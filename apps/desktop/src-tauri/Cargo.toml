@@ -1,14 +1,14 @@
 [package]
-name = "pitwall-desktop"
+name = "trackwall-desktop"
 version = "0.1.0"
-description = "Pitwall: okno, tray i nadzór daemona"
+description = "Trackwall: okno, tray i nadzór daemona"
 edition = "2021"
 rust-version = "1.90"
 license = "MIT"
 publish = false
 
 [[bin]]
-name = "pitwall"
+name = "trackwall"
 path = "src/main.rs"
 
 [build-dependencies]

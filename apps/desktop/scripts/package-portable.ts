@@ -1,12 +1,12 @@
 /**
  * Pakuje wynik `pnpm build:desktop` do archiwum w `out/`:
  *
- *   Windows: pitwall-<wersja>-windows-x64.zip
- *     Pitwall/pitwall.exe          okno + tray (wymaga WebView2)
- *     Pitwall/pitwall-daemon.exe   daemon (sidecar)
- *     Pitwall/ui/                  UI dla trybu bez okna: pitwall-daemon.exe --ui
- *     Pitwall/CZYTAJ.txt
- *   macOS:   pitwall-<wersja>-macos-<arch>.zip z Pitwall.app
+ *   Windows: trackwall-<wersja>-windows-x64.zip
+ *     Trackwall/trackwall.exe          okno + tray (wymaga WebView2)
+ *     Trackwall/trackwall-daemon.exe   daemon (sidecar)
+ *     Trackwall/ui/                    UI dla trybu bez okna: trackwall-daemon.exe --ui
+ *     Trackwall/CZYTAJ.txt
+ *   macOS:   trackwall-<wersja>-macos-<arch>.zip z Trackwall.app
  *
  * Bez instalatora i bez zapisu poza katalogiem użytkownika: archiwum rozpakowuje się gdziekolwiek.
  */
@@ -27,32 +27,32 @@ mkdirSync(OUT, { recursive: true });
 
 if (process.platform === "win32") {
   const release = join(TAURI_DIR, "target", "release");
-  const stage = join(OUT, "stage", "Pitwall");
+  const stage = join(OUT, "stage", "Trackwall");
   mkdirSync(stage, { recursive: true });
-  cpSync(need(join(release, "pitwall.exe")), join(stage, "pitwall.exe"));
-  cpSync(need(join(release, "pitwall-daemon.exe")), join(stage, "pitwall-daemon.exe"));
+  cpSync(need(join(release, "trackwall.exe")), join(stage, "trackwall.exe"));
+  cpSync(need(join(release, "trackwall-daemon.exe")), join(stage, "trackwall-daemon.exe"));
   cpSync(need(join(REPO, "packages", "ui", "dist")), join(stage, "ui"), { recursive: true });
   writeFileSync(
     join(stage, "CZYTAJ.txt"),
     [
-      `Pitwall ${version} (portable)`,
+      `Trackwall ${version} (portable)`,
       "",
-      "Uruchom pitwall.exe. Instalacja nie jest potrzebna, stan trafia do %USERPROFILE%\\.pitwall.",
+      "Uruchom trackwall.exe. Instalacja nie jest potrzebna, stan trafia do %USERPROFILE%\\.trackwall.",
       "",
-      "Brak WebView2 albo okno się nie otwiera: uruchom pitwall-daemon.exe --ui,",
-      "Pitwall otworzy się w domyślnej przeglądarce.",
+      "Brak WebView2 albo okno się nie otwiera: uruchom trackwall-daemon.exe --ui,",
+      "Trackwall otworzy się w domyślnej przeglądarce.",
       "",
       "Daemon działa po zamknięciu okna (ikona w zasobniku). Pełne wyjście: ikona w zasobniku > Wyjdź.",
-      "Log startu daemona: %USERPROFILE%\\.pitwall\\logs\\daemon-start.log",
+      "Log startu daemona: %USERPROFILE%\\.trackwall\\logs\\daemon-start.log",
       "",
     ].join("\r\n"),
   );
-  const zip = join(OUT, `pitwall-${version}-windows-x64.zip`);
-  run(["tar", "-a", "-c", "-f", zip, "Pitwall"], join(OUT, "stage"));
+  const zip = join(OUT, `trackwall-${version}-windows-x64.zip`);
+  run(["tar", "-a", "-c", "-f", zip, "Trackwall"], join(OUT, "stage"));
   console.log(zip);
 } else if (process.platform === "darwin") {
-  const app = need(join(TAURI_DIR, "target", "release", "bundle", "macos", "Pitwall.app"));
-  const zip = join(OUT, `pitwall-${version}-macos-${process.arch}.zip`);
+  const app = need(join(TAURI_DIR, "target", "release", "bundle", "macos", "Trackwall.app"));
+  const zip = join(OUT, `trackwall-${version}-macos-${process.arch}.zip`);
   run(["ditto", "-c", "-k", "--keepParent", app, zip], OUT);
   console.log(zip);
 } else {

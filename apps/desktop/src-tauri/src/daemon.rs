@@ -46,11 +46,11 @@ impl From<&DaemonFile> for Connection {
 
 /// Katalog stanu w buildzie deweloperskim jest osobny, żeby `tauri dev` nie podłączał się do daemona
 /// z wydania (albo z `bun ... --ui`), który nie wpuszcza originu serwera Vite.
-const HOME_DIR_NAME: &str = if cfg!(debug_assertions) { ".pitwall-dev" } else { ".pitwall" };
+const HOME_DIR_NAME: &str = if cfg!(debug_assertions) { ".trackwall-dev" } else { ".trackwall" };
 
-/// `PITWALL_HOME` albo `~/.pitwall`, tak samo jak w daemonie; pusta zmienna znaczy „nie ustawiono”.
-pub fn pitwall_home() -> Result<PathBuf, String> {
-    if let Some(dir) = std::env::var_os("PITWALL_HOME").filter(|v| !v.is_empty()) {
+/// `TRACKWALL_HOME` albo `~/.trackwall`, tak samo jak w daemonie; pusta zmienna znaczy „nie ustawiono”.
+pub fn trackwall_home() -> Result<PathBuf, String> {
+    if let Some(dir) = std::env::var_os("TRACKWALL_HOME").filter(|v| !v.is_empty()) {
         return Ok(PathBuf::from(dir));
     }
     let var = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
@@ -91,7 +91,7 @@ pub fn ensure_daemon(home: &Path, cancel: &AtomicBool) -> Result<Connection, Str
             Some(v) if v == VERSION => return Ok(Connection::from(&existing)),
             Some(v) => {
                 return Err(format!(
-                    "Działa daemon Pitwall w wersji {v} (pid {}), a ta aplikacja to {VERSION}. \
+                    "Działa daemon Trackwall w wersji {v} (pid {}), a ta aplikacja to {VERSION}. \
                      Zakończ stary daemon i kliknij „Spróbuj ponownie”.",
                     existing.pid
                 ))
@@ -153,11 +153,11 @@ pub fn shutdown(conn: &Connection) -> Result<(), String> {
     Err(format!("daemon nadal odpowiada po {} s", STOP_TIMEOUT.as_secs()))
 }
 
-/// Ścieżka sidecara: obok `pitwall.exe` (portable zip) albo w `Contents/MacOS` (bundle .app).
+/// Ścieżka sidecara: obok `trackwall.exe` (portable zip) albo w `Contents/MacOS` (bundle .app).
 fn sidecar_path() -> Result<PathBuf, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let dir = exe.parent().ok_or("brak katalogu aplikacji")?;
-    let path = dir.join(format!("pitwall-daemon{}", std::env::consts::EXE_SUFFIX));
+    let path = dir.join(format!("trackwall-daemon{}", std::env::consts::EXE_SUFFIX));
     if path.is_file() {
         Ok(path)
     } else {
@@ -174,7 +174,7 @@ fn spawn_sidecar(home: &Path, log_path: &Path) -> Result<Child, String> {
     let mut cmd = Command::new(&exe);
     cmd.arg("--parent").arg(std::process::id().to_string());
     // Jawnie, bo w buildzie deweloperskim katalog domyślny powłoki różni się od domyślnego daemona.
-    cmd.env("PITWALL_HOME", home);
+    cmd.env("TRACKWALL_HOME", home);
     // `tauri dev` ładuje UI z serwera Vite, który ma własny origin.
     #[cfg(debug_assertions)]
     cmd.arg("--allow-origin").arg("http://127.0.0.1:5173");

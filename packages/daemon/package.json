@@ -1,13 +1,13 @@
 {
-  "name": "@pitwall/daemon",
+  "name": "@trackwall/daemon",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "bin": {
-    "pitwall-daemon": "./src/main.ts"
+    "trackwall-daemon": "./src/main.ts"
   },
   "scripts": {
-    "dev": "bun --watch src/main.ts --home ../../.pitwall-dev",
+    "dev": "bun --watch src/main.ts --home ../../.trackwall-dev",
     "start": "bun src/main.ts --ui",
     "start:node": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/main.ts --ui",
     "build": "bun scripts/build.ts",
@@ -15,7 +15,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@pitwall/protocol": "workspace:*"
+    "@trackwall/protocol": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "1.4.4",

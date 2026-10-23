@@ -92,8 +92,8 @@
               "options": {
                 "patterns": [
                   {
-                    "group": ["@pitwall/daemon", "@pitwall/daemon/**", "**/daemon/src/**"],
-                    "message": "Tylko daemon importuje swój kod; wspólny kod bierz z @pitwall/protocol (AGENTS.md, granice modułów)."
+                    "group": ["@trackwall/daemon", "@trackwall/daemon/**", "**/daemon/src/**"],
+                    "message": "Tylko daemon importuje swój kod; wspólny kod bierz z @trackwall/protocol (AGENTS.md, granice modułów)."
                   }
                 ]
               }

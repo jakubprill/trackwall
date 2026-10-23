@@ -1,4 +1,4 @@
-import type { ApiResult } from "@pitwall/protocol";
+import type { ApiResult } from "@trackwall/protocol";
 import type { z } from "zod";
 import type { Connection } from "./connection.ts";
 

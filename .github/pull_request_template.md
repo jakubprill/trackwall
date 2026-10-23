@@ -1,6 +1,6 @@
 ## Co się zmienia
 
-<!-- Dla użytkownika Pitwall: jak było, jak jest. Przy zmianie wewnętrznej: co i gdzie. -->
+<!-- Dla użytkownika Trackwall: jak było, jak jest. Przy zmianie wewnętrznej: co i gdzie. -->
 
 ## Dlaczego
 

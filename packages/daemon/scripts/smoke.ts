@@ -1,29 +1,29 @@
 /**
  * Test dymny skompilowanej binarki daemona: start, health, info z tokenem, shutdown, sprzątnięty daemon.json.
  *
- *   bun scripts/smoke.ts <ścieżka do pitwall-daemon>
+ *   bun scripts/smoke.ts <ścieżka do trackwall-daemon>
  *
  * Na Windowsie `.exe` jest dopisywane, gdy go brakuje, więc ta sama komenda działa na obu systemach.
  */
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { DaemonInfoResult, HealthResult } from "@pitwall/protocol";
+import { DaemonInfoResult, HealthResult } from "@trackwall/protocol";
 import { daemonFilePath, readDaemonFile } from "../src/discovery.ts";
 import { loopbackRequest } from "../src/loopback.ts";
 
 const arg = Bun.argv[2];
-if (!arg) throw new Error("użycie: bun scripts/smoke.ts <ścieżka do pitwall-daemon>");
+if (!arg) throw new Error("użycie: bun scripts/smoke.ts <ścieżka do trackwall-daemon>");
 const given = resolve(arg);
 const bin = process.platform === "win32" && !given.toLowerCase().endsWith(".exe") ? `${given}.exe` : given;
 if (!existsSync(bin)) throw new Error(`brak binarki ${bin}`);
-const home = mkdtempSync(join(tmpdir(), "pitwall-smoke-"));
+const home = mkdtempSync(join(tmpdir(), "trackwall-smoke-"));
 const file = daemonFilePath(home);
 
 const version = Bun.spawnSync([bin, "--version"]).stdout.toString().trim();
 console.log(`--version: ${version}`);
 
-const proc = Bun.spawn([bin], { env: { ...process.env, PITWALL_HOME: home }, stdout: "inherit", stderr: "inherit" });
+const proc = Bun.spawn([bin], { env: { ...process.env, TRACKWALL_HOME: home }, stdout: "inherit", stderr: "inherit" });
 const deadline = Date.now() + 15_000;
 async function waitForDaemonFile() {
   for (;;) {

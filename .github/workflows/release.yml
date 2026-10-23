@@ -67,11 +67,11 @@ jobs:
           save-if: false
       - run: pnpm build:desktop
       - name: smoke test sidecara z buildu
-        run: bun packages/daemon/scripts/smoke.ts apps/desktop/src-tauri/target/release/pitwall-daemon
+        run: bun packages/daemon/scripts/smoke.ts apps/desktop/src-tauri/target/release/trackwall-daemon
       - run: pnpm portable
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
-          name: pitwall-${{ runner.os }}
+          name: trackwall-${{ runner.os }}
           path: out/*.zip
           if-no-files-found: error
           retention-days: 7
@@ -85,7 +85,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
-          pattern: pitwall-*
+          pattern: trackwall-*
           path: dist
           merge-multiple: true
 
@@ -96,10 +96,10 @@ jobs:
         run: |
           shopt -s nullglob
           version="${TAG#v}"
-          for f in "pitwall-$version-windows-x64.zip" "pitwall-$version-macos-arm64.zip"; do
+          for f in "trackwall-$version-windows-x64.zip" "trackwall-$version-macos-arm64.zip"; do
             [ -f "$f" ] || { echo "::error::Brak $f, są: $(ls)"; exit 1; }
           done
-          zips=(pitwall-*.zip)
+          zips=(trackwall-*.zip)
           if [ ${#zips[@]} -ne 2 ]; then
             echo "::error::Oczekiwano 2 archiwów, są: ${zips[*]}"
             exit 1
@@ -120,5 +120,5 @@ jobs:
             prerelease=()
             if [[ "$TAG" == *-* ]]; then prerelease=(--prerelease); fi
             gh release create "$TAG" dist/* --verify-tag --generate-notes \
-              --title "Pitwall ${TAG#v}" "${prerelease[@]}"
+              --title "Trackwall ${TAG#v}" "${prerelease[@]}"
           fi

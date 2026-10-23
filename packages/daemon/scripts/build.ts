@@ -5,7 +5,7 @@
  *   bun scripts/build.ts --target all    wszystkie wspierane platformy (kompilacja krzyżowa)
  *   bun scripts/build.ts --target x86_64-pc-windows-msvc
  *
- * Wynik: `dist/pitwall-daemon-<triple>[.exe]`, czyli dokładnie nazwa, której Tauri oczekuje od sidecara.
+ * Wynik: `dist/trackwall-daemon-<triple>[.exe]`, czyli dokładnie nazwa, której Tauri oczekuje od sidecara.
  */
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -49,7 +49,7 @@ mkdirSync(outDir, { recursive: true });
 
 for (const triple of triples) {
   const target = TARGETS[triple];
-  const outfile = join(outDir, `pitwall-daemon-${triple}${target.exe ? ".exe" : ""}`);
+  const outfile = join(outDir, `trackwall-daemon-${triple}${target.exe ? ".exe" : ""}`);
   const proc = Bun.spawnSync(
     ["bun", "build", "--compile", "--minify", "--sourcemap", `--target=${target.bun}`, "src/main.ts", "--outfile", outfile],
     { cwd: root, stdout: "inherit", stderr: "inherit" },

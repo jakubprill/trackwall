@@ -1,4 +1,4 @@
-# Pitwall (nazwa robocza)
+# Trackwall
 
 Desktopowa aplikacja open source dla jednej osoby pracującej z wieloma repozytoriami (Java BFF, mikroserwisy, frontendy TS) i wieloma agentami CLI naraz: połączenia między repo, lokalne stawianie serwisów, analiza błędów cross-repo.
 
@@ -34,8 +34,8 @@ Na Windowsie bez Build Tools Rust znajduje inny `link.exe` z PATH (np. z coreuti
 
 ```sh
 pnpm install
-pnpm dev                       # daemon (bun --watch, stan w .pitwall-dev/) + Vite na http://127.0.0.1:5173
-pnpm --filter @pitwall/desktop dev   # to samo w oknie Tauri (stan w ~/.pitwall-dev, osobno od wydania)
+pnpm dev                       # daemon (bun --watch, stan w .trackwall-dev/) + Vite na http://127.0.0.1:5173
+pnpm --filter @trackwall/desktop dev   # to samo w oknie Tauri (stan w ~/.trackwall-dev, osobno od wydania)
 pnpm lint                      # Biome i knip (pnpm format poprawia formatowanie)
 pnpm test                      # testy wszystkich paczek
 ```
@@ -47,18 +47,18 @@ pnpm build
 bun packages/daemon/src/main.ts --ui
 ```
 
-Ten sam daemon działa też pod samym Node, bez Bun (ADR-1): `pnpm --filter @pitwall/ui build`, potem `pnpm --filter @pitwall/daemon start:node`.
+Ten sam daemon działa też pod samym Node, bez Bun (ADR-1): `pnpm --filter @trackwall/ui build`, potem `pnpm --filter @trackwall/daemon start:node`.
 
 ## Portable build
 
 ```sh
 pnpm build:desktop   # UI, daemon jako binarka, Tauri bez instalatora
-pnpm portable        # out/pitwall-<wersja>-windows-x64.zip albo out/pitwall-<wersja>-macos-<arch>.zip
+pnpm portable        # out/trackwall-<wersja>-windows-x64.zip albo out/trackwall-<wersja>-macos-<arch>.zip
 ```
 
-Windows: zip zawiera `pitwall.exe`, `pitwall-daemon.exe` i `ui/`. Rozpakowanie i uruchomienie `pitwall.exe` wystarcza; stan trafia do `%USERPROFILE%\.pitwall`. Bez WebView2 `pitwall.exe` pokazuje komunikat, a `pitwall-daemon.exe --ui` otwiera Pitwall w przeglądarce. Pliki nie są podpisane, więc SmartScreen pokaże ostrzeżenie (podpis jest zaplanowany przed publikacją, §9).
+Windows: zip zawiera `trackwall.exe`, `trackwall-daemon.exe` i `ui/`. Rozpakowanie i uruchomienie `trackwall.exe` wystarcza; stan trafia do `%USERPROFILE%\.trackwall`. Bez WebView2 `trackwall.exe` pokazuje komunikat, a `trackwall-daemon.exe --ui` otwiera Trackwall w przeglądarce. Pliki nie są podpisane, więc SmartScreen pokaże ostrzeżenie (podpis jest zaplanowany przed publikacją, §9).
 
-macOS: zip zawiera niepodpisany `Pitwall.app`; pierwsze uruchomienie przez prawy klik > Otwórz albo `xattr -dr com.apple.quarantine Pitwall.app`.
+macOS: zip zawiera niepodpisany `Trackwall.app`; pierwsze uruchomienie przez prawy klik > Otwórz albo `xattr -dr com.apple.quarantine Trackwall.app`.
 
 Każdy przebieg CI publikuje oba archiwa jako artefakty.
 
