@@ -276,7 +276,7 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 - `cards`: testy na fixture'ach repo (małe pom.xml, application.yml, package.json) bez sieci.
 - `agents`: detektory stanu testowane na nagraniach `.cast` z prawdziwych sesji Copilot CLI; nagrania zanonimizowane trafiają do repo jako fixture'y.
 - `api`/`mcp`: kontrakt z `packages/protocol`, testy przez prawdziwy klient MCP SDK.
-- CI: `windows-latest` i `macos-latest`, kroki lint → test → build daemona (binarka) → build Tauri portable → artefakty. Wydanie z tagu, draft publikowany po przejściu obu buildów.
+- CI: `windows-latest` i `macos-latest`, kroki lint → test → build daemona (binarka) → build Tauri portable → artefakty. Wydanie z tagu (`release.yml`): GitHub Release powstaje dopiero po przejściu obu buildów, opis w `docs/release.md`.
 
 ## 11. Kamienie milowe (mapowanie na kolejność prac)
 

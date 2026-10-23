@@ -1,0 +1,130 @@
+# Wydanie z tagu vX.Y.Z: portable build na Windows i macOS, potem jeden GitHub Release.
+# Release powstaje dopiero, gdy oba buildy przejdą, więc nigdy nie jest połowiczny.
+# Kroki budowania są te same co w jobie `desktop` w ci.yml. Instrukcja: docs/release.md
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+", "v[0-9]+.[0-9]+.[0-9]+-*"]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  BUN_VERSION: "1.4.2"
+  NODE_VERSION: "22"
+
+# Akcje przypięte do SHA: ten workflow publikuje binarki, więc przesunięty tag akcji
+# nie może podmienić tego, co trafia do użytkowników.
+jobs:
+  build:
+    name: portable (${{ matrix.os }})
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Tag na main i zgodny z wersją aplikacji
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag $TAG wskazuje commit spoza main"
+            exit 1
+          fi
+          version=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::Tag $TAG nie pasuje do wersji $version w tauri.conf.json"
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: apps/desktop/src-tauri
+          # Wydanie czyta cache z main, ale go nie zapisuje.
+          save-if: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:desktop
+      - name: smoke test sidecara z buildu
+        shell: bash
+        run: |
+          exe=""
+          if [ "$RUNNER_OS" = Windows ]; then exe=.exe; fi
+          bun packages/daemon/scripts/smoke.ts "apps/desktop/src-tauri/target/release/pitwall-daemon$exe"
+      - run: pnpm portable
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: pitwall-${{ runner.os }}
+          path: out/*.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          pattern: pitwall-*
+          path: dist
+          merge-multiple: true
+
+      - name: Sumy kontrolne
+        working-directory: dist
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          shopt -s nullglob
+          version="${TAG#v}"
+          for f in "pitwall-$version-windows-x64.zip" "pitwall-$version-macos-arm64.zip"; do
+            [ -f "$f" ] || { echo "::error::Brak $f, są: $(ls)"; exit 1; }
+          done
+          zips=(pitwall-*.zip)
+          if [ ${#zips[@]} -ne 2 ]; then
+            echo "::error::Oczekiwano 2 archiwów, są: ${zips[*]}"
+            exit 1
+          fi
+          sha256sum "${zips[@]}" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # Ponowne uruchomienie po awarii: podmień pliki, nie twórz drugiego release.
+            gh release upload "$TAG" dist/* --clobber
+          else
+            prerelease=()
+            if [[ "$TAG" == *-* ]]; then prerelease=(--prerelease); fi
+            gh release create "$TAG" dist/* --verify-tag --generate-notes \
+              --title "Pitwall ${TAG#v}" "${prerelease[@]}"
+          fi
