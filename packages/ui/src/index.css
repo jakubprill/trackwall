@@ -43,6 +43,22 @@
   --ring: oklch(0.552 0.016 285.938);
 }
 
+/*
+ * Okno Tauri z efektem tła (ADR-11, src/lib/window-effect.ts): tło strony znika, a powierzchnie są
+ * półprzezroczyste, żeby Mica, Acrylic albo vibrancy były widoczne, a tekst nadal czytelny.
+ * Bez atrybutu (przeglądarka, brak efektu) obowiązują nieprzezroczyste kolory z `.dark`.
+ * „Ogranicz przezroczystość” w systemie wyłącza sam efekt (Windows i macOS malują wtedy jednolite tło),
+ * więc tu nie potrzeba osobnego `prefers-reduced-transparency`.
+ */
+.dark[data-window-effect] {
+  --background: transparent;
+  --card: oklch(0.21 0.006 285.885 / 55%);
+  --secondary: oklch(0.274 0.006 286.033 / 60%);
+  --muted: oklch(0.274 0.006 286.033 / 60%);
+  --accent: oklch(0.274 0.006 286.033 / 60%);
+  --border: oklch(1 0 0 / 12%);
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
