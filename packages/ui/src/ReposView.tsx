@@ -1,6 +1,7 @@
 import { type Repo, workspaceApi } from "@trackwall/protocol";
 import { Plus, RefreshCw } from "lucide-react";
 import { type FormEvent, useCallback, useState } from "react";
+import { Loading } from "@/components/Loading";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,8 +82,12 @@ export function ReposView({ conn, onRetry }: { conn: Connection; onRetry: () => 
             }}
           />
         ) : (
-          <div className="text-muted-foreground flex h-full items-center justify-center p-6 text-sm">
-            {list.data || list.error ? "Wybierz repo z listy albo dodaj nowe po lewej." : "Wczytywanie…"}
+          <div className="flex h-full items-center justify-center p-6">
+            {list.data || list.error ? (
+              <p className="text-muted-foreground text-sm">Wybierz repo z listy albo dodaj nowe po lewej.</p>
+            ) : (
+              <Loading />
+            )}
           </div>
         )}
       </section>

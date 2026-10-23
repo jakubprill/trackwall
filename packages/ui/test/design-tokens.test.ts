@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 /**
  * ADR-16: kolory, kroje, rozmiary tekstu i poświaty żyją tylko w `src/index.css`, a komponenty używają tokenów.
- * Test pilnuje tego zamiast zdania w przeglądzie: surowy kolor albo dowolna wartość wygląd w `.tsx` to błąd.
+ * Test pilnuje tego zamiast zdania w przeglądzie: surowy kolor albo dowolna wartość wyglądu w `.tsx` to błąd.
  */
 const FORBIDDEN = [
   { name: "kolor oklch", pattern: /oklch\(/ },
@@ -16,6 +16,7 @@ const FORBIDDEN = [
       /-(zinc|slate|gray|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d/,
   },
   { name: "dowolna wartość koloru, kroju lub poświaty", pattern: /\b(shadow|text|tracking|leading|bg|border|font)-\[/ },
+  { name: "dowolna właściwość wyglądu", pattern: /\[(box-shadow|color|background|font|letter-spacing|line-height)[a-z-]*:/ },
 ];
 
 function tsxFiles(dir: string): string[] {

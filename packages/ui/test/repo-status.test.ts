@@ -18,7 +18,7 @@ describe("stan repo w UI", () => {
     ]);
   });
 
-  test("odłączony HEAD zamiast nazwy gałęzi", () => {
+  test("gałąź pokazuje swoją nazwę, a bez gałęzi napis „odłączony HEAD”", () => {
     expect([branchLabel({ ...ok, changes: 0 }), branchLabel({ ...ok, branch: null, changes: 0 })]).toEqual(["main", "odłączony HEAD"]);
   });
 });
