@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { apiResult, DaemonInfoResult, HealthResult, RepoList, workspaceApi } from "@trackwall/protocol";
+import { postRoutes } from "../src/api/routes.ts";
 import { type ApiServer, startApi } from "../src/api/server.ts";
 import { createFacade } from "../src/facade.ts";
 import { type LoopbackOptions, loopbackRequest } from "../src/loopback.ts";
@@ -131,6 +132,10 @@ describe("api", () => {
 
 describe("api workspace", () => {
   const post = (path: string, body: string) => authed(path, { method: "POST", headers: { "content-type": "application/json" }, body });
+
+  test("każda akcja z kontraktu workspace ma trasę w daemonie", () => {
+    expect(Object.values(workspaceApi).filter((endpoint) => !postRoutes.has(endpoint.path))).toEqual([]);
+  });
 
   test("trasy workspace wymagają tokenu", async () => {
     expect((await req(workspaceApi.list.path, { method: "POST" })).status).toBe(401);

@@ -1,4 +1,4 @@
-import { type Repo, type RepoList, workspaceApi } from "@trackwall/protocol";
+import { type Repo, type RepoList, type SyncRepo, workspaceApi } from "@trackwall/protocol";
 import { FolderOpen, Plus, RefreshCw } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -9,26 +9,32 @@ import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { twoDigits } from "@/lib/format";
 import { branchLabel, repoStatusTone } from "@/lib/repo-status";
+import { syncedByPath, syncRepoTone } from "@/lib/sync-state";
 import { useRemote } from "@/lib/use-remote";
+import { useSyncRun } from "@/lib/use-sync-run";
 import { cn } from "@/lib/utils";
 import { CloneView } from "./CloneView.tsx";
 import { RepoDetail } from "./RepoDetail.tsx";
+import { SyncBar, SyncView } from "./SyncView.tsx";
 
 /** Lista repo i ich stan pochodzą z folderu z projektami i z gita przy każdym zapytaniu (§4.5), więc lista jest odpytywana cyklicznie. */
 const POLL_MS = 10_000;
 
 export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection; onRetry: () => void; onOpenSettings: () => void }) {
   const [selected, setSelected] = useState<string>();
-  /** Prawa strona pokazuje wyszukiwarkę repo do sklonowania zamiast wybranego repo. */
-  const [cloning, setCloning] = useState(false);
+  /** Co pokazuje prawa strona: wybrane repo, wyszukiwarkę repo do sklonowania albo synchronizację. */
+  const [panel, setPanel] = useState<"repo" | "clone" | "sync">("repo");
   const load = useCallback(() => post(conn, workspaceApi.list, {}), [conn]);
   const list = useRemote(load, { pollMs: POLL_MS });
+  const sync = useSyncRun(conn, list.reload);
+  const synced = syncedByPath(sync.run);
 
   // Folder z projektami, który zniknął albo jest źle wpisany w `workspace.yaml`, poprawia się w ustawieniach,
   // a stara lista wyglądałaby na aktualną.
   const needsSettings = list.errorCode === "projects_dir_unavailable" || list.errorCode === "invalid_config";
   const repos = needsSettings ? [] : (list.data?.repos ?? []);
   const current = repos.find((r) => r.id === selected) ?? repos[0];
+  const canSync = Boolean(list.data?.projectsDir) && !needsSettings;
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[var(--spacing-sidebar)_1fr]">
@@ -36,7 +42,7 @@ export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection;
         <div className="flex items-center justify-between px-4 pt-3 pb-2">
           <h2 className="hud-label">Repo {list.data && <span className="text-primary">{`// ${twoDigits(repos.length)}`}</span>}</h2>
           <span className="flex">
-            <Button variant="ghost" size="icon" onClick={() => setCloning(true)} aria-label="Dodaj repo z GitLab albo GitHub">
+            <Button variant="ghost" size="icon" onClick={() => setPanel("clone")} aria-label="Dodaj repo z GitLab albo GitHub">
               <Plus />
             </Button>
             <Button variant="ghost" size="icon" onClick={onOpenSettings} aria-label="Zmień folder z projektami">
@@ -52,6 +58,7 @@ export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection;
             {list.data.projectsDir}
           </p>
         )}
+        {canSync && <SyncBar sync={sync} onShow={() => setPanel("sync")} />}
         <nav className="flex-1 overflow-y-auto px-2 pb-4">
           {list.error && (
             <div className="px-2 pb-2">
@@ -66,24 +73,26 @@ export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection;
               </ErrorWithRetry>
             </div>
           )}
-          {list.data && !list.error && <EmptyList list={list.data} onOpenSettings={onOpenSettings} onClone={() => setCloning(true)} />}
+          {list.data && !list.error && <EmptyList list={list.data} onOpenSettings={onOpenSettings} onClone={() => setPanel("clone")} />}
           {repos.map((repo, i) => (
             <RepoListItem
               key={repo.id}
               repo={repo}
               position={i + 1}
-              active={!cloning && repo.id === current?.id}
+              sync={synced.get(repo.path)}
+              active={panel === "repo" && repo.id === current?.id}
               onSelect={() => {
                 setSelected(repo.id);
-                setCloning(false);
+                setPanel("repo");
               }}
             />
           ))}
         </nav>
       </aside>
       <section className="min-h-0 min-w-0 overflow-y-auto">
-        {cloning && <CloneView conn={conn} onCloned={list.reload} onOpenSettings={onOpenSettings} />}
-        {!cloning && current && <RepoDetail key={current.id} conn={conn} repo={current} />}
+        {panel === "clone" && <CloneView conn={conn} onCloned={list.reload} onOpenSettings={onOpenSettings} />}
+        {panel === "sync" && <SyncView sync={sync} canSync={canSync} />}
+        {panel === "repo" && current && <RepoDetail key={current.id} conn={conn} repo={current} />}
         {/* Bez repo do pokazania lista po lewej mówi, co zrobić; tu zostaje tylko ładowanie. */}
         {!list.data && !list.error && (
           <div className="flex h-full items-center justify-center p-6">
@@ -128,11 +137,25 @@ function ChangeProjectsDir({ onClick }: { onClick: () => void }) {
 
 /**
  * Wiersz listy w stylu HUD (ADR-16): numer pozycji, nazwa, gałąź oraz kropka i tekst stanu; aktywny ma świecącą kreskę z lewej.
- * Numer to tylko pozycja na liście, nie identyfikator repo.
+ * Numer to tylko pozycja na liście, nie identyfikator repo. Wynik ostatniej synchronizacji stoi pod stanem, chyba że
+ * repo było już aktualne: wtedy nie ma o czym mówić, a stary napis „aktualne” byłby z czasem nieprawdą.
  */
-function RepoListItem({ repo, position, active, onSelect }: { repo: Repo; position: number; active: boolean; onSelect: () => void }) {
+function RepoListItem({
+  repo,
+  position,
+  sync,
+  active,
+  onSelect,
+}: {
+  repo: Repo;
+  position: number;
+  sync: SyncRepo | undefined;
+  active: boolean;
+  onSelect: () => void;
+}) {
   const { status } = repo;
   const state = repoStatusTone(status);
+  const synced = sync && sync.state !== "up-to-date" ? syncRepoTone(sync) : undefined;
   return (
     <button
       type="button"
@@ -150,6 +173,14 @@ function RepoListItem({ repo, position, active, onSelect }: { repo: Repo; positi
           {status.kind === "ok" && <span className="min-w-0 truncate font-mono">{branchLabel(status)}</span>}
           <StatusLabel tone={state.tone} label={state.label} />
         </span>
+        {synced && (
+          <span
+            className="text-muted-foreground text-xs"
+            title={sync?.state === "skipped" || sync?.state === "failed" ? sync.message : undefined}
+          >
+            <StatusLabel tone={synced.tone} label={synced.label} />
+          </span>
+        )}
       </span>
     </button>
   );

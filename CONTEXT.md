@@ -55,6 +55,14 @@ Klon jednego repo zdalnego do folderu z projektami, w tle: `running`, `done` alb
 **Repo** (`Repo`, `RepoId`):
 Jedno repozytorium z workspace, identyfikowane slugiem z nazwy jego katalogu.
 
+**Adres repo zdalnego** (`Repo.remote`):
+Adres głównego remote repo (`origin` albo jedynego) jako `host/ścieżka`, np. `gitlab.example.com/sklep/api`, bez protokołu i użytkownika. Identyfikuje repo niezależnie od nazwy katalogu (ADR-21).
+_Unikaj_: URL repo (URL ma protokół i bywa z tokenem), remote (to nazwa w gicie, np. `origin`)
+
+**Synchronizacja** (`SyncRun`, wynik repo `SyncRepo`):
+Fetch każdego repo z folderu z projektami i fast-forward jego gałęzi domyślnej, w tle, z wynikiem per repo: przesunięte, aktualne, pominięte z powodem (`SyncSkipReason`) albo błąd. Nigdy nie scala ani nie nadpisuje lokalnych zmian (ADR-21). Trzymana tylko w pamięci daemona.
+_Unikaj_: pull, aktualizacja (bez dopowiedzenia)
+
 **Stan repo** (`RepoStatus`):
 Gałąź, ostatni commit, liczba zmian w katalogu roboczym i ahead/behind względem gałęzi śledzonej, odczytane z gita przy każdym zapytaniu (`ok`), albo `unavailable` z komunikatem, gdy git go nie czyta (repo, którego katalog zniknął, znika z listy). Nigdy nie jest zapisywany.
 _Unikaj_: status (w polskim tekście), sync (to osobna akcja)
