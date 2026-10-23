@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { COPILOT_HOOK_EVENTS, type CopilotHookEvent } from "./copilot-hook-record.ts";
 
 /**
- * Wtyczka sesji (§4.4, ADR-16): katalog podawany Copilot CLI przez `--plugin-dir`, który rejestruje hooki
+ * Wtyczka sesji (§4.4, ADR-17): katalog podawany Copilot CLI przez `--plugin-dir`, który rejestruje hooki
  * zgłaszające stan. Działa tylko w tej jednej sesji, więc nie zmienia konfiguracji użytkownika
  * (`~/.copilot`) ani plików w repo (`.github/hooks`).
  */

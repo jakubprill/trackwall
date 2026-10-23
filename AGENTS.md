@@ -82,6 +82,7 @@ Repo ma zostać opublikowane jako open source (nagłówek `docs/architecture.md`
   - knip (`knip.json`): nieużywane pliki, eksporty i zależności;
   - `rustfmt.toml` i `cargo clippy -D warnings` dla powłoki Tauri;
   - test `apps/desktop/test/toolchain.test.ts`: te same wersje narzędzi w `mise.toml` i workflow;
+  - test `packages/ui/test/design-tokens.test.ts`: komponenty UI bez surowych kolorów i dowolnych wartości wyglądu, tylko tokeny z `index.css` (ADR-16);
   - zgodność daemona z Node (ADR-1): `erasableSyntaxOnly` w `tsconfig.json` daemona i `protocol`, w Biome `useImportExtensions` w ich `src` i zakaz API Bun w daemonie poza `platform/`, testy procesu daemona pod Bun i pod Node.
 
   Rzutowań `as` na danych z zewnątrz nie pilnuje narzędzie, więc tego pilnuje przegląd.
@@ -111,4 +112,4 @@ Wersje narzędzi są w `mise.toml` (`mise install`), tam też taski `setup`, `de
 - Praca idzie przez PR do `main`, nigdy push prosto na `main`.
 - Jeden temat na PR. Nie mieszaj refaktoryzacji ze zmianą zachowania, chyba że refaktoryzacja jest do niej potrzebna.
 - Komunikaty commitów i tytuły PR w trybie rozkazującym, jak w historii („Dodaj…”, „Rozstrzygnij…”).
-- Wersję podbija się tylko przy wydaniu, w trzech miejscach naraz (`docs/release.md`).
+- Wersję podbija się tylko przy wydaniu, w trzech miejscach naraz, razem z notatką o zmianach w `docs/release-notes/` (`docs/release.md`).

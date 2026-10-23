@@ -2,46 +2,33 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Jedyny motyw (ADR-16), ciemny HUD: czarne tło, chłodne szklane powierzchnie, cienkie linie i jeden akcent
+ * (cyjan) dla tego, co aktywne. Kolory stanu (`success`, `warning`, `destructive`) mówią tylko o stanie.
+ * `<html>` ma klasę `dark` tylko dla wariantów `dark:` w komponentach shadcn/ui.
+ * `--background` ma swoją kopię jako ACRYLIC_TINT w apps/desktop/src-tauri/src/window_effect.rs.
+ */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.141 0.005 285.823);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.21 0.006 285.885);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.21 0.006 285.885);
-  --destructive: oklch(0.577 0.245 27.325);
-  --success: oklch(0.6 0.15 150);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.705 0.015 286.067);
-}
-
-/* `--background` ma swoją kopię jako ACRYLIC_TINT w apps/desktop/src-tauri/src/window_effect.rs. */
-.dark {
+  --radius: 0.375rem;
   --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885 / var(--surface-alpha, 1));
-  --card-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.92 0.004 286.32);
-  --primary-foreground: oklch(0.21 0.006 285.885);
-  --secondary: oklch(0.274 0.006 286.033 / var(--fill-alpha, 1));
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033 / var(--fill-alpha, 1));
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033 / var(--fill-alpha, 1));
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --success: oklch(0.72 0.16 150);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.552 0.016 285.938);
+  --foreground: oklch(0.96 0.008 230);
+  --card: oklch(0.19 0.014 240 / var(--surface-alpha, 1));
+  --card-foreground: oklch(0.96 0.008 230);
+  --primary: oklch(0.82 0.12 210);
+  --primary-foreground: oklch(0.18 0.03 230);
+  --secondary: oklch(0.25 0.016 240 / var(--fill-alpha, 1));
+  --secondary-foreground: oklch(0.96 0.008 230);
+  --muted: oklch(0.16 0.012 240 / var(--fill-alpha, 1));
+  --muted-foreground: oklch(0.68 0.02 240);
+  --accent: oklch(0.26 0.03 225 / var(--fill-alpha, 1));
+  --accent-foreground: oklch(0.96 0.008 230);
+  --destructive: oklch(0.68 0.19 22);
+  --success: oklch(0.78 0.14 165);
+  --warning: oklch(0.82 0.13 80);
+  --border: oklch(0.85 0.04 220 / 12%);
+  --input: oklch(0.85 0.04 220 / 18%);
+  --ring: oklch(0.82 0.12 210 / 70%);
+  --grid-line: oklch(0.85 0.04 220 / 4%);
 }
 
 /*
@@ -50,29 +37,42 @@
  * widoczne, a tekst nadal czytelny. Bez atrybutu (przeglądarka, brak efektu) wszystko jest nieprzezroczyste.
  * `--background` zostaje nieprzezroczyste, bo shadcn używa go też jako tła okien dialogowych.
  */
-.dark[data-window-effect] body {
+[data-window-effect] body {
   background-color: transparent;
 }
 
-.dark[data-window-effect] {
+[data-window-effect] {
   --surface-alpha: 55%;
   --fill-alpha: 60%;
-  --border: oklch(1 0 0 / 12%);
+  --border: oklch(0.85 0.04 220 / 14%);
 }
 
 /* Chromium (WebView2) wiąże to z systemowym „Ogranicz przezroczystość”; Acrylic na Windows 10 sam go nie respektuje. */
 @media (prefers-reduced-transparency: reduce) {
-  .dark[data-window-effect] body {
+  [data-window-effect] body {
     background-color: var(--background);
   }
 
-  .dark[data-window-effect] {
+  [data-window-effect] {
     --surface-alpha: 1;
     --fill-alpha: 1;
   }
 }
 
 @theme inline {
+  /* Segoe UI Variable przed `system-ui`, bo `system-ui` w WebView2 zawsze trafia w starsze Segoe UI. */
+  --font-sans: "Segoe UI Variable Text", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --tracking-hud: 0.12em;
+  --tracking-brand: 0.2em;
+  --spacing-header: 3rem;
+  --spacing-sidebar: 18rem;
+  --shadow-glow-primary: 0 0 8px var(--primary);
+  --shadow-glow-success: 0 0 6px var(--success);
+  --shadow-glow-warning: 0 0 6px var(--warning);
+  --shadow-glow-destructive: 0 0 6px var(--destructive);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -90,6 +90,7 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-success: var(--success);
+  --color-warning: var(--warning);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -101,5 +102,44 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+  }
+}
+
+/* Etykieta HUD: krótki podpis sekcji albo pola, np. „REPO // 02”. */
+@utility hud-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  line-height: var(--text-2xs--line-height);
+  letter-spacing: var(--tracking-hud);
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+/* Szklana powierzchnia (ADR-11, ADR-16): `Surface` i kafelki stanu repo. */
+@utility surface {
+  background-color: var(--card);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* Delikatna siatka pod treścią; obraz, nie kolor tła, więc nie zasłania efektu okna (ADR-11). */
+@utility hud-grid {
+  background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Znacznik aktywnego elementu listy: świecąca kreska przy lewej krawędzi. */
+@utility hud-active-edge {
+  position: relative;
+  &::before {
+    content: "";
+    position: absolute;
+    inset-block: 0.5rem;
+    left: 0;
+    width: 2px;
+    border-radius: 9999px;
+    background: var(--primary);
+    box-shadow: var(--shadow-glow-primary);
   }
 }

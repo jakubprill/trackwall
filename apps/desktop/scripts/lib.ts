@@ -47,7 +47,7 @@ export function cargoVersion(path: string): string {
 }
 
 /** Wersja musi być ta sama w daemonie, Tauri i Cargo: powłoka porównuje ją z `/api/health`. */
-export function versions(): Record<string, string> {
+function versions(): Record<string, string> {
   const manifests = {
     "packages/daemon/package.json": jsonVersion,
     "apps/desktop/src-tauri/tauri.conf.json": jsonVersion,

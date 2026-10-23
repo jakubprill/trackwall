@@ -119,7 +119,7 @@ _Unikaj_: sesja POSIX (to pojęcie z grupy procesów)
 Reguła, która z hooków, sekwencji terminala albo wyglądu ekranu wnioskuje stan zadania.
 
 **Wtyczka sesji** (`writeCopilotPlugin`):
-Katalog z `plugin.json` i `hooks.json`, który daemon podaje Copilot CLI przez `--plugin-dir`, żeby hooki zgłaszały stan tylko tej jednej sesji (ADR-16).
+Katalog z `plugin.json` i `hooks.json`, który daemon podaje Copilot CLI przez `--plugin-dir`, żeby hooki zgłaszały stan tylko tej jednej sesji (ADR-17).
 _Unikaj_: plugin (w polskim tekście), konfiguracja hooków
 
 **Rekord hooka** (`CopilotHookRecord`):

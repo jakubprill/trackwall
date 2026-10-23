@@ -2,7 +2,7 @@ import type { Osc } from "./osc-parser.ts";
 import type { StateSignal } from "./task-state-tracker.ts";
 
 /**
- * Detektor stanu Copilot CLI z sekwencji terminala (§4.4, ADR-16). Copilot CLI przy domyślnym
+ * Detektor stanu Copilot CLI z sekwencji terminala (§4.4, ADR-17). Copilot CLI przy domyślnym
  * `terminalProgress: true` wysyła OSC 9;4 (pasek postępu Windows Terminal / ConEmu) przez cały czas pracy
  * agenta i zdejmuje go po zakończeniu tury. Zdjęcie paska nie mówi, czy agent czeka na prompt, czy na zgodę,
  * dlatego to tylko `Input` z niską pewnością; dokładniej rozstrzygają hooki.

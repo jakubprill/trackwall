@@ -86,6 +86,12 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Tylko notatka o zmianach; test versions.test.ts pilnuje, że istnieje dla wersji z tagu.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          sparse-checkout: docs/release-notes
+          persist-credentials: false
+
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           pattern: trackwall-*
@@ -122,6 +128,7 @@ jobs:
           else
             prerelease=()
             if [[ "$TAG" == *-* ]]; then prerelease=(--prerelease); fi
+            # Notatka z repo idzie przed listą PR-ów, którą generuje GitHub.
             gh release create "$TAG" dist/* --verify-tag --generate-notes \
-              --title "Trackwall ${TAG#v}" "${prerelease[@]}"
+              --notes-file "docs/release-notes/$TAG.md" --title "Trackwall ${TAG#v}" "${prerelease[@]}"
           fi

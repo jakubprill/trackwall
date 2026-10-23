@@ -16,7 +16,7 @@ Etap 1 (szkielet): daemon z `/api/health`, UI z panelem daemona, powłoka Tauri 
 
 Przeglądanie repo: w zakładce „Repo” dodajesz lokalny katalog z gitem (pełną ścieżką), a Trackwall pokazuje gałąź, liczbę zmian i ahead/behind, README, pliki i commity z ostatniego commita oraz otwiera repo w VS Code. Lista repo jest w `~/.trackwall/workspace.yaml` i można ją edytować ręcznie. Wymaga `git` w `PATH`.
 
-Etap 2 (prototyp): wykrywanie stanu sesji Copilot CLI z hooków i sekwencji terminala (ADR-16), na razie jako skrypt nagrywający sesję, jeszcze bez zakładki Zadania; opis niżej w „Nagrywanie sesji Copilot CLI”.
+Etap 2 (prototyp): wykrywanie stanu sesji Copilot CLI z hooków i sekwencji terminala (ADR-17), na razie jako skrypt nagrywający sesję, jeszcze bez zakładki Zadania; opis niżej w „Nagrywanie sesji Copilot CLI”.
 
 ## Układ repo
 
@@ -68,7 +68,7 @@ Przebieg CI na Windowsie i macOS (push na `main` albo ręczne uruchomienie) publ
 
 ## Nagrywanie sesji Copilot CLI
 
-Prototyp wykrywania stanu zadania (ADR-16). Skrypt uruchamia Copilot CLI w PTY tak jak zrobi to daemon, pokazuje go w bieżącym terminalu, nagrywa i liczy stan (`Working`, `Input`, `Approval`…). Wymaga Bun i zainstalowanego, zalogowanego `copilot` w `PATH` (na Windowsie zarówno `copilot.exe`, jak i `copilot.cmd` z `npm install -g`). Uruchom go w katalogu repo, w którym ma pracować agent, z `bun --no-env-file`, żeby Bun nie wczytał `.env` repo do środowiska Copilot CLI (Bun nadal czyta `bunfig.toml` z bieżącego katalogu, więc w repo z `bunfig.toml` uruchom skrypt z `--config` wskazującym inny plik):
+Prototyp wykrywania stanu zadania (ADR-17). Skrypt uruchamia Copilot CLI w PTY tak jak zrobi to daemon, pokazuje go w bieżącym terminalu, nagrywa i liczy stan (`Working`, `Input`, `Approval`…). Wymaga Bun i zainstalowanego, zalogowanego `copilot` w `PATH` (na Windowsie zarówno `copilot.exe`, jak i `copilot.cmd` z `npm install -g`). Uruchom go w katalogu repo, w którym ma pracować agent, z `bun --no-env-file`, żeby Bun nie wczytał `.env` repo do środowiska Copilot CLI (Bun nadal czyta `bunfig.toml` z bieżącego katalogu, więc w repo z `bunfig.toml` uruchom skrypt z `--config` wskazującym inny plik):
 
 ```sh
 bun --no-env-file <trackwall>/packages/daemon/scripts/copilot-record.ts record                         # zwykła sesja interaktywna

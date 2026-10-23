@@ -1,5 +1,8 @@
 /** Formatowanie dla widoków repo; czyste funkcje, testowane w `test/format.test.ts`. */
 
+/** Przypis pod ucięty plik (README albo podgląd); daemon zwraca tylko początek dużych plików. */
+export const TRUNCATED_NOTE = "Plik jest dłuższy; pokazano początek.";
+
 export function relativeTime(iso: string, now: Date): string {
   const seconds = Math.round((now.getTime() - new Date(iso).getTime()) / 1000);
   if (Number.isNaN(seconds)) return iso;
@@ -34,4 +37,9 @@ export function changesLabel(changes: number): string | undefined {
   const lastDigit = changes % 10;
   const teen = changes % 100 >= 12 && changes % 100 <= 14;
   return `${changes} ${lastDigit >= 2 && lastDigit <= 4 && !teen ? "zmiany" : "zmian"}`;
+}
+
+/** Liczba z co najmniej dwiema cyframi, jak numery na liście repo: 1 daje „01”, 12 daje „12”. */
+export function twoDigits(n: number): string {
+  return String(n).padStart(2, "0");
 }

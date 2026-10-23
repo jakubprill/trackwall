@@ -2,7 +2,7 @@ import { z } from "zod";
 import { jsonOf } from "./json.ts";
 
 /**
- * Rekord hooka (§4.4, ADR-16): jedno wywołanie hooka z wtyczki sesji, zapisywane jako linia `hooks.jsonl`
+ * Rekord hooka (§4.4, ADR-17): jedno wywołanie hooka z wtyczki sesji, zapisywane jako linia `hooks.jsonl`
  * i znacznik w nagraniu. Payload to JSON od Copilot CLI na stdin hooka, więc jest niezaufany. Zapisywane są
  * tylko pola z listy, potrzebne do stanu; o reszcie zostają same nazwy, żeby z nagrań dało się poznać
  * nieudokumentowane pola bez zapisywania ich treści (prompt, argumenty i wyniki narzędzi mogą zawierać kod
