@@ -82,7 +82,7 @@ export class Mise {
         command: [...this.deps.command, "run", miseTask],
         cwd: dir,
         env: await this.deps.env(),
-        logSource: { kind: "mise-task", repo, miseTask },
+        logSource: logSource(repo, miseTask),
       });
     } catch (err) {
       if (!(err instanceof SpawnFailure)) throw err;
@@ -139,6 +139,11 @@ export function parseTaskList(result: MiseCliResult): TaskList {
 /** Klucz właściciela grupy w `procs`; tylko budowany, nigdy rozbierany z powrotem. */
 function owner(repo: string, miseTask: string): string {
   return `mise:${repo}:${miseTask}`;
+}
+
+/** Źródło logu taska: ta sama para (repo, task mise) co właściciel grupy, w kształcie z kontraktu `logs`. */
+function logSource(repo: string, miseTask: string): LogSource {
+  return { kind: "mise-task", repo, miseTask };
 }
 
 /** Komunikat błędu mise bez ostrzeżeń, które nie są przyczyną (np. nieudane sprawdzenie nowej wersji). */

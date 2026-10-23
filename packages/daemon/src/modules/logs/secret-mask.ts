@@ -15,17 +15,41 @@ const SECRET_NAME = /(^|_)(TOKEN|SECRET|PASSWORD|PASSWD|PASSPHRASE|APIKEY|API_KE
 /** Krótsze wartości (`true`, `1`, `dev`) zamieniałyby zwykłe słowa w całym logu. */
 const MIN_SECRET_CHARS = 8;
 
-/** Wartości zmiennych o nazwach sekretów, od najdłuższej, żeby sekret zawierający inny został zamaskowany w całości. */
+/**
+ * Wartości zmiennych o nazwach sekretów. Wartość wieloliniowa (klucz PEM) daje każdą swoją linię
+ * osobno, bo wyjście jest maskowane po liniach.
+ */
 export function secretValues(env: NodeJS.ProcessEnv): string[] {
   const values = new Set<string>();
   for (const [name, value] of Object.entries(env)) {
-    if (value !== undefined && value.length >= MIN_SECRET_CHARS && SECRET_NAME.test(name)) values.add(value);
+    if (value === undefined || !SECRET_NAME.test(name)) continue;
+    for (const part of value.split(/\r?\n/)) if (part.length >= MIN_SECRET_CHARS) values.add(part);
   }
-  return [...values].sort((a, b) => b.length - a.length);
+  return [...values];
 }
 
+/**
+ * Zamienia każde wystąpienie sekretu na `***`. Wystąpienia są szukane w oryginalnej linii i łączone, zanim cokolwiek
+ * zostanie zamienione, więc sekrety, które na siebie zachodzą albo jeden zawiera drugi, znikają w całości.
+ */
 export function maskSecrets(line: string, secrets: readonly string[]): string {
-  let masked = line;
-  for (const secret of secrets) masked = masked.replaceAll(secret, MASK);
-  return masked;
+  const ranges: [number, number][] = [];
+  for (const secret of secrets) {
+    for (let at = line.indexOf(secret); at !== -1; at = line.indexOf(secret, at + 1)) ranges.push([at, at + secret.length]);
+  }
+  if (ranges.length === 0) return line;
+  ranges.sort((a, b) => a[0] - b[0]);
+  const merged: [number, number][] = [];
+  for (const [start, end] of ranges) {
+    const last = merged.at(-1);
+    if (last && start <= last[1]) last[1] = Math.max(last[1], end);
+    else merged.push([start, end]);
+  }
+  let masked = "";
+  let done = 0;
+  for (const [start, end] of merged) {
+    masked += `${line.slice(done, start)}${MASK}`;
+    done = end;
+  }
+  return masked + line.slice(done);
 }

@@ -16,12 +16,13 @@ const RECORD_CHARS = 16 * 1024;
 export class RunOutput {
   private readonly secrets: readonly string[];
   private readonly onLine: (stream: LogStream, msg: string) => void;
-  private readonly streams = { stdout: new StreamLines(), stderr: new StreamLines() };
+  private readonly streams: Record<LogStream, StreamLines>;
   private readonly last: string[] = [];
 
   constructor(secrets: readonly string[], onLine: (stream: LogStream, msg: string) => void) {
     this.secrets = secrets;
     this.onLine = onLine;
+    this.streams = { stdout: new StreamLines(secrets), stderr: new StreamLines(secrets) };
   }
 
   push(stream: LogStream, chunk: Buffer): void {

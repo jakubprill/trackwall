@@ -1,4 +1,4 @@
-import { LOG_BUFFER_RECORDS, type LogRecord, type LogSource, type LogStream, type LogTail } from "@trackwall/protocol";
+import { LOG_BUFFER_RECORDS, type LogRecord, type LogSource, type LogStream, type LogTail, type LogTailRequest } from "@trackwall/protocol";
 import { LogFile, logFilePath } from "./log-file.ts";
 import { logLevel } from "./log-level.ts";
 import { RunOutput } from "./run-output.ts";
@@ -12,6 +12,8 @@ import { secretValues } from "./secret-mask.ts";
 
 /** Zapis do plików paczkami: głośny proces daje setki linii na sekundę. */
 const FLUSH_DELAY_MS = 250;
+/** Bufor źródła ma też limit treści: 2000 długich linii (np. logów JSON) zajęłoby dziesiątki MB na task. */
+const BUFFER_CHARS = 2 * 1024 * 1024;
 
 export interface LogsDeps {
   /** Katalog plików JSONL (`<katalog stanu>/logs`). */
@@ -23,23 +25,25 @@ export interface LogsDeps {
 
 interface SourceLog {
   readonly records: LogRecord[];
+  /** Suma długości `msg` rekordów w buforze. */
+  chars: number;
   /** `seq` ostatniego rekordu, który wypadł z bufora; kursor starszy znaczy, że coś przepadło. */
   evictedSeq: number;
   readonly file: LogFile;
-  /** Błąd zapisu tego pliku jest zgłaszany raz, do następnego udanego zapisu. */
-  failing: boolean;
-}
-
-export interface TailQuery {
-  source: LogSource;
-  sinceSeq?: number;
-  limit: number;
+  /** Błąd zapisu i utrata rekordów są zgłaszane raz, do następnego udanego zapisu. */
+  writeFailing: boolean;
+  losing: boolean;
 }
 
 export class Logs {
   private readonly deps: LogsDeps;
   private readonly sources = new Map<string, SourceLog>();
-  private seq = 0;
+  /**
+   * Pierwszy `seq` tego działania daemona minus jeden: chwila startu w ms razy 1000. Kursor mniejszy pochodzi
+   * z wcześniejszego działania; tysiąc rekordów na milisekundę działania to więcej, niż wypisze jakikolwiek proces.
+   */
+  private readonly baseSeq = Date.now() * 1000;
+  private seq = this.baseSeq;
   private flushTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(deps: LogsDeps) {
@@ -56,13 +60,14 @@ export class Logs {
   }
 
   /**
-   * Rekordy źródła po kursorze, od najstarszego, najwyżej `limit`. Bez kursora (albo z kursorem z poprzedniego
-   * działania daemona, większym niż ostatni `seq`) ostatnie `limit` rekordów.
+   * Rekordy źródła po kursorze, od najstarszego, najwyżej `limit`. Bez kursora (albo z kursorem z innego działania
+   * daemona) ostatnie `limit` rekordów.
    */
-  tail({ source, sinceSeq, limit }: TailQuery): LogTail {
+  tail({ source, sinceSeq, limit }: LogTailRequest): LogTail {
     const log = this.sources.get(sourceKey(source));
     const records = log?.records ?? [];
-    const fromOtherRun = sinceSeq !== undefined && sinceSeq > this.seq;
+    // Większy niż ostatni `seq`: z działania, którego zegar był do przodu.
+    const fromOtherRun = sinceSeq !== undefined && (sinceSeq < this.baseSeq || sinceSeq > this.seq);
     if (sinceSeq === undefined || fromOtherRun) return { records: records.slice(-limit), nextSeq: this.seq, dropped: fromOtherRun };
     const start = records.findIndex((r) => r.seq > sinceSeq);
     const page = start === -1 ? [] : records.slice(start, start + limit);
@@ -78,10 +83,11 @@ export class Logs {
     for (const log of this.sources.values()) {
       try {
         log.file.flush();
-        log.failing = false;
+        log.writeFailing = false;
+        log.losing = false;
       } catch (err) {
-        if (!log.failing) this.deps.log(`zapis ${log.file.path}: ${String(err)}; spróbuję ponownie`);
-        log.failing = true;
+        if (!log.writeFailing) this.deps.log(`zapis ${log.file.path}: ${String(err)}; spróbuję ponownie`);
+        log.writeFailing = true;
       }
     }
     if ([...this.sources.values()].some((l) => l.file.hasPending)) this.scheduleFlush();
@@ -91,10 +97,16 @@ export class Logs {
     this.seq += 1;
     const record: LogRecord = { seq: this.seq, ts: new Date().toISOString(), ...line, level: logLevel(line.msg) };
     log.records.push(record);
-    if (log.records.length > LOG_BUFFER_RECORDS) log.evictedSeq = log.records.shift()?.seq ?? log.evictedSeq;
-    if (!log.file.append(JSON.stringify({ ...record, source })) && !log.failing) {
-      log.failing = true;
-      this.deps.log(`zapis ${log.file.path} nie nadąża; rekordy giną do następnego udanego zapisu`);
+    log.chars += record.msg.length;
+    while (log.records.length > LOG_BUFFER_RECORDS || log.chars > BUFFER_CHARS) {
+      const evicted = log.records.shift();
+      if (!evicted) break;
+      log.evictedSeq = evicted.seq;
+      log.chars -= evicted.msg.length;
+    }
+    if (!log.file.append(JSON.stringify({ ...record, source })) && !log.losing) {
+      log.losing = true;
+      this.deps.log(`zapis ${log.file.path} nie nadąża; rekordy nie trafiają do pliku do następnego udanego zapisu`);
     }
     this.scheduleFlush();
   }
@@ -110,7 +122,8 @@ export class Logs {
     const key = sourceKey(source);
     let log = this.sources.get(key);
     if (!log) {
-      log = { records: [], evictedSeq: 0, file: new LogFile(logFilePath(this.deps.dir, source), this.deps.maxFileBytes), failing: false };
+      const file = new LogFile(logFilePath(this.deps.dir, source), this.deps.maxFileBytes);
+      log = { records: [], chars: 0, evictedSeq: 0, file, writeFailing: false, losing: false };
       this.sources.set(key, log);
     }
     return log;

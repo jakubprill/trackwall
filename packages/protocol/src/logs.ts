@@ -26,7 +26,10 @@ export const LogStream = z.enum(["stdout", "stderr"]);
 export type LogStream = z.infer<typeof LogStream>;
 
 export const LogRecord = z.object({
-  /** Globalny numer rekordu, rosnący dla wszystkich źródeł w jednym działaniu daemona. */
+  /**
+   * Globalny numer rekordu, rosnący dla wszystkich źródeł. Każde działanie daemona zaczyna od chwili startu
+   * w milisekundach razy 1000, więc numery kolejnych działań się nie powtarzają (§4.2).
+   */
   seq: z.number().int().positive(),
   /** ISO 8601, chwila odebrania linii przez daemon. */
   ts: z.string(),
@@ -45,14 +48,14 @@ export const LogTail = z.object({
   /** Kursor do następnego pytania (`sinceSeq`). */
   nextSeq: z.number().int().nonnegative(),
   /**
-   * Część rekordów po kursorze przepadła: wypadły z bufora albo kursor pochodzi z poprzedniego działania daemona.
-   * Klient zaczyna wtedy od tego, co dostał, zamiast doklejać.
+   * Część rekordów po kursorze przepadła: wypadły z bufora albo kursor pochodzi z innego działania daemona (wtedy
+   * odpowiedź to ostatnie rekordy, jak bez kursora). Klient zaczyna wtedy od tego, co dostał, zamiast doklejać.
    */
   dropped: z.boolean(),
 });
 export type LogTail = z.infer<typeof LogTail>;
 
-const LogTailRequest = z
+export const LogTailRequest = z
   .object({
     source: LogSource,
     /** Rekordy z `seq` większym niż kursor, od najstarszego; bez kursora ostatnie `limit` rekordów źródła. */
@@ -60,6 +63,7 @@ const LogTailRequest = z
     limit: z.number().int().min(1).max(LOG_TAIL_MAX),
   })
   .strict();
+export type LogTailRequest = z.infer<typeof LogTailRequest>;
 
 function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
   return { path: `/api/logs/${action}`, request, data };

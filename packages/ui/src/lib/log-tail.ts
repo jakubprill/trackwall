@@ -6,7 +6,8 @@ import { LOG_BUFFER_RECORDS, type LogLevel, type LogRecord, type LogTail } from 
  */
 
 /** Gdy daemon zgłasza `dropped`, lista zaczyna się od nowa: między starymi a nowymi rekordami jest dziura. */
-export function mergeTail(shown: readonly LogRecord[], page: LogTail): LogRecord[] {
+export function mergeTail(shown: LogRecord[], page: LogTail): LogRecord[] {
+  if (!page.dropped && page.records.length === 0) return shown;
   const merged = page.dropped ? page.records : [...shown, ...page.records];
   return merged.slice(-LOG_BUFFER_RECORDS);
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { LOG_BUFFER_RECORDS, type LogRecord } from "@trackwall/protocol";
+import { LOG_BUFFER_RECORDS, LogLevel, type LogRecord } from "@trackwall/protocol";
 import { logLevelClass, mergeTail, startsRun } from "../src/lib/log-tail.ts";
 
 function record(seq: number, runId = "r1"): LogRecord {
@@ -12,6 +12,12 @@ describe("log taska mise w UI", () => {
 
     expect(mergeTail(shown, { records: [record(5)], nextSeq: 5, dropped: false }).map((r) => r.seq)).toEqual([1, 2, 5]);
     expect(mergeTail(shown, { records: [record(9)], nextSeq: 9, dropped: true }).map((r) => r.seq)).toEqual([9]);
+  });
+
+  test("strona bez nowych rekordów zostawia tę samą listę, żeby widok nie malował wszystkich linii od nowa", () => {
+    const shown = [record(1)];
+
+    expect(mergeTail(shown, { records: [], nextSeq: 1, dropped: false })).toBe(shown);
   });
 
   test("lista nie jest dłuższa niż bufor źródła w daemonie", () => {
@@ -29,12 +35,12 @@ describe("log taska mise w UI", () => {
   });
 
   test("kolor mają tylko błędy i ostrzeżenia, szczegóły są przygaszone", () => {
-    expect(["error", "warn", "info", "debug", "trace"].map((l) => logLevelClass(l as LogRecord["level"]))).toEqual([
-      "text-destructive",
-      "text-warning",
+    expect(LogLevel.options.map(logLevelClass)).toEqual([
+      "text-muted-foreground",
+      "text-muted-foreground",
       "",
-      "text-muted-foreground",
-      "text-muted-foreground",
+      "text-warning",
+      "text-destructive",
     ]);
   });
 });

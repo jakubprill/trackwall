@@ -82,6 +82,8 @@ describe("logi procesu", () => {
 describe("odczyt od kursora", () => {
   test("seq jest wspólny dla wszystkich źródeł, a kursor zwraca tylko nowsze rekordy swojego źródła", () => {
     const { logs } = newLogs();
+    // Kursor pustego logu to ostatni `seq` przed pierwszym rekordem tego działania daemona.
+    const s = logs.tail({ source: DEV, limit: 1 }).nextSeq;
     const dev = logs.open(DEV, "run-1", {});
     const build = logs.open(BUILD, "run-2", {});
     write(dev, "a");
@@ -90,45 +92,70 @@ describe("odczyt od kursora", () => {
 
     expect(logs.tail({ source: DEV, limit: 10 })).toMatchObject({
       records: [
-        { seq: 1, msg: "a" },
-        { seq: 3, msg: "c" },
+        { seq: s + 1, msg: "a" },
+        { seq: s + 3, msg: "c" },
       ],
-      nextSeq: 3,
+      nextSeq: s + 3,
     });
-    expect(logs.tail({ source: BUILD, limit: 10 }).records).toMatchObject([{ seq: 2, msg: "b" }]);
-    expect(logs.tail({ source: DEV, sinceSeq: 1, limit: 10 })).toMatchObject({
-      records: [{ seq: 3, msg: "c" }],
-      nextSeq: 3,
+    expect(logs.tail({ source: BUILD, limit: 10 }).records).toMatchObject([{ seq: s + 2, msg: "b" }]);
+    expect(logs.tail({ source: DEV, sinceSeq: s + 1, limit: 10 })).toMatchObject({
+      records: [{ seq: s + 3, msg: "c" }],
+      nextSeq: s + 3,
       dropped: false,
     });
-    expect(logs.tail({ source: DEV, sinceSeq: 3, limit: 10 })).toEqual({ records: [], nextSeq: 3, dropped: false });
+    expect(logs.tail({ source: DEV, sinceSeq: s + 3, limit: 10 })).toEqual({ records: [], nextSeq: s + 3, dropped: false });
   });
 
   test("limit z kursorem daje najstarsze rekordy po nim i kursor na ostatnim zwróconym, bez kursora najnowsze", () => {
     const { logs } = newLogs();
+    const s = logs.tail({ source: DEV, limit: 1 }).nextSeq;
     write(logs.open(DEV, "r", {}), "1", "2", "3", "4");
 
-    expect(logs.tail({ source: DEV, sinceSeq: 0, limit: 2 })).toMatchObject({ records: [{ msg: "1" }, { msg: "2" }], nextSeq: 2 });
-    expect(logs.tail({ source: DEV, sinceSeq: 2, limit: 2 })).toMatchObject({ records: [{ msg: "3" }, { msg: "4" }], nextSeq: 4 });
-    expect(logs.tail({ source: DEV, limit: 2 })).toMatchObject({ records: [{ msg: "3" }, { msg: "4" }], nextSeq: 4 });
+    expect(logs.tail({ source: DEV, sinceSeq: s, limit: 2 })).toMatchObject({ records: [{ msg: "1" }, { msg: "2" }], nextSeq: s + 2 });
+    expect(logs.tail({ source: DEV, sinceSeq: s + 2, limit: 2 })).toMatchObject({ records: [{ msg: "3" }, { msg: "4" }], nextSeq: s + 4 });
+    expect(logs.tail({ source: DEV, limit: 2 })).toMatchObject({ records: [{ msg: "3" }, { msg: "4" }], nextSeq: s + 4 });
   });
 
-  test("kursor starszy niż bufor źródła albo z poprzedniego działania daemona zgłasza dropped", () => {
+  test("kursor starszy niż bufor źródła zgłasza dropped i zwraca rekordy od najstarszego w buforze", () => {
     const { logs } = newLogs();
+    const s = logs.tail({ source: DEV, limit: 1 }).nextSeq;
     const output = logs.open(DEV, "r", {});
     for (let i = 1; i <= LOG_BUFFER_RECORDS + 5; i++) write(output, `linia ${i}`);
 
-    const old = logs.tail({ source: DEV, sinceSeq: 2, limit: 1 });
-    expect(old).toMatchObject({ dropped: true, records: [{ seq: 6, msg: "linia 6" }] });
-    expect(logs.tail({ source: DEV, sinceSeq: 5, limit: 1 }).dropped).toBe(false);
+    expect(logs.tail({ source: DEV, sinceSeq: s + 2, limit: 1 })).toMatchObject({
+      dropped: true,
+      records: [{ seq: s + 6, msg: "linia 6" }],
+    });
+    expect(logs.tail({ source: DEV, sinceSeq: s + 5, limit: 1 }).dropped).toBe(false);
+  });
 
-    const future = logs.tail({ source: DEV, sinceSeq: 1_000_000, limit: 1 });
-    expect(future).toMatchObject({ dropped: true, nextSeq: LOG_BUFFER_RECORDS + 5, records: [{ msg: `linia ${LOG_BUFFER_RECORDS + 5}` }] });
+  test("kursor z innego działania daemona, mniejszy albo większy, zgłasza dropped i zwraca ostatnie rekordy", () => {
+    const { logs } = newLogs();
+    const s = logs.tail({ source: DEV, limit: 1 }).nextSeq;
+    write(logs.open(DEV, "r", {}), "1", "2");
+
+    for (const sinceSeq of [5, s + 1_000_000]) {
+      expect(logs.tail({ source: DEV, sinceSeq, limit: 1 })).toEqual({
+        dropped: true,
+        nextSeq: s + 2,
+        records: [expect.objectContaining({ msg: "2" })],
+      });
+    }
+  });
+
+  test("bufor źródła ma limit treści: długie linie wypychają starsze rekordy wcześniej niż po 2000", () => {
+    const { logs } = newLogs();
+    const output = logs.open(DEV, "r", {});
+    for (let i = 0; i < 300; i++) write(output, "x".repeat(16 * 1024));
+
+    const { records } = logs.tail({ source: DEV, limit: 1000 });
+    expect(records.length).toBeLessThan(300);
+    expect(records.reduce((sum, r) => sum + r.msg.length, 0)).toBeLessThanOrEqual(2 * 1024 * 1024);
   });
 
   test("źródło, które nic nie wypisało, ma pusty log", () => {
     const { logs } = newLogs();
-    expect(logs.tail({ source: DEV, limit: 10 })).toEqual({ records: [], nextSeq: 0, dropped: false });
+    expect(logs.tail({ source: DEV, limit: 10 })).toMatchObject({ records: [], dropped: false });
   });
 });
 
@@ -191,7 +218,7 @@ describe("linie wyjścia", () => {
 });
 
 describe("sekrety do maskowania", () => {
-  test("to wartości zmiennych o nazwach sekretów, od najdłuższej, bez krótkich i bez PWD", () => {
+  test("to wartości zmiennych o nazwach sekretów, bez krótkich i bez PWD", () => {
     expect(
       secretValues({
         GH_TOKEN: "ghp_123456789",
@@ -202,7 +229,7 @@ describe("sekrety do maskowania", () => {
         TOKENIZERS_PARALLELISM: "false-false",
         PATH: "/usr/bin:/bin",
       }),
-    ).toEqual(["haslo-do-bazy-dlugie", "sk_test_abcdefgh", "ghp_123456789"]);
+    ).toEqual(["ghp_123456789", "haslo-do-bazy-dlugie", "sk_test_abcdefgh"]);
   });
 
   test("sekret zawierający inny jest maskowany w całości", () => {
@@ -211,6 +238,35 @@ describe("sekrety do maskowania", () => {
     write(new RunOutput(secrets, (_stream, msg) => lines.push(msg)), "x abcdefgh-ijkl y");
 
     expect(lines).toEqual(["x *** y"]);
+  });
+});
+
+describe("sekret w trudnych miejscach", () => {
+  test("klucz wieloliniowy jest maskowany w każdej linii", () => {
+    const secrets = secretValues({ DEPLOY_PRIVATE_KEY: "-----BEGIN KEY-----\nMIIEabcdefgh\r\n-----END KEY-----" });
+    const lines: string[] = [];
+    write(new RunOutput(secrets, (_stream, msg) => lines.push(msg)), "-----BEGIN KEY-----", "MIIEabcdefgh", "-----END KEY-----");
+
+    expect(lines).toEqual(["***", "***", "***"]);
+  });
+
+  test("sekrety zachodzące na siebie znikają w całości", () => {
+    const lines: string[] = [];
+    write(new RunOutput(["abcdefgh12", "12345678x"], (_stream, msg) => lines.push(msg)), "przed abcdefgh12345678x po");
+
+    expect(lines).toEqual(["przed *** po"]);
+  });
+
+  test("wymuszony podział długiej linii nie rozcina sekretu", () => {
+    const secret = "ghp_SECRETVALUE1234567890";
+    const lines: string[] = [];
+    const output = new RunOutput([secret], (_stream, msg) => lines.push(msg));
+    // Postęp z `\r` bez `\n` przekracza 64 KB w chwili, gdy sekret jest przecięty na granicy kawałków.
+    output.push("stdout", Buffer.from(`${"postęp 50%\r".repeat(6000)}token=${secret.slice(0, 15)}`));
+    output.push("stdout", Buffer.from(`${secret.slice(15)}\n`));
+
+    expect(lines.join("\n")).not.toContain("ghp_");
+    expect(lines.at(-1)).toBe("token=***");
   });
 });
 
@@ -238,7 +294,7 @@ describe("plik logu", () => {
     expect(fileName("con")).toBe("%con");
     expect(fileName("web.api")).toBe("web%2Eapi");
     const long = fileName("x".repeat(300));
-    expect(long.length).toBe(80);
+    expect(long.length).toBe(60);
     expect(long).not.toBe(fileName(`${"x".repeat(299)}y`));
   });
 
@@ -257,6 +313,20 @@ describe("plik logu", () => {
 
     expect(readFileSync(rotatedPath(path), "utf8")).toBe('{"n":1,"pad":"xxxxxxxxxx"}\n');
     expect(readFileSync(path, "utf8")).toBe('{"n":2}\n');
+  });
+
+  test("nieudana rotacja nie wstrzymuje zapisu: plik rośnie ponad limit", () => {
+    const dir = mkdtempSync(join(tmpdir(), "trackwall-logfile-"));
+    const path = join(dir, "dev.jsonl");
+    // Niepusty katalog w miejscu `.1.jsonl`: rename się nie uda, jak na Windowsie przy pliku otwartym gdzie indziej.
+    mkdirSync(join(rotatedPath(path), "zajete"), { recursive: true });
+    const file = new LogFile(path, 10);
+    file.append('{"n":1}');
+    file.flush();
+    file.append('{"n":2}');
+    file.flush();
+
+    expect(readFileSync(path, "utf8")).toBe('{"n":1}\n{"n":2}\n');
   });
 
   test("rozmiar pliku z poprzedniego działania daemona liczy się do limitu", () => {

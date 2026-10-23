@@ -45,14 +45,24 @@ export class LogFile {
     const bytes = Buffer.byteLength(text);
     mkdirSync(dirname(this.path), { recursive: true });
     this.size ??= sizeOf(this.path);
-    if (this.size > 0 && this.size + bytes > this.maxBytes) {
-      renameSync(this.path, rotatedPath(this.path));
-      this.size = 0;
-    }
+    if (this.size > 0 && this.size + bytes > this.maxBytes) this.rotate();
     appendFileSync(this.path, text);
     this.size += bytes;
     this.pending = [];
     this.pendingChars = 0;
+  }
+
+  /**
+   * Rotacja, która się nie udała (na Windowsie plik otwarty bez `FILE_SHARE_DELETE`, np. przez `Get-Content -Wait`
+   * albo antywirusa), nie wstrzymuje zapisu: plik rośnie ponad limit, a rotacja jest ponawiana przy następnym zapisie.
+   */
+  private rotate(): void {
+    try {
+      renameSync(this.path, rotatedPath(this.path));
+      this.size = 0;
+    } catch {
+      // celowo: limit to cel, nie warunek zapisu
+    }
   }
 }
 
@@ -79,8 +89,11 @@ export function logFilePath(dir: string, source: LogSource): string {
  * więc wystarczy porównać całą.
  */
 const RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i;
-/** Dłuższa nazwa jest skracana ze skrótem, żeby ścieżka zmieściła się w limicie 260 znaków Windowsa. */
-const MAX_NAME_CHARS = 80;
+/**
+ * Dłuższa nazwa jest skracana ze skrótem: dwie takie nazwy z `logs\mise-task` i `.1.jsonl` to ok. 140 znaków, więc
+ * ścieżka mieści się w limicie 260 znaków Windowsa przy katalogu stanu do ok. 100 znaków.
+ */
+const MAX_NAME_CHARS = 60;
 
 /**
  * Nazwa pliku z dowolnego napisu, ta sama na Windowsie i macOS: znaki spoza `[a-z0-9_-]` (także `:` z `build:ui`,

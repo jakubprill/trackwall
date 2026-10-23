@@ -205,7 +205,7 @@ describe("api logs", () => {
   test("log taska, który nic nie wypisał, jest pusty, a źródło niezgodne ze schematem to 400", async () => {
     const source = { kind: "mise-task", repo: "web", miseTask: "dev" };
     const empty = await post(logsApi.tail.path, { source, limit: 100 });
-    expect(apiResult(LogTail).parse(JSON.parse(empty.body))).toEqual({ ok: true, data: { records: [], nextSeq: 0, dropped: false } });
+    expect(apiResult(LogTail).parse(JSON.parse(empty.body))).toMatchObject({ ok: true, data: { records: [], dropped: false } });
 
     const bad = await post(logsApi.tail.path, { source: { ...source, miseTask: "--help" }, limit: 100 });
     expect(bad.status).toBe(400);

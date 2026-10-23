@@ -185,11 +185,11 @@ _Unikaj_: wpis, event
 Skąd pochodzi rekord. Dziś task mise repo (`{ kind: "mise-task", repo, miseTask }`); serwis, zadanie i sam daemon dojdą jako kolejne rodzaje. Źródło ma rekordy wszystkich swoich uruchomień.
 
 **Log** (log taska mise, `logs/tail`, w UI przycisk „Log”):
-Rekordy jednego źródła w kolejności `seq`: ostatnie 2000 w pamięci daemona, wszystkie w pliku JSONL `logs/<rodzaj>/<repo>/<task mise>.jsonl` w katalogu stanu (ADR-28). Nie myl z logiem daemona (stderr procesu `trackwall-daemon`).
+Rekordy jednego źródła w kolejności `seq`: ostatnie (do 2000) w pamięci daemona, nowsze niż ostatnia rotacja w pliku JSONL `logs/<rodzaj>/<repo>/<task mise>.jsonl` w katalogu stanu (bieżący plik i jeden poprzedni, po 10 MB, ADR-28). Nie myl z logiem daemona (stderr procesu `trackwall-daemon`).
 _Unikaj_: konsola, terminal (to PTY sesji zadania)
 
 **`seq`**:
-Globalny, rosnący numer rekordu dla wszystkich źródeł, od 1 w każdym działaniu daemona. Kursor (`sinceSeq` w API, `since_seq` w narzędziach MCP) działa dla jednego źródła i dla całego workspace; `dropped` mówi, że część rekordów po kursorze przepadła.
+Globalny, rosnący numer rekordu dla wszystkich źródeł; każde działanie daemona zaczyna od chwili startu, więc numery się nie powtarzają. Kursor (`sinceSeq` w API, `since_seq` w narzędziach MCP) działa dla jednego źródła i dla całego workspace; `dropped` mówi, że część rekordów po kursorze przepadła.
 
 **Zdarzenie**:
 Wiadomość daemona na WebSocket `/ws` (`service.state`, `task.state`…) z własnym `seq` zdarzeń.

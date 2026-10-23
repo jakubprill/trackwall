@@ -17,15 +17,25 @@ const ANSI = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g;
 
 export class StreamLines {
   private readonly decoder = new StringDecoder("utf8");
+  private readonly secrets: readonly string[];
   private partial = "";
+
+  /**
+   * Maskowanie działa na liniach, więc wymuszony podział linii nie może rozciąć sekretu (`secrets`): część przed
+   * podziałem pokazałaby jego początek.
+   */
+  constructor(secrets: readonly string[]) {
+    this.secrets = secrets;
+  }
 
   /** Pełne linie z kawałka, jeszcze nieoczyszczone; reszta czeka na następny. */
   push(chunk: Buffer): string[] {
     const lines = (this.partial + this.decoder.write(chunk)).split("\n");
     this.partial = lines.pop() ?? "";
     if (this.partial.length > MAX_PARTIAL_CHARS) {
-      lines.push(this.partial);
-      this.partial = "";
+      const cut = safeCut(this.partial, this.secrets);
+      lines.push(this.partial.slice(0, cut));
+      this.partial = this.partial.slice(cut);
     }
     return lines;
   }
@@ -41,6 +51,26 @@ export class StreamLines {
     this.partial = "";
     return last === "" ? undefined : last;
   }
+}
+
+/**
+ * Miejsce wymuszonego podziału: koniec tekstu bez najdłuższego sekretu bez jednego znaku (sekret, który dopiero
+ * przychodzi, zaczyna się w tej zakładce), cofnięty przed każdy sekret, który by go przecinał.
+ */
+function safeCut(text: string, secrets: readonly string[]): number {
+  let cut = text.length - Math.max(0, ...secrets.map((s) => s.length - 1));
+  for (let moved = true; moved; ) {
+    moved = false;
+    for (const secret of secrets) {
+      const at = text.lastIndexOf(secret, cut - 1);
+      if (at !== -1 && at < cut && at + secret.length > cut) {
+        cut = at;
+        moved = true;
+      }
+    }
+  }
+  // Tekst w całości z zachodzących na siebie sekretów: lepiej podzielić na końcu niż trzymać rosnącą linię.
+  return cut > 0 ? cut : text.length;
 }
 
 /** Linia bez sekwencji ANSI; `\r` jest zostawiane, bo maskowanie musi widzieć całą linię (`visibleText`). */

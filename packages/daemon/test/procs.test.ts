@@ -254,14 +254,16 @@ describe("procs", () => {
 
 describe.each(RUNTIMES)("procs pod %s", (_name, runtime) => {
   test(
-    "stop zatrzymuje całą grupę procesów",
+    "stop zatrzymuje całą grupę procesów, a jej wyjście trafia do ostatnich linii i pliku logu",
     async () => {
       const dir = mkdtempSync(join(tmpdir(), "trackwall-procs-runtime-"));
       const proc = Bun.spawn([...runtime, RUNNER, dir], { stdout: "pipe", stderr: "pipe" });
       const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
       expect({ code, err }).toEqual({ code: 0, err: "" });
 
-      expect(JSON.parse(out)).toMatchObject({ kind: "exited", stoppedByUser: true });
+      expect(JSON.parse(out)).toMatchObject({ kind: "exited", stoppedByUser: true, lastLines: ["poziom 0 działa"] });
+      const logFile = join(dir, "logs", "mise-task", "web", "dev.jsonl");
+      expect(readFileSync(logFile, "utf8")).toContain('"msg":"poziom 0 działa"');
       expect(treePids(dir, 3)).toHaveLength(3);
       expect(treePids(dir, 3).filter(isAlive)).toEqual([]);
     },
