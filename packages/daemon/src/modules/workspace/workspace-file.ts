@@ -4,7 +4,7 @@ import { type Document, isMap, parseDocument } from "yaml";
 import { z } from "zod";
 import { writeFileAtomic } from "../../atomic-write.ts";
 import { DomainError } from "../../errors.ts";
-import { isFullPath } from "./projects-dir.ts";
+import { isFullPath, NOT_FULL_PATH } from "./full-path.ts";
 
 /**
  * `workspace.yaml` (§4.5, ADR-13): konfiguracja workspace, którą użytkownik może edytować ręcznie i trzymać
@@ -17,7 +17,7 @@ const WorkspaceConfig = z.object({
   // Pusty klucz (`projectsDir:`) YAML czyta jako `null`, tak samo jak brak klucza.
   projectsDir: z
     .string()
-    .refine((dir) => isFullPath(dir), "folder z projektami musi być pełną ścieżką (bez `~` i bez ścieżki względnej)")
+    .refine((dir) => isFullPath(dir), NOT_FULL_PATH)
     .nullish()
     .transform((dir) => dir ?? null),
 });

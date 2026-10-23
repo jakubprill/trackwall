@@ -1,27 +1,28 @@
 import { describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, posix, win32 } from "node:path";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
 import { vscodeUrl } from "../src/modules/workspace/editor-url.ts";
-import { isFullPath } from "../src/modules/workspace/projects-dir.ts";
+import { isFullPath } from "../src/modules/workspace/full-path.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { gitIn, makeRepo } from "./support/git-repo.ts";
 
 /** Workspace z ustawionym, pustym folderem z projektami. */
-function workspaceWithProjectsDir() {
+async function workspaceWithProjectsDir() {
   const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projekty-"));
   const opened: string[] = [];
   const workspace = new Workspace({ file: new WorkspaceFile(file), vcs: new Vcs(), openUrl: (url) => opened.push(url) });
-  workspace.setProjectsDir(projects);
+  await workspace.setProjectsDir(projects);
   return { workspace, file, projects, opened };
 }
 
 describe("workspace", () => {
   test("lista to repo gita z folderu z projektami, posortowane, bez zwykłych katalogów, plików i ukrytych katalogów", async () => {
-    const { workspace, projects } = workspaceWithProjectsDir();
+    const { workspace, projects } = await workspaceWithProjectsDir();
     makeRepo({ a: "1" }, "web", projects);
     makeRepo({ a: "1" }, "Orders BFF", projects);
     makeRepo({ a: "1" }, ".ukryte", projects);
@@ -38,7 +39,7 @@ describe("workspace", () => {
   });
 
   test("dowiązanie do repo (na Windowsie junction) i worktree z plikiem .git są repo, zerwane dowiązanie nie", async () => {
-    const { workspace, projects } = workspaceWithProjectsDir();
+    const { workspace, projects } = await workspaceWithProjectsDir();
     // Junction na Windowsie nie wymaga uprawnień administratora; na macOS i Linuksie typ jest ignorowany.
     symlinkSync(makeRepo({ a: "1" }), join(projects, "dowiazane"), "junction");
     symlinkSync(join(projects, "nie-ma"), join(projects, "zerwane"), "junction");
@@ -49,7 +50,7 @@ describe("workspace", () => {
   });
 
   test("repo sklonowane albo usunięte poza Trackwallem pojawia się i znika przy następnym zapytaniu", async () => {
-    const { workspace, projects } = workspaceWithProjectsDir();
+    const { workspace, projects } = await workspaceWithProjectsDir();
     expect((await workspace.list()).repos).toEqual([]);
 
     const dir = makeRepo({ a: "1" }, "api", projects);
@@ -61,7 +62,7 @@ describe("workspace", () => {
   });
 
   test("katalogi, których nazwy dają ten sam identyfikator, dostają przyrostki w stałej kolejności", async () => {
-    const { workspace, projects } = workspaceWithProjectsDir();
+    const { workspace, projects } = await workspaceWithProjectsDir();
     makeRepo({}, "Zażółć", projects);
     makeRepo({}, "zazolc", projects);
 
@@ -80,32 +81,34 @@ describe("workspace", () => {
     await expect(workspace.overview("api")).rejects.toMatchObject({ code: "not_found" });
   });
 
-  test("ustawienie folderu zapisuje pełną ścieżkę w workspace.yaml", () => {
-    const { workspace, file, projects } = workspaceWithProjectsDir();
+  test("ustawienie folderu zapisuje pełną ścieżkę w workspace.yaml", async () => {
+    const { workspace, file, projects } = await workspaceWithProjectsDir();
     expect(workspace.settings()).toEqual({ projectsDir: projects, configFile: file });
     expect(readFileSync(file, "utf8")).toContain(`projectsDir: ${projects}`);
   });
 
-  test("ścieżka względna, nieistniejąca albo do pliku jest odrzucana jako bad_request i niczego nie zapisuje", () => {
-    const { workspace, projects } = workspaceWithProjectsDir();
+  test("ścieżka względna, nieistniejąca albo do pliku jest odrzucana jako bad_request i niczego nie zapisuje", async () => {
+    const { workspace, projects } = await workspaceWithProjectsDir();
     writeFileSync(join(projects, "plik.txt"), "x");
 
-    expect(() => workspace.setProjectsDir("wzgledna/sciezka")).toThrow(expect.objectContaining({ code: "bad_request" }));
-    expect(() => workspace.setProjectsDir(join(projects, "nie-ma"))).toThrow(expect.objectContaining({ code: "bad_request" }));
-    expect(() => workspace.setProjectsDir(join(projects, "plik.txt"))).toThrow(expect.objectContaining({ code: "bad_request" }));
-    expect(() => workspace.setProjectsDir(join(projects, "plik.txt", "pod"))).toThrow(expect.objectContaining({ code: "bad_request" }));
+    await expect(workspace.setProjectsDir("wzgledna/sciezka")).rejects.toThrow(expect.objectContaining({ code: "bad_request" }));
+    await expect(workspace.setProjectsDir(join(projects, "nie-ma"))).rejects.toThrow(expect.objectContaining({ code: "bad_request" }));
+    await expect(workspace.setProjectsDir(join(projects, "plik.txt"))).rejects.toThrow(expect.objectContaining({ code: "bad_request" }));
+    await expect(workspace.setProjectsDir(join(projects, "plik.txt", "pod"))).rejects.toThrow(
+      expect.objectContaining({ code: "bad_request" }),
+    );
     expect(workspace.settings().projectsDir).toBe(projects);
   });
 
   test("folder, który zniknął po ustawieniu, to projects_dir_unavailable z jego ścieżką", async () => {
-    const { workspace, projects } = workspaceWithProjectsDir();
+    const { workspace, projects } = await workspaceWithProjectsDir();
     rmSync(projects, { recursive: true, force: true });
 
     await expect(workspace.list()).rejects.toMatchObject({ code: "projects_dir_unavailable", message: expect.stringContaining(projects) });
   });
 
   test("repo, którego git nie czyta, zostaje na liście jako niedostępne", async () => {
-    const { workspace, projects } = workspaceWithProjectsDir();
+    const { workspace, projects } = await workspaceWithProjectsDir();
     mkdirSync(join(projects, "zepsute", ".git"), { recursive: true });
 
     const [repo] = (await workspace.list()).repos;
@@ -118,13 +121,42 @@ describe("workspace", () => {
     const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
     const workspace = new Workspace({ file: new WorkspaceFile(file), vcs: new Vcs(), openUrl: () => {} });
     mkdirSync(join(outer, "Projects", "puste", ".git"), { recursive: true });
-    workspace.setProjectsDir(join(outer, "Projects"));
+    await workspace.setProjectsDir(join(outer, "Projects"));
 
     expect((await workspace.list()).repos).toMatchObject([{ id: "puste", status: { kind: "unavailable" } }]);
   });
 
+  test("dowiązanie do katalogu z pustym .git leżącego w innym repo nie pokazuje tamtego repo", async () => {
+    const outer = makeRepo({ "a.txt": "zewnętrzne" }, "dom");
+    mkdirSync(join(outer, "cel", ".git"), { recursive: true });
+    const { workspace, projects } = await workspaceWithProjectsDir();
+    symlinkSync(join(outer, "cel"), join(projects, "dowiazane"), "junction");
+
+    expect((await workspace.list()).repos).toMatchObject([{ id: "dowiazane", status: { kind: "unavailable" } }]);
+  });
+
+  test("gpg.program z konfiguracji repo nie jest uruchamiany przez log.showSignature", async () => {
+    const { workspace, projects } = await workspaceWithProjectsDir();
+    const dir = makeRepo({}, "api", projects);
+    const marker = join(projects, "gpg-uruchomiony");
+    const program = join(projects, "gpg.sh");
+    writeFileSync(program, `#!/bin/sh\necho x > "${marker.replaceAll("\\", "/")}"\n`, { mode: 0o755 });
+    // Commit z podpisem (nagłówek `gpgsig`), bo bez niego git nie woła programu weryfikującego.
+    const tree = gitIn(dir, "write-tree").trim();
+    const commit = execFileSync("git", ["-C", dir, "hash-object", "-t", "commit", "-w", "--stdin"], {
+      input: `tree ${tree}\nauthor A <a@example.com> 1700000000 +0000\ncommitter A <a@example.com> 1700000000 +0000\ngpgsig -----BEGIN PGP SIGNATURE-----\n \n -----END PGP SIGNATURE-----\n\npodpisany\n`,
+      encoding: "utf8",
+    }).trim();
+    gitIn(dir, "update-ref", "refs/heads/main", commit);
+    gitIn(dir, "config", "log.showSignature", "true");
+    gitIn(dir, "config", "gpg.program", program.replaceAll("\\", "/"));
+
+    expect((await workspace.list()).repos[0]?.status).toMatchObject({ kind: "ok", head: { subject: "podpisany" } });
+    expect(existsSync(marker)).toBe(false);
+  });
+
   test("core.fsmonitor z konfiguracji repo nie jest uruchamiany przy odczycie stanu", async () => {
-    const { workspace, projects } = workspaceWithProjectsDir();
+    const { workspace, projects } = await workspaceWithProjectsDir();
     const dir = makeRepo({ a: "1" }, "api", projects);
     const marker = join(projects, "fsmonitor-uruchomiony");
     gitIn(dir, "config", "core.fsmonitor", `echo x > "${marker.replaceAll("\\", "/")}"`);
@@ -134,7 +166,7 @@ describe("workspace", () => {
   });
 
   test("przegląd zawiera README i commity, drzewo i plik czytają z ostatniego commita", async () => {
-    const { workspace, projects } = workspaceWithProjectsDir();
+    const { workspace, projects } = await workspaceWithProjectsDir();
     makeRepo({ "README.md": "# Opis\n", "readme.txt": "gorszy", "src/a.ts": "kod" }, "api", projects);
 
     const overview = await workspace.overview("api");
@@ -147,13 +179,13 @@ describe("workspace", () => {
   });
 
   test("przegląd repo bez commitów nie ma README ani commitów", async () => {
-    const { workspace, projects } = workspaceWithProjectsDir();
+    const { workspace, projects } = await workspaceWithProjectsDir();
     makeRepo({}, "puste", projects);
     expect(await workspace.overview("puste")).toMatchObject({ readme: null, commits: [] });
   });
 
   test("otwarcie w VS Code przekazuje adres vscode:// z katalogiem repo", async () => {
-    const { workspace, projects, opened } = workspaceWithProjectsDir();
+    const { workspace, projects, opened } = await workspaceWithProjectsDir();
     const dir = makeRepo({ a: "1" }, "api", projects);
     await workspace.openEditor("api");
     expect(opened).toEqual([vscodeUrl(dir)]);

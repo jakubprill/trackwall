@@ -17,7 +17,8 @@ describe("mapLimit", () => {
     expect(peak).toBe(2);
   });
 
-  test("pusta lista daje pusty wynik", async () => {
+  test("pusta lista daje pusty wynik, a limit poniżej 1 to błąd zamiast cichej pustej listy", async () => {
     expect(await mapLimit([], 4, async () => 1)).toEqual([]);
+    await expect(mapLimit([1], 0, async () => 1)).rejects.toThrow("co najmniej 1");
   });
 });

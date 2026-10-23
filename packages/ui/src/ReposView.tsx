@@ -21,9 +21,10 @@ export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection;
   const load = useCallback(() => post(conn, workspaceApi.list, {}), [conn]);
   const list = useRemote(load, { pollMs: POLL_MS });
 
-  // Folder z projektami, który zniknął, nie ma już repo; stara lista wyglądałaby na aktualną.
-  const projectsDirGone = list.errorCode === "projects_dir_unavailable";
-  const repos = projectsDirGone ? [] : (list.data?.repos ?? []);
+  // Folder z projektami, który zniknął albo jest źle wpisany w `workspace.yaml`, poprawia się w ustawieniach,
+  // a stara lista wyglądałaby na aktualną.
+  const needsSettings = list.errorCode === "projects_dir_unavailable" || list.errorCode === "invalid_config";
+  const repos = needsSettings ? [] : (list.data?.repos ?? []);
   const current = repos.find((r) => r.id === selected) ?? repos[0];
 
   return (
@@ -55,7 +56,7 @@ export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection;
                   list.reload();
                 }}
               >
-                {projectsDirGone && <ChangeProjectsDir onClick={onOpenSettings} />}
+                {needsSettings && <ChangeProjectsDir onClick={onOpenSettings} />}
               </ErrorWithRetry>
             </div>
           )}

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { errorCode, errorMessage } from "./api.ts";
+import { type CallErrorCode, errorCode, errorMessage } from "./api.ts";
 
 /** Ostatnie dane i ostatni błąd osobno: błąd odświeżenia nie zabiera widoku, który już coś pokazuje. */
 export interface Remote<T> {
   data?: T;
   error?: string;
   /** `error.code` z daemona, gdy widok musi zareagować na konkretny błąd, a nie tylko go pokazać. */
-  errorCode?: string;
+  errorCode?: CallErrorCode;
 }
 
 export type RemoteHandle<T> = Remote<T> & { reload: () => void };

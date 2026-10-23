@@ -1,8 +1,9 @@
-import { type Dirent, statSync } from "node:fs";
+import type { Dirent } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
-import path, { join, type PlatformPath, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import type { RepoId } from "@trackwall/protocol";
 import { DomainError } from "../../errors.ts";
+import { isFullPath, NOT_FULL_PATH } from "./full-path.ts";
 import { repoIdFor } from "./repo-id.ts";
 
 /**
@@ -19,25 +20,20 @@ export interface RepoEntry {
 }
 
 /**
- * Pełna ścieżka: na Windowsie z literą dysku albo UNC. `\projekty` jest dla `isAbsolute` pełna, ale wskazuje
- * dysk, z którego akurat uruchomiono daemon; `~` nie jest rozwijane, a względna zależy od katalogu daemona.
+ * Pełna ścieżka folderu do zapisu w `workspace.yaml`; musi istnieć, żeby literówka nie dała po cichu pustej listy.
+ * Asynchronicznie, bo wskazany folder może leżeć na uśpionym dysku.
  */
-export function isFullPath(p: string, paths: PlatformPath = path): boolean {
-  return paths.isAbsolute(p) && (paths.sep === "/" || paths.parse(p).root.length > 1);
-}
-
-/** Pełna ścieżka folderu do zapisu w `workspace.yaml`; musi istnieć, żeby literówka nie dała po cichu pustej listy. */
-export function resolveProjectsDir(input: string): string {
-  if (!isFullPath(input)) throw new DomainError("bad_request", `podaj pełną ścieżkę do folderu z projektami, dostałem "${input}"`);
+export async function resolveProjectsDir(input: string): Promise<string> {
+  if (!isFullPath(input)) throw new DomainError("bad_request", `${NOT_FULL_PATH}, dostałem "${input}"`);
   const dir = resolve(input);
   let isDir: boolean;
   try {
-    isDir = statSync(dir).isDirectory();
+    isDir = (await stat(dir)).isDirectory();
   } catch (err) {
     // Nie tylko ENOENT: ENOTDIR, EACCES i zbyt długa nazwa to też zła ścieżka od użytkownika, nie błąd daemona.
     throw new DomainError("bad_request", `${dir} nie istnieje albo nie da się go otworzyć (${errorCode(err)})`);
   }
-  if (!isDir) throw new DomainError("bad_request", `${dir} nie jest folderem`);
+  if (!isDir) throw new DomainError("bad_request", `${dir} nie jest katalogiem`);
   return dir;
 }
 
@@ -77,10 +73,9 @@ async function listDir(dir: string): Promise<Dirent[]> {
 
 /** Dowiązanie (na Windowsie także junction) do katalogu liczy się jak katalog; zerwane dowiązanie jest pomijane. */
 async function isRepoDir(parent: string, entry: Dirent): Promise<boolean> {
-  if (!entry.isDirectory() && !entry.isSymbolicLink()) return false;
   const dir = join(parent, entry.name);
-  const [self, git] = await Promise.all([stat(dir).catch(() => undefined), stat(join(dir, ".git")).catch(() => undefined)]);
-  return self?.isDirectory() === true && git !== undefined;
+  const isDir = entry.isDirectory() || (entry.isSymbolicLink() && (await stat(dir).catch(() => undefined))?.isDirectory() === true);
+  return isDir && (await stat(join(dir, ".git")).catch(() => undefined)) !== undefined;
 }
 
 /** Bez `localeCompare`: porządek nie może zależeć od danych ICU w Bun i Node. */

@@ -1,4 +1,4 @@
-import { type WorkspaceSettings, workspaceApi } from "@trackwall/protocol";
+import { workspaceApi } from "@trackwall/protocol";
 import { type FormEvent, useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
@@ -32,18 +32,35 @@ export function SettingsView({ conn, onRetry, onSaved }: { conn: Connection; onR
             />
           )}
           {!settings.data && !settings.error && <Loading />}
-          {/* Także przy błędzie: zły `projectsDir` wpisany ręcznie w `workspace.yaml` poprawia się właśnie tym formularzem. */}
-          {(settings.data || settings.error) && (
-            <ProjectsDirForm key={settings.data ? "ustawienia" : "blad"} conn={conn} settings={settings.data} onSaved={onSaved} />
+          {settings.data && (
+            <ProjectsDirForm
+              conn={conn}
+              initialPath={settings.data.projectsDir ?? ""}
+              configFile={settings.data.configFile}
+              onSaved={onSaved}
+            />
           )}
+          {/* Zły `projectsDir` wpisany ręcznie w `workspace.yaml` poprawia się właśnie tym formularzem. */}
+          {settings.errorCode === "invalid_config" && <ProjectsDirForm conn={conn} initialPath="" onSaved={onSaved} />}
         </div>
       </Surface>
     </div>
   );
 }
 
-function ProjectsDirForm({ conn, settings, onSaved }: { conn: Connection; settings?: WorkspaceSettings; onSaved: () => void }) {
-  const [path, setPath] = useState(settings?.projectsDir ?? "");
+function ProjectsDirForm({
+  conn,
+  initialPath,
+  configFile,
+  onSaved,
+}: {
+  conn: Connection;
+  initialPath: string;
+  /** Nieznany, gdy `workspace.yaml` nie przeszedł walidacji. */
+  configFile?: string;
+  onSaved: () => void;
+}) {
+  const [path, setPath] = useState(initialPath);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -75,9 +92,9 @@ function ProjectsDirForm({ conn, settings, onSaved }: { conn: Connection; settin
         </Button>
       </div>
       {error && <p className="text-destructive text-xs break-words">{error}</p>}
-      {settings && (
+      {configFile && (
         <p className="text-muted-foreground text-xs break-all">
-          Zapisane jako <span className="font-mono">projectsDir</span> w <span className="font-mono">{settings.configFile}</span>
+          Zapisane jako <span className="font-mono">projectsDir</span> w <span className="font-mono">{configFile}</span>
         </p>
       )}
     </form>
