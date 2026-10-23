@@ -76,6 +76,21 @@ describe("procs", () => {
   );
 
   test(
+    "ended czeka na potwierdzony koniec grupy i zwraca jej stan, a dla właściciela bez grupy zwraca undefined",
+    async () => {
+      const { dir, groups } = setup();
+      expect(await groups.ended("nikt")).toBeUndefined();
+      await groups.start({ owner: "o", command: [process.execPath, TREE, dir, "0", "2", "exit-leader", "4"], cwd: dir, env: process.env });
+
+      const ended = await groups.ended("o");
+
+      expect(ended).toMatchObject({ kind: "exited", exitCode: 4, stoppedByUser: false });
+      expect(treePids(dir, 2).filter(isAlive)).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
+  test(
     "lider, który kończy się sam, zabiera resztę grupy, a stan ma kod wyjścia i ostatnie linie",
     async () => {
       const { dir, groups } = setup();

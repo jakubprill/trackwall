@@ -143,7 +143,7 @@
               "options": {
                 "patterns": [
                   {
-                    "group": ["../*/**", "!../../errors.ts", "!../../atomic-write.ts", "!../../platform/**"],
+                    "group": ["../*/**", "!../../errors.ts", "!../../atomic-write.ts", "!../../map-limit.ts", "!../../platform/**"],
                     "message": "Moduł nie importuje innego modułu; zadeklaruj potrzebny interfejs, a fasada (src/facade.ts) poda moduł (AGENTS.md, §4). Z zewnątrz modułu wolno brać tylko wymienione pliki infrastruktury i src/platform/; moduł jest płaskim katalogiem."
                   }
                 ]
