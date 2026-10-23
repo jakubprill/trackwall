@@ -12,7 +12,9 @@ import { DaemonInfoResult, HealthResult } from "@pitwall/protocol";
 import { daemonFilePath, readDaemonFile } from "../src/discovery.ts";
 import { loopbackRequest } from "../src/loopback.ts";
 
-const given = resolve(Bun.argv[2] ?? "");
+const arg = Bun.argv[2];
+if (!arg) throw new Error("użycie: bun scripts/smoke.ts <ścieżka do pitwall-daemon>");
+const given = resolve(arg);
 const bin = process.platform === "win32" && !given.toLowerCase().endsWith(".exe") ? `${given}.exe` : given;
 if (!existsSync(bin)) throw new Error(`brak binarki ${bin}`);
 const home = mkdtempSync(join(tmpdir(), "pitwall-smoke-"));

@@ -2,17 +2,19 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
+import { REPO } from "../scripts/lib.ts";
 
-/** Sprawdza pliki całego repo, nie paczki desktop; leży tu, bo root nie ma własnych testów. */
-const REPO = join(import.meta.dir, "..", "..", "..");
+// Sprawdza pliki całego repo, nie paczki desktop; leży tu, bo root nie ma własnych testów.
 const read = (path: string) => readFileSync(join(REPO, path), "utf8");
 
 const MiseToml = z.object({ tools: z.record(z.string(), z.string()) });
 const miseTools = () => MiseToml.parse(Bun.TOML.parse(read("mise.toml"))).tools;
 
-/** Wartość z bloku `env:` na poziomie workflow (jedyne `env` z wersjami narzędzi). */
+/** Wartość zmiennej z `env:` workflow; zmienna ustawiona więcej niż raz (np. nadpisana w jobie) to błąd. */
 function workflowEnv(path: string, name: string): string | undefined {
-  return read(path).match(new RegExp(`^  ${name}:\\s*"([^"]+)"`, "m"))?.[1];
+  const values = [...read(path).matchAll(new RegExp(`^\\s+${name}:\\s*"([^"]+)"`, "gm"))].map((m) => m[1]);
+  if (values.length > 1) throw new Error(`${path}: ${name} ustawione ${values.length} razy`);
+  return values[0];
 }
 
 test("mise.toml ustala wersje Node, Bun, pnpm i Rust", () => {

@@ -24,7 +24,13 @@ const JsonManifest = z.object({ version: z.string().min(1) });
 const CargoManifest = z.object({ package: z.object({ version: z.string().min(1) }) });
 
 function parseFile<T>(path: string, schema: z.ZodType<T>, parse: (text: string) => unknown): T {
-  const parsed = schema.safeParse(parse(readFileSync(path, "utf8")));
+  let data: unknown;
+  try {
+    data = parse(readFileSync(path, "utf8"));
+  } catch (err) {
+    throw new Error(`${path}: ${(err as Error).message}`);
+  }
+  const parsed = schema.safeParse(data);
   if (!parsed.success) throw new Error(`${path}: ${z.prettifyError(parsed.error)}`);
   return parsed.data;
 }
@@ -41,11 +47,12 @@ export function cargoVersion(path: string): string {
 
 /** Wersja musi być ta sama w daemonie, Tauri i Cargo: powłoka porównuje ją z `/api/health`. */
 export function versions(): Record<string, string> {
-  return {
-    "packages/daemon/package.json": jsonVersion(join(REPO, "packages", "daemon", "package.json")),
-    "apps/desktop/src-tauri/tauri.conf.json": jsonVersion(join(TAURI_DIR, "tauri.conf.json")),
-    "apps/desktop/src-tauri/Cargo.toml": cargoVersion(join(TAURI_DIR, "Cargo.toml")),
+  const manifests = {
+    "packages/daemon/package.json": jsonVersion,
+    "apps/desktop/src-tauri/tauri.conf.json": jsonVersion,
+    "apps/desktop/src-tauri/Cargo.toml": cargoVersion,
   };
+  return Object.fromEntries(Object.entries(manifests).map(([path, read]) => [path, read(join(REPO, ...path.split("/")))]));
 }
 
 export function assertVersionsMatch(): string {

@@ -23,8 +23,13 @@ test("jsonVersion rzuca błąd z nazwą pliku, gdy version brakuje albo nie jest
 });
 
 test("cargoVersion czyta version z [package], nie z tabeli zależności", () => {
-  const toml = '[package]\nname = "x"\nversion = "0.4.0"\n\n[dependencies.tauri]\nversion = "2"\n';
+  const toml = '[dependencies.tauri]\nversion = "2"\n\n[package]\nname = "x"\nversion = "0.4.0"\n';
   expect(cargoVersion(file("Cargo.toml", toml))).toBe("0.4.0");
+});
+
+test("błąd składni pliku podaje jego ścieżkę", () => {
+  expect(() => jsonVersion(file("zepsuty.json", '{ "version": "1.0.0", }'))).toThrow("zepsuty.json");
+  expect(() => cargoVersion(file("zepsuty.toml", "[package\n"))).toThrow("zepsuty.toml");
 });
 
 test("cargoVersion rzuca błąd, gdy [package] nie ma version", () => {
