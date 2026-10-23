@@ -45,14 +45,15 @@ export function SettingsView({ conn, onRetry, onSaved }: { conn: Connection; onR
           {settings.errorCode === "invalid_config" && <ProjectsDirForm conn={conn} initialPath="" onSaved={onSaved} />}
         </div>
       </Surface>
-      {settings.data && (
+      {(settings.data || settings.errorCode === "invalid_config") && (
         <Surface label="Hostingi repo">
           <div className="flex flex-col gap-4 p-4">
             <p className="text-muted-foreground text-sm">
               Z tych hostingów zakładka „Repo” wyszukuje repo i klonuje je jednym kliknięciem do folderu z projektami. Trackwall pyta je
               przez programy glab (GitLab) i gh (GitHub) zalogowane w systemie, więc nie przechowuje tokenu.
             </p>
-            <RepoHostsForm conn={conn} initial={settings.data.repoHosts} />
+            {/* Zły wpis w `repoHosts` poprawia się, zapisując listę od nowa. */}
+            <RepoHostsForm conn={conn} initial={settings.data?.repoHosts ?? []} />
           </div>
         </Surface>
       )}

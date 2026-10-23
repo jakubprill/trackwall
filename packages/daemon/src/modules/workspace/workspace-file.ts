@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { RepoHost } from "@trackwall/protocol";
+import { type RepoHost, RepoHosts } from "@trackwall/protocol";
 import { type Document, isMap, parseDocument } from "yaml";
 import { z } from "zod";
 import { writeFileAtomic } from "../../atomic-write.ts";
@@ -14,7 +14,11 @@ import { isFullPath, NOT_FULL_PATH } from "./full-path.ts";
  * już listę `repos` z wersji 0.2.0 (ADR-18): to plik użytkownika, więc usunięcie jej zostawiamy jemu.
  */
 
-const WorkspaceConfig = z.object({
+/**
+ * Klucze czytane osobno, więc zły wpis w jednym nie psuje drugiego: literówka w hostingach nie zabiera listy repo,
+ * a komunikat mówi, który klucz poprawić.
+ */
+const Keys = {
   // Pusty klucz (`projectsDir:`) YAML czyta jako `null`, tak samo jak brak klucza.
   projectsDir: z
     .string()
@@ -22,12 +26,9 @@ const WorkspaceConfig = z.object({
     .nullish()
     .transform((dir) => dir ?? null),
   // Hostingi repo (ADR-19); brak klucza to brak hostingów, bo adres GitLab zna tylko użytkownik.
-  repoHosts: z
-    .array(RepoHost)
-    .nullish()
-    .transform((hosts) => hosts ?? []),
-});
-type WorkspaceConfig = z.infer<typeof WorkspaceConfig>;
+  repoHosts: RepoHosts.nullish().transform((hosts) => hosts ?? []),
+};
+type Key = keyof typeof Keys;
 
 export class WorkspaceFile {
   readonly path: string;
@@ -38,29 +39,31 @@ export class WorkspaceFile {
 
   /** Folder z projektami (ADR-18); `null`, dopóki nie jest ustawiony. */
   projectsDir(): string | null {
-    return this.config().projectsDir;
+    return this.get("projectsDir", Keys.projectsDir);
   }
 
   /** Hostingi repo w kolejności z pliku (ADR-19). */
   repoHosts(): RepoHost[] {
-    return this.config().repoHosts;
+    return this.get("repoHosts", Keys.repoHosts);
   }
 
   setProjectsDir(dir: string): void {
     this.set("projectsDir", dir);
   }
 
-  setRepoHosts(hosts: readonly RepoHost[]): void {
+  setRepoHosts(hosts: RepoHost[]): void {
     this.set("repoHosts", hosts);
   }
 
-  private config(): WorkspaceConfig {
-    const parsed = WorkspaceConfig.safeParse(this.load().toJS() ?? {});
-    if (!parsed.success) throw this.invalid(z.prettifyError(parsed.error));
+  private get<T>(key: Key, schema: z.ZodType<T>): T {
+    // `load` gwarantuje mapę albo pusty dokument.
+    const config: Record<string, unknown> = this.load().toJS() ?? {};
+    const parsed = schema.safeParse(config[key] ?? null);
+    if (!parsed.success) throw this.invalid(`${key}: ${z.prettifyError(parsed.error)}`);
     return parsed.data;
   }
 
-  private set(key: keyof WorkspaceConfig, value: unknown): void {
+  private set(key: Key, value: unknown): void {
     const doc = this.load();
     doc.set(key, value);
     this.save(doc);

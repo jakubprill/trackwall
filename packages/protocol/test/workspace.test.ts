@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { HostName, RemoteRepoName, RepoPath, workspaceApi } from "../src/index.ts";
+import { HostName, RemoteRepoName, RepoHosts, RepoPath, workspaceApi } from "../src/index.ts";
 
 describe("kontrakt workspace", () => {
   test("ścieżka w repo nie wychodzi poza drzewo commita i nie zawiera znaków sterujących", () => {
@@ -26,5 +26,11 @@ describe("kontrakt workspace", () => {
     expect(HostName.safeParse("git.local:8443").success).toBe(true);
     for (const bad of ["https://gitlab.example.com", "gitlab.example.com/grupa", "", "-x.com"])
       expect(HostName.safeParse(bad).success).toBe(false);
+  });
+
+  test("lista hostingów nie przyjmuje tego samego hostingu dwa razy, także pisanego innymi literami", () => {
+    const gitlab = { kind: "gitlab", host: "gitlab.example.com" };
+    expect(RepoHosts.safeParse([gitlab, { kind: "github", host: "github.com" }]).success).toBe(true);
+    expect(RepoHosts.safeParse([gitlab, { kind: "gitlab", host: "GitLab.example.com" }]).success).toBe(false);
   });
 });

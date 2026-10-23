@@ -1,6 +1,6 @@
-import type { RepoHost, RepoHostKind } from "@trackwall/protocol";
+import { HOST_CLI, type HostedRepo, hostKey, type RepoHost, type RepoHostKind } from "@trackwall/protocol";
 import { gitEnv } from "./git.ts";
-import { cloneable, githubApi, gitlabApi, type HostedRepo, type HostingApi } from "./hosted-repo.ts";
+import { githubApi, gitlabApi, type HostingApi } from "./hosted-repo.ts";
 import { runProgram } from "./run.ts";
 
 /**
@@ -19,8 +19,8 @@ interface HostingCli {
 export type HostingClis = Record<RepoHostKind, HostingCli>;
 
 export const HOSTING_CLIS: HostingClis = {
-  github: { command: "gh", args: [] },
-  gitlab: { command: "glab", args: [] },
+  github: { command: HOST_CLI.github, args: [] },
+  gitlab: { command: HOST_CLI.gitlab, args: [] },
 };
 
 const APIS: Record<RepoHostKind, HostingApi> = { github: githubApi, gitlab: gitlabApi };
@@ -29,15 +29,28 @@ const APIS: Record<RepoHostKind, HostingApi> = { github: githubApi, gitlab: gitl
 const PAGE_SIZE = 100;
 /** Jedna strona API; dłużej to raczej brak sieci albo VPN. */
 const PAGE_TIMEOUT_MS = 30_000;
+/**
+ * Jak długo pobrane strony służą kolejnym zapytaniom: wyszukiwanie filtrowane w daemonie (GitHub, krótkie zapytanie
+ * w GitLab) nie pobiera listy przy każdym znaku, a nowe repo w hostingu pojawia się najpóźniej po tym czasie.
+ */
+const CACHE_MS = 60_000;
+/**
+ * Klon dużego repo trwa minutami, ale ssh czekające na potwierdzenie klucza hosta w ukrytej konsoli trwałoby
+ * zawsze. Po tym czasie klonowanie jest nieudane; git uruchomiony przez `gh` / `glab` może jednak żyć dalej,
+ * bo nie jest w grupie procesów (§4.5).
+ */
+const CLONE_TIMEOUT_MS = 30 * 60_000;
 
 export interface HostedRepos {
   /** W kolejności z hostingu (`HostingApi`). */
   repos: HostedRepo[];
+  /** Pobrano tyle stron, ile pozwala `maxPages`, a ostatnia była pełna. */
   truncated: boolean;
 }
 
 export class Hosting {
   private readonly clis: HostingClis;
+  private readonly cache = new Map<string, { at: number; fetched: Promise<HostedRepos> }>();
 
   constructor(clis: HostingClis) {
     this.clis = clis;
@@ -46,31 +59,50 @@ export class Hosting {
   /** Repo pasujące do `query` (bez wielkości liter, w pełnej nazwie albo opisie); puste `query` to wszystkie. */
   async repos(host: RepoHost, query: string): Promise<HostedRepos> {
     const api = APIS[host.kind];
+    const onServer = api.searchesOnServer(query);
+    const { repos, truncated } = await this.fetchCached(host, onServer ? query : "");
+    return { repos: onServer ? repos : repos.filter((r) => matches(r, query)), truncated };
+  }
+
+  /** Klon `fullName` do `dest` (katalogu, którego jeszcze nie ma). */
+  async clone(host: RepoHost, fullName: string, dest: string): Promise<void> {
+    await this.run(host, ["repo", "clone", fullName, dest], CLONE_TIMEOUT_MS);
+  }
+
+  /** Nieudane pobranie nie zostaje w pamięci, więc „Spróbuj ponownie” po zalogowaniu pyta hosting od nowa. */
+  private fetchCached(host: RepoHost, serverQuery: string): Promise<HostedRepos> {
+    const now = Date.now();
+    for (const [key, entry] of this.cache) if (now - entry.at > CACHE_MS) this.cache.delete(key);
+    const key = `${hostKey(host)}\n${serverQuery}`;
+    const cached = this.cache.get(key);
+    if (cached) return cached.fetched;
+    const fetched = this.fetch(host, serverQuery);
+    this.cache.set(key, { at: now, fetched });
+    fetched.catch(() => this.cache.delete(key));
+    return fetched;
+  }
+
+  private async fetch(host: RepoHost, serverQuery: string): Promise<HostedRepos> {
+    const api = APIS[host.kind];
     const repos: HostedRepo[] = [];
     let truncated = true;
     for (let page = 1; page <= api.maxPages && truncated; page++) {
-      const path = api.reposPage(page, PAGE_SIZE, api.searchesOnServer ? query : "");
-      const { stdout } = await this.run(host, ["api", "--hostname", host.host, path], PAGE_TIMEOUT_MS);
+      const { stdout } = await this.run(
+        host,
+        ["api", "--hostname", host.host, api.reposPage(page, PAGE_SIZE, serverQuery)],
+        PAGE_TIMEOUT_MS,
+      );
       const pageRepos = parsePage(api, stdout.toString("utf8"), host);
       repos.push(...pageRepos.items);
       truncated = pageRepos.received === PAGE_SIZE;
     }
-    const found = api.searchesOnServer ? repos : repos.filter((r) => matches(r, query));
-    return { repos: cloneable(found), truncated };
+    return { repos, truncated };
   }
 
-  /**
-   * Klon `fullName` do `dest` (katalogu, którego jeszcze nie ma). Bez limitu czasu: duże repo klonuje się minutami,
-   * a zabicie `gh` nie zatrzymałoby gita, którego uruchomił.
-   */
-  async clone(host: RepoHost, fullName: string, dest: string): Promise<void> {
-    await this.run(host, ["repo", "clone", fullName, dest], undefined);
-  }
-
-  private run(host: RepoHost, args: string[], timeoutMs: number | undefined) {
+  private run(host: RepoHost, args: string[], timeoutMs: number) {
     const cli = this.clis[host.kind];
     return runProgram(cli.command, [...cli.args, ...args], {
-      label: `${HOSTING_CLIS[host.kind].command} ${args.slice(0, 2).join(" ")}`,
+      label: `${HOST_CLI[host.kind]} ${args[0]}`,
       env: { ...gitEnv(), ...APIS[host.kind].env(host.host) },
       timeoutMs,
     });
@@ -82,7 +114,7 @@ function parsePage(api: HostingApi, text: string, host: RepoHost): ReturnType<Ho
   try {
     return api.parseReposPage(JSON.parse(text));
   } catch {
-    throw new Error(`${HOSTING_CLIS[host.kind].command} api zwrócił odpowiedź niezgodną z API ${host.host}`);
+    throw new Error(`${HOST_CLI[host.kind]} api zwrócił odpowiedź niezgodną z API ${host.host}`);
   }
 }
 

@@ -60,12 +60,15 @@ export async function findRepos(projectsDir: string): Promise<RepoEntry[]> {
   );
 }
 
-/**
- * Nazwy wszystkiego w folderze z projektami (także plików i ukrytych katalogów), małymi literami: klon nie może
- * trafić w zajętą nazwę, a dyski Windowsa i macOS nie rozróżniają wielkości liter.
- */
-export async function takenNames(projectsDir: string): Promise<Set<string>> {
-  return new Set((await listDir(projectsDir)).map((entry) => entry.name.toLowerCase()));
+/** Klucz nazwy w folderze z projektami: dyski Windowsa i macOS nie rozróżniają wielkości liter. */
+export function dirKey(name: string): string {
+  return name.toLowerCase();
+}
+
+/** Czy w folderze z projektami jest już coś (także plik albo ukryty katalog) o tej nazwie; klon nie może tam trafić. */
+export async function takenNames(projectsDir: string): Promise<(name: string) => boolean> {
+  const taken = new Set((await listDir(projectsDir)).map((entry) => dirKey(entry.name)));
+  return (name) => taken.has(dirKey(name));
 }
 
 async function listDir(dir: string): Promise<Dirent[]> {

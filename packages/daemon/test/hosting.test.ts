@@ -83,13 +83,34 @@ describe("hostingi repo przez gh i glab", () => {
     expect(calls()[0]?.env).toMatchObject({ GH_HOST: "github.com", GH_PROMPT_DISABLED: "1" });
   });
 
+  test("zapytanie krótsze niż 3 znaki GitLab dostaje bez wyszukiwania, a daemon dopasowuje je sam", async () => {
+    const { hosting, calls } = fakeHosting({ repos: [gitlabProject("sklep/tw"), gitlabProject("sklep/api")] });
+
+    expect((await hosting.repos(GITLAB, "TW")).repos.map((r) => r.fullName)).toEqual(["sklep/tw"]);
+    expect(calls()[0]?.args[3]).not.toContain("search=");
+  });
+
+  test("kolejne wyszukiwanie filtrowane w daemonie nie pyta hostingu drugi raz, a nieudane pytanie nie zostaje w pamięci", async () => {
+    const { hosting, calls } = fakeHosting({ repos: [githubRepo("ja/trackwall"), githubRepo("ja/pawn")] });
+    await hosting.repos(GITHUB, "track");
+    expect((await hosting.repos(GITHUB, "pawn")).repos.map((r) => r.fullName)).toEqual(["ja/pawn"]);
+    expect(calls()).toHaveLength(1);
+
+    const failing = fakeHosting({ apiErrors: { "github.com": "gh: brak sieci" } });
+    await expect(failing.hosting.repos(GITHUB, "")).rejects.toThrow("brak sieci");
+    await expect(failing.hosting.repos(GITHUB, "")).rejects.toThrow("brak sieci");
+    expect(failing.calls()).toHaveLength(2);
+  });
+
   test("nazwa, która mogłaby być opcją programu, nie trafia na listę", async () => {
     const { hosting } = fakeHosting({ repos: [githubRepo("ja/-x"), githubRepo("ja/ok")] });
     expect((await hosting.repos(GITHUB, "")).repos.map((r) => r.fullName)).toEqual(["ja/ok"]);
   });
 
   test("błąd glab wraca z komunikatem z stderr, a odpowiedź niezgodna z API z opisem bez zrzutu", async () => {
-    await expect(fakeHosting({ apiError: "glab: 401 Unauthorized" }).hosting.repos(GITLAB, "")).rejects.toThrow("401 Unauthorized");
+    await expect(fakeHosting({ apiErrors: { "gitlab.example.com": "glab: 401 Unauthorized" } }).hosting.repos(GITLAB, "")).rejects.toThrow(
+      "401 Unauthorized",
+    );
     await expect(fakeHosting({ apiRaw: '{"message":"nie lista"}' }).hosting.repos(GITLAB, "")).rejects.toThrow(
       "glab api zwrócił odpowiedź niezgodną z API gitlab.example.com",
     );

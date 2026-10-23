@@ -1,11 +1,11 @@
-import { type RepoHost, type RepoHostKind, workspaceApi } from "@trackwall/protocol";
+import { hostKey, type RepoHost, RepoHostKind, workspaceApi } from "@trackwall/protocol";
 import { Trash2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorMessage, post } from "@/lib/api";
-import { HOST_KIND_LABEL, loginCommand } from "@/lib/clone-state";
 import type { Connection } from "@/lib/connection";
+import { HOST_KIND_LABEL, loginCommand } from "@/lib/repo-hosts";
 
 /** Podpowiedź hosta przy wyborze rodzaju; GitLab firmowy ma własny adres, więc bez wartości. */
 const HOST_HINT: Record<RepoHostKind, string> = { gitlab: "gitlab.example.com", github: "github.com" };
@@ -42,7 +42,7 @@ export function RepoHostsForm({ conn, initial }: { conn: Connection; initial: Re
       {hosts.length > 0 && (
         <ul className="flex flex-col gap-2">
           {hosts.map((h) => (
-            <li key={`${h.kind}:${h.host}`} className="flex items-center gap-3">
+            <li key={hostKey(h)} className="flex items-center gap-3">
               <span className="hud-label w-14 shrink-0">{HOST_KIND_LABEL[h.kind]}</span>
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate font-mono text-sm">{h.host}</span>
@@ -63,7 +63,7 @@ export function RepoHostsForm({ conn, initial }: { conn: Connection; initial: Re
       )}
       <form onSubmit={(e) => void add(e)} className="flex gap-2">
         <span className="flex shrink-0">
-          {(["gitlab", "github"] as const).map((k) => (
+          {RepoHostKind.options.map((k) => (
             <Button
               key={k}
               type="button"

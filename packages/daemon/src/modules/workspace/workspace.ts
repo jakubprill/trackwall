@@ -3,8 +3,8 @@ import {
   type CloneJob,
   type Commit,
   type FileContent,
+  type HostedRepo,
   type HostRepos,
-  type RemoteRepo,
   type RemoteRepoList,
   type Repo,
   type RepoHost,
@@ -25,8 +25,9 @@ import type { WorkspaceFile } from "./workspace-file.ts";
 
 /**
  * Moduł `workspace` (§4): repo z folderu z projektami wskazanego w `workspace.yaml` (ADR-18) i ich stan
- * zaobserwowany w gicie. Ani lista, ani stan nie są nigdzie zapisywane; każde zapytanie czyta folder i pyta gita,
- * więc nie rozjeżdżają się z tym, co robi użytkownik.
+ * zaobserwowany w gicie, oraz klon nowych repo z hostingów z ustawień (ADR-19). Ani lista, ani stan nie są nigdzie
+ * zapisywane; każde zapytanie czyta folder i pyta gita, więc nie rozjeżdżają się z tym, co robi użytkownik.
+ * Klonowania żyją tylko w pamięci, do restartu daemona.
  */
 
 /** Ile commitów pokazuje przegląd repo. */
@@ -47,9 +48,6 @@ interface WorkspaceVcs {
   tree(dir: string, path: string): Promise<TreeEntry[] | undefined>;
   file(dir: string, path: string, maxBytes: number): Promise<FileContent | undefined>;
 }
-
-/** Repo z hostingu, zanim `workspace` dopisze, czy jego katalog jest już w folderze z projektami. */
-type HostedRepo = Omit<RemoteRepo, "dir" | "inProjectsDir">;
 
 /** Czego `workspace` potrzebuje od hostingów repo z modułu `vcs` (ADR-19). */
 interface WorkspaceHosting {
@@ -87,9 +85,7 @@ export class Workspace {
     return this.settings();
   }
 
-  setRepoHosts(hosts: readonly RepoHost[]): WorkspaceSettings {
-    const duplicate = hosts.find((host, i) => hosts.findIndex((other) => sameHost(host, other)) !== i);
-    if (duplicate) throw new DomainError("bad_request", `hosting ${duplicate.kind} ${duplicate.host} jest na liście dwa razy`);
+  setRepoHosts(hosts: RepoHost[]): WorkspaceSettings {
     this.deps.file.setRepoHosts(hosts);
     return this.settings();
   }
@@ -99,7 +95,7 @@ export class Workspace {
    */
   async remoteRepos(query: string): Promise<RemoteRepoList> {
     const projectsDir = this.deps.file.projectsDir();
-    const taken = projectsDir === null ? new Set<string>() : await takenNames(projectsDir);
+    const taken = projectsDir === null ? () => false : await takenNames(projectsDir);
     const hosts = await Promise.all(this.deps.file.repoHosts().map((host) => this.hostRepos(host, query, taken)));
     return { projectsDir, hosts };
   }
@@ -117,11 +113,11 @@ export class Workspace {
     const taken = await takenNames(projectsDir);
     // Od tego miejsca bez `await`, żeby dwa równoczesne żądania nie przeszły obu sprawdzeń.
     const path = join(projectsDir, dir);
-    const running = this.clones.runningInto(path);
+    const running = this.clones.runningInto(dir);
     if (running && sameHost(running.host, host) && running.fullName === fullName) return running;
     if (running) throw new DomainError("bad_request", `do ${path} trwa już klonowanie ${running.fullName}`);
-    if (taken.has(dir.toLowerCase())) throw new DomainError("bad_request", `w folderze z projektami jest już ${dir}`);
-    return this.clones.start(host, fullName, path, () => this.deps.hosting.clone(host, fullName, path));
+    if (taken(dir)) throw new DomainError("bad_request", `w folderze z projektami jest już ${dir}`);
+    return this.clones.start(dir, { host, fullName, path }, () => this.deps.hosting.clone(host, fullName, path));
   }
 
   cloneJobs(): CloneJob[] {
@@ -177,12 +173,12 @@ export class Workspace {
     return { ...entry, status };
   }
 
-  private async hostRepos(host: RepoHost, query: string, taken: ReadonlySet<string>): Promise<HostRepos> {
+  private async hostRepos(host: RepoHost, query: string, taken: (name: string) => boolean): Promise<HostRepos> {
     try {
       const { repos, truncated } = await this.deps.hosting.repos(host, query);
       const withDirs = repos.map((repo) => {
         const dir = cloneDir(repo.fullName);
-        return { ...repo, dir, inProjectsDir: taken.has(dir.toLowerCase()) };
+        return { ...repo, dir, inProjectsDir: taken(dir) };
       });
       return { host, listing: { kind: "ok", repos: withDirs, truncated } };
     } catch (err) {

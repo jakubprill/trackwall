@@ -21,8 +21,7 @@ export interface RunOptions {
   /** Jak nazwać wywołanie w komunikacie błędu, np. `git status`. */
   label: string;
   env: NodeJS.ProcessEnv;
-  /** `undefined`: bez limitu czasu (klon dużego repo trwa, ile trwa). */
-  timeoutMs: number | undefined;
+  timeoutMs: number;
   maxBytes?: number;
   /** Wejście dla komend czytających z stdin (`cat-file --batch-check`). */
   stdin?: string;
@@ -30,7 +29,6 @@ export interface RunOptions {
 
 export function runProgram(command: string, args: readonly string[], opts: RunOptions): Promise<RunOutput> {
   const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
-  const what = opts.label;
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { env: opts.env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
     const out: Buffer[] = [];
@@ -51,10 +49,7 @@ export function runProgram(command: string, args: readonly string[], opts: RunOp
         child.kill();
       }
     };
-    const timer =
-      opts.timeoutMs === undefined
-        ? undefined
-        : setTimeout(() => finish(() => reject(new Error(`${what} nie skończył w ${opts.timeoutMs} ms`))), opts.timeoutMs);
+    const timer = setTimeout(() => finish(() => reject(new Error(`${opts.label} nie skończył w ${opts.timeoutMs} ms`))), opts.timeoutMs);
 
     child.stdout.on("data", (chunk: Buffer) => {
       const room = maxBytes - size;
@@ -74,7 +69,7 @@ export function runProgram(command: string, args: readonly string[], opts: RunOp
     child.on("close", (code, signal) => {
       if (code === 0) return finish(() => resolve({ stdout: Buffer.concat(out), truncated: false }));
       const reason = signal ? `przerwany sygnałem ${signal}` : `zakończył się kodem ${code}`;
-      finish(() => reject(new Error(stderr.toString("utf8").trim() || `${what} ${reason}`)));
+      finish(() => reject(new Error(stderr.toString("utf8").trim() || `${opts.label} ${reason}`)));
     });
     // Program, który nie czyta stdin, może go zamknąć przed zapisem; EPIPE nie jest wtedy błędem wywołania.
     child.stdin.on("error", () => {});

@@ -65,9 +65,21 @@ describe("workspace.yaml", () => {
     writeFileSync(path, "- /projekty\n");
     expect(() => new WorkspaceFile(path).projectsDir()).toThrow(expect.objectContaining({ message: expect.stringContaining("mapą") }));
   });
-  test("hosting z adresem zamiast nazwy hosta jest błędem konfiguracji", () => {
+  test("zły wpis w repoHosts jest błędem konfiguracji tego klucza i nie psuje folderu z projektami", () => {
     const path = tempFile();
-    writeFileSync(path, "repoHosts:\n  - kind: gitlab\n    host: https://gitlab.example.com\n");
+    const dir = resolve("/projekty");
+    writeFileSync(path, `projectsDir: ${JSON.stringify(dir)}\nrepoHosts:\n  - kind: gitlab\n    host: https://gitlab.example.com\n`);
+    const file = new WorkspaceFile(path);
+
+    expect(() => file.repoHosts()).toThrow(
+      expect.objectContaining({ code: "invalid_config", message: expect.stringContaining("repoHosts") }),
+    );
+    expect(file.projectsDir()).toBe(dir);
+  });
+
+  test("ten sam hosting dwa razy w repoHosts jest błędem konfiguracji", () => {
+    const path = tempFile();
+    writeFileSync(path, "repoHosts:\n  - { kind: gitlab, host: gitlab.example.com }\n  - { kind: gitlab, host: GitLab.example.com }\n");
     expect(() => new WorkspaceFile(path).repoHosts()).toThrow(expect.objectContaining({ code: "invalid_config" }));
   });
 });

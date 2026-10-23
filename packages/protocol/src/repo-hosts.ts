@@ -25,6 +25,27 @@ export const HostName = z
 export const RepoHost = z.object({ kind: RepoHostKind, host: HostName }).strict();
 export type RepoHost = z.infer<typeof RepoHost>;
 
+/** Program, przez który daemon pyta hosting i klonuje z niego (ADR-19); użytkownik loguje się nim sam. */
+export const HOST_CLI: Record<RepoHostKind, "gh" | "glab"> = { github: "gh", gitlab: "glab" };
+
+export function sameHost(a: RepoHost, b: RepoHost): boolean {
+  return a.kind === b.kind && a.host === b.host;
+}
+
+/** Klucz hostingu, np. `gitlab:gitlab.example.com`: do map i kluczy list w UI. */
+export function hostKey(host: RepoHost): string {
+  return `${host.kind}:${host.host}`;
+}
+
+/** Lista hostingów z `workspace.yaml` i ustawień: bez powtórzeń, bo każdy hosting to jedna sekcja wyników. */
+export const RepoHosts = z
+  .array(RepoHost)
+  .max(20)
+  .refine(
+    (hosts) => hosts.every((h, i) => hosts.findIndex((other) => sameHost(h, other)) === i),
+    "ten sam hosting jest na liście dwa razy",
+  );
+
 /** Segment ścieżki repo w hostingu: znaki, które dopuszczają GitHub i GitLab, bez `.` i `-` na początku. */
 const SEGMENT = "[A-Za-z0-9_][A-Za-z0-9._-]*";
 
@@ -38,15 +59,20 @@ export const RemoteRepoName = z
   .regex(new RegExp(`^${SEGMENT}(?:/${SEGMENT})+$`), "pełna nazwa repo, np. właściciel/repo albo grupa/podgrupa/repo");
 export type RemoteRepoName = z.infer<typeof RemoteRepoName>;
 
-/** Repo dostępne w hostingu dla zalogowanego użytkownika `gh` albo `glab`. */
-export const RemoteRepo = z.object({
+/** Repo dostępne w hostingu dla zalogowanego użytkownika `gh` albo `glab`, tak jak podał je hosting. */
+export const HostedRepo = z.object({
   fullName: RemoteRepoName,
-  /** Katalog, do którego trafi klon: ostatni segment `fullName`. */
-  dir: z.string(),
   description: z.string().nullable(),
   webUrl: z.string(),
   /** ISO 8601, ostatnia zmiana w hostingu; `null`, gdy hosting jej nie podał. */
   updatedAt: z.string().nullable(),
+});
+export type HostedRepo = z.infer<typeof HostedRepo>;
+
+/** Repo z hostingu z tym, co daemon wie o folderze z projektami. */
+export const RemoteRepo = HostedRepo.extend({
+  /** Katalog, do którego trafi klon: ostatni segment `fullName`. */
+  dir: z.string(),
   /** W folderze z projektami jest już coś o nazwie `dir` (porównanie bez wielkości liter), więc klon się nie uda. */
   inProjectsDir: z.boolean(),
 });
@@ -59,7 +85,7 @@ export const HostRepos = z.object({
       kind: z.literal("ok"),
       /** Bez zarchiwizowanych, w kolejności z hostingu: GitHub po nazwie, GitLab od ostatnio zmienianych. */
       repos: z.array(RemoteRepo),
-      /** Hosting ma więcej pasujących repo, niż Trackwall pobiera (§4.5); trzeba zawęzić wyszukiwanie. */
+      /** Hosting ma więcej repo, niż Trackwall pobiera (§4.5), więc wyników może brakować; pomaga zawężenie wyszukiwania. */
       truncated: z.boolean(),
     }),
     /** `gh` albo `glab` nie odpowiedział: brak programu, brak logowania, brak sieci; szczegóły w `message`. */
@@ -68,21 +94,20 @@ export const HostRepos = z.object({
 });
 export type HostRepos = z.infer<typeof HostRepos>;
 
-/** Klonowanie jednego repo do folderu z projektami; trzymane w pamięci daemona do jego restartu. */
-export const CloneJob = z.object({
+const CloneTarget = z.object({
   host: RepoHost,
   fullName: RemoteRepoName,
   /** Pełna ścieżka katalogu klonu. */
   path: z.string(),
-  state: z.enum(["running", "done", "failed"]),
-  /** Komunikat `gh` albo `glab`, gdy klonowanie się nie udało. */
-  message: z.string().nullable(),
 });
+
+/** Klonowanie jednego repo do folderu z projektami; trzymane w pamięci daemona do jego restartu. */
+export const CloneJob = z.discriminatedUnion("state", [
+  CloneTarget.extend({ state: z.enum(["running", "done"]) }),
+  /** `message` to komunikat `gh` albo `glab`. */
+  CloneTarget.extend({ state: z.literal("failed"), message: z.string() }),
+]);
 export type CloneJob = z.infer<typeof CloneJob>;
 
 export const CloneRequest = z.object({ host: RepoHost, fullName: RemoteRepoName }).strict();
 export type CloneRequest = z.infer<typeof CloneRequest>;
-
-export function sameHost(a: RepoHost, b: RepoHost): boolean {
-  return a.kind === b.kind && a.host === b.host;
-}

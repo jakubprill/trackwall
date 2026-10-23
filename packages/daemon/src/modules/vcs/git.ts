@@ -1,6 +1,6 @@
 import { realpath } from "node:fs/promises";
 import { delimiter, dirname, resolve as resolvePath } from "node:path";
-import { type RunOutput, runProgram } from "./run.ts";
+import { type RunOptions, type RunOutput, runProgram } from "./run.ts";
 
 /**
  * Uruchamianie `git` dla modułu `vcs`. Argumenty zawsze tablicą, bez powłoki; katalog repo przez `-C`,
@@ -33,11 +33,7 @@ const REPO_SELECTING_ENV = [
   "GIT_PREFIX",
 ];
 
-export interface GitOptions {
-  maxBytes?: number;
-  /** Wejście dla komend czytających z stdin (`cat-file --batch-check`). */
-  stdin?: string;
-}
+type GitOptions = Pick<RunOptions, "maxBytes" | "stdin">;
 
 export async function git(repoDir: string, args: readonly string[], opts: GitOptions = {}): Promise<RunOutput> {
   const ceiling = await ceilingFor(repoDir);

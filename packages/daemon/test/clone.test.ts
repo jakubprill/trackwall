@@ -65,15 +65,19 @@ describe("klonowanie z hostingu do folderu z projektami", () => {
   });
 
   test("hosting, który nie odpowiada, jest niedostępny z komunikatem, a pozostałe działają", async () => {
-    const { workspace } = await workspaceWithGitLab({ apiError: "glab: nie jesteś zalogowany" });
-    workspace.setRepoHosts([GITLAB, { kind: "github", host: "github.com" }]);
+    const { workspace } = await workspaceWithGitLab({
+      repos: [project("sklep/api")],
+      apiErrors: { "gitlab.example.com": "glab: nie jesteś zalogowany" },
+    });
+    workspace.setRepoHosts([GITLAB, { kind: "gitlab", host: "drugi.example.com" }]);
 
     const { hosts } = await workspace.remoteRepos("");
 
-    expect(hosts.map((h) => h.listing)).toEqual([
-      { kind: "unavailable", message: "glab: nie jesteś zalogowany" },
-      { kind: "unavailable", message: "glab: nie jesteś zalogowany" },
+    expect(hosts.map((h) => [h.host.host, h.listing.kind])).toEqual([
+      ["gitlab.example.com", "unavailable"],
+      ["drugi.example.com", "ok"],
     ]);
+    expect(hosts[0]?.listing).toEqual({ kind: "unavailable", message: "glab: nie jesteś zalogowany" });
   });
 
   test("klon trwa w tle, a po nim repo jest na liście z folderu", async () => {
@@ -85,7 +89,6 @@ describe("klonowanie z hostingu do folderu z projektami", () => {
       fullName: "sklep/zamowienia/orders-bff",
       path: join(projects, "orders-bff"),
       state: "running",
-      message: null,
     });
     // Drugie kliknięcie w trakcie nie zaczyna drugiego klonu.
     expect(await workspace.clone(GITLAB, "sklep/zamowienia/orders-bff")).toEqual(started);
@@ -130,11 +133,10 @@ describe("klonowanie z hostingu do folderu z projektami", () => {
     });
   });
 
-  test("hostingi zapisują się w workspace.yaml, a powtórzony hosting jest odrzucany", async () => {
+  test("hostingi zapisują się w workspace.yaml jako lista repoHosts", async () => {
     const { workspace, file } = await workspaceWithGitLab();
 
     expect(workspace.settings().repoHosts).toEqual([GITLAB]);
     expect(readFileSync(file, "utf8")).toContain("repoHosts:\n  - kind: gitlab\n    host: gitlab.example.com\n");
-    expect(() => workspace.setRepoHosts([GITLAB, GITLAB])).toThrow(expect.objectContaining({ code: "bad_request" }));
   });
 });

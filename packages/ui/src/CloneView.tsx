@@ -1,4 +1,4 @@
-import { type CloneJob, type HostRepos, type RemoteRepo, type RepoHost, workspaceApi } from "@trackwall/protocol";
+import { type CloneJob, type HostRepos, hostKey, type RemoteRepo, type RepoHost, workspaceApi } from "@trackwall/protocol";
 import { Download, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -8,9 +8,10 @@ import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorMessage, post } from "@/lib/api";
-import { type CloneState, cloneState, HOST_KIND_LABEL, loginCommand } from "@/lib/clone-state";
+import { type CloneState, cloneState } from "@/lib/clone-state";
 import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
+import { HOST_KIND_LABEL, loginCommand } from "@/lib/repo-hosts";
 import { useDebounced } from "@/lib/use-debounced";
 import { useRemote } from "@/lib/use-remote";
 
@@ -65,7 +66,7 @@ export function CloneView({ conn, onCloned, onOpenSettings }: { conn: Connection
       )}
       {hosts?.map((h) => (
         <HostSection
-          key={`${h.host.kind}:${h.host.host}`}
+          key={hostKey(h.host)}
           conn={conn}
           hostRepos={h}
           jobs={jobs}
@@ -77,14 +78,17 @@ export function CloneView({ conn, onCloned, onOpenSettings }: { conn: Connection
   );
 }
 
-/** Wywołuje `onDone`, gdy któreś klonowanie przejdzie z `running` do `done`. */
+/**
+ * Wywołuje `onDone`, gdy na liście pojawi się zakończone klonowanie, którego jeszcze nie widział; także takie,
+ * które skończyło się przed pierwszym odpytaniem i nigdy nie było widać go w stanie `running`.
+ */
 function useOnCloneDone(jobs: readonly CloneJob[], onDone: () => void) {
-  const running = useRef(new Set<string>());
+  const seen = useRef(new Set<string>());
   useEffect(() => {
-    const key = (j: CloneJob) => `${j.host.kind}:${j.host.host}/${j.fullName}`;
-    const finished = jobs.some((j) => j.state === "done" && running.current.has(key(j)));
-    running.current = new Set(jobs.filter((j) => j.state === "running").map(key));
-    if (finished) onDone();
+    const done = jobs.filter((j) => j.state === "done").map((j) => `${hostKey(j.host)}/${j.fullName}`);
+    const fresh = done.filter((key) => !seen.current.has(key));
+    for (const key of fresh) seen.current.add(key);
+    if (fresh.length > 0) onDone();
   }, [jobs, onDone]);
 }
 
@@ -129,8 +133,8 @@ function HostSection({
   return (
     <Surface
       label={label}
-      meta={`${listing.repos.length}${listing.truncated ? "+" : ""}`}
-      note={listing.truncated ? "Pasujących repo jest więcej; zawęź wyszukiwanie." : undefined}
+      meta={String(listing.repos.length)}
+      note={listing.truncated ? "Hosting ma więcej repo, niż Trackwall pobiera; jeśli czegoś brakuje, zawęź wyszukiwanie." : undefined}
     >
       {listing.repos.length === 0 && <p className="text-muted-foreground p-3 text-sm">Nic nie pasuje.</p>}
       <ul className="divide-y">

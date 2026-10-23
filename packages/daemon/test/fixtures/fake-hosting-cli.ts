@@ -11,8 +11,8 @@ const Config = z.object({
   log: z.string(),
   /** Repo w kształcie odpowiedzi API hostingu, dzielone na strony według `page` i `per_page` z zapytania. */
   repos: z.array(z.unknown()).default([]),
-  /** Komunikat na stderr i kod 1 dla `api`. */
-  apiError: z.string().optional(),
+  /** Komunikat na stderr i kod 1 dla `api` z danym `--hostname`. */
+  apiErrors: z.record(z.string(), z.string()).default({}),
   /** Surowa odpowiedź `api` zamiast stron z `repos`. */
   apiRaw: z.string().optional(),
   /** Repo, których klon kończy się błędem z tym komunikatem. */
@@ -30,7 +30,8 @@ appendFileSync(config.log, `${JSON.stringify({ args, env })}\n`);
 
 const [command, subcommand] = args;
 if (command === "api") {
-  if (config.apiError) fail(config.apiError);
+  const apiError = config.apiErrors[args[2] ?? ""];
+  if (apiError) fail(apiError);
   if (config.apiRaw !== undefined) {
     process.stdout.write(config.apiRaw);
     process.exit(0);
