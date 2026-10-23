@@ -12,6 +12,13 @@ _Unikaj_: backend, serwer (bez dopowiedzenia)
 Aplikacja Tauri: okno, tray, uruchamianie i nadzór daemona jako sidecara, sprawdzenie WebView2. Nie zawiera logiki domenowej.
 _Unikaj_: aplikacja (gdy chodzi tylko o Tauri)
 
+**Widok** (`View`):
+Ekran aplikacji w UI (Repo, Daemon, Ustawienia), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
+_Unikaj_: zakładka (dla całego ekranu)
+
+**Zakładka** (`TabBar`):
+Przełącznik części treści wewnątrz widoku, np. README, Pliki i Commity w widoku Repo.
+
 **Fasada** (`Facade`):
 Zbiór interfejsów modułów daemona przekazywany do transportów (HTTP, MCP, zdarzenia). Moduły rozmawiają ze sobą tylko przez nią.
 

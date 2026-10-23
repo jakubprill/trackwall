@@ -1,31 +1,40 @@
 import { describe, expect, test } from "bun:test";
 import { ariaShortcut, matchesShortcut, shortcutLabel } from "../src/lib/view-shortcut.ts";
 
-const repos = { code: "Digit1", key: "1" };
-const none = { ctrlKey: false, metaKey: false, altKey: false, shiftKey: false };
+const none = { code: "", key: "", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false };
+const ctrl1 = { ...none, code: "Digit1", key: "1", ctrlKey: true };
 
 describe("skróty widoków", () => {
   test("na Windowsie widok przełącza Ctrl + klawisz, a ⌘ nie", () => {
-    expect(matchesShortcut({ ...none, code: "Digit1", ctrlKey: true }, repos, false)).toBe(true);
-    expect(matchesShortcut({ ...none, code: "Digit1", metaKey: true }, repos, false)).toBe(false);
+    expect(matchesShortcut(ctrl1, "1", false)).toBe(true);
+    expect(matchesShortcut({ ...ctrl1, ctrlKey: false, metaKey: true }, "1", false)).toBe(false);
   });
 
   test("na macOS widok przełącza ⌘ + klawisz, a Ctrl nie", () => {
-    expect(matchesShortcut({ ...none, code: "Digit1", metaKey: true }, repos, true)).toBe(true);
-    expect(matchesShortcut({ ...none, code: "Digit1", ctrlKey: true }, repos, true)).toBe(false);
+    expect(matchesShortcut({ ...ctrl1, ctrlKey: false, metaKey: true }, "1", true)).toBe(true);
+    expect(matchesShortcut(ctrl1, "1", true)).toBe(false);
   });
 
   test("Shift, Alt, sam klawisz i inny klawisz nie przełączają widoku", () => {
-    expect(matchesShortcut({ ...none, code: "Digit1", ctrlKey: true, shiftKey: true }, repos, false)).toBe(false);
-    expect(matchesShortcut({ ...none, code: "Digit1", ctrlKey: true, altKey: true }, repos, false)).toBe(false);
-    expect(matchesShortcut({ ...none, code: "Digit1" }, repos, false)).toBe(false);
-    expect(matchesShortcut({ ...none, code: "Digit2", ctrlKey: true }, repos, false)).toBe(false);
+    expect(matchesShortcut({ ...ctrl1, shiftKey: true }, "1", false)).toBe(false);
+    expect(matchesShortcut({ ...ctrl1, altKey: true }, "1", false)).toBe(false);
+    expect(matchesShortcut({ ...ctrl1, ctrlKey: false }, "1", false)).toBe(false);
+    expect(matchesShortcut(ctrl1, "2", false)).toBe(false);
+  });
+
+  test("cyfra liczy się po klawiszu, także gdy układ (AZERTY) daje bez Shift inny znak", () => {
+    expect(matchesShortcut({ ...ctrl1, key: "&" }, "1", false)).toBe(true);
+  });
+
+  test("przecinek liczy się po znaku, gdziekolwiek leży w układzie", () => {
+    expect(matchesShortcut({ ...none, code: "KeyM", key: ",", ctrlKey: true }, ",", false)).toBe(true);
+    expect(matchesShortcut({ ...none, code: "Comma", key: ";", ctrlKey: true }, ",", false)).toBe(false);
   });
 
   test("podpis skrótu w konwencji systemu", () => {
-    expect(shortcutLabel(repos, false)).toBe("Ctrl+1");
-    expect(shortcutLabel(repos, true)).toBe("⌘1");
-    expect(ariaShortcut({ code: "Comma", key: "," }, false)).toBe("Control+,");
-    expect(ariaShortcut(repos, true)).toBe("Meta+1");
+    expect(shortcutLabel("1", false)).toBe("Ctrl+1");
+    expect(shortcutLabel("1", true)).toBe("⌘1");
+    expect(ariaShortcut(",", false)).toBe("Control+,");
+    expect(ariaShortcut("1", true)).toBe("Meta+1");
   });
 });

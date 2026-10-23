@@ -8,14 +8,13 @@ import { DaemonPanel } from "./DaemonPanel.tsx";
 import { ReposView } from "./ReposView.tsx";
 import { SettingsView } from "./SettingsView.tsx";
 
-type View = "repos" | "daemon" | "settings";
-
 /** Kolejność i skróty paska widoków; następne widoki pracy (np. graf, sesje) dostają kolejne cyfry. */
-const VIEWS: readonly ActivityView<View>[] = [
-  { id: "repos", label: "Repo", icon: FolderGit2, shortcut: { code: "Digit1", key: "1" }, placement: "top" },
-  { id: "daemon", label: "Daemon", icon: Activity, shortcut: { code: "Digit9", key: "9" }, placement: "bottom" },
-  { id: "settings", label: "Ustawienia", icon: Settings, shortcut: { code: "Comma", key: "," }, placement: "bottom" },
-];
+const VIEWS = [
+  { id: "repos", label: "Repo", icon: FolderGit2, shortcut: "1", placement: "top" },
+  { id: "daemon", label: "Daemon", icon: Activity, shortcut: "9", placement: "bottom" },
+  { id: "settings", label: "Ustawienia", icon: Settings, shortcut: ",", placement: "bottom" },
+] as const satisfies readonly ActivityView<string>[];
+type View = (typeof VIEWS)[number]["id"];
 
 export function App() {
   const [view, setView] = useState<View>("repos");
@@ -32,7 +31,7 @@ export function App() {
             </Button>
           </div>
         )}
-        <main className="hud-grid min-h-0 flex-1">
+        <main className="hud-grid min-h-0 flex-1 overflow-y-auto">
           {!conn && !error && (
             <div className="p-6">
               <Loading text="Łączenie z daemonem…" />

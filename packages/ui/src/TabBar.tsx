@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-/** Pasek zakładek w treści widoku, np. zakładki karty repo. Widoki aplikacji przełącza `ActivityBar`. */
+/** Pasek zakładek w treści widoku, np. README, pliki i commity w widoku repo. Widoki aplikacji przełącza `ActivityBar`. */
 export function TabBar<Id extends string>({
   tabs,
   active,

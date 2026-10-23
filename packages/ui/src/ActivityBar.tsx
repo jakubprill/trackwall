@@ -17,7 +17,7 @@ const IS_MAC = navigator.userAgent.includes("Mac");
 
 /**
  * Pasek widoków przy lewej krawędzi okna (activity bar z VS Code): ikona na widok, nazwa i skrót w podpowiedzi,
- * aktywny widok ze świecącą kreską. Skróty działają w całym oknie, także gdy fokus jest w polu tekstowym.
+ * aktywny widok ze świecącą kreską (ADR-16).
  */
 export function ActivityBar<Id extends string>({
   views,
@@ -28,16 +28,7 @@ export function ActivityBar<Id extends string>({
   active: Id;
   onSelect: (id: Id) => void;
 }) {
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const view = views.find((v) => matchesShortcut(event, v.shortcut, IS_MAC));
-      if (!view) return;
-      event.preventDefault();
-      onSelect(view.id);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [views, onSelect]);
+  useViewShortcuts(views, onSelect);
 
   const group = (placement: ActivityView<Id>["placement"]) =>
     views
@@ -51,6 +42,20 @@ export function ActivityBar<Id extends string>({
       <ul className="mt-auto flex flex-col pb-1">{group("bottom")}</ul>
     </nav>
   );
+}
+
+/** Skróty działają w całym oknie, także gdy fokus jest w polu tekstowym. */
+function useViewShortcuts<Id extends string>(views: readonly ActivityView<Id>[], onSelect: (id: Id) => void) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const view = views.find((v) => matchesShortcut(event, v.shortcut, IS_MAC));
+      if (!view) return;
+      event.preventDefault();
+      onSelect(view.id);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [views, onSelect]);
 }
 
 function ActivityButton<Id extends string>({ view, active, onSelect }: { view: ActivityView<Id>; active: boolean; onSelect: () => void }) {
