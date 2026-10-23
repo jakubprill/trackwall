@@ -61,7 +61,12 @@ fn candidates() -> &'static [(WindowEffect, Apply<WebviewWindow, ApplyError>)] {
     #[cfg(target_os = "macos")]
     return &[(WindowEffect::Vibrancy, |w| {
         use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState};
-        window_vibrancy::apply_vibrancy(w, NSVisualEffectMaterial::UnderWindowBackground, Some(NSVisualEffectState::FollowsWindowActiveState), None)
+        window_vibrancy::apply_vibrancy(
+            w,
+            NSVisualEffectMaterial::UnderWindowBackground,
+            Some(NSVisualEffectState::FollowsWindowActiveState),
+            None,
+        )
     })];
     #[cfg(not(any(windows, target_os = "macos")))]
     return &[];
@@ -159,10 +164,13 @@ mod tests {
     use super::*;
     use std::cell::RefCell;
 
+    /// Lista wywołanych efektów w kolejności prób.
+    type Calls = RefCell<Vec<&'static str>>;
+
     #[test]
     fn falls_back_to_next_effect_and_stops_at_first_success() {
         let calls = RefCell::new(Vec::new());
-        let candidates: &[(WindowEffect, Apply<RefCell<Vec<&'static str>>, String>)] = &[
+        let candidates: &[(WindowEffect, Apply<Calls, String>)] = &[
             (WindowEffect::Mica, |c| {
                 c.borrow_mut().push("mica");
                 Err("Windows 10".into())
