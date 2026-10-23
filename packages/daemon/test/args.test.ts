@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseDaemonArgs } from "../src/args.ts";
+import { parseCommandLine, parseDaemonArgs } from "../src/args.ts";
 
 describe("argumenty", () => {
   test("domyślne", () => {
@@ -21,5 +21,12 @@ describe("argumenty", () => {
     expect(() => parseDaemonArgs(["--port", "70000"])).toThrow();
     expect(() => parseDaemonArgs(["--port", "1.5"])).toThrow();
     expect(() => parseDaemonArgs(["--nieznana"])).toThrow();
+  });
+
+  test("mcp-stdio jako pierwszy argument uruchamia most z opcjonalnym --home, bez opcji daemona", () => {
+    expect(parseCommandLine(["mcp-stdio"])).toEqual({ command: "mcp-stdio", home: undefined });
+    expect(parseCommandLine(["mcp-stdio", "--home", "/stan"])).toEqual({ command: "mcp-stdio", home: "/stan" });
+    expect(() => parseCommandLine(["mcp-stdio", "--port", "1"])).toThrow();
+    expect(parseCommandLine(["--port", "7"])).toMatchObject({ command: "daemon", args: { port: 7 } });
   });
 });

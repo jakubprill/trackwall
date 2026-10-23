@@ -34,6 +34,11 @@ export const DaemonInfo = z.object({
   runtime: z.object({ name: z.enum(["bun", "node"]), version: z.string() }),
   launchedBy: z.enum(["desktop", "manual"]),
   home: z.string(),
+  /**
+   * Program i argumenty mostu stdio do serwera MCP tego daemona (`trackwall-daemon mcp-stdio`, §5.3), gotowe do
+   * konfiguracji MCP CLI agenta: pełna ścieżka binarki, a przy uruchomieniu ze źródeł runtime i skrypt.
+   */
+  mcpStdioCommand: z.array(z.string()).min(1),
 });
 export type DaemonInfo = z.infer<typeof DaemonInfo>;
 export const DaemonInfoResult = apiResult(DaemonInfo);

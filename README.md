@@ -20,6 +20,8 @@ Przeglądanie repo: w widoku „Ustawienia” wskazujesz folder z projektami (pe
 
 Taski mise: zakładka „Taski mise” w karcie repo pokazuje taski z `mise tasks ls`, uruchamia je (`mise run <task>` w korzeniu repo) i zatrzymuje jako całą grupę procesów, razem z ich potomkami (Job Object na Windowsie, sesja POSIX na macOS, ADR-20); po błędzie pokazuje kod wyjścia i ostatnie linie wyjścia. Konfiguracji mise, której mise nie ufa, można zaufać przyciskiem (`mise trust`). Wyjście daemona zatrzymuje wszystkie taski, a grupy po awarii daemona sprząta jego następny start. Wymaga `mise` w `PATH` (na macOS wystarczy `PATH` z powłoki logowania).
 
+Serwer MCP dla Copilot CLI: daemon wystawia serwer MCP tylko do odczytu (ADR-24) z narzędziami `list_repos` (repo z folderu z projektami: ścieżka, adres repo zdalnego, gałąź, stan, wynik ostatniej synchronizacji) i `get_repo` (README, ostatnie commity, taski mise jednego repo). Copilot CLI podłącza się raz, komendą z widoku „Daemon” (opis niżej w „Podłączenie Copilot CLI”).
+
 Komenda zbiorcza: przycisk „Komenda zbiorcza” pod listą repo otwiera panel, w którym wybiera się repo (domyślnie wszystkie) i kroki: synchronizacja, narzędzia (`mise install`), zależności (task mise `setup`) i build (task mise `build`). Kroki idą w repo po kolei, a repo po trzy naraz; panel pokazuje wynik każdego kroku w każdym repo, a przy błędzie kod wyjścia i ostatnie linie. Repo bez taska ma krok pominięty, błąd kończy tylko to repo, a „Przerwij” zatrzymuje trwające taski i nie zaczyna kolejnych. Powtórka jest szybka, gdy taski mają w `mise.toml` `sources` i `outputs` (ADR-27).
 
 Etap 2 (prototyp): wykrywanie stanu sesji Copilot CLI z hooków i sekwencji terminala (ADR-17), na razie jako skrypt nagrywający sesję, jeszcze bez widoku Zadania; opis niżej w „Nagrywanie sesji Copilot CLI”.
@@ -71,6 +73,22 @@ Windows: zip zawiera `trackwall.exe`, `trackwall-daemon.exe` i `ui/`. Rozpakowan
 macOS: zip zawiera niepodpisany `Trackwall.app`; pierwsze uruchomienie przez prawy klik > Otwórz albo `xattr -dr com.apple.quarantine Trackwall.app`.
 
 Każdy przebieg CI (PR, push na `main`, ręczne uruchomienie) publikuje oba archiwa jako artefakty.
+
+## Podłączenie Copilot CLI
+
+Copilot CLI uruchamia most stdio daemona (`trackwall-daemon mcp-stdio`) jako lokalny serwer MCP; most znajduje działający daemon przez `daemon.json`, więc konfiguracja nie zmienia się po restarcie daemona i nie zawiera tokenu. Gotową komendę dla tej instalacji pokazuje widok „Daemon” (Ctrl+9, przycisk kopiowania). Wygląda tak:
+
+```sh
+copilot mcp add trackwall -- /Applications/Trackwall.app/Contents/MacOS/trackwall-daemon mcp-stdio                     # macOS
+copilot mcp add trackwall '--' '<katalog z Trackwall>\trackwall-daemon.exe' mcp-stdio    # Windows (PowerShell; `--` w apostrofach)
+copilot mcp add trackwall -- bun --no-env-file --config=<trackwall>/packages/daemon/bunfig.toml <trackwall>/packages/daemon/src/main.ts mcp-stdio --home <katalog stanu>   # ze źródeł
+```
+
+Komenda dopisuje wpis `trackwall` do `~/.copilot/mcp-config.json` (na Windowsie `%USERPROFILE%\.copilot\mcp-config.json`; ten sam wpis w JSON jest w widoku „Daemon”, gdyby trzeba go wkleić ręcznie). Trackwall musi działać, zanim wystartuje Copilot CLI, bo Copilot uruchamia serwery MCP przy starcie sesji; `/mcp` w Copilot CLI pokazuje, czy serwer `trackwall` jest połączony. Potem wystarczy poprosić agenta np. „Jakie repo mam w folderze z projektami?”.
+
+Sprawdzenie ręczne (wymaga zalogowanego Copilot CLI): uruchom Trackwall z ustawionym folderem z projektami, wykonaj komendę z widoku „Daemon”, uruchom `copilot` w folderze z projektami, sprawdź w `/mcp`, że `trackwall` jest połączony z narzędziami `list_repos` i `get_repo`, poproś o listę repo, a potem o szczegóły jednego z nich (README, taski mise). Log daemona (terminal `pnpm dev` albo `trackwall-daemon`) pokazuje każde wywołanie jako `[mcp] list_repos: ok w … ms`.
+
+Inne klienty MCP mogą też rozmawiać z daemonem wprost przez Streamable HTTP pod `http://127.0.0.1:<port>/mcp` z nagłówkiem `Authorization: Bearer <token>`; port i token są w `daemon.json` i zmieniają się przy każdym starcie daemona.
 
 ## Ikony
 

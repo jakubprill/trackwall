@@ -12,6 +12,8 @@ export interface DaemonArgs {
 }
 
 export const USAGE = `trackwall-daemon [opcje]
+trackwall-daemon mcp-stdio [--home <dir>]
+                   most stdio do serwera MCP działającego daemona (dla Copilot CLI)
 
   --ui             otwórz UI w domyślnej przeglądarce (tryb bez Tauri)
   --ui-dir <dir>   katalog zbudowanego UI (domyślnie ./ui obok binarki)
@@ -65,4 +67,16 @@ function toInt(value: string | undefined, name: string): number {
   const n = Number(value);
   if (!Number.isInteger(n)) throw new Error(`${name} oczekuje liczby całkowitej, dostał "${value}"`);
   return n;
+}
+
+/** Podkomenda `trackwall-daemon`, która uruchamia most stdio do `/mcp` (§5.3). */
+export const MCP_STDIO_COMMAND = "mcp-stdio";
+
+/** Wiersz poleceń: daemon albo most stdio (`mcp-stdio [--home <dir>]`), który ma do ustawienia tylko katalog stanu. */
+export type CommandLine = { command: "daemon"; args: DaemonArgs } | { command: typeof MCP_STDIO_COMMAND; home?: string };
+
+export function parseCommandLine(argv: string[]): CommandLine {
+  if (argv[0] !== MCP_STDIO_COMMAND) return { command: "daemon", args: parseDaemonArgs(argv) };
+  const { values } = parseArgs({ args: argv.slice(1), options: { home: { type: "string" } }, strict: true, allowPositionals: false });
+  return { command: MCP_STDIO_COMMAND, home: values.home };
 }
