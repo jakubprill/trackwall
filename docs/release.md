@@ -6,8 +6,10 @@ Trackwall jest dystrybuowany jako archiwa zip w [GitHub Releases](https://github
 
 1. Podbij wersję w trzech miejscach (test `apps/desktop/test/versions.test.ts` pilnuje zgodności):
    `packages/daemon/package.json`, `apps/desktop/src-tauri/tauri.conf.json`, `apps/desktop/src-tauri/Cargo.toml`.
-2. Scal zmianę do `main` przez PR.
-3. Na `main` utwórz i wypchnij tag z tą samą wersją:
+   Potem `cargo update --workspace --manifest-path apps/desktop/src-tauri/Cargo.toml` przenosi nową wersję do `Cargo.lock` (bez podbijania zależności); zacommituj go razem z resztą.
+2. Dopisz notatkę o zmianach `docs/release-notes/v<wersja>.md` dla użytkownika: co nowego, jak przejść ze starszej wersji, znane ograniczenia (ten sam test pilnuje, że plik istnieje i nie jest pusty).
+3. Scal zmianę do `main` przez PR.
+4. Na `main` utwórz i wypchnij tag z tą samą wersją:
 
    ```sh
    git tag v0.2.0
@@ -24,7 +26,7 @@ Workflow sprawdza, że tag wskazuje commit z `main` i zgadza się z wersją w `t
 | `trackwall-<wersja>-macos-arm64.zip` | `Trackwall.app` (Apple Silicon) |
 | `SHA256SUMS.txt` | sumy SHA-256 obu archiwów |
 
-Opis release generuje GitHub z listy PR-ów od poprzedniego tagu. Jeśli workflow padnie w kroku publikacji, wystarczy go uruchomić ponownie: istniejący release dostanie podmienione pliki, drugi nie powstanie.
+Opis release to notatka z `docs/release-notes/v<wersja>.md`, a pod nią lista PR-ów od poprzedniego wydania wygenerowana przez GitHub (bez poprzedniego wydania: od początku repo). Jeśli workflow padnie w kroku publikacji, wystarczy go uruchomić ponownie: istniejący release dostanie podmienione pliki, drugi nie powstanie.
 
 ## Instalacja na nowym komputerze
 
@@ -60,7 +62,7 @@ ditto -x -k trackwall-0.2.0-macos-arm64.zip /Applications
 xattr -dr com.apple.quarantine /Applications/Trackwall.app
 ```
 
-Przejście z 0.1.0 (wydanej jeszcze pod nazwą Pitwall, ADR-12): nowa wersja nie wykrywa starej, bo ma inny katalog stanu i identyfikator aplikacji. Przed pierwszym uruchomieniem zamknij Pitwall z traya (Wyjdź), usuń `%LOCALAPPDATA%\Programs\Pitwall` (macOS: `Pitwall.app` z Aplikacji) i, jeśli chcesz, `~/.pitwall`. Nic stamtąd nie jest potrzebne.
+Przejście z 0.1.0 (wydanej jeszcze pod nazwą Pitwall, ADR-12) opisuje [notatka o zmianach 0.2.0](release-notes/v0.2.0.md#przejście-z-pitwall-010): Trackwall nie przejmuje starej instalacji, więc Pitwall trzeba zamknąć i usunąć ręcznie.
 
 Na obu systemach dane użytkownika (`~/.trackwall`, na Windowsie `%USERPROFILE%\.trackwall`) są poza folderem aplikacji, więc aktualizacja to zamknięcie aplikacji (tray > Wyjdź, żeby zatrzymać też daemona) i podmiana folderu lub `.app` na nowy.
 

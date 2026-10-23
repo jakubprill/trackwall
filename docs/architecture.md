@@ -65,6 +65,8 @@ trackwall/
     desktop/              Tauri (Rust shell), tauri.conf, ikony, sidecar binarka daemona
   docs/
     architecture.md       ten dokument
+    release.md            proces wydania i instalacja
+    release-notes/        notatki o zmianach per wersja (v<wersja>.md), opis GitHub Release
     adr/                  decyzje architektoniczne (od chwili, gdy zacznie ich przybywać)
   .github/workflows/
     ci.yml                przy PR: lint (Biome, knip, rustfmt), typecheck, test na Linuksie, audyt; na main i ręcznie: do tego test, clippy, build portable, spike'i na Windows + macOS
