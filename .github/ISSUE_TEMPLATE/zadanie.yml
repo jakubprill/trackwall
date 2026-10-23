@@ -1,0 +1,23 @@
+name: Zadanie
+description: Nowa funkcja, zmiana albo prace porządkowe.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: cel
+    attributes:
+      label: Cel
+      description: Co ma się zmienić dla użytkownika i dlaczego.
+    validations:
+      required: true
+  - type: textarea
+    id: zakres
+    attributes:
+      label: Zakres
+      description: Moduły z docs/architecture.md §4, których to dotyczy, i czego zadanie celowo nie obejmuje.
+  - type: textarea
+    id: gotowe
+    attributes:
+      label: Kiedy gotowe
+      description: Kryteria akceptacji ponad Definition of done z AGENTS.md (np. konkretny scenariusz na Windowsie).
+    validations:
+      required: true
