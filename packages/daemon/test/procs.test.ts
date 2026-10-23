@@ -245,10 +245,17 @@ describe("procs, gdy lider kończy się sam w trakcie stopu", () => {
       const dir = mkdtempSync(join(tmpdir(), "trackwall-procs-"));
       const real = await groupPlatform();
       let releases = 0;
-      // Zabicie z opóźnieniem: stop przychodzi, gdy lider już nie żyje, a reszta grupy jeszcze tak.
+      // Grupa wygląda na żywą jeszcze 500 ms po zabiciu: stop przychodzi, gdy lider już nie żyje, a dobijanie trwa.
+      // Na Windowsie potomkowie giną razem z liderem (libuv lidera trzyma ich we własnym jobie), więc bez tego
+      // dobijanie kończyłoby się, zanim test zdąży zatrzymać grupę.
+      let killedAt: number | undefined;
       const slowKill = (control: GroupControl): GroupControl => ({
         ...control,
-        kill: () => setTimeout(() => control.kill(), 500),
+        kill: () => {
+          killedAt ??= Date.now();
+          control.kill();
+        },
+        isEmpty: () => killedAt !== undefined && Date.now() - killedAt >= 500 && control.isEmpty(),
         release: () => {
           releases += 1;
           control.release();
@@ -261,8 +268,7 @@ describe("procs, gdy lider kończy się sam w trakcie stopu", () => {
       });
       await groups.start({ owner: "o", command: [process.execPath, TREE, dir, "0", "3", "exit-leader", "3"], cwd: dir, env: process.env });
       const pids = await waitForTree(dir, 3);
-      // Bez stopu `stopping` znaczy, że daemon zauważył koniec lidera i dobija resztę grupy. Na Windowsie libuv
-      // lidera trzyma swoich potomków we własnym jobie, więc giną razem z nim i dobijanie bywa puste.
+      // Bez stopu `stopping` znaczy, że daemon zauważył koniec lidera i dobija resztę grupy.
       expect(await waitUntil(() => groups.state("o")?.kind === "stopping", 15_000)).toBe(true);
 
       const stopped = await groups.stop("o");
