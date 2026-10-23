@@ -1,0 +1,13 @@
+{"version": 2, "width": 120, "height": 30, "timestamp": 1792756800, "title": "Syntetyczna sesja Copilot CLI (nie nagranie): prompt, prośba o zgodę, koniec tury, wyjście"}
+[0.1, "m", "{\"kind\":\"hook\",\"record\":{\"event\":\"sessionStart\",\"at\":1792756800100,\"payload\":{\"sessionId\":\"00000000-0000-4000-8000-000000000001\",\"timestamp\":1792756800100.0,\"cwd\":\"/repos/demo\",\"source\":\"new\"}}}"]
+[0.5, "o", "\u001b]0;GitHub Copilot\u0007\u001b[?1049h> "]
+[1.0, "m", "{\"kind\":\"hook\",\"record\":{\"event\":\"userPromptSubmitted\",\"at\":1792756801000,\"payload\":{\"sessionId\":\"00000000-0000-4000-8000-000000000001\",\"timestamp\":1792756801000.0,\"cwd\":\"/repos/demo\"}}}"]
+[1.1, "o", "\u001b]9;4;3;0\u0007\u001b]0;Naprawa testu parsera\u0007⠋ Thinking"]
+[3.0, "m", "{\"kind\":\"hook\",\"record\":{\"event\":\"postToolUse\",\"at\":1792756803000,\"payload\":{\"sessionId\":\"00000000-0000-4000-8000-000000000001\",\"timestamp\":1792756803000.0,\"cwd\":\"/repos/demo\",\"toolName\":\"view\"}}}"]
+[3.9, "o", "Allow bash to run `bun test`? (y/n)"]
+[4.0, "m", "{\"kind\":\"hook\",\"record\":{\"event\":\"notification\",\"at\":1792756804000,\"payload\":{\"sessionId\":\"00000000-0000-4000-8000-000000000001\",\"timestamp\":1792756804000.0,\"cwd\":\"/repos/demo\",\"notification_type\":\"permission_prompt\",\"message\":\"Copilot needs permission to run bash\"}}}"]
+[70.0, "m", "{\"kind\":\"hook\",\"record\":{\"event\":\"postToolUse\",\"at\":1792756870000,\"payload\":{\"sessionId\":\"00000000-0000-4000-8000-000000000001\",\"timestamp\":1792756870000.0,\"cwd\":\"/repos/demo\",\"toolName\":\"bash\"}}}"]
+[71.0, "o", "\u001b]9;4;0;0\u0007Done. "]
+[71.2, "m", "{\"kind\":\"hook\",\"record\":{\"event\":\"agentStop\",\"at\":1792756871200,\"payload\":{\"sessionId\":\"00000000-0000-4000-8000-000000000001\",\"timestamp\":1792756871200.0,\"cwd\":\"/repos/demo\",\"stopReason\":\"end_turn\",\"stop_hook_active\":false}}}"]
+[75.0, "m", "{\"kind\":\"hook\",\"record\":{\"event\":\"sessionEnd\",\"at\":1792756875000,\"payload\":{\"sessionId\":\"00000000-0000-4000-8000-000000000001\",\"timestamp\":1792756875000.0,\"cwd\":\"/repos/demo\",\"reason\":\"user_exit\"}}}"]
+[75.1, "m", "{\"kind\": \"exit\", \"code\": 0}"]
