@@ -78,7 +78,7 @@ Przebieg CI na Windowsie i macOS (push na `main` albo ręczne uruchomienie) publ
 pnpm --filter @trackwall/desktop icons   # ikony z bundle.icon w tauri.conf.json, szablon traya dla macOS i favicon UI
 ```
 
-Wygenerowane pliki trafiają do repo razem ze zmienionym SVG.
+Wygenerowane pliki trafiają do repo razem ze zmienionym SVG. `tauri icon` zapisuje `icon.icns` za każdym razem w innej kolejności wpisów, więc zmieniony `icon.icns` po przebiegu bez zmiany SVG odrzuć (`git checkout -- apps/desktop/src-tauri/icons/icon.icns`).
 
 ## Nagrywanie sesji Copilot CLI
 

@@ -13,7 +13,8 @@ const ASSETS = join(DESKTOP, "assets");
 const FAVICON = join(REPO, "packages", "ui", "public", "favicon.png");
 const FAVICON_SIZE = 64;
 const TRAY_SIZE = 64;
-// Kafel w icon.svg zajmuje 50..462 z 512 (siatka macOS); kadr zostawia 6 px na poświatę krawędzi.
+// Kafel w icon.svg zajmuje 50..462 z 512 (siatka macOS); kadr zostawia 6 px przezroczystego marginesu,
+// żeby wygładzona krawędź kafla nie dotykała brzegu ikony.
 const MACOS_VIEWBOX = 'viewBox="0 0 512 512"';
 const FULL_BLEED_VIEWBOX = 'viewBox="44 44 424 424"';
 
