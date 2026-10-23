@@ -20,8 +20,8 @@ export function SettingsView({ conn, onRetry, onSaved }: { conn: Connection; onR
       <Surface label="Folder z projektami">
         <div className="flex flex-col gap-4 p-4">
           <p className="text-muted-foreground text-sm">
-            Trackwall pokazuje w zakładce „Repo” każde repo gita, które leży bezpośrednio w tym folderze. Repo sklonowane do niego pojawi
-            się na liście samo.
+            Trackwall pokazuje w widoku „Repo” każde repo gita, które leży bezpośrednio w tym folderze. Repo sklonowane do niego pojawi się
+            na liście samo.
           </p>
           {settings.error && (
             <ErrorWithRetry
@@ -58,7 +58,7 @@ function RepoHostsSurface({ conn }: { conn: Connection }) {
     <Surface label="Hostingi repo">
       <div className="flex flex-col gap-4 p-4">
         <p className="text-muted-foreground text-sm">
-          Z tych hostingów zakładka „Repo” wyszukuje repo i klonuje je jednym kliknięciem do folderu z projektami. Trackwall pyta je przez
+          Z tych hostingów widok „Repo” wyszukuje repo i klonuje je jednym kliknięciem do folderu z projektami. Trackwall pyta je przez
           programy glab (GitLab) i gh (GitHub) zalogowane w systemie, więc nie przechowuje tokenu.
         </p>
         {hosts.error && <ErrorWithRetry message={hosts.error} onRetry={hosts.reload} />}
