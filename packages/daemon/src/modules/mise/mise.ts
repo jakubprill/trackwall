@@ -1,4 +1,4 @@
-import { type MiseTask, MiseTaskName, type MiseTasks, type RunState } from "@trackwall/protocol";
+import { type LogSource, type MiseTask, MiseTaskName, type MiseTasks, type RunState } from "@trackwall/protocol";
 import { z } from "zod";
 import { DomainError, SpawnFailure } from "../../errors.ts";
 import { type MiseCliResult, runMiseCli } from "./mise-cli.ts";
@@ -12,7 +12,7 @@ import { type MiseCliResult, runMiseCli } from "./mise-cli.ts";
 
 /** Czego `mise` potrzebuje od `procs`; podłączane w fasadzie. */
 interface MiseProcs {
-  start(spec: { owner: string; command: readonly string[]; cwd: string; env: NodeJS.ProcessEnv }): Promise<RunState>;
+  start(spec: { owner: string; command: readonly string[]; cwd: string; env: NodeJS.ProcessEnv; logSource: LogSource }): Promise<RunState>;
   state(owner: string): RunState | undefined;
   ended(owner: string): Promise<RunState | undefined>;
   stop(owner: string): Promise<RunState | undefined>;
@@ -75,7 +75,7 @@ export class Mise {
   async start(repo: string, miseTask: string): Promise<RunState> {
     const dir = await this.deps.repos.repoPath(repo);
     if (!(await this.hasTask(dir, miseTask))) throw new DomainError("not_found", `repo ${repo} nie ma taska mise "${miseTask}"`);
-    const run = await this.launch(owner(repo, miseTask), dir, ["run", miseTask], repo);
+    const run = await this.launch(owner(repo, miseTask), dir, ["run", miseTask], repo, taskLogSource(repo, miseTask));
     this.remember(repo, miseTask);
     return run;
   }
@@ -89,7 +89,7 @@ export class Mise {
     const dir = await this.deps.repos.repoPath(repo);
     if (!(await this.hasTask(dir, miseTask))) return null;
     this.remember(repo, miseTask);
-    return this.runGroupToEnd(owner(repo, miseTask), dir, ["run", miseTask], repo, signal);
+    return this.runGroupToEnd(owner(repo, miseTask), dir, ["run", miseTask], repo, taskLogSource(repo, miseTask), signal);
   }
 
   /**
@@ -98,7 +98,7 @@ export class Mise {
    */
   async installTools(repo: string, signal: AbortSignal): Promise<RunState> {
     const dir = await this.deps.repos.repoPath(repo);
-    return this.runGroupToEnd(installOwner(repo), dir, ["install"], repo, signal);
+    return this.runGroupToEnd(installOwner(repo), dir, ["install"], repo, { kind: "mise-install", repo }, signal);
   }
 
   async stop(repo: string, miseTask: string): Promise<RunState> {
@@ -128,13 +128,14 @@ export class Mise {
     this.started.set(repo, names.add(miseTask));
   }
 
-  private async launch(groupOwner: string, dir: string, args: readonly string[], repo: string): Promise<RunState> {
+  private async launch(groupOwner: string, dir: string, args: readonly string[], repo: string, logSource: LogSource): Promise<RunState> {
     try {
       return await this.deps.procs.start({
         owner: groupOwner,
         command: [...this.deps.command, ...args],
         cwd: dir,
         env: await this.deps.env(),
+        logSource,
       });
     } catch (err) {
       if (!(err instanceof SpawnFailure)) throw err;
@@ -152,10 +153,11 @@ export class Mise {
     dir: string,
     args: readonly string[],
     repo: string,
+    logSource: LogSource,
     signal: AbortSignal,
   ): Promise<RunState> {
     signal.throwIfAborted();
-    await this.launch(groupOwner, dir, args, repo);
+    await this.launch(groupOwner, dir, args, repo, logSource);
     let stop = () => {};
     const stopFailed = new Promise<never>((_, reject) => {
       stop = () => void this.deps.procs.stop(groupOwner).catch(reject);
@@ -202,6 +204,11 @@ export function parseTaskList(result: MiseCliResult): TaskList {
 /** Klucz właściciela grupy w `procs`; tylko budowany, nigdy rozbierany z powrotem. */
 function owner(repo: string, miseTask: string): string {
   return `mise:${repo}:${miseTask}`;
+}
+
+/** Źródło logu taska: ta sama para (repo, task mise) co właściciel grupy, w kształcie z kontraktu `logs`. */
+function taskLogSource(repo: string, miseTask: string): LogSource {
+  return { kind: "mise-task", repo, miseTask };
 }
 
 /** Właściciel grupy `mise install` repo; inny przedrostek niż taski, bo task może nazywać się `install`. */

@@ -3,6 +3,7 @@ import { Agents, type AgentsDeps } from "./modules/agents/agents.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { CardCache } from "./modules/cards/card-cache.ts";
 import { Cards } from "./modules/cards/cards.ts";
+import { Logs } from "./modules/logs/logs.ts";
 import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
@@ -22,6 +23,7 @@ export interface Facade {
   cards: Cards;
   mise: Mise;
   procs: ProcessGroups;
+  logs: Logs;
   agents: Agents;
   batch: Batch;
 }
@@ -31,9 +33,12 @@ export { runCopilotHook } from "./modules/agents/copilot-hook-command.ts";
 const WORKSPACE_FILE = "workspace.yaml";
 const RUNTIME_FILE = "runtime.json";
 const CARDS_DIR = "cards";
+const LOGS_DIR = "logs";
+/** Limit jednego pliku JSONL źródła; z poprzednim plikiem po rotacji źródło zajmuje najwyżej dwa razy tyle. */
+const LOG_FILE_MAX_BYTES = 10 * 1024 * 1024;
 
 export interface FacadeOptions {
-  /** Katalog stanu daemona; tam leżą `workspace.yaml` (ADR-13), `runtime.json` (§4.1) i karty repo (`cards/`, ADR-25). */
+  /** Katalog stanu daemona; tam leżą `workspace.yaml` (ADR-13), `runtime.json` (§4.1) `logs/` (§4.2) i karty repo (`cards/`, ADR-25). */
   home: string;
   openUrl: (url: string) => void;
   /** Program `mise` z argumentami przed komendą (`["mise"]` w daemonie). */
@@ -57,8 +62,10 @@ export function createFacade(o: FacadeOptions): Facade {
     hosting: new Hosting(HOSTING_CLIS),
     openUrl: o.openUrl,
   });
+  const logs = new Logs({ dir: join(o.home, LOGS_DIR), maxFileBytes: LOG_FILE_MAX_BYTES, log: o.log });
   const procs = new ProcessGroups({
     runtime: new RuntimeFile(join(o.home, RUNTIME_FILE)),
+    logs,
     platform: groupPlatform(),
     terminals: terminalPlatform(),
     log: o.log,
@@ -78,5 +85,5 @@ export function createFacade(o: FacadeOptions): Facade {
     mcpStdioCommand: o.mcpStdioCommand,
     log: o.log,
   });
-  return { workspace, cards, mise, procs, batch, agents };
+  return { workspace, cards, mise, procs, logs, batch, agents };
 }

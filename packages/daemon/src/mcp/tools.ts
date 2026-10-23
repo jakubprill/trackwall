@@ -102,6 +102,11 @@ const runs: ToolRuns = {
     };
   },
   getRepoCard: (facade, { repo }) => facade.cards.card(repo),
+  tail: async (facade, { repo, miseTask, sinceSeq, limit }) => {
+    // Repo musi istnieć (`not_found` jak w get_repo); log taska, który nic nie wypisał, jest pusty.
+    await facade.workspace.repo(repo);
+    return facade.logs.tail({ source: { kind: "mise-task", repo, miseTask }, sinceSeq, limit });
+  },
 };
 
 /**
@@ -112,6 +117,7 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.listRepos, runs.listRepos),
   defineTool(mcpTools.getRepo, runs.getRepo),
   defineTool(mcpTools.getRepoCard, runs.getRepoCard),
+  defineTool(mcpTools.tail, runs.tail),
 ];
 
 /** Repo łączy się z wynikiem synchronizacji po ścieżce, bo identyfikator może się zmienić razem z nazwą katalogu (ADR-18). */

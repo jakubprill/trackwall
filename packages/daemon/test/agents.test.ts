@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { Session } from "@trackwall/protocol";
 import { DomainError } from "../src/errors.ts";
 import { Agents } from "../src/modules/agents/agents.ts";
+import { Logs } from "../src/modules/logs/logs.ts";
 import { ProcessGroups } from "../src/modules/procs/process-groups.ts";
 import { RuntimeFile } from "../src/modules/procs/runtime-file.ts";
 import { groupPlatform } from "../src/platform/group-platform.ts";
@@ -18,6 +19,7 @@ const daemonMain = join(import.meta.dir, "..", "src", "main.ts");
 function makeAgents(repoDir: string) {
   const home = mkdtempSync(join(tmpdir(), "trackwall-agents-"));
   const procs = new ProcessGroups({
+    logs: new Logs({ dir: join(home, "logs"), maxFileBytes: 1024 * 1024, log: () => {} }),
     runtime: new RuntimeFile(join(home, "runtime.json")),
     platform: groupPlatform(),
     terminals: terminalPlatform(),

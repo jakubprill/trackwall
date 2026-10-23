@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { RepoCardResult, TagName } from "./cards.ts";
-import { MiseTasks } from "./mise.ts";
+import { LOG_BUFFER_RECORDS, LOG_TAIL_MAX, LogTail } from "./logs.ts";
+import { MiseTaskName, MiseTasks } from "./mise.ts";
 import { SyncRepo } from "./sync.ts";
 import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
 
@@ -66,6 +67,8 @@ export interface McpTool<Args extends z.ZodObject = z.ZodObject, Result extends 
 }
 
 const LIST_REPOS = "list_repos";
+const GET_REPO = "get_repo";
+const RepoArg = RepoId.describe(`identyfikator repo z ${LIST_REPOS} (pole id)`);
 
 export const mcpTools = {
   listRepos: {
@@ -82,11 +85,11 @@ export const mcpTools = {
     result: ListReposResult,
   },
   getRepo: {
-    name: "get_repo",
+    name: GET_REPO,
     description:
       `Szczegóły jednego repo: to samo co w ${LIST_REPOS} (z tagami; puste, gdy karty nie da się policzyć), README z ostatniego commita (przycięte), ostatnie ` +
       "commity i taski mise (nazwa, opis, stan uruchomienia) albo powód, dla którego mise ich nie podał.",
-    args: z.object({ repo: RepoId.describe(`identyfikator repo z ${LIST_REPOS} (pole id)`) }).strict(),
+    args: z.object({ repo: RepoArg }).strict(),
     result: GetRepoResult,
   },
   getRepoCard: {
@@ -97,7 +100,25 @@ export const mcpTools = {
       "wymagane wersje narzędzi (mise, .nvmrc, wersja Javy), wykryte mechanizmy (Spring Boot, Feign, WebClient, " +
       "OpenAPI, Kafka, Eureka, Config Server, Kubernetes, Helm, Docker, frameworki frontendu) i tagi z powodami. " +
       "Paczka udostępniana przez jedno repo i używana przez inne to połączenie między nimi. card: null w repo bez commitów.",
-    args: z.object({ repo: RepoId.describe(`identyfikator repo z ${LIST_REPOS} (pole id)`) }).strict(),
+    args: z.object({ repo: RepoArg }).strict(),
     result: RepoCardResult,
+  },
+  tail: {
+    name: "tail",
+    description:
+      "Log taska mise repo (wyjście stdout i stderr, od najstarszego): rekordy z numerem seq, uruchomieniem (runId), " +
+      "strumieniem, poziomem z treści linii (error, warn, info…) i treścią bez kolorów, z sekretami zamienionymi na ***. " +
+      "Bez sinceSeq zwraca ostatnie rekordy; potem podawaj nextSeq z poprzedniej odpowiedzi jako sinceSeq, żeby " +
+      `dostać tylko nowe. dropped: true znaczy, że część rekordów przepadła (daemon trzyma ostatnie rekordy taska, najwyżej ${LOG_BUFFER_RECORDS}) ` +
+      `albo kursor jest z poprzedniego działania Trackwall. Taski i ich stan podaje ${GET_REPO}.`,
+    args: z
+      .object({
+        repo: RepoArg,
+        miseTask: MiseTaskName.describe(`nazwa taska mise z ${GET_REPO} (pole miseTasks)`),
+        sinceSeq: z.number().int().nonnegative().optional().describe("nextSeq z poprzedniej odpowiedzi"),
+        limit: z.number().int().min(1).max(LOG_TAIL_MAX).describe(`ile rekordów najwyżej (do ${LOG_TAIL_MAX})`),
+      })
+      .strict(),
+    result: LogTail,
   },
 } satisfies Record<string, McpTool>;

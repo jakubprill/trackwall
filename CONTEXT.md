@@ -39,7 +39,7 @@ Sekret z `~/.trackwall/daemon.json`, którym UI, `ws`, powłoka i most stdio uwi
 **Serwer MCP** (`/mcp`, `createMcpEndpoint`):
 Część daemona, przez którą agenci czytają jego stan narzędziami MCP; ten sam port i token co API (§5.3, ADR-24).
 
-**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`):
+**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`, `tail`):
 Jedno wywołanie serwera MCP z nazwą po angielsku, wejściem i wynikiem opisanym schematem z `packages/protocol/src/mcp.ts`; mapowanie na fasadę, bez własnej logiki domenowej.
 _Unikaj_: komenda, akcja (to pojęcia z API i CLI)
 
@@ -226,14 +226,18 @@ Blok, którym agent kończy zadanie; trafia do pola `summary` i do propozycji PR
 ## Logi, zdarzenia i audyt
 
 **Rekord** (`LogRecord`):
-Jedna linia wyjścia procesu po parsowaniu: `seq`, czas, źródło, poziom, treść, opcjonalnie identyfikator śladu (`traceId` w TypeScript, `trace_id` w narzędziach MCP).
+Jedna linia wyjścia procesu po parsowaniu: `seq`, czas, uruchomienie (`runId`), strumień, poziom, treść (bez ANSI, z zamaskowanymi sekretami), później opcjonalnie identyfikator śladu (`traceId` w TypeScript, `trace_id` w narzędziach MCP).
 _Unikaj_: wpis, event
 
 **Źródło** (`LogSource`):
-Skąd pochodzi rekord: serwis, zadanie albo sam daemon, z identyfikatorem.
+Skąd pochodzi rekord. Dziś task mise repo (`{ kind: "mise-task", repo, miseTask }`); serwis, zadanie i sam daemon dojdą jako kolejne rodzaje. Źródło ma rekordy wszystkich swoich uruchomień.
+
+**Log** (log taska mise, `logs/tail` i narzędzie MCP `tail`, w UI przycisk „Log”):
+Rekordy jednego źródła w kolejności `seq`: ostatnie (do 2000) w pamięci daemona, nowsze niż ostatnia rotacja w pliku JSONL `logs/<rodzaj>/<repo>/<task mise>.jsonl` w katalogu stanu (bieżący plik i jeden poprzedni, po 10 MB, ADR-28). Nie myl z logiem daemona (stderr procesu `trackwall-daemon`).
+_Unikaj_: konsola, terminal (to PTY sesji zadania)
 
 **`seq`**:
-Globalny, rosnący numer rekordu dla wszystkich źródeł. Kursor `since_seq` działa dla jednego serwisu i dla całego workspace.
+Globalny, rosnący numer rekordu dla wszystkich źródeł; każde działanie daemona zaczyna od chwili startu, więc numery się nie powtarzają. Kursor (`sinceSeq` w API i w narzędziach MCP) działa dla jednego źródła i dla całego workspace; `dropped` mówi, że część rekordów po kursorze przepadła.
 
 **Zdarzenie**:
 Wiadomość daemona na WebSocket `/ws` (`service.state`, `task.state`…) z własnym `seq` zdarzeń.
@@ -243,7 +247,7 @@ _Unikaj_: rekord (to log)
 Pełny stan z `GET /api/snapshot`, od którego UI zaczyna i do którego wraca po `resync`.
 
 **Maskowanie**:
-Zamiana wartości sekretów na `***` przed zapisem rekordu do bufora.
+Zamiana wartości sekretów na `***` przed zapisem rekordu do bufora, pliku i ostatnich linii stanu. Dziś sekrety to wartości zmiennych środowiska procesu o nazwach sekretów (`GH_TOKEN`, `DB_PASSWORD`…, §4.2).
 
 **Audyt** (`AuditEntry`):
 Zapis każdego wywołania narzędzia MCP: klient, narzędzie, argumenty, czas, skrót wyniku. Widoczny tylko w UI.

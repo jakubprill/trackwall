@@ -9,6 +9,8 @@ import {
   cardsApi,
   DaemonInfoResult,
   HealthResult,
+  LogTail,
+  logsApi,
   miseApi,
   RepoList,
   workspaceApi,
@@ -224,6 +226,25 @@ describe("api workspace", () => {
       JSON.stringify({ host: { kind: "gitlab", host: "gitlab.example.com" }, fullName: "--upload-pack=x/y" }),
     );
     expect(res.status).toBe(400);
+  });
+});
+
+describe("api logs", () => {
+  const post = (path: string, body: unknown) =>
+    authed(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+  test("każda akcja z kontraktów mise i logs ma trasę w daemonie", () => {
+    expect([...Object.values(miseApi), ...Object.values(logsApi)].filter((endpoint) => !postRoutes.has(endpoint.path))).toEqual([]);
+  });
+
+  test("log taska, który nic nie wypisał, jest pusty, a źródło niezgodne ze schematem to 400", async () => {
+    const source = { kind: "mise-task", repo: "web", miseTask: "dev" };
+    const empty = await post(logsApi.tail.path, { source, limit: 100 });
+    expect(apiResult(LogTail).parse(JSON.parse(empty.body))).toMatchObject({ ok: true, data: { records: [], dropped: false } });
+
+    const bad = await post(logsApi.tail.path, { source: { ...source, miseTask: "--help" }, limit: 100 });
+    expect(bad.status).toBe(400);
+    expect((await post(logsApi.tail.path, { source, limit: 100_000 })).status).toBe(400);
   });
 });
 

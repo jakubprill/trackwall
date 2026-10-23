@@ -46,6 +46,8 @@ async function main(args: DaemonArgs): Promise<void> {
     facade?.agents.close();
     removeDaemonFile(home, process.pid);
     await api?.close();
+    // Na końcu: ostatnie linie zatrzymanych grup, także te, które przyszły po `exit` lidera, trafiają do plików logów.
+    facade?.logs.flush();
     process.exit(0);
   }
 
