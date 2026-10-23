@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage } from "./api.ts";
 import { useRemote } from "./use-remote.ts";
 
@@ -36,8 +36,14 @@ export function useBackgroundRun<R extends BackgroundRun>(
   const [actionError, setActionError] = useState<string>();
   const [acted, setActed] = useState<R | null>(null);
   const remote = useRemote(load, { pollMs: (run) => (run?.finishedAt === null ? RUNNING_POLL_MS : IDLE_POLL_MS) });
-  // Odpowiedź akcji jest nowsza od odpytania, które zaczęło się przed nią; odpytanie z tym samym albo późniejszym
-  // startem już nie.
+  // Odpowiedź akcji jest nowsza od odpytania sprzed niej. Pierwsza odpowiedź odpytania po akcji ją zastępuje, także
+  // `null` (daemon uruchomiony od nowa nie zna przebiegu), żeby wynik akcji nie wisiał na ekranie bez końca.
+  const latestData = useRef(remote.data);
+  latestData.current = remote.data;
+  const dataAtAct = useRef(remote.data);
+  useEffect(() => {
+    if (remote.data !== dataAtAct.current) setActed(null);
+  }, [remote.data]);
   const run = acted && (!remote.data || remote.data.startedAt < acted.startedAt) ? acted : remote.data;
   const finishedAt = run?.finishedAt;
   useEffect(() => {
@@ -52,6 +58,7 @@ export function useBackgroundRun<R extends BackgroundRun>(
       action()
         .then(
           (result) => {
+            dataAtAct.current = latestData.current;
             setActed(result);
             reload();
           },

@@ -27,7 +27,10 @@ import { runOutcome, syncOutcome } from "./step-outcome.ts";
  */
 const BATCH_CONCURRENCY = 3;
 
-/** Krok, który jest taskiem mise, i nazwa tego taska (konwencja z `CONTEXT.md`, „Task mise”). */
+/**
+ * Krok, który jest taskiem mise, i nazwa tego taska (konwencja z `CONTEXT.md`, „Task mise”). Osobno od nazwy kroku,
+ * bo krok jest kontraktem API, a nazwa taska konwencją repo, która może dostać ustawienie w `workspace.yaml`.
+ */
 const MISE_TASK = { setup: "setup", build: "build" } as const satisfies Partial<Record<BatchStep, string>>;
 
 /** Czego `batch` potrzebuje od `workspace`; podłączane w fasadzie (§4). */
@@ -164,7 +167,9 @@ export class Batch {
 /**
  * Repo pogrupowane po katalogu na dysku: dowiązanie w folderze z projektami do innego repo z listy to
  * osobny wpis, a dwa `pnpm install` albo buildy naraz w jednym katalogu psują sobie nawzajem pliki. Wpisy jednej
- * grupy idą po kolei, grupy równolegle. Bez wielkości liter, jak dyski Windowsa i macOS.
+ * grupy idą po kolei, grupy równolegle. Bez wielkości liter, jak dyski Windowsa i macOS (na Linuksie `Web` i `web`
+ * idą wtedy po kolei, co kosztuje tylko czas). Katalog, którego `realpath` nie czyta, zostaje pod swoją ścieżką:
+ * jego krok i tak skończy się błędem.
  */
 async function groupBySameDir(repos: readonly BatchRepo[]): Promise<BatchRepo[][]> {
   const keyed = await Promise.all(

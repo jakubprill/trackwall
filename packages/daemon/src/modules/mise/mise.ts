@@ -88,10 +88,8 @@ export class Mise {
   async runToEnd(repo: string, miseTask: string, signal: AbortSignal): Promise<RunState | null> {
     const dir = await this.deps.repos.repoPath(repo);
     if (!(await this.hasTask(dir, miseTask))) return null;
-    signal.throwIfAborted();
-    await this.launchToEnd(owner(repo, miseTask), dir, ["run", miseTask], repo);
     this.remember(repo, miseTask);
-    return this.ended(owner(repo, miseTask), signal);
+    return this.runGroupToEnd(owner(repo, miseTask), dir, ["run", miseTask], repo, signal);
   }
 
   /**
@@ -100,9 +98,7 @@ export class Mise {
    */
   async installTools(repo: string, signal: AbortSignal): Promise<RunState> {
     const dir = await this.deps.repos.repoPath(repo);
-    signal.throwIfAborted();
-    await this.launchToEnd(installOwner(repo), dir, ["install"], repo);
-    return this.ended(installOwner(repo), signal);
+    return this.runGroupToEnd(installOwner(repo), dir, ["install"], repo, signal);
   }
 
   async stop(repo: string, miseTask: string): Promise<RunState> {
@@ -147,11 +143,19 @@ export class Mise {
   }
 
   /**
-   * Koniec grupy po potwierdzeniu w systemie. `signal` zatrzymuje grupę; gdy grupa przeżyje zabicie, wynikiem jest
-   * `stop_unconfirmed`, a nie czekanie bez końca, bo koniec grupy, której nie da się zabić, nie przyjdzie. Grupa
-   * zostaje wtedy `stopping` w karcie repo, skąd stop można ponowić.
+   * Start (albo dołączenie do działającej grupy tego właściciela) i koniec grupy po potwierdzeniu w systemie.
+   * `signal` zatrzymuje grupę; gdy grupa przeżyje zabicie, wynikiem jest `stop_unconfirmed`, a nie czekanie bez
+   * końca, więc przerwanie zawsze kończy czekanie. Grupa zostaje wtedy `stopping` w karcie repo, skąd stop można ponowić.
    */
-  private async ended(groupOwner: string, signal: AbortSignal): Promise<RunState> {
+  private async runGroupToEnd(
+    groupOwner: string,
+    dir: string,
+    args: readonly string[],
+    repo: string,
+    signal: AbortSignal,
+  ): Promise<RunState> {
+    signal.throwIfAborted();
+    await this.launch(groupOwner, dir, args, repo);
     let stop = () => {};
     const stopFailed = new Promise<never>((_, reject) => {
       stop = () => void this.deps.procs.stop(groupOwner).catch(reject);
@@ -165,15 +169,6 @@ export class Mise {
     } finally {
       signal.removeEventListener("abort", stop);
     }
-  }
-
-  /**
-   * Start dla uruchomienia doczekanego do końca. Grupa tego właściciela, która jest zatrzymywana (np. po
-   * `stop_unconfirmed`), może nie skończyć się nigdy, więc to błąd, a nie dołączenie do niej.
-   */
-  private async launchToEnd(groupOwner: string, dir: string, args: readonly string[], repo: string): Promise<void> {
-    const run = await this.launch(groupOwner, dir, args, repo);
-    if (run.kind === "stopping") throw new DomainError("bad_request", `${repo}: ${args.join(" ")} jest właśnie zatrzymywany`);
   }
 
   private async list(dir: string): Promise<TaskList> {

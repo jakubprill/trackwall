@@ -305,7 +305,7 @@ describe("komenda zbiorcza", () => {
       const { batch, dir } = setup({ web: { tasks: [BUILD] } }, { platform: stubbornPlatform() });
 
       await batch.start({ repos: ["web"], steps: ["build"] });
-      expect(await waitUntil(() => liveTree(join(dir("web"))).length === 2, 15_000)).toBe(true);
+      expect(await waitUntil(() => liveTree(dir("web")).length === 2, 15_000)).toBe(true);
       batch.cancel();
       const run = await finished(batch);
 
