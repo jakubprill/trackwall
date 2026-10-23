@@ -59,7 +59,7 @@ Repo ma zostać opublikowane jako open source (nagłówek `docs/architecture.md`
 ## Windows pierwszy
 
 - Ścieżki tylko przez `node:path` i `node:os`; żadnego sklejania z `/` ani zakładania, że katalog domowy to `~`. Pamiętaj o limicie 260 znaków i plikach blokowanych przez działające procesy.
-- Skrypty w repo są w TypeScript (`bun scripts/...`), nie w bash ani PowerShell, żeby działały tak samo na obu systemach. Wyjątek: kroki `run:` w workflow GitHub Actions.
+- Skrypty w repo są w TypeScript (`bun <paczka>/scripts/...`), nie w bash ani PowerShell, żeby działały tak samo na obu systemach. Wyjątek: kroki `run:` w workflow GitHub Actions.
 - Stan procesu się obserwuje, nie zakłada (§1.3): „zatrzymany” dopiero po sprawdzeniu, że cała grupa nie żyje i port jest wolny. `taskkill` i kod wyjścia to za mało.
 - Bez dowiązań symbolicznych w repo: na Windowsie git domyślnie zamienia je w pliki tekstowe.
 - `fetch` w Bun kieruje `127.0.0.1` przez `HTTP_PROXY`. W daemonie i jego skryptach do loopbacku służy `loopbackRequest` z `packages/daemon/src/loopback.ts`; gdy będzie potrzebny poza daemonem (CLI `ws`), trafia do osobnej paczki tylko dla Node/Bun, nie do `protocol`, który musi działać w przeglądarce.
@@ -99,11 +99,11 @@ cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
 pnpm build:desktop
 cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
-bun packages/daemon/scripts/smoke.ts apps/desktop/src-tauri/target/release/pitwall-daemon   # z .exe na Windowsie
+bun packages/daemon/scripts/smoke.ts apps/desktop/src-tauri/target/release/pitwall-daemon
 pnpm portable
 ```
 
-Wersje narzędzi są w `mise.toml` (`mise install`); workflow mają te same, a zmiana wersji idzie w obu miejscach naraz.
+Wersje narzędzi są w `mise.toml` (`mise install`). Workflow mają je w `env`, a akcja `.github/actions/setup` instaluje je w każdym jobie; zmiana wersji idzie w `mise.toml` i obu workflow naraz (pilnuje tego test).
 
 ## Commity i PR
 

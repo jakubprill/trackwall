@@ -53,15 +53,11 @@ jobs:
             exit 1
           fi
 
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: ./.github/actions/setup
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
           bun-version: ${{ env.BUN_VERSION }}
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # gałąź stable; wersję Rust daje RUST_VERSION
         with:
           toolchain: ${{ env.RUST_VERSION }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -69,14 +65,9 @@ jobs:
           workspaces: apps/desktop/src-tauri
           # Wydanie czyta cache z main, ale go nie zapisuje.
           save-if: false
-      - run: pnpm install --frozen-lockfile
       - run: pnpm build:desktop
       - name: smoke test sidecara z buildu
-        shell: bash
-        run: |
-          exe=""
-          if [ "$RUNNER_OS" = Windows ]; then exe=.exe; fi
-          bun packages/daemon/scripts/smoke.ts "apps/desktop/src-tauri/target/release/pitwall-daemon$exe"
+        run: bun packages/daemon/scripts/smoke.ts apps/desktop/src-tauri/target/release/pitwall-daemon
       - run: pnpm portable
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:

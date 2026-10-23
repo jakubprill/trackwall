@@ -26,7 +26,7 @@ Etap 1 (szkielet): daemon z `/api/health`, UI z panelem daemona, powłoka Tauri 
 
 ## Uruchomienie ze źródeł
 
-Wymagane: Node 22, pnpm 10, Bun 1.4, a dla aplikacji desktopowej Rust (wersje w `mise.toml`, `mise install` je ustawia).
+Wymagane: Node 22.12+, pnpm 10, Bun 1.4, a dla aplikacji desktopowej Rust (wersje w `mise.toml`, `mise install` je ustawia).
 
 ```sh
 pnpm install

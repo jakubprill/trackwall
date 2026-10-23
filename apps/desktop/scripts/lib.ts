@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { z } from "zod";
 
 export const REPO = join(import.meta.dir, "..", "..", "..");
-const DESKTOP = join(REPO, "apps", "desktop");
+export const DESKTOP = join(REPO, "apps", "desktop");
 export const TAURI_DIR = join(DESKTOP, "src-tauri");
 
 /** Triple hosta z `rustc -vV`; tak samo nazywa sidecary Tauri. */
@@ -20,26 +20,31 @@ export function run(cmd: string[], cwd: string, capture = false): string {
   return capture ? (proc.stdout?.toString() ?? "") : "";
 }
 
-const Versioned = z.object({ version: z.string().min(1) });
+const JsonManifest = z.object({ version: z.string().min(1) });
+const CargoManifest = z.object({ package: z.object({ version: z.string().min(1) }) });
 
-function jsonVersion(path: string): string {
-  const parsed = Versioned.safeParse(JSON.parse(readFileSync(join(REPO, path), "utf8")));
-  if (!parsed.success) throw new Error(`${path}: brak pola version (${parsed.error.message})`);
-  return parsed.data.version;
+function parseFile<T>(path: string, schema: z.ZodType<T>, parse: (text: string) => unknown): T {
+  const parsed = schema.safeParse(parse(readFileSync(path, "utf8")));
+  if (!parsed.success) throw new Error(`${path}: ${z.prettifyError(parsed.error)}`);
+  return parsed.data;
 }
 
-function cargoVersion(path: string): string {
-  const version = readFileSync(join(REPO, path), "utf8").match(/^version\s*=\s*"([^"]+)"/m)?.[1];
-  if (!version) throw new Error(`${path}: brak version w [package]`);
-  return version;
+/** Pole `version` z pliku JSON (package.json, tauri.conf.json). */
+export function jsonVersion(path: string): string {
+  return parseFile(path, JsonManifest, JSON.parse).version;
+}
+
+/** `[package].version` z Cargo.toml. */
+export function cargoVersion(path: string): string {
+  return parseFile(path, CargoManifest, Bun.TOML.parse).package.version;
 }
 
 /** Wersja musi być ta sama w daemonie, Tauri i Cargo: powłoka porównuje ją z `/api/health`. */
 export function versions(): Record<string, string> {
   return {
-    "packages/daemon/package.json": jsonVersion("packages/daemon/package.json"),
-    "apps/desktop/src-tauri/tauri.conf.json": jsonVersion("apps/desktop/src-tauri/tauri.conf.json"),
-    "apps/desktop/src-tauri/Cargo.toml": cargoVersion("apps/desktop/src-tauri/Cargo.toml"),
+    "packages/daemon/package.json": jsonVersion(join(REPO, "packages", "daemon", "package.json")),
+    "apps/desktop/src-tauri/tauri.conf.json": jsonVersion(join(TAURI_DIR, "tauri.conf.json")),
+    "apps/desktop/src-tauri/Cargo.toml": cargoVersion(join(TAURI_DIR, "Cargo.toml")),
   };
 }
 

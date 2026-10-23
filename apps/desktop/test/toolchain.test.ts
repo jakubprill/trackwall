@@ -1,17 +1,18 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { REPO } from "../scripts/lib.ts";
+import { z } from "zod";
 
+/** Sprawdza pliki całego repo, nie paczki desktop; leży tu, bo root nie ma własnych testów. */
+const REPO = join(import.meta.dir, "..", "..", "..");
 const read = (path: string) => readFileSync(join(REPO, path), "utf8");
 
-/** `[tools]` z mise.toml: `nazwa = "wersja"` w każdej linii. */
-function miseTools(): Record<string, string> {
-  return Object.fromEntries([...read("mise.toml").matchAll(/^(\w+)\s*=\s*"([^"]+)"/gm)].map(([, name, version]) => [name, version]));
-}
+const MiseToml = z.object({ tools: z.record(z.string(), z.string()) });
+const miseTools = () => MiseToml.parse(Bun.TOML.parse(read("mise.toml"))).tools;
 
+/** Wartość z bloku `env:` na poziomie workflow (jedyne `env` z wersjami narzędzi). */
 function workflowEnv(path: string, name: string): string | undefined {
-  return read(path).match(new RegExp(`^\\s+${name}:\\s*"([^"]+)"`, "m"))?.[1];
+  return read(path).match(new RegExp(`^  ${name}:\\s*"([^"]+)"`, "m"))?.[1];
 }
 
 test("mise.toml ustala wersje Node, Bun, pnpm i Rust", () => {

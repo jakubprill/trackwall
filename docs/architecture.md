@@ -69,6 +69,7 @@ pitwall/
   .github/workflows/
     ci.yml                macierz windows-latest + macos-latest: lint (Biome, knip), test, clippy, build portable; audyt zależności
     release.yml           wydanie z tagu vX.Y.Z (docs/release.md)
+  .github/actions/setup/  wspólne przygotowanie jobów: pnpm, Node, Bun, pnpm install
   .github/dependabot.yml  cotygodniowe aktualizacje akcji, npm i cargo
 ```
 
@@ -258,6 +259,7 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 - Zmienne środowiskowe nigdy nie trafiają do logów ani do audytu; maskowanie wartości przed buforem.
 - Autostart i „podłącz agenta” tylko z UI; agent nie ma narzędzia do zmiany konfiguracji daemona.
 - Jeśli kiedyś pojawią się narzędzia bazodanowe, rola bez superużytkownika i transakcja tylko do odczytu.
+- Przed publikacją repo: `SECURITY.md` z kanałem zgłaszania podatności (prywatne zgłoszenia na GitHubie włącza właściciel w ustawieniach repo).
 
 ## 9. Windows: ryzyka i jak je sprawdzamy wcześnie
 

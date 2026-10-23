@@ -1,7 +1,9 @@
 /**
  * Test dymny skompilowanej binarki daemona: start, health, info z tokenem, shutdown, sprzątnięty daemon.json.
  *
- *   bun scripts/smoke.ts <ścieżka do pitwall-daemon[.exe]>
+ *   bun scripts/smoke.ts <ścieżka do pitwall-daemon>
+ *
+ * Na Windowsie `.exe` jest dopisywane, gdy go brakuje, więc ta sama komenda działa na obu systemach.
  */
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,7 +12,8 @@ import { DaemonInfoResult, HealthResult } from "@pitwall/protocol";
 import { daemonFilePath, readDaemonFile } from "../src/discovery.ts";
 import { loopbackRequest } from "../src/loopback.ts";
 
-const bin = resolve(Bun.argv[2] ?? "");
+const given = resolve(Bun.argv[2] ?? "");
+const bin = process.platform === "win32" && !given.toLowerCase().endsWith(".exe") ? `${given}.exe` : given;
 if (!existsSync(bin)) throw new Error(`brak binarki ${bin}`);
 const home = mkdtempSync(join(tmpdir(), "pitwall-smoke-"));
 const file = daemonFilePath(home);
@@ -20,13 +23,15 @@ console.log(`--version: ${version}`);
 
 const proc = Bun.spawn([bin], { env: { ...process.env, PITWALL_HOME: home }, stdout: "inherit", stderr: "inherit" });
 const deadline = Date.now() + 15_000;
-let daemon = readDaemonFile(home);
-while (!daemon) {
-  if (Date.now() > deadline) throw new Error("poprawny daemon.json nie powstał w 15 s");
-  await Bun.sleep(100);
-  daemon = readDaemonFile(home);
+async function waitForDaemonFile() {
+  for (;;) {
+    const daemon = readDaemonFile(home);
+    if (daemon) return daemon;
+    if (Date.now() > deadline) throw new Error("poprawny daemon.json nie powstał w 15 s");
+    await Bun.sleep(100);
+  }
 }
-const { port, token } = daemon;
+const { port, token } = await waitForDaemonFile();
 const get = async (path: string, method = "GET"): Promise<unknown> =>
   JSON.parse((await loopbackRequest(port, path, { method, token })).body);
 

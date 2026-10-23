@@ -4,15 +4,15 @@
   "type": "module",
   "packageManager": "pnpm@10.28.0",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12"
   },
   "scripts": {
     "dev": "pnpm --parallel --filter @pitwall/daemon --filter @pitwall/ui dev",
     "build": "pnpm --filter @pitwall/ui build && pnpm --filter @pitwall/daemon build",
     "build:desktop": "pnpm --filter @pitwall/desktop build",
-    "portable": "bun apps/desktop/scripts/package-portable.ts",
+    "portable": "pnpm --filter @pitwall/desktop portable",
     "typecheck": "pnpm -r typecheck",
-    "lint": "biome check . && knip",
+    "lint": "biome check --error-on-warnings . && knip",
     "format": "biome check --write .",
     "test": "pnpm -r test"
   },
