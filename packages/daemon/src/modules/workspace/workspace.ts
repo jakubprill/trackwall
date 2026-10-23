@@ -1,24 +1,33 @@
-import type {
-  Commit,
-  FileContent,
-  Repo,
-  RepoList,
-  RepoOverview,
-  RepoStatus,
-  RepoStatusOk,
-  TreeEntry,
-  WorkspaceSettings,
+import { dirname, join } from "node:path";
+import {
+  type CloneJob,
+  type Commit,
+  type FileContent,
+  type HostedRepo,
+  type HostRepos,
+  type RemoteRepoList,
+  type Repo,
+  type RepoHost,
+  type RepoList,
+  type RepoOverview,
+  type RepoStatus,
+  type RepoStatusOk,
+  sameHost,
+  type TreeEntry,
+  type WorkspaceSettings,
 } from "@trackwall/protocol";
 import { DomainError } from "../../errors.ts";
+import { CloneJobs } from "./clone-jobs.ts";
 import { vscodeUrl } from "./editor-url.ts";
 import { mapLimit } from "./map-limit.ts";
-import { findRepos, type RepoEntry, resolveProjectsDir } from "./projects-dir.ts";
+import { dirKey, findRepos, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
 
 /**
  * Moduł `workspace` (§4): repo z folderu z projektami wskazanego w `workspace.yaml` (ADR-18) i ich stan
- * zaobserwowany w gicie. Ani lista, ani stan nie są nigdzie zapisywane; każde zapytanie czyta folder i pyta gita,
- * więc nie rozjeżdżają się z tym, co robi użytkownik.
+ * zaobserwowany w gicie, oraz klon nowych repo z hostingów z ustawień (ADR-19). Ani lista, ani stan nie są nigdzie
+ * zapisywane; każde zapytanie czyta folder i pyta gita, więc nie rozjeżdżają się z tym, co robi użytkownik.
+ * Klonowania żyją tylko w pamięci, do restartu daemona.
  */
 
 /** Ile commitów pokazuje przegląd repo. */
@@ -40,15 +49,23 @@ interface WorkspaceVcs {
   file(dir: string, path: string, maxBytes: number): Promise<FileContent | undefined>;
 }
 
+/** Czego `workspace` potrzebuje od hostingów repo z modułu `vcs` (ADR-19). */
+interface WorkspaceHosting {
+  repos(host: RepoHost, query: string): Promise<{ repos: HostedRepo[]; truncated: boolean }>;
+  clone(host: RepoHost, fullName: string, dest: string): Promise<void>;
+}
+
 export interface WorkspaceDeps {
   file: WorkspaceFile;
   vcs: WorkspaceVcs;
+  hosting: WorkspaceHosting;
   /** Otwiera URL w systemie (tu: `vscode://`); w daemonie `openBrowser`. */
   openUrl: (url: string) => void;
 }
 
 export class Workspace {
   private readonly deps: WorkspaceDeps;
+  private readonly clones = new CloneJobs();
 
   constructor(deps: WorkspaceDeps) {
     this.deps = deps;
@@ -66,6 +83,52 @@ export class Workspace {
   async setProjectsDir(path: string): Promise<WorkspaceSettings> {
     this.deps.file.setProjectsDir(await resolveProjectsDir(path));
     return this.settings();
+  }
+
+  repoHosts(): RepoHost[] {
+    return this.deps.file.repoHosts();
+  }
+
+  setRepoHosts(hosts: RepoHost[]): RepoHost[] {
+    this.deps.file.setRepoHosts(hosts);
+    return this.repoHosts();
+  }
+
+  /**
+   * Repo pasujące do `query` z każdego hostingu naraz; hosting, który nie odpowiada, nie zabiera listy pozostałych.
+   */
+  async remoteRepos(query: string): Promise<RemoteRepoList> {
+    const projectsDir = this.deps.file.projectsDir();
+    const taken = projectsDir === null ? () => false : await takenNames(projectsDir);
+    const hosts = await Promise.all(this.deps.file.repoHosts().map((host) => this.hostRepos(host, query, taken)));
+    return { projectsDir, hosts };
+  }
+
+  /**
+   * Zaczyna klon `fullName` do folderu z projektami, do katalogu o nazwie ostatniego segmentu. Lista repo złapie
+   * klon sama (ADR-18), więc daemon niczego nie zapisuje.
+   */
+  async clone(host: RepoHost, fullName: string): Promise<CloneJob> {
+    if (!this.deps.file.repoHosts().some((h) => sameHost(h, host)))
+      throw new DomainError("bad_request", `hostingu ${host.kind} ${host.host} nie ma w ustawieniach`);
+    const projectsDir = this.deps.file.projectsDir();
+    if (projectsDir === null) throw new DomainError("bad_request", "najpierw ustaw folder z projektami");
+    const dir = cloneDir(fullName);
+    const taken = await takenNames(projectsDir);
+    // Od tego miejsca bez `await`, żeby dwa równoczesne żądania nie przeszły obu sprawdzeń.
+    const path = join(projectsDir, dir);
+    const running = this.clones.runningInto(path);
+    if (running && sameHost(running.host, host) && running.fullName === fullName) return running;
+    if (running) throw new DomainError("bad_request", `do ${path} trwa już klonowanie ${running.fullName}`);
+    if (taken(dir)) throw new DomainError("bad_request", `w folderze z projektami jest już ${dir}`);
+    return this.clones.start({ host, fullName, path }, () => this.deps.hosting.clone(host, fullName, path));
+  }
+
+  /** Klonowania do bieżącego folderu z projektami; te do folderu sprzed zmiany ustawień nie mówią nic o nim. */
+  cloneJobs(): CloneJob[] {
+    const projectsDir = this.deps.file.projectsDir();
+    if (projectsDir === null) return [];
+    return this.clones.list().filter((job) => dirKey(dirname(job.path)) === dirKey(projectsDir));
   }
 
   async overview(id: string): Promise<RepoOverview> {
@@ -117,6 +180,19 @@ export class Workspace {
     return { ...entry, status };
   }
 
+  private async hostRepos(host: RepoHost, query: string, taken: (name: string) => boolean): Promise<HostRepos> {
+    try {
+      const { repos, truncated } = await this.deps.hosting.repos(host, query);
+      const withDirs = repos.map((repo) => {
+        const dir = cloneDir(repo.fullName);
+        return { ...repo, dir, inProjectsDir: taken(dir) };
+      });
+      return { host, listing: { kind: "ok", repos: withDirs, truncated } };
+    } catch (err) {
+      return { host, listing: { kind: "unavailable", message: messageOf(err) } };
+    }
+  }
+
   private async readme(dir: string): Promise<RepoOverview["readme"]> {
     const root = (await this.deps.vcs.tree(dir, "")) ?? [];
     const candidates = root.filter((e) => e.kind === "file" && README.test(e.name));
@@ -134,6 +210,13 @@ export class Workspace {
       throw new DomainError("repo_unavailable", `${entry.id}: ${messageOf(err)}`);
     }
   }
+}
+
+/** Katalog klonu: ostatni segment pełnej nazwy, jak przy `git clone` bez podanego katalogu. */
+function cloneDir(fullName: string): string {
+  const dir = fullName.split("/").at(-1);
+  if (!dir) throw new Error(`pełna nazwa repo bez nazwy: "${fullName}"`);
+  return dir;
 }
 
 function messageOf(err: unknown): string {
