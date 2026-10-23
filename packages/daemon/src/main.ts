@@ -7,10 +7,11 @@ import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
 import { type DaemonArgs, parseDaemonArgs, USAGE } from "./args.ts";
 import { newToken, probeRunningDaemon, removeDaemonFile, watchDaemonFile, withStartLock, writeDaemonFile } from "./discovery.ts";
-import { createFacade } from "./facade.ts";
+import { createFacade, type Facade } from "./facade.ts";
 import { trackwallHome } from "./home.ts";
 import { openBrowser } from "./open-browser.ts";
 import { runtimeInfo } from "./platform/runtime.ts";
+import { userEnv } from "./user-env.ts";
 import { VERSION } from "./version.ts";
 
 /** Kody wyjścia czytane przez Tauri. */
@@ -25,6 +26,7 @@ async function main(args: DaemonArgs): Promise<void> {
   // Stan potrzebny do zatrzymania jest zadeklarowany przed startem API: shutdown może przyjść żądaniem HTTP
   // albo sygnałem w dowolnym momencie po otwarciu portu.
   let api: ApiServer | undefined;
+  let facade: Facade | undefined;
   let stopWatching = () => {};
   let shuttingDown = false;
 
@@ -32,8 +34,9 @@ async function main(args: DaemonArgs): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
     log(`zatrzymywanie (${reason})`);
-    // Etap 3: tutaj zatrzymanie serwisów i sesji agentów tym samym łagodnym stopem.
     stopWatching();
+    // Grupy procesów przed zamknięciem API: UI widzi „stopping”, a nie zerwane połączenie w trakcie zatrzymywania.
+    await facade?.procs.stopAll();
     removeDaemonFile(home, process.pid);
     await api?.close();
     process.exit(0);
@@ -43,6 +46,9 @@ async function main(args: DaemonArgs): Promise<void> {
     const running = await probeRunningDaemon(home);
     if (running) return { kind: "existing" as const, ...running };
     const token = newToken();
+    facade = createFacade({ home, openUrl: openBrowser, miseCommand: ["mise"], userEnv, log });
+    // Pod blokadą startu: drugi daemon nie może w tym czasie uruchomić grupy, którą ten wziąłby za sierotę.
+    await facade.procs.sweepOrphans().catch((err: unknown) => log(`sprzątanie sierot z runtime.json: ${String(err)}`));
     api = await startApi(
       {
         token,
@@ -61,7 +67,7 @@ async function main(args: DaemonArgs): Promise<void> {
           home,
         }),
         onShutdown: () => void shutdown("POST /api/daemon/shutdown"),
-        facade: createFacade({ home, openUrl: openBrowser }),
+        facade,
       },
       args.port,
     );

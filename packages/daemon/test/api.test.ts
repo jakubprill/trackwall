@@ -39,7 +39,13 @@ beforeAll(async () => {
     onShutdown: () => {
       shutdowns++;
     },
-    facade: createFacade({ home: mkdtempSync(join(tmpdir(), "trackwall-home-")), openUrl: () => {} }),
+    facade: createFacade({
+      home: mkdtempSync(join(tmpdir(), "trackwall-home-")),
+      openUrl: () => {},
+      miseCommand: ["mise"],
+      userEnv: async () => process.env,
+      log: () => {},
+    }),
   });
 });
 
@@ -185,7 +191,13 @@ describe("--allow-origin", () => {
         throw new Error("nieużywane");
       },
       onShutdown: () => {},
-      facade: createFacade({ home: mkdtempSync(join(tmpdir(), "trackwall-home-")), openUrl: () => {} }),
+      facade: createFacade({
+        home: mkdtempSync(join(tmpdir(), "trackwall-home-")),
+        openUrl: () => {},
+        miseCommand: ["mise"],
+        userEnv: async () => process.env,
+        log: () => {},
+      }),
     });
     try {
       const res = await loopbackRequest(extra.port, "/api/health", { headers: { origin: "http://127.0.0.1:5173" } });
