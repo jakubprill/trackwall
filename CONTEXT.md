@@ -35,14 +35,18 @@ Osobny token dla sesji zadania; po nim daemon wie, które zadanie woła MCP, i o
 ## Workspace i wiedza
 
 **Workspace** (`workspace`):
-Zbiór repo użytkownika opisany w `workspace.yaml`, poza repozytorium Trackwall. Tu żyje wszystko, co firmowe.
+Zbiór repo użytkownika (repo z folderu z projektami) i jego konfiguracja w `workspace.yaml`, poza repozytorium Trackwall. Tu żyje wszystko, co firmowe.
 _Unikaj_: projekt
 
+**Folder z projektami** (`projectsDir`):
+Jeden katalog na dysku użytkownika, wskazany w `workspace.yaml` albo w ustawieniach. Każdy jego bezpośredni podkatalog z `.git` to repo z workspace (ADR-18); repo dodaje się, klonując je do tego folderu.
+_Unikaj_: katalog workspace, root, folder (bez dopowiedzenia)
+
 **Repo** (`Repo`, `RepoId`):
-Jedno repozytorium z workspace, identyfikowane slugiem.
+Jedno repozytorium z workspace, identyfikowane slugiem z nazwy jego katalogu.
 
 **Stan repo** (`RepoStatus`):
-Gałąź, ostatni commit, liczba zmian w katalogu roboczym i ahead/behind względem gałęzi śledzonej, odczytane z gita przy każdym zapytaniu (`ok`), albo `unavailable` z komunikatem, gdy katalog zniknął lub git go nie czyta. Nigdy nie jest zapisywany.
+Gałąź, ostatni commit, liczba zmian w katalogu roboczym i ahead/behind względem gałęzi śledzonej, odczytane z gita przy każdym zapytaniu (`ok`), albo `unavailable` z komunikatem, gdy git go nie czyta (repo, którego katalog zniknął, znika z listy). Nigdy nie jest zapisywany.
 _Unikaj_: status (w polskim tekście), sync (to osobna akcja)
 
 **Przegląd repo** (`RepoOverview`):

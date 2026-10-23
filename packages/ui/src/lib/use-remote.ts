@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { errorMessage } from "./api.ts";
+import { type CallErrorCode, errorCode, errorMessage } from "./api.ts";
 
 /** Ostatnie dane i ostatni błąd osobno: błąd odświeżenia nie zabiera widoku, który już coś pokazuje. */
 export interface Remote<T> {
   data?: T;
   error?: string;
+  /** `error.code` z daemona, gdy widok musi zareagować na konkretny błąd, a nie tylko go pokazać. */
+  errorCode?: CallErrorCode;
 }
 
 export type RemoteHandle<T> = Remote<T> & { reload: () => void };
@@ -41,7 +43,7 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
     load()
       .then(
         (data) => current && setState({ data }),
-        (err: unknown) => current && setState((prev) => ({ data: prev.data, error: errorMessage(err) })),
+        (err: unknown) => current && setState((prev) => ({ data: prev.data, error: errorMessage(err), errorCode: errorCode(err) })),
       )
       .finally(() => {
         if (current && pollMs !== undefined) timer = setTimeout(next, pollMs);

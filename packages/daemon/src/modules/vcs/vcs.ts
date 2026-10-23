@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import type { Commit, FileContent, RepoStatusOk, TreeEntry } from "@trackwall/protocol";
 import { git } from "./git.ts";
 import { type GitObject, isBinary, LOG_FORMAT, parseLog, parseObjects, parseStatus, parseTree } from "./parse.ts";
@@ -9,14 +8,6 @@ import { type GitObject, isBinary, LOG_FORMAT, parseLog, parseObjects, parseStat
  * a przeglądanie nie zależy od tego, co leży w katalogu roboczym.
  */
 export class Vcs {
-  /** Korzeń repo, w którym leży `dir`; błąd z komunikatem gita, gdy `dir` nie jest w repo gita. */
-  async toplevel(dir: string): Promise<string> {
-    const { stdout } = await git(dir, ["rev-parse", "--show-toplevel"]);
-    // Tylko końcowy znak nowej linii: spacja na końcu nazwy katalogu jest częścią ścieżki.
-    // Git na Windowsie zwraca `C:/...`; `resolve` sprowadza to do postaci z `node:path`.
-    return resolve(stdout.toString("utf8").replace(/\r?\n$/, ""));
-  }
-
   async status(dir: string): Promise<RepoStatusOk> {
     const { stdout } = await git(dir, ["status", "--porcelain=v2", "--branch", "-z"]);
     const { hasCommits, ...status } = parseStatus(stdout.toString("utf8"));

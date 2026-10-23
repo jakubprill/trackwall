@@ -40,12 +40,6 @@ describe("vcs na prawdziwym gicie", () => {
     expect((await vcs.status(clone)).upstream).toEqual({ name: "origin/main", ahead: 1, behind: 1 });
   });
 
-  test("toplevel z podkatalogu zwraca korzeń repo, a katalog spoza repo kończy się błędem", async () => {
-    const dir = makeRepo({ "src/deep/x.ts": "1" });
-    expect(await vcs.toplevel(join(dir, "src", "deep"))).toBe(await vcs.toplevel(dir));
-    await expect(vcs.toplevel(join(dir, ".."))).rejects.toThrow();
-  });
-
   test("tree listuje katalog z ostatniego commita, bez plików niezacommitowanych", async () => {
     const dir = makeRepo({ "src/a.ts": "aa", "src/lib/b.ts": "b", "README.md": "r" });
     writeFileSync(join(dir, "src", "roboczy.ts"), "nie w commicie");

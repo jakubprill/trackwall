@@ -15,9 +15,16 @@ export function gitIn(dir: string, ...args: string[]): string {
   );
 }
 
-/** Nowe repo w katalogu tymczasowym z gałęzią `main`; pliki z `files` zapisane i zacommitowane jednym commitem. */
-export function makeRepo(files: Record<string, string | Buffer> = {}, name = "repo"): string {
-  const dir = join(mkdtempSync(join(tmpdir(), "trackwall-git-")), name);
+/**
+ * Nowe repo `parent/name` z gałęzią `main` (domyślnie w nowym katalogu tymczasowym); pliki z `files` zapisane
+ * i zacommitowane jednym commitem.
+ */
+export function makeRepo(
+  files: Record<string, string | Buffer> = {},
+  name = "repo",
+  parent = mkdtempSync(join(tmpdir(), "trackwall-git-")),
+): string {
+  const dir = join(parent, name);
   mkdirSync(dir);
   gitIn(dir, "init", "-q", "-b", "main");
   if (Object.keys(files).length > 0) commitFiles(dir, files, "pierwszy commit");

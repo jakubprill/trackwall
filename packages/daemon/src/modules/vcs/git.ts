@@ -1,9 +1,20 @@
 import { spawn } from "node:child_process";
+import { realpath } from "node:fs/promises";
+import { delimiter, dirname, resolve as resolvePath } from "node:path";
 
 /**
  * Uruchamianie `git` dla modułu `vcs`. Argumenty zawsze tablicą, bez powłoki; katalog repo przez `-C`,
  * żeby brak katalogu był błędem gita z czytelnym komunikatem, a nie `ENOENT` mylony z brakiem gita.
+ * `repoDir` to zawsze korzeń repo, a repo trafia na listę samo, gdy leży w folderze z projektami (ADR-18), więc
+ * git nie może szukać repo powyżej niego, a klucze z `NO_REPO_COMMANDS` są wyłączone; reszta konfiguracji repo
+ * obowiązuje (luka z filtrem `clean` w §8).
  */
+
+/**
+ * Klucze `.git/config`, którymi repo kazałoby gitowi uruchomić program przy komendach daemona:
+ * `core.fsmonitor` przy `status`, `log.showSignature` (z `gpg.program`) przy `log`.
+ */
+const NO_REPO_COMMANDS = ["-c", "core.fsmonitor=false", "-c", "log.showSignature=false"];
 
 /** Zwykłe wywołania kończą się w ułamku sekundy; limit chroni przed wiszącym gitem (blokada, dysk sieciowy). */
 const TIMEOUT_MS = 15_000;
@@ -36,10 +47,15 @@ export interface GitOptions {
   stdin?: string;
 }
 
-export function git(repoDir: string, args: readonly string[], opts: GitOptions = {}): Promise<GitOutput> {
+export async function git(repoDir: string, args: readonly string[], opts: GitOptions = {}): Promise<GitOutput> {
   const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
+  const ceiling = await ceilingFor(repoDir);
   return new Promise((resolve, reject) => {
-    const child = spawn("git", ["-C", repoDir, ...args], { env: gitEnv(), stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    const child = spawn("git", [...NO_REPO_COMMANDS, "-C", repoDir, ...args], {
+      env: gitEnv(ceiling),
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+    });
     const out: Buffer[] = [];
     const err: Buffer[] = [];
     let size = 0;
@@ -83,9 +99,25 @@ export function git(repoDir: string, args: readonly string[], opts: GitOptions =
   });
 }
 
-function gitEnv(): NodeJS.ProcessEnv {
+/**
+ * Katalog nadrzędny korzenia repo dla `GIT_CEILING_DIRECTORIES`: przy pustym albo uszkodzonym `.git` git nie szuka
+ * repo wyżej, więc nie pokaże repo, w którym leży folder z projektami (np. katalog domowy pod gitem). Git porównuje
+ * go ze ścieżką po rozwinięciu dowiązań, stąd `realpath`. Jawne `--git-dir` też zatrzymałoby szukanie, ale wyłącza
+ * sprawdzenie właściciela repo (`safe.directory`), więc repo innego użytkownika z dysku sieciowego by przeszło.
+ */
+async function ceilingFor(repoDir: string): Promise<string> {
+  // Brak katalogu zgłosi sam git (`-C`), z czytelnym komunikatem.
+  const root = await realpath(repoDir).catch(() => resolvePath(repoDir));
+  const ceiling = dirname(root);
+  // Zmienna jest listą ścieżek; ścieżka z separatorem rozpadłaby się na kawałki i ochrona zniknęłaby po cichu.
+  if (ceiling.includes(delimiter)) throw new Error(`ścieżka ${ceiling} zawiera znak "${delimiter}", którego git nie obsłuży`);
+  return ceiling;
+}
+
+function gitEnv(ceiling: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
+    GIT_CEILING_DIRECTORIES: ceiling,
     // Odczyt stanu nie może zakładać `index.lock`: daemon pyta cyklicznie, a użytkownik w tym czasie commituje.
     GIT_OPTIONAL_LOCKS: "0",
     // Daemon nie ma terminala; git nie może czekać na hasło.

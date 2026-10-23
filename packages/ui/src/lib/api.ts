@@ -1,11 +1,14 @@
-import { ApiEnvelope, type Endpoint } from "@trackwall/protocol";
+import { ApiEnvelope, type Endpoint, type ErrorCode } from "@trackwall/protocol";
 import type { z } from "zod";
 import type { Connection } from "./connection.ts";
 
-class ApiCallError extends Error {
-  readonly code: string;
+/** Kody z `ErrorCode` daemona i `bad_response`, gdy odpowiedź nie zgadza się z kontraktem. */
+export type CallErrorCode = ErrorCode | "bad_response";
 
-  constructor(code: string, message: string) {
+class ApiCallError extends Error {
+  readonly code: CallErrorCode;
+
+  constructor(code: CallErrorCode, message: string) {
     super(message);
     this.code = code;
   }
@@ -35,6 +38,11 @@ export function post<Req extends z.ZodType, Data extends z.ZodType>(
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+/** Kod błędu API (`error.code`), gdy błąd przyszedł od daemona. */
+export function errorCode(err: unknown): CallErrorCode | undefined {
+  return err instanceof ApiCallError ? err.code : undefined;
 }
 
 export function errorMessage(err: unknown): string {
