@@ -1,10 +1,10 @@
 name: CI
 
 # Repo jest publiczne, więc standardowe runnery nie mają limitu minut (ADR-22). Każdy PR i push na main:
-# - lint, rustfmt, typecheck i testy na Linuksie oraz audyt zależności;
+# - lint, rustfmt, typecheck i testy na Linuksie oraz audyt zależności (poza `CI ok`, patrz job `audit`);
 # - testy i spike'i na Windowsie i macOS;
 # - build daemona i Tauri portable na Windowsie i macOS (clippy, cargo test, smoke test sidecara);
-# - zbiorczy job `CI ok`, jedyny check wymagany w ochronie gałęzi main.
+# - zbiorczy job `CI ok`, jedyny check do wymagania w ochronie gałęzi main.
 # Joby idą równolegle: czas przebiegu to najdłuższy job (build na Windowsie), nie suma.
 # Bez paths-ignore: wymagany check musi raportować przy każdym PR, a docs/release-notes sprawdzają testy.
 # Ręczne uruchomienie zostaje dla gałęzi bez PR. Wydania buduje release.yml niezależnie od tego pliku.
@@ -15,9 +15,10 @@ on:
   workflow_dispatch:
 
 # Nowy push na gałąź PR przerywa jej poprzedni przebieg, bo następny obejmuje te same zmiany. Na main
-# przebiegi się nie przerywają: każdy commit main dostaje werdykt, zanim ktoś postawi na nim tag wydania.
+# każdy commit ma własną grupę: wspólna grupa trzyma tylko jeden czekający przebieg i kasuje go, gdy
+# przyjdzie kolejny, więc commit main mógłby zostać bez werdyktu, a może na nim stanąć tag wydania.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 # Domyślnie żadnych uprawnień; każdy job dostaje tylko to, czego potrzebuje.
@@ -47,7 +48,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           bun-version: ${{ env.BUN_VERSION }}
-      # Jedyny krok Rust przy PR: rustfmt nie potrzebuje bibliotek systemowych Tauri, więc działa na Linuksie.
+      # rustfmt nie potrzebuje bibliotek systemowych Tauri, więc formatowanie Rust dostaje werdykt w szybkim jobie na Linuksie.
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # gałąź stable; wersję Rust daje RUST_VERSION
         with:
           toolchain: ${{ env.RUST_VERSION }}
@@ -58,6 +59,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
 
+  # Nie wchodzi do `CI ok`: wynik zależy od bazy podatności, a nie od PR, więc nowe zgłoszenie bez
+  # poprawionej wersji zablokowałoby każdy PR. Czerwony audyt widać przy PR i na main.
   audit:
     name: znane podatności zależności
     runs-on: ubuntu-latest
@@ -158,12 +161,12 @@ jobs:
           path: out/*.zip
           if-no-files-found: error
 
-  # Jedyny check wymagany w ochronie main: nazwy jobów macierzy mogą się zmieniać, a ta nie.
+  # Check do wymagania w ochronie main (ustawia ją właściciel repo): nazwy jobów macierzy mogą się zmieniać, a ta nie.
   # `always()`, bo pominięty wymagany check GitHub liczy jako zaliczony; tu pominięty albo
   # przerwany job zależny daje czerwony wynik.
   ci-ok:
     name: CI ok
-    needs: [check, audit, test, desktop]
+    needs: [check, test, desktop]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
