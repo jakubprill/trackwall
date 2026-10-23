@@ -7,7 +7,7 @@ import { type RunOptions, type RunOutput, runProgram } from "./run.ts";
  * żeby brak katalogu był błędem gita z czytelnym komunikatem, a nie `ENOENT` mylony z brakiem gita.
  * `repoDir` to zawsze korzeń repo, a repo trafia na listę samo, gdy leży w folderze z projektami (ADR-18), więc
  * git nie może szukać repo powyżej niego, a klucze z `NO_REPO_COMMANDS` są wyłączone; reszta konfiguracji repo
- * obowiązuje (luka z filtrem `clean` w §8).
+ * obowiązuje (luki z filtrem `clean` i z programami z konfiguracji repo przy synchronizacji w §8).
  */
 
 /**
@@ -33,16 +33,34 @@ const REPO_SELECTING_ENV = [
   "GIT_PREFIX",
 ];
 
-type GitOptions = Pick<RunOptions, "maxBytes" | "stdin">;
+type GitOptions = Pick<RunOptions, "maxBytes" | "stdin"> & {
+  /** Limit dłuższy niż `TIMEOUT_MS` dla komend, które pobierają dane albo zmieniają katalog roboczy. */
+  timeoutMs?: number;
+  /**
+   * Komenda może łączyć się z serwerem (`fetch`, `remote set-head`, `merge` z filtrem LFS): środowisko bez pytań
+   * (`networkEnv`); `sshCommand` to `core.sshCommand` z konfiguracji repo i użytkownika.
+   */
+  network?: GitNetwork;
+};
+
+/** `core.sshCommand` z konfiguracji repo i użytkownika dla komendy, która łączy się z serwerem. */
+export type GitNetwork = { sshCommand: string | undefined };
 
 export async function git(repoDir: string, args: readonly string[], opts: GitOptions = {}): Promise<RunOutput> {
   const ceiling = await ceilingFor(repoDir);
+  const { maxBytes, stdin } = opts;
   return runProgram("git", [...NO_REPO_COMMANDS, "-C", repoDir, ...args], {
-    ...opts,
+    maxBytes,
+    stdin,
     label: `git ${args[0]}`,
     // Odczyt stanu nie może zakładać `index.lock`: daemon pyta cyklicznie, a użytkownik w tym czasie commituje.
-    env: { ...gitEnv(), GIT_CEILING_DIRECTORIES: ceiling, GIT_OPTIONAL_LOCKS: "0" },
-    timeoutMs: TIMEOUT_MS,
+    env: {
+      ...gitEnv(),
+      ...(opts.network && networkEnv(opts.network.sshCommand)),
+      GIT_CEILING_DIRECTORIES: ceiling,
+      GIT_OPTIONAL_LOCKS: "0",
+    },
+    timeoutMs: opts.timeoutMs ?? TIMEOUT_MS,
   });
 }
 
@@ -68,5 +86,18 @@ async function ceilingFor(repoDir: string): Promise<string> {
 export function gitEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
   for (const name of REPO_SELECTING_ENV) delete env[name];
+  return env;
+}
+
+/**
+ * Dodatki do `gitEnv()` dla komend, które łączą się z serwerem: daemon nie ma terminala ani okna, więc każde pytanie
+ * o hasło, token albo klucz hosta wisiałoby do limitu czasu w ukrytej konsoli. Pusty `GIT_ASKPASS` (git nie pyta
+ * wtedy przez program, także odziedziczony z terminala VS Code), Git Credential Manager bez okien i ssh w trybie
+ * wsadowym, chyba że użytkownik sam ustawił program ssh (`GIT_SSH_COMMAND`, `GIT_SSH`, `core.sshCommand`): wtedy
+ * zostaje jego, bo `GIT_SSH_COMMAND` daemona przykryłby go.
+ */
+export function networkEnv(sshCommand: string | undefined, inherited: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { GIT_ASKPASS: "", GCM_INTERACTIVE: "never" };
+  if (!(inherited.GIT_SSH_COMMAND || inherited.GIT_SSH || sshCommand)) env.GIT_SSH_COMMAND = "ssh -o BatchMode=yes";
   return env;
 }

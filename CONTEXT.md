@@ -51,7 +51,7 @@ _Unikaj_: katalog workspace, root, folder (bez dopowiedzenia)
 
 **Hosting repo** (`RepoHost`, w `workspace.yaml` `repoHosts`):
 GitLab albo GitHub z nazwą hosta (`gitlab.example.com`), z którego Trackwall wyszukuje repo i klonuje je do folderu z projektami przez zalogowane `glab` albo `gh` (ADR-19).
-_Unikaj_: remote (to zdalne repo gita), serwer, źródło (to pojęcie z logów)
+_Unikaj_: remote (to nazwa repo zdalnego w gicie, np. `origin`), serwer, źródło (to pojęcie z logów)
 
 **Repo zdalne** (`RemoteRepo`, pełna nazwa `fullName`):
 Repo w hostingu dostępne dla użytkownika, np. `grupa/podgrupa/projekt`. Ostatni segment pełnej nazwy to katalog klonu.
@@ -61,6 +61,14 @@ Klon jednego repo zdalnego do folderu z projektami, w tle: `running`, `done` alb
 
 **Repo** (`Repo`, `RepoId`):
 Jedno repozytorium z workspace, identyfikowane slugiem z nazwy jego katalogu.
+
+**Adres repo zdalnego** (`Repo.remote`):
+Adres głównego remote (`origin` albo jedynego remote w gicie, `mainRemote`) jako `host/ścieżka`, np. `gitlab.example.com/sklep/api`, bez protokołu i użytkownika. Identyfikuje repo niezależnie od nazwy katalogu (ADR-21).
+_Unikaj_: URL repo (URL ma protokół i bywa z tokenem), remote bez dopowiedzenia (to nazwa w gicie, np. `origin`)
+
+**Synchronizacja** (`SyncRun`, wynik repo `SyncRepo`):
+Fetch każdego repo z folderu z projektami i fast-forward jego gałęzi domyślnej, w tle, z wynikiem per repo: przesunięte, aktualne, pominięte z powodem (`SyncSkipReason`) albo błąd. Nigdy nie scala ani nie nadpisuje lokalnych zmian (ADR-21). Trzymana tylko w pamięci daemona.
+_Unikaj_: pull, aktualizacja (bez dopowiedzenia)
 
 **Stan repo** (`RepoStatus`):
 Gałąź, ostatni commit, liczba zmian w katalogu roboczym i ahead/behind względem gałęzi śledzonej, odczytane z gita przy każdym zapytaniu (`ok`), albo `unavailable` z komunikatem, gdy git go nie czyta (repo, którego katalog zniknął, znika z listy). Nigdy nie jest zapisywany.

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Endpoint } from "./api.ts";
 import { CloneJob, CloneRequest, HostRepos, RepoHosts } from "./repo-hosts.ts";
+import { SyncRun } from "./sync.ts";
 
 /**
  * Kontrakt modułu `workspace` (§4.5, §6): repo z folderu z projektami i przeglądanie ich zawartości z ostatniego commita.
@@ -64,6 +65,12 @@ export type RepoStatus = z.infer<typeof RepoStatus>;
 export const Repo = z.object({
   id: RepoId,
   path: z.string(),
+  /**
+   * Adres repo zdalnego bez schematu, użytkownika, portu i `.git`, np. `gitlab.example.com/grupa/projekt`
+   * (ADR-21): to samo repo pod inną nazwą katalogu albo sklonowane przez SSH i HTTPS ma ten sam adres. Z `origin`,
+   * a bez niego z jedynego remote; `null`, gdy remote nie ma, jest ich kilka bez `origin` albo to ścieżka lokalna.
+   */
+  remote: z.string().nullable(),
   status: RepoStatus,
 });
 export type Repo = z.infer<typeof Repo>;
@@ -157,4 +164,11 @@ export const workspaceApi = {
   clone: endpoint("clone", CloneRequest, CloneJob),
   /** Klonowania do bieżącego folderu z projektami od startu daemona, w kolejności rozpoczęcia. */
   clones: endpoint("clones", z.object({}).strict(), z.array(CloneJob)),
+  /**
+   * Zaczyna synchronizację wszystkich repo z folderu z projektami (ADR-21) i od razu ją zwraca; trwająca zwraca się
+   * bez startu nowej. Postęp przez `syncRun`.
+   */
+  sync: endpoint("sync", z.object({}).strict(), SyncRun),
+  /** Ostatnia synchronizacja bieżącego folderu z projektami od startu daemona; `null`, gdy jej nie było. */
+  syncRun: endpoint("sync-run", z.object({}).strict(), SyncRun.nullable()),
 };
