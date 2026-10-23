@@ -13,7 +13,7 @@ Aplikacja Tauri: okno, tray, uruchamianie i nadzór daemona jako sidecara, spraw
 _Unikaj_: aplikacja (gdy chodzi tylko o Tauri)
 
 **Widok** (`View`):
-Ekran aplikacji w UI (Repo, Daemon, Ustawienia), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
+Ekran aplikacji w UI (Repo, Przegląd, Daemon, Ustawienia), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
 _Unikaj_: zakładka (dla całego ekranu)
 
 **Zakładka** (`TabBar`):
@@ -39,7 +39,7 @@ Sekret z `~/.trackwall/daemon.json`, którym UI, `ws`, powłoka i most stdio uwi
 **Serwer MCP** (`/mcp`, `createMcpEndpoint`):
 Część daemona, przez którą agenci czytają jego stan narzędziami MCP; ten sam port i token co API (§5.3, ADR-24).
 
-**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`):
+**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`, `who_calls`):
 Jedno wywołanie serwera MCP z nazwą po angielsku, wejściem i wynikiem opisanym schematem z `packages/protocol/src/mcp.ts`; mapowanie na fasadę, bez własnej logiki domenowej.
 _Unikaj_: komenda, akcja (to pojęcia z API i CLI)
 
@@ -117,17 +117,28 @@ _Unikaj_: etykieta, kategoria
 **Reguła tagów** (`repoTags` w `workspace.yaml`, `RepoTagRules`):
 Tag i wzorce identyfikatora albo adresu repo zdalnego, które go nadają (`core-api: ["*-core"]`). Dla grup, których nie widać w plikach, np. zespołów.
 
-**Graf**:
-Złączenie kart: węzły to serwisy, krawędzie łączą `consumes` jednego z `provides` drugiego.
+**Graf** (graf połączeń, `RepoGraph`, moduł `graph`):
+Repo z folderu z projektami jako węzły (`GraphNode`) i krawędzie między nimi, liczone przy każdym pytaniu z kart i z wpisów `graph` w `workspace.yaml`. Dziś węzłem jest repo; serwisy (kilka na repo) przyjdą z modułem `services`.
+_Unikaj_: mapa, diagram zależności
 
-**Krawędź** (`Edge`):
-Połączenie w grafie z rodzajem (`http`, `topic`, `package`, `env-url`), kluczem, pewnością i dowodami.
+**Krawędź** (`GraphEdge`):
+Połączenie od repo, które używa, do repo używanego, z rodzajem (`EdgeKind`: `package` z kart, `manual` z `workspace.yaml`; potem `http`, `topic`), kluczem (nazwa paczki albo opis), pewnością i dowodami. Jedna para repo może mieć kilka krawędzi; widok „Przegląd” rysuje je jedną linią.
 
-**Dowód** (`Evidence`):
-Plik i linia, z których wynika fakt na karcie lub krawędź w grafie.
+**Alias paczki** (`graph.packages` w `workspace.yaml`):
+Nazwa paczki i repo, które ją dostarcza, gdy karta tego repo jej nie pokazuje (paczka budowana poza plikami buildu, inna nazwa w repozytorium artefaktów). Działa tylko dla paczki, której nie buduje żadne repo z listy.
 
-**Pewność** (`confidence`):
-`exact`, `high`, `medium` albo `low`. Przy `low` daemon niczego nie robi automatycznie.
+**Ręczna krawędź** (`ManualEdge`, `graph.edges` w `workspace.yaml`):
+Połączenie wpisane przez użytkownika (`from`, `to`, `note`), np. wywołanie HTTP, którego karty jeszcze nie widzą. Repo wskazuje się identyfikatorem albo adresem repo zdalnego (`RepoRef`).
+
+**Dowód** (`Evidence`, w grafie `EdgeEvidence`):
+Plik i linia, z których wynika fakt na karcie lub krawędź w grafie; dowód krawędzi ma też repo (albo `null` dla `workspace.yaml`) i zdanie, co w tym miejscu jest.
+
+**Pewność** (`confidence`, w grafie `EdgeConfidence`):
+`exact`, `high`, `medium` albo `low`. Krawędź z paczki budowanej przez jedno repo i ręczna krawędź są `exact`, z aliasu paczki `high`, z paczki budowanej przez kilka repo `medium`. Przy `low` daemon niczego nie robi automatycznie.
+
+**Przegląd** (widok „Przegląd”, `OverviewView`):
+Widok z grafem połączeń na całą szerokość i panelem szczegółów wybranego repo (kogo używa, kto używa jego, dowody).
+_Unikaj_: dashboard (to scena 3D), przegląd repo (to README i commity jednego repo, `RepoOverview`)
 
 ## Procesy i serwisy
 
