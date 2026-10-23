@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RepoCardResult, TagName } from "./cards.ts";
 import { MiseTasks } from "./mise.ts";
 import { SyncRepo } from "./sync.ts";
 import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
@@ -22,19 +23,22 @@ const LastSync = z.object({
   result: SyncRepo,
 });
 
-/** Repo z listy (`Repo`) i jego wynik w ostatniej synchronizacji od startu daemona; `null`, gdy go w niej nie było. */
-export const RepoWithLastSync = Repo.extend({ lastSync: LastSync.nullable() });
-export type RepoWithLastSync = z.infer<typeof RepoWithLastSync>;
+/**
+ * Repo z listy (`Repo`) dla agenta: wynik w ostatniej synchronizacji od startu daemona (`null`, gdy go w niej nie
+ * było) i nazwy tagów repo (ADR-25).
+ */
+export const AgentRepo = Repo.extend({ lastSync: LastSync.nullable(), tags: z.array(TagName) });
+export type AgentRepo = z.infer<typeof AgentRepo>;
 
 export const ListReposResult = z.object({
   /** Pełna ścieżka folderu z projektami; `null`, dopóki użytkownik go nie ustawi, a wtedy lista jest pusta. */
   projectsDir: z.string().nullable(),
-  repos: z.array(RepoWithLastSync),
+  repos: z.array(AgentRepo),
 });
 export type ListReposResult = z.infer<typeof ListReposResult>;
 
 export const GetRepoResult = z.object({
-  repo: RepoWithLastSync,
+  repo: AgentRepo,
   /** README z commita HEAD, przycięte dla kontekstu agenta; `null`, gdy repo go nie ma. */
   readme: RepoOverview.shape.readme,
   /** Ostatnie commity, od najnowszego. */
@@ -60,9 +64,12 @@ export const mcpTools = {
     description:
       "Lista repo z folderu z projektami użytkownika: identyfikator, ścieżka, adres repo zdalnego (host/ścieżka), " +
       "gałąź, ostatni commit, liczba lokalnych zmian, ahead/behind i wynik w ostatniej synchronizacji od startu " +
-      "Trackwall (lastSync: null, gdy od startu jej nie było). Zacznij od tego narzędzia; identyfikator (pole id) " +
-      "podawaj do pozostałych.",
-    args: z.object({}).strict(),
+      "Trackwall (lastSync: null, gdy od startu jej nie było) i tagi repo (np. java, frontend, bff, monorepo oraz " +
+      "tagi z reguł użytkownika). Argument tags zawęża listę do repo z każdym z podanych tagów. Zacznij od tego " +
+      "narzędzia; identyfikator (pole id) podawaj do pozostałych.",
+    args: z
+      .object({ tags: z.array(TagName).max(20).optional().describe('tylko repo z każdym z tych tagów, bez #, np. ["java", "bff"]') })
+      .strict(),
     result: ListReposResult,
   },
   getRepo: {
@@ -72,5 +79,16 @@ export const mcpTools = {
       "commity i taski mise (nazwa, opis, stan uruchomienia) albo powód, dla którego mise ich nie podał.",
     args: z.object({ repo: RepoId.describe(`identyfikator repo z ${LIST_REPOS} (pole id)`) }).strict(),
     result: GetRepoResult,
+  },
+  getRepoCard: {
+    name: "get_repo_card",
+    description:
+      "Karta repo z plików buildu i konfiguracji w ostatnim commicie, każdy fakt z dowodem (plik i linia): paczki, " +
+      "które repo udostępnia (współrzędne Maven grupa:artefakt, nazwy npm), paczki, których używa (z zakresem), " +
+      "wymagane wersje narzędzi (mise, .nvmrc, wersja Javy), wykryte mechanizmy (Spring Boot, Feign, WebClient, " +
+      "OpenAPI, Kafka, Eureka, Config Server, Kubernetes, Helm, Docker, frameworki frontendu) i tagi z powodami. " +
+      "Paczka udostępniana przez jedno repo i używana przez inne to połączenie między nimi. card: null w repo bez commitów.",
+    args: z.object({ repo: RepoId.describe(`identyfikator repo z ${LIST_REPOS} (pole id)`) }).strict(),
+    result: RepoCardResult,
   },
 } satisfies Record<string, McpTool>;

@@ -22,7 +22,8 @@ const LITERAL_DEPENDENCY = /^\s*(\w+)\s*\(?\s*(?:(?:enforced)?[pP]latform\s*\(\s
 /** `implementation(libs.spring.boot.web)` albo `implementation libs.spring.boot.web`. */
 const CATALOG_DEPENDENCY = /^\s*(\w+)\s*\(?\s*(?:(?:enforced)?[pP]latform\s*\(\s*)?libs\.([\w.]+)/;
 /** `id("org.springframework.boot") version "3.3.0"`, `id 'x' version 'y'`, `apply plugin: 'x'`. */
-const PLUGIN_ID = /(?:(?:^|[{;\s])id\s*\(?\s*|apply\s*\(?\s*plugin\s*[:=]\s*)["']([\w.-]+)["']\s*\)?(?:\s*version\s*\(?\s*["']([^"']+)["'])?/;
+const PLUGIN_ID =
+  /(?:(?:^|[{;\s])id\s*\(?\s*|apply\s*\(?\s*plugin\s*[:=]\s*)["']([\w.-]+)["']\s*\)?(?:\s*version\s*\(?\s*["']([^"']+)["'])?/;
 const CATALOG_PLUGIN = /alias\s*\(\s*libs\.plugins\.([\w.]+)\s*\)/;
 const JAVA_TOOLCHAIN =
   /JavaLanguageVersion\.of\(\s*["']?(\d+)["']?\s*\)|(?:source|target)Compatibility\s*=\s*(?:JavaVersion\.VERSION_)?["']?([\d._]+)["']?/;

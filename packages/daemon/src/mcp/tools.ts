@@ -1,13 +1,13 @@
 import type { McpServer } from "@modelcontextprotocol/server";
-import { type McpTool, mcpTools, type Repo, type RepoWithLastSync, type SyncRun } from "@trackwall/protocol";
+import { type AgentRepo, type McpTool, mcpTools, type Repo, type RepoTags, type SyncRun } from "@trackwall/protocol";
 import type { z } from "zod";
 import { DomainError } from "../errors.ts";
 import type { Facade } from "../facade.ts";
 
 /**
  * Narzędzia MCP daemona (§5.3, ADR-24): każde to cienkie mapowanie na fasadę, więc agent widzi ten sam stan co UI
- * (§1.1). Wszystkie tylko czytają; żadne nie zmienia konfiguracji, repo ani procesów (§8). Karty i graf dojdą tu jako
- * kolejne wpisy `mcpTools` w protocol i `runs` tutaj, razem z modułami `cards` i `graph`.
+ * (§1.1). Wszystkie tylko czytają; żadne nie zmienia konfiguracji, repo ani procesów (§8). Graf dojdzie tu jako
+ * kolejny wpis `mcpTools` w protocol i `runs` tutaj, razem z modułem `graph`.
  */
 
 /**
@@ -67,19 +67,25 @@ type ToolRuns = { [K in keyof typeof mcpTools]: (typeof mcpTools)[K] extends Mcp
 
 /** Po jednym wykonaniu na każde narzędzie z `mcpTools`: brak któregoś to błąd kompilacji. */
 const runs: ToolRuns = {
-  listRepos: async (facade) => {
-    const list = await facade.workspace.list();
+  listRepos: async (facade, { tags: wanted = [] }) => {
+    const [list, tags] = await Promise.all([facade.workspace.list(), facade.cards.tags()]);
     const run = facade.workspace.syncRun();
-    return { projectsDir: list.projectsDir, repos: list.repos.map((repo) => withLastSync(repo, run)) };
+    const repos = list.repos.map((repo) => agentRepo(repo, run, tagNames(tags.find((t) => t.repo === repo.id))));
+    return { projectsDir: list.projectsDir, repos: repos.filter((repo) => wanted.every((tag) => repo.tags.includes(tag))) };
   },
   getRepo: async (facade, { repo: id }) => {
-    const [repo, overview, miseTasks] = await Promise.all([
+    const [repo, overview, miseTasks, card] = await Promise.all([
       facade.workspace.repo(id),
       facade.workspace.overview(id),
       facade.mise.tasks(id),
+      facade.cards.card(id),
     ]);
     return {
-      repo: withLastSync(repo, facade.workspace.syncRun()),
+      repo: agentRepo(
+        repo,
+        facade.workspace.syncRun(),
+        card.tags.map((t) => t.name),
+      ),
       readme: overview.readme && {
         ...overview.readme,
         text: overview.readme.text.slice(0, README_MAX_CHARS),
@@ -89,6 +95,7 @@ const runs: ToolRuns = {
       miseTasks,
     };
   },
+  getRepoCard: (facade, { repo }) => facade.cards.card(repo),
 };
 
 /**
@@ -98,10 +105,16 @@ const runs: ToolRuns = {
 export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.listRepos, runs.listRepos),
   defineTool(mcpTools.getRepo, runs.getRepo),
+  defineTool(mcpTools.getRepoCard, runs.getRepoCard),
 ];
 
 /** Repo łączy się z wynikiem synchronizacji po ścieżce, bo identyfikator może się zmienić razem z nazwą katalogu (ADR-18). */
-function withLastSync(repo: Repo, run: SyncRun | null): RepoWithLastSync {
+function agentRepo(repo: Repo, run: SyncRun | null, tags: string[]): AgentRepo {
   const result = run?.repos.find((r) => r.path === repo.path);
-  return { ...repo, lastSync: run && result ? { startedAt: run.startedAt, finishedAt: run.finishedAt, result } : null };
+  return { ...repo, lastSync: run && result ? { startedAt: run.startedAt, finishedAt: run.finishedAt, result } : null, tags };
+}
+
+/** Nazwy tagów repo; repo, którego git nie czyta, nie ma tagów (jego stan na liście i tak mówi, że jest niedostępne). */
+function tagNames(entry: RepoTags | undefined): string[] {
+  return entry?.kind === "ok" ? entry.tags.map((t) => t.name) : [];
 }

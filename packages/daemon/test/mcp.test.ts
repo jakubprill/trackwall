@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
-import { DaemonInfoResult, GetRepoResult, ListReposResult, mcpTools, workspaceApi } from "@trackwall/protocol";
+import { DaemonInfoResult, GetRepoResult, ListReposResult, mcpTools, RepoCardResult, workspaceApi } from "@trackwall/protocol";
 import { z } from "zod";
 import { type ApiServer, startApi } from "../src/api/server.ts";
 import { readDaemonFile, writeDaemonFile } from "../src/discovery.ts";
@@ -23,6 +23,9 @@ const MAIN = join(import.meta.dir, "..", "src", "main.ts");
 
 const TOKEN = "m".repeat(43);
 const README = "# Zamówienia\n\nBFF sklepu.\n";
+const POM =
+  "<project><parent><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-parent</artifactId>" +
+  "<version>3.3.0</version></parent><groupId>com.example</groupId><artifactId>orders-bff</artifactId></project>\n";
 let api: ApiServer;
 let projects: string;
 let orders: string;
@@ -30,7 +33,7 @@ const logs: string[] = [];
 
 beforeAll(async () => {
   projects = mkdtempSync(join(tmpdir(), "trackwall-mcp-projects-"));
-  orders = makeRepo({ "README.md": README, "src/app.ts": "export {};\n" }, "orders-bff", projects);
+  orders = makeRepo({ "README.md": README, "pom.xml": POM, "src/app.ts": "export {};\n" }, "orders-bff", projects);
   gitIn(orders, "remote", "add", "origin", "git@gitlab.example.com:sklep/orders-bff.git");
   const facade = createFacade({
     home: mkdtempSync(join(tmpdir(), "trackwall-mcp-home-")),
@@ -56,10 +59,10 @@ beforeAll(async () => {
 afterAll(() => api.close());
 
 describe("serwer MCP przez Streamable HTTP", () => {
-  test("ogłasza tylko narzędzia do odczytu: list_repos i get_repo", async () => {
+  test("ogłasza tylko narzędzia do odczytu: list_repos, get_repo i get_repo_card", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name)).toEqual(["list_repos", "get_repo"]);
+    expect(tools.map((t) => t.name)).toEqual(["list_repos", "get_repo", "get_repo_card"]);
     // Każde narzędzie z kontraktu, który pokazuje UI, jest zarejestrowane w daemonie.
     expect(tools.map((t) => t.name)).toEqual(Object.values(mcpTools).map((t) => t.name));
     for (const tool of tools) expect(tool.annotations?.readOnlyHint).toBe(true);
@@ -80,6 +83,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
       remote: "gitlab.example.com/sklep/orders-bff",
       status: { kind: "ok", branch: "main", changes: 0 },
       lastSync: null,
+      tags: ["backend", "bff", "java"],
     });
     // Tekst wyniku to ten sam JSON dla klientów, które nie czytają `structuredContent`.
     expect(result.content).toEqual([{ type: "text", text: JSON.stringify(data) }]);
@@ -95,6 +99,25 @@ describe("serwer MCP przez Streamable HTTP", () => {
     expect(data.readme).toEqual({ path: "README.md", text: README, truncated: false });
     expect(data.commits.map((c) => c.subject)).toEqual(["pierwszy commit"]);
     expect(data.miseTasks.kind).toBe("not_installed");
+    await client.close();
+  });
+
+  test("list_repos z tagami zwraca tylko repo z każdym z nich", async () => {
+    const client = await connectHttpClient(api.port, TOKEN);
+    const ids = async (tags: string[]) =>
+      ListReposResult.parse((await client.callTool({ name: "list_repos", arguments: { tags } })).structuredContent).repos.map((r) => r.id);
+    expect(await ids(["java", "bff"])).toEqual(["orders-bff"]);
+    expect(await ids(["java", "frontend"])).toEqual([]);
+    await client.close();
+  });
+
+  test("get_repo_card zwraca kartę z dowodami i tagi z powodami", async () => {
+    const client = await connectHttpClient(api.port, TOKEN);
+    const result = await client.callTool({ name: "get_repo_card", arguments: { repo: "orders-bff" } });
+    const data = RepoCardResult.parse(result.structuredContent);
+    expect(data.card?.provides.map((p) => p.name)).toEqual(["com.example:orders-bff"]);
+    expect(data.card?.mechanisms.map((m) => [m.id, m.evidence[0]?.path])).toEqual([["spring-boot", "pom.xml"]]);
+    expect(data.tags.find((t) => t.name === "backend")?.reason).toBe("spring-boot w pom.xml:1");
     await client.close();
   });
 
