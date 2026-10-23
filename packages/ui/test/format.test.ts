@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { breadcrumbs, changesLabel, formatBytes, relativeTime } from "../src/lib/format.ts";
+import { breadcrumbs, changesLabel, formatBytes, relativeTime, slotNumber } from "../src/lib/format.ts";
 
 describe("format", () => {
   const now = new Date("2026-10-23T12:00:00Z");
@@ -35,5 +35,9 @@ describe("format", () => {
 
   test("rozmiar pliku w B, KB i MB", () => {
     expect([512, 2048, 3 * 1024 * 1024].map(formatBytes)).toEqual(["512 B", "2.0 KB", "3.0 MB"]);
+  });
+
+  test("numer slotu ma co najmniej dwie cyfry", () => {
+    expect([1, 12, 120].map(slotNumber)).toEqual(["01", "12", "120"]);
   });
 });

@@ -69,7 +69,7 @@ function InfoTable({ info }: { info: DaemonInfo }) {
     <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
       {rows.map(([k, v]) => (
         <div key={k} className="contents">
-          <dt className="text-muted-foreground">{k}</dt>
+          <dt className="hud-label self-center">{k}</dt>
           <dd className="font-mono break-all">{v}</dd>
         </div>
       ))}

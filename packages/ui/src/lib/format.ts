@@ -35,3 +35,8 @@ export function changesLabel(changes: number): string | undefined {
   const teen = changes % 100 >= 12 && changes % 100 <= 14;
   return `${changes} ${lastDigit >= 2 && lastDigit <= 4 && !teen ? "zmiany" : "zmian"}`;
 }
+
+/** Numer slotu w stylu HUD, co najmniej dwie cyfry: 1 daje „01”, 12 daje „12”. */
+export function slotNumber(n: number): string {
+  return String(n).padStart(2, "0");
+}
