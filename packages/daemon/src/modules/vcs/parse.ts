@@ -98,6 +98,32 @@ export function parseObjects(out: string, count: number): (GitObject | undefined
   });
 }
 
+/**
+ * Wynik `git cat-file --batch`: na każde zapytanie nagłówek `<oid> <typ> <rozmiar>`, treść i znak nowej linii, albo
+ * linia `<zapytanie> missing`. Zwraca treść blobów w kolejności zapytań; brakujący obiekt, obiekt innego typu
+ * i treść uciętą końcem wyjścia jako `undefined`.
+ */
+export function parseBlobs(out: Buffer, count: number): (Buffer | undefined)[] {
+  const blobs: (Buffer | undefined)[] = [];
+  let pos = 0;
+  while (blobs.length < count) {
+    const eol = out.indexOf(0x0a, pos);
+    if (eol < 0) break;
+    const header = /^[0-9a-f]{40,64} (\w+) (\d+)$/.exec(out.subarray(pos, eol).toString("utf8"));
+    pos = eol + 1;
+    if (!header) {
+      blobs.push(undefined);
+      continue;
+    }
+    const size = Number(header[2]);
+    const end = pos + size;
+    blobs.push(header[1] === "blob" && end <= out.length ? out.subarray(pos, end) : undefined);
+    pos = end + 1;
+  }
+  while (blobs.length < count) blobs.push(undefined);
+  return blobs;
+}
+
 /** Ta sama heurystyka co w gicie: NUL w pierwszych 8000 bajtach znaczy plik binarny. */
 export function isBinary(content: Buffer): boolean {
   return content.subarray(0, 8000).includes(0);

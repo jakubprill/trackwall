@@ -1,4 +1,4 @@
-import { type Endpoint, miseApi, workspaceApi } from "@trackwall/protocol";
+import { cardsApi, type Endpoint, miseApi, workspaceApi } from "@trackwall/protocol";
 import { z } from "zod";
 import { DomainError } from "../errors.ts";
 import type { Facade } from "../facade.ts";
@@ -41,6 +41,8 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.clones, (f) => f.workspace.cloneJobs()),
   route(workspaceApi.sync, (f) => f.workspace.sync()),
   route(workspaceApi.syncRun, (f) => f.workspace.syncRun()),
+  route(cardsApi.card, (f, b) => f.cards.card(b.repo)),
+  route(cardsApi.tags, (f) => f.cards.tags()),
   route(miseApi.tasks, (f, b) => f.mise.tasks(b.repo)),
   route(miseApi.start, (f, b) => f.mise.start(b.repo, b.miseTask)),
   route(miseApi.stop, (f, b) => f.mise.stop(b.repo, b.miseTask)),

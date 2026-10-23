@@ -41,6 +41,9 @@ importers:
       '@trackwall/protocol':
         specifier: workspace:*
         version: link:../protocol
+      smol-toml:
+        specifier: 1.9.1
+        version: 1.9.1
       yaml:
         specifier: 2.9.1
         version: 2.9.1
@@ -73,15 +76,15 @@ importers:
 
   packages/ui:
     dependencies:
-      '@trackwall/protocol':
-        specifier: workspace:*
-        version: link:../protocol
       '@radix-ui/react-slot':
         specifier: 1.5.0
         version: 1.5.0(@types/react@19.3.0)(react@19.3.1)
       '@tauri-apps/api':
         specifier: 2.12.4
         version: 2.12.4
+      '@trackwall/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       class-variance-authority:
         specifier: 0.7.1
         version: 0.7.1

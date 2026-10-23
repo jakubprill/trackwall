@@ -12,17 +12,18 @@ import {
   type RepoOverview,
   type RepoStatus,
   type RepoStatusOk,
+  type RepoTagRules,
   type SyncResult,
   type SyncRun,
   sameHost,
   type TreeEntry,
   type WorkspaceSettings,
 } from "@trackwall/protocol";
+import { messageOf } from "../../error-message.ts";
 import { DomainError } from "../../errors.ts";
+import { mapLimit } from "../../map-limit.ts";
 import { CloneJobs } from "./clone-jobs.ts";
 import { vscodeUrl } from "./editor-url.ts";
-import { messageOf } from "./error-message.ts";
-import { mapLimit } from "./map-limit.ts";
 import { dirKey, findRepos, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
@@ -191,6 +192,16 @@ export class Workspace {
   /** Korzeń repo po identyfikatorze, dla modułów, które uruchamiają w nim procesy (`mise`). */
   async repoPath(id: string): Promise<string> {
     return (await this.entry(id)).path;
+  }
+
+  /** Repo z folderu z projektami (identyfikator i korzeń), dla modułów, które czytają każde repo (`cards`). */
+  async repoEntries(): Promise<RepoEntry[]> {
+    return (await this.entries()).entries;
+  }
+
+  /** Reguły tagów repo z `workspace.yaml` (ADR-25). */
+  tagRules(): RepoTagRules {
+    return this.deps.file.repoTagRules();
   }
 
   /** Bez ustawionego folderu z projektami nie ma repo. */

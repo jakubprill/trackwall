@@ -1,7 +1,7 @@
 import type { SyncResult, SyncRun } from "@trackwall/protocol";
+import { messageOf } from "../../error-message.ts";
 import { DomainError } from "../../errors.ts";
-import { messageOf } from "./error-message.ts";
-import { mapLimit } from "./map-limit.ts";
+import { mapLimit } from "../../map-limit.ts";
 import type { RepoEntry } from "./projects-dir.ts";
 
 /**

@@ -1,4 +1,6 @@
 import { join } from "node:path";
+import { CardCache } from "./modules/cards/card-cache.ts";
+import { Cards } from "./modules/cards/cards.ts";
 import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
@@ -14,15 +16,17 @@ import { groupPlatform } from "./platform/group-platform.ts";
  */
 export interface Facade {
   workspace: Workspace;
+  cards: Cards;
   mise: Mise;
   procs: ProcessGroups;
 }
 
 const WORKSPACE_FILE = "workspace.yaml";
 const RUNTIME_FILE = "runtime.json";
+const CARDS_DIR = "cards";
 
 export interface FacadeOptions {
-  /** Katalog stanu daemona; tam leżą `workspace.yaml` (ADR-13) i `runtime.json` (§4.1). */
+  /** Katalog stanu daemona; tam leżą `workspace.yaml` (ADR-13), `runtime.json` (§4.1) i karty repo (`cards/`, ADR-25). */
   home: string;
   openUrl: (url: string) => void;
   /** Program `mise` z argumentami przed komendą (`["mise"]` w daemonie). */
@@ -33,13 +37,17 @@ export interface FacadeOptions {
 }
 
 export function createFacade(o: FacadeOptions): Facade {
+  const vcs = new Vcs();
   const workspace = new Workspace({
     file: new WorkspaceFile(join(o.home, WORKSPACE_FILE)),
-    vcs: new Vcs(),
+    vcs,
     hosting: new Hosting(HOSTING_CLIS),
     openUrl: o.openUrl,
   });
   const procs = new ProcessGroups({ runtime: new RuntimeFile(join(o.home, RUNTIME_FILE)), platform: groupPlatform(), log: o.log });
   const mise = new Mise({ procs, repos: workspace, command: o.miseCommand, env: o.userEnv });
-  return { workspace, mise, procs };
+  const cache = new CardCache(join(o.home, CARDS_DIR), o.log);
+  cache.prune().catch((err: unknown) => o.log(`nie udało się posprzątać kart: ${String(err)}`));
+  const cards = new Cards({ vcs, repos: workspace, cache });
+  return { workspace, cards, mise, procs };
 }
