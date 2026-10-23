@@ -24,7 +24,7 @@ export const TaskStateChange = z.object({
   source: TaskStateSource,
   confidence: Confidence,
   /** Czas zmiany, ISO 8601. */
-  at: z.string(),
+  at: z.iso.datetime(),
   /** Krótko, z czego wynika stan, np. `hook agentStop` albo `osc 9;4;0`. */
   reason: z.string(),
 });

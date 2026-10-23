@@ -37,9 +37,15 @@ describe("łączenie sygnałów stanu zadania", () => {
 
     now = 59_000;
     expect(tracker.tick()).toBeUndefined();
-    now = 61_000;
-    expect(tracker.tick()).toMatchObject({ state: "Stale", source: "timeout", reason: "brak wyjścia od 61 s" });
-    now = 62_000;
+    now = 75_000;
+    // Czas i powód zależą od progu, nie od chwili wywołania `tick`.
+    expect(tracker.tick()).toMatchObject({
+      state: "Stale",
+      source: "timeout",
+      reason: "brak wyjścia przez 60 s",
+      at: "1970-01-01T00:01:00.000Z",
+    });
+    now = 76_000;
     expect(tracker.activity()).toMatchObject({ state: "Working", source: "hook", reason: "hook postToolUse" });
   });
 
@@ -62,9 +68,16 @@ describe("łączenie sygnałów stanu zadania", () => {
     expect(crashed.exit(1)).toMatchObject({ state: "Error", source: "exit", reason: "kod wyjścia 1" });
   });
 
+  test("błąd z hooka bez końca sesji nie wygrywa z kodem wyjścia 0", () => {
+    const tracker = new TaskStateTracker({ now: () => 0, staleAfterMs: 60_000 });
+    tracker.signal({ state: "Error", source: "hook", confidence: "medium", reason: "hook errorOccurred" });
+
+    expect(tracker.exit(0)).toMatchObject({ state: "Done", source: "exit" });
+  });
+
   test("koniec sesji z hooka zostaje po wyjściu procesu, a potem nic już stanu nie zmienia", () => {
     const tracker = new TaskStateTracker({ now: () => 0, staleAfterMs: 60_000 });
-    tracker.signal({ state: "Done", source: "hook", confidence: "high", reason: "hook sessionEnd user_exit" });
+    tracker.signal({ state: "Done", source: "hook", confidence: "high", reason: "hook sessionEnd user_exit", endsSession: true });
 
     expect(tracker.exit(0)).toBeUndefined();
     expect(tracker.signal({ state: "Working", source: "hook", confidence: "high", reason: "hook postToolUse" })).toBeUndefined();

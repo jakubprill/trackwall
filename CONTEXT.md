@@ -123,7 +123,7 @@ Katalog z `plugin.json` i `hooks.json`, który daemon podaje Copilot CLI przez `
 _Unikaj_: plugin (w polskim tekście), konfiguracja hooków
 
 **Rekord hooka** (`CopilotHookRecord`):
-Jedno wywołanie hooka z wtyczki sesji: zdarzenie, czas i payload bez promptu, argumentów i wyników narzędzi. Linia `hooks.jsonl` i znacznik w nagraniu.
+Jedno wywołanie hooka z wtyczki sesji: zdarzenie, czas odebrania i tylko pola payloadu potrzebne do stanu, a o reszcie same nazwy (bez promptu, argumentów i wyników narzędzi). Linia `hooks.jsonl` i znacznik w nagraniu.
 _Unikaj_: rekord (bez dopowiedzenia; to linia logu)
 
 **Nagranie** (nagranie sesji, `session.cast`):

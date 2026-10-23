@@ -1,6 +1,7 @@
 import type { TaskStateChange } from "@trackwall/protocol";
-import { type CopilotHookRecord, stateFromHook } from "./copilot-hooks.ts";
-import { intentFromOsc, stateFromOsc } from "./copilot-osc.ts";
+import type { CopilotHookRecord } from "./copilot-hook-record.ts";
+import { stateFromHook } from "./copilot-hooks.ts";
+import { stateFromOsc, windowTitleFromOsc } from "./copilot-osc.ts";
 import { OscParser } from "./osc-parser.ts";
 import { TaskStateTracker, type TaskStateTrackerOptions } from "./task-state-tracker.ts";
 
@@ -12,25 +13,21 @@ import { TaskStateTracker, type TaskStateTrackerOptions } from "./task-state-tra
 export class CopilotSessionState {
   readonly #osc = new OscParser();
   readonly #tracker: TaskStateTracker;
-  #intent: string | undefined;
+  #windowTitle: string | undefined;
 
   constructor(o: TaskStateTrackerOptions) {
     this.#tracker = new TaskStateTracker(o);
   }
 
-  get current(): TaskStateChange | undefined {
-    return this.#tracker.current;
-  }
-
   /** Ostatni tytuł okna ustawiony przez Copilot CLI: nad czym agent pracuje. */
-  get intent(): string | undefined {
-    return this.#intent;
+  get windowTitle(): string | undefined {
+    return this.#windowTitle;
   }
 
   output(data: string): TaskStateChange[] {
     const changes = [this.#tracker.activity()];
     for (const osc of this.#osc.feed(data)) {
-      this.#intent = intentFromOsc(osc) ?? this.#intent;
+      this.#windowTitle = windowTitleFromOsc(osc) ?? this.#windowTitle;
       const signal = stateFromOsc(osc);
       if (signal) changes.push(this.#tracker.signal(signal));
     }

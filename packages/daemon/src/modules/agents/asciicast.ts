@@ -1,5 +1,6 @@
 import { closeSync, openSync, writeSync } from "node:fs";
 import { z } from "zod";
+import { jsonOf } from "./json.ts";
 
 /**
  * Nagranie sesji w formacie asciicast v2 (§4.4): nagłówek JSON, potem po linii `[sekundy, kod, dane]`.
@@ -12,7 +13,8 @@ const AsciicastHeader = z.looseObject({
   version: z.literal(2),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
-  timestamp: z.number().optional(),
+  /** Początek nagrania, sekundy od epoki; od niego liczy się czas zmian stanu przy odtwarzaniu. */
+  timestamp: z.number(),
 });
 type AsciicastHeader = z.infer<typeof AsciicastHeader>;
 
@@ -27,13 +29,13 @@ export interface Asciicast {
 export function parseAsciicast(text: string): Asciicast {
   const [first, ...rest] = text.split("\n").filter((line) => line.trim() !== "");
   if (first === undefined) throw new Error("puste nagranie asciicast");
-  const header = AsciicastHeader.parse(JSON.parse(first));
-  const events = rest.map((line, i) => {
-    const event = AsciicastEvent.safeParse(JSON.parse(line));
-    if (!event.success) throw new Error(`zła linia ${i + 2} nagrania: ${z.prettifyError(event.error)}`);
-    return event.data;
-  });
-  return { header, events };
+  return { header: parseLine(AsciicastHeader, first, 1), events: rest.map((line, i) => parseLine(AsciicastEvent, line, i + 2)) };
+}
+
+function parseLine<T extends z.ZodType>(schema: T, line: string, number: number): z.infer<T> {
+  const parsed = jsonOf(schema).safeParse(line);
+  if (!parsed.success) throw new Error(`zła linia ${number} nagrania: ${z.prettifyError(parsed.error)}`);
+  return parsed.data;
 }
 
 export interface AsciicastWriterOptions {

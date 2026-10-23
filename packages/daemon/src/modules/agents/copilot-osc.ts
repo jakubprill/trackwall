@@ -22,6 +22,7 @@ export function stateFromOsc(osc: Osc): StateSignal | undefined {
     case "0":
       return { state: "Input", source: "osc", confidence: "low", reason };
     case "2":
+      // Stan błędu paska; Copilot CLI nie dokumentuje, kiedy go ustawia, więc tylko niska pewność.
       return { state: "Error", source: "osc", confidence: "low", reason };
     default:
       return undefined;
@@ -29,6 +30,6 @@ export function stateFromOsc(osc: Osc): StateSignal | undefined {
 }
 
 /** Tytuł okna (OSC 0 i 2): Copilot CLI wpisuje tam, nad czym agent teraz pracuje (`updateTerminalTitle`). */
-export function intentFromOsc(osc: Osc): string | undefined {
+export function windowTitleFromOsc(osc: Osc): string | undefined {
   return osc.code === "0" || osc.code === "2" ? osc.data : undefined;
 }

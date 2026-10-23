@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseAsciicast } from "../src/modules/agents/asciicast.ts";
-import { replayCopilotRecording } from "../src/modules/agents/copilot-recording.ts";
+import { replayCopilotRecording, StatesLine } from "../src/modules/agents/copilot-recording.ts";
 
 const script = join(import.meta.dir, "..", "scripts", "copilot-record.ts");
 const fakeCopilot = join(import.meta.dir, "fixtures", "fake-copilot.ts");
@@ -20,7 +20,7 @@ async function recordFakeSession(exitCode: number) {
   const states = readFileSync(join(out, "states.jsonl"), "utf8")
     .trim()
     .split("\n")
-    .map((line) => JSON.parse(line));
+    .map((line) => StatesLine.parse(JSON.parse(line)));
   return { out, code, stdout, stderr, states };
 }
 
@@ -47,6 +47,7 @@ describe("nagrywanie sesji Copilot CLI (prawdziwy PTY i procesy hooków)", () =>
     const hooks = readFileSync(join(out, "hooks.jsonl"), "utf8");
     expect(hooks).not.toContain("tajny prompt");
     expect(hooks).not.toContain("HASLO");
+    expect(states.at(-1)?.windowTitle).toBe("Naprawa testu");
   }, 30_000);
 
   test("niezerowy kod wyjścia sesji jest kodem wyjścia nagrywania", async () => {
