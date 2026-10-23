@@ -33,7 +33,12 @@ function fire(event: string, payload: Record<string, unknown>): void {
   }
 }
 
-process.stdout.write(`\x1b]0;Atrapa Copilot\x07Witaj w atrapie, katalog ${process.cwd()}, MCP: ${mcpServers.join(", ")}\r\n> `);
+/** Argumenty zadania (`--interactive=`, `--resume=`, `--session-id=`), które atrapa wypisuje, żeby test je zobaczył. */
+const taskArgs = process.argv.filter((a) => /^--(interactive|resume|session-id)=/.test(a));
+
+process.stdout.write(`\x1b]0;Atrapa Copilot\x07Witaj w atrapie, katalog ${process.cwd()}, MCP: ${mcpServers.join(", ")}\r\n`);
+for (const arg of taskArgs) process.stdout.write(`Argument: ${arg}\r\n`);
+process.stdout.write("> ");
 fire("sessionStart", { source: "new" });
 
 let awaitingApproval = false;

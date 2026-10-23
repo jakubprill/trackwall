@@ -18,6 +18,8 @@ export const ErrorCode = z.enum([
   "stop_unconfirmed",
   /** Nie da się uruchomić sesji agenta: brak Copilot CLI w `PATH` albo PTY w tym runtime (daemon pod Node, ADR-26). */
   "agent_unavailable",
+  /** Usunięcie zadania skasowałoby zmiany (niezacommitowane pliki albo commity zadania), a wołający tego nie potwierdził. */
+  "unsaved_changes",
   "internal",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;

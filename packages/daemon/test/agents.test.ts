@@ -2,76 +2,10 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Session } from "@trackwall/protocol";
-import { DomainError } from "../src/errors.ts";
 import { Agents } from "../src/modules/agents/agents.ts";
-import { Logs } from "../src/modules/logs/logs.ts";
-import { ProcessGroups } from "../src/modules/procs/process-groups.ts";
-import { RuntimeFile } from "../src/modules/procs/runtime-file.ts";
-import { groupPlatform } from "../src/platform/group-platform.ts";
+import { Vcs } from "../src/modules/vcs/vcs.ts";
 import { isAlive } from "../src/platform/process-group.ts";
-import { terminalPlatform } from "../src/platform/terminal.ts";
-
-const fakeCopilot = join(import.meta.dir, "fixtures", "fake-copilot-session.ts");
-const daemonMain = join(import.meta.dir, "..", "src", "main.ts");
-
-/** Sesje z prawdziwym PTY, grupą procesów i hookami przez podkomendę `copilot-hook` daemona. */
-function makeAgents(repoDir: string) {
-  const home = mkdtempSync(join(tmpdir(), "trackwall-agents-"));
-  const procs = new ProcessGroups({
-    logs: new Logs({ dir: join(home, "logs"), maxFileBytes: 1024 * 1024, log: () => {} }),
-    runtime: new RuntimeFile(join(home, "runtime.json")),
-    platform: groupPlatform(),
-    terminals: terminalPlatform(),
-    log: () => {},
-  });
-  const agents = new Agents({
-    procs,
-    repos: {
-      repoPath: async (id) => {
-        if (id !== "sklep") throw new DomainError("not_found", `nie ma repo ${id}`);
-        return repoDir;
-      },
-    },
-    home,
-    copilot: [process.execPath, fakeCopilot],
-    env: async () => process.env,
-    hookCommand: (event, hooksFile) => ({ exec: process.execPath, args: ["--no-env-file", daemonMain, "copilot-hook", event, hooksFile] }),
-    mcpStdioCommand: ["trackwall-daemon", "mcp-stdio"],
-    log: () => {},
-  });
-  return { home, procs, agents };
-}
-
-async function waitFor(agents: Agents, id: string, check: (s: Session) => boolean, what: string): Promise<Session> {
-  const until = Date.now() + 20_000;
-  for (;;) {
-    const session = agents.sessions().sessions.find((s) => s.id === id);
-    if (session && check(session)) return session;
-    if (Date.now() > until) throw new Error(`nie doczekano się: ${what}; ostatni stan ${JSON.stringify(session)}`);
-    await new Promise((r) => setTimeout(r, 50));
-  }
-}
-
-/** Okno terminala na niby: obraz ekranu i wyjście jako tekst oraz to, czy daemon je zamknął. */
-function viewer(agents: Agents, id: string) {
-  let screen = "";
-  let closed = false;
-  const decoder = new TextDecoder();
-  const attachment = agents.attach(
-    id,
-    (bytes) => {
-      screen += decoder.decode(bytes, { stream: true });
-    },
-    (snapshot) => {
-      screen += snapshot;
-    },
-    () => {
-      closed = true;
-    },
-  );
-  return { attachment, text: () => screen, closed: () => closed };
-}
+import { makeAgents, viewer, waitFor } from "./support/agents.ts";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterAll(async () => {
@@ -81,7 +15,7 @@ afterAll(async () => {
 describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziwy PTY, atrapa Copilot CLI)", () => {
   test("sesja startuje w katalogu repo z serwerem MCP Trackwall, stan idzie za hookami, a /exit kończy ją jako Done", async () => {
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
-    const { agents, procs } = makeAgents(repoDir);
+    const { agents, procs } = makeAgents({ sklep: repoDir });
     cleanups.push(() => procs.stopAll());
 
     const started = await agents.start("sklep");
@@ -114,7 +48,7 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
 
   test("okno podłączone później dostaje obraz ekranu z tym, co sesja już wypisała", async () => {
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
-    const { agents, procs } = makeAgents(repoDir);
+    const { agents, procs } = makeAgents({ sklep: repoDir });
     cleanups.push(() => procs.stopAll());
     const started = await agents.start("sklep");
     const first = viewer(agents, started.id);
@@ -132,7 +66,7 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
 
   test("stop zatrzymuje całą grupę z procesem pomocnika, a zamknięcie usuwa sesję, jej pliki i okna", async () => {
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
-    const { agents, home } = makeAgents(repoDir);
+    const { agents, home } = makeAgents({ sklep: repoDir });
     const started = await agents.start("sklep");
     const window = viewer(agents, started.id);
     window.attachment.input("uruchom pomocnika\r");
@@ -155,7 +89,7 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
 
   test("brak Copilot CLI i nieznane repo to błędy z kodem, bez procesu", async () => {
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
-    const { agents } = makeAgents(repoDir);
+    const { agents } = makeAgents({ sklep: repoDir });
     await expect(agents.start("inne")).rejects.toMatchObject({ code: "not_found" });
 
     const missing = new Agents({
@@ -165,11 +99,13 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
         stop: async () => undefined,
       },
       repos: { repoPath: async () => repoDir },
+      vcs: new Vcs(),
       home: mkdtempSync(join(tmpdir(), "trackwall-agents-")),
       copilot: ["copilot-ktorego-nie-ma"],
       env: async () => ({ PATH: repoDir }),
       hookCommand: () => ({ exec: "nieuzywane", args: [] }),
       mcpStdioCommand: ["nieuzywane"],
+      openEditor: () => {},
       log: () => {},
     });
     await expect(missing.start("sklep")).rejects.toMatchObject({ code: "agent_unavailable" });

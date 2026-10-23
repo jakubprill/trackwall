@@ -10,6 +10,7 @@ import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
 import { HOSTING_CLIS, Hosting } from "./modules/vcs/hosting.ts";
 import { Vcs } from "./modules/vcs/vcs.ts";
+import { vscodeUrl } from "./modules/workspace/editor-url.ts";
 import { Workspace } from "./modules/workspace/workspace.ts";
 import { WorkspaceFile } from "./modules/workspace/workspace-file.ts";
 import { groupPlatform } from "./platform/group-platform.ts";
@@ -80,11 +81,13 @@ export function createFacade(o: FacadeOptions): Facade {
   const agents = new Agents({
     procs,
     repos: workspace,
+    vcs,
     home: o.home,
     copilot: o.copilotCommand,
     env: o.userEnv,
     hookCommand: o.hookCommand,
     mcpStdioCommand: o.mcpStdioCommand,
+    openEditor: (dir) => o.openUrl(vscodeUrl(dir)),
     log: o.log,
   });
   const graph = new Graph({ cards, workspace });

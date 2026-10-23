@@ -41,6 +41,8 @@ type GitOptions = Pick<RunOptions, "maxBytes" | "stdin"> & {
    * (`networkEnv`); `sshCommand` to `core.sshCommand` z konfiguracji repo i użytkownika.
    */
   network?: GitNetwork;
+  /** Indeks zamiast indeksu repo (`GIT_INDEX_FILE`): zmiany zadania liczone bez dotykania indeksu, którego używa agent. */
+  indexFile?: string;
 };
 
 /** `core.sshCommand` z konfiguracji repo i użytkownika dla komendy, która łączy się z serwerem. */
@@ -57,11 +59,20 @@ export async function git(repoDir: string, args: readonly string[], opts: GitOpt
     env: {
       ...gitEnv(),
       ...(opts.network && networkEnv(opts.network.sshCommand)),
+      ...(opts.indexFile && { GIT_INDEX_FILE: opts.indexFile }),
       GIT_CEILING_DIRECTORIES: ceiling,
       GIT_OPTIONAL_LOCKS: "0",
     },
     timeoutMs: opts.timeoutMs ?? TIMEOUT_MS,
   });
+}
+
+/** Pełny hash commita, na który wskazuje `ref`; `undefined`, gdy takiego commita nie ma. */
+export async function revParse(dir: string, ref: string): Promise<string | undefined> {
+  return git(dir, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]).then(
+    ({ stdout }) => stdout.toString("utf8").trim(),
+    () => undefined,
+  );
 }
 
 /**

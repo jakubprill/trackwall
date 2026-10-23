@@ -23,6 +23,8 @@ export interface SessionPty {
 export interface LiveSessionOptions {
   id: string;
   repo: string;
+  /** Zadanie, w którego worktree działa sesja; `null` w korzeniu repo. */
+  task: string | null;
   cols: number;
   rows: number;
   /** `hooks.jsonl` sesji, do którego dopisują procesy hooków wtyczki sesji. */
@@ -34,6 +36,7 @@ export interface LiveSessionOptions {
 export class LiveSession {
   readonly id: string;
   readonly repo: string;
+  readonly task: string | null;
   readonly startedAt = new Date().toISOString();
   readonly #run: () => RunState | undefined;
   readonly #screen: TerminalScreen;
@@ -48,6 +51,7 @@ export class LiveSession {
   constructor(o: LiveSessionOptions) {
     this.id = o.id;
     this.repo = o.repo;
+    this.task = o.task;
     this.#run = o.run;
     this.#screen = new TerminalScreen(o.cols, o.rows);
     this.#hooks = new HookTail(o.hooksFile);
@@ -113,6 +117,7 @@ export class LiveSession {
       state: this.#last,
       windowTitle: this.#state.windowTitle ?? null,
       needsAttention: run.kind === "running" && this.#last !== null && WAITING_STATES.has(this.#last.state),
+      task: this.task,
     };
   }
 

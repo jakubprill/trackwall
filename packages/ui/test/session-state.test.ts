@@ -6,7 +6,7 @@ const running = { kind: "running", runId: "r", startedAt: "2026-10-23T10:00:00Z"
 
 /** `needsAttention` liczy daemon; tu jest podane wprost, tak jak przychodzi w liście sesji. */
 function session(id: string, state: Session["state"], run: Session["run"] = running, needsAttention = false): Session {
-  return { id, repo: `repo-${id}`, startedAt: "2026-10-23T10:00:00Z", run, state, windowTitle: null, needsAttention };
+  return { id, repo: `repo-${id}`, startedAt: "2026-10-23T10:00:00Z", run, state, windowTitle: null, needsAttention, task: null };
 }
 
 function waiting(id: string, state: Session["state"]): Session {

@@ -1,17 +1,29 @@
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { Commit, FileContent, RepoStatusOk, SyncResult, TreeEntry } from "@trackwall/protocol";
+import type { Commit, FileContent, RepoStatusOk, SyncResult, TreeEntry, WorktreeChanges } from "@trackwall/protocol";
 import { git } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
+import { KeyedQueue } from "./keyed-queue.ts";
 import { type GitObject, isBinary, LOG_FORMAT, parseBlobs, parseLog, parseObjects, parseStatus, parseTree } from "./parse.ts";
 import { remoteAddress } from "./remote.ts";
 import { syncRepo } from "./sync.ts";
+import {
+  addWorktree,
+  defaultBase,
+  deleteBranch,
+  pendingWork,
+  removeWorktree,
+  type WorktreeBase,
+  type WorktreeBranch,
+  worktreeChanges,
+} from "./worktree.ts";
 
 /**
  * Moduł `vcs` (§4, §4.5): lokalny adapter gita. Zna katalogi, nie identyfikatory repo; te tłumaczy `workspace`.
  * Zawartość repo czyta z obiektów commita HEAD (ADR-14), więc ścieżka nie może wskazać pliku spoza repo,
- * a przeglądanie nie zależy od tego, co leży w katalogu roboczym. Jedyna komenda, która coś zmienia, to `sync`
- * (ADR-21): fetch, fast-forward gałęzi domyślnej i aktualizacja katalogu roboczego, gdy ta gałąź jest wybrana.
+ * a przeglądanie nie zależy od tego, co leży w katalogu roboczym. Zmieniają coś tylko `sync` (ADR-21): fetch,
+ * fast-forward gałęzi domyślnej i aktualizacja katalogu roboczego, gdy ta gałąź jest wybrana, oraz worktree zadań
+ * agentów (ADR-31): nowa gałąź z worktree, jej usunięcie i usunięcie gałęzi.
  */
 export class Vcs {
   /**
@@ -19,7 +31,9 @@ export class Vcs {
    * dowiązanie w folderze z projektami to kilka wpisów listy, a dwa równoczesne fetch w jednym `.git` walczą o te
    * same refy i jeden pada.
    */
-  private readonly syncing = new Map<string, Promise<void>>();
+  private readonly syncing = new KeyedQueue();
+  /** Zmiany worktree w jednym repo po kolei: dwa równoczesne `worktree add` walczą o blokady w `.git`. */
+  private readonly worktreeOps = new KeyedQueue();
 
   async status(dir: string): Promise<RepoStatusOk> {
     const { stdout } = await git(dir, ["status", "--porcelain=v2", "--branch", "-z"]);
@@ -39,18 +53,32 @@ export class Vcs {
    * z tym samym katalogiem `.git` synchronizują się po kolei.
    */
   async sync(dir: string): Promise<SyncResult> {
-    const key = await this.commonDir(dir);
-    const result = (this.syncing.get(key) ?? Promise.resolve()).then(() => syncRepo(dir));
-    // Następny czeka na koniec, nie na sukces; błąd dostaje tylko wołający.
-    const done = result.then(
-      () => {},
-      () => {},
-    );
-    this.syncing.set(key, done);
-    void done.then(() => {
-      if (this.syncing.get(key) === done) this.syncing.delete(key);
-    });
-    return result;
+    return this.syncing.run(await this.commonDir(dir), () => syncRepo(dir));
+  }
+
+  /** Gałąź domyślna i jej commit, bez łączenia z serwerem (ADR-31). */
+  defaultBase(dir: string): Promise<WorktreeBase> {
+    return defaultBase(dir);
+  }
+
+  async addWorktree(repoDir: string, path: string, branch: string, commit: string): Promise<void> {
+    return this.worktreeOps.run(await this.commonDir(repoDir), () => addWorktree(repoDir, path, branch, commit));
+  }
+
+  async removeWorktree(repoDir: string, path: string): Promise<void> {
+    return this.worktreeOps.run(await this.commonDir(repoDir), () => removeWorktree(repoDir, path));
+  }
+
+  async deleteBranch(repoDir: string, branch: string): Promise<void> {
+    return this.worktreeOps.run(await this.commonDir(repoDir), () => deleteBranch(repoDir, branch));
+  }
+
+  pendingWork(work: WorktreeBranch): Promise<{ uncommitted: number; commits: number }> {
+    return pendingWork(work);
+  }
+
+  worktreeChanges(dir: string, base: string, maxPatchBytes: number): Promise<WorktreeChanges> {
+    return worktreeChanges(dir, base, maxPatchBytes);
   }
 
   /** Katalog `.git` wspólny dla repo i jego worktree, po rozwinięciu dowiązań; klucz bez wielkości liter jak dyski Windowsa i macOS. */

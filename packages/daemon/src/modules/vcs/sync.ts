@@ -1,5 +1,5 @@
 import type { SyncResult, SyncSkipReason } from "@trackwall/protocol";
-import { type GitNetwork, git } from "./git.ts";
+import { type GitNetwork, git, revParse } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { parseStatus } from "./parse.ts";
 
@@ -89,13 +89,6 @@ async function fastForward(dir: string, branch: string, remoteRef: string, netwo
     await git(dir, ["fetch", "--quiet", "--no-recurse-submodules", "--no-write-fetch-head", ".", `${remoteRef}:${localRef}`]);
   }
   return { state: "updated", branch, commits: behind };
-}
-
-async function revParse(dir: string, ref: string): Promise<string | undefined> {
-  return git(dir, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]).then(
-    ({ stdout }) => stdout.toString("utf8").trim(),
-    () => undefined,
-  );
 }
 
 /** Ile commitów ma tylko lokalna gałąź (`ahead`), a ile tylko zdalna (`behind`). */

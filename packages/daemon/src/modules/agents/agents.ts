@@ -1,19 +1,22 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { copilotMcpServers, type RunState, type Session, type SessionList } from "@trackwall/protocol";
+import { copilotMcpServers, type RunState, type Session, type SessionList, type Task, type WorktreeChanges } from "@trackwall/protocol";
 import { DomainError, SpawnFailure } from "../../errors.ts";
 import { findCopilot } from "./copilot-command.ts";
 import type { CopilotHookEvent } from "./copilot-hook-record.ts";
 import { type HookCommand, writeCopilotPlugin } from "./copilot-plugin.ts";
 import { LiveSession, type SessionPty } from "./live-session.ts";
+import { TaskFile } from "./task-file.ts";
+import { AgentTasks, type TasksVcs } from "./tasks.ts";
 import type { ScreenViewer } from "./terminal-screen.ts";
 
 /**
  * Moduł `agents` (§4.4, ADR-26): sesje Copilot CLI uruchamiane z UI w repo z folderu z projektami, kilka naraz.
  * Każda sesja to Copilot CLI w PTY należącym do daemona, w grupie procesów modułu `procs`, z wtyczką sesji, której
  * hooki zgłaszają stan (ADR-17). Komendę składa daemon; z zewnątrz przychodzi tylko identyfikator repo (§1.2).
- * Sesje żyją w pamięci daemona: wyjście daemona zatrzymuje je razem z innymi grupami procesów.
+ * Sesje żyją w pamięci daemona: wyjście daemona zatrzymuje je razem z innymi grupami procesów. Sesja może należeć
+ * do zadania (ADR-31, `tasks.ts`): działa wtedy w worktree zadania, a zadanie przeżywa daemona.
  */
 
 /** Rozmiar PTY, zanim okno terminala zgłosi swój. */
@@ -23,6 +26,8 @@ const INITIAL_ROWS = 30;
 const TICK_MS = 200;
 /** Konfiguracja MCP sesji w katalogu sesji; plik zamiast JSON w argumencie, żeby cudzysłowy JSON-u nie zależały od cytowania argumentów na Windowsie. */
 const MCP_CONFIG_FILE = "mcp-config.json";
+const TASKS_FILE = "tasks.json";
+const WORKTREES_DIR = "worktrees";
 
 /** Czego `agents` potrzebuje od `procs`; podłączane w fasadzie. */
 interface AgentsProcs {
@@ -47,7 +52,12 @@ interface AgentsRepos {
 export interface AgentsDeps {
   procs: AgentsProcs;
   repos: AgentsRepos;
-  /** Katalog stanu daemona; sesje trzymają swoje pliki w `sessions/<sesja>/`. */
+  /** Worktree i gałęzie zadań (ADR-31). */
+  vcs: TasksVcs;
+  /**
+   * Katalog stanu daemona; sesje trzymają swoje pliki w `sessions/<sesja>/`, zadania listę w `tasks.json`, a swoje
+   * worktree w `worktrees/<repo>/`.
+   */
   home: string;
   /** Program Copilot CLI (nazwa z `PATH` albo pełna ścieżka) z argumentami przed argumentami sesji; w daemonie `["copilot"]`. */
   copilot: readonly string[];
@@ -57,6 +67,8 @@ export interface AgentsDeps {
   hookCommand: (event: CopilotHookEvent, hooksFile: string) => Omit<HookCommand, "cwd">;
   /** Most stdio do serwera MCP daemona (§5.3): każda sesja dostaje serwer `trackwall` przez `--additional-mcp-config`. */
   mcpStdioCommand: readonly string[];
+  /** Otwiera katalog w VS Code (worktree zadania). */
+  openEditor: (dir: string) => void;
   log: (msg: string) => void;
 }
 
@@ -70,30 +82,80 @@ export interface SessionAttachment {
 export class Agents {
   readonly #deps: AgentsDeps;
   readonly #sessions = new Map<string, LiveSession>();
+  readonly #tasks: AgentTasks;
+  readonly #worktreesDir: string;
   #timer: NodeJS.Timeout | undefined;
 
   constructor(deps: AgentsDeps) {
     this.#deps = deps;
+    const worktreesDir = join(deps.home, WORKTREES_DIR);
+    this.#worktreesDir = worktreesDir;
+    this.#tasks = new AgentTasks({
+      vcs: deps.vcs,
+      repos: deps.repos,
+      file: new TaskFile(join(deps.home, TASKS_FILE), worktreesDir, deps.log),
+      worktreesDir,
+      openEditor: deps.openEditor,
+      log: deps.log,
+      sessions: {
+        launch: (spec) => this.#launch(spec.repo, spec.cwd, spec.task, spec.args),
+        of: (task) => this.#views().filter((s) => s.task === task),
+        close: (id) => this.#close(id),
+      },
+    });
   }
 
   sessions(): SessionList {
-    const sessions = [...this.#sessions.values()].flatMap((s) => this.#fresh(s) ?? []);
-    return { sessions: sessions.reverse() };
+    const sessions = this.#views();
+    return { sessions, tasks: this.#tasks.list(sessions), worktreesDir: this.#worktreesDir };
   }
 
   async start(repo: string): Promise<Session> {
-    const cwd = await this.#deps.repos.repoPath(repo);
+    return this.#launch(repo, await this.#deps.repos.repoPath(repo), null, []);
+  }
+
+  createTask(repo: string, prompt: string): Promise<Task> {
+    return this.#tasks.create(repo, prompt);
+  }
+
+  resumeTask(id: string): Promise<Task> {
+    return this.#tasks.resume(id);
+  }
+
+  taskChanges(id: string): Promise<WorktreeChanges> {
+    return this.#tasks.changes(id);
+  }
+
+  openTaskEditor(id: string): void {
+    this.#tasks.openEditor(id);
+  }
+
+  async removeTask(id: string, keepBranch: boolean, discardChanges: boolean): Promise<SessionList> {
+    await this.#tasks.remove(id, keepBranch, discardChanges);
+    return this.sessions();
+  }
+
+  /** Copilot CLI w `cwd` (korzeń repo albo worktree zadania `task`) z argumentami przed argumentami sesji. */
+  async #launch(repo: string, cwd: string, task: string | null, args: readonly string[]): Promise<Session> {
     const env = { ...(await this.#deps.env()), TERM: "xterm-256color", COLORTERM: "truecolor" };
     const [name = "copilot", ...prefix] = this.#deps.copilot;
     const program = findCopilot(name, env);
     if (!program) throw new DomainError("agent_unavailable", `nie znaleziono Copilot CLI (${name}) w PATH`);
     const id = randomUUID();
     const dir = this.#sessionDir(id);
-    const session = this.#prepare(id, repo, dir);
+    const session = this.#prepare(id, repo, task, dir);
     try {
       const { terminal } = await this.#deps.procs.startTerminal({
         owner: owner(id),
-        command: [program, ...prefix, "--plugin-dir", join(dir, "plugin"), "--additional-mcp-config", `@${join(dir, MCP_CONFIG_FILE)}`],
+        command: [
+          program,
+          ...prefix,
+          "--plugin-dir",
+          join(dir, "plugin"),
+          "--additional-mcp-config",
+          `@${join(dir, MCP_CONFIG_FILE)}`,
+          ...args,
+        ],
         cwd,
         env,
         cols: INITIAL_COLS,
@@ -117,15 +179,9 @@ export class Agents {
     return this.#view(session);
   }
 
-  /** Zamyka zakończoną sesję: znika z listy, a jej pliki z katalogu stanu. */
+  /** Zamyka zakończoną sesję: znika z listy, a jej pliki z katalogu stanu. Zadanie sesji zostaje. */
   dismiss(id: string): SessionList {
-    const session = this.#get(id);
-    if (this.#deps.procs.state(owner(id))?.kind !== "exited") {
-      throw new DomainError("bad_request", "sesja jeszcze działa; zatrzymaj ją przed zamknięciem");
-    }
-    this.#sessions.delete(id);
-    session.dispose();
-    this.#removeDir(id);
+    this.#close(id);
     return this.sessions();
   }
 
@@ -151,15 +207,38 @@ export class Agents {
     this.#timer = undefined;
   }
 
+  #close(id: string): void {
+    const session = this.#get(id);
+    if (this.#deps.procs.state(owner(id))?.kind !== "exited") {
+      throw new DomainError("bad_request", "sesja jeszcze działa; zatrzymaj ją przed zamknięciem");
+    }
+    this.#sessions.delete(id);
+    session.dispose();
+    this.#removeDir(id);
+  }
+
+  /** Sesje od najnowszej. */
+  #views(): Session[] {
+    return [...this.#sessions.values()].flatMap((s) => this.#fresh(s) ?? []).reverse();
+  }
+
   /** Katalog sesji z wtyczką sesji, konfiguracją MCP i pustym `hooks.jsonl`, zanim Copilot CLI wystartuje. */
-  #prepare(id: string, repo: string, dir: string): LiveSession {
+  #prepare(id: string, repo: string, task: string | null, dir: string): LiveSession {
     const pluginDir = join(dir, "plugin");
     const hooksFile = join(dir, "hooks.jsonl");
     mkdirSync(dir, { recursive: true });
     writeFileSync(hooksFile, "");
     writeFileSync(join(dir, MCP_CONFIG_FILE), JSON.stringify(copilotMcpServers(this.#deps.mcpStdioCommand), null, 2));
     writeCopilotPlugin(pluginDir, (event) => ({ ...this.#deps.hookCommand(event, hooksFile), cwd: pluginDir }));
-    return new LiveSession({ id, repo, cols: INITIAL_COLS, rows: INITIAL_ROWS, hooksFile, run: () => this.#deps.procs.state(owner(id)) });
+    return new LiveSession({
+      id,
+      repo,
+      task,
+      cols: INITIAL_COLS,
+      rows: INITIAL_ROWS,
+      hooksFile,
+      run: () => this.#deps.procs.state(owner(id)),
+    });
   }
 
   #startTicking(): void {
