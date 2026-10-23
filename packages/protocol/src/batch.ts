@@ -54,8 +54,7 @@ export const BatchRun = z.object({
   finishedAt: z.string().nullable(),
   /** Użytkownik przerwał komendę: kroki, które nie zaczęły się przed przerwaniem, są `cancelled`. */
   cancelled: z.boolean(),
-  steps: z.array(BatchStep),
-  /** Wybrane repo w kolejności listy repo. */
+  /** Wybrane repo w kolejności z żądania. */
   repos: z.array(BatchRepo),
 });
 export type BatchRun = z.infer<typeof BatchRun>;

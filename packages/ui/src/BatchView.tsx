@@ -1,4 +1,4 @@
-import { BATCH_STEPS, type BatchRepo, type BatchStep, type Repo } from "@trackwall/protocol";
+import { BATCH_STEPS, type BatchRepo, type BatchRun, type BatchStep, type Repo } from "@trackwall/protocol";
 import { ListChecks, Play, Square } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Loading } from "@/components/Loading";
@@ -10,7 +10,7 @@ import type { BatchRunHandle } from "@/lib/use-batch-run";
 
 /**
  * Komenda zbiorcza (ADR-27): wybór kroków i repo, start, przerwanie i wynik każdego kroku w każdym repo. Repo
- * wybiera się ręcznie z listy repo; filtr po tagach dołoży tu zaznaczanie grupy repo.
+ * wybiera się ręcznie z listy repo; filtr po tagach dołoży tu zaznaczanie grupy repo (`setSelected`).
  */
 export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: readonly Repo[] }) {
   const [steps, setSteps] = useState<ReadonlySet<BatchStep>>(() => new Set(BATCH_STEPS));
@@ -30,7 +30,7 @@ export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: read
         </p>
       </header>
       <Surface label="Kroki" meta={`${steps.size}/${BATCH_STEPS.length}`}>
-        <ul className="divide-y">
+        <ul className="grid sm:grid-cols-2">
           {BATCH_STEPS.map((step) => (
             <Choice key={step} checked={steps.has(step)} onChange={() => setSteps(toggle(steps, step))}>
               <span className="text-sm">{STEP_LABEL[step]}</span>
@@ -48,7 +48,8 @@ export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: read
             Żadne
           </Button>
         </div>
-        <ul className="divide-y">
+        {/* Kolumny zamiast jednej listy: przy kilkudziesięciu repo wyniki zostają blisko przycisku startu. */}
+        <ul className="grid grid-cols-2 lg:grid-cols-3">
           {repos.map((repo) => (
             <Choice key={repo.id} checked={selected.has(repo.id)} onChange={() => setSelected(toggle(selected, repo.id))}>
               <span className="truncate font-mono text-sm">{repo.id}</span>
@@ -90,7 +91,7 @@ export function BatchBar({ batch, onShow }: { batch: BatchRunHandle; onShow: () 
   );
 }
 
-function Results({ run }: { run: NonNullable<BatchRunHandle["run"]> }) {
+function Results({ run }: { run: BatchRun }) {
   const progress = batchProgress(run);
   return (
     <Surface

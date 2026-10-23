@@ -1,5 +1,7 @@
+import { realpath } from "node:fs/promises";
 import {
   BATCH_STEPS,
+  type BatchRepo,
   type BatchRequest,
   type BatchRun,
   type BatchStep,
@@ -20,10 +22,13 @@ import { runOutcome, syncOutcome } from "./step-outcome.ts";
  */
 
 /**
- * Ile repo naraz: build Javy albo frontendu zajmuje kilka rdzeni i GB pamięci, a `mise install` pobiera JDK
+ * Ile katalogów naraz: build Javy albo frontendu zajmuje kilka rdzeni i GB pamięci, a `mise install` pobiera JDK
  * i Node; więcej równoległych repo na laptopie tylko wydłuża każde z nich.
  */
 const BATCH_CONCURRENCY = 3;
+
+/** Krok, który jest taskiem mise, i nazwa tego taska (konwencja z `CONTEXT.md`, „Task mise”). */
+const MISE_TASK = { setup: "setup", build: "build" } as const satisfies Partial<Record<BatchStep, string>>;
 
 /** Czego `batch` potrzebuje od `workspace`; podłączane w fasadzie (§4). */
 interface BatchWorkspace {
@@ -40,6 +45,7 @@ interface BatchMise {
 export interface BatchDeps {
   workspace: BatchWorkspace;
   mise: BatchMise;
+  log: (msg: string) => void;
 }
 
 interface Active {
@@ -52,6 +58,8 @@ export class Batch {
   private last: Active | undefined;
   /** Start w toku (repo są jeszcze sprawdzane): drugi start w tym czasie zacząłby drugą komendę. */
   private starting = false;
+  /** Daemon się zatrzymuje: komenda zaczęta teraz uruchamiałaby procesy po `stopAll`. */
+  private closed = false;
 
   constructor(deps: BatchDeps) {
     this.deps = deps;
@@ -69,14 +77,19 @@ export class Batch {
         startedAt: new Date().toISOString(),
         finishedAt: null,
         cancelled: false,
-        steps,
         repos: targets.map((target) => ({ ...target, steps: steps.map((step) => ({ step, state: "waiting" })) })),
       };
-      const active: Active = { run, abort: new AbortController() };
-      this.last = active;
-      void mapLimit(run.repos, BATCH_CONCURRENCY, (_, i) => this.runRepo(active, i)).finally(() => {
-        run.finishedAt = new Date().toISOString();
-      });
+      const groups = await groupBySameDir(run.repos);
+      if (this.closed) throw new DomainError("bad_request", "daemon się zatrzymuje");
+      const abort = new AbortController();
+      this.last = { run, abort };
+      void mapLimit(groups, BATCH_CONCURRENCY, async (repos) => {
+        for (const repo of repos) await this.runRepo(repo, abort.signal);
+      })
+        .catch((err: unknown) => this.deps.log(`komenda zbiorcza: ${messageOf(err)}`))
+        .finally(() => {
+          run.finishedAt = new Date().toISOString();
+        });
       return snapshot(run);
     } finally {
       this.starting = false;
@@ -100,36 +113,66 @@ export class Batch {
     return this.run();
   }
 
+  /** Wyjście daemona: przerywa trwającą komendę i nie pozwala zacząć nowej, także takiej, która właśnie startuje. */
+  close(): void {
+    this.closed = true;
+    this.cancel();
+  }
+
   /** Kroki repo po kolei; błąd albo przerwanie kroku kończy repo, a pominięcie (np. brak taska) nie. */
-  private async runRepo(active: Active, index: number): Promise<void> {
-    const repo = active.run.repos[index];
-    if (!repo) throw new Error(`komenda zbiorcza bez repo nr ${index}`);
+  private async runRepo(repo: BatchRepo, signal: AbortSignal): Promise<void> {
     let stopped: BatchStepState | undefined;
     for (const [i, { step }] of repo.steps.entries()) {
-      if (active.abort.signal.aborted) stopped = { state: "cancelled" };
+      if (signal.aborted) stopped = { state: "cancelled" };
       if (stopped) {
         repo.steps[i] = { step, ...stopped };
         continue;
       }
       repo.steps[i] = { step, state: "running" };
-      const outcome = await this.runStep(repo.repo, step, active.abort.signal);
+      const outcome = await this.runStep(repo, step, signal);
       repo.steps[i] = { step, ...outcome };
       if (outcome.state === "failed") stopped = { state: "skipped", message: `pominięty po błędzie kroku ${step}` };
       if (outcome.state === "cancelled") stopped = outcome;
     }
   }
 
-  private async runStep(repo: string, step: BatchStep, signal: AbortSignal): Promise<BatchStepState> {
+  private async runStep({ repo, path }: BatchRepo, step: BatchStep, signal: AbortSignal): Promise<BatchStepState> {
     try {
-      if (step === "sync") return syncOutcome(await this.deps.workspace.syncRepo(repo));
-      if (step === "tools") return runOutcome(await this.deps.mise.installTools(repo, signal));
-      const run = await this.deps.mise.runToEnd(repo, step, signal);
-      return run ? runOutcome(run) : { state: "skipped", message: `repo nie ma taska mise ${step}` };
+      // Identyfikator z nazwy katalogu może przejść na inny katalog w trakcie komendy (ADR-18); krok idzie tylko
+      // w repo, które użytkownik widzi w wynikach.
+      if ((await this.deps.workspace.repoPath(repo)) !== path)
+        return { state: "failed", message: `${repo} wskazuje teraz inny katalog niż ${path}`, lastLines: [] };
+      switch (step) {
+        case "sync":
+          return syncOutcome(await this.deps.workspace.syncRepo(repo));
+        case "tools":
+          return runOutcome(await this.deps.mise.installTools(repo, signal));
+        case "setup":
+        case "build": {
+          const run = await this.deps.mise.runToEnd(repo, MISE_TASK[step], signal);
+          return run ? runOutcome(run) : { state: "skipped", message: `repo nie ma taska mise ${MISE_TASK[step]}` };
+        }
+      }
     } catch (err) {
-      if (signal.aborted) return { state: "cancelled" };
+      // Tylko przerwanie przed startem procesu; błąd stopu po przerwaniu (`stop_unconfirmed`) jest błędem kroku.
+      if (err === signal.reason) return { state: "cancelled" };
       return { state: "failed", message: messageOf(err), lastLines: [] };
     }
   }
+}
+
+/**
+ * Repo pogrupowane po katalogu na dysku: dowiązanie w folderze z projektami do innego repo z listy to
+ * osobny wpis, a dwa `pnpm install` albo buildy naraz w jednym katalogu psują sobie nawzajem pliki. Wpisy jednej
+ * grupy idą po kolei, grupy równolegle. Bez wielkości liter, jak dyski Windowsa i macOS.
+ */
+async function groupBySameDir(repos: readonly BatchRepo[]): Promise<BatchRepo[][]> {
+  const keyed = await Promise.all(
+    repos.map(async (repo) => ({ repo, key: (await realpath(repo.path).catch(() => repo.path)).toLowerCase() })),
+  );
+  const groups = new Map<string, BatchRepo[]>();
+  for (const { repo, key } of keyed) groups.set(key, [...(groups.get(key) ?? []), repo]);
+  return [...groups.values()];
 }
 
 /** Kopia dla wołającego: komenda zmienia się w tle, a wynik ma pokazać jedną chwilę. */

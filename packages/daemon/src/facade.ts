@@ -43,6 +43,6 @@ export function createFacade(o: FacadeOptions): Facade {
   });
   const procs = new ProcessGroups({ runtime: new RuntimeFile(join(o.home, RUNTIME_FILE)), platform: groupPlatform(), log: o.log });
   const mise = new Mise({ procs, repos: workspace, command: o.miseCommand, env: o.userEnv });
-  const batch = new Batch({ workspace, mise });
+  const batch = new Batch({ workspace, mise, log: o.log });
   return { workspace, mise, procs, batch };
 }

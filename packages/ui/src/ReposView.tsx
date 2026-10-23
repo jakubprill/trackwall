@@ -22,10 +22,12 @@ import { SyncBar, SyncView } from "./SyncView.tsx";
 /** Lista repo i ich stan pochodzą z folderu z projektami i z gita przy każdym zapytaniu (§4.5), więc lista jest odpytywana cyklicznie. */
 const POLL_MS = 10_000;
 
+/** Co pokazuje prawa strona: wybrane repo, wyszukiwarkę repo do sklonowania, synchronizację albo komendę zbiorczą. */
+type Panel = "repo" | "clone" | "sync" | "batch";
+
 export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection; onRetry: () => void; onOpenSettings: () => void }) {
   const [selected, setSelected] = useState<string>();
-  /** Co pokazuje prawa strona: wybrane repo, wyszukiwarkę repo do sklonowania, synchronizację albo komendę zbiorczą. */
-  const [panel, setPanel] = useState<"repo" | "clone" | "sync" | "batch">("repo");
+  const [panel, setPanel] = useState<Panel>("repo");
   const load = useCallback(() => post(conn, workspaceApi.list, {}), [conn]);
   const list = useRemote(load, { pollMs: POLL_MS });
   const sync = useSyncRun(conn, list.reload);
@@ -111,7 +113,7 @@ function FolderActions({
   projectsDir: string;
   sync: SyncRunHandle;
   batch: BatchRunHandle;
-  onShow: (panel: "sync" | "batch") => void;
+  onShow: (panel: Extract<Panel, "sync" | "batch">) => void;
 }) {
   return (
     <>

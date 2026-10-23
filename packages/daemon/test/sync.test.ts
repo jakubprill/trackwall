@@ -66,6 +66,25 @@ describe("synchronizacja wszystkich repo", () => {
   );
 
   test(
+    "synchronizacja jednego repo po identyfikatorze przesuwa tylko to repo, a nieznane repo to not_found",
+    async () => {
+      const { workspace, projects, remotes } = await setup();
+      const api = cloned(projects, remotes, "api");
+      const web = cloned(projects, remotes, "web");
+      commitFiles(api.upstream, { "nowy.txt": "1" }, "zdalny w api");
+      commitFiles(web.upstream, { "nowy.txt": "1" }, "zdalny w web");
+      const webBefore = head(web.clone);
+
+      expect(await workspace.syncRepo("api")).toEqual({ state: "updated", branch: "main", commits: 1 });
+
+      expect(head(api.clone)).toBe(head(api.upstream));
+      expect(head(web.clone)).toBe(webBefore);
+      await expect(workspace.syncRepo("nie-ma")).rejects.toMatchObject({ code: "not_found" });
+    },
+    GIT_HEAVY_MS,
+  );
+
+  test(
     "gałąź domyślna niewybrana przesuwa się bez zmiany wybranej gałęzi i katalogu roboczego",
     async () => {
       const { workspace, projects, remotes } = await setup();

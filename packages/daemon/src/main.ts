@@ -40,7 +40,7 @@ async function main(args: DaemonArgs): Promise<void> {
     stopWatching();
     // Grupy procesów przed zamknięciem API: UI widzi „stopping”, a nie zerwane połączenie w trakcie zatrzymywania.
     // Komenda zbiorcza najpierw, żeby kolejne repo nie próbowały startować w trakcie zatrzymywania.
-    facade?.batch.cancel();
+    facade?.batch.close();
     await facade?.procs.stopAll();
     removeDaemonFile(home, process.pid);
     await api?.close();

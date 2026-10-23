@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BatchRun, SyncResult } from "@trackwall/protocol";
@@ -9,16 +9,20 @@ import { Mise } from "../src/modules/mise/mise.ts";
 import { ProcessGroups } from "../src/modules/procs/process-groups.ts";
 import { RuntimeFile } from "../src/modules/procs/runtime-file.ts";
 import { groupPlatform } from "../src/platform/group-platform.ts";
-import { isAlive, waitUntil } from "../src/platform/process-group.ts";
+import { type GroupPlatform, isAlive, waitUntil } from "../src/platform/process-group.ts";
 
 const FAKE_MISE = [process.execPath, join(import.meta.dir, "fixtures", "fake-mise.ts")];
 const TIMEOUT = 30_000;
 
 /**
  * Komenda zbiorcza na prawdziwych modułach `mise` i `procs` z atrapą `mise` (opis w `fixtures/fake-mise.ts`).
- * Synchronizacja jest atrapą: `sync` mówi, co zwraca dla repo, a jej przebieg sprawdza `sync.test.ts`.
+ * Synchronizacja jest atrapą: `sync` mówi, co zwraca dla repo, a jej przebieg sprawdzają `sync.test.ts` i
+ * `workspace.syncRepo`. `dirs` to folder z projektami: identyfikator repo -> katalog, zmienialny w trakcie testu.
  */
-function setup(repos: Record<string, object>, sync: (repo: string) => Promise<SyncResult> = upToDate) {
+function setup(
+  repos: Record<string, object>,
+  { sync = upToDate, platform = groupPlatform() }: { sync?: (repo: string) => Promise<SyncResult>; platform?: Promise<GroupPlatform> } = {},
+) {
   const home = mkdtempSync(join(tmpdir(), "trackwall-batch-"));
   const dirs = new Map<string, string>();
   for (const [id, config] of Object.entries(repos)) {
@@ -34,12 +38,24 @@ function setup(repos: Record<string, object>, sync: (repo: string) => Promise<Sy
   };
   const procs = new ProcessGroups({
     runtime: new RuntimeFile(join(home, "runtime.json")),
-    platform: groupPlatform().then((p) => ({ ...p, graceMs: 300 })),
+    platform: platform.then((p) => ({ ...p, graceMs: 300 })),
     log: () => {},
   });
   const mise = new Mise({ procs, repos: { repoPath }, command: FAKE_MISE, env: async () => process.env });
-  const batch = new Batch({ workspace: { repoPath, syncRepo: sync }, mise });
-  return { batch, dir: (id: string) => dirs.get(id) ?? "" };
+  const batch = new Batch({ workspace: { repoPath, syncRepo: sync }, mise, log: () => {} });
+  return { batch, mise, procs, home, dirs, dir: (id: string) => dirs.get(id) ?? "" };
+}
+
+/** Platforma, na której zabicie grupy się nie potwierdza: procesy giną, ale grupa nigdy nie jest pusta. */
+async function stubbornPlatform(): Promise<GroupPlatform> {
+  const real = await groupPlatform();
+  return { ...real, adopt: (child) => ({ ...real.adopt(child), isEmpty: () => false }) };
+}
+
+/** Uruchomienia atrapy mise w repo trwające do zatrzymania (drzewo procesów z `pids`). */
+function liveTree(dir: string): number[] {
+  const pids = join(dir, "pids");
+  return existsSync(pids) ? readdirSync(pids).map((f) => Number(readFileSync(join(pids, f), "utf8"))) : [];
 }
 
 async function upToDate(): Promise<SyncResult> {
@@ -65,14 +81,13 @@ describe("komenda zbiorcza", () => {
   test(
     "kroki w repo idą po kolei: synchronizacja, mise install, setup i build, niezależnie od kolejności w żądaniu",
     async () => {
-      const { batch, dir } = setup({ web: { tasks: [SETUP, BUILD], exits: { setup: 0, build: 0 } } }, async () => ({
-        state: "updated",
-        branch: "main",
-        commits: 2,
-      }));
+      const { batch, dir } = setup(
+        { web: { tasks: [SETUP, BUILD], exits: { setup: 0, build: 0 } } },
+        { sync: async () => ({ state: "updated", branch: "main", commits: 2 }) },
+      );
 
       const started = await batch.start({ repos: ["web"], steps: ["build", "setup", "tools", "sync"] });
-      expect(started.steps).toEqual(["sync", "tools", "setup", "build"]);
+      expect(started.repos[0]?.steps.map((s) => s.step)).toEqual(["sync", "tools", "setup", "build"]);
       const run = await finished(batch);
 
       expect(calls(dir("web"))).toEqual(["install", "run setup", "run build"]);
@@ -96,11 +111,10 @@ describe("komenda zbiorcza", () => {
   test(
     "repo bez taska ma krok pominięty, a pominięta synchronizacja nie zatrzymuje kolejnych kroków",
     async () => {
-      const { batch, dir } = setup({ web: { tasks: [BUILD], exits: { build: 0 } } }, async () => ({
-        state: "skipped",
-        reason: "dirty",
-        message: "w gałęzi main są niezacommitowane zmiany",
-      }));
+      const { batch, dir } = setup(
+        { web: { tasks: [BUILD], exits: { build: 0 } } },
+        { sync: async () => ({ state: "skipped", reason: "dirty", message: "w gałęzi main są niezacommitowane zmiany" }) },
+      );
 
       await batch.start({ repos: ["web"], steps: ["sync", "setup", "build"] });
       const run = await finished(batch);
@@ -156,11 +170,10 @@ describe("komenda zbiorcza", () => {
     async () => {
       // `build` bez kodu w `exits` działa do zatrzymania jako drzewo procesów.
       const { batch, dir } = setup({ web: { tasks: [SETUP, BUILD], exits: { setup: 0 } } });
-      const pids = join(dir("web"), "pids");
 
       await batch.start({ repos: ["web"], steps: ["setup", "build"] });
-      expect(await waitUntil(() => existsSync(pids) && readdirSync(pids).length === 2, 15_000)).toBe(true);
-      const tree = readdirSync(pids).map((f) => Number(readFileSync(join(pids, f), "utf8")));
+      expect(await waitUntil(() => liveTree(dir("web")).length === 2, 15_000)).toBe(true);
+      const tree = liveTree(dir("web"));
       batch.cancel();
       const run = await finished(batch);
 
@@ -188,6 +201,132 @@ describe("komenda zbiorcza", () => {
 
       expect(run.repos.map((r) => r.steps[0]?.state)).toEqual(["cancelled", "cancelled", "cancelled", "cancelled"]);
       expect(calls(dir("d"))).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "nieudany mise install pomija zależności i build tego repo",
+    async () => {
+      const { batch, dir } = setup({ web: { tasks: [SETUP, BUILD], exits: { setup: 0, build: 0 }, installExit: 1 } });
+
+      await batch.start({ repos: ["web"], steps: ["tools", "setup", "build"] });
+      const run = await finished(batch);
+
+      expect(run.repos[0]?.steps).toEqual([
+        { step: "tools", state: "failed", message: "zakończony kodem 1", lastLines: ["mise all tools are installed"] },
+        { step: "setup", state: "skipped", message: "pominięty po błędzie kroku tools" },
+        { step: "build", state: "skipped", message: "pominięty po błędzie kroku tools" },
+      ]);
+      expect(calls(dir("web"))).toEqual(["install"]);
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "build uruchomiony wcześniej z karty repo nie startuje drugi raz, a jego stop z karty kończy krok jako przerwany",
+    async () => {
+      const { batch, mise, procs, dir } = setup({ web: { tasks: [BUILD] } });
+      const fromCard = await mise.start("web", "build");
+      // Komenda czeka na koniec grupy przez `procs.ended`; dopiero wtedy wiadomo, że dołączyła do taska z karty.
+      const waitsForEnd = procs.ended.bind(procs);
+      const joined = new Promise<void>((resolve) => {
+        procs.ended = (owner) => {
+          resolve();
+          return waitsForEnd(owner);
+        };
+      });
+
+      await batch.start({ repos: ["web"], steps: ["build"] });
+      await joined;
+      await mise.stop("web", "build");
+      const run = await finished(batch);
+
+      expect(calls(dir("web"))).toEqual(["run build"]);
+      expect(run.repos[0]?.steps).toEqual([{ step: "build", state: "cancelled" }]);
+      await expect(mise.tasks("web")).resolves.toMatchObject({
+        tasks: [{ name: "build", run: { runId: fromCard.runId, kind: "exited" } }],
+      });
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "dowiązanie do repo z listy idzie po kolei z tym repo, a nie równolegle w tym samym katalogu",
+    async () => {
+      const { batch, dirs, dir, home } = setup({ web: { tasks: [BUILD] } });
+      const link = join(home, "web-link");
+      // Junction na Windowsie nie wymaga uprawnień administratora; poza Windowsem typ jest pomijany.
+      symlinkSync(dir("web"), link, "junction");
+      dirs.set("web-link", link);
+
+      await batch.start({ repos: ["web", "web-link"], steps: ["build"] });
+      expect(await waitUntil(() => calls(dir("web")).length === 1, 15_000)).toBe(true);
+      // Drugi wpis czekałby na wolne miejsce, gdyby szedł równolegle: miejsc jest trzy, więc start byłby od razu.
+      expect(await waitUntil(() => calls(dir("web")).length > 1, 1500)).toBe(false);
+      expect(batch.run()?.repos.map((r) => r.steps[0]?.state)).toEqual(["running", "waiting"]);
+      batch.cancel();
+      await finished(batch);
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "krok idzie tylko w katalogu z chwili startu: identyfikator, który przeszedł na inny katalog, to błąd kroku",
+    async () => {
+      const { batch, dirs, dir, home } = setup(
+        { web: { tasks: [BUILD], exits: { build: 0 } }, inny: { tasks: [BUILD], exits: { build: 0 } } },
+        {
+          sync: async () => {
+            dirs.set("web", join(home, "inny"));
+            return { state: "up-to-date", branch: "main" };
+          },
+        },
+      );
+      const webDir = dir("web");
+
+      await batch.start({ repos: ["web"], steps: ["sync", "build"] });
+      const run = await finished(batch);
+
+      expect(run.repos[0]?.steps[1]).toEqual({
+        step: "build",
+        state: "failed",
+        message: `web wskazuje teraz inny katalog niż ${webDir}`,
+        lastLines: [],
+      });
+      expect(calls(join(home, "inny"))).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "grupa, której zatrzymania nie da się potwierdzić, kończy krok błędem stop_unconfirmed zamiast trzymać komendę",
+    async () => {
+      const { batch, dir } = setup({ web: { tasks: [BUILD] } }, { platform: stubbornPlatform() });
+
+      await batch.start({ repos: ["web"], steps: ["build"] });
+      expect(await waitUntil(() => liveTree(join(dir("web"))).length === 2, 15_000)).toBe(true);
+      batch.cancel();
+      const run = await finished(batch);
+
+      const [step] = run.repos[0]?.steps ?? [];
+      expect(step).toMatchObject({ step: "build", state: "failed" });
+      expect(step?.state === "failed" && step.message).toContain("nadal działa");
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "wyjście daemona przerywa komendę, a nowej nie da się już zacząć",
+    async () => {
+      const { batch } = setup({ web: { tasks: [BUILD] } });
+
+      await batch.start({ repos: ["web"], steps: ["build"] });
+      batch.close();
+      const run = await finished(batch);
+
+      expect(run.cancelled).toBe(true);
+      await expect(batch.start({ repos: ["web"], steps: ["build"] })).rejects.toMatchObject({ code: "bad_request" });
     },
     TIMEOUT,
   );

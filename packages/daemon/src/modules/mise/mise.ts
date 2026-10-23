@@ -75,7 +75,9 @@ export class Mise {
   async start(repo: string, miseTask: string): Promise<RunState> {
     const dir = await this.deps.repos.repoPath(repo);
     if (!(await this.hasTask(dir, miseTask))) throw new DomainError("not_found", `repo ${repo} nie ma taska mise "${miseTask}"`);
-    return this.startTask(repo, dir, miseTask);
+    const run = await this.launch(owner(repo, miseTask), dir, ["run", miseTask], repo);
+    this.remember(repo, miseTask);
+    return run;
   }
 
   /**
@@ -87,7 +89,8 @@ export class Mise {
     const dir = await this.deps.repos.repoPath(repo);
     if (!(await this.hasTask(dir, miseTask))) return null;
     signal.throwIfAborted();
-    await this.startTask(repo, dir, miseTask);
+    await this.launchToEnd(owner(repo, miseTask), dir, ["run", miseTask], repo);
+    this.remember(repo, miseTask);
     return this.ended(owner(repo, miseTask), signal);
   }
 
@@ -98,7 +101,7 @@ export class Mise {
   async installTools(repo: string, signal: AbortSignal): Promise<RunState> {
     const dir = await this.deps.repos.repoPath(repo);
     signal.throwIfAborted();
-    await this.launch(installOwner(repo), dir, ["install"], repo);
+    await this.launchToEnd(installOwner(repo), dir, ["install"], repo);
     return this.ended(installOwner(repo), signal);
   }
 
@@ -123,11 +126,10 @@ export class Mise {
     return listed.tasks.some((t) => t.name === miseTask);
   }
 
-  private async startTask(repo: string, dir: string, miseTask: string): Promise<RunState> {
-    const run = await this.launch(owner(repo, miseTask), dir, ["run", miseTask], repo);
+  /** Task uruchomiony w tym działaniu daemona: lista pokaże go do zatrzymania, nawet gdy zniknie z konfiguracji. */
+  private remember(repo: string, miseTask: string): void {
     const names = this.started.get(repo) ?? new Set<string>();
     this.started.set(repo, names.add(miseTask));
-    return run;
   }
 
   private async launch(groupOwner: string, dir: string, args: readonly string[], repo: string): Promise<RunState> {
@@ -145,20 +147,33 @@ export class Mise {
   }
 
   /**
-   * Koniec grupy po potwierdzeniu w systemie. Stop po `signal` nie zgłasza błędu: gdy grupa przeżyje zabicie
-   * (`stop_unconfirmed`), zostaje `stopping` w karcie repo, a wołający czeka dalej, bo koniec nie jest potwierdzony.
+   * Koniec grupy po potwierdzeniu w systemie. `signal` zatrzymuje grupę; gdy grupa przeżyje zabicie, wynikiem jest
+   * `stop_unconfirmed`, a nie czekanie bez końca, bo koniec grupy, której nie da się zabić, nie przyjdzie. Grupa
+   * zostaje wtedy `stopping` w karcie repo, skąd stop można ponowić.
    */
   private async ended(groupOwner: string, signal: AbortSignal): Promise<RunState> {
-    const stop = () => void this.deps.procs.stop(groupOwner).catch(() => {});
+    let stop = () => {};
+    const stopFailed = new Promise<never>((_, reject) => {
+      stop = () => void this.deps.procs.stop(groupOwner).catch(reject);
+    });
     signal.addEventListener("abort", stop, { once: true });
     if (signal.aborted) stop();
     try {
-      const end = await this.deps.procs.ended(groupOwner);
+      const end = await Promise.race([this.deps.procs.ended(groupOwner), stopFailed]);
       if (!end) throw new Error(`grupa ${groupOwner} zniknęła przed końcem`);
       return end;
     } finally {
       signal.removeEventListener("abort", stop);
     }
+  }
+
+  /**
+   * Start dla uruchomienia doczekanego do końca. Grupa tego właściciela, która jest zatrzymywana (np. po
+   * `stop_unconfirmed`), może nie skończyć się nigdy, więc to błąd, a nie dołączenie do niej.
+   */
+  private async launchToEnd(groupOwner: string, dir: string, args: readonly string[], repo: string): Promise<void> {
+    const run = await this.launch(groupOwner, dir, args, repo);
+    if (run.kind === "stopping") throw new DomainError("bad_request", `${repo}: ${args.join(" ")} jest właśnie zatrzymywany`);
   }
 
   private async list(dir: string): Promise<TaskList> {

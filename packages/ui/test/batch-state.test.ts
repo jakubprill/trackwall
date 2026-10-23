@@ -39,7 +39,6 @@ describe("komenda zbiorcza w UI", () => {
       startedAt: "2026-10-23T10:00:00Z",
       finishedAt: null,
       cancelled: false,
-      steps: ["sync", "build"],
       repos: [
         {
           ...repo,
@@ -75,7 +74,7 @@ describe("komenda zbiorcza w UI", () => {
   });
 
   test("nagłówek wyników mówi, czy komenda trwa, czy się skończyła, i czy ją przerwano", () => {
-    const run = { startedAt: "2026-10-23T10:00:00Z", steps: [], repos: [] };
+    const run = { startedAt: "2026-10-23T10:00:00Z", repos: [] };
     const now = new Date("2026-10-23T10:00:30Z");
     expect(batchRunLabel({ ...run, finishedAt: null, cancelled: false }, now)).toBe("Trwa");
     expect(batchRunLabel({ ...run, finishedAt: null, cancelled: true }, now)).toBe("Przerywanie");
