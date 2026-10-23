@@ -20,7 +20,8 @@ env:
   RUST_VERSION: "1.90"
 
 # Akcje przypięte do SHA (komentarz to wersja): przesunięty tag akcji nie podmieni kodu, który tu działa.
-# Aktualizuje je Dependabot (.github/dependabot.yml). Node, pnpm i Bun instaluje .github/actions/setup.
+# Aktualizuje je Dependabot (.github/dependabot.yml). Node, pnpm i Bun instaluje .github/actions/setup
+# (poza audytem, który potrzebuje tylko pnpm i Node).
 jobs:
   check:
     name: lint, typecheck, test (${{ matrix.os }})

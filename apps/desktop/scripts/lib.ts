@@ -24,11 +24,12 @@ const JsonManifest = z.object({ version: z.string().min(1) });
 const CargoManifest = z.object({ package: z.object({ version: z.string().min(1) }) });
 
 function parseFile<T>(path: string, schema: z.ZodType<T>, parse: (text: string) => unknown): T {
+  const text = readFileSync(path, "utf8");
   let data: unknown;
   try {
-    data = parse(readFileSync(path, "utf8"));
+    data = parse(text);
   } catch (err) {
-    throw new Error(`${path}: ${(err as Error).message}`);
+    throw new Error(`${path}: ${(err as Error).message}`, { cause: err });
   }
   const parsed = schema.safeParse(data);
   if (!parsed.success) throw new Error(`${path}: ${z.prettifyError(parsed.error)}`);
