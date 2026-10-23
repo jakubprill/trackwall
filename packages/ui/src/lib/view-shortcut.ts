@@ -1,8 +1,9 @@
 /**
  * Skróty widoków z paska widoków: Ctrl + klawisz, na macOS ⌘ + klawisz, bez Shift i Alt.
- * Cyfry są rozpoznawane po klawiszu (`code`, także z klawiatury numerycznej), bo na AZERTY cyfra bez Shift daje inny znak.
- * Przecinek po klawiszu albo po znaku (`key`): po znaku działa w układach, w których leży gdzie indziej (AZERTY),
- * po klawiszu w tych, w których wymaga Shift (cyrylica).
+ * Cyfry są rozpoznawane po klawiszu (`code`), bo na AZERTY cyfra bez Shift daje inny znak; z klawiatury numerycznej
+ * tylko przy włączonym NumLock, bo bez niego te klawisze to End, PageUp itd. Przecinek po znaku (`key`), bo w innych
+ * układach (AZERTY, Dvorak) leży na innym klawiszu, a na jego miejscu bywa litera z własnym skrótem. W układach, w których
+ * przecinek wymaga Shift (cyrylica), ustawień nie otworzy skrót, tylko ikona.
  */
 export type ViewShortcut = "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | ",";
 
@@ -12,8 +13,8 @@ export function matchesShortcut(press: KeyPress, shortcut: ViewShortcut, isMac: 
   const modifier = isMac ? press.metaKey && !press.ctrlKey : press.ctrlKey && !press.metaKey;
   const key =
     shortcut === ","
-      ? press.code === "Comma" || press.key === ","
-      : press.code === `Digit${shortcut}` || press.code === `Numpad${shortcut}`;
+      ? press.key === ","
+      : press.code === `Digit${shortcut}` || (press.code === `Numpad${shortcut}` && press.key === shortcut);
   return modifier && !press.altKey && !press.shiftKey && key;
 }
 

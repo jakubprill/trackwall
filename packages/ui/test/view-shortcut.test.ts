@@ -26,14 +26,15 @@ describe("skróty widoków", () => {
     expect(matchesShortcut({ ...ctrl1, key: "&" }, "1", false)).toBe(true);
   });
 
-  test("cyfra z klawiatury numerycznej też przełącza widok", () => {
+  test("cyfra z klawiatury numerycznej przełącza widok tylko przy włączonym NumLock", () => {
     expect(matchesShortcut({ ...ctrl1, code: "Numpad1" }, "1", false)).toBe(true);
+    expect(matchesShortcut({ ...ctrl1, code: "Numpad1", key: "End" }, "1", false)).toBe(false);
   });
 
-  test("przecinek działa po znaku (AZERTY) i po klawiszu, gdy znak wymaga Shift (cyrylica)", () => {
+  test("przecinek liczy się po znaku, a nie po klawiszu, na którym w innym układzie leży litera", () => {
     expect(matchesShortcut({ ...none, code: "KeyM", key: ",", ctrlKey: true }, ",", false)).toBe(true);
-    expect(matchesShortcut({ ...none, code: "Comma", key: "б", ctrlKey: true }, ",", false)).toBe(true);
-    expect(matchesShortcut({ ...none, code: "Period", key: ".", ctrlKey: true }, ",", false)).toBe(false);
+    expect(matchesShortcut({ ...none, code: "Comma", key: ";", ctrlKey: true }, ",", false)).toBe(false);
+    expect(matchesShortcut({ ...none, code: "Comma", key: "w", ctrlKey: true }, ",", false)).toBe(false);
   });
 
   test("podpis skrótu w konwencji systemu", () => {
