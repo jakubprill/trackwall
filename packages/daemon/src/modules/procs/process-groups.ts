@@ -120,10 +120,10 @@ export class ProcessGroups {
     const terminals = await this.deps.terminals;
     if (!terminals) throw new SpawnFailure("terminal_unavailable", "ten runtime daemona nie ma PTY (daemon pod Node)");
     const started = this.spawnGroup(spec, async (cwd) => launchTerminal(terminals, spec, cwd));
-    this.starting.set(
-      spec.owner,
-      started.then(({ group }) => stateOf(group)),
-    );
+    const run = started.then(({ group }) => stateOf(group));
+    // Błąd startu odbiera wołający przez `started`; `starting` służy tylko innym do czekania na koniec startu.
+    run.catch(() => {});
+    this.starting.set(spec.owner, run);
     try {
       const { group, launched } = await started;
       return { run: stateOf(group), terminal: launched.leader };

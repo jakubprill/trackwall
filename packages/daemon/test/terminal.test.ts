@@ -12,8 +12,10 @@ describe.skipIf(process.versions.bun === undefined || process.platform === "win3
   test("po końcu procesu terminal jest zamknięty i nie zostawia deskryptora", async () => {
     const terminals = await terminalPlatform();
     if (!terminals) throw new Error("pod Bun PTY musi być dostępny");
-    const before = openDescriptors();
-    for (let i = 0; i < 5; i++) {
+    // Pierwszy start może otworzyć deskryptory samego Bun, więc liczymy dopiero od drugiego.
+    let before = 0;
+    for (let i = 0; i < 6; i++) {
+      if (i === 1) before = openDescriptors();
       let output = "";
       const proc = terminals.spawn({
         command: [process.execPath, "-e", "console.log('koniec')"],

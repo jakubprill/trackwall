@@ -1,4 +1,4 @@
-import type { RunState, Session, TaskStateChange } from "@trackwall/protocol";
+import type { RunState, Session, TaskState, TaskStateChange } from "@trackwall/protocol";
 import { CopilotSessionState } from "./copilot-session-state.ts";
 import { HookTail } from "./hook-tail.ts";
 import { type ScreenViewer, TerminalScreen } from "./terminal-screen.ts";
@@ -12,7 +12,7 @@ import { type ScreenViewer, TerminalScreen } from "./terminal-screen.ts";
 export const STALE_AFTER_MS = 60_000;
 
 /** Stany, w których działająca sesja czeka na Ciebie (`Session.needsAttention`). */
-const WAITING_STATES: ReadonlySet<string> = new Set(["Input", "Approval", "Plan"]);
+const WAITING_STATES: ReadonlySet<TaskState> = new Set(["Input", "Approval", "Plan"]);
 
 /** PTY procesu sesji: terminal lidera grupy z `procs` (`GroupTerminal`). */
 export interface SessionPty {
@@ -112,7 +112,7 @@ export class LiveSession {
       run,
       state: this.#last,
       windowTitle: this.#state.windowTitle ?? null,
-      needsAttention: run.kind === "running" && WAITING_STATES.has(this.#last?.state ?? ""),
+      needsAttention: run.kind === "running" && this.#last !== null && WAITING_STATES.has(this.#last.state),
     };
   }
 

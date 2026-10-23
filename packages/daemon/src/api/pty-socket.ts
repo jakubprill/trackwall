@@ -75,8 +75,13 @@ function admit(req: IncomingMessage, o: PtySocketOptions): { session: string } |
 }
 
 function reject(socket: Duplex, status: string): void {
-  if (socket.writable) socket.write(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
-  socket.destroy();
+  if (!socket.writable) {
+    socket.destroy();
+    return;
+  }
+  // Jak `abortHandshake` w `ws`: zamknięcie dopiero po wysłaniu odpowiedzi, żeby status nie przepadł w buforze.
+  socket.once("finish", () => socket.destroy());
+  socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
 }
 
 function serve(ws: WebSocket, session: string, facade: Facade): void {
