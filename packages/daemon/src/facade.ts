@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { Agents, type AgentsDeps } from "./modules/agents/agents.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
@@ -8,6 +9,7 @@ import { Vcs } from "./modules/vcs/vcs.ts";
 import { Workspace } from "./modules/workspace/workspace.ts";
 import { WorkspaceFile } from "./modules/workspace/workspace-file.ts";
 import { groupPlatform } from "./platform/group-platform.ts";
+import { terminalPlatform } from "./platform/terminal.ts";
 
 /**
  * Fasada (§4): moduły daemona złożone w jednym miejscu. Zależności między modułami widać tylko tutaj;
@@ -17,8 +19,11 @@ export interface Facade {
   workspace: Workspace;
   mise: Mise;
   procs: ProcessGroups;
+  agents: Agents;
   batch: Batch;
 }
+
+export { runCopilotHook } from "./modules/agents/copilot-hook-command.ts";
 
 const WORKSPACE_FILE = "workspace.yaml";
 const RUNTIME_FILE = "runtime.json";
@@ -29,6 +34,12 @@ export interface FacadeOptions {
   openUrl: (url: string) => void;
   /** Program `mise` z argumentami przed komendą (`["mise"]` w daemonie). */
   miseCommand: readonly string[];
+  /** Program Copilot CLI z argumentami przed argumentami sesji (`["copilot"]` w daemonie, atrapa w testach). */
+  copilotCommand: readonly string[];
+  /** Program hooka wtyczki sesji (`trackwall-daemon copilot-hook …` w daemonie). */
+  hookCommand: AgentsDeps["hookCommand"];
+  /** Most stdio do serwera MCP tego daemona (`mcpStdioCommand`), który dostaje każda sesja Copilot CLI. */
+  mcpStdioCommand: readonly string[];
   /** Środowisko procesów uruchamianych dla użytkownika (`userEnv`). */
   userEnv: () => Promise<NodeJS.ProcessEnv>;
   log: (msg: string) => void;
@@ -41,8 +52,23 @@ export function createFacade(o: FacadeOptions): Facade {
     hosting: new Hosting(HOSTING_CLIS),
     openUrl: o.openUrl,
   });
-  const procs = new ProcessGroups({ runtime: new RuntimeFile(join(o.home, RUNTIME_FILE)), platform: groupPlatform(), log: o.log });
+  const procs = new ProcessGroups({
+    runtime: new RuntimeFile(join(o.home, RUNTIME_FILE)),
+    platform: groupPlatform(),
+    terminals: terminalPlatform(),
+    log: o.log,
+  });
   const mise = new Mise({ procs, repos: workspace, command: o.miseCommand, env: o.userEnv });
   const batch = new Batch({ workspace, mise, log: o.log });
-  return { workspace, mise, procs, batch };
+  const agents = new Agents({
+    procs,
+    repos: workspace,
+    home: o.home,
+    copilot: o.copilotCommand,
+    env: o.userEnv,
+    hookCommand: o.hookCommand,
+    mcpStdioCommand: o.mcpStdioCommand,
+    log: o.log,
+  });
+  return { workspace, mise, procs, batch, agents };
 }

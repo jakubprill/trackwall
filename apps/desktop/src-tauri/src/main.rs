@@ -3,6 +3,7 @@
 // Bez okna konsoli w wydaniu na Windowsie.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod attention;
 mod daemon;
 mod daemon_state;
 mod window_effect;
@@ -10,7 +11,6 @@ mod window_effect;
 use daemon::Connection;
 use daemon_state::DaemonState;
 use std::sync::Arc;
-use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
 
@@ -63,6 +63,7 @@ fn main() {
             app.manage(window_effect::apply(&window));
             window_effect::reveal_fallback(app.handle(), show_main);
             build_tray(app.handle())?;
+            attention::watch(app.handle().clone(), Arc::clone(&state), TRAY_ID);
             Ok(())
         })
         .on_page_load(|webview, payload| window_effect::on_page_load(webview, payload, show_main))
@@ -96,17 +97,19 @@ fn main() {
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, "show", "Pokaż Trackwall", true, None::<&str>)?;
-    let quit_item = MenuItem::with_id(app, "quit", "Wyjdź (zatrzymuje daemon)", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &quit_item])?;
+    let menu = attention::build_menu(app, &[])?;
     let mut tray = TrayIconBuilder::with_id(TRAY_ID)
-        .tooltip("Trackwall")
+        .tooltip(attention::tooltip(&[]))
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
-            "show" => show_main(app),
-            "quit" => quit_app(app),
-            _ => {}
+            attention::MENU_SHOW => show_main(app),
+            attention::MENU_QUIT => quit_app(app),
+            id => {
+                if let Some(session) = attention::session_from_menu(id) {
+                    attention::focus_session(app, session, show_main);
+                }
+            }
         })
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {

@@ -15,7 +15,7 @@ export class DomainError extends Error {
 
 /** Proces nie wystartował: wołający rozróżnia brak programu od złego katalogu roboczego i od reszty. */
 export class SpawnFailure extends Error {
-  readonly reason: "program_not_found" | "cwd_invalid" | "spawn_failed";
+  readonly reason: "program_not_found" | "cwd_invalid" | "terminal_unavailable" | "spawn_failed";
 
   constructor(reason: SpawnFailure["reason"], message: string) {
     super(message);
