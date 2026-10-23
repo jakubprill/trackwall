@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 
 const tempFile = () => join(mkdtempSync(join(tmpdir(), "trackwall-wsf-")), "workspace.yaml");
@@ -12,10 +12,12 @@ describe("workspace.yaml", () => {
     const file = new WorkspaceFile(path);
     expect(file.projectsDir()).toBeNull();
 
-    file.setProjectsDir("/projekty");
+    // Pełna ścieżka na każdym systemie: na Windowsie `/projekty` nie ma litery dysku.
+    const dir = resolve("/projekty");
+    file.setProjectsDir(dir);
 
-    expect(file.projectsDir()).toBe("/projekty");
-    expect(readFileSync(path, "utf8")).toBe("projectsDir: /projekty\n");
+    expect(file.projectsDir()).toBe(dir);
+    expect(readFileSync(path, "utf8")).toBe(`projectsDir: ${dir}\n`);
   });
 
   test("pusty klucz projectsDir to nieustawiony folder", () => {
