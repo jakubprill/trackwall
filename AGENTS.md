@@ -112,4 +112,4 @@ Wersje narzędzi są w `mise.toml` (`mise install`), tam też taski `setup`, `de
 - Praca idzie przez PR do `main`, nigdy push prosto na `main`.
 - Jeden temat na PR. Nie mieszaj refaktoryzacji ze zmianą zachowania, chyba że refaktoryzacja jest do niej potrzebna.
 - Komunikaty commitów i tytuły PR w trybie rozkazującym, jak w historii („Dodaj…”, „Rozstrzygnij…”).
-- Wersję podbija się tylko przy wydaniu, w trzech miejscach naraz (`docs/release.md`).
+- Wersję podbija się tylko przy wydaniu, w trzech miejscach naraz, razem z notatką o zmianach w `docs/release-notes/` (`docs/release.md`).
