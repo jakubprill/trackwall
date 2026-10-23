@@ -1,7 +1,7 @@
 import { MCP_SERVER_NAME } from "@trackwall/protocol";
 
 /**
- * Podłączenie serwera MCP Trackwall do Copilot CLI (§5.3, ADR-23): komenda `copilot mcp add`, która dopisuje wpis do
+ * Podłączenie serwera MCP Trackwall do Copilot CLI (§5.3, ADR-24): komenda `copilot mcp add`, która dopisuje wpis do
  * `~/.copilot/mcp-config.json`, i sam wpis do wklejenia ręcznie. Most stdio (`mcpStdioCommand`) podaje daemon.
  */
 

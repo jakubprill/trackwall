@@ -37,7 +37,7 @@ Cienki klient CLI daemona przez HTTP na loopbacku. Nie ma nic wspólnego z WebSo
 Sekret z `~/.trackwall/daemon.json`, którym UI, `ws`, powłoka i most stdio uwierzytelniają się w API i serwerze MCP.
 
 **Serwer MCP** (`/mcp`, `createMcpEndpoint`):
-Część daemona, przez którą agenci czytają jego stan narzędziami MCP; ten sam port i token co API (§5.3, ADR-23).
+Część daemona, przez którą agenci czytają jego stan narzędziami MCP; ten sam port i token co API (§5.3, ADR-24).
 
 **Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`):
 Jedno wywołanie serwera MCP z nazwą po angielsku, wejściem i wynikiem opisanym schematem z `packages/protocol/src/mcp.ts`; mapowanie na fasadę, bez własnej logiki domenowej.

@@ -6,7 +6,7 @@ import { type LoopbackResponse, loopbackRequest } from "../loopback.ts";
 import { MCP_PATH } from "./endpoint.ts";
 
 /**
- * Most stdio (`trackwall-daemon mcp-stdio`, §5.3, ADR-23): CLI agenta uruchamia go jako lokalny serwer MCP, a most
+ * Most stdio (`trackwall-daemon mcp-stdio`, §5.3, ADR-24): CLI agenta uruchamia go jako lokalny serwer MCP, a most
  * przekazuje każdą wiadomość JSON-RPC ze stdin do `/mcp` działającego daemona i odpowiedzi na stdout. Port i token
  * czyta z `daemon.json` przy każdej wiadomości, więc restart daemona nie wymaga zmiany konfiguracji agenta, a token
  * nie trafia do niej wcale. Sam niczego nie wie o narzędziach i nie uruchamia daemona.

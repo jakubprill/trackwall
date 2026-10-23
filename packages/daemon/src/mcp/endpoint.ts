@@ -5,7 +5,7 @@ import { readBody } from "../api/body.ts";
 import { TOOL_REGISTRATIONS, type ToolContext } from "./tools.ts";
 
 /**
- * Serwer MCP daemona w transporcie Streamable HTTP (§5.3, ADR-23), bez sesji: każde żądanie dostaje świeży
+ * Serwer MCP daemona w transporcie Streamable HTTP (§5.3, ADR-24), bez sesji: każde żądanie dostaje świeży
  * `McpServer` z tymi samymi narzędziami, bo narzędzia tylko czytają fasadę i nie ma czego trzymać między żądaniami.
  * SDK obsługuje i rewizję 2026-07-28, i starsze klienty z `initialize` (bezstanowo). Host, Origin i token sprawdza
  * wcześniej `handle()` w `api/server.ts`, jak dla każdej trasy (AGENTS.md, Bezpieczeństwo).
