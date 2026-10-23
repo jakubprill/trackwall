@@ -12,7 +12,7 @@ Dokumentacja:
 
 ## Stan
 
-Etap 1 (szkielet): daemon z `/api/health`, UI z panelem daemona, powłoka Tauri z trayem, portable build na Windows i macOS, CI z macierzą Windows + macOS, spike'i Job Objects i PTY.
+Etap 1 (szkielet): daemon z `/api/health`, UI z panelem daemona, powłoka Tauri z trayem, portable build na Windows i macOS, CI na Linuksie przy PR i z macierzą Windows + macOS na `main` i ręcznie (ADR-15), spike'i Job Objects i PTY.
 
 Przeglądanie repo: w zakładce „Repo” dodajesz lokalny katalog z gitem (pełną ścieżką), a Trackwall pokazuje gałąź, liczbę zmian i ahead/behind, README, pliki i commity z ostatniego commita oraz otwiera repo w VS Code. Lista repo jest w `~/.trackwall/workspace.yaml` i można ją edytować ręcznie. Wymaga `git` w `PATH`.
 
@@ -62,7 +62,7 @@ Windows: zip zawiera `trackwall.exe`, `trackwall-daemon.exe` i `ui/`. Rozpakowan
 
 macOS: zip zawiera niepodpisany `Trackwall.app`; pierwsze uruchomienie przez prawy klik > Otwórz albo `xattr -dr com.apple.quarantine Trackwall.app`.
 
-Każdy przebieg CI publikuje oba archiwa jako artefakty.
+Przebieg CI na Windowsie i macOS (push na `main` albo ręczne uruchomienie) publikuje oba archiwa jako artefakty.
 
 ## Licencja i bezpieczeństwo
 

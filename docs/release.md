@@ -16,7 +16,7 @@ Trackwall jest dystrybuowany jako archiwa zip w [GitHub Releases](https://github
 
    Tag z myślnikiem (np. `v0.2.0-rc.1`) tworzy pre-release.
 
-Workflow sprawdza, że tag wskazuje commit z `main` i zgadza się z wersją w `tauri.conf.json`, buduje równolegle na `windows-latest` i `macos-latest` tymi samymi skryptami co CI (`pnpm build:desktop`, smoke test sidecara, `pnpm portable`), a release publikuje dopiero po sukcesie obu buildów. Release zawiera:
+Workflow sprawdza, że tag wskazuje commit z `main` i zgadza się z wersją w `tauri.conf.json`, na `windows-latest` i `macos-latest` uruchamia `pnpm test` (tag nie wymaga zielonego CI na `main`, a CI przy PR testuje tylko Linuksa, ADR-15) i buduje równolegle tymi samymi skryptami co CI (`pnpm build:desktop`, smoke test sidecara, `pnpm portable`), a release publikuje dopiero po sukcesie obu buildów. Release zawiera:
 
 | Plik | Zawartość |
 |---|---|

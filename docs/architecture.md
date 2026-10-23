@@ -67,7 +67,7 @@ trackwall/
     architecture.md       ten dokument
     adr/                  decyzje architektoniczne (od chwili, gdy zacznie ich przybywać)
   .github/workflows/
-    ci.yml                macierz windows-latest + macos-latest: lint (Biome, knip), test, clippy, build portable; audyt zależności
+    ci.yml                przy PR: lint (Biome, knip, rustfmt), typecheck, test na Linuksie, audyt; na main i ręcznie: do tego test, clippy, build portable, spike'i na Windows + macOS
     release.yml           wydanie z tagu vX.Y.Z (docs/release.md)
   .github/actions/setup/  wspólne przygotowanie jobów: pnpm, Node, Bun, pnpm install
   .github/dependabot.yml  cotygodniowe aktualizacje akcji, npm i cargo
@@ -292,11 +292,11 @@ Trwałość: SQLite (`~/.trackwall/trackwall.db`) dla repos, cards, edges (cache
 
 ## 10. Testy i CI
 
-- `procs` i `logs`: testy integracyjne uruchamiające prawdziwe procesy potomne (skrypt, który odpala wnuka i ignoruje łagodny stop), na obu systemach w macierzy CI.
+- `procs` i `logs`: testy integracyjne uruchamiające prawdziwe procesy potomne (skrypt, który odpala wnuka i ignoruje łagodny stop), na obu systemach w macierzy CI (push na `main` albo ręcznie, ADR-15).
 - `cards`: testy na fixture'ach repo (małe pom.xml, application.yml, package.json) bez sieci.
 - `agents`: detektory stanu testowane na nagraniach `.cast` z prawdziwych sesji Copilot CLI; nagrania zanonimizowane trafiają do repo jako fixture'y.
 - `api`/`mcp`: kontrakt z `packages/protocol`, testy przez prawdziwy klient MCP SDK.
-- CI: `windows-latest` i `macos-latest`, kroki lint → test → build daemona (binarka) → build Tauri portable → artefakty. Wydanie z tagu (`release.yml`): GitHub Release powstaje dopiero po przejściu obu buildów, opis w `docs/release.md`.
+- CI (ADR-15): każdy PR i push na `main` przechodzi lint, `cargo fmt`, typecheck i testy na `ubuntu-latest` oraz audyt zależności. Push na `main` i ręczne uruchomienie (`workflow_dispatch`, także na gałęzi PR) dokładają po zielonym Linuksie job `desktop` na `windows-latest` i `macos-latest`: test → build daemona (binarka) → build Tauri portable → artefakty → spike'i. Zmiany tylko w Markdownie i `docs/` nie uruchamiają CI, a nowy push przerywa poprzedni przebieg tej gałęzi, także na `main`. Wydanie z tagu (`release.yml`): GitHub Release powstaje dopiero po przejściu obu buildów, opis w `docs/release.md`.
 
 ## 11. Kamienie milowe (mapowanie na kolejność prac)
 
@@ -335,6 +335,8 @@ Trwałość: SQLite (`~/.trackwall/trackwall.db`) dla repos, cards, edges (cache
 **ADR-13 `workspace.yaml` w katalogu stanu daemona, do czasu wyboru workspace.** (2026-10-23) Lista repo jest w `<katalog stanu>/workspace.yaml` (`~/.trackwall/workspace.yaml`). Dzięki temu pierwsza wersja nie potrzebuje ekranu wyboru workspace, a plik ma już docelowy format i można go przenieść. Odwróci to wybór katalogu workspace w UI (np. prywatne repo z konfiguracją): wtedy daemon dostaje ścieżkę do pliku, a w katalogu stanu zostaje tylko wskazanie na niego.
 
 **ADR-14 Przeglądanie repo z commita HEAD, nie z katalogu roboczego.** (2026-10-23) Drzewo plików, README i podgląd czytają obiekty gita (`ls-tree`, `cat-file`). Ścieżka z UI nie dotyka systemu plików, więc nie ma ryzyka wyjścia poza repo, dowiązań symbolicznych, plików zablokowanych przez procesy ani przypadkowego pokazania sekretów z ignorowanych plików (`.env`). Kosztem jest to, że niezacommitowanych zmian w przeglądarce nie widać; pokazuje je liczba zmian w stanie repo, a docelowo diff (Monaco). Odwróci to potrzeba edycji plików w UI albo podglądu katalogu roboczego; wtedy osobna trasa z walidacją ścieżki względem korzenia.
+
+**ADR-15 CI przy PR tylko na Linuksie, Windows i macOS na `main`, ręcznie i przy wydaniu.** (2026-10-23) W prywatnym repo minuta runnera Windows liczy się w limicie GitHub Actions podwójnie, a macOS dziesięciokrotnie, a pełna macierz przy każdym PR i pushu wyczerpała limit. Błąd specyficzny dla systemu w PR bez ręcznego przebiegu wychodzi najpóźniej na `main`, a wydanie (`release.yml`) uruchamia testy na obu systemach przed publikacją. Odwróci to upublicznienie repo (standardowe runnery są wtedy bez limitu) albo własny runner: wtedy macierz Windows + macOS wraca do każdego PR.
 
 ## 13. Pytania otwarte
 
