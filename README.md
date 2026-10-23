@@ -23,12 +23,16 @@ Przeglądanie repo: w zakładce „Repo” dodajesz lokalny katalog z gitem (pe�
 | `packages/protocol` | typy i schematy zod wspólne dla daemona, UI i CLI |
 | `packages/daemon` | daemon (Bun, kod zgodny z Node), budowany do jednej binarki |
 | `packages/ui` | React + Tailwind + shadcn/ui, Vite |
-| `apps/desktop` | powłoka Tauri 2: okno, tray, start i zatrzymanie daemona |
+| `apps/desktop` | powłoka Tauri 2: okno (półprzezroczyste, ADR-11), tray, start i zatrzymanie daemona |
 | `spikes/` | eksperymenty etapu 1, nie trafiają do aplikacji |
 
 ## Uruchomienie ze źródeł
 
-Wymagane: Node 22.12+, pnpm 10, Bun 1.4, a dla aplikacji desktopowej Rust (wersje w `mise.toml`, `mise install` je ustawia).
+Wymagane: Node 22.12+, pnpm 10, Bun 1.4, a dla aplikacji desktopowej Rust (wersje w `mise.toml`, `mise install` je ustawia). Na Windowsie aplikacja desktopowa wymaga też Visual Studio Build Tools z obciążeniem „Desktop development with C++”, których mise nie instaluje.
+
+Z mise: `mise install`, potem `mise run dev` (zależności i tryb deweloperski) albo `mise run portable` (zależności i portable build do `out/`); `mise run setup` instaluje same zależności, `mise tasks` pokazuje listę.
+
+Na Windowsie bez Build Tools Rust znajduje inny `link.exe` z PATH (np. z coreutils albo Git) i build Tauri kończy się błędem linkera. UI w przeglądarce (`pnpm dev`) działa bez nich.
 
 ```sh
 pnpm install
@@ -45,6 +49,8 @@ pnpm build
 bun packages/daemon/src/main.ts --ui
 ```
 
+Ten sam daemon działa też pod samym Node, bez Bun (ADR-1): `pnpm --filter @pitwall/ui build`, potem `pnpm --filter @pitwall/daemon start:node`.
+
 ## Portable build
 
 ```sh
@@ -57,3 +63,7 @@ Windows: zip zawiera `pitwall.exe`, `pitwall-daemon.exe` i `ui/`. Rozpakowanie i
 macOS: zip zawiera niepodpisany `Pitwall.app`; pierwsze uruchomienie przez prawy klik > Otwórz albo `xattr -dr com.apple.quarantine Pitwall.app`.
 
 Każdy przebieg CI publikuje oba archiwa jako artefakty.
+
+## Licencja i bezpieczeństwo
+
+Kod jest na licencji MIT (`LICENSE`). Podatności zgłaszaj prywatnie według `SECURITY.md`.

@@ -17,7 +17,7 @@ export interface LoopbackOptions {
 /**
  * Żądanie HTTP do procesu na 127.0.0.1 przez `node:http`, nie `fetch`.
  * `fetch` w Bun kieruje także adresy loopback przez `HTTP_PROXY`, jeśli `NO_PROXY` nie wymienia 127.0.0.1,
- * co na firmowym komputerze z proxy wyglądałoby jak „daemon nie działa”.
+ * co na komputerze z proxy wyglądałoby jak „daemon nie działa”.
  */
 export function loopbackRequest(port: number, path: string, opts: LoopbackOptions = {}): Promise<LoopbackResponse> {
   return new Promise((resolve, reject) => {

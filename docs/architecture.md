@@ -54,7 +54,7 @@ Daemon można też uruchomić bez Tauri (`pitwall-daemon --ui`), co daje tryb �
 pitwall/
   package.json            pnpm workspaces, skrypty root
   pnpm-workspace.yaml
-  mise.toml               wersje narzędzi dla samego projektu (node/bun, pnpm, rust)
+  mise.toml               wersje narzędzi dla samego projektu (node/bun, pnpm, rust) i taski setup, dev, portable
   packages/
     protocol/             typy zdarzeń, DTO, schemat JSON API (zod); zero zależności runtime
     daemon/               binarka daemona; src/ podzielone na moduły z §4
@@ -186,7 +186,7 @@ Zasoby MCP (`resources`) udostępniają kartę repo i aktualny snapshot grafu ja
 
 ### 5.4 Tauri ↔ daemon
 
-Tauri uruchamia daemon jako sidecar z argumentem `--parent <pid>`, czeka na `/api/health`, pokazuje ekran powitalny, a po niepowodzeniu dialog z logiem startu. Zamknięcie okna chowa je do traya. „Wyjdź” z traya wysyła `POST /api/daemon/shutdown`, daemon zatrzymuje serwisy i sesje tym samym łagodnym stopem co Ctrl-C, a Tauri czeka na zakończenie. Daemon sam nie kończy się po śmierci rodzica (tryb „działa przy zamkniętym oknie”), ale sprawdza `--parent` tylko po to, żeby odróżnić start z Tauri od ręcznego.
+Tauri uruchamia daemon jako sidecar z argumentem `--parent <pid>`, czeka na `/api/health`, pokazuje ekran powitalny, a po niepowodzeniu dialog z logiem startu. Okno pokazuje się dopiero po załadowaniu UI, z już ustawionym efektem tła (ADR-11). Zamknięcie okna chowa je do traya. „Wyjdź” z traya wysyła `POST /api/daemon/shutdown`, daemon zatrzymuje serwisy i sesje tym samym łagodnym stopem co Ctrl-C, a Tauri czeka na zakończenie. Daemon sam nie kończy się po śmierci rodzica (tryb „działa przy zamkniętym oknie”), ale sprawdza `--parent` tylko po to, żeby odróżnić start z Tauri od ręcznego.
 
 ### 5.5 Daemon ↔ scena 3D
 
@@ -275,7 +275,7 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 - Zmienne środowiskowe nigdy nie trafiają do logów ani do audytu; maskowanie wartości przed buforem.
 - Autostart i „podłącz agenta” tylko z UI; agent nie ma narzędzia do zmiany konfiguracji daemona.
 - Jeśli kiedyś pojawią się narzędzia bazodanowe, rola bez superużytkownika i transakcja tylko do odczytu.
-- Przed publikacją repo: `SECURITY.md` z kanałem zgłaszania podatności (prywatne zgłoszenia na GitHubie włącza właściciel w ustawieniach repo).
+- Podatności zgłasza się prywatnie według `SECURITY.md` (GitHub Security Advisories).
 
 ## 9. Windows: ryzyka i jak je sprawdzamy wcześnie
 
@@ -284,11 +284,11 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 | Job Objects z Bun/Node | brak natywnego API; trzeba N-API lub `koffi`; proces potomny już w innym jobie (np. uruchomiony z terminala VS Code) nie da się dodać bez `JOB_OBJECT_LIMIT_BREAKAWAY_OK` | spike w etapie 1: moduł `procs` z testem „zabij drzewo mise→mvn→java” |
 | ConPTY + `node-pty` w Bun | natywny addon może nie działać pod Bun; `bun build --compile` nie osadza `.node` | spike w etapie 1; plan B: Node 22 + SEA, plan C: PTY po stronie Rust w Tauri (`portable-pty`) z mostem do daemona |
 | Łagodny stop na Windowsie | brak SIGTERM; `GenerateConsoleCtrlEvent` wymaga wspólnej konsoli; `taskkill` zgłasza sukces przy żywym procesie | stop zawsze potwierdzany obserwacją; dla Spring Boot dodatkowo `POST /actuator/shutdown`, jeśli włączone |
-| Wykrywanie stanu Copilot CLI | brak hooków lub inne sekwencje na Windowsie; ekran ConPTY różni się od Unixa | etap 2, prototyp na firmowym komputerze; wzorce ekranu zbierane z nagrań sesji |
-| Portable exe | WebView2 może nie być zainstalowany; SmartScreen i AppLocker blokują niepodpisany plik; autoaktualizacja musi podmienić działający plik | etap 1: build z `tauri.conf` → bundle `none` + sprawdzenie WebView2 przy starcie; test na firmowym komputerze; podpis Azure Trusted Signing przed publikacją |
+| Wykrywanie stanu Copilot CLI | brak hooków lub inne sekwencje na Windowsie; ekran ConPTY różni się od Unixa | etap 2, prototyp na prawdziwym Windowsie; wzorce ekranu zbierane z nagrań sesji |
+| Portable exe | WebView2 może nie być zainstalowany; SmartScreen blokuje niepodpisany plik; autoaktualizacja musi podmienić działający plik | etap 1: build z `tauri.conf` → bundle `none` + sprawdzenie WebView2 przy starcie; test na prawdziwym Windowsie; podpis Azure Trusted Signing przed publikacją |
 | Długie ścieżki i blokady plików | worktree pod `.worktrees` przekracza 260 znaków; `git worktree remove` nie usuwa plików trzymanych przez proces | `\\?\` i `core.longpaths`; usuwanie worktree dopiero po potwierdzonym stopie grupy |
 | Port → właściciel | `netstat`/`Get-NetTCPConnection` wolne; PID bez drzewa | `GetExtendedTcpTable` przez N-API, drzewo z `runtime.json` i Job Object |
-| Antywirus / EDR firmowy | losowe spowolnienia, kwarantanna daemona | portable bez pakowania UPX, wczesny test na firmowym komputerze |
+| Antywirus / EDR | losowe spowolnienia, kwarantanna daemona | portable bez pakowania UPX, wczesny test na prawdziwym Windowsie |
 
 ## 10. Testy i CI
 
@@ -301,14 +301,14 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 ## 11. Kamienie milowe (mapowanie na kolejność prac)
 
 1. **Szkielet**: monorepo, `protocol`, daemon z `/api/health`, UI z jednym panelem, Tauri portable na Win i mac, CI. Spike'i: Job Objects, ConPTY/node-pty pod Bun. Wynik: decyzja Bun vs Node (ADR-1 potwierdzony lub odwrócony).
-2. **Prototyp Copilot CLI**: PTY w daemonie, xterm w UI, detektory stanu, test na firmowym komputerze. Wynik: które źródła stanu działają i z jaką pewnością.
+2. **Prototyp Copilot CLI**: PTY w daemonie, xterm w UI, detektory stanu, test na prawdziwym Windowsie. Wynik: które źródła stanu działają i z jaką pewnością.
 3. **Workspace**: `workspace.yaml`, sync, generator mise, `procs` + `logs` w pełni, zakładka Serwisy i Zadania, `ws` CLI.
 4. **Wiedza**: ekstraktory kart, graf, serwer MCP z narzędziami z §5.3, audyt.
 5. **Dopełnienie**: scena 3D, dzierżawy, `trace`, sekrety w wersji docelowej (sops + age).
 
 ## 12. Decyzje (ADR w skrócie)
 
-**ADR-1 Runtime daemona: Bun, z zachowaniem zgodności z Node.** Bun daje `bun build --compile` do jednej binarki i wbudowane SQLite. Kod pisany tak, by działał też pod Node 22 (`node:` API, bez API specyficznych dla Bun poza warstwą `platform/`). Jeśli spike z etapu 1 pokaże, że ConPTY lub Job Objects nie działają pod Bun, przechodzimy na Node 22 + SEA bez zmian w modułach. Doprecyzowanie (2026-10-23): „działa pod Node” znaczy `node packages/daemon/src/main.ts` bez flag, czyli z wbudowanym usuwaniem typów (Node 22.18+, stąd `engines` w `package.json`); dlatego kod daemona nie używa składni TypeScriptu wymagającej transformacji (właściwości w parametrach konstruktora, `enum`, `namespace`), Biome tego pilnuje, a test `node-compat` ładuje daemon pod Node.
+**ADR-1 Runtime daemona: Bun, z zachowaniem zgodności z Node.** Bun daje `bun build --compile` do jednej binarki i wbudowane SQLite. Kod pisany tak, by działał też pod Node 22 (`node:` API, bez API specyficznych dla Bun poza warstwą `platform/`). Jeśli spike z etapu 1 pokaże, że ConPTY lub Job Objects nie działają pod Bun, przechodzimy na Node 22 + SEA bez zmian w modułach. Uzupełnienie (2026-10-23): zgodności z Node pilnuje narzędzie, bo bez tego się rozjechała (właściwość w parametrze konstruktora w `api/guard.ts` blokowała start pod Node). Daemon i `protocol` mają `erasableSyntaxOnly` i wymagane rozszerzenia w importach, API Bun poza `platform/` odrzuca Biome, a testy procesu daemona idą pod Bun i pod Node z flagami ze skryptu `start:node` (Node 22.12+ uruchamia kod źródłowy bez kompilacji).
 
 **ADR-2 Transport UI: HTTP + WebSocket, nie tylko IPC Tauri.** Dzięki temu ten sam UI działa w przeglądarce (etap 1) i w Tauri, a `ws` CLI i testy używają tego samego API. Tauri IPC zostaje dla spraw natywnych: tray, autostart, token.
 
@@ -328,10 +328,12 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 
 **ADR-10 Repo sekretów trzyma manifesty k8s `Secret`.** (2026-10-23) Gałąź `origin/<repo>` zawiera pliki YAML `kind: Secret`; `secrets.resolve` czyta `data` (base64) i `stringData` (jawny tekst) i mapuje klucze na zmienne środowiskowe 1:1. Nazwy kluczy są porównywane z `runtime.secretNames` z karty repo, stąd `check_secrets`. Docelowe szyfrowanie sops + age nie zmienia formatu, tylko dodaje krok odszyfrowania przed parsowaniem.
 
+**ADR-11 Półprzezroczyste okno z efektem systemowym, nieprzezroczyste tło jako fallback.** (2026-10-23) Okno Tauri jest przezroczyste (`transparent`, motyw `Dark`), a powłoka w `setup` próbuje efektów po kolei przez `window-vibrancy`: na Windows Mica (Windows 11), potem Acrylic (Windows 10 1809+), na macOS vibrancy `UnderWindowBackground`. Po załadowaniu strony powłoka ustawia na `<html>` atrybut `data-window-effect` z nazwą przyjętego efektu i pokazuje okno (startuje z `visible: false`) dopiero po wykonaniu tego skryptu, więc przy starcie nie miga nieprzezroczyste tło; gdyby strona nie zgłosiła końca ładowania, okno pokazuje się po 10 s. Odświeżenie strony (F5) maluje ją nieprzezroczyście do końca ładowania, co zostawiamy jako rzadki przypadek. Atrybut zdejmuje tło strony i robi powierzchnie półprzezroczystymi; bez niego (brak efektu, przeglądarka) UI zostaje nieprzezroczyste, a `prefers-reduced-transparency` przywraca nieprzezroczystość także przy działającym efekcie. `set_effects` z Tauri odpada, bo bierze tylko pierwszy efekt z listy i nie mówi, czy się udał. `macOSPrivateApi` nie jest potrzebne: od Tauri 2.12.1 (dolna granica w `Cargo.toml`) przezroczystość na macOS działa bez tej flagi. Odwróciłoby to zauważalne przycinanie Acrylic przy przeciąganiu okna na Windows 10 (wtedy Windows 10 dostaje nieprzezroczyste tło) albo słaba czytelność na jasnych tapetach (wtedy mniejsza przezroczystość powierzchni).
+
 **ADR-12 `workspace.yaml` w katalogu stanu daemona, do czasu wyboru workspace.** (2026-10-23) Lista repo jest w `<katalog stanu>/workspace.yaml` (`~/.pitwall/workspace.yaml`). Dzięki temu pierwsza wersja nie potrzebuje ekranu wyboru workspace, a plik ma już docelowy format i można go przenieść. Odwróci to wybór katalogu workspace w UI (np. prywatne repo z konfiguracją): wtedy daemon dostaje ścieżkę do pliku, a w katalogu stanu zostaje tylko wskazanie na niego.
 
 **ADR-13 Przeglądanie repo z commita HEAD, nie z katalogu roboczego.** (2026-10-23) Drzewo plików, README i podgląd czytają obiekty gita (`ls-tree`, `cat-file`). Ścieżka z UI nie dotyka systemu plików, więc nie ma ryzyka wyjścia poza repo, dowiązań symbolicznych, plików zablokowanych przez procesy ani przypadkowego pokazania sekretów z ignorowanych plików (`.env`). Kosztem jest to, że niezacommitowanych zmian w przeglądarce nie widać; pokazuje je liczba zmian w stanie repo, a docelowo diff (Monaco). Odwróci to potrzeba edycji plików w UI albo podglądu katalogu roboczego; wtedy osobna trasa z walidacją ścieżki względem korzenia.
 
 ## 13. Pytania otwarte
 
-Wszystkie pytania z wizji zostały rozstrzygnięte 2026-10-23 (ADR-8, ADR-9, ADR-10). Prototyp z etapu 2 może być uruchamiany na firmowym komputerze, gdzie Copilot CLI jest dostępny.
+Wszystkie pytania z wizji zostały rozstrzygnięte 2026-10-23 (ADR-8, ADR-9, ADR-10).

@@ -11,7 +11,7 @@ W tym pliku „agent” to agent piszący kod Pitwall. Agent uruchamiany przez P
 Zmiana jest gotowa, gdy spełnia wszystkie punkty, a nie wtedy, gdy się kompiluje:
 
 1. **Działa i ma test** na najtańszym poziomie, który to udowadnia: test w katalogu `test/` paczki (`bun test`), test z prawdziwym procesem potomnym dla `procs` i `logs`, `cargo test` dla powłoki Tauri. Poprawka błędu zaczyna się od testu, który bez niej nie przechodzi.
-2. **Działa na Windowsie i macOS.** Kod zależny od systemu ma test, który CI uruchamia w macierzy `windows-latest` + `macos-latest`. Czego nie da się sprawdzić w CI (WebView2, SmartScreen, firmowy komputer), wypisz w PR jako „do sprawdzenia ręcznie”.
+2. **Działa na Windowsie i macOS.** Kod zależny od systemu ma test, który CI uruchamia w macierzy `windows-latest` + `macos-latest`. Czego nie da się sprawdzić w CI (WebView2, SmartScreen, prawdziwy Windows poza CI), wypisz w PR jako „do sprawdzenia ręcznie”.
 3. **Lokalnie przechodzą** `pnpm lint`, `pnpm typecheck` i `pnpm test`, a gdy zmiana dotyka `apps/desktop`, buildu daemona albo pakowania, także kroki joba `desktop` z `.github/workflows/ci.yml` (sekcja „Komendy”). CI potwierdza, a nie szuka błędów.
 4. **Dokumentacja opisuje nowe zachowanie w tym samym PR** (sekcja „Dokumentacja”).
 5. **Nic firmowego** w kodzie, testach, fixture'ach, dokumentacji i commitach (sekcja „Nic firmowego w repo”).
@@ -78,10 +78,11 @@ Repo ma zostać opublikowane jako open source (nagłówek `docs/architecture.md`
 - **Zależności npm w dokładnych wersjach** (bez `^` i `~`; `.npmrc` ma `save-exact=true`, więc `pnpm add` tego pilnuje). Nie dodawaj zależności do czegoś, co załatwia kilka linii kodu. Natywny addon wymaga sprawdzenia, że działa w `bun build --compile` na obu systemach (patrz `spikes/`).
 - **Testy czytają się jak dokumentacja**: nazwa testu to zdanie opisujące zachowanie, a test pokazuje wejście i oczekiwany wynik bez helperów, które je ukrywają.
 - **Reguły egzekwuje narzędzie wszędzie, gdzie się da**: reguła w linterze trzyma lepiej niż zdanie w tym pliku. Gdy powtarzasz tę samą uwagę w przeglądzie, zamień ją w regułę. Dziś pilnują:
-  - Biome (`biome.json`): zestaw `recommended` oraz zakaz `!`, `any`, `enum`, `namespace` i właściwości w parametrach konstruktora (Node 22 usuwa typy bez transformacji i ich nie obsługuje, a daemon ma działać pod Node, ADR-1), limit złożoności funkcji (15), cykle importów, nieobsłużone obietnice, nazwy plików w kebab-case (PascalCase tylko dla `.tsx` w `packages/ui/src`), import `@pitwall/daemon` tylko w daemonie, moduły Node (`node:*`) zakazane w `packages/protocol/src` i `packages/ui/src`, granice modułów daemona (§4: moduł nie importuje sąsiedniego modułu, a kod poza `src/modules` sięga do nich tylko przez `src/facade.ts`);
+  - Biome (`biome.json`): zestaw `recommended` oraz zakaz `!` i `any`, limit złożoności funkcji (15), cykle importów, nieobsłużone obietnice, nazwy plików w kebab-case (PascalCase tylko dla `.tsx` w `packages/ui/src`), import `@pitwall/daemon` tylko w daemonie, moduły Node (`node:*`) zakazane w `packages/protocol/src` i `packages/ui/src`, granice modułów daemona (§4: moduł nie importuje sąsiedniego modułu, a kod poza `src/modules` sięga do nich tylko przez `src/facade.ts`);
   - knip (`knip.json`): nieużywane pliki, eksporty i zależności;
   - `rustfmt.toml` i `cargo clippy -D warnings` dla powłoki Tauri;
-  - test `apps/desktop/test/toolchain.test.ts`: te same wersje narzędzi w `mise.toml` i workflow.
+  - test `apps/desktop/test/toolchain.test.ts`: te same wersje narzędzi w `mise.toml` i workflow;
+  - zgodność daemona z Node (ADR-1): `erasableSyntaxOnly` w `tsconfig.json` daemona i `protocol`, w Biome `useImportExtensions` w ich `src` i zakaz API Bun w daemonie poza `platform/`, testy procesu daemona pod Bun i pod Node.
 
   Rzutowań `as` na danych z zewnątrz nie pilnuje narzędzie, więc tego pilnuje przegląd.
 
@@ -103,7 +104,7 @@ bun packages/daemon/scripts/smoke.ts apps/desktop/src-tauri/target/release/pitwa
 pnpm portable
 ```
 
-Wersje narzędzi są w `mise.toml` (`mise install`). Workflow mają je w `env`, a akcja `.github/actions/setup` instaluje je w jobach, które budują i testują (audyt potrzebuje tylko pnpm i Node); zmiana wersji idzie w `mise.toml` i obu workflow naraz (pilnuje tego test).
+Wersje narzędzi są w `mise.toml` (`mise install`), tam też taski `setup`, `dev` i `portable`. Workflow mają je w `env`, a akcja `.github/actions/setup` instaluje je w jobach, które budują i testują (audyt potrzebuje tylko pnpm i Node); zmiana wersji idzie w `mise.toml` i obu workflow naraz (pilnuje tego test).
 
 ## Commity i PR
 
