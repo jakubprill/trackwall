@@ -8,6 +8,7 @@ import WebSocket from "ws";
 import { type ApiServer, startApi } from "../src/api/server.ts";
 import { createFacade, type Facade } from "../src/facade.ts";
 import { loopbackRequest } from "../src/loopback.ts";
+import { createMcpEndpoint } from "../src/mcp/endpoint.ts";
 import { makeRepo } from "./support/git-repo.ts";
 
 const TOKEN = "p".repeat(43);
@@ -27,6 +28,7 @@ beforeAll(async () => {
     miseCommand: ["mise"],
     copilotCommand: [process.execPath, fakeCopilot],
     hookCommand: (event, hooksFile) => ({ exec: process.execPath, args: ["--no-env-file", daemonMain, "copilot-hook", event, hooksFile] }),
+    mcpStdioCommand: ["trackwall-daemon", "mcp-stdio"],
     userEnv: async () => process.env,
     log: () => {},
   });
@@ -38,6 +40,7 @@ beforeAll(async () => {
     },
     onShutdown: () => {},
     facade,
+    mcp: createMcpEndpoint({ facade, version: "test", log: () => {} }),
   });
 });
 

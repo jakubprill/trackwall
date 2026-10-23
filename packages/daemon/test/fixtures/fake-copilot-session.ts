@@ -22,13 +22,18 @@ const pluginDir = process.argv[dirIndex + 1];
 if (dirIndex < 0 || !pluginDir) throw new Error("brak --plugin-dir");
 const { hooks } = HooksFile.parse(JSON.parse(readFileSync(join(pluginDir, "hooks.json"), "utf8")));
 
+/** Serwery MCP z `--additional-mcp-config @<plik>`, jak w Copilot CLI; atrapa tylko wypisuje ich nazwy. */
+const McpConfig = z.object({ mcpServers: z.record(z.string(), z.object({ command: z.string() })) });
+const mcpArg = process.argv[process.argv.indexOf("--additional-mcp-config") + 1] ?? "";
+const mcpServers = mcpArg.startsWith("@") ? Object.keys(McpConfig.parse(JSON.parse(readFileSync(mcpArg.slice(1), "utf8"))).mcpServers) : [];
+
 function fire(event: string, payload: Record<string, unknown>): void {
   for (const hook of hooks[event] ?? []) {
     spawnSync(hook.exec, hook.args, { cwd: hook.cwd, input: JSON.stringify({ sessionId: "s1", timestamp: Date.now(), ...payload }) });
   }
 }
 
-process.stdout.write(`\x1b]0;Atrapa Copilot\x07Witaj w atrapie, katalog ${process.cwd()}\r\n> `);
+process.stdout.write(`\x1b]0;Atrapa Copilot\x07Witaj w atrapie, katalog ${process.cwd()}, MCP: ${mcpServers.join(", ")}\r\n> `);
 fire("sessionStart", { source: "new" });
 
 let awaitingApproval = false;

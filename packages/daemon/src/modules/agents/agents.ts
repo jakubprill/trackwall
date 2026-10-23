@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { RunState, Session, SessionList } from "@trackwall/protocol";
+import { copilotMcpServers, type RunState, type Session, type SessionList } from "@trackwall/protocol";
 import { DomainError, SpawnFailure } from "../../errors.ts";
 import { findCopilot } from "./copilot-command.ts";
 import type { CopilotHookEvent } from "./copilot-hook-record.ts";
@@ -21,6 +21,8 @@ const INITIAL_COLS = 120;
 const INITIAL_ROWS = 30;
 /** Jak często sesje czytają rekordy hooków i sprawdzają koniec procesu. */
 const TICK_MS = 200;
+/** Konfiguracja MCP sesji w katalogu sesji; plik zamiast JSON w argumencie, żeby cudzysłowy JSON-u nie zależały od cytowania argumentów na Windowsie. */
+const MCP_CONFIG_FILE = "mcp-config.json";
 
 /** Czego `agents` potrzebuje od `procs`; podłączane w fasadzie. */
 interface AgentsProcs {
@@ -53,6 +55,8 @@ export interface AgentsDeps {
   env: () => Promise<NodeJS.ProcessEnv>;
   /** Program hooka wtyczki sesji dla zdarzenia: daemon z podkomendą `copilot-hook` (bez `cwd`, ustala je moduł). */
   hookCommand: (event: CopilotHookEvent, hooksFile: string) => Omit<HookCommand, "cwd">;
+  /** Most stdio do serwera MCP daemona (§5.3): każda sesja dostaje serwer `trackwall` przez `--additional-mcp-config`. */
+  mcpStdioCommand: readonly string[];
   log: (msg: string) => void;
 }
 
@@ -89,7 +93,7 @@ export class Agents {
     try {
       const { terminal } = await this.#deps.procs.startTerminal({
         owner: owner(id),
-        command: [program, ...prefix, "--plugin-dir", join(dir, "plugin")],
+        command: [program, ...prefix, "--plugin-dir", join(dir, "plugin"), "--additional-mcp-config", `@${join(dir, MCP_CONFIG_FILE)}`],
         cwd,
         env,
         cols: INITIAL_COLS,
@@ -147,12 +151,13 @@ export class Agents {
     this.#timer = undefined;
   }
 
-  /** Katalog sesji z wtyczką sesji i pustym `hooks.jsonl`, zanim Copilot CLI wystartuje. */
+  /** Katalog sesji z wtyczką sesji, konfiguracją MCP i pustym `hooks.jsonl`, zanim Copilot CLI wystartuje. */
   #prepare(id: string, repo: string, dir: string): LiveSession {
     const pluginDir = join(dir, "plugin");
     const hooksFile = join(dir, "hooks.jsonl");
     mkdirSync(dir, { recursive: true });
     writeFileSync(hooksFile, "");
+    writeFileSync(join(dir, MCP_CONFIG_FILE), JSON.stringify(copilotMcpServers(this.#deps.mcpStdioCommand), null, 2));
     writeCopilotPlugin(pluginDir, (event) => ({ ...this.#deps.hookCommand(event, hooksFile), cwd: pluginDir }));
     return new LiveSession({ id, repo, cols: INITIAL_COLS, rows: INITIAL_ROWS, hooksFile, run: () => this.#deps.procs.state(owner(id)) });
   }

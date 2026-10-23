@@ -5,10 +5,13 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
-import { COPILOT_HOOK_COMMAND, type CommandLine, type DaemonArgs, parseCommandLine, USAGE } from "./args.ts";
+import { COPILOT_HOOK_COMMAND, type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./args.ts";
 import { newToken, probeRunningDaemon, removeDaemonFile, watchDaemonFile, withStartLock, writeDaemonFile } from "./discovery.ts";
 import { createFacade, type Facade, runCopilotHook } from "./facade.ts";
 import { trackwallHome } from "./home.ts";
+import { createMcpEndpoint } from "./mcp/endpoint.ts";
+import { runStdioBridge } from "./mcp/stdio-bridge.ts";
+import { mcpStdioCommand } from "./mcp/stdio-command.ts";
 import { openBrowser } from "./open-browser.ts";
 import { runtimeInfo } from "./platform/runtime.ts";
 import { selfCommand } from "./self-command.ts";
@@ -54,6 +57,7 @@ async function main(args: DaemonArgs): Promise<void> {
       miseCommand: ["mise"],
       copilotCommand: ["copilot"],
       hookCommand: (event, hooksFile) => selfCommand([COPILOT_HOOK_COMMAND, event, hooksFile]),
+      mcpStdioCommand: mcpStdioCommand(home),
       userEnv,
       log,
     });
@@ -76,9 +80,11 @@ async function main(args: DaemonArgs): Promise<void> {
           runtime: runtimeInfo(),
           launchedBy: args.parent === undefined ? "manual" : "desktop",
           home,
+          mcpStdioCommand: mcpStdioCommand(home),
         }),
         onShutdown: () => void shutdown("POST /api/daemon/shutdown"),
         facade,
+        mcp: createMcpEndpoint({ facade, version: VERSION, log: (msg) => log(`[mcp] ${msg}`) }),
       },
       args.port,
     );
@@ -143,7 +149,9 @@ try {
   process.stderr.write(`${(err as Error).message}\n\n${USAGE}`);
   process.exit(EXIT_USAGE);
 }
-if (commandLine.command === COPILOT_HOOK_COMMAND) {
+if (commandLine.command === MCP_STDIO_COMMAND) {
+  runMcpStdio(trackwallHome(commandLine.home));
+} else if (commandLine.command === COPILOT_HOOK_COMMAND) {
   runHook(commandLine.event, commandLine.hooksFile);
 } else if (commandLine.args.help) {
   process.stdout.write(USAGE);
@@ -153,6 +161,18 @@ if (commandLine.command === COPILOT_HOOK_COMMAND) {
   main(commandLine.args).catch((err: unknown) => {
     process.stderr.write(`[daemon] błąd startu: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
     process.exit(1);
+  });
+}
+
+/**
+ * Most stdio do serwera MCP działającego daemona. stdout należy do protokołu MCP, więc komunikaty mostu idą tylko na
+ * stderr; proces kończy się sam po opróżnieniu stdout (`process.exit` ucięłoby odpowiedzi czekające w buforze rury).
+ */
+function runMcpStdio(home: string): void {
+  const log = (msg: string) => process.stderr.write(`[mcp-stdio] ${msg}\n`);
+  runStdioBridge({ home, input: process.stdin, output: process.stdout, log }).catch((err: unknown) => {
+    log(String(err));
+    process.exitCode = 1;
   });
 }
 

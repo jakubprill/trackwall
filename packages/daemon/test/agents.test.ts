@@ -35,6 +35,7 @@ function makeAgents(repoDir: string) {
     copilot: [process.execPath, fakeCopilot],
     env: async () => process.env,
     hookCommand: (event, hooksFile) => ({ exec: process.execPath, args: ["--no-env-file", daemonMain, "copilot-hook", event, hooksFile] }),
+    mcpStdioCommand: ["trackwall-daemon", "mcp-stdio"],
     log: () => {},
   });
   return { home, procs, agents };
@@ -76,7 +77,7 @@ afterAll(async () => {
 });
 
 describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziwy PTY, atrapa Copilot CLI)", () => {
-  test("sesja startuje w katalogu repo, stan idzie za hookami, a /exit kończy ją jako Done", async () => {
+  test("sesja startuje w katalogu repo z serwerem MCP Trackwall, stan idzie za hookami, a /exit kończy ją jako Done", async () => {
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
     const { agents, procs } = makeAgents(repoDir);
     cleanups.push(() => procs.stopAll());
@@ -91,6 +92,7 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
     const window = viewer(agents, started.id);
     await waitFor(agents, started.id, () => window.text().includes("Witaj w atrapie"), "obraz ekranu");
     expect(window.text()).toContain(repoDir);
+    expect(window.text()).toContain("MCP: trackwall");
 
     window.attachment.input("napraw test\r");
     const approval = await waitFor(agents, started.id, (s) => s.state?.state === "Approval", "prośba o zgodę");
@@ -165,6 +167,7 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
       copilot: ["copilot-ktorego-nie-ma"],
       env: async () => ({ PATH: repoDir }),
       hookCommand: () => ({ exec: "nieuzywane", args: [] }),
+      mcpStdioCommand: ["nieuzywane"],
       log: () => {},
     });
     await expect(missing.start("sklep")).rejects.toMatchObject({ code: "agent_unavailable" });

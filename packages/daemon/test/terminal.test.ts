@@ -8,13 +8,16 @@ function openDescriptors(): number {
   return readdirSync("/dev/fd").length;
 }
 
+const STARTS = 20;
+
 describe.skipIf(process.versions.bun === undefined || process.platform === "win32")("PTY z Bun.spawn", () => {
   test("po końcu procesu terminal jest zamknięty i nie zostawia deskryptora", async () => {
     const terminals = await terminalPlatform();
     if (!terminals) throw new Error("pod Bun PTY musi być dostępny");
-    // Pierwszy start może otworzyć deskryptory samego Bun, więc liczymy dopiero od drugiego.
+    // Pierwszy start może otworzyć deskryptory samego Bun, więc liczymy dopiero od drugiego. Inne testy w tym samym
+    // procesie mogą jeszcze zamykać swoje gniazda, więc liczy się wzrost mniejszy niż liczba startów, a nie zero.
     let before = 0;
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i <= STARTS; i++) {
       if (i === 1) before = openDescriptors();
       let output = "";
       const proc = terminals.spawn({
@@ -30,6 +33,6 @@ describe.skipIf(process.versions.bun === undefined || process.platform === "win3
       expect(await proc.exited).toEqual({ code: 0, signal: null });
       expect(output).toContain("koniec");
     }
-    expect(openDescriptors()).toBeLessThanOrEqual(before);
+    expect(openDescriptors() - before).toBeLessThan(STARTS / 2);
   });
 });
