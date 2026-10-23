@@ -1,61 +1,55 @@
-import { type Repo, RepoResult, ReposResult, WORKSPACE_ROUTES } from "@pitwall/protocol";
+import { type Repo, workspaceApi } from "@pitwall/protocol";
 import { FolderGit2, Plus, RefreshCw } from "lucide-react";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
-import { Badge } from "@/components/ui/badge";
+import { type FormEvent, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { post } from "@/lib/api";
-import { type Connection, resolveConnection } from "@/lib/connection";
-import { changesLabel } from "@/lib/format";
+import { errorMessage, post } from "@/lib/api";
+import type { Connection } from "@/lib/connection";
 import { useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
 import { RepoDetail } from "./RepoDetail.tsx";
+import { RepoStatusBadges } from "./RepoStatusBadges.tsx";
 
-/** Stan repo pochodzi z gita przy każdym zapytaniu (§4 `workspace`), więc lista odświeża się cyklicznie. */
+/** Stan repo pochodzi z gita przy każdym zapytaniu (§4.5), więc lista jest odpytywana cyklicznie. */
 const POLL_MS = 10_000;
 
-export function ReposView() {
-  const [conn, setConn] = useState<Connection>();
-  const [connError, setConnError] = useState<string>();
+export function ReposView({ conn, onRetry }: { conn: Connection; onRetry: () => Promise<boolean> }) {
   const [selected, setSelected] = useState<string>();
+  const load = useCallback(() => post(conn, workspaceApi.list, {}), [conn]);
+  const list = useRemote(load, POLL_MS);
 
-  useEffect(() => {
-    resolveConnection().then(setConn, (err: unknown) => setConnError(String(err)));
-  }, []);
-
-  const load = useMemo(() => (conn ? () => post(conn, WORKSPACE_ROUTES.list, {}, ReposResult) : undefined), [conn]);
-  const { state, reload } = useRemote(load);
-
-  useEffect(() => {
-    const id = setInterval(reload, POLL_MS);
-    return () => clearInterval(id);
-  }, [reload]);
-
-  const repos = state.kind === "ok" ? state.data : [];
+  const repos = list.data ?? [];
   const current = repos.find((r) => r.id === selected) ?? repos[0];
+  const retry = () => {
+    onRetry().then((replaced) => replaced || list.reload(), list.reload);
+  };
 
   return (
-    <div className="grid h-full grid-cols-[18rem_1fr] min-h-0">
+    <div className="grid h-full min-h-0 grid-cols-[18rem_1fr]">
       <aside className="flex min-h-0 flex-col border-r">
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
           <h2 className="text-sm font-semibold">Repo</h2>
-          <Button variant="ghost" size="icon" onClick={reload} aria-label="Odśwież listę repo">
+          <Button variant="ghost" size="icon" onClick={list.reload} aria-label="Odśwież listę repo">
             <RefreshCw />
           </Button>
         </div>
-        {conn && (
-          <AddRepoForm
-            conn={conn}
-            onAdded={(repo) => {
-              setSelected(repo.id);
-              reload();
-            }}
-          />
-        )}
+        <AddRepoForm
+          conn={conn}
+          onAdded={(repo) => {
+            setSelected(repo.id);
+            list.reload();
+          }}
+        />
         <nav className="flex-1 overflow-y-auto px-2 pb-4">
-          {connError && <p className="text-destructive px-2 text-sm">{connError}</p>}
-          {state.kind === "error" && <p className="text-destructive px-2 text-sm break-words">{state.message}</p>}
-          {state.kind === "ok" && repos.length === 0 && (
+          {list.error && (
+            <div className="flex flex-col items-start gap-2 px-2 pb-2">
+              <p className="text-destructive text-sm break-words">{list.error}</p>
+              <Button variant="outline" size="sm" onClick={retry}>
+                Spróbuj ponownie
+              </Button>
+            </div>
+          )}
+          {list.data?.length === 0 && (
             <p className="text-muted-foreground px-2 text-sm">Dodaj pierwsze repo: wklej pełną ścieżkę do katalogu z gitem.</p>
           )}
           {repos.map((repo) => (
@@ -64,18 +58,20 @@ export function ReposView() {
         </nav>
       </aside>
       <section className="min-h-0 min-w-0 overflow-y-auto">
-        {conn && current ? (
+        {current ? (
           <RepoDetail
             key={current.id}
             conn={conn}
             repo={current}
             onRemoved={() => {
               setSelected(undefined);
-              reload();
+              list.reload();
             }}
           />
         ) : (
-          <EmptyDetail />
+          <div className="text-muted-foreground flex h-full items-center justify-center p-6 text-sm">
+            {list.loading ? "Wczytywanie…" : "Wybierz repo z listy albo dodaj nowe po lewej."}
+          </div>
         )}
       </section>
     </div>
@@ -92,10 +88,10 @@ function AddRepoForm({ conn, onAdded }: { conn: Connection; onAdded: (repo: Repo
     setBusy(true);
     setError(undefined);
     try {
-      onAdded(await post(conn, WORKSPACE_ROUTES.add, { path: path.trim() }, RepoResult));
+      onAdded(await post(conn, workspaceApi.add, { path: path.trim() }));
       setPath("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -121,7 +117,6 @@ function AddRepoForm({ conn, onAdded }: { conn: Connection; onAdded: (repo: Repo
 }
 
 function RepoListItem({ repo, active, onSelect }: { repo: Repo; active: boolean; onSelect: () => void }) {
-  const { status } = repo;
   return (
     <button
       type="button"
@@ -132,24 +127,9 @@ function RepoListItem({ repo, active, onSelect }: { repo: Repo; active: boolean;
         <FolderGit2 className="text-muted-foreground size-4 shrink-0" />
         <span className="truncate">{repo.id}</span>
       </span>
-      <span className="flex flex-wrap items-center gap-1 pl-6 text-xs">
-        {status.kind === "ok" ? (
-          <>
-            <span className="text-muted-foreground font-mono truncate">{status.branch ?? "odłączony HEAD"}</span>
-            {changesLabel(status.changes) && <Badge variant="secondary">{changesLabel(status.changes)}</Badge>}
-          </>
-        ) : (
-          <Badge variant="destructive">niedostępne</Badge>
-        )}
+      <span className="text-muted-foreground pl-6">
+        <RepoStatusBadges repo={repo} compact />
       </span>
     </button>
-  );
-}
-
-function EmptyDetail() {
-  return (
-    <div className="text-muted-foreground flex h-full items-center justify-center p-6 text-sm">
-      Wybierz repo z listy albo dodaj nowe po lewej.
-    </div>
   );
 }

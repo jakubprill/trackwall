@@ -4,8 +4,8 @@ import type { ApiResult, DaemonInfo, ErrorCode, Health } from "@pitwall/protocol
 import { DomainError } from "../errors.ts";
 import type { Facade } from "../facade.ts";
 import { hasValidToken, OriginPolicy } from "./guard.ts";
+import { postRoutes } from "./routes.ts";
 import { serveStatic } from "./static.ts";
-import { workspaceRoutes } from "./workspace-routes.ts";
 
 export interface ApiOptions {
   token: string;
@@ -109,8 +109,8 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
     res.once("finish", () => setImmediate(o.onShutdown));
     return;
   }
-  const post = req.method === "POST" ? workspaceRoutes[path] : undefined;
-  if (post) return ok(res, await post.handle(o.facade, await readJson(req)));
+  const post = req.method === "POST" ? postRoutes.get(path) : undefined;
+  if (post) return ok(res, await post(o.facade, await readJson(req)));
   return fail(res, "not_found", `no route ${req.method} ${path}`);
 }
 

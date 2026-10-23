@@ -112,8 +112,8 @@
               "options": {
                 "patterns": [
                   {
-                    "group": ["../*/**", "!../../**"],
-                    "message": "Moduł nie importuje innego modułu; zadeklaruj potrzebny interfejs, a fasada (src/facade.ts) poda moduł (AGENTS.md, §4)."
+                    "group": ["../*/**", "!../../*.ts", "!../../platform/**"],
+                    "message": "Moduł nie importuje innego modułu; zadeklaruj potrzebny interfejs, a fasada (src/facade.ts) poda moduł (AGENTS.md, §4). Z zewnątrz modułu wolno brać tylko pliki infrastruktury z src/ i src/platform/; moduł jest płaskim katalogiem."
                   }
                 ]
               }

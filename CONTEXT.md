@@ -46,7 +46,7 @@ Gałąź, ostatni commit, liczba zmian w katalogu roboczym i ahead/behind wzglę
 _Unikaj_: status (w polskim tekście), sync (to osobna akcja)
 
 **Przegląd repo** (`RepoOverview`):
-Stan repo, README i ostatnie commity w jednej odpowiedzi; od niego zaczyna się widok repo w UI. Pliki przeglądane są osobno, zawsze z commita HEAD (ADR-13).
+README i ostatnie commity repo w jednej odpowiedzi; stan repo przychodzi z listy repo. Pliki przeglądane są osobno, zawsze z commita HEAD (ADR-13).
 
 **Worktree**:
 Osobny katalog roboczy gita dla zadania, w `<repo>/.worktrees/<zadanie>`. Usuwany dopiero po potwierdzonym zatrzymaniu procesów, które z niego korzystają.

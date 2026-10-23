@@ -1,46 +1,48 @@
 import { useState } from "react";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { errorMessage } from "@/lib/api";
+import { useConnection } from "@/lib/use-connection";
+import { TabBar } from "./components/TabBar.tsx";
 import { DaemonPanel } from "./DaemonPanel.tsx";
 import { ReposView } from "./ReposView.tsx";
 
-type View = "repos" | "daemon";
-const VIEWS: { id: View; label: string }[] = [
+const VIEWS = [
   { id: "repos", label: "Repo" },
   { id: "daemon", label: "Daemon" },
-];
+] as const;
+type View = (typeof VIEWS)[number]["id"];
 
 export function App() {
   const [view, setView] = useState<View>("repos");
+  const { conn, epoch, error, retry } = useConnection();
   return (
     <div className="flex h-screen flex-col">
       <header className="flex items-center gap-6 border-b px-6 py-3">
         <span className="font-semibold tracking-tight">Pitwall</span>
-        <nav className="flex gap-1">
-          {VIEWS.map((v) => (
-            <button
-              key={v.id}
-              type="button"
-              onClick={() => setView(v.id)}
-              aria-current={view === v.id ? "page" : undefined}
-              className={cn(
-                "rounded-md px-3 py-1 text-sm",
-                view === v.id ? "bg-accent font-medium" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {v.label}
-            </button>
-          ))}
-        </nav>
+        <TabBar tabs={VIEWS} active={view} onSelect={setView} variant="pills" />
       </header>
       <main className="min-h-0 flex-1">
-        {view === "repos" ? (
-          <ReposView />
-        ) : (
+        {!conn && <ConnectionStatus error={error} onRetry={retry} />}
+        {conn && view === "repos" && <ReposView key={epoch} conn={conn} onRetry={retry} />}
+        {conn && view === "daemon" && (
           <div className="flex justify-center p-6">
-            <DaemonPanel />
+            <DaemonPanel key={epoch} conn={conn} onRetry={retry} />
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+function ConnectionStatus({ error, onRetry }: { error?: string; onRetry: () => Promise<boolean> }) {
+  const [retryError, setRetryError] = useState<string>();
+  if (!error) return <p className="text-muted-foreground p-6 text-sm">Łączenie z daemonem…</p>;
+  return (
+    <div className="flex flex-col items-start gap-3 p-6">
+      <p className="text-destructive text-sm whitespace-pre-wrap">{retryError ?? error}</p>
+      <Button variant="outline" size="sm" onClick={() => onRetry().catch((err: unknown) => setRetryError(errorMessage(err)))}>
+        Spróbuj ponownie
+      </Button>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isBinary, parseLog, parseStatus, parseTree } from "../src/modules/vcs/parse.ts";
+import { isBinary, parseLog, parseObjects, parseStatus, parseTree } from "../src/modules/vcs/parse.ts";
 
 describe("parseStatus", () => {
   test("czyta gałąź, gałąź śledzoną z ahead/behind i liczy zmiany, także zmianę nazwy jako jedną", () => {
@@ -59,6 +59,14 @@ describe("parseTree", () => {
       { name: "A z spacją.md", path: "docs/A z spacją.md", kind: "file", size: 5 },
       { name: "b.txt", path: "docs/b.txt", kind: "file", size: 12 },
     ]);
+  });
+});
+
+describe("parseObjects", () => {
+  test("linia na zapytanie; brakujący obiekt to undefined, nawet gdy zapytanie zawiera spacje", () => {
+    const oid = "a".repeat(40);
+    const out = `${oid} tree 0\nHEAD:nie ma.txt missing\n${oid} blob 12\n`;
+    expect(parseObjects(out, 3)).toEqual([{ oid, type: "tree", size: 0 }, undefined, { oid, type: "blob", size: 12 }]);
   });
 });
 

@@ -1,9 +1,10 @@
 import { z } from "zod";
-import { apiResult } from "./api.ts";
+import type { Endpoint } from "./api.ts";
 
 /**
- * Kontrakt modułu `workspace` (§4, §6): lista repo i przeglądanie ich zawartości z ostatniego commita.
- * Trasy: `POST /api/workspace/<akcja>` z ciałem z tego pliku.
+ * Kontrakt modułu `workspace` (§4.5, §6): lista repo i przeglądanie ich zawartości z ostatniego commita.
+ * Każda akcja to `POST /api/workspace/<akcja>`; `workspaceApi` trzyma ścieżkę, schemat ciała i schemat wyniku razem,
+ * więc daemon i UI nie mogą ich sparować inaczej.
  */
 
 /** Slug repo w `workspace.yaml`; z nazwy katalogu, małe litery. */
@@ -15,17 +16,17 @@ export const RepoId = z
 export type RepoId = z.infer<typeof RepoId>;
 
 /**
- * Ścieżka wewnątrz repo, zawsze z `/` (tak jak w gicie), bez `.` i `..`. Pusta znaczy korzeń.
- * Daemon przekazuje ją gitowi jako ścieżkę w drzewie commita, więc nie da się nią wyjść poza repo.
+ * Ścieżka w drzewie commita, z `/` jak w gicie, bez `.` i `..`; pusta znaczy korzeń. Nie dotyka systemu plików
+ * (ADR-13), więc `\` jest zwykłym znakiem nazwy. Bez znaków sterujących, bo daemon podaje ją gitowi liniami.
  */
 export const RepoPath = z
   .string()
-  .max(1024)
+  .max(4096)
   .refine(
     (p) => p === "" || p.split("/").every((s) => s !== "" && s !== "." && s !== ".."),
     "ścieżka w repo: segmenty bez '.', '..' i pustych",
   )
-  .refine((p) => !/[\\\0]/.test(p), "ścieżka w repo nie może zawierać '\\' ani znaku NUL");
+  .refine((p) => [...p].every((c) => c >= " "), "ścieżka w repo nie może zawierać znaków sterujących");
 export type RepoPath = z.infer<typeof RepoPath>;
 
 export const Commit = z.object({
@@ -37,20 +38,24 @@ export const Commit = z.object({
 });
 export type Commit = z.infer<typeof Commit>;
 
+/** Stan repo, który git zwrócił. */
+export const RepoStatusOk = z.object({
+  kind: z.literal("ok"),
+  /** `null` przy odłączonym HEAD. */
+  branch: z.string().nullable(),
+  /** `null` w repo bez commitów. */
+  head: Commit.nullable(),
+  /** Liczba zmienionych i nieśledzonych plików w katalogu roboczym. */
+  changes: z.number().int().nonnegative(),
+  /** Gałąź śledzona z licznikami; `null`, gdy gałąź jej nie ma albo zniknęła na zdalnym. */
+  upstream: z.object({ name: z.string(), ahead: z.number().int(), behind: z.number().int() }).nullable(),
+});
+export type RepoStatusOk = z.infer<typeof RepoStatusOk>;
+
 /** Stan repo zaobserwowany w gicie przy każdym zapytaniu; nigdy nie jest zapisywany. */
 export const RepoStatus = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("ok"),
-    /** `null` przy odłączonym HEAD. */
-    branch: z.string().nullable(),
-    /** `null` w repo bez commitów. */
-    head: Commit.nullable(),
-    /** Liczba zmienionych i nieśledzonych plików w katalogu roboczym. */
-    changes: z.number().int().nonnegative(),
-    /** Gałąź śledzona z licznikami; `null`, gdy gałąź jej nie ma. */
-    upstream: z.object({ name: z.string(), ahead: z.number().int(), behind: z.number().int() }).nullable(),
-  }),
-  /** Katalog zniknął albo przestał być repo gita; wpis w `workspace.yaml` zostaje. */
+  RepoStatusOk,
+  /** Katalog zniknął albo git go nie czyta; wpis w `workspace.yaml` zostaje. */
   z.object({ kind: z.literal("unavailable"), message: z.string() }),
 ]);
 export type RepoStatus = z.infer<typeof RepoStatus>;
@@ -64,7 +69,8 @@ export type Repo = z.infer<typeof Repo>;
 
 export const TreeEntry = z.object({
   name: z.string(),
-  path: RepoPath,
+  /** Ścieżka od korzenia repo, taka, jaką zwrócił git; podawana z powrotem w `tree` i `file`. */
+  path: z.string(),
   kind: z.enum(["dir", "file", "submodule"]),
   /** Rozmiar w bajtach, tylko dla plików. */
   size: z.number().int().nonnegative().optional(),
@@ -78,33 +84,33 @@ export const FileContent = z.discriminatedUnion("kind", [
 export type FileContent = z.infer<typeof FileContent>;
 
 export const RepoOverview = z.object({
-  repo: Repo,
-  readme: z.object({ path: RepoPath, text: z.string(), truncated: z.boolean() }).nullable(),
+  readme: z.object({ path: z.string(), text: z.string(), truncated: z.boolean() }).nullable(),
+  /** Ostatnie commity, od najnowszego; puste w repo bez commitów. */
   commits: z.array(Commit),
 });
 export type RepoOverview = z.infer<typeof RepoOverview>;
 
-/** Ciała żądań. `path` przy dodawaniu to ścieżka na dysku użytkownika, nie w repo. */
-export const AddRepoRequest = z.object({ path: z.string().min(1).max(4096) });
-export const RepoRequest = z.object({ repo: RepoId });
-export const TreeRequest = z.object({ repo: RepoId, path: RepoPath });
-export const FileRequest = z.object({ repo: RepoId, path: RepoPath.refine((p) => p !== "", "ścieżka pliku nie może być pusta") });
+function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
+  return { path: `/api/workspace/${action}`, request, data };
+}
 
-export const ReposResult = apiResult(z.array(Repo));
-export const RepoResult = apiResult(Repo);
-export const RepoOverviewResult = apiResult(RepoOverview);
-export const TreeResult = apiResult(z.array(TreeEntry));
-export const FileResult = apiResult(FileContent);
-export const RemovedResult = apiResult(z.object({ removed: z.literal(true) }));
-export const OpenedResult = apiResult(z.object({ opened: z.literal(true) }));
+const RepoRequest = z.object({ repo: RepoId }).strict();
+/** Akcja bez wyniku poza potwierdzeniem. */
+const Done = z.null();
 
-/** Ścieżki tras modułu: jedno miejsce dla daemona i UI. */
-export const WORKSPACE_ROUTES = {
-  list: "/api/workspace/list",
-  add: "/api/workspace/add",
-  remove: "/api/workspace/remove",
-  overview: "/api/workspace/overview",
-  tree: "/api/workspace/tree",
-  file: "/api/workspace/file",
-  openEditor: "/api/workspace/open-editor",
-} as const;
+export const workspaceApi = {
+  list: endpoint("list", z.object({}).strict(), z.array(Repo)),
+  /** `path` to katalog na dysku użytkownika (w repo albo jego korzeń), nie ścieżka w repo. */
+  add: endpoint("add", z.object({ path: z.string().min(1).max(4096) }).strict(), Repo),
+  /** Zdejmuje repo z listy; katalog na dysku zostaje. */
+  remove: endpoint("remove", RepoRequest, Done),
+  overview: endpoint("overview", RepoRequest, RepoOverview),
+  tree: endpoint("tree", z.object({ repo: RepoId, path: RepoPath }).strict(), z.array(TreeEntry)),
+  file: endpoint(
+    "file",
+    z.object({ repo: RepoId, path: RepoPath.refine((p) => p !== "", "ścieżka pliku nie może być pusta") }).strict(),
+    FileContent,
+  ),
+  /** Otwiera `vscode://` w systemie; daemon nie wie, czy coś obsłużyło adres. */
+  openEditor: endpoint("open-editor", RepoRequest, Done),
+};

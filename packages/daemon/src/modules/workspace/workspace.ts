@@ -1,7 +1,9 @@
 import { isAbsolute, resolve } from "node:path";
-import type { Commit, FileContent, Repo, RepoOverview, RepoStatus, TreeEntry } from "@pitwall/protocol";
+import type { Commit, FileContent, Repo, RepoOverview, RepoStatus, RepoStatusOk, TreeEntry } from "@pitwall/protocol";
 import { DomainError } from "../../errors.ts";
+import { vscodeUrl } from "./editor-url.ts";
 import { repoIdFor } from "./repo-id.ts";
+import { samePath } from "./same-path.ts";
 import type { WorkspaceFile, WorkspaceRepoEntry } from "./workspace-file.ts";
 
 /**
@@ -18,7 +20,7 @@ const README = /^readme(\.(md|markdown|txt|rst|adoc))?$/i;
 /** Czego `workspace` potrzebuje od `vcs`; podłączane w fasadzie (§4: moduły nie importują się nawzajem). */
 interface WorkspaceVcs {
   toplevel(dir: string): Promise<string>;
-  status(dir: string): Promise<Extract<RepoStatus, { kind: "ok" }>>;
+  status(dir: string): Promise<RepoStatusOk>;
   log(dir: string, limit: number): Promise<Commit[]>;
   tree(dir: string, path: string): Promise<TreeEntry[] | undefined>;
   file(dir: string, path: string, maxBytes: number): Promise<FileContent | undefined>;
@@ -56,18 +58,17 @@ export class Workspace {
   }
 
   /** Usuwa repo tylko z listy; katalog na dysku zostaje nietknięty. */
-  remove(id: string): void {
+  remove(id: string): null {
     if (!this.deps.file.remove(id)) throw notFound(id);
+    return null;
   }
 
   async overview(id: string): Promise<RepoOverview> {
-    const repo = await this.describe(this.entry(id));
-    const { status } = repo;
-    if (status.kind !== "ok") return { repo, readme: null, commits: [] };
-    const [commits, readme] = await this.inRepo(repo, () =>
-      Promise.all([status.head ? this.deps.vcs.log(repo.path, OVERVIEW_COMMITS) : [], this.readme(repo.path)]),
+    const entry = this.entry(id);
+    const [commits, readme] = await this.inRepo(entry, () =>
+      Promise.all([this.deps.vcs.log(entry.path, OVERVIEW_COMMITS), this.readme(entry.path)]),
     );
-    return { repo, readme, commits };
+    return { readme, commits };
   }
 
   async tree(id: string, path: string): Promise<TreeEntry[]> {
@@ -84,8 +85,10 @@ export class Workspace {
     return content;
   }
 
-  openEditor(id: string): void {
+  /** Daemon nie wie, czy system obsłużył adres; wynik to tylko potwierdzenie przyjęcia. */
+  openEditor(id: string): null {
     this.deps.openUrl(vscodeUrl(this.entry(id).path));
+    return null;
   }
 
   private entry(id: string): WorkspaceRepoEntry {
@@ -113,12 +116,11 @@ export class Workspace {
     return content?.kind === "text" ? { path: best.path, text: content.text, truncated: content.truncated } : null;
   }
 
-  /** Błąd gita przy czytaniu repo z listy to stan repo, nie błąd daemona. */
-  private async inRepo<T>(entry: WorkspaceRepoEntry, fn: () => Promise<T>): Promise<T> {
+  /** Błąd gita przy czytaniu repo z listy to stan repo (`repo_unavailable`), nie błąd daemona. */
+  private async inRepo<T>(entry: WorkspaceRepoEntry, readFromGit: () => Promise<T>): Promise<T> {
     try {
-      return await fn();
+      return await readFromGit();
     } catch (err) {
-      if (err instanceof DomainError) throw err;
       throw new DomainError("repo_unavailable", `${entry.id}: ${messageOf(err)}`);
     }
   }
@@ -130,18 +132,4 @@ function notFound(id: string): DomainError {
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
-}
-
-/** Windows i macOS mają domyślnie systemy plików bez rozróżniania wielkości liter. */
-function samePath(a: string, b: string): boolean {
-  const caseInsensitive = process.platform === "win32" || process.platform === "darwin";
-  return caseInsensitive ? resolve(a).toLowerCase() === resolve(b).toLowerCase() : resolve(a) === resolve(b);
-}
-
-/** `vscode://file/C:/repo` na Windowsie, `vscode://file/Users/me/repo` na macOS. */
-export function vscodeUrl(dir: string): string {
-  const segments = dir.replaceAll("\\", "/").split("/");
-  // `#`, `?` i `%` w nazwie katalogu muszą być zakodowane; dwukropek litery dysku zostaje.
-  const encoded = segments.map((s) => encodeURIComponent(s).replaceAll("%3A", ":")).join("/");
-  return `vscode://file${encoded.startsWith("/") ? encoded : `/${encoded}`}`;
 }

@@ -20,9 +20,10 @@ describe("vcs na prawdziwym gicie", () => {
     expect(status.head?.hash).toMatch(/^[0-9a-f]{40}$/);
   });
 
-  test("status repo bez commitów ma pusty HEAD, a korzeń drzewa jest pusty", async () => {
+  test("status repo bez commitów ma pusty HEAD, log jest pusty, a korzeń drzewa jest pusty", async () => {
     const dir = makeRepo();
     expect(await vcs.status(dir)).toMatchObject({ kind: "ok", branch: "main", head: null, changes: 0 });
+    expect(await vcs.log(dir, 10)).toEqual([]);
     expect(await vcs.tree(dir, "")).toEqual([]);
     expect(await vcs.tree(dir, "src")).toBeUndefined();
   });
@@ -79,6 +80,30 @@ describe("vcs na prawdziwym gicie", () => {
     const dir = makeRepo({ "a.txt": "1" });
     commitFiles(dir, { "a.txt": "2" }, "drugi");
     expect((await vcs.log(dir, 10)).map((c) => c.subject)).toEqual(["drugi", "pierwszy commit"]);
+  });
+
+  test("submoduł nie jest ani katalogiem, ani plikiem do odczytu", async () => {
+    const inner = makeRepo({ "lib.ts": "1" }, "biblioteka");
+    const dir = makeRepo({ "a.txt": "1" });
+    gitIn(dir, "-c", "protocol.file.allow=always", "submodule", "add", "-q", inner, "vendor");
+    gitIn(dir, "commit", "-q", "-m", "submoduł");
+
+    expect(((await vcs.tree(dir, "")) ?? []).map((e) => [e.name, e.kind])).toContainEqual(["vendor", "submodule"]);
+    expect(await vcs.tree(dir, "vendor")).toBeUndefined();
+    expect(await vcs.file(dir, "vendor", 100)).toBeUndefined();
+  });
+
+  test("odziedziczone GIT_DIR nie podmienia repo wskazanego przez -C", async () => {
+    const alfa = makeRepo({ "alfa.txt": "a" }, "alfa");
+    const beta = makeRepo({ "beta.txt": "b" }, "beta");
+    const before = process.env.GIT_DIR;
+    process.env.GIT_DIR = join(beta, ".git");
+    try {
+      expect(((await vcs.tree(alfa, "")) ?? []).map((e) => e.name)).toEqual(["alfa.txt"]);
+    } finally {
+      if (before === undefined) delete process.env.GIT_DIR;
+      else process.env.GIT_DIR = before;
+    }
   });
 
   test("brak katalogu repo to błąd gita z komunikatem, a nie wyjątek uruchomienia", async () => {

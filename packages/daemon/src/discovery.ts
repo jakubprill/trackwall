@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
-import { chmodSync, closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { DAEMON_FILE, DaemonFile, HealthResult } from "@pitwall/protocol";
+import { writeFileAtomic } from "./atomic-write.ts";
 import { loopbackRequest } from "./loopback.ts";
 
 /** Odkrywanie daemona przez `daemon.json` (§5.1). */
@@ -35,11 +36,7 @@ export function readDaemonFile(home: string): DaemonFile | undefined {
 /** Zapis atomowy (plik tymczasowy + rename), uprawnienia tylko dla właściciela tam, gdzie system je ma. */
 export function writeDaemonFile(home: string, file: DaemonFile): void {
   mkdirSync(home, { recursive: true, mode: 0o700 });
-  const target = daemonFilePath(home);
-  const tmp = `${target}.${process.pid}.tmp`;
-  writeFileSync(tmp, `${JSON.stringify(file, null, 2)}\n`, { mode: 0o600 });
-  if (process.platform !== "win32") chmodSync(tmp, 0o600);
-  renameSync(tmp, target);
+  writeFileAtomic(daemonFilePath(home), `${JSON.stringify(file, null, 2)}\n`, 0o600);
 }
 
 /** Usuwa `daemon.json` tylko wtedy, gdy nadal opisuje ten proces (nie kasuje pliku następcy). */

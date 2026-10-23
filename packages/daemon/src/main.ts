@@ -2,6 +2,7 @@
 import { arch, platform } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { z } from "zod";
 import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
 import { type DaemonArgs, parseDaemonArgs, USAGE } from "./args.ts";
@@ -114,6 +115,9 @@ function uiUrl(port: number, token: string): string {
 function log(msg: string): void {
   process.stderr.write(`[daemon] ${msg}\n`);
 }
+
+// Komunikaty walidacji zod trafiają do UI (`bad_request`, `invalid_config`), więc po polsku jak reszta tekstów.
+z.config(z.locales.pl());
 
 let parsed: DaemonArgs;
 try {

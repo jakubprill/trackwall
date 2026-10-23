@@ -7,6 +7,25 @@ import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 const tempFile = () => join(mkdtempSync(join(tmpdir(), "pitwall-wsf-")), "workspace.yaml");
 
 describe("workspace.yaml", () => {
+  test("pusty klucz repos to pusta lista, a dodanie go uzupełnia", () => {
+    const path = tempFile();
+    writeFileSync(path, "# moje repo\nrepos:\n");
+    const file = new WorkspaceFile(path);
+    expect(file.repos()).toEqual([]);
+
+    file.add({ id: "api", path: "/repos/api" });
+
+    expect(file.repos()).toEqual([{ id: "api", path: "/repos/api" }]);
+  });
+
+  test("ścieżka względna albo z ~ jest błędem konfiguracji, a nie cichym zależeniem od katalogu daemona", () => {
+    const path = tempFile();
+    writeFileSync(path, "repos:\n  - { id: api, path: ~/repos/api }\n");
+    expect(() => new WorkspaceFile(path).repos()).toThrow(
+      expect.objectContaining({ code: "invalid_config", message: expect.stringContaining("pełna") }),
+    );
+  });
+
   test("brak pliku to pusty workspace, a pierwsze dodanie tworzy plik", () => {
     const path = tempFile();
     const file = new WorkspaceFile(path);
@@ -36,7 +55,7 @@ describe("workspace.yaml", () => {
     const path = tempFile();
     writeFileSync(path, "repos:\n  - id: Wielkie Litery\n    path: /x\n");
     expect(() => new WorkspaceFile(path).repos()).toThrow(
-      expect.objectContaining({ code: "invalid_config", message: expect.stringContaining("repos.0.id") }),
+      expect.objectContaining({ code: "invalid_config", message: expect.stringContaining("repos[0].id") }),
     );
 
     writeFileSync(path, "repos: [\n");

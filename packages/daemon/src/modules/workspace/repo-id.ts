@@ -11,7 +11,7 @@ export function repoIdFor(dir: string, taken: ReadonlySet<string>): string {
       .replace(/ł/g, "l")
       .replace(/Ł/g, "L")
       .normalize("NFKD")
-      .replace(/[̀-ͯ]/g, "")
+      .replace(/[\u0300-\u036f]/g, "")
       .toLowerCase()
       .replace(/[^a-z0-9._-]+/g, "-")
       .replace(/^[^a-z0-9]+/, "")

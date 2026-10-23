@@ -1,30 +1,39 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { mkdirSync, readFileSync } from "node:fs";
+import { dirname, isAbsolute } from "node:path";
 import { RepoId } from "@pitwall/protocol";
-import { isMap, isSeq, parseDocument } from "yaml";
+import { type Document, isMap, isSeq, parseDocument } from "yaml";
 import { z } from "zod";
+import { writeFileAtomic } from "../../atomic-write.ts";
 import { DomainError } from "../../errors.ts";
 
 /**
- * `workspace.yaml` (§6): konfiguracja workspace, którą użytkownik może edytować ręcznie i trzymać w prywatnym repo.
- * Czytany przy każdym użyciu, więc ręczna edycja działa bez restartu daemona. Zapis zmienia tylko listę `repos`
- * i zachowuje komentarze oraz pozostałe klucze.
+ * `workspace.yaml` (§4.5, ADR-12): konfiguracja workspace, którą użytkownik może edytować ręcznie i trzymać
+ * w prywatnym repo. Czytany przy każdym użyciu, więc ręczna edycja działa bez restartu daemona. Zapis zmienia
+ * tylko listę `repos` i zachowuje komentarze oraz pozostałe klucze.
  */
 
-export const WorkspaceRepoEntry = z.object({ id: RepoId, path: z.string().min(1) });
+export const WorkspaceRepoEntry = z.object({
+  id: RepoId,
+  // Względna ścieżka zależałaby od katalogu, z którego uruchomiono daemon, a `~` nie jest rozwijane.
+  path: z.string().refine(isAbsolute, "ścieżka repo musi być pełna (bez `~` i bez ścieżki względnej)"),
+});
 export type WorkspaceRepoEntry = z.infer<typeof WorkspaceRepoEntry>;
 
-const WorkspaceConfig = z
-  .object({ repos: z.array(WorkspaceRepoEntry).default([]) })
-  .refine((c) => new Set(c.repos.map((r) => r.id)).size === c.repos.length, "identyfikatory repo w `repos` muszą być unikalne");
+const WorkspaceConfig = z.object({
+  // Pusty klucz `repos:` (np. po ręcznym usunięciu wszystkich wpisów) YAML czyta jako `null`.
+  repos: z
+    .array(WorkspaceRepoEntry)
+    .nullish()
+    .transform((repos) => repos ?? [])
+    .refine((repos) => new Set(repos.map((r) => r.id)).size === repos.length, "identyfikatory repo muszą być unikalne"),
+});
 
 export class WorkspaceFile {
   constructor(readonly path: string) {}
 
   repos(): WorkspaceRepoEntry[] {
-    const doc = this.load();
-    const parsed = WorkspaceConfig.safeParse(doc.toJS() ?? {});
-    if (!parsed.success) throw this.invalid(parsed.error.issues.map((i) => `${i.path.join(".") || "(korzeń)"}: ${i.message}`).join("; "));
+    const parsed = WorkspaceConfig.safeParse(this.load().toJS() ?? {});
+    if (!parsed.success) throw this.invalid(z.prettifyError(parsed.error));
     return parsed.data.repos;
   }
 
@@ -32,7 +41,7 @@ export class WorkspaceFile {
     const doc = this.load();
     if (!isSeq(doc.get("repos"))) doc.set("repos", doc.createNode([]));
     doc.addIn(["repos"], doc.createNode(entry));
-    this.save(doc.toString());
+    this.save(doc);
   }
 
   /** `false`, gdy repo o tym identyfikatorze nie ma w pliku. */
@@ -43,11 +52,11 @@ export class WorkspaceFile {
     const index = repos.items.findIndex((item) => isMap(item) && item.get("id") === id);
     if (index < 0) return false;
     repos.delete(index);
-    this.save(doc.toString());
+    this.save(doc);
     return true;
   }
 
-  private load() {
+  private load(): Document {
     let text: string;
     try {
       text = readFileSync(this.path, "utf8");
@@ -61,12 +70,13 @@ export class WorkspaceFile {
     return doc;
   }
 
-  /** Atomowo (plik tymczasowy + rename): przerwany zapis nie zostawia uciętego pliku. */
-  private save(text: string): void {
-    mkdirSync(dirname(this.path), { recursive: true });
-    const tmp = `${this.path}.${process.pid}.tmp`;
-    writeFileSync(tmp, text);
-    renameSync(tmp, this.path);
+  private save(doc: Document): void {
+    try {
+      mkdirSync(dirname(this.path), { recursive: true });
+      writeFileAtomic(this.path, doc.toString());
+    } catch (err) {
+      throw new DomainError("internal", `nie udało się zapisać ${this.path}: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   private invalid(details: string): DomainError {

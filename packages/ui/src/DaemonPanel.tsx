@@ -1,31 +1,26 @@
-import { type DaemonInfo, DaemonInfoResult } from "@pitwall/protocol";
+import { DaemonInfo } from "@pitwall/protocol";
 import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { call } from "@/lib/api";
-import { type Connection, resolveConnection, retryConnection } from "@/lib/connection";
+import { call, errorMessage } from "@/lib/api";
+import type { Connection } from "@/lib/connection";
 
 type State = { kind: "connecting" } | { kind: "connected"; info: DaemonInfo; at: Date } | { kind: "error"; message: string };
 
 const POLL_MS = 5000;
 
-export function DaemonPanel() {
-  const [conn, setConn] = useState<Connection>();
+/** `onRetry` zwraca `true`, gdy podmienił połączenie; wtedy rodzic montuje panel od nowa (`key`). */
+export function DaemonPanel({ conn, onRetry }: { conn: Connection; onRetry: () => Promise<boolean> }) {
   const [state, setState] = useState<State>({ kind: "connecting" });
 
-  useEffect(() => {
-    resolveConnection().then(setConn, (err: unknown) => setState({ kind: "error", message: String(err) }));
-  }, []);
-
   const refresh = useCallback(async () => {
-    if (!conn) return;
     try {
-      const info = await call(conn, "/api/daemon/info", DaemonInfoResult);
+      const info = await call(conn, "/api/daemon/info", DaemonInfo);
       setState({ kind: "connected", info, at: new Date() });
     } catch (err) {
-      setState({ kind: "error", message: err instanceof Error ? err.message : String(err) });
+      setState({ kind: "error", message: errorMessage(err) });
     }
   }, [conn]);
 
@@ -33,20 +28,17 @@ export function DaemonPanel() {
   const retry = useCallback(async () => {
     setState({ kind: "connecting" });
     try {
-      const next = await retryConnection();
-      if (next) setConn(next);
-      else await refresh();
+      if (!(await onRetry())) await refresh();
     } catch (err) {
-      setState({ kind: "error", message: err instanceof Error ? err.message : String(err) });
+      setState({ kind: "error", message: errorMessage(err) });
     }
-  }, [refresh]);
+  }, [onRetry, refresh]);
 
   useEffect(() => {
-    if (!conn) return;
     void refresh();
     const id = setInterval(refresh, POLL_MS);
     return () => clearInterval(id);
-  }, [conn, refresh]);
+  }, [refresh]);
 
   return (
     <Card className="w-full max-w-xl">
@@ -55,7 +47,7 @@ export function DaemonPanel() {
         <CardDescription>Proces, który trzyma cały stan Pitwalla.</CardDescription>
         <CardAction className="flex items-center gap-2">
           <StatusBadge state={state} />
-          <Button variant="ghost" size="icon" onClick={() => void refresh()} disabled={!conn} aria-label="Odśwież">
+          <Button variant="ghost" size="icon" onClick={() => void refresh()} aria-label="Odśwież">
             <RefreshCw />
           </Button>
         </CardAction>

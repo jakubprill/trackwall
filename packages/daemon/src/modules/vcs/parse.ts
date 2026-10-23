@@ -1,17 +1,15 @@
-import type { Commit, RepoStatus, TreeEntry } from "@pitwall/protocol";
+import type { Commit, RepoStatusOk, TreeEntry } from "@pitwall/protocol";
 
 /**
  * Parsery wyjścia gita w formatach maszynowych (`-z`, `--porcelain=v2`), bez zależności od języka gita.
  * Czyste funkcje, testowane bez procesu.
  */
 
-export type GitStatus = Extract<RepoStatus, { kind: "ok" }>;
-
 /** Format `git log` zgodny z `parseLog`: pola rozdzielone 0x1f, commity rozdzielone NUL przez `-z`. */
 export const LOG_FORMAT = "--format=%H%x1f%an%x1f%aI%x1f%s";
 
 /** Wynik `git status --porcelain=v2 --branch -z` bez commita HEAD (dokłada go `vcs`). */
-export interface ParsedStatus extends Omit<GitStatus, "head"> {
+export interface ParsedStatus extends Omit<RepoStatusOk, "head"> {
   /** `false` w repo bez commitów (`branch.oid (initial)`). */
   hasCommits: boolean;
 }
@@ -80,6 +78,24 @@ const KIND_ORDER: Record<TreeEntry["kind"], number> = { dir: 0, submodule: 1, fi
 
 function byKindThenName(a: TreeEntry, b: TreeEntry): number {
   return KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.name.localeCompare(b.name);
+}
+
+export interface GitObject {
+  oid: string;
+  type: string;
+  size: number;
+}
+
+/**
+ * Wynik `git cat-file --batch-check='%(objectname) %(objecttype) %(objectsize)'`: linia na każde zapytanie,
+ * w tej samej kolejności. Brakujący obiekt git opisuje linią `<zapytanie> missing`, więc rozpoznajemy linie udane.
+ */
+export function parseObjects(out: string, count: number): (GitObject | undefined)[] {
+  const lines = out.split("\n").slice(0, count);
+  return lines.map((line) => {
+    const m = /^([0-9a-f]{40,64}) (\w+) (\d+)$/.exec(line);
+    return m ? { oid: m[1] ?? "", type: m[2] ?? "", size: Number(m[3]) } : undefined;
+  });
 }
 
 /** Ta sama heurystyka co w gicie: NUL w pierwszych 8000 bajtach znaczy plik binarny. */

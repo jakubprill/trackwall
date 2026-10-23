@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DomainError } from "../src/errors.ts";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
-import { vscodeUrl, Workspace } from "../src/modules/workspace/workspace.ts";
+import { vscodeUrl } from "../src/modules/workspace/editor-url.ts";
+import { samePath } from "../src/modules/workspace/same-path.ts";
+import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { makeRepo } from "./support/git-repo.ts";
 
@@ -60,6 +62,7 @@ describe("workspace", () => {
     const { id } = await workspace.add(makeRepo({ "README.md": "# Opis\n", "readme.txt": "gorszy", "src/a.ts": "kod" }));
 
     const overview = await workspace.overview(id);
+    expect(Object.keys(overview).sort()).toEqual(["commits", "readme"]);
     expect(overview.readme).toEqual({ path: "README.md", text: "# Opis\n", truncated: false });
     expect(overview.commits.map((c) => c.subject)).toEqual(["pierwszy commit"]);
     expect((await workspace.tree(id, "")).map((e) => e.path)).toEqual(["src", "README.md", "readme.txt"]);
@@ -97,5 +100,13 @@ describe("vscodeUrl", () => {
   test("ścieżka z Windowsa i z macOS, znaki specjalne zakodowane", () => {
     expect(vscodeUrl("C:\\Users\\jan\\repo #1")).toBe("vscode://file/C:/Users/jan/repo%20%231");
     expect(vscodeUrl("/Users/jan/repo")).toBe("vscode://file/Users/jan/repo");
+  });
+});
+
+describe("samePath", () => {
+  test("na Windowsie i macOS wielkość liter nie ma znaczenia, na Linuksie ma", () => {
+    expect(samePath("/Repo/API", "/repo/api", "win32")).toBe(true);
+    expect(samePath("/Repo/API", "/repo/api", "darwin")).toBe(true);
+    expect(samePath("/Repo/API", "/repo/api", "linux")).toBe(false);
   });
 });
