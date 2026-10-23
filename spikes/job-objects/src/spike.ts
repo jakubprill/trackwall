@@ -2,16 +2,16 @@
  * Spike: grupa procesów, której nie da się zgubić.
  *
  *   spike.ts                 uruchamia wszystkie sprawdzenia i drukuje JSON z wynikami
- *   spike.ts tree <n> <dir>  węzeł drzewa testowego (ignoruje łagodne sygnały, odpala poziom n+1)
- *   spike.ts holder <dir>    „daemon”, który trzyma job z drzewem i zostaje zabity
+ * Role procesów potomnych (w zmiennej PITWALL_SPIKE_ROLE jako tablica JSON):
+ *   ["tree", n, dir]         węzeł drzewa testowego (ignoruje łagodne sygnały, odpala poziom n+1)
+ *   ["holder", dir]          „daemon”, który trzyma job z drzewem i zostaje zabity
  */
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Check, check, isAlive, isCompiled, readTreePids, spawnSelf, TREE_DEPTH, waitUntil } from "./common.ts";
+import { type Check, check, isAlive, isCompiled, ROLE_ENV, readTreePids, spawnSelf, TREE_DEPTH, waitUntil } from "./common.ts";
 
-// Skompilowana binarka też ma dwa elementy przed argumentami: ["bun", "/$bunfs/root/..."]
-const [role, ...rest] = process.argv.slice(2);
+const [role, ...rest] = JSON.parse(process.env[ROLE_ENV] ?? "[]") as string[];
 
 if (role === "tree") await treeNode(Number(rest[0]), rest[1] as string);
 else if (role === "holder") await holder(rest[0] as string);
