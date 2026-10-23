@@ -7,9 +7,18 @@ export interface Remote<T> {
   error?: string;
   /** `error.code` z daemona, gdy widok musi zareagować na konkretny błąd, a nie tylko go pokazać. */
   errorCode?: CallErrorCode;
+  /**
+   * Numer pytania, które dało `data`, w kolejności wysłania; razem z `sentLoads` mówi, czy dane pochodzą z pytania
+   * wysłanego po danej chwili (np. po akcji), a nie z takiego, które było już w drodze.
+   */
+  loadNumber?: number;
 }
 
-export type RemoteHandle<T> = Remote<T> & { reload: () => void };
+export type RemoteHandle<T> = Remote<T> & {
+  reload: () => void;
+  /** Ile pytań wysłano do tej chwili. */
+  sentLoads: () => number;
+};
 
 export interface RemoteOptions<T> {
   /**
@@ -35,6 +44,7 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
   const pollRef = useRef(pollMs);
   pollRef.current = pollMs;
   const dataRef = useRef<T | undefined>(undefined);
+  const sent = useRef(0);
 
   // `generation` i `refreshKey` nie są czytane w efekcie: ich zmiana to prośba o ponowne pobranie.
   useEffect(() => {
@@ -52,14 +62,17 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
       dataRef.current = undefined;
       setState({});
     }
+    const loadNumber = ++sent.current;
     load()
       .then(
         (data) => {
           if (!current) return;
           dataRef.current = data;
-          setState({ data });
+          setState({ data, loadNumber });
         },
-        (err: unknown) => current && setState((prev) => ({ data: prev.data, error: errorMessage(err), errorCode: errorCode(err) })),
+        (err: unknown) =>
+          current &&
+          setState((prev) => ({ data: prev.data, loadNumber: prev.loadNumber, error: errorMessage(err), errorCode: errorCode(err) })),
       )
       .finally(() => {
         if (current && pollRef.current !== undefined) timer = setTimeout(next, interval());
@@ -71,5 +84,6 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
   }, [load, generation, refreshKey]);
 
   const reload = useCallback(() => setGeneration((g) => g + 1), []);
-  return { ...state, reload };
+  const sentLoads = useCallback(() => sent.current, []);
+  return { ...state, reload, sentLoads };
 }

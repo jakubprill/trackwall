@@ -312,8 +312,9 @@ describe("plik logu", () => {
     expect(long).not.toBe(fileName(`${"x".repeat(299)}y`));
   });
 
-  test("ścieżka pliku źródła zawiera rodzaj źródła, repo i task mise", () => {
+  test("ścieżka pliku źródła zawiera rodzaj źródła, repo i task mise, a log mise install jest plikiem repo", () => {
     expect(logFilePath("/stan/logs", BUILD)).toBe(join("/stan/logs", "mise-task", "web", "build%3Aui.jsonl"));
+    expect(logFilePath("/stan/logs", { kind: "mise-install", repo: "Web" })).toBe(join("/stan/logs", "mise-install", "%57eb.jsonl"));
   });
 
   test("plik po przekroczeniu limitu staje się .1.jsonl, a nowy zaczyna się od pustego", () => {

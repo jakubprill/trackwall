@@ -1,5 +1,5 @@
 import { LOG_BUFFER_RECORDS, type LogRecord, type LogSource, type LogStream, type LogTail, type LogTailRequest } from "@trackwall/protocol";
-import { LogFile, logFilePath } from "./log-file.ts";
+import { LogFile, logFilePath, sourceParts } from "./log-file.ts";
 import { logLevel } from "./log-level.ts";
 import { RunOutput } from "./run-output.ts";
 import { secretValues } from "./secret-mask.ts";
@@ -142,5 +142,5 @@ export class Logs {
 
 /** Klucz źródła w mapie; tylko budowany, nigdy rozbierany z powrotem. */
 function sourceKey(source: LogSource): string {
-  return [source.kind, source.repo, source.miseTask].join("\0");
+  return sourceParts(source).join("\0");
 }

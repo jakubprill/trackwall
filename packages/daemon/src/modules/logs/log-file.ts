@@ -87,7 +87,19 @@ export function rotatedPath(path: string): string {
 
 /** Ścieżka pliku źródła w katalogu logów. */
 export function logFilePath(dir: string, source: LogSource): string {
-  return join(dir, source.kind, fileName(source.repo), `${fileName(source.miseTask)}.jsonl`);
+  const [kind, ...names] = sourceParts(source);
+  const encoded = names.map(fileName);
+  return `${join(dir, kind, ...encoded)}.jsonl`;
+}
+
+/** Rodzaj i nazwy źródła, od ogólnej do szczegółowej: katalogi i plik logu oraz klucz źródła w pamięci. */
+export function sourceParts(source: LogSource): [string, ...string[]] {
+  switch (source.kind) {
+    case "mise-task":
+      return [source.kind, source.repo, source.miseTask];
+    case "mise-install":
+      return [source.kind, source.repo];
+  }
 }
 
 /**

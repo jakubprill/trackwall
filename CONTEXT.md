@@ -81,6 +81,10 @@ _Unikaj_: URL repo (URL ma protokół i bywa z tokenem), remote bez dopowiedzeni
 Fetch każdego repo z folderu z projektami i fast-forward jego gałęzi domyślnej, w tle, z wynikiem per repo: przesunięte, aktualne, pominięte z powodem (`SyncSkipReason`) albo błąd. Nigdy nie scala ani nie nadpisuje lokalnych zmian (ADR-21). Trzymana tylko w pamięci daemona.
 _Unikaj_: pull, aktualizacja (bez dopowiedzenia)
 
+**Komenda zbiorcza** (`BatchRun`, krok `BatchStep`, wynik repo `BatchRepo`):
+Wybrane kroki na wybranych repo jednym przyciskiem: synchronizacja (`sync`), narzędzia z konfiguracji mise repo (`tools`, `mise install`), zależności (`setup`, task mise `setup`) i build (`build`, task mise `build`), w repo zawsze w tej kolejności, kilka repo naraz, z wynikiem każdego kroku w każdym repo (ADR-27). Błąd kroku kończy repo, pozostałe idą dalej. Trzymana tylko w pamięci daemona.
+_Unikaj_: batch (w polskim tekście), operacja zbiorcza, workflow
+
 **Stan repo** (`RepoStatus`):
 Gałąź, ostatni commit, liczba zmian w katalogu roboczym i ahead/behind względem gałęzi śledzonej, odczytane z gita przy każdym zapytaniu (`ok`), albo `unavailable` z komunikatem, gdy git go nie czyta (repo, którego katalog zniknął, znika z listy). Nigdy nie jest zapisywany.
 _Unikaj_: status (w polskim tekście), sync (to osobna akcja)

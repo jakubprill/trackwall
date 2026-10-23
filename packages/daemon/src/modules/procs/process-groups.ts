@@ -100,6 +100,8 @@ interface Group {
   stopping?: Promise<RunState>;
   /** Zabijanie reszty grupy po końcu lidera; stop w tym czasie czeka na nie zamiast zabijać drugi raz. */
   draining?: Promise<boolean>;
+  /** Spełniana w `finish`, czyli po potwierdzeniu pustej grupy; grupa, której nie da się zabić, nie kończy się nigdy. */
+  readonly ended: { promise: Promise<void>; resolve: () => void };
 }
 
 export class ProcessGroups {
@@ -157,6 +159,18 @@ export class ProcessGroups {
   state(owner: string): RunState | undefined {
     const group = this.groups.get(owner);
     return group && stateOf(group);
+  }
+
+  /**
+   * Stan `exited` bieżącej grupy właściciela, gdy system potwierdzi jej koniec; `undefined`, gdy właściciel nie ma
+   * grupy. Dla wołającego, który czeka na wynik (komenda zbiorcza), a nie tylko pokazuje stan.
+   */
+  async ended(owner: string): Promise<RunState | undefined> {
+    await this.starting.get(owner)?.catch(() => undefined);
+    const group = this.groups.get(owner);
+    if (!group) return undefined;
+    await group.ended.promise;
+    return stateOf(group);
   }
 
   /**
@@ -238,7 +252,7 @@ export class ProcessGroups {
       pid: leader.pid,
       identity: await platform.identity(leader.pid),
     };
-    const group: Group = { record, control, output, leaderExit, phase: { kind: "live" }, stopRequested: false };
+    const group: Group = { record, control, output, leaderExit, phase: { kind: "live" }, stopRequested: false, ended: deferred() };
     this.groups.set(spec.owner, group);
     this.persist();
     leaderExit
@@ -281,6 +295,7 @@ export class ProcessGroups {
     group.phase = { kind: "exited", exit: group.phase.exit };
     group.control.release();
     this.persist();
+    group.ended.resolve();
   }
 
   /**
@@ -376,6 +391,14 @@ function attachOutput(child: ChildProcess, output: RunOutput): void {
   child.stdin?.on("error", () => {});
   // Błąd po starcie (np. nieudany `kill`) bez słuchacza zakończyłby daemon; stan i tak wynika z `exit`.
   child.on("error", () => {});
+}
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve = () => {};
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
 }
 
 function stateOf(group: Group): RunState {

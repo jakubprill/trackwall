@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { Agents, type AgentsDeps } from "./modules/agents/agents.ts";
+import { Batch } from "./modules/batch/batch.ts";
 import { Logs } from "./modules/logs/logs.ts";
 import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
@@ -21,6 +22,7 @@ export interface Facade {
   procs: ProcessGroups;
   logs: Logs;
   agents: Agents;
+  batch: Batch;
 }
 
 export { runCopilotHook } from "./modules/agents/copilot-hook-command.ts";
@@ -64,6 +66,7 @@ export function createFacade(o: FacadeOptions): Facade {
     log: o.log,
   });
   const mise = new Mise({ procs, repos: workspace, command: o.miseCommand, env: o.userEnv });
+  const batch = new Batch({ workspace, mise, log: o.log });
   const agents = new Agents({
     procs,
     repos: workspace,
@@ -74,5 +77,5 @@ export function createFacade(o: FacadeOptions): Facade {
     mcpStdioCommand: o.mcpStdioCommand,
     log: o.log,
   });
-  return { workspace, mise, procs, logs, agents };
+  return { workspace, mise, procs, logs, batch, agents };
 }

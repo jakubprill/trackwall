@@ -13,9 +13,13 @@ export const LOG_BUFFER_RECORDS = 2000;
 /** Najwięcej rekordów w jednej odpowiedzi `tail`. */
 export const LOG_TAIL_MAX = 1000;
 
-/** Skąd pochodzi rekord. Dziś tylko task mise repo; serwisy, zadania i daemon dojdą z tymi modułami. */
+/**
+ * Skąd pochodzi rekord. Dziś task mise repo i `mise install` repo z komendy zbiorczej; serwisy, zadania i daemon
+ * dojdą z tymi modułami.
+ */
 export const LogSource = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("mise-task"), repo: RepoId, miseTask: MiseTaskName }).strict(),
+  z.object({ kind: z.literal("mise-install"), repo: RepoId }).strict(),
 ]);
 export type LogSource = z.infer<typeof LogSource>;
 
