@@ -1,6 +1,8 @@
-import type { Commit, FileContent, RepoStatusOk, TreeEntry } from "@trackwall/protocol";
+import type { Commit, FileContent, RepoStatusOk, SyncOutcome, TreeEntry } from "@trackwall/protocol";
 import { git } from "./git.ts";
 import { type GitObject, isBinary, LOG_FORMAT, parseLog, parseObjects, parseStatus, parseTree } from "./parse.ts";
+import { mainRemote, remoteAddress } from "./remote.ts";
+import { readConfig, syncRepo } from "./sync.ts";
 
 /**
  * Moduł `vcs` (§4, §4.5): lokalny adapter gita. Zna katalogi, nie identyfikatory repo; te tłumaczy `workspace`.
@@ -13,6 +15,17 @@ export class Vcs {
     const { hasCommits, ...status } = parseStatus(stdout.toString("utf8"));
     const [head] = hasCommits ? await this.log(dir, 1) : [];
     return { ...status, head: head ?? null };
+  }
+
+  /** Adres głównego remote (`origin` albo jedyny) jako `host/ścieżka` (ADR-21); `null` bez takiego remote. */
+  async remote(dir: string): Promise<string | null> {
+    const remote = mainRemote(await readConfig(dir));
+    return (remote && remoteAddress(remote.url)) ?? null;
+  }
+
+  /** Fetch i fast-forward gałęzi domyślnej (ADR-21); powód pominięcia jest wynikiem, a błąd gita wyjątkiem. */
+  sync(dir: string): Promise<SyncOutcome> {
+    return syncRepo(dir);
   }
 
   /** Ostatnie commity od HEAD; pusto w repo bez commitów (`--ignore-missing` pomija nieistniejący HEAD). */

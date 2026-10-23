@@ -33,16 +33,23 @@ const REPO_SELECTING_ENV = [
   "GIT_PREFIX",
 ];
 
-type GitOptions = Pick<RunOptions, "maxBytes" | "stdin">;
+type GitOptions = Pick<RunOptions, "maxBytes" | "stdin"> & {
+  /** Dłuższy limit dla komend sieciowych (`fetch`); domyślnie `TIMEOUT_MS`. */
+  timeoutMs?: number;
+  /** Zmienne dodane do `gitEnv()`, np. wyłączenie pytań o hasło przy komendach sieciowych. */
+  env?: NodeJS.ProcessEnv;
+};
 
 export async function git(repoDir: string, args: readonly string[], opts: GitOptions = {}): Promise<RunOutput> {
   const ceiling = await ceilingFor(repoDir);
+  const { maxBytes, stdin } = opts;
   return runProgram("git", [...NO_REPO_COMMANDS, "-C", repoDir, ...args], {
-    ...opts,
+    maxBytes,
+    stdin,
     label: `git ${args[0]}`,
     // Odczyt stanu nie może zakładać `index.lock`: daemon pyta cyklicznie, a użytkownik w tym czasie commituje.
-    env: { ...gitEnv(), GIT_CEILING_DIRECTORIES: ceiling, GIT_OPTIONAL_LOCKS: "0" },
-    timeoutMs: TIMEOUT_MS,
+    env: { ...gitEnv(), ...opts.env, GIT_CEILING_DIRECTORIES: ceiling, GIT_OPTIONAL_LOCKS: "0" },
+    timeoutMs: opts.timeoutMs ?? TIMEOUT_MS,
   });
 }
 

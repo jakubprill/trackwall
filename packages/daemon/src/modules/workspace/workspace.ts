@@ -12,6 +12,8 @@ import {
   type RepoOverview,
   type RepoStatus,
   type RepoStatusOk,
+  type SyncOutcome,
+  type SyncRun,
   sameHost,
   type TreeEntry,
   type WorkspaceSettings,
@@ -21,13 +23,15 @@ import { CloneJobs } from "./clone-jobs.ts";
 import { vscodeUrl } from "./editor-url.ts";
 import { mapLimit } from "./map-limit.ts";
 import { dirKey, findRepos, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
+import { SyncRuns } from "./sync-runs.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
 
 /**
  * Moduł `workspace` (§4): repo z folderu z projektami wskazanego w `workspace.yaml` (ADR-18) i ich stan
  * zaobserwowany w gicie, oraz klon nowych repo z hostingów z ustawień (ADR-19). Ani lista, ani stan nie są nigdzie
  * zapisywane; każde zapytanie czyta folder i pyta gita, więc nie rozjeżdżają się z tym, co robi użytkownik.
- * Klonowania żyją tylko w pamięci, do restartu daemona.
+ * Synchronizacja wszystkich repo (ADR-21) przesuwa gałęzie domyślne do zdalnych. Klonowania i synchronizacje żyją
+ * tylko w pamięci, do restartu daemona.
  */
 
 /** Ile commitów pokazuje przegląd repo. */
@@ -40,10 +44,17 @@ const README = /^readme(\.(md|markdown|txt|rst|adoc))?$/i;
  * na Windowsie drogie w starcie i skanowane przez antywirus.
  */
 const STATUS_CONCURRENCY = 8;
+/**
+ * Ile repo naraz synchronizuje: fetch trzyma połączenie z hostingiem, a firmowy GitLab albo VPN potrafi
+ * ograniczać liczbę równoczesnych połączeń SSH z jednego klienta.
+ */
+const SYNC_CONCURRENCY = 4;
 
 /** Czego `workspace` potrzebuje od `vcs`; podłączane w fasadzie (§4: moduły nie importują się nawzajem). */
 interface WorkspaceVcs {
   status(dir: string): Promise<RepoStatusOk>;
+  remote(dir: string): Promise<string | null>;
+  sync(dir: string): Promise<SyncOutcome>;
   log(dir: string, limit: number): Promise<Commit[]>;
   tree(dir: string, path: string): Promise<TreeEntry[] | undefined>;
   file(dir: string, path: string, maxBytes: number): Promise<FileContent | undefined>;
@@ -66,6 +77,7 @@ export interface WorkspaceDeps {
 export class Workspace {
   private readonly deps: WorkspaceDeps;
   private readonly clones = new CloneJobs();
+  private readonly syncs = new SyncRuns();
 
   constructor(deps: WorkspaceDeps) {
     this.deps = deps;
@@ -131,6 +143,28 @@ export class Workspace {
     return this.clones.list().filter((job) => dirKey(dirname(job.path)) === dirKey(projectsDir));
   }
 
+  /**
+   * Zaczyna synchronizację repo z folderu z projektami w tle; trwająca synchronizacja tego folderu zwraca się bez
+   * startu nowej. Repo, do którego trwa klonowanie, jest pomijane: jego katalog nie jest jeszcze gotowym repo.
+   */
+  async sync(): Promise<SyncRun> {
+    const { projectsDir, entries } = await this.entries();
+    if (projectsDir === null) throw new DomainError("bad_request", "najpierw ustaw folder z projektami");
+    // Od tego miejsca bez `await`, żeby dwa równoczesne żądania nie zaczęły dwóch synchronizacji.
+    const key = dirKey(projectsDir);
+    const running = this.syncs.current();
+    if (running?.key === key) return running.run;
+    if (running) throw new DomainError("bad_request", "trwa synchronizacja poprzedniego folderu z projektami");
+    const targets = entries.filter((entry) => !this.clones.runningInto(entry.path));
+    return this.syncs.start(key, targets, SYNC_CONCURRENCY, (entry) => this.deps.vcs.sync(entry.path));
+  }
+
+  /** Ostatnia synchronizacja bieżącego folderu z projektami; ta sprzed zmiany ustawień nie mówi nic o nim. */
+  syncRun(): SyncRun | null {
+    const projectsDir = this.deps.file.projectsDir();
+    return projectsDir === null ? null : (this.syncs.last(dirKey(projectsDir)) ?? null);
+  }
+
   async overview(id: string): Promise<RepoOverview> {
     const entry = await this.entry(id);
     const [commits, readme] = await this.inRepo(entry, () =>
@@ -171,13 +205,12 @@ export class Workspace {
   }
 
   private async describe(entry: RepoEntry): Promise<Repo> {
-    let status: RepoStatus;
-    try {
-      status = await this.deps.vcs.status(entry.path);
-    } catch (err) {
-      status = { kind: "unavailable", message: messageOf(err) };
-    }
-    return { ...entry, status };
+    const [status, remote] = await Promise.all([
+      this.deps.vcs.status(entry.path).catch((err: unknown): RepoStatus => ({ kind: "unavailable", message: messageOf(err) })),
+      // Brak adresu nie jest błędem repo: stan repo i tak powie, gdy git go nie czyta.
+      this.deps.vcs.remote(entry.path).catch(() => null),
+    ]);
+    return { ...entry, remote, status };
   }
 
   private async hostRepos(host: RepoHost, query: string, taken: (name: string) => boolean): Promise<HostRepos> {
