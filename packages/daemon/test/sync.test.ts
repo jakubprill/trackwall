@@ -121,6 +121,58 @@ describe("synchronizacja wszystkich repo", () => {
     ]);
   });
 
+  test("gałąź domyślna w trakcie bisect zostaje nietknięta, choć HEAD jest odłączony", async () => {
+    const { workspace, projects, remotes } = await setup();
+    const { upstream, clone } = cloned(projects, remotes, "api");
+    commitFiles(upstream, { "a.txt": "1" }, "drugi");
+    commitFiles(upstream, { "b.txt": "2" }, "trzeci");
+    gitIn(clone, "pull", "-q", "--ff-only");
+    commitFiles(upstream, { "nowy.txt": "1" }, "zdalny");
+    // Bisect odłącza HEAD, ale gałąź, z której zaczął, wraca po `bisect reset`, więc git traktuje ją jak wybraną.
+    gitIn(clone, "bisect", "start", "main", "main~2");
+    const before = head(clone, "refs/heads/main");
+
+    const run = await workspace.sync().then(() => finished(workspace));
+
+    expect(run.repos[0]).toMatchObject({ state: "failed" });
+    expect(head(clone, "refs/heads/main")).toBe(before);
+  });
+
+  test("repo i jego worktree w folderze z projektami synchronizują się po kolei, bez błędu blokady refów", async () => {
+    const { workspace, projects, remotes } = await setup();
+    const { upstream, clone } = cloned(projects, remotes, "api");
+    gitIn(clone, "worktree", "add", "-q", "-b", "funkcja", join(projects, "api-funkcja"));
+    commitFiles(upstream, { "nowy.txt": "1" }, "zdalny");
+
+    const run = await workspace.sync().then(() => finished(workspace));
+
+    expect(run.repos.map((r) => r.repo)).toEqual(["api", "api-funkcja"]);
+    expect(run.repos.filter((r) => r.state === "failed")).toEqual([]);
+    expect(head(clone)).toBe(head(upstream));
+  });
+
+  test("po zmianie gałęzi domyślnej w hostingu i usunięciu starej daemon pyta serwer o nową", async () => {
+    const { workspace, projects, remotes } = await setup();
+    const { upstream, clone } = cloned(projects, remotes, "api");
+    gitIn(upstream, "branch", "-q", "-m", "main", "trunk");
+    gitIn(clone, "config", "fetch.prune", "true");
+
+    const run = await workspace.sync().then(() => finished(workspace));
+
+    expect(run.repos[0]).toMatchObject({ state: "skipped", reason: "no-local-branch", message: expect.stringContaining("trunk") });
+    expect(gitIn(clone, "symbolic-ref", "refs/remotes/origin/HEAD").trim()).toBe("refs/remotes/origin/trunk");
+  });
+
+  test("remote bez żadnej gałęzi nie ma gałęzi domyślnej", async () => {
+    const { workspace, projects, remotes } = await setup();
+    const empty = makeRepo({}, "puste", remotes);
+    gitIn(projects, "clone", "-q", empty, "puste");
+
+    const run = await workspace.sync().then(() => finished(workspace));
+
+    expect(run.repos[0]).toMatchObject({ state: "skipped", reason: "no-default-branch" });
+  });
+
   test("repo bez origin jest pomijane, a gałąź domyślną remote bez HEAD daemon ustala sam", async () => {
     const { workspace, projects, remotes } = await setup();
     makeRepo({ a: "1" }, "lokalne", projects);

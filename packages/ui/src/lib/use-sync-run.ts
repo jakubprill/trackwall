@@ -1,5 +1,5 @@
 import { type SyncRun, workspaceApi } from "@trackwall/protocol";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { errorMessage, post } from "./api.ts";
 import type { Connection } from "./connection.ts";
 import { useRemote } from "./use-remote.ts";
@@ -20,8 +20,8 @@ export interface SyncRunHandle {
 }
 
 /**
- * Ostatnia synchronizacja folderu z projektami (ADR-21) i jej start. `onFinished` jest wołane, gdy synchronizacja
- * widziana w trakcie się skończy, żeby lista repo pokazała nowe HEAD bez czekania na swoje odpytanie.
+ * Ostatnia synchronizacja folderu z projektami (ADR-21) i jej start. `onFinished` jest wołane po końcu synchronizacji,
+ * żeby lista repo pokazała nowe HEAD bez czekania na swoje odpytanie.
  */
 export function useSyncRun(conn: Connection, onFinished: () => void): SyncRunHandle {
   const [startError, setStartError] = useState<string>();
@@ -33,40 +33,21 @@ export function useSyncRun(conn: Connection, onFinished: () => void): SyncRunHan
   const run = remote.data;
   const inProgress = run?.finishedAt === null;
   useEffect(() => setFast(inProgress), [inProgress]);
-  const seenRunning = useOnFinished(run, onFinished);
+  // Każda skończona synchronizacja ma nowy `finishedAt`, także taka, która zaczęła się i skończyła między
+  // odpytaniami; pierwsza odpowiedź po otwarciu widoku odświeża listę raz, bez szkody.
+  const finishedAt = run?.finishedAt;
+  useEffect(() => {
+    if (finishedAt) onFinished();
+  }, [finishedAt, onFinished]);
 
   const { reload } = remote;
   const start = useCallback(() => {
     setStarting(true);
     setStartError(undefined);
     post(conn, workspaceApi.sync, {})
-      .then(
-        (started) => {
-          // Synchronizacja, która skończy się przed następnym odpytaniem, też ma odświeżyć listę.
-          seenRunning.current = started.startedAt;
-          reload();
-        },
-        (err: unknown) => setStartError(errorMessage(err)),
-      )
+      .then(reload, (err: unknown) => setStartError(errorMessage(err)))
       .finally(() => setStarting(false));
-  }, [conn, reload, seenRunning]);
+  }, [conn, reload]);
 
   return { run, running: inProgress || starting, error: startError ?? remote.error, start };
-}
-
-/**
- * Woła `onFinished`, gdy synchronizacja, którą ten widok widział w trakcie, dostanie `finishedAt`. Zwraca znacznik
- * (`startedAt`) widzianej synchronizacji, żeby start mógł go ustawić sam.
- */
-function useOnFinished(run: SyncRun | null | undefined, onFinished: () => void) {
-  const seenRunning = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    if (!run) return;
-    if (run.finishedAt === null) seenRunning.current = run.startedAt;
-    else if (seenRunning.current === run.startedAt) {
-      seenRunning.current = undefined;
-      onFinished();
-    }
-  }, [run, onFinished]);
-  return seenRunning;
 }

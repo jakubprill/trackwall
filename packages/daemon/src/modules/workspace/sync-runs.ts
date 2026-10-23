@@ -1,15 +1,17 @@
-import type { SyncOutcome, SyncRepo, SyncRun } from "@trackwall/protocol";
+import type { SyncResult, SyncRun } from "@trackwall/protocol";
+import { DomainError } from "../../errors.ts";
+import { messageOf } from "./error-message.ts";
 import { mapLimit } from "./map-limit.ts";
 import type { RepoEntry } from "./projects-dir.ts";
 
 /**
  * Synchronizacje folderów z projektami (§4.5, ADR-21), trzymane tylko w pamięci, jak klonowania: wynik i tak widać
- * w stanie repo, a po restarcie daemona nie ma czego wznawiać. Jedna synchronizacja na folder (pełna ścieżka bez
- * wielkości liter); naraz trwa co najwyżej jedna, bo dwie na tym samym repo walczyłyby o te same refy.
+ * w stanie repo, a po restarcie daemona nie ma czego wznawiać. Jedna synchronizacja na folder (klucz: pełna ścieżka
+ * bez wielkości liter), a naraz trwa co najwyżej jedna, w dowolnym folderze: zmiana folderu w trakcie nie zaczyna
+ * drugiej na tych samych repo.
  */
 export class SyncRuns {
   private readonly runs = new Map<string, SyncRun>();
-  private running: string | undefined;
 
   /** Ostatnia synchronizacja folderu o kluczu `key`. */
   last(key: string): SyncRun | undefined {
@@ -17,42 +19,36 @@ export class SyncRuns {
     return run && snapshot(run);
   }
 
-  /** Trwająca synchronizacja, w dowolnym folderze, z kluczem folderu. */
-  current(): { key: string; run: SyncRun } | undefined {
-    const key = this.running;
-    const run = key === undefined ? undefined : this.last(key);
-    return key !== undefined && run ? { key, run } : undefined;
+  /**
+   * Zaczyna synchronizację `entries` w tle, najwyżej `limit` repo naraz, albo zwraca trwającą w tym folderze; trwająca
+   * w innym folderze to błąd. Wyjątek z `sync` to wynik `failed` tego repo, nie całej synchronizacji.
+   */
+  startOrJoin(key: string, entries: readonly RepoEntry[], limit: number, sync: (entry: RepoEntry) => Promise<SyncResult>): SyncRun {
+    const running = [...this.runs].find(([, run]) => run.finishedAt === null);
+    if (running?.[0] === key) return snapshot(running[1]);
+    if (running) throw new DomainError("bad_request", "trwa synchronizacja poprzedniego folderu z projektami");
+    return snapshot(this.start(key, entries, limit, sync));
   }
 
-  /**
-   * Zaczyna synchronizację `entries` w tle, najwyżej `limit` repo naraz; wyjątek z `sync` to wynik `failed`
-   * tego repo, nie całej synchronizacji.
-   */
-  start(key: string, entries: readonly RepoEntry[], limit: number, sync: (entry: RepoEntry) => Promise<SyncOutcome>): SyncRun {
+  private start(key: string, entries: readonly RepoEntry[], limit: number, sync: (entry: RepoEntry) => Promise<SyncResult>): SyncRun {
     const run: SyncRun = {
       startedAt: new Date().toISOString(),
       finishedAt: null,
       repos: entries.map((e) => ({ repo: e.id, path: e.path, state: "waiting" })),
     };
     this.runs.set(key, run);
-    this.running = key;
-    const settle = (i: number, state: SyncRepo) => {
-      run.repos[i] = state;
-    };
-    const indexed = entries.map((entry, i) => ({ entry, i }));
-    void mapLimit(indexed, limit, async ({ entry, i }) => {
+    void mapLimit(entries, limit, async (entry, i) => {
       const target = { repo: entry.id, path: entry.path };
-      settle(i, { ...target, state: "running" });
+      run.repos[i] = { ...target, state: "running" };
       try {
-        settle(i, { ...target, ...(await sync(entry)) });
+        run.repos[i] = { ...target, ...(await sync(entry)) };
       } catch (err) {
-        settle(i, { ...target, state: "failed", message: err instanceof Error ? err.message : String(err) });
+        run.repos[i] = { ...target, state: "failed", message: messageOf(err) };
       }
     }).finally(() => {
       run.finishedAt = new Date().toISOString();
-      this.running = undefined;
     });
-    return snapshot(run);
+    return run;
   }
 }
 

@@ -5,7 +5,7 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
 import { relativeTime } from "@/lib/format";
-import { type SyncProgress, syncProgress, syncRepoTone } from "@/lib/sync-state";
+import { type SyncProgress, syncMessage, syncProgress, syncRepoTone } from "@/lib/sync-state";
 import type { SyncRunHandle } from "@/lib/use-sync-run";
 
 /**
@@ -87,7 +87,7 @@ function summary(p: SyncProgress): string | undefined {
 
 function SyncRow({ repo }: { repo: SyncRepo }) {
   const { tone, label } = syncRepoTone(repo);
-  const message = repo.state === "skipped" || repo.state === "failed" ? repo.message : undefined;
+  const message = syncMessage(repo);
   return (
     <li className="flex items-start gap-3 px-3 py-2">
       <div className="flex min-w-0 flex-1 flex-col gap-1">

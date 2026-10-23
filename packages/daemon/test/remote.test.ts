@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { mainRemote, parseConfig, remoteAddress } from "../src/modules/vcs/remote.ts";
-import { noPromptEnv } from "../src/modules/vcs/sync.ts";
+import { networkEnv } from "../src/modules/vcs/git.ts";
+import { mainRemote, parseConfig } from "../src/modules/vcs/git-config.ts";
+import { remoteAddress } from "../src/modules/vcs/remote.ts";
 
 describe("adres repo zdalnego", () => {
   test("SSH, scp i HTTPS do tego samego repo dają ten sam adres, bez użytkownika, tokenu, portu i .git", () => {
@@ -22,6 +23,7 @@ describe("adres repo zdalnego", () => {
       "C:/repo/api",
       "file:///srv/git/api.git",
       "https://gitlab.example.com/",
+      "ext::sshpass -p tajne ssh git@gitlab.example.com %S 'sklep/api'",
       "",
     ])
       expect(remoteAddress(url)).toBeUndefined();
@@ -34,11 +36,18 @@ describe("adres repo zdalnego", () => {
     expect(config("remote.a.url\na\0remote.b.url\nb\0")).toBeUndefined();
     expect(config("core.bare\nfalse\0core.quotepath\0")).toBeUndefined();
   });
+
+  test("adres remote jest po skrócie insteadOf, z najdłuższym pasującym prefiksem, jak w gicie", () => {
+    const config = parseConfig(
+      "url.git@gitlab.example.com:.insteadof\ngl:\0url.git@inny.example.com:sklep/.insteadof\ngl:sklep/\0remote.origin.url\ngl:sklep/api\0",
+    );
+    expect(mainRemote(config)).toEqual({ name: "origin", url: "git@inny.example.com:sklep/api" });
+  });
 });
 
 describe("komendy sieciowe bez pytań", () => {
   test("ssh w trybie wsadowym, pusty GIT_ASKPASS i Git Credential Manager bez okien", () => {
-    expect(noPromptEnv(parseConfig(""), {})).toEqual({
+    expect(networkEnv(undefined, {})).toEqual({
       GIT_ASKPASS: "",
       GCM_INTERACTIVE: "never",
       GIT_SSH_COMMAND: "ssh -o BatchMode=yes",
@@ -46,8 +55,8 @@ describe("komendy sieciowe bez pytań", () => {
   });
 
   test("program ssh ustawiony przez użytkownika zostaje", () => {
-    expect(noPromptEnv(parseConfig("core.sshcommand\nplink -batch\0"), {}).GIT_SSH_COMMAND).toBeUndefined();
-    expect(noPromptEnv(parseConfig(""), { GIT_SSH: "plink" }).GIT_SSH_COMMAND).toBeUndefined();
-    expect(noPromptEnv(parseConfig(""), { GIT_SSH_COMMAND: "ssh -i klucz" }).GIT_SSH_COMMAND).toBeUndefined();
+    expect(networkEnv(parseConfig("core.sshcommand\nplink -batch\0").sshCommand, {}).GIT_SSH_COMMAND).toBeUndefined();
+    expect(networkEnv(undefined, { GIT_SSH: "plink" }).GIT_SSH_COMMAND).toBeUndefined();
+    expect(networkEnv(undefined, { GIT_SSH_COMMAND: "ssh -i klucz" }).GIT_SSH_COMMAND).toBeUndefined();
   });
 });

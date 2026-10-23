@@ -32,6 +32,20 @@ export function syncRepoTone(repo: SyncRepo): { tone: StatusTone; label: string 
   }
 }
 
+/** Zdanie z daemona dla pominiętego albo nieudanego repo; reszta wyników mieści się w krótkim tekście. */
+export function syncMessage(repo: SyncRepo): string | undefined {
+  return repo.state === "skipped" || repo.state === "failed" ? repo.message : undefined;
+}
+
+/**
+ * Wynik pod stanem repo na liście, chyba że repo było już aktualne: wtedy nie ma o czym mówić, a stary napis
+ * „aktualne” byłby z czasem nieprawdą.
+ */
+export function listSyncBadge(repo: SyncRepo | undefined): { tone: StatusTone; label: string; message: string | undefined } | undefined {
+  if (!repo || repo.state === "up-to-date") return undefined;
+  return { ...syncRepoTone(repo), message: syncMessage(repo) };
+}
+
 export interface SyncProgress {
   /** Repo z wynikiem (także pominięte i nieudane). */
   done: number;

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { SyncRepo } from "@trackwall/protocol";
-import { syncProgress, syncRepoTone } from "../src/lib/sync-state.ts";
+import { listSyncBadge, syncProgress, syncRepoTone } from "../src/lib/sync-state.ts";
 
 const target = { repo: "api", path: "/projekty/api" };
 
@@ -42,5 +42,20 @@ describe("synchronizacja w UI", () => {
       ],
     } satisfies { startedAt: string; finishedAt: null; repos: SyncRepo[] };
     expect(syncProgress(run)).toEqual({ done: 4, total: 6, updated: 1, skipped: 1, failed: 1 });
+  });
+
+  test("na liście repo wynik ma zdanie z daemona, a aktualne repo nie ma wyniku", () => {
+    expect(listSyncBadge(undefined)).toBeUndefined();
+    expect(listSyncBadge({ ...target, state: "up-to-date", branch: "main" })).toBeUndefined();
+    expect(listSyncBadge({ ...target, state: "failed", message: "Permission denied (publickey)." })).toEqual({
+      tone: "error",
+      label: "błąd synchronizacji",
+      message: "Permission denied (publickey).",
+    });
+    expect(listSyncBadge({ ...target, state: "updated", branch: "main", commits: 2 })).toEqual({
+      tone: "ok",
+      label: "+2 commity",
+      message: undefined,
+    });
   });
 });

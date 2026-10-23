@@ -9,7 +9,7 @@ import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { twoDigits } from "@/lib/format";
 import { branchLabel, repoStatusTone } from "@/lib/repo-status";
-import { syncedByPath, syncRepoTone } from "@/lib/sync-state";
+import { listSyncBadge, syncedByPath } from "@/lib/sync-state";
 import { useRemote } from "@/lib/use-remote";
 import { useSyncRun } from "@/lib/use-sync-run";
 import { cn } from "@/lib/utils";
@@ -79,7 +79,7 @@ export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection;
               key={repo.id}
               repo={repo}
               position={i + 1}
-              sync={synced.get(repo.path)}
+              syncResult={synced.get(repo.path)}
               active={panel === "repo" && repo.id === current?.id}
               onSelect={() => {
                 setSelected(repo.id);
@@ -137,25 +137,24 @@ function ChangeProjectsDir({ onClick }: { onClick: () => void }) {
 
 /**
  * Wiersz listy w stylu HUD (ADR-16): numer pozycji, nazwa, gałąź oraz kropka i tekst stanu; aktywny ma świecącą kreskę z lewej.
- * Numer to tylko pozycja na liście, nie identyfikator repo. Wynik ostatniej synchronizacji stoi pod stanem, chyba że
- * repo było już aktualne: wtedy nie ma o czym mówić, a stary napis „aktualne” byłby z czasem nieprawdą.
+ * Numer to tylko pozycja na liście, nie identyfikator repo. Pod stanem stoi wynik ostatniej synchronizacji (`listSyncBadge`).
  */
 function RepoListItem({
   repo,
   position,
-  sync,
+  syncResult,
   active,
   onSelect,
 }: {
   repo: Repo;
   position: number;
-  sync: SyncRepo | undefined;
+  syncResult: SyncRepo | undefined;
   active: boolean;
   onSelect: () => void;
 }) {
   const { status } = repo;
   const state = repoStatusTone(status);
-  const synced = sync && sync.state !== "up-to-date" ? syncRepoTone(sync) : undefined;
+  const badge = listSyncBadge(syncResult);
   return (
     <button
       type="button"
@@ -173,12 +172,9 @@ function RepoListItem({
           {status.kind === "ok" && <span className="min-w-0 truncate font-mono">{branchLabel(status)}</span>}
           <StatusLabel tone={state.tone} label={state.label} />
         </span>
-        {synced && (
-          <span
-            className="text-muted-foreground text-xs"
-            title={sync?.state === "skipped" || sync?.state === "failed" ? sync.message : undefined}
-          >
-            <StatusLabel tone={synced.tone} label={synced.label} />
+        {badge && (
+          <span className="text-muted-foreground text-xs" title={badge.message}>
+            <StatusLabel tone={badge.tone} label={badge.label} />
           </span>
         )}
       </span>

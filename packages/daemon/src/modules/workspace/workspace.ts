@@ -12,7 +12,7 @@ import {
   type RepoOverview,
   type RepoStatus,
   type RepoStatusOk,
-  type SyncOutcome,
+  type SyncResult,
   type SyncRun,
   sameHost,
   type TreeEntry,
@@ -21,6 +21,7 @@ import {
 import { DomainError } from "../../errors.ts";
 import { CloneJobs } from "./clone-jobs.ts";
 import { vscodeUrl } from "./editor-url.ts";
+import { messageOf } from "./error-message.ts";
 import { mapLimit } from "./map-limit.ts";
 import { dirKey, findRepos, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";
@@ -54,7 +55,7 @@ const SYNC_CONCURRENCY = 4;
 interface WorkspaceVcs {
   status(dir: string): Promise<RepoStatusOk>;
   remote(dir: string): Promise<string | null>;
-  sync(dir: string): Promise<SyncOutcome>;
+  sync(dir: string): Promise<SyncResult>;
   log(dir: string, limit: number): Promise<Commit[]>;
   tree(dir: string, path: string): Promise<TreeEntry[] | undefined>;
   file(dir: string, path: string, maxBytes: number): Promise<FileContent | undefined>;
@@ -150,13 +151,8 @@ export class Workspace {
   async sync(): Promise<SyncRun> {
     const { projectsDir, entries } = await this.entries();
     if (projectsDir === null) throw new DomainError("bad_request", "najpierw ustaw folder z projektami");
-    // Od tego miejsca bez `await`, żeby dwa równoczesne żądania nie zaczęły dwóch synchronizacji.
-    const key = dirKey(projectsDir);
-    const running = this.syncs.current();
-    if (running?.key === key) return running.run;
-    if (running) throw new DomainError("bad_request", "trwa synchronizacja poprzedniego folderu z projektami");
     const targets = entries.filter((entry) => !this.clones.runningInto(entry.path));
-    return this.syncs.start(key, targets, SYNC_CONCURRENCY, (entry) => this.deps.vcs.sync(entry.path));
+    return this.syncs.startOrJoin(dirKey(projectsDir), targets, SYNC_CONCURRENCY, (entry) => this.deps.vcs.sync(entry.path));
   }
 
   /** Ostatnia synchronizacja bieżącego folderu z projektami; ta sprzed zmiany ustawień nie mówi nic o nim. */
@@ -250,8 +246,4 @@ function cloneDir(fullName: string): string {
   const dir = fullName.split("/").at(-1);
   if (!dir) throw new Error(`pełna nazwa repo bez nazwy: "${fullName}"`);
   return dir;
-}
-
-function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }

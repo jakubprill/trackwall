@@ -34,10 +34,13 @@ const REPO_SELECTING_ENV = [
 ];
 
 type GitOptions = Pick<RunOptions, "maxBytes" | "stdin"> & {
-  /** Dłuższy limit dla komend sieciowych (`fetch`); domyślnie `TIMEOUT_MS`. */
+  /** Limit dłuższy niż `TIMEOUT_MS` dla komend, które pobierają dane albo zmieniają katalog roboczy. */
   timeoutMs?: number;
-  /** Zmienne dodane do `gitEnv()`, np. wyłączenie pytań o hasło przy komendach sieciowych. */
-  env?: NodeJS.ProcessEnv;
+  /**
+   * Komenda może łączyć się z serwerem (`fetch`, `remote set-head`, `merge` z filtrem LFS): środowisko bez pytań
+   * (`networkEnv`); `sshCommand` to `core.sshCommand` z konfiguracji repo i użytkownika.
+   */
+  network?: { sshCommand: string | undefined };
 };
 
 export async function git(repoDir: string, args: readonly string[], opts: GitOptions = {}): Promise<RunOutput> {
@@ -48,7 +51,12 @@ export async function git(repoDir: string, args: readonly string[], opts: GitOpt
     stdin,
     label: `git ${args[0]}`,
     // Odczyt stanu nie może zakładać `index.lock`: daemon pyta cyklicznie, a użytkownik w tym czasie commituje.
-    env: { ...gitEnv(), ...opts.env, GIT_CEILING_DIRECTORIES: ceiling, GIT_OPTIONAL_LOCKS: "0" },
+    env: {
+      ...gitEnv(),
+      ...(opts.network && networkEnv(opts.network.sshCommand)),
+      GIT_CEILING_DIRECTORIES: ceiling,
+      GIT_OPTIONAL_LOCKS: "0",
+    },
     timeoutMs: opts.timeoutMs ?? TIMEOUT_MS,
   });
 }
@@ -75,5 +83,18 @@ async function ceilingFor(repoDir: string): Promise<string> {
 export function gitEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
   for (const name of REPO_SELECTING_ENV) delete env[name];
+  return env;
+}
+
+/**
+ * Dodatki do `gitEnv()` dla komend, które łączą się z serwerem: daemon nie ma terminala ani okna, więc każde pytanie
+ * o hasło, token albo klucz hosta wisiałoby do limitu czasu w ukrytej konsoli. Pusty `GIT_ASKPASS` (git nie pyta
+ * wtedy przez program, także odziedziczony z terminala VS Code), Git Credential Manager bez okien i ssh w trybie
+ * wsadowym, chyba że użytkownik sam ustawił program ssh (`GIT_SSH_COMMAND`, `GIT_SSH`, `core.sshCommand`): wtedy
+ * zostaje jego, bo `GIT_SSH_COMMAND` daemona przykryłby go.
+ */
+export function networkEnv(sshCommand: string | undefined, inherited: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { GIT_ASKPASS: "", GCM_INTERACTIVE: "never" };
+  if (!(inherited.GIT_SSH_COMMAND || inherited.GIT_SSH || sshCommand)) env.GIT_SSH_COMMAND = "ssh -o BatchMode=yes";
   return env;
 }

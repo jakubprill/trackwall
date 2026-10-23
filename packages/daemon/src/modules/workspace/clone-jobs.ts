@@ -1,4 +1,5 @@
 import type { CloneJob, RepoHost } from "@trackwall/protocol";
+import { messageOf } from "./error-message.ts";
 import { dirKey } from "./projects-dir.ts";
 
 /**
@@ -29,7 +30,7 @@ export class CloneJobs {
     this.jobs.set(key, job);
     void clone().then(
       () => this.jobs.set(key, { ...target, state: "done" }),
-      (err: unknown) => this.jobs.set(key, { ...target, state: "failed", message: err instanceof Error ? err.message : String(err) }),
+      (err: unknown) => this.jobs.set(key, { ...target, state: "failed", message: messageOf(err) }),
     );
     return job;
   }

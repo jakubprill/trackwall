@@ -27,14 +27,20 @@ export const SyncSkipReason = z.enum([
 ]);
 export type SyncSkipReason = z.infer<typeof SyncSkipReason>;
 
-/** Wynik synchronizacji jednego repo, gdy już się skończyła. */
-export const SyncOutcome = z.discriminatedUnion("state", [
+/** Wynik synchronizacji jednego repo bez błędu: to, co zwraca `vcs`, a błąd gita jest u niego wyjątkiem. */
+export const SyncResult = z.discriminatedUnion("state", [
   /** Gałąź domyślna przesunięta do zdalnej o `commits` commitów. */
   z.object({ state: z.literal("updated"), branch: z.string(), commits: z.number().int().positive() }),
   /** Fetch się udał, a gałąź domyślna już była równa zdalnej. */
   z.object({ state: z.literal("up-to-date"), branch: z.string() }),
   /** `message` to zdanie dla użytkownika, z nazwą gałęzi, gdy jest znana. */
   z.object({ state: z.literal("skipped"), reason: SyncSkipReason, message: z.string() }),
+]);
+export type SyncResult = z.infer<typeof SyncResult>;
+
+/** Wynik synchronizacji jednego repo, gdy już się skończyła. */
+export const SyncOutcome = z.union([
+  SyncResult,
   /** Git odmówił (sieć, logowanie, klucz hosta, limit czasu); `message` to komunikat gita. */
   z.object({ state: z.literal("failed"), message: z.string() }),
 ]);
