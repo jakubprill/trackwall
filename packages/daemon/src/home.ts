@@ -7,5 +7,10 @@ import { TRACKWALL_HOME_ENV } from "@trackwall/protocol";
  * Pusta wartość znaczy „nie ustawiono”, tak samo jak w powłoce Tauri.
  */
 export function trackwallHome(override?: string): string {
-  return resolve(override || process.env[TRACKWALL_HOME_ENV] || join(homedir(), ".trackwall"));
+  return resolve(override || process.env[TRACKWALL_HOME_ENV] || defaultTrackwallHome());
+}
+
+/** `~/.trackwall`: katalog stanu, gdy ani `--home`, ani `TRACKWALL_HOME` go nie wskazują. */
+export function defaultTrackwallHome(): string {
+  return join(homedir(), ".trackwall");
 }
