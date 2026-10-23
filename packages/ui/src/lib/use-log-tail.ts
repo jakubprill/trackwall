@@ -34,7 +34,8 @@ export function useLogTail(conn: Connection, source: LogSource) {
   const load = useMemo(() => {
     let sinceSeq: number | undefined;
     let view: LogView = { records: [], dropped: false, full: false };
-    return async (): Promise<LogView> => {
+    let inFlight: Promise<LogView> | undefined;
+    const fetchPage = async (): Promise<LogView> => {
       const page = await post(conn, logsApi.tail, { source: sourceRef.current, sinceSeq, limit: LOG_TAIL_MAX });
       // Pierwsza odpowiedź bez kursora to ostatnie rekordy, a nie dziura w logu.
       const dropped = view.dropped || (sinceSeq !== undefined && page.dropped);
@@ -43,6 +44,14 @@ export function useLogTail(conn: Connection, source: LogSource) {
       const full = page.records.length === LOG_TAIL_MAX;
       if (records !== view.records || dropped !== view.dropped || full !== view.full) view = { records, dropped, full };
       return view;
+    };
+    // Dwa pytania naraz (StrictMode uruchamia efekt dwa razy, `reload` w trakcie odpytywania) dostają tę samą
+    // odpowiedź: inaczej oba poszłyby z tym samym kursorem i strona zostałaby doklejona dwa razy.
+    return () => {
+      inFlight ??= fetchPage().finally(() => {
+        inFlight = undefined;
+      });
+      return inFlight;
     };
   }, [conn, key]);
 

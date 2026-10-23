@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { LOG_BUFFER_RECORDS, LogLevel, type LogRecord } from "@trackwall/protocol";
+import { LOG_BUFFER_RECORDS, type LogLevel, type LogRecord } from "@trackwall/protocol";
 import { logLevelClass, mergeTail, startsRun } from "../src/lib/log-tail.ts";
 
 function record(seq: number, runId = "r1"): LogRecord {
@@ -35,12 +35,8 @@ describe("log taska mise w UI", () => {
   });
 
   test("kolor mają tylko błędy i ostrzeżenia, szczegóły są przygaszone", () => {
-    expect(LogLevel.options.map(logLevelClass)).toEqual([
-      "text-muted-foreground",
-      "text-muted-foreground",
-      "",
-      "text-warning",
-      "text-destructive",
-    ]);
+    const levels: LogLevel[] = ["error", "warn", "info", "debug", "trace"];
+
+    expect(levels.map(logLevelClass)).toEqual(["text-destructive", "text-warning", "", "text-muted-foreground", "text-muted-foreground"]);
   });
 });

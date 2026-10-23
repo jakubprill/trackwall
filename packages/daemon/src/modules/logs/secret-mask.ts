@@ -35,6 +35,8 @@ export function secretValues(env: NodeJS.ProcessEnv): string[] {
 export function maskSecrets(line: string, secrets: readonly string[]): string {
   const ranges: [number, number][] = [];
   for (const secret of secrets) {
+    // Pusty napis pasuje wszędzie, a `indexOf` zapętliłby się na końcu linii.
+    if (secret === "") continue;
     for (let at = line.indexOf(secret); at !== -1; at = line.indexOf(secret, at + 1)) ranges.push([at, at + secret.length]);
   }
   if (ranges.length === 0) return line;

@@ -55,7 +55,7 @@ export class StreamLines {
 
 /**
  * Miejsce wymuszonego podziału: koniec tekstu bez najdłuższego sekretu bez jednego znaku (sekret, który dopiero
- * przychodzi, zaczyna się w tej zakładce), cofnięty przed każdy sekret, który by go przecinał.
+ * przychodzi, może się zaczynać tylko w tych ostatnich znakach), cofnięty przed każdy sekret, który by go przecinał.
  */
 function safeCut(text: string, secrets: readonly string[]): number {
   let cut = text.length - Math.max(0, ...secrets.map((s) => s.length - 1));
@@ -69,6 +69,9 @@ function safeCut(text: string, secrets: readonly string[]): number {
       }
     }
   }
+  // Nie między połówkami pary zastępczej UTF-16 (emoji): obie części pokazałyby znak zastępczy.
+  const high = text.charCodeAt(cut - 1);
+  if (high >= 0xd800 && high <= 0xdbff) cut -= 1;
   // Tekst w całości z zachodzących na siebie sekretów: lepiej podzielić na końcu niż trzymać rosnącą linię.
   return cut > 0 ? cut : text.length;
 }

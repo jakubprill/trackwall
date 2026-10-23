@@ -155,7 +155,11 @@ describe("odczyt od kursora", () => {
 
   test("źródło, które nic nie wypisało, ma pusty log", () => {
     const { logs } = newLogs();
-    expect(logs.tail({ source: DEV, limit: 10 })).toMatchObject({ records: [], dropped: false });
+    const empty = logs.tail({ source: DEV, limit: 10 });
+    expect(empty).toMatchObject({ records: [], dropped: false });
+
+    write(logs.open(DEV, "r", {}), "pierwsza");
+    expect(logs.tail({ source: DEV, sinceSeq: empty.nextSeq, limit: 10 }).records).toMatchObject([{ seq: empty.nextSeq + 1 }]);
   });
 });
 
@@ -242,6 +246,16 @@ describe("sekrety do maskowania", () => {
 });
 
 describe("sekret w trudnych miejscach", () => {
+  test("wymuszony podział cofnięty przed sekretem nie rozcina emoji na dwie połówki", () => {
+    const lines: string[] = [];
+    const output = new RunOutput(["sekret-12345"], (_stream, msg) => lines.push(msg));
+    output.push("stdout", Buffer.from(`${"x".repeat(65_525)}${"😀".repeat(7)}`));
+    output.end("stdout");
+
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toBe("😀".repeat(6));
+  });
+
   test("klucz wieloliniowy jest maskowany w każdej linii", () => {
     const secrets = secretValues({ DEPLOY_PRIVATE_KEY: "-----BEGIN KEY-----\nMIIEabcdefgh\r\n-----END KEY-----" });
     const lines: string[] = [];
@@ -305,7 +319,7 @@ describe("plik logu", () => {
   test("plik po przekroczeniu limitu staje się .1.jsonl, a nowy zaczyna się od pustego", () => {
     const dir = mkdtempSync(join(tmpdir(), "trackwall-logfile-"));
     const path = join(dir, "a", "dev.jsonl");
-    const file = new LogFile(path, 30);
+    const file = new LogFile(path, 30, () => {});
     file.append('{"n":1,"pad":"xxxxxxxxxx"}');
     file.flush();
     file.append('{"n":2}');
@@ -315,18 +329,20 @@ describe("plik logu", () => {
     expect(readFileSync(path, "utf8")).toBe('{"n":2}\n');
   });
 
-  test("nieudana rotacja nie wstrzymuje zapisu: plik rośnie ponad limit", () => {
+  test("nieudana rotacja nie wstrzymuje zapisu: plik rośnie ponad limit, a błąd jest zgłoszony raz", () => {
     const dir = mkdtempSync(join(tmpdir(), "trackwall-logfile-"));
     const path = join(dir, "dev.jsonl");
     // Niepusty katalog w miejscu `.1.jsonl`: rename się nie uda, jak na Windowsie przy pliku otwartym gdzie indziej.
     mkdirSync(join(rotatedPath(path), "zajete"), { recursive: true });
-    const file = new LogFile(path, 10);
-    file.append('{"n":1}');
-    file.flush();
-    file.append('{"n":2}');
-    file.flush();
+    const errors: unknown[] = [];
+    const file = new LogFile(path, 10, (err) => errors.push(err));
+    for (const n of [1, 2, 3]) {
+      file.append(`{"n":${n}}`);
+      file.flush();
+    }
 
-    expect(readFileSync(path, "utf8")).toBe('{"n":1}\n{"n":2}\n');
+    expect(readFileSync(path, "utf8")).toBe('{"n":1}\n{"n":2}\n{"n":3}\n');
+    expect(errors).toHaveLength(1);
   });
 
   test("rozmiar pliku z poprzedniego działania daemona liczy się do limitu", () => {
@@ -334,7 +350,7 @@ describe("plik logu", () => {
     mkdirSync(join(dir, "a"));
     const path = join(dir, "a", "dev.jsonl");
     writeFileSync(path, `${"x".repeat(25)}\n`);
-    const file = new LogFile(path, 30);
+    const file = new LogFile(path, 30, () => {});
     file.append('{"n":2}');
     file.flush();
 

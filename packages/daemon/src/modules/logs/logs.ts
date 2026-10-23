@@ -30,9 +30,10 @@ interface SourceLog {
   /** `seq` ostatniego rekordu, który wypadł z bufora; kursor starszy znaczy, że coś przepadło. */
   evictedSeq: number;
   readonly file: LogFile;
-  /** Błąd zapisu i utrata rekordów są zgłaszane raz, do następnego udanego zapisu. */
-  writeFailing: boolean;
-  losing: boolean;
+  /** Błąd zapisu pliku już zgłoszony w logu daemona; zgłaszany raz, do następnego udanego zapisu. */
+  writeErrorReported: boolean;
+  /** Pełny bufor zapisu (rekordy nie trafiają do pliku) już zgłoszony; też raz, do następnego udanego zapisu. */
+  overflowReported: boolean;
 }
 
 export class Logs {
@@ -40,7 +41,8 @@ export class Logs {
   private readonly sources = new Map<string, SourceLog>();
   /**
    * Pierwszy `seq` tego działania daemona minus jeden: chwila startu w ms razy 1000. Kursor mniejszy pochodzi
-   * z wcześniejszego działania; tysiąc rekordów na milisekundę działania to więcej, niż wypisze jakikolwiek proces.
+   * z wcześniejszego działania; tysiąc rekordów na milisekundę działania to więcej, niż wypisze jakikolwiek proces,
+   * a wartość mieści się w `Number.MAX_SAFE_INTEGER` do ok. 2255 roku.
    */
   private readonly baseSeq = Date.now() * 1000;
   private seq = this.baseSeq;
@@ -83,11 +85,11 @@ export class Logs {
     for (const log of this.sources.values()) {
       try {
         log.file.flush();
-        log.writeFailing = false;
-        log.losing = false;
+        log.writeErrorReported = false;
+        log.overflowReported = false;
       } catch (err) {
-        if (!log.writeFailing) this.deps.log(`zapis ${log.file.path}: ${String(err)}; spróbuję ponownie`);
-        log.writeFailing = true;
+        if (!log.writeErrorReported) this.deps.log(`zapis ${log.file.path}: ${String(err)}; spróbuję ponownie`);
+        log.writeErrorReported = true;
       }
     }
     if ([...this.sources.values()].some((l) => l.file.hasPending)) this.scheduleFlush();
@@ -104,8 +106,8 @@ export class Logs {
       log.evictedSeq = evicted.seq;
       log.chars -= evicted.msg.length;
     }
-    if (!log.file.append(JSON.stringify({ ...record, source })) && !log.losing) {
-      log.losing = true;
+    if (!log.file.append(JSON.stringify({ ...record, source })) && !log.overflowReported) {
+      log.overflowReported = true;
       this.deps.log(`zapis ${log.file.path} nie nadąża; rekordy nie trafiają do pliku do następnego udanego zapisu`);
     }
     this.scheduleFlush();
@@ -122,8 +124,11 @@ export class Logs {
     const key = sourceKey(source);
     let log = this.sources.get(key);
     if (!log) {
-      const file = new LogFile(logFilePath(this.deps.dir, source), this.deps.maxFileBytes);
-      log = { records: [], chars: 0, evictedSeq: 0, file, writeFailing: false, losing: false };
+      const path = logFilePath(this.deps.dir, source);
+      const file = new LogFile(path, this.deps.maxFileBytes, (err) =>
+        this.deps.log(`rotacja ${path}: ${String(err)}; plik rośnie ponad limit do następnej udanej rotacji`),
+      );
+      log = { records: [], chars: 0, evictedSeq: 0, file, writeErrorReported: false, overflowReported: false };
       this.sources.set(key, log);
     }
     return log;

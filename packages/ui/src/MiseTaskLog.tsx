@@ -32,8 +32,8 @@ export function MiseTaskLog({ conn, repo, miseTask }: { conn: Connection; repo: 
     <div className="flex flex-col gap-1">
       {log.data?.dropped && (
         <p className="text-muted-foreground text-xs">
-          Część linii przepadła: daemon trzyma w pamięci tylko ostatnie {LOG_BUFFER_RECORDS} linii taska i nie pamięta ich po restarcie.
-          Starsze linie są w pliku logu w katalogu stanu (logs/).
+          Część linii przepadła: daemon trzyma w pamięci tylko ostatnie (najwyżej {LOG_BUFFER_RECORDS}) linie taska i nie pamięta ich po
+          restarcie. Starsze linie są w pliku logu w katalogu stanu (logs/).
         </p>
       )}
       <div ref={box} onScroll={onScroll} className="bg-muted max-h-96 overflow-auto rounded-md border px-2 py-1 font-mono text-xs">

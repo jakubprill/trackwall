@@ -16,14 +16,18 @@ const MAX_PENDING_CHARS = 4 * 1024 * 1024;
 export class LogFile {
   readonly path: string;
   private readonly maxBytes: number;
+  private readonly onRotationError: (err: unknown) => void;
+  /** Nieudana rotacja jest zgłaszana raz, do następnej udanej. */
+  private rotationFailing = false;
   private pending: string[] = [];
   private pendingChars = 0;
   /** Rozmiar pliku na dysku; nieznany do pierwszego zapisu (plik mógł zostać po poprzednim działaniu daemona). */
   private size: number | undefined;
 
-  constructor(path: string, maxBytes: number) {
+  constructor(path: string, maxBytes: number, onRotationError: (err: unknown) => void) {
     this.path = path;
     this.maxBytes = maxBytes;
+    this.onRotationError = onRotationError;
   }
 
   /** Zwraca `false`, gdy bufor jest pełny i linia przepadła. */
@@ -60,8 +64,10 @@ export class LogFile {
     try {
       renameSync(this.path, rotatedPath(this.path));
       this.size = 0;
-    } catch {
-      // celowo: limit to cel, nie warunek zapisu
+      this.rotationFailing = false;
+    } catch (err) {
+      if (!this.rotationFailing) this.onRotationError(err);
+      this.rotationFailing = true;
     }
   }
 }
