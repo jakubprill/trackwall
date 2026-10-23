@@ -2,7 +2,7 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
     "packages/daemon": {
-      "entry": ["test/fixtures/*.ts"]
+      "entry": ["test/fixtures/*.ts", "scripts/copilot-record.ts"]
     },
     "spikes/conpty": {
       "entry": ["src/spike.ts"]

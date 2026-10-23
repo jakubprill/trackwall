@@ -1,0 +1,97 @@
+import { closeSync, openSync, writeSync } from "node:fs";
+import { z } from "zod";
+import { jsonOf } from "./json.ts";
+
+/**
+ * Nagranie sesji w formacie asciicast v2 (§4.4): nagłówek JSON, potem po linii `[sekundy, kod, dane]`.
+ * Zapisywane jest wyjście (`o`), zmiana rozmiaru (`r`) i znaczniki (`m`) z rekordami hooków, żeby jedno
+ * nagranie wystarczyło do odtworzenia wykrywania stanu. Wejście z klawiatury (`i`) nie jest zapisywane,
+ * bo może zawierać hasła wpisane w sesji.
+ */
+
+const AsciicastHeader = z.looseObject({
+  version: z.literal(2),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  /** Początek nagrania, sekundy od epoki; od niego liczy się czas zmian stanu przy odtwarzaniu. */
+  timestamp: z.number(),
+});
+type AsciicastHeader = z.infer<typeof AsciicastHeader>;
+
+export const AsciicastEvent = z.tuple([z.number().nonnegative(), z.enum(["o", "i", "r", "m"]), z.string()]);
+export type AsciicastEvent = z.infer<typeof AsciicastEvent>;
+
+export interface Asciicast {
+  header: AsciicastHeader;
+  events: AsciicastEvent[];
+}
+
+export function parseAsciicast(text: string): Asciicast {
+  const [first, ...rest] = text.split("\n").filter((line) => line.trim() !== "");
+  if (first === undefined) throw new Error("puste nagranie asciicast");
+  return { header: parseLine(HeaderLine, first, 1), events: rest.map((line, i) => parseLine(EventLine, line, i + 2)) };
+}
+
+const HeaderLine = jsonOf(AsciicastHeader);
+const EventLine = jsonOf(AsciicastEvent);
+
+function parseLine<T extends z.ZodType>(schema: T, line: string, number: number): z.infer<T> {
+  const parsed = schema.safeParse(line);
+  if (!parsed.success) throw new Error(`zła linia ${number} nagrania: ${z.prettifyError(parsed.error)}`);
+  return parsed.data;
+}
+
+export interface AsciicastWriterOptions {
+  width: number;
+  height: number;
+}
+
+export class AsciicastWriter {
+  readonly #fd: number;
+  /** `performance.now()` w chwili odpowiadającej pełnej sekundzie z nagłówka. */
+  readonly #origin: number;
+  readonly #startedAt: number;
+
+  /**
+   * Nagłówek ma tylko pełne sekundy, więc czasy zdarzeń liczą się od tej pełnej sekundy, a nie od chwili startu:
+   * inaczej odtworzone czasy byłyby przesunięte o ułamek sekundy. Zegar monotoniczny, bo cofnięcie zegara
+   * systemu (NTP po uśpieniu) dałoby ujemne czasy i nagranie, którego nie da się odczytać.
+   */
+  constructor(path: string, o: AsciicastWriterOptions) {
+    this.#fd = openSync(path, "w");
+    const wall = Date.now();
+    this.#origin = performance.now() - (wall % 1000);
+    this.#startedAt = Math.floor(wall / 1000) * 1000;
+    const header: AsciicastHeader = { version: 2, width: o.width, height: o.height, timestamp: Math.floor(wall / 1000) };
+    writeSync(this.#fd, `${JSON.stringify(header)}\n`);
+  }
+
+  /**
+   * Czas nagrania, ms od epoki: ten sam, z którego odtwarzanie liczy stan. Tracker na żywo używa go zamiast
+   * `Date.now`, żeby uśpienie komputera albo korekta zegara nie dały innego stanu na żywo i z nagrania.
+   */
+  now(): number {
+    return this.#startedAt + (performance.now() - this.#origin);
+  }
+
+  output(data: string): void {
+    this.#event("o", data);
+  }
+
+  resize(width: number, height: number): void {
+    this.#event("r", `${width}x${height}`);
+  }
+
+  marker(label: string): void {
+    this.#event("m", label);
+  }
+
+  close(): void {
+    closeSync(this.#fd);
+  }
+
+  #event(code: AsciicastEvent[1], data: string): void {
+    const event: AsciicastEvent = [(this.now() - this.#startedAt) / 1000, code, data];
+    writeSync(this.#fd, `${JSON.stringify(event)}\n`);
+  }
+}

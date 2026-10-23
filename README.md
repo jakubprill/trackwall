@@ -16,6 +16,8 @@ Etap 1 (szkielet): daemon z `/api/health`, UI z panelem daemona, powłoka Tauri 
 
 Przeglądanie repo: w zakładce „Repo” dodajesz lokalny katalog z gitem (pełną ścieżką), a Trackwall pokazuje gałąź, liczbę zmian i ahead/behind, README, pliki i commity z ostatniego commita oraz otwiera repo w VS Code. Lista repo jest w `~/.trackwall/workspace.yaml` i można ją edytować ręcznie. Wymaga `git` w `PATH`.
 
+Etap 2 (prototyp): wykrywanie stanu sesji Copilot CLI z hooków i sekwencji terminala (ADR-17), na razie jako skrypt nagrywający sesję, jeszcze bez zakładki Zadania; opis niżej w „Nagrywanie sesji Copilot CLI”.
+
 ## Układ repo
 
 | Ścieżka | Co to jest |
@@ -63,6 +65,18 @@ Windows: zip zawiera `trackwall.exe`, `trackwall-daemon.exe` i `ui/`. Rozpakowan
 macOS: zip zawiera niepodpisany `Trackwall.app`; pierwsze uruchomienie przez prawy klik > Otwórz albo `xattr -dr com.apple.quarantine Trackwall.app`.
 
 Przebieg CI na Windowsie i macOS (push na `main` albo ręczne uruchomienie) publikuje oba archiwa jako artefakty.
+
+## Nagrywanie sesji Copilot CLI
+
+Prototyp wykrywania stanu zadania (ADR-17). Skrypt uruchamia Copilot CLI w PTY tak jak zrobi to daemon, pokazuje go w bieżącym terminalu, nagrywa i liczy stan (`Working`, `Input`, `Approval`…). Wymaga Bun i zainstalowanego, zalogowanego `copilot` w `PATH` (na Windowsie zarówno `copilot.exe`, jak i `copilot.cmd` z `npm install -g`). Uruchom go w katalogu repo, w którym ma pracować agent, z `bun --no-env-file`, żeby Bun nie wczytał `.env` repo do środowiska Copilot CLI (Bun nadal czyta `bunfig.toml` z bieżącego katalogu, więc w repo z `bunfig.toml` uruchom skrypt z `--config` wskazującym inny plik):
+
+```sh
+bun --no-env-file <trackwall>/packages/daemon/scripts/copilot-record.ts record                         # zwykła sesja interaktywna
+bun --no-env-file <trackwall>/packages/daemon/scripts/copilot-record.ts record -- -i "Opisz to repo"   # argumenty po -- idą do copilot
+bun <trackwall>/packages/daemon/scripts/copilot-record.ts replay <katalog>/session.cast                # stan policzony jeszcze raz z nagrania
+```
+
+Po wyjściu z Copilot CLI skrypt drukuje listę zmian stanu i katalog nagrania (domyślnie `~/.trackwall/recordings/<czas>` albo `$TRACKWALL_HOME/recordings/<czas>`, inny przez `--out`): `session.cast` (asciicast v2, do odtworzenia w asciinema), `states.jsonl`, `hooks.jsonl` i `plugin/` z hookami podanymi przez `--plugin-dir`. Stany na żywo widać w drugim terminalu: `tail -f <katalog>/states.jsonl` albo w PowerShell `Get-Content -Wait <katalog>\states.jsonl`. Nagranie zawiera wszystko, co było na ekranie, więc przed dodaniem go do repo jako fixture trzeba je zanonimizować; wpisywane klawisze i treść promptów oraz narzędzi z hooków nie są zapisywane.
 
 ## Licencja i bezpieczeństwo
 

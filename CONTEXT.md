@@ -112,11 +112,26 @@ Wszystko, co Trackwall wie o jednym CLI agenta: szablon komendy, konfiguracja MC
 CLI agenta działające w PTY należącym do daemona, nagrywane do `sessions/<zadanie>.cast`.
 _Unikaj_: sesja POSIX (to pojęcie z grupy procesów)
 
-**Stan zadania**:
-`Working`, `Input`, `Approval`, `Plan`, `Done`, `Error` albo `Stale`, zawsze ze źródłem (`hook`, `osc`, `screen`, `timeout`) i pewnością (§4.4).
+**Stan zadania** (`TaskState`, zmiana: `TaskStateChange`):
+`Working`, `Input`, `Approval`, `Plan`, `Done`, `Error` albo `Stale`, zawsze ze źródłem (`hook`, `osc`, `screen`, `timeout`, `exit`) i pewnością (§4.4).
 
 **Detektor stanu**:
 Reguła, która z hooków, sekwencji terminala albo wyglądu ekranu wnioskuje stan zadania.
+
+**Wtyczka sesji** (`writeCopilotPlugin`):
+Katalog z `plugin.json` i `hooks.json`, który daemon podaje Copilot CLI przez `--plugin-dir`, żeby hooki zgłaszały stan tylko tej jednej sesji (ADR-17).
+_Unikaj_: plugin (w polskim tekście), konfiguracja hooków
+
+**Rekord hooka** (`CopilotHookRecord`):
+Jedno wywołanie hooka z wtyczki sesji: zdarzenie, czas odebrania i tylko pola payloadu potrzebne do stanu, a o reszcie same nazwy (bez promptu, argumentów i wyników narzędzi). Linia `hooks.jsonl` i znacznik w nagraniu.
+_Unikaj_: rekord (bez dopowiedzenia; to linia logu)
+
+**Tytuł okna** (`windowTitle`):
+Tytuł, który CLI agenta ustawia sekwencją OSC 0 / 2; w Copilot CLI to opis bieżącej pracy. Pokazywany obok stanu, nigdy nie jest stanem.
+_Unikaj_: intencja, intent
+
+**Nagranie** (nagranie sesji, `session.cast`):
+Wyjście sesji w formacie asciicast v2 ze znacznikami rekordów hooków i kodu wyjścia, z którego da się policzyć stan jeszcze raz (`replayCopilotRecording`). Bez wejścia z klawiatury.
 
 **Budżet**:
 Limit czasu i liczby commitów zadania; po przekroczeniu daemon kończy sesję.
