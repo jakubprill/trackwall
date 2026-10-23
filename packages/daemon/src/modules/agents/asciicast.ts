@@ -29,11 +29,14 @@ export interface Asciicast {
 export function parseAsciicast(text: string): Asciicast {
   const [first, ...rest] = text.split("\n").filter((line) => line.trim() !== "");
   if (first === undefined) throw new Error("puste nagranie asciicast");
-  return { header: parseLine(AsciicastHeader, first, 1), events: rest.map((line, i) => parseLine(AsciicastEvent, line, i + 2)) };
+  return { header: parseLine(HeaderLine, first, 1), events: rest.map((line, i) => parseLine(EventLine, line, i + 2)) };
 }
 
+const HeaderLine = jsonOf(AsciicastHeader);
+const EventLine = jsonOf(AsciicastEvent);
+
 function parseLine<T extends z.ZodType>(schema: T, line: string, number: number): z.infer<T> {
-  const parsed = jsonOf(schema).safeParse(line);
+  const parsed = schema.safeParse(line);
   if (!parsed.success) throw new Error(`zła linia ${number} nagrania: ${z.prettifyError(parsed.error)}`);
   return parsed.data;
 }
@@ -47,6 +50,7 @@ export class AsciicastWriter {
   readonly #fd: number;
   /** `performance.now()` w chwili odpowiadającej pełnej sekundzie z nagłówka. */
   readonly #origin: number;
+  readonly #startedAt: number;
 
   /**
    * Nagłówek ma tylko pełne sekundy, więc czasy zdarzeń liczą się od tej pełnej sekundy, a nie od chwili startu:
@@ -57,8 +61,17 @@ export class AsciicastWriter {
     this.#fd = openSync(path, "w");
     const wall = Date.now();
     this.#origin = performance.now() - (wall % 1000);
+    this.#startedAt = Math.floor(wall / 1000) * 1000;
     const header: AsciicastHeader = { version: 2, width: o.width, height: o.height, timestamp: Math.floor(wall / 1000) };
     writeSync(this.#fd, `${JSON.stringify(header)}\n`);
+  }
+
+  /**
+   * Czas nagrania, ms od epoki: ten sam, z którego odtwarzanie liczy stan. Tracker na żywo używa go zamiast
+   * `Date.now`, żeby uśpienie komputera albo korekta zegara nie dały innego stanu na żywo i z nagrania.
+   */
+  now(): number {
+    return this.#startedAt + (performance.now() - this.#origin);
   }
 
   output(data: string): void {
@@ -78,7 +91,7 @@ export class AsciicastWriter {
   }
 
   #event(code: AsciicastEvent[1], data: string): void {
-    const event: AsciicastEvent = [(performance.now() - this.#origin) / 1000, code, data];
+    const event: AsciicastEvent = [(this.now() - this.#startedAt) / 1000, code, data];
     writeSync(this.#fd, `${JSON.stringify(event)}\n`);
   }
 }

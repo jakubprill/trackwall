@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseAsciicast } from "../src/modules/agents/asciicast.ts";
 import { replayCopilotRecording } from "../src/modules/agents/copilot-recording.ts";
+import { CopilotSessionState } from "../src/modules/agents/copilot-session-state.ts";
 
 const fixture = (name: string) => parseAsciicast(readFileSync(join(import.meta.dir, "fixtures", "copilot", name), "utf8"));
 const summary = (changes: ReturnType<typeof replayCopilotRecording>) =>
@@ -53,5 +54,14 @@ describe("stan sesji Copilot CLI z nagrania", () => {
 
     expect(() => parseAsciicast('{"version": 2, "width": 80, "height": 24, "timestamp": 0}\n[1.0, "x", "?"]\n')).toThrow("zła linia 2");
     expect(() => parseAsciicast('{"version": 2, "width": 80, "height": 24, "timestamp": 0}\n[1.0, "o", \n')).toThrow("zła linia 2");
+  });
+
+  test("wyjście po progu bez cyklicznego sprawdzenia daje Stale i powrót, tak jak odtwarzanie nagrania", () => {
+    let now = 0;
+    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000 });
+    session.output("\x1b]9;4;3;0\x07");
+
+    now = 61_100;
+    expect(session.output(".").map((c) => `${c.state} ${c.at}`)).toEqual(["Stale 1970-01-01T00:01:00.000Z", "Working 1970-01-01T00:01:01.100Z"]);
   });
 });

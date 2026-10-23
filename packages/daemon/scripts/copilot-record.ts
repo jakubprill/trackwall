@@ -24,6 +24,7 @@ import {
   writeFileSync,
   writeSync,
 } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath } from "node:url";
@@ -139,11 +140,13 @@ async function hook(argv: string[]): Promise<void> {
 class Recording {
   readonly changes: TaskStateChange[] = [];
   readonly #cast: AsciicastWriter;
-  readonly #session = new CopilotSessionState({ now: Date.now, staleAfterMs: STALE_AFTER_MS });
+  readonly #session: CopilotSessionState;
   readonly #statesFd: number;
 
   constructor(out: string, size: { cols: number; rows: number }) {
     this.#cast = new AsciicastWriter(join(out, "session.cast"), { width: size.cols, height: size.rows });
+    // Zegar nagrania, a nie `Date.now`: odtworzenie nagrania liczy stan z tych samych czasów.
+    this.#session = new CopilotSessionState({ now: () => this.#cast.now(), staleAfterMs: STALE_AFTER_MS });
     this.#statesFd = openSync(join(out, "states.jsonl"), "w");
   }
 
@@ -155,7 +158,7 @@ class Recording {
 
   hook(r: CopilotHookRecord): void {
     this.#cast.marker(encodeMarker({ kind: "hook", record: r }));
-    this.#report(this.#session.hook(r));
+    for (const change of this.#session.hook(r)) this.#report(change);
   }
 
   resize(cols: number, rows: number): void {
@@ -186,16 +189,24 @@ class Recording {
 
 /**
  * Program Copilot CLI z argumentami. `npm install -g` daje na Windowsie `copilot.cmd`, a uruchomienie go przez
- * `cmd.exe` psuje argumenty ze spacjami i `&` (inne reguły cytowania), więc zamiast niego idzie loader z paczki npm
- * uruchomiony przez Bun.
+ * `cmd.exe` psuje argumenty ze spacjami i `&` (inne reguły cytowania). Loader z paczki npm uruchomiony przez Bun
+ * w repo wczytałby `.env` i `bunfig.toml` repo, więc skrypt szuka natywnego `copilot.exe` z paczki platformy,
+ * tak jak robi to loader.
  */
 function copilotCommand(program: string | undefined, args: string[]): string[] {
   const found = Bun.which(program ?? "copilot");
   if (!found) throw new Error(`nie znaleziono ${program ?? "copilot"} w PATH; podaj ścieżkę przez --copilot`);
   if (!/\.(cmd|bat)$/i.test(found)) return [found, ...args];
-  const loader = join(dirname(found), "node_modules", "@github", "copilot", "npm-loader.js");
-  if (!existsSync(loader)) throw new Error(`${found} to skrypt cmd, a obok nie ma ${loader}; podaj copilot.exe przez --copilot`);
-  return [process.execPath, loader, ...args];
+  const npmPackage = join(dirname(found), "node_modules", "@github", "copilot", "package.json");
+  const native = `@github/copilot-${process.platform}-${process.arch}/package.json`;
+  let exe: string | undefined;
+  try {
+    exe = join(dirname(createRequire(npmPackage).resolve(native)), "copilot.exe");
+  } catch {
+    exe = undefined;
+  }
+  if (!exe || !existsSync(exe)) throw new Error(`${found} to skrypt cmd i nie znaleziono obok copilot.exe; podaj go przez --copilot`);
+  return [exe, ...args];
 }
 
 const HookLine = jsonOf(CopilotHookRecord);

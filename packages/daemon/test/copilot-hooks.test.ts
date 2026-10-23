@@ -73,13 +73,17 @@ describe("stan zadania z hooków Copilot CLI", () => {
         omitted: [],
       }),
     ).toEqual({ state: "Approval", source: "hook", confidence: "medium", reason: "hook notification permission_prompt" });
-    expect(stateFromHook({ event: "notification", receivedAt: 0, payload: { notificationType: "plan_ready" }, omitted: [] })?.state).toBe(
-      "Plan",
-    );
     expect(stateFromHook({ event: "notification", receivedAt: 0, payload: { type: "elicitation_dialog" }, omitted: [] })?.state).toBe(
       "Input",
     );
-    expect(stateFromHook({ event: "notification", receivedAt: 0, payload: { type: "agent_idle" }, omitted: [] })?.state).toBe("Input");
+  });
+
+  test("powiadomienia o agentach i komendach w tle oraz nieznane rodzaje nie zmieniają stanu", () => {
+    expect(stateFromHook({ event: "notification", receivedAt: 0, payload: { type: "agent_idle" }, omitted: [] })).toBeUndefined();
+    expect(stateFromHook({ event: "notification", receivedAt: 0, payload: { type: "agent_completed" }, omitted: [] })).toBeUndefined();
+    expect(
+      stateFromHook({ event: "notification", receivedAt: 0, payload: { notificationType: "plan_ready" }, omitted: [] }),
+    ).toBeUndefined();
     expect(
       stateFromHook({
         event: "notification",

@@ -24,8 +24,12 @@ export class CopilotSessionState {
     return this.#windowTitle;
   }
 
+  /**
+   * Każde wejście najpierw sprawdza próg `Stale`, tak jak cykliczny `tick`: na żywo i przy odtwarzaniu, gdzie
+   * `tick` jest tylko przed zdarzeniami, kolejność kroków jest wtedy ta sama.
+   */
   output(data: string): TaskStateChange[] {
-    const changes = [this.#tracker.activity()];
+    const changes = [this.#tracker.tick(), this.#tracker.activity()];
     for (const osc of this.#osc.feed(data)) {
       this.#windowTitle = windowTitleFromOsc(osc) ?? this.#windowTitle;
       const signal = stateFromOsc(osc);
@@ -34,9 +38,9 @@ export class CopilotSessionState {
     return changes.filter((c) => c !== undefined);
   }
 
-  hook(record: CopilotHookRecord): TaskStateChange | undefined {
+  hook(record: CopilotHookRecord): TaskStateChange[] {
     const signal = stateFromHook(record);
-    return signal && this.#tracker.signal(signal);
+    return [this.#tracker.tick(), signal && this.#tracker.signal(signal)].filter((c) => c !== undefined);
   }
 
   tick(): TaskStateChange | undefined {

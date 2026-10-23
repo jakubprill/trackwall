@@ -48,7 +48,7 @@ export function replayCopilotRecording(cast: Asciicast, o: ReplayOptions): TaskS
     if (code === "o") changes.push(...session.output(data));
     if (code !== "m") continue;
     const marker = decodeMarker(data);
-    if (marker?.kind === "hook") changes.push(session.hook(marker.record));
+    if (marker?.kind === "hook") changes.push(...session.hook(marker.record));
     if (marker?.kind === "exit") changes.push(session.exit(marker.code));
   }
   return changes.filter((c) => c !== undefined);

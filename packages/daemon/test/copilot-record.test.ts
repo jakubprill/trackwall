@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseAsciicast } from "../src/modules/agents/asciicast.ts";
 import { replayCopilotRecording, StatesLine } from "../src/modules/agents/copilot-recording.ts";
+import { jsonOf } from "../src/modules/agents/json.ts";
 
 const script = join(import.meta.dir, "..", "scripts", "copilot-record.ts");
 const fakeCopilot = join(import.meta.dir, "fixtures", "fake-copilot.ts");
@@ -20,7 +21,7 @@ async function recordFakeSession(exitCode: number) {
   const states = readFileSync(join(out, "states.jsonl"), "utf8")
     .trim()
     .split("\n")
-    .map((line) => StatesLine.parse(JSON.parse(line)));
+    .map((line) => jsonOf(StatesLine).parse(line));
   return { out, code, stdout, stderr, states };
 }
 

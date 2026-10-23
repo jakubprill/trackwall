@@ -126,6 +126,10 @@ _Unikaj_: plugin (w polskim tekście), konfiguracja hooków
 Jedno wywołanie hooka z wtyczki sesji: zdarzenie, czas odebrania i tylko pola payloadu potrzebne do stanu, a o reszcie same nazwy (bez promptu, argumentów i wyników narzędzi). Linia `hooks.jsonl` i znacznik w nagraniu.
 _Unikaj_: rekord (bez dopowiedzenia; to linia logu)
 
+**Tytuł okna** (`windowTitle`):
+Tytuł, który CLI agenta ustawia sekwencją OSC 0 / 2; w Copilot CLI to opis bieżącej pracy. Pokazywany obok stanu, nigdy nie jest stanem.
+_Unikaj_: intencja, intent
+
 **Nagranie** (nagranie sesji, `session.cast`):
 Wyjście sesji w formacie asciicast v2 ze znacznikami rekordów hooków i kodu wyjścia, z którego da się policzyć stan jeszcze raz (`replayCopilotRecording`). Bez wejścia z klawiatury.
 

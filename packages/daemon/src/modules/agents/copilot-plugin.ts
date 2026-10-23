@@ -12,7 +12,7 @@ const COPILOT_PLUGIN_NAME = "trackwall-session";
 
 /**
  * Program uruchamiany bez powłoki (`exec` + `args`), więc ścieżki ze spacjami nie wymagają cytowania. `cwd` musi
- * być katalogiem Trackwall, nie repo: Copilot CLI domyślnie uruchamia hooki w repo, a wtedy np. Bun wczytałby
+ * być katalogiem wtyczki sesji, nie repo: Copilot CLI domyślnie uruchamia hooki w repo, a wtedy np. Bun wczytałby
  * `bunfig.toml` i `.env` z repo użytkownika (cudzy kod i sekrety w procesie hooka).
  */
 export interface HookCommand {

@@ -68,15 +68,15 @@ Przebieg CI na Windowsie i macOS (push na `main` albo ręczne uruchomienie) publ
 
 ## Nagrywanie sesji Copilot CLI
 
-Prototyp wykrywania stanu zadania (ADR-16). Skrypt uruchamia Copilot CLI w PTY tak jak zrobi to daemon, pokazuje go w bieżącym terminalu, nagrywa i liczy stan (`Working`, `Input`, `Approval`…). Wymaga Bun i zainstalowanego, zalogowanego `copilot` w `PATH`. Uruchom go w katalogu repo, w którym ma pracować agent:
+Prototyp wykrywania stanu zadania (ADR-16). Skrypt uruchamia Copilot CLI w PTY tak jak zrobi to daemon, pokazuje go w bieżącym terminalu, nagrywa i liczy stan (`Working`, `Input`, `Approval`…). Wymaga Bun i zainstalowanego, zalogowanego `copilot` w `PATH` (na Windowsie zarówno `copilot.exe`, jak i `copilot.cmd` z `npm install -g`). Uruchom go w katalogu repo, w którym ma pracować agent, z `bun --no-env-file`, żeby Bun nie wczytał `.env` repo do środowiska Copilot CLI:
 
 ```sh
-bun <trackwall>/packages/daemon/scripts/copilot-record.ts record                 # zwykła sesja interaktywna
-bun <trackwall>/packages/daemon/scripts/copilot-record.ts record -- -i "Opisz to repo"   # argumenty po -- idą do copilot
-bun <trackwall>/packages/daemon/scripts/copilot-record.ts replay <katalog>/session.cast  # stan policzony jeszcze raz z nagrania
+bun --no-env-file <trackwall>/packages/daemon/scripts/copilot-record.ts record                         # zwykła sesja interaktywna
+bun --no-env-file <trackwall>/packages/daemon/scripts/copilot-record.ts record -- -i "Opisz to repo"   # argumenty po -- idą do copilot
+bun <trackwall>/packages/daemon/scripts/copilot-record.ts replay <katalog>/session.cast                # stan policzony jeszcze raz z nagrania
 ```
 
-Po wyjściu z Copilot CLI skrypt drukuje listę zmian stanu i katalog nagrania (domyślnie `~/.trackwall/recordings/<czas>`, inny przez `--out`): `session.cast` (asciicast v2, do odtworzenia w asciinema), `states.jsonl`, `hooks.jsonl` i `plugin/` z hookami podanymi przez `--plugin-dir`. Stany na żywo widać w drugim terminalu: `tail -f <katalog>/states.jsonl` albo w PowerShell `Get-Content -Wait <katalog>\states.jsonl`. Nagranie zawiera wszystko, co było na ekranie, więc przed dodaniem go do repo jako fixture trzeba je zanonimizować; wpisywane klawisze i treść promptów oraz narzędzi z hooków nie są zapisywane.
+Po wyjściu z Copilot CLI skrypt drukuje listę zmian stanu i katalog nagrania (domyślnie `~/.trackwall/recordings/<czas>` albo `$TRACKWALL_HOME/recordings/<czas>`, inny przez `--out`): `session.cast` (asciicast v2, do odtworzenia w asciinema), `states.jsonl`, `hooks.jsonl` i `plugin/` z hookami podanymi przez `--plugin-dir`. Stany na żywo widać w drugim terminalu: `tail -f <katalog>/states.jsonl` albo w PowerShell `Get-Content -Wait <katalog>\states.jsonl`. Nagranie zawiera wszystko, co było na ekranie, więc przed dodaniem go do repo jako fixture trzeba je zanonimizować; wpisywane klawisze i treść promptów oraz narzędzi z hooków nie są zapisywane.
 
 ## Licencja i bezpieczeństwo
 
