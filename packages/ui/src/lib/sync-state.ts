@@ -4,7 +4,7 @@ import type { StatusTone } from "./repo-status.ts";
 
 /** Synchronizacja w UI (ADR-21): ton i krótki tekst wyniku repo oraz postęp całości; testy w `test/sync-state.test.ts`. */
 
-/** Krótko, bo stoi w wierszu listy repo; pełne zdanie z daemona jest w widoku synchronizacji. */
+/** Krótko, bo stoi w wierszu listy repo; pełne zdanie z daemona jest w panelu synchronizacji. */
 const SKIP_LABEL: Record<SyncSkipReason, string> = {
   "no-remote": "bez remote",
   "no-default-branch": "brak gałęzi domyślnej",

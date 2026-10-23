@@ -59,7 +59,7 @@ export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection;
           </p>
         )}
         {canSync && <SyncBar sync={sync} onShow={() => setPanel("sync")} />}
-        <nav className="flex-1 overflow-y-auto px-2 pb-4">
+        <nav aria-label="Lista repo" className="flex-1 overflow-y-auto px-2 pb-4">
           {list.error && (
             <div className="px-2 pb-2">
               <ErrorWithRetry
