@@ -1,5 +1,5 @@
 /**
- * Prototyp etapu 2 (§11, ADR-17): uruchamia Copilot CLI w PTY tak jak daemon (ADR-24), pokazuje go w bieżącym
+ * Prototyp etapu 2 (§11, ADR-17): uruchamia Copilot CLI w PTY tak jak daemon (ADR-25), pokazuje go w bieżącym
  * terminalu, nagrywa sesję i na bieżąco liczy stan zadania. Służy do sprawdzenia detektorów na prawdziwym
  * Windowsie i macOS oraz do zbierania nagrań, z których po anonimizacji powstają fixture'y testów; daemon sesji
  * nie nagrywa. Skrypt sięga do plików modułu `agents` wprost, bo działa bez daemona.

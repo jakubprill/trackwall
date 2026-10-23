@@ -7,7 +7,7 @@ import type { Facade } from "../facade.ts";
 import { type OriginPolicy, tokenMatches } from "./guard.ts";
 
 /**
- * Terminal sesji przez WebSocket `/ws/pty/<sesja>` (§5.2, ADR-24). Te same zabezpieczenia co reszta API (§8):
+ * Terminal sesji przez WebSocket `/ws/pty/<sesja>` (§5.2, ADR-25). Te same zabezpieczenia co reszta API (§8):
  * `Host` i `Origin` z `OriginPolicy`, token porównywany w stałym czasie. Przeglądarka nie ustawi nagłówka przy
  * WebSocket, więc token przychodzi jako podprotokół `bearer.<token>`, a serwer odpowiada tylko `trackwall.pty`.
  * Daemon wysyła obraz ekranu (ramka tekstowa), potem wyjście (ramki binarne); klient wysyła wejście i rozmiar.

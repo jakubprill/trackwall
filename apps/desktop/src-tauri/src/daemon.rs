@@ -158,6 +158,15 @@ pub fn shutdown(conn: &Connection) -> Result<(), String> {
     Err(format!("daemon nadal odpowiada po {} s", STOP_TIMEOUT.as_secs()))
 }
 
+/// Treść odpowiedzi `POST /api/agents/sessions` (lista sesji Copilot CLI, ADR-25).
+pub fn sessions(conn: &Connection) -> Result<String, String> {
+    let (status, body) = http(conn.port, "POST", "/api/agents/sessions", Some(&conn.token))?;
+    if status != 200 {
+        return Err(format!("lista sesji zwróciła {status}"));
+    }
+    Ok(body)
+}
+
 /// Ścieżka sidecara: obok `trackwall.exe` (portable zip) albo w `Contents/MacOS` (bundle .app).
 fn sidecar_path() -> Result<PathBuf, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;

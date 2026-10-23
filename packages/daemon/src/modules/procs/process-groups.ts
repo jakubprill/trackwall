@@ -111,7 +111,7 @@ export class ProcessGroups {
   }
 
   /**
-   * Uruchamia grupę, której lider działa w PTY (§4.4, ADR-24), i zwraca terminal do pisania i zmiany rozmiaru.
+   * Uruchamia grupę, której lider działa w PTY (§4.4, ADR-25), i zwraca terminal do pisania i zmiany rozmiaru.
    * Właściciel musi być nowy: sesja w terminalu nie ma „drugiego startu”, który oddałby istniejącą.
    */
   async startTerminal(spec: TerminalGroupSpec): Promise<{ run: RunState; terminal: GroupTerminal }> {

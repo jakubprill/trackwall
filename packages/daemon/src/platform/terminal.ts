@@ -1,7 +1,7 @@
 import { runtimeInfo } from "./runtime.ts";
 
 /**
- * PTY (§4.4, ADR-24): proces w pseudoterminalu należącym do daemona, z którego okno terminala w UI dostaje ekran,
+ * PTY (§4.4, ADR-25): proces w pseudoterminalu należącym do daemona, z którego okno terminala w UI dostaje ekran,
  * a do którego wysyła klawisze. Na Windowsie to ConPTY, na macOS i Linuksie zwykły PTY, w którym proces jest liderem
  * nowej sesji POSIX, więc jego PID jest też identyfikatorem grupy procesów (§4.1). Daje go `Bun.spawn({ terminal })`
  * (spike z etapu 1, ADR-1); Node nie ma PTY bez natywnego addonu, więc pod Node sesji agentów nie ma.
@@ -18,7 +18,7 @@ export interface TerminalSpec {
   onData: (bytes: Uint8Array) => void;
 }
 
-export interface TerminalExit {
+interface TerminalExit {
   code: number | null;
   signal: string | null;
 }

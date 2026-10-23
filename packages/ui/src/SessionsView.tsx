@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { SessionTerminal } from "./SessionTerminal.tsx";
 
 /**
- * Widok „Sesje” (§4.4, ADR-24): kilka sesji Copilot CLI naraz, każda w repo z folderu z projektami. Po lewej lista
+ * Widok „Sesje” (§4.4, ADR-25): kilka sesji Copilot CLI naraz, każda w repo z folderu z projektami. Po lewej lista
  * ze stanem każdej sesji i skokiem do następnej, która czeka na człowieka; po prawej terminal wybranej sesji.
  * Listę sesji odpytuje `App`, bo liczba czekających sesji jest też na pasku widoków.
  */
@@ -210,7 +210,7 @@ function NewSession({ conn, onStarted, onCancel }: { conn: Connection; onStarted
       {repos.data && repos.data.repos.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           <select
-            aria-label="Repo"
+            aria-label="Repo nowej sesji"
             value={chosen}
             onChange={(e) => setRepo(e.target.value)}
             className="border-input bg-card h-9 min-w-48 rounded-md border px-3 text-sm"

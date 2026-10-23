@@ -10,7 +10,7 @@ import { LiveSession, type SessionTerminal } from "./live-session.ts";
 import type { ScreenViewer } from "./terminal-screen.ts";
 
 /**
- * Moduł `agents` (§4.4, ADR-24): sesje Copilot CLI uruchamiane z UI w repo z folderu z projektami, kilka naraz.
+ * Moduł `agents` (§4.4, ADR-25): sesje Copilot CLI uruchamiane z UI w repo z folderu z projektami, kilka naraz.
  * Każda sesja to Copilot CLI w PTY należącym do daemona, w grupie procesów modułu `procs`, z wtyczką sesji, której
  * hooki zgłaszają stan (ADR-17). Komendę składa daemon; z zewnątrz przychodzi tylko identyfikator repo (§1.2).
  * Sesje żyją w pamięci daemona: wyjście daemona zatrzymuje je razem z innymi grupami procesów.

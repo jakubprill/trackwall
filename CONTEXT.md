@@ -13,7 +13,7 @@ Aplikacja Tauri: okno, tray, uruchamianie i nadzór daemona jako sidecara, spraw
 _Unikaj_: aplikacja (gdy chodzi tylko o Tauri)
 
 **Widok** (`View`):
-Ekran aplikacji w UI (Repo, Daemon, Ustawienia), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
+Ekran aplikacji w UI (Repo, Sesje, Daemon, Ustawienia), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
 _Unikaj_: zakładka (dla całego ekranu)
 
 **Zakładka** (`TabBar`):
@@ -144,9 +144,19 @@ _Unikaj_: autoryzacja, akceptacja
 **Adapter**:
 Wszystko, co Trackwall wie o jednym CLI agenta: szablon komendy, konfiguracja MCP, wznowienie, detektory stanu. Jedyny adapter to Copilot CLI (ADR-8).
 
-**Sesja** (sesja zadania):
-CLI agenta działające w PTY należącym do daemona, nagrywane do `sessions/<zadanie>.cast`.
-_Unikaj_: sesja POSIX (to pojęcie z grupy procesów)
+**Sesja** (sesja zadania, `Session`, `SessionId`):
+CLI agenta działające w PTY należącym do daemona, w korzeniu repo, jako grupa procesów, z własnym katalogiem `sessions/<sesja>/` (wtyczka sesji, `hooks.jsonl`). Dziś sesja istnieje bez zadania: widok Sesje uruchamia ją w repo jednym kliknięciem (ADR-25); zadanie doda do niej prompt, worktree i budżet. Nagrywa ją tylko `copilot-record.ts`.
+_Unikaj_: sesja POSIX (to pojęcie z grupy procesów), okno (to okno terminala w UI)
+
+**Czeka na Ciebie** (`sessionNeedsAttention`):
+Działająca sesja w stanie `Input`, `Approval` albo `Plan`: agent nie ruszy dalej bez człowieka. Liczona tak samo w UI (licznik na pasku widoków, „Następna czekająca”) i w trayu (menu „Czeka: <repo>”, miganie okna).
+
+**Okno terminala** (`SessionTerminal`):
+xterm.js w widoku Sesje podłączony WebSocketem `/ws/pty/<sesja>` do PTY sesji. Kilka okien może pokazywać tę samą sesję; rozmiar PTY ustala ostatnie, które go zgłosiło.
+
+**Obraz ekranu** (`TerminalScreen`):
+Stan ekranu sesji, który daemon trzyma w emulatorze terminala bez okna i wysyła oknu terminala przy podłączeniu, zanim pójdzie dalsze wyjście.
+_Unikaj_: zrzut ekranu (to obrazek), historia wyjścia
 
 **Stan zadania** (`TaskState`, zmiana: `TaskStateChange`):
 `Working`, `Input`, `Approval`, `Plan`, `Done`, `Error` albo `Stale`, zawsze ze źródłem (`hook`, `osc`, `screen`, `timeout`, `exit`) i pewnością (§4.4).

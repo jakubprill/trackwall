@@ -1,7 +1,7 @@
 import type { TerminalPlatform, TerminalProcess, TerminalSpec } from "./terminal.ts";
 
 /**
- * PTY z `Bun.spawn({ terminal })` (ADR-1, ADR-24): ConPTY na Windowsie, PTY z `setsid` na macOS i Linuksie.
+ * PTY z `Bun.spawn({ terminal })` (ADR-1, ADR-25): ConPTY na Windowsie, PTY z `setsid` na macOS i Linuksie.
  * Ładowany tylko pod Bun.
  */
 

@@ -31,7 +31,7 @@ function nativeCopilot(script: string): string | undefined {
  * Szuka programu jak powłoka: w katalogach `PATH`, na Windowsie z rozszerzeniami z `PATHEXT` (w ich kolejności, jak
  * `cmd.exe`). Nazwa z ukośnikiem to ścieżka, a nie nazwa do szukania.
  */
-export function which(program: string, env: NodeJS.ProcessEnv): string | undefined {
+function which(program: string, env: NodeJS.ProcessEnv): string | undefined {
   const windows = process.platform === "win32";
   const extensions = windows && extname(program) === "" ? (pathValue(env, "PATHEXT") ?? ".COM;.EXE;.BAT;.CMD").split(";") : [""];
   const candidates = (base: string) => extensions.map((ext) => base + ext.toLowerCase());

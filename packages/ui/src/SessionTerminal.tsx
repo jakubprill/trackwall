@@ -12,7 +12,7 @@ const CLOSE_NOT_FOUND = 4404;
 const RECONNECT_MS = 1000;
 
 /**
- * Okno terminala jednej sesji (§4.4, ADR-24): xterm.js podłączony WebSocketem do PTY w daemonie. Daemon najpierw
+ * Okno terminala jednej sesji (§4.4, ADR-25): xterm.js podłączony WebSocketem do PTY w daemonie. Daemon najpierw
  * przysyła obraz ekranu, więc przełączenie sesji albo zerwane połączenie zaczyna od aktualnego ekranu, a nie od
  * pustego terminala. Klawisze i rozmiar okna idą do sesji; rozmiar PTY ustala ostatnie okno, które go zgłosiło.
  */
@@ -93,7 +93,9 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
     <div className="flex min-h-0 flex-1 flex-col">
       {notice && <p className="text-warning border-b px-3 py-1 text-xs">{notice}</p>}
       {!live && (
-        <p className="text-muted-foreground border-b px-3 py-1 text-xs">Sesja się zakończyła; terminal pokazuje jej ostatni ekran.</p>
+        <p className="text-muted-foreground border-b px-3 py-1 text-xs">
+          Sesja się zakończyła; terminal pokazuje to, co zostało na jej ekranie.
+        </p>
       )}
       <div ref={host} className="bg-background min-h-0 flex-1 p-2 font-mono" />
     </div>

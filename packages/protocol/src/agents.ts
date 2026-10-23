@@ -5,7 +5,7 @@ import { TaskStateChange } from "./task-state.ts";
 import { RepoId } from "./workspace.ts";
 
 /**
- * Kontrakt modułu `agents` (§4.4, ADR-24): sesje Copilot CLI w PTY należącym do daemona, kilka naraz. Każda akcja
+ * Kontrakt modułu `agents` (§4.4, ADR-25): sesje Copilot CLI w PTY należącym do daemona, kilka naraz. Każda akcja
  * to `POST /api/agents/<akcja>`, a terminal sesji to WebSocket `/ws/pty/<sesja>` (§5.2). Klient wskazuje repo
  * identyfikatorem; komendę Copilot CLI składa daemon (§1.2).
  */
@@ -39,7 +39,7 @@ const SessionRequest = z.object({ session: SessionId }).strict();
 
 export const agentsApi = {
   sessions: endpoint("sessions", z.object({}).strict(), SessionList),
-  /** Uruchamia Copilot CLI w korzeniu repo, z wtyczką sesji (ADR-17) i serwerem MCP Trackwall. */
+  /** Uruchamia Copilot CLI w korzeniu repo, z wtyczką sesji (ADR-17). */
   start: endpoint("start", z.object({ repo: RepoId }).strict(), Session),
   /** Wraca po potwierdzeniu, że żaden proces sesji nie żyje; zakończona sesja zwraca swój stan. */
   stop: endpoint("stop", SessionRequest, Session),

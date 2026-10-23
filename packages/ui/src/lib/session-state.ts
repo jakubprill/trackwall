@@ -26,7 +26,7 @@ export function sessionStateLabel(session: Session): { tone?: StatusTone; label:
       ? { tone: "error", label: "błąd" }
       : { label: "zakończona" };
   }
-  if (!state) return { label: "uruchamia się" };
+  if (!state) return { label: "stan nieznany" };
   const label = STATE_LABELS[state.state];
   const likely = state.confidence === "medium" || state.confidence === "low" ? `prawdopodobnie ${label}` : label;
   if (sessionNeedsAttention(session)) return { tone: "warning", label: likely };

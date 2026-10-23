@@ -16,7 +16,7 @@ export const ErrorCode = z.enum([
   "mise_unavailable",
   /** Po zatrzymaniu z eskalacją część grupy procesów nadal żyje; daemon nie zgłasza zatrzymania, którego nie widział. */
   "stop_unconfirmed",
-  /** Nie da się uruchomić sesji agenta: brak Copilot CLI w `PATH` albo PTY w tym runtime (daemon pod Node, ADR-24). */
+  /** Nie da się uruchomić sesji agenta: brak Copilot CLI w `PATH` albo PTY w tym runtime (daemon pod Node, ADR-25). */
   "agent_unavailable",
   "internal",
 ]);

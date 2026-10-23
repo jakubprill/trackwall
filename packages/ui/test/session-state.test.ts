@@ -28,8 +28,8 @@ describe("stan sesji w jednej linii", () => {
     expect(sessionStateLabel(session("a", change("Working", "medium"))).label).toBe("prawdopodobnie pracuje");
   });
 
-  test("bez sygnału sesja się uruchamia; koniec procesu wygrywa ze stanem z hooków", () => {
-    expect(sessionStateLabel(session("a", null))).toEqual({ label: "uruchamia się" });
+  test("bez sygnału stan jest nieznany; koniec procesu wygrywa ze stanem z hooków", () => {
+    expect(sessionStateLabel(session("a", null))).toEqual({ label: "stan nieznany" });
     expect(sessionStateLabel(session("a", change("Input"), exited(null, true)))).toEqual({ label: "zatrzymana" });
     expect(sessionStateLabel(session("a", change("Done"), exited(1)))).toEqual({ label: "zakończona" });
     expect(sessionStateLabel(session("a", change("Input"), exited(1)))).toEqual({ tone: "error", label: "błąd" });

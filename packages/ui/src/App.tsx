@@ -32,7 +32,7 @@ export function App() {
   const [session, setSession] = useState<string>();
   const { conn, epoch, error, retry } = useConnection();
   const sessions = useSessions(conn, view === "sessions");
-  // Skok do sesji z traya (ADR-24): powłoka pokazuje okno i podaje sesję, która czeka.
+  // Skok do sesji z traya (ADR-25): powłoka pokazuje okno i podaje sesję, która czeka.
   useSessionFocus((id) => {
     setView("sessions");
     setSession(id);
