@@ -12,7 +12,7 @@ Dokumentacja:
 
 ## Stan
 
-Etap 1 (szkielet): daemon z `/api/health`, UI z panelem daemona, powłoka Tauri z trayem, portable build na Windows i macOS, CI na Linuksie przy PR i z macierzą Windows + macOS na `main` i ręcznie (ADR-15), spike'i Job Objects i PTY.
+Etap 1 (szkielet): daemon z `/api/health`, UI z panelem daemona, powłoka Tauri z trayem, portable build na Windows i macOS, CI na Linuksie, Windowsie i macOS przy każdym PR (ADR-22), spike'i Job Objects i PTY.
 
 Nawigacja: widoki przełącza pasek przy lewej krawędzi okna, jak w VS Code: Repo (Ctrl+1) u góry, Daemon (Ctrl+9) i Ustawienia (Ctrl+,) na dole; na macOS ⌘ zamiast Ctrl. Nazwę i skrót widoku pokazuje podpowiedź po najechaniu na ikonę.
 
@@ -20,7 +20,7 @@ Przeglądanie repo: w widoku „Ustawienia” wskazujesz folder z projektami (pe
 
 Taski mise: zakładka „Taski mise” w karcie repo pokazuje taski z `mise tasks ls`, uruchamia je (`mise run <task>` w korzeniu repo) i zatrzymuje jako całą grupę procesów, razem z ich potomkami (Job Object na Windowsie, sesja POSIX na macOS, ADR-20); po błędzie pokazuje kod wyjścia i ostatnie linie wyjścia. Konfiguracji mise, której mise nie ufa, można zaufać przyciskiem (`mise trust`). Wyjście daemona zatrzymuje wszystkie taski, a grupy po awarii daemona sprząta jego następny start. Wymaga `mise` w `PATH` (na macOS wystarczy `PATH` z powłoki logowania).
 
-Serwer MCP dla Copilot CLI: daemon wystawia serwer MCP tylko do odczytu (ADR-22) z narzędziami `list_repos` (repo z folderu z projektami: ścieżka, adres repo zdalnego, gałąź, stan, wynik ostatniej synchronizacji) i `get_repo` (README, ostatnie commity, taski mise jednego repo). Copilot CLI podłącza się raz, komendą z widoku „Daemon” (opis niżej w „Podłączenie Copilot CLI”).
+Serwer MCP dla Copilot CLI: daemon wystawia serwer MCP tylko do odczytu (ADR-23) z narzędziami `list_repos` (repo z folderu z projektami: ścieżka, adres repo zdalnego, gałąź, stan, wynik ostatniej synchronizacji) i `get_repo` (README, ostatnie commity, taski mise jednego repo). Copilot CLI podłącza się raz, komendą z widoku „Daemon” (opis niżej w „Podłączenie Copilot CLI”).
 
 Etap 2 (prototyp): wykrywanie stanu sesji Copilot CLI z hooków i sekwencji terminala (ADR-17), na razie jako skrypt nagrywający sesję, jeszcze bez widoku Zadania; opis niżej w „Nagrywanie sesji Copilot CLI”.
 
@@ -70,7 +70,7 @@ Windows: zip zawiera `trackwall.exe`, `trackwall-daemon.exe` i `ui/`. Rozpakowan
 
 macOS: zip zawiera niepodpisany `Trackwall.app`; pierwsze uruchomienie przez prawy klik > Otwórz albo `xattr -dr com.apple.quarantine Trackwall.app`.
 
-Przebieg CI na Windowsie i macOS (push na `main` albo ręczne uruchomienie) publikuje oba archiwa jako artefakty.
+Każdy przebieg CI (PR, push na `main`, ręczne uruchomienie) publikuje oba archiwa jako artefakty.
 
 ## Podłączenie Copilot CLI
 

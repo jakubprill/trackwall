@@ -5,7 +5,7 @@ import { DomainError } from "../errors.ts";
 import type { Facade } from "../facade.ts";
 
 /**
- * Narzędzia MCP daemona (§5.3, ADR-22): każde to cienkie mapowanie na fasadę, więc agent widzi ten sam stan co UI
+ * Narzędzia MCP daemona (§5.3, ADR-23): każde to cienkie mapowanie na fasadę, więc agent widzi ten sam stan co UI
  * (§1.1). Wszystkie tylko czytają; żadne nie zmienia konfiguracji, repo ani procesów (§8). Karty i graf dojdą tu jako
  * kolejne wpisy `mcpTools` w protocol i `runs` tutaj, razem z modułami `cards` i `graph`.
  */

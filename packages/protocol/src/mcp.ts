@@ -4,7 +4,7 @@ import { SyncRepo } from "./sync.ts";
 import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
 
 /**
- * Kontrakt narzędzi MCP daemona (§5.3, ADR-22): nazwa, opis dla agenta, wejście i wynik każdego narzędzia w jednym
+ * Kontrakt narzędzi MCP daemona (§5.3, ADR-23): nazwa, opis dla agenta, wejście i wynik każdego narzędzia w jednym
  * obiekcie `McpTool`, tak jak `Endpoint` dla API. Daemon ogłasza z nich `tools/list` i sprawdza nimi argumenty oraz
  * `structuredContent`, a testy, UI i klienty biorą z nich nazwy i parsują odpowiedź. Narzędzia tylko czytają; nazwy
  * narzędzi i pól po angielsku, opisy po polsku (AGENTS.md).
