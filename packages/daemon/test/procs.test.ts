@@ -393,6 +393,41 @@ describe("runtime.json", () => {
 });
 
 describe.skipIf(process.versions.bun === undefined)("procs z liderem w PTY", () => {
+  test(
+    "ekran PTY daje zamaskowane ostatnie linie stanu, ale nie trafia do logu",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "trackwall-procs-"));
+      const logsDir = mkdtempSync(join(tmpdir(), "trackwall-procs-logs-"));
+      const logs = new Logs({ dir: logsDir, maxFileBytes: 1024 * 1024, log: () => {} });
+      const groups = new ProcessGroups({
+        logs,
+        runtime: new RuntimeFile(join(dir, "runtime.json")),
+        platform: groupPlatform(),
+        terminals: terminalPlatform(),
+        log: () => {},
+      });
+      await groups.startTerminal({
+        owner: "agent:x",
+        command: [process.execPath, "-e", "console.log('hasło: ' + process.env.DB_PASSWORD)"],
+        cwd: dir,
+        env: { ...process.env, DB_PASSWORD: "tajne-haslo-123" },
+        cols: 80,
+        rows: 24,
+        onData: () => {},
+      });
+
+      expect(await waitUntil(() => groups.state("agent:x")?.kind === "exited", 15_000)).toBe(true);
+
+      const state = groups.state("agent:x");
+      if (state?.kind !== "exited") throw new Error(`grupa nie zakończona: ${state?.kind}`);
+      expect(state.lastLines).toContain("hasło: ***");
+      expect(state.lastLines.join("\n")).not.toContain("tajne-haslo-123");
+      logs.flush();
+      expect(readdirSync(logsDir)).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
   test("nieudany start w terminalu odrzuca tylko wywołanie, bez nieobsłużonego błędu w daemonie", async () => {
     const unhandled: unknown[] = [];
     const onUnhandled = (err: unknown) => unhandled.push(err);
