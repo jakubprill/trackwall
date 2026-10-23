@@ -1,0 +1,24 @@
+{
+  "name": "@pitwall/daemon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "pitwall-daemon": "./src/main.ts"
+  },
+  "scripts": {
+    "dev": "bun --watch src/main.ts",
+    "start": "bun src/main.ts --ui",
+    "build": "bun scripts/build.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@pitwall/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3"
+  }
+}

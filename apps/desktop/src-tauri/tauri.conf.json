@@ -1,0 +1,41 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Pitwall",
+  "version": "0.1.0",
+  "identifier": "dev.pitwall.desktop",
+  "mainBinaryName": "pitwall",
+  "build": {
+    "frontendDist": "../../../packages/ui/dist",
+    "devUrl": "http://127.0.0.1:5173",
+    "beforeDevCommand": {
+      "script": "pnpm --filter @pitwall/ui dev",
+      "cwd": "../../.."
+    }
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Pitwall",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 640,
+        "minHeight": 480
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' ipc: http://ipc.localhost; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:*; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "externalBin": ["binaries/pitwall-daemon"],
+    "category": "DeveloperTool",
+    "shortDescription": "Wiele repo i wiele agentów CLI w jednym miejscu",
+    "macOS": {
+      "minimumSystemVersion": "12.0"
+    }
+  }
+}

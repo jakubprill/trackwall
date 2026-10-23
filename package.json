@@ -1,0 +1,23 @@
+{
+  "name": "pitwall",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @pitwall/daemon --filter @pitwall/ui dev",
+    "build": "pnpm --filter @pitwall/ui build && pnpm --filter @pitwall/daemon build",
+    "build:desktop": "pnpm build && pnpm --filter @pitwall/desktop build",
+    "portable": "bun scripts/package-portable.ts",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.2",
+    "typescript": "5.9.3"
+  }
+}

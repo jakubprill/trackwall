@@ -1,0 +1,15 @@
+{
+  "name": "@pitwall/spike-job-objects",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "spike": "bun src/run.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3"
+  }
+}
