@@ -20,7 +20,10 @@
         "width": 1200,
         "height": 800,
         "minWidth": 640,
-        "minHeight": 480
+        "minHeight": 480,
+        "transparent": true,
+        "visible": false,
+        "theme": "Dark"
       }
     ],
     "security": {
