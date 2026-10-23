@@ -37,8 +37,8 @@ const WRAPPERS: [string, string, RegExp][] = [
   [".mvn/wrapper/maven-wrapper.properties", "maven", /^apache-maven-(.+)-bin\.zip$/],
   ["gradle/wrapper/gradle-wrapper.properties", "gradle", /^gradle-(.+)-(?:bin|all)\.zip$/],
 ];
-/** Klucz tabeli TOML na początku linii (`node =`, `"npm:prettier" =`). */
-const TOML_KEY = /^\s*["']?([^"'\s=]+)["']?\s*=/g;
+/** Klucz tabeli TOML na początku linii (`node =`, `"npm:prettier" =`, `"ubi:cli/cli[exe=gh]" =`). */
+const TOML_KEY = /^\s*(?:"([^"]*)"|'([^']*)'|([^"'\s=]+))\s*=/g;
 
 /** Nazwy plików z podpowiedziami, czytanych w korzeniu i w katalogach buildów. */
 const HINT_FILE_NAMES = new Set([SDKMANRC, ...SINGLE_VERSION_FILES.map(([name]) => name), ...WRAPPERS.map(([path]) => baseName(path))]);

@@ -57,6 +57,21 @@ describe("cards", () => {
     expect(second.card?.mechanisms.map((m) => m.id)).toEqual(["angular"]);
   });
 
+  test("równoczesne pytania o kartę tego samego commita (lista tagów i karta naraz) czytają gita raz", async () => {
+    const vcs = new Vcs();
+    let reads = 0;
+    const commitFilesOf = vcs.commitFiles.bind(vcs);
+    vcs.commitFiles = (...args) => {
+      reads++;
+      return commitFilesOf(...args);
+    };
+    const { projects, cards } = await setup(vcs);
+    makeRepo({ "package.json": PACKAGE_JSON }, "web", projects);
+    const [card, tags] = await Promise.all([cards.card("web"), cards.tags()]);
+    expect(reads).toBe(1);
+    expect(tags).toEqual([{ kind: "ok", repo: "web", tags: card.tags }]);
+  });
+
   test("repo bez commitów ma pustą kartę i tagi tylko z reguł", async () => {
     const { projects, cards, home } = await setup();
     makeRepo({}, "nowe", projects);

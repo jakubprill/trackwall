@@ -111,6 +111,7 @@ function includedProjects(settings: string): string[] {
     if (!continued && !/^\s*include\b/.test(text)) continue;
     if (!continued) depth = 0;
     for (const m of text.matchAll(/["']([^"']+)["']/g)) paths.push((m[1] ?? "").replace(/^:/, ""));
+    // Na liniach include wystarczą proste napisy: komentarze zdjął już `codeLines`.
     const code = text.replace(/"[^"]*"|'[^']*'/g, "");
     depth += (code.match(/\(/g)?.length ?? 0) - (code.match(/\)/g)?.length ?? 0);
     continued = depth > 0 || text.trimEnd().endsWith(",");
