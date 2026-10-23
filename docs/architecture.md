@@ -1,6 +1,6 @@
-# Architektura Pitwall
+# Architektura Trackwall
 
-Stan: propozycja do dyskusji, 2026-10-23. Nazwa „Pitwall” jest robocza (zajęta przez quanticstudios/pitwall i aenzenith/pitwall-vscode) i zostanie zmieniona przed publikacją.
+Stan: propozycja do dyskusji, 2026-10-23. Wcześniejsza robocza nazwa „Pitwall” została zmieniona na „Trackwall” (ADR-12).
 
 Ten dokument opisuje, jak aplikacja jest podzielona na komponenty, gdzie przebiegają granice między modułami, jakimi protokołami komponenty rozmawiają, jaki jest model danych, jak wyglądają najważniejsze przepływy i jakie ryzyka niesie Windows jako platforma główna. Wizja produktu (cel, moduły, kolejność prac) jest założeniem tego dokumentu, a nie jego treścią. Decyzje, które warto umieć później cofnąć, są zebrane na końcu jako ADR-y.
 
@@ -25,7 +25,7 @@ Ten dokument opisuje, jak aplikacja jest podzielona na komponenty, gdzie przebie
 │  ui (React + Tailwind + shadcn/ui)        daemon (TS, 1 binarka) │
 │  panele: Zadania, Serwisy, Logi (xterm),  ┌────────────────────┐ │
 │  Diff (Monaco), Graf, Sekrety, Audyt      │ fasada usług       │ │
-│  scena 3D: @pitwall/scene (Pawn)          │  workspace  cards  │ │
+│  scena 3D: @trackwall/scene (Pawn)        │  workspace  cards  │ │
 │      │ HTTP + WebSocket (loopback, token)  │  graph      tasks  │ │
 │      └────────────────────────────────────▶│  procs      leases │ │
 │                                            │  logs       secrets│ │
@@ -33,7 +33,7 @@ Ten dokument opisuje, jak aplikacja jest podzielona na komponenty, gdzie przebie
 │                                            └───┬──────────┬─────┘ │
 │   Copilot CLI / inne CLI ── MCP (HTTP lub stdio) ─┘          │     │
 │                                                   SQLite + JSONL   │
-│                                                   ~/.pitwall/      │
+│                                                   ~/.trackwall/    │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -41,17 +41,17 @@ Cztery procesy na maszynie użytkownika:
 
 | Proces | Rola | Żyje, gdy okno zamknięte? |
 |---|---|---|
-| `pitwall.exe` (Tauri) | okno, tray, nadzór daemona, aktualizacja | tak, w trayu |
-| `pitwall-daemon.exe` (sidecar) | cała logika: workspace, procesy, logi, zadania, MCP | tak |
+| `trackwall.exe` (Tauri) | okno, tray, nadzór daemona, aktualizacja | tak, w trayu |
+| `trackwall-daemon.exe` (sidecar) | cała logika: workspace, procesy, logi, zadania, MCP | tak |
 | procesy serwisów | `mise run dev` w grupie procesów per serwis | tak |
 | sesje agentów | CLI agenta w PTY należącym do daemona | tak |
 
-Daemon można też uruchomić bez Tauri (`pitwall-daemon --ui`), co daje tryb „lokalna strona w przeglądarce” z pierwszego etapu prac. Tauri niczego nie dodaje do logiki, tylko do pakowania i integracji z systemem.
+Daemon można też uruchomić bez Tauri (`trackwall-daemon --ui`), co daje tryb „lokalna strona w przeglądarce” z pierwszego etapu prac. Tauri niczego nie dodaje do logiki, tylko do pakowania i integracji z systemem.
 
 ## 3. Monorepo
 
 ```
-pitwall/
+trackwall/
   package.json            pnpm workspaces, skrypty root
   pnpm-workspace.yaml
   mise.toml               wersje narzędzi dla samego projektu (node/bun, pnpm, rust) i taski setup, dev, portable
@@ -83,7 +83,7 @@ W kodzie: moduł to katalog `packages/daemon/src/modules/<moduł>/`, fasada to `
 
 | Moduł | Odpowiada za | Zależy od | Trwały stan |
 |---|---|---|---|
-| `workspace` | lista repo, klon, sync, stan per repo, przeglądanie zawartości, `ws sync` | `vcs`, `tasks(mise)` | `workspace.yaml` (ADR-12), tabela `repos` |
+| `workspace` | lista repo, klon, sync, stan per repo, przeglądanie zawartości, `ws sync` | `vcs`, `tasks(mise)` | `workspace.yaml` (ADR-13), tabela `repos` |
 | `vcs` | adaptery git (lokalne), GitHub, GitLab; worktree; `git show` bez checkoutu; stan, log, drzewo i pliki z HEAD | – | – |
 | `mise` | generowanie `mise.local.toml`, uruchamianie tasków po nazwie, wykrywanie stacku | `procs` | pliki w repo |
 | `cards` | analiza repo -> karta (provides / consumes / runtime); uzupełnienie przez LLM | `workspace` | tabela `cards` z commitem analizy |
@@ -134,9 +134,9 @@ Dzierżawa mówi, **która gałąź/worktree** zajmuje serwis na jego porcie. Do
 
 Pierwszy wycinek modułu `workspace` (etap 3 w §11, zrobiony wcześniej na prośbę użytkownika): lista repo i ich przeglądanie, bez klonu, sync i mise.
 
-- **Lista repo** żyje w `workspace.yaml` (ADR-12). Plik jest czytany przy każdym zapytaniu, więc ręczna edycja działa bez restartu; zapis z UI zmienia tylko listę `repos` i zachowuje komentarze. Dodanie przyjmuje pełną ścieżkę do katalogu w repo, zapisuje korzeń repo (`git rev-parse --show-toplevel`) i nadaje identyfikator z nazwy katalogu (`orders-bff`, przy kolizji `orders-bff-2`). To samo repo dodane drugi raz zwraca istniejący wpis. Usunięcie zdejmuje repo tylko z listy.
+- **Lista repo** żyje w `workspace.yaml` (ADR-13). Plik jest czytany przy każdym zapytaniu, więc ręczna edycja działa bez restartu; zapis z UI zmienia tylko listę `repos` i zachowuje komentarze. Dodanie przyjmuje pełną ścieżkę do katalogu w repo, zapisuje korzeń repo (`git rev-parse --show-toplevel`) i nadaje identyfikator z nazwy katalogu (`orders-bff`, przy kolizji `orders-bff-2`). To samo repo dodane drugi raz zwraca istniejący wpis. Usunięcie zdejmuje repo tylko z listy.
 - **Stan repo** (`RepoStatus`) jest obserwowany przy każdym zapytaniu jednym `git status --porcelain=v2 --branch` plus `git log -1`: gałąź, ostatni commit, liczba zmian w katalogu roboczym, ahead/behind względem gałęzi śledzonej. Nic z tego nie jest zapisywane. Repo, którego katalog zniknął albo którego git nie czyta, zostaje na liście jako `unavailable` z komunikatem gita.
-- **Przeglądanie** czyta z commita HEAD, nie z katalogu roboczego (ADR-13): jedno `cat-file --batch-check` mówi, czy HEAD i `HEAD:<ścieżka>` istnieją, jakiego są typu i rozmiaru, potem `ls-tree` albo `cat-file blob`. Ścieżka z żądania jest ścieżką w drzewie commita, więc nie da się nią wyjść poza repo ani trafić w plik ignorowany przez gita. Podgląd pliku i README jest ucinany do 512 KB; plik z bajtem NUL w pierwszych 8000 bajtach jest binarny (ta sama heurystyka co w gicie).
+- **Przeglądanie** czyta z commita HEAD, nie z katalogu roboczego (ADR-14): jedno `cat-file --batch-check` mówi, czy HEAD i `HEAD:<ścieżka>` istnieją, jakiego są typu i rozmiaru, potem `ls-tree` albo `cat-file blob`. Ścieżka z żądania jest ścieżką w drzewie commita, więc nie da się nią wyjść poza repo ani trafić w plik ignorowany przez gita. Podgląd pliku i README jest ucinany do 512 KB; plik z bajtem NUL w pierwszych 8000 bajtach jest binarny (ta sama heurystyka co w gicie).
 - **Git** jest uruchamiany przez `spawn` z tablicą argumentów, bez powłoki, z `-C <repo>`, limitem czasu 15 s, `GIT_OPTIONAL_LOCKS=0` (odczyt stanu nie zakłada `index.lock`, gdy użytkownik akurat commituje) i `GIT_TERMINAL_PROMPT=0`, bez odziedziczonych zmiennych wybierających repo (`GIT_DIR`, `GIT_WORK_TREE`…), które przebiłyby `-C`. Wynik jest ustalany bez czekania na zamknięcie rur, bo na Windowsie `git` z `PATH` bywa launcherem, którego wnuk trzyma je po przekroczeniu czasu. Wyjście jest parsowane z formatów maszynowych (`-z`, `--porcelain=v2`), więc nie zależy od języka gita.
 - **„Otwórz w VS Code”** otwiera adres `vscode://file/<korzeń repo>` systemowym mechanizmem otwierania URL-i (to samo co `--ui`), bez uruchamiania `code` przez powłokę.
 - `workspace.yaml` jest zapisywany przez plik tymczasowy i `rename` (`atomic-write.ts`, wspólne z `daemon.json`), z ponowieniem na Windowsie, gdy plik chwilowo trzyma antywirus albo edytor. Ścieżki repo w pliku muszą być pełne.
@@ -152,7 +152,7 @@ Graf = złączenie `consumes` z `provides` po kluczach: URL/base-path, nazwa art
 
 ### 5.1 Odkrywanie daemona
 
-Daemon przy starcie zapisuje `~/.pitwall/daemon.json`: `{ pid, port, token, startedAt, version }` z uprawnieniami tylko dla użytkownika. Port jest losowy z zakresu loopback, nasłuch wyłącznie na `127.0.0.1`. Drugi daemon kończy się, gdy `/api/health` istniejącego odpowiada tą samą wersją; przy innej wersji prosi o restart z UI. Klienty (Tauri, `ws`, cienki klient MCP) czytają ten plik, nic nie jest konfigurowane ręcznie.
+Daemon przy starcie zapisuje `~/.trackwall/daemon.json`: `{ pid, port, token, startedAt, version }` z uprawnieniami tylko dla użytkownika. Port jest losowy z zakresu loopback, nasłuch wyłącznie na `127.0.0.1`. Drugi daemon kończy się, gdy `/api/health` istniejącego odpowiada tą samą wersją; przy innej wersji prosi o restart z UI. Klienty (Tauri, `ws`, cienki klient MCP) czytają ten plik, nic nie jest konfigurowane ręcznie.
 
 ### 5.2 Daemon ↔ UI i CLI: HTTP + WebSocket
 
@@ -163,7 +163,7 @@ Daemon przy starcie zapisuje `~/.pitwall/daemon.json`: `{ pid, port, token, star
 
 ### 5.3 Daemon ↔ agent: MCP
 
-Daemon wystawia serwer MCP w transporcie **Streamable HTTP** pod `/mcp` z tym samym tokenem. Dla CLI, które obsługują tylko stdio, jest cienki klient `pitwall-daemon mcp-stdio`, który przekazuje ramki do `/mcp`. Funkcja „podłącz agenta” w UI dopisuje wpis do konfiguracji MCP danego CLI, nie ruszając reszty pliku.
+Daemon wystawia serwer MCP w transporcie **Streamable HTTP** pod `/mcp` z tym samym tokenem. Dla CLI, które obsługują tylko stdio, jest cienki klient `trackwall-daemon mcp-stdio`, który przekazuje ramki do `/mcp`. Funkcja „podłącz agenta” w UI dopisuje wpis do konfiguracji MCP danego CLI, nie ruszając reszty pliku.
 
 Narzędzia (wszystkie przyjmują identyfikatory):
 
@@ -190,7 +190,7 @@ Tauri uruchamia daemon jako sidecar z argumentem `--parent <pid>`, czeka na `/ap
 
 ### 5.5 Daemon ↔ scena 3D
 
-`@pitwall/scene` nie ma własnego transportu: dostaje strumień zdarzeń z tego samego WebSocketu co reszta UI i mapuje go na encje koota (`Kind`, `Status`, `Port`, `Lease`, `Layer`). Układ warstw (FE → BFF → serwisy → bazy) wynika z grafu: warstwa = najdłuższa ścieżka od węzłów bez wejść. Render na żądanie po każdej paczce zdarzeń.
+`@trackwall/scene` nie ma własnego transportu: dostaje strumień zdarzeń z tego samego WebSocketu co reszta UI i mapuje go na encje koota (`Kind`, `Status`, `Port`, `Lease`, `Layer`). Układ warstw (FE → BFF → serwisy → bazy) wynika z grafu: warstwa = najdłuższa ścieżka od węzłów bez wejść. Render na żądanie po każdej paczce zdarzeń.
 
 ## 6. Model danych
 
@@ -251,7 +251,7 @@ interface AuditEntry { id: number; at: string; client: string; tool: string;
                        args: unknown; durationMs: number; ok: boolean; resultDigest: string }
 ```
 
-Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), services, leases, tasks, audit; JSONL dla logów; nagrania sesji jako pliki; `runtime.json` tylko dla żywych grup procesów. Konfiguracja workspace to `workspace.yaml` (lista repo, nadpisania portów, wskazanie repo sekretów), który użytkownik może trzymać w prywatnym repo; do czasu wyboru katalogu workspace leży w katalogu stanu daemona (ADR-12). Stan nigdy nie miesza się z konfiguracją.
+Trwałość: SQLite (`~/.trackwall/trackwall.db`) dla repos, cards, edges (cache), services, leases, tasks, audit; JSONL dla logów; nagrania sesji jako pliki; `runtime.json` tylko dla żywych grup procesów. Konfiguracja workspace to `workspace.yaml` (lista repo, nadpisania portów, wskazanie repo sekretów), który użytkownik może trzymać w prywatnym repo; do czasu wyboru katalogu workspace leży w katalogu stanu daemona (ADR-12). Stan nigdy nie miesza się z konfiguracją.
 
 ## 7. Przepływy
 
@@ -270,7 +270,7 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 - Loopback only, token, sprawdzenie `Host`/`Origin`, porównanie w stałym czasie.
 - Token zadania (per sesja agenta) zamiast tokenu globalnego: daemon wie, które zadanie woła MCP, może ograniczyć `run_task` do repo zadania i wpisać zadanie do audytu.
 - Katalog roboczy procesu zawsze wewnątrz repo lub worktree; ścieżki z wejścia są normalizowane i sprawdzane na wyjście poza korzeń. Przeglądanie repo czyta tylko obiekty z commita HEAD, a ścieżkę w repo waliduje schemat `RepoPath` (bez `.`, `..`, pustych segmentów i znaków sterujących; `\` jest zwykłym znakiem nazwy).
-- Daemon uruchamia `git` w repo z listy z konfiguracją tego repo (`.git/config`), tak jak robi to użytkownik w terminalu; np. `core.fsmonitor` może uruchomić komendę przy `git status`. Dla repo dodanych ręcznie to świadoma decyzja; przy klonowaniu przez Pitwall trzeba ją rozważyć ponownie.
+- Daemon uruchamia `git` w repo z listy z konfiguracją tego repo (`.git/config`), tak jak robi to użytkownik w terminalu; np. `core.fsmonitor` może uruchomić komendę przy `git status`. Dla repo dodanych ręcznie to świadoma decyzja; przy klonowaniu przez Trackwall trzeba ją rozważyć ponownie.
 - Klon repo sekretów poza workspace, w katalogu niewidocznym dla worktree; w profilu zadania repo sekretów jest wykluczone z narzędzi plikowych agenta (konfiguracja adaptera).
 - Zmienne środowiskowe nigdy nie trafiają do logów ani do audytu; maskowanie wartości przed buforem.
 - Autostart i „podłącz agenta” tylko z UI; agent nie ma narzędzia do zmiany konfiguracji daemona.
@@ -330,9 +330,11 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 
 **ADR-11 Półprzezroczyste okno z efektem systemowym, nieprzezroczyste tło jako fallback.** (2026-10-23) Okno Tauri jest przezroczyste (`transparent`, motyw `Dark`), a powłoka w `setup` próbuje efektów po kolei przez `window-vibrancy`: na Windows Mica (Windows 11), potem Acrylic (Windows 10 1809+), na macOS vibrancy `UnderWindowBackground`. Po załadowaniu strony powłoka ustawia na `<html>` atrybut `data-window-effect` z nazwą przyjętego efektu i pokazuje okno (startuje z `visible: false`) dopiero po wykonaniu tego skryptu, więc przy starcie nie miga nieprzezroczyste tło; gdyby strona nie zgłosiła końca ładowania, okno pokazuje się po 10 s. Odświeżenie strony (F5) maluje ją nieprzezroczyście do końca ładowania, co zostawiamy jako rzadki przypadek. Atrybut zdejmuje tło strony i robi powierzchnie półprzezroczystymi; bez niego (brak efektu, przeglądarka) UI zostaje nieprzezroczyste, a `prefers-reduced-transparency` przywraca nieprzezroczystość także przy działającym efekcie. `set_effects` z Tauri odpada, bo bierze tylko pierwszy efekt z listy i nie mówi, czy się udał. `macOSPrivateApi` nie jest potrzebne: od Tauri 2.12.1 (dolna granica w `Cargo.toml`) przezroczystość na macOS działa bez tej flagi. Odwróciłoby to zauważalne przycinanie Acrylic przy przeciąganiu okna na Windows 10 (wtedy Windows 10 dostaje nieprzezroczyste tło) albo słaba czytelność na jasnych tapetach (wtedy mniejsza przezroczystość powierzchni).
 
-**ADR-12 `workspace.yaml` w katalogu stanu daemona, do czasu wyboru workspace.** (2026-10-23) Lista repo jest w `<katalog stanu>/workspace.yaml` (`~/.pitwall/workspace.yaml`). Dzięki temu pierwsza wersja nie potrzebuje ekranu wyboru workspace, a plik ma już docelowy format i można go przenieść. Odwróci to wybór katalogu workspace w UI (np. prywatne repo z konfiguracją): wtedy daemon dostaje ścieżkę do pliku, a w katalogu stanu zostaje tylko wskazanie na niego.
+**ADR-12 Nazwa: Trackwall.** (2026-10-23) Robocza nazwa „Pitwall” była zajęta przez istniejące narzędzia deweloperskie (quanticstudios/pitwall, aenzenith/pitwall-vscode), więc projekt nazywa się Trackwall: paczki `@trackwall/*`, binarki `trackwall` i `trackwall-daemon`, katalog danych `~/.trackwall`, zmienne `TRACKWALL_*`, identyfikator aplikacji `dev.trackwall.desktop`. Nazwa zostaje przy motywie ściany przy torze i w chwili decyzji była wolna na npm (także jako scope), crates.io i PyPI. Stan z wersji 0.1.0 w `~/.pitwall` nie jest przenoszony, bo poza tokenem i logami nic tam nie ma. Odwróciłaby ją kolizja nazwy z narzędziem lub znakiem towarowym znaleziona przed publikacją.
 
-**ADR-13 Przeglądanie repo z commita HEAD, nie z katalogu roboczego.** (2026-10-23) Drzewo plików, README i podgląd czytają obiekty gita (`ls-tree`, `cat-file`). Ścieżka z UI nie dotyka systemu plików, więc nie ma ryzyka wyjścia poza repo, dowiązań symbolicznych, plików zablokowanych przez procesy ani przypadkowego pokazania sekretów z ignorowanych plików (`.env`). Kosztem jest to, że niezacommitowanych zmian w przeglądarce nie widać; pokazuje je liczba zmian w stanie repo, a docelowo diff (Monaco). Odwróci to potrzeba edycji plików w UI albo podglądu katalogu roboczego; wtedy osobna trasa z walidacją ścieżki względem korzenia.
+**ADR-13 `workspace.yaml` w katalogu stanu daemona, do czasu wyboru workspace.** (2026-10-23) Lista repo jest w `<katalog stanu>/workspace.yaml` (`~/.trackwall/workspace.yaml`). Dzięki temu pierwsza wersja nie potrzebuje ekranu wyboru workspace, a plik ma już docelowy format i można go przenieść. Odwróci to wybór katalogu workspace w UI (np. prywatne repo z konfiguracją): wtedy daemon dostaje ścieżkę do pliku, a w katalogu stanu zostaje tylko wskazanie na niego.
+
+**ADR-14 Przeglądanie repo z commita HEAD, nie z katalogu roboczego.** (2026-10-23) Drzewo plików, README i podgląd czytają obiekty gita (`ls-tree`, `cat-file`). Ścieżka z UI nie dotyka systemu plików, więc nie ma ryzyka wyjścia poza repo, dowiązań symbolicznych, plików zablokowanych przez procesy ani przypadkowego pokazania sekretów z ignorowanych plików (`.env`). Kosztem jest to, że niezacommitowanych zmian w przeglądarce nie widać; pokazuje je liczba zmian w stanie repo, a docelowo diff (Monaco). Odwróci to potrzeba edycji plików w UI albo podglądu katalogu roboczego; wtedy osobna trasa z walidacją ścieżki względem korzenia.
 
 ## 13. Pytania otwarte
 

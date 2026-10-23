@@ -17,7 +17,7 @@ export function gitIn(dir: string, ...args: string[]): string {
 
 /** Nowe repo w katalogu tymczasowym z gałęzią `main`; pliki z `files` zapisane i zacommitowane jednym commitem. */
 export function makeRepo(files: Record<string, string | Buffer> = {}, name = "repo"): string {
-  const dir = join(mkdtempSync(join(tmpdir(), "pitwall-git-")), name);
+  const dir = join(mkdtempSync(join(tmpdir(), "trackwall-git-")), name);
   mkdirSync(dir);
   gitIn(dir, "init", "-q", "-b", "main");
   if (Object.keys(files).length > 0) commitFiles(dir, files, "pierwszy commit");

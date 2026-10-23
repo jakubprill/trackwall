@@ -1,4 +1,4 @@
-import { type Repo, workspaceApi } from "@pitwall/protocol";
+import { type Repo, workspaceApi } from "@trackwall/protocol";
 import { FolderGit2, Plus, RefreshCw } from "lucide-react";
 import { type FormEvent, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";

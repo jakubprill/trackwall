@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 
-const tempFile = () => join(mkdtempSync(join(tmpdir(), "pitwall-wsf-")), "workspace.yaml");
+const tempFile = () => join(mkdtempSync(join(tmpdir(), "trackwall-wsf-")), "workspace.yaml");
 
 describe("workspace.yaml", () => {
   test("pusty klucz repos to pusta lista, a dodanie go uzupełnia", () => {

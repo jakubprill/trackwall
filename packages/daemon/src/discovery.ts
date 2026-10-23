@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { closeSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeSync } from "node:fs";
 import { join } from "node:path";
-import { DAEMON_FILE, DaemonFile, HealthResult } from "@pitwall/protocol";
+import { DAEMON_FILE, DaemonFile, HealthResult } from "@trackwall/protocol";
 import { writeFileAtomic } from "./atomic-write.ts";
 import { loopbackRequest } from "./loopback.ts";
 

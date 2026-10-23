@@ -17,7 +17,7 @@ export function App() {
   return (
     <div className="flex h-screen flex-col">
       <header className="flex items-center gap-6 border-b px-6 py-3">
-        <span className="font-semibold tracking-tight">Pitwall</span>
+        <span className="font-semibold tracking-tight">Trackwall</span>
         <TabBar tabs={VIEWS} active={view} onSelect={setView} variant="pills" />
       </header>
       {error && (

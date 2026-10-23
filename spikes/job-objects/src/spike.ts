@@ -2,7 +2,7 @@
  * Spike: grupa procesów, której nie da się zgubić.
  *
  *   spike.ts                 uruchamia wszystkie sprawdzenia i drukuje JSON z wynikami
- * Role procesów potomnych (w zmiennej PITWALL_SPIKE_ROLE jako tablica JSON):
+ * Role procesów potomnych (w zmiennej TRACKWALL_SPIKE_ROLE jako tablica JSON):
  *   ["tree", n, dir]         węzeł drzewa testowego (ignoruje łagodne sygnały, odpala poziom n+1)
  *   ["holder", dir]          „daemon”, który trzyma job z drzewem i zostaje zabity
  */
@@ -49,7 +49,7 @@ async function main(): Promise<void> {
 }
 
 function tmp(): string {
-  return mkdtempSync(join(tmpdir(), "pitwall-job-"));
+  return mkdtempSync(join(tmpdir(), "trackwall-job-"));
 }
 
 async function windowsChecks(): Promise<Check[]> {

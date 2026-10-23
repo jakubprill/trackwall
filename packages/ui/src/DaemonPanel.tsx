@@ -1,4 +1,4 @@
-import { DaemonInfo } from "@pitwall/protocol";
+import { DaemonInfo } from "@trackwall/protocol";
 import { RefreshCw } from "lucide-react";
 import { useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,7 @@ export function DaemonPanel({ conn, onRetry }: { conn: Connection; onRetry: () =
     <Card className="w-full max-w-xl">
       <CardHeader>
         <CardTitle>Daemon</CardTitle>
-        <CardDescription>Proces, który trzyma cały stan Pitwalla.</CardDescription>
+        <CardDescription>Proces, który trzyma cały stan Trackwalla.</CardDescription>
         <CardAction className="flex items-center gap-2">
           <StatusBadge info={info} />
           <Button variant="ghost" size="icon" onClick={info.reload} aria-label="Odśwież">

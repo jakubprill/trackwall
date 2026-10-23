@@ -37,7 +37,7 @@ body:
   - type: input
     id: wersja
     attributes:
-      label: Wersja Pitwall
+      label: Wersja Trackwall
       description: Z panelu daemona w UI (pole „Wersja”), z nazwy archiwum zip albo, przy uruchomieniu ze źródeł, hash commita.
     validations:
       required: true
@@ -45,5 +45,5 @@ body:
     id: logi
     attributes:
       label: Logi
-      description: Fragment logu po zanonimizowaniu. Log startu daemona jest w `~/.pitwall/logs/daemon-start.log` (na Windowsie `%USERPROFILE%\.pitwall\logs`).
+      description: Fragment logu po zanonimizowaniu. Log startu daemona jest w `~/.trackwall/logs/daemon-start.log` (na Windowsie `%USERPROFILE%\.trackwall\logs`).
       render: text

@@ -1,4 +1,4 @@
-import type { Commit, RepoStatusOk, TreeEntry } from "@pitwall/protocol";
+import type { Commit, RepoStatusOk, TreeEntry } from "@trackwall/protocol";
 
 /**
  * Parsery wyjścia gita w formatach maszynowych (`-z`, `--porcelain=v2`), bez zależności od języka gita.

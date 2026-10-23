@@ -1,11 +1,11 @@
-# Słownik Pitwall
+# Słownik Trackwall
 
 Pojęcia, które łatwo pomylić. Kod, UI, narzędzia MCP i dokumentacja używają tych słów i tylko tych: w prozie polskiego słowa, w kodzie identyfikatora podanego przy haśle. Szczegóły są w `docs/architecture.md`; tu jest tylko to, co trzeba wiedzieć, żeby nazwać rzecz poprawnie. Nowe pojęcie dopisuje się w tym samym PR, w którym się pojawia.
 
 ## Aplikacja
 
 **Daemon** (`daemon`):
-Proces `pitwall-daemon`, który trzyma cały stan i całą logikę. Jedyne źródło prawdy; UI, CLI `ws` i agenci (przez serwer MCP w daemonie) są klientami jego fasady.
+Proces `trackwall-daemon`, który trzyma cały stan i całą logikę. Jedyne źródło prawdy; UI, CLI `ws` i agenci (przez serwer MCP w daemonie) są klientami jego fasady.
 _Unikaj_: backend, serwer (bez dopowiedzenia)
 
 **Powłoka** (`apps/desktop`):
@@ -20,14 +20,14 @@ Wydzielona część daemona z §4 architektury (`procs`, `logs`, `workspace`…)
 _Unikaj_: serwis (to byt z workspace, patrz niżej), paczka
 
 **Paczka**:
-Pakiet pnpm z `pnpm-workspace.yaml` (`@pitwall/daemon`, `@pitwall/protocol`, spike'i…).
+Pakiet pnpm z `pnpm-workspace.yaml` (`@trackwall/daemon`, `@trackwall/protocol`, spike'i…).
 _Unikaj_: workspace (to osobne pojęcie, patrz niżej)
 
 **`ws`**:
 Cienki klient CLI daemona przez HTTP na loopbacku. Nie ma nic wspólnego z WebSocketem `/ws`.
 
 **Token daemona**:
-Sekret z `~/.pitwall/daemon.json`, którym UI, `ws` i powłoka uwierzytelniają się w API.
+Sekret z `~/.trackwall/daemon.json`, którym UI, `ws` i powłoka uwierzytelniają się w API.
 
 **Token zadania**:
 Osobny token dla sesji zadania; po nim daemon wie, które zadanie woła MCP, i ogranicza jego narzędzia (§8).
@@ -35,7 +35,7 @@ Osobny token dla sesji zadania; po nim daemon wie, które zadanie woła MCP, i o
 ## Workspace i wiedza
 
 **Workspace** (`workspace`):
-Zbiór repo użytkownika opisany w `workspace.yaml`, poza repozytorium Pitwall. Tu żyje wszystko, co firmowe.
+Zbiór repo użytkownika opisany w `workspace.yaml`, poza repozytorium Trackwall. Tu żyje wszystko, co firmowe.
 _Unikaj_: projekt
 
 **Repo** (`Repo`, `RepoId`):
@@ -46,7 +46,7 @@ Gałąź, ostatni commit, liczba zmian w katalogu roboczym i ahead/behind wzglę
 _Unikaj_: status (w polskim tekście), sync (to osobna akcja)
 
 **Przegląd repo** (`RepoOverview`):
-README i ostatnie commity repo w jednej odpowiedzi; stan repo przychodzi z listy repo. Pliki przeglądane są osobno, zawsze z commita HEAD (ADR-13).
+README i ostatnie commity repo w jednej odpowiedzi; stan repo przychodzi z listy repo. Pliki przeglądane są osobno, zawsze z commita HEAD (ADR-14).
 
 **Worktree**:
 Osobny katalog roboczy gita dla zadania, w `<repo>/.worktrees/<zadanie>`. Usuwany dopiero po potwierdzonym zatrzymaniu procesów, które z niego korzystają.
@@ -74,7 +74,7 @@ Plik i linia, z których wynika fakt na karcie lub krawędź w grafie.
 
 **Serwis** (`Service`, `ServiceId`):
 Repo plus jego task mise `dev`, port i sonda zdrowia. Jedno repo może mieć kilka serwisów.
-_Unikaj_: aplikacja, mikroserwis (gdy chodzi o byt w Pitwall)
+_Unikaj_: aplikacja, mikroserwis (gdy chodzi o byt w Trackwall)
 
 **Stan serwisu**:
 `stopped`, `starting`, `healthy`, `unhealthy`, `stopping` albo `crashed`; zawsze zaobserwowany, nigdy założony.
@@ -106,7 +106,7 @@ Nazwana komenda z `mise.toml` repo: `setup`, `dev`, `test`, `build`, `lint`, `he
 Jednorazowe wykonanie taska mise przez `run_task` albo z UI, z własną grupą procesów i logami. Nie jest zadaniem ani serwisem.
 
 **Adapter**:
-Wszystko, co Pitwall wie o jednym CLI agenta: szablon komendy, konfiguracja MCP, wznowienie, detektory stanu. Jedyny adapter to Copilot CLI (ADR-8).
+Wszystko, co Trackwall wie o jednym CLI agenta: szablon komendy, konfiguracja MCP, wznowienie, detektory stanu. Jedyny adapter to Copilot CLI (ADR-8).
 
 **Sesja** (sesja zadania):
 CLI agenta działające w PTY należącym do daemona, nagrywane do `sessions/<zadanie>.cast`.
@@ -122,7 +122,7 @@ Reguła, która z hooków, sekwencji terminala albo wyglądu ekranu wnioskuje st
 Limit czasu i liczby commitów zadania; po przekroczeniu daemon kończy sesję.
 
 **Podsumowanie**:
-Blok, którym agent kończy zadanie; trafia do pola `summary` i do propozycji PR. Pitwall niczego sam nie scala (ADR-9).
+Blok, którym agent kończy zadanie; trafia do pola `summary` i do propozycji PR. Trackwall niczego sam nie scala (ADR-9).
 
 ## Logi, zdarzenia i audyt
 
@@ -159,7 +159,7 @@ Klucz z `data` albo `stringData` manifestu, wstrzykiwany jako zmienna środowisk
 
 ## Scena 3D
 
-**Scena** (`@pitwall/scene`):
+**Scena** (`@trackwall/scene`):
 Dashboard 3D na Pawn, zasilany tymi samymi zdarzeniami co reszta UI.
 
 **Warstwa**:

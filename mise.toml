@@ -1,4 +1,4 @@
-# Wersje narzędzi dla samego projektu Pitwall (nie dla repo z workspace użytkownika).
+# Wersje narzędzi dla samego projektu Trackwall (nie dla repo z workspace użytkownika).
 [tools]
 node = "22"
 bun = "1.4.2"
@@ -12,7 +12,7 @@ description = "Zależności workspace z lockfile (pnpm install --frozen-lockfile
 run = "pnpm install --frozen-lockfile"
 
 [tasks.dev]
-description = "Daemon i Vite w trybie deweloperskim, UI na http://127.0.0.1:5173 (stan w .pitwall-dev/)"
+description = "Daemon i Vite w trybie deweloperskim, UI na http://127.0.0.1:5173 (stan w .trackwall-dev/)"
 depends = ["setup"]
 run = "pnpm dev"
 

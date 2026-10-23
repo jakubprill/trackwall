@@ -8,7 +8,7 @@ import { isUiDir } from "./api/static.ts";
 import { type DaemonArgs, parseDaemonArgs, USAGE } from "./args.ts";
 import { newToken, probeRunningDaemon, removeDaemonFile, watchDaemonFile, withStartLock, writeDaemonFile } from "./discovery.ts";
 import { createFacade } from "./facade.ts";
-import { pitwallHome } from "./home.ts";
+import { trackwallHome } from "./home.ts";
 import { openBrowser } from "./open-browser.ts";
 import { runtimeInfo } from "./platform/runtime.ts";
 import { VERSION } from "./version.ts";
@@ -18,7 +18,7 @@ const EXIT_USAGE = 2;
 const EXIT_OTHER_VERSION_RUNNING = 3;
 
 async function main(args: DaemonArgs): Promise<void> {
-  const home = pitwallHome(args.home);
+  const home = trackwallHome(args.home);
   const uiDir = resolveUiDir(args.uiDir);
   const startedAt = new Date().toISOString();
 
@@ -87,7 +87,7 @@ async function main(args: DaemonArgs): Promise<void> {
     process.on(signal, () => void shutdown(signal));
   }
 
-  log(`pitwall-daemon ${VERSION} na http://127.0.0.1:${self.port} (pid ${process.pid}, ${runtimeInfo().name}, stan w ${home})`);
+  log(`trackwall-daemon ${VERSION} na http://127.0.0.1:${self.port} (pid ${process.pid}, ${runtimeInfo().name}, stan w ${home})`);
   if (!uiDir) log("brak zbudowanego UI: API działa, strona nie będzie serwowana (zbuduj packages/ui albo podaj --ui-dir)");
   if (args.ui) {
     if (uiDir) openBrowser(uiUrl(self.port, self.token));
@@ -95,10 +95,10 @@ async function main(args: DaemonArgs): Promise<void> {
   }
 }
 
-/** Kolejność: `--ui-dir`, `PITWALL_UI_DIR`, `ui/` obok binarki (portable), `packages/ui/dist` (dev). */
+/** Kolejność: `--ui-dir`, `TRACKWALL_UI_DIR`, `ui/` obok binarki (portable), `packages/ui/dist` (dev). */
 function resolveUiDir(explicit: string | undefined): string | undefined {
   if (explicit) return isUiDir(explicit) ? explicit : undefined;
-  const candidates = [process.env.PITWALL_UI_DIR, join(dirname(process.execPath), "ui")];
+  const candidates = [process.env.TRACKWALL_UI_DIR, join(dirname(process.execPath), "ui")];
   try {
     candidates.push(fileURLToPath(new URL("../../ui/dist", import.meta.url)));
   } catch {

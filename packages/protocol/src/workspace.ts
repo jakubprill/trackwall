@@ -17,7 +17,7 @@ export type RepoId = z.infer<typeof RepoId>;
 
 /**
  * Ścieżka w drzewie commita, z `/` jak w gicie, bez `.` i `..`; pusta znaczy korzeń. Nie dotyka systemu plików
- * (ADR-13), więc `\` jest zwykłym znakiem nazwy. Bez znaków sterujących, bo daemon podaje ją gitowi liniami.
+ * (ADR-14), więc `\` jest zwykłym znakiem nazwy. Bez znaków sterujących, bo daemon podaje ją gitowi liniami.
  */
 export const RepoPath = z
   .string()

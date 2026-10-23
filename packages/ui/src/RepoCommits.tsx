@@ -1,4 +1,4 @@
-import type { Commit } from "@pitwall/protocol";
+import type { Commit } from "@trackwall/protocol";
 import { relativeTime } from "@/lib/format";
 
 export function RepoCommits({ commits }: { commits: Commit[] }) {

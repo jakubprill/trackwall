@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cargoVersion, jsonVersion } from "../scripts/lib.ts";
 
-const dir = mkdtempSync(join(tmpdir(), "pitwall-manifest-"));
+const dir = mkdtempSync(join(tmpdir(), "trackwall-manifest-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 function file(name: string, content: string): string {

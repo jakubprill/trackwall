@@ -1,5 +1,5 @@
 import { isAbsolute, resolve } from "node:path";
-import type { Commit, FileContent, Repo, RepoOverview, RepoStatus, RepoStatusOk, TreeEntry } from "@pitwall/protocol";
+import type { Commit, FileContent, Repo, RepoOverview, RepoStatus, RepoStatusOk, TreeEntry } from "@trackwall/protocol";
 import { DomainError } from "../../errors.ts";
 import { vscodeUrl } from "./editor-url.ts";
 import { repoIdFor } from "./repo-id.ts";

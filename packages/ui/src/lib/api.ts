@@ -1,4 +1,4 @@
-import { ApiEnvelope, type Endpoint } from "@pitwall/protocol";
+import { ApiEnvelope, type Endpoint } from "@trackwall/protocol";
 import type { z } from "zod";
 import type { Connection } from "./connection.ts";
 

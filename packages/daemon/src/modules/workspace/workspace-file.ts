@@ -1,13 +1,13 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute } from "node:path";
-import { RepoId } from "@pitwall/protocol";
+import { RepoId } from "@trackwall/protocol";
 import { type Document, isMap, isSeq, parseDocument } from "yaml";
 import { z } from "zod";
 import { writeFileAtomic } from "../../atomic-write.ts";
 import { DomainError } from "../../errors.ts";
 
 /**
- * `workspace.yaml` (§4.5, ADR-12): konfiguracja workspace, którą użytkownik może edytować ręcznie i trzymać
+ * `workspace.yaml` (§4.5, ADR-13): konfiguracja workspace, którą użytkownik może edytować ręcznie i trzymać
  * w prywatnym repo. Czytany przy każdym użyciu, więc ręczna edycja działa bez restartu daemona. Zapis zmienia
  * tylko listę `repos` i zachowuje komentarze oraz pozostałe klucze.
  */

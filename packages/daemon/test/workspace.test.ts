@@ -11,7 +11,7 @@ import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { makeRepo } from "./support/git-repo.ts";
 
 function newWorkspace() {
-  const file = join(mkdtempSync(join(tmpdir(), "pitwall-ws-")), "workspace.yaml");
+  const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
   const opened: string[] = [];
   const workspace = new Workspace({ file: new WorkspaceFile(file), vcs: new Vcs(), openUrl: (url) => opened.push(url) });
   return { workspace, file, opened };
@@ -42,7 +42,7 @@ describe("workspace", () => {
 
   test("katalog spoza gita i ścieżka względna są odrzucane jako bad_request", async () => {
     const { workspace } = newWorkspace();
-    await expect(workspace.add(mkdtempSync(join(tmpdir(), "pitwall-nie-git-")))).rejects.toMatchObject({ code: "bad_request" });
+    await expect(workspace.add(mkdtempSync(join(tmpdir(), "trackwall-nie-git-")))).rejects.toMatchObject({ code: "bad_request" });
     await expect(workspace.add("wzgledna/sciezka")).rejects.toMatchObject({ code: "bad_request" });
   });
 

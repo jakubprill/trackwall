@@ -14,7 +14,7 @@ export interface Facade {
 const WORKSPACE_FILE = "workspace.yaml";
 
 export interface FacadeOptions {
-  /** Katalog stanu daemona; tam leży `workspace.yaml` (ADR-12). */
+  /** Katalog stanu daemona; tam leży `workspace.yaml` (ADR-13). */
   home: string;
   openUrl: (url: string) => void;
 }

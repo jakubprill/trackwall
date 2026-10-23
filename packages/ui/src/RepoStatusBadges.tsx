@@ -1,4 +1,4 @@
-import type { Repo } from "@pitwall/protocol";
+import type { Repo } from "@trackwall/protocol";
 import { ArrowDown, ArrowUp, GitBranch } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { changesLabel, relativeTime } from "@/lib/format";

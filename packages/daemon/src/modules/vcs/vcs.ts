@@ -1,11 +1,11 @@
 import { resolve } from "node:path";
-import type { Commit, FileContent, RepoStatusOk, TreeEntry } from "@pitwall/protocol";
+import type { Commit, FileContent, RepoStatusOk, TreeEntry } from "@trackwall/protocol";
 import { git } from "./git.ts";
 import { type GitObject, isBinary, LOG_FORMAT, parseLog, parseObjects, parseStatus, parseTree } from "./parse.ts";
 
 /**
  * Moduł `vcs` (§4, §4.5): lokalny adapter gita. Zna katalogi, nie identyfikatory repo; te tłumaczy `workspace`.
- * Zawartość repo czyta z obiektów commita HEAD (ADR-13), więc ścieżka nie może wskazać pliku spoza repo,
+ * Zawartość repo czyta z obiektów commita HEAD (ADR-14), więc ścieżka nie może wskazać pliku spoza repo,
  * a przeglądanie nie zależy od tego, co leży w katalogu roboczym.
  */
 export class Vcs {

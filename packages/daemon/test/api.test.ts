@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { apiResult, DaemonInfoResult, HealthResult, Repo, workspaceApi } from "@pitwall/protocol";
+import { apiResult, DaemonInfoResult, HealthResult, Repo, workspaceApi } from "@trackwall/protocol";
 import { z } from "zod";
 import { type ApiServer, startApi } from "../src/api/server.ts";
 import { createFacade } from "../src/facade.ts";
@@ -15,13 +15,13 @@ let shutdowns = 0;
 
 beforeAll(async () => {
   // Katalog nadrzędny o nazwie `assets` sprawdza, że cache zależy od ścieżki względem UI, nie całej ścieżki.
-  const parent = join(mkdtempSync(join(tmpdir(), "pitwall-ui-")), "assets");
+  const parent = join(mkdtempSync(join(tmpdir(), "trackwall-ui-")), "assets");
   const uiDir = join(parent, "ui");
   mkdirSync(join(uiDir, "assets"), { recursive: true });
-  writeFileSync(join(uiDir, "index.html"), "<!doctype html><title>pitwall</title>");
+  writeFileSync(join(uiDir, "index.html"), "<!doctype html><title>trackwall</title>");
   writeFileSync(join(uiDir, "assets", "app.js"), "console.log(1)");
   // Plik tuż obok katalogu UI: cel prób wyjścia poza katalog w teście path traversal.
-  writeFileSync(join(parent, "pitwall-secret.txt"), "nie do odczytu");
+  writeFileSync(join(parent, "trackwall-secret.txt"), "nie do odczytu");
   api = await startApi({
     token: TOKEN,
     version: "9.9.9",
@@ -40,7 +40,7 @@ beforeAll(async () => {
     onShutdown: () => {
       shutdowns++;
     },
-    facade: createFacade({ home: mkdtempSync(join(tmpdir(), "pitwall-home-")), openUrl: () => {} }),
+    facade: createFacade({ home: mkdtempSync(join(tmpdir(), "trackwall-home-")), openUrl: () => {} }),
   });
 });
 
@@ -98,18 +98,18 @@ describe("api", () => {
 
   test("UI: index, assets, fallback SPA i brak wyjścia poza katalog", async () => {
     const index = await req("/");
-    expect(index.body).toContain("pitwall");
+    expect(index.body).toContain("trackwall");
     expect(index.headers["cache-control"]).toBe("no-cache");
-    expect((await req("/tasks/123")).body).toContain("pitwall");
+    expect((await req("/tasks/123")).body).toContain("trackwall");
     const asset = await req("/assets/app.js");
     expect(asset.headers["content-type"]).toContain("javascript");
     expect(asset.headers["cache-control"]).toContain("immutable");
     expect((await req("/assets/missing.js")).status).toBe(404);
     for (const path of [
-      "/..%2fpitwall-secret.txt",
-      "/%2e%2e/pitwall-secret.txt",
-      "/..%5cpitwall-secret.txt",
-      "/assets/..%2f..%2fpitwall-secret.txt",
+      "/..%2ftrackwall-secret.txt",
+      "/%2e%2e/trackwall-secret.txt",
+      "/..%5ctrackwall-secret.txt",
+      "/assets/..%2f..%2ftrackwall-secret.txt",
     ]) {
       const res = await req(path);
       expect({ path, status: res.status, leaked: res.body.includes("nie do odczytu") }).toEqual({ path, status: 404, leaked: false });
@@ -176,7 +176,7 @@ describe("--allow-origin", () => {
         throw new Error("nieużywane");
       },
       onShutdown: () => {},
-      facade: createFacade({ home: mkdtempSync(join(tmpdir(), "pitwall-home-")), openUrl: () => {} }),
+      facade: createFacade({ home: mkdtempSync(join(tmpdir(), "trackwall-home-")), openUrl: () => {} }),
     });
     try {
       const res = await loopbackRequest(extra.port, "/api/health", { headers: { origin: "http://127.0.0.1:5173" } });

@@ -1,4 +1,4 @@
-import { type Repo, type RepoOverview, workspaceApi } from "@pitwall/protocol";
+import { type Repo, type RepoOverview, workspaceApi } from "@trackwall/protocol";
 import { Code, Trash2 } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";

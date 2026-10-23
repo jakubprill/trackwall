@@ -1,4 +1,4 @@
-import type { ErrorCode } from "@pitwall/protocol";
+import type { ErrorCode } from "@trackwall/protocol";
 
 /**
  * Błąd, który moduł zgłasza świadomie i który transport ma pokazać klientowi z kodem i treścią.

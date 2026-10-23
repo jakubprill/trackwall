@@ -1,11 +1,11 @@
-import { type Endpoint, workspaceApi } from "@pitwall/protocol";
+import { type Endpoint, workspaceApi } from "@trackwall/protocol";
 import { z } from "zod";
 import { DomainError } from "../errors.ts";
 import type { Facade } from "../facade.ts";
 
 /**
  * Trasy `POST /api/<moduł>/<akcja>` (§5.2) wszystkich modułów w jednej mapie. Ścieżkę i schematy bierze
- * z `@pitwall/protocol`, więc `server.ts` nie zna modułów, a wynik akcji musi zgadzać się z kontraktem co do typu.
+ * z `@trackwall/protocol`, więc `server.ts` nie zna modułów, a wynik akcji musi zgadzać się z kontraktem co do typu.
  */
 type PostHandler = (facade: Facade, body: unknown) => Promise<unknown>;
 

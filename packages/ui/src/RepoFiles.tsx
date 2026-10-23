@@ -1,4 +1,4 @@
-import { type TreeEntry, workspaceApi } from "@pitwall/protocol";
+import { type TreeEntry, workspaceApi } from "@trackwall/protocol";
 import { File, Folder, FolderGit } from "lucide-react";
 import { useCallback, useState } from "react";
 import { post } from "@/lib/api";
@@ -8,7 +8,7 @@ import { useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
 
 /**
- * Drzewo plików z ostatniego commita (daemon czyta HEAD, nie katalog roboczy, ADR-13) i podgląd wybranego pliku.
+ * Drzewo plików z ostatniego commita (daemon czyta HEAD, nie katalog roboczy, ADR-14) i podgląd wybranego pliku.
  * Zmiana `head` (nowy commit) pobiera katalog i plik od nowa, zostawiając poprzednie do czasu odpowiedzi.
  */
 export function RepoFiles({ conn, repo, head }: { conn: Connection; repo: string; head: string }) {

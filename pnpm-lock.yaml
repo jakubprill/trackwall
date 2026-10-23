@@ -38,7 +38,7 @@ importers:
 
   packages/daemon:
     dependencies:
-      '@pitwall/protocol':
+      '@trackwall/protocol':
         specifier: workspace:*
         version: link:../protocol
       yaml:
@@ -73,7 +73,7 @@ importers:
 
   packages/ui:
     dependencies:
-      '@pitwall/protocol':
+      '@trackwall/protocol':
         specifier: workspace:*
         version: link:../protocol
       '@radix-ui/react-slot':

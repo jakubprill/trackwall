@@ -6,7 +6,7 @@ import { writeFileAtomic } from "../src/atomic-write.ts";
 
 describe("writeFileAtomic", () => {
   test("nadpisuje istniejący plik i nie zostawia pliku tymczasowego", () => {
-    const dir = mkdtempSync(join(tmpdir(), "pitwall-aw-"));
+    const dir = mkdtempSync(join(tmpdir(), "trackwall-aw-"));
     const target = join(dir, "workspace.yaml");
     writeFileSync(target, "stara treść");
 
@@ -17,7 +17,7 @@ describe("writeFileAtomic", () => {
   });
 
   test("gdy podmiana się nie uda, błąd leci dalej, a plik tymczasowy jest sprzątany", () => {
-    const dir = mkdtempSync(join(tmpdir(), "pitwall-aw-"));
+    const dir = mkdtempSync(join(tmpdir(), "trackwall-aw-"));
     // Katalog w miejscu pliku: rename na niego kończy się błędem na każdym systemie.
     mkdirSync(join(dir, "workspace.yaml"));
     writeFileSync(join(dir, "workspace.yaml", "zawartosc"), "x");
