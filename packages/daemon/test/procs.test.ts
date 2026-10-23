@@ -228,6 +228,41 @@ describe.each(RUNTIMES)("procs pod %s", (_name, runtime) => {
   );
 });
 
+describe("procs, gdy lider kończy się sam w trakcie stopu", () => {
+  test(
+    "stop w czasie dobijania reszty grupy czeka na nie, zwraca kod lidera i zwalnia grupę raz",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "trackwall-procs-"));
+      const real = await groupPlatform();
+      let releases = 0;
+      // Zabicie z opóźnieniem: stop przychodzi, gdy lider już nie żyje, a reszta grupy jeszcze tak.
+      const slowKill = (control: GroupControl): GroupControl => ({
+        ...control,
+        kill: () => setTimeout(() => control.kill(), 500),
+        release: () => {
+          releases += 1;
+          control.release();
+        },
+      });
+      const groups = new ProcessGroups({
+        runtime: new RuntimeFile(join(dir, "runtime.json")),
+        platform: Promise.resolve({ ...real, graceMs: TEST_GRACE_MS, adopt: (child) => slowKill(real.adopt(child)) }),
+        log: () => {},
+      });
+      await groups.start({ owner: "o", command: [process.execPath, TREE, dir, "0", "3", "exit-leader", "3"], cwd: dir, env: process.env });
+      const pids = await waitForTree(dir, 3);
+      expect(await waitUntil(() => !isAlive(pids[0] ?? -1), 15_000)).toBe(true);
+
+      const stopped = await groups.stop("o");
+
+      expect(stopped).toMatchObject({ kind: "exited", exitCode: 3, stoppedByUser: false });
+      expect(pids.filter(isAlive)).toEqual([]);
+      expect(releases).toBe(1);
+    },
+    TIMEOUT,
+  );
+});
+
 describe("procs, gdy grupy nie da się zabić", () => {
   test(
     "stop zgłasza stop_unconfirmed, uruchomienie zostaje stopping, a właściciel nie dostaje drugiej grupy",

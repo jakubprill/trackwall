@@ -27,6 +27,9 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
   const [state, setState] = useState<Remote<T>>({});
   const [generation, setGeneration] = useState(0);
   const previousLoad = useRef(load);
+  // Tempo czytane przy planowaniu następnego pytania: zmiana tempa nie wysyła pytania od razu ani nie gubi odpowiedzi.
+  const pollRef = useRef(pollMs);
+  pollRef.current = pollMs;
 
   // `generation` i `refreshKey` nie są czytane w efekcie: ich zmiana to prośba o ponowne pobranie.
   useEffect(() => {
@@ -36,7 +39,7 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
     let current = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const next = () => {
-      if (document.hidden) timer = setTimeout(next, pollMs);
+      if (document.hidden) timer = setTimeout(next, pollRef.current);
       else setGeneration((g) => g + 1);
     };
     if (changed) setState({});
@@ -46,13 +49,13 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
         (err: unknown) => current && setState((prev) => ({ data: prev.data, error: errorMessage(err), errorCode: errorCode(err) })),
       )
       .finally(() => {
-        if (current && pollMs !== undefined) timer = setTimeout(next, pollMs);
+        if (current && pollRef.current !== undefined) timer = setTimeout(next, pollRef.current);
       });
     return () => {
       current = false;
       clearTimeout(timer);
     };
-  }, [load, generation, pollMs, refreshKey]);
+  }, [load, generation, refreshKey]);
 
   const reload = useCallback(() => setGeneration((g) => g + 1), []);
   return { ...state, reload };

@@ -31,7 +31,7 @@ function identity(pid: number): Promise<string | null> {
   return new Promise((resolve) => {
     // Stała strefa i język: zapis musi wyjść tak samo z terminala i z Findera (inne TZ i LC_TIME).
     const env = { ...process.env, LC_ALL: "C", TZ: "UTC" };
-    execFile("ps", ["-o", "lstart=", "-p", String(pid)], { timeout: 5000, env }, (err, stdout) => {
+    execFile("ps", ["-o", "lstart=", "-p", String(pid)], { timeout: 2000, env }, (err, stdout) => {
       const value = stdout.trim();
       resolve(err || value === "" ? null : value);
     });

@@ -13,7 +13,7 @@ import { type MiseCliResult, runMiseCli } from "./mise-cli.ts";
 interface MiseProcs {
   start(spec: { owner: string; command: readonly string[]; cwd: string; env: NodeJS.ProcessEnv }): Promise<RunState>;
   state(owner: string): RunState | undefined;
-  stop(owner: string): Promise<RunState> | undefined;
+  stop(owner: string): Promise<RunState | undefined>;
 }
 
 /** Czego `mise` potrzebuje od `workspace`: korzeń repo po identyfikatorze (`not_found`, gdy repo nie ma). */
@@ -93,7 +93,7 @@ export class Mise {
   }
 
   async stop(repo: string, miseTask: string): Promise<RunState> {
-    const stopped = this.deps.procs.stop(owner(repo, miseTask));
+    const stopped = await this.deps.procs.stop(owner(repo, miseTask));
     if (!stopped) throw new DomainError("not_found", `task mise "${miseTask}" w ${repo} nie był uruchamiany`);
     return stopped;
   }

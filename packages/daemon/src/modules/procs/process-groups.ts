@@ -59,6 +59,8 @@ interface Group {
   /** Stop zlecił użytkownik albo wyjście daemona; zostaje w stanie `exited` jako `stoppedByUser`. */
   stopRequested: boolean;
   stopping?: Promise<RunState>;
+  /** Zabijanie reszty grupy po końcu lidera; stop w tym czasie czeka na nie zamiast zabijać drugi raz. */
+  draining?: Promise<boolean>;
 }
 
 export class ProcessGroups {
@@ -96,13 +98,13 @@ export class ProcessGroups {
    * Łagodny stop, po czasie łaski zabicie całej grupy. Wraca dopiero po potwierdzeniu, że grupa nie żyje;
    * inaczej `stop_unconfirmed`, a uruchomienie zostaje `stopping`, więc stop można ponowić.
    */
-  stop(owner: string): Promise<RunState> | undefined {
+  async stop(owner: string): Promise<RunState | undefined> {
     // Start w toku (np. czekanie na `ps`) jeszcze nie ma grupy w mapie; stop czeka na niego zamiast zgłosić brak.
-    const starting = this.starting.get(owner);
-    if (starting) return starting.then(() => this.stop(owner) ?? Promise.reject(new Error(`brak grupy ${owner}`)));
+    // Nieudany start nie zostawia grupy, więc stop kończy się jak dla właściciela bez grupy.
+    await this.starting.get(owner)?.catch(() => undefined);
     const group = this.groups.get(owner);
     if (!group) return undefined;
-    if (group.phase.kind === "exited") return Promise.resolve(stateOf(group));
+    if (group.phase.kind === "exited") return stateOf(group);
     group.stopping ??= this.stopGroup(group).finally(() => {
       group.stopping = undefined;
     });
@@ -130,7 +132,8 @@ export class ProcessGroups {
     for (const orphan of this.readRuntime()) {
       const what = `${orphan.owner} (pid ${orphan.pid}, ${orphan.command.join(" ")})`;
       const target = await platform.reattach(orphan.pid, orphan.identity);
-      if (target === "unverified") this.deps.log(`pid ${orphan.pid} żyje, ale nie wiadomo, czy to sierota ${what}; zostawiono`);
+      if (target === "unverified")
+        this.deps.log(`pid ${orphan.pid} żyje, ale nie wiadomo, czy to sierota ${what}; zostawiono i usunięto z runtime.json`);
       if (typeof target === "string") continue;
       if (await terminate(target, platform.graceMs)) {
         target.release();
@@ -194,21 +197,26 @@ export class ProcessGroups {
   private async onLeaderExit(group: Group, exit: Exit): Promise<void> {
     group.phase = { kind: "draining", exit };
     if (group.stopping) return; // stop sam potwierdzi koniec
-    if (group.control.isEmpty() || (await killAndWait(group.control))) this.finish(group);
+    group.draining = (group.control.isEmpty() ? Promise.resolve(true) : killAndWait(group.control)).finally(() => {
+      group.draining = undefined;
+    });
+    if (await group.draining) this.finish(group);
     else this.deps.log(`grupa ${group.record.owner} (pid ${group.record.pid}) żyje po zabiciu; zostaje w runtime.json`);
   }
 
   private async stopGroup(group: Group): Promise<RunState> {
-    group.stopRequested = true;
+    // Lider, który skończył sam, nie został zatrzymany przez użytkownika: jego kod wyjścia jest wynikiem.
+    if (group.phase.kind === "live") group.stopRequested = true;
     const platform = await this.deps.platform;
-    if (!(await terminate(group.control, platform.graceMs))) {
+    const empty = group.draining ? await group.draining : await terminate(group.control, platform.graceMs);
+    if (!empty) {
       throw new DomainError(
         "stop_unconfirmed",
         `${group.record.command.join(" ")} (pid ${group.record.pid}): część procesów grupy nadal działa po zabiciu`,
       );
     }
     // Pusta grupa znaczy, że lider nie żyje; zdarzenie `exit` przychodzi najpóźniej chwilę później.
-    group.phase = { kind: "draining", exit: await group.leaderExit };
+    if (group.phase.kind === "live") group.phase = { kind: "draining", exit: await group.leaderExit };
     this.finish(group);
     return stateOf(group);
   }
