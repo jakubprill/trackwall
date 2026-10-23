@@ -6,6 +6,9 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
+/// Odpowiedź dla UI, które pyta o daemon, gdy powłoka już się zamyka.
+const SHELL_EXITING: &str = "aplikacja się zamyka";
+
 #[derive(Clone)]
 enum Phase {
     Idle,
@@ -69,24 +72,24 @@ impl DaemonState {
 
     /// Czeka na koniec trwającego startu. `Idle` oznacza, że start nie był zlecony.
     pub fn wait(&self) -> Result<Connection, String> {
-        let phase = self.changed.wait_while(self.lock(), |p| matches!(p, Phase::Starting)).unwrap_or_else(|e| e.into_inner());
+        let phase = self.wait_while(self.lock(), |p| matches!(p, Phase::Starting));
         match &*phase {
             Phase::Ready(conn) => Ok(conn.clone()),
             Phase::Failed(err) => Err(err.clone()),
             Phase::Idle | Phase::Starting => Err("daemon nie był uruchamiany".into()),
-            Phase::Stopping | Phase::Stopped => Err("aplikacja się zamyka".into()),
+            Phase::Stopping | Phase::Stopped => Err(SHELL_EXITING.into()),
         }
     }
 
     /// Przerywa trwający start i łagodnie zatrzymuje daemon; wraca, gdy daemon przestał odpowiadać.
     /// Kolejne wywołania czekają na koniec pierwszego, żeby żadna droga wyjścia nie zakończyła procesu w połowie.
     pub fn stop(&self) {
-        let own = {
+        let started = {
             let phase = self.lock();
             self.cancel.store(true, Ordering::SeqCst);
-            let mut phase = self.changed.wait_while(phase, |p| matches!(p, Phase::Starting)).unwrap_or_else(|e| e.into_inner());
+            let mut phase = self.wait_while(phase, |p| matches!(p, Phase::Starting));
             if matches!(*phase, Phase::Stopping | Phase::Stopped) {
-                drop(self.changed.wait_while(phase, |p| matches!(p, Phase::Stopping)).unwrap_or_else(|e| e.into_inner()));
+                drop(self.wait_while(phase, |p| matches!(p, Phase::Stopping)));
                 return;
             }
             // Po czekaniu faza nie jest już `Starting`, więc zostaje tylko pytanie, czy start się udał.
@@ -95,7 +98,8 @@ impl DaemonState {
                 _ => None,
             }
         };
-        self.shutdown(own.as_ref());
+        eprintln!("[desktop] zamykanie aplikacji: zatrzymywanie daemona");
+        self.shutdown(started.as_ref());
         *self.lock() = Phase::Stopped;
         self.changed.notify_all();
     }
@@ -120,6 +124,10 @@ impl DaemonState {
 
     fn lock(&self) -> MutexGuard<'_, Phase> {
         self.phase.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn wait_while<'a>(&self, guard: MutexGuard<'a, Phase>, condition: impl FnMut(&mut Phase) -> bool) -> MutexGuard<'a, Phase> {
+        self.changed.wait_while(guard, condition).unwrap_or_else(|e| e.into_inner())
     }
 }
 
@@ -212,7 +220,7 @@ mod tests {
         state.stop();
 
         assert!(matches!(*state.lock(), Phase::Stopped));
-        assert_eq!(state.wait().unwrap_err(), "aplikacja się zamyka");
+        assert_eq!(state.wait().unwrap_err(), SHELL_EXITING);
         assert_eq!(shutdown_requests(&rx).len(), 1);
     }
 

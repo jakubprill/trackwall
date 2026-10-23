@@ -84,8 +84,8 @@ fn main() {
             // Ostatnie okno schowane to nie powód do wyjścia.
             api.prevent_exit();
         }
-        // Cmd+Q i „Zakończ” z Docka na macOS oraz wylogowanie na Windows kończą pętlę zdarzeń z pominięciem
-        // `ExitRequested` i traya. Bez tego daemon zostawał osierocony. Po „Wyjdź” z traya daemon jest już zatrzymany.
+        // Cmd+Q i „Zakończ” z Docka na macOS (a według kodu tao także koniec sesji Windows) kończą pętlę zdarzeń
+        // z pominięciem `ExitRequested` i traya. Bez tego daemon zostawał osierocony. Po „Wyjdź” z traya daemon jest już zatrzymany.
         RunEvent::Exit => {
             // Pętla zdarzeń już stoi: bez schowania okno i tray wisiałyby zamrożone do końca zatrzymywania.
             hide_shell(handle);
