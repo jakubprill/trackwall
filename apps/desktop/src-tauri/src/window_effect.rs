@@ -3,18 +3,18 @@
 //! Okno jest przezroczyste (`transparent` w `tauri.conf.json`), więc bez efektu byłoby widać przez nie pulpit.
 //! UI domyślnie maluje nieprzezroczyste tło i zdejmuje je dopiero, gdy powłoka ustawi na `<html>` atrybut
 //! z nazwą efektu, który system faktycznie przyjął. Okno startuje schowane (`visible: false`) i pokazuje się
-//! po załadowaniu strony z już ustawionym atrybutem, żeby przy starcie nie mignęło nieprzezroczyste tło.
+//! dopiero, gdy skrypt ustawiający atrybut się wykonał, żeby przy starcie nie mignęło nieprzezroczyste tło.
+//! Odświeżenie strony (F5) maluje ją nieprzezroczyście do końca ładowania; to świadomie zostawione (ADR-11).
 //! `set_effects` z Tauri nie nadaje się tu, bo bierze tylko pierwszy efekt z listy i nie mówi, czy się udał.
 
-use serde::Serialize;
 use std::fmt::Display;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 use tauri::webview::{PageLoadEvent, PageLoadPayload};
-use tauri::{Manager, Runtime, Webview, WebviewWindow};
+use tauri::{AppHandle, Manager, Webview, WebviewWindow};
 
-/// Wartość atrybutu `data-window-effect`; `index.css` sprawdza tylko jego obecność, nazwa służy diagnostyce.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
+/// Efekt przyjęty przez system; `index.css` sprawdza tylko obecność atrybutu, nazwa służy diagnostyce.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WindowEffect {
     #[cfg_attr(not(windows), allow(dead_code))]
     Mica,
@@ -22,7 +22,16 @@ pub enum WindowEffect {
     Acrylic,
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     Vibrancy,
-    None,
+}
+
+impl WindowEffect {
+    fn as_str(self) -> &'static str {
+        match self {
+            WindowEffect::Mica => "mica",
+            WindowEffect::Acrylic => "acrylic",
+            WindowEffect::Vibrancy => "vibrancy",
+        }
+    }
 }
 
 /// Atrybut na `<html>`, od którego `packages/ui/src/index.css` przełącza tło na półprzezroczyste.
@@ -58,22 +67,36 @@ fn candidates() -> &'static [(WindowEffect, Apply<WebviewWindow, ApplyError>)] {
     return &[];
 }
 
-/// Próbuje efektów po kolei i zwraca pierwszy przyjęty. Powody odrzucenia idą na stderr, widoczny
+/// Próbuje efektów po kolei i zwraca pierwszy przyjęty albo `None`, gdy żaden. Powody odrzucenia idą na stderr, widoczny
 /// tylko w `tauri dev` (wydanie na Windowsie nie ma konsoli).
-fn first_applied<W, E: Display>(window: &W, candidates: &[(WindowEffect, Apply<W, E>)]) -> WindowEffect {
+fn first_applied<W, E: Display>(window: &W, candidates: &[(WindowEffect, Apply<W, E>)]) -> Option<WindowEffect> {
     for (effect, apply) in candidates {
         match apply(window) {
-            Ok(()) => return *effect,
+            Ok(()) => return Some(*effect),
             Err(err) => eprintln!("[desktop] efekt okna {effect:?} niedostępny: {err}"),
         }
     }
-    WindowEffect::None
+    None
 }
 
-/// Efekt przyjęty w `setup` i to, czy okno zostało już raz pokazane po starcie.
+/// Gdyby strona nigdy nie zgłosiła końca ładowania (WKWebView nie zgłasza go przy błędzie nawigacji),
+/// okno i tak pokaże się po tym czasie, z nieprzezroczystym UI.
+const REVEAL_FALLBACK: Duration = Duration::from_secs(10);
+
+/// Efekt przyjęty w `setup` i to, czy okno zostało już pokazane (przez stronę, tray albo drugie uruchomienie).
 pub struct AppliedEffect {
-    effect: WindowEffect,
+    effect: Option<WindowEffect>,
     revealed: AtomicBool,
+}
+
+impl AppliedEffect {
+    pub fn mark_revealed(&self) {
+        self.revealed.store(true, Ordering::SeqCst);
+    }
+
+    fn is_revealed(&self) -> bool {
+        self.revealed.load(Ordering::SeqCst)
+    }
 }
 
 /// Musi działać na wątku głównym (wymóg AppKit na macOS), czyli w `setup`.
@@ -81,35 +104,50 @@ pub fn apply(window: &WebviewWindow) -> AppliedEffect {
     AppliedEffect { effect: first_applied(window, candidates()), revealed: AtomicBool::new(false) }
 }
 
-/// Skrypt, który przekazuje UI przyjęty efekt; przy `None` nic nie robi i UI zostaje nieprzezroczyste.
-fn ui_script(effect: WindowEffect) -> Option<String> {
-    if effect == WindowEffect::None {
-        return None;
-    }
-    let value = serde_json::to_string(&effect).ok()?;
-    Some(format!("document.documentElement.setAttribute({ATTRIBUTE:?}, {value});"))
+/// Skrypt, który przekazuje UI przyjęty efekt.
+fn ui_script(effect: WindowEffect) -> String {
+    format!("document.documentElement.setAttribute({ATTRIBUTE:?}, {:?});", effect.as_str())
 }
 
-/// Po każdym załadowaniu strony (także po odświeżeniu) ustawia atrybut, a za pierwszym razem pokazuje okno.
-pub fn on_page_load<R: Runtime>(webview: &Webview<R>, payload: &PageLoadPayload<'_>) {
+/// Po każdym załadowaniu strony ustawia atrybut, a przy pierwszym pokazuje okno, ale dopiero gdy skrypt
+/// się wykonał (`eval` jest asynchroniczny). `reveal` to `show_main` z `main.rs`.
+pub fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>, reveal: fn(&AppHandle)) {
     if payload.event() != PageLoadEvent::Finished {
         return;
     }
-    let Some(applied) = webview.try_state::<AppliedEffect>() else {
-        // Bez stanu z `setup` nie wiadomo nic o efekcie: okno pokazuje się z nieprzezroczystym UI.
-        let _ = webview.window().show();
+    // `setup` (a w nim `manage`) kończy się na wątku głównym przed obsługą pierwszego zdarzenia strony.
+    let applied = webview.state::<AppliedEffect>();
+    let first = !applied.is_revealed();
+    let app = webview.app_handle().clone();
+    let Some(effect) = applied.effect else {
+        if first {
+            reveal(&app);
+        }
         return;
     };
-    if let Some(script) = ui_script(applied.effect) {
-        if let Err(err) = webview.eval(script) {
-            eprintln!("[desktop] przekazanie efektu okna do UI: {err}");
+    let after = app.clone();
+    let result = webview.eval_with_callback(ui_script(effect), move |_| {
+        if first {
+            reveal(&after);
+        }
+    });
+    if let Err(err) = result {
+        eprintln!("[desktop] przekazanie efektu okna do UI: {err}");
+        if first {
+            reveal(&app);
         }
     }
-    if !applied.revealed.swap(true, Ordering::SeqCst) {
-        let window = webview.window();
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
+}
+
+/// Pokazuje okno po `REVEAL_FALLBACK`, jeśli nic go wcześniej nie pokazało.
+pub fn reveal_fallback(app: &AppHandle, reveal: fn(&AppHandle)) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(REVEAL_FALLBACK);
+        if !app.state::<AppliedEffect>().is_revealed() {
+            reveal(&app);
+        }
+    });
 }
 
 #[cfg(test)]
@@ -134,7 +172,7 @@ mod tests {
                 Ok(())
             }),
         ];
-        assert_eq!(first_applied(&calls, candidates), WindowEffect::Acrylic);
+        assert_eq!(first_applied(&calls, candidates), Some(WindowEffect::Acrylic));
         assert_eq!(*calls.borrow(), ["mica", "acrylic"]);
     }
 
@@ -142,13 +180,21 @@ mod tests {
     fn none_when_every_effect_is_rejected() {
         let rejected: &[(WindowEffect, Apply<(), String>)] =
             &[(WindowEffect::Mica, |_| Err("brak".into())), (WindowEffect::Acrylic, |_| Err("brak".into()))];
-        assert_eq!(first_applied(&(), rejected), WindowEffect::None);
+        assert_eq!(first_applied(&(), rejected), None);
+        assert_eq!(first_applied::<(), String>(&(), &[]), None);
     }
 
     #[test]
-    fn ui_script_sets_attribute_only_when_effect_applied() {
-        assert_eq!(ui_script(WindowEffect::Mica).as_deref(), Some("document.documentElement.setAttribute(\"data-window-effect\", \"mica\");"));
-        assert_eq!(ui_script(WindowEffect::None), None);
+    fn window_counts_as_revealed_after_any_show() {
+        let applied = AppliedEffect { effect: Some(WindowEffect::Mica), revealed: AtomicBool::new(false) };
+        assert!(!applied.is_revealed());
+        applied.mark_revealed();
+        assert!(applied.is_revealed());
+    }
+
+    #[test]
+    fn ui_script_sets_attribute_with_effect_name() {
+        assert_eq!(ui_script(WindowEffect::Mica), "document.documentElement.setAttribute(\"data-window-effect\", \"mica\");");
     }
 
     fn order() -> Vec<WindowEffect> {

@@ -50,7 +50,7 @@
  * widoczne, a tekst nadal czytelny. Bez atrybutu (przeglądarka, brak efektu) wszystko jest nieprzezroczyste.
  * `--background` zostaje nieprzezroczyste, bo shadcn używa go też jako tła okien dialogowych.
  */
-[data-window-effect] body {
+.dark[data-window-effect] body {
   background-color: transparent;
 }
 
@@ -62,7 +62,7 @@
 
 /* Chromium (WebView2) wiąże to z systemowym „Ogranicz przezroczystość”; Acrylic na Windows 10 sam go nie respektuje. */
 @media (prefers-reduced-transparency: reduce) {
-  [data-window-effect] body {
+  .dark[data-window-effect] body {
     background-color: var(--background);
   }
 
