@@ -30,14 +30,23 @@ Opis release generuje GitHub z listy PR-ów od poprzedniego tagu. Jeśli workflo
 
 Pobierz archiwum dla swojego systemu i sprawdź sumę z `SHA256SUMS.txt`.
 
-**Windows.** Plik pobrany z internetu ma znacznik „Mark of the Web”, który Windows przenosi na rozpakowane pliki, więc SmartScreen blokuje start. Przed rozpakowaniem odblokuj archiwum:
+**Windows.** Przeglądarka dokleja do pobranego pliku znacznik „Mark of the Web”, więc SmartScreen blokuje start `pitwall.exe` (na komputerze firmowym często bez przycisku „Uruchom mimo to”). Narzędzia z terminala tego znacznika nie dodają, dlatego najprościej pobrać archiwum przez `gh` (repo jest prywatne, więc potrzebny jest zalogowany `gh auth login`) i sprawdzić sumę:
 
 ```powershell
-Get-FileHash .\pitwall-0.2.0-windows-x64.zip -Algorithm SHA256
-Unblock-File .\pitwall-0.2.0-windows-x64.zip
-Expand-Archive .\pitwall-0.2.0-windows-x64.zip "$env:LOCALAPPDATA\Programs"
+$v = "0.2.0"
+$zip = "pitwall-$v-windows-x64.zip"
+gh release download "v$v" -R jakubprill/pitwall -p $zip -p SHA256SUMS.txt -D $env:TEMP --clobber
+if ($LASTEXITCODE) { throw "gh release download nie powiodło się" }
+$sum = ((Select-String -Path "$env:TEMP\SHA256SUMS.txt" -Pattern $zip -SimpleMatch).Line -split '\s+')[0]
+if (-not $sum -or (Get-FileHash "$env:TEMP\$zip" -Algorithm SHA256).Hash -ne $sum) { throw "zła albo brakująca suma SHA-256 dla $zip" }
+if (Test-Path "$env:LOCALAPPDATA\Programs\Pitwall") { Remove-Item "$env:LOCALAPPDATA\Programs\Pitwall" -Recurse -Force }
+Expand-Archive "$env:TEMP\$zip" "$env:LOCALAPPDATA\Programs"
 & "$env:LOCALAPPDATA\Programs\Pitwall\pitwall.exe"
 ```
+
+Stary folder znika dopiero po udanym pobraniu i zgodnej sumie. Przed aktualizacją zamknij Pitwall (tray > Wyjdź), bo `Remove-Item` nie usunie plików działającej aplikacji. Plik pobrany przeglądarką odblokuj przed rozpakowaniem: `Unblock-File <plik.zip>`. Folder usuwamy w całości, a nie rozpakowujemy na stary: zostałyby pliki poprzedniej wersji, a w folderze rozpakowanym wcześniej z pliku ze znacznikiem także sam znacznik.
+
+Bez `gh`, gdy repo będzie publiczne, archiwum pobierze wbudowany w Windows 10 (od 1803) i 11 `curl.exe`, też bez znacznika: `curl.exe -fL -o "$env:TEMP\$zip" "https://github.com/jakubprill/pitwall/releases/download/v$v/$zip"` (i tak samo `SHA256SUMS.txt`). Pisz `curl.exe`, bo w Windows PowerShell 5.1 `curl` to alias `Invoke-WebRequest`; `-f` sprawia, że błąd HTTP kończy komendę, zamiast zapisać stronę błędu jako zip. Ani `gh`, ani `curl.exe` nie biorą proxy z ustawień systemu; dla `gh` ustaw `HTTPS_PROXY` (proxy z logowaniem Windows nie jest przez `gh` obsługiwane). Dla `curl.exe`: podaj proxy w `HTTPS_PROXY` albo `-x http://<proxy>:<port>` (proxy z logowaniem Windows: dodatkowo `--proxy-negotiate -U :`), a gdy proxy podmienia certyfikaty i pojawia się `CRYPT_E_NO_REVOCATION_CHECK`, dodaj `--ssl-no-revoke`.
 
 Archiwum zawiera folder `Pitwall`, więc aplikacja ląduje w `%LOCALAPPDATA%\Programs\Pitwall`.
 
