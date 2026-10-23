@@ -36,6 +36,7 @@ beforeAll(async () => {
       runtime: { name: "bun", version: "x" },
       launchedBy: "manual",
       home: "/tmp",
+      mcpStdioCommand: ["trackwall-daemon", "mcp-stdio"],
     }),
     onShutdown: () => {
       shutdowns++;
@@ -47,6 +48,7 @@ beforeAll(async () => {
       userEnv: async () => process.env,
       log: () => {},
     }),
+    log: () => {},
   });
 });
 
@@ -211,6 +213,7 @@ describe("--allow-origin", () => {
         userEnv: async () => process.env,
         log: () => {},
       }),
+      log: () => {},
     });
     try {
       const res = await loopbackRequest(extra.port, "/api/health", { headers: { origin: "http://127.0.0.1:5173" } });

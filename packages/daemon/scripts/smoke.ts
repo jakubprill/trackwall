@@ -1,5 +1,6 @@
 /**
- * Test dymny skompilowanej binarki daemona: start, health, info z tokenem, shutdown, sprzątnięty daemon.json.
+ * Test dymny skompilowanej binarki daemona: start, health, info z tokenem, `initialize` przez most MCP (`mcp-stdio`),
+ * shutdown, sprzątnięty daemon.json.
  *
  *   bun scripts/smoke.ts <ścieżka do trackwall-daemon>
  *
@@ -42,6 +43,16 @@ if (!health.ok || health.data.version !== version) throw new Error(`health: ${JS
 const info = DaemonInfoResult.parse(await get("/api/daemon/info"));
 if (!info.ok || info.data.runtime.name !== "bun") throw new Error(`info: ${JSON.stringify(info)}`);
 console.log(`info: ${info.data.platform}/${info.data.arch}, ${info.data.runtime.name} ${info.data.runtime.version}`);
+
+// Most stdio z binarki, tak jak uruchamia go Copilot CLI: jedna linia JSON-RPC na wejściu, odpowiedź w pierwszej linii.
+const bridge = Bun.spawn([bin, "mcp-stdio", "--home", home], { stdin: "pipe", stdout: "pipe", stderr: "inherit" });
+bridge.stdin.write(
+  `${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "smoke", version: "1" } } })}\n`,
+);
+await bridge.stdin.end();
+const reply = (await new Response(bridge.stdout).text()).split("\n")[0] ?? "";
+if (!reply.includes('"serverInfo":{"name":"trackwall"')) throw new Error(`mcp-stdio initialize: ${reply}`);
+console.log("mcp-stdio: initialize OK");
 
 await get("/api/daemon/shutdown", "POST");
 const code = await Promise.race([proc.exited, Bun.sleep(10_000).then(() => "timeout")]);

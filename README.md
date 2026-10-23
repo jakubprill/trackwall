@@ -20,6 +20,8 @@ Przeglądanie repo: w widoku „Ustawienia” wskazujesz folder z projektami (pe
 
 Taski mise: zakładka „Taski mise” w karcie repo pokazuje taski z `mise tasks ls`, uruchamia je (`mise run <task>` w korzeniu repo) i zatrzymuje jako całą grupę procesów, razem z ich potomkami (Job Object na Windowsie, sesja POSIX na macOS, ADR-20); po błędzie pokazuje kod wyjścia i ostatnie linie wyjścia. Konfiguracji mise, której mise nie ufa, można zaufać przyciskiem (`mise trust`). Wyjście daemona zatrzymuje wszystkie taski, a grupy po awarii daemona sprząta jego następny start. Wymaga `mise` w `PATH` (na macOS wystarczy `PATH` z powłoki logowania).
 
+Serwer MCP dla Copilot CLI: daemon wystawia serwer MCP tylko do odczytu (ADR-22) z narzędziami `list_repos` (repo z folderu z projektami: ścieżka, adres repo zdalnego, gałąź, stan, wynik ostatniej synchronizacji) i `get_repo` (README, ostatnie commity, taski mise jednego repo). Copilot CLI podłącza się raz, komendą z widoku „Daemon” (opis niżej w „Podłączenie Copilot CLI”).
+
 Etap 2 (prototyp): wykrywanie stanu sesji Copilot CLI z hooków i sekwencji terminala (ADR-17), na razie jako skrypt nagrywający sesję, jeszcze bez widoku Zadania; opis niżej w „Nagrywanie sesji Copilot CLI”.
 
 ## Układ repo
@@ -69,6 +71,20 @@ Windows: zip zawiera `trackwall.exe`, `trackwall-daemon.exe` i `ui/`. Rozpakowan
 macOS: zip zawiera niepodpisany `Trackwall.app`; pierwsze uruchomienie przez prawy klik > Otwórz albo `xattr -dr com.apple.quarantine Trackwall.app`.
 
 Przebieg CI na Windowsie i macOS (push na `main` albo ręczne uruchomienie) publikuje oba archiwa jako artefakty.
+
+## Podłączenie Copilot CLI
+
+Copilot CLI uruchamia most stdio daemona (`trackwall-daemon mcp-stdio`) jako lokalny serwer MCP; most znajduje działający daemon przez `daemon.json`, więc konfiguracja nie zmienia się po restarcie daemona i nie zawiera tokenu. Gotową komendę dla tej instalacji pokazuje widok „Daemon” (Ctrl+9, przycisk kopiowania). Wygląda tak:
+
+```sh
+copilot mcp add trackwall -- /Applications/Trackwall.app/Contents/MacOS/trackwall-daemon mcp-stdio                     # macOS
+copilot mcp add trackwall -- '<katalog z Trackwall>\trackwall-daemon.exe' mcp-stdio                                       # Windows (PowerShell)
+copilot mcp add trackwall -- bun --no-env-file <trackwall>/packages/daemon/src/main.ts mcp-stdio --home <katalog stanu>   # ze źródeł
+```
+
+Komenda dopisuje wpis `trackwall` do `~/.copilot/mcp-config.json` (ten sam wpis w JSON jest w widoku „Daemon”, gdyby trzeba go wkleić ręcznie). Trackwall musi działać, zanim wystartuje Copilot CLI, bo Copilot uruchamia serwery MCP przy starcie sesji; `/mcp` w Copilot CLI pokazuje, czy serwer `trackwall` jest połączony. Potem wystarczy poprosić agenta np. „Jakie repo mam w folderze z projektami?”.
+
+Inne klienty MCP mogą też rozmawiać z daemonem wprost przez Streamable HTTP pod `http://127.0.0.1:<port>/mcp` z nagłówkiem `Authorization: Bearer <token>`; port i token są w `daemon.json` i zmieniają się przy każdym starcie daemona.
 
 ## Nagrywanie sesji Copilot CLI
 

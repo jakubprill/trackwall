@@ -161,6 +161,11 @@ export class Workspace {
     return projectsDir === null ? null : (this.syncs.last(dirKey(projectsDir)) ?? null);
   }
 
+  /** Jedno repo z listy ze stanem i adresem repo zdalnego, bez pytania gita o pozostałe repo z folderu. */
+  async repo(id: string): Promise<Repo> {
+    return this.describe(await this.entry(id));
+  }
+
   async overview(id: string): Promise<RepoOverview> {
     const entry = await this.entry(id);
     const [commits, readme] = await this.inRepo(entry, () =>

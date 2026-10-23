@@ -1,6 +1,7 @@
 import { DaemonInfo } from "@trackwall/protocol";
 import { RefreshCw } from "lucide-react";
 import { useCallback } from "react";
+import { ConnectCopilot } from "@/ConnectCopilot";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
@@ -17,7 +18,7 @@ export function DaemonPanel({ conn, onRetry }: { conn: Connection; onRetry: () =
   const info = useRemote(load, { pollMs: POLL_MS });
 
   return (
-    <div className="w-full max-w-xl">
+    <div className="flex w-full max-w-xl flex-col gap-4">
       <Surface
         label="Daemon"
         meta={
@@ -44,6 +45,7 @@ export function DaemonPanel({ conn, onRetry }: { conn: Connection; onRetry: () =
           {info.data && !info.error && <InfoTable info={info.data} />}
         </div>
       </Surface>
+      {info.data && !info.error && <ConnectCopilot info={info.data} />}
     </div>
   );
 }

@@ -5,10 +5,12 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
-import { type DaemonArgs, parseDaemonArgs, USAGE } from "./args.ts";
+import { type DaemonArgs, parseDaemonArgs, parseMcpStdioArgs, USAGE } from "./args.ts";
 import { newToken, probeRunningDaemon, removeDaemonFile, watchDaemonFile, withStartLock, writeDaemonFile } from "./discovery.ts";
 import { createFacade, type Facade } from "./facade.ts";
 import { trackwallHome } from "./home.ts";
+import { runStdioBridge } from "./mcp/stdio-bridge.ts";
+import { MCP_STDIO_COMMAND, mcpStdioCommand } from "./mcp/stdio-command.ts";
 import { openBrowser } from "./open-browser.ts";
 import { runtimeInfo } from "./platform/runtime.ts";
 import { userEnv } from "./user-env.ts";
@@ -65,9 +67,11 @@ async function main(args: DaemonArgs): Promise<void> {
           runtime: runtimeInfo(),
           launchedBy: args.parent === undefined ? "manual" : "desktop",
           home,
+          mcpStdioCommand: mcpStdioCommand(home),
         }),
         onShutdown: () => void shutdown("POST /api/daemon/shutdown"),
         facade,
+        log,
       },
       args.port,
     );
@@ -125,20 +129,47 @@ function log(msg: string): void {
 // Komunikaty walidacji zod trafiają do UI (`bad_request`, `invalid_config`), więc po polsku jak reszta tekstów.
 z.config(z.locales.pl());
 
-let parsed: DaemonArgs;
-try {
-  parsed = parseDaemonArgs(process.argv.slice(2));
-} catch (err) {
-  process.stderr.write(`${(err as Error).message}\n\n${USAGE}`);
-  process.exit(EXIT_USAGE);
-}
-if (parsed.help) {
-  process.stdout.write(USAGE);
-} else if (parsed.version) {
-  process.stdout.write(`${VERSION}\n`);
+const argv = process.argv.slice(2);
+if (argv[0] === MCP_STDIO_COMMAND) {
+  runMcpStdio(argv.slice(1));
 } else {
-  main(parsed).catch((err: unknown) => {
-    process.stderr.write(`[daemon] błąd startu: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
-    process.exit(1);
-  });
+  runDaemon(argv);
+}
+
+function runMcpStdio(args: string[]): void {
+  let home: string;
+  try {
+    home = trackwallHome(parseMcpStdioArgs(args).home);
+  } catch (err) {
+    process.stderr.write(`${(err as Error).message}\n\n${USAGE}`);
+    process.exit(EXIT_USAGE);
+  }
+  // stdout należy do protokołu MCP, więc komunikaty mostu idą tylko na stderr.
+  runStdioBridge({ home, input: process.stdin, output: process.stdout, log: (msg) => process.stderr.write(`[mcp-stdio] ${msg}\n`) }).then(
+    () => process.exit(0),
+    (err: unknown) => {
+      process.stderr.write(`[mcp-stdio] ${String(err)}\n`);
+      process.exit(1);
+    },
+  );
+}
+
+function runDaemon(args: string[]): void {
+  let parsed: DaemonArgs;
+  try {
+    parsed = parseDaemonArgs(args);
+  } catch (err) {
+    process.stderr.write(`${(err as Error).message}\n\n${USAGE}`);
+    process.exit(EXIT_USAGE);
+  }
+  if (parsed.help) {
+    process.stdout.write(USAGE);
+  } else if (parsed.version) {
+    process.stdout.write(`${VERSION}\n`);
+  } else {
+    main(parsed).catch((err: unknown) => {
+      process.stderr.write(`[daemon] błąd startu: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
+      process.exit(1);
+    });
+  }
 }
