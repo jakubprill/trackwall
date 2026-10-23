@@ -97,6 +97,14 @@ impl AppliedEffect {
     fn is_revealed(&self) -> bool {
         self.revealed.load(Ordering::SeqCst)
     }
+
+    /// Jedyne miejsce, które decyduje o automatycznym pokazaniu okna: sprawdzenie i zaznaczenie naraz,
+    /// więc strona, zapasowy timer i tray nie pokażą go dwa razy.
+    fn reveal_once<A>(&self, app: &A, reveal: fn(&A)) {
+        if !self.revealed.swap(true, Ordering::SeqCst) {
+            reveal(app);
+        }
+    }
 }
 
 /// Musi działać na wątku głównym (wymóg AppKit na macOS), czyli w `setup`.
@@ -115,27 +123,25 @@ pub fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>, reveal: fn
     if payload.event() != PageLoadEvent::Finished {
         return;
     }
-    // `setup` (a w nim `manage`) kończy się na wątku głównym przed obsługą pierwszego zdarzenia strony.
-    let applied = webview.state::<AppliedEffect>();
-    let first = !applied.is_revealed();
     let app = webview.app_handle().clone();
-    let Some(effect) = applied.effect else {
-        if first {
-            reveal(&app);
-        }
+    // `setup` z `manage` kończy się przed obsługą zdarzeń strony; gdyby jednak nie, okno pokazuje się nieprzezroczyste.
+    let Some(applied) = webview.try_state::<AppliedEffect>() else {
+        reveal(&app);
         return;
     };
-    let after = app.clone();
-    let result = webview.eval_with_callback(ui_script(effect), move |_| {
-        if first {
-            reveal(&after);
-        }
-    });
+    let Some(effect) = applied.effect else {
+        applied.reveal_once(&app, reveal);
+        return;
+    };
+    let result = if applied.is_revealed() {
+        webview.eval(ui_script(effect))
+    } else {
+        let after = app.clone();
+        webview.eval_with_callback(ui_script(effect), move |_| after.state::<AppliedEffect>().reveal_once(&after, reveal))
+    };
     if let Err(err) = result {
         eprintln!("[desktop] przekazanie efektu okna do UI: {err}");
-        if first {
-            reveal(&app);
-        }
+        applied.reveal_once(&app, reveal);
     }
 }
 
@@ -144,9 +150,7 @@ pub fn reveal_fallback(app: &AppHandle, reveal: fn(&AppHandle)) {
     let app = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(REVEAL_FALLBACK);
-        if !app.state::<AppliedEffect>().is_revealed() {
-            reveal(&app);
-        }
+        app.state::<AppliedEffect>().reveal_once(&app, reveal);
     });
 }
 
@@ -185,11 +189,18 @@ mod tests {
     }
 
     #[test]
-    fn window_counts_as_revealed_after_any_show() {
+    fn window_is_revealed_once_even_when_shown_from_tray_first() {
+        let shown = std::cell::Cell::new(0);
+        let count: fn(&std::cell::Cell<u32>) = |c| c.set(c.get() + 1);
         let applied = AppliedEffect { effect: Some(WindowEffect::Mica), revealed: AtomicBool::new(false) };
-        assert!(!applied.is_revealed());
-        applied.mark_revealed();
-        assert!(applied.is_revealed());
+        applied.reveal_once(&shown, count);
+        applied.reveal_once(&shown, count);
+        assert_eq!(shown.get(), 1);
+
+        let from_tray = AppliedEffect { effect: Some(WindowEffect::Mica), revealed: AtomicBool::new(false) };
+        from_tray.mark_revealed();
+        from_tray.reveal_once(&shown, count);
+        assert_eq!(shown.get(), 1);
     }
 
     #[test]
