@@ -1,6 +1,7 @@
 import { type Repo, type RepoOverview, workspaceApi } from "@trackwall/protocol";
 import { Code } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
+import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
@@ -55,15 +56,7 @@ export function RepoDetail({ conn, repo }: { conn: Connection; repo: Repo }) {
 }
 
 function Loaded({ remote, children }: { remote: RemoteHandle<RepoOverview>; children: (data: RepoOverview) => ReactNode }) {
-  if (remote.error)
-    return (
-      <div className="flex flex-col items-start gap-2">
-        <p className="text-destructive text-sm">{remote.error}</p>
-        <Button variant="outline" size="sm" onClick={remote.reload}>
-          Spróbuj ponownie
-        </Button>
-      </div>
-    );
+  if (remote.error) return <ErrorWithRetry message={remote.error} onRetry={remote.reload} />;
   if (!remote.data) return <Loading />;
   return children(remote.data);
 }

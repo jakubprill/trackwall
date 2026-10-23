@@ -37,6 +37,11 @@ export function post<Req extends z.ZodType, Data extends z.ZodType>(
   });
 }
 
+/** Kod błędu API (`error.code`), gdy błąd przyszedł od daemona. */
+export function errorCode(err: unknown): string | undefined {
+  return err instanceof ApiCallError ? err.code : undefined;
+}
+
 export function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }

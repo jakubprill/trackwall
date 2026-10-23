@@ -34,6 +34,17 @@ describe("workspace.yaml", () => {
     expect(readFileSync(path, "utf8")).toBe("# mój workspace\nports:\n  api: 8080\n# tu są repo\nprojectsDir: /nowe\n");
   });
 
+  test("lista repos z wersji 0.2.0 nie jest czytana, ale zostaje w pliku", () => {
+    const path = tempFile();
+    writeFileSync(path, "repos:\n  - id: api\n    path: /repos/api\n");
+    const file = new WorkspaceFile(path);
+    expect(file.projectsDir()).toBeNull();
+
+    file.setProjectsDir("/projekty");
+
+    expect(readFileSync(path, "utf8")).toBe("repos:\n  - id: api\n    path: /repos/api\nprojectsDir: /projekty\n");
+  });
+
   test("ścieżka względna albo z ~ jest błędem konfiguracji, a nie cichym zależeniem od katalogu daemona", () => {
     const path = tempFile();
     writeFileSync(path, "projectsDir: ~/projekty\n");

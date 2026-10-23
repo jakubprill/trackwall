@@ -68,18 +68,20 @@ export const Repo = z.object({
 export type Repo = z.infer<typeof Repo>;
 
 /**
- * Repo z folderu z projektami (ADR-18). `projectsDir` to `null`, dopóki użytkownik go nie ustawi
- * (w ustawieniach albo w `workspace.yaml`); wtedy lista jest pusta.
+ * Pełna ścieżka folderu z projektami (ADR-18); `null`, dopóki użytkownik go nie ustawi (w ustawieniach albo
+ * w `workspace.yaml`), a wtedy lista repo jest pusta.
  */
+const ProjectsDir = z.string().nullable();
+
 export const RepoList = z.object({
-  projectsDir: z.string().nullable(),
+  projectsDir: ProjectsDir,
   /** Posortowane po nazwie katalogu. */
   repos: z.array(Repo),
 });
 export type RepoList = z.infer<typeof RepoList>;
 
 export const WorkspaceSettings = z.object({
-  projectsDir: z.string().nullable(),
+  projectsDir: ProjectsDir,
   /** Pełna ścieżka `workspace.yaml`, żeby użytkownik wiedział, który plik edytować ręcznie. */
   configFile: z.string(),
 });

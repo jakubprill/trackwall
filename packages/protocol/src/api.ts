@@ -6,7 +6,7 @@ export const ErrorCode = z.enum([
   "forbidden_origin",
   "not_found",
   "bad_request",
-  /** Repo z workspace jest niedostępne (katalog zniknął, git odmówił); szczegóły w `message`. */
+  /** Repo z workspace jest niedostępne (git odmówił, np. uszkodzone `.git`); szczegóły w `message`. */
   "repo_unavailable",
   /** Folder z projektami z `workspace.yaml` nie istnieje albo nie jest katalogiem (np. odłączony dysk). */
   "projects_dir_unavailable",

@@ -1,5 +1,3 @@
-import { statSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
 import type {
   Commit,
   FileContent,
@@ -13,7 +11,8 @@ import type {
 } from "@trackwall/protocol";
 import { DomainError } from "../../errors.ts";
 import { vscodeUrl } from "./editor-url.ts";
-import { findRepos, type RepoEntry } from "./projects-dir.ts";
+import { mapLimit } from "./map-limit.ts";
+import { findRepos, type RepoEntry, resolveProjectsDir } from "./projects-dir.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
 
 /**
@@ -27,6 +26,11 @@ const OVERVIEW_COMMITS = 30;
 /** Limit podglądu pliku i README: więcej i tak nikt nie przewija w panelu. */
 const PREVIEW_MAX_BYTES = 512 * 1024;
 const README = /^readme(\.(md|markdown|txt|rst|adoc))?$/i;
+/**
+ * Ile repo naraz pyta gita przy liście: folder z projektami może mieć ich setki, a każde to dwa procesy `git`,
+ * na Windowsie drogie w starcie i skanowane przez antywirus.
+ */
+const STATUS_CONCURRENCY = 8;
 
 /** Czego `workspace` potrzebuje od `vcs`; podłączane w fasadzie (§4: moduły nie importują się nawzajem). */
 interface WorkspaceVcs {
@@ -51,28 +55,21 @@ export class Workspace {
   }
 
   async list(): Promise<RepoList> {
-    const projectsDir = this.deps.file.projectsDir();
-    if (projectsDir === null) return { projectsDir, repos: [] };
-    return { projectsDir, repos: await Promise.all(findRepos(projectsDir).map((entry) => this.describe(entry))) };
+    const { projectsDir, entries } = await this.entries();
+    return { projectsDir, repos: await mapLimit(entries, STATUS_CONCURRENCY, (entry) => this.describe(entry)) };
   }
 
   settings(): WorkspaceSettings {
     return { projectsDir: this.deps.file.projectsDir(), configFile: this.deps.file.path };
   }
 
-  /** Zapisuje folder z projektami w `workspace.yaml`; musi istnieć, żeby literówka nie dała po cichu pustej listy. */
   setProjectsDir(path: string): WorkspaceSettings {
-    if (!isAbsolute(path)) throw new DomainError("bad_request", `podaj pełną ścieżkę do folderu, dostałem "${path}"`);
-    const dir = resolve(path);
-    if (!statSync(dir, { throwIfNoEntry: false })?.isDirectory()) {
-      throw new DomainError("bad_request", `${dir} nie istnieje albo nie jest folderem`);
-    }
-    this.deps.file.setProjectsDir(dir);
+    this.deps.file.setProjectsDir(resolveProjectsDir(path));
     return this.settings();
   }
 
   async overview(id: string): Promise<RepoOverview> {
-    const entry = this.entry(id);
+    const entry = await this.entry(id);
     const [commits, readme] = await this.inRepo(entry, () =>
       Promise.all([this.deps.vcs.log(entry.path, OVERVIEW_COMMITS), this.readme(entry.path)]),
     );
@@ -80,27 +77,32 @@ export class Workspace {
   }
 
   async tree(id: string, path: string): Promise<TreeEntry[]> {
-    const entry = this.entry(id);
+    const entry = await this.entry(id);
     const entries = await this.inRepo(entry, () => this.deps.vcs.tree(entry.path, path));
     if (!entries) throw new DomainError("not_found", `w ${id} nie ma katalogu "${path}" w ostatnim commicie`);
     return entries;
   }
 
   async file(id: string, path: string): Promise<FileContent> {
-    const entry = this.entry(id);
+    const entry = await this.entry(id);
     const content = await this.inRepo(entry, () => this.deps.vcs.file(entry.path, path, PREVIEW_MAX_BYTES));
     if (!content) throw new DomainError("not_found", `w ${id} nie ma pliku "${path}" w ostatnim commicie`);
     return content;
   }
 
   /** Daemon nie wie, czy system obsłużył adres; wynik to tylko potwierdzenie przyjęcia. */
-  openEditor(id: string): void {
-    this.deps.openUrl(vscodeUrl(this.entry(id).path));
+  async openEditor(id: string): Promise<void> {
+    this.deps.openUrl(vscodeUrl((await this.entry(id)).path));
   }
 
-  private entry(id: string): RepoEntry {
+  /** Bez ustawionego folderu z projektami nie ma repo. */
+  private async entries(): Promise<{ projectsDir: string | null; entries: RepoEntry[] }> {
     const projectsDir = this.deps.file.projectsDir();
-    const entry = projectsDir === null ? undefined : findRepos(projectsDir).find((r) => r.id === id);
+    return { projectsDir, entries: projectsDir === null ? [] : await findRepos(projectsDir) };
+  }
+
+  private async entry(id: string): Promise<RepoEntry> {
+    const entry = (await this.entries()).entries.find((r) => r.id === id);
     if (!entry) throw new DomainError("not_found", `w folderze z projektami nie ma repo "${id}"`);
     return entry;
   }

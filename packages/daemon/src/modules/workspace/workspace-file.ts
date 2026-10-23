@@ -1,22 +1,23 @@
 import { mkdirSync, readFileSync } from "node:fs";
-import { dirname, isAbsolute } from "node:path";
+import { dirname } from "node:path";
 import { type Document, isMap, parseDocument } from "yaml";
 import { z } from "zod";
 import { writeFileAtomic } from "../../atomic-write.ts";
 import { DomainError } from "../../errors.ts";
+import { isFullPath } from "./projects-dir.ts";
 
 /**
  * `workspace.yaml` (§4.5, ADR-13): konfiguracja workspace, którą użytkownik może edytować ręcznie i trzymać
  * w prywatnym repo. Czytany przy każdym użyciu, więc ręczna edycja działa bez restartu daemona. Zapis zmienia
- * tylko klucz `projectsDir` i zachowuje komentarze oraz pozostałe klucze.
+ * tylko klucz `projectsDir` i zachowuje komentarze oraz pozostałe klucze, także nieczytaną już listę `repos`
+ * z wersji 0.2.0 (ADR-18): to plik użytkownika, więc usunięcie jej zostawiamy jemu.
  */
 
 const WorkspaceConfig = z.object({
   // Pusty klucz (`projectsDir:`) YAML czyta jako `null`, tak samo jak brak klucza.
   projectsDir: z
     .string()
-    // Względna ścieżka zależałaby od katalogu, z którego uruchomiono daemon, a `~` nie jest rozwijane.
-    .refine(isAbsolute, "folder z projektami musi być pełną ścieżką (bez `~` i bez ścieżki względnej)")
+    .refine((dir) => isFullPath(dir), "folder z projektami musi być pełną ścieżką (bez `~` i bez ścieżki względnej)")
     .nullish()
     .transform((dir) => dir ?? null),
 });

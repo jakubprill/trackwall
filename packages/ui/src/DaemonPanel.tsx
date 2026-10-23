@@ -1,6 +1,7 @@
 import { DaemonInfo } from "@trackwall/protocol";
 import { RefreshCw } from "lucide-react";
 import { useCallback } from "react";
+import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
 import { Badge } from "@/components/ui/badge";
@@ -32,19 +33,13 @@ export function DaemonPanel({ conn, onRetry }: { conn: Connection; onRetry: () =
           <p className="text-muted-foreground text-sm">Proces, który trzyma cały stan Trackwalla.</p>
           {!info.data && !info.error && <Loading text="Łączenie z daemonem…" />}
           {info.error && (
-            <div className="flex flex-col items-start gap-3">
-              <p className="text-destructive text-sm whitespace-pre-wrap break-words">{info.error}</p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  onRetry();
-                  info.reload();
-                }}
-              >
-                Spróbuj ponownie
-              </Button>
-            </div>
+            <ErrorWithRetry
+              message={info.error}
+              onRetry={() => {
+                onRetry();
+                info.reload();
+              }}
+            />
           )}
           {info.data && !info.error && <InfoTable info={info.data} />}
         </div>

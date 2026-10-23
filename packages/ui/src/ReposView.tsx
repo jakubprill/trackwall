@@ -1,6 +1,7 @@
 import { type Repo, type RepoList, workspaceApi } from "@trackwall/protocol";
 import { FolderOpen, RefreshCw } from "lucide-react";
 import { useCallback, useState } from "react";
+import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
@@ -20,7 +21,9 @@ export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection;
   const load = useCallback(() => post(conn, workspaceApi.list, {}), [conn]);
   const list = useRemote(load, { pollMs: POLL_MS });
 
-  const repos = list.data?.repos ?? [];
+  // Folder z projektami, który zniknął, nie ma już repo; stara lista wyglądałaby na aktualną.
+  const projectsDirGone = list.errorCode === "projects_dir_unavailable";
+  const repos = projectsDirGone ? [] : (list.data?.repos ?? []);
   const current = repos.find((r) => r.id === selected) ?? repos[0];
 
   return (
@@ -44,21 +47,19 @@ export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection;
         )}
         <nav className="flex-1 overflow-y-auto px-2 pb-4">
           {list.error && (
-            <div className="flex flex-col items-start gap-2 px-2 pb-2">
-              <p className="text-destructive text-sm break-words">{list.error}</p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
+            <div className="px-2 pb-2">
+              <ErrorWithRetry
+                message={list.error}
+                onRetry={() => {
                   onRetry();
                   list.reload();
                 }}
               >
-                Spróbuj ponownie
-              </Button>
+                {projectsDirGone && <ChangeProjectsDir onClick={onOpenSettings} />}
+              </ErrorWithRetry>
             </div>
           )}
-          {list.data && <EmptyList list={list.data} onOpenSettings={onOpenSettings} />}
+          {list.data && !list.error && <EmptyList list={list.data} onOpenSettings={onOpenSettings} />}
           {repos.map((repo, i) => (
             <RepoListItem
               key={repo.id}
@@ -91,16 +92,24 @@ function EmptyList({ list, onOpenSettings }: { list: RepoList; onOpenSettings: (
         <p className="text-muted-foreground text-sm">
           Wskaż folder z projektami, a Trackwall pokaże wszystkie repo gita, które w nim leżą.
         </p>
-        <Button variant="outline" size="sm" onClick={onOpenSettings}>
-          <FolderOpen /> Ustaw folder
-        </Button>
+        <ChangeProjectsDir onClick={onOpenSettings} />
       </div>
     );
   if (list.repos.length === 0)
     return (
-      <p className="text-muted-foreground px-2 text-sm">W tym folderze nie ma repo gita. Sklonuj do niego repo albo wskaż inny folder.</p>
+      <p className="text-muted-foreground px-2 text-sm">
+        W folderze z projektami nie ma repo gita. Sklonuj do niego repo albo wskaż inny folder z projektami.
+      </p>
     );
   return null;
+}
+
+function ChangeProjectsDir({ onClick }: { onClick: () => void }) {
+  return (
+    <Button variant="outline" size="sm" onClick={onClick}>
+      <FolderOpen /> Ustaw folder z projektami
+    </Button>
+  );
 }
 
 /**

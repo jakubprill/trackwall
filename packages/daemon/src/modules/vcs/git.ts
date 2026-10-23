@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { dirname, resolve } from "node:path";
 
 /**
  * Uruchamianie `git` dla modułu `vcs`. Argumenty zawsze tablicą, bez powłoki; katalog repo przez `-C`,
@@ -39,7 +40,13 @@ export interface GitOptions {
 export function git(repoDir: string, args: readonly string[], opts: GitOptions = {}): Promise<GitOutput> {
   const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
   return new Promise((resolve, reject) => {
-    const child = spawn("git", ["-C", repoDir, ...args], { env: gitEnv(), stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    // `core.fsmonitor` z `.git/config` repo to komenda, którą `git status` by uruchomił (§8); repo trafia na listę
+    // samo, gdy leży w folderze z projektami, więc jego konfiguracja nie może niczego uruchamiać.
+    const child = spawn("git", ["-c", "core.fsmonitor=false", "-C", repoDir, ...args], {
+      env: gitEnv(repoDir),
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+    });
     const out: Buffer[] = [];
     const err: Buffer[] = [];
     let size = 0;
@@ -83,9 +90,12 @@ export function git(repoDir: string, args: readonly string[], opts: GitOptions =
   });
 }
 
-function gitEnv(): NodeJS.ProcessEnv {
+function gitEnv(repoDir: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
+    // `repoDir` to korzeń repo: z pustym albo uszkodzonym `.git` git nie może szukać wyżej i pokazać repo,
+    // w którym leży folder z projektami (np. katalog domowy pod gitem).
+    GIT_CEILING_DIRECTORIES: dirname(resolve(repoDir)),
     // Odczyt stanu nie może zakładać `index.lock`: daemon pyta cyklicznie, a użytkownik w tym czasie commituje.
     GIT_OPTIONAL_LOCKS: "0",
     // Daemon nie ma terminala; git nie może czekać na hasło.

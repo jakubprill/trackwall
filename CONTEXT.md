@@ -46,7 +46,7 @@ _Unikaj_: katalog workspace, root, folder (bez dopowiedzenia)
 Jedno repozytorium z workspace, identyfikowane slugiem z nazwy jego katalogu.
 
 **Stan repo** (`RepoStatus`):
-Gałąź, ostatni commit, liczba zmian w katalogu roboczym i ahead/behind względem gałęzi śledzonej, odczytane z gita przy każdym zapytaniu (`ok`), albo `unavailable` z komunikatem, gdy katalog zniknął lub git go nie czyta. Nigdy nie jest zapisywany.
+Gałąź, ostatni commit, liczba zmian w katalogu roboczym i ahead/behind względem gałęzi śledzonej, odczytane z gita przy każdym zapytaniu (`ok`), albo `unavailable` z komunikatem, gdy git go nie czyta (repo, którego katalog zniknął, znika z listy). Nigdy nie jest zapisywany.
 _Unikaj_: status (w polskim tekście), sync (to osobna akcja)
 
 **Przegląd repo** (`RepoOverview`):

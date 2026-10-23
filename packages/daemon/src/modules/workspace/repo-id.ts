@@ -1,8 +1,9 @@
 import { basename } from "node:path";
 
 /**
- * Identyfikator nowego repo z nazwy katalogu: małe litery bez polskich znaków, pozostałe znaki spoza `[a-z0-9._-]` zamienione na `-`,
- * a przy kolizji przyrostek `-2`, `-3`…
+ * Identyfikator repo z nazwy katalogu, liczony przy każdym odczycie folderu z projektami: małe litery bez polskich
+ * znaków, pozostałe znaki spoza `[a-z0-9._-]` zamienione na `-`, a przy kolizji z identyfikatorem z `taken`
+ * (repo wcześniej w kolejności) przyrostek `-2`, `-3`…
  */
 export function repoIdFor(dir: string, taken: ReadonlySet<string>): string {
   const base =

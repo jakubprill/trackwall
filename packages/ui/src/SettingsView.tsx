@@ -1,5 +1,6 @@
 import { type WorkspaceSettings, workspaceApi } from "@trackwall/protocol";
 import { type FormEvent, useCallback, useState } from "react";
+import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
@@ -22,30 +23,27 @@ export function SettingsView({ conn, onRetry, onSaved }: { conn: Connection; onR
             się na liście samo.
           </p>
           {settings.error && (
-            <div className="flex flex-col items-start gap-3">
-              <p className="text-destructive text-sm whitespace-pre-wrap break-words">{settings.error}</p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  onRetry();
-                  settings.reload();
-                }}
-              >
-                Spróbuj ponownie
-              </Button>
-            </div>
+            <ErrorWithRetry
+              message={settings.error}
+              onRetry={() => {
+                onRetry();
+                settings.reload();
+              }}
+            />
           )}
           {!settings.data && !settings.error && <Loading />}
-          {settings.data && <ProjectsDirForm conn={conn} settings={settings.data} onSaved={onSaved} />}
+          {/* Także przy błędzie: zły `projectsDir` wpisany ręcznie w `workspace.yaml` poprawia się właśnie tym formularzem. */}
+          {(settings.data || settings.error) && (
+            <ProjectsDirForm key={settings.data ? "ustawienia" : "blad"} conn={conn} settings={settings.data} onSaved={onSaved} />
+          )}
         </div>
       </Surface>
     </div>
   );
 }
 
-function ProjectsDirForm({ conn, settings, onSaved }: { conn: Connection; settings: WorkspaceSettings; onSaved: () => void }) {
-  const [path, setPath] = useState(settings.projectsDir ?? "");
+function ProjectsDirForm({ conn, settings, onSaved }: { conn: Connection; settings?: WorkspaceSettings; onSaved: () => void }) {
+  const [path, setPath] = useState(settings?.projectsDir ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -77,9 +75,11 @@ function ProjectsDirForm({ conn, settings, onSaved }: { conn: Connection; settin
         </Button>
       </div>
       {error && <p className="text-destructive text-xs break-words">{error}</p>}
-      <p className="text-muted-foreground text-xs break-all">
-        Zapisane jako <span className="font-mono">projectsDir</span> w <span className="font-mono">{settings.configFile}</span>
-      </p>
+      {settings && (
+        <p className="text-muted-foreground text-xs break-all">
+          Zapisane jako <span className="font-mono">projectsDir</span> w <span className="font-mono">{settings.configFile}</span>
+        </p>
+      )}
     </form>
   );
 }
