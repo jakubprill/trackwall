@@ -54,6 +54,9 @@ function modules() {
     home: mkdtempSync(join(tmpdir(), "trackwall-home-")),
     openUrl: () => {},
     miseCommand: ["mise"],
+    copilotCommand: ["copilot"],
+    hookCommand: () => ({ exec: "true", args: [] }),
+    mcpStdioCommand: ["trackwall-daemon", "mcp-stdio"],
     userEnv: async () => process.env,
     log: () => {},
   });

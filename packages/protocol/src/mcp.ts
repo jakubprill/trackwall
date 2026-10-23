@@ -13,6 +13,15 @@ import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
 /** Nazwa serwera MCP w `initialize` i w konfiguracji Copilot CLI (`copilot mcp add trackwall …`). */
 export const MCP_SERVER_NAME = "trackwall";
 
+/**
+ * Wpis serwera MCP Trackwall w formacie konfiguracji MCP Copilot CLI (`mcp-config.json`, `--additional-mcp-config`):
+ * lokalny serwer uruchamiany komendą mostu stdio (`mcpStdioCommand`), ze wszystkimi narzędziami.
+ */
+export function copilotMcpServers(mcpStdioCommand: readonly string[]) {
+  const [command, ...args] = mcpStdioCommand;
+  return { mcpServers: { [MCP_SERVER_NAME]: { type: "local", command, args, tools: ["*"] } } };
+}
+
 /** Wynik repo w ostatniej synchronizacji i kiedy ta synchronizacja trwała. */
 const LastSync = z.object({
   /** ISO 8601. */

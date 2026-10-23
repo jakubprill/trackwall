@@ -1,4 +1,4 @@
-import { MCP_SERVER_NAME } from "@trackwall/protocol";
+import { copilotMcpServers, MCP_SERVER_NAME } from "@trackwall/protocol";
 
 /**
  * Podłączenie serwera MCP Trackwall do Copilot CLI (§5.3, ADR-24): komenda `copilot mcp add`, która dopisuje wpis do
@@ -18,9 +18,7 @@ export function copilotMcpConfigPath(platform: string): string {
 
 /** Ten sam wpis w formacie `mcp-config.json`. */
 export function copilotMcpConfig(mcpStdioCommand: readonly string[]): string {
-  const [command, ...args] = mcpStdioCommand;
-  const config = { mcpServers: { [MCP_SERVER_NAME]: { type: "local", command, args, tools: ["*"] } } };
-  return JSON.stringify(config, null, 2);
+  return JSON.stringify(copilotMcpServers(mcpStdioCommand), null, 2);
 }
 
 /** Argument bez znaków specjalnych zostaje jak jest; inny w apostrofach, w których powłoka nic nie rozwija. */

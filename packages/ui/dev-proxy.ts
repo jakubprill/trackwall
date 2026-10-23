@@ -1,12 +1,14 @@
 import { readFileSync } from "node:fs";
-import { request } from "node:http";
+import { type IncomingMessage, request } from "node:http";
 import { join } from "node:path";
+import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
-import { DAEMON_FILE, DaemonFile, TRACKWALL_HOME_ENV } from "@trackwall/protocol";
+import { DAEMON_FILE, DaemonFile, PTY_SOCKET_PREFIX, PTY_SUBPROTOCOL, PTY_TOKEN_PREFIX, TRACKWALL_HOME_ENV } from "@trackwall/protocol";
 import type { Plugin } from "vite";
 
 /**
- * Tylko `vite dev`: przekazuje `/api/*` do daemona z `pnpm dev` z tokenem z `daemon.json`.
+ * Tylko `vite dev`: przekazuje `/api/*` i WebSocket terminala sesji (`/ws/pty/*`) do daemona z `pnpm dev` z tokenem
+ * z `daemon.json`.
  * Daemon deweloperski trzyma stan w `<repo>/.trackwall-dev`, osobno od wydanej aplikacji w `~/.trackwall`
  * (`TRACKWALL_HOME` nadpisuje oba).
  * Plik jest czytany przy każdym żądaniu, więc kolejność startu daemona i Vite nie ma znaczenia,
@@ -25,6 +27,20 @@ export function daemonDevProxy(): Plugin {
     apply: "serve",
     configureServer(server) {
       const file = join(process.env[TRACKWALL_HOME_ENV] || DEV_HOME, DAEMON_FILE);
+      const readDaemon = (): DaemonFile | undefined => {
+        try {
+          return DaemonFile.parse(JSON.parse(readFileSync(file, "utf8")));
+        } catch {
+          return undefined;
+        }
+      };
+      const ownOrigins = () => [`http://127.0.0.1:${server.config.server.port}`, `http://localhost:${server.config.server.port}`];
+      server.httpServer?.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+        if (!req.url?.startsWith(PTY_SOCKET_PREFIX)) return; // HMR Vite ma własną obsługę
+        const daemon = readDaemon();
+        if (!daemon || (req.headers.origin !== undefined && !ownOrigins().includes(req.headers.origin))) return void socket.destroy();
+        proxyPtySocket(req, socket, head, daemon);
+      });
       server.middlewares.use("/api", (req, res) => {
         const reply = (status: number, message: string) => {
           if (res.headersSent) {
@@ -36,20 +52,15 @@ export function daemonDevProxy(): Plugin {
           res.end(JSON.stringify({ ok: false, error: { code: status === 403 ? "forbidden_origin" : "internal", message } }));
         };
 
-        const port = server.config.server.port;
-        const own = [`http://127.0.0.1:${port}`, `http://localhost:${port}`];
+        const own = ownOrigins();
         const origin = req.headers.origin;
         const site = req.headers["sec-fetch-site"];
         if ((origin !== undefined && !own.includes(origin)) || (site !== undefined && site !== "same-origin" && site !== "none")) {
           return reply(403, "żądanie spoza strony Vite");
         }
 
-        let daemon: DaemonFile;
-        try {
-          daemon = DaemonFile.parse(JSON.parse(readFileSync(file, "utf8")));
-        } catch {
-          return reply(503, `daemon nie działa (brak albo uszkodzony ${file})`);
-        }
+        const daemon = readDaemon();
+        if (!daemon) return reply(503, `daemon nie działa (brak albo uszkodzony ${file})`);
 
         // node:http, nie fetch: bez obejścia przez HTTP_PROXY i ze strumieniowaniem ciała w obie strony.
         const upstream = request(
@@ -79,4 +90,35 @@ export function daemonDevProxy(): Plugin {
       });
     },
   };
+}
+
+/**
+ * WebSocket terminala: proxy podmienia podprotokoły na `trackwall.pty` z tokenem i bez `Origin` strony Vite (sprawdzonego
+ * wyżej), a po przełączeniu protokołu przepuszcza ramki w obie strony bez zmian.
+ */
+function proxyPtySocket(req: IncomingMessage, socket: Duplex, head: Buffer, daemon: DaemonFile): void {
+  const { origin: _, host: __, "sec-websocket-protocol": ___, ...headers } = req.headers;
+  const upstream = request({
+    host: "127.0.0.1",
+    port: daemon.port,
+    path: req.url,
+    agent: false,
+    headers: {
+      ...headers,
+      host: `127.0.0.1:${daemon.port}`,
+      "sec-websocket-protocol": `${PTY_SUBPROTOCOL}, ${PTY_TOKEN_PREFIX}${daemon.token}`,
+    },
+  });
+  upstream.on("upgrade", (res, upSocket, upHead) => {
+    const lines = Object.entries(res.headers).flatMap(([k, v]) => (Array.isArray(v) ? v.map((x) => `${k}: ${x}`) : [`${k}: ${v}`]));
+    socket.write(`HTTP/1.1 101 Switching Protocols\r\n${lines.join("\r\n")}\r\n\r\n`);
+    if (upHead.length > 0) socket.write(upHead);
+    if (head.length > 0) upSocket.write(head);
+    upSocket.pipe(socket).pipe(upSocket);
+    upSocket.on("error", () => socket.destroy());
+    socket.on("error", () => upSocket.destroy());
+  });
+  upstream.on("response", () => socket.destroy());
+  upstream.on("error", () => socket.destroy());
+  upstream.end();
 }

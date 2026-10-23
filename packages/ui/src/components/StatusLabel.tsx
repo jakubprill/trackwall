@@ -7,8 +7,12 @@ const TONES: Record<StatusTone, { dot: string; text: string }> = {
   error: { dot: "bg-destructive shadow-glow-destructive", text: "text-destructive" },
 };
 
-/** Świecąca kropka stanu z tekstem; kropka powtarza tekst, więc czytnik ekranu ją pomija. */
-export function StatusLabel({ tone, label }: { tone: StatusTone; label: string }) {
+/**
+ * Świecąca kropka stanu z tekstem; kropka powtarza tekst, więc czytnik ekranu ją pomija. Stan bez tonu (np. zatrzymany
+ * przez użytkownika) to wyciszony tekst bez kropki.
+ */
+export function StatusLabel({ tone, label }: { tone?: StatusTone; label: string }) {
+  if (!tone) return <span className="text-muted-foreground">{label}</span>;
   return (
     <span className={cn("flex shrink-0 items-center gap-2", TONES[tone].text)}>
       <span aria-hidden className={cn("inline-block size-1.5 shrink-0 rounded-full", TONES[tone].dot)} />

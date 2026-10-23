@@ -44,8 +44,12 @@ export class OriginPolicy {
 
 export function hasValidToken(req: IncomingMessage, token: string): boolean {
   const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) return false;
-  const given = Buffer.from(header.slice("Bearer ".length));
+  return header?.startsWith("Bearer ") === true && tokenMatches(header.slice("Bearer ".length), token);
+}
+
+/** Porównanie tokenu w stałym czasie; wspólne dla nagłówka `Authorization` i podprotokołu WebSocketu. */
+export function tokenMatches(givenToken: string, token: string): boolean {
+  const given = Buffer.from(givenToken);
   const expected = Buffer.from(token);
   return given.length === expected.length && timingSafeEqual(given, expected);
 }

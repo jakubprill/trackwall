@@ -23,17 +23,20 @@ export function ActivityBar<Id extends string>({
   views,
   active,
   onSelect,
+  badges = {},
 }: {
   views: readonly ActivityView<Id>[];
   active: Id;
   onSelect: (id: Id) => void;
+  /** Liczba przy ikonie widoku, np. sesje, które czekają na Ciebie; zero i brak nie pokazują niczego. */
+  badges?: Partial<Record<Id, number>>;
 }) {
   useViewShortcuts(views, onSelect);
 
   const group = (placement: ActivityView<Id>["placement"]) =>
     views
       .filter((v) => v.placement === placement)
-      .map((v) => <ActivityButton key={v.id} view={v} active={v.id === active} onSelect={() => onSelect(v.id)} />);
+      .map((v) => <ActivityButton key={v.id} view={v} active={v.id === active} badge={badges[v.id]} onSelect={() => onSelect(v.id)} />);
 
   return (
     <nav aria-label="Widoki" className="bg-card w-activity-bar flex shrink-0 flex-col border-r">
@@ -58,13 +61,24 @@ function useViewShortcuts<Id extends string>(views: readonly ActivityView<Id>[],
   }, [views, onSelect]);
 }
 
-function ActivityButton<Id extends string>({ view, active, onSelect }: { view: ActivityView<Id>; active: boolean; onSelect: () => void }) {
+function ActivityButton<Id extends string>({
+  view,
+  active,
+  badge,
+  onSelect,
+}: {
+  view: ActivityView<Id>;
+  active: boolean;
+  badge: number | undefined;
+  onSelect: () => void;
+}) {
   const Icon = view.icon;
+  const count = badge !== undefined && badge > 0 ? badge : undefined;
   return (
     <li>
       <button
         type="button"
-        aria-label={view.label}
+        aria-label={count === undefined ? view.label : `${view.label} (czeka: ${count})`}
         aria-current={active ? "page" : undefined}
         aria-keyshortcuts={ariaShortcut(view.shortcut, IS_MAC)}
         onClick={onSelect}
@@ -74,6 +88,14 @@ function ActivityButton<Id extends string>({ view, active, onSelect }: { view: A
         )}
       >
         <Icon className="size-5" strokeWidth={1.75} />
+        {count !== undefined && (
+          <span
+            aria-hidden
+            className="bg-warning text-background shadow-glow-warning absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full font-mono text-2xs font-semibold"
+          >
+            {count > 9 ? "9+" : count}
+          </span>
+        )}
         <span
           aria-hidden
           className="bg-background pointer-events-none absolute top-1/2 left-full z-10 ml-2 flex -translate-y-1/2 items-center gap-3 rounded-md border px-2 py-1 text-xs whitespace-nowrap opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
