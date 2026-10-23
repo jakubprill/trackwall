@@ -56,7 +56,10 @@ interface Group {
   readonly tail: OutputTail;
   readonly leaderExit: Promise<Exit>;
   phase: Phase;
-  /** Stop zlecił użytkownik albo wyjście daemona; zostaje w stanie `exited` jako `stoppedByUser`. */
+  /**
+   * Stop zlecił użytkownik albo wyjście daemona, zanim lider skończył się sam; zostaje w stanie `exited` jako
+   * `stoppedByUser`. Stop po końcu lidera nie zmienia wyniku: liczy się kod wyjścia lidera.
+   */
   stopRequested: boolean;
   stopping?: Promise<RunState>;
   /** Zabijanie reszty grupy po końcu lidera; stop w tym czasie czeka na nie zamiast zabijać drugi raz. */

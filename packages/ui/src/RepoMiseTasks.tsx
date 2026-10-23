@@ -1,6 +1,6 @@
 import { type MiseTask, type MiseTasks, miseApi } from "@trackwall/protocol";
 import { Play, ShieldCheck, Square } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -23,10 +23,7 @@ const POLL_IDLE_MS = 10_000;
 /** Taski mise repo (ADR-20): lista z `mise tasks ls`, start i stop całej grupy procesów, stan uruchomienia. */
 export function RepoMiseTasks({ conn, repo }: { conn: Connection; repo: string }) {
   const load = useCallback(() => post(conn, miseApi.tasks, { repo }), [conn, repo]);
-  // Tempo zależy od ostatniej odpowiedzi, a odpowiedź od odpytywania, stąd osobny stan zamiast liczenia w miejscu.
-  const [live, setLive] = useState(false);
-  const remote = useRemote(load, { pollMs: live ? POLL_LIVE_MS : POLL_IDLE_MS });
-  useEffect(() => setLive(anyLive(remote.data)), [remote.data]);
+  const remote = useRemote(load, { pollMs: pollInterval });
 
   if (!remote.data) {
     return remote.error ? <ErrorWithRetry message={remote.error} onRetry={remote.reload} /> : <Loading />;
@@ -34,9 +31,9 @@ export function RepoMiseTasks({ conn, repo }: { conn: Connection; repo: string }
   return <TaskPanel conn={conn} repo={repo} tasks={remote.data} onChange={remote.reload} />;
 }
 
-function anyLive(tasks: MiseTasks | undefined): boolean {
-  if (!tasks) return false;
-  return (tasks.kind === "ok" ? tasks.tasks : tasks.running).some((t) => isLive(t.run));
+function pollInterval(tasks: MiseTasks | undefined): number {
+  const live = tasks !== undefined && (tasks.kind === "ok" ? tasks.tasks : tasks.running).some((t) => isLive(t.run));
+  return live ? POLL_LIVE_MS : POLL_IDLE_MS;
 }
 
 function TaskPanel({ conn, repo, tasks, onChange }: { conn: Connection; repo: string; tasks: MiseTasks; onChange: () => void }) {

@@ -132,6 +132,16 @@ describe("procs", () => {
     expect(groups.state("o")).toBeUndefined();
   });
 
+  test("stop w trakcie startu, który się nie udał, zwraca brak grupy zamiast błędu startu", async () => {
+    const { dir, groups } = setup();
+    const start = groups.start({ owner: "o", command: ["trackwall-nie-ma-takiego-programu"], cwd: dir, env: process.env });
+
+    const stopped = await groups.stop("o");
+
+    expect(stopped).toBeUndefined();
+    await expect(start).rejects.toThrow("nie znaleziono programu");
+  });
+
   test("katalog roboczy musi być pełną ścieżką istniejącego katalogu", async () => {
     const { dir, groups } = setup();
     const spec = { owner: "o", command: [process.execPath, TREE, dir, "0", "1"], env: process.env };
@@ -251,7 +261,9 @@ describe("procs, gdy lider kończy się sam w trakcie stopu", () => {
       });
       await groups.start({ owner: "o", command: [process.execPath, TREE, dir, "0", "3", "exit-leader", "3"], cwd: dir, env: process.env });
       const pids = await waitForTree(dir, 3);
-      expect(await waitUntil(() => !isAlive(pids[0] ?? -1), 15_000)).toBe(true);
+      // Bez stopu `stopping` znaczy, że daemon zauważył koniec lidera i dobija resztę grupy.
+      expect(await waitUntil(() => groups.state("o")?.kind === "stopping", 15_000)).toBe(true);
+      expect(pids.slice(1).filter(isAlive).length).toBeGreaterThan(0);
 
       const stopped = await groups.stop("o");
 
@@ -304,7 +316,7 @@ describe("procs, gdy grupy nie da się zabić", () => {
 
       expect(runtime.read().map((g) => g.runId)).toContain("stara");
       // Prawdziwe `kill` atrapy kończy drzewo testu; stop i tak zgłosi brak potwierdzenia.
-      await groups.stop("o")?.catch(() => {});
+      await groups.stop("o").catch(() => {});
     },
     TIMEOUT,
   );

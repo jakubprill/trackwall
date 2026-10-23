@@ -11,9 +11,12 @@ export interface Remote<T> {
 
 export type RemoteHandle<T> = Remote<T> & { reload: () => void };
 
-export interface RemoteOptions {
-  /** Odpytuj co tyle ms, licząc od poprzedniej odpowiedzi. */
-  pollMs?: number;
+export interface RemoteOptions<T> {
+  /**
+   * Odpytuj co tyle ms, licząc od poprzedniej odpowiedzi. Funkcja liczy tempo z ostatnich danych w chwili planowania
+   * następnego pytania, więc odpowiedź, która zmienia tempo (np. task ruszył), od razu planuje pytanie w nowym tempie.
+   */
+  pollMs?: number | ((data: T | undefined) => number);
   /** Zmiana wartości pobiera dane od nowa, zachowując poprzednie do czasu odpowiedzi (np. hash HEAD repo). */
   refreshKey?: string;
 }
@@ -23,13 +26,15 @@ export interface RemoteOptions {
  * poprzednią odpowiedź; `reload`, `refreshKey` i odpytywanie zachowują ją do czasu nowej. Odpytywanie planuje
  * następne pytanie dopiero po odpowiedzi, więc wolny git nie piętrzy żądań, i czeka, gdy okno jest schowane.
  */
-export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, refreshKey }: RemoteOptions = {}): RemoteHandle<T> {
+export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, refreshKey }: RemoteOptions<T> = {}): RemoteHandle<T> {
   const [state, setState] = useState<Remote<T>>({});
   const [generation, setGeneration] = useState(0);
   const previousLoad = useRef(load);
-  // Tempo czytane przy planowaniu następnego pytania: zmiana tempa nie wysyła pytania od razu ani nie gubi odpowiedzi.
+  // Tempo czytane przy planowaniu następnego pytania, nie w zależnościach efektu: funkcja tworzona przy renderze nie
+  // może wysyłać pytania przy każdym renderze.
   const pollRef = useRef(pollMs);
   pollRef.current = pollMs;
+  const dataRef = useRef<T | undefined>(undefined);
 
   // `generation` i `refreshKey` nie są czytane w efekcie: ich zmiana to prośba o ponowne pobranie.
   useEffect(() => {
@@ -38,18 +43,26 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
     previousLoad.current = load;
     let current = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const interval = () => (typeof pollRef.current === "function" ? pollRef.current(dataRef.current) : pollRef.current);
     const next = () => {
-      if (document.hidden) timer = setTimeout(next, pollRef.current);
+      if (document.hidden) timer = setTimeout(next, interval());
       else setGeneration((g) => g + 1);
     };
-    if (changed) setState({});
+    if (changed) {
+      dataRef.current = undefined;
+      setState({});
+    }
     load()
       .then(
-        (data) => current && setState({ data }),
+        (data) => {
+          if (!current) return;
+          dataRef.current = data;
+          setState({ data });
+        },
         (err: unknown) => current && setState((prev) => ({ data: prev.data, error: errorMessage(err), errorCode: errorCode(err) })),
       )
       .finally(() => {
-        if (current && pollRef.current !== undefined) timer = setTimeout(next, pollRef.current);
+        if (current && pollRef.current !== undefined) timer = setTimeout(next, interval());
       });
     return () => {
       current = false;
