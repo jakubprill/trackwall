@@ -178,14 +178,18 @@ Blok, którym agent kończy zadanie; trafia do pola `summary` i do propozycji PR
 ## Logi, zdarzenia i audyt
 
 **Rekord** (`LogRecord`):
-Jedna linia wyjścia procesu po parsowaniu: `seq`, czas, źródło, poziom, treść, opcjonalnie identyfikator śladu (`traceId` w TypeScript, `trace_id` w narzędziach MCP).
+Jedna linia wyjścia procesu po parsowaniu: `seq`, czas, uruchomienie (`runId`), strumień, poziom, treść (bez ANSI, z zamaskowanymi sekretami), później opcjonalnie identyfikator śladu (`traceId` w TypeScript, `trace_id` w narzędziach MCP).
 _Unikaj_: wpis, event
 
 **Źródło** (`LogSource`):
-Skąd pochodzi rekord: serwis, zadanie albo sam daemon, z identyfikatorem.
+Skąd pochodzi rekord. Dziś task mise repo (`{ kind: "mise-task", repo, miseTask }`); serwis, zadanie i sam daemon dojdą jako kolejne rodzaje. Źródło ma rekordy wszystkich swoich uruchomień.
+
+**Log** (log taska mise, `logs/tail`, w UI przycisk „Log”):
+Rekordy jednego źródła w kolejności `seq`: ostatnie 2000 w pamięci daemona, wszystkie w pliku JSONL `logs/<rodzaj>/<repo>/<task mise>.jsonl` w katalogu stanu (ADR-28). Nie myl z logiem daemona (stderr procesu `trackwall-daemon`).
+_Unikaj_: konsola, terminal (to PTY sesji zadania)
 
 **`seq`**:
-Globalny, rosnący numer rekordu dla wszystkich źródeł. Kursor `since_seq` działa dla jednego serwisu i dla całego workspace.
+Globalny, rosnący numer rekordu dla wszystkich źródeł, od 1 w każdym działaniu daemona. Kursor (`sinceSeq` w API, `since_seq` w narzędziach MCP) działa dla jednego źródła i dla całego workspace; `dropped` mówi, że część rekordów po kursorze przepadła.
 
 **Zdarzenie**:
 Wiadomość daemona na WebSocket `/ws` (`service.state`, `task.state`…) z własnym `seq` zdarzeń.
@@ -195,7 +199,7 @@ _Unikaj_: rekord (to log)
 Pełny stan z `GET /api/snapshot`, od którego UI zaczyna i do którego wraca po `resync`.
 
 **Maskowanie**:
-Zamiana wartości sekretów na `***` przed zapisem rekordu do bufora.
+Zamiana wartości sekretów na `***` przed zapisem rekordu do bufora, pliku i ostatnich linii stanu. Dziś sekrety to wartości zmiennych środowiska procesu o nazwach sekretów (`GH_TOKEN`, `DB_PASSWORD`…, §4.2).
 
 **Audyt** (`AuditEntry`):
 Zapis każdego wywołania narzędzia MCP: klient, narzędzie, argumenty, czas, skrót wyniku. Widoczny tylko w UI.

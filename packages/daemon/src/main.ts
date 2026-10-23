@@ -37,6 +37,8 @@ async function main(args: DaemonArgs): Promise<void> {
     stopWatching();
     // Grupy procesów przed zamknięciem API: UI widzi „stopping”, a nie zerwane połączenie w trakcie zatrzymywania.
     await facade?.procs.stopAll();
+    // Po grupach: ostatnie linie zatrzymanych procesów też trafiają do plików logów.
+    facade?.logs.flush();
     removeDaemonFile(home, process.pid);
     await api?.close();
     process.exit(0);

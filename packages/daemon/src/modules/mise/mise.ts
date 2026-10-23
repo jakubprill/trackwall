@@ -1,4 +1,4 @@
-import { type MiseTask, MiseTaskName, type MiseTasks, type RunState } from "@trackwall/protocol";
+import { type LogSource, type MiseTask, MiseTaskName, type MiseTasks, type RunState } from "@trackwall/protocol";
 import { z } from "zod";
 import { DomainError, SpawnFailure } from "../../errors.ts";
 import { type MiseCliResult, runMiseCli } from "./mise-cli.ts";
@@ -11,7 +11,7 @@ import { type MiseCliResult, runMiseCli } from "./mise-cli.ts";
 
 /** Czego `mise` potrzebuje od `procs`; podłączane w fasadzie. */
 interface MiseProcs {
-  start(spec: { owner: string; command: readonly string[]; cwd: string; env: NodeJS.ProcessEnv }): Promise<RunState>;
+  start(spec: { owner: string; command: readonly string[]; cwd: string; env: NodeJS.ProcessEnv; logSource: LogSource }): Promise<RunState>;
   state(owner: string): RunState | undefined;
   stop(owner: string): Promise<RunState | undefined>;
 }
@@ -82,6 +82,7 @@ export class Mise {
         command: [...this.deps.command, "run", miseTask],
         cwd: dir,
         env: await this.deps.env(),
+        logSource: { kind: "mise-task", repo, miseTask },
       });
     } catch (err) {
       if (!(err instanceof SpawnFailure)) throw err;

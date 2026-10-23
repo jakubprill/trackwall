@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { Logs } from "./modules/logs/logs.ts";
 import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
@@ -16,13 +17,17 @@ export interface Facade {
   workspace: Workspace;
   mise: Mise;
   procs: ProcessGroups;
+  logs: Logs;
 }
 
 const WORKSPACE_FILE = "workspace.yaml";
 const RUNTIME_FILE = "runtime.json";
+const LOGS_DIR = "logs";
+/** Limit jednego pliku JSONL źródła; z poprzednim plikiem po rotacji źródło zajmuje najwyżej dwa razy tyle. */
+const LOG_FILE_MAX_BYTES = 10 * 1024 * 1024;
 
 export interface FacadeOptions {
-  /** Katalog stanu daemona; tam leżą `workspace.yaml` (ADR-13) i `runtime.json` (§4.1). */
+  /** Katalog stanu daemona; tam leżą `workspace.yaml` (ADR-13), `runtime.json` (§4.1) i `logs/` (§4.2). */
   home: string;
   openUrl: (url: string) => void;
   /** Program `mise` z argumentami przed komendą (`["mise"]` w daemonie). */
@@ -39,7 +44,8 @@ export function createFacade(o: FacadeOptions): Facade {
     hosting: new Hosting(HOSTING_CLIS),
     openUrl: o.openUrl,
   });
-  const procs = new ProcessGroups({ runtime: new RuntimeFile(join(o.home, RUNTIME_FILE)), platform: groupPlatform(), log: o.log });
+  const logs = new Logs({ dir: join(o.home, LOGS_DIR), maxFileBytes: LOG_FILE_MAX_BYTES, log: o.log });
+  const procs = new ProcessGroups({ runtime: new RuntimeFile(join(o.home, RUNTIME_FILE)), logs, platform: groupPlatform(), log: o.log });
   const mise = new Mise({ procs, repos: workspace, command: o.miseCommand, env: o.userEnv });
-  return { workspace, mise, procs };
+  return { workspace, mise, procs, logs };
 }

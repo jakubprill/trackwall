@@ -2,10 +2,9 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
-import type { RunState } from "@trackwall/protocol";
+import type { LogSource, LogStream, RunState } from "@trackwall/protocol";
 import { DomainError, SpawnFailure, spawnFailure } from "../../errors.ts";
 import { type GroupControl, type GroupPlatform, waitUntil } from "../../platform/process-group.ts";
-import { OutputTail } from "./output-tail.ts";
 import type { RuntimeFile, RuntimeGroup } from "./runtime-file.ts";
 
 /**
@@ -30,10 +29,25 @@ export interface GroupSpec {
   /** Pełna ścieżka istniejącego katalogu: korzeń repo albo worktree, sprawdzony przez wołającego. */
   cwd: string;
   env: NodeJS.ProcessEnv;
+  /** Źródło w module `logs`, do którego trafia wyjście grupy. */
+  logSource: LogSource;
+}
+
+/** Wyjście jednego uruchomienia od strony `procs`: bajty wchodzą, ostatnie linie wychodzą do stanu `exited`. */
+interface RunOutput {
+  push(stream: LogStream, chunk: Buffer): void;
+  end(stream: LogStream): void;
+  lastLines(): string[];
+}
+
+/** Czego `procs` potrzebuje od `logs` (§4.2); podłączane w fasadzie. */
+interface ProcsLogs {
+  open(source: LogSource, runId: string, env: NodeJS.ProcessEnv): RunOutput;
 }
 
 export interface ProcessGroupsDeps {
   runtime: RuntimeFile;
+  logs: ProcsLogs;
   platform: Promise<GroupPlatform>;
   log: (msg: string) => void;
 }
@@ -53,7 +67,7 @@ type Phase = { kind: "live" } | { kind: "draining"; exit: Exit } | { kind: "exit
 interface Group {
   readonly record: RuntimeGroup;
   readonly control: GroupControl;
-  readonly tail: OutputTail;
+  readonly output: RunOutput;
   readonly leaderExit: Promise<Exit>;
   phase: Phase;
   /**
@@ -155,6 +169,7 @@ export class ProcessGroups {
     if (program === undefined) throw new Error("pusta komenda");
     await requireDirectory(spec.cwd);
     const platform = await this.deps.platform;
+    const runId = randomUUID();
     const child = spawn(program, args, {
       cwd: spec.cwd,
       env: spec.env,
@@ -163,8 +178,8 @@ export class ProcessGroups {
       windowsHide: true,
     });
     // Wyjście i koniec procesu są podłączone od razu: krótki task może skończyć się, zanim padnie pierwszy `await`.
-    const tail = new OutputTail();
-    attachOutput(child, tail);
+    const output = this.deps.logs.open(spec.logSource, runId, spec.env);
+    attachOutput(child, output);
     const leaderExit = new Promise<Exit>((resolve) => {
       child.once("exit", (code, signal) => resolve({ code, signal, at: new Date().toISOString() }));
     });
@@ -179,7 +194,7 @@ export class ProcessGroups {
       throw err;
     }
     const record: RuntimeGroup = {
-      runId: randomUUID(),
+      runId,
       owner: spec.owner,
       command: [...spec.command],
       cwd: spec.cwd,
@@ -187,7 +202,7 @@ export class ProcessGroups {
       pid,
       identity: await platform.identity(pid),
     };
-    const group: Group = { record, control, tail, leaderExit, phase: { kind: "live" }, stopRequested: false };
+    const group: Group = { record, control, output, leaderExit, phase: { kind: "live" }, stopRequested: false };
     this.groups.set(spec.owner, group);
     this.persist();
     leaderExit
@@ -257,13 +272,12 @@ export class ProcessGroups {
   }
 }
 
-/**
- * stdout i stderr są czytane zawsze, bo nieczytana rura blokuje proces po kilkudziesięciu KB (§4.1).
- * Tu podłączy się moduł `logs`; na razie zostają ostatnie linie dla stanu `exited`.
- */
-function attachOutput(child: ChildProcess, tail: OutputTail): void {
-  child.stdout?.on("data", (chunk: Buffer) => tail.push("stdout", chunk));
-  child.stderr?.on("data", (chunk: Buffer) => tail.push("stderr", chunk));
+/** stdout i stderr są czytane zawsze, bo nieczytana rura blokuje proces po kilkudziesięciu KB (§4.1). */
+function attachOutput(child: ChildProcess, output: RunOutput): void {
+  for (const stream of ["stdout", "stderr"] as const) {
+    child[stream]?.on("data", (chunk: Buffer) => output.push(stream, chunk));
+    child[stream]?.on("end", () => output.end(stream));
+  }
   // Proces, który nie czyta stdin, może go zamknąć; EPIPE przy łagodnym stopie nie jest błędem.
   child.stdin?.on("error", () => {});
   // Błąd po starcie (np. nieudany `kill`) bez słuchacza zakończyłby daemon; stan i tak wynika z `exit`.
@@ -283,7 +297,7 @@ function stateOf(group: Group): RunState {
     exitCode: phase.exit.code,
     signal: phase.exit.signal,
     stoppedByUser: group.stopRequested,
-    lastLines: group.tail.snapshot(),
+    lastLines: group.output.lastLines(),
   };
 }
 

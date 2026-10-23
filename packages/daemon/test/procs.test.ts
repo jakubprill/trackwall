@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { OutputTail } from "../src/modules/procs/output-tail.ts";
+import { Logs } from "../src/modules/logs/logs.ts";
 import { ProcessGroups } from "../src/modules/procs/process-groups.ts";
 import { RuntimeFile } from "../src/modules/procs/runtime-file.ts";
 import { groupPlatform } from "../src/platform/group-platform.ts";
@@ -16,12 +16,18 @@ const RUNNER = join(import.meta.dir, "fixtures", "procs-runner.ts");
 /** Drzewo ignoruje łagodny stop, więc krótki czas łaski skraca testy bez zmiany przebiegu. */
 const TEST_GRACE_MS = 300;
 const TIMEOUT = 30_000;
+const SOURCE = { kind: "mise-task", repo: "web", miseTask: "dev" } as const;
+
+function testLogs(): Logs {
+  return new Logs({ dir: mkdtempSync(join(tmpdir(), "trackwall-procs-logs-")), maxFileBytes: 1024 * 1024, log: () => {} });
+}
 
 function setup() {
   const dir = mkdtempSync(join(tmpdir(), "trackwall-procs-"));
   const runtime = new RuntimeFile(join(dir, "runtime.json"));
   const logs: string[] = [];
   const groups = new ProcessGroups({
+    logs: testLogs(),
     runtime,
     platform: groupPlatform().then((p) => ({ ...p, graceMs: TEST_GRACE_MS })),
     log: (msg) => logs.push(msg),
@@ -60,7 +66,13 @@ describe("procs", () => {
     "stop zatrzymuje całą grupę, także wnuki ignorujące łagodny stop, i usuwa ją z runtime.json",
     async () => {
       const { dir, runtime, groups } = setup();
-      const started = await groups.start({ owner: "o", command: [process.execPath, TREE, dir, "0", "3"], cwd: dir, env: process.env });
+      const started = await groups.start({
+        owner: "o",
+        command: [process.execPath, TREE, dir, "0", "3"],
+        cwd: dir,
+        env: process.env,
+        logSource: SOURCE,
+      });
       const pids = await waitForTree(dir, 3);
       expect(started.kind).toBe("running");
       expect(runtime.read().map((g) => g.pid)).toEqual([pids[0] ?? -1]);
@@ -78,7 +90,13 @@ describe("procs", () => {
     "lider, który kończy się sam, zabiera resztę grupy, a stan ma kod wyjścia i ostatnie linie",
     async () => {
       const { dir, groups } = setup();
-      await groups.start({ owner: "o", command: [process.execPath, TREE, dir, "0", "3", "exit-leader", "3"], cwd: dir, env: process.env });
+      await groups.start({
+        owner: "o",
+        command: [process.execPath, TREE, dir, "0", "3", "exit-leader", "3"],
+        cwd: dir,
+        env: process.env,
+        logSource: SOURCE,
+      });
       const pids = await waitForTree(dir, 3);
 
       expect(await waitUntil(() => groups.state("o")?.kind === "exited", 15_000)).toBe(true);
@@ -98,7 +116,7 @@ describe("procs", () => {
     "drugi start tego samego właściciela zwraca działające uruchomienie zamiast nowej grupy",
     async () => {
       const { dir, groups } = setup();
-      const spec = { owner: "o", command: [process.execPath, TREE, dir, "0", "1"], cwd: dir, env: process.env };
+      const spec = { owner: "o", command: [process.execPath, TREE, dir, "0", "1"], cwd: dir, env: process.env, logSource: SOURCE };
       const [first, second] = await Promise.all([groups.start(spec), groups.start(spec)]);
       const third = await groups.start(spec);
 
@@ -113,7 +131,7 @@ describe("procs", () => {
     "stop w trakcie startu czeka na grupę i ją zatrzymuje, a po stopAll nowy start jest odrzucany",
     async () => {
       const { dir, groups } = setup();
-      const spec = { owner: "o", command: [process.execPath, TREE, dir, "0", "1"], cwd: dir, env: process.env };
+      const spec = { owner: "o", command: [process.execPath, TREE, dir, "0", "1"], cwd: dir, env: process.env, logSource: SOURCE };
       const started = groups.start(spec);
 
       const stopped = await groups.stop("o");
@@ -127,14 +145,26 @@ describe("procs", () => {
 
   test("program, którego nie ma, kończy start błędem z nazwą programu", async () => {
     const { dir, groups } = setup();
-    const start = groups.start({ owner: "o", command: ["trackwall-nie-ma-takiego-programu"], cwd: dir, env: process.env });
+    const start = groups.start({
+      owner: "o",
+      command: ["trackwall-nie-ma-takiego-programu"],
+      cwd: dir,
+      env: process.env,
+      logSource: SOURCE,
+    });
     await expect(start).rejects.toThrow("nie znaleziono programu trackwall-nie-ma-takiego-programu w PATH");
     expect(groups.state("o")).toBeUndefined();
   });
 
   test("stop w trakcie startu, który się nie udał, zwraca brak grupy zamiast błędu startu", async () => {
     const { dir, groups } = setup();
-    const start = groups.start({ owner: "o", command: ["trackwall-nie-ma-takiego-programu"], cwd: dir, env: process.env });
+    const start = groups.start({
+      owner: "o",
+      command: ["trackwall-nie-ma-takiego-programu"],
+      cwd: dir,
+      env: process.env,
+      logSource: SOURCE,
+    });
 
     const stopped = await groups.stop("o");
 
@@ -144,7 +174,7 @@ describe("procs", () => {
 
   test("katalog roboczy musi być pełną ścieżką istniejącego katalogu", async () => {
     const { dir, groups } = setup();
-    const spec = { owner: "o", command: [process.execPath, TREE, dir, "0", "1"], env: process.env };
+    const spec = { owner: "o", command: [process.execPath, TREE, dir, "0", "1"], env: process.env, logSource: SOURCE };
     await expect(groups.start({ ...spec, cwd: "wzgledny" })).rejects.toThrow("pełną ścieżką");
     await expect(groups.start({ ...spec, cwd: join(dir, "nie-ma") })).rejects.toThrow("nie istnieje");
   });
@@ -155,8 +185,8 @@ describe("procs", () => {
       const { dir, groups } = setup();
       const a = mkdtempSync(join(dir, "a-"));
       const b = mkdtempSync(join(dir, "b-"));
-      await groups.start({ owner: "a", command: [process.execPath, TREE, a, "0", "2"], cwd: dir, env: process.env });
-      await groups.start({ owner: "b", command: [process.execPath, TREE, b, "0", "2"], cwd: dir, env: process.env });
+      await groups.start({ owner: "a", command: [process.execPath, TREE, a, "0", "2"], cwd: dir, env: process.env, logSource: SOURCE });
+      await groups.start({ owner: "b", command: [process.execPath, TREE, b, "0", "2"], cwd: dir, env: process.env, logSource: SOURCE });
       const pids = [...(await waitForTree(a, 2)), ...(await waitForTree(b, 2))];
 
       await groups.stopAll();
@@ -179,6 +209,7 @@ describe("procs", () => {
       // Windows: job zamknięty razem z daemonem zabija grupę sam. macOS i Linux: grupa żyje do sprzątania przy starcie.
       const logs: string[] = [];
       const next = new ProcessGroups({
+        logs: testLogs(),
         runtime: new RuntimeFile(join(home, "runtime.json")),
         platform: groupPlatform(),
         log: (m) => logs.push(m),
@@ -262,11 +293,18 @@ describe("procs, gdy lider kończy się sam w trakcie stopu", () => {
         },
       });
       const groups = new ProcessGroups({
+        logs: testLogs(),
         runtime: new RuntimeFile(join(dir, "runtime.json")),
         platform: Promise.resolve({ ...real, graceMs: TEST_GRACE_MS, adopt: (child) => slowKill(real.adopt(child)) }),
         log: () => {},
       });
-      await groups.start({ owner: "o", command: [process.execPath, TREE, dir, "0", "3", "exit-leader", "3"], cwd: dir, env: process.env });
+      await groups.start({
+        owner: "o",
+        command: [process.execPath, TREE, dir, "0", "3", "exit-leader", "3"],
+        cwd: dir,
+        env: process.env,
+        logSource: SOURCE,
+      });
       const pids = await waitForTree(dir, 3);
       // Bez stopu `stopping` znaczy, że daemon zauważył koniec lidera i dobija resztę grupy.
       expect(await waitUntil(() => groups.state("o")?.kind === "stopping", 15_000)).toBe(true);
@@ -287,8 +325,8 @@ describe("procs, gdy grupy nie da się zabić", () => {
     async () => {
       const dir = mkdtempSync(join(tmpdir(), "trackwall-procs-"));
       const runtime = new RuntimeFile(join(dir, "runtime.json"));
-      const groups = new ProcessGroups({ runtime, platform: stubbornPlatform(), log: () => {} });
-      const spec = { owner: "o", command: [process.execPath, TREE, dir, "0", "1"], cwd: dir, env: process.env };
+      const groups = new ProcessGroups({ logs: testLogs(), runtime, platform: stubbornPlatform(), log: () => {} });
+      const spec = { owner: "o", command: [process.execPath, TREE, dir, "0", "1"], cwd: dir, env: process.env, logSource: SOURCE };
       const started = await groups.start(spec);
 
       await expect(groups.stop("o")).rejects.toMatchObject({ code: "stop_unconfirmed" });
@@ -315,10 +353,10 @@ describe("procs, gdy grupy nie da się zabić", () => {
         identity: null,
       };
       runtime.write([orphan]);
-      const groups = new ProcessGroups({ runtime, platform: stubbornPlatform(), log: () => {} });
+      const groups = new ProcessGroups({ logs: testLogs(), runtime, platform: stubbornPlatform(), log: () => {} });
 
       await groups.sweepOrphans();
-      await groups.start({ owner: "o", command: [process.execPath, TREE, dir, "0", "1"], cwd: dir, env: process.env });
+      await groups.start({ owner: "o", command: [process.execPath, TREE, dir, "0", "1"], cwd: dir, env: process.env, logSource: SOURCE });
 
       expect(runtime.read().map((g) => g.runId)).toContain("stara");
       // Prawdziwe `kill` atrapy kończy drzewo testu; stop i tak zgłosi brak potwierdzenia.
@@ -326,37 +364,6 @@ describe("procs, gdy grupy nie da się zabić", () => {
     },
     TIMEOUT,
   );
-});
-
-describe("ostatnie linie wyjścia", () => {
-  test("łączy strumienie w kolejności linii, bez kolorów i nadpisanego postępu", () => {
-    const tail = new OutputTail();
-    tail.push("stdout", Buffer.from("\x1b[32mstart\x1b[0m\npobieranie 10%\rpobieranie 100%\n"));
-    tail.push("stderr", Buffer.from("ostrzeż"));
-    tail.push("stdout", Buffer.from("gotowe\n"));
-    tail.push("stderr", Buffer.from("enie\n\n"));
-
-    expect(tail.snapshot()).toEqual(["start", "pobieranie 100%", "gotowe", "ostrzeżenie"]);
-  });
-
-  test("znak UTF-8 rozcięty między kawałkami nie psuje linii", () => {
-    const tail = new OutputTail();
-    const bytes = Buffer.from("zażółć\n");
-    tail.push("stdout", bytes.subarray(0, 3));
-    tail.push("stdout", bytes.subarray(3));
-
-    expect(tail.snapshot()).toEqual(["zażółć"]);
-  });
-
-  test("trzyma tylko ostatnie 20 linii, z niedokończoną linią na końcu", () => {
-    const tail = new OutputTail();
-    tail.push("stdout", Buffer.from(`${Array.from({ length: 30 }, (_, i) => `linia ${i}`).join("\n")}`));
-
-    const lines = tail.snapshot();
-    expect(lines).toHaveLength(20);
-    expect(lines[0]).toBe("linia 10");
-    expect(lines.at(-1)).toBe("linia 29");
-  });
 });
 
 describe("runtime.json", () => {

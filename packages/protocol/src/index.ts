@@ -1,5 +1,6 @@
 export * from "./api.ts";
 export * from "./daemon.ts";
+export * from "./logs.ts";
 export * from "./mise.ts";
 export * from "./procs.ts";
 export * from "./repo-hosts.ts";
