@@ -6,6 +6,7 @@ Dokumentacja:
 
 - [Architektura](docs/architecture.md)
 - [Spike'i etapu 1](spikes/README.md)
+- [Wydania i instalacja](docs/release.md)
 
 ## Stan
 
