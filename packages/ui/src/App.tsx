@@ -1,16 +1,18 @@
-import { Activity, FolderGit2, Settings } from "lucide-react";
+import { Activity, FolderGit2, Network, Settings } from "lucide-react";
 import { useState } from "react";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import { useConnection } from "@/lib/use-connection";
 import { ActivityBar, type ActivityView } from "./ActivityBar.tsx";
 import { DaemonPanel } from "./DaemonPanel.tsx";
+import { OverviewView } from "./OverviewView.tsx";
 import { ReposView } from "./ReposView.tsx";
 import { SettingsView } from "./SettingsView.tsx";
 
 /** Kolejność i skróty paska widoków; następne widoki pracy (np. graf, sesje) dostają kolejne cyfry. */
 const VIEWS = [
   { id: "repos", label: "Repo", icon: FolderGit2, shortcut: "1", placement: "top" },
+  { id: "overview", label: "Przegląd", icon: Network, shortcut: "3", placement: "top" },
   { id: "daemon", label: "Daemon", icon: Activity, shortcut: "9", placement: "bottom" },
   { id: "settings", label: "Ustawienia", icon: Settings, shortcut: ",", placement: "bottom" },
 ] as const satisfies readonly ActivityView<string>[];
@@ -38,6 +40,7 @@ export function App() {
             </div>
           )}
           {conn && view === "repos" && <ReposView key={epoch} conn={conn} onRetry={retry} onOpenSettings={() => setView("settings")} />}
+          {conn && view === "overview" && <OverviewView key={epoch} conn={conn} />}
           {conn && view === "daemon" && (
             <div className="flex justify-center p-6">
               <DaemonPanel key={epoch} conn={conn} onRetry={retry} />
