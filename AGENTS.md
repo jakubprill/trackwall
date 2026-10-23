@@ -1,10 +1,10 @@
-# Pitwall: zasady dla agentów
+# Trackwall: zasady dla agentów
 
-Pitwall piszą głównie agenci, a człowiek czyta kod od czasu do czasu. Każda zasada poniżej istnieje po to, żeby następny agent albo osoba zaglądająca z boku mogli zrozumieć zmianę i jej zaufać bez dopytywania. Gdy zasada i intuicja się różnią, wygrywa zasada. Gdy zasada jest zła, zmień ją tutaj w tym samym PR i napisz dlaczego.
+Trackwall piszą głównie agenci, a człowiek czyta kod od czasu do czasu. Każda zasada poniżej istnieje po to, żeby następny agent albo osoba zaglądająca z boku mogli zrozumieć zmianę i jej zaufać bez dopytywania. Gdy zasada i intuicja się różnią, wygrywa zasada. Gdy zasada jest zła, zmień ją tutaj w tym samym PR i napisz dlaczego.
 
 Mapa repo i uruchomienie ze źródeł: `README.md`. Architektura i granice modułów: `docs/architecture.md`. Słownik pojęć: `CONTEXT.md`. Wydania: `docs/release.md`.
 
-W tym pliku „agent” to agent piszący kod Pitwall. Agent uruchamiany przez Pitwall w zadaniu nazywa się tu „sesją zadania”.
+W tym pliku „agent” to agent piszący kod Trackwall. Agent uruchamiany przez Trackwall w zadaniu nazywa się tu „sesją zadania”.
 
 ## Definition of done
 
@@ -67,7 +67,7 @@ Repo ma zostać opublikowane jako open source (nagłówek `docs/architecture.md`
 ## Kod czytelny dla agentów i ludzi
 
 - **Nazwy mówią, czym rzecz jest w domenie**, tym samym słowem co `CONTEXT.md`, UI i narzędzia MCP. Jedno pojęcie, jedna nazwa.
-- **Granice modułów z §4 są twarde.** Moduł daemona nie importuje innego modułu bezpośrednio, tylko przez fasadę; nowa zależność między modułami wymaga zmiany tabeli w §4. UI, scena i CLI nie importują `@pitwall/daemon`; wspólny kod biorą tylko z `@pitwall/protocol`. Pliki infrastruktury daemona (start, odkrywanie, `platform/`) nie są modułami i nie trzymają stanu domenowego.
+- **Granice modułów z §4 są twarde.** Moduł daemona nie importuje innego modułu bezpośrednio, tylko przez fasadę; nowa zależność między modułami wymaga zmiany tabeli w §4. UI, scena i CLI nie importują `@trackwall/daemon`; wspólny kod biorą tylko z `@trackwall/protocol`. Pliki infrastruktury daemona (start, odkrywanie, `platform/`) nie są modułami i nie trzymają stanu domenowego.
 - **Typy są kontraktem i pochodzą z kodu**: z wartości, ze schematów zod (`z.infer`). Bez `any`. Zamiast `!` jawne sprawdzenie i wyjątek z opisem. Asercja `as` to twierdzenie, którego kompilator nie sprawdzi: dane z zewnątrz (`JSON.parse`, odpowiedzi HTTP, pliki, argumenty CLI) nigdy nie są rzutowane, tylko parsowane schematem. Poza tym `as` tylko tam, gdzie typ z biblioteki jest szerszy niż to, co wiadomo w danym miejscu (`server.address() as AddressInfo`, błąd w `catch` jako `NodeJS.ErrnoException`), oraz w testach do budowania atrap. Kod w `spikes/` jest wyłączony z tej zasady, bo nie trafia do aplikacji.
 - **Małe funkcje i pliki o jednym celu.** Plik, który robi dwie rzeczy, staje się dwoma plikami.
 - **Jedno miejsce dla każdej reguły.** Zanim napiszesz helper, poszukaj istniejącego. Zduplikowana logika to błąd, który czeka, aż kopie się rozjadą.
@@ -78,7 +78,7 @@ Repo ma zostać opublikowane jako open source (nagłówek `docs/architecture.md`
 - **Zależności npm w dokładnych wersjach** (bez `^` i `~`; `.npmrc` ma `save-exact=true`, więc `pnpm add` tego pilnuje). Nie dodawaj zależności do czegoś, co załatwia kilka linii kodu. Natywny addon wymaga sprawdzenia, że działa w `bun build --compile` na obu systemach (patrz `spikes/`).
 - **Testy czytają się jak dokumentacja**: nazwa testu to zdanie opisujące zachowanie, a test pokazuje wejście i oczekiwany wynik bez helperów, które je ukrywają.
 - **Reguły egzekwuje narzędzie wszędzie, gdzie się da**: reguła w linterze trzyma lepiej niż zdanie w tym pliku. Gdy powtarzasz tę samą uwagę w przeglądzie, zamień ją w regułę. Dziś pilnują:
-  - Biome (`biome.json`): zestaw `recommended` oraz zakaz `!` i `any`, limit złożoności funkcji (15), cykle importów, nieobsłużone obietnice, nazwy plików w kebab-case (PascalCase tylko dla `.tsx` w `packages/ui/src`), import `@pitwall/daemon` tylko w daemonie, moduły Node (`node:*`) zakazane w `packages/protocol/src` i `packages/ui/src`;
+  - Biome (`biome.json`): zestaw `recommended` oraz zakaz `!` i `any`, limit złożoności funkcji (15), cykle importów, nieobsłużone obietnice, nazwy plików w kebab-case (PascalCase tylko dla `.tsx` w `packages/ui/src`), import `@trackwall/daemon` tylko w daemonie, moduły Node (`node:*`) zakazane w `packages/protocol/src` i `packages/ui/src`;
   - knip (`knip.json`): nieużywane pliki, eksporty i zależności;
   - `rustfmt.toml` i `cargo clippy -D warnings` dla powłoki Tauri;
   - test `apps/desktop/test/toolchain.test.ts`: te same wersje narzędzi w `mise.toml` i workflow;
@@ -100,7 +100,7 @@ cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
 pnpm build:desktop
 cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
-bun packages/daemon/scripts/smoke.ts apps/desktop/src-tauri/target/release/pitwall-daemon
+bun packages/daemon/scripts/smoke.ts apps/desktop/src-tauri/target/release/trackwall-daemon
 pnpm portable
 ```
 

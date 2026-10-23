@@ -1,12 +1,12 @@
 # Zgłaszanie podatności
 
-Podatności zgłaszaj prywatnie przez [GitHub Security Advisories](https://github.com/jakubprill/pitwall/security/advisories/new) („Report a vulnerability” w zakładce Security), nie w publicznym issue ani PR.
+Podatności zgłaszaj prywatnie przez [GitHub Security Advisories](https://github.com/jakubprill/trackwall/security/advisories/new) („Report a vulnerability” w zakładce Security), nie w publicznym issue ani PR.
 
-W zgłoszeniu opisz wersję Pitwall, system (Windows albo macOS), kroki do odtworzenia i to, co atakujący może dzięki temu zrobić. Nie wklejaj prawdziwych sekretów, tokenów ani nazw firmowych repo; zanonimizuj logi.
+W zgłoszeniu opisz wersję Trackwall, system (Windows albo macOS), kroki do odtworzenia i to, co atakujący może dzięki temu zrobić. Nie wklejaj prawdziwych sekretów, tokenów ani nazw firmowych repo; zanonimizuj logi.
 
 ## Zakres
 
-Poprawki dostaje tylko najnowsze wydanie z [GitHub Releases](https://github.com/jakubprill/pitwall/releases).
+Poprawki dostaje tylko najnowsze wydanie z [GitHub Releases](https://github.com/jakubprill/trackwall/releases).
 
 Szczególnie interesują nas:
 
@@ -17,4 +17,4 @@ Szczególnie interesują nas:
 
 Dziś daemon wystawia tylko HTTP; WebSocket, MCP i sesje zadań są dopiero planowane. Model docelowy opisuje `docs/architecture.md` §8.
 
-Pitwall to projekt jednej osoby, więc odpowiedź może potrwać kilka dni.
+Trackwall to projekt jednej osoby, więc odpowiedź może potrwać kilka dni.

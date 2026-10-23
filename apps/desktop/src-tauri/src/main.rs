@@ -1,4 +1,4 @@
-//! Powłoka desktopowa Pitwall: okno, tray i nadzór daemona. Cała logika żyje w daemonie (§2, §5.4).
+//! Powłoka desktopowa Trackwall: okno, tray i nadzór daemona. Cała logika żyje w daemonie (§2, §5.4).
 
 // Bez okna konsoli w wydaniu na Windowsie.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -43,7 +43,7 @@ impl DaemonState {
         self.cancel.store(false, Ordering::SeqCst);
         let me = Arc::clone(self);
         std::thread::spawn(move || {
-            let result = daemon::pitwall_home().and_then(|home| daemon::ensure_daemon(&home, &me.cancel));
+            let result = daemon::trackwall_home().and_then(|home| daemon::ensure_daemon(&home, &me.cancel));
             *me.lock() = match result {
                 Ok(conn) => Phase::Ready(conn),
                 Err(err) => Phase::Failed(err),
@@ -101,16 +101,16 @@ fn main() {
     #[cfg(windows)]
     if let Err(err) = tauri::webview_version() {
         windows_alert(&format!(
-            "Pitwall potrzebuje Microsoft Edge WebView2 Runtime, którego nie znaleziono ({err}).\n\n\
+            "Trackwall potrzebuje Microsoft Edge WebView2 Runtime, którego nie znaleziono ({err}).\n\n\
              Zainstaluj go ze strony https://developer.microsoft.com/microsoft-edge/webview2/ \
-             albo uruchom pitwall-daemon.exe --ui, żeby otworzyć Pitwall w przeglądarce."
+             albo uruchom trackwall-daemon.exe --ui, żeby otworzyć Trackwall w przeglądarce."
         ));
         std::process::exit(1);
     }
 
     let state = Arc::new(DaemonState::default());
     let builder = tauri::Builder::default();
-    // Ponowne uruchomienie pitwall.exe pokazuje istniejące okno zamiast drugiej powłoki i drugiej ikony w trayu.
+    // Ponowne uruchomienie trackwall.exe pokazuje istniejące okno zamiast drugiej powłoki i drugiej ikony w trayu.
     // Tylko w wydaniu: identyfikator instancji jest wspólny, a `tauri dev` ma działać obok zainstalowanej aplikacji.
     #[cfg(not(debug_assertions))]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -151,11 +151,11 @@ fn main() {
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, "show", "Pokaż Pitwall", true, None::<&str>)?;
+    let show = MenuItem::with_id(app, "show", "Pokaż Trackwall", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "Wyjdź (zatrzymuje daemon)", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &quit_item])?;
     let mut tray = TrayIconBuilder::with_id("main")
-        .tooltip("Pitwall")
+        .tooltip("Trackwall")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -194,7 +194,7 @@ fn quit_app(app: &AppHandle) {
         // nie wyklucza, że daemon działa: wtedy szukamy go po daemon.json.
         let stopped = started.as_ref().is_some_and(|c| daemon::shutdown(c).is_ok());
         if !stopped {
-            if let Some(conn) = daemon::pitwall_home().ok().and_then(|home| daemon::discover(&home)) {
+            if let Some(conn) = daemon::trackwall_home().ok().and_then(|home| daemon::discover(&home)) {
                 if let Err(err) = daemon::shutdown(&conn) {
                     eprintln!("[desktop] zatrzymanie daemona: {err}");
                 }
@@ -208,7 +208,7 @@ fn quit_app(app: &AppHandle) {
 fn windows_alert(text: &str) {
     use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
     let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
-    let (text, title) = (wide(text), wide("Pitwall"));
+    let (text, title) = (wide(text), wide("Trackwall"));
     // SAFETY: oba bufory są zakończone zerem i żyją do końca wywołania.
     unsafe { MessageBoxW(std::ptr::null_mut(), text.as_ptr(), title.as_ptr(), MB_OK | MB_ICONERROR) };
 }

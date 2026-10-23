@@ -13,4 +13,4 @@ out/
 spikes/*/results/
 
 # stan daemona z `pnpm dev`
-.pitwall-dev/
+.trackwall-dev/

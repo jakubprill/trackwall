@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { chmodSync, closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
 import { join } from "node:path";
-import { DAEMON_FILE, DaemonFile, HealthResult } from "@pitwall/protocol";
+import { DAEMON_FILE, DaemonFile, HealthResult } from "@trackwall/protocol";
 import { loopbackRequest } from "./loopback.ts";
 
 /** Odkrywanie daemona przez `daemon.json` (§5.1). */

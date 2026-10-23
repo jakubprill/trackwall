@@ -3,9 +3,9 @@ import { apiResult } from "./api.ts";
 
 /** Nazwa nagłówka i pliku odkrywania daemona; jedno miejsce dla daemona, UI, Tauri i CLI. */
 export const DAEMON_FILE = "daemon.json";
-export const PITWALL_HOME_ENV = "PITWALL_HOME";
+export const TRACKWALL_HOME_ENV = "TRACKWALL_HOME";
 
-/** `~/.pitwall/daemon.json`, zapisywany przez daemon przy starcie (§5.1). */
+/** `~/.trackwall/daemon.json`, zapisywany przez daemon przy starcie (§5.1). */
 export const DaemonFile = z.object({
   pid: z.number().int().positive(),
   port: z.number().int().min(1).max(65535),

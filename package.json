@@ -1,5 +1,5 @@
 {
-  "name": "pitwall",
+  "name": "trackwall",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.28.0",
@@ -7,10 +7,10 @@
     "node": ">=22.12"
   },
   "scripts": {
-    "dev": "pnpm --parallel --filter @pitwall/daemon --filter @pitwall/ui dev",
-    "build": "pnpm --filter @pitwall/ui build && pnpm --filter @pitwall/daemon build",
-    "build:desktop": "pnpm --filter @pitwall/desktop build",
-    "portable": "pnpm --filter @pitwall/desktop portable",
+    "dev": "pnpm --parallel --filter @trackwall/daemon --filter @trackwall/ui dev",
+    "build": "pnpm --filter @trackwall/ui build && pnpm --filter @trackwall/daemon build",
+    "build:desktop": "pnpm --filter @trackwall/desktop build",
+    "portable": "pnpm --filter @trackwall/desktop portable",
     "typecheck": "pnpm -r typecheck",
     "lint": "biome check --error-on-warnings . && knip",
     "format": "biome check --write .",

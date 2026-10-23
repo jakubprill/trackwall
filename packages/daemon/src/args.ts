@@ -11,13 +11,13 @@ export interface DaemonArgs {
   version: boolean;
 }
 
-export const USAGE = `pitwall-daemon [opcje]
+export const USAGE = `trackwall-daemon [opcje]
 
   --ui             otwórz UI w domyślnej przeglądarce (tryb bez Tauri)
   --ui-dir <dir>   katalog zbudowanego UI (domyślnie ./ui obok binarki)
   --port <n>       port na 127.0.0.1 (domyślnie losowy)
   --parent <pid>   PID procesu Tauri, który uruchomił daemon
-  --home <dir>     katalog stanu (domyślnie ~/.pitwall albo PITWALL_HOME)
+  --home <dir>     katalog stanu (domyślnie ~/.trackwall albo TRACKWALL_HOME)
   --allow-origin <origin>
                    dodatkowy origin przeglądarki z dostępem do API (np. serwer Vite przy tauri dev)
   --version        wypisz wersję

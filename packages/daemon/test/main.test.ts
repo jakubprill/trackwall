@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DaemonInfoResult } from "@pitwall/protocol";
+import { DaemonInfoResult } from "@trackwall/protocol";
 import pkg from "../package.json" with { type: "json" };
 import { readDaemonFile } from "../src/discovery.ts";
 import { loopbackRequest } from "../src/loopback.ts";
@@ -47,8 +47,8 @@ const RUNTIMES: [name: "bun" | "node", argv: string[]][] = [
 
 describe.each(RUNTIMES)("proces daemona pod %s", (name, runtime) => {
   test("start, drugi start z tą samą wersją kończy się 0, shutdown sprząta daemon.json", async () => {
-    const home = mkdtempSync(join(tmpdir(), "pitwall-e2e-"));
-    const env = { ...process.env, PITWALL_HOME: home };
+    const home = mkdtempSync(join(tmpdir(), "trackwall-e2e-"));
+    const env = { ...process.env, TRACKWALL_HOME: home };
     const daemon = Bun.spawn([...runtime, MAIN], { env, stdout: "ignore", stderr: "pipe" });
     try {
       const file = await waitFor(() => readDaemonFile(home), daemon);
@@ -70,8 +70,8 @@ describe.each(RUNTIMES)("proces daemona pod %s", (name, runtime) => {
   }, 20_000);
 
   test("równoczesne starty zostawiają dokładnie jeden daemon", async () => {
-    const home = mkdtempSync(join(tmpdir(), "pitwall-race-"));
-    const env = { ...process.env, PITWALL_HOME: home };
+    const home = mkdtempSync(join(tmpdir(), "trackwall-race-"));
+    const env = { ...process.env, TRACKWALL_HOME: home };
     const procs = Array.from({ length: 5 }, () => Bun.spawn([...runtime, MAIN], { env, stdout: "ignore", stderr: "ignore" }));
     try {
       const file = await waitFor(() => readDaemonFile(home));
@@ -84,13 +84,13 @@ describe.each(RUNTIMES)("proces daemona pod %s", (name, runtime) => {
     }
   }, 30_000);
 
-  test("pusty PITWALL_HOME znaczy domyślny katalog ~/.pitwall, nie błąd", async () => {
-    const fakeHome = mkdtempSync(join(tmpdir(), "pitwall-userhome-"));
+  test("pusty TRACKWALL_HOME znaczy domyślny katalog ~/.trackwall, nie błąd", async () => {
+    const fakeHome = mkdtempSync(join(tmpdir(), "trackwall-userhome-"));
     // os.homedir(): HOME na Unixie, USERPROFILE na Windowsie.
-    const env = { ...process.env, PITWALL_HOME: "", HOME: fakeHome, USERPROFILE: fakeHome };
+    const env = { ...process.env, TRACKWALL_HOME: "", HOME: fakeHome, USERPROFILE: fakeHome };
     const daemon = Bun.spawn([...runtime, MAIN], { env, stdout: "ignore", stderr: "ignore" });
     try {
-      const file = await waitFor(() => readDaemonFile(join(fakeHome, ".pitwall")), daemon);
+      const file = await waitFor(() => readDaemonFile(join(fakeHome, ".trackwall")), daemon);
       expect(file.pid).toBe(daemon.pid);
       await loopbackRequest(file.port, "/api/daemon/shutdown", { method: "POST", token: file.token });
       expect(await daemon.exited).toBe(0);
@@ -100,11 +100,11 @@ describe.each(RUNTIMES)("proces daemona pod %s", (name, runtime) => {
   }, 20_000);
 
   test("strona UI z --ui-dir jest serwowana, a info podaje runtime, pod którym działa daemon", async () => {
-    const home = mkdtempSync(join(tmpdir(), "pitwall-ui-"));
-    const ui = mkdtempSync(join(tmpdir(), "pitwall-ui-dir-"));
-    writeFileSync(join(ui, "index.html"), "<!doctype html><title>pitwall-test</title>");
+    const home = mkdtempSync(join(tmpdir(), "trackwall-ui-"));
+    const ui = mkdtempSync(join(tmpdir(), "trackwall-ui-dir-"));
+    writeFileSync(join(ui, "index.html"), "<!doctype html><title>trackwall-test</title>");
     const daemon = Bun.spawn([...runtime, MAIN, "--ui-dir", ui], {
-      env: { ...process.env, PITWALL_HOME: home },
+      env: { ...process.env, TRACKWALL_HOME: home },
       stdout: "ignore",
       stderr: "inherit",
     });
@@ -112,7 +112,7 @@ describe.each(RUNTIMES)("proces daemona pod %s", (name, runtime) => {
       const file = await waitFor(() => readDaemonFile(home), daemon);
       const info = DaemonInfoResult.parse(JSON.parse((await loopbackRequest(file.port, "/api/daemon/info", { token: file.token })).body));
       expect(info.ok && info.data.runtime.name).toBe(name);
-      expect((await loopbackRequest(file.port, "/")).body).toContain("<title>pitwall-test</title>");
+      expect((await loopbackRequest(file.port, "/")).body).toContain("<title>trackwall-test</title>");
       await loopbackRequest(file.port, "/api/daemon/shutdown", { method: "POST", token: file.token });
       expect(await daemon.exited).toBe(0);
     } finally {

@@ -25,7 +25,7 @@ function selfCommand(): string[] {
  * Rola procesu potomnego idzie przez zmienną środowiskową, nie argv: układ `process.argv` w skompilowanej binarce
  * różni się między systemami (na Windowsie argv bez rozpoznanej roli uruchamiał spike od nowa w pętli).
  */
-export const ROLE_ENV = "PITWALL_SPIKE_ROLE";
+export const ROLE_ENV = "TRACKWALL_SPIKE_ROLE";
 
 export function spawnSelf(args: string[], opts: { detached?: boolean } = {}): ChildProcess {
   const [cmd, ...pre] = selfCommand();

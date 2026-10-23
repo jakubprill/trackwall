@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { ApiResult, DaemonInfo, ErrorCode, Health } from "@pitwall/protocol";
+import type { ApiResult, DaemonInfo, ErrorCode, Health } from "@trackwall/protocol";
 import { hasValidToken, OriginPolicy } from "./guard.ts";
 import { serveStatic } from "./static.ts";
 

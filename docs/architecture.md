@@ -1,6 +1,6 @@
-# Architektura Pitwall
+# Architektura Trackwall
 
-Stan: propozycja do dyskusji, 2026-10-23. Nazwa „Pitwall” jest robocza (zajęta przez quanticstudios/pitwall i aenzenith/pitwall-vscode) i zostanie zmieniona przed publikacją.
+Stan: propozycja do dyskusji, 2026-10-23. Wcześniejsza robocza nazwa „Pitwall” została zmieniona na „Trackwall” (ADR-11).
 
 Ten dokument opisuje, jak aplikacja jest podzielona na komponenty, gdzie przebiegają granice między modułami, jakimi protokołami komponenty rozmawiają, jaki jest model danych, jak wyglądają najważniejsze przepływy i jakie ryzyka niesie Windows jako platforma główna. Wizja produktu (cel, moduły, kolejność prac) jest założeniem tego dokumentu, a nie jego treścią. Decyzje, które warto umieć później cofnąć, są zebrane na końcu jako ADR-y.
 
@@ -25,7 +25,7 @@ Ten dokument opisuje, jak aplikacja jest podzielona na komponenty, gdzie przebie
 │  ui (React + Tailwind + shadcn/ui)        daemon (TS, 1 binarka) │
 │  panele: Zadania, Serwisy, Logi (xterm),  ┌────────────────────┐ │
 │  Diff (Monaco), Graf, Sekrety, Audyt      │ fasada usług       │ │
-│  scena 3D: @pitwall/scene (Pawn)          │  workspace  cards  │ │
+│  scena 3D: @trackwall/scene (Pawn)          │  workspace  cards  │ │
 │      │ HTTP + WebSocket (loopback, token)  │  graph      tasks  │ │
 │      └────────────────────────────────────▶│  procs      leases │ │
 │                                            │  logs       secrets│ │
@@ -33,7 +33,7 @@ Ten dokument opisuje, jak aplikacja jest podzielona na komponenty, gdzie przebie
 │                                            └───┬──────────┬─────┘ │
 │   Copilot CLI / inne CLI ── MCP (HTTP lub stdio) ─┘          │     │
 │                                                   SQLite + JSONL   │
-│                                                   ~/.pitwall/      │
+│                                                   ~/.trackwall/      │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -41,17 +41,17 @@ Cztery procesy na maszynie użytkownika:
 
 | Proces | Rola | Żyje, gdy okno zamknięte? |
 |---|---|---|
-| `pitwall.exe` (Tauri) | okno, tray, nadzór daemona, aktualizacja | tak, w trayu |
-| `pitwall-daemon.exe` (sidecar) | cała logika: workspace, procesy, logi, zadania, MCP | tak |
+| `trackwall.exe` (Tauri) | okno, tray, nadzór daemona, aktualizacja | tak, w trayu |
+| `trackwall-daemon.exe` (sidecar) | cała logika: workspace, procesy, logi, zadania, MCP | tak |
 | procesy serwisów | `mise run dev` w grupie procesów per serwis | tak |
 | sesje agentów | CLI agenta w PTY należącym do daemona | tak |
 
-Daemon można też uruchomić bez Tauri (`pitwall-daemon --ui`), co daje tryb „lokalna strona w przeglądarce” z pierwszego etapu prac. Tauri niczego nie dodaje do logiki, tylko do pakowania i integracji z systemem.
+Daemon można też uruchomić bez Tauri (`trackwall-daemon --ui`), co daje tryb „lokalna strona w przeglądarce” z pierwszego etapu prac. Tauri niczego nie dodaje do logiki, tylko do pakowania i integracji z systemem.
 
 ## 3. Monorepo
 
 ```
-pitwall/
+trackwall/
   package.json            pnpm workspaces, skrypty root
   pnpm-workspace.yaml
   mise.toml               wersje narzędzi dla samego projektu (node/bun, pnpm, rust) i taski setup, dev, portable
@@ -138,7 +138,7 @@ Graf = złączenie `consumes` z `provides` po kluczach: URL/base-path, nazwa art
 
 ### 5.1 Odkrywanie daemona
 
-Daemon przy starcie zapisuje `~/.pitwall/daemon.json`: `{ pid, port, token, startedAt, version }` z uprawnieniami tylko dla użytkownika. Port jest losowy z zakresu loopback, nasłuch wyłącznie na `127.0.0.1`. Drugi daemon kończy się, gdy `/api/health` istniejącego odpowiada tą samą wersją; przy innej wersji prosi o restart z UI. Klienty (Tauri, `ws`, cienki klient MCP) czytają ten plik, nic nie jest konfigurowane ręcznie.
+Daemon przy starcie zapisuje `~/.trackwall/daemon.json`: `{ pid, port, token, startedAt, version }` z uprawnieniami tylko dla użytkownika. Port jest losowy z zakresu loopback, nasłuch wyłącznie na `127.0.0.1`. Drugi daemon kończy się, gdy `/api/health` istniejącego odpowiada tą samą wersją; przy innej wersji prosi o restart z UI. Klienty (Tauri, `ws`, cienki klient MCP) czytają ten plik, nic nie jest konfigurowane ręcznie.
 
 ### 5.2 Daemon ↔ UI i CLI: HTTP + WebSocket
 
@@ -149,7 +149,7 @@ Daemon przy starcie zapisuje `~/.pitwall/daemon.json`: `{ pid, port, token, star
 
 ### 5.3 Daemon ↔ agent: MCP
 
-Daemon wystawia serwer MCP w transporcie **Streamable HTTP** pod `/mcp` z tym samym tokenem. Dla CLI, które obsługują tylko stdio, jest cienki klient `pitwall-daemon mcp-stdio`, który przekazuje ramki do `/mcp`. Funkcja „podłącz agenta” w UI dopisuje wpis do konfiguracji MCP danego CLI, nie ruszając reszty pliku.
+Daemon wystawia serwer MCP w transporcie **Streamable HTTP** pod `/mcp` z tym samym tokenem. Dla CLI, które obsługują tylko stdio, jest cienki klient `trackwall-daemon mcp-stdio`, który przekazuje ramki do `/mcp`. Funkcja „podłącz agenta” w UI dopisuje wpis do konfiguracji MCP danego CLI, nie ruszając reszty pliku.
 
 Narzędzia (wszystkie przyjmują identyfikatory):
 
@@ -176,7 +176,7 @@ Tauri uruchamia daemon jako sidecar z argumentem `--parent <pid>`, czeka na `/ap
 
 ### 5.5 Daemon ↔ scena 3D
 
-`@pitwall/scene` nie ma własnego transportu: dostaje strumień zdarzeń z tego samego WebSocketu co reszta UI i mapuje go na encje koota (`Kind`, `Status`, `Port`, `Lease`, `Layer`). Układ warstw (FE → BFF → serwisy → bazy) wynika z grafu: warstwa = najdłuższa ścieżka od węzłów bez wejść. Render na żądanie po każdej paczce zdarzeń.
+`@trackwall/scene` nie ma własnego transportu: dostaje strumień zdarzeń z tego samego WebSocketu co reszta UI i mapuje go na encje koota (`Kind`, `Status`, `Port`, `Lease`, `Layer`). Układ warstw (FE → BFF → serwisy → bazy) wynika z grafu: warstwa = najdłuższa ścieżka od węzłów bez wejść. Render na żądanie po każdej paczce zdarzeń.
 
 ## 6. Model danych
 
@@ -236,7 +236,7 @@ interface AuditEntry { id: number; at: string; client: string; tool: string;
                        args: unknown; durationMs: number; ok: boolean; resultDigest: string }
 ```
 
-Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), services, leases, tasks, audit; JSONL dla logów; nagrania sesji jako pliki; `runtime.json` tylko dla żywych grup procesów. Konfiguracja workspace to `workspace.yaml` w katalogu workspace (lista repo, nadpisania portów, wskazanie repo sekretów), który użytkownik może trzymać w prywatnym repo. Stan nigdy nie miesza się z konfiguracją.
+Trwałość: SQLite (`~/.trackwall/trackwall.db`) dla repos, cards, edges (cache), services, leases, tasks, audit; JSONL dla logów; nagrania sesji jako pliki; `runtime.json` tylko dla żywych grup procesów. Konfiguracja workspace to `workspace.yaml` w katalogu workspace (lista repo, nadpisania portów, wskazanie repo sekretów), który użytkownik może trzymać w prywatnym repo. Stan nigdy nie miesza się z konfiguracją.
 
 ## 7. Przepływy
 
@@ -311,6 +311,8 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 **ADR-9 Bez auto-merge i plannera, na stałe.** (2026-10-23) Zadanie kończy się podsumowaniem i propozycją PR; łączenie i rozbijanie celów robi człowiek. W modelu danych nie ma miejsca na zależności między zadaniami ani kolejkę.
 
 **ADR-10 Repo sekretów trzyma manifesty k8s `Secret`.** (2026-10-23) Gałąź `origin/<repo>` zawiera pliki YAML `kind: Secret`; `secrets.resolve` czyta `data` (base64) i `stringData` (jawny tekst) i mapuje klucze na zmienne środowiskowe 1:1. Nazwy kluczy są porównywane z `runtime.secretNames` z karty repo, stąd `check_secrets`. Docelowe szyfrowanie sops + age nie zmienia formatu, tylko dodaje krok odszyfrowania przed parsowaniem.
+
+**ADR-11 Nazwa: Trackwall.** (2026-10-23) Robocza nazwa „Pitwall” była zajęta przez istniejące narzędzia deweloperskie (quanticstudios/pitwall, aenzenith/pitwall-vscode), więc projekt nazywa się Trackwall: paczki `@trackwall/*`, binarki `trackwall` i `trackwall-daemon`, katalog danych `~/.trackwall`, zmienne `TRACKWALL_*`, identyfikator aplikacji `dev.trackwall.desktop`. Nazwa zostaje przy motywie ściany przy torze i w chwili decyzji była wolna na npm (także jako scope), crates.io i PyPI. Stan z wersji 0.1.0 w `~/.pitwall` nie jest przenoszony, bo poza tokenem i logami nic tam nie ma. Odwróciłaby ją kolizja nazwy z narzędziem lub znakiem towarowym znaleziona przed publikacją.
 
 ## 13. Pytania otwarte
 
