@@ -15,7 +15,7 @@ export interface ApiOptions {
   info: () => DaemonInfo;
   onShutdown: () => void;
   facade: Facade;
-  /** Serwer MCP (§5.3) pod `/mcp`; trasa i ochrona są tu, narzędzia w `mcp/`. */
+  /** Serwer MCP (§5.3) pod `/mcp`; trasa i ochrona są tu, narzędzia w `mcp/`. Zamykany razem z serwerem API. */
   mcp: McpEndpoint;
   uiDir?: string;
   /** Dodatkowe originy przeglądarki z dostępem do API, np. serwer Vite przy `tauri dev`. */
@@ -100,21 +100,18 @@ async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, 
     return void res.end();
   }
 
-  // Jedno sprawdzenie tokenu dla API i MCP; publiczne są tylko `GET /api/health` i statyczne pliki UI.
+  // Publiczne są tylko `GET /api/health` i statyczne pliki UI; reszta API i MCP przechodzi jedno sprawdzenie tokenu.
+  if (path === "/api/health" && req.method === "GET") return ok<Health>(res, { status: "ok", version: o.version });
   const api = path.startsWith("/api/");
-  const isPublic = (path === "/api/health" && req.method === "GET") || (!api && path !== MCP_PATH);
-  if (!isPublic && !hasValidToken(req, o.token)) return fail(res, "unauthorized", "missing or invalid token");
+  if ((api || path === MCP_PATH) && !hasValidToken(req, o.token)) return fail(res, "unauthorized", "missing or invalid token");
   if (api) return handleApi(req, res, path, o);
   if (path === MCP_PATH) return o.mcp.handle(req, res);
   if (o.uiDir && (req.method === "GET" || req.method === "HEAD")) return serveStatic(o.uiDir, path, res);
   return fail(res, "not_found", `no route ${req.method} ${path}`);
 }
 
-/** Trasy `/api/*`, już po sprawdzeniu tokenu tam, gdzie jest wymagany. */
+/** Trasy `/api/*` z tokenem, już sprawdzonym. */
 async function handleApi(req: IncomingMessage, res: ServerResponse, path: string, o: ApiOptions): Promise<void> {
-  if (path === "/api/health" && req.method === "GET") {
-    return ok<Health>(res, { status: "ok", version: o.version });
-  }
   if (path === "/api/daemon/info" && req.method === "GET") return ok<DaemonInfo>(res, o.info());
   if (path === "/api/daemon/shutdown" && req.method === "POST") {
     await drain(req);

@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
 import { readBody } from "../api/body.ts";
-import { MCP_TOOLS, type ToolContext } from "./tools.ts";
+import { TOOL_REGISTRATIONS, type ToolContext } from "./tools.ts";
 
 /**
  * Serwer MCP daemona w transporcie Streamable HTTP (§5.3, ADR-22), bez sesji: każde żądanie dostaje świeży
@@ -30,7 +30,7 @@ export function createMcpEndpoint(o: ToolContext & { version: string }): McpEndp
   const handler = createMcpHandler(
     () => {
       const server = new McpServer({ name: MCP_SERVER_NAME, version: o.version }, { instructions: INSTRUCTIONS });
-      for (const register of MCP_TOOLS) register(server, o);
+      for (const register of TOOL_REGISTRATIONS) register(server, o);
       return server;
     },
     { onerror: (err) => o.log(`żądanie odrzucone: ${err.message}`), maxRequestBodySize: MAX_REQUEST_BYTES },

@@ -7,7 +7,7 @@ import type { Facade } from "../facade.ts";
 /**
  * Narzędzia MCP daemona (§5.3, ADR-22): każde to cienkie mapowanie na fasadę, więc agent widzi ten sam stan co UI
  * (§1.1). Wszystkie tylko czytają; żadne nie zmienia konfiguracji, repo ani procesów (§8). Karty i graf dojdą tu jako
- * kolejne wpisy `MCP_TOOLS`, razem z modułami `cards` i `graph`.
+ * kolejne wpisy `mcpTools` w protocol i `runs` tutaj, razem z modułami `cards` i `graph`.
  */
 
 /**
@@ -60,28 +60,41 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
   };
 }
 
-const listRepos = defineTool(mcpTools.listRepos, async (facade) => {
-  const list = await facade.workspace.list();
-  const run = facade.workspace.syncRun();
-  return { projectsDir: list.projectsDir, repos: list.repos.map((repo) => withLastSync(repo, run)) };
-});
+/** Wykonanie narzędzia z kontraktu na fasadzie: argumenty i wynik mają typy jego schematów. */
+type ToolRun<T> = T extends McpTool<infer Args, infer Result> ? (facade: Facade, args: z.output<Args>) => Promise<z.input<Result>> : never;
+type ToolRuns = { [K in keyof typeof mcpTools]: ToolRun<(typeof mcpTools)[K]> };
 
-const getRepo = defineTool(mcpTools.getRepo, async (facade, { repo: id }) => {
-  const [repo, overview, miseTasks] = await Promise.all([facade.workspace.repo(id), facade.workspace.overview(id), facade.mise.tasks(id)]);
-  return {
-    repo: withLastSync(repo, facade.workspace.syncRun()),
-    readme: overview.readme && {
-      ...overview.readme,
-      text: overview.readme.text.slice(0, README_MAX_CHARS),
-      truncated: overview.readme.truncated || overview.readme.text.length > README_MAX_CHARS,
-    },
-    commits: overview.commits.slice(0, RECENT_COMMITS),
-    miseTasks,
-  };
-});
+/** Po jednym wykonaniu na każde narzędzie z `mcpTools`: brak któregoś to błąd kompilacji, nie cicha luka w `tools/list`. */
+const runs: ToolRuns = {
+  listRepos: async (facade) => {
+    const list = await facade.workspace.list();
+    const run = facade.workspace.syncRun();
+    return { projectsDir: list.projectsDir, repos: list.repos.map((repo) => withLastSync(repo, run)) };
+  },
+  getRepo: async (facade, { repo: id }) => {
+    const [repo, overview, miseTasks] = await Promise.all([
+      facade.workspace.repo(id),
+      facade.workspace.overview(id),
+      facade.mise.tasks(id),
+    ]);
+    return {
+      repo: withLastSync(repo, facade.workspace.syncRun()),
+      readme: overview.readme && {
+        ...overview.readme,
+        text: overview.readme.text.slice(0, README_MAX_CHARS),
+        truncated: overview.readme.truncated || overview.readme.text.length > README_MAX_CHARS,
+      },
+      commits: overview.commits.slice(0, RECENT_COMMITS),
+      miseTasks,
+    };
+  },
+};
 
-/** Narzędzia w kolejności `tools/list`. */
-export const MCP_TOOLS: readonly ToolRegistration[] = [listRepos, getRepo];
+/** Rejestracje narzędzi w kolejności `mcpTools`, czyli tej samej co w `tools/list` i w UI. */
+export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
+  defineTool(mcpTools.listRepos, runs.listRepos),
+  defineTool(mcpTools.getRepo, runs.getRepo),
+];
 
 /** Repo łączy się z wynikiem synchronizacji po ścieżce, bo identyfikator może się zmienić razem z nazwą katalogu (ADR-18). */
 function withLastSync(repo: Repo, run: SyncRun | null): RepoWithLastSync {

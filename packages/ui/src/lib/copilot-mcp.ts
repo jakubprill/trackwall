@@ -23,17 +23,20 @@ export function copilotMcpConfig(mcpStdioCommand: readonly string[]): string {
   return JSON.stringify(config, null, 2);
 }
 
-/** Argument bez znaków specjalnych zostaje jak jest; inny w apostrofach, w których obie powłoki nic nie rozwijają. */
-const PLAIN = /^[\w@%+=:,./\\-]+$/;
+/** Argument bez znaków specjalnych zostaje jak jest; inny w apostrofach, w których powłoka nic nie rozwija. */
+const PLAIN_POSIX = /^[\w@%+=:,./\\-]+$/;
+/**
+ * PowerShell ma więcej znaków specjalnych w trybie argumentów: `,` buduje tablicę, a `@` na początku to splatting.
+ * Argument zaczynający się od `-` też idzie w apostrofach: gołe `--` PowerShell bierze za koniec parametrów i nie
+ * przekazuje go skryptowi (`copilot.ps1` z `npm install -g`), a Windows PowerShell 5.1 dzieli argumenty programów
+ * w rodzaju `--config=C:\x.toml` na kropce.
+ */
+const PLAIN_POWERSHELL = /^[\w%+=:./\\][\w%+=:./\\-]*$/;
 
 function quotePosix(arg: string): string {
-  return PLAIN.test(arg) ? arg : `'${arg.replaceAll("'", `'\\''`)}'`;
+  return PLAIN_POSIX.test(arg) ? arg : `'${arg.replaceAll("'", `'\\''`)}'`;
 }
 
-/**
- * Gołe `--` PowerShell bierze za koniec parametrów i nie przekazuje go skryptowi (`copilot.ps1` z `npm install -g`),
- * a Copilot CLI potrzebuje go przed komendą mostu; w apostrofach przechodzi dosłownie.
- */
 function quotePowerShell(arg: string): string {
-  return PLAIN.test(arg) && arg !== "--" ? arg : `'${arg.replaceAll("'", "''")}'`;
+  return PLAIN_POWERSHELL.test(arg) ? arg : `'${arg.replaceAll("'", "''")}'`;
 }

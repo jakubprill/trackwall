@@ -14,6 +14,17 @@ describe("podłączenie Copilot CLI", () => {
     ).toBe("copilot mcp add trackwall '--' 'C:\\Users\\Jan O''Neill\\AppData\\Local\\Programs\\trackwall\\trackwall-daemon.exe' mcp-stdio");
   });
 
+  test("przecinek w ścieżce i opcje mostu ze źródeł w apostrofach w PowerShell", () => {
+    expect(
+      copilotMcpAddCommand(
+        ["C:\\Users\\Kowalski, Jan\\bun.exe", "--config=C:\\src\\bunfig.toml", "C:\\src\\main.ts", "mcp-stdio", "--home", "@dev"],
+        "win32",
+      ),
+    ).toBe(
+      "copilot mcp add trackwall '--' 'C:\\Users\\Kowalski, Jan\\bun.exe' '--config=C:\\src\\bunfig.toml' C:\\src\\main.ts mcp-stdio '--home' '@dev'",
+    );
+  });
+
   test("plik konfiguracji w zapisie systemu użytkownika", () => {
     expect(copilotMcpConfigPath("win32")).toBe("%USERPROFILE%\\.copilot\\mcp-config.json");
     expect(copilotMcpConfigPath("darwin")).toBe("~/.copilot/mcp-config.json");

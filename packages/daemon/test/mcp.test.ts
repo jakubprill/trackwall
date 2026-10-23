@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
-import { DaemonInfoResult, GetRepoResult, ListReposResult, workspaceApi } from "@trackwall/protocol";
+import { DaemonInfoResult, GetRepoResult, ListReposResult, mcpTools, workspaceApi } from "@trackwall/protocol";
 import { z } from "zod";
 import { type ApiServer, startApi } from "../src/api/server.ts";
 import { readDaemonFile, writeDaemonFile } from "../src/discovery.ts";
@@ -60,6 +60,8 @@ describe("serwer MCP przez Streamable HTTP", () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual(["list_repos", "get_repo"]);
+    // Każde narzędzie z kontraktu, który pokazuje UI, jest zarejestrowane w daemonie.
+    expect(tools.map((t) => t.name)).toEqual(Object.values(mcpTools).map((t) => t.name));
     for (const tool of tools) expect(tool.annotations?.readOnlyHint).toBe(true);
     expect(client.getServerVersion()).toMatchObject({ name: "trackwall", version: "9.9.9" });
     await client.close();
@@ -207,6 +209,25 @@ describe("most stdio", () => {
     expect(await throughBridge(home, ["42"])).toEqual([
       { jsonrpc: "2.0", id: null, error: { code: -32600, message: "wiadomość nie jest obiektem JSON-RPC" } },
     ]);
+  });
+
+  test("błąd transportu z id null od daemona trafia do klienta pod identyfikatorem żądania", async () => {
+    // Tak SDK odrzuca żądanie, którego nie powiąże z identyfikatorem (np. nieobsługiwana wersja w nagłówku).
+    const rejecting = createServer((_req, res) => {
+      res.writeHead(400, { "content-type": "application/json" });
+      res.end(JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32600, message: "Bad Request: wersja" } }));
+    });
+    await new Promise<void>((resolve) => rejecting.listen(0, "127.0.0.1", resolve));
+    try {
+      const home = mkdtempSync(join(tmpdir(), "trackwall-mcp-rejecting-"));
+      const { port } = rejecting.address() as AddressInfo;
+      writeDaemonFile(home, { pid: process.pid, port, token: TOKEN, startedAt: "2026-10-23T00:00:00Z", version: "9.9.9" });
+      expect(await throughBridge(home, [INITIALIZE])).toEqual([
+        { jsonrpc: "2.0", id: 1, error: { code: -32600, message: "Bad Request: wersja" } },
+      ]);
+    } finally {
+      rejecting.close();
+    }
   });
 
   test("odpowiedź daemona bez wiadomości o tym id kończy żądanie błędem zamiast ciszy", async () => {

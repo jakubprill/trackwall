@@ -9,17 +9,17 @@ import { copilotMcpAddCommand, copilotMcpConfig, copilotMcpConfigPath } from "@/
  * Jak podłączyć serwer MCP Trackwall do Copilot CLI (§5.3, ADR-22): komenda do skopiowania i ten sam wpis w JSON.
  * UI niczego nie zapisuje w konfiguracji Copilot CLI; robi to `copilot mcp add` po stronie użytkownika.
  */
+const TOOL_NAMES = Object.values(mcpTools)
+  .map((t) => t.name)
+  .join(", ");
+
 export function ConnectCopilot({ info }: { info: DaemonInfo }) {
   const command = copilotMcpAddCommand(info.mcpStdioCommand, info.platform);
   return (
     <Surface label="Copilot CLI" note="Narzędzia tylko czytają. Trackwall musi działać, kiedy startuje Copilot CLI.">
       <div className="flex flex-col gap-3 p-4 text-sm">
         <p className="text-muted-foreground">
-          Daje agentowi mapę repo z folderu z projektami (
-          {Object.values(mcpTools)
-            .map((t) => t.name)
-            .join(", ")}
-          ). Uruchom raz w terminalu, potem zrestartuj Copilot CLI:
+          Daje agentowi mapę repo z folderu z projektami ({TOOL_NAMES}). Uruchom raz w terminalu, potem zrestartuj Copilot CLI:
         </p>
         <CopyableCode text={command} />
         <p className="text-muted-foreground">Albo dopisz wpis do {copilotMcpConfigPath(info.platform)}:</p>

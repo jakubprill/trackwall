@@ -32,6 +32,7 @@ const Incoming = z.looseObject({ id: z.union([z.string(), z.number()]).optional(
 /** Wiadomość od daemona: przekazywana dalej tylko, gdy to JSON-RPC. */
 const Outgoing = z.looseObject({ jsonrpc: z.literal("2.0") });
 const Reply = z.looseObject({ id: z.union([z.string(), z.number(), z.null()]).optional() });
+const TransportError = z.looseObject({ id: z.null(), error: z.looseObject({}) });
 const InitializeResult = z.looseObject({ result: z.looseObject({ protocolVersion: z.string() }) });
 const ApiErrorBody = z.object({ error: z.object({ message: z.string() }) });
 
@@ -74,7 +75,7 @@ async function forward(line: string, o: StdioBridgeOptions, session: Session, wr
     return write(errorResponse(id, METHOD_NOT_FOUND, `most stdio Trackwall nie obsługuje ${DISCOVER_METHOD}; użyj initialize`));
   }
   try {
-    const replies = await postToDaemon(line, o.home, session);
+    const replies = (await postToDaemon(line, o.home, session)).map((reply) => withRequestId(reply, id));
     if (method === "initialize") rememberProtocolVersion(replies, session);
     for (const reply of replies) write(reply);
     // Strumień zerwany w trakcie (np. wyjście daemona) zostawiłby żądanie bez odpowiedzi do limitu czasu klienta.
@@ -98,6 +99,15 @@ function parseIncoming(
   const incoming = Incoming.safeParse(json);
   if (!incoming.success) return { ok: false, reply: errorResponse(null, INVALID_REQUEST, "wiadomość nie jest obiektem JSON-RPC") };
   return { ok: true, message: incoming.data };
+}
+
+/**
+ * Błąd na poziomie transportu (np. nagłówek odrzucony przez SDK) daemon zwraca z `id: null`, bo HTTP nie wiąże go
+ * z żądaniem; przez stdio klient paruje odpowiedzi po `id`, więc most wpisuje identyfikator żądania, na które odpowiada.
+ */
+function withRequestId(reply: unknown, id: string | number | undefined): unknown {
+  const transportError = TransportError.safeParse(reply);
+  return transportError.success && id !== undefined ? { ...transportError.data, id } : reply;
 }
 
 function rememberProtocolVersion(replies: unknown[], session: Session): void {
