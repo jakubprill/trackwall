@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import type { RunState } from "@trackwall/protocol";
-import { DomainError } from "../../errors.ts";
+import { DomainError, SpawnFailure, spawnFailure } from "../../errors.ts";
 import { type GroupControl, type GroupPlatform, waitUntil } from "../../platform/process-group.ts";
 import { OutputTail } from "./output-tail.ts";
 import type { RuntimeFile, RuntimeGroup } from "./runtime-file.ts";
@@ -13,12 +13,15 @@ import type { RuntimeFile, RuntimeGroup } from "./runtime-file.ts";
  * obserwowany: uruchomienie jest `exited` dopiero wtedy, gdy system potwierdził, że żaden proces grupy nie żyje.
  * Lider, który zakończył się sam, zabiera ze sobą resztę grupy, więc nic nie zostaje w tle bez nadzoru.
  *
- * Właściciel (`owner`) to klucz wołającego, np. task mise w repo; na właściciela przypada jedno żywe uruchomienie,
- * a po jego końcu zostaje ostatni stan, do następnego startu.
+ * Właściciel (`owner`) to klucz wołającego, np. task mise w repo; na właściciela przypada jedna żywa grupa,
+ * a po jej końcu zostaje ostatni stan, do następnego startu.
  */
 
-/** Ile czekać na koniec grupy po zabiciu; dłużej znaczy proces, którego system nie umie zakończyć. */
-const KILL_WAIT_MS = 5000;
+/**
+ * Ile czekać na koniec grupy po zabiciu; dłużej znaczy proces, którego system nie umie zakończyć. Czas łaski
+ * (5 s na POSIX) plus ten limit mieszczą się w 10 s, które powłoka Tauri czeka na zatrzymanie daemona (§5.4).
+ */
+const KILL_WAIT_MS = 3000;
 
 export interface GroupSpec {
   owner: string;
@@ -41,16 +44,19 @@ interface Exit {
   at: string;
 }
 
+/**
+ * `live`: lider żyje. `draining`: lider skończył, ale część grupy jeszcze żyje (zabijanie trwa albo się nie udało).
+ * `exited`: system potwierdził, że grupa jest pusta; tylko ta faza zwalnia właściciela dla nowego startu.
+ */
+type Phase = { kind: "live" } | { kind: "draining"; exit: Exit } | { kind: "exited"; exit: Exit };
+
 interface Group {
   readonly record: RuntimeGroup;
-  readonly child: ChildProcess;
   readonly control: GroupControl;
   readonly tail: OutputTail;
-  /** Spełniona po końcu lidera i sprzątnięciu grupy; `true`, gdy grupa na pewno nie żyje. */
-  readonly finished: Promise<boolean>;
-  exit?: Exit;
-  /** System potwierdził, że żaden proces grupy nie żyje; dopiero wtedy grupa znika z `runtime.json`. */
-  confirmedEmpty: boolean;
+  readonly leaderExit: Promise<Exit>;
+  phase: Phase;
+  /** Stop zlecił użytkownik albo wyjście daemona; zostaje w stanie `exited` jako `stoppedByUser`. */
   stopRequested: boolean;
   stopping?: Promise<RunState>;
 }
@@ -59,15 +65,20 @@ export class ProcessGroups {
   private readonly deps: ProcessGroupsDeps;
   private readonly groups = new Map<string, Group>();
   private readonly starting = new Map<string, Promise<RunState>>();
+  /** Sieroty, których sprzątanie przy starcie się nie udało: zostają w `runtime.json` do następnego startu. */
+  private orphans: RuntimeGroup[] = [];
+  /** Daemon się zatrzymuje: nowe grupy powstałyby już po `stopAll` i przeżyłyby daemon. */
+  private closing = false;
 
   constructor(deps: ProcessGroupsDeps) {
     this.deps = deps;
   }
 
-  /** Uruchamia grupę; gdy właściciel ma już żywą, zwraca jej stan zamiast drugiej. */
+  /** Uruchamia grupę; gdy właściciel ma już grupę, która nie skończyła się na pewno, zwraca jej stan zamiast drugiej. */
   start(spec: GroupSpec): Promise<RunState> {
-    const live = this.groups.get(spec.owner);
-    if (live && !live.exit) return Promise.resolve(stateOf(live));
+    if (this.closing) return Promise.reject(new SpawnFailure("spawn_failed", "daemon się zatrzymuje"));
+    const current = this.groups.get(spec.owner);
+    if (current && current.phase.kind !== "exited") return Promise.resolve(stateOf(current));
     let started = this.starting.get(spec.owner);
     if (!started) {
       started = this.spawnGroup(spec).finally(() => this.starting.delete(spec.owner));
@@ -81,20 +92,18 @@ export class ProcessGroups {
     return group && stateOf(group);
   }
 
-  /** Właściciele z ostatnim stanem, także zakończeni. */
-  owners(): string[] {
-    return [...this.groups.keys()];
-  }
-
   /**
    * Łagodny stop, po czasie łaski zabicie całej grupy. Wraca dopiero po potwierdzeniu, że grupa nie żyje;
    * inaczej `stop_unconfirmed`, a uruchomienie zostaje `stopping`, więc stop można ponowić.
    */
   stop(owner: string): Promise<RunState> | undefined {
+    // Start w toku (np. czekanie na `ps`) jeszcze nie ma grupy w mapie; stop czeka na niego zamiast zgłosić brak.
+    const starting = this.starting.get(owner);
+    if (starting) return starting.then(() => this.stop(owner) ?? Promise.reject(new Error(`brak grupy ${owner}`)));
     const group = this.groups.get(owner);
     if (!group) return undefined;
-    if (group.exit) return Promise.resolve(stateOf(group));
-    group.stopping ??= this.escalate(group).finally(() => {
+    if (group.phase.kind === "exited") return Promise.resolve(stateOf(group));
+    group.stopping ??= this.stopGroup(group).finally(() => {
       group.stopping = undefined;
     });
     return group.stopping;
@@ -102,7 +111,9 @@ export class ProcessGroups {
 
   /** Wyjście daemona: zatrzymuje wszystkie żywe grupy równolegle; grupy, których nie udało się zatrzymać, zgłasza w logu. */
   async stopAll(): Promise<void> {
-    const live = [...this.groups.entries()].filter(([, g]) => !g.exit);
+    this.closing = true;
+    await Promise.allSettled(this.starting.values());
+    const live = [...this.groups.entries()].filter(([, g]) => g.phase.kind !== "exited");
     const results = await Promise.allSettled(live.map(([owner]) => this.stop(owner)));
     results.forEach((r, i) => {
       if (r.status === "rejected") this.deps.log(`nie zatrzymano ${live[i]?.[0]}: ${String(r.reason)}`);
@@ -111,22 +122,26 @@ export class ProcessGroups {
 
   /**
    * Start daemona: grupy z `runtime.json` zostały po poprzednim działaniu (awaria, twarde zabicie). Sprzątana jest
-   * tylko grupa, której lider to na pewno ten sam proces (§4.1, `GroupPlatform.killOrphan`).
+   * tylko grupa, która na pewno jest nasza (§4.1, `GroupPlatform.reattach`), tym samym stopem co żywe grupy.
    */
   async sweepOrphans(): Promise<void> {
     const platform = await this.deps.platform;
     const left: RuntimeGroup[] = [];
-    for (const orphan of this.deps.runtime.read()) {
-      const outcome = await platform.killOrphan(orphan.pid, orphan.identity);
+    for (const orphan of this.readRuntime()) {
       const what = `${orphan.owner} (pid ${orphan.pid}, ${orphan.command.join(" ")})`;
-      if (outcome === "killed") this.deps.log(`sprzątnięto sierotę ${what}`);
-      if (outcome === "unverified") this.deps.log(`pid ${orphan.pid} żyje, ale nie wiadomo, czy to sierota ${what}; zostawiono`);
-      if (outcome === "alive") {
+      const target = await platform.reattach(orphan.pid, orphan.identity);
+      if (target === "unverified") this.deps.log(`pid ${orphan.pid} żyje, ale nie wiadomo, czy to sierota ${what}; zostawiono`);
+      if (typeof target === "string") continue;
+      if (await terminate(target, platform.graceMs)) {
+        target.release();
+        this.deps.log(`sprzątnięto sierotę ${what}`);
+      } else {
         this.deps.log(`sierota ${what} przeżyła zabicie; spróbuję przy następnym starcie`);
         left.push(orphan);
       }
     }
-    this.deps.runtime.write([...left, ...this.liveRecords()]);
+    this.orphans = left;
+    this.persist();
   }
 
   private async spawnGroup(spec: GroupSpec): Promise<RunState> {
@@ -144,7 +159,7 @@ export class ProcessGroups {
     // Wyjście i koniec procesu są podłączone od razu: krótki task może skończyć się, zanim padnie pierwszy `await`.
     const tail = new OutputTail();
     attachOutput(child, tail);
-    const exited = new Promise<Exit>((resolve) => {
+    const leaderExit = new Promise<Exit>((resolve) => {
       child.once("exit", (code, signal) => resolve({ code, signal, at: new Date().toISOString() }));
     });
     await spawned(child, program);
@@ -166,52 +181,68 @@ export class ProcessGroups {
       pid,
       identity: await platform.identity(pid),
     };
-    const group: Group = {
-      record,
-      child,
-      control,
-      tail,
-      stopRequested: false,
-      confirmedEmpty: false,
-      finished: exited.then((e) => this.reap(group, e)),
-    };
+    const group: Group = { record, control, tail, leaderExit, phase: { kind: "live" }, stopRequested: false };
     this.groups.set(spec.owner, group);
-    this.deps.runtime.write(this.liveRecords());
+    this.persist();
+    leaderExit
+      .then((exit) => this.onLeaderExit(group, exit))
+      .catch((err: unknown) => this.deps.log(`koniec grupy ${spec.owner}: ${String(err)}`));
     return stateOf(group);
   }
 
-  /** Koniec lidera: reszta grupy jest zabijana, a uruchomienie kończy się dopiero, gdy grupa jest pusta. */
-  private async reap(group: Group, exit: Exit): Promise<boolean> {
-    const empty = group.control.isEmpty() || (await killAndWait(group.control));
-    group.exit = exit;
-    group.confirmedEmpty = empty;
-    if (empty) {
-      group.control.release();
-      this.deps.runtime.write(this.liveRecords());
-    } else {
-      this.deps.log(`grupa ${group.record.owner} (pid ${group.record.pid}) żyje po zabiciu; zostaje w runtime.json`);
-    }
-    return empty;
+  /** Lider skończył sam albo po stopie: reszta grupy jest zabijana, a uruchomienie kończy się dopiero przy pustej grupie. */
+  private async onLeaderExit(group: Group, exit: Exit): Promise<void> {
+    group.phase = { kind: "draining", exit };
+    if (group.stopping) return; // stop sam potwierdzi koniec
+    if (group.control.isEmpty() || (await killAndWait(group.control))) this.finish(group);
+    else this.deps.log(`grupa ${group.record.owner} (pid ${group.record.pid}) żyje po zabiciu; zostaje w runtime.json`);
   }
 
-  private async escalate(group: Group): Promise<RunState> {
+  private async stopGroup(group: Group): Promise<RunState> {
     group.stopRequested = true;
     const platform = await this.deps.platform;
-    group.control.askToStop();
-    if (!(await within(group.finished, platform.graceMs))) group.control.kill();
-    const empty = await within(group.finished, KILL_WAIT_MS * 2);
-    if (!empty) {
+    if (!(await terminate(group.control, platform.graceMs))) {
       throw new DomainError(
         "stop_unconfirmed",
         `${group.record.command.join(" ")} (pid ${group.record.pid}): część procesów grupy nadal działa po zabiciu`,
       );
     }
+    // Pusta grupa znaczy, że lider nie żyje; zdarzenie `exit` przychodzi najpóźniej chwilę później.
+    group.phase = { kind: "draining", exit: await group.leaderExit };
+    this.finish(group);
     return stateOf(group);
   }
 
-  /** Grupy, które mogą jeszcze żyć. */
-  private liveRecords(): RuntimeGroup[] {
-    return [...this.groups.values()].filter((g) => !g.confirmedEmpty).map((g) => g.record);
+  /** Grupa potwierdzona jako pusta: koniec uruchomienia i zniknięcie z `runtime.json`. */
+  private finish(group: Group): void {
+    if (group.phase.kind !== "draining") return;
+    group.phase = { kind: "exited", exit: group.phase.exit };
+    group.control.release();
+    this.persist();
+  }
+
+  /**
+   * Jedyny zapis `runtime.json`: sieroty, których nie udało się sprzątnąć, i grupy bez potwierdzonego końca.
+   * Nieudany zapis (np. plik trzymany przez antywirusa) nie zmienia stanu w pamięci; następny zapis go nadrobi.
+   */
+  private persist(): void {
+    const live = [...this.groups.values()].filter((g) => g.phase.kind !== "exited").map((g) => g.record);
+    try {
+      this.deps.runtime.write([...this.orphans, ...live]);
+    } catch (err) {
+      this.deps.log(`zapis ${this.deps.runtime.path}: ${String(err)}`);
+    }
+  }
+
+  /** Plik, którego nie da się odczytać, jest odkładany obok, żeby następny zapis nie skasował zapisanych w nim grup. */
+  private readRuntime(): RuntimeGroup[] {
+    try {
+      return this.deps.runtime.read();
+    } catch (err) {
+      const aside = this.deps.runtime.moveAside();
+      this.deps.log(`${String(err)}; plik odłożony jako ${aside}, sieroty z niego nie zostaną sprzątnięte`);
+      return [];
+    }
   }
 }
 
@@ -230,37 +261,25 @@ function attachOutput(child: ChildProcess, tail: OutputTail): void {
 
 function stateOf(group: Group): RunState {
   const { runId, startedAt, pid } = group.record;
-  if (!group.exit) return { kind: group.stopRequested ? "stopping" : "running", runId, startedAt, pid };
+  const { phase } = group;
+  if (phase.kind === "live") return { kind: group.stopRequested ? "stopping" : "running", runId, startedAt, pid };
+  if (phase.kind === "draining") return { kind: "stopping", runId, startedAt, pid };
   return {
     kind: "exited",
     runId,
     startedAt,
-    endedAt: group.exit.at,
-    exitCode: group.exit.code,
-    signal: group.exit.signal,
+    endedAt: phase.exit.at,
+    exitCode: phase.exit.code,
+    signal: phase.exit.signal,
     stoppedByUser: group.stopRequested,
     lastLines: group.tail.snapshot(),
   };
 }
 
-async function requireDirectory(cwd: string): Promise<void> {
-  if (!isAbsolute(cwd)) throw new Error(`katalog roboczy musi być pełną ścieżką: ${cwd}`);
-  const info = await stat(cwd).catch(() => undefined);
-  if (!info?.isDirectory()) throw new Error(`katalog roboczy nie istnieje: ${cwd}`);
-}
-
-/** Czeka na `spawn` albo `error`: dopiero wtedy wiadomo, czy program w ogóle wystartował. */
-function spawned(child: ChildProcess, program: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    child.once("spawn", () => resolve());
-    child.once("error", (err: NodeJS.ErrnoException) => {
-      reject(
-        new Error(
-          err.code === "ENOENT" ? `nie znaleziono programu ${program} w PATH` : `nie udało się uruchomić ${program}: ${err.message}`,
-        ),
-      );
-    });
-  });
+/** Jedna droga zatrzymania dla żywych grup i sierot: łagodnie, po czasie łaski zabicie, potem czekanie na pustą grupę. */
+async function terminate(control: GroupControl, graceMs: number): Promise<boolean> {
+  control.askToStop();
+  return (await waitUntil(() => control.isEmpty(), graceMs)) || killAndWait(control);
 }
 
 async function killAndWait(control: GroupControl): Promise<boolean> {
@@ -268,11 +287,16 @@ async function killAndWait(control: GroupControl): Promise<boolean> {
   return waitUntil(() => control.isEmpty(), KILL_WAIT_MS);
 }
 
-/** `true`, gdy grupa skończyła się w czasie i jest pusta. */
-function within(finished: Promise<boolean>, ms: number): Promise<boolean> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<boolean>((resolve) => {
-    timer = setTimeout(() => resolve(false), ms);
+async function requireDirectory(cwd: string): Promise<void> {
+  if (!isAbsolute(cwd)) throw new SpawnFailure("cwd_invalid", `katalog roboczy musi być pełną ścieżką: ${cwd}`);
+  const info = await stat(cwd).catch(() => undefined);
+  if (!info?.isDirectory()) throw new SpawnFailure("cwd_invalid", `katalog roboczy nie istnieje: ${cwd}`);
+}
+
+/** Czeka na `spawn` albo `error`: dopiero wtedy wiadomo, czy program w ogóle wystartował. */
+function spawned(child: ChildProcess, program: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    child.once("spawn", () => resolve());
+    child.once("error", (err: NodeJS.ErrnoException) => reject(spawnFailure(program, err)));
   });
-  return Promise.race([finished, timeout]).finally(() => clearTimeout(timer));
 }

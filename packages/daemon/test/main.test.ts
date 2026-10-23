@@ -3,9 +3,9 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DaemonInfoResult } from "@trackwall/protocol";
-import pkg from "../package.json" with { type: "json" };
 import { readDaemonFile } from "../src/discovery.ts";
 import { loopbackRequest } from "../src/loopback.ts";
+import { RUNTIMES } from "./support/runtimes.ts";
 
 const MAIN = join(import.meta.dir, "..", "src", "main.ts");
 
@@ -29,21 +29,6 @@ function isAlive(pid: number): boolean {
     return false;
   }
 }
-
-/**
- * Każdy test procesu idzie pod Bun i pod samym Node (ADR-1). Komenda Node pochodzi ze skryptu `start:node`,
- * żeby flagi (`--experimental-strip-types` dla Node 22.12–22.17) były w jednym miejscu.
- */
-function nodeArgv(script: string): string[] {
-  const suffix = " src/main.ts --ui";
-  if (!script.startsWith("node ") || !script.endsWith(suffix))
-    throw new Error(`start:node ma postać "node <flagi>${suffix}", jest "${script}"`);
-  return script.slice(0, -suffix.length).split(" ");
-}
-const RUNTIMES: [name: "bun" | "node", argv: string[]][] = [
-  ["bun", ["bun"]],
-  ["node", nodeArgv(pkg.scripts["start:node"])],
-];
 
 describe.each(RUNTIMES)("proces daemona pod %s", (name, runtime) => {
   test("start, drugi start z tą samą wersją kończy się 0, shutdown sprząta daemon.json", async () => {

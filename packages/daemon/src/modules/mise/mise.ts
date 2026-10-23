@@ -1,6 +1,6 @@
 import { type MiseTask, MiseTaskName, type MiseTasks, type RunState } from "@trackwall/protocol";
 import { z } from "zod";
-import { DomainError } from "../../errors.ts";
+import { DomainError, SpawnFailure } from "../../errors.ts";
 import { type MiseCliResult, runMiseCli } from "./mise-cli.ts";
 
 /**
@@ -14,7 +14,6 @@ interface MiseProcs {
   start(spec: { owner: string; command: readonly string[]; cwd: string; env: NodeJS.ProcessEnv }): Promise<RunState>;
   state(owner: string): RunState | undefined;
   stop(owner: string): Promise<RunState> | undefined;
-  owners(): string[];
 }
 
 /** Czego `mise` potrzebuje od `workspace`: korzeń repo po identyfikatorze (`not_found`, gdy repo nie ma). */
@@ -35,14 +34,17 @@ export interface MiseDeps {
 const ListedTask = z.object({ name: z.string(), description: z.string().nullish(), hide: z.boolean().optional() });
 const ListedTasks = z.array(ListedTask);
 
-/** Lista z konfiguracji, jeszcze bez stanu uruchomień. */
-type TaskList = Exclude<MiseTasks, { kind: "ok" }> | { kind: "ok"; tasks: Omit<MiseTask, "run">[] };
+/** Task z `mise tasks ls`, jeszcze bez stanu uruchomienia. */
+type ListedMiseTask = Omit<MiseTask, "run">;
+type TaskList = { kind: Exclude<MiseTasks["kind"], "ok">; message: string } | { kind: "ok"; tasks: ListedMiseTask[] };
 
 /** Fragment komunikatu mise o konfiguracji bez zaufania (`Config files in … are not trusted`). */
 const UNTRUSTED = /not trusted/i;
 
 export class Mise {
   private readonly deps: MiseDeps;
+  /** Taski uruchomione w tym działaniu daemona, per repo: lista pokazuje je także po usunięciu z konfiguracji. */
+  private readonly started = new Map<string, Set<string>>();
 
   constructor(deps: MiseDeps) {
     this.deps = deps;
@@ -50,16 +52,22 @@ export class Mise {
 
   async tasks(repo: string): Promise<MiseTasks> {
     const listed = await this.list(await this.deps.repos.repoPath(repo));
-    if (listed.kind !== "ok") return listed;
+    if (listed.kind !== "ok") return { ...listed, running: this.liveOutside(repo, []) };
     const tasks: MiseTask[] = listed.tasks.map((t) => ({ ...t, run: this.deps.procs.state(owner(repo, t.name)) ?? null }));
-    // Task usunięty z konfiguracji w trakcie działania nadal ma żywą grupę; bez niego nie dałoby się jej zatrzymać z UI.
-    for (const key of this.deps.procs.owners()) {
-      const name = taskOf(repo, key);
-      if (name === undefined || tasks.some((t) => t.name === name)) continue;
-      const run = this.deps.procs.state(key);
-      if (run && run.kind !== "exited") tasks.push({ name, description: "", run });
+    return { kind: "ok", tasks: [...tasks, ...this.liveOutside(repo, tasks)] };
+  }
+
+  /**
+   * Działające taski repo spoza listy: usunięte z konfiguracji w trakcie działania albo pokazane, gdy mise listy
+   * nie podał. Bez nich nie dałoby się ich zatrzymać z UI.
+   */
+  private liveOutside(repo: string, listed: readonly ListedMiseTask[]): MiseTask[] {
+    const live: MiseTask[] = [];
+    for (const name of this.started.get(repo) ?? []) {
+      const run = this.deps.procs.state(owner(repo, name));
+      if (run && run.kind !== "exited" && !listed.some((t) => t.name === name)) live.push({ name, description: "", run });
     }
-    return { kind: "ok", tasks };
+    return live;
   }
 
   async start(repo: string, miseTask: string): Promise<RunState> {
@@ -67,17 +75,21 @@ export class Mise {
     const listed = await this.list(dir);
     if (listed.kind !== "ok") throw new DomainError("mise_unavailable", listed.message);
     if (!listed.tasks.some((t) => t.name === miseTask)) throw new DomainError("not_found", `repo ${repo} nie ma taska mise "${miseTask}"`);
+    let run: RunState;
     try {
-      return await this.deps.procs.start({
+      run = await this.deps.procs.start({
         owner: owner(repo, miseTask),
         command: [...this.deps.command, "run", miseTask],
         cwd: dir,
         env: await this.deps.env(),
       });
     } catch (err) {
-      if (err instanceof DomainError) throw err;
-      throw new DomainError("mise_unavailable", `${repo}: ${messageOf(err)}`);
+      if (!(err instanceof SpawnFailure)) throw err;
+      throw new DomainError(err.reason === "cwd_invalid" ? "repo_unavailable" : "mise_unavailable", `${repo}: ${err.message}`);
     }
+    const names = this.started.get(repo) ?? new Set<string>();
+    this.started.set(repo, names.add(miseTask));
+    return run;
   }
 
   async stop(repo: string, miseTask: string): Promise<RunState> {
@@ -90,7 +102,7 @@ export class Mise {
   async trust(repo: string): Promise<MiseTasks> {
     const dir = await this.deps.repos.repoPath(repo);
     const result = await runMiseCli(this.deps.command, ["trust"], dir, await this.deps.env());
-    if (result.kind === "not_found") throw new DomainError("mise_unavailable", result.message);
+    if (result.kind !== "exited") throw new DomainError("mise_unavailable", result.message);
     if (result.code !== 0) throw new DomainError("mise_unavailable", failure(result.stderr, result.code));
     return this.tasks(repo);
   }
@@ -103,7 +115,8 @@ export class Mise {
 
 /** Wynik `mise tasks ls --json` jako lista tasków albo powód, dla którego jej nie ma. */
 export function parseTaskList(result: MiseCliResult): TaskList {
-  if (result.kind === "not_found") return { kind: "not_installed", message: result.message };
+  if (result.kind === "not_started") return { kind: "not_installed", message: result.message };
+  if (result.kind === "failed") return { kind: "error", message: result.message };
   if (result.code !== 0) {
     const message = failure(result.stderr, result.code);
     return UNTRUSTED.test(message) ? { kind: "untrusted", message } : { kind: "error", message };
@@ -122,14 +135,9 @@ export function parseTaskList(result: MiseCliResult): TaskList {
   return { kind: "ok", tasks };
 }
 
-/** Klucz właściciela w `procs`: identyfikator repo nie zawiera `:`, więc nazwa taska (np. `build:ui`) jest za drugim. */
+/** Klucz właściciela grupy w `procs`; tylko budowany, nigdy rozbierany z powrotem. */
 function owner(repo: string, miseTask: string): string {
   return `mise:${repo}:${miseTask}`;
-}
-
-function taskOf(repo: string, key: string): string | undefined {
-  const prefix = owner(repo, "");
-  return key.startsWith(prefix) ? key.slice(prefix.length) : undefined;
 }
 
 /** Komunikat błędu mise bez ostrzeżeń, które nie są przyczyną (np. nieudane sprawdzenie nowej wersji). */
@@ -139,8 +147,4 @@ function failure(stderr: string, code: number | null): string {
     .map((l) => l.trim())
     .filter((l) => l !== "" && !/^mise WARN/.test(l));
   return lines.join("\n") || `mise zakończył się kodem ${code}`;
-}
-
-function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }

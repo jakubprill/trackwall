@@ -1,34 +1,27 @@
 import { type ChildProcess, execFile } from "node:child_process";
-import { type GroupControl, type GroupPlatform, isAlive, type OrphanOutcome, waitUntil } from "./process-group.ts";
+import { type GroupControl, type GroupPlatform, isAlive, signalExists } from "./process-group.ts";
 
 /**
  * Grupa procesów na macOS i Linuksie: lider startuje w nowej sesji (`detached` = `setsid`), więc jego PID jest
  * identyfikatorem grupy, a potomkowie ją dziedziczą. Sygnał do `-pgid` dostaje cała grupa. Po twardym zabiciu
- * daemona grupa żyje dalej i sprząta ją dopiero następny start (`killOrphan`).
+ * daemona grupa żyje dalej i sprząta ją dopiero następny start (`reattach`).
  */
 
 const GRACE_MS = 5000;
-const KILL_WAIT_MS = 5000;
 
-function signalGroup(pgid: number, signal: NodeJS.Signals | 0): boolean {
+function signalGroup(pgid: number, signal: NodeJS.Signals): void {
   try {
     process.kill(-pgid, signal);
-    return true;
-  } catch (err) {
-    // ESRCH: w grupie nie ma już żadnego procesu. EPERM: proces grupy zmienił użytkownika, ale nadal żyje.
-    return (err as NodeJS.ErrnoException).code === "EPERM";
+  } catch {
+    // ESRCH: w grupie nie ma już procesów; wynik i tak sprawdza `isEmpty`.
   }
-}
-
-function groupAlive(pgid: number): boolean {
-  return signalGroup(pgid, 0);
 }
 
 function control(pgid: number): GroupControl {
   return {
-    askToStop: () => void signalGroup(pgid, "SIGTERM"),
-    kill: () => void signalGroup(pgid, "SIGKILL"),
-    isEmpty: () => !groupAlive(pgid),
+    askToStop: () => signalGroup(pgid, "SIGTERM"),
+    kill: () => signalGroup(pgid, "SIGKILL"),
+    isEmpty: () => !signalExists(-pgid),
     release: () => {},
   };
 }
@@ -36,7 +29,9 @@ function control(pgid: number): GroupControl {
 /** Czas startu procesu z `ps` (`lstart`, z dokładnością do sekundy); razem z PID-em odróżnia proces od recyklingu. */
 function identity(pid: number): Promise<string | null> {
   return new Promise((resolve) => {
-    execFile("ps", ["-o", "lstart=", "-p", String(pid)], { timeout: 5000 }, (err, stdout) => {
+    // Stała strefa i język: zapis musi wyjść tak samo z terminala i z Findera (inne TZ i LC_TIME).
+    const env = { ...process.env, LC_ALL: "C", TZ: "UTC" };
+    execFile("ps", ["-o", "lstart=", "-p", String(pid)], { timeout: 5000, env }, (err, stdout) => {
       const value = stdout.trim();
       resolve(err || value === "" ? null : value);
     });
@@ -48,13 +43,10 @@ function identity(pid: number): Promise<string | null> {
  * nikomu, dopóki grupa żyje. Gdy lider nie żyje, a grupa tak, to wciąż nasza grupa. Gdy lider żyje, musi mieć ten sam
  * czas startu: inaczej PID dostał nowy proces, który sam założył sesję.
  */
-async function killOrphan(pgid: number, recorded: string | null): Promise<OrphanOutcome> {
-  if (!groupAlive(pgid)) return "gone";
+async function reattach(pgid: number, recorded: string | null): Promise<GroupControl | "gone" | "unverified"> {
+  if (!signalExists(-pgid)) return "gone";
   if (isAlive(pgid) && (recorded === null || (await identity(pgid)) !== recorded)) return "unverified";
-  signalGroup(pgid, "SIGTERM");
-  if (await waitUntil(() => !groupAlive(pgid), GRACE_MS)) return "killed";
-  signalGroup(pgid, "SIGKILL");
-  return (await waitUntil(() => !groupAlive(pgid), KILL_WAIT_MS)) ? "killed" : "alive";
+  return control(pgid);
 }
 
 export const posixGroups: GroupPlatform = {
@@ -65,5 +57,5 @@ export const posixGroups: GroupPlatform = {
     return control(child.pid);
   },
   identity,
-  killOrphan,
+  reattach,
 };

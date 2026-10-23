@@ -2,7 +2,7 @@ import type { RunState } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 
 /**
- * Stan uruchomienia taska mise w jednej linii (§4.1). Ton ma tylko to, co wymaga uwagi albo działa;
+ * Stan uruchomienia (`RunState`, §4.1) w jednej linii; dziś pokazują go taski mise, później serwisy. Ton ma tylko to, co wymaga uwagi albo działa;
  * task nieuruchamiany i zatrzymany przez użytkownika są bez tonu (zwykły tekst).
  */
 export function runStateLabel(run: RunState | null): { tone?: StatusTone; label: string } {

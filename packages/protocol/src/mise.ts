@@ -28,16 +28,22 @@ export const MiseTask = z.object({
 });
 export type MiseTask = z.infer<typeof MiseTask>;
 
+/**
+ * Powód, dla którego mise nie podał listy, i taski, które mimo to działają (uruchomione wcześniej): bez nich błąd
+ * w `mise.toml` w trakcie pracy odebrałby możliwość zatrzymania serwera z UI.
+ */
+const NoList = { message: z.string(), running: z.array(MiseTask) };
+
 /** Taski repo albo powód, dla którego mise ich nie podał. */
 export const MiseTasks = z.discriminatedUnion("kind", [
   /** Repo bez konfiguracji mise ma pustą listę. Task, który zniknął z konfiguracji w trakcie działania, zostaje do zatrzymania. */
   z.object({ kind: z.literal("ok"), tasks: z.array(MiseTask) }),
   /** Nie ma programu `mise` w `PATH` daemona. */
-  z.object({ kind: z.literal("not_installed"), message: z.string() }),
+  z.object({ kind: z.literal("not_installed"), ...NoList }),
   /** mise nie czyta konfiguracji repo, dopóki użytkownik jej nie zaufa (`mise trust`, akcja `trust`). */
-  z.object({ kind: z.literal("untrusted"), message: z.string() }),
-  /** Inny błąd mise, np. składnia `mise.toml`; komunikat z mise. */
-  z.object({ kind: z.literal("error"), message: z.string() }),
+  z.object({ kind: z.literal("untrusted"), ...NoList }),
+  /** Inny błąd mise, np. składnia `mise.toml`, albo przekroczony limit czasu; komunikat z mise. */
+  z.object({ kind: z.literal("error"), ...NoList }),
 ]);
 export type MiseTasks = z.infer<typeof MiseTasks>;
 

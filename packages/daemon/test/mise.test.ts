@@ -67,7 +67,11 @@ describe("mise", () => {
   test("brak programu mise daje stan not_installed, a start kończy się błędem mise_unavailable", async () => {
     const { mise } = setup({ tasks: [DEV] }, ["trackwall-nie-ma-mise"]);
 
-    expect(await mise.tasks("web")).toEqual({ kind: "not_installed", message: "nie znaleziono programu trackwall-nie-ma-mise w PATH" });
+    expect(await mise.tasks("web")).toEqual({
+      kind: "not_installed",
+      message: "nie znaleziono programu trackwall-nie-ma-mise w PATH",
+      running: [],
+    });
     await expect(mise.start("web", "dev")).rejects.toMatchObject({ code: "mise_unavailable" });
   });
 
@@ -79,7 +83,7 @@ describe("mise", () => {
   });
 
   test(
-    "start uruchamia mise run w korzeniu repo, stan trafia na listę, a stop zatrzymuje całe drzewo",
+    "start uruchamia mise run w korzeniu repo, stan trafia na listę, a stop zatrzymuje całą grupę procesów",
     async () => {
       const { mise, repoDir } = setup({ tasks: [DEV] });
 
@@ -111,6 +115,22 @@ describe("mise", () => {
 
       await mise.stop("web", "dev");
       expect(await mise.tasks("web")).toEqual({ kind: "ok", tasks: [] });
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "gdy mise przestaje podawać listę (np. konfiguracja bez zaufania), działający task nadal jest do zatrzymania",
+    async () => {
+      const { mise, repoDir } = setup({ tasks: [DEV] });
+      await mise.start("web", "dev");
+      writeConfig(repoDir, { tasks: [DEV], untrusted: true });
+
+      const listed = await mise.tasks("web");
+      expect(listed.kind).toBe("untrusted");
+      expect(listed.kind !== "ok" && listed.running.map((t) => [t.name, t.run?.kind])).toEqual([["dev", "running"]]);
+
+      expect((await mise.stop("web", "dev")).kind).toBe("exited");
     },
     TIMEOUT,
   );

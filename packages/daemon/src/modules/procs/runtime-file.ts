@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, renameSync } from "node:fs";
 import { z } from "zod";
 import { writeFileAtomic } from "../../atomic-write.ts";
 
@@ -37,9 +37,22 @@ export class RuntimeFile {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw err;
     }
-    const parsed = RuntimeFileSchema.safeParse(JSON.parse(text));
+    let json: unknown;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error(`${this.path}: to nie jest JSON`);
+    }
+    const parsed = RuntimeFileSchema.safeParse(json);
     if (!parsed.success) throw new Error(`${this.path}: ${z.prettifyError(parsed.error)}`);
     return parsed.data.groups;
+  }
+
+  /** Przenosi nieczytelny plik obok (`runtime.json.broken-<czas>`) i zwraca nową ścieżkę. */
+  moveAside(): string {
+    const aside = `${this.path}.broken-${Date.now()}`;
+    renameSync(this.path, aside);
+    return aside;
   }
 
   write(groups: readonly RuntimeGroup[]): void {

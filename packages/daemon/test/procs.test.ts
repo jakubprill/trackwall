@@ -1,16 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { OutputTail } from "../src/modules/procs/output-tail.ts";
 import { ProcessGroups } from "../src/modules/procs/process-groups.ts";
 import { RuntimeFile } from "../src/modules/procs/runtime-file.ts";
 import { groupPlatform } from "../src/platform/group-platform.ts";
-import { isAlive, waitUntil } from "../src/platform/process-group.ts";
+import { type GroupControl, type GroupPlatform, isAlive, waitUntil } from "../src/platform/process-group.ts";
+import { RUNTIMES } from "./support/runtimes.ts";
 
 const TREE = join(import.meta.dir, "fixtures", "process-tree.ts");
 const HOLDER = join(import.meta.dir, "fixtures", "procs-holder.ts");
+const RUNNER = join(import.meta.dir, "fixtures", "procs-runner.ts");
 /** Drzewo ignoruje łagodny stop, więc krótki czas łaski skraca testy bez zmiany przebiegu. */
 const TEST_GRACE_MS = 300;
 const TIMEOUT = 30_000;
@@ -25,6 +27,21 @@ function setup() {
     log: (msg) => logs.push(msg),
   });
   return { dir, runtime, groups, logs };
+}
+
+/**
+ * Platforma, na której zabicie grupy się nie udaje: lider kończy się zwykłym `kill`, ale grupa nigdy nie jest pusta.
+ * Tak wygląda proces, którego system nie umie zakończyć (np. zawieszony w sterowniku).
+ */
+async function stubbornPlatform(): Promise<GroupPlatform> {
+  const real = await groupPlatform();
+  const stubborn = (control: GroupControl): GroupControl => ({ ...control, isEmpty: () => false });
+  return {
+    ...real,
+    graceMs: TEST_GRACE_MS,
+    adopt: (child) => stubborn(real.adopt(child)),
+    reattach: async () => stubborn({ askToStop() {}, kill() {}, isEmpty: () => false, release() {} }),
+  };
 }
 
 function treePids(dir: string, depth: number): number[] {
@@ -88,6 +105,22 @@ describe("procs", () => {
       expect(second.runId).toBe(first.runId);
       expect(third.runId).toBe(first.runId);
       await groups.stop("o");
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "stop w trakcie startu czeka na grupę i ją zatrzymuje, a po stopAll nowy start jest odrzucany",
+    async () => {
+      const { dir, groups } = setup();
+      const spec = { owner: "o", command: [process.execPath, TREE, dir, "0", "1"], cwd: dir, env: process.env };
+      const started = groups.start(spec);
+
+      const stopped = await groups.stop("o");
+      await groups.stopAll();
+
+      expect(stopped).toMatchObject({ kind: "exited", runId: (await started).runId });
+      await expect(groups.start(spec)).rejects.toThrow("daemon się zatrzymuje");
     },
     TIMEOUT,
   );
@@ -178,6 +211,70 @@ describe("procs", () => {
   );
 });
 
+describe.each(RUNTIMES)("procs pod %s", (_name, runtime) => {
+  test(
+    "stop zatrzymuje całą grupę procesów",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "trackwall-procs-runtime-"));
+      const proc = Bun.spawn([...runtime, RUNNER, dir], { stdout: "pipe", stderr: "pipe" });
+      const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+      expect({ code, err }).toEqual({ code: 0, err: "" });
+
+      expect(JSON.parse(out)).toMatchObject({ kind: "exited", stoppedByUser: true });
+      expect(treePids(dir, 3)).toHaveLength(3);
+      expect(treePids(dir, 3).filter(isAlive)).toEqual([]);
+    },
+    TIMEOUT,
+  );
+});
+
+describe("procs, gdy grupy nie da się zabić", () => {
+  test(
+    "stop zgłasza stop_unconfirmed, uruchomienie zostaje stopping, a właściciel nie dostaje drugiej grupy",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "trackwall-procs-"));
+      const runtime = new RuntimeFile(join(dir, "runtime.json"));
+      const groups = new ProcessGroups({ runtime, platform: stubbornPlatform(), log: () => {} });
+      const spec = { owner: "o", command: [process.execPath, TREE, dir, "0", "1"], cwd: dir, env: process.env };
+      const started = await groups.start(spec);
+
+      await expect(groups.stop("o")).rejects.toMatchObject({ code: "stop_unconfirmed" });
+
+      expect(groups.state("o")?.kind).toBe("stopping");
+      expect((await groups.start(spec)).runId).toBe(started.runId);
+      expect(runtime.read().map((g) => g.runId)).toEqual([started.runId]);
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "sierota, która przeżyła zabicie, zostaje w runtime.json także po starcie nowej grupy",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "trackwall-procs-"));
+      const runtime = new RuntimeFile(join(dir, "runtime.json"));
+      const orphan = {
+        runId: "stara",
+        owner: "stary",
+        command: ["mise", "run", "dev"],
+        cwd: dir,
+        startedAt: "2026-01-01T00:00:00Z",
+        pid: 1,
+        identity: null,
+      };
+      runtime.write([orphan]);
+      const groups = new ProcessGroups({ runtime, platform: stubbornPlatform(), log: () => {} });
+
+      await groups.sweepOrphans();
+      await groups.start({ owner: "o", command: [process.execPath, TREE, dir, "0", "1"], cwd: dir, env: process.env });
+
+      expect(runtime.read().map((g) => g.runId)).toContain("stara");
+      // Prawdziwe `kill` atrapy kończy drzewo testu; stop i tak zgłosi brak potwierdzenia.
+      await groups.stop("o")?.catch(() => {});
+    },
+    TIMEOUT,
+  );
+});
+
 describe("ostatnie linie wyjścia", () => {
   test("łączy strumienie w kolejności linii, bez kolorów i nadpisanego postępu", () => {
     const tail = new OutputTail();
@@ -210,6 +307,18 @@ describe("ostatnie linie wyjścia", () => {
 });
 
 describe("runtime.json", () => {
+  test("nieczytelny plik jest odkładany obok, a nie nadpisywany przy następnym zapisie", async () => {
+    const { dir, runtime, groups, logs } = setup();
+    writeFileSync(runtime.path, "{ucięty");
+
+    await groups.sweepOrphans();
+
+    const aside = readdirSync(dir).find((f) => f.startsWith("runtime.json.broken-"));
+    expect(aside && readFileSync(join(dir, aside), "utf8")).toBe("{ucięty");
+    expect(runtime.read()).toEqual([]);
+    expect(logs.join("\n")).toContain("to nie jest JSON");
+  });
+
   test("brak pliku to brak grup, a plik niezgodny ze schematem jest błędem z jego ścieżką", () => {
     const dir = mkdtempSync(join(tmpdir(), "trackwall-runtime-"));
     const runtime = new RuntimeFile(join(dir, "runtime.json"));

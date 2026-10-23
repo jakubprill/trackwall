@@ -1,32 +1,80 @@
 import { type MiseTask, type MiseTasks, miseApi } from "@trackwall/protocol";
 import { Play, ShieldCheck, Square } from "lucide-react";
-import { useCallback, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
-import { errorMessage, post } from "@/lib/api";
+import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
 import { isLive, runStateLabel, showsLastLines } from "@/lib/run-state";
+import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 
-/** Stan tasków odpytywany często, bo użytkownik właśnie coś uruchomił albo zatrzymał i czeka na wynik. */
-const POLL_MS = 2000;
+/**
+ * Odpytywanie: często, gdy coś działa (użytkownik czeka na wynik startu albo stopu), rzadko, gdy nic nie działa,
+ * bo każde pytanie to `mise tasks ls`, a w zaufanym repo mise wykonuje przy tym `[env]` konfiguracji.
+ */
+const POLL_LIVE_MS = 2000;
+const POLL_IDLE_MS = 10_000;
 
 /** Taski mise repo (ADR-20): lista z `mise tasks ls`, start i stop całej grupy procesów, stan uruchomienia. */
 export function RepoMiseTasks({ conn, repo }: { conn: Connection; repo: string }) {
   const load = useCallback(() => post(conn, miseApi.tasks, { repo }), [conn, repo]);
-  const remote = useRemote(load, { pollMs: POLL_MS });
+  // Tempo zależy od ostatniej odpowiedzi, a odpowiedź od odpytywania, stąd osobny stan zamiast liczenia w miejscu.
+  const [live, setLive] = useState(false);
+  const remote = useRemote(load, { pollMs: live ? POLL_LIVE_MS : POLL_IDLE_MS });
+  useEffect(() => setLive(anyLive(remote.data)), [remote.data]);
 
   if (!remote.data) {
     return remote.error ? <ErrorWithRetry message={remote.error} onRetry={remote.reload} /> : <Loading />;
   }
-  return <TaskList conn={conn} repo={repo} tasks={remote.data} onChange={remote.reload} />;
+  return <TaskPanel conn={conn} repo={repo} tasks={remote.data} onChange={remote.reload} />;
 }
 
-function TaskList({ conn, repo, tasks, onChange }: { conn: Connection; repo: string; tasks: MiseTasks; onChange: () => void }) {
+function anyLive(tasks: MiseTasks | undefined): boolean {
+  if (!tasks) return false;
+  return (tasks.kind === "ok" ? tasks.tasks : tasks.running).some((t) => isLive(t.run));
+}
+
+function TaskPanel({ conn, repo, tasks, onChange }: { conn: Connection; repo: string; tasks: MiseTasks; onChange: () => void }) {
+  const rows = (list: MiseTask[], label: string) => (
+    <Surface label={label} meta={list.length}>
+      <ul className="divide-y">
+        {list.map((task) => (
+          <TaskRow key={task.name} conn={conn} repo={repo} task={task} onChange={onChange} />
+        ))}
+      </ul>
+    </Surface>
+  );
+  if (tasks.kind === "ok") {
+    return tasks.tasks.length === 0 ? (
+      <p className="text-muted-foreground text-sm">To repo nie ma tasków mise.</p>
+    ) : (
+      rows(tasks.tasks, "Taski mise")
+    );
+  }
+  return (
+    <div className="flex flex-col gap-4">
+      <NoList conn={conn} repo={repo} tasks={tasks} onChange={onChange} />
+      {tasks.running.length > 0 && rows(tasks.running, "Nadal działają")}
+    </div>
+  );
+}
+
+function NoList({
+  conn,
+  repo,
+  tasks,
+  onChange,
+}: {
+  conn: Connection;
+  repo: string;
+  tasks: Exclude<MiseTasks, { kind: "ok" }>;
+  onChange: () => void;
+}): ReactNode {
   if (tasks.kind === "not_installed") {
     return (
       <p className="text-muted-foreground text-sm">
@@ -35,29 +83,11 @@ function TaskList({ conn, repo, tasks, onChange }: { conn: Connection; repo: str
     );
   }
   if (tasks.kind === "untrusted") return <Untrusted conn={conn} repo={repo} message={tasks.message} onTrusted={onChange} />;
-  if (tasks.kind === "error") return <ErrorWithRetry message={`mise: ${tasks.message}`} onRetry={onChange} />;
-  if (tasks.tasks.length === 0) return <p className="text-muted-foreground text-sm">To repo nie ma tasków mise.</p>;
-  return (
-    <Surface label="Taski mise" meta={tasks.tasks.length}>
-      <ul className="divide-y">
-        {tasks.tasks.map((task) => (
-          <TaskRow key={task.name} conn={conn} repo={repo} task={task} onChange={onChange} />
-        ))}
-      </ul>
-    </Surface>
-  );
+  return <ErrorWithRetry message={`mise: ${tasks.message}`} onRetry={onChange} />;
 }
 
 function Untrusted({ conn, repo, message, onTrusted }: { conn: Connection; repo: string; message: string; onTrusted: () => void }) {
-  const [error, setError] = useState<string>();
-  const [pending, setPending] = useState(false);
-  const trust = () => {
-    setPending(true);
-    setError(undefined);
-    post(conn, miseApi.trust, { repo })
-      .then(onTrusted, (err: unknown) => setError(errorMessage(err)))
-      .finally(() => setPending(false));
-  };
+  const trust = useAction(() => post(conn, miseApi.trust, { repo }), onTrusted);
   return (
     <div className="flex flex-col items-start gap-3">
       <p className="text-sm">
@@ -65,26 +95,19 @@ function Untrusted({ conn, repo, message, onTrusted }: { conn: Connection; repo:
         uruchamiać programy.
       </p>
       <p className="text-muted-foreground font-mono text-xs whitespace-pre-wrap break-all">{message}</p>
-      <Button variant="outline" size="sm" onClick={trust} disabled={pending}>
+      <Button variant="outline" size="sm" onClick={trust.run} disabled={trust.pending}>
         <ShieldCheck /> Zaufaj konfiguracji mise (mise trust)
       </Button>
-      {error && <p className="text-destructive text-xs">{error}</p>}
+      {trust.error && <p className="text-destructive text-xs">{trust.error}</p>}
     </div>
   );
 }
 
 function TaskRow({ conn, repo, task, onChange }: { conn: Connection; repo: string; task: MiseTask; onChange: () => void }) {
-  const [error, setError] = useState<string>();
-  const [pending, setPending] = useState(false);
   const live = isLive(task.run);
   const state = runStateLabel(task.run);
-  const act = () => {
-    setPending(true);
-    setError(undefined);
-    post(conn, live ? miseApi.stop : miseApi.start, { repo, miseTask: task.name })
-      .then(onChange, (err: unknown) => setError(errorMessage(err)))
-      .finally(() => setPending(false));
-  };
+  // Także przy `stopping`: po `stop_unconfirmed` stop można ponowić, a daemon łączy równoległe prośby w jedną.
+  const action = useAction(() => post(conn, live ? miseApi.stop : miseApi.start, { repo, miseTask: task.name }), onChange);
 
   return (
     <li className="flex flex-col gap-2 px-3 py-2 text-sm">
@@ -100,7 +123,7 @@ function TaskRow({ conn, repo, task, onChange }: { conn: Connection; repo: strin
             <span className="text-muted-foreground">{state.label}</span>
           )}
         </span>
-        <Button variant="outline" size="sm" onClick={act} disabled={pending || task.run?.kind === "stopping"}>
+        <Button variant="outline" size="sm" onClick={action.run} disabled={action.pending}>
           {live ? <Square /> : <Play />} {live ? "Zatrzymaj" : "Uruchom"}
         </Button>
       </div>
@@ -109,7 +132,7 @@ function TaskRow({ conn, repo, task, onChange }: { conn: Connection; repo: strin
           {task.run.lastLines.join("\n")}
         </pre>
       )}
-      {error && <p className="text-destructive text-xs whitespace-pre-wrap">{error}</p>}
+      {action.error && <p className="text-destructive text-xs whitespace-pre-wrap">{action.error}</p>}
     </li>
   );
 }

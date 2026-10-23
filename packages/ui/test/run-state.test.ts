@@ -5,12 +5,12 @@ import { isLive, runStateLabel, showsLastLines } from "../src/lib/run-state.ts";
 const base = { runId: "r", startedAt: "2026-10-23T10:00:00Z" };
 const exited = {
   ...base,
-  kind: "exited",
+  kind: "exited" as const,
   endedAt: "2026-10-23T10:01:00Z",
   signal: null,
   stoppedByUser: false,
   lastLines: ["boom"],
-} as const;
+};
 
 describe("stan uruchomienia taska mise w UI", () => {
   test("działający ma ton ok, zatrzymywany warning, a zakończony błędem error z kodem albo sygnałem", () => {

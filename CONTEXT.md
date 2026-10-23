@@ -87,6 +87,9 @@ _Unikaj_: aplikacja, mikroserwis (gdy chodzi o byt w Trackwall)
 Proces-lider i wszyscy jego potomkowie, zatrzymywani razem: Job Object na Windowsie, nowa sesja POSIX (`setsid`) z zabijaniem po `-pgid` na macOS.
 _Unikaj_: drzewo procesów (gdy chodzi o jednostkę zarządzaną)
 
+**Właściciel grupy** (`owner`):
+Klucz, pod którym `procs` trzyma grupę procesów i jej ostatni stan; nadaje go moduł, który ją uruchomił (dziś task mise w repo). Jeden właściciel ma najwyżej jedną grupę, która nie jest potwierdzona jako pusta.
+
 **Sonda** (health):
 Task mise `health` uruchamiany cyklicznie; jego wynik decyduje o `healthy` / `unhealthy`.
 

@@ -2,9 +2,11 @@ import type { ChildProcess } from "node:child_process";
 
 /**
  * Grupa procesów (§4.1) od strony systemu: jak uruchomić lidera, żeby jego potomkowie byli z nim jedną jednostką,
- * jak ją zatrzymać i jak sprawdzić, że nie żyje. Moduł `procs` zna tylko ten interfejs; Windows ma Job Object
- * (pod Bun, ADR-20), macOS i Linux nową sesję POSIX (`setsid`) z sygnałami do `-pgid`.
+ * jak ją zatrzymać i jak sprawdzić, że nie żyje. Moduł `procs` zna tylko ten interfejs i sam decyduje o kolejności
+ * kroków; Windows ma Job Object (pod Bun, ADR-20), macOS i Linux nową sesję POSIX (`setsid`) z sygnałami do `-pgid`.
  */
+
+/** Metody nie rzucają: błąd systemu przy zatrzymywaniu wychodzi jako grupa, która nie jest pusta. */
 export interface GroupControl {
   /** Łagodna prośba o koniec: SIGTERM do całej grupy, na Windowsie zamknięcie stdin lidera. */
   askToStop(): void;
@@ -16,15 +18,6 @@ export interface GroupControl {
   release(): void;
 }
 
-/** Wynik sprzątania sieroty z `runtime.json` przy starcie daemona. */
-export type OrphanOutcome =
-  | "gone"
-  | "killed"
-  /** Lider żyje, ale nie da się potwierdzić, że to ten sam proces (PID z recyklingu albo brak sposobu na sprawdzenie). */
-  | "unverified"
-  /** Grupa przeżyła zabicie. */
-  | "alive";
-
 export interface GroupPlatform {
   /** `setsid` na POSIX; na Windowsie lider zostaje w konsoli daemona, a grupę tworzy job. */
   detached: boolean;
@@ -34,17 +27,25 @@ export interface GroupPlatform {
   adopt(child: ChildProcess): GroupControl;
   /** Tożsamość lidera do `runtime.json` (czas startu procesu), `null`, gdy system jej nie podaje. */
   identity(pid: number): Promise<string | null>;
-  /** Zabija grupę z poprzedniego działania daemona, jeśli lider to wciąż ten sam proces. */
-  killOrphan(pid: number, identity: string | null): Promise<OrphanOutcome>;
+  /**
+   * Grupa z poprzedniego działania daemona (`runtime.json`), jeśli wciąż żyje i na pewno jest nasza; `unverified`,
+   * gdy żyje proces o tym PID-ie, ale nie da się potwierdzić, że to nasz lider (PID z recyklingu).
+   */
+  reattach(pid: number, identity: string | null): Promise<GroupControl | "gone" | "unverified">;
 }
 
-export function isAlive(pid: number): boolean {
+/** Sygnał 0 sprawdza istnienie; EPERM znaczy, że proces żyje, tylko należy do innego użytkownika. */
+export function signalExists(target: number): boolean {
   try {
-    process.kill(pid, 0);
+    process.kill(target, 0);
     return true;
   } catch (err) {
     return (err as NodeJS.ErrnoException).code === "EPERM";
   }
+}
+
+export function isAlive(pid: number): boolean {
+  return signalExists(pid);
 }
 
 export async function waitUntil(fn: () => boolean, timeoutMs: number, stepMs = 50): Promise<boolean> {
