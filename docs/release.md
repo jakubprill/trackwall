@@ -7,7 +7,7 @@ Trackwall jest dystrybuowany jako archiwa zip w [GitHub Releases](https://github
 1. Podbij wersję w trzech miejscach (test `apps/desktop/test/versions.test.ts` pilnuje zgodności):
    `packages/daemon/package.json`, `apps/desktop/src-tauri/tauri.conf.json`, `apps/desktop/src-tauri/Cargo.toml`.
    Potem `cargo update --workspace --manifest-path apps/desktop/src-tauri/Cargo.toml` przenosi nową wersję do `Cargo.lock` (bez podbijania zależności); zacommituj go razem z resztą.
-2. Dopisz notatkę o zmianach `docs/release-notes/v<wersja>.md` dla użytkownika: co nowego, jak przejść ze starszej wersji, znane ograniczenia (ten sam test pilnuje, że plik istnieje).
+2. Dopisz notatkę o zmianach `docs/release-notes/v<wersja>.md` dla użytkownika: co nowego, jak przejść ze starszej wersji, znane ograniczenia (ten sam test pilnuje, że plik istnieje i nie jest pusty).
 3. Scal zmianę do `main` przez PR.
 4. Na `main` utwórz i wypchnij tag z tą samą wersją:
 
