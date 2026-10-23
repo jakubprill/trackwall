@@ -6,11 +6,11 @@ import { DomainError, SpawnFailure } from "../../errors.ts";
 import { findCopilot } from "./copilot-command.ts";
 import type { CopilotHookEvent } from "./copilot-hook-record.ts";
 import { type HookCommand, writeCopilotPlugin } from "./copilot-plugin.ts";
-import { LiveSession, type SessionTerminal } from "./live-session.ts";
+import { LiveSession, type SessionPty } from "./live-session.ts";
 import type { ScreenViewer } from "./terminal-screen.ts";
 
 /**
- * Moduł `agents` (§4.4, ADR-25): sesje Copilot CLI uruchamiane z UI w repo z folderu z projektami, kilka naraz.
+ * Moduł `agents` (§4.4, ADR-26): sesje Copilot CLI uruchamiane z UI w repo z folderu z projektami, kilka naraz.
  * Każda sesja to Copilot CLI w PTY należącym do daemona, w grupie procesów modułu `procs`, z wtyczką sesji, której
  * hooki zgłaszają stan (ADR-17). Komendę składa daemon; z zewnątrz przychodzi tylko identyfikator repo (§1.2).
  * Sesje żyją w pamięci daemona: wyjście daemona zatrzymuje je razem z innymi grupami procesów.
@@ -32,7 +32,7 @@ interface AgentsProcs {
     cols: number;
     rows: number;
     onData: (bytes: Uint8Array) => void;
-  }): Promise<{ run: RunState; terminal: SessionTerminal }>;
+  }): Promise<{ run: RunState; terminal: SessionPty }>;
   state(owner: string): RunState | undefined;
   stop(owner: string): Promise<RunState | undefined>;
 }
@@ -73,7 +73,7 @@ export class Agents {
   }
 
   sessions(): SessionList {
-    const sessions = [...this.#sessions.values()].flatMap((s) => s.view() ?? []);
+    const sessions = [...this.#sessions.values()].flatMap((s) => this.#fresh(s) ?? []);
     return { sessions: sessions.reverse() };
   }
 
@@ -110,7 +110,6 @@ export class Agents {
   async stop(id: string): Promise<Session> {
     const session = this.#get(id);
     await this.#deps.procs.stop(owner(id));
-    session.tick();
     return this.#view(session);
   }
 
@@ -126,10 +125,10 @@ export class Agents {
     return this.sessions();
   }
 
-  /** Okno terminala sesji: najpierw obraz ekranu, potem wyjście na bieżąco. */
-  attach(id: string, viewer: ScreenViewer, onSnapshot: (snapshot: string) => void): SessionAttachment {
+  /** Okno terminala sesji: najpierw obraz ekranu, potem wyjście na bieżąco, a `onClosed`, gdy sesja zniknie. */
+  attach(id: string, viewer: ScreenViewer, onSnapshot: (snapshot: string) => void, onClosed: () => void): SessionAttachment {
     const session = this.#get(id);
-    const detach = session.attach(viewer, onSnapshot);
+    const detach = session.attach(viewer, onSnapshot, onClosed);
     return { input: (data) => session.input(data), resize: (cols, rows) => session.resize(cols, rows), detach };
   }
 
@@ -167,11 +166,11 @@ export class Agents {
     let live = 0;
     for (const session of this.#sessions.values()) {
       try {
-        session.tick();
+        if (session.tick()) live++;
       } catch (err) {
+        live++;
         this.#deps.log(`sesja ${session.id}: ${String(err)}`);
       }
-      if (this.#deps.procs.state(owner(session.id))?.kind !== "exited") live++;
     }
     if (live === 0) this.close();
   }
@@ -182,8 +181,14 @@ export class Agents {
     return session;
   }
 
+  /** Stan sesji po przeczytaniu nowych rekordów hooków i końca procesu. */
+  #fresh(session: LiveSession): Session | undefined {
+    session.tick();
+    return session.view();
+  }
+
   #view(session: LiveSession): Session {
-    const view = session.view();
+    const view = this.#fresh(session);
     if (!view) throw new Error(`sesja ${session.id} bez grupy procesów`);
     return view;
   }

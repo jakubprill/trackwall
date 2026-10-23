@@ -12,7 +12,7 @@ import { useSessionFocus } from "@/lib/use-session-focus";
 import { ActivityBar, type ActivityView } from "./ActivityBar.tsx";
 import { DaemonPanel } from "./DaemonPanel.tsx";
 import { ReposView } from "./ReposView.tsx";
-import { SessionsView } from "./SessionsView.tsx";
+import { type SessionSelection, SessionsView } from "./SessionsView.tsx";
 import { SettingsView } from "./SettingsView.tsx";
 
 /** Kolejność i skróty paska widoków; następne widoki pracy (np. graf, sesje) dostają kolejne cyfry. */
@@ -29,13 +29,13 @@ const SESSIONS_POLL_MS = { open: 1000, closed: 3000 };
 
 export function App() {
   const [view, setView] = useState<View>("repos");
-  const [session, setSession] = useState<string>();
+  const [session, setSession] = useState<SessionSelection>();
   const { conn, epoch, error, retry } = useConnection();
   const sessions = useSessions(conn, view === "sessions");
-  // Skok do sesji z traya (ADR-25): powłoka pokazuje okno i podaje sesję, która czeka.
+  // Skok do sesji z traya (ADR-26): powłoka pokazuje okno i podaje sesję, która czeka.
   useSessionFocus((id) => {
     setView("sessions");
-    setSession(id);
+    setSession({ kind: "session", id });
   });
   return (
     <div className="flex h-screen">

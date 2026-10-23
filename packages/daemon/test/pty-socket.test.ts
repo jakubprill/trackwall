@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
+import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { agentsApi, apiResult, PTY_SUBPROTOCOL, Session, SessionList } from "@trackwall/protocol";
+import { agentsApi, apiResult, PTY_CLOSE_NOT_FOUND, PTY_SUBPROTOCOL, Session, SessionList } from "@trackwall/protocol";
 import WebSocket from "ws";
-import { PTY_CLOSE_NOT_FOUND } from "../src/api/pty-socket.ts";
 import { type ApiServer, startApi } from "../src/api/server.ts";
 import { createFacade, type Facade } from "../src/facade.ts";
 import { loopbackRequest } from "../src/loopback.ts";
@@ -110,5 +110,22 @@ describe.skipIf(process.versions.bun === undefined)("terminal sesji przez WebSoc
 
     const unknown = connect(session, [PTY_SUBPROTOCOL, `bearer.${TOKEN}`]);
     expect(await unknown.closed).toBe(PTY_CLOSE_NOT_FOUND);
+  });
+
+  test("żądanie z adresem, którego nie da się sparsować, dostaje 404, a daemon działa dalej", async () => {
+    const response = await new Promise<string>((resolve, reject) => {
+      const socket = createConnection(api.port, "127.0.0.1", () => {
+        socket.write(`GET http://[x/ HTTP/1.1\r\nHost: 127.0.0.1:${api.port}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n`);
+      });
+      let received = "";
+      socket.on("data", (chunk) => {
+        received += chunk.toString("utf8");
+      });
+      socket.on("close", () => resolve(received));
+      socket.on("error", reject);
+    });
+    expect(response.split("\r\n")[0]).toBe("HTTP/1.1 404 Not Found");
+    const health = await loopbackRequest(api.port, "/api/health", { method: "GET", timeoutMs: 5000 });
+    expect(health.status).toBe(200);
   });
 });

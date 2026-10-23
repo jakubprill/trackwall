@@ -1,4 +1,4 @@
-import { agentsApi, type Session, type SessionList, sessionNeedsAttention, workspaceApi } from "@trackwall/protocol";
+import { agentsApi, type Session, type SessionList, workspaceApi } from "@trackwall/protocol";
 import { BellRing, Play, Plus, Square, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -14,9 +14,12 @@ import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
 import { SessionTerminal } from "./SessionTerminal.tsx";
 
+/** Co pokazuje prawa część widoku: wybraną sesję, formularz nowej sesji, a bez wyboru najnowszą sesję. */
+export type SessionSelection = { kind: "new" } | { kind: "session"; id: string } | undefined;
+
 /**
- * Widok „Sesje” (§4.4, ADR-25): kilka sesji Copilot CLI naraz, każda w repo z folderu z projektami. Po lewej lista
- * ze stanem każdej sesji i skokiem do następnej, która czeka na człowieka; po prawej terminal wybranej sesji.
+ * Widok „Sesje” (§4.4, ADR-26): kilka sesji Copilot CLI naraz, każda w repo z folderu z projektami. Po lewej lista
+ * ze stanem każdej sesji i skokiem do następnej, która czeka na Ciebie; po prawej terminal wybranej sesji.
  * Listę sesji odpytuje `App`, bo liczba czekających sesji jest też na pasku widoków.
  */
 export function SessionsView({
@@ -27,12 +30,12 @@ export function SessionsView({
 }: {
   conn: Connection;
   sessions: RemoteHandle<SessionList>;
-  selected: string | undefined;
-  onSelect: (id: string | undefined) => void;
+  selected: SessionSelection;
+  onSelect: (selection: SessionSelection) => void;
 }) {
-  const [starting, setStarting] = useState(false);
   const list = sessions.data?.sessions ?? [];
-  const current = starting ? undefined : (list.find((s) => s.id === selected) ?? list[0]);
+  const current = selected?.kind === "new" ? undefined : (list.find((s) => s.id === selected?.id) ?? list[0]);
+  const show = (id: string) => onSelect({ kind: "session", id });
   const next = nextWaiting(list, current?.id);
   const waiting = waitingCount(list);
 
@@ -41,13 +44,13 @@ export function SessionsView({
       <aside className="bg-card flex min-h-0 flex-col border-r">
         <div className="flex items-center justify-between px-4 pt-3 pb-2">
           <h2 className="hud-label">Sesje {sessions.data && <span className="text-primary">{`// ${twoDigits(list.length)}`}</span>}</h2>
-          <Button variant="ghost" size="icon" onClick={() => setStarting(true)} aria-label="Nowa sesja Copilot CLI">
+          <Button variant="ghost" size="icon" onClick={() => onSelect({ kind: "new" })} aria-label="Nowa sesja Copilot CLI">
             <Plus />
           </Button>
         </div>
         {next && (
           <div className="px-4 pb-3">
-            <Button variant="outline" size="sm" className="w-full" onClick={() => onSelect(next.id)}>
+            <Button variant="outline" size="sm" className="w-full" onClick={() => show(next.id)}>
               <BellRing /> {waiting === 1 ? "Sesja czeka na Ciebie" : `Następna czekająca (${waiting})`}
             </Button>
           </div>
@@ -63,10 +66,7 @@ export function SessionsView({
               session={session}
               position={i + 1}
               active={session.id === current?.id}
-              onSelect={() => {
-                setStarting(false);
-                onSelect(session.id);
-              }}
+              onSelect={() => show(session.id)}
             />
           ))}
         </nav>
@@ -77,15 +77,14 @@ export function SessionsView({
             <Loading />
           </div>
         )}
-        {sessions.data && (!current || starting) && (
+        {sessions.data && !current && (
           <NewSession
             conn={conn}
             onStarted={(session) => {
-              setStarting(false);
-              onSelect(session.id);
+              show(session.id);
               sessions.reload();
             }}
-            onCancel={list.length > 0 ? () => setStarting(false) : undefined}
+            onCancel={list.length > 0 ? () => onSelect(undefined) : undefined}
           />
         )}
         {current && (
@@ -122,19 +121,15 @@ function SessionListItem({
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate text-sm font-medium">{session.repo}</span>
-          {sessionNeedsAttention(session) && <BellRing className="text-warning size-3.5 shrink-0" aria-label="czeka na Ciebie" />}
+          {session.needsAttention && <BellRing className="text-warning size-3.5 shrink-0" aria-label="czeka na Ciebie" />}
         </span>
         <span className="text-muted-foreground text-xs">
-          <StateText state={state} />
+          <StatusLabel tone={state.tone} label={state.label} />
         </span>
         {session.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
       </span>
     </button>
   );
-}
-
-function StateText({ state }: { state: ReturnType<typeof sessionStateLabel> }) {
-  return state.tone ? <StatusLabel tone={state.tone} label={state.label} /> : <span>{state.label}</span>;
 }
 
 /** Nagłówek wybranej sesji (repo, stan, nad czym pracuje, przyciski) i jej terminal. */
@@ -166,7 +161,7 @@ function SessionPanel({
           <span className="flex min-w-0 items-center gap-3">
             <span className="truncate text-sm font-medium">{session.repo}</span>
             <span className="text-muted-foreground text-xs">
-              <StateText state={sessionStateLabel(session)} />
+              <StatusLabel {...sessionStateLabel(session)} />
             </span>
             <span className="text-muted-foreground text-xs">{relativeTime(session.startedAt, new Date())}</span>
           </span>

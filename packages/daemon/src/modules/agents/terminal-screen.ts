@@ -2,7 +2,7 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import headless from "@xterm/headless";
 
 /**
- * Ekran sesji po stronie daemona (§4.4, ADR-25): emulator terminala bez okna, karmiony całym wyjściem PTY.
+ * Ekran sesji po stronie daemona (§4.4, ADR-26): emulator terminala bez okna, karmiony całym wyjściem PTY.
  * Okno terminala w UI, które podłącza się w trakcie sesji (przełączenie sesji, odświeżenie, drugie okno), dostaje
  * najpierw obraz ekranu z tego emulatora, a potem dalsze wyjście. Bez tego musiałoby odtworzyć całe wyjście od
  * startu, a TUI Copilot CLI pracuje na alternatywnym ekranie, którego koniec bufora nie odtwarza.

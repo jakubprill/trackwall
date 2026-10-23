@@ -1,4 +1,4 @@
-import { type Session, sessionNeedsAttention } from "@trackwall/protocol";
+import type { Session } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 
 /**
@@ -29,22 +29,22 @@ export function sessionStateLabel(session: Session): { tone?: StatusTone; label:
   if (!state) return { label: "stan nieznany" };
   const label = STATE_LABELS[state.state];
   const likely = state.confidence === "medium" || state.confidence === "low" ? `prawdopodobnie ${label}` : label;
-  if (sessionNeedsAttention(session)) return { tone: "warning", label: likely };
+  if (session.needsAttention) return { tone: "warning", label: likely };
   if (state.state === "Error" || state.state === "Stale") return { tone: "error", label: likely };
   return { tone: "ok", label: likely };
 }
 
 /**
- * Następna sesja czekająca na człowieka po bieżącej, w kolejności listy i w kółko; `undefined`, gdy żadna nie czeka.
+ * Następna sesja, która czeka na Ciebie, po bieżącej, w kolejności listy i w kółko; `undefined`, gdy żadna nie czeka.
  * Bieżąca sesja jest wybierana dopiero wtedy, gdy czeka tylko ona.
  */
 export function nextWaiting(sessions: readonly Session[], current: string | undefined): Session | undefined {
-  const waiting = sessions.filter(sessionNeedsAttention);
+  const waiting = sessions.filter((s) => s.needsAttention);
   const at = sessions.findIndex((s) => s.id === current);
   const after = waiting.find((s) => sessions.indexOf(s) > at);
   return after ?? waiting[0];
 }
 
 export function waitingCount(sessions: readonly Session[]): number {
-  return sessions.filter(sessionNeedsAttention).length;
+  return sessions.filter((s) => s.needsAttention).length;
 }

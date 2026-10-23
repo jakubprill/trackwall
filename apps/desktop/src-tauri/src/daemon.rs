@@ -158,7 +158,7 @@ pub fn shutdown(conn: &Connection) -> Result<(), String> {
     Err(format!("daemon nadal odpowiada po {} s", STOP_TIMEOUT.as_secs()))
 }
 
-/// Treść odpowiedzi `POST /api/agents/sessions` (lista sesji Copilot CLI, ADR-25).
+/// Treść odpowiedzi `POST /api/agents/sessions` (lista sesji Copilot CLI, ADR-26).
 pub fn sessions(conn: &Connection) -> Result<String, String> {
     let (status, body) = http(conn.port, "POST", "/api/agents/sessions", Some(&conn.token))?;
     if status != 200 {

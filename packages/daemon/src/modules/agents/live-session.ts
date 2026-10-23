@@ -11,8 +11,11 @@ import { type ScreenViewer, TerminalScreen } from "./terminal-screen.ts";
 /** Ten sam próg co w prototypie (`copilot-record.ts`), żeby nagranie i daemon liczyły `Stale` tak samo. */
 export const STALE_AFTER_MS = 60_000;
 
-/** Terminal procesu sesji, z `procs` (`GroupTerminal`). */
-export interface SessionTerminal {
+/** Stany, w których działająca sesja czeka na Ciebie (`Session.needsAttention`). */
+const WAITING_STATES: ReadonlySet<string> = new Set(["Input", "Approval", "Plan"]);
+
+/** PTY procesu sesji: terminal lidera grupy z `procs` (`GroupTerminal`). */
+export interface SessionPty {
   write(data: string): void;
   resize(cols: number, rows: number): void;
 }
@@ -37,9 +40,10 @@ export class LiveSession {
   readonly #state = new CopilotSessionState({ now: Date.now, staleAfterMs: STALE_AFTER_MS });
   readonly #hooks: HookTail;
   readonly #decoder = new TextDecoder();
-  #terminal: SessionTerminal | undefined;
+  #terminal: SessionPty | undefined;
   #last: TaskStateChange | null = null;
   #finished = false;
+  readonly #closers = new Set<() => void>();
 
   constructor(o: LiveSessionOptions) {
     this.id = o.id;
@@ -50,7 +54,7 @@ export class LiveSession {
   }
 
   /** Terminal procesu; przychodzi po starcie grupy, a wyjście może przyjść już wcześniej. */
-  connect(terminal: SessionTerminal): void {
+  connect(terminal: SessionPty): void {
     this.#terminal = terminal;
   }
 
@@ -71,26 +75,34 @@ export class LiveSession {
     this.#terminal?.resize(cols, rows);
   }
 
-  attach(viewer: ScreenViewer, onSnapshot: (snapshot: string) => void): () => void {
-    return this.#screen.attach(viewer, onSnapshot);
+  /** `onClosed` dostaje widz, którego sesja znika (`dismiss`), żeby jego okno nie czekało na wyjście, które nie przyjdzie. */
+  attach(viewer: ScreenViewer, onSnapshot: (snapshot: string) => void, onClosed: () => void): () => void {
+    const detach = this.#screen.attach(viewer, onSnapshot);
+    this.#closers.add(onClosed);
+    return () => {
+      this.#closers.delete(onClosed);
+      detach();
+    };
   }
 
-  /** Wołane cyklicznie: nowe rekordy hooków, próg `Stale` i koniec procesu; po końcu nic już nie zmienia stanu. */
-  tick(): void {
-    if (this.#finished) return;
+  /**
+   * Nowe rekordy hooków, próg `Stale` i koniec procesu; po końcu nic już nie zmienia stanu. Wołane cyklicznie
+   * i przed każdym odczytem stanu, bo koniec procesu widać w `procs` wcześniej niż w cyklu. Zwraca, czy sesja żyje.
+   */
+  tick(): boolean {
+    if (this.#finished) return false;
     for (const record of this.#hooks.read()) this.#report(this.#state.hook(record));
     this.#report([this.#state.tick()]);
     const run = this.#run();
-    if (run?.kind !== "exited") return;
+    if (run?.kind !== "exited") return true;
     // Zatrzymanie przez użytkownika to zamierzony koniec, nie błąd sesji, choć proces kończy się sygnałem.
     this.#report([this.#state.exit(run.stoppedByUser ? 0 : (run.exitCode ?? 1))]);
     this.#finished = true;
     this.#hooks.close();
+    return false;
   }
 
-  /** Najpierw `tick`: koniec procesu widać w `procs` wcześniej niż w cyklu sesji, a stan musi już go uwzględniać. */
   view(): Session | undefined {
-    this.tick();
     const run = this.#run();
     if (!run) return undefined;
     return {
@@ -100,12 +112,15 @@ export class LiveSession {
       run,
       state: this.#last,
       windowTitle: this.#state.windowTitle ?? null,
+      needsAttention: run.kind === "running" && WAITING_STATES.has(this.#last?.state ?? ""),
     };
   }
 
   dispose(): void {
     if (!this.#finished) this.#hooks.close();
     this.#finished = true;
+    for (const close of this.#closers) close();
+    this.#closers.clear();
     this.#screen.dispose();
   }
 

@@ -7,9 +7,9 @@ import { isCompiledBinary, runtimeInfo } from "./platform/runtime.ts";
  * `--no-env-file`, bo inaczej wczytałby `.env` z katalogu, w którym uruchomi go tamten program; Node dostaje flagi
  * daemona, bo bez nich nie uruchomi TypeScriptu.
  */
-export function selfCommand(args: readonly string[]): string[] {
+export function selfCommand(args: readonly string[]): { exec: string; args: string[] } {
   const script = process.argv[1];
   const runtimeArgs = runtimeInfo().name === "node" ? process.execArgv : ["--no-env-file"];
   const fromSource = !isCompiledBinary() && script !== undefined ? [...runtimeArgs, resolve(script)] : [];
-  return [process.execPath, ...fromSource, ...args];
+  return { exec: process.execPath, args: [...fromSource, ...args] };
 }

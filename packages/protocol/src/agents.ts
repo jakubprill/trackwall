@@ -5,7 +5,7 @@ import { TaskStateChange } from "./task-state.ts";
 import { RepoId } from "./workspace.ts";
 
 /**
- * Kontrakt modułu `agents` (§4.4, ADR-25): sesje Copilot CLI w PTY należącym do daemona, kilka naraz. Każda akcja
+ * Kontrakt modułu `agents` (§4.4, ADR-26): sesje Copilot CLI w PTY należącym do daemona, kilka naraz. Każda akcja
  * to `POST /api/agents/<akcja>`, a terminal sesji to WebSocket `/ws/pty/<sesja>` (§5.2). Klient wskazuje repo
  * identyfikatorem; komendę Copilot CLI składa daemon (§1.2).
  */
@@ -24,6 +24,11 @@ export const Session = z.object({
   state: TaskStateChange.nullable(),
   /** Tytuł okna z OSC 0 / 2: nad czym agent pracuje. */
   windowTitle: z.string().nullable(),
+  /**
+   * Czeka na Ciebie: działa, a stan to `Input`, `Approval` albo `Plan`. Liczy to daemon, żeby UI i tray w powłoce
+   * (Rust) czytały jedną regułę zamiast jej kopii.
+   */
+  needsAttention: z.boolean(),
 });
 export type Session = z.infer<typeof Session>;
 
@@ -58,6 +63,13 @@ export const PTY_SUBPROTOCOL = "trackwall.pty";
 export const PTY_TOKEN_PREFIX = "bearer.";
 
 /**
+ * Kody zamknięcia WebSocketu terminala z zakresu aplikacji (4000–4999), żeby okno terminala odróżniło koniec sesji
+ * od zerwania połączenia. Sesji nie ma (nieznana albo zamknięta przez `dismiss`): okno nie łączy się ponownie. */
+export const PTY_CLOSE_NOT_FOUND = 4404;
+/** Okno nie odbiera wyjścia (ponad 8 MB w buforze daemona); łączy się ponownie od obrazu ekranu. */
+export const PTY_CLOSE_SLOW = 4429;
+
+/**
  * Ramki od klienta (tekst JSON). Daemon wysyła wyjście terminala ramkami binarnymi, a po podłączeniu najpierw obraz
  * ekranu (ramka tekstowa), od którego klient zaczyna.
  */
@@ -66,9 +78,3 @@ export const PtyClientMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("resize"), cols: z.number().int().min(10).max(1000), rows: z.number().int().min(4).max(500) }),
 ]);
 export type PtyClientMessage = z.infer<typeof PtyClientMessage>;
-
-/** Stany, w których sesja czeka na człowieka: UI i tray pokazują je jako „czeka na Ciebie”. */
-export function sessionNeedsAttention(session: Session): boolean {
-  const state = session.state?.state;
-  return session.run.kind === "running" && (state === "Input" || state === "Approval" || state === "Plan");
-}

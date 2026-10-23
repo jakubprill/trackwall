@@ -69,7 +69,7 @@ function toInt(value: string | undefined, name: string): number {
   return n;
 }
 
-/** Podkomenda `trackwall-daemon`, którą Copilot CLI uruchamia jako hook wtyczki sesji (ADR-17, ADR-25). */
+/** Podkomenda `trackwall-daemon`, którą Copilot CLI uruchamia jako hook wtyczki sesji (ADR-17, ADR-26). */
 export const COPILOT_HOOK_COMMAND = "copilot-hook";
 
 /** Wiersz poleceń: daemon albo hook wtyczki sesji (`copilot-hook <zdarzenie> <hooks.jsonl>`). */

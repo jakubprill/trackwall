@@ -4,8 +4,13 @@ import { nextWaiting, sessionStateLabel, waitingCount } from "../src/lib/session
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-23T10:00:00Z", pid: 10 } as const;
 
-function session(id: string, state: Session["state"], run: Session["run"] = running): Session {
-  return { id, repo: `repo-${id}`, startedAt: "2026-10-23T10:00:00Z", run, state, windowTitle: null };
+/** `needsAttention` liczy daemon; tu jest podane wprost, tak jak przychodzi w liście sesji. */
+function session(id: string, state: Session["state"], run: Session["run"] = running, needsAttention = false): Session {
+  return { id, repo: `repo-${id}`, startedAt: "2026-10-23T10:00:00Z", run, state, windowTitle: null, needsAttention };
+}
+
+function waiting(id: string, state: Session["state"]): Session {
+  return session(id, state, running, true);
 }
 
 function change(state: NonNullable<Session["state"]>["state"], confidence: NonNullable<Session["state"]>["confidence"] = "high") {
@@ -17,14 +22,14 @@ function exited(exitCode: number | null, stoppedByUser = false): Session["run"] 
 }
 
 describe("stan sesji w jednej linii", () => {
-  test("sesja czekająca na człowieka ma ton ostrzeżenia, pracująca ok", () => {
-    expect(sessionStateLabel(session("a", change("Input")))).toEqual({ tone: "warning", label: "czeka na Ciebie" });
-    expect(sessionStateLabel(session("a", change("Approval")))).toEqual({ tone: "warning", label: "prosi o zgodę" });
+  test("sesja, która czeka na Ciebie, ma ton ostrzeżenia, pracująca ok", () => {
+    expect(sessionStateLabel(waiting("a", change("Input")))).toEqual({ tone: "warning", label: "czeka na Ciebie" });
+    expect(sessionStateLabel(waiting("a", change("Approval")))).toEqual({ tone: "warning", label: "prosi o zgodę" });
     expect(sessionStateLabel(session("a", change("Working")))).toEqual({ tone: "ok", label: "pracuje" });
   });
 
   test("słabszy sygnał jest podany jako „prawdopodobnie”", () => {
-    expect(sessionStateLabel(session("a", change("Input", "low"))).label).toBe("prawdopodobnie czeka na Ciebie");
+    expect(sessionStateLabel(waiting("a", change("Input", "low"))).label).toBe("prawdopodobnie czeka na Ciebie");
     expect(sessionStateLabel(session("a", change("Working", "medium"))).label).toBe("prawdopodobnie pracuje");
   });
 
@@ -40,8 +45,8 @@ describe("stan sesji w jednej linii", () => {
 describe("skok do sesji czekającej", () => {
   const list = [
     session("a", change("Working")),
-    session("b", change("Input")),
-    session("c", change("Approval")),
+    waiting("b", change("Input")),
+    waiting("c", change("Approval")),
     session("d", change("Working")),
   ];
 
@@ -52,7 +57,7 @@ describe("skok do sesji czekającej", () => {
     expect(nextWaiting(list, undefined)?.id).toBe("b");
   });
 
-  test("zakończona sesja nie czeka, nawet gdy ostatni stan to Input", () => {
+  test("liczą się tylko sesje, które czekają na Ciebie", () => {
     const ended = [session("a", change("Input"), exited(0))];
     expect(nextWaiting(ended, undefined)).toBeUndefined();
     expect(waitingCount(ended)).toBe(0);

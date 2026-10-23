@@ -53,10 +53,7 @@ async function main(args: DaemonArgs): Promise<void> {
       openUrl: openBrowser,
       miseCommand: ["mise"],
       copilotCommand: ["copilot"],
-      hookCommand: (event, hooksFile) => {
-        const [exec = process.execPath, ...args] = selfCommand([COPILOT_HOOK_COMMAND, event, hooksFile]);
-        return { exec, args };
-      },
+      hookCommand: (event, hooksFile) => selfCommand([COPILOT_HOOK_COMMAND, event, hooksFile]),
       userEnv,
       log,
     });

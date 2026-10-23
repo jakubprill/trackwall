@@ -103,7 +103,7 @@ export class ProcessGroups {
     let started = this.starting.get(spec.owner);
     if (!started) {
       started = this.spawnGroup(spec, (cwd, platform) => launchPiped(spec, cwd, platform.detached))
-        .then(stateOf)
+        .then(({ group }) => stateOf(group))
         .finally(() => this.starting.delete(spec.owner));
       this.starting.set(spec.owner, started);
     }
@@ -111,7 +111,7 @@ export class ProcessGroups {
   }
 
   /**
-   * Uruchamia grupę, której lider działa w PTY (§4.4, ADR-25), i zwraca terminal do pisania i zmiany rozmiaru.
+   * Uruchamia grupę, której lider działa w PTY (§4.4, ADR-26), i zwraca terminal do pisania i zmiany rozmiaru.
    * Właściciel musi być nowy: sesja w terminalu nie ma „drugiego startu”, który oddałby istniejącą.
    */
   async startTerminal(spec: TerminalGroupSpec): Promise<{ run: RunState; terminal: GroupTerminal }> {
@@ -119,17 +119,14 @@ export class ProcessGroups {
     if (this.groups.has(spec.owner) || this.starting.has(spec.owner)) throw new Error(`właściciel ${spec.owner} ma już grupę`);
     const terminals = await this.deps.terminals;
     if (!terminals) throw new SpawnFailure("terminal_unavailable", "ten runtime daemona nie ma PTY (daemon pod Node)");
-    let terminal: GroupTerminal | undefined;
-    const started = this.spawnGroup(spec, async (cwd) => {
-      const launched = launchTerminal(terminals, spec, cwd);
-      terminal = launched.terminal;
-      return launched;
-    }).then(stateOf);
-    this.starting.set(spec.owner, started);
+    const started = this.spawnGroup(spec, async (cwd) => launchTerminal(terminals, spec, cwd));
+    this.starting.set(
+      spec.owner,
+      started.then(({ group }) => stateOf(group)),
+    );
     try {
-      const run = await started;
-      if (!terminal) throw new Error("grupa bez terminala");
-      return { run, terminal };
+      const { group, launched } = await started;
+      return { run: stateOf(group), terminal: launched.leader };
     } finally {
       this.starting.delete(spec.owner);
     }
@@ -193,10 +190,14 @@ export class ProcessGroups {
     this.persist();
   }
 
-  private async spawnGroup(spec: GroupSpec, launch: (cwd: string, platform: GroupPlatform) => Promise<Launched>): Promise<Group> {
+  private async spawnGroup<L extends Launched>(
+    spec: GroupSpec,
+    launch: (cwd: string, platform: GroupPlatform) => Promise<L>,
+  ): Promise<{ group: Group; launched: L }> {
     await requireDirectory(spec.cwd);
     const platform = await this.deps.platform;
-    const { leader, leaderExit, tail } = await launch(spec.cwd, platform);
+    const launched = await launch(spec.cwd, platform);
+    const { leader, leaderExit, tail } = launched;
     let control: GroupControl;
     try {
       control = platform.adopt(leader);
@@ -219,7 +220,7 @@ export class ProcessGroups {
     leaderExit
       .then((exit) => this.onLeaderExit(group, exit))
       .catch((err: unknown) => this.deps.log(`koniec grupy ${spec.owner}: ${String(err)}`));
-    return group;
+    return { group, launched };
   }
 
   /** Lider skończył sam albo po stopie: reszta grupy jest zabijana, a uruchomienie kończy się dopiero przy pustej grupie. */
@@ -313,14 +314,14 @@ async function launchPiped(spec: GroupSpec, cwd: string, detached: boolean): Pro
   return { leader, leaderExit, tail };
 }
 
-/** Lider w PTY: wyjście terminala idzie do wołającego i do ostatnich linii stanu `exited`. */
-function launchTerminal(terminals: TerminalPlatform, spec: TerminalGroupSpec, cwd: string): Launched & { terminal: GroupTerminal } {
+/** Lider w PTY jest zarazem terminalem; jego wyjście idzie do wołającego i do ostatnich linii stanu `exited`. */
+function launchTerminal(terminals: TerminalPlatform, spec: TerminalGroupSpec, cwd: string): Launched & { leader: TerminalProcess } {
   const [program] = spec.command;
   if (program === undefined) throw new Error("pusta komenda");
   const tail = new OutputTail();
-  let proc: TerminalProcess;
+  let leader: TerminalProcess;
   try {
-    proc = terminals.spawn({
+    leader = terminals.spawn({
       command: spec.command,
       cwd,
       env: spec.env,
@@ -334,21 +335,8 @@ function launchTerminal(terminals: TerminalPlatform, spec: TerminalGroupSpec, cw
   } catch (err) {
     throw spawnFailure(program, err as NodeJS.ErrnoException);
   }
-  const leaderExit = proc.exited.then((exit) => ({ ...exit, at: new Date().toISOString() }));
-  const leader = {
-    pid: proc.pid,
-    closeInput: () => proc.close(),
-    hasExited: () => proc.hasExited(),
-    kill: () => {
-      try {
-        process.kill(proc.pid, "SIGKILL");
-      } catch {
-        // już nie żyje
-      }
-    },
-  };
-  const terminal: GroupTerminal = { write: (data) => proc.write(data), resize: (cols, rows) => proc.resize(cols, rows) };
-  return { leader, leaderExit, tail, terminal };
+  const leaderExit = leader.exited.then((exit) => ({ ...exit, at: new Date().toISOString() }));
+  return { leader, leaderExit, tail };
 }
 
 /**

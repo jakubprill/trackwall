@@ -1,5 +1,5 @@
 import "@xterm/xterm/css/xterm.css";
-import type { PtyClientMessage } from "@trackwall/protocol";
+import { PTY_CLOSE_NOT_FOUND, type PtyClientMessage } from "@trackwall/protocol";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { useEffect, useRef, useState } from "react";
@@ -7,12 +7,10 @@ import type { Connection } from "@/lib/connection";
 import { ptySocket } from "@/lib/pty-socket";
 import { terminalTheme } from "@/lib/terminal-theme";
 
-/** Kod zamknięcia od daemona, gdy sesji nie ma (`PTY_CLOSE_NOT_FOUND` w daemonie). */
-const CLOSE_NOT_FOUND = 4404;
 const RECONNECT_MS = 1000;
 
 /**
- * Okno terminala jednej sesji (§4.4, ADR-25): xterm.js podłączony WebSocketem do PTY w daemonie. Daemon najpierw
+ * Okno terminala jednej sesji (§4.4, ADR-26): xterm.js podłączony WebSocketem do PTY w daemonie. Daemon najpierw
  * przysyła obraz ekranu, więc przełączenie sesji albo zerwane połączenie zaczyna od aktualnego ekranu, a nie od
  * pustego terminala. Klawisze i rozmiar okna idą do sesji; rozmiar PTY ustala ostatnie okno, które go zgłosiło.
  */
@@ -65,7 +63,7 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
       };
       ws.onclose = (event) => {
         if (disposed) return;
-        if (event.code === CLOSE_NOT_FOUND) return setNotice("Tej sesji nie ma już w daemonie.");
+        if (event.code === PTY_CLOSE_NOT_FOUND) return setNotice("Tej sesji nie ma już w daemonie.");
         setNotice("Połączenie z terminalem sesji zerwane; łączenie ponownie…");
         timer = setTimeout(connect, RECONNECT_MS);
       };

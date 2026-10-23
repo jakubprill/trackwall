@@ -1,13 +1,13 @@
-//! Sesje Copilot CLI, które czekają na człowieka (ADR-25): powłoka co chwilę pyta daemon o listę sesji i, gdy któraś
+//! Sesje Copilot CLI, które czekają na Ciebie (ADR-26): powłoka co chwilę pyta daemon o listę sesji i, gdy któraś
 //! przestaje pracować i zaczyna czekać, zwraca uwagę użytkownika (miganie na pasku zadań, podskok w Docku), zmienia
 //! podpowiedź i menu traya. Kliknięcie pozycji w menu pokazuje okno z tą sesją.
 //!
 //! Pytanie idzie z powłoki, a nie z UI: schowane okno WebView może mieć wstrzymane timery, a tray ma działać także
-//! przy zamkniętym oknie. Reguła „czeka na człowieka” jest ta sama co w UI (`sessionNeedsAttention` w protocol).
+//! przy zamkniętym oknie. Czy sesja czeka na Ciebie, liczy daemon (`Session.needsAttention`), tak samo dla UI i traya.
 
 use crate::daemon;
 use crate::daemon_state::DaemonState;
-use serde_json::Value;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -15,14 +15,14 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::{AppHandle, Emitter, Manager, UserAttentionType};
 
 const POLL: Duration = Duration::from_secs(2);
-/// Zdarzenie dla UI z identyfikatorem sesji do pokazania (`FOCUS_SESSION_EVENT` w UI).
+/// Zdarzenie dla UI z identyfikatorem sesji do pokazania (`FOCUS_SESSION_EVENT` w `use-session-focus.ts`).
 const FOCUS_SESSION_EVENT: &str = "focus-session";
 /// Identyfikatory pozycji menu traya; pozycja sesji to prefiks i identyfikator sesji.
 pub const MENU_SHOW: &str = "show";
 pub const MENU_QUIT: &str = "quit";
 const MENU_SESSION_PREFIX: &str = "session:";
 
-/// Sesja, która czeka na człowieka.
+/// Sesja, która czeka na Ciebie.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Waiting {
     pub id: String,
@@ -32,22 +32,47 @@ pub struct Waiting {
 /// Stan sesji z ostatniego pytania: identyfikator i stan z `TaskState` (albo `None` bez sygnału).
 type States = HashMap<String, Option<String>>;
 
-/// Sesje z odpowiedzi `POST /api/agents/sessions`: stan każdej działającej sesji i te, które czekają.
+/// Tylko te pola odpowiedzi `POST /api/agents/sessions`, których potrzebuje tray (`SessionList` w protocol).
+#[derive(Deserialize)]
+struct Reply {
+    data: SessionList,
+}
+
+#[derive(Deserialize)]
+struct SessionList {
+    sessions: Vec<Session>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Session {
+    id: String,
+    repo: String,
+    run: Run,
+    state: Option<StateChange>,
+    needs_attention: bool,
+}
+
+#[derive(Deserialize)]
+struct Run {
+    kind: String,
+}
+
+#[derive(Deserialize)]
+struct StateChange {
+    state: String,
+}
+
+/// Sesje z odpowiedzi daemona: stan każdej działającej sesji i te, które czekają na Ciebie.
 pub fn parse_sessions(body: &str) -> Option<(States, Vec<Waiting>)> {
-    let v: Value = serde_json::from_str(body).ok()?;
-    let sessions = v["data"]["sessions"].as_array()?;
+    let reply: Reply = serde_json::from_str(body).ok()?;
     let mut states = States::new();
     let mut waiting = Vec::new();
-    for s in sessions {
-        let (Some(id), Some(repo)) = (s["id"].as_str(), s["repo"].as_str()) else { continue };
-        if s["run"]["kind"].as_str() != Some("running") {
-            continue;
+    for s in reply.data.sessions.into_iter().filter(|s| s.run.kind == "running") {
+        if s.needs_attention {
+            waiting.push(Waiting { id: s.id.clone(), repo: s.repo });
         }
-        let state = s["state"]["state"].as_str().map(str::to_owned);
-        if matches!(state.as_deref(), Some("Input" | "Approval" | "Plan")) {
-            waiting.push(Waiting { id: id.to_owned(), repo: repo.to_owned() });
-        }
-        states.insert(id.to_owned(), state);
+        states.insert(s.id, s.state.map(|c| c.state));
     }
     Some((states, waiting))
 }
@@ -59,13 +84,23 @@ pub fn newly_waiting(previous: &States, waiting: &[Waiting]) -> Vec<Waiting> {
 }
 
 pub fn tooltip(waiting: &[Waiting]) -> String {
-    match waiting.len() {
-        0 => "Trackwall".to_owned(),
-        1 => format!("Trackwall: sesja {} czeka na Ciebie", waiting[0].repo),
-        // 2–4 sesje czekają, ale 5 (i 12–14) sesji czeka.
-        n if (2..=4).contains(&(n % 10)) && !(12..=14).contains(&(n % 100)) => format!("Trackwall: {n} sesje czekają na Ciebie"),
-        n => format!("Trackwall: {n} sesji czeka na Ciebie"),
+    match waiting {
+        [] => "Trackwall".to_owned(),
+        [only] => format!("Trackwall: sesja {} czeka na Ciebie", only.repo),
+        _ => format!("Trackwall: {} na Ciebie", count_label(waiting.len(), "sesja czeka", "sesje czekają", "sesji czeka")),
     }
+}
+
+/// Liczba z polską formą: 1 sesja, 2–4 sesje (ale 12–14 sesji), 5 sesji; to samo co `countLabel` w UI (`format.ts`).
+fn count_label(n: usize, one: &str, few: &str, many: &str) -> String {
+    let form = if n == 1 {
+        one
+    } else if (2..=4).contains(&(n % 10)) && !(12..=14).contains(&(n % 100)) {
+        few
+    } else {
+        many
+    };
+    format!("{n} {form}")
 }
 
 /// Menu traya: sesje czekające na górze, potem stałe pozycje.
@@ -131,15 +166,16 @@ mod tests {
     }
 
     fn session(id: &str, run: &str, state: Option<&str>) -> String {
+        let attention = run == "running" && matches!(state, Some("Input" | "Approval" | "Plan"));
         let state = state.map(|s| format!(r#"{{"state":"{s}","source":"hook","confidence":"high","at":"x","reason":"r"}}"#));
         format!(
-            r#"{{"id":"{id}","repo":"repo-{id}","startedAt":"x","run":{{"kind":"{run}"}},"state":{},"windowTitle":null}}"#,
+            r#"{{"id":"{id}","repo":"repo-{id}","startedAt":"x","run":{{"kind":"{run}"}},"state":{},"windowTitle":null,"needsAttention":{attention}}}"#,
             state.unwrap_or_else(|| "null".into())
         )
     }
 
     #[test]
-    fn waiting_sessions_are_running_ones_in_input_approval_or_plan() {
+    fn waiting_sessions_are_the_ones_daemon_marks_as_needing_attention() {
         let list = [
             session("a", "running", Some("Working")),
             session("b", "running", Some("Approval")),
@@ -174,6 +210,8 @@ mod tests {
         assert_eq!(tooltip(&[w("a")]), "Trackwall: sesja repo-a czeka na Ciebie");
         assert_eq!(tooltip(&[w("a"), w("b")]), "Trackwall: 2 sesje czekają na Ciebie");
         assert_eq!(tooltip(&["a", "b", "c", "d", "e"].map(w)), "Trackwall: 5 sesji czeka na Ciebie");
+        assert_eq!(count_label(12, "sesja", "sesje", "sesji"), "12 sesji");
+        assert_eq!(count_label(22, "sesja", "sesje", "sesji"), "22 sesje");
         assert_eq!(session_from_menu("session:abc"), Some("abc"));
         assert_eq!(session_from_menu(MENU_SHOW), None);
     }

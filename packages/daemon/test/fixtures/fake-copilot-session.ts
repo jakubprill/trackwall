@@ -1,11 +1,13 @@
 /**
  * Interaktywna atrapa Copilot CLI dla testów sesji w daemonie: działa w PTY, czyta wtyczkę z `--plugin-dir`
  * i wywołuje jej hooki tak jak Copilot CLI (program z `exec` + `args`, payload JSON na stdin). Przebieg:
- * ekran powitalny i `sessionStart` (czeka na człowieka), linia od użytkownika uruchamia turę z prośbą o zgodę
+ * ekran powitalny i `sessionStart` (czeka na Ciebie), linia od użytkownika uruchamia turę z prośbą o zgodę
  * (`notification` `permission_prompt`), `y` kończy turę (`agentStop`), a `/exit` kończy sesję (`sessionEnd`).
- * Tytuł okna i pasek postępu idą sekwencjami OSC, jak w Copilot CLI.
+ * Tytuł okna i pasek postępu idą sekwencjami OSC, jak w Copilot CLI. Pierwsza tura uruchamia proces pomocnika
+ * (jak narzędzie agenta) i wypisuje jego PID, żeby test sprawdził, że stop sesji kończy całą grupę. Pomocnik startuje
+ * dopiero po wejściu od użytkownika, bo na Windowsie lider trafia do joba chwilę po starcie.
  */
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -44,6 +46,8 @@ lines.on("line", (line) => {
     return;
   }
   fire("userPromptSubmitted", { prompt: line });
+  const helper = spawn(process.execPath, ["-e", "setTimeout(() => {}, 600000)"], { stdio: "ignore" });
+  process.stdout.write(`PID pomocnika: ${helper.pid}\r\n`);
   process.stdout.write(`\x1b]0;Praca nad: ${line}\x07\x1b]9;4;3;0\x07Myślę nad: ${line}\r\nZezwolić na bash? (y/n) `);
   awaitingApproval = true;
   fire("notification", { notification_type: "permission_prompt", message: "Allow bash?" });

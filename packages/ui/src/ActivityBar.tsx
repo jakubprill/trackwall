@@ -28,7 +28,7 @@ export function ActivityBar<Id extends string>({
   views: readonly ActivityView<Id>[];
   active: Id;
   onSelect: (id: Id) => void;
-  /** Liczba przy ikonie widoku, np. sesje czekające na człowieka; zero i brak nie pokazują niczego. */
+  /** Liczba przy ikonie widoku, np. sesje, które czekają na Ciebie; zero i brak nie pokazują niczego. */
   badges?: Partial<Record<Id, number>>;
 }) {
   useViewShortcuts(views, onSelect);

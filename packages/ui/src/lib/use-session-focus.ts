@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { SessionId } from "@trackwall/protocol";
 import { useEffect, useRef } from "react";
 
-/** Zdarzenie powłoki Tauri: użytkownik kliknął w trayu sesję, która czeka (ADR-25); niesie identyfikator sesji. */
+/** Zdarzenie powłoki Tauri: użytkownik kliknął w trayu sesję, która czeka (ADR-26); niesie identyfikator sesji. */
 const FOCUS_SESSION_EVENT = "focus-session";
 
 /** Wywołuje `onFocus` z identyfikatorem sesji, gdy powłoka prosi o pokazanie jej; poza oknem Tauri nic nie robi. */

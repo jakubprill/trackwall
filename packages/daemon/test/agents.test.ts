@@ -2,12 +2,13 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Session, sessionNeedsAttention } from "@trackwall/protocol";
+import type { Session } from "@trackwall/protocol";
 import { DomainError } from "../src/errors.ts";
 import { Agents } from "../src/modules/agents/agents.ts";
 import { ProcessGroups } from "../src/modules/procs/process-groups.ts";
 import { RuntimeFile } from "../src/modules/procs/runtime-file.ts";
 import { groupPlatform } from "../src/platform/group-platform.ts";
+import { isAlive } from "../src/platform/process-group.ts";
 import { terminalPlatform } from "../src/platform/terminal.ts";
 
 const fakeCopilot = join(import.meta.dir, "fixtures", "fake-copilot-session.ts");
@@ -49,9 +50,10 @@ async function waitFor(agents: Agents, id: string, check: (s: Session) => boolea
   }
 }
 
-/** Okno terminala na niby: obraz ekranu i wyjście jako tekst. */
+/** Okno terminala na niby: obraz ekranu i wyjście jako tekst oraz to, czy daemon je zamknął. */
 function viewer(agents: Agents, id: string) {
   let screen = "";
+  let closed = false;
   const decoder = new TextDecoder();
   const attachment = agents.attach(
     id,
@@ -61,8 +63,11 @@ function viewer(agents: Agents, id: string) {
     (snapshot) => {
       screen += snapshot;
     },
+    () => {
+      closed = true;
+    },
   );
-  return { attachment, text: () => screen };
+  return { attachment, text: () => screen, closed: () => closed };
 }
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -81,7 +86,7 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
 
     const waiting = await waitFor(agents, started.id, (s) => s.state?.reason === "hook sessionStart", "sessionStart");
     expect(waiting.state).toMatchObject({ state: "Input", source: "hook" });
-    expect(sessionNeedsAttention(waiting)).toBe(true);
+    expect(waiting.needsAttention).toBe(true);
 
     const window = viewer(agents, started.id);
     await waitFor(agents, started.id, () => window.text().includes("Witaj w atrapie"), "obraz ekranu");
@@ -99,7 +104,7 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
     window.attachment.input("/exit\r");
     const done = await waitFor(agents, started.id, (s) => s.run.kind === "exited", "koniec sesji");
     expect(done.state).toMatchObject({ state: "Done", source: "hook" });
-    expect(sessionNeedsAttention(done)).toBe(false);
+    expect(done.needsAttention).toBe(false);
     window.attachment.detach();
   }, 60_000);
 
@@ -121,19 +126,26 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
     await agents.stop(started.id);
   }, 60_000);
 
-  test("stop zatrzymuje całą grupę, a zamknięcie usuwa sesję z listy i jej pliki", async () => {
+  test("stop zatrzymuje całą grupę z procesem pomocnika, a zamknięcie usuwa sesję, jej pliki i okna", async () => {
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
     const { agents, home } = makeAgents(repoDir);
     const started = await agents.start("sklep");
-    await waitFor(agents, started.id, (s) => s.state !== null, "pierwszy sygnał");
+    const window = viewer(agents, started.id);
+    window.attachment.input("uruchom pomocnika\r");
+    await waitFor(agents, started.id, () => /PID pomocnika: \d+/.test(window.text()), "proces pomocnika");
+    const helperPid = Number(/PID pomocnika: (\d+)/.exec(window.text())?.[1]);
+    expect(isAlive(helperPid)).toBe(true);
     expect(() => agents.dismiss(started.id)).toThrow("sesja jeszcze działa");
 
     const stopped = await agents.stop(started.id);
     expect(stopped.run).toMatchObject({ kind: "exited", stoppedByUser: true });
     expect(stopped.state?.state).toBe("Done");
+    expect(isAlive(helperPid)).toBe(false);
     expect(existsSync(join(home, "sessions", started.id))).toBe(true);
 
+    expect(window.closed()).toBe(false);
     expect(agents.dismiss(started.id).sessions).toEqual([]);
+    expect(window.closed()).toBe(true);
     expect(existsSync(join(home, "sessions", started.id))).toBe(false);
   }, 60_000);
 
