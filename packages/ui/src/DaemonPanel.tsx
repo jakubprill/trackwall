@@ -1,9 +1,10 @@
 import { DaemonInfo } from "@trackwall/protocol";
 import { RefreshCw } from "lucide-react";
 import { useCallback } from "react";
+import { Loading } from "@/components/Loading";
+import { Surface } from "@/components/Surface";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { call } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { type Remote, useRemote } from "@/lib/use-remote";
@@ -15,37 +16,40 @@ export function DaemonPanel({ conn, onRetry }: { conn: Connection; onRetry: () =
   const info = useRemote(load, { pollMs: POLL_MS });
 
   return (
-    <Card className="w-full max-w-xl">
-      <CardHeader>
-        <CardTitle>Daemon</CardTitle>
-        <CardDescription>Proces, który trzyma cały stan Trackwalla.</CardDescription>
-        <CardAction className="flex items-center gap-2">
-          <StatusBadge info={info} />
-          <Button variant="ghost" size="icon" onClick={info.reload} aria-label="Odśwież">
-            <RefreshCw />
-          </Button>
-        </CardAction>
-      </CardHeader>
-      <CardContent>
-        {!info.data && !info.error && <p className="text-muted-foreground text-sm">Łączenie z daemonem…</p>}
-        {info.error && (
-          <div className="flex flex-col items-start gap-3">
-            <p className="text-destructive text-sm whitespace-pre-wrap break-words">{info.error}</p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                onRetry();
-                info.reload();
-              }}
-            >
-              Spróbuj ponownie
+    <div className="w-full max-w-xl">
+      <Surface
+        label="Daemon"
+        meta={
+          <span className="flex items-center gap-2">
+            <StatusBadge info={info} />
+            <Button variant="ghost" size="icon" className="size-6" onClick={info.reload} aria-label="Odśwież">
+              <RefreshCw />
             </Button>
-          </div>
-        )}
-        {info.data && !info.error && <InfoTable info={info.data} />}
-      </CardContent>
-    </Card>
+          </span>
+        }
+      >
+        <div className="flex flex-col gap-4 p-4">
+          <p className="text-muted-foreground text-sm">Proces, który trzyma cały stan Trackwalla.</p>
+          {!info.data && !info.error && <Loading text="Łączenie z daemonem…" />}
+          {info.error && (
+            <div className="flex flex-col items-start gap-3">
+              <p className="text-destructive text-sm whitespace-pre-wrap break-words">{info.error}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  onRetry();
+                  info.reload();
+                }}
+              >
+                Spróbuj ponownie
+              </Button>
+            </div>
+          )}
+          {info.data && !info.error && <InfoTable info={info.data} />}
+        </div>
+      </Surface>
+    </div>
   );
 }
 

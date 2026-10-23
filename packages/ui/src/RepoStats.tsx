@@ -1,20 +1,21 @@
 import type { RepoStatusOk } from "@trackwall/protocol";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import type { ReactNode } from "react";
-import { StatusDot } from "@/components/StatusDot";
-import { changesLabel, relativeTime } from "@/lib/format";
+import { StatusLabel } from "@/components/StatusLabel";
+import { relativeTime } from "@/lib/format";
+import { branchLabel, repoStatusTone } from "@/lib/repo-status";
 
-/** Kafelki stanu w nagłówku repo: gałąź, upstream, katalog roboczy i ostatni commit (§4.5). */
+/** Kafelki stanu w nagłówku repo: gałąź, gałąź śledzona, katalog roboczy i ostatni commit (§4.5). */
 export function RepoStats({ status }: { status: RepoStatusOk }) {
-  const changes = changesLabel(status.changes);
+  const state = repoStatusTone(status);
   return (
     <dl className="grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-2">
       <Stat label="Gałąź">
-        <span className="font-mono" title={status.branch ?? undefined}>
-          {status.branch ?? "odłączony HEAD"}
+        <span className="font-mono" title={branchLabel(status)}>
+          {branchLabel(status)}
         </span>
       </Stat>
-      <Stat label="Upstream">
+      <Stat label="Gałąź śledzona">
         {status.upstream ? (
           <span className="flex items-center gap-2 font-mono" title={`względem ${status.upstream.name}`}>
             <span className="flex items-center gap-0.5">
@@ -32,10 +33,7 @@ export function RepoStats({ status }: { status: RepoStatusOk }) {
         )}
       </Stat>
       <Stat label="Katalog roboczy">
-        <span className="flex items-center gap-2">
-          <StatusDot tone={changes ? "warning" : "ok"} />
-          {changes ?? "czysto"}
-        </span>
+        <StatusLabel tone={state.tone} label={state.label} />
       </Stat>
       <Stat label="Ostatni commit">
         {status.head ? (
@@ -57,7 +55,7 @@ export function RepoStats({ status }: { status: RepoStatusOk }) {
 
 function Stat({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="bg-card flex min-w-0 flex-col gap-1 rounded-md border px-3 py-2">
+    <div className="surface flex min-w-0 flex-col gap-1 px-3 py-2">
       <dt className="hud-label">{label}</dt>
       <dd className="min-w-0 truncate text-sm">{children}</dd>
     </div>

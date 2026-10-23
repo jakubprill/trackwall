@@ -1,10 +1,12 @@
 import { type Repo, type RepoOverview, workspaceApi } from "@trackwall/protocol";
 import { Code, Trash2 } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
-import { Panel } from "@/components/Panel";
+import { Loading } from "@/components/Loading";
+import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
 import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { TRUNCATED_NOTE } from "@/lib/format";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { RepoCommits } from "./RepoCommits.tsx";
 import { RepoFiles } from "./RepoFiles.tsx";
@@ -37,12 +39,11 @@ export function RepoDetail({ conn, repo, onRemoved }: { conn: Connection; repo: 
         </div>
         <RepoActions conn={conn} repo={repo} onRemoved={onRemoved} />
       </header>
-      {status.kind === "ok" && <RepoStats status={status} />}
-
-      {repo.status.kind === "unavailable" ? (
-        <p className="text-destructive text-sm whitespace-pre-wrap">Repo jest niedostępne: {repo.status.message}</p>
+      {status.kind === "unavailable" ? (
+        <p className="text-destructive text-sm whitespace-pre-wrap">Repo jest niedostępne: {status.message}</p>
       ) : (
         <>
+          <RepoStats status={status} />
           <TabBar tabs={TABS} active={tab} onSelect={setTab} variant="underline" />
           {tab === "readme" && <Loaded remote={overview}>{(o) => <Readme readme={o.readme} />}</Loaded>}
           {tab === "commits" && <Loaded remote={overview}>{(o) => <RepoCommits commits={o.commits} />}</Loaded>}
@@ -63,7 +64,7 @@ function Loaded({ remote, children }: { remote: RemoteHandle<RepoOverview>; chil
         </Button>
       </div>
     );
-  if (!remote.data) return <p className="hud-label">Wczytywanie…</p>;
+  if (!remote.data) return <Loading />;
   return children(remote.data);
 }
 
@@ -112,9 +113,8 @@ function RepoActions({ conn, repo, onRemoved }: { conn: Connection; repo: Repo; 
 function Readme({ readme }: { readme: RepoOverview["readme"] }) {
   if (!readme) return <p className="text-muted-foreground text-sm">To repo nie ma pliku README w ostatnim commicie.</p>;
   return (
-    <Panel path={readme.path}>
+    <Surface path={readme.path} note={readme.truncated ? TRUNCATED_NOTE : undefined}>
       <pre className="overflow-x-auto p-4 text-sm leading-relaxed whitespace-pre-wrap break-words">{readme.text}</pre>
-      {readme.truncated && <p className="text-muted-foreground border-t px-4 py-2 text-xs">Plik jest dłuższy; pokazano początek.</p>}
-    </Panel>
+    </Surface>
   );
 }

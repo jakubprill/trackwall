@@ -1,12 +1,12 @@
 import type { Commit } from "@trackwall/protocol";
-import { Panel } from "@/components/Panel";
+import { Surface } from "@/components/Surface";
 import { relativeTime } from "@/lib/format";
 
 export function RepoCommits({ commits }: { commits: Commit[] }) {
   if (commits.length === 0) return <p className="text-muted-foreground text-sm">Brak commitów.</p>;
   const now = new Date();
   return (
-    <Panel label="Ostatnie commity" meta={commits.length}>
+    <Surface label="Ostatnie commity" meta={commits.length}>
       <ol className="divide-y">
         {commits.map((c) => (
           <li key={c.hash} className="flex items-baseline gap-3 px-3 py-2 text-sm">
@@ -20,6 +20,6 @@ export function RepoCommits({ commits }: { commits: Commit[] }) {
           </li>
         ))}
       </ol>
-    </Panel>
+    </Surface>
   );
 }

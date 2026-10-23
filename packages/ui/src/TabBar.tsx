@@ -1,11 +1,11 @@
 import { cn } from "@/lib/utils";
 
-/** Aktywna zakładka dostaje akcent z poświatą przy dolnej krawędzi; `-mb-px` kładzie ją na linii nagłówka. */
 const STYLES = {
+  /** Widoki w nagłówku aplikacji: pełna wysokość nagłówka, a `-mb-px` kładzie akcent na jego dolnej linii. */
   nav: {
     bar: "self-stretch",
-    tab: "-mb-px flex items-center border-b-2 px-3 font-mono text-xs tracking-[0.12em] uppercase",
-    active: "border-primary text-foreground [box-shadow:0_6px_12px_-8px_var(--primary)]",
+    tab: "-mb-px flex items-center border-b-2 px-3 font-mono text-xs tracking-hud uppercase",
+    active: "border-primary text-foreground",
     idle: "text-muted-foreground border-transparent hover:text-foreground",
   },
   underline: {
