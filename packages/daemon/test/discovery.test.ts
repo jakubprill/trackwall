@@ -77,7 +77,8 @@ describe("pitwallHome", () => {
     process.env.PITWALL_HOME = "";
     try {
       expect(pitwallHome()).toBe(join(homedir(), ".pitwall"));
-      expect(pitwallHome("/x")).toBe("/x");
+      const explicit = join(tmpdir(), "pitwall-explicit");
+      expect(pitwallHome(explicit)).toBe(explicit);
     } finally {
       if (prev === undefined) delete process.env.PITWALL_HOME;
       else process.env.PITWALL_HOME = prev;
