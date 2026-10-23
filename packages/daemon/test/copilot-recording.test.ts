@@ -62,6 +62,9 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     session.output("\x1b]9;4;3;0\x07");
 
     now = 61_100;
-    expect(session.output(".").map((c) => `${c.state} ${c.at}`)).toEqual(["Stale 1970-01-01T00:01:00.000Z", "Working 1970-01-01T00:01:01.100Z"]);
+    expect(session.output(".").map((c) => `${c.state} ${c.at}`)).toEqual([
+      "Stale 1970-01-01T00:01:00.000Z",
+      "Working 1970-01-01T00:01:01.100Z",
+    ]);
   });
 });
