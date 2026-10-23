@@ -32,6 +32,8 @@ const STATUS: Record<ErrorCode, number> = {
   repo_unavailable: 409,
   projects_dir_unavailable: 409,
   invalid_config: 500,
+  mise_unavailable: 409,
+  stop_unconfirmed: 500,
   internal: 500,
 };
 
