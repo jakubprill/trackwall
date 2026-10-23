@@ -75,7 +75,7 @@ export const mcpTools = {
   getRepo: {
     name: "get_repo",
     description:
-      `Szczegóły jednego repo: to samo co w ${LIST_REPOS}, README z ostatniego commita (przycięte), ostatnie ` +
+      `Szczegóły jednego repo: to samo co w ${LIST_REPOS} (z tagami; puste, gdy karty nie da się policzyć), README z ostatniego commita (przycięte), ostatnie ` +
       "commity i taski mise (nazwa, opis, stan uruchomienia) albo powód, dla którego mise ich nie podał.",
     args: z.object({ repo: RepoId.describe(`identyfikator repo z ${LIST_REPOS} (pole id)`) }).strict(),
     result: GetRepoResult,

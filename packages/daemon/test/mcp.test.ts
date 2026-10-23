@@ -123,7 +123,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
     await client.close();
   });
 
-  test("zły repoTags w workspace.yaml: list_repos bez filtra daje repo bez tagów, a z filtrem błąd konfiguracji", async () => {
+  test("zły repoTags w workspace.yaml: list_repos bez filtra daje repo bez tagów, z filtrem błąd, a get_repo README bez tagów", async () => {
     const workspaceFile = join(home, "workspace.yaml");
     const valid = readFileSync(workspaceFile, "utf8");
     writeFileSync(workspaceFile, `${valid}repoTags:\n  Zła-Nazwa: ["*"]\n`);
@@ -135,6 +135,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
       expect(filtered.isError).toBe(true);
       const repo = GetRepoResult.parse((await client.callTool({ name: "get_repo", arguments: { repo: "orders-bff" } })).structuredContent);
       expect(repo.repo.tags).toEqual([]);
+      expect(repo.readme?.text).toBe(README);
     } finally {
       writeFileSync(workspaceFile, valid);
       await client.close();

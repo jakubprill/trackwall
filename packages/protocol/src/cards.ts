@@ -58,7 +58,10 @@ export type ProvidedPackage = z.infer<typeof ProvidedPackage>;
 
 /** Paczka spoza repo, której repo używa: zależność, rodzic Maven, BOM, wtyczka buildu. */
 export const ConsumedPackage = ProvidedPackage.extend({
-  /** Wersja tak, jak stoi w pliku (zakres npm, właściwość Maven, której nie dało się podstawić); `null` bez wersji. */
+  /**
+   * Ten sam typ co w `ProvidedPackage`, inne znaczenie: wersja tak, jak stoi w pliku (zakres npm, właściwość Maven,
+   * której nie dało się podstawić); `null` bez wersji.
+   */
   version: z.string().nullable(),
   /**
    * Rodzaj użycia z pliku: zakres Maven (`compile`, `test`, `import`…), `parent`, `plugin`, konfiguracja Gradle

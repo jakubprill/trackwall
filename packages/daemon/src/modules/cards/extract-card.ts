@@ -12,16 +12,20 @@ import { extractTools, readsToolFile } from "./tools.ts";
  * i spis mechanizmów z tego, czego repo używa. Czysta funkcja: ten sam commit daje tę samą kartę.
  */
 
-const BUILD_EXTRACTORS = [extractMaven, extractGradle, extractNpm];
-const FILE_READERS = [readsMavenFile, readsGradleFile, readsNpmFile, readsToolFile];
+/** Ekstraktor systemu budowania razem z wyborem plików, które czyta, żeby nowy nie mógł zapomnieć o drugim. */
+const BUILD_EXTRACTORS = [
+  { reads: readsMavenFile, extract: extractMaven },
+  { reads: readsGradleFile, extract: extractGradle },
+  { reads: readsNpmFile, extract: extractNpm },
+];
 
 /** Czy któryś ekstraktor czyta plik `path`; tylko takie pliki odczyt commita wyciąga z gita. */
 export function readsCardFile(path: string): boolean {
-  return FILE_READERS.some((reads) => reads(path));
+  return readsToolFile(path) || BUILD_EXTRACTORS.some((e) => e.reads(path));
 }
 
 export function extractCard(snapshot: RepoSnapshot): RepoCard {
-  const builds = BUILD_EXTRACTORS.map((extract) => extract(snapshot));
+  const builds = BUILD_EXTRACTORS.map((e) => e.extract(snapshot));
   const buildDirs = builds.flatMap((b) => b.buildFiles.map((f) => dirOf(f.path)));
   const all = [...builds, extractTools(snapshot, buildDirs)];
   const consumes = unique(all.flatMap((e) => e.consumes));

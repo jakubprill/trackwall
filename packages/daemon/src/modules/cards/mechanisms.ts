@@ -55,6 +55,11 @@ const RULES: Rule[] = [
   { id: "nestjs", packages: /^npm:@nestjs\/core$/ },
 ];
 
+/**
+ * Dłuższa ścieżka nie jest plikiem wdrożenia ani specyfikacją; wyrażenia z `files` jej nie widzą, bo ścieżka jest
+ * z repo, a `(k8s|kubernetes)/.+` na ścieżce z tysiącami powtórzeń `k8s/` cofa się kwadratowo.
+ */
+const MAX_PATH_LENGTH = 1024;
 /** Tyle dowodów na mechanizm wystarcza, żeby sprawdzić go w repo; resztę widać w zależnościach karty. */
 const MAX_EVIDENCE = 3;
 
@@ -80,7 +85,7 @@ function fileEvidence(rule: Rule, paths: readonly string[]): MechanismEvidence[]
   const found: MechanismEvidence[] = [];
   for (const path of paths) {
     if (found.length >= MAX_EVIDENCE) break;
-    if (pattern.test(path)) found.push({ path, line: null, detail: baseName(path) });
+    if (path.length <= MAX_PATH_LENGTH && pattern.test(path)) found.push({ path, line: null, detail: baseName(path) });
   }
   return found;
 }

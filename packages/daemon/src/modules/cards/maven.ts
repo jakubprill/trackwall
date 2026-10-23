@@ -159,10 +159,12 @@ function properties(pom: Pom, poms: ReadonlyMap<string, Pom>, seen = new Set<str
  * zostaje w tekście, żeby było widać, skąd wersja pochodzi.
  */
 function substitute(value: string, props: ReadonlyMap<string, string>): string {
+  // Wartość dłuższa niż wynik po podstawieniu nie jest wersją, a przeszukiwanie jej kosztuje.
+  if (value.length > MAX_SUBSTITUTED_LENGTH) return value;
   let current = value;
   for (let i = 0; i < MAX_SUBSTITUTIONS && current.includes("${"); i++) {
     let length = current.length;
-    const next = current.replace(/\$\{([^}]+)\}/g, (whole, name: string) => {
+    const next = current.replace(/\$\{([^}$]+)\}/g, (whole, name: string) => {
       const value = props.get(name);
       if (value === undefined || length + value.length > MAX_SUBSTITUTED_LENGTH) return whole;
       length += value.length - whole.length;

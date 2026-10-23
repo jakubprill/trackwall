@@ -137,4 +137,31 @@ describe("ekstraktor Gradle", () => {
     const out = extractGradle(snapshotOf({ "build.gradle": "sourceCompatibility = JavaVersion.VERSION_1_8\n" }));
     expect(out.tools.map((t) => t.version)).toEqual(["8"]);
   });
+
+  test("nawias w napisie nie przedłuża include na następne linie", () => {
+    const out = extractGradle(
+      snapshotOf({
+        "settings.gradle.kts": 'include("app(")\nval y = "core"\n',
+        "build.gradle.kts": "",
+        "app(/build.gradle.kts": "",
+        "core/build.gradle.kts": "",
+      }),
+    );
+    expect(out.buildFiles.map((f) => f.path)).toEqual(["build.gradle.kts", "app(/build.gradle.kts"]);
+  });
+
+  test("surowy napis Kotlin z ukośnikiem wstecznym kończy się na potrójnym cudzysłowie", () => {
+    const out = extractGradle(snapshotOf({ "build.gradle.kts": 'val dir = """C:\\"""\n// implementation("com.example:wylaczona:1.0")\n' }));
+    expect(out.consumes).toEqual([]);
+  });
+
+  test("version.ref do nazwy z prototypu obiektu (constructor) to brak wersji, nie funkcja", () => {
+    const out = extractGradle(
+      snapshotOf({
+        "build.gradle.kts": "dependencies {\n    implementation(libs.lib)\n}\n",
+        "gradle/libs.versions.toml": '[libraries]\nlib = { module = "com.example:lib", version.ref = "constructor" }\n',
+      }),
+    );
+    expect(out.consumes.map((c) => [c.name, c.version])).toEqual([["com.example:lib", null]]);
+  });
 });

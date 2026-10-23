@@ -7,7 +7,7 @@ import type { BuildFile, CardProblem, ConsumedPackage, Evidence, ProvidedPackage
  */
 export interface RepoSnapshot {
   commit: string;
-  /** Pliki commita poza katalogami zależności (`node_modules`). */
+  /** Pliki commita poza katalogami zależności (`SKIPPED_DIRS` w `read-snapshot.ts`). */
   paths: readonly string[];
   /** Treść pliku; `undefined`, gdy go nie ma albo nie był czytany (nie jest plikiem buildu ani konfiguracji). */
   text(path: string): string | undefined;
@@ -35,7 +35,15 @@ export function evidenceAt(path: string, text: string, pattern: RegExp): Evidenc
   return { path, line: index < 0 ? null : index + 1 };
 }
 
-/** `s` jako fragment wyrażenia regularnego, dosłownie. */
-export function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/**
+ * Linia (od 1) pierwszego wystąpienia każdego klucza, który wyrażenie `key` (z flagą `g`) łapie w grupie 1. Jedno
+ * przejście przez plik zamiast szukania osobno dla każdej zależności: plik z dziesiątkami tysięcy kluczy dawałby czas
+ * kwadratowy, a plik jest niezaufany (§8).
+ */
+export function keyLines(text: string, key: RegExp): Map<string, number> {
+  const lines = new Map<string, number>();
+  text.split("\n").forEach((line, i) => {
+    for (const m of line.matchAll(key)) if (m[1] !== undefined && !lines.has(m[1])) lines.set(m[1], i + 1);
+  });
+  return lines;
 }

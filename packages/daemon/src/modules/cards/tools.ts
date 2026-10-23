@@ -3,7 +3,7 @@ import { parse as parseToml } from "smol-toml";
 import { z } from "zod";
 import { messageOf } from "../../error-message.ts";
 import { baseName, inDir } from "./repo-path.ts";
-import { type Extracted, emptyExtracted, escapeRegExp, evidenceAt, type RepoSnapshot } from "./snapshot.ts";
+import { type Extracted, emptyExtracted, keyLines, type RepoSnapshot } from "./snapshot.ts";
 
 /**
  * Wymagane narzędzia z drzewa commita (§4.6, ADR-25): `[tools]` z konfiguracji mise w korzeniu repo i `.tool-versions`
@@ -29,11 +29,16 @@ const SINGLE_VERSION_FILES: [string, string][] = [
   [".java-version", "java"],
 ];
 const SDKMANRC = ".sdkmanrc";
-/** Wrapper i narzędzie, którego wersję podaje w adresie dystrybucji (`apache-maven-3.9.6-bin.zip`, `gradle-8.7-bin.zip`). */
+/**
+ * Wrapper, narzędzie i nazwa pliku dystrybucji z adresu w `distributionUrl` (`apache-maven-3.9.6-bin.zip`,
+ * `gradle-8.7-bin.zip`). Wyrażenie dostaje tylko nazwę pliku i jest zakotwiczone z obu stron, bo plik jest z repo.
+ */
 const WRAPPERS: [string, string, RegExp][] = [
-  [".mvn/wrapper/maven-wrapper.properties", "maven", /apache-maven-([\w.-]+?)-bin\.zip/],
-  ["gradle/wrapper/gradle-wrapper.properties", "gradle", /gradle-([\w.-]+?)-(?:bin|all)\.zip/],
+  [".mvn/wrapper/maven-wrapper.properties", "maven", /^apache-maven-(.+)-bin\.zip$/],
+  ["gradle/wrapper/gradle-wrapper.properties", "gradle", /^gradle-(.+)-(?:bin|all)\.zip$/],
 ];
+/** Klucz tabeli TOML na początku linii (`node =`, `"npm:prettier" =`). */
+const TOML_KEY = /^\s*["']?([^"'\s=]+)["']?\s*=/g;
 
 /** Nazwy plików z podpowiedziami, czytanych w korzeniu i w katalogach buildów. */
 const HINT_FILE_NAMES = new Set([SDKMANRC, ...SINGLE_VERSION_FILES.map(([name]) => name), ...WRAPPERS.map(([path]) => baseName(path))]);
@@ -72,12 +77,13 @@ export function extractTools(snapshot: RepoSnapshot, buildDirs: readonly string[
 function miseTools(path: string, text: string): ToolRequirement[] {
   const parsed = MiseConfig.safeParse(parseToml(text));
   if (!parsed.success) return [];
+  const keys = keyLines(text, TOML_KEY);
   return Object.entries(parsed.data.tools).flatMap(([tool, value]) =>
     [value].flat().map((v) => ({
       tool,
       version: typeof v === "string" ? v : v.version,
       source: "mise" as const,
-      evidence: evidenceAt(path, text, new RegExp(`^\\s*["']?${escapeRegExp(tool)}["']?\\s*=`)),
+      evidence: { path, line: keys.get(tool) ?? null },
     })),
   );
 }
@@ -106,9 +112,19 @@ function hints(snapshot: RepoSnapshot, dir: string): ToolRequirement[] {
     });
   for (const [file, tool, pattern] of WRAPPERS) {
     const path = inDir(dir, file);
-    const text = snapshot.text(path);
-    const version = text === undefined ? undefined : pattern.exec(text)?.[1];
-    if (text !== undefined && version) found.push({ tool, version, source: "hint", evidence: evidenceAt(path, text, pattern) });
+    const hint = wrapperVersion(snapshot.text(path) ?? "", pattern);
+    if (hint) found.push({ tool, version: hint.version, source: "hint", evidence: { path, line: hint.line } });
   }
   return found;
+}
+
+/** Wersja z nazwy pliku w `distributionUrl=…` właściwości wrappera i linia tego wpisu. */
+function wrapperVersion(text: string, pattern: RegExp): { version: string; line: number } | undefined {
+  const lines = text.split("\n");
+  for (const [i, raw] of lines.entries()) {
+    const url = /^\s*distributionUrl\s*=(.*)$/.exec(raw)?.[1]?.trim();
+    const version = url === undefined ? undefined : pattern.exec(url.slice(url.lastIndexOf("/") + 1))?.[1];
+    if (version) return { version, line: i + 1 };
+  }
+  return undefined;
 }

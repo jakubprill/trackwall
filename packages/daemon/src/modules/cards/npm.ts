@@ -1,10 +1,10 @@
-import { BuildTool, type ConsumedPackage, type ToolRequirement } from "@trackwall/protocol";
+import { BuildTool, type ConsumedPackage, type Evidence, type ToolRequirement } from "@trackwall/protocol";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { messageOf } from "../../error-message.ts";
 import { globMatcher } from "./glob.ts";
 import { baseName, dirOf, inDir, isUnder, rootFiles } from "./repo-path.ts";
-import { type Extracted, emptyExtracted, escapeRegExp, evidenceAt, type RepoSnapshot } from "./snapshot.ts";
+import { type Extracted, emptyExtracted, keyLines, type RepoSnapshot } from "./snapshot.ts";
 
 /**
  * Ekstraktor npm (§4.6): `package.json` korzeni i paczek workspace (`workspaces` w `package.json` albo
@@ -57,7 +57,8 @@ const PnpmWorkspace = z.object({ packages: z.array(z.string()).optional() });
 interface Manifest {
   path: string;
   json: PackageJson;
-  text: string;
+  /** Linia pierwszego wystąpienia każdego klucza JSON, do dowodów. */
+  keys: Map<string, number>;
   memberOf: string | null;
   tool: BuildTool;
 }
@@ -74,7 +75,7 @@ export function extractNpm(snapshot: RepoSnapshot): Extracted {
         ecosystem: "npm",
         name: m.json.name,
         version: m.json.version ?? null,
-        evidence: evidenceAt(m.path, m.text, /"name"\s*:/),
+        evidence: keyEvidence(m, "name"),
       });
     out.consumes.push(...dependencies(m).filter((d) => !internal.has(d.name)));
     out.tools.push(...tools(m));
@@ -90,10 +91,11 @@ function readManifests(snapshot: RepoSnapshot, out: Extracted): Manifest[] {
     const json = readManifest(snapshot, root, out);
     if (!json) continue;
     const tool = packageManager(snapshot, root, json);
-    manifests.push({ path: root, json, text: snapshot.text(root) ?? "", memberOf: null, tool });
+    manifests.push({ path: root, json, keys: keyLines(snapshot.text(root) ?? "", JSON_KEY), memberOf: null, tool });
     for (const member of workspaceMembers(snapshot, root, json, all, out)) {
       const memberJson = readManifest(snapshot, member, out);
-      if (memberJson) manifests.push({ path: member, json: memberJson, text: snapshot.text(member) ?? "", memberOf: root, tool });
+      if (memberJson)
+        manifests.push({ path: member, json: memberJson, keys: keyLines(snapshot.text(member) ?? "", JSON_KEY), memberOf: root, tool });
     }
   }
   return manifests;
@@ -125,9 +127,21 @@ function workspaceMembers(snapshot: RepoSnapshot, root: string, json: PackageJso
   });
 }
 
-/** Wzorzec workspace bez `./` z przodu i `/` na końcu, jak go piszą ludzie. */
+/**
+ * Wzorzec workspace bez `./` z przodu i `/` na końcu, jak go piszą ludzie. Pętla zamiast `/\/+$/`: wzorzec jest
+ * z repo, a to wyrażenie cofa się kwadratowo na długim ciągu ukośników w środku.
+ */
 function clean(pattern: string): string {
-  return pattern.replace(/^\.\//, "").replace(/\/+$/, "");
+  let end = pattern.length;
+  while (end > 0 && pattern[end - 1] === "/") end--;
+  return pattern.slice(0, end).replace(/^\.\//, "");
+}
+
+/** Klucz JSON w cudzysłowie, za nim `:`; w jednej linii może być ich wiele (zminifikowany `package.json`). */
+const JSON_KEY = /"([^"\\]*)"\s*:/g;
+
+function keyEvidence(m: Manifest, key: string): Evidence {
+  return { path: m.path, line: m.keys.get(key) ?? null };
 }
 
 function pnpmWorkspaces(snapshot: RepoSnapshot, path: string, out: Extracted): string[] {
@@ -156,7 +170,7 @@ function dependencies(m: Manifest): ConsumedPackage[] {
       name,
       version,
       scope: field,
-      evidence: evidenceAt(m.path, m.text, new RegExp(`"${escapeRegExp(name)}"\\s*:`)),
+      evidence: keyEvidence(m, name),
     })),
   );
 }
@@ -165,7 +179,7 @@ function dependencies(m: Manifest): ConsumedPackage[] {
 function tools(m: Manifest): ToolRequirement[] {
   const found: ToolRequirement[] = [];
   const node = m.json.engines?.node;
-  if (node) found.push({ tool: "node", version: node, source: "hint", evidence: evidenceAt(m.path, m.text, /"node"\s*:/) });
+  if (node) found.push({ tool: "node", version: node, source: "hint", evidence: keyEvidence(m, "node") });
   const [manager, version] = m.json.packageManager?.split("@") ?? [];
   if (manager && version && MANAGERS.has(manager))
     found.push({
@@ -173,7 +187,7 @@ function tools(m: Manifest): ToolRequirement[] {
       // Wersja bywa z dopiskiem skrótu (`pnpm@9.1.0+sha512.…`).
       version: version.split("+")[0] ?? version,
       source: "hint",
-      evidence: evidenceAt(m.path, m.text, /"packageManager"\s*:/),
+      evidence: keyEvidence(m, "packageManager"),
     });
   return found;
 }

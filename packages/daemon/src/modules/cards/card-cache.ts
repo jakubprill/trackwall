@@ -39,10 +39,13 @@ export class CardCache {
 
   /** Karta commita z pamięci albo z dysku, a bez niej policzona przez `compute` i zapamiętana. */
   async getOrCompute(commit: string, compute: () => Promise<RepoCard>): Promise<RepoCard> {
-    const cached = await this.get(commit);
-    if (cached) return cached;
     const running = this.computing.get(commit);
     if (running) return running;
+    const cached = await this.get(commit);
+    if (cached) return cached;
+    // Drugie pytanie mogło zacząć liczenie, gdy to czytało dysk.
+    const started = this.computing.get(commit);
+    if (started) return started;
     const computed = compute()
       .then((card) => {
         this.set(card);
