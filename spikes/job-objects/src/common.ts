@@ -21,9 +21,20 @@ export function selfCommand(): string[] {
   return isCompiled() ? [process.execPath] : [process.execPath, fileURLToPath(new URL("./spike.ts", import.meta.url))];
 }
 
+/**
+ * Rola procesu potomnego idzie przez zmienną środowiskową, nie argv: układ `process.argv` w skompilowanej binarce
+ * różni się między systemami (na Windowsie argv bez rozpoznanej roli uruchamiał spike od nowa w pętli).
+ */
+export const ROLE_ENV = "PITWALL_SPIKE_ROLE";
+
 export function spawnSelf(args: string[], opts: { detached?: boolean } = {}): ChildProcess {
   const [cmd, ...pre] = selfCommand();
-  const child = spawn(cmd as string, [...pre, ...args], { stdio: "ignore", windowsHide: true, detached: opts.detached ?? false });
+  const child = spawn(cmd as string, pre, {
+    stdio: "ignore",
+    windowsHide: true,
+    detached: opts.detached ?? false,
+    env: { ...process.env, [ROLE_ENV]: JSON.stringify(args) },
+  });
   child.on("error", () => {});
   return child;
 }
