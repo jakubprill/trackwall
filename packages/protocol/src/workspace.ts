@@ -83,8 +83,6 @@ export type RepoList = z.infer<typeof RepoList>;
 
 export const WorkspaceSettings = z.object({
   projectsDir: ProjectsDir,
-  /** Hostingi, z których można sklonować repo do folderu z projektami (ADR-19); kolejność jak w `workspace.yaml`. */
-  repoHosts: RepoHosts,
   /** Pełna ścieżka `workspace.yaml`, żeby użytkownik wiedział, który plik edytować ręcznie. */
   configFile: z.string(),
 });
@@ -142,11 +140,17 @@ export const workspaceApi = {
   ),
   /** Otwiera `vscode://` w systemie; daemon nie wie, czy coś obsłużyło adres. */
   openEditor: endpoint("open-editor", RepoRequest, Done),
-  /** Zastępuje listę hostingów w `workspace.yaml`. */
-  setRepoHosts: endpoint("set-repo-hosts", z.object({ repoHosts: RepoHosts }).strict(), WorkspaceSettings),
   /**
-   * Repo dostępne w każdym hostingu, pobierane przy każdym zapytaniu przez `gh` albo `glab`; `query` szuka w nazwie
-   * (GitLab po swojej stronie, także w ścieżce grupy), puste daje ostatnio zmieniane (GitLab) albo wszystkie (GitHub).
+   * Hostingi, z których można sklonować repo do folderu z projektami (ADR-19), w kolejności z `workspace.yaml`.
+   * Osobno od `settings`, bo zły wpis w jednym kluczu nie może blokować poprawiania drugiego.
+   */
+  repoHosts: endpoint("repo-hosts", z.object({}).strict(), RepoHosts),
+  /** Zastępuje listę hostingów w `workspace.yaml`. */
+  setRepoHosts: endpoint("set-repo-hosts", z.object({ repoHosts: RepoHosts }).strict(), RepoHosts),
+  /**
+   * Repo dostępne w każdym hostingu, pobierane przez `gh` albo `glab` i pamiętane przez 60 s (§4.5); `query` szuka
+   * w nazwie (GitLab po swojej stronie od 3 znaków, także w ścieżce grupy; krótsze i GitHub filtruje daemon), puste
+   * daje ostatnio zmieniane (GitLab) albo wszystkie (GitHub).
    */
   remoteRepos: endpoint("remote-repos", z.object({ query: z.string().trim().max(100) }).strict(), RemoteRepoList),
   /** Zaczyna klonowanie i od razu zwraca je w stanie `running`; postęp przez `clones`. */

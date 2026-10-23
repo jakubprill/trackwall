@@ -120,6 +120,17 @@ describe("klonowanie z hostingu do folderu z projektami", () => {
     await finished(workspace, "sklep/api");
   });
 
+  test("trwający klon do starego folderu z projektami nie blokuje klonu o tej samej nazwie do nowego", async () => {
+    const { workspace } = await workspaceWithGitLab({ cloneDelayMs: 200 });
+    await workspace.clone(GITLAB, "sklep/api");
+    const nowy = mkdtempSync(join(tmpdir(), "trackwall-projekty-"));
+    await workspace.setProjectsDir(nowy);
+
+    expect(await workspace.clone(GITLAB, "magazyn/api")).toMatchObject({ path: join(nowy, "api"), state: "running" });
+    await finished(workspace, "sklep/api");
+    await finished(workspace, "magazyn/api");
+  });
+
   test("klon z hostingu spoza ustawień albo bez folderu z projektami jest odrzucany", async () => {
     const { workspace } = await workspaceWithGitLab();
     await expect(workspace.clone({ kind: "gitlab", host: "inny.example.com" }, "sklep/api")).rejects.toMatchObject({ code: "bad_request" });
@@ -136,7 +147,7 @@ describe("klonowanie z hostingu do folderu z projektami", () => {
   test("hostingi zapisują się w workspace.yaml jako lista repoHosts", async () => {
     const { workspace, file } = await workspaceWithGitLab();
 
-    expect(workspace.settings().repoHosts).toEqual([GITLAB]);
+    expect(workspace.repoHosts()).toEqual([GITLAB]);
     expect(readFileSync(file, "utf8")).toContain("repoHosts:\n  - kind: gitlab\n    host: gitlab.example.com\n");
   });
 });

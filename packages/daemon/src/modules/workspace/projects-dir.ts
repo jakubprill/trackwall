@@ -60,7 +60,7 @@ export async function findRepos(projectsDir: string): Promise<RepoEntry[]> {
   );
 }
 
-/** Klucz nazwy w folderze z projektami: dyski Windowsa i macOS nie rozróżniają wielkości liter. */
+/** Klucz nazwy albo ścieżki w folderze z projektami: dyski Windowsa i macOS nie rozróżniają wielkości liter. */
 export function dirKey(name: string): string {
   return name.toLowerCase();
 }

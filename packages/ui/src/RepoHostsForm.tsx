@@ -22,7 +22,7 @@ export function RepoHostsForm({ conn, initial }: { conn: Connection; initial: Re
     setBusy(true);
     setError(undefined);
     try {
-      setHosts((await post(conn, workspaceApi.setRepoHosts, { repoHosts: next })).repoHosts);
+      setHosts(await post(conn, workspaceApi.setRepoHosts, { repoHosts: next }));
       return true;
     } catch (err) {
       setError(errorMessage(err));

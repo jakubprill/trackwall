@@ -77,7 +77,7 @@ export class Workspace {
   }
 
   settings(): WorkspaceSettings {
-    return { projectsDir: this.deps.file.projectsDir(), repoHosts: this.deps.file.repoHosts(), configFile: this.deps.file.path };
+    return { projectsDir: this.deps.file.projectsDir(), configFile: this.deps.file.path };
   }
 
   async setProjectsDir(path: string): Promise<WorkspaceSettings> {
@@ -85,9 +85,13 @@ export class Workspace {
     return this.settings();
   }
 
-  setRepoHosts(hosts: RepoHost[]): WorkspaceSettings {
+  repoHosts(): RepoHost[] {
+    return this.deps.file.repoHosts();
+  }
+
+  setRepoHosts(hosts: RepoHost[]): RepoHost[] {
     this.deps.file.setRepoHosts(hosts);
-    return this.settings();
+    return this.repoHosts();
   }
 
   /**
@@ -113,11 +117,11 @@ export class Workspace {
     const taken = await takenNames(projectsDir);
     // Od tego miejsca bez `await`, żeby dwa równoczesne żądania nie przeszły obu sprawdzeń.
     const path = join(projectsDir, dir);
-    const running = this.clones.runningInto(dir);
+    const running = this.clones.runningInto(path);
     if (running && sameHost(running.host, host) && running.fullName === fullName) return running;
     if (running) throw new DomainError("bad_request", `do ${path} trwa już klonowanie ${running.fullName}`);
     if (taken(dir)) throw new DomainError("bad_request", `w folderze z projektami jest już ${dir}`);
-    return this.clones.start(dir, { host, fullName, path }, () => this.deps.hosting.clone(host, fullName, path));
+    return this.clones.start({ host, fullName, path }, () => this.deps.hosting.clone(host, fullName, path));
   }
 
   cloneJobs(): CloneJob[] {

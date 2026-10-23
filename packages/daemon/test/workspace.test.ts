@@ -83,13 +83,13 @@ describe("workspace", () => {
     const workspace = new Workspace({ file: new WorkspaceFile(file), vcs: new Vcs(), hosting: fakeHosting().hosting, openUrl: () => {} });
 
     expect(await workspace.list()).toEqual({ projectsDir: null, repos: [] });
-    expect(workspace.settings()).toEqual({ projectsDir: null, repoHosts: [], configFile: file });
+    expect(workspace.settings()).toEqual({ projectsDir: null, configFile: file });
     await expect(workspace.overview("api")).rejects.toMatchObject({ code: "not_found" });
   });
 
   test("ustawienie folderu zapisuje pełną ścieżkę w workspace.yaml", async () => {
     const { workspace, file, projects } = await workspaceWithProjectsDir();
-    expect(workspace.settings()).toEqual({ projectsDir: projects, repoHosts: [], configFile: file });
+    expect(workspace.settings()).toEqual({ projectsDir: projects, configFile: file });
     expect(readFileSync(file, "utf8")).toContain(`projectsDir: ${projects}`);
   });
 

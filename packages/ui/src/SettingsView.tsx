@@ -45,19 +45,29 @@ export function SettingsView({ conn, onRetry, onSaved }: { conn: Connection; onR
           {settings.errorCode === "invalid_config" && <ProjectsDirForm conn={conn} initialPath="" onSaved={onSaved} />}
         </div>
       </Surface>
-      {(settings.data || settings.errorCode === "invalid_config") && (
-        <Surface label="Hostingi repo">
-          <div className="flex flex-col gap-4 p-4">
-            <p className="text-muted-foreground text-sm">
-              Z tych hostingów zakładka „Repo” wyszukuje repo i klonuje je jednym kliknięciem do folderu z projektami. Trackwall pyta je
-              przez programy glab (GitLab) i gh (GitHub) zalogowane w systemie, więc nie przechowuje tokenu.
-            </p>
-            {/* Zły wpis w `repoHosts` poprawia się, zapisując listę od nowa. */}
-            <RepoHostsForm conn={conn} initial={settings.data?.repoHosts ?? []} />
-          </div>
-        </Surface>
-      )}
+      <RepoHostsSurface conn={conn} />
     </div>
+  );
+}
+
+/** Hostingi repo (ADR-19) mają własne zapytanie: zły wpis w `repoHosts` nie blokuje folderu z projektami i odwrotnie. */
+function RepoHostsSurface({ conn }: { conn: Connection }) {
+  const load = useCallback(() => post(conn, workspaceApi.repoHosts, {}), [conn]);
+  const hosts = useRemote(load);
+  return (
+    <Surface label="Hostingi repo">
+      <div className="flex flex-col gap-4 p-4">
+        <p className="text-muted-foreground text-sm">
+          Z tych hostingów zakładka „Repo” wyszukuje repo i klonuje je jednym kliknięciem do folderu z projektami. Trackwall pyta je przez
+          programy glab (GitLab) i gh (GitHub) zalogowane w systemie, więc nie przechowuje tokenu.
+        </p>
+        {hosts.error && <ErrorWithRetry message={hosts.error} onRetry={hosts.reload} />}
+        {!hosts.data && !hosts.error && <Loading />}
+        {hosts.data && <RepoHostsForm conn={conn} initial={hosts.data} />}
+        {/* Zły `repoHosts` wpisany ręcznie poprawia się, zapisując listę od nowa. */}
+        {hosts.errorCode === "invalid_config" && <RepoHostsForm conn={conn} initial={[]} />}
+      </div>
+    </Surface>
   );
 }
 
