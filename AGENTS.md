@@ -104,7 +104,7 @@ bun packages/daemon/scripts/smoke.ts apps/desktop/src-tauri/target/release/pitwa
 pnpm portable
 ```
 
-Wersje narzędzi są w `mise.toml` (`mise install`). Workflow mają je w `env`, a akcja `.github/actions/setup` instaluje je w jobach, które budują i testują (audyt potrzebuje tylko pnpm i Node); zmiana wersji idzie w `mise.toml` i obu workflow naraz (pilnuje tego test).
+Wersje narzędzi są w `mise.toml` (`mise install`), tam też taski `setup`, `dev` i `portable`. Workflow mają je w `env`, a akcja `.github/actions/setup` instaluje je w jobach, które budują i testują (audyt potrzebuje tylko pnpm i Node); zmiana wersji idzie w `mise.toml` i obu workflow naraz (pilnuje tego test).
 
 ## Commity i PR
 

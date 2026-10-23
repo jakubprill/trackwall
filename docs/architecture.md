@@ -54,7 +54,7 @@ Daemon można też uruchomić bez Tauri (`pitwall-daemon --ui`), co daje tryb �
 pitwall/
   package.json            pnpm workspaces, skrypty root
   pnpm-workspace.yaml
-  mise.toml               wersje narzędzi dla samego projektu (node/bun, pnpm, rust)
+  mise.toml               wersje narzędzi dla samego projektu (node/bun, pnpm, rust) i taski setup, dev, portable
   packages/
     protocol/             typy zdarzeń, DTO, schemat JSON API (zod); zero zależności runtime
     daemon/               binarka daemona; src/ podzielone na moduły z §4
