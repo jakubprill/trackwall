@@ -113,7 +113,11 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 show_main(tray.app_handle());
             }
         });
-    if let Some(icon) = app.default_window_icon() {
+    // Pasek menu macOS oczekuje jednobarwnego szablonu, który system sam przebarwia do jasnego i ciemnego paska.
+    // Zasobnik Windows bywa jasny albo ciemny, więc tam zostaje kolorowa ikona aplikacji, czytelna na obu.
+    if cfg!(target_os = "macos") {
+        tray = tray.icon(tauri::include_image!("icons/tray-template.png")).icon_as_template(true);
+    } else if let Some(icon) = app.default_window_icon() {
         tray = tray.icon(icon.clone());
     }
     tray.build(app)?;

@@ -21,6 +21,7 @@ export function run(cmd: string[], cwd: string, capture = false): string {
 }
 
 const JsonManifest = z.object({ version: z.string().min(1) });
+const TauriBundle = z.object({ bundle: z.object({ icon: z.array(z.string().min(1)).min(1) }) });
 const CargoManifest = z.object({ package: z.object({ version: z.string().min(1) }) });
 
 function parseFile<T>(path: string, schema: z.ZodType<T>, parse: (text: string) => unknown): T {
@@ -40,6 +41,14 @@ function parseFile<T>(path: string, schema: z.ZodType<T>, parse: (text: string) 
 export function jsonVersion(path: string): string {
   return parseFile(path, JsonManifest, JSON.parse).version;
 }
+
+/** Ikony aplikacji z `bundle.icon` w tauri.conf.json, ścieżki względem `src-tauri`. */
+export function bundleIcons(): string[] {
+  return parseFile(join(TAURI_DIR, "tauri.conf.json"), TauriBundle, JSON.parse).bundle.icon;
+}
+
+/** Szablon ikony traya na macOS, względem `src-tauri` (wczytuje go `include_image!` w `main.rs`). */
+export const TRAY_TEMPLATE_ICON = "icons/tray-template.png";
 
 /** `[package].version` z Cargo.toml. */
 export function cargoVersion(path: string): string {
