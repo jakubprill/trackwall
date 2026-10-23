@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { bundleIcons, TAURI_DIR, TRAY_TEMPLATE_ICON } from "../scripts/lib.ts";
+import { bundleIcons, TRAY_TEMPLATE_ICON } from "../scripts/icon-paths.ts";
+import { TAURI_DIR } from "../scripts/lib.ts";
 
 // Ikony generuje `scripts/icons.ts` z `assets/*.svg`; tu pilnujemy, że Tauri dostanie wszystkie pliki, o które prosi.
 test("każda ikona z bundle.icon w tauri.conf.json leży w src-tauri", () => {
