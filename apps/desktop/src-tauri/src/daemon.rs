@@ -9,6 +9,7 @@ use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 /// Wersja powłoki musi być równa wersji daemona; pilnuje tego skrypt budowania.
@@ -83,14 +84,15 @@ pub fn health(port: u16) -> Option<String> {
 }
 
 /// Znajduje działający daemon albo uruchamia sidecar i czeka, aż odpowie.
-pub fn ensure_daemon(home: &Path) -> Result<Connection, String> {
+/// `cancel` przerywa czekanie i zabija uruchomiony sidecar (wyjście z traya w trakcie startu).
+pub fn ensure_daemon(home: &Path, cancel: &AtomicBool) -> Result<Connection, String> {
     if let Some(existing) = read_daemon_file(home) {
         match health(existing.port) {
             Some(v) if v == VERSION => return Ok(Connection::from(&existing)),
             Some(v) => {
                 return Err(format!(
                     "Działa daemon Pitwall w wersji {v} (pid {}), a ta aplikacja to {VERSION}. \
-                     Zakończ stary daemon i uruchom aplikację ponownie.",
+                     Zakończ stary daemon i kliknij „Spróbuj ponownie”.",
                     existing.pid
                 ))
             }
@@ -101,6 +103,11 @@ pub fn ensure_daemon(home: &Path) -> Result<Connection, String> {
     let mut child = spawn_sidecar(home, &log_path)?;
     let deadline = Instant::now() + START_TIMEOUT;
     loop {
+        if cancel.load(Ordering::SeqCst) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("Start daemona przerwany.".into());
+        }
         if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
             // Kod 0 oznacza, że w międzyczasie wystartował inny daemon tej samej wersji.
             if status.success() {
@@ -121,7 +128,7 @@ pub fn ensure_daemon(home: &Path) -> Result<Connection, String> {
             let _ = child.kill();
             let _ = child.wait();
             return Err(format!(
-                "Daemon nie odpowiedział w ciągu {} s i został zatrzymany. Uruchom aplikację ponownie.\n\n{}",
+                "Daemon nie odpowiedział w ciągu {} s i został zatrzymany. Kliknij „Spróbuj ponownie”.\n\n{}",
                 START_TIMEOUT.as_secs(),
                 log_tail(&log_path)
             ));

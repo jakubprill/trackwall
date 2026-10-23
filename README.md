@@ -27,7 +27,7 @@ Wymagane: Node 22, pnpm 10, Bun 1.4, a dla aplikacji desktopowej Rust (wersje w 
 
 ```sh
 pnpm install
-pnpm dev                       # daemon (bun --watch) + Vite na http://127.0.0.1:5173
+pnpm dev                       # daemon (bun --watch, stan w .pitwall-dev/) + Vite na http://127.0.0.1:5173
 pnpm --filter @pitwall/desktop dev   # to samo w oknie Tauri (stan w ~/.pitwall-dev, osobno od wydania)
 pnpm test                      # testy wszystkich paczek
 ```

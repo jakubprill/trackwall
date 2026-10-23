@@ -2,10 +2,10 @@
 import { arch, platform } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { startApi } from "./api/server.ts";
+import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
 import { type DaemonArgs, parseDaemonArgs, USAGE } from "./args.ts";
-import { newToken, probeRunningDaemon, removeDaemonFile, withStartLock, writeDaemonFile } from "./discovery.ts";
+import { newToken, probeRunningDaemon, removeDaemonFile, watchDaemonFile, withStartLock, writeDaemonFile } from "./discovery.ts";
 import { pitwallHome } from "./home.ts";
 import { openBrowser } from "./open-browser.ts";
 import { runtimeInfo } from "./platform/runtime.ts";
@@ -18,15 +18,30 @@ const EXIT_OTHER_VERSION_RUNNING = 3;
 async function main(args: DaemonArgs): Promise<void> {
   const home = pitwallHome(args.home);
   const uiDir = resolveUiDir(args.uiDir);
-
   const startedAt = new Date().toISOString();
+
+  // Stan potrzebny do zatrzymania jest zadeklarowany przed startem API: shutdown może przyjść żądaniem HTTP
+  // albo sygnałem w dowolnym momencie po otwarciu portu.
+  let api: ApiServer | undefined;
+  let stopWatching = () => {};
   let shuttingDown = false;
+
+  async function shutdown(reason: string): Promise<void> {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    log(`zatrzymywanie (${reason})`);
+    // Etap 3: tutaj zatrzymanie serwisów i sesji agentów tym samym łagodnym stopem.
+    stopWatching();
+    removeDaemonFile(home, process.pid);
+    await api?.close();
+    process.exit(0);
+  }
 
   const started = await withStartLock(home, async () => {
     const running = await probeRunningDaemon(home);
     if (running) return { kind: "existing" as const, ...running };
     const token = newToken();
-    const api = await startApi(
+    api = await startApi(
       {
         token,
         version: VERSION,
@@ -47,8 +62,9 @@ async function main(args: DaemonArgs): Promise<void> {
       },
       args.port,
     );
-    writeDaemonFile(home, { pid: process.pid, port: api.port, token, startedAt, version: VERSION });
-    return { kind: "started" as const, api, token };
+    const self = { pid: process.pid, port: api.port, token, startedAt, version: VERSION };
+    writeDaemonFile(home, self);
+    return { kind: "started" as const, self };
   });
 
   if (started.kind === "existing") {
@@ -61,27 +77,18 @@ async function main(args: DaemonArgs): Promise<void> {
     return;
   }
 
-  const { api, token } = started;
-  log(`pitwall-daemon ${VERSION} na http://127.0.0.1:${api.port} (pid ${process.pid}, ${runtimeInfo().name}, stan w ${home})`);
-  if (!uiDir) log("brak zbudowanego UI: API działa, strona nie będzie serwowana (zbuduj packages/ui albo podaj --ui-dir)");
-  if (args.ui) {
-    if (uiDir) openBrowser(uiUrl(api.port, token));
-    else log("--ui pominięte, bo nie ma UI do pokazania");
-  }
-
-  async function shutdown(reason: string): Promise<void> {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    log(`zatrzymywanie (${reason})`);
-    // Etap 3: tutaj zatrzymanie serwisów i sesji agentów tym samym łagodnym stopem.
-    removeDaemonFile(home, process.pid);
-    await api.close();
-    process.exit(0);
-  }
-
+  const { self } = started;
+  stopWatching = watchDaemonFile(home, self, (other) => void shutdown(`daemon.json wskazuje na pid ${other.pid}`));
   const signals: NodeJS.Signals[] = process.platform === "win32" ? ["SIGINT", "SIGBREAK", "SIGHUP"] : ["SIGINT", "SIGTERM", "SIGHUP"];
   for (const signal of signals) {
     process.on(signal, () => void shutdown(signal));
+  }
+
+  log(`pitwall-daemon ${VERSION} na http://127.0.0.1:${self.port} (pid ${process.pid}, ${runtimeInfo().name}, stan w ${home})`);
+  if (!uiDir) log("brak zbudowanego UI: API działa, strona nie będzie serwowana (zbuduj packages/ui albo podaj --ui-dir)");
+  if (args.ui) {
+    if (uiDir) openBrowser(uiUrl(self.port, self.token));
+    else log("--ui pominięte, bo nie ma UI do pokazania");
   }
 }
 

@@ -6,32 +6,78 @@
 mod daemon;
 
 use daemon::Connection;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
 
-/// Wynik startu daemona; UI czeka na niego komendą `daemon_connection`.
+/// Stan połączenia z daemonem widziany przez powłokę.
+#[derive(Clone, Default)]
+enum Phase {
+    #[default]
+    Idle,
+    Starting,
+    Ready(Connection),
+    Failed(String),
+}
+
+/// UI czeka na wynik startu komendą `daemon_connection`; tray i drugie uruchomienie mogą start ponowić albo przerwać.
 #[derive(Default)]
 struct DaemonState {
-    result: Mutex<Option<Result<Connection, String>>>,
-    ready: Condvar,
+    phase: Mutex<Phase>,
+    changed: Condvar,
+    cancel: AtomicBool,
 }
 
 impl DaemonState {
-    fn set(&self, r: Result<Connection, String>) {
-        *self.result.lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
-        self.ready.notify_all();
+    /// Uruchamia start w tle, jeśli jeszcze nie startowano albo poprzedni start się nie udał.
+    fn start(self: &Arc<Self>) {
+        {
+            let mut phase = self.lock();
+            if matches!(*phase, Phase::Starting | Phase::Ready(_)) {
+                return;
+            }
+            *phase = Phase::Starting;
+        }
+        self.cancel.store(false, Ordering::SeqCst);
+        let me = Arc::clone(self);
+        std::thread::spawn(move || {
+            let result = daemon::pitwall_home().and_then(|home| daemon::ensure_daemon(&home, &me.cancel));
+            *me.lock() = match result {
+                Ok(conn) => Phase::Ready(conn),
+                Err(err) => Phase::Failed(err),
+            };
+            me.changed.notify_all();
+        });
     }
 
+    /// Jak `start`, ale także wtedy, gdy zapisany daemon przestał odpowiadać (np. zakończony spoza aplikacji).
+    fn restart_if_down(self: &Arc<Self>) {
+        {
+            let mut phase = self.lock();
+            if let Phase::Ready(conn) = &*phase {
+                if daemon::health(conn.port).as_deref() == Some(daemon::VERSION) {
+                    return;
+                }
+                *phase = Phase::Idle;
+            }
+        }
+        self.start();
+    }
+
+    /// Czeka na koniec trwającego startu. `Idle` oznacza, że start nie był zlecony.
     fn wait(&self) -> Result<Connection, String> {
-        let guard = self.result.lock().unwrap_or_else(|e| e.into_inner());
-        let guard = self.ready.wait_while(guard, |r| r.is_none()).unwrap_or_else(|e| e.into_inner());
-        guard.clone().unwrap_or_else(|| Err("brak wyniku startu daemona".into()))
+        let phase = self.changed.wait_while(self.lock(), |p| matches!(p, Phase::Starting)).unwrap_or_else(|e| e.into_inner());
+        match &*phase {
+            Phase::Ready(conn) => Ok(conn.clone()),
+            Phase::Failed(err) => Err(err.clone()),
+            Phase::Idle | Phase::Starting => Err("daemon nie był uruchamiany".into()),
+        }
     }
 
-    fn current(&self) -> Option<Connection> {
-        self.result.lock().unwrap_or_else(|e| e.into_inner()).clone().and_then(Result::ok)
+    fn lock(&self) -> std::sync::MutexGuard<'_, Phase> {
+        self.phase.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
 
@@ -39,6 +85,15 @@ impl DaemonState {
 #[tauri::command]
 async fn daemon_connection(state: tauri::State<'_, Arc<DaemonState>>) -> Result<Connection, String> {
     let state = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || state.wait()).await.map_err(|e| e.to_string())?
+}
+
+/// Ponowny start po błędzie albo po zniknięciu daemona (przycisk „Spróbuj ponownie” w UI).
+#[tauri::command]
+async fn retry_daemon(state: tauri::State<'_, Arc<DaemonState>>) -> Result<Connection, String> {
+    let state = Arc::clone(&state);
+    let restarter = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || restarter.restart_if_down()).await.map_err(|e| e.to_string())?;
     tauri::async_runtime::spawn_blocking(move || state.wait()).await.map_err(|e| e.to_string())?
 }
 
@@ -54,14 +109,20 @@ fn main() {
     }
 
     let state = Arc::new(DaemonState::default());
-    let app = tauri::Builder::default()
-        // Ponowne uruchomienie pitwall.exe pokazuje istniejące okno zamiast drugiej powłoki i drugiej ikony w trayu.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
+    let builder = tauri::Builder::default();
+    // Ponowne uruchomienie pitwall.exe pokazuje istniejące okno zamiast drugiej powłoki i drugiej ikony w trayu.
+    // Tylko w wydaniu: identyfikator instancji jest wspólny, a `tauri dev` ma działać obok zainstalowanej aplikacji.
+    #[cfg(not(debug_assertions))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        let state = Arc::clone(app.state::<Arc<DaemonState>>().inner());
+        std::thread::spawn(move || state.restart_if_down());
+        show_main(app);
+    }));
+    let app = builder
         .manage(Arc::clone(&state))
-        .invoke_handler(tauri::generate_handler![daemon_connection])
+        .invoke_handler(tauri::generate_handler![daemon_connection, retry_daemon])
         .setup(move |app| {
-            let starter = Arc::clone(&state);
-            std::thread::spawn(move || starter.set(daemon::pitwall_home().and_then(|home| daemon::ensure_daemon(&home))));
+            state.start();
             build_tray(app.handle())?;
             Ok(())
         })
@@ -122,16 +183,21 @@ fn show_main(app: &AppHandle) {
     }
 }
 
-/// „Wyjdź” z traya: łagodne zatrzymanie daemona, potem koniec procesu okna.
+/// „Wyjdź” z traya: przerwanie trwającego startu, łagodne zatrzymanie daemona, potem koniec procesu okna.
 fn quit_app(app: &AppHandle) {
     let state = Arc::clone(app.state::<Arc<DaemonState>>().inner());
     let app = app.clone();
     std::thread::spawn(move || {
-        // Gdy start się nie udał, daemon mógł mimo to wstać (np. inna powłoka go uruchomiła): szukamy go po daemon.json.
-        let conn = state.current().or_else(|| daemon::pitwall_home().ok().and_then(|home| daemon::discover(&home)));
-        if let Some(conn) = conn {
-            if let Err(err) = daemon::shutdown(&conn) {
-                eprintln!("[desktop] zatrzymanie daemona: {err}");
+        state.cancel.store(true, Ordering::SeqCst);
+        let started = state.wait().ok();
+        // Zapisane połączenie mogło się zestarzeć (daemon wstał ponownie na innym porcie), a nieudany start
+        // nie wyklucza, że daemon działa: wtedy szukamy go po daemon.json.
+        let stopped = started.as_ref().is_some_and(|c| daemon::shutdown(c).is_ok());
+        if !stopped {
+            if let Some(conn) = daemon::pitwall_home().ok().and_then(|home| daemon::discover(&home)) {
+                if let Err(err) = daemon::shutdown(&conn) {
+                    eprintln!("[desktop] zatrzymanie daemona: {err}");
+                }
             }
         }
         app.exit(0);

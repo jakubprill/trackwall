@@ -66,10 +66,20 @@ describe("proces daemona", () => {
     }
   }, 30_000);
 
-  test("pusty PITWALL_HOME znaczy domyślny katalog, nie błąd", async () => {
-    const p = Bun.spawn(["bun", MAIN, "--version"], { env: { ...process.env, PITWALL_HOME: "" }, stdout: "pipe" });
-    expect(await p.exited).toBe(0);
-  });
+  test("pusty PITWALL_HOME znaczy domyślny katalog ~/.pitwall, nie błąd", async () => {
+    const fakeHome = mkdtempSync(join(tmpdir(), "pitwall-userhome-"));
+    // os.homedir(): HOME na Unixie, USERPROFILE na Windowsie.
+    const env = { ...process.env, PITWALL_HOME: "", HOME: fakeHome, USERPROFILE: fakeHome };
+    const daemon = Bun.spawn(["bun", MAIN], { env, stdout: "ignore", stderr: "ignore" });
+    try {
+      const file = await waitFor(() => readDaemonFile(join(fakeHome, ".pitwall")));
+      expect(file.pid).toBe(daemon.pid);
+      await loopbackRequest(file.port, "/api/daemon/shutdown", { method: "POST", token: file.token });
+      expect(await daemon.exited).toBe(0);
+    } finally {
+      daemon.kill();
+    }
+  }, 20_000);
 
   test("zły argument kończy się kodem 2", async () => {
     const p = Bun.spawn(["bun", MAIN, "--port", "abc"], { stdout: "ignore", stderr: "pipe" });

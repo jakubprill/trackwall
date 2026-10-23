@@ -1,12 +1,14 @@
 import { readFileSync } from "node:fs";
 import { request } from "node:http";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { DAEMON_FILE, DaemonFile, PITWALL_HOME_ENV } from "@pitwall/protocol";
 import type { Plugin } from "vite";
 
 /**
- * Tylko `vite dev`: przekazuje `/api/*` do działającego daemona z tokenem z `daemon.json`.
+ * Tylko `vite dev`: przekazuje `/api/*` do daemona z `pnpm dev` z tokenem z `daemon.json`.
+ * Daemon deweloperski trzyma stan w `<repo>/.pitwall-dev`, osobno od wydanej aplikacji w `~/.pitwall`
+ * (`PITWALL_HOME` nadpisuje oba).
  * Plik jest czytany przy każdym żądaniu, więc kolejność startu daemona i Vite nie ma znaczenia,
  * a przeglądarka nigdy nie widzi tokenu.
  *
@@ -14,14 +16,21 @@ import type { Plugin } from "vite";
  * żądania ze strony Vite. Bez tego dowolna strona w przeglądarce mogłaby wysłać formularz POST na
  * `127.0.0.1:5173/api/...` i wykonać akcję w daemonie.
  */
+/** Ten sam katalog podaje skrypt `dev` daemona (`--home ../../.pitwall-dev`). */
+export const DEV_HOME = fileURLToPath(new URL("../../.pitwall-dev", import.meta.url));
+
 export function daemonDevProxy(): Plugin {
   return {
     name: "pitwall-daemon-dev-proxy",
     apply: "serve",
     configureServer(server) {
-      const file = join(process.env[PITWALL_HOME_ENV] || join(homedir(), ".pitwall"), DAEMON_FILE);
+      const file = join(process.env[PITWALL_HOME_ENV] || DEV_HOME, DAEMON_FILE);
       server.middlewares.use("/api", (req, res) => {
         const reply = (status: number, message: string) => {
+          if (res.headersSent) {
+            res.destroy();
+            return;
+          }
           res.statusCode = status;
           res.setHeader("content-type", "application/json");
           res.end(JSON.stringify({ ok: false, error: { code: status === 403 ? "forbidden_origin" : "internal", message } }));
@@ -59,6 +68,9 @@ export function daemonDevProxy(): Plugin {
           (up) => {
             res.statusCode = up.statusCode ?? 502;
             res.setHeader("content-type", up.headers["content-type"] ?? "application/json");
+            // Zerwane połączenie w połowie odpowiedzi: przeglądarka ma dostać błąd, a nie wiszące żądanie.
+            up.on("aborted", () => res.destroy());
+            up.on("error", () => res.destroy());
             up.pipe(res);
           },
         );

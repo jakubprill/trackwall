@@ -7,8 +7,11 @@ import { loopbackRequest } from "./loopback.ts";
 /** Odkrywanie daemona przez `daemon.json` (§5.1). */
 
 const LOCK_FILE = "daemon.lock";
-/** Po tym czasie blokada startu jest uznawana za porzuconą, nawet jeśli PID z pliku żyje (recykling PID-ów). */
-const LOCK_STALE_MS = 30_000;
+/**
+ * Po tym czasie blokada startu jest uznawana za porzuconą, nawet jeśli PID z pliku żyje (recykling PID-ów).
+ * Sekcja krytyczna trwa milisekundy, a limit musi być krótszy niż czas czekania na blokadę.
+ */
+const LOCK_STALE_MS = 10_000;
 /** Plik blokady bez PID-u młodszy niż to jest właśnie zapisywany przez innego startującego. */
 const LOCK_WRITE_GRACE_MS = 2_000;
 
@@ -62,6 +65,9 @@ export async function probeRunningDaemon(home: string, timeoutMs = 1500): Promis
 /**
  * Sekcja krytyczna startu: sprawdzenie, czy daemon już działa, i zapis `daemon.json` przez nowego.
  * Bez niej dwa równoczesne starty (dwuklik, Tauri + `--ui`) zostawiają dwa daemony, z których jeden jest niewidoczny.
+ *
+ * Przejęcie porzuconej blokady nie jest atomowe (Node nie ma flock), więc dwa starty, które jednocześnie uznały
+ * ją za porzuconą, mogą obie wejść do sekcji. Ten rzadki przypadek domyka `watchDaemonFile` w daemonie.
  */
 export async function withStartLock<T>(home: string, fn: () => Promise<T>, timeoutMs = 15_000): Promise<T> {
   mkdirSync(home, { recursive: true, mode: 0o700 });
@@ -108,7 +114,23 @@ function isStaleLock(lock: string): boolean {
   }
   if (ageMs > LOCK_STALE_MS) return true;
   if (!Number.isInteger(holder) || holder <= 0) return ageMs > LOCK_WRITE_GRACE_MS;
+  // Własny PID w cudzej blokadzie: poprzednie wcielenie tego procesu (`bun --watch` restartuje przez execve).
+  if (holder === process.pid) return true;
   return !isAlive(holder);
+}
+
+/**
+ * Pilnuje, żeby `daemon.json` opisywał ten proces. Gdy wskazuje innego żywego daemona, ten proces jest
+ * niewidoczny dla klientów i ma się zakończyć; gdy plik zniknął, jest zapisywany ponownie.
+ */
+export function watchDaemonFile(home: string, self: DaemonFile, onSuperseded: (by: DaemonFile) => void, intervalMs = 2000): () => void {
+  const timer = setInterval(() => {
+    const current = readDaemonFile(home);
+    if (current === undefined) writeDaemonFile(home, self);
+    else if (current.pid !== self.pid && isAlive(current.pid)) onSuperseded(current);
+  }, intervalMs);
+  timer.unref();
+  return () => clearInterval(timer);
 }
 
 function isAlive(pid: number): boolean {

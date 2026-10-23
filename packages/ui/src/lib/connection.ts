@@ -18,6 +18,11 @@ export async function resolveConnection(): Promise<Connection> {
   return { baseUrl: "", token: takeTokenFromLocation(window.location, window.history, window.sessionStorage) };
 }
 
+/** Ponowny start daemona po błędzie. Tylko w oknie Tauri; w przeglądarce daemon uruchamia się ręcznie. */
+export async function retryConnection(): Promise<Connection | undefined> {
+  return isTauri() ? invoke<Connection>("retry_daemon") : undefined;
+}
+
 export function takeTokenFromLocation(location: Location, history: History, storage: Storage): string | undefined {
   const fromHash = new URLSearchParams(location.hash.slice(1)).get("token");
   if (fromHash) {

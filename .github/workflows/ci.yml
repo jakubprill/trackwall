@@ -66,7 +66,7 @@ jobs:
       - run: pnpm build:desktop
       # Po buildzie, bo tauri-build wymaga binarki sidecara, którą tworzy build:desktop.
       - name: cargo test (powłoka Tauri)
-        run: cargo test --release --manifest-path apps/desktop/src-tauri/Cargo.toml
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
       - name: smoke test sidecara z buildu
         shell: bash
         run: bun packages/daemon/scripts/smoke.ts apps/desktop/src-tauri/target/release/pitwall-daemon$([ "$RUNNER_OS" = Windows ] && echo .exe)

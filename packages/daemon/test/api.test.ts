@@ -1,24 +1,24 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DaemonInfoResult, HealthResult } from "@pitwall/protocol";
 import { type ApiServer, startApi } from "../src/api/server.ts";
+import { type LoopbackOptions, loopbackRequest } from "../src/loopback.ts";
 
 const TOKEN = "t".repeat(43);
 let api: ApiServer;
 let shutdowns = 0;
-let base: string;
 
 beforeAll(async () => {
   // Katalog nadrzędny o nazwie `assets` sprawdza, że cache zależy od ścieżki względem UI, nie całej ścieżki.
-  const uiDir = join(mkdtempSync(join(tmpdir(), "pitwall-ui-")), "assets", "ui");
-  mkdirSync(uiDir, { recursive: true });
+  const parent = join(mkdtempSync(join(tmpdir(), "pitwall-ui-")), "assets");
+  const uiDir = join(parent, "ui");
+  mkdirSync(join(uiDir, "assets"), { recursive: true });
   writeFileSync(join(uiDir, "index.html"), "<!doctype html><title>pitwall</title>");
-  mkdirSync(join(uiDir, "assets"));
   writeFileSync(join(uiDir, "assets", "app.js"), "console.log(1)");
-  writeFileSync(join(tmpdir(), "pitwall-secret.txt"), "nie do odczytu");
+  // Plik tuż obok katalogu UI: cel prób wyjścia poza katalog w teście path traversal.
+  writeFileSync(join(parent, "pitwall-secret.txt"), "nie do odczytu");
   api = await startApi({
     token: TOKEN,
     version: "9.9.9",
@@ -38,93 +38,89 @@ beforeAll(async () => {
       shutdowns++;
     },
   });
-  base = `http://127.0.0.1:${api.port}`;
 });
 
 afterAll(() => api.close());
 
-const auth = { authorization: `Bearer ${TOKEN}` };
-
-/** fetch() nie pozwala ustawić nagłówka Host, więc dla tego testu surowe żądanie. */
-function rawGet(path: string, headers: Record<string, string>): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const req = request({ host: "127.0.0.1", port: api.port, path, headers }, (res) => {
-      res.resume();
-      resolve(res.statusCode ?? 0);
-    });
-    req.on("error", reject);
-    req.end();
-  });
-}
+/** Żądania przez node:http: pozwala ustawić `Host` i nie idzie przez HTTP_PROXY. */
+const req = (path: string, opts: LoopbackOptions = {}) => loopbackRequest(api.port, path, opts);
+const authed = (path: string, opts: LoopbackOptions = {}) => req(path, { token: TOKEN, ...opts });
 
 describe("api", () => {
   test("health jest publiczne i zwraca wersję", async () => {
-    const res = await fetch(`${base}/api/health`);
+    const res = await req("/api/health");
     expect(res.status).toBe(200);
-    const body = HealthResult.parse(await res.json());
-    expect(body).toEqual({ ok: true, data: { status: "ok", version: "9.9.9" } });
+    expect(HealthResult.parse(JSON.parse(res.body))).toEqual({ ok: true, data: { status: "ok", version: "9.9.9" } });
   });
 
   test("info wymaga tokenu", async () => {
-    expect((await fetch(`${base}/api/daemon/info`)).status).toBe(401);
-    expect((await fetch(`${base}/api/daemon/info`, { headers: { authorization: `Bearer ${"x".repeat(43)}` } })).status).toBe(401);
-    const res = await fetch(`${base}/api/daemon/info`, { headers: auth });
+    expect((await req("/api/daemon/info")).status).toBe(401);
+    expect((await req("/api/daemon/info", { token: "x".repeat(43) })).status).toBe(401);
+    expect((await req("/api/daemon/info", { token: "krótki" })).status).toBe(401);
+    const res = await authed("/api/daemon/info");
     expect(res.status).toBe(200);
-    expect(DaemonInfoResult.parse(await res.json()).ok).toBe(true);
+    expect(DaemonInfoResult.parse(JSON.parse(res.body)).ok).toBe(true);
   });
 
   test("obcy Origin jest odrzucany nawet z poprawnym tokenem", async () => {
-    const res = await fetch(`${base}/api/daemon/info`, { headers: { ...auth, origin: "https://evil.example" } });
-    expect(res.status).toBe(403);
+    expect((await authed("/api/daemon/info", { headers: { origin: "https://evil.example" } })).status).toBe(403);
+    expect((await authed("/api/daemon/info", { headers: { origin: "null" } })).status).toBe(403);
   });
 
   test("Host spoza loopbacku jest odrzucany (DNS rebinding)", async () => {
-    expect(await rawGet("/api/health", { host: `evil.example:${api.port}` })).toBe(403);
-    expect(await rawGet("/api/health", { host: `localhost:${api.port}` })).toBe(200);
+    expect((await req("/api/health", { headers: { host: `evil.example:${api.port}` } })).status).toBe(403);
+    expect((await req("/api/health", { headers: { host: `localhost:${api.port}` } })).status).toBe(200);
+    expect((await req("/api/health", { headers: { host: "127.0.0.1:1" } })).status).toBe(403);
   });
 
   test("okno Tauri dostaje nagłówki CORS i preflight", async () => {
-    const pre = await fetch(`${base}/api/daemon/info`, {
+    const pre = await req("/api/daemon/info", {
       method: "OPTIONS",
       headers: { origin: "http://tauri.localhost", "access-control-request-headers": "authorization" },
     });
     expect(pre.status).toBe(204);
-    expect(pre.headers.get("access-control-allow-origin")).toBe("http://tauri.localhost");
-    expect(pre.headers.get("access-control-allow-headers")).toContain("authorization");
-    const res = await fetch(`${base}/api/daemon/info`, { headers: { ...auth, origin: "tauri://localhost" } });
+    expect(pre.headers["access-control-allow-origin"]).toBe("http://tauri.localhost");
+    expect(pre.headers["access-control-allow-headers"]).toContain("authorization");
+    const res = await authed("/api/daemon/info", { headers: { origin: "tauri://localhost" } });
     expect(res.status).toBe(200);
-    expect(res.headers.get("access-control-allow-origin")).toBe("tauri://localhost");
+    expect(res.headers["access-control-allow-origin"]).toBe("tauri://localhost");
   });
 
   test("strona z daemona nie dostaje CORS, bo jest same-origin", async () => {
-    const res = await fetch(`${base}/api/health`, { headers: { origin: base } });
+    const res = await req("/api/health", { headers: { origin: `http://127.0.0.1:${api.port}` } });
     expect(res.status).toBe(200);
-    expect(res.headers.get("access-control-allow-origin")).toBeNull();
+    expect(res.headers["access-control-allow-origin"]).toBeUndefined();
   });
 
   test("UI: index, assets, fallback SPA i brak wyjścia poza katalog", async () => {
-    const index = await fetch(`${base}/`);
-    expect(await index.text()).toContain("pitwall");
-    expect(index.headers.get("cache-control")).toBe("no-cache");
-    expect(await (await fetch(`${base}/tasks/123`)).text()).toContain("pitwall");
-    const asset = await fetch(`${base}/assets/app.js`);
-    expect(asset.headers.get("content-type")).toContain("javascript");
-    expect(asset.headers.get("cache-control")).toContain("immutable");
-    expect((await fetch(`${base}/assets/missing.js`)).status).toBe(404);
-    expect(await rawGet("/..%2fpitwall-secret.txt", { host: `127.0.0.1:${api.port}` })).toBe(404);
-    expect(await rawGet("/%2e%2e/%2e%2e/pitwall-secret.txt", { host: `127.0.0.1:${api.port}` })).toBe(404);
-    expect(await rawGet("/..%5cpitwall-secret.txt", { host: `127.0.0.1:${api.port}` })).toBe(404);
+    const index = await req("/");
+    expect(index.body).toContain("pitwall");
+    expect(index.headers["cache-control"]).toBe("no-cache");
+    expect((await req("/tasks/123")).body).toContain("pitwall");
+    const asset = await req("/assets/app.js");
+    expect(asset.headers["content-type"]).toContain("javascript");
+    expect(asset.headers["cache-control"]).toContain("immutable");
+    expect((await req("/assets/missing.js")).status).toBe(404);
+    for (const path of [
+      "/..%2fpitwall-secret.txt",
+      "/%2e%2e/pitwall-secret.txt",
+      "/..%5cpitwall-secret.txt",
+      "/assets/..%2f..%2fpitwall-secret.txt",
+    ]) {
+      const res = await req(path);
+      expect({ path, status: res.status, leaked: res.body.includes("nie do odczytu") }).toEqual({ path, status: 404, leaked: false });
+    }
   });
 
   test("nieznana trasa API to 404 w kopercie błędu", async () => {
-    const res = await fetch(`${base}/api/nope`, { headers: auth });
+    const res = await authed("/api/nope");
     expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ ok: false, error: { code: "not_found" } });
+    expect(JSON.parse(res.body)).toMatchObject({ ok: false, error: { code: "not_found" } });
   });
 
   test("shutdown odpowiada, a potem wywołuje zatrzymanie", async () => {
-    const res = await fetch(`${base}/api/daemon/shutdown`, { method: "POST", headers: auth });
-    expect(await res.json()).toEqual({ ok: true, data: { stopping: true } });
+    const res = await authed("/api/daemon/shutdown", { method: "POST" });
+    expect(JSON.parse(res.body)).toEqual({ ok: true, data: { stopping: true } });
     await Bun.sleep(20);
     expect(shutdowns).toBe(1);
   });
@@ -142,11 +138,10 @@ describe("--allow-origin", () => {
       onShutdown: () => {},
     });
     try {
-      const url = `http://127.0.0.1:${extra.port}/api/health`;
-      const res = await fetch(url, { headers: { origin: "http://127.0.0.1:5173" } });
+      const res = await loopbackRequest(extra.port, "/api/health", { headers: { origin: "http://127.0.0.1:5173" } });
       expect(res.status).toBe(200);
-      expect(res.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:5173");
-      expect((await fetch(url, { headers: { origin: "http://127.0.0.1:5174" } })).status).toBe(403);
+      expect(res.headers["access-control-allow-origin"]).toBe("http://127.0.0.1:5173");
+      expect((await loopbackRequest(extra.port, "/api/health", { headers: { origin: "http://127.0.0.1:5174" } })).status).toBe(403);
     } finally {
       await extra.close();
     }

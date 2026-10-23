@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { call } from "@/lib/api";
-import { type Connection, resolveConnection } from "@/lib/connection";
+import { type Connection, resolveConnection, retryConnection } from "@/lib/connection";
 
 type State = { kind: "connecting" } | { kind: "connected"; info: DaemonInfo; at: Date } | { kind: "error"; message: string };
 
@@ -29,6 +29,18 @@ export function DaemonPanel() {
     }
   }, [conn]);
 
+  /** Gdy daemon nie wstał, okno Tauri może go uruchomić ponownie; w przeglądarce zostaje zwykłe odświeżenie. */
+  const retry = useCallback(async () => {
+    setState({ kind: "connecting" });
+    try {
+      const next = await retryConnection();
+      if (next) setConn(next);
+      else await refresh();
+    } catch (err) {
+      setState({ kind: "error", message: err instanceof Error ? err.message : String(err) });
+    }
+  }, [refresh]);
+
   useEffect(() => {
     if (!conn) return;
     void refresh();
@@ -50,7 +62,14 @@ export function DaemonPanel() {
       </CardHeader>
       <CardContent>
         {state.kind === "connecting" && <p className="text-muted-foreground text-sm">Łączenie z daemonem…</p>}
-        {state.kind === "error" && <p className="text-destructive text-sm whitespace-pre-wrap break-words">{state.message}</p>}
+        {state.kind === "error" && (
+          <div className="flex flex-col items-start gap-3">
+            <p className="text-destructive text-sm whitespace-pre-wrap break-words">{state.message}</p>
+            <Button variant="outline" size="sm" onClick={() => void retry()}>
+              Spróbuj ponownie
+            </Button>
+          </div>
+        )}
         {state.kind === "connected" && <InfoTable info={state.info} />}
       </CardContent>
     </Card>

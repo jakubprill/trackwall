@@ -7,7 +7,7 @@
     "pitwall-daemon": "./src/main.ts"
   },
   "scripts": {
-    "dev": "bun --watch src/main.ts",
+    "dev": "bun --watch src/main.ts --home ../../.pitwall-dev",
     "start": "bun src/main.ts --ui",
     "build": "bun scripts/build.ts",
     "typecheck": "tsc -p tsconfig.json",

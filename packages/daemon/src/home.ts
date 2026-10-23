@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { PITWALL_HOME_ENV } from "@pitwall/protocol";
 
 /**
@@ -7,5 +7,5 @@ import { PITWALL_HOME_ENV } from "@pitwall/protocol";
  * Pusta wartość znaczy „nie ustawiono”, tak samo jak w powłoce Tauri.
  */
 export function pitwallHome(override?: string): string {
-  return override || process.env[PITWALL_HOME_ENV] || join(homedir(), ".pitwall");
+  return resolve(override || process.env[PITWALL_HOME_ENV] || join(homedir(), ".pitwall"));
 }
