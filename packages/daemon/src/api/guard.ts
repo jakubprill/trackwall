@@ -12,11 +12,10 @@ const TAURI_ORIGINS = ["tauri://localhost", "http://tauri.localhost", "https://t
 export class OriginPolicy {
   /** Originy spoza strony daemona, które dostają CORS: okno Tauri i jawne `--allow-origin` (np. `tauri dev`). */
   private readonly cross: Set<string>;
+  private readonly port: number;
 
-  constructor(
-    private readonly port: number,
-    extraOrigins: readonly string[] = [],
-  ) {
+  constructor(port: number, extraOrigins: readonly string[] = []) {
+    this.port = port;
     this.cross = new Set([...TAURI_ORIGINS, ...extraOrigins]);
   }
 

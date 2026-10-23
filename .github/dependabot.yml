@@ -1,0 +1,27 @@
+# Aktualizacje zależności raz w tygodniu, zgrupowane per ekosystem, żeby nie zasypać kolejki.
+# Akcje GitHub są przypięte do SHA; Dependabot podbija SHA razem z komentarzem wersji.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories: ["/", "/.github/actions/*"]
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm:
+        patterns: ["*"]
+
+  - package-ecosystem: cargo
+    directory: /apps/desktop/src-tauri
+    schedule:
+      interval: weekly
+    groups:
+      cargo:
+        patterns: ["*"]

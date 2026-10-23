@@ -1,0 +1,4 @@
+contact_links:
+  - name: Zgłoś podatność
+    url: https://github.com/jakubprill/pitwall/security/advisories/new
+    about: Podatności zgłaszaj prywatnie (SECURITY.md), nie w publicznym issue.

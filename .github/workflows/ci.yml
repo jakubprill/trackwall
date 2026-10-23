@@ -10,13 +10,18 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
+# Domyślnie żadnych uprawnień; każdy job dostaje tylko to, czego potrzebuje.
+permissions: {}
 
+# Te same wersje co w mise.toml; pilnuje tego apps/desktop/test/toolchain.test.ts.
 env:
   BUN_VERSION: "1.4.2"
   NODE_VERSION: "22"
+  RUST_VERSION: "1.90"
 
+# Akcje przypięte do SHA (komentarz to wersja): przesunięty tag akcji nie podmieni kodu, który tu działa.
+# Aktualizuje je Dependabot (.github/dependabot.yml). Node, pnpm i Bun instaluje .github/actions/setup
+# (poza audytem, który potrzebuje tylko pnpm i Node).
 jobs:
   check:
     name: lint, typecheck, test (${{ matrix.os }})
@@ -25,20 +30,39 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-      - uses: oven-sh/setup-bun@v2
-        with:
           bun-version: ${{ env.BUN_VERSION }}
-      - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+
+  audit:
+    name: znane podatności zależności
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      # Bez pnpm install i Bun: pnpm audit czyta tylko lockfile.
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          # setup-node v5 sam włącza cache pnpm z packageManager; bez install store nie istnieje i zapis cache kończy job błędem.
+          package-manager-cache: false
+      - run: pnpm audit --audit-level high
 
   desktop:
     name: portable (${{ matrix.os }})
@@ -48,30 +72,36 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-      - uses: oven-sh/setup-bun@v2
-        with:
           bun-version: ${{ env.BUN_VERSION }}
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # gałąź stable; wersję Rust daje RUST_VERSION
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: apps/desktop/src-tauri
-      - run: pnpm install --frozen-lockfile
+      - name: cargo fmt (powłoka Tauri)
+        run: cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
       - run: pnpm build:desktop
       # Po buildzie, bo tauri-build wymaga binarki sidecara, którą tworzy build:desktop.
+      - name: cargo clippy (powłoka Tauri)
+        run: cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
       - name: cargo test (powłoka Tauri)
         run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
       - name: smoke test sidecara z buildu
-        shell: bash
-        run: bun packages/daemon/scripts/smoke.ts apps/desktop/src-tauri/target/release/pitwall-daemon$([ "$RUNNER_OS" = Windows ] && echo .exe)
+        run: bun packages/daemon/scripts/smoke.ts apps/desktop/src-tauri/target/release/pitwall-daemon
       - run: pnpm portable
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: pitwall-${{ runner.os }}
           path: out/*.zip
@@ -87,23 +117,23 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-      - uses: oven-sh/setup-bun@v2
-        with:
           bun-version: ${{ env.BUN_VERSION }}
-      - run: pnpm install --frozen-lockfile
       - name: Job Objects / grupy procesów
         run: pnpm --filter @pitwall/spike-job-objects spike
       - name: PTY (ConPTY na Windowsie)
         if: always()
         run: pnpm --filter @pitwall/spike-conpty spike
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         if: always()
         with:
           name: spikes-${{ runner.os }}

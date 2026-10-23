@@ -73,33 +73,43 @@ export async function withStartLock<T>(home: string, fn: () => Promise<T>, timeo
   mkdirSync(home, { recursive: true, mode: 0o700 });
   const lock = join(home, LOCK_FILE);
   const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    try {
-      const fd = openSync(lock, "wx", 0o600);
-      try {
-        writeSync(fd, String(process.pid));
-      } finally {
-        closeSync(fd);
-      }
-      break;
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-      if (isStaleLock(lock)) {
-        rmSync(lock, { force: true });
-        continue;
-      }
-      if (Date.now() > deadline) throw new Error(`blokada startu ${lock} trzymana dłużej niż ${timeoutMs} ms`);
-      await new Promise((r) => setTimeout(r, 50));
+  while (!tryCreateLock(lock)) {
+    if (isStaleLock(lock)) {
+      rmSync(lock, { force: true });
+      continue;
     }
+    if (Date.now() > deadline) throw new Error(`blokada startu ${lock} trzymana dłużej niż ${timeoutMs} ms`);
+    await new Promise((r) => setTimeout(r, 50));
   }
   try {
     return await fn();
   } finally {
-    try {
-      if (readFileSync(lock, "utf8") === String(process.pid)) rmSync(lock, { force: true });
-    } catch {
-      // ktoś uznał blokadę za porzuconą i ją usunął
-    }
+    releaseLock(lock);
+  }
+}
+
+/** `false`, gdy blokada już istnieje; każdy inny błąd systemu plików leci dalej. */
+function tryCreateLock(lock: string): boolean {
+  let fd: number;
+  try {
+    fd = openSync(lock, "wx", 0o600);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw err;
+  }
+  try {
+    writeSync(fd, String(process.pid));
+  } finally {
+    closeSync(fd);
+  }
+  return true;
+}
+
+function releaseLock(lock: string): void {
+  try {
+    if (readFileSync(lock, "utf8") === String(process.pid)) rmSync(lock, { force: true });
+  } catch {
+    // ktoś uznał blokadę za porzuconą i ją usunął
   }
 }
 

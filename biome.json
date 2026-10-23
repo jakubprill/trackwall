@@ -6,7 +6,16 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/dist", "!**/target", "!**/gen", "!**/*.json.tmp", "!apps/desktop/src-tauri/icons", "!**/*.md"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/target",
+      "!**/gen",
+      "!**/*.json.tmp",
+      "!apps/desktop/src-tauri/icons",
+      "!pnpm-lock.yaml",
+      "!**/*.md"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -15,7 +24,34 @@
     "lineWidth": 140
   },
   "linter": {
-    "enabled": true
+    "enabled": true,
+    "rules": {
+      "complexity": {
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": {
+            "maxAllowedComplexity": 15
+          }
+        }
+      },
+      "nursery": {
+        "noFloatingPromises": "error"
+      },
+      "style": {
+        "noNonNullAssertion": "error",
+        "useFilenamingConvention": {
+          "level": "error",
+          "options": {
+            "filenameCases": ["kebab-case"],
+            "requireAscii": true
+          }
+        }
+      },
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noImportCycles": "error"
+      }
+    }
   },
   "assist": {
     "actions": {
@@ -28,5 +64,84 @@
     "parser": {
       "tailwindDirectives": true
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["packages/ui/src/**/*.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useFilenamingConvention": {
+              "level": "error",
+              "options": {
+                "filenameCases": ["kebab-case", "PascalCase"],
+                "requireAscii": true
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**", "!packages/daemon/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@pitwall/daemon", "@pitwall/daemon/**", "**/daemon/src/**"],
+                    "message": "Tylko daemon importuje swój kod; wspólny kod bierz z @pitwall/protocol (AGENTS.md, granice modułów)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/daemon/src/**", "packages/protocol/src/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "useImportExtensions": "error"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/daemon/src/**", "!packages/daemon/src/platform/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": { "Bun": "API Bun tylko w packages/daemon/src/platform (ADR-1); reszta daemona działa też pod Node." }
+              }
+            },
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [{ "group": ["bun", "bun:*"], "message": "Moduły Bun tylko w packages/daemon/src/platform (ADR-1)." }]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/protocol/src/**", "packages/ui/src/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noNodejsModules": "error"
+          }
+        }
+      }
+    }
+  ]
 }

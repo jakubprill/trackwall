@@ -54,7 +54,7 @@ Daemon można też uruchomić bez Tauri (`pitwall-daemon --ui`), co daje tryb �
 pitwall/
   package.json            pnpm workspaces, skrypty root
   pnpm-workspace.yaml
-  mise.toml               wersje narzędzi dla samego projektu (node/bun, pnpm, rust)
+  mise.toml               wersje narzędzi dla samego projektu (node/bun, pnpm, rust) i taski setup, dev, portable
   packages/
     protocol/             typy zdarzeń, DTO, schemat JSON API (zod); zero zależności runtime
     daemon/               binarka daemona; src/ podzielone na moduły z §4
@@ -67,7 +67,10 @@ pitwall/
     architecture.md       ten dokument
     adr/                  decyzje architektoniczne (od chwili, gdy zacznie ich przybywać)
   .github/workflows/
-    ci.yml                macierz windows-latest + macos-latest: lint, test, build portable
+    ci.yml                macierz windows-latest + macos-latest: lint (Biome, knip), test, clippy, build portable; audyt zależności
+    release.yml           wydanie z tagu vX.Y.Z (docs/release.md)
+  .github/actions/setup/  wspólne przygotowanie jobów: pnpm, Node, Bun, pnpm install
+  .github/dependabot.yml  cotygodniowe aktualizacje akcji, npm i cargo
 ```
 
 `packages/protocol` jest jedyną zależnością wspólną między daemonem, UI, sceną i CLI. Dzięki temu UI nie importuje nic z daemona (nie da się przypadkiem wciągnąć `node:child_process` do bundle'a WebView), a schematy zod są jednocześnie walidacją wejścia w daemonie i typami w UI.
@@ -256,6 +259,7 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 - Zmienne środowiskowe nigdy nie trafiają do logów ani do audytu; maskowanie wartości przed buforem.
 - Autostart i „podłącz agenta” tylko z UI; agent nie ma narzędzia do zmiany konfiguracji daemona.
 - Jeśli kiedyś pojawią się narzędzia bazodanowe, rola bez superużytkownika i transakcja tylko do odczytu.
+- Podatności zgłasza się prywatnie według `SECURITY.md` (GitHub Security Advisories).
 
 ## 9. Windows: ryzyka i jak je sprawdzamy wcześnie
 
@@ -264,11 +268,11 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 | Job Objects z Bun/Node | brak natywnego API; trzeba N-API lub `koffi`; proces potomny już w innym jobie (np. uruchomiony z terminala VS Code) nie da się dodać bez `JOB_OBJECT_LIMIT_BREAKAWAY_OK` | spike w etapie 1: moduł `procs` z testem „zabij drzewo mise→mvn→java” |
 | ConPTY + `node-pty` w Bun | natywny addon może nie działać pod Bun; `bun build --compile` nie osadza `.node` | spike w etapie 1; plan B: Node 22 + SEA, plan C: PTY po stronie Rust w Tauri (`portable-pty`) z mostem do daemona |
 | Łagodny stop na Windowsie | brak SIGTERM; `GenerateConsoleCtrlEvent` wymaga wspólnej konsoli; `taskkill` zgłasza sukces przy żywym procesie | stop zawsze potwierdzany obserwacją; dla Spring Boot dodatkowo `POST /actuator/shutdown`, jeśli włączone |
-| Wykrywanie stanu Copilot CLI | brak hooków lub inne sekwencje na Windowsie; ekran ConPTY różni się od Unixa | etap 2, prototyp na firmowym komputerze; wzorce ekranu zbierane z nagrań sesji |
-| Portable exe | WebView2 może nie być zainstalowany; SmartScreen i AppLocker blokują niepodpisany plik; autoaktualizacja musi podmienić działający plik | etap 1: build z `tauri.conf` → bundle `none` + sprawdzenie WebView2 przy starcie; test na firmowym komputerze; podpis Azure Trusted Signing przed publikacją |
+| Wykrywanie stanu Copilot CLI | brak hooków lub inne sekwencje na Windowsie; ekran ConPTY różni się od Unixa | etap 2, prototyp na prawdziwym Windowsie; wzorce ekranu zbierane z nagrań sesji |
+| Portable exe | WebView2 może nie być zainstalowany; SmartScreen blokuje niepodpisany plik; autoaktualizacja musi podmienić działający plik | etap 1: build z `tauri.conf` → bundle `none` + sprawdzenie WebView2 przy starcie; test na prawdziwym Windowsie; podpis Azure Trusted Signing przed publikacją |
 | Długie ścieżki i blokady plików | worktree pod `.worktrees` przekracza 260 znaków; `git worktree remove` nie usuwa plików trzymanych przez proces | `\\?\` i `core.longpaths`; usuwanie worktree dopiero po potwierdzonym stopie grupy |
 | Port → właściciel | `netstat`/`Get-NetTCPConnection` wolne; PID bez drzewa | `GetExtendedTcpTable` przez N-API, drzewo z `runtime.json` i Job Object |
-| Antywirus / EDR firmowy | losowe spowolnienia, kwarantanna daemona | portable bez pakowania UPX, wczesny test na firmowym komputerze |
+| Antywirus / EDR | losowe spowolnienia, kwarantanna daemona | portable bez pakowania UPX, wczesny test na prawdziwym Windowsie |
 
 ## 10. Testy i CI
 
@@ -281,14 +285,14 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 ## 11. Kamienie milowe (mapowanie na kolejność prac)
 
 1. **Szkielet**: monorepo, `protocol`, daemon z `/api/health`, UI z jednym panelem, Tauri portable na Win i mac, CI. Spike'i: Job Objects, ConPTY/node-pty pod Bun. Wynik: decyzja Bun vs Node (ADR-1 potwierdzony lub odwrócony).
-2. **Prototyp Copilot CLI**: PTY w daemonie, xterm w UI, detektory stanu, test na firmowym komputerze. Wynik: które źródła stanu działają i z jaką pewnością.
+2. **Prototyp Copilot CLI**: PTY w daemonie, xterm w UI, detektory stanu, test na prawdziwym Windowsie. Wynik: które źródła stanu działają i z jaką pewnością.
 3. **Workspace**: `workspace.yaml`, sync, generator mise, `procs` + `logs` w pełni, zakładka Serwisy i Zadania, `ws` CLI.
 4. **Wiedza**: ekstraktory kart, graf, serwer MCP z narzędziami z §5.3, audyt.
 5. **Dopełnienie**: scena 3D, dzierżawy, `trace`, sekrety w wersji docelowej (sops + age).
 
 ## 12. Decyzje (ADR w skrócie)
 
-**ADR-1 Runtime daemona: Bun, z zachowaniem zgodności z Node.** Bun daje `bun build --compile` do jednej binarki i wbudowane SQLite. Kod pisany tak, by działał też pod Node 22 (`node:` API, bez API specyficznych dla Bun poza warstwą `platform/`). Jeśli spike z etapu 1 pokaże, że ConPTY lub Job Objects nie działają pod Bun, przechodzimy na Node 22 + SEA bez zmian w modułach.
+**ADR-1 Runtime daemona: Bun, z zachowaniem zgodności z Node.** Bun daje `bun build --compile` do jednej binarki i wbudowane SQLite. Kod pisany tak, by działał też pod Node 22 (`node:` API, bez API specyficznych dla Bun poza warstwą `platform/`). Jeśli spike z etapu 1 pokaże, że ConPTY lub Job Objects nie działają pod Bun, przechodzimy na Node 22 + SEA bez zmian w modułach. Uzupełnienie (2026-10-23): zgodności z Node pilnuje narzędzie, bo bez tego się rozjechała (właściwość w parametrze konstruktora w `api/guard.ts` blokowała start pod Node). Daemon i `protocol` mają `erasableSyntaxOnly` i wymagane rozszerzenia w importach, API Bun poza `platform/` odrzuca Biome, a testy procesu daemona idą pod Bun i pod Node z flagami ze skryptu `start:node` (Node 22.12+ uruchamia kod źródłowy bez kompilacji).
 
 **ADR-2 Transport UI: HTTP + WebSocket, nie tylko IPC Tauri.** Dzięki temu ten sam UI działa w przeglądarce (etap 1) i w Tauri, a `ws` CLI i testy używają tego samego API. Tauri IPC zostaje dla spraw natywnych: tray, autostart, token.
 
@@ -312,4 +316,4 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 
 ## 13. Pytania otwarte
 
-Wszystkie pytania z wizji zostały rozstrzygnięte 2026-10-23 (ADR-8, ADR-9, ADR-10). Prototyp z etapu 2 może być uruchamiany na firmowym komputerze, gdzie Copilot CLI jest dostępny.
+Wszystkie pytania z wizji zostały rozstrzygnięte 2026-10-23 (ADR-8, ADR-9, ADR-10).

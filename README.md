@@ -5,6 +5,8 @@ Desktopowa aplikacja open source dla jednej osoby pracującej z wieloma repozyto
 Dokumentacja:
 
 - [Architektura](docs/architecture.md)
+- [Zasady dla agentów i Definition of done](AGENTS.md)
+- [Słownik pojęć](CONTEXT.md)
 - [Spike'i etapu 1](spikes/README.md)
 - [Wydania i instalacja](docs/release.md)
 
@@ -24,12 +26,17 @@ Etap 1 (szkielet): daemon z `/api/health`, UI z panelem daemona, powłoka Tauri 
 
 ## Uruchomienie ze źródeł
 
-Wymagane: Node 22, pnpm 10, Bun 1.4, a dla aplikacji desktopowej Rust (wersje w `mise.toml`, `mise install` je ustawia).
+Wymagane: Node 22.12+, pnpm 10, Bun 1.4, a dla aplikacji desktopowej Rust (wersje w `mise.toml`, `mise install` je ustawia). Na Windowsie aplikacja desktopowa wymaga też Visual Studio Build Tools z obciążeniem „Desktop development with C++”, których mise nie instaluje.
+
+Z mise: `mise install`, potem `mise run dev` (zależności i tryb deweloperski) albo `mise run portable` (zależności i portable build do `out/`); `mise run setup` instaluje same zależności, `mise tasks` pokazuje listę.
+
+Na Windowsie bez Build Tools Rust znajduje inny `link.exe` z PATH (np. z coreutils albo Git) i build Tauri kończy się błędem linkera. UI w przeglądarce (`pnpm dev`) działa bez nich.
 
 ```sh
 pnpm install
 pnpm dev                       # daemon (bun --watch, stan w .pitwall-dev/) + Vite na http://127.0.0.1:5173
 pnpm --filter @pitwall/desktop dev   # to samo w oknie Tauri (stan w ~/.pitwall-dev, osobno od wydania)
+pnpm lint                      # Biome i knip (pnpm format poprawia formatowanie)
 pnpm test                      # testy wszystkich paczek
 ```
 
@@ -39,6 +46,8 @@ Sam daemon z UI w przeglądarce, bez Tauri:
 pnpm build
 bun packages/daemon/src/main.ts --ui
 ```
+
+Ten sam daemon działa też pod samym Node, bez Bun (ADR-1): `pnpm --filter @pitwall/ui build`, potem `pnpm --filter @pitwall/daemon start:node`.
 
 ## Portable build
 
@@ -52,3 +61,7 @@ Windows: zip zawiera `pitwall.exe`, `pitwall-daemon.exe` i `ui/`. Rozpakowanie i
 macOS: zip zawiera niepodpisany `Pitwall.app`; pierwsze uruchomienie przez prawy klik > Otwórz albo `xattr -dr com.apple.quarantine Pitwall.app`.
 
 Każdy przebieg CI publikuje oba archiwa jako artefakty.
+
+## Licencja i bezpieczeństwo
+
+Kod jest na licencji MIT (`LICENSE`). Podatności zgłaszaj prywatnie według `SECURITY.md`.
