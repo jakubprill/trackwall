@@ -30,13 +30,17 @@ export function breadcrumbs(path: string): { name: string; path: string }[] {
   return [...crumbs, ...parts.map((name, i) => ({ name, path: parts.slice(0, i + 1).join("/") }))];
 }
 
+/** Liczba z rzeczownikiem w polskiej formie: 1 zmiana, 2–4 zmiany (bez 12–14), pozostałe zmian. */
+export function countLabel(n: number, forms: { one: string; few: string; many: string }): string {
+  if (n === 1) return `1 ${forms.one}`;
+  const lastDigit = n % 10;
+  const teen = n % 100 >= 12 && n % 100 <= 14;
+  return `${n} ${lastDigit >= 2 && lastDigit <= 4 && !teen ? forms.few : forms.many}`;
+}
+
 /** Liczba zmian w katalogu roboczym jako tekst; `undefined`, gdy repo jest czyste. */
 export function changesLabel(changes: number): string | undefined {
-  if (changes === 0) return undefined;
-  if (changes === 1) return "1 zmiana";
-  const lastDigit = changes % 10;
-  const teen = changes % 100 >= 12 && changes % 100 <= 14;
-  return `${changes} ${lastDigit >= 2 && lastDigit <= 4 && !teen ? "zmiany" : "zmian"}`;
+  return changes === 0 ? undefined : countLabel(changes, { one: "zmiana", few: "zmiany", many: "zmian" });
 }
 
 /** Liczba z co najmniej dwiema cyframi, jak numery na liście repo: 1 daje „01”, 12 daje „12”. */
