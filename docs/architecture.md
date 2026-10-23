@@ -268,11 +268,11 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 | Job Objects z Bun/Node | brak natywnego API; trzeba N-API lub `koffi`; proces potomny już w innym jobie (np. uruchomiony z terminala VS Code) nie da się dodać bez `JOB_OBJECT_LIMIT_BREAKAWAY_OK` | spike w etapie 1: moduł `procs` z testem „zabij drzewo mise→mvn→java” |
 | ConPTY + `node-pty` w Bun | natywny addon może nie działać pod Bun; `bun build --compile` nie osadza `.node` | spike w etapie 1; plan B: Node 22 + SEA, plan C: PTY po stronie Rust w Tauri (`portable-pty`) z mostem do daemona |
 | Łagodny stop na Windowsie | brak SIGTERM; `GenerateConsoleCtrlEvent` wymaga wspólnej konsoli; `taskkill` zgłasza sukces przy żywym procesie | stop zawsze potwierdzany obserwacją; dla Spring Boot dodatkowo `POST /actuator/shutdown`, jeśli włączone |
-| Wykrywanie stanu Copilot CLI | brak hooków lub inne sekwencje na Windowsie; ekran ConPTY różni się od Unixa | etap 2, prototyp na firmowym komputerze; wzorce ekranu zbierane z nagrań sesji |
-| Portable exe | WebView2 może nie być zainstalowany; SmartScreen i AppLocker blokują niepodpisany plik; autoaktualizacja musi podmienić działający plik | etap 1: build z `tauri.conf` → bundle `none` + sprawdzenie WebView2 przy starcie; test na firmowym komputerze; podpis Azure Trusted Signing przed publikacją |
+| Wykrywanie stanu Copilot CLI | brak hooków lub inne sekwencje na Windowsie; ekran ConPTY różni się od Unixa | etap 2, prototyp na prawdziwym Windowsie; wzorce ekranu zbierane z nagrań sesji |
+| Portable exe | WebView2 może nie być zainstalowany; SmartScreen blokuje niepodpisany plik; autoaktualizacja musi podmienić działający plik | etap 1: build z `tauri.conf` → bundle `none` + sprawdzenie WebView2 przy starcie; test na prawdziwym Windowsie; podpis Azure Trusted Signing przed publikacją |
 | Długie ścieżki i blokady plików | worktree pod `.worktrees` przekracza 260 znaków; `git worktree remove` nie usuwa plików trzymanych przez proces | `\\?\` i `core.longpaths`; usuwanie worktree dopiero po potwierdzonym stopie grupy |
 | Port → właściciel | `netstat`/`Get-NetTCPConnection` wolne; PID bez drzewa | `GetExtendedTcpTable` przez N-API, drzewo z `runtime.json` i Job Object |
-| Antywirus / EDR firmowy | losowe spowolnienia, kwarantanna daemona | portable bez pakowania UPX, wczesny test na firmowym komputerze |
+| Antywirus / EDR | losowe spowolnienia, kwarantanna daemona | portable bez pakowania UPX, wczesny test na prawdziwym Windowsie |
 
 ## 10. Testy i CI
 
@@ -285,7 +285,7 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 ## 11. Kamienie milowe (mapowanie na kolejność prac)
 
 1. **Szkielet**: monorepo, `protocol`, daemon z `/api/health`, UI z jednym panelem, Tauri portable na Win i mac, CI. Spike'i: Job Objects, ConPTY/node-pty pod Bun. Wynik: decyzja Bun vs Node (ADR-1 potwierdzony lub odwrócony).
-2. **Prototyp Copilot CLI**: PTY w daemonie, xterm w UI, detektory stanu, test na firmowym komputerze. Wynik: które źródła stanu działają i z jaką pewnością.
+2. **Prototyp Copilot CLI**: PTY w daemonie, xterm w UI, detektory stanu, test na prawdziwym Windowsie. Wynik: które źródła stanu działają i z jaką pewnością.
 3. **Workspace**: `workspace.yaml`, sync, generator mise, `procs` + `logs` w pełni, zakładka Serwisy i Zadania, `ws` CLI.
 4. **Wiedza**: ekstraktory kart, graf, serwer MCP z narzędziami z §5.3, audyt.
 5. **Dopełnienie**: scena 3D, dzierżawy, `trace`, sekrety w wersji docelowej (sops + age).
@@ -314,4 +314,4 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 
 ## 13. Pytania otwarte
 
-Wszystkie pytania z wizji zostały rozstrzygnięte 2026-10-23 (ADR-8, ADR-9, ADR-10). Prototyp z etapu 2 może być uruchamiany na firmowym komputerze, gdzie Copilot CLI jest dostępny.
+Wszystkie pytania z wizji zostały rozstrzygnięte 2026-10-23 (ADR-8, ADR-9, ADR-10).

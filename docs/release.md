@@ -41,7 +41,7 @@ Expand-Archive .\pitwall-0.2.0-windows-x64.zip "$env:LOCALAPPDATA\Programs"
 
 Archiwum zawiera folder `Pitwall`, więc aplikacja ląduje w `%LOCALAPPDATA%\Programs\Pitwall`.
 
-Wymagany jest WebView2 (jest w Windows 11 i w większości aktualnych Windows 10). AppLocker może nie pozwolić na uruchamianie z `Downloads`; folder w `%LOCALAPPDATA%\Programs` zwykle jest dozwolony, ale to zależy od polityki firmy.
+Wymagany jest WebView2 (jest w Windows 11 i w większości aktualnych Windows 10).
 
 **macOS.** Aplikacja nie jest jeszcze podpisana ani notaryzowana, więc Gatekeeper po pobraniu przez przeglądarkę zgłasza, że jest „uszkodzona”. Po rozpakowaniu zdejmij kwarantannę:
 
@@ -63,5 +63,5 @@ Jednorazowo, robi to właściciel w ustawieniach repo (Settings > Security): wł
   1. W aplikacji „sprawdź aktualizacje”: zapytanie o najnowszy release przez API GitHuba i link do pobrania. Mało kodu, działa na obu systemach.
   2. Na macOS włączenie updatera Tauri (`createUpdaterArtifacts`, klucz minisign w sekretach repo, `latest.json` w release).
   3. Na Windowsie własna podmiana: pobranie zip, weryfikacja podpisu minisign, zatrzymanie daemona, zmiana nazwy działającego `pitwall.exe` na `.old` (Windows na to pozwala), rozpakowanie i restart. Alternatywa: dodatkowo publikować instalator NSIS w trybie per-user i użyć standardowego updatera.
-- **Podpis kodu.** Azure Trusted Signing dla Windows (mniej ostrzeżeń SmartScreen, łatwiej z AppLockerem) oraz Developer ID i notaryzacja dla macOS. Bez tego obowiązują kroki odblokowania opisane wyżej.
+- **Podpis kodu.** Azure Trusted Signing dla Windows (mniej ostrzeżeń SmartScreen) oraz Developer ID i notaryzacja dla macOS. Bez tego obowiązują kroki odblokowania opisane wyżej.
 - **macOS Intel.** Teraz tylko Apple Silicon. Build `universal-apple-darwin` wymaga sidecara daemona dla obu architektur (`bun build --compile` dwa razy i `lipo`).
