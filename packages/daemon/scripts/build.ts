@@ -19,6 +19,10 @@ const TARGETS = {
 } as const;
 type Triple = keyof typeof TARGETS;
 
+function isTriple(value: string): value is Triple {
+  return Object.hasOwn(TARGETS, value);
+}
+
 function hostTriple(): Triple {
   const key = `${process.platform}-${process.arch}`;
   const map: Record<string, Triple> = {
@@ -34,7 +38,10 @@ function hostTriple(): Triple {
 
 const { values } = parseArgs({ args: Bun.argv.slice(2), options: { target: { type: "string" } } });
 const requested = values.target ?? hostTriple();
-const triples: Triple[] = requested === "all" ? (Object.keys(TARGETS) as Triple[]) : [requested as Triple];
+if (requested !== "all" && !isTriple(requested)) {
+  throw new Error(`nieznany target ${requested}; dostępne: all, ${Object.keys(TARGETS).join(", ")}`);
+}
+const triples = requested === "all" ? Object.keys(TARGETS).filter(isTriple) : [requested];
 
 const root = join(import.meta.dir, "..");
 const outDir = join(root, "dist");
@@ -42,7 +49,6 @@ mkdirSync(outDir, { recursive: true });
 
 for (const triple of triples) {
   const target = TARGETS[triple];
-  if (!target) throw new Error(`nieznany target ${triple}; dostępne: ${Object.keys(TARGETS).join(", ")}`);
   const outfile = join(outDir, `pitwall-daemon-${triple}${target.exe ? ".exe" : ""}`);
   const proc = Bun.spawnSync(
     ["bun", "build", "--compile", "--minify", "--sourcemap", `--target=${target.bun}`, "src/main.ts", "--outfile", outfile],

@@ -17,7 +17,7 @@ import type { Plugin } from "vite";
  * `127.0.0.1:5173/api/...` i wykonać akcję w daemonie.
  */
 /** Ten sam katalog podaje skrypt `dev` daemona (`--home ../../.pitwall-dev`). */
-export const DEV_HOME = fileURLToPath(new URL("../../.pitwall-dev", import.meta.url));
+const DEV_HOME = fileURLToPath(new URL("../../.pitwall-dev", import.meta.url));
 
 export function daemonDevProxy(): Plugin {
   return {

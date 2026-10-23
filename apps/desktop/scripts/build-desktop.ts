@@ -2,7 +2,7 @@
  * Build aplikacji desktopowej dla bieżącej platformy:
  *   Windows: `pitwall.exe` bez instalatora (`--no-bundle`), sidecar obok,
  *   macOS:   `Pitwall.app` (bundle `app`, bez dmg i bez podpisu).
- * Pakowanie do archiwum robi `scripts/package-portable.ts` w root repo.
+ * Pakowanie do archiwum robi `scripts/package-portable.ts` (`pnpm portable`).
  */
 import { join } from "node:path";
 import { assertVersionsMatch, REPO, run } from "./lib.ts";

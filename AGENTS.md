@@ -75,27 +75,35 @@ Repo ma zostać opublikowane jako open source (nagłówek `docs/architecture.md`
 - **Jawnie zamiast sprytnie**: bez magicznych napisów współdzielonych między plikami (eksportuj stałą), bez ukrytego stanu globalnego, bez cichych wartości domyślnych dla czegoś, co musi być ustawione.
 - **Usuwaj martwy kod** zamiast go komentować.
 - **Nazwy plików**: kebab-case (`open-browser.ts`), komponenty React w PascalCase (`DaemonPanel.tsx`). Wyjątek: komponenty shadcn/ui w `components/ui/` zostają pod nazwami, które nadaje generator (`button.tsx`).
-- **Zależności npm w dokładnych wersjach** (bez `^` i `~`). Nie dodawaj zależności do czegoś, co załatwia kilka linii kodu. Natywny addon wymaga sprawdzenia, że działa w `bun build --compile` na obu systemach (patrz `spikes/`).
+- **Zależności npm w dokładnych wersjach** (bez `^` i `~`; `.npmrc` ma `save-exact=true`, więc `pnpm add` tego pilnuje). Nie dodawaj zależności do czegoś, co załatwia kilka linii kodu. Natywny addon wymaga sprawdzenia, że działa w `bun build --compile` na obu systemach (patrz `spikes/`).
 - **Testy czytają się jak dokumentacja**: nazwa testu to zdanie opisujące zachowanie, a test pokazuje wejście i oczekiwany wynik bez helperów, które je ukrywają.
-- **Reguły egzekwuje narzędzie wszędzie, gdzie się da**: reguła w linterze trzyma lepiej niż zdanie w tym pliku. Dziś Biome ma tylko zestaw `recommended`, więc większości zasad z tej sekcji pilnuje przegląd. Gdy powtarzasz tę samą uwagę w przeglądzie, zamień ją w regułę.
+- **Reguły egzekwuje narzędzie wszędzie, gdzie się da**: reguła w linterze trzyma lepiej niż zdanie w tym pliku. Gdy powtarzasz tę samą uwagę w przeglądzie, zamień ją w regułę. Dziś pilnują:
+  - Biome (`biome.json`): zestaw `recommended` oraz zakaz `!` i `any`, limit złożoności funkcji (15), cykle importów, nieobsłużone obietnice, nazwy plików w kebab-case (PascalCase tylko dla `.tsx` w `packages/ui/src`), import `@pitwall/daemon` tylko w daemonie, moduły Node (`node:*`) zakazane w `packages/protocol/src` i `packages/ui/src`;
+  - knip (`knip.json`): nieużywane pliki, eksporty i zależności;
+  - `rustfmt.toml` i `cargo clippy -D warnings` dla powłoki Tauri;
+  - test `apps/desktop/test/toolchain.test.ts`: te same wersje narzędzi w `mise.toml` i workflow.
+
+  Granic między modułami daemona (§4) jeszcze nie pilnuje narzędzie, bo modułów jeszcze nie ma; z pierwszym modułem dochodzi reguła `noRestrictedImports` w `biome.json`. Rzutowań `as` na danych z zewnątrz też nie, więc tego pilnuje przegląd.
 
 ## Komendy
 
 Pełny opis uruchamiania jest w `README.md`. Do Definition of done:
 
 ```sh
-pnpm lint              # Biome: format, lint, kolejność importów (pnpm format poprawia)
+pnpm lint              # Biome (format, lint, kolejność importów; pnpm format poprawia) i knip
 pnpm typecheck
 pnpm test              # bun test we wszystkich paczkach
 
 # gdy zmiana dotyka apps/desktop, buildu daemona albo pakowania (job `desktop` w CI):
+cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
 pnpm build:desktop
+cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
 bun packages/daemon/scripts/smoke.ts apps/desktop/src-tauri/target/release/pitwall-daemon   # z .exe na Windowsie
 pnpm portable
 ```
 
-Wersje narzędzi są w `mise.toml` (`mise install`).
+Wersje narzędzi są w `mise.toml` (`mise install`); workflow mają te same, a zmiana wersji idzie w obu miejscach naraz.
 
 ## Commity i PR
 

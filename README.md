@@ -5,6 +5,8 @@ Desktopowa aplikacja open source dla jednej osoby pracującej z wieloma repozyto
 Dokumentacja:
 
 - [Architektura](docs/architecture.md)
+- [Zasady dla agentów i Definition of done](AGENTS.md)
+- [Słownik pojęć](CONTEXT.md)
 - [Spike'i etapu 1](spikes/README.md)
 - [Wydania i instalacja](docs/release.md)
 
@@ -30,6 +32,7 @@ Wymagane: Node 22, pnpm 10, Bun 1.4, a dla aplikacji desktopowej Rust (wersje w 
 pnpm install
 pnpm dev                       # daemon (bun --watch, stan w .pitwall-dev/) + Vite na http://127.0.0.1:5173
 pnpm --filter @pitwall/desktop dev   # to samo w oknie Tauri (stan w ~/.pitwall-dev, osobno od wydania)
+pnpm lint                      # Biome i knip (pnpm format poprawia formatowanie)
 pnpm test                      # testy wszystkich paczek
 ```
 

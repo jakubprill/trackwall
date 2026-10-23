@@ -17,7 +17,7 @@ export function isCompiled(): boolean {
   return import.meta.url.includes("$bunfs") || import.meta.url.includes("~BUN");
 }
 
-export function selfCommand(): string[] {
+function selfCommand(): string[] {
   return isCompiled() ? [process.execPath] : [process.execPath, fileURLToPath(new URL("./spike.ts", import.meta.url))];
 }
 

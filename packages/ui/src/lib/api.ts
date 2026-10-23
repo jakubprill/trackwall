@@ -2,7 +2,7 @@ import type { ApiResult } from "@pitwall/protocol";
 import type { z } from "zod";
 import type { Connection } from "./connection.ts";
 
-export class ApiCallError extends Error {
+class ApiCallError extends Error {
   constructor(
     readonly code: string,
     message: string,

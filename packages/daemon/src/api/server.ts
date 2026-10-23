@@ -81,23 +81,24 @@ async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, 
     return void res.end();
   }
 
+  if (path.startsWith("/api/")) return handleApi(req, res, path, o);
+  if (o.uiDir && (req.method === "GET" || req.method === "HEAD")) return serveStatic(o.uiDir, path, res);
+  return fail(res, "not_found", `no route ${req.method} ${path}`);
+}
+
+/** Trasy `/api/*`: poza `/api/health` każda wymaga tokenu. */
+async function handleApi(req: IncomingMessage, res: ServerResponse, path: string, o: ApiOptions): Promise<void> {
   if (path === "/api/health" && req.method === "GET") {
     return ok<Health>(res, { status: "ok", version: o.version });
   }
-
-  if (path.startsWith("/api/")) {
-    if (!hasValidToken(req, o.token)) return fail(res, "unauthorized", "missing or invalid token");
-    if (path === "/api/daemon/info" && req.method === "GET") return ok<DaemonInfo>(res, o.info());
-    if (path === "/api/daemon/shutdown" && req.method === "POST") {
-      await drain(req);
-      ok(res, { stopping: true as const });
-      res.once("finish", () => setImmediate(o.onShutdown));
-      return;
-    }
-    return fail(res, "not_found", `no route ${req.method} ${path}`);
+  if (!hasValidToken(req, o.token)) return fail(res, "unauthorized", "missing or invalid token");
+  if (path === "/api/daemon/info" && req.method === "GET") return ok<DaemonInfo>(res, o.info());
+  if (path === "/api/daemon/shutdown" && req.method === "POST") {
+    await drain(req);
+    ok(res, { stopping: true as const });
+    res.once("finish", () => setImmediate(o.onShutdown));
+    return;
   }
-
-  if (o.uiDir && (req.method === "GET" || req.method === "HEAD")) return serveStatic(o.uiDir, path, res);
   return fail(res, "not_found", `no route ${req.method} ${path}`);
 }
 

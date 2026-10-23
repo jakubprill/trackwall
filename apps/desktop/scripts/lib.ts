@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { z } from "zod";
 
 export const REPO = join(import.meta.dir, "..", "..", "..");
-export const DESKTOP = join(REPO, "apps", "desktop");
+const DESKTOP = join(REPO, "apps", "desktop");
 export const TAURI_DIR = join(DESKTOP, "src-tauri");
 
 /** Triple hosta z `rustc -vV`; tak samo nazywa sidecary Tauri. */
@@ -19,26 +20,38 @@ export function run(cmd: string[], cwd: string, capture = false): string {
   return capture ? (proc.stdout?.toString() ?? "") : "";
 }
 
+const Versioned = z.object({ version: z.string().min(1) });
+
+function jsonVersion(path: string): string {
+  const parsed = Versioned.safeParse(JSON.parse(readFileSync(join(REPO, path), "utf8")));
+  if (!parsed.success) throw new Error(`${path}: brak pola version (${parsed.error.message})`);
+  return parsed.data.version;
+}
+
+function cargoVersion(path: string): string {
+  const version = readFileSync(join(REPO, path), "utf8").match(/^version\s*=\s*"([^"]+)"/m)?.[1];
+  if (!version) throw new Error(`${path}: brak version w [package]`);
+  return version;
+}
+
 /** Wersja musi być ta sama w daemonie, Tauri i Cargo: powłoka porównuje ją z `/api/health`. */
 export function versions(): Record<string, string> {
-  const json = (p: string) => JSON.parse(readFileSync(join(REPO, p), "utf8")).version as string;
-  const cargo = readFileSync(join(TAURI_DIR, "Cargo.toml"), "utf8").match(/^version\s*=\s*"([^"]+)"/m)?.[1] ?? "?";
   return {
-    "packages/daemon/package.json": json("packages/daemon/package.json"),
-    "apps/desktop/src-tauri/tauri.conf.json": json("apps/desktop/src-tauri/tauri.conf.json"),
-    "apps/desktop/src-tauri/Cargo.toml": cargo,
+    "packages/daemon/package.json": jsonVersion("packages/daemon/package.json"),
+    "apps/desktop/src-tauri/tauri.conf.json": jsonVersion("apps/desktop/src-tauri/tauri.conf.json"),
+    "apps/desktop/src-tauri/Cargo.toml": cargoVersion("apps/desktop/src-tauri/Cargo.toml"),
   };
 }
 
 export function assertVersionsMatch(): string {
   const v = versions();
-  const unique = new Set(Object.values(v));
-  if (unique.size !== 1) {
+  const [version, ...others] = new Set(Object.values(v));
+  if (!version || others.length > 0) {
     throw new Error(
       `różne wersje:\n${Object.entries(v)
         .map(([f, x]) => `  ${f}: ${x}`)
         .join("\n")}`,
     );
   }
-  return [...unique][0] as string;
+  return version;
 }
