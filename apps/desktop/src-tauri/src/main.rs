@@ -55,6 +55,8 @@ fn main() {
 
     let state = Arc::new(DaemonState::default());
     let app = tauri::Builder::default()
+        // Ponowne uruchomienie pitwall.exe pokazuje istniejące okno zamiast drugiej powłoki i drugiej ikony w trayu.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
         .manage(Arc::clone(&state))
         .invoke_handler(tauri::generate_handler![daemon_connection])
         .setup(move |app| {
@@ -125,7 +127,9 @@ fn quit_app(app: &AppHandle) {
     let state = Arc::clone(app.state::<Arc<DaemonState>>().inner());
     let app = app.clone();
     std::thread::spawn(move || {
-        if let Some(conn) = state.current() {
+        // Gdy start się nie udał, daemon mógł mimo to wstać (np. inna powłoka go uruchomiła): szukamy go po daemon.json.
+        let conn = state.current().or_else(|| daemon::pitwall_home().ok().and_then(|home| daemon::discover(&home)));
+        if let Some(conn) = conn {
             if let Err(err) = daemon::shutdown(&conn) {
                 eprintln!("[desktop] zatrzymanie daemona: {err}");
             }

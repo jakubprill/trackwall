@@ -14,7 +14,8 @@ use std::time::{Duration, Instant};
 /// Wersja powłoki musi być równa wersji daemona; pilnuje tego skrypt budowania.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-const START_TIMEOUT: Duration = Duration::from_secs(20);
+/// Hojny limit: pierwsze uruchomienie niepodpisanej binarki bywa długo skanowane przez antywirus (§9).
+const START_TIMEOUT: Duration = Duration::from_secs(60);
 const STOP_TIMEOUT: Duration = Duration::from_secs(10);
 const IO_TIMEOUT: Duration = Duration::from_millis(1500);
 
@@ -42,7 +43,11 @@ impl From<&DaemonFile> for Connection {
     }
 }
 
-/// `PITWALL_HOME` albo `~/.pitwall`, tak samo jak w daemonie.
+/// Katalog stanu w buildzie deweloperskim jest osobny, żeby `tauri dev` nie podłączał się do daemona
+/// z wydania (albo z `bun ... --ui`), który nie wpuszcza originu serwera Vite.
+const HOME_DIR_NAME: &str = if cfg!(debug_assertions) { ".pitwall-dev" } else { ".pitwall" };
+
+/// `PITWALL_HOME` albo `~/.pitwall`, tak samo jak w daemonie; pusta zmienna znaczy „nie ustawiono”.
 pub fn pitwall_home() -> Result<PathBuf, String> {
     if let Some(dir) = std::env::var_os("PITWALL_HOME").filter(|v| !v.is_empty()) {
         return Ok(PathBuf::from(dir));
@@ -50,8 +55,13 @@ pub fn pitwall_home() -> Result<PathBuf, String> {
     let var = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
     std::env::var_os(var)
         .filter(|v| !v.is_empty())
-        .map(|h| PathBuf::from(h).join(".pitwall"))
+        .map(|h| PathBuf::from(h).join(HOME_DIR_NAME))
         .ok_or_else(|| format!("nie znaleziono katalogu domowego (brak {var})"))
+}
+
+/// Działający daemon tej samej wersji opisany przez `daemon.json`.
+pub fn discover(home: &Path) -> Option<Connection> {
+    read_daemon_file(home).filter(|f| health(f.port).as_deref() == Some(VERSION)).map(|f| Connection::from(&f))
 }
 
 pub fn read_daemon_file(home: &Path) -> Option<DaemonFile> {
@@ -94,8 +104,8 @@ pub fn ensure_daemon(home: &Path) -> Result<Connection, String> {
         if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
             // Kod 0 oznacza, że w międzyczasie wystartował inny daemon tej samej wersji.
             if status.success() {
-                if let Some(f) = read_daemon_file(home).filter(|f| health(f.port).as_deref() == Some(VERSION)) {
-                    return Ok(Connection::from(&f));
+                if let Some(conn) = discover(home) {
+                    return Ok(conn);
                 }
             }
             return Err(format!("Daemon zakończył się przy starcie ({status}).\n\n{}", log_tail(&log_path)));
@@ -106,8 +116,12 @@ pub fn ensure_daemon(home: &Path) -> Result<Connection, String> {
             }
         }
         if Instant::now() > deadline {
+            // Nie zostawiamy procesu, którego nikt nie zna: bez tego daemon mógłby wstać chwilę później,
+            // a okno i tray nie miałyby jak się z nim połączyć ani go zatrzymać.
+            let _ = child.kill();
+            let _ = child.wait();
             return Err(format!(
-                "Daemon nie odpowiedział w ciągu {} s.\n\n{}",
+                "Daemon nie odpowiedział w ciągu {} s i został zatrzymany. Uruchom aplikację ponownie.\n\n{}",
                 START_TIMEOUT.as_secs(),
                 log_tail(&log_path)
             ));
@@ -152,6 +166,8 @@ fn spawn_sidecar(home: &Path, log_path: &Path) -> Result<Child, String> {
 
     let mut cmd = Command::new(&exe);
     cmd.arg("--parent").arg(std::process::id().to_string());
+    // Jawnie, bo w buildzie deweloperskim katalog domyślny powłoki różni się od domyślnego daemona.
+    cmd.env("PITWALL_HOME", home);
     // `tauri dev` ładuje UI z serwera Vite, który ma własny origin.
     #[cfg(debug_assertions)]
     cmd.arg("--allow-origin").arg("http://127.0.0.1:5173");

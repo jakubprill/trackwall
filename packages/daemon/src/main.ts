@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
 import { type DaemonArgs, parseDaemonArgs, USAGE } from "./args.ts";
-import { newToken, probeRunningDaemon, removeDaemonFile, writeDaemonFile } from "./discovery.ts";
+import { newToken, probeRunningDaemon, removeDaemonFile, withStartLock, writeDaemonFile } from "./discovery.ts";
 import { pitwallHome } from "./home.ts";
 import { openBrowser } from "./open-browser.ts";
 import { runtimeInfo } from "./platform/runtime.ts";
@@ -19,45 +19,50 @@ async function main(args: DaemonArgs): Promise<void> {
   const home = pitwallHome(args.home);
   const uiDir = resolveUiDir(args.uiDir);
 
-  const running = await probeRunningDaemon(home);
-  if (running) {
-    if (running.version !== VERSION) {
-      log(`działa daemon w innej wersji (${running.version}, pid ${running.file.pid}); zatrzymaj go przed startem ${VERSION}`);
-      process.exit(EXIT_OTHER_VERSION_RUNNING);
-    }
-    log(`daemon ${VERSION} już działa (pid ${running.file.pid}, port ${running.file.port})`);
-    if (args.ui) openBrowser(uiUrl(running.file.port, running.file.token));
-    return;
-  }
-
-  const token = newToken();
   const startedAt = new Date().toISOString();
   let shuttingDown = false;
 
-  const api = await startApi(
-    {
-      token,
-      version: VERSION,
-      uiDir,
-      allowOrigins: args.allowOrigins,
-      info: () => ({
+  const started = await withStartLock(home, async () => {
+    const running = await probeRunningDaemon(home);
+    if (running) return { kind: "existing" as const, ...running };
+    const token = newToken();
+    const api = await startApi(
+      {
+        token,
         version: VERSION,
-        pid: process.pid,
-        startedAt,
-        uptimeMs: Math.round(process.uptime() * 1000),
-        platform: platform(),
-        arch: arch(),
-        runtime: runtimeInfo(),
-        launchedBy: args.parent === undefined ? "manual" : "desktop",
-        home,
-      }),
-      onShutdown: () => void shutdown("POST /api/daemon/shutdown"),
-    },
-    args.port,
-  );
+        uiDir,
+        allowOrigins: args.allowOrigins,
+        info: () => ({
+          version: VERSION,
+          pid: process.pid,
+          startedAt,
+          uptimeMs: Math.round(process.uptime() * 1000),
+          platform: platform(),
+          arch: arch(),
+          runtime: runtimeInfo(),
+          launchedBy: args.parent === undefined ? "manual" : "desktop",
+          home,
+        }),
+        onShutdown: () => void shutdown("POST /api/daemon/shutdown"),
+      },
+      args.port,
+    );
+    writeDaemonFile(home, { pid: process.pid, port: api.port, token, startedAt, version: VERSION });
+    return { kind: "started" as const, api, token };
+  });
 
-  writeDaemonFile(home, { pid: process.pid, port: api.port, token, startedAt, version: VERSION });
-  log(`pitwall-daemon ${VERSION} na http://127.0.0.1:${api.port} (pid ${process.pid}, ${runtimeInfo().name})`);
+  if (started.kind === "existing") {
+    if (started.version !== VERSION) {
+      log(`działa daemon w innej wersji (${started.version}, pid ${started.file.pid}); zatrzymaj go przed startem ${VERSION}`);
+      process.exit(EXIT_OTHER_VERSION_RUNNING);
+    }
+    log(`daemon ${VERSION} już działa (pid ${started.file.pid}, port ${started.file.port})`);
+    if (args.ui) openBrowser(uiUrl(started.file.port, started.file.token));
+    return;
+  }
+
+  const { api, token } = started;
+  log(`pitwall-daemon ${VERSION} na http://127.0.0.1:${api.port} (pid ${process.pid}, ${runtimeInfo().name}, stan w ${home})`);
   if (!uiDir) log("brak zbudowanego UI: API działa, strona nie będzie serwowana (zbuduj packages/ui albo podaj --ui-dir)");
   if (args.ui) {
     if (uiDir) openBrowser(uiUrl(api.port, token));

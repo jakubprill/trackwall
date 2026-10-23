@@ -9,8 +9,9 @@ export default defineConfig({
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
-  // Tauri ładuje pliki z własnego protokołu, daemon z `/`; ścieżki względne działają w obu.
-  base: "./",
+  // Ścieżki od korzenia: daemon serwuje index.html także dla zagnieżdżonych tras (np. /tasks/123),
+  // a Tauri udostępnia frontendDist pod korzeniem własnego protokołu.
+  base: "/",
   build: {
     outDir: "dist",
     emptyOutDir: true,

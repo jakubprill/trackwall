@@ -41,7 +41,7 @@ const step = (name: string, ok: boolean, detail?: string) => result.steps.push({
 // Komenda liczy wynik, więc echo samego wejścia (40+2) nie da fałszywego trafienia (42).
 const shell = isWin ? "cmd.exe" : "/bin/sh";
 const compute = isWin ? "set /a 40+2\r" : "echo $((40+2))\r";
-const exitCmd = isWin ? "exit 7\r" : "exit 7\r";
+const exitCmd = "exit 7\r";
 
 let output = "";
 let exitCode: number | undefined;

@@ -45,7 +45,8 @@ export function serveStatic(dir: string, urlPath: string, res: ServerResponse): 
     file = join(root, "index.html");
   }
   const type = CONTENT_TYPES[extname(file)] ?? "application/octet-stream";
-  const immutable = file.includes(`${sep}assets${sep}`);
+  // Tylko pliki z hashem w nazwie (Vite: `assets/`) liczone względem katalogu UI, nie całej ścieżki na dysku.
+  const immutable = relative(root, file).startsWith(`assets${sep}`);
   res.writeHead(200, {
     "content-type": type,
     "cache-control": immutable ? "public, max-age=31536000, immutable" : "no-cache",

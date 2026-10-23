@@ -35,7 +35,7 @@
     "category": "DeveloperTool",
     "shortDescription": "Wiele repo i wiele agentów CLI w jednym miejscu",
     "macOS": {
-      "minimumSystemVersion": "12.0"
+      "minimumSystemVersion": "13.0"
     }
   }
 }

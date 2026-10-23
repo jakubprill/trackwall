@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "pnpm --parallel --filter @pitwall/daemon --filter @pitwall/ui dev",
     "build": "pnpm --filter @pitwall/ui build && pnpm --filter @pitwall/daemon build",
-    "build:desktop": "pnpm build && pnpm --filter @pitwall/desktop build",
+    "build:desktop": "pnpm --filter @pitwall/desktop build",
     "portable": "bun scripts/package-portable.ts",
     "typecheck": "pnpm -r typecheck",
     "lint": "biome check .",

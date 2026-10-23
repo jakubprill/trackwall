@@ -12,7 +12,9 @@ let shutdowns = 0;
 let base: string;
 
 beforeAll(async () => {
-  const uiDir = mkdtempSync(join(tmpdir(), "pitwall-ui-"));
+  // Katalog nadrzędny o nazwie `assets` sprawdza, że cache zależy od ścieżki względem UI, nie całej ścieżki.
+  const uiDir = join(mkdtempSync(join(tmpdir(), "pitwall-ui-")), "assets", "ui");
+  mkdirSync(uiDir, { recursive: true });
   writeFileSync(join(uiDir, "index.html"), "<!doctype html><title>pitwall</title>");
   mkdirSync(join(uiDir, "assets"));
   writeFileSync(join(uiDir, "assets", "app.js"), "console.log(1)");
@@ -101,10 +103,13 @@ describe("api", () => {
   });
 
   test("UI: index, assets, fallback SPA i brak wyjścia poza katalog", async () => {
-    expect(await (await fetch(`${base}/`)).text()).toContain("pitwall");
+    const index = await fetch(`${base}/`);
+    expect(await index.text()).toContain("pitwall");
+    expect(index.headers.get("cache-control")).toBe("no-cache");
     expect(await (await fetch(`${base}/tasks/123`)).text()).toContain("pitwall");
     const asset = await fetch(`${base}/assets/app.js`);
     expect(asset.headers.get("content-type")).toContain("javascript");
+    expect(asset.headers.get("cache-control")).toContain("immutable");
     expect((await fetch(`${base}/assets/missing.js`)).status).toBe(404);
     expect(await rawGet("/..%2fpitwall-secret.txt", { host: `127.0.0.1:${api.port}` })).toBe(404);
     expect(await rawGet("/%2e%2e/%2e%2e/pitwall-secret.txt", { host: `127.0.0.1:${api.port}` })).toBe(404);
