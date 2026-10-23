@@ -74,9 +74,8 @@ export function git(repoDir: string, args: readonly string[], opts: GitOptions =
     child.on("close", (code, signal) => {
       if (code === 0) return finish(() => resolve({ stdout: Buffer.concat(out), truncated: false }));
       const stderr = Buffer.concat(err).toString("utf8").trim();
-      finish(() =>
-        reject(new Error(stderr || `git ${args[0]} ${signal ? `przerwany sygnałem ${signal}` : `zakończył się kodem ${code}`}`)),
-      );
+      const reason = signal ? `przerwany sygnałem ${signal}` : `zakończył się kodem ${code}`;
+      finish(() => reject(new Error(stderr || `git ${args[0]} ${reason}`)));
     });
     // Git, który nie czyta stdin, może go zamknąć przed zapisem; EPIPE nie jest wtedy błędem wywołania.
     child.stdin.on("error", () => {});

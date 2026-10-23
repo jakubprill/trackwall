@@ -18,7 +18,11 @@ export function writeFileAtomic(target: string, text: string, mode?: number): vo
     if (mode !== undefined && process.platform !== "win32") chmodSync(tmp, mode);
     renameWithRetry(tmp, target);
   } catch (err) {
-    rmSync(tmp, { force: true });
+    try {
+      rmSync(tmp, { force: true });
+    } catch {
+      // Plik tymczasowy trzymany przez inny proces: zostaje, a wołający dostaje pierwotny błąd zapisu.
+    }
     throw err;
   }
 }

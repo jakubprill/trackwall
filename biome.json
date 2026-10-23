@@ -40,6 +40,8 @@
       "style": {
         "noNonNullAssertion": "error",
         "noParameterProperties": "error",
+        "noEnum": "error",
+        "noNamespace": "error",
         "useFilenamingConvention": {
           "level": "error",
           "options": {

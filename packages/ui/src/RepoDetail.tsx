@@ -4,7 +4,7 @@ import { type ReactNode, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { type Remote, useRemote } from "@/lib/use-remote";
+import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { RepoCommits } from "./RepoCommits.tsx";
 import { RepoFiles } from "./RepoFiles.tsx";
 import { RepoStatusBadges } from "./RepoStatusBadges.tsx";
@@ -19,9 +19,10 @@ type Tab = (typeof TABS)[number]["id"];
 
 export function RepoDetail({ conn, repo, onRemoved }: { conn: Connection; repo: Repo; onRemoved: () => void }) {
   const [tab, setTab] = useState<Tab>("readme");
-  const available = repo.status.kind === "ok";
+  const { status } = repo;
+  const available = status.kind === "ok";
   // Nowy commit (np. z terminala) zmienia HEAD w odpytywanej liście, a to pobiera przegląd i drzewo od nowa.
-  const head = repo.status.kind === "ok" ? (repo.status.head?.hash ?? "") : "";
+  const head = status.kind === "ok" ? (status.head?.hash ?? "") : "";
   const load = useCallback(() => post(conn, workspaceApi.overview, { repo: repo.id }), [conn, repo.id]);
   const overview = useRemote(available ? load : undefined, { refreshKey: head });
 
@@ -50,13 +51,7 @@ export function RepoDetail({ conn, repo, onRemoved }: { conn: Connection; repo: 
   );
 }
 
-function Loaded({
-  remote,
-  children,
-}: {
-  remote: Remote<RepoOverview> & { reload: () => void };
-  children: (data: RepoOverview) => ReactNode;
-}) {
+function Loaded({ remote, children }: { remote: RemoteHandle<RepoOverview>; children: (data: RepoOverview) => ReactNode }) {
   if (remote.error)
     return (
       <div className="flex flex-col items-start gap-2">

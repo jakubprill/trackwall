@@ -5,8 +5,9 @@ import { errorMessage } from "./api.ts";
 export interface Remote<T> {
   data?: T;
   error?: string;
-  loading: boolean;
 }
+
+export type RemoteHandle<T> = Remote<T> & { reload: () => void };
 
 export interface RemoteOptions {
   /** Odpytuj co tyle ms, licząc od poprzedniej odpowiedzi. */
@@ -20,11 +21,8 @@ export interface RemoteOptions {
  * poprzednią odpowiedź; `reload`, `refreshKey` i odpytywanie zachowują ją do czasu nowej. Odpytywanie planuje
  * następne pytanie dopiero po odpowiedzi, więc wolny git nie piętrzy żądań, i czeka, gdy okno jest schowane.
  */
-export function useRemote<T>(
-  load: (() => Promise<T>) | undefined,
-  { pollMs, refreshKey }: RemoteOptions = {},
-): Remote<T> & { reload: () => void } {
-  const [state, setState] = useState<Remote<T>>({ loading: true });
+export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, refreshKey }: RemoteOptions = {}): RemoteHandle<T> {
+  const [state, setState] = useState<Remote<T>>({});
   const [generation, setGeneration] = useState(0);
   const previousLoad = useRef(load);
 
@@ -39,11 +37,11 @@ export function useRemote<T>(
       if (document.hidden) timer = setTimeout(next, pollMs);
       else setGeneration((g) => g + 1);
     };
-    setState((prev) => (changed ? { loading: true } : { ...prev, loading: true }));
+    if (changed) setState({});
     load()
       .then(
-        (data) => current && setState({ data, loading: false }),
-        (err: unknown) => current && setState((prev) => ({ data: prev.data, error: errorMessage(err), loading: false })),
+        (data) => current && setState({ data }),
+        (err: unknown) => current && setState((prev) => ({ data: prev.data, error: errorMessage(err) })),
       )
       .finally(() => {
         if (current && pollMs !== undefined) timer = setTimeout(next, pollMs);

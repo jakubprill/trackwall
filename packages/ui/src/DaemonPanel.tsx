@@ -31,12 +31,19 @@ export function DaemonPanel({ conn, onRetry }: { conn: Connection; onRetry: () =
         {info.error && (
           <div className="flex flex-col items-start gap-3">
             <p className="text-destructive text-sm whitespace-pre-wrap break-words">{info.error}</p>
-            <Button variant="outline" size="sm" onClick={onRetry}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                onRetry();
+                info.reload();
+              }}
+            >
               Spróbuj ponownie
             </Button>
           </div>
         )}
-        {info.data && <InfoTable info={info.data} />}
+        {info.data && !info.error && <InfoTable info={info.data} />}
       </CardContent>
     </Card>
   );

@@ -41,7 +41,14 @@ export function ReposView({ conn, onRetry }: { conn: Connection; onRetry: () => 
           {list.error && (
             <div className="flex flex-col items-start gap-2 px-2 pb-2">
               <p className="text-destructive text-sm break-words">{list.error}</p>
-              <Button variant="outline" size="sm" onClick={onRetry}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  onRetry();
+                  list.reload();
+                }}
+              >
                 Spróbuj ponownie
               </Button>
             </div>
