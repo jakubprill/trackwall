@@ -138,12 +138,25 @@ describe("workspace", () => {
   test("repo innego użytkownika jest niedostępne, jak w terminalu (safe.directory)", async () => {
     const { workspace, projects } = await workspaceWithProjectsDir();
     makeRepo({ a: "1" }, "cudze", projects);
-    // Zmienna z testów gita udaje innego właściciela repo bez `chown`, którego CI nie może zrobić.
-    process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER = "1";
+    // Zmienna z testów gita udaje innego właściciela repo bez `chown`, którego CI nie może zrobić. Bez systemowej,
+    // globalnej i środowiskowej konfiguracji, bo runner CI może mieć w niej `safe.directory = *`.
+    const isolated = {
+      GIT_TEST_ASSUME_DIFFERENT_OWNER: "1",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_COUNT: "0",
+      GIT_CONFIG_PARAMETERS: "",
+      GIT_CONFIG_GLOBAL: join(projects, "pusty.gitconfig"),
+    };
+    writeFileSync(isolated.GIT_CONFIG_GLOBAL, "");
+    const saved = Object.keys(isolated).map((name) => [name, process.env[name]] as const);
+    Object.assign(process.env, isolated);
     try {
       expect((await workspace.list()).repos).toMatchObject([{ id: "cudze", status: { kind: "unavailable" } }]);
     } finally {
-      delete process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER;
+      for (const [name, value] of saved) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
     }
   });
 
