@@ -41,7 +41,7 @@ export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection;
             </Button>
           </span>
         </div>
-        {list.data?.projectsDir && (
+        {list.data?.projectsDir && !needsSettings && (
           <p className="text-muted-foreground truncate px-4 pb-3 font-mono text-xs" title={list.data.projectsDir}>
             {list.data.projectsDir}
           </p>

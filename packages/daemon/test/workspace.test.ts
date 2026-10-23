@@ -135,6 +135,18 @@ describe("workspace", () => {
     expect((await workspace.list()).repos).toMatchObject([{ id: "dowiazane", status: { kind: "unavailable" } }]);
   });
 
+  test("repo innego użytkownika jest niedostępne, jak w terminalu (safe.directory)", async () => {
+    const { workspace, projects } = await workspaceWithProjectsDir();
+    makeRepo({ a: "1" }, "cudze", projects);
+    // Zmienna z testów gita udaje innego właściciela repo bez `chown`, którego CI nie może zrobić.
+    process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER = "1";
+    try {
+      expect((await workspace.list()).repos).toMatchObject([{ id: "cudze", status: { kind: "unavailable" } }]);
+    } finally {
+      delete process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER;
+    }
+  });
+
   test("gpg.program z konfiguracji repo nie jest uruchamiany przez log.showSignature", async () => {
     const { workspace, projects } = await workspaceWithProjectsDir();
     const dir = makeRepo({}, "api", projects);

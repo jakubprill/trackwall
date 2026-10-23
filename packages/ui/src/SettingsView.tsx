@@ -92,11 +92,15 @@ function ProjectsDirForm({
         </Button>
       </div>
       {error && <p className="text-destructive text-xs break-words">{error}</p>}
-      {configFile && (
-        <p className="text-muted-foreground text-xs break-all">
-          Zapisane jako <span className="font-mono">projectsDir</span> w <span className="font-mono">{configFile}</span>
-        </p>
-      )}
+      <p className="text-muted-foreground text-xs break-all">
+        {configFile ? (
+          <>
+            Zapisane jako <span className="font-mono">projectsDir</span> w <span className="font-mono">{configFile}</span>
+          </>
+        ) : (
+          "Błąd składni YAML trzeba poprawić w pliku z komunikatu powyżej; zapis tutaj poprawi tylko zły projectsDir."
+        )}
+      </p>
     </form>
   );
 }
