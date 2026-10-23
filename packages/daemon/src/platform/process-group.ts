@@ -1,5 +1,3 @@
-import type { ChildProcess } from "node:child_process";
-
 /**
  * Grupa procesów (§4.1) od strony systemu: jak uruchomić lidera, żeby jego potomkowie byli z nim jedną jednostką,
  * jak ją zatrzymać i jak sprawdzić, że nie żyje. Moduł `procs` zna tylko ten interfejs i sam decyduje o kolejności
@@ -8,7 +6,7 @@ import type { ChildProcess } from "node:child_process";
 
 /** Metody nie rzucają: błąd systemu przy zatrzymywaniu wychodzi jako grupa, która nie jest pusta. */
 export interface GroupControl {
-  /** Łagodna prośba o koniec: SIGTERM do całej grupy, na Windowsie zamknięcie stdin lidera. */
+  /** Łagodna prośba o koniec: SIGTERM do całej grupy, na Windowsie zamknięcie wejścia lidera. */
   askToStop(): void;
   /** Zabija każdy proces grupy, także te, które zostały po wyjściu lidera. */
   kill(): void;
@@ -18,13 +16,24 @@ export interface GroupControl {
   release(): void;
 }
 
+/**
+ * Lider grupy widziany przez platformę: proces z rurami albo proces w PTY (`terminal.ts`). Platforma potrzebuje
+ * PID-u, łagodnej prośby o koniec od strony wejścia i tego, czy lider już skończył.
+ */
+export interface GroupLeader {
+  pid: number;
+  /** Zamyka wejście lidera: stdin procesu z rurami albo terminal (ConPTY wysyła wtedy `CTRL_CLOSE_EVENT`). */
+  closeInput(): void;
+  hasExited(): boolean;
+}
+
 export interface GroupPlatform {
   /** `setsid` na POSIX; na Windowsie lider zostaje w konsoli daemona, a grupę tworzy job. */
   detached: boolean;
   /** Czas łaski między `askToStop` a `kill`. */
   graceMs: number;
   /** Robi z uruchomionego lidera grupę. Rzuca, gdy system odmówi (wtedy wołający zabija lidera). */
-  adopt(child: ChildProcess): GroupControl;
+  adopt(leader: GroupLeader): GroupControl;
   /** Tożsamość lidera do `runtime.json` (czas startu procesu), `null`, gdy system jej nie podaje. */
   identity(pid: number): Promise<string | null>;
   /**

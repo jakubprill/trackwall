@@ -27,6 +27,8 @@ export interface GraphConfigInput {
   config: GraphConfig;
   /** Pełna ścieżka `workspace.yaml`: dowód aliasu i ręcznej krawędzi. */
   file: string;
+  /** Klucze `workspace.yaml`, których nie dało się przeczytać (zły `graph` albo `repoTags`); trafiają do `configProblems`. */
+  problems: string[];
 }
 
 interface Provider {
@@ -39,12 +41,17 @@ interface Join {
   edges: EdgeSet;
   resolve: (ref: string) => string[];
   problems: string[];
-  config: GraphConfig;
+  /**
+   * Aliasy paczek jako `Map`: nazwa paczki pochodzi z repo, a obiekt z YAML-a dla nazwy `constructor` czy
+   * `toString` oddałby funkcję z prototypu.
+   */
+  aliases: Map<string, string>;
   file: string;
 }
 
-export function buildGraph(cards: readonly GraphCardInput[], { config, file }: GraphConfigInput, configProblems: string[] = []): RepoGraph {
-  const join: Join = { edges: new EdgeSet(), resolve: repoResolver(cards), problems: [...configProblems], config, file };
+export function buildGraph(cards: readonly GraphCardInput[], { config, file, problems }: GraphConfigInput): RepoGraph {
+  const aliases = new Map(Object.entries(config.packages));
+  const join: Join = { edges: new EdgeSet(), resolve: repoResolver(cards), problems: [...problems], aliases, file };
   const providers = providersByPackage(cards);
   for (const entry of cards) {
     if (entry.kind !== "ok" || entry.card === null) continue;
@@ -60,7 +67,8 @@ export function buildGraph(cards: readonly GraphCardInput[], { config, file }: G
 }
 
 function addPackageEdges(join: Join, from: string, pkg: ConsumedPackage, found: Provider[]): void {
-  // Kilka repo z tą samą paczką to zwykle klony jednego repo albo fork: krawędź do każdego, ale niepewna.
+  // Kilka repo z tą samą paczką to zwykle klony jednego repo albo fork: krawędź do każdego, ale niepewna. Jedno repo
+  // jest w `found` raz (`providersByPackage`), nawet gdy buduje paczkę dwoma plikami buildu.
   const confidence: EdgeConfidence = found.length === 1 ? "exact" : "medium";
   for (const p of found) {
     join.edges.add({
@@ -76,7 +84,7 @@ function addPackageEdges(join: Join, from: string, pkg: ConsumedPackage, found: 
 
 /** Alias działa tylko dla paczki, której żadna karta nie pokazuje: fakt z plików buildu wygrywa z wpisem. */
 function addAliasEdges(join: Join, from: string, pkg: ConsumedPackage): void {
-  const alias = join.config.packages[pkg.name];
+  const alias = join.aliases.get(pkg.name);
   if (alias === undefined) return;
   const evidence: EdgeEvidence = { repo: null, path: join.file, line: null, detail: `graph.packages: ${pkg.name} → ${alias}` };
   for (const to of join.resolve(alias).filter((repo) => repo !== from)) {
@@ -85,7 +93,7 @@ function addAliasEdges(join: Join, from: string, pkg: ConsumedPackage): void {
 }
 
 function checkAliases(join: Join): void {
-  for (const [name, ref] of Object.entries(join.config.packages)) {
+  for (const [name, ref] of join.aliases) {
     if (join.resolve(ref).length === 0) join.problems.push(`graph.packages „${name}”: ${missingRepo(ref)}`);
   }
 }
@@ -96,10 +104,12 @@ function addManualEdges(join: Join, manual: ManualEdge, i: number): void {
   if (froms.length === 0) join.problems.push(`graph.edges[${i}].from: ${missingRepo(manual.from)}`);
   if (tos.length === 0) join.problems.push(`graph.edges[${i}].to: ${missingRepo(manual.to)}`);
   const evidence: EdgeEvidence = { repo: null, path: join.file, line: null, detail: `graph.edges[${i}]: ${manual.from} → ${manual.to}` };
-  for (const from of froms) {
-    for (const to of tos.filter((repo) => repo !== from)) {
-      join.edges.add({ from, to, kind: "manual", key: manual.note, confidence: "exact", evidence: [evidence] });
-    }
+  const pairs = froms.flatMap((from) => tos.filter((to) => to !== from).map((to) => ({ from, to })));
+  if (froms.length > 0 && tos.length > 0 && pairs.length === 0) {
+    join.problems.push(`graph.edges[${i}]: from i to wskazują to samo repo (${froms.join(", ")})`);
+  }
+  for (const { from, to } of pairs) {
+    join.edges.add({ from, to, kind: "manual", key: manual.note, confidence: "exact", evidence: [evidence] });
   }
 }
 
@@ -109,7 +119,7 @@ function graphNode(entry: GraphCardInput): GraphNode {
     repo: entry.repo,
     remote: entry.remote,
     tags: entry.tags.map((t) => t.name),
-    provides: entry.card?.provides.length ?? 0,
+    provides: new Set(entry.card?.provides.map(packageKey)).size,
     problem: null,
   };
 }
@@ -125,7 +135,9 @@ function providersByPackage(cards: readonly GraphCardInput[]): Map<string, Provi
     if (entry.kind !== "ok" || entry.card === null) continue;
     for (const pkg of entry.card.provides) {
       const key = packageKey(pkg);
-      providers.set(key, [...(providers.get(key) ?? []), { repo: entry.repo, pkg }]);
+      const list = providers.get(key) ?? [];
+      // Ta sama paczka z dwóch plików buildu jednego repo (np. w trakcie przejścia z Mavena na Gradle) to jedno repo.
+      if (!list.some((p) => p.repo === entry.repo)) providers.set(key, [...list, { repo: entry.repo, pkg }]);
     }
   }
   return providers;

@@ -18,7 +18,7 @@ import { GraphNodePanel, GraphSummaryPanel } from "./GraphNodePanel.tsx";
  */
 const POLL_MS = 30_000;
 
-export function OverviewView({ conn }: { conn: Connection }) {
+export function GraphView({ conn }: { conn: Connection }) {
   const load = useCallback(() => post(conn, graphApi.graph, {}), [conn]);
   const graph = useRemote(load, { pollMs: POLL_MS });
   const [selected, setSelected] = useState<string>();
@@ -32,7 +32,7 @@ export function OverviewView({ conn }: { conn: Connection }) {
       ),
     [data],
   );
-  // Repo, które zniknęło z grafu po odświeżeniu (np. usunięty katalog), zdejmuje wybór.
+  // Repo, którego nie ma w odświeżonym grafie (np. usunięty katalog), nie ma panelu; wybór wraca, gdy repo wróci.
   const node = data?.nodes.find((n) => n.repo === selected);
   return (
     <div className="grid h-full min-h-0 grid-cols-[1fr_24rem]">

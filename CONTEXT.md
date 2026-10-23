@@ -13,7 +13,7 @@ Aplikacja Tauri: okno, tray, uruchamianie i nadzór daemona jako sidecara, spraw
 _Unikaj_: aplikacja (gdy chodzi tylko o Tauri)
 
 **Widok** (`View`):
-Ekran aplikacji w UI (Repo, Przegląd, Daemon, Ustawienia), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
+Ekran aplikacji w UI (Repo, Sesje, Przegląd, Daemon, Ustawienia), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
 _Unikaj_: zakładka (dla całego ekranu)
 
 **Zakładka** (`TabBar`):
@@ -39,7 +39,7 @@ Sekret z `~/.trackwall/daemon.json`, którym UI, `ws`, powłoka i most stdio uwi
 **Serwer MCP** (`/mcp`, `createMcpEndpoint`):
 Część daemona, przez którą agenci czytają jego stan narzędziami MCP; ten sam port i token co API (§5.3, ADR-24).
 
-**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`, `who_calls`):
+**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`, `tail`, `who_calls`):
 Jedno wywołanie serwera MCP z nazwą po angielsku, wejściem i wynikiem opisanym schematem z `packages/protocol/src/mcp.ts`; mapowanie na fasadę, bez własnej logiki domenowej.
 _Unikaj_: komenda, akcja (to pojęcia z API i CLI)
 
@@ -80,6 +80,10 @@ _Unikaj_: URL repo (URL ma protokół i bywa z tokenem), remote bez dopowiedzeni
 **Synchronizacja** (`SyncRun`, wynik repo `SyncRepo`):
 Fetch każdego repo z folderu z projektami i fast-forward jego gałęzi domyślnej, w tle, z wynikiem per repo: przesunięte, aktualne, pominięte z powodem (`SyncSkipReason`) albo błąd. Nigdy nie scala ani nie nadpisuje lokalnych zmian (ADR-21). Trzymana tylko w pamięci daemona.
 _Unikaj_: pull, aktualizacja (bez dopowiedzenia)
+
+**Komenda zbiorcza** (`BatchRun`, krok `BatchStep`, wynik repo `BatchRepo`):
+Wybrane kroki na wybranych repo jednym przyciskiem: synchronizacja (`sync`), narzędzia z konfiguracji mise repo (`tools`, `mise install`), zależności (`setup`, task mise `setup`) i build (`build`, task mise `build`), w repo zawsze w tej kolejności, kilka repo naraz, z wynikiem każdego kroku w każdym repo (ADR-27). Błąd kroku kończy repo, pozostałe idą dalej. Trzymana tylko w pamięci daemona.
+_Unikaj_: batch (w polskim tekście), operacja zbiorcza, workflow
 
 **Stan repo** (`RepoStatus`):
 Gałąź, ostatni commit, liczba zmian w katalogu roboczym i ahead/behind względem gałęzi śledzonej, odczytane z gita przy każdym zapytaniu (`ok`), albo `unavailable` z komunikatem, gdy git go nie czyta (repo, którego katalog zniknął, znika z listy). Nigdy nie jest zapisywany.
@@ -136,7 +140,7 @@ Plik i linia, z których wynika fakt na karcie lub krawędź w grafie; dowód kr
 **Pewność** (`confidence`, w grafie `EdgeConfidence`):
 `exact`, `high`, `medium` albo `low`. Krawędź z paczki budowanej przez jedno repo i ręczna krawędź są `exact`, z aliasu paczki `high`, z paczki budowanej przez kilka repo `medium`. Przy `low` daemon niczego nie robi automatycznie.
 
-**Przegląd** (widok „Przegląd”, `OverviewView`):
+**Przegląd** (widok „Przegląd”, `GraphView`, identyfikator widoku `graph`):
 Widok z grafem połączeń na całą szerokość i panelem szczegółów wybranego repo (kogo używa, kto używa jego, dowody).
 _Unikaj_: dashboard (to scena 3D), przegląd repo (to README i commity jednego repo, `RepoOverview`)
 
@@ -189,9 +193,19 @@ Wszystko, co Trackwall wie o jednym CLI agenta: szablon komendy, konfiguracja MC
 CLI agenta (dziś Copilot CLI) uruchomione przez użytkownika poza zadaniem, np. w folderze z projektami, z dostępem do serwera MCP. W odróżnieniu od sesji zadania nie ma worktree, budżetu ani tokenu zadania. Pojęcie z dokumentacji i opisów narzędzi; w kodzie nie ma własnego identyfikatora, bo daemon niczego o nim nie trzyma.
 _Unikaj_: orkiestrator, główny agent
 
-**Sesja** (sesja zadania):
-CLI agenta działające w PTY należącym do daemona, nagrywane do `sessions/<zadanie>.cast`.
-_Unikaj_: sesja POSIX (to pojęcie z grupy procesów)
+**Sesja** (sesja zadania, `Session`, `SessionId`):
+CLI agenta działające w PTY należącym do daemona, w korzeniu repo, jako grupa procesów, z własnym katalogiem `sessions/<sesja>/` (wtyczka sesji, `hooks.jsonl`). Dziś sesja istnieje bez zadania: widok Sesje uruchamia ją w repo jednym kliknięciem (ADR-26); zadanie doda do niej prompt, worktree i budżet. Nagrywa ją tylko `copilot-record.ts`.
+_Unikaj_: sesja POSIX (to pojęcie z grupy procesów), okno (to okno terminala w UI)
+
+**Czeka na Ciebie** (`Session.needsAttention`):
+Działająca sesja w stanie `Input`, `Approval` albo `Plan`: agent nie ruszy dalej bez człowieka. Liczy to daemon, a UI (licznik na pasku widoków, „Następna czekająca”) i tray (menu „Czeka: <repo>”, miganie okna) tylko czytają pole.
+
+**Okno terminala** (`SessionTerminal`):
+xterm.js w widoku Sesje podłączony WebSocketem `/ws/pty/<sesja>` do PTY sesji. Kilka okien może pokazywać tę samą sesję; rozmiar PTY ustala ostatnie, które go zgłosiło.
+
+**Obraz ekranu** (`TerminalScreen`):
+Stan ekranu sesji, który daemon trzyma w emulatorze terminala bez okna i wysyła oknu terminala przy podłączeniu, zanim pójdzie dalsze wyjście.
+_Unikaj_: zrzut ekranu (to obrazek), historia wyjścia
 
 **Stan zadania** (`TaskState`, zmiana: `TaskStateChange`):
 `Working`, `Input`, `Approval`, `Plan`, `Done`, `Error` albo `Stale`, zawsze ze źródłem (`hook`, `osc`, `screen`, `timeout`, `exit`) i pewnością (§4.4).
@@ -223,14 +237,18 @@ Blok, którym agent kończy zadanie; trafia do pola `summary` i do propozycji PR
 ## Logi, zdarzenia i audyt
 
 **Rekord** (`LogRecord`):
-Jedna linia wyjścia procesu po parsowaniu: `seq`, czas, źródło, poziom, treść, opcjonalnie identyfikator śladu (`traceId` w TypeScript, `trace_id` w narzędziach MCP).
+Jedna linia wyjścia procesu po parsowaniu: `seq`, czas, uruchomienie (`runId`), strumień, poziom, treść (bez ANSI, z zamaskowanymi sekretami), później opcjonalnie identyfikator śladu (`traceId` w TypeScript, `trace_id` w narzędziach MCP).
 _Unikaj_: wpis, event
 
 **Źródło** (`LogSource`):
-Skąd pochodzi rekord: serwis, zadanie albo sam daemon, z identyfikatorem.
+Skąd pochodzi rekord. Dziś task mise repo (`{ kind: "mise-task", repo, miseTask }`); serwis, zadanie i sam daemon dojdą jako kolejne rodzaje. Źródło ma rekordy wszystkich swoich uruchomień.
+
+**Log** (log taska mise, `logs/tail` i narzędzie MCP `tail`, w UI przycisk „Log”):
+Rekordy jednego źródła w kolejności `seq`: ostatnie (do 2000) w pamięci daemona, nowsze niż ostatnia rotacja w pliku JSONL `logs/<rodzaj>/<repo>/<task mise>.jsonl` w katalogu stanu (bieżący plik i jeden poprzedni, po 10 MB, ADR-28). Nie myl z logiem daemona (stderr procesu `trackwall-daemon`).
+_Unikaj_: konsola, terminal (to PTY sesji zadania)
 
 **`seq`**:
-Globalny, rosnący numer rekordu dla wszystkich źródeł. Kursor `since_seq` działa dla jednego serwisu i dla całego workspace.
+Globalny, rosnący numer rekordu dla wszystkich źródeł; każde działanie daemona zaczyna od chwili startu, więc numery się nie powtarzają. Kursor (`sinceSeq` w API i w narzędziach MCP) działa dla jednego źródła i dla całego workspace; `dropped` mówi, że część rekordów po kursorze przepadła.
 
 **Zdarzenie**:
 Wiadomość daemona na WebSocket `/ws` (`service.state`, `task.state`…) z własnym `seq` zdarzeń.
@@ -240,7 +258,7 @@ _Unikaj_: rekord (to log)
 Pełny stan z `GET /api/snapshot`, od którego UI zaczyna i do którego wraca po `resync`.
 
 **Maskowanie**:
-Zamiana wartości sekretów na `***` przed zapisem rekordu do bufora.
+Zamiana wartości sekretów na `***` przed zapisem rekordu do bufora, pliku i ostatnich linii stanu. Dziś sekrety to wartości zmiennych środowiska procesu o nazwach sekretów (`GH_TOKEN`, `DB_PASSWORD`…, §4.2).
 
 **Audyt** (`AuditEntry`):
 Zapis każdego wywołania narzędzia MCP: klient, narzędzie, argumenty, czas, skrót wyniku. Widoczny tylko w UI.

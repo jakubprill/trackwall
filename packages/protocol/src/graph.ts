@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Endpoint } from "./api.ts";
-import { TagName } from "./cards.ts";
+import { MechanismEvidence, TagName } from "./cards.ts";
 import { RepoId } from "./workspace.ts";
 
 /**
@@ -37,8 +37,15 @@ export type ManualEdge = z.infer<typeof ManualEdge>;
  */
 export const GraphConfig = z
   .object({
-    packages: z.record(z.string().min(1).max(300), RepoRef).default({}),
-    edges: z.array(ManualEdge).default([]),
+    // Pusty podklucz (`packages:` z zakomentowanymi wpisami) YAML czyta jako `null`, tak jak brak klucza.
+    packages: z
+      .record(z.string().min(1).max(300), RepoRef)
+      .nullish()
+      .transform((packages) => packages ?? {}),
+    edges: z
+      .array(ManualEdge)
+      .nullish()
+      .transform((edges) => edges ?? []),
   })
   .strict();
 export type GraphConfig = z.infer<typeof GraphConfig>;
@@ -57,14 +64,11 @@ export type EdgeKind = z.infer<typeof EdgeKind>;
 export const EdgeConfidence = z.enum(["exact", "high", "medium"]);
 export type EdgeConfidence = z.infer<typeof EdgeConfidence>;
 
-/** Dowód krawędzi: miejsce w repo (plik i linia w commicie z karty) albo w `workspace.yaml` (`repo: null`, pełna ścieżka). */
-export const EdgeEvidence = z.object({
-  repo: RepoId.nullable(),
-  path: z.string(),
-  line: z.number().int().positive().nullable(),
-  /** Co w tym miejscu wskazuje połączenie, np. `używa com.example:orders-client (compile)`. */
-  detail: z.string(),
-});
+/**
+ * Dowód krawędzi: miejsce w repo (plik i linia w commicie z karty) albo w `workspace.yaml` (`repo: null`, pełna
+ * ścieżka), ze zdaniem, co w tym miejscu wskazuje połączenie, np. `używa com.example:orders-client (compile)`.
+ */
+export const EdgeEvidence = MechanismEvidence.extend({ repo: RepoId.nullable() });
 export type EdgeEvidence = z.infer<typeof EdgeEvidence>;
 
 /** Krawędź od repo, które używa, do repo, którego używa. */
@@ -114,6 +118,13 @@ export const Subgraph = z.object({
   edges: z.array(GraphEdge),
 });
 export type Subgraph = z.infer<typeof Subgraph>;
+
+export const WhoCallsResult = z.object({
+  repo: RepoId,
+  /** Krawędzie do tego repo: kto go używa, czego (klucz) i skąd to wiadomo (dowody). */
+  edges: z.array(GraphEdge),
+});
+export type WhoCallsResult = z.infer<typeof WhoCallsResult>;
 
 function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
   return { path: `/api/graph/${action}`, request, data };

@@ -1,6 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    // Typy `@xterm/addon-serialize` (ekran sesji, ADR-26) wciągają `lib.dom` przez `@xterm/xterm`; bez `DOM.Iterable`
+    // DOM-owe `Headers` z tej biblioteki przesłaniają iterowalne `Headers` z Node i Bun.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["bun", "node"],
     "erasableSyntaxOnly": true
   },

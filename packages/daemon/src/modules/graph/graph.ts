@@ -1,4 +1,4 @@
-import type { GraphConfig, GraphEdge, RepoGraph, Subgraph } from "@trackwall/protocol";
+import type { GraphConfig, RepoGraph, Subgraph, WhoCallsResult } from "@trackwall/protocol";
 import { DomainError } from "../../errors.ts";
 import { buildGraph, type GraphCardInput } from "./build-graph.ts";
 import { subgraph } from "./subgraph.ts";
@@ -11,7 +11,7 @@ import { subgraph } from "./subgraph.ts";
 
 /** Czego `graph` potrzebuje od `cards`; podłączane w fasadzie. */
 interface GraphCards {
-  all(): Promise<GraphCardInput[]>;
+  all(): Promise<{ cards: GraphCardInput[]; tagRulesProblem: string | null }>;
 }
 
 /** Czego `graph` potrzebuje od `workspace`: wpisy `graph` z `workspace.yaml`. */
@@ -33,25 +33,30 @@ export class Graph {
   }
 
   async graph(): Promise<RepoGraph> {
-    const cards = await this.deps.cards.all();
-    const file = this.deps.workspace.configFile();
-    try {
-      return buildGraph(cards, { config: this.deps.workspace.graphConfig(), file });
-    } catch (err) {
-      // Zły klucz `graph` nie zabiera krawędzi z kart: graf powstaje bez wpisów użytkownika, z powodem do poprawienia.
-      if (!(err instanceof DomainError && err.code === "invalid_config")) throw err;
-      return buildGraph(cards, { config: { packages: {}, edges: [] }, file }, [err.message]);
-    }
+    const { cards, tagRulesProblem } = await this.deps.cards.all();
+    const { config, problem } = this.config();
+    const problems = [tagRulesProblem, problem].filter((p) => p !== null);
+    return buildGraph(cards, { config, file: this.deps.workspace.configFile(), problems });
   }
 
   /** Krawędzie do repo: kto go używa. */
-  async whoCalls(repo: string): Promise<GraphEdge[]> {
+  async whoCalls(repo: string): Promise<WhoCallsResult> {
     const graph = await this.graphWith(repo);
-    return graph.edges.filter((e) => e.to === repo);
+    return { repo, edges: graph.edges.filter((e) => e.to === repo) };
   }
 
   async subgraph(repo: string, depth: number): Promise<Subgraph> {
     return subgraph(await this.graphWith(repo), repo, depth);
+  }
+
+  /** Zły klucz `graph` nie zabiera krawędzi z kart: graf powstaje bez wpisów użytkownika, z powodem do poprawienia. */
+  private config(): { config: GraphConfig; problem: string | null } {
+    try {
+      return { config: this.deps.workspace.graphConfig(), problem: null };
+    } catch (err) {
+      if (!(err instanceof DomainError && err.code === "invalid_config")) throw err;
+      return { config: { packages: {}, edges: [] }, problem: err.message };
+    }
   }
 
   private async graphWith(repo: string): Promise<RepoGraph> {

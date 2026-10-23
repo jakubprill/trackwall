@@ -1,6 +1,5 @@
 import type { RepoCard, RepoCardResult, RepoTag, RepoTagRules, RepoTags } from "@trackwall/protocol";
-import { messageOf } from "../../error-message.ts";
-import { DomainError } from "../../errors.ts";
+import { DomainError, messageOf } from "../../errors.ts";
 import { mapLimit } from "../../map-limit.ts";
 import type { CardCache } from "./card-cache.ts";
 import { extractCard, readsCardFile } from "./extract-card.ts";
@@ -34,7 +33,7 @@ interface TaggedCard {
 }
 
 /** Karta jednego repo z listy albo powód, dla którego jej nie ma (git nie czyta repo). */
-export type CardOfRepo = ({ kind: "ok"; repo: string } & TaggedCard) | { kind: "unavailable"; repo: string; message: string };
+type CardOfRepo = ({ kind: "ok"; repo: string } & TaggedCard) | { kind: "unavailable"; repo: string; message: string };
 
 export interface CardsDeps {
   vcs: CardsVcs;
@@ -68,14 +67,28 @@ export class Cards {
 
   /** Tagi wszystkich repo z folderu z projektami; repo, którego git nie czyta, ma powód zamiast tagów. */
   async tags(): Promise<RepoTags[]> {
-    return (await this.all()).map((c) =>
+    return (await this.withRules(this.deps.repos.tagRules())).map((c) =>
       c.kind === "ok" ? { kind: "ok", repo: c.repo, tags: c.tags } : { kind: "unavailable", repo: c.repo, message: c.message },
     );
   }
 
-  /** Karty i tagi wszystkich repo z folderu z projektami w kolejności listy (dla grafu, §4.6, ADR-29). */
-  async all(): Promise<CardOfRepo[]> {
-    const rules = this.deps.repos.tagRules();
+  /**
+   * Karty i tagi wszystkich repo z folderu z projektami w kolejności listy (dla grafu, §4.6, ADR-29). Zły `repoTags`
+   * nie zabiera kart: repo mają wtedy tylko tagi z karty, a komunikat wraca w `tagRulesProblem`.
+   */
+  async all(): Promise<{ cards: CardOfRepo[]; tagRulesProblem: string | null }> {
+    let rules: RepoTagRules = {};
+    let tagRulesProblem: string | null = null;
+    try {
+      rules = this.deps.repos.tagRules();
+    } catch (err) {
+      if (!(err instanceof DomainError && err.code === "invalid_config")) throw err;
+      tagRulesProblem = err.message;
+    }
+    return { cards: await this.withRules(rules), tagRulesProblem };
+  }
+
+  private async withRules(rules: RepoTagRules): Promise<CardOfRepo[]> {
     const entries = await this.deps.repos.repoEntries();
     return mapLimit(entries, TAGS_CONCURRENCY, async ({ id, path }): Promise<CardOfRepo> => {
       try {

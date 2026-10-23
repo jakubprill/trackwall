@@ -37,23 +37,23 @@ export class CardCache {
     this.log = log;
   }
 
-  /** Karta commita z pamięci albo z dysku, a bez niej policzona przez `compute` i zapamiętana. */
-  async getOrCompute(commit: string, compute: () => Promise<RepoCard>): Promise<RepoCard> {
+  /**
+   * Karta commita z pamięci albo z dysku, a bez niej policzona przez `compute` i zapamiętana. Całe zadanie (odczyt
+   * dysku i liczenie) trafia do `computing` przed pierwszym `await`, więc równoczesne pytanie o ten sam commit
+   * dostaje to samo zadanie.
+   */
+  getOrCompute(commit: string, compute: () => Promise<RepoCard>): Promise<RepoCard> {
     const running = this.computing.get(commit);
     if (running) return running;
-    const cached = await this.get(commit);
-    if (cached) return cached;
-    // Drugie pytanie mogło zacząć liczenie, gdy to czytało dysk.
-    const started = this.computing.get(commit);
-    if (started) return started;
-    const computed = compute()
-      .then((card) => {
-        this.set(card);
-        return card;
-      })
-      .finally(() => this.computing.delete(commit));
-    this.computing.set(commit, computed);
-    return computed;
+    const job = (async () => {
+      const cached = await this.get(commit);
+      if (cached) return cached;
+      const card = await compute();
+      this.set(card);
+      return card;
+    })().finally(() => this.computing.delete(commit));
+    this.computing.set(commit, job);
+    return job;
   }
 
   private async get(commit: string): Promise<RepoCard | undefined> {

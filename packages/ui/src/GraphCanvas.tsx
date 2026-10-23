@@ -108,7 +108,8 @@ function Edge({
   if (!from || !to) return null;
   const active = selected !== undefined && (pair.from === selected || pair.to === selected);
   const dimmed = near !== undefined && !active;
-  const manualOnly = pair.kinds.every((k) => k === "manual");
+  // Linia przerywana, gdy wszystkie krawędzie pary są ręczne.
+  const manualOnly = pair.edges.every((e) => e.kind === "manual");
   return (
     <g className={cn("transition-opacity", dimmed && "opacity-15")}>
       <path

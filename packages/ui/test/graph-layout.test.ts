@@ -50,11 +50,11 @@ describe("layoutGraph", () => {
 });
 
 describe("edgePairs i neighbourhood", () => {
-  test("krawędzie jednej pary repo są jedną linią z listą rodzajów", () => {
+  test("krawędzie jednej pary repo są jedną linią", () => {
     const pairs = edgePairs([edge("a", "b", "x"), edge("a", "b", "opis", "manual"), edge("b", "c")]);
-    expect(pairs.map((p) => [p.from, p.to, p.edges.length, p.kinds])).toEqual([
-      ["a", "b", 2, ["package", "manual"]],
-      ["b", "c", 1, ["package"]],
+    expect(pairs.map((p) => [p.from, p.to, p.edges.map((e) => e.key)])).toEqual([
+      ["a", "b", ["x", "opis"]],
+      ["b", "c", ["b->c"]],
     ]);
   });
 

@@ -1,4 +1,4 @@
-import type { EdgeConfidence, EdgeEvidence, GraphEdge, GraphNode, RepoGraph } from "@trackwall/protocol";
+import { type EdgeConfidence, type EdgeEvidence, evidenceLabel, type GraphEdge, type GraphNode, type RepoGraph } from "@trackwall/protocol";
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Surface } from "@/components/Surface";
@@ -55,12 +55,12 @@ export function GraphNodePanel({
         <Stat label="Używają go" value={usedBy.length} />
         <Stat label="Paczki" value={node.provides ?? "–"} />
       </dl>
-      <Section label="Używa" empty="Repo nie używa paczek z innych repo z listy.">
+      <Section label="Używa" empty="Repo nie ma połączeń do innych repo z listy.">
         {uses.map((pair) => (
           <PairItem key={pair.to} repo={pair.to} edges={pair.edges} onSelect={onSelect} />
         ))}
       </Section>
-      <Section label="Używają go" empty="Żadne repo z listy nie używa paczek z tego repo.">
+      <Section label="Używają go" empty="Żadne repo z listy nie ma połączenia do tego repo.">
         {usedBy.map((pair) => (
           <PairItem key={pair.from} repo={pair.from} edges={pair.edges} onSelect={onSelect} />
         ))}
@@ -140,8 +140,7 @@ function PairItem({ repo, edges, onSelect }: { repo: string; edges: GraphEdge[];
  * pokazuje w całości, więc tu wystarcza nazwa pliku.
  */
 function evidenceText(e: EdgeEvidence): string {
-  const place = e.line === null ? e.path : `${e.path}:${e.line}`;
-  return e.repo === null ? `${fileName(e.path)} ${e.detail}` : `${e.repo}: ${place} ${e.detail}`;
+  return e.repo === null ? `${fileName(e.path)} ${e.detail}` : `${e.repo}: ${evidenceLabel(e)} ${e.detail}`;
 }
 
 /** Ostatni człon pełnej ścieżki z Windowsa albo macOS (UI nie ma `node:path`). */

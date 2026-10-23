@@ -1,7 +1,7 @@
 import { BuildTool, type ConsumedPackage, type Evidence, type ToolRequirement } from "@trackwall/protocol";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
-import { messageOf } from "../../error-message.ts";
+import { messageOf } from "../../errors.ts";
 import { globMatcher } from "./glob.ts";
 import { baseName, dirOf, inDir, isUnder, rootFiles } from "./repo-path.ts";
 import { type Extracted, emptyExtracted, keyLines, type RepoSnapshot } from "./snapshot.ts";

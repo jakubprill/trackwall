@@ -1,4 +1,4 @@
-import type { EdgeKind, GraphEdge } from "@trackwall/protocol";
+import type { GraphEdge } from "@trackwall/protocol";
 
 /**
  * Układ grafu w widoku „Przegląd” (ADR-29): kolumny od repo, których nikt nie używa (frontendy), do tych, których
@@ -11,8 +11,6 @@ export interface EdgePair {
   from: string;
   to: string;
   edges: GraphEdge[];
-  /** Linia przerywana, gdy wszystkie krawędzie pary są ręczne. */
-  kinds: EdgeKind[];
 }
 
 export interface NodeBox {
@@ -43,9 +41,8 @@ export function edgePairs(edges: readonly GraphEdge[]): EdgePair[] {
   const pairs = new Map<string, EdgePair>();
   for (const edge of edges) {
     const id = `${edge.from}\u0000${edge.to}`;
-    const pair = pairs.get(id) ?? { from: edge.from, to: edge.to, edges: [], kinds: [] };
+    const pair = pairs.get(id) ?? { from: edge.from, to: edge.to, edges: [] };
     pair.edges.push(edge);
-    if (!pair.kinds.includes(edge.kind)) pair.kinds.push(edge.kind);
     pairs.set(id, pair);
   }
   return [...pairs.values()];

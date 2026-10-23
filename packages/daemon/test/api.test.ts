@@ -2,7 +2,21 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { apiResult, cardsApi, DaemonInfoResult, graphApi, HealthResult, RepoGraph, RepoList, workspaceApi } from "@trackwall/protocol";
+import {
+  apiResult,
+  BatchRun,
+  batchApi,
+  cardsApi,
+  DaemonInfoResult,
+  graphApi,
+  HealthResult,
+  LogTail,
+  logsApi,
+  miseApi,
+  RepoGraph,
+  RepoList,
+  workspaceApi,
+} from "@trackwall/protocol";
 import { postRoutes } from "../src/api/routes.ts";
 import { type ApiServer, startApi } from "../src/api/server.ts";
 import { createFacade } from "../src/facade.ts";
@@ -54,6 +68,9 @@ function modules() {
     home: mkdtempSync(join(tmpdir(), "trackwall-home-")),
     openUrl: () => {},
     miseCommand: ["mise"],
+    copilotCommand: ["copilot"],
+    hookCommand: () => ({ exec: "true", args: [] }),
+    mcpStdioCommand: ["trackwall-daemon", "mcp-stdio"],
     userEnv: async () => process.env,
     log: () => {},
   });
@@ -147,12 +164,15 @@ describe("api", () => {
 describe("api workspace", () => {
   const post = (path: string, body: string) => authed(path, { method: "POST", headers: { "content-type": "application/json" }, body });
 
-  test("każda akcja z kontraktu workspace, kart i grafu ma trasę w daemonie", () => {
-    expect(
-      [...Object.values(workspaceApi), ...Object.values(cardsApi), ...Object.values(graphApi)].filter(
-        (endpoint) => !postRoutes.has(endpoint.path),
-      ),
-    ).toEqual([]);
+  test("każda akcja z kontraktów workspace, kart, grafu, mise i batch ma trasę w daemonie", () => {
+    const endpoints = [
+      ...Object.values(workspaceApi),
+      ...Object.values(cardsApi),
+      ...Object.values(graphApi),
+      ...Object.values(miseApi),
+      ...Object.values(batchApi),
+    ];
+    expect(endpoints.filter((endpoint) => !postRoutes.has(endpoint.path))).toEqual([]);
   });
 
   test("trasy workspace wymagają tokenu", async () => {
@@ -200,12 +220,42 @@ describe("api workspace", () => {
     expect((await authed(workspaceApi.list.path)).status).toBe(404);
   });
 
+  test("komenda zbiorcza bez repo albo z nieznanym krokiem to 400, a z nieznanym repo 404, i żadna nie startuje", async () => {
+    const noRepos = await post(batchApi.start.path, JSON.stringify({ repos: [], steps: ["build"] }));
+    expect(noRepos.status).toBe(400);
+    expect(JSON.parse(noRepos.body)).toMatchObject({ error: { message: expect.stringContaining("co najmniej jedno repo") } });
+    expect((await post(batchApi.start.path, JSON.stringify({ repos: ["sklep"], steps: ["deploy"] }))).status).toBe(400);
+    expect((await post(batchApi.start.path, JSON.stringify({ repos: ["nie-ma"], steps: ["build"] }))).status).toBe(404);
+
+    const last = apiResult(BatchRun.nullable()).parse(JSON.parse((await post(batchApi.run.path, "")).body));
+    expect(last).toEqual({ ok: true, data: null });
+  });
+
   test("klon z nazwą, która byłaby opcją gh albo glab, to 400 jeszcze przed uruchomieniem programu", async () => {
     const res = await post(
       workspaceApi.clone.path,
       JSON.stringify({ host: { kind: "gitlab", host: "gitlab.example.com" }, fullName: "--upload-pack=x/y" }),
     );
     expect(res.status).toBe(400);
+  });
+});
+
+describe("api logs", () => {
+  const post = (path: string, body: unknown) =>
+    authed(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+  test("każda akcja z kontraktów mise i logs ma trasę w daemonie", () => {
+    expect([...Object.values(miseApi), ...Object.values(logsApi)].filter((endpoint) => !postRoutes.has(endpoint.path))).toEqual([]);
+  });
+
+  test("log taska, który nic nie wypisał, jest pusty, a źródło niezgodne ze schematem to 400", async () => {
+    const source = { kind: "mise-task", repo: "web", miseTask: "dev" };
+    const empty = await post(logsApi.tail.path, { source, limit: 100 });
+    expect(apiResult(LogTail).parse(JSON.parse(empty.body))).toMatchObject({ ok: true, data: { records: [], dropped: false } });
+
+    const bad = await post(logsApi.tail.path, { source: { ...source, miseTask: "--help" }, limit: 100 });
+    expect(bad.status).toBe(400);
+    expect((await post(logsApi.tail.path, { source, limit: 100_000 })).status).toBe(400);
   });
 });
 

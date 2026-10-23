@@ -1,6 +1,6 @@
 import { type MiseTask, type MiseTasks, miseApi } from "@trackwall/protocol";
-import { Play, ShieldCheck, Square } from "lucide-react";
-import { type ReactNode, useCallback } from "react";
+import { Play, ScrollText, ShieldCheck, Square } from "lucide-react";
+import { type ReactNode, useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -12,6 +12,7 @@ import { relativeTime } from "@/lib/format";
 import { isLive, runStateLabel, showsLastLines } from "@/lib/run-state";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
+import { MiseTaskLog } from "@/MiseTaskLog";
 
 /**
  * Odpytywanie: często, gdy coś działa (użytkownik czeka na wynik startu albo stopu), rzadko, gdy nic nie działa,
@@ -103,8 +104,16 @@ function Untrusted({ conn, repo, message, onTrusted }: { conn: Connection; repo:
 function TaskRow({ conn, repo, task, onChange }: { conn: Connection; repo: string; task: MiseTask; onChange: () => void }) {
   const live = isLive(task.run);
   const state = runStateLabel(task.run);
+  const [showLog, setShowLog] = useState(false);
   // Także przy `stopping`: po `stop_unconfirmed` stop można ponowić, a daemon łączy równoległe prośby w jedną.
-  const action = useAction(() => post(conn, live ? miseApi.stop : miseApi.start, { repo, miseTask: task.name }), onChange);
+  const action = useAction(
+    () => post(conn, live ? miseApi.stop : miseApi.start, { repo, miseTask: task.name }),
+    () => {
+      // Uruchomienie otwiera log: użytkownik i tak chce zobaczyć, co task robi.
+      if (!live) setShowLog(true);
+      onChange();
+    },
+  );
 
   return (
     <li className="flex flex-col gap-2 px-3 py-2 text-sm">
@@ -114,17 +123,17 @@ function TaskRow({ conn, repo, task, onChange }: { conn: Connection; repo: strin
           {task.description && <span className="text-muted-foreground truncate text-xs">{task.description}</span>}
         </div>
         <span className="text-xs" title={task.run ? `od ${relativeTime(task.run.startedAt, new Date())}` : undefined}>
-          {state.tone ? (
-            <StatusLabel tone={state.tone} label={state.label} />
-          ) : (
-            <span className="text-muted-foreground">{state.label}</span>
-          )}
+          <StatusLabel tone={state.tone} label={state.label} />
         </span>
+        <Button variant="ghost" size="sm" onClick={() => setShowLog((v) => !v)} aria-pressed={showLog}>
+          <ScrollText /> {showLog ? "Ukryj log" : "Log"}
+        </Button>
         <Button variant="outline" size="sm" onClick={action.run} disabled={action.pending}>
           {live ? <Square /> : <Play />} {live ? "Zatrzymaj" : "Uruchom"}
         </Button>
       </div>
-      {showsLastLines(task.run) && (
+      {showLog && <MiseTaskLog conn={conn} repo={repo} miseTask={task.name} />}
+      {!showLog && showsLastLines(task.run) && (
         <pre className="text-muted-foreground overflow-x-auto font-mono text-xs whitespace-pre-wrap break-all">
           {task.run.lastLines.join("\n")}
         </pre>

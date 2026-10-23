@@ -40,7 +40,7 @@ describe("buildGraph: krawędzie z kart", () => {
         repo("orders-bff", card([], [consumes("com.example:orders-client")])),
         repo("orders-api", card([provides("com.example:orders-client", "client/pom.xml")], [])),
       ],
-      { config: NO_CONFIG, file: CONFIG_FILE },
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
     );
 
     expect(graph.edges).toEqual([
@@ -68,6 +68,7 @@ describe("buildGraph: krawędzie z kart", () => {
     const graph = buildGraph([repo("web", card([], [npm])), repo("orders-api", card([provides("com.example:orders-client")], []))], {
       config: NO_CONFIG,
       file: CONFIG_FILE,
+      problems: [],
     });
     expect(graph.edges).toEqual([]);
   });
@@ -79,7 +80,7 @@ describe("buildGraph: krawędzie z kart", () => {
         repo("core", card([provides("com.example:core")], [])),
         repo("core-kopia", card([provides("com.example:core")], [])),
       ],
-      { config: NO_CONFIG, file: CONFIG_FILE },
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
     );
     expect(graph.edges.map((e) => [e.from, e.to, e.confidence])).toEqual([
       ["app", "core", "medium"],
@@ -87,10 +88,30 @@ describe("buildGraph: krawędzie z kart", () => {
     ]);
   });
 
+  test("paczka budowana dwoma plikami buildu jednego repo daje krawędź exact i liczy się raz", () => {
+    const graph = buildGraph(
+      [
+        repo("app", card([], [consumes("com.example:core")])),
+        repo("core", card([provides("com.example:core", "pom.xml"), provides("com.example:core", "build.gradle")], [])),
+      ],
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
+    );
+    expect(graph.edges.map((e) => [e.to, e.confidence])).toEqual([["core", "exact"]]);
+    expect(graph.nodes.find((n) => n.repo === "core")?.provides).toBe(1);
+  });
+
+  test("paczka o nazwie z prototypu obiektu (constructor) nie psuje grafu", () => {
+    const npm: ConsumedPackage = { ...consumes("constructor"), ecosystem: "npm" };
+    const graph = buildGraph([repo("web", card([], [npm]))], { config: NO_CONFIG, file: CONFIG_FILE, problems: [] });
+    expect(graph.edges).toEqual([]);
+    expect(graph.configProblems).toEqual([]);
+  });
+
   test("repo bez karty albo nieczytelne jest węzłem bez krawędzi z powodem", () => {
     const graph = buildGraph([repo("pusty", null), { kind: "unavailable", repo: "zepsuty", message: "fatal: not a git repository" }], {
       config: NO_CONFIG,
       file: CONFIG_FILE,
+      problems: [],
     });
     expect(graph.nodes).toEqual([
       { repo: "pusty", remote: null, tags: [], provides: 0, problem: null },
@@ -110,6 +131,7 @@ describe("buildGraph: wpisy graph w workspace.yaml", () => {
       {
         config: { packages: { "com.example:orders-client": "gitlab.example.com/Sklep/orders-api" }, edges: [] },
         file: CONFIG_FILE,
+        problems: [],
       },
     );
     expect(graph.edges).toEqual([
@@ -139,7 +161,7 @@ describe("buildGraph: wpisy graph w workspace.yaml", () => {
         repo("core", card([provides("com.example:core")], [])),
         repo("inne", card([], [])),
       ],
-      { config: { packages: { "com.example:core": "inne" }, edges: [] }, file: CONFIG_FILE },
+      { config: { packages: { "com.example:core": "inne" }, edges: [] }, file: CONFIG_FILE, problems: [] },
     );
     expect(graph.edges.map((e) => [e.from, e.to, e.confidence])).toEqual([["app", "core", "exact"]]);
   });
@@ -148,6 +170,7 @@ describe("buildGraph: wpisy graph w workspace.yaml", () => {
     const graph = buildGraph([repo("web", card([], [])), repo("orders-bff", card([], []))], {
       config: { packages: {}, edges: [{ from: "web", to: "orders-bff", note: "HTTP /api/orders" }] },
       file: CONFIG_FILE,
+      problems: [],
     });
     expect(graph.edges).toEqual([
       {
@@ -161,10 +184,21 @@ describe("buildGraph: wpisy graph w workspace.yaml", () => {
     ]);
   });
 
+  test("ręczna krawędź z repo do niego samego trafia do configProblems", () => {
+    const graph = buildGraph([repo("web", card([], []), "gitlab.example.com/sklep/web")], {
+      config: { packages: {}, edges: [{ from: "web", to: "gitlab.example.com/sklep/web", note: "HTTP" }] },
+      file: CONFIG_FILE,
+      problems: [],
+    });
+    expect(graph.edges).toEqual([]);
+    expect(graph.configProblems).toEqual(["graph.edges[0]: from i to wskazują to samo repo (web)"]);
+  });
+
   test("wpis z repo spoza listy trafia do configProblems i nie daje krawędzi", () => {
     const graph = buildGraph([repo("web", card([], []))], {
       config: { packages: { "com.example:x": "nie-ma" }, edges: [{ from: "web", to: "nie-ma-tez", note: "HTTP" }] },
       file: CONFIG_FILE,
+      problems: [],
     });
     expect(graph.edges).toEqual([]);
     expect(graph.configProblems).toEqual([
@@ -188,6 +222,7 @@ describe("subgraph", () => {
         ],
       },
       file: CONFIG_FILE,
+      problems: [],
     },
   );
 
@@ -244,7 +279,7 @@ describe("Graph na kartach z prawdziwego gita", () => {
       ["core-lib", "pom.xml", 3],
     ]);
     expect(result.configFile).toBe(workspaceFile);
-    expect((await graph.whoCalls("orders")).map((e) => e.from)).toEqual(["web"]);
+    expect((await graph.whoCalls("orders")).edges.map((e) => e.from)).toEqual(["web"]);
     expect((await graph.subgraph("web", 2)).nodes.map((n) => n.repo).sort()).toEqual(["core-lib", "orders", "web"]);
   });
 
@@ -259,6 +294,41 @@ describe("Graph na kartach z prawdziwego gita", () => {
     expect(result.edges.map((e) => e.key)).toEqual(["com.example:core-lib"]);
     expect(result.configProblems).toHaveLength(1);
     expect(result.configProblems[0]).toContain("graph");
+  });
+
+  test("pusty podklucz packages nie zabiera ręcznych krawędzi", async () => {
+    const { projects, workspaceFile, graph } = await setup();
+    makeRepo({ "pom.xml": CORE_POM }, "core-lib", projects);
+    makeRepo({ "pom.xml": APP_POM }, "orders", projects);
+    writeFileSync(
+      workspaceFile,
+      `${readFileSync(workspaceFile, "utf8")}graph:\n  packages:\n  edges:\n    - { from: core-lib, to: orders, note: HTTP }\n`,
+    );
+
+    const result = await graph.graph();
+
+    expect(result.edges.map((e) => [e.from, e.to])).toEqual([
+      ["core-lib", "orders"],
+      ["orders", "core-lib"],
+    ]);
+    expect(result.configProblems).toEqual([]);
+  });
+
+  test("zły repoTags zostawia graf z krawędziami, bez tagów z reguł i z powodem", async () => {
+    const { projects, workspaceFile, graph } = await setup();
+    makeRepo({ "pom.xml": CORE_POM }, "core-lib", projects);
+    makeRepo({ "pom.xml": APP_POM }, "orders", projects);
+    writeFileSync(workspaceFile, `${readFileSync(workspaceFile, "utf8")}repoTags:\n  Zła-Nazwa: ["*"]\n`);
+
+    const result = await graph.graph();
+
+    expect(result.edges.map((e) => e.key)).toEqual(["com.example:core-lib"]);
+    expect(result.nodes.map((n) => n.tags)).toEqual([
+      ["java", "library"],
+      ["java", "library"],
+    ]);
+    expect(result.configProblems).toHaveLength(1);
+    expect(result.configProblems[0]).toContain("repoTags");
   });
 
   test("who_calls i subgraph dla repo spoza listy to not_found", async () => {

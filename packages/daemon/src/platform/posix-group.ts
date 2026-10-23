@@ -1,5 +1,5 @@
-import { type ChildProcess, execFile } from "node:child_process";
-import { type GroupControl, type GroupPlatform, isAlive, signalExists } from "./process-group.ts";
+import { execFile } from "node:child_process";
+import { type GroupControl, type GroupLeader, type GroupPlatform, isAlive, signalExists } from "./process-group.ts";
 
 /**
  * Grupa procesów na macOS i Linuksie: lider startuje w nowej sesji (`detached` = `setsid`), więc jego PID jest
@@ -52,10 +52,7 @@ async function reattach(pgid: number, recorded: string | null): Promise<GroupCon
 export const posixGroups: GroupPlatform = {
   detached: true,
   graceMs: GRACE_MS,
-  adopt: (child: ChildProcess) => {
-    if (child.pid === undefined) throw new Error("proces nie ma PID-u");
-    return control(child.pid);
-  },
+  adopt: (leader: GroupLeader) => control(leader.pid),
   identity,
   reattach,
 };

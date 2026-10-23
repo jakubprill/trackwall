@@ -36,14 +36,18 @@ export function evidenceAt(path: string, text: string, pattern: RegExp): Evidenc
 }
 
 /**
- * Linia (od 1) pierwszego wystąpienia każdego klucza, który wyrażenie `key` (z flagą `g`) łapie w grupie 1. Jedno
+ * Linia (od 1) pierwszego wystąpienia każdego klucza, który wyrażenie `key` (z flagą `g`) łapie w pierwszej pasującej
+ * grupie (alternatywy dla klucza w cudzysłowie i bez). Jedno
  * przejście przez plik zamiast szukania osobno dla każdej zależności: plik z dziesiątkami tysięcy kluczy dawałby czas
  * kwadratowy, a plik jest niezaufany (§8).
  */
 export function keyLines(text: string, key: RegExp): Map<string, number> {
   const lines = new Map<string, number>();
   text.split("\n").forEach((line, i) => {
-    for (const m of line.matchAll(key)) if (m[1] !== undefined && !lines.has(m[1])) lines.set(m[1], i + 1);
+    for (const m of line.matchAll(key)) {
+      const name = m.slice(1).find((group) => group !== undefined);
+      if (name !== undefined && !lines.has(name)) lines.set(name, i + 1);
+    }
   });
   return lines;
 }
