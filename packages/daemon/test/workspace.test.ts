@@ -9,13 +9,19 @@ import { isFullPath } from "../src/modules/workspace/full-path.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { gitIn, makeRepo } from "./support/git-repo.ts";
+import { fakeHosting } from "./support/hosting.ts";
 
 /** Workspace z ustawionym, pustym folderem z projektami. */
 async function workspaceWithProjectsDir() {
   const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projekty-"));
   const opened: string[] = [];
-  const workspace = new Workspace({ file: new WorkspaceFile(file), vcs: new Vcs(), openUrl: (url) => opened.push(url) });
+  const workspace = new Workspace({
+    file: new WorkspaceFile(file),
+    vcs: new Vcs(),
+    hosting: fakeHosting().hosting,
+    openUrl: (url) => opened.push(url),
+  });
   await workspace.setProjectsDir(projects);
   return { workspace, file, projects, opened };
 }
@@ -74,7 +80,7 @@ describe("workspace", () => {
 
   test("bez ustawionego folderu lista jest pusta, a repo nie da się otworzyć", async () => {
     const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
-    const workspace = new Workspace({ file: new WorkspaceFile(file), vcs: new Vcs(), openUrl: () => {} });
+    const workspace = new Workspace({ file: new WorkspaceFile(file), vcs: new Vcs(), hosting: fakeHosting().hosting, openUrl: () => {} });
 
     expect(await workspace.list()).toEqual({ projectsDir: null, repos: [] });
     expect(workspace.settings()).toEqual({ projectsDir: null, configFile: file });
@@ -119,7 +125,7 @@ describe("workspace", () => {
   test("puste .git w folderze z projektami leżącym w innym repo nie pokazuje tamtego repo", async () => {
     const outer = makeRepo({ "a.txt": "zewnętrzne" }, "dom");
     const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
-    const workspace = new Workspace({ file: new WorkspaceFile(file), vcs: new Vcs(), openUrl: () => {} });
+    const workspace = new Workspace({ file: new WorkspaceFile(file), vcs: new Vcs(), hosting: fakeHosting().hosting, openUrl: () => {} });
     mkdirSync(join(outer, "Projects", "puste", ".git"), { recursive: true });
     await workspace.setProjectsDir(join(outer, "Projects"));
 

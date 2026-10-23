@@ -179,6 +179,14 @@ describe("api workspace", () => {
     expect(res.status).toBe(404);
     expect((await authed(workspaceApi.list.path)).status).toBe(404);
   });
+
+  test("klon z nazwą, która byłaby opcją gh albo glab, to 400 jeszcze przed uruchomieniem programu", async () => {
+    const res = await post(
+      workspaceApi.clone.path,
+      JSON.stringify({ host: { kind: "gitlab", host: "gitlab.example.com" }, fullName: "--upload-pack=x/y" }),
+    );
+    expect(res.status).toBe(400);
+  });
 });
 
 describe("--allow-origin", () => {

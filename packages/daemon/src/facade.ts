@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
+import { HOSTING_CLIS, Hosting } from "./modules/vcs/hosting.ts";
 import { Vcs } from "./modules/vcs/vcs.ts";
 import { Workspace } from "./modules/workspace/workspace.ts";
 import { WorkspaceFile } from "./modules/workspace/workspace-file.ts";
@@ -32,8 +33,12 @@ export interface FacadeOptions {
 }
 
 export function createFacade(o: FacadeOptions): Facade {
-  const vcs = new Vcs();
-  const workspace = new Workspace({ file: new WorkspaceFile(join(o.home, WORKSPACE_FILE)), vcs, openUrl: o.openUrl });
+  const workspace = new Workspace({
+    file: new WorkspaceFile(join(o.home, WORKSPACE_FILE)),
+    vcs: new Vcs(),
+    hosting: new Hosting(HOSTING_CLIS),
+    openUrl: o.openUrl,
+  });
   const procs = new ProcessGroups({ runtime: new RuntimeFile(join(o.home, RUNTIME_FILE)), platform: groupPlatform(), log: o.log });
   const mise = new Mise({ procs, repos: workspace, command: o.miseCommand, env: o.userEnv });
   return { workspace, mise, procs };

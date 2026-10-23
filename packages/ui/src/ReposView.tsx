@@ -1,5 +1,5 @@
 import { type Repo, type RepoList, workspaceApi } from "@trackwall/protocol";
-import { FolderOpen, RefreshCw } from "lucide-react";
+import { FolderOpen, Plus, RefreshCw } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
@@ -11,6 +11,7 @@ import { twoDigits } from "@/lib/format";
 import { branchLabel, repoStatusTone } from "@/lib/repo-status";
 import { useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
+import { CloneView } from "./CloneView.tsx";
 import { RepoDetail } from "./RepoDetail.tsx";
 
 /** Lista repo i ich stan pochodzą z folderu z projektami i z gita przy każdym zapytaniu (§4.5), więc lista jest odpytywana cyklicznie. */
@@ -18,6 +19,8 @@ const POLL_MS = 10_000;
 
 export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection; onRetry: () => void; onOpenSettings: () => void }) {
   const [selected, setSelected] = useState<string>();
+  /** Prawa strona pokazuje wyszukiwarkę repo do sklonowania zamiast wybranego repo. */
+  const [cloning, setCloning] = useState(false);
   const load = useCallback(() => post(conn, workspaceApi.list, {}), [conn]);
   const list = useRemote(load, { pollMs: POLL_MS });
 
@@ -33,6 +36,9 @@ export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection;
         <div className="flex items-center justify-between px-4 pt-3 pb-2">
           <h2 className="hud-label">Repo {list.data && <span className="text-primary">{`// ${twoDigits(repos.length)}`}</span>}</h2>
           <span className="flex">
+            <Button variant="ghost" size="icon" onClick={() => setCloning(true)} aria-label="Dodaj repo z GitLab albo GitHub">
+              <Plus />
+            </Button>
             <Button variant="ghost" size="icon" onClick={onOpenSettings} aria-label="Zmień folder z projektami">
               <FolderOpen />
             </Button>
@@ -60,20 +66,24 @@ export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection;
               </ErrorWithRetry>
             </div>
           )}
-          {list.data && !list.error && <EmptyList list={list.data} onOpenSettings={onOpenSettings} />}
+          {list.data && !list.error && <EmptyList list={list.data} onOpenSettings={onOpenSettings} onClone={() => setCloning(true)} />}
           {repos.map((repo, i) => (
             <RepoListItem
               key={repo.id}
               repo={repo}
               position={i + 1}
-              active={repo.id === current?.id}
-              onSelect={() => setSelected(repo.id)}
+              active={!cloning && repo.id === current?.id}
+              onSelect={() => {
+                setSelected(repo.id);
+                setCloning(false);
+              }}
             />
           ))}
         </nav>
       </aside>
       <section className="min-h-0 min-w-0 overflow-y-auto">
-        {current && <RepoDetail key={current.id} conn={conn} repo={current} />}
+        {cloning && <CloneView conn={conn} onCloned={list.reload} onOpenSettings={onOpenSettings} />}
+        {!cloning && current && <RepoDetail key={current.id} conn={conn} repo={current} />}
         {/* Bez repo do pokazania lista po lewej mówi, co zrobić; tu zostaje tylko ładowanie. */}
         {!list.data && !list.error && (
           <div className="flex h-full items-center justify-center p-6">
@@ -86,7 +96,7 @@ export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection;
 }
 
 /** Pusta lista ma dwa powody: folder z projektami nie jest ustawiony albo nie ma w nim repo gita. */
-function EmptyList({ list, onOpenSettings }: { list: RepoList; onOpenSettings: () => void }) {
+function EmptyList({ list, onOpenSettings, onClone }: { list: RepoList; onOpenSettings: () => void; onClone: () => void }) {
   if (list.projectsDir === null)
     return (
       <div className="flex flex-col items-start gap-2 px-2">
@@ -98,9 +108,12 @@ function EmptyList({ list, onOpenSettings }: { list: RepoList; onOpenSettings: (
     );
   if (list.repos.length === 0)
     return (
-      <p className="text-muted-foreground px-2 text-sm">
-        W folderze z projektami nie ma repo gita. Sklonuj do niego repo albo wskaż inny folder z projektami.
-      </p>
+      <div className="flex flex-col items-start gap-2 px-2">
+        <p className="text-muted-foreground text-sm">W folderze z projektami nie ma repo gita. Sklonuj repo z GitLab albo GitHub.</p>
+        <Button variant="outline" size="sm" onClick={onClone}>
+          <Plus /> Dodaj repo
+        </Button>
+      </div>
     );
   return null;
 }

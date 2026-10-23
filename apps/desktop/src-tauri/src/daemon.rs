@@ -84,7 +84,7 @@ pub fn health(port: u16) -> Option<String> {
 }
 
 /// Znajduje działający daemon albo uruchamia sidecar i czeka, aż odpowie.
-/// `cancel` przerywa czekanie i zabija uruchomiony sidecar (wyjście z traya w trakcie startu).
+/// `cancel` przerywa czekanie i zabija uruchomiony sidecar, który jeszcze nie odpowiada (wyjście w trakcie startu).
 pub fn ensure_daemon(home: &Path, cancel: &AtomicBool) -> Result<Connection, String> {
     if let Some(existing) = read_daemon_file(home) {
         match health(existing.port) {
@@ -99,15 +99,13 @@ pub fn ensure_daemon(home: &Path, cancel: &AtomicBool) -> Result<Connection, Str
             None => {} // nieaktualny plik po awarii; nowy daemon go nadpisze
         }
     }
+    if cancel.load(Ordering::SeqCst) {
+        return Err("Start daemona przerwany.".into());
+    }
     let log_path = home.join("logs").join("daemon-start.log");
     let mut child = spawn_sidecar(home, &log_path)?;
     let deadline = Instant::now() + START_TIMEOUT;
     loop {
-        if cancel.load(Ordering::SeqCst) {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err("Start daemona przerwany.".into());
-        }
         if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
             // Kod 0 oznacza, że w międzyczasie wystartował inny daemon tej samej wersji.
             if status.success() {
@@ -121,6 +119,13 @@ pub fn ensure_daemon(home: &Path, cancel: &AtomicBool) -> Result<Connection, Str
             if health(f.port).as_deref() == Some(VERSION) {
                 return Ok(Connection::from(&f));
             }
+        }
+        // Po sprawdzeniu gotowości: daemon, który już wstał, wraca do wywołującego i dostaje łagodne zatrzymanie,
+        // a nie twarde zabicie, po którym jego serwisy zostałyby bez rodzica.
+        if cancel.load(Ordering::SeqCst) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("Start daemona przerwany.".into());
         }
         if Instant::now() > deadline {
             // Nie zostawiamy procesu, którego nikt nie zna: bez tego daemon mógłby wstać chwilę później,

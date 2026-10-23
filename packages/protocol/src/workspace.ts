@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Endpoint } from "./api.ts";
+import { CloneJob, CloneRequest, HostRepos, RepoHosts } from "./repo-hosts.ts";
 
 /**
  * Kontrakt modułu `workspace` (§4.5, §6): repo z folderu z projektami i przeglądanie ich zawartości z ostatniego commita.
@@ -110,6 +111,13 @@ export const RepoOverview = z.object({
 });
 export type RepoOverview = z.infer<typeof RepoOverview>;
 
+export const RemoteRepoList = z.object({
+  projectsDir: ProjectsDir,
+  /** Po jednym wpisie na hosting z ustawień, w ich kolejności. */
+  hosts: z.array(HostRepos),
+});
+export type RemoteRepoList = z.infer<typeof RemoteRepoList>;
+
 function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
   return { path: `/api/workspace/${action}`, request, data };
 }
@@ -132,4 +140,21 @@ export const workspaceApi = {
   ),
   /** Otwiera `vscode://` w systemie; daemon nie wie, czy coś obsłużyło adres. */
   openEditor: endpoint("open-editor", RepoRequest, Done),
+  /**
+   * Hostingi, z których można sklonować repo do folderu z projektami (ADR-19), w kolejności z `workspace.yaml`.
+   * Osobno od `settings`, bo zły wpis w jednym kluczu nie może blokować poprawiania drugiego.
+   */
+  repoHosts: endpoint("repo-hosts", z.object({}).strict(), RepoHosts),
+  /** Zastępuje listę hostingów w `workspace.yaml`. */
+  setRepoHosts: endpoint("set-repo-hosts", z.object({ repoHosts: RepoHosts }).strict(), RepoHosts),
+  /**
+   * Repo dostępne w każdym hostingu, pobierane przez `gh` albo `glab` i pamiętane przez 60 s (§4.5); `query` szuka
+   * w nazwie (GitLab po swojej stronie od 3 znaków, także w ścieżce grupy; krótsze i GitHub filtruje daemon), puste
+   * daje ostatnio zmieniane (GitLab) albo wszystkie (GitHub).
+   */
+  remoteRepos: endpoint("remote-repos", z.object({ query: z.string().trim().max(100) }).strict(), RemoteRepoList),
+  /** Zaczyna klonowanie i od razu zwraca je w stanie `running`; postęp przez `clones`. */
+  clone: endpoint("clone", CloneRequest, CloneJob),
+  /** Klonowania do bieżącego folderu z projektami od startu daemona, w kolejności rozpoczęcia. */
+  clones: endpoint("clones", z.object({}).strict(), z.array(CloneJob)),
 };

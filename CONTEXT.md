@@ -42,6 +42,16 @@ _Unikaj_: projekt
 Jeden katalog na dysku użytkownika, wskazany w `workspace.yaml` albo w ustawieniach. Każdy jego bezpośredni podkatalog z `.git` to repo z workspace (ADR-18); repo dodaje się, klonując je do tego folderu.
 _Unikaj_: katalog workspace, root, folder (bez dopowiedzenia)
 
+**Hosting repo** (`RepoHost`, w `workspace.yaml` `repoHosts`):
+GitLab albo GitHub z nazwą hosta (`gitlab.example.com`), z którego Trackwall wyszukuje repo i klonuje je do folderu z projektami przez zalogowane `glab` albo `gh` (ADR-19).
+_Unikaj_: remote (to zdalne repo gita), serwer, źródło (to pojęcie z logów)
+
+**Repo zdalne** (`RemoteRepo`, pełna nazwa `fullName`):
+Repo w hostingu dostępne dla użytkownika, np. `grupa/podgrupa/projekt`. Ostatni segment pełnej nazwy to katalog klonu.
+
+**Klonowanie** (`CloneJob`):
+Klon jednego repo zdalnego do folderu z projektami, w tle: `running`, `done` albo `failed` z komunikatem. Trzymane tylko w pamięci daemona.
+
 **Repo** (`Repo`, `RepoId`):
 Jedno repozytorium z workspace, identyfikowane slugiem z nazwy jego katalogu.
 

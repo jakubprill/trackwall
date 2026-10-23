@@ -4,83 +4,18 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod daemon;
+mod daemon_state;
 mod window_effect;
 
 use daemon::Connection;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use daemon_state::DaemonState;
+use std::sync::Arc;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
 
-/// Stan połączenia z daemonem widziany przez powłokę.
-#[derive(Clone, Default)]
-enum Phase {
-    #[default]
-    Idle,
-    Starting,
-    Ready(Connection),
-    Failed(String),
-}
-
-/// UI czeka na wynik startu komendą `daemon_connection`; tray i drugie uruchomienie mogą start ponowić albo przerwać.
-#[derive(Default)]
-struct DaemonState {
-    phase: Mutex<Phase>,
-    changed: Condvar,
-    cancel: AtomicBool,
-}
-
-impl DaemonState {
-    /// Uruchamia start w tle, jeśli jeszcze nie startowano albo poprzedni start się nie udał.
-    fn start(self: &Arc<Self>) {
-        {
-            let mut phase = self.lock();
-            if matches!(*phase, Phase::Starting | Phase::Ready(_)) {
-                return;
-            }
-            *phase = Phase::Starting;
-        }
-        self.cancel.store(false, Ordering::SeqCst);
-        let me = Arc::clone(self);
-        std::thread::spawn(move || {
-            let result = daemon::trackwall_home().and_then(|home| daemon::ensure_daemon(&home, &me.cancel));
-            *me.lock() = match result {
-                Ok(conn) => Phase::Ready(conn),
-                Err(err) => Phase::Failed(err),
-            };
-            me.changed.notify_all();
-        });
-    }
-
-    /// Jak `start`, ale także wtedy, gdy zapisany daemon przestał odpowiadać (np. zakończony spoza aplikacji).
-    fn restart_if_down(self: &Arc<Self>) {
-        {
-            let mut phase = self.lock();
-            if let Phase::Ready(conn) = &*phase {
-                if daemon::health(conn.port).as_deref() == Some(daemon::VERSION) {
-                    return;
-                }
-                *phase = Phase::Idle;
-            }
-        }
-        self.start();
-    }
-
-    /// Czeka na koniec trwającego startu. `Idle` oznacza, że start nie był zlecony.
-    fn wait(&self) -> Result<Connection, String> {
-        let phase = self.changed.wait_while(self.lock(), |p| matches!(p, Phase::Starting)).unwrap_or_else(|e| e.into_inner());
-        match &*phase {
-            Phase::Ready(conn) => Ok(conn.clone()),
-            Phase::Failed(err) => Err(err.clone()),
-            Phase::Idle | Phase::Starting => Err("daemon nie był uruchamiany".into()),
-        }
-    }
-
-    fn lock(&self) -> std::sync::MutexGuard<'_, Phase> {
-        self.phase.lock().unwrap_or_else(|e| e.into_inner())
-    }
-}
+/// Identyfikator ikony w trayu: potrzebny, żeby usunąć ją przy wyjściu.
+const TRAY_ID: &str = "main";
 
 /// Adres i token daemona dla UI. Token przechodzi przez IPC Tauri, nigdy przez URL (§5.2).
 #[tauri::command]
@@ -109,7 +44,7 @@ fn main() {
         std::process::exit(1);
     }
 
-    let state = Arc::new(DaemonState::default());
+    let state = Arc::new(DaemonState::new(daemon::trackwall_home()));
     let builder = tauri::Builder::default();
     // Ponowne uruchomienie trackwall.exe pokazuje istniejące okno zamiast drugiej powłoki i drugiej ikony w trayu.
     // Tylko w wydaniu: identyfikator instancji jest wspólny, a `tauri dev` ma działać obok zainstalowanej aplikacji.
@@ -146,12 +81,17 @@ fn main() {
         #[cfg(target_os = "macos")]
         RunEvent::Reopen { .. } => show_main(handle),
         RunEvent::ExitRequested { code: None, api, .. } => {
-            // Ostatnie okno schowane to nie powód do wyjścia; wyjście tylko z traya.
+            // Ostatnie okno schowane to nie powód do wyjścia.
             api.prevent_exit();
         }
-        _ => {
-            let _ = handle;
+        // Cmd+Q i „Zakończ” z Docka na macOS (a według kodu tao także koniec sesji Windows) kończą pętlę zdarzeń
+        // z pominięciem `ExitRequested` i traya. Bez tego daemon zostawał osierocony. Po „Wyjdź” z traya daemon jest już zatrzymany.
+        RunEvent::Exit => {
+            // Pętla zdarzeń już stoi: bez schowania okno i tray wisiałyby zamrożone do końca zatrzymywania.
+            hide_shell(handle);
+            handle.state::<Arc<DaemonState>>().stop();
         }
+        _ => {}
     });
 }
 
@@ -159,7 +99,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "Pokaż Trackwall", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "Wyjdź (zatrzymuje daemon)", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &quit_item])?;
-    let mut tray = TrayIconBuilder::with_id("main")
+    let mut tray = TrayIconBuilder::with_id(TRAY_ID)
         .tooltip("Trackwall")
         .menu(&menu)
         .show_menu_on_left_click(false)
@@ -192,25 +132,24 @@ fn show_main(app: &AppHandle) {
     }
 }
 
-/// „Wyjdź” z traya: przerwanie trwającego startu, łagodne zatrzymanie daemona, potem koniec procesu okna.
+/// „Wyjdź” z traya: zatrzymanie daemona w tle, żeby pętla zdarzeń działała, a pojedyncza instancja
+/// była trzymana do końca; potem koniec procesu okna.
 fn quit_app(app: &AppHandle) {
+    hide_shell(app);
     let state = Arc::clone(app.state::<Arc<DaemonState>>().inner());
     let app = app.clone();
     std::thread::spawn(move || {
-        state.cancel.store(true, Ordering::SeqCst);
-        let started = state.wait().ok();
-        // Zapisane połączenie mogło się zestarzeć (daemon wstał ponownie na innym porcie), a nieudany start
-        // nie wyklucza, że daemon działa: wtedy szukamy go po daemon.json.
-        let stopped = started.as_ref().is_some_and(|c| daemon::shutdown(c).is_ok());
-        if !stopped {
-            if let Some(conn) = daemon::trackwall_home().ok().and_then(|home| daemon::discover(&home)) {
-                if let Err(err) = daemon::shutdown(&conn) {
-                    eprintln!("[desktop] zatrzymanie daemona: {err}");
-                }
-            }
-        }
+        state.stop();
         app.exit(0);
     });
+}
+
+/// Chowa okna i ikonę w trayu, żeby zamykająca się powłoka nie przyjmowała już kliknięć.
+fn hide_shell(app: &AppHandle) {
+    for window in app.webview_windows().values() {
+        let _ = window.hide();
+    }
+    let _ = app.remove_tray_by_id(TRAY_ID);
 }
 
 #[cfg(windows)]
