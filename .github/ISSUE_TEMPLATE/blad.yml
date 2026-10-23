@@ -1,5 +1,6 @@
 name: Błąd
 description: Coś działa inaczej, niż powinno.
+labels: [bug]
 body:
   - type: markdown
     attributes:
@@ -29,15 +30,20 @@ body:
     validations:
       required: true
   - type: input
+    id: wersja-systemu
+    attributes:
+      label: Wersja systemu i architektura
+      placeholder: Windows 11 23H2 x64 / macOS 15.4 arm64
+  - type: input
     id: wersja
     attributes:
       label: Wersja Pitwall
-      description: Z nazwy zipa, z `/api/health` albo hash commita przy uruchomieniu ze źródeł.
+      description: Z panelu daemona w UI (pole „Wersja”), z nazwy archiwum zip albo, przy uruchomieniu ze źródeł, hash commita.
     validations:
       required: true
   - type: textarea
     id: logi
     attributes:
       label: Logi
-      description: Fragment logu daemona albo serwisu, po zanonimizowaniu.
+      description: Fragment logu po zanonimizowaniu. Log startu daemona jest w `~/.pitwall/logs/daemon-start.log` (na Windowsie `%USERPROFILE%\.pitwall\logs`).
       render: text

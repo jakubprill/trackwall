@@ -1,5 +1,6 @@
 name: Zadanie
 description: Nowa funkcja, zmiana albo prace porządkowe.
+labels: [enhancement]
 body:
   - type: textarea
     id: cel

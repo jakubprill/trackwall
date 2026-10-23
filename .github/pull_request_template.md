@@ -14,15 +14,17 @@
 
 Do sprawdzenia ręcznie:
 
-## Review przed PR
+## Przegląd przed PR
 
-<!-- Rundy: thermo-nuclear, /code-review max, mattpocock-skills:code-review. Co poprawiono, co odrzucono i dlaczego. -->
+<!-- Rundy: thermo-nuclear, /code-review, mattpocock-skills:code-review. Co poprawiono, co odrzucono i dlaczego. -->
 
 ## Definition of done
 
-- [ ] Test na najtańszym poziomie, który udowadnia zmianę (poprawka błędu: test, który bez niej nie przechodzi)
-- [ ] Kod zależny od systemu sprawdzony na Windowsie i macOS (CI albo lista „do sprawdzenia ręcznie”)
-- [ ] `pnpm lint`, `pnpm typecheck`, `pnpm test` lokalnie; przy zmianach w desktopie i pakowaniu także `pnpm build:desktop`, `cargo test`, `pnpm portable`
-- [ ] Dokumentacja w tym PR: `docs/architecture.md`, `CONTEXT.md`, `README.md`, `docs/release.md`, jeśli zmiana ich dotyczy
-- [ ] Nic firmowego w kodzie, testach, fixture'ach i commitach
-- [ ] Review przed PR zrobione do czystej rundy
+<!-- Pełne brzmienie punktów: AGENTS.md, sekcja „Definition of done”. -->
+
+- [ ] 1. Test na najtańszym poziomie (poprawka błędu: test, który bez niej nie przechodzi)
+- [ ] 2. Kod zależny od systemu ma test w macierzy Windows + macOS; reszta wypisana wyżej jako „do sprawdzenia ręcznie”
+- [ ] 3. Komendy z AGENTS.md przechodzą lokalnie
+- [ ] 4. Dokumentacja zaktualizowana w tym PR
+- [ ] 5. Nic firmowego
+- [ ] 6. Przegląd przed PR do czystej rundy
