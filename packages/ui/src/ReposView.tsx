@@ -1,14 +1,17 @@
 import { type Repo, workspaceApi } from "@trackwall/protocol";
-import { FolderGit2, Plus, RefreshCw } from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 import { type FormEvent, useCallback, useState } from "react";
+import { Loading } from "@/components/Loading";
+import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { twoDigits } from "@/lib/format";
+import { branchLabel, repoStatusTone } from "@/lib/repo-status";
 import { useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
 import { RepoDetail } from "./RepoDetail.tsx";
-import { RepoStatusBadges } from "./RepoStatusBadges.tsx";
 
 /** Stan repo pochodzi z gita przy każdym zapytaniu (§4.5), więc lista jest odpytywana cyklicznie. */
 const POLL_MS = 10_000;
@@ -22,10 +25,10 @@ export function ReposView({ conn, onRetry }: { conn: Connection; onRetry: () => 
   const current = repos.find((r) => r.id === selected) ?? repos[0];
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[18rem_1fr]">
-      <aside className="flex min-h-0 flex-col border-r">
-        <div className="flex items-center justify-between px-4 pt-4 pb-2">
-          <h2 className="text-sm font-semibold">Repo</h2>
+    <div className="grid h-full min-h-0 grid-cols-[var(--spacing-sidebar)_1fr]">
+      <aside className="bg-card flex min-h-0 flex-col border-r">
+        <div className="flex items-center justify-between px-4 pt-3 pb-2">
+          <h2 className="hud-label">Repo {list.data && <span className="text-primary">{`// ${twoDigits(list.data.length)}`}</span>}</h2>
           <Button variant="ghost" size="icon" onClick={list.reload} aria-label="Odśwież listę repo">
             <RefreshCw />
           </Button>
@@ -56,8 +59,14 @@ export function ReposView({ conn, onRetry }: { conn: Connection; onRetry: () => 
           {list.data?.length === 0 && (
             <p className="text-muted-foreground px-2 text-sm">Dodaj pierwsze repo: wklej pełną ścieżkę do katalogu z gitem.</p>
           )}
-          {repos.map((repo) => (
-            <RepoListItem key={repo.id} repo={repo} active={repo.id === current?.id} onSelect={() => setSelected(repo.id)} />
+          {repos.map((repo, i) => (
+            <RepoListItem
+              key={repo.id}
+              repo={repo}
+              position={i + 1}
+              active={repo.id === current?.id}
+              onSelect={() => setSelected(repo.id)}
+            />
           ))}
         </nav>
       </aside>
@@ -73,8 +82,12 @@ export function ReposView({ conn, onRetry }: { conn: Connection; onRetry: () => 
             }}
           />
         ) : (
-          <div className="text-muted-foreground flex h-full items-center justify-center p-6 text-sm">
-            {list.data || list.error ? "Wybierz repo z listy albo dodaj nowe po lewej." : "Wczytywanie…"}
+          <div className="flex h-full items-center justify-center p-6">
+            {list.data || list.error ? (
+              <p className="text-muted-foreground text-sm">Wybierz repo z listy albo dodaj nowe po lewej.</p>
+            ) : (
+              <Loading />
+            )}
           </div>
         )}
       </section>
@@ -120,19 +133,30 @@ function AddRepoForm({ conn, onAdded }: { conn: Connection; onAdded: (repo: Repo
   );
 }
 
-function RepoListItem({ repo, active, onSelect }: { repo: Repo; active: boolean; onSelect: () => void }) {
+/**
+ * Wiersz listy w stylu HUD (ADR-16): numer pozycji, nazwa, gałąź oraz kropka i tekst stanu; aktywny ma świecącą kreskę z lewej.
+ * Numer to tylko pozycja na liście, nie identyfikator repo.
+ */
+function RepoListItem({ repo, position, active, onSelect }: { repo: Repo; position: number; active: boolean; onSelect: () => void }) {
+  const { status } = repo;
+  const state = repoStatusTone(status);
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={cn("flex w-full flex-col gap-1 rounded-md px-2 py-2 text-left hover:bg-accent", active && "bg-accent")}
+      aria-current={active || undefined}
+      className={cn(
+        "flex w-full items-start gap-3 rounded-md border border-transparent px-2 py-2 text-left transition-colors hover:bg-accent",
+        active && "bg-accent border-primary/25 hud-active-edge",
+      )}
     >
-      <span className="flex items-center gap-2 text-sm font-medium">
-        <FolderGit2 className="text-muted-foreground size-4 shrink-0" />
-        <span className="truncate">{repo.id}</span>
-      </span>
-      <span className="text-muted-foreground pl-6">
-        <RepoStatusBadges repo={repo} compact />
+      <span className="text-muted-foreground text-2xs w-5 shrink-0 pt-0.5 text-right font-mono">{twoDigits(position)}</span>
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="truncate text-sm font-medium">{repo.id}</span>
+        <span className="text-muted-foreground flex min-w-0 items-center gap-2 text-xs">
+          {status.kind === "ok" && <span className="min-w-0 truncate font-mono">{branchLabel(status)}</span>}
+          <StatusLabel tone={state.tone} label={state.label} />
+        </span>
       </span>
     </button>
   );
