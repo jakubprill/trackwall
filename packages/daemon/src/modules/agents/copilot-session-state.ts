@@ -25,8 +25,8 @@ export class CopilotSessionState {
   }
 
   /**
-   * Każde wejście najpierw sprawdza próg `Stale`, tak jak cykliczny `tick`: na żywo i przy odtwarzaniu, gdzie
-   * `tick` jest tylko przed zdarzeniami, kolejność kroków jest wtedy ta sama.
+   * Każde wejście najpierw sprawdza próg `Stale`. Odtwarzanie nie ma cyklicznego `tick`, więc dzięki temu daje tę
+   * samą kolejność zmian co sesja na żywo.
    */
   output(data: string): TaskStateChange[] {
     const changes = [this.#tracker.tick(), this.#tracker.activity()];

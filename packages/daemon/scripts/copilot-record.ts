@@ -198,10 +198,10 @@ function copilotCommand(program: string | undefined, args: string[]): string[] {
   if (!found) throw new Error(`nie znaleziono ${program ?? "copilot"} w PATH; podaj ścieżkę przez --copilot`);
   if (!/\.(cmd|bat)$/i.test(found)) return [found, ...args];
   const npmPackage = join(dirname(found), "node_modules", "@github", "copilot", "package.json");
-  const native = `@github/copilot-${process.platform}-${process.arch}/package.json`;
   let exe: string | undefined;
   try {
-    exe = join(dirname(createRequire(npmPackage).resolve(native)), "copilot.exe");
+    // Paczka platformy eksportuje sam plik binarny (`exports: { ".": "./copilot.exe" }`).
+    exe = createRequire(npmPackage).resolve(`@github/copilot-${process.platform}-${process.arch}`);
   } catch {
     exe = undefined;
   }

@@ -68,7 +68,7 @@ Przebieg CI na Windowsie i macOS (push na `main` albo ręczne uruchomienie) publ
 
 ## Nagrywanie sesji Copilot CLI
 
-Prototyp wykrywania stanu zadania (ADR-16). Skrypt uruchamia Copilot CLI w PTY tak jak zrobi to daemon, pokazuje go w bieżącym terminalu, nagrywa i liczy stan (`Working`, `Input`, `Approval`…). Wymaga Bun i zainstalowanego, zalogowanego `copilot` w `PATH` (na Windowsie zarówno `copilot.exe`, jak i `copilot.cmd` z `npm install -g`). Uruchom go w katalogu repo, w którym ma pracować agent, z `bun --no-env-file`, żeby Bun nie wczytał `.env` repo do środowiska Copilot CLI:
+Prototyp wykrywania stanu zadania (ADR-16). Skrypt uruchamia Copilot CLI w PTY tak jak zrobi to daemon, pokazuje go w bieżącym terminalu, nagrywa i liczy stan (`Working`, `Input`, `Approval`…). Wymaga Bun i zainstalowanego, zalogowanego `copilot` w `PATH` (na Windowsie zarówno `copilot.exe`, jak i `copilot.cmd` z `npm install -g`). Uruchom go w katalogu repo, w którym ma pracować agent, z `bun --no-env-file`, żeby Bun nie wczytał `.env` repo do środowiska Copilot CLI (Bun nadal czyta `bunfig.toml` z bieżącego katalogu, więc w repo z `bunfig.toml` uruchom skrypt z `--config` wskazującym inny plik):
 
 ```sh
 bun --no-env-file <trackwall>/packages/daemon/scripts/copilot-record.ts record                         # zwykła sesja interaktywna

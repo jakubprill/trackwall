@@ -5,7 +5,7 @@ import type { StateSignal } from "./task-state-tracker.ts";
 /**
  * Detektor stanu Copilot CLI z rekordów hooków (§4.4, ADR-16), najpewniejsze źródło. Pewne z dokumentacji
  * Copilot CLI: nazwy zdarzeń, `sessionEnd.reason`, `agentStop.stopReason`. Niepewne: pola i rodzaje
- * `notification`, których dokumentacja nie wylicza (rodzaje znalezione w typach SDK Copilot CLI). Dlatego
+ * `notification`, których dokumentacja nie wylicza (`permission_prompt` w typach `@github/copilot-sdk`, `elicitation_dialog` w tekstach Copilot CLI 1.0.103). Dlatego
  * powiadomienie jest klasyfikowane po znanym rodzaju (pewność `medium`), a bez rodzaju po słowach treści
  * (pewność `low`).
  */
@@ -36,7 +36,7 @@ function sessionEnd(payload: CopilotHookRecord["payload"], reason: string): Stat
 }
 
 /**
- * Rodzaje powiadomień głównego agenta znalezione w Copilot CLI 1.0.103. Inne rodzaje (np. `agent_idle`,
+ * Rodzaje powiadomień głównego agenta znalezione przy Copilot CLI 1.0.103. Inne rodzaje (np. `agent_idle`,
  * `agent_completed` i `shell_completed` dotyczą agentów i komend w tle) nie zmieniają stanu, nawet jeśli treść
  * brzmi jak prośba o zgodę. Rodzaju dla planu nie znaleziono; `Plan` daje tylko treść.
  */
