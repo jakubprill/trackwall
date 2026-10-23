@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { errorMessage } from "./api.ts";
+import { currentRun } from "./background-run.ts";
 import { useRemote } from "./use-remote.ts";
 
 /** W trakcie postęp ma być widać od razu, a przebieg jest w pamięci daemona, więc odpytywanie jest tanie. */
@@ -34,23 +35,15 @@ export function useBackgroundRun<R extends BackgroundRun>(
 ): BackgroundRunHandle<R> & { act: (action: () => Promise<R | null>) => void } {
   const [pending, setPending] = useState(false);
   const [actionError, setActionError] = useState<string>();
-  const [acted, setActed] = useState<R | null>(null);
+  const [acted, setActed] = useState<{ run: R | null; afterLoad: number }>();
   const remote = useRemote(load, { pollMs: (run) => (run?.finishedAt === null ? RUNNING_POLL_MS : IDLE_POLL_MS) });
-  // Odpowiedź akcji jest nowsza od odpytania sprzed niej. Pierwsza odpowiedź odpytania po akcji ją zastępuje, także
-  // `null` (daemon uruchomiony od nowa nie zna przebiegu), żeby wynik akcji nie wisiał na ekranie bez końca.
-  const latestData = useRef(remote.data);
-  latestData.current = remote.data;
-  const dataAtAct = useRef(remote.data);
-  useEffect(() => {
-    if (remote.data !== dataAtAct.current) setActed(null);
-  }, [remote.data]);
-  const run = acted && (!remote.data || remote.data.startedAt < acted.startedAt) ? acted : remote.data;
+  const run = currentRun(acted, remote);
   const finishedAt = run?.finishedAt;
   useEffect(() => {
     if (finishedAt) onFinished();
   }, [finishedAt, onFinished]);
 
-  const { reload } = remote;
+  const { reload, sentLoads } = remote;
   const act = useCallback(
     (action: () => Promise<R | null>) => {
       setPending(true);
@@ -58,15 +51,14 @@ export function useBackgroundRun<R extends BackgroundRun>(
       action()
         .then(
           (result) => {
-            dataAtAct.current = latestData.current;
-            setActed(result);
+            setActed({ run: result, afterLoad: sentLoads() });
             reload();
           },
           (err: unknown) => setActionError(errorMessage(err)),
         )
         .finally(() => setPending(false));
     },
-    [reload],
+    [reload, sentLoads],
   );
 
   return { run, running: finishedAt === null || pending, error: actionError ?? remote.error, act };
