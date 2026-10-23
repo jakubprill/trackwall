@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  BUN_VERSION: "1.4.2"
+  NODE_VERSION: "22"
+
+jobs:
+  check:
+    name: lint, typecheck, test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  desktop:
+    name: portable (${{ matrix.os }})
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:desktop
+      # Po buildzie, bo tauri-build wymaga binarki sidecara, którą tworzy build:desktop.
+      - name: cargo test (powłoka Tauri)
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
+      - name: smoke test sidecara z buildu
+        shell: bash
+        run: bun packages/daemon/scripts/smoke.ts apps/desktop/src-tauri/target/release/pitwall-daemon$([ "$RUNNER_OS" = Windows ] && echo .exe)
+      - run: pnpm portable
+      - uses: actions/upload-artifact@v5
+        with:
+          name: pitwall-${{ runner.os }}
+          path: out/*.zip
+          if-no-files-found: error
+
+  spikes:
+    name: spike'i (${{ matrix.os }})
+    needs: check
+    # Wynikiem spike'a jest tabela w podsumowaniu joba; czerwony spike nie blokuje PR.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: pnpm install --frozen-lockfile
+      - name: Job Objects / grupy procesów
+        run: pnpm --filter @pitwall/spike-job-objects spike
+      - name: PTY (ConPTY na Windowsie)
+        if: always()
+        run: pnpm --filter @pitwall/spike-conpty spike
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: spikes-${{ runner.os }}
+          path: spikes/*/results/*.json
