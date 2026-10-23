@@ -34,7 +34,11 @@ export interface WorkspaceDeps {
 }
 
 export class Workspace {
-  constructor(private readonly deps: WorkspaceDeps) {}
+  private readonly deps: WorkspaceDeps;
+
+  constructor(deps: WorkspaceDeps) {
+    this.deps = deps;
+  }
 
   list(): Promise<Repo[]> {
     return Promise.all(this.deps.file.repos().map((entry) => this.describe(entry)));
@@ -58,9 +62,8 @@ export class Workspace {
   }
 
   /** Usuwa repo tylko z listy; katalog na dysku zostaje nietknięty. */
-  remove(id: string): null {
+  remove(id: string): void {
     if (!this.deps.file.remove(id)) throw notFound(id);
-    return null;
   }
 
   async overview(id: string): Promise<RepoOverview> {
@@ -86,9 +89,8 @@ export class Workspace {
   }
 
   /** Daemon nie wie, czy system obsłużył adres; wynik to tylko potwierdzenie przyjęcia. */
-  openEditor(id: string): null {
+  openEditor(id: string): void {
     this.deps.openUrl(vscodeUrl(this.entry(id).path));
-    return null;
   }
 
   private entry(id: string): WorkspaceRepoEntry {

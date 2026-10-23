@@ -9,13 +9,13 @@ import { cn } from "@/lib/utils";
 
 /**
  * Drzewo plików z ostatniego commita (daemon czyta HEAD, nie katalog roboczy, ADR-13) i podgląd wybranego pliku.
- * `head` jest w zależnościach, żeby nowy commit pobrał katalog i plik od nowa.
+ * Zmiana `head` (nowy commit) pobiera katalog i plik od nowa, zostawiając poprzednie do czasu odpowiedzi.
  */
 export function RepoFiles({ conn, repo, head }: { conn: Connection; repo: string; head: string }) {
   const [dir, setDir] = useState("");
   const [file, setFile] = useState<string>();
-  const loadTree = useCallback(() => post(conn, workspaceApi.tree, { repo, path: dir }), [conn, repo, dir, head]);
-  const tree = useRemote(loadTree);
+  const loadTree = useCallback(() => post(conn, workspaceApi.tree, { repo, path: dir }), [conn, repo, dir]);
+  const tree = useRemote(loadTree, { refreshKey: head });
 
   const open = (entry: TreeEntry) => {
     if (entry.kind === "dir") {
@@ -81,8 +81,8 @@ function EntryIcon({ kind }: { kind: TreeEntry["kind"] }) {
 }
 
 function FilePreview({ conn, repo, path, head }: { conn: Connection; repo: string; path: string; head: string }) {
-  const load = useCallback(() => post(conn, workspaceApi.file, { repo, path }), [conn, repo, path, head]);
-  const { data: content, error } = useRemote(load);
+  const load = useCallback(() => post(conn, workspaceApi.file, { repo, path }), [conn, repo, path]);
+  const { data: content, error } = useRemote(load, { refreshKey: head });
   if (error) return <p className="text-destructive text-sm">{error}</p>;
   if (!content) return <p className="text-muted-foreground text-sm">Wczytywanie…</p>;
   return (

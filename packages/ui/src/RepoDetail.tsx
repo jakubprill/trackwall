@@ -5,10 +5,10 @@ import { Button } from "@/components/ui/button";
 import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { type Remote, useRemote } from "@/lib/use-remote";
-import { TabBar } from "./components/TabBar.tsx";
 import { RepoCommits } from "./RepoCommits.tsx";
 import { RepoFiles } from "./RepoFiles.tsx";
 import { RepoStatusBadges } from "./RepoStatusBadges.tsx";
+import { TabBar } from "./TabBar.tsx";
 
 const TABS = [
   { id: "readme", label: "README" },
@@ -19,10 +19,11 @@ type Tab = (typeof TABS)[number]["id"];
 
 export function RepoDetail({ conn, repo, onRemoved }: { conn: Connection; repo: Repo; onRemoved: () => void }) {
   const [tab, setTab] = useState<Tab>("readme");
+  const available = repo.status.kind === "ok";
   // Nowy commit (np. z terminala) zmienia HEAD w odpytywanej liście, a to pobiera przegląd i drzewo od nowa.
-  const head = repo.status.kind === "ok" ? (repo.status.head?.hash ?? "") : undefined;
-  const load = useCallback(() => post(conn, workspaceApi.overview, { repo: repo.id }), [conn, repo.id, head]);
-  const overview = useRemote(head === undefined ? undefined : load);
+  const head = repo.status.kind === "ok" ? (repo.status.head?.hash ?? "") : "";
+  const load = useCallback(() => post(conn, workspaceApi.overview, { repo: repo.id }), [conn, repo.id]);
+  const overview = useRemote(available ? load : undefined, { refreshKey: head });
 
   return (
     <div className="flex flex-col gap-4 p-6">
@@ -42,15 +43,29 @@ export function RepoDetail({ conn, repo, onRemoved }: { conn: Connection; repo: 
           <TabBar tabs={TABS} active={tab} onSelect={setTab} variant="underline" />
           {tab === "readme" && <Loaded remote={overview}>{(o) => <Readme readme={o.readme} />}</Loaded>}
           {tab === "commits" && <Loaded remote={overview}>{(o) => <RepoCommits commits={o.commits} />}</Loaded>}
-          {tab === "files" && head !== undefined && <RepoFiles conn={conn} repo={repo.id} head={head} />}
+          {tab === "files" && <RepoFiles conn={conn} repo={repo.id} head={head} />}
         </>
       )}
     </div>
   );
 }
 
-function Loaded({ remote, children }: { remote: Remote<RepoOverview>; children: (data: RepoOverview) => ReactNode }) {
-  if (remote.error) return <p className="text-destructive text-sm">{remote.error}</p>;
+function Loaded({
+  remote,
+  children,
+}: {
+  remote: Remote<RepoOverview> & { reload: () => void };
+  children: (data: RepoOverview) => ReactNode;
+}) {
+  if (remote.error)
+    return (
+      <div className="flex flex-col items-start gap-2">
+        <p className="text-destructive text-sm">{remote.error}</p>
+        <Button variant="outline" size="sm" onClick={remote.reload}>
+          Spróbuj ponownie
+        </Button>
+      </div>
+    );
   if (!remote.data) return <p className="text-muted-foreground text-sm">Wczytywanie…</p>;
   return children(remote.data);
 }

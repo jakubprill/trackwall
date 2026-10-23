@@ -13,16 +13,13 @@ import { RepoStatusBadges } from "./RepoStatusBadges.tsx";
 /** Stan repo pochodzi z gita przy każdym zapytaniu (§4.5), więc lista jest odpytywana cyklicznie. */
 const POLL_MS = 10_000;
 
-export function ReposView({ conn, onRetry }: { conn: Connection; onRetry: () => Promise<boolean> }) {
+export function ReposView({ conn, onRetry }: { conn: Connection; onRetry: () => void }) {
   const [selected, setSelected] = useState<string>();
   const load = useCallback(() => post(conn, workspaceApi.list, {}), [conn]);
-  const list = useRemote(load, POLL_MS);
+  const list = useRemote(load, { pollMs: POLL_MS });
 
   const repos = list.data ?? [];
   const current = repos.find((r) => r.id === selected) ?? repos[0];
-  const retry = () => {
-    onRetry().then((replaced) => replaced || list.reload(), list.reload);
-  };
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[18rem_1fr]">
@@ -44,7 +41,7 @@ export function ReposView({ conn, onRetry }: { conn: Connection; onRetry: () => 
           {list.error && (
             <div className="flex flex-col items-start gap-2 px-2 pb-2">
               <p className="text-destructive text-sm break-words">{list.error}</p>
-              <Button variant="outline" size="sm" onClick={retry}>
+              <Button variant="outline" size="sm" onClick={onRetry}>
                 Spróbuj ponownie
               </Button>
             </div>
@@ -70,7 +67,7 @@ export function ReposView({ conn, onRetry }: { conn: Connection; onRetry: () => 
           />
         ) : (
           <div className="text-muted-foreground flex h-full items-center justify-center p-6 text-sm">
-            {list.loading ? "Wczytywanie…" : "Wybierz repo z listy albo dodaj nowe po lewej."}
+            {list.data || list.error ? "Wybierz repo z listy albo dodaj nowe po lewej." : "Wczytywanie…"}
           </div>
         )}
       </section>

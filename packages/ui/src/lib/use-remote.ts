@@ -8,17 +8,27 @@ export interface Remote<T> {
   loading: boolean;
 }
 
+export interface RemoteOptions {
+  /** Odpytuj co tyle ms, licząc od poprzedniej odpowiedzi. */
+  pollMs?: number;
+  /** Zmiana wartości pobiera dane od nowa, zachowując poprzednie do czasu odpowiedzi (np. hash HEAD repo). */
+  refreshKey?: string;
+}
+
 /**
  * Dane z daemona dla jednego widoku. Nowe `load` (zmień je przez `useCallback`, gdy zmienia się pytanie) czyści
- * poprzednią odpowiedź; `reload` i odpytywanie zachowują ją do czasu nowej. Odpytywanie planuje następne pytanie
- * dopiero po odpowiedzi, więc wolny git nie piętrzy żądań, i pomija je, gdy okno jest schowane.
+ * poprzednią odpowiedź; `reload`, `refreshKey` i odpytywanie zachowują ją do czasu nowej. Odpytywanie planuje
+ * następne pytanie dopiero po odpowiedzi, więc wolny git nie piętrzy żądań, i czeka, gdy okno jest schowane.
  */
-export function useRemote<T>(load: (() => Promise<T>) | undefined, pollMs?: number): Remote<T> & { reload: () => void } {
+export function useRemote<T>(
+  load: (() => Promise<T>) | undefined,
+  { pollMs, refreshKey }: RemoteOptions = {},
+): Remote<T> & { reload: () => void } {
   const [state, setState] = useState<Remote<T>>({ loading: true });
   const [generation, setGeneration] = useState(0);
   const previousLoad = useRef(load);
 
-  // `generation` nie jest czytane w efekcie: jego zmiana to prośba o ponowne pobranie.
+  // `generation` i `refreshKey` nie są czytane w efekcie: ich zmiana to prośba o ponowne pobranie.
   useEffect(() => {
     if (!load) return;
     const changed = previousLoad.current !== load;
@@ -42,7 +52,7 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, pollMs?: numb
       current = false;
       clearTimeout(timer);
     };
-  }, [load, generation, pollMs]);
+  }, [load, generation, pollMs, refreshKey]);
 
   const reload = useCallback(() => setGeneration((g) => g + 1), []);
   return { ...state, reload };

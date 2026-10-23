@@ -13,8 +13,8 @@ const RETRYABLE = new Set(["EPERM", "EBUSY", "EACCES"]);
 /** `mode` ustawia uprawnienia tam, gdzie system je ma (nie na Windowsie). */
 export function writeFileAtomic(target: string, text: string, mode?: number): void {
   const tmp = `${target}.${process.pid}.tmp`;
-  writeFileSync(tmp, text, mode === undefined ? undefined : { mode });
   try {
+    writeFileSync(tmp, text, mode === undefined ? undefined : { mode });
     if (mode !== undefined && process.platform !== "win32") chmodSync(tmp, mode);
     renameWithRetry(tmp, target);
   } catch (err) {

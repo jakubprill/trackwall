@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import type { Commit, FileContent, RepoStatusOk, TreeEntry } from "@pitwall/protocol";
 import { git } from "./git.ts";
-import { isBinary, LOG_FORMAT, parseLog, parseObjects, parseStatus, parseTree } from "./parse.ts";
+import { type GitObject, isBinary, LOG_FORMAT, parseLog, parseObjects, parseStatus, parseTree } from "./parse.ts";
 
 /**
  * Moduł `vcs` (§4, §4.5): lokalny adapter gita. Zna katalogi, nie identyfikatory repo; te tłumaczy `workspace`.
@@ -9,7 +9,7 @@ import { isBinary, LOG_FORMAT, parseLog, parseObjects, parseStatus, parseTree } 
  * a przeglądanie nie zależy od tego, co leży w katalogu roboczym.
  */
 export class Vcs {
-  /** Korzeń repo, w którym leży `dir`; `GitError`, gdy `dir` nie jest w repo gita. */
+  /** Korzeń repo, w którym leży `dir`; błąd z komunikatem gita, gdy `dir` nie jest w repo gita. */
   async toplevel(dir: string): Promise<string> {
     const { stdout } = await git(dir, ["rev-parse", "--show-toplevel"]);
     // Tylko końcowy znak nowej linii: spacja na końcu nazwy katalogu jest częścią ścieżki.
@@ -20,14 +20,14 @@ export class Vcs {
   async status(dir: string): Promise<RepoStatusOk> {
     const { stdout } = await git(dir, ["status", "--porcelain=v2", "--branch", "-z"]);
     const { hasCommits, ...status } = parseStatus(stdout.toString("utf8"));
-    const [head] = hasCommits ? await this.logFromHead(dir, 1) : [];
+    const [head] = hasCommits ? await this.log(dir, 1) : [];
     return { ...status, head: head ?? null };
   }
 
-  /** Ostatnie commity od HEAD; pusto w repo bez commitów. */
+  /** Ostatnie commity od HEAD; pusto w repo bez commitów (`--ignore-missing` pomija nieistniejący HEAD). */
   async log(dir: string, limit: number): Promise<Commit[]> {
-    const [head] = await this.objects(dir, ["HEAD"]);
-    return head ? this.logFromHead(dir, limit) : [];
+    const { stdout } = await git(dir, ["log", "-z", "--ignore-missing", `--max-count=${limit}`, LOG_FORMAT, "HEAD", "--"]);
+    return parseLog(stdout.toString("utf8"));
   }
 
   /** Zawartość katalogu `path` w HEAD; `undefined`, gdy nie ma takiego katalogu. Pusty korzeń w repo bez commitów. */
@@ -48,17 +48,12 @@ export class Vcs {
     return { kind: "text", text: stdout.toString("utf8"), size: object.size, truncated };
   }
 
-  private async logFromHead(dir: string, limit: number): Promise<Commit[]> {
-    const { stdout } = await git(dir, ["log", "-z", `--max-count=${limit}`, LOG_FORMAT, "HEAD", "--"]);
-    return parseLog(stdout.toString("utf8"));
-  }
-
   /**
    * Istnienie, typ i rozmiar obiektów w jednym procesie (`cat-file --batch-check`); `undefined` dla brakującego,
    * także dla submodułu, którego commitu nie ma w tym repo. Specyfikacje idą liniami, stąd zakaz znaków
    * sterujących w `RepoPath`.
    */
-  private async objects(dir: string, specs: string[]) {
+  private async objects(dir: string, specs: string[]): Promise<(GitObject | undefined)[]> {
     const { stdout } = await git(dir, ["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"], {
       stdin: `${specs.join("\n")}\n`,
     });

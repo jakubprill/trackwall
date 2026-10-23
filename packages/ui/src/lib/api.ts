@@ -3,11 +3,11 @@ import type { z } from "zod";
 import type { Connection } from "./connection.ts";
 
 class ApiCallError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-  ) {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
     super(message);
+    this.code = code;
   }
 }
 

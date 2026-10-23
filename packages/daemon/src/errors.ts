@@ -5,10 +5,10 @@ import type { ErrorCode } from "@pitwall/protocol";
  * Każdy inny wyjątek API zamienia na `internal` bez szczegółów.
  */
 export class DomainError extends Error {
-  constructor(
-    readonly code: ErrorCode,
-    message: string,
-  ) {
+  readonly code: ErrorCode;
+
+  constructor(code: ErrorCode, message: string) {
     super(message);
+    this.code = code;
   }
 }

@@ -29,7 +29,11 @@ const WorkspaceConfig = z.object({
 });
 
 export class WorkspaceFile {
-  constructor(readonly path: string) {}
+  readonly path: string;
+
+  constructor(path: string) {
+    this.path = path;
+  }
 
   repos(): WorkspaceRepoEntry[] {
     const parsed = WorkspaceConfig.safeParse(this.load().toJS() ?? {});
@@ -71,12 +75,8 @@ export class WorkspaceFile {
   }
 
   private save(doc: Document): void {
-    try {
-      mkdirSync(dirname(this.path), { recursive: true });
-      writeFileAtomic(this.path, doc.toString());
-    } catch (err) {
-      throw new DomainError("internal", `nie udało się zapisać ${this.path}: ${err instanceof Error ? err.message : String(err)}`);
-    }
+    mkdirSync(dirname(this.path), { recursive: true });
+    writeFileAtomic(this.path, doc.toString());
   }
 
   private invalid(details: string): DomainError {

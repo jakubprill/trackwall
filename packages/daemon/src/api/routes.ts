@@ -26,9 +26,15 @@ function route<Req extends z.ZodType, Data extends z.ZodType>(
 export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.list, (f) => f.workspace.list()),
   route(workspaceApi.add, (f, b) => f.workspace.add(b.path)),
-  route(workspaceApi.remove, (f, b) => f.workspace.remove(b.repo)),
+  route(workspaceApi.remove, (f, b) => {
+    f.workspace.remove(b.repo);
+    return null;
+  }),
   route(workspaceApi.overview, (f, b) => f.workspace.overview(b.repo)),
   route(workspaceApi.tree, (f, b) => f.workspace.tree(b.repo, b.path)),
   route(workspaceApi.file, (f, b) => f.workspace.file(b.repo, b.path)),
-  route(workspaceApi.openEditor, (f, b) => f.workspace.openEditor(b.repo)),
+  route(workspaceApi.openEditor, (f, b) => {
+    f.workspace.openEditor(b.repo);
+    return null;
+  }),
 ]);

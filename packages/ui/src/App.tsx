@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { errorMessage } from "@/lib/api";
 import { useConnection } from "@/lib/use-connection";
-import { TabBar } from "./components/TabBar.tsx";
 import { DaemonPanel } from "./DaemonPanel.tsx";
 import { ReposView } from "./ReposView.tsx";
+import { TabBar } from "./TabBar.tsx";
 
 const VIEWS = [
   { id: "repos", label: "Repo" },
@@ -21,8 +20,16 @@ export function App() {
         <span className="font-semibold tracking-tight">Pitwall</span>
         <TabBar tabs={VIEWS} active={view} onSelect={setView} variant="pills" />
       </header>
+      {error && (
+        <div className="flex items-center gap-3 border-b px-6 py-2">
+          <p className="text-destructive min-w-0 flex-1 text-sm whitespace-pre-wrap">{error}</p>
+          <Button variant="outline" size="sm" onClick={retry}>
+            Spróbuj ponownie
+          </Button>
+        </div>
+      )}
       <main className="min-h-0 flex-1">
-        {!conn && <ConnectionStatus error={error} onRetry={retry} />}
+        {!conn && !error && <p className="text-muted-foreground p-6 text-sm">Łączenie z daemonem…</p>}
         {conn && view === "repos" && <ReposView key={epoch} conn={conn} onRetry={retry} />}
         {conn && view === "daemon" && (
           <div className="flex justify-center p-6">
@@ -30,19 +37,6 @@ export function App() {
           </div>
         )}
       </main>
-    </div>
-  );
-}
-
-function ConnectionStatus({ error, onRetry }: { error?: string; onRetry: () => Promise<boolean> }) {
-  const [retryError, setRetryError] = useState<string>();
-  if (!error) return <p className="text-muted-foreground p-6 text-sm">Łączenie z daemonem…</p>;
-  return (
-    <div className="flex flex-col items-start gap-3 p-6">
-      <p className="text-destructive text-sm whitespace-pre-wrap">{retryError ?? error}</p>
-      <Button variant="outline" size="sm" onClick={() => onRetry().catch((err: unknown) => setRetryError(errorMessage(err)))}>
-        Spróbuj ponownie
-      </Button>
     </div>
   );
 }

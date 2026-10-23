@@ -71,10 +71,12 @@ export function git(repoDir: string, args: readonly string[], opts: GitOptions =
       const message = e.code === "ENOENT" ? "nie znaleziono programu git w PATH" : `nie udało się uruchomić gita: ${e.message}`;
       finish(() => reject(new Error(message)));
     });
-    child.on("close", (code) => {
+    child.on("close", (code, signal) => {
       if (code === 0) return finish(() => resolve({ stdout: Buffer.concat(out), truncated: false }));
       const stderr = Buffer.concat(err).toString("utf8").trim();
-      finish(() => reject(new Error(stderr || `git ${args[0]} zakończył się kodem ${code}`)));
+      finish(() =>
+        reject(new Error(stderr || `git ${args[0]} ${signal ? `przerwany sygnałem ${signal}` : `zakończył się kodem ${code}`}`)),
+      );
     });
     // Git, który nie czyta stdin, może go zamknąć przed zapisem; EPIPE nie jest wtedy błędem wywołania.
     child.stdin.on("error", () => {});

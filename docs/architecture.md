@@ -269,7 +269,7 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 
 - Loopback only, token, sprawdzenie `Host`/`Origin`, porównanie w stałym czasie.
 - Token zadania (per sesja agenta) zamiast tokenu globalnego: daemon wie, które zadanie woła MCP, może ograniczyć `run_task` do repo zadania i wpisać zadanie do audytu.
-- Katalog roboczy procesu zawsze wewnątrz repo lub worktree; ścieżki z wejścia są normalizowane i sprawdzane na wyjście poza korzeń. Przeglądanie repo czyta tylko obiekty z commita HEAD, a ścieżkę w repo waliduje schemat `RepoPath` (bez `.`, `..`, `\` i NUL).
+- Katalog roboczy procesu zawsze wewnątrz repo lub worktree; ścieżki z wejścia są normalizowane i sprawdzane na wyjście poza korzeń. Przeglądanie repo czyta tylko obiekty z commita HEAD, a ścieżkę w repo waliduje schemat `RepoPath` (bez `.`, `..`, pustych segmentów i znaków sterujących; `\` jest zwykłym znakiem nazwy).
 - Daemon uruchamia `git` w repo z listy z konfiguracją tego repo (`.git/config`), tak jak robi to użytkownik w terminalu; np. `core.fsmonitor` może uruchomić komendę przy `git status`. Dla repo dodanych ręcznie to świadoma decyzja; przy klonowaniu przez Pitwall trzeba ją rozważyć ponownie.
 - Klon repo sekretów poza workspace, w katalogu niewidocznym dla worktree; w profilu zadania repo sekretów jest wykluczone z narzędzi plikowych agenta (konfiguracja adaptera).
 - Zmienne środowiskowe nigdy nie trafiają do logów ani do audytu; maskowanie wartości przed buforem.
@@ -308,7 +308,7 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 
 ## 12. Decyzje (ADR w skrócie)
 
-**ADR-1 Runtime daemona: Bun, z zachowaniem zgodności z Node.** Bun daje `bun build --compile` do jednej binarki i wbudowane SQLite. Kod pisany tak, by działał też pod Node 22 (`node:` API, bez API specyficznych dla Bun poza warstwą `platform/`). Jeśli spike z etapu 1 pokaże, że ConPTY lub Job Objects nie działają pod Bun, przechodzimy na Node 22 + SEA bez zmian w modułach.
+**ADR-1 Runtime daemona: Bun, z zachowaniem zgodności z Node.** Bun daje `bun build --compile` do jednej binarki i wbudowane SQLite. Kod pisany tak, by działał też pod Node 22 (`node:` API, bez API specyficznych dla Bun poza warstwą `platform/`). Jeśli spike z etapu 1 pokaże, że ConPTY lub Job Objects nie działają pod Bun, przechodzimy na Node 22 + SEA bez zmian w modułach. Doprecyzowanie (2026-10-23): „działa pod Node” znaczy `node packages/daemon/src/main.ts` bez flag, czyli z wbudowanym usuwaniem typów; dlatego kod daemona nie używa składni TypeScriptu wymagającej transformacji (właściwości w parametrach konstruktora, `enum`, `namespace`), Biome tego pilnuje, a test `node-compat` ładuje daemon pod Node.
 
 **ADR-2 Transport UI: HTTP + WebSocket, nie tylko IPC Tauri.** Dzięki temu ten sam UI działa w przeglądarce (etap 1) i w Tauri, a `ws` CLI i testy używają tego samego API. Tauri IPC zostaje dla spraw natywnych: tray, autostart, token.
 
