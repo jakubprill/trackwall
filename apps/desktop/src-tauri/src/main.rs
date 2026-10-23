@@ -7,6 +7,7 @@ mod daemon;
 mod window_effect;
 
 use daemon::Connection;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use tauri::menu::{Menu, MenuItem};
@@ -146,12 +147,16 @@ fn main() {
         #[cfg(target_os = "macos")]
         RunEvent::Reopen { .. } => show_main(handle),
         RunEvent::ExitRequested { code: None, api, .. } => {
-            // Ostatnie okno schowane to nie powód do wyjścia; wyjście tylko z traya.
+            // Ostatnie okno schowane to nie powód do wyjścia.
             api.prevent_exit();
         }
-        _ => {
-            let _ = handle;
+        // Każda droga wyjścia kończy się tutaj: „Wyjdź” z traya, ale też Cmd+Q i „Zakończ” z Docka na macOS,
+        // które idą prosto przez `terminate:` z pominięciem `ExitRequested`. Bez tego daemon zostawał osierocony.
+        RunEvent::Exit => {
+            let state = handle.state::<Arc<DaemonState>>();
+            stop_daemon(&state, daemon::trackwall_home().ok().as_deref());
         }
+        _ => {}
     });
 }
 
@@ -192,25 +197,25 @@ fn show_main(app: &AppHandle) {
     }
 }
 
-/// „Wyjdź” z traya: przerwanie trwającego startu, łagodne zatrzymanie daemona, potem koniec procesu okna.
+/// „Wyjdź” z traya. Daemon zatrzymuje obsługa `RunEvent::Exit`, wspólna dla wszystkich dróg wyjścia.
 fn quit_app(app: &AppHandle) {
-    let state = Arc::clone(app.state::<Arc<DaemonState>>().inner());
-    let app = app.clone();
-    std::thread::spawn(move || {
-        state.cancel.store(true, Ordering::SeqCst);
-        let started = state.wait().ok();
-        // Zapisane połączenie mogło się zestarzeć (daemon wstał ponownie na innym porcie), a nieudany start
-        // nie wyklucza, że daemon działa: wtedy szukamy go po daemon.json.
-        let stopped = started.as_ref().is_some_and(|c| daemon::shutdown(c).is_ok());
-        if !stopped {
-            if let Some(conn) = daemon::trackwall_home().ok().and_then(|home| daemon::discover(&home)) {
-                if let Err(err) = daemon::shutdown(&conn) {
-                    eprintln!("[desktop] zatrzymanie daemona: {err}");
-                }
-            }
+    app.exit(0);
+}
+
+/// Przerywa trwający start i łagodnie zatrzymuje daemon; blokuje, aż daemon przestanie odpowiadać (§5.4).
+/// Zapisane połączenie mogło się zestarzeć (daemon wstał ponownie na innym porcie), a nieudany start
+/// nie wyklucza, że daemon działa: wtedy szukamy go po `daemon.json` w `home`.
+fn stop_daemon(state: &DaemonState, home: Option<&Path>) {
+    state.cancel.store(true, Ordering::SeqCst);
+    let started = state.wait().ok();
+    if started.as_ref().is_some_and(|c| daemon::shutdown(c).is_ok()) {
+        return;
+    }
+    if let Some(conn) = home.and_then(daemon::discover) {
+        if let Err(err) = daemon::shutdown(&conn) {
+            eprintln!("[desktop] zatrzymanie daemona: {err}");
         }
-        app.exit(0);
-    });
+    }
 }
 
 #[cfg(windows)]
@@ -220,4 +225,73 @@ fn windows_alert(text: &str) {
     let (text, title) = (wide(text), wide("Trackwall"));
     // SAFETY: oba bufory są zakończone zerem i żyją do końca wywołania.
     unsafe { MessageBoxW(std::ptr::null_mut(), text.as_ptr(), title.as_ptr(), MB_OK | MB_ICONERROR) };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::path::PathBuf;
+    use std::sync::mpsc;
+
+    /// Daemon na niby: odpowiada na `/api/health` wersją powłoki, a po `POST /api/daemon/shutdown`
+    /// zamyka port, tak jak prawdziwy daemon. Kanał dostaje kolejne linie żądań.
+    fn fake_daemon() -> (u16, mpsc::Receiver<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let mut stream = stream.unwrap();
+                let mut buf = [0u8; 4096];
+                let n = stream.read(&mut buf).unwrap();
+                let request = String::from_utf8_lossy(&buf[..n]).into_owned();
+                let line = request.lines().next().unwrap_or("").to_owned();
+                let body = format!(r#"{{"ok":true,"data":{{"version":"{}"}}}}"#, daemon::VERSION);
+                let response = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+                stream.write_all(response.as_bytes()).unwrap();
+                let shutdown = line.starts_with("POST /api/daemon/shutdown") && request.contains("Bearer secret");
+                tx.send(line).unwrap();
+                if shutdown {
+                    return;
+                }
+            }
+        });
+        (port, rx)
+    }
+
+    fn temp_home(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("trackwall-desktop-test-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn shutdown_requests(rx: &mpsc::Receiver<String>) -> usize {
+        rx.try_iter().filter(|line| line.starts_with("POST /api/daemon/shutdown")).count()
+    }
+
+    #[test]
+    fn exit_stops_daemon_started_by_this_shell() {
+        let (port, rx) = fake_daemon();
+        let state = DaemonState::default();
+        *state.lock() = Phase::Ready(Connection { base_url: format!("http://127.0.0.1:{port}"), token: "secret".into(), port });
+
+        stop_daemon(&state, None);
+
+        assert_eq!(shutdown_requests(&rx), 1);
+        assert!(state.cancel.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn exit_without_own_start_stops_daemon_found_in_daemon_json() {
+        let (port, rx) = fake_daemon();
+        let home = temp_home("discover");
+        std::fs::write(home.join("daemon.json"), format!(r#"{{"pid":1,"port":{port},"token":"secret"}}"#)).unwrap();
+
+        stop_daemon(&DaemonState::default(), Some(&home));
+
+        assert_eq!(shutdown_requests(&rx), 1);
+        std::fs::remove_dir_all(home).unwrap();
+    }
 }

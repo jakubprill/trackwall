@@ -191,7 +191,7 @@ Zasoby MCP (`resources`) udostępniają kartę repo i aktualny snapshot grafu ja
 
 ### 5.4 Tauri ↔ daemon
 
-Tauri uruchamia daemon jako sidecar z argumentem `--parent <pid>`, czeka na `/api/health`, pokazuje ekran powitalny, a po niepowodzeniu dialog z logiem startu. Okno pokazuje się dopiero po załadowaniu UI, z już ustawionym efektem tła (ADR-11). Zamknięcie okna chowa je do traya. „Wyjdź” z traya wysyła `POST /api/daemon/shutdown`, daemon zatrzymuje serwisy i sesje tym samym łagodnym stopem co Ctrl-C, a Tauri czeka na zakończenie. Daemon sam nie kończy się po śmierci rodzica (tryb „działa przy zamkniętym oknie”), ale sprawdza `--parent` tylko po to, żeby odróżnić start z Tauri od ręcznego.
+Tauri uruchamia daemon jako sidecar z argumentem `--parent <pid>`, czeka na `/api/health`, pokazuje ekran powitalny, a po niepowodzeniu dialog z logiem startu. Okno pokazuje się dopiero po załadowaniu UI, z już ustawionym efektem tła (ADR-11). Zamknięcie okna chowa je do traya. Każde wyjście z powłoki, czyli „Wyjdź” z traya, a na macOS także Cmd+Q i „Zakończ” z Docka (te idą przez `terminate:` z pominięciem `ExitRequested`), przechodzi przez `RunEvent::Exit`: powłoka przerywa trwający start daemona, wysyła `POST /api/daemon/shutdown` (gdy start się nie udał, do daemona z `daemon.json`), daemon zatrzymuje serwisy i sesje tym samym łagodnym stopem co Ctrl-C, a Tauri czeka, aż przestanie odpowiadać. Daemon sam nie kończy się po śmierci rodzica (tryb „działa przy zamkniętym oknie”), ale sprawdza `--parent` tylko po to, żeby odróżnić start z Tauri od ręcznego. Po awarii albo zabiciu powłoki daemon działa dalej, a następne uruchomienie aplikacji podłącza się do niego przez `daemon.json`.
 
 ### 5.5 Daemon ↔ scena 3D
 
