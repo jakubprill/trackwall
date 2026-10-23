@@ -10,7 +10,8 @@ import { syncRepo } from "./sync.ts";
 /**
  * Moduł `vcs` (§4, §4.5): lokalny adapter gita. Zna katalogi, nie identyfikatory repo; te tłumaczy `workspace`.
  * Zawartość repo czyta z obiektów commita HEAD (ADR-14), więc ścieżka nie może wskazać pliku spoza repo,
- * a przeglądanie nie zależy od tego, co leży w katalogu roboczym.
+ * a przeglądanie nie zależy od tego, co leży w katalogu roboczym. Jedyna komenda, która coś zmienia, to `sync`
+ * (ADR-21): fetch, fast-forward gałęzi domyślnej i aktualizacja katalogu roboczego, gdy ta gałąź jest wybrana.
  */
 export class Vcs {
   /**

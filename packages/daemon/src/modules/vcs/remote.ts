@@ -42,6 +42,6 @@ function fromUrl(url: string): { host: string; path: string } | undefined {
  */
 function fromScp(url: string): { host: string; path: string } | undefined {
   const m = /^(?:[^@/]+@)?([^:/]+):(.+)$/s.exec(url);
-  if (!m || (m[1] ?? "").length < 2) return undefined;
-  return { host: m[1] ?? "", path: m[2] ?? "" };
+  const [, host = "", path = ""] = m ?? [];
+  return host.length < 2 ? undefined : { host, path };
 }

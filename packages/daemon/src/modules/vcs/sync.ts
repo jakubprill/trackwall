@@ -1,6 +1,6 @@
 import type { SyncResult, SyncSkipReason } from "@trackwall/protocol";
 import { git } from "./git.ts";
-import { type GitConfig, mainRemote, readConfig } from "./git-config.ts";
+import { mainRemote, readConfig } from "./git-config.ts";
 import { parseStatus } from "./parse.ts";
 
 /**
@@ -21,13 +21,13 @@ const MERGE_TIMEOUT_MS = 5 * 60_000;
 export async function syncRepo(dir: string): Promise<SyncResult> {
   const config = await readConfig(dir);
   const remote = mainRemote(config);
-  if (!remote) return skipped("no-remote", "repo nie ma remote origin");
+  if (!remote) return skipped("no-remote", "repo nie ma remote origin ani jedynego innego remote");
   const network = { sshCommand: config.sshCommand };
   await git(dir, ["fetch", "--quiet", "--", remote.name], { timeoutMs: FETCH_TIMEOUT_MS, network });
-  const branch = await defaultBranch(dir, remote.name, config);
+  const branch = await defaultBranch(dir, remote.name, network);
   if (branch === undefined)
     return skipped("no-default-branch", `${remote.name} nie wskazuje gałęzi domyślnej (git remote set-head ${remote.name} --auto)`);
-  return fastForward(dir, branch, `refs/remotes/${remote.name}/${branch}`, config);
+  return fastForward(dir, branch, `refs/remotes/${remote.name}/${branch}`, network);
 }
 
 /**
@@ -36,7 +36,10 @@ export async function syncRepo(dir: string): Promise<SyncResult> {
  * z `prune` usunął starą), jedno pytanie do serwera (`remote set-head --auto`). Zmiany gałęzi domyślnej, której
  * stara wersja nadal istnieje, daemon nie wykryje bez pytania serwera przy każdej synchronizacji.
  */
-async function defaultBranch(dir: string, remote: string, config: GitConfig): Promise<string | undefined> {
+/** `core.sshCommand` dla komend, które łączą się z serwerem (`network` w `git`). */
+type Network = { sshCommand: string | undefined };
+
+async function defaultBranch(dir: string, remote: string, network: Network): Promise<string | undefined> {
   const prefix = `refs/remotes/${remote}/`;
   const read = async () => {
     const ref = await git(dir, ["symbolic-ref", "--quiet", `${prefix}HEAD`]).then(
@@ -51,7 +54,7 @@ async function defaultBranch(dir: string, remote: string, config: GitConfig): Pr
   try {
     await git(dir, ["remote", "set-head", "--auto", "--", remote], {
       timeoutMs: FETCH_TIMEOUT_MS,
-      network: { sshCommand: config.sshCommand },
+      network,
     });
   } catch {
     return undefined;
@@ -59,7 +62,7 @@ async function defaultBranch(dir: string, remote: string, config: GitConfig): Pr
   return read();
 }
 
-async function fastForward(dir: string, branch: string, remoteRef: string, config: GitConfig): Promise<SyncResult> {
+async function fastForward(dir: string, branch: string, remoteRef: string, network: Network): Promise<SyncResult> {
   const localRef = `refs/heads/${branch}`;
   if ((await revParse(dir, localRef)) === undefined)
     return skipped("no-local-branch", `gałęzi ${branch} nie ma lokalnie; pobrano tylko zmiany`);
@@ -78,14 +81,15 @@ async function fastForward(dir: string, branch: string, remoteRef: string, confi
     // nieśledzony plik, który leży na drodze. Filtr LFS może przy tym pobierać obiekty, stąd środowisko sieciowe.
     await git(dir, ["merge", "--ff-only", "--quiet", remoteRef], {
       timeoutMs: MERGE_TIMEOUT_MS,
-      network: { sshCommand: config.sshCommand },
+      network,
     });
   } else {
     if (await checkedOutInWorktree(dir, localRef))
       return skipped("checked-out-elsewhere", `${branch} jest wybrana w innym worktree tego repo`);
     // Fetch z bieżącego repo bez `+` przyjmuje tylko fast-forward i odmawia, gdy gałąź jest w użyciu w którymś
-    // worktree także bez bycia wybraną (rebase albo bisect w toku), czego nie widać w `worktree list`.
-    await git(dir, ["fetch", "--quiet", ".", `${remoteRef}:${localRef}`]);
+    // worktree także bez bycia wybraną (rebase albo bisect w toku), czego nie widać w `worktree list`. Bez
+    // submodułów (`submodule.recurse` użytkownika pobierałby je drugi raz z sieci) i bez nadpisania `FETCH_HEAD`.
+    await git(dir, ["fetch", "--quiet", "--no-recurse-submodules", "--no-write-fetch-head", ".", `${remoteRef}:${localRef}`]);
   }
   return { state: "updated", branch, commits: behind };
 }

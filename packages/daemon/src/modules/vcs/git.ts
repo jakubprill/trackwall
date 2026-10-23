@@ -7,7 +7,7 @@ import { type RunOptions, type RunOutput, runProgram } from "./run.ts";
  * żeby brak katalogu był błędem gita z czytelnym komunikatem, a nie `ENOENT` mylony z brakiem gita.
  * `repoDir` to zawsze korzeń repo, a repo trafia na listę samo, gdy leży w folderze z projektami (ADR-18), więc
  * git nie może szukać repo powyżej niego, a klucze z `NO_REPO_COMMANDS` są wyłączone; reszta konfiguracji repo
- * obowiązuje (luka z filtrem `clean` w §8).
+ * obowiązuje (luki z filtrem `clean` i z programami z konfiguracji repo przy synchronizacji w §8).
  */
 
 /**

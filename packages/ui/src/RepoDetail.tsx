@@ -37,6 +37,7 @@ export function RepoDetail({ conn, repo }: { conn: Connection; repo: Repo }) {
           <span className="hud-label">Repo</span>
           <h1 className="text-xl font-semibold tracking-tight">{repo.id}</h1>
           <p className="text-muted-foreground font-mono text-xs break-all">{repo.path}</p>
+          {repo.remote && <p className="text-muted-foreground font-mono text-xs break-all">{repo.remote}</p>}
         </div>
         <OpenEditor conn={conn} repo={repo} />
       </header>

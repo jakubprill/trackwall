@@ -46,10 +46,10 @@ export function parseConfig(out: string): GitConfig {
  */
 export function mainRemote(config: GitConfig): { name: string; url: string } | undefined {
   const origin = config.remotes.get("origin");
-  const [only, ...rest] = config.remotes;
-  const remote =
-    origin !== undefined ? { name: "origin", url: origin } : only && rest.length === 0 ? { name: only[0], url: only[1] } : undefined;
-  return remote && { name: remote.name, url: rewrite(remote.url, config.insteadOf) };
+  if (origin !== undefined) return { name: "origin", url: rewrite(origin, config.insteadOf) };
+  const [only] = config.remotes;
+  if (only && config.remotes.size === 1) return { name: only[0], url: rewrite(only[1], config.insteadOf) };
+  return undefined;
 }
 
 function rewrite(url: string, insteadOf: ReadonlyMap<string, string>): string {
