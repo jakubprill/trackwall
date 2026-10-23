@@ -4,6 +4,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod daemon;
+mod window_effect;
 
 use daemon::Connection;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -123,9 +124,13 @@ fn main() {
         .invoke_handler(tauri::generate_handler![daemon_connection, retry_daemon])
         .setup(move |app| {
             state.start();
+            let window = app.get_webview_window("main").ok_or("brak okna main z tauri.conf.json")?;
+            app.manage(window_effect::apply(&window));
+            window_effect::reveal_fallback(app.handle(), show_main);
             build_tray(app.handle())?;
             Ok(())
         })
+        .on_page_load(|webview, payload| window_effect::on_page_load(webview, payload, show_main))
         .on_window_event(|window, event| {
             // Zamknięcie okna chowa je do traya; daemon i serwisy działają dalej.
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -176,6 +181,10 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 }
 
 fn show_main(app: &AppHandle) {
+    // Okno pokazane z traya przed końcem ładowania strony nie wyskoczy drugi raz po załadowaniu.
+    if let Some(applied) = app.try_state::<window_effect::AppliedEffect>() {
+        applied.mark_revealed();
+    }
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.show();

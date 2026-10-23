@@ -23,24 +23,53 @@
   --ring: oklch(0.705 0.015 286.067);
 }
 
+/* `--background` ma swoją kopię jako ACRYLIC_TINT w apps/desktop/src-tauri/src/window_effect.rs. */
 .dark {
   --background: oklch(0.141 0.005 285.823);
   --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
+  --card: oklch(0.21 0.006 285.885 / var(--surface-alpha, 1));
   --card-foreground: oklch(0.985 0 0);
   --primary: oklch(0.92 0.004 286.32);
   --primary-foreground: oklch(0.21 0.006 285.885);
-  --secondary: oklch(0.274 0.006 286.033);
+  --secondary: oklch(0.274 0.006 286.033 / var(--fill-alpha, 1));
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
+  --muted: oklch(0.274 0.006 286.033 / var(--fill-alpha, 1));
   --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
+  --accent: oklch(0.274 0.006 286.033 / var(--fill-alpha, 1));
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --success: oklch(0.72 0.16 150);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.552 0.016 285.938);
+}
+
+/*
+ * Okno Tauri z efektem tła (ADR-11, apps/desktop/src-tauri/src/window_effect.rs ustawia atrybut):
+ * strona nie maluje tła, a powierzchnie są półprzezroczyste, żeby Mica, Acrylic albo vibrancy były
+ * widoczne, a tekst nadal czytelny. Bez atrybutu (przeglądarka, brak efektu) wszystko jest nieprzezroczyste.
+ * `--background` zostaje nieprzezroczyste, bo shadcn używa go też jako tła okien dialogowych.
+ */
+.dark[data-window-effect] body {
+  background-color: transparent;
+}
+
+.dark[data-window-effect] {
+  --surface-alpha: 55%;
+  --fill-alpha: 60%;
+  --border: oklch(1 0 0 / 12%);
+}
+
+/* Chromium (WebView2) wiąże to z systemowym „Ogranicz przezroczystość”; Acrylic na Windows 10 sam go nie respektuje. */
+@media (prefers-reduced-transparency: reduce) {
+  .dark[data-window-effect] body {
+    background-color: var(--background);
+  }
+
+  .dark[data-window-effect] {
+    --surface-alpha: 1;
+    --fill-alpha: 1;
+  }
 }
 
 @theme inline {

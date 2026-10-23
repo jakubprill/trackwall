@@ -3865,6 +3865,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-single-instance",
+ "window-vibrancy",
  "windows-sys 0.61.2",
 ]
 

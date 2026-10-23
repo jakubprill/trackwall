@@ -12,6 +12,6 @@ apps/desktop/src-tauri/binaries/
 out/
 spikes/*/results/
 
-# stan daemona z `pnpm dev` (`.pitwall-dev/` z checkoutów sprzed zmiany nazwy, ADR-11)
+# stan daemona z `pnpm dev` (`.pitwall-dev/` z checkoutów sprzed zmiany nazwy, ADR-12)
 .trackwall-dev/
 .pitwall-dev/
