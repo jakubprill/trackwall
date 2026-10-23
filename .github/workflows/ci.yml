@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 # Nowy push na gałąź PR przerywa jej poprzedni przebieg, bo następny obejmuje te same zmiany. Na main
-# każdy commit ma własną grupę, więc nic go nie przerywa: wspólna grupa trzyma tylko jeden czekający
+# każdy commit ma własną grupę, więc push kolejnego commita go nie przerywa (tylko ręczny przebieg tego samego): wspólna grupa trzyma tylko jeden czekający
 # przebieg i kasuje go, gdy przyjdzie kolejny, a wtedy nie wiadomo, który commit zepsuł main.
 concurrency:
   group: ci-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
