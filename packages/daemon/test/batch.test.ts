@@ -229,11 +229,11 @@ describe("komenda zbiorcza", () => {
   );
 
   test(
-    "build uruchomiony wcześniej z karty repo nie startuje drugi raz, a jego stop z karty kończy krok jako przerwany",
+    "build uruchomiony wcześniej ze szczegółów repo nie startuje drugi raz, a jego stop ze szczegółów repo kończy krok jako przerwany",
     async () => {
       const { batch, mise, procs, dir } = setup({ web: { tasks: [BUILD] } });
       const fromCard = await mise.start("web", "build");
-      // Komenda czeka na koniec grupy przez `procs.ended`; dopiero wtedy wiadomo, że dołączyła do taska z karty.
+      // Komenda czeka na koniec grupy przez `procs.ended`; dopiero wtedy wiadomo, że dołączyła do taska ze szczegółów repo.
       const waitsForEnd = procs.ended.bind(procs);
       const joined = new Promise<void>((resolve) => {
         procs.ended = (owner) => {

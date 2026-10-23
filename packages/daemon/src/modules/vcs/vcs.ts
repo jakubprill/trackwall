@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import type { Commit, FileContent, RepoStatusOk, SyncResult, TreeEntry } from "@trackwall/protocol";
 import { git } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
-import { type GitObject, isBinary, LOG_FORMAT, parseLog, parseObjects, parseStatus, parseTree } from "./parse.ts";
+import { type GitObject, isBinary, LOG_FORMAT, parseBlobs, parseLog, parseObjects, parseStatus, parseTree } from "./parse.ts";
 import { remoteAddress } from "./remote.ts";
 import { syncRepo } from "./sync.ts";
 
@@ -83,6 +83,40 @@ export class Vcs {
     const { stdout, truncated } = await git(dir, ["cat-file", "blob", object.oid], { maxBytes });
     if (isBinary(stdout)) return { kind: "binary", size: object.size };
     return { kind: "text", text: stdout.toString("utf8"), size: object.size, truncated };
+  }
+
+  /** Pełny hash commita HEAD; `null` w repo bez commitów. */
+  async headCommit(dir: string): Promise<string | null> {
+    const [head] = await this.objects(dir, ["HEAD"]);
+    return head?.type === "commit" ? head.oid : null;
+  }
+
+  /**
+   * Wszystkie pliki commita z rozmiarami, bez katalogów i submodułów; `truncated`, gdy lista przekroczyła
+   * `maxBytes` wyjścia (repo z setkami tysięcy plików) i jest niepełna.
+   */
+  async commitFiles(dir: string, commit: string, maxBytes: number): Promise<{ files: TreeEntry[]; truncated: boolean }> {
+    const { stdout, truncated } = await git(dir, ["ls-tree", "-r", "-z", "--long", commit], { maxBytes });
+    const files = parseTree(stdout.toString("utf8"), "").filter((e) => e.kind === "file");
+    // Ostatni rekord uciętego wyjścia może być niepełną ścieżką.
+    return { files: truncated ? files.slice(0, -1) : files, truncated };
+  }
+
+  /**
+   * Treść wielu plików commita jednym procesem (`cat-file --batch`), bez filtrów i `textconv`, więc repo nie
+   * uruchamia przy tym żadnego programu. Plik, którego nie ma albo który nie zmieścił się w `maxBytes` całego
+   * wyjścia, nie trafia do wyniku.
+   */
+  async readFiles(dir: string, commit: string, paths: readonly string[], maxBytes: number): Promise<Map<string, Buffer>> {
+    if (paths.length === 0) return new Map();
+    const { stdout } = await git(dir, ["cat-file", "--batch"], { stdin: `${paths.map((p) => `${commit}:${p}`).join("\n")}\n`, maxBytes });
+    const blobs = parseBlobs(stdout, paths.length);
+    const read = new Map<string, Buffer>();
+    blobs.forEach((blob, i) => {
+      const path = paths[i];
+      if (blob && path !== undefined) read.set(path, blob);
+    });
+    return read;
   }
 
   /**

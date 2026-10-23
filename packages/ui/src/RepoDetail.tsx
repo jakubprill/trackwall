@@ -9,6 +9,7 @@ import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { TRUNCATED_NOTE } from "@/lib/format";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
+import { RepoCardView } from "./RepoCardView.tsx";
 import { RepoCommits } from "./RepoCommits.tsx";
 import { RepoFiles } from "./RepoFiles.tsx";
 import { RepoMiseTasks } from "./RepoMiseTasks.tsx";
@@ -17,6 +18,7 @@ import { TabBar } from "./TabBar.tsx";
 
 const TABS = [
   { id: "readme", label: "README" },
+  { id: "card", label: "Karta" },
   { id: "files", label: "Pliki" },
   { id: "commits", label: "Commity" },
   { id: "mise", label: "Taski mise" },
@@ -51,6 +53,7 @@ export function RepoDetail({ conn, repo }: { conn: Connection; repo: Repo }) {
           <TabBar tabs={TABS} active={tab} onSelect={setTab} />
           {tab === "readme" && <Loaded remote={overview}>{(o) => <Readme readme={o.readme} />}</Loaded>}
           {tab === "commits" && <Loaded remote={overview}>{(o) => <RepoCommits commits={o.commits} />}</Loaded>}
+          {tab === "card" && <RepoCardView conn={conn} repo={repo.id} head={head} />}
           {tab === "files" && <RepoFiles conn={conn} repo={repo.id} head={head} />}
           {tab === "mise" && <RepoMiseTasks conn={conn} repo={repo.id} />}
         </>

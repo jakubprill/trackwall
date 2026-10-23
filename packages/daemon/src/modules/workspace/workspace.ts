@@ -12,6 +12,7 @@ import {
   type RepoOverview,
   type RepoStatus,
   type RepoStatusOk,
+  type RepoTagRules,
   type SyncResult,
   type SyncRun,
   sameHost,
@@ -205,6 +206,16 @@ export class Workspace {
   /** Korzeń repo po identyfikatorze, dla modułów, które uruchamiają w nim procesy (`mise`). */
   async repoPath(id: string): Promise<string> {
     return (await this.entry(id)).path;
+  }
+
+  /** Repo z folderu z projektami (identyfikator i korzeń), dla modułów, które czytają każde repo (`cards`). */
+  async repoEntries(): Promise<RepoEntry[]> {
+    return (await this.entries()).entries;
+  }
+
+  /** Reguły tagów repo z `workspace.yaml` (ADR-25). */
+  tagRules(): RepoTagRules {
+    return this.deps.file.repoTagRules();
   }
 
   /** Bez ustawionego folderu z projektami nie ma repo. */

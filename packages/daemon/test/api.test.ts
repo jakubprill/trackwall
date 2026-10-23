@@ -6,6 +6,7 @@ import {
   apiResult,
   BatchRun,
   batchApi,
+  cardsApi,
   DaemonInfoResult,
   HealthResult,
   LogTail,
@@ -161,8 +162,8 @@ describe("api", () => {
 describe("api workspace", () => {
   const post = (path: string, body: string) => authed(path, { method: "POST", headers: { "content-type": "application/json" }, body });
 
-  test("każda akcja z kontraktów workspace, mise i batch ma trasę w daemonie", () => {
-    const endpoints = [...Object.values(workspaceApi), ...Object.values(miseApi), ...Object.values(batchApi)];
+  test("każda akcja z kontraktów workspace, kart, mise i batch ma trasę w daemonie", () => {
+    const endpoints = [...Object.values(workspaceApi), ...Object.values(cardsApi), ...Object.values(miseApi), ...Object.values(batchApi)];
     expect(endpoints.filter((endpoint) => !postRoutes.has(endpoint.path))).toEqual([]);
   });
 

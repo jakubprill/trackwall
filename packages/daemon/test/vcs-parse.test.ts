@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isBinary, parseLog, parseObjects, parseStatus, parseTree } from "../src/modules/vcs/parse.ts";
+import { isBinary, parseBlobs, parseLog, parseObjects, parseStatus, parseTree } from "../src/modules/vcs/parse.ts";
 
 describe("parseStatus", () => {
   test("czyta gałąź, gałąź śledzoną z ahead/behind i liczy zmiany, także zmianę nazwy jako jedną", () => {
@@ -74,5 +74,19 @@ describe("isBinary", () => {
   test("NUL w treści znaczy plik binarny", () => {
     expect(isBinary(Buffer.from([0x89, 0x50, 0x00, 0x47]))).toBe(true);
     expect(isBinary(Buffer.from("zażółć gęślą jaźń\n"))).toBe(false);
+  });
+});
+
+describe("parseBlobs", () => {
+  test("treść blobów w kolejności zapytań; brakujący, inny typ i ucięty koniec to undefined", () => {
+    const oid = "1".repeat(40);
+    const out = Buffer.concat([
+      Buffer.from(`${oid} blob 3\nabc\n`),
+      Buffer.from("HEAD:nie-ma missing\n"),
+      Buffer.from(`${oid} tree 2\nxy\n`),
+      Buffer.from(`${oid} blob 0\n\n`),
+      Buffer.from(`${oid} blob 10\nucięt`),
+    ]);
+    expect(parseBlobs(out, 5).map((b) => b?.toString("utf8"))).toEqual(["abc", undefined, undefined, "", undefined]);
   });
 });

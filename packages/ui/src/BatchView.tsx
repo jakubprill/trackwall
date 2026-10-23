@@ -9,8 +9,8 @@ import { batchProgress, batchRunLabel, STEP_HINT, STEP_LABEL, stepLabel, stepMes
 import type { BatchRunHandle } from "@/lib/use-batch-run";
 
 /**
- * Komenda zbiorcza (ADR-27): wybór kroków i repo, start, przerwanie i wynik każdego kroku w każdym repo. Repo
- * wybiera się ręcznie z listy repo; filtr po tagach dołoży tu zaznaczanie grupy repo (`setSelected`).
+ * Komenda zbiorcza (ADR-27): wybór kroków i repo, start, przerwanie i wynik każdego kroku w każdym repo. `repos` to
+ * lista repo po filtrze tagów (ADR-25), więc grupę repo wybiera filtr, a tu można ją jeszcze zawęzić ręcznie.
  */
 export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: readonly Repo[] }) {
   const [steps, setSteps] = useState<ReadonlySet<BatchStep>>(() => new Set(BATCH_STEPS));

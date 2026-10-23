@@ -30,7 +30,7 @@ export const BatchStepState = z.discriminatedUnion("state", [
   z.object({ state: z.literal("skipped"), message: z.string() }),
   /** `lastLines`: koniec wyjścia procesu, gdy krok był procesem; komunikat gita albo mise ma tylko `message`. */
   z.object({ state: z.literal("failed"), message: z.string(), lastLines: z.array(z.string()) }),
-  /** Przerwany przez użytkownika (przerwanie komendy, stop taska w karcie repo albo wyjście daemona). */
+  /** Przerwany przez użytkownika (przerwanie komendy, stop taska w szczegółach repo albo wyjście daemona). */
   z.object({ state: z.literal("cancelled") }),
 ]);
 export type BatchStepState = z.infer<typeof BatchStepState>;
@@ -83,7 +83,7 @@ export const batchApi = {
   run: endpoint("run", z.object({}).strict(), BatchRun.nullable()),
   /**
    * Przerywa trwającą komendę: repo, które czekają, i kroki, które się nie zaczęły, nie ruszą, a działające taski mise
-   * są zatrzymywane jak stopem z karty repo. Trwającego kroku synchronizacji nie da się przerwać, kończy się sam.
+   * są zatrzymywane jak stopem ze szczegółów repo. Trwającego kroku synchronizacji nie da się przerwać, kończy się sam.
    */
   cancel: endpoint("cancel", z.object({}).strict(), BatchRun.nullable()),
 };

@@ -17,7 +17,7 @@ import { runOutcome, syncOutcome } from "./step-outcome.ts";
  * Moduł `batch` (§4.8, ADR-27): komenda zbiorcza, czyli wybrane kroki (synchronizacja, `mise install`, taski mise
  * `setup` i `build`) na wybranych repo, kilka repo naraz, a w repo krok po kroku. Składa moduły `workspace` i `mise`
  * ponad nimi i nie uruchamia niczego sam: procesy startuje `mise` przez `procs`, więc taski są widoczne i do
- * zatrzymania także w karcie repo. Powtórka jest tania dzięki cache mise (`sources` i `outputs` tasku), nie własnemu.
+ * zatrzymania także w szczegółach repo. Powtórka jest tania dzięki cache mise (`sources` i `outputs` tasku), nie własnemu.
  * Trzymana tylko w pamięci, jak synchronizacja; naraz trwa jedna.
  */
 

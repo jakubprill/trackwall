@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { type RepoHost, RepoHosts } from "@trackwall/protocol";
+import { type RepoHost, RepoHosts, RepoTagRules } from "@trackwall/protocol";
 import { type Document, isMap, parseDocument } from "yaml";
 import { z } from "zod";
 import { writeFileAtomic } from "../../atomic-write.ts";
@@ -10,7 +10,7 @@ import { isFullPath, NOT_FULL_PATH } from "./full-path.ts";
 /**
  * `workspace.yaml` (§4.5, ADR-13): konfiguracja workspace, którą użytkownik może edytować ręcznie i trzymać
  * w prywatnym repo. Czytany przy każdym użyciu, więc ręczna edycja działa bez restartu daemona. Zapis zmienia
- * tylko jeden klucz (`projectsDir` albo `repoHosts`) i zachowuje komentarze oraz pozostałe klucze, także nieczytaną
+ * tylko jeden klucz (`projectsDir` albo `repoHosts`; `repoTags` tylko ręcznie) i zachowuje komentarze oraz pozostałe klucze, także nieczytaną
  * już listę `repos` z wersji 0.2.0 (ADR-18): to plik użytkownika, więc usunięcie jej zostawiamy jemu.
  */
 
@@ -27,6 +27,8 @@ const Keys = {
     .transform((dir) => dir ?? null),
   // Hostingi repo (ADR-19); brak klucza to brak hostingów, bo adres GitLab zna tylko użytkownik.
   repoHosts: RepoHosts.nullish().transform((hosts) => hosts ?? []),
+  // Reguły tagów repo (ADR-25); tylko ręcznie w pliku, bo nazwy zespołów i grup zna tylko użytkownik.
+  repoTags: RepoTagRules.nullish().transform((rules) => rules ?? {}),
 };
 type Key = keyof typeof Keys;
 
@@ -45,6 +47,11 @@ export class WorkspaceFile {
   /** Hostingi repo w kolejności z pliku (ADR-19). */
   repoHosts(): RepoHost[] {
     return this.get("repoHosts", Keys.repoHosts);
+  }
+
+  /** Reguły tagów repo (`repoTags`, ADR-25): tag i wzorce identyfikatora albo adresu repo zdalnego. */
+  repoTagRules(): RepoTagRules {
+    return this.get("repoTags", Keys.repoTags);
   }
 
   setProjectsDir(dir: string): void {

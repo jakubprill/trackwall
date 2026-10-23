@@ -1,6 +1,8 @@
 import { join } from "node:path";
 import { Agents, type AgentsDeps } from "./modules/agents/agents.ts";
 import { Batch } from "./modules/batch/batch.ts";
+import { CardCache } from "./modules/cards/card-cache.ts";
+import { Cards } from "./modules/cards/cards.ts";
 import { Logs } from "./modules/logs/logs.ts";
 import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
@@ -18,6 +20,7 @@ import { terminalPlatform } from "./platform/terminal.ts";
  */
 export interface Facade {
   workspace: Workspace;
+  cards: Cards;
   mise: Mise;
   procs: ProcessGroups;
   logs: Logs;
@@ -29,12 +32,13 @@ export { runCopilotHook } from "./modules/agents/copilot-hook-command.ts";
 
 const WORKSPACE_FILE = "workspace.yaml";
 const RUNTIME_FILE = "runtime.json";
+const CARDS_DIR = "cards";
 const LOGS_DIR = "logs";
 /** Limit jednego pliku JSONL źródła; z poprzednim plikiem po rotacji źródło zajmuje najwyżej dwa razy tyle. */
 const LOG_FILE_MAX_BYTES = 10 * 1024 * 1024;
 
 export interface FacadeOptions {
-  /** Katalog stanu daemona; tam leżą `workspace.yaml` (ADR-13), `runtime.json` (§4.1) i `logs/` (§4.2). */
+  /** Katalog stanu daemona; tam leżą `workspace.yaml` (ADR-13), `runtime.json` (§4.1) `logs/` (§4.2) i karty repo (`cards/`, ADR-25). */
   home: string;
   openUrl: (url: string) => void;
   /** Program `mise` z argumentami przed komendą (`["mise"]` w daemonie). */
@@ -51,9 +55,10 @@ export interface FacadeOptions {
 }
 
 export function createFacade(o: FacadeOptions): Facade {
+  const vcs = new Vcs();
   const workspace = new Workspace({
     file: new WorkspaceFile(join(o.home, WORKSPACE_FILE)),
-    vcs: new Vcs(),
+    vcs,
     hosting: new Hosting(HOSTING_CLIS),
     openUrl: o.openUrl,
   });
@@ -66,6 +71,9 @@ export function createFacade(o: FacadeOptions): Facade {
     log: o.log,
   });
   const mise = new Mise({ procs, repos: workspace, command: o.miseCommand, env: o.userEnv });
+  const cache = new CardCache(join(o.home, CARDS_DIR), o.log);
+  cache.prune().catch((err: unknown) => o.log(`nie udało się posprzątać kart: ${String(err)}`));
+  const cards = new Cards({ vcs, repos: workspace, cache });
   const batch = new Batch({ workspace, mise, log: o.log });
   const agents = new Agents({
     procs,
@@ -77,5 +85,5 @@ export function createFacade(o: FacadeOptions): Facade {
     mcpStdioCommand: o.mcpStdioCommand,
     log: o.log,
   });
-  return { workspace, mise, procs, logs, batch, agents };
+  return { workspace, cards, mise, procs, logs, batch, agents };
 }

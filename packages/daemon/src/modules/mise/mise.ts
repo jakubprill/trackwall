@@ -82,8 +82,8 @@ export class Mise {
 
   /**
    * Komenda zbiorcza (§4.8): task z aktualnej listy uruchomiony i doczekany do potwierdzonego końca grupy; `null`,
-   * gdy repo nie ma takiego taska. Działający już task (np. z karty repo) nie startuje drugi raz: wynikiem jest jego
-   * koniec. `signal` zatrzymuje grupę tak jak stop z karty repo.
+   * gdy repo nie ma takiego taska. Działający już task (np. ze szczegółów repo) nie startuje drugi raz: wynikiem jest jego
+   * koniec. `signal` zatrzymuje grupę tak jak stop ze szczegółów repo.
    */
   async runToEnd(repo: string, miseTask: string, signal: AbortSignal): Promise<RunState | null> {
     const dir = await this.deps.repos.repoPath(repo);
@@ -146,7 +146,7 @@ export class Mise {
   /**
    * Start (albo dołączenie do działającej grupy tego właściciela) i koniec grupy po potwierdzeniu w systemie.
    * `signal` zatrzymuje grupę; gdy grupa przeżyje zabicie, wynikiem jest `stop_unconfirmed`, a nie czekanie bez
-   * końca, więc przerwanie zawsze kończy czekanie. Grupa zostaje wtedy `stopping` w karcie repo, skąd stop można ponowić.
+   * końca, więc przerwanie zawsze kończy czekanie. Grupa zostaje wtedy `stopping` w szczegółach repo, skąd stop można ponowić.
    */
   private async runGroupToEnd(
     groupOwner: string,
