@@ -85,7 +85,8 @@ export function CloneView({ conn, onCloned, onOpenSettings }: { conn: Connection
 function useOnCloneDone(jobs: readonly CloneJob[], onDone: () => void) {
   const seen = useRef(new Set<string>());
   useEffect(() => {
-    const done = jobs.filter((j) => j.state === "done").map((j) => `${hostKey(j.host)}/${j.fullName}`);
+    // Ścieżka klonu jest unikalna dla klonowania; to samo repo można sklonować znowu do innego folderu.
+    const done = jobs.filter((j) => j.state === "done").map((j) => j.path);
     const fresh = done.filter((key) => !seen.current.has(key));
     for (const key of fresh) seen.current.add(key);
     if (fresh.length > 0) onDone();

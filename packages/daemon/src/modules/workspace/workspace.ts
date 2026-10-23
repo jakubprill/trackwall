@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   type CloneJob,
   type Commit,
@@ -20,7 +20,7 @@ import { DomainError } from "../../errors.ts";
 import { CloneJobs } from "./clone-jobs.ts";
 import { vscodeUrl } from "./editor-url.ts";
 import { mapLimit } from "./map-limit.ts";
-import { findRepos, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
+import { dirKey, findRepos, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
 
 /**
@@ -124,8 +124,11 @@ export class Workspace {
     return this.clones.start({ host, fullName, path }, () => this.deps.hosting.clone(host, fullName, path));
   }
 
+  /** Klonowania do bieżącego folderu z projektami; te do folderu sprzed zmiany ustawień nie mówią nic o nim. */
   cloneJobs(): CloneJob[] {
-    return this.clones.list();
+    const projectsDir = this.deps.file.projectsDir();
+    if (projectsDir === null) return [];
+    return this.clones.list().filter((job) => dirKey(dirname(job.path)) === dirKey(projectsDir));
   }
 
   async overview(id: string): Promise<RepoOverview> {

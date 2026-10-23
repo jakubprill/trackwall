@@ -155,6 +155,6 @@ export const workspaceApi = {
   remoteRepos: endpoint("remote-repos", z.object({ query: z.string().trim().max(100) }).strict(), RemoteRepoList),
   /** Zaczyna klonowanie i od razu zwraca je w stanie `running`; postęp przez `clones`. */
   clone: endpoint("clone", CloneRequest, CloneJob),
-  /** Klonowania od startu daemona, w kolejności rozpoczęcia. */
+  /** Klonowania do bieżącego folderu z projektami od startu daemona, w kolejności rozpoczęcia. */
   clones: endpoint("clones", z.object({}).strict(), z.array(CloneJob)),
 };

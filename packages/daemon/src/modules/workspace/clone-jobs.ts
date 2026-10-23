@@ -5,7 +5,7 @@ import { dirKey } from "./projects-dir.ts";
  * Klonowania do folderu z projektami (§4.5, ADR-19), trzymane tylko w pamięci: po zakończeniu repo i tak jest na
  * liście z folderu, a stan po restarcie daemona odczyta się z dysku. Jeden katalog klonu (pełna ścieżka, bez
  * wielkości liter, bo folder z projektami można w trakcie zmienić) to jedno klonowanie: nowe
- * klonowanie do tej samej nazwy zastępuje zakończone, a nieudane zostaje, żeby UI mogło pokazać komunikat.
+ * klonowanie do tego samego katalogu zastępuje zakończone, a nieudane zostaje, żeby UI mogło pokazać komunikat.
  */
 export class CloneJobs {
   private readonly jobs = new Map<string, CloneJob>();

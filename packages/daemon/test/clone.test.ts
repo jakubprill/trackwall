@@ -127,8 +127,20 @@ describe("klonowanie z hostingu do folderu z projektami", () => {
     await workspace.setProjectsDir(nowy);
 
     expect(await workspace.clone(GITLAB, "magazyn/api")).toMatchObject({ path: join(nowy, "api"), state: "running" });
-    await finished(workspace, "sklep/api");
+    expect(workspace.cloneJobs().map((j) => j.fullName)).toEqual(["magazyn/api"]);
     await finished(workspace, "magazyn/api");
+  });
+
+  test("to samo repo można sklonować znowu do nowego folderu z projektami", async () => {
+    const { workspace } = await workspaceWithGitLab();
+    await workspace.clone(GITLAB, "sklep/api");
+    await finished(workspace, "sklep/api");
+    const nowy = mkdtempSync(join(tmpdir(), "trackwall-projekty-"));
+    await workspace.setProjectsDir(nowy);
+
+    expect(workspace.cloneJobs()).toEqual([]);
+    expect(await workspace.clone(GITLAB, "sklep/api")).toMatchObject({ path: join(nowy, "api"), state: "running" });
+    expect(await finished(workspace, "sklep/api")).toMatchObject({ path: join(nowy, "api"), state: "done" });
   });
 
   test("klon z hostingu spoza ustawień albo bez folderu z projektami jest odrzucany", async () => {
