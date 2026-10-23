@@ -12,6 +12,10 @@ export const ErrorCode = z.enum([
   "projects_dir_unavailable",
   /** `workspace.yaml` nie przechodzi walidacji; użytkownik musi go poprawić ręcznie. */
   "invalid_config",
+  /** Nie da się uruchomić taska mise: brak mise, konfiguracja bez zaufania albo błąd mise; szczegóły w `message`. */
+  "mise_unavailable",
+  /** Po zatrzymaniu z eskalacją część grupy procesów nadal żyje; daemon nie zgłasza zatrzymania, którego nie widział. */
+  "stop_unconfirmed",
   "internal",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;

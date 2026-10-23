@@ -105,6 +105,9 @@ _Unikaj_: aplikacja, mikroserwis (gdy chodzi o byt w Trackwall)
 Proces-lider i wszyscy jego potomkowie, zatrzymywani razem: Job Object na Windowsie, nowa sesja POSIX (`setsid`) z zabijaniem po `-pgid` na macOS.
 _Unikaj_: drzewo procesów (gdy chodzi o jednostkę zarządzaną)
 
+**Właściciel grupy** (`owner`):
+Klucz, pod którym `procs` trzyma grupę procesów i jej ostatni stan; nadaje go moduł, który ją uruchomił (dziś task mise w repo). Jeden właściciel ma najwyżej jedną grupę, która nie jest potwierdzona jako pusta.
+
 **Sonda** (health):
 Task mise `health` uruchamiany cyklicznie; jego wynik decyduje o `healthy` / `unhealthy`.
 
@@ -113,7 +116,7 @@ Informacja, która gałąź albo worktree zajmuje serwis na jego porcie. Domyśl
 _Unikaj_: lock, rezerwacja
 
 **Sierota**:
-Grupa procesów z `runtime.json`, której daemon już nie nadzoruje (np. po awarii). Sprzątana tylko, gdy komenda i czas startu lidera się zgadzają.
+Grupa procesów z `runtime.json`, której daemon już nie nadzoruje (np. po awarii). Sprzątana przy starcie daemona tylko, gdy lider to ten sam proces (ten sam czas startu) albo już nie żyje, a grupa tak.
 
 ## Agenci
 
@@ -124,8 +127,12 @@ _Unikaj_: job; „task” w polskim tekście (myli się z taskiem mise)
 **Task mise**:
 Nazwana komenda z `mise.toml` repo: `setup`, `dev`, `test`, `build`, `lint`, `health`. W kodzie zawsze z dopowiedzeniem (`miseTask`, `mise.run(...)`), nigdy gołe `task`. Jedyny wyjątek to argument `task` narzędzia MCP `run_task` (§5.3), gdzie kontekst jest jednoznaczny.
 
-**Uruchomienie** (`run`, `runId`):
-Jednorazowe wykonanie taska mise przez `run_task` albo z UI, z własną grupą procesów i logami. Nie jest zadaniem ani serwisem.
+**Uruchomienie** (`run`, `runId`, stan: `RunState`):
+Jednorazowe wykonanie taska mise przez `run_task` albo z UI, z własną grupą procesów i logami. Stan `running`, `stopping` albo `exited` (kod wyjścia, sygnał, czy zatrzymał je użytkownik, ostatnie linie wyjścia), zawsze zaobserwowany. Nie jest zadaniem ani serwisem.
+
+**Zaufanie mise** (`mise trust`, akcja `trust`):
+Zgoda użytkownika, żeby mise czytał konfigurację repo, która może uruchamiać programy (`[env]`, szablony, hooki). Bez niej mise nie poda listy tasków (`untrusted`). Daje się tylko w UI.
+_Unikaj_: autoryzacja, akceptacja
 
 **Adapter**:
 Wszystko, co Trackwall wie o jednym CLI agenta: szablon komendy, konfiguracja MCP, wznowienie, detektory stanu. Jedyny adapter to Copilot CLI (ADR-8).

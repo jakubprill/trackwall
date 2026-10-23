@@ -188,6 +188,11 @@ export class Workspace {
     this.deps.openUrl(vscodeUrl((await this.entry(id)).path));
   }
 
+  /** Korzeń repo po identyfikatorze, dla modułów, które uruchamiają w nim procesy (`mise`). */
+  async repoPath(id: string): Promise<string> {
+    return (await this.entry(id)).path;
+  }
+
   /** Bez ustawionego folderu z projektami nie ma repo. */
   private async entries(): Promise<{ projectsDir: string | null; entries: RepoEntry[] }> {
     const projectsDir = this.deps.file.projectsDir();
