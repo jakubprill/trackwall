@@ -1,5 +1,5 @@
-import type { GraphConfig, RepoGraph, Subgraph, WhoCallsResult } from "@trackwall/protocol";
-import { DomainError } from "../../errors.ts";
+import { GraphConfig, type RepoGraph, type Subgraph, type WhoCallsResult } from "@trackwall/protocol";
+import { configOrProblem, DomainError } from "../../errors.ts";
 import { buildGraph, type GraphCardInput } from "./build-graph.ts";
 import { subgraph } from "./subgraph.ts";
 
@@ -34,7 +34,8 @@ export class Graph {
 
   async graph(): Promise<RepoGraph> {
     const { cards, tagRulesProblem } = await this.deps.cards.all();
-    const { config, problem } = this.config();
+    // Zły klucz `graph` nie zabiera krawędzi z kart: graf powstaje bez wpisów użytkownika, z powodem do poprawienia.
+    const { value: config, problem } = configOrProblem(() => this.deps.workspace.graphConfig(), GraphConfig.parse({}));
     const problems = [tagRulesProblem, problem].filter((p) => p !== null);
     return buildGraph(cards, { config, file: this.deps.workspace.configFile(), problems });
   }
@@ -47,16 +48,6 @@ export class Graph {
 
   async subgraph(repo: string, depth: number): Promise<Subgraph> {
     return subgraph(await this.graphWith(repo), repo, depth);
-  }
-
-  /** Zły klucz `graph` nie zabiera krawędzi z kart: graf powstaje bez wpisów użytkownika, z powodem do poprawienia. */
-  private config(): { config: GraphConfig; problem: string | null } {
-    try {
-      return { config: this.deps.workspace.graphConfig(), problem: null };
-    } catch (err) {
-      if (!(err instanceof DomainError && err.code === "invalid_config")) throw err;
-      return { config: { packages: {}, edges: [] }, problem: err.message };
-    }
   }
 
   private async graphWith(repo: string): Promise<RepoGraph> {

@@ -1,5 +1,5 @@
 import type { RepoCard, RepoCardResult, RepoTag, RepoTagRules, RepoTags } from "@trackwall/protocol";
-import { DomainError, messageOf } from "../../errors.ts";
+import { configOrProblem, DomainError, messageOf } from "../../errors.ts";
 import { mapLimit } from "../../map-limit.ts";
 import type { CardCache } from "./card-cache.ts";
 import { extractCard, readsCardFile } from "./extract-card.ts";
@@ -77,14 +77,7 @@ export class Cards {
    * nie zabiera kart: repo mają wtedy tylko tagi z karty, a komunikat wraca w `tagRulesProblem`.
    */
   async all(): Promise<{ cards: CardOfRepo[]; tagRulesProblem: string | null }> {
-    let rules: RepoTagRules = {};
-    let tagRulesProblem: string | null = null;
-    try {
-      rules = this.deps.repos.tagRules();
-    } catch (err) {
-      if (!(err instanceof DomainError && err.code === "invalid_config")) throw err;
-      tagRulesProblem = err.message;
-    }
+    const { value: rules, problem: tagRulesProblem } = configOrProblem(() => this.deps.repos.tagRules(), {});
     return { cards: await this.withRules(rules), tagRulesProblem };
   }
 

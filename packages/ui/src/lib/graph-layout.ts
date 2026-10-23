@@ -57,7 +57,7 @@ export function layoutGraph(repos: readonly string[], edges: readonly GraphEdge[
   const tallest = Math.max(0, ...columns.map((c) => c.length));
   const boxes = new Map<string, NodeBox>();
   columns.forEach((column, c) => {
-    // Krótsze kolumny są wyśrodkowane względem najwyższej, jak w inspiracji z panelem bocznym.
+    // Krótsze kolumny są wyśrodkowane względem najwyższej, żeby nie kleiły się do góry, a krzywe do nich były krótsze.
     const offset = ((tallest - column.length) * (NODE_HEIGHT + ROW_GAP)) / 2;
     column.forEach((repo, row) => {
       boxes.set(repo, { repo, column: c, x: c * (NODE_WIDTH + COLUMN_GAP), y: offset + row * (NODE_HEIGHT + ROW_GAP) });

@@ -166,6 +166,15 @@ describe("buildGraph: wpisy graph w workspace.yaml", () => {
     expect(graph.edges.map((e) => [e.from, e.to, e.confidence])).toEqual([["app", "core", "exact"]]);
   });
 
+  test("alias nie działa dla paczki, którą buduje samo repo, które jej używa", () => {
+    const graph = buildGraph([repo("app", card([provides("com.example:x")], [consumes("com.example:x")])), repo("inne", card([], []))], {
+      config: { packages: { "com.example:x": "inne" }, edges: [] },
+      file: CONFIG_FILE,
+      problems: [],
+    });
+    expect(graph.edges).toEqual([]);
+  });
+
   test("ręczna krawędź łączy repo po identyfikatorze z opisem jako kluczem", () => {
     const graph = buildGraph([repo("web", card([], [])), repo("orders-bff", card([], []))], {
       config: { packages: {}, edges: [{ from: "web", to: "orders-bff", note: "HTTP /api/orders" }] },

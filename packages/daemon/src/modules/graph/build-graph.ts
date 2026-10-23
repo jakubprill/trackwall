@@ -56,9 +56,11 @@ export function buildGraph(cards: readonly GraphCardInput[], { config, file, pro
   for (const entry of cards) {
     if (entry.kind !== "ok" || entry.card === null) continue;
     for (const pkg of entry.card.consumes) {
-      const found = (providers.get(packageKey(pkg)) ?? []).filter((p) => p.repo !== entry.repo);
+      const all = providers.get(packageKey(pkg)) ?? [];
+      // Alias tylko dla paczki, której nie buduje żadne repo z listy, także to, które jej używa (moduły jednego buildu).
+      if (all.length === 0) addAliasEdges(join, entry.repo, pkg);
+      const found = all.filter((p) => p.repo !== entry.repo);
       if (found.length > 0) addPackageEdges(join, entry.repo, pkg, found);
-      else addAliasEdges(join, entry.repo, pkg);
     }
   }
   checkAliases(join);
@@ -185,6 +187,7 @@ class EdgeSet {
   }
 }
 
+/** Bez `localeCompare`: porządek nie może zależeć od danych ICU w Bun i Node (jak `byName` w `workspace`). */
 function compare(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }

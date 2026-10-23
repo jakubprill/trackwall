@@ -91,7 +91,7 @@ export class Workspace {
   }
 
   settings(): WorkspaceSettings {
-    return { projectsDir: this.deps.file.projectsDir(), configFile: this.deps.file.path };
+    return { projectsDir: this.deps.file.projectsDir(), configFile: this.configFile() };
   }
 
   async setProjectsDir(path: string): Promise<WorkspaceSettings> {

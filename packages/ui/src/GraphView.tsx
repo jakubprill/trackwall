@@ -56,8 +56,10 @@ export function GraphView({ conn }: { conn: Connection }) {
         {data && layout && <GraphCanvas graph={data} layout={layout} selected={node?.repo} onSelect={setSelected} />}
       </section>
       <aside className="bg-card min-h-0 overflow-y-auto border-l">
-        {data && node && <GraphNodePanel node={node} graph={data} onSelect={setSelected} onClose={() => setSelected(undefined)} />}
-        {data && !node && <GraphSummaryPanel graph={data} />}
+        {layout && node && (
+          <GraphNodePanel node={node} pairs={layout.pairs} onSelect={setSelected} onClose={() => setSelected(undefined)} />
+        )}
+        {data && layout && !node && <GraphSummaryPanel graph={data} pairs={layout.pairs} />}
       </aside>
     </div>
   );

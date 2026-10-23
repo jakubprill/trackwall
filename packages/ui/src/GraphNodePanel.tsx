@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { Surface } from "@/components/Surface";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { edgePairs } from "@/lib/graph-layout";
+import type { EdgePair } from "@/lib/graph-layout";
 
 /** Pewność krawędzi dla człowieka (ADR-29); `Record` wymusza wpis dla każdej z kontraktu. */
 const CONFIDENCE_LABELS: Record<EdgeConfidence, string> = {
@@ -19,17 +19,18 @@ const CONFIDENCE_LABELS: Record<EdgeConfidence, string> = {
  */
 export function GraphNodePanel({
   node,
-  graph,
+  pairs,
   onSelect,
   onClose,
 }: {
   node: GraphNode;
-  graph: RepoGraph;
+  /** Krawędzie zgrupowane po parze repo, te same co na rysunku (`GraphLayout.pairs`). */
+  pairs: readonly EdgePair[];
   onSelect: (repo: string) => void;
   onClose: () => void;
 }) {
-  const uses = edgePairs(graph.edges.filter((e) => e.from === node.repo));
-  const usedBy = edgePairs(graph.edges.filter((e) => e.to === node.repo));
+  const uses = pairs.filter((p) => p.from === node.repo);
+  const usedBy = pairs.filter((p) => p.to === node.repo);
   return (
     <div className="flex flex-col gap-4 p-4">
       <header className="flex items-start justify-between gap-2">
@@ -70,14 +71,14 @@ export function GraphNodePanel({
 }
 
 /** Panel bez wybranego repo: liczby, wpisy `graph` z błędami i gdzie dopisać ręczne połączenia. */
-export function GraphSummaryPanel({ graph }: { graph: RepoGraph }) {
+export function GraphSummaryPanel({ graph, pairs }: { graph: RepoGraph; pairs: readonly EdgePair[] }) {
   const withProblems = graph.nodes.filter((n) => n.problem !== null).length;
   return (
     <div className="flex flex-col gap-4 p-4">
       <p className="hud-label">Graf połączeń</p>
       <dl className="grid grid-cols-3 gap-2">
         <Stat label="Repo" value={graph.nodes.length} />
-        <Stat label="Połączenia" value={edgePairs(graph.edges).length} />
+        <Stat label="Połączenia" value={pairs.length} />
         <Stat label="Bez karty" value={withProblems} />
       </dl>
       <p className="text-muted-foreground text-sm">
