@@ -60,6 +60,14 @@ export async function findRepos(projectsDir: string): Promise<RepoEntry[]> {
   );
 }
 
+/**
+ * Nazwy wszystkiego w folderze z projektami (także plików i ukrytych katalogów), małymi literami: klon nie może
+ * trafić w zajętą nazwę, a dyski Windowsa i macOS nie rozróżniają wielkości liter.
+ */
+export async function takenNames(projectsDir: string): Promise<Set<string>> {
+  return new Set((await listDir(projectsDir)).map((entry) => entry.name.toLowerCase()));
+}
+
 async function listDir(dir: string): Promise<Dirent[]> {
   try {
     return await readdir(dir, { withFileTypes: true });

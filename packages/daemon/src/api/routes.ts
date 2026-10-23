@@ -34,4 +34,8 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     await f.workspace.openEditor(b.repo);
     return null;
   }),
+  route(workspaceApi.setRepoHosts, (f, b) => f.workspace.setRepoHosts(b.repoHosts)),
+  route(workspaceApi.remoteRepos, (f, b) => f.workspace.remoteRepos(b.query)),
+  route(workspaceApi.clone, (f, b) => f.workspace.clone(b.host, b.fullName)),
+  route(workspaceApi.clones, (f) => f.workspace.cloneJobs()),
 ]);

@@ -65,4 +65,9 @@ describe("workspace.yaml", () => {
     writeFileSync(path, "- /projekty\n");
     expect(() => new WorkspaceFile(path).projectsDir()).toThrow(expect.objectContaining({ message: expect.stringContaining("mapą") }));
   });
+  test("hosting z adresem zamiast nazwy hosta jest błędem konfiguracji", () => {
+    const path = tempFile();
+    writeFileSync(path, "repoHosts:\n  - kind: gitlab\n    host: https://gitlab.example.com\n");
+    expect(() => new WorkspaceFile(path).repoHosts()).toThrow(expect.objectContaining({ code: "invalid_config" }));
+  });
 });

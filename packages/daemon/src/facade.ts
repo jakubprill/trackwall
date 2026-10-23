@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { HOSTING_CLIS, Hosting } from "./modules/vcs/hosting.ts";
 import { Vcs } from "./modules/vcs/vcs.ts";
 import { Workspace } from "./modules/workspace/workspace.ts";
 import { WorkspaceFile } from "./modules/workspace/workspace-file.ts";
@@ -20,7 +21,11 @@ export interface FacadeOptions {
 }
 
 export function createFacade(o: FacadeOptions): Facade {
-  const vcs = new Vcs();
-  const workspace = new Workspace({ file: new WorkspaceFile(join(o.home, WORKSPACE_FILE)), vcs, openUrl: o.openUrl });
+  const workspace = new Workspace({
+    file: new WorkspaceFile(join(o.home, WORKSPACE_FILE)),
+    vcs: new Vcs(),
+    hosting: new Hosting(HOSTING_CLIS),
+    openUrl: o.openUrl,
+  });
   return { workspace };
 }
