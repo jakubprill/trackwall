@@ -1,7 +1,17 @@
 import { z } from "zod";
 
 /** Kody błędów wspólne dla wszystkich modułów API. */
-export const ErrorCode = z.enum(["unauthorized", "forbidden_origin", "not_found", "bad_request", "internal"]);
+export const ErrorCode = z.enum([
+  "unauthorized",
+  "forbidden_origin",
+  "not_found",
+  "bad_request",
+  /** Repo z workspace jest niedostępne (katalog zniknął, git odmówił); szczegóły w `message`. */
+  "repo_unavailable",
+  /** `workspace.yaml` nie przechodzi walidacji; użytkownik musi go poprawić ręcznie. */
+  "invalid_config",
+  "internal",
+]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 
 export const ApiError = z.object({

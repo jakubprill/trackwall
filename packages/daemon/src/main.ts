@@ -6,6 +6,7 @@ import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
 import { type DaemonArgs, parseDaemonArgs, USAGE } from "./args.ts";
 import { newToken, probeRunningDaemon, removeDaemonFile, watchDaemonFile, withStartLock, writeDaemonFile } from "./discovery.ts";
+import { createFacade } from "./facade.ts";
 import { pitwallHome } from "./home.ts";
 import { openBrowser } from "./open-browser.ts";
 import { runtimeInfo } from "./platform/runtime.ts";
@@ -59,6 +60,7 @@ async function main(args: DaemonArgs): Promise<void> {
           home,
         }),
         onShutdown: () => void shutdown("POST /api/daemon/shutdown"),
+        facade: createFacade({ home, openUrl: openBrowser }),
       },
       args.port,
     );

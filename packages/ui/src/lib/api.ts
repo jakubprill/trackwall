@@ -21,3 +21,8 @@ export async function call<T>(conn: Connection, path: string, schema: z.ZodType<
   if (!parsed.data.ok) throw new ApiCallError(parsed.data.error.code, parsed.data.error.message);
   return parsed.data.data;
 }
+
+/** `POST /api/<moduł>/<akcja>` z ciałem JSON (§5.2). */
+export function post<T>(conn: Connection, path: string, body: unknown, schema: z.ZodType<ApiResult<T>>): Promise<T> {
+  return call(conn, path, schema, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+}

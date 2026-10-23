@@ -2,9 +2,11 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DaemonInfoResult, HealthResult } from "@pitwall/protocol";
+import { DaemonInfoResult, HealthResult, ReposResult, WORKSPACE_ROUTES } from "@pitwall/protocol";
 import { type ApiServer, startApi } from "../src/api/server.ts";
+import { createFacade } from "../src/facade.ts";
 import { type LoopbackOptions, loopbackRequest } from "../src/loopback.ts";
+import { makeRepo } from "./support/git-repo.ts";
 
 const TOKEN = "t".repeat(43);
 let api: ApiServer;
@@ -37,6 +39,7 @@ beforeAll(async () => {
     onShutdown: () => {
       shutdowns++;
     },
+    facade: createFacade({ home: mkdtempSync(join(tmpdir(), "pitwall-home-")), openUrl: () => {} }),
   });
 });
 
@@ -126,6 +129,37 @@ describe("api", () => {
   });
 });
 
+describe("api workspace", () => {
+  const post = (path: string, body: string) => authed(path, { method: "POST", headers: { "content-type": "application/json" }, body });
+
+  test("trasy workspace wymagają tokenu", async () => {
+    expect((await req(WORKSPACE_ROUTES.list, { method: "POST" })).status).toBe(401);
+  });
+
+  test("dodane repo pojawia się na liście ze stanem z gita", async () => {
+    const dir = makeRepo({ "a.txt": "1" }, "sklep");
+    const added = await post(WORKSPACE_ROUTES.add, JSON.stringify({ path: dir }));
+    expect(added.status).toBe(200);
+
+    const list = ReposResult.parse(JSON.parse((await post(WORKSPACE_ROUTES.list, "")).body));
+    expect(list.ok && list.data.map((r) => [r.id, r.status.kind])).toEqual([["sklep", "ok"]]);
+  });
+
+  test("ciało niezgodne ze schematem albo niebędące JSON-em to 400 z opisem", async () => {
+    const bad = await post(WORKSPACE_ROUTES.tree, JSON.stringify({ repo: "sklep", path: "../poza" }));
+    expect(bad.status).toBe(400);
+    expect(JSON.parse(bad.body)).toMatchObject({ ok: false, error: { code: "bad_request", message: expect.stringContaining("..") } });
+    expect((await post(WORKSPACE_ROUTES.add, "{nie json")).status).toBe(400);
+    expect((await post(WORKSPACE_ROUTES.add, JSON.stringify({ path: "x".repeat(70_000) }))).status).toBe(400);
+  });
+
+  test("nieznane repo to 404, a GET na trasie POST nie istnieje", async () => {
+    const res = await post(WORKSPACE_ROUTES.overview, JSON.stringify({ repo: "nie-ma" }));
+    expect(res.status).toBe(404);
+    expect((await authed(WORKSPACE_ROUTES.list)).status).toBe(404);
+  });
+});
+
 describe("--allow-origin", () => {
   test("dodatkowy origin dostaje dostęp i CORS, inne nie", async () => {
     const extra = await startApi({
@@ -136,6 +170,7 @@ describe("--allow-origin", () => {
         throw new Error("nieużywane");
       },
       onShutdown: () => {},
+      facade: createFacade({ home: mkdtempSync(join(tmpdir(), "pitwall-home-")), openUrl: () => {} }),
     });
     try {
       const res = await loopbackRequest(extra.port, "/api/health", { headers: { origin: "http://127.0.0.1:5173" } });

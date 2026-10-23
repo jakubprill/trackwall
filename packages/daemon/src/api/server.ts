@@ -1,14 +1,18 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { ApiResult, DaemonInfo, ErrorCode, Health } from "@pitwall/protocol";
+import { DomainError } from "../errors.ts";
+import type { Facade } from "../facade.ts";
 import { hasValidToken, OriginPolicy } from "./guard.ts";
 import { serveStatic } from "./static.ts";
+import { workspaceRoutes } from "./workspace-routes.ts";
 
 export interface ApiOptions {
   token: string;
   version: string;
   info: () => DaemonInfo;
   onShutdown: () => void;
+  facade: Facade;
   uiDir?: string;
   /** Dodatkowe originy przeglądarki z dostępem do API, np. serwer Vite przy `tauri dev`. */
   allowOrigins?: readonly string[];
@@ -25,8 +29,13 @@ const STATUS: Record<ErrorCode, number> = {
   forbidden_origin: 403,
   not_found: 404,
   bad_request: 400,
+  repo_unavailable: 409,
+  invalid_config: 500,
   internal: 500,
 };
+
+/** Ciała żądań to małe obiekty JSON; większe są odrzucane, zanim trafią do pamięci w całości. */
+const MAX_BODY_BYTES = 64 * 1024;
 
 /** HTTP API daemona na `127.0.0.1` (§5.2). `port: 0` wybiera losowy wolny port. */
 export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer> {
@@ -34,6 +43,7 @@ export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer
   const server = createServer((req, res) => {
     if (!policy) return void res.destroy();
     handle(req, res, options, policy).catch((err: unknown) => {
+      if (err instanceof DomainError && !res.headersSent) return fail(res, err.code, err.message);
       process.stderr.write(`[api] ${req.method} ${req.url}: ${String(err)}\n`);
       if (!res.headersSent) send(res, 500, { ok: false, error: { code: "internal", message: "internal error" } });
       else res.destroy();
@@ -99,6 +109,8 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
     res.once("finish", () => setImmediate(o.onShutdown));
     return;
   }
+  const post = req.method === "POST" ? workspaceRoutes[path] : undefined;
+  if (post) return ok(res, await post.handle(o.facade, await readJson(req)));
   return fail(res, "not_found", `no route ${req.method} ${path}`);
 }
 
@@ -115,7 +127,25 @@ function send(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-/** Ciało POST nie jest jeszcze używane, ale musi zostać odczytane, żeby połączenie keep-alive się nie zawiesiło. */
+/** Ciało JSON żądania; puste ciało to `{}`. */
+async function readJson(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req as AsyncIterable<Buffer>) {
+    size += chunk.length;
+    if (size > MAX_BODY_BYTES) throw new DomainError("bad_request", `ciało żądania większe niż ${MAX_BODY_BYTES} bajtów`);
+    chunks.push(chunk);
+  }
+  const text = Buffer.concat(chunks).toString("utf8");
+  if (text.trim() === "") return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new DomainError("bad_request", "ciało żądania nie jest poprawnym JSON-em");
+  }
+}
+
+/** Ciało POST bez treści musi zostać odczytane, żeby połączenie keep-alive się nie zawiesiło. */
 async function drain(req: IncomingMessage): Promise<void> {
   for await (const _ of req) {
     // celowo puste

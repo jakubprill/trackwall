@@ -14,6 +14,8 @@ Dokumentacja:
 
 Etap 1 (szkielet): daemon z `/api/health`, UI z panelem daemona, powłoka Tauri z trayem, portable build na Windows i macOS, CI z macierzą Windows + macOS, spike'i Job Objects i PTY.
 
+Przeglądanie repo: w zakładce „Repo” dodajesz lokalny katalog z gitem (pełną ścieżką), a Pitwall pokazuje gałąź, liczbę zmian i ahead/behind, README, pliki i commity z ostatniego commita oraz otwiera repo w VS Code. Lista repo jest w `~/.pitwall/workspace.yaml` i można ją edytować ręcznie. Wymaga `git` w `PATH`.
+
 ## Układ repo
 
 | Ścieżka | Co to jest |
