@@ -92,11 +92,30 @@ README i ostatnie commity repo w jednej odpowiedzi; stan repo przychodzi z listy
 Osobny katalog roboczy gita dla zadania, w `<repo>/.worktrees/<zadanie>`. Usuwany dopiero po potwierdzonym zatrzymaniu procesów, które z niego korzystają.
 
 **Karta** (karta repo, `RepoCard`):
-Fakty o repo wyciągnięte deterministycznie z plików buildu i konfiguracji: co repo udostępnia (`provides`), czego używa (`consumes`) i czego potrzebuje do działania (`runtime`). LLM dopisuje tylko opis i propozycje połączeń oznaczone `origin: 'llm'` (ADR-6).
-_Unikaj_: profil, metadane
+Fakty o repo wyciągnięte deterministycznie z plików buildu i konfiguracji w commicie HEAD: pliki buildu, co repo udostępnia (`provides`), czego używa (`consumes`), wymagane narzędzia, mechanizmy i problemy, każdy fakt z dowodem. Zależy tylko od commita, więc liczy się raz na commit (ADR-25). LLM dopisze tylko opis i propozycje połączeń oznaczone `origin: 'llm'` (ADR-6). W UI zakładka „Karta” w szczegółach repo.
+_Unikaj_: profil, metadane; „karta repo” dla całego panelu szczegółów repo
+
+**Plik buildu** (`BuildFile`):
+`pom.xml`, `build.gradle(.kts)` albo `package.json`, który należy do buildu repo: korzeń (bez pliku tego samego rodzaju wyżej) albo moduł lub paczka workspace, którą wymienia inny plik buildu (`memberOf`).
+
+**Paczka** (`ProvidedPackage`, `ConsumedPackage`):
+Artefakt Maven (`grupa:artefakt`), wtyczka Gradle albo paczka npm, którą repo udostępnia albo której używa. Paczki z tego samego repo nie są używanymi.
+
+**Wymagane narzędzie** (`ToolRequirement`):
+Narzędzie i wersja z konfiguracji mise albo `.tool-versions` (źródło `mise`) lub z pliku, który podaje wersję po swojemu (`.nvmrc`, wrapper Maven, `engines.node`; źródło `hint`).
+
+**Mechanizm** (`Mechanism`, `MechanismId`):
+Technologia rozpoznana w repo po paczce albo pliku (Spring Boot, Feign, Kafka, Helm…), ze spisem dowodów. Spis, nie wniosek: mechanizm nie mówi, z kim repo się łączy.
 
 **Ekstraktor**:
-Wtyczka per stack (`extractors/spring`, `extractors/node`), która czyta pliki repo i zwraca fakty z pozycją w pliku.
+Czysta funkcja na migawce commita (`RepoSnapshot`) w `modules/cards/` (`maven.ts`, `gradle.ts`, `npm.ts`, `tools.ts`, `mechanisms.ts`), która zwraca fakty z pozycją w pliku. Niczego nie wykonuje.
+
+**Tag repo** (`RepoTag`):
+Krótka nazwa grupy repo (`java`, `frontend`, `bff`, `monorepo`…) z powodem, liczona z karty, identyfikatora i adresu repo zdalnego albo z reguły tagów. Tagi są ortogonalne: filtr z kilkoma tagami pokazuje repo, które mają wszystkie.
+_Unikaj_: etykieta, kategoria
+
+**Reguła tagów** (`repoTags` w `workspace.yaml`, `RepoTagRules`):
+Tag i wzorce identyfikatora albo adresu repo zdalnego, które go nadają (`core-api: ["*-core"]`). Dla grup, których nie widać w plikach, np. zespołów.
 
 **Graf**:
 Złączenie kart: węzły to serwisy, krawędzie łączą `consumes` jednego z `provides` drugiego.
