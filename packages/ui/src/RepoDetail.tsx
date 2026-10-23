@@ -47,7 +47,7 @@ export function RepoDetail({ conn, repo }: { conn: Connection; repo: Repo }) {
       ) : (
         <>
           <RepoStats status={status} />
-          <TabBar tabs={TABS} active={tab} onSelect={setTab} variant="underline" />
+          <TabBar tabs={TABS} active={tab} onSelect={setTab} />
           {tab === "readme" && <Loaded remote={overview}>{(o) => <Readme readme={o.readme} />}</Loaded>}
           {tab === "commits" && <Loaded remote={overview}>{(o) => <RepoCommits commits={o.commits} />}</Loaded>}
           {tab === "files" && <RepoFiles conn={conn} repo={repo.id} head={head} />}
