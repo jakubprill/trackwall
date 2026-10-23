@@ -102,6 +102,8 @@ const runs: ToolRuns = {
     };
   },
   getRepoCard: (facade, { repo }) => facade.cards.card(repo),
+  whoCalls: async (facade, { repo }) => ({ repo, edges: await facade.graph.whoCalls(repo) }),
+  subgraphFor: (facade, { repo, depth }) => facade.graph.subgraph(repo, depth),
 };
 
 /**
@@ -112,6 +114,8 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.listRepos, runs.listRepos),
   defineTool(mcpTools.getRepo, runs.getRepo),
   defineTool(mcpTools.getRepoCard, runs.getRepoCard),
+  defineTool(mcpTools.whoCalls, runs.whoCalls),
+  defineTool(mcpTools.subgraphFor, runs.subgraphFor),
 ];
 
 /** Repo łączy się z wynikiem synchronizacji po ścieżce, bo identyfikator może się zmienić razem z nazwą katalogu (ADR-18). */

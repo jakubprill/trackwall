@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { CardCache } from "./modules/cards/card-cache.ts";
 import { Cards } from "./modules/cards/cards.ts";
+import { Graph } from "./modules/graph/graph.ts";
 import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
@@ -17,6 +18,7 @@ import { groupPlatform } from "./platform/group-platform.ts";
 export interface Facade {
   workspace: Workspace;
   cards: Cards;
+  graph: Graph;
   mise: Mise;
   procs: ProcessGroups;
 }
@@ -49,5 +51,6 @@ export function createFacade(o: FacadeOptions): Facade {
   const cache = new CardCache(join(o.home, CARDS_DIR), o.log);
   cache.prune().catch((err: unknown) => o.log(`nie udało się posprzątać kart: ${String(err)}`));
   const cards = new Cards({ vcs, repos: workspace, cache });
-  return { workspace, cards, mise, procs };
+  const graph = new Graph({ cards, workspace });
+  return { workspace, cards, graph, mise, procs };
 }

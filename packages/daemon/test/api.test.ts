@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { apiResult, cardsApi, DaemonInfoResult, HealthResult, RepoList, workspaceApi } from "@trackwall/protocol";
+import { apiResult, cardsApi, DaemonInfoResult, graphApi, HealthResult, RepoGraph, RepoList, workspaceApi } from "@trackwall/protocol";
 import { postRoutes } from "../src/api/routes.ts";
 import { type ApiServer, startApi } from "../src/api/server.ts";
 import { createFacade } from "../src/facade.ts";
@@ -147,8 +147,12 @@ describe("api", () => {
 describe("api workspace", () => {
   const post = (path: string, body: string) => authed(path, { method: "POST", headers: { "content-type": "application/json" }, body });
 
-  test("każda akcja z kontraktu workspace i kart ma trasę w daemonie", () => {
-    expect([...Object.values(workspaceApi), ...Object.values(cardsApi)].filter((endpoint) => !postRoutes.has(endpoint.path))).toEqual([]);
+  test("każda akcja z kontraktu workspace, kart i grafu ma trasę w daemonie", () => {
+    expect(
+      [...Object.values(workspaceApi), ...Object.values(cardsApi), ...Object.values(graphApi)].filter(
+        (endpoint) => !postRoutes.has(endpoint.path),
+      ),
+    ).toEqual([]);
   });
 
   test("trasy workspace wymagają tokenu", async () => {
@@ -163,6 +167,9 @@ describe("api workspace", () => {
 
     const list = apiResult(RepoList).parse(JSON.parse((await post(workspaceApi.list.path, "")).body));
     expect(list.ok && list.data.repos.map((r) => [r.id, r.status.kind])).toEqual([["sklep", "ok"]]);
+
+    const graph = apiResult(RepoGraph).parse(JSON.parse((await post(graphApi.graph.path, "")).body));
+    expect(graph.ok && graph.data.nodes.map((n) => n.repo)).toEqual(["sklep"]);
   });
 
   test("nieistniejący folder z projektami to 400 z opisem", async () => {

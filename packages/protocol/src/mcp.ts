@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { RepoCardResult, TagName } from "./cards.ts";
+import { GraphEdge, MAX_SUBGRAPH_DEPTH, Subgraph } from "./graph.ts";
 import { MiseTasks } from "./mise.ts";
 import { SyncRepo } from "./sync.ts";
 import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
@@ -48,6 +49,13 @@ export const GetRepoResult = z.object({
 });
 export type GetRepoResult = z.infer<typeof GetRepoResult>;
 
+export const WhoCallsResult = z.object({
+  repo: RepoId,
+  /** Krawędzie do tego repo: kto go używa, czego (klucz) i skąd to wiadomo (dowody). */
+  edges: z.array(GraphEdge),
+});
+export type WhoCallsResult = z.infer<typeof WhoCallsResult>;
+
 export interface McpTool<Args extends z.ZodObject = z.ZodObject, Result extends z.ZodObject = z.ZodObject> {
   name: string;
   /** Opis dla modelu agenta: co zwraca i kiedy go użyć. */
@@ -90,5 +98,27 @@ export const mcpTools = {
       "Paczka udostępniana przez jedno repo i używana przez inne to połączenie między nimi. card: null w repo bez commitów.",
     args: z.object({ repo: RepoId.describe(`identyfikator repo z ${LIST_REPOS} (pole id)`) }).strict(),
     result: RepoCardResult,
+  },
+  whoCalls: {
+    name: "who_calls",
+    description:
+      "Kto używa danego repo: krawędzie grafu połączeń skierowane do tego repo, każda z rodzajem (package: repo " +
+      "używa paczki zbudowanej w tym repo; manual: połączenie wpisane przez użytkownika), kluczem (nazwa paczki albo " +
+      "opis), pewnością i dowodami (repo, plik, linia). Przed zmianą API albo paczki repo sprawdź, kogo dotknie.",
+    args: z.object({ repo: RepoId.describe(`identyfikator repo z ${LIST_REPOS} (pole id)`) }).strict(),
+    result: WhoCallsResult,
+  },
+  subgraphFor: {
+    name: "subgraph_for",
+    description:
+      "Fragment grafu połączeń wokół repo: repo w odległości do depth krawędzi w obie strony (kogo używa i kto " +
+      "używa jego) i krawędzie między nimi, z dowodami. Węzeł ma tagi i problem, gdy karty repo nie da się policzyć.",
+    args: z
+      .object({
+        repo: RepoId.describe(`identyfikator repo z ${LIST_REPOS} (pole id)`),
+        depth: z.number().int().min(1).max(MAX_SUBGRAPH_DEPTH).default(1).describe("ile krawędzi od repo, domyślnie 1"),
+      })
+      .strict(),
+    result: Subgraph,
   },
 } satisfies Record<string, McpTool>;
