@@ -93,7 +93,7 @@ Praca jednego agenta nad jednym repo: prompt, worktree, gałąź, sesja, budżet
 _Unikaj_: job; „task” w polskim tekście (myli się z taskiem mise)
 
 **Task mise**:
-Nazwana komenda z `mise.toml` repo: `setup`, `dev`, `test`, `build`, `lint`, `health`. W kodzie zawsze z dopowiedzeniem (`miseTask`, `mise.run(...)`), nigdy gołe `task`.
+Nazwana komenda z `mise.toml` repo: `setup`, `dev`, `test`, `build`, `lint`, `health`. W kodzie zawsze z dopowiedzeniem (`miseTask`, `mise.run(...)`), nigdy gołe `task`. Jedyny wyjątek to argument `task` narzędzia MCP `run_task` (§5.3), gdzie kontekst jest jednoznaczny.
 
 **Uruchomienie** (`run`, `runId`):
 Jednorazowe wykonanie taska mise przez `run_task` albo z UI, z własną grupą procesów i logami. Nie jest zadaniem ani serwisem.

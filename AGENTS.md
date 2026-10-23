@@ -48,7 +48,7 @@ Repo ma zostać opublikowane jako open source (nagłówek `docs/architecture.md`
 
 ## Bezpieczeństwo
 
-- **Daemon słucha tylko na `127.0.0.1`.** Poza `GET /api/health` i statycznymi plikami UI każdy endpoint HTTP, WebSocket i MCP wymaga tokenu, porównywanego w stałym czasie, i przechodzi sprawdzenie `Host`/`Origin`. Robi to `handle()` w `packages/daemon/src/api/server.ts` z pomocą `api/guard.ts`; nowy transport używa tych samych funkcji, nie własnych.
+- **Daemon słucha tylko na `127.0.0.1`.** Każde żądanie HTTP, WebSocket i MCP przechodzi sprawdzenie `Host`/`Origin`, a poza `GET /api/health` i statycznymi plikami UI wymaga też tokenu, porównywanego w stałym czasie. Robi to `handle()` w `packages/daemon/src/api/server.ts` z pomocą `api/guard.ts`; nowy transport używa tych samych funkcji, nie własnych.
 - **Wszystko z zewnątrz jest niezaufane**: ciała żądań, argumenty narzędzi MCP, pliki konfiguracji, wyjście procesów, pliki z repo użytkownika. Wchodzi przez schemat zod (`safeParse` w miejscu wejścia; schematy kontraktu API w `packages/protocol`).
 - **Daemon składa komendy z konfiguracji, nigdy z tekstu od sesji zadania** (§1.2). Procesy serwisów, tasków mise i sesji zadań startują tylko przez moduł `procs`, w grupie, z katalogiem roboczym sprawdzonym względem korzenia repo lub worktree.
 - **Sekrety nie trafiają do sesji zadania ani do logów**: wartości są maskowane przed zapisem do bufora, narzędzia MCP odpowiadają „ustawiony / brak”, zmienne środowiskowe nie trafiają do audytu, komunikatów błędów ani fixture'ów.
@@ -68,13 +68,13 @@ Repo ma zostać opublikowane jako open source (nagłówek `docs/architecture.md`
 
 - **Nazwy mówią, czym rzecz jest w domenie**, tym samym słowem co `CONTEXT.md`, UI i narzędzia MCP. Jedno pojęcie, jedna nazwa.
 - **Granice modułów z §4 są twarde.** Moduł daemona nie importuje innego modułu bezpośrednio, tylko przez fasadę; nowa zależność między modułami wymaga zmiany tabeli w §4. UI, scena i CLI nie importują `@pitwall/daemon`; wspólny kod biorą tylko z `@pitwall/protocol`. Pliki infrastruktury daemona (start, odkrywanie, `platform/`) nie są modułami i nie trzymają stanu domenowego.
-- **Typy są kontraktem i pochodzą z kodu**: z wartości, ze schematów zod (`z.infer`). Bez `any`. Zamiast `!` jawne sprawdzenie i wyjątek z opisem. Asercja `as` to twierdzenie, którego kompilator nie sprawdzi: dane z zewnątrz (`JSON.parse`, odpowiedzi HTTP, pliki, argumenty CLI) nigdy nie są rzutowane, tylko parsowane schematem. Poza tym `as` tylko tam, gdzie typ z biblioteki jest szerszy niż to, co wiadomo w danym miejscu (`server.address() as AddressInfo`, błąd w `catch` jako `NodeJS.ErrnoException`), oraz w testach do budowania atrap.
+- **Typy są kontraktem i pochodzą z kodu**: z wartości, ze schematów zod (`z.infer`). Bez `any`. Zamiast `!` jawne sprawdzenie i wyjątek z opisem. Asercja `as` to twierdzenie, którego kompilator nie sprawdzi: dane z zewnątrz (`JSON.parse`, odpowiedzi HTTP, pliki, argumenty CLI) nigdy nie są rzutowane, tylko parsowane schematem. Poza tym `as` tylko tam, gdzie typ z biblioteki jest szerszy niż to, co wiadomo w danym miejscu (`server.address() as AddressInfo`, błąd w `catch` jako `NodeJS.ErrnoException`), oraz w testach do budowania atrap. Kod w `spikes/` jest wyłączony z tej zasady, bo nie trafia do aplikacji.
 - **Małe funkcje i pliki o jednym celu.** Plik, który robi dwie rzeczy, staje się dwoma plikami.
 - **Jedno miejsce dla każdej reguły.** Zanim napiszesz helper, poszukaj istniejącego. Zduplikowana logika to błąd, który czeka, aż kopie się rozjadą.
 - **Komentarze tłumaczą dlaczego, nie co.** Nieoczywisty moduł zaczyna się od krótkiego komentarza: do czego służy, co gwarantuje, gdzie jest opisany (sekcja architektury).
 - **Jawnie zamiast sprytnie**: bez magicznych napisów współdzielonych między plikami (eksportuj stałą), bez ukrytego stanu globalnego, bez cichych wartości domyślnych dla czegoś, co musi być ustawione.
 - **Usuwaj martwy kod** zamiast go komentować.
-- **Nazwy plików**: kebab-case (`open-browser.ts`), komponenty React w PascalCase (`DaemonPanel.tsx`).
+- **Nazwy plików**: kebab-case (`open-browser.ts`), komponenty React w PascalCase (`DaemonPanel.tsx`). Wyjątek: komponenty shadcn/ui w `components/ui/` zostają pod nazwami, które nadaje generator (`button.tsx`).
 - **Zależności npm w dokładnych wersjach** (bez `^` i `~`). Nie dodawaj zależności do czegoś, co załatwia kilka linii kodu. Natywny addon wymaga sprawdzenia, że działa w `bun build --compile` na obu systemach (patrz `spikes/`).
 - **Testy czytają się jak dokumentacja**: nazwa testu to zdanie opisujące zachowanie, a test pokazuje wejście i oczekiwany wynik bez helperów, które je ukrywają.
 - **Reguły egzekwuje narzędzie wszędzie, gdzie się da**: reguła w linterze trzyma lepiej niż zdanie w tym pliku. Dziś Biome ma tylko zestaw `recommended`, więc większości zasad z tej sekcji pilnuje przegląd. Gdy powtarzasz tę samą uwagę w przeglądzie, zamień ją w regułę.

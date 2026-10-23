@@ -27,4 +27,4 @@ Do sprawdzenia ręcznie:
 - [ ] 3. Komendy z AGENTS.md przechodzą lokalnie
 - [ ] 4. Dokumentacja zaktualizowana w tym PR
 - [ ] 5. Nic firmowego
-- [ ] 6. Przegląd przed PR do czystej rundy
+- [ ] 6. Przegląd przed PR do czystej rundy albo trzy rundy, a to, co zostało, opisane wyżej
