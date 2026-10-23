@@ -30,6 +30,17 @@ describe("łączenie sygnałów stanu zadania", () => {
     expect(tracker.current?.state).toBe("Approval");
   });
 
+  test("słabsze źródło może zakończyć Working, gdy hook końca tury nie przyszedł, ale nie zaczyna pracy po hooku", () => {
+    const tracker = new TaskStateTracker({ now: () => 0, staleAfterMs: 60_000 });
+    tracker.signal({ state: "Working", source: "hook", confidence: "high", reason: "hook userPromptSubmitted" });
+
+    expect(tracker.signal({ state: "Input", source: "osc", confidence: "low", reason: "osc 9;4;0" })).toMatchObject({
+      state: "Input",
+      source: "osc",
+    });
+    expect(tracker.signal({ state: "Working", source: "osc", confidence: "high", reason: "osc 9;4;3" })).toBeUndefined();
+  });
+
   test("Working bez wyjścia dłużej niż próg przechodzi w Stale, a wyjście przywraca Working", () => {
     let now = 0;
     const tracker = new TaskStateTracker({ now: () => now, staleAfterMs: 60_000 });

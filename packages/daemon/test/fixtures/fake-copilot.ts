@@ -8,7 +8,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 
-const HooksFile = z.object({ hooks: z.record(z.string(), z.array(z.object({ exec: z.string(), args: z.array(z.string()) }))) });
+const HooksFile = z.object({
+  hooks: z.record(z.string(), z.array(z.object({ exec: z.string(), args: z.array(z.string()), cwd: z.string() }))),
+});
 
 const dirIndex = process.argv.indexOf("--plugin-dir");
 const pluginDir = process.argv[dirIndex + 1];
@@ -17,7 +19,10 @@ const { hooks } = HooksFile.parse(JSON.parse(readFileSync(join(pluginDir, "hooks
 
 function fire(event: string, payload: Record<string, unknown>): void {
   for (const hook of hooks[event] ?? []) {
-    spawnSync(hook.exec, hook.args, { input: JSON.stringify({ sessionId: "s1", timestamp: Date.now(), cwd: process.cwd(), ...payload }) });
+    spawnSync(hook.exec, hook.args, {
+      cwd: hook.cwd,
+      input: JSON.stringify({ sessionId: "s1", timestamp: Date.now(), cwd: process.cwd(), ...payload }),
+    });
   }
 }
 

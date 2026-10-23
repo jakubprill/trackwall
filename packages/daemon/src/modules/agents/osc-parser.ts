@@ -39,9 +39,12 @@ export class OscParser {
 
   #inside(ch: string): Osc | undefined {
     if (this.#afterEsc) {
-      // `ESC \` kończy sekwencję; każdy inny znak po ESC ją przerywa i jest czytany jak poza sekwencją.
-      this.#afterEsc = false;
-      if (ch === "\\") return this.#finish();
+      // `ESC \` kończy sekwencję; każdy inny znak po ESC ją przerywa i jest czytany jak poza sekwencją, zaraz po ESC
+      // (więc `ESC ]` od razu zaczyna następną).
+      if (ch === "\\") {
+        this.#afterEsc = false;
+        return this.#finish();
+      }
       this.#body = undefined;
       return this.#outside(ch);
     }

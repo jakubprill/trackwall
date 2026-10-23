@@ -41,19 +41,23 @@ function parseLine<T extends z.ZodType>(schema: T, line: string, number: number)
 export interface AsciicastWriterOptions {
   width: number;
   height: number;
-  now: () => number;
 }
 
 export class AsciicastWriter {
   readonly #fd: number;
-  readonly #now: () => number;
-  readonly #startedAt: number;
+  /** `performance.now()` w chwili odpowiadającej pełnej sekundzie z nagłówka. */
+  readonly #origin: number;
 
+  /**
+   * Nagłówek ma tylko pełne sekundy, więc czasy zdarzeń liczą się od tej pełnej sekundy, a nie od chwili startu:
+   * inaczej odtworzone czasy byłyby przesunięte o ułamek sekundy. Zegar monotoniczny, bo cofnięcie zegara
+   * systemu (NTP po uśpieniu) dałoby ujemne czasy i nagranie, którego nie da się odczytać.
+   */
   constructor(path: string, o: AsciicastWriterOptions) {
     this.#fd = openSync(path, "w");
-    this.#now = o.now;
-    this.#startedAt = o.now();
-    const header: AsciicastHeader = { version: 2, width: o.width, height: o.height, timestamp: Math.floor(this.#startedAt / 1000) };
+    const wall = Date.now();
+    this.#origin = performance.now() - (wall % 1000);
+    const header: AsciicastHeader = { version: 2, width: o.width, height: o.height, timestamp: Math.floor(wall / 1000) };
     writeSync(this.#fd, `${JSON.stringify(header)}\n`);
   }
 
@@ -74,7 +78,7 @@ export class AsciicastWriter {
   }
 
   #event(code: AsciicastEvent[1], data: string): void {
-    const event: AsciicastEvent = [(this.#now() - this.#startedAt) / 1000, code, data];
+    const event: AsciicastEvent = [(performance.now() - this.#origin) / 1000, code, data];
     writeSync(this.#fd, `${JSON.stringify(event)}\n`);
   }
 }

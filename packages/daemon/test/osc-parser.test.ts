@@ -23,6 +23,10 @@ describe("parser OSC", () => {
     expect(parser.feed("\x1b]0;urwany\x1b[0m\x1b]2;cały\x07")).toEqual([{ code: "2", data: "cały" }]);
   });
 
+  test("ESC ] zaraz po urwanej sekwencji od razu zaczyna następną", () => {
+    expect(new OscParser().feed("\x1b]0;tytul\x1b]9;4;3;0\x07")).toEqual([{ code: "9", data: "4;3;0" }]);
+  });
+
   test("sekwencja bez średnika ma pusty napis danych", () => {
     expect(new OscParser().feed("\x1b]110\x07")).toEqual([{ code: "110", data: "" }]);
   });

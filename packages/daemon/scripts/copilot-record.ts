@@ -12,13 +12,24 @@
  * `replay` liczy stan jeszcze raz z nagrania, np. po zmianie reguł. Trzecia komenda, `hook`, jest wywoływana
  * przez Copilot CLI z wtyczki sesji, nie przez człowieka.
  */
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync, writeSync } from "node:fs";
-import { homedir } from "node:os";
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  fstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import type { TaskStateChange } from "@trackwall/protocol";
+import { trackwallHome } from "../src/home.ts";
 import { AsciicastWriter, parseAsciicast } from "../src/modules/agents/asciicast.ts";
 import { CopilotHookEvent, CopilotHookRecord, hookRecord } from "../src/modules/agents/copilot-hook-record.ts";
 import { writeCopilotPlugin } from "../src/modules/agents/copilot-plugin.ts";
@@ -40,13 +51,17 @@ async function record(argv: string[]): Promise<number> {
     allowPositionals: true,
   });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const out = resolve(values.out ?? join(homedir(), ".trackwall", "recordings", stamp));
+  const out = resolve(values.out ?? join(trackwallHome(), "recordings", stamp));
   mkdirSync(out, { recursive: true });
   const hooksPath = join(out, "hooks.jsonl");
   writeFileSync(hooksPath, "");
   const pluginDir = join(out, "plugin");
   const script = fileURLToPath(import.meta.url);
-  writeCopilotPlugin(pluginDir, (event) => ({ exec: process.execPath, args: [script, "hook", event, hooksPath] }));
+  writeCopilotPlugin(pluginDir, (event) => ({
+    exec: process.execPath,
+    args: ["--no-env-file", script, "hook", event, hooksPath],
+    cwd: pluginDir,
+  }));
 
   // Bez terminala (przekierowane wyjście) albo w `script` rozmiar bywa 0, a PTY 0×0 rozkłada TUI.
   const size = () => ({ cols: process.stdout.columns || DEFAULT_COLS, rows: process.stdout.rows || DEFAULT_ROWS });
@@ -84,6 +99,7 @@ async function record(argv: string[]): Promise<number> {
     return code;
   } finally {
     clearInterval(timer);
+    hooks.close();
     terminal.close();
     recording.close();
     process.stdin.setRawMode?.(false);
@@ -127,7 +143,7 @@ class Recording {
   readonly #statesFd: number;
 
   constructor(out: string, size: { cols: number; rows: number }) {
-    this.#cast = new AsciicastWriter(join(out, "session.cast"), { width: size.cols, height: size.rows, now: Date.now });
+    this.#cast = new AsciicastWriter(join(out, "session.cast"), { width: size.cols, height: size.rows });
     this.#statesFd = openSync(join(out, "states.jsonl"), "w");
   }
 
@@ -186,33 +202,33 @@ const HookLine = jsonOf(CopilotHookRecord);
 
 /** Czyta linie dopisywane do `hooks.jsonl` przez procesy hooków, od miejsca, w którym skończył poprzednio. */
 class HookTail {
-  readonly #path: string;
+  readonly #fd: number;
+  readonly #buffer = Buffer.alloc(64 * 1024);
   readonly #decoder = new StringDecoder("utf8");
   #offset = 0;
   #partial = "";
 
   constructor(path: string) {
-    this.#path = path;
+    this.#fd = openSync(path, "r");
   }
 
   read(): CopilotHookRecord[] {
-    const fd = openSync(this.#path, "r");
-    const buffer = Buffer.alloc(64 * 1024);
+    if (fstatSync(this.#fd).size === this.#offset) return [];
     let text = this.#partial;
-    try {
-      let n = readSync(fd, buffer, 0, buffer.length, this.#offset);
-      while (n > 0) {
-        this.#offset += n;
-        text += this.#decoder.write(buffer.subarray(0, n));
-        n = readSync(fd, buffer, 0, buffer.length, this.#offset);
-      }
-    } finally {
-      closeSync(fd);
+    let n = readSync(this.#fd, this.#buffer, 0, this.#buffer.length, this.#offset);
+    while (n > 0) {
+      this.#offset += n;
+      text += this.#decoder.write(this.#buffer.subarray(0, n));
+      n = readSync(this.#fd, this.#buffer, 0, this.#buffer.length, this.#offset);
     }
     const lines = text.split("\n");
     this.#partial = lines.pop() ?? "";
     // Linia, która nie jest rekordem (np. dwa hooki dopisały się naraz), jest pomijana: to tylko gorszy stan.
     return lines.flatMap((line) => HookLine.safeParse(line).data ?? []);
+  }
+
+  close(): void {
+    closeSync(this.#fd);
   }
 }
 

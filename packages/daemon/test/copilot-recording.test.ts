@@ -9,7 +9,7 @@ const summary = (changes: ReturnType<typeof replayCopilotRecording>) =>
   changes.map((c) => `${c.state} ${c.source} ${c.confidence} ${c.reason}`);
 
 describe("stan sesji Copilot CLI z nagrania", () => {
-  test("sesja z hookami: prośba o zgodę trwa ponad minutę bez Stale, sekwencje terminala nie mieszają po hooku", () => {
+  test("sesja z hookami: prośba o zgodę trwa ponad minutę bez Stale, a zdjęcie paska postępu kończy pracę przed hookiem końca tury", () => {
     const changes = replayCopilotRecording(fixture("approval-session.cast"), { staleAfterMs: 60_000 });
 
     expect(summary(changes)).toEqual([
@@ -17,6 +17,7 @@ describe("stan sesji Copilot CLI z nagrania", () => {
       "Working hook high hook userPromptSubmitted",
       "Approval hook medium hook notification permission_prompt",
       "Working hook high hook postToolUse",
+      "Input osc low osc 9;4;0",
       "Input hook high hook agentStop",
       "Done hook high hook sessionEnd user_exit",
     ]);

@@ -5,6 +5,8 @@ import type { TaskStateChange, TaskStateSource } from "@trackwall/protocol";
  *
  * - Najlepsze źródło, które się odezwało, wygrywa: po pierwszym hooku sekwencje terminala i ekran nie zmieniają
  *   już stanu, bo hook wie więcej. Dopóki hook milczy (np. nie działa na danym systemie), stan idzie ze słabszych.
+ *   Wyjątek: słabsze źródło może zakończyć `Working`. Gdy hook końca tury nie przyjdzie (zgubiony, przekroczony
+ *   czas hooka, przerwana tura), sesja nie wisi w `Working`, a potem w `Stale`, choć czeka na człowieka.
  * - `Stale` tylko z `Working`: brak wyjścia i sygnałów przez próg. Czekanie na człowieka nie jest zawieszeniem.
  *   Czas i powód `Stale` zależą tylko od ostatniej aktywności i progu, nie od tego, jak często woła się `tick`,
  *   więc na żywo i przy odtwarzaniu nagrania wychodzi to samo. Każde wyjście po `Stale` wraca do stanu sprzed niego.
@@ -54,8 +56,9 @@ export class TaskStateTracker {
   /** Sygnał detektora; zwraca zmianę, gdy stan, źródło albo pewność są inne niż dotąd. */
   signal({ endsSession, ...s }: StateSignal): TaskStateChange | undefined {
     const rank = DETECTOR_RANK[s.source];
-    if (this.#exited || rank < this.#bestRank) return undefined;
-    this.#bestRank = rank;
+    const endsWork = this.#current?.state === "Working" && s.state !== "Working";
+    if (this.#exited || (rank < this.#bestRank && !endsWork)) return undefined;
+    this.#bestRank = Math.max(this.#bestRank, rank);
     this.#sessionEnded ||= endsSession === true;
     this.#lastActivity = this.#now();
     return this.#set(s, this.#lastActivity);
