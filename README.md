@@ -55,3 +55,7 @@ Windows: zip zawiera `pitwall.exe`, `pitwall-daemon.exe` i `ui/`. Rozpakowanie i
 macOS: zip zawiera niepodpisany `Pitwall.app`; pierwsze uruchomienie przez prawy klik > Otwórz albo `xattr -dr com.apple.quarantine Pitwall.app`.
 
 Każdy przebieg CI publikuje oba archiwa jako artefakty.
+
+## Licencja i bezpieczeństwo
+
+Kod jest na licencji MIT (`LICENSE`). Podatności zgłaszaj prywatnie według `SECURITY.md`.
