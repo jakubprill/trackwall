@@ -7,11 +7,11 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
-import { DaemonInfoResult, GetRepoResult, ListReposResult, mcpTools, workspaceApi } from "@trackwall/protocol";
+import { DaemonInfoResult, GetRepoResult, ListReposResult, LogTail, mcpTools, workspaceApi } from "@trackwall/protocol";
 import { z } from "zod";
 import { type ApiServer, startApi } from "../src/api/server.ts";
 import { readDaemonFile, writeDaemonFile } from "../src/discovery.ts";
-import { createFacade } from "../src/facade.ts";
+import { createFacade, type Facade } from "../src/facade.ts";
 import { loopbackRequest } from "../src/loopback.ts";
 import { createMcpEndpoint, MCP_PATH } from "../src/mcp/endpoint.ts";
 import { runStdioBridge } from "../src/mcp/stdio-bridge.ts";
@@ -24,6 +24,7 @@ const MAIN = join(import.meta.dir, "..", "src", "main.ts");
 const TOKEN = "m".repeat(43);
 const README = "# Zamówienia\n\nBFF sklepu.\n";
 let api: ApiServer;
+let facade: Facade;
 let projects: string;
 let orders: string;
 const logs: string[] = [];
@@ -32,7 +33,7 @@ beforeAll(async () => {
   projects = mkdtempSync(join(tmpdir(), "trackwall-mcp-projects-"));
   orders = makeRepo({ "README.md": README, "src/app.ts": "export {};\n" }, "orders-bff", projects);
   gitIn(orders, "remote", "add", "origin", "git@gitlab.example.com:sklep/orders-bff.git");
-  const facade = createFacade({
+  facade = createFacade({
     home: mkdtempSync(join(tmpdir(), "trackwall-mcp-home-")),
     openUrl: () => {},
     // Program, którego nie ma w PATH: lista tasków mise jest wtedy stanem `not_installed`, na każdej maszynie tak samo.
@@ -59,10 +60,10 @@ beforeAll(async () => {
 afterAll(() => api.close());
 
 describe("serwer MCP przez Streamable HTTP", () => {
-  test("ogłasza tylko narzędzia do odczytu: list_repos i get_repo", async () => {
+  test("ogłasza tylko narzędzia do odczytu: list_repos, get_repo i tail", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name)).toEqual(["list_repos", "get_repo"]);
+    expect(tools.map((t) => t.name)).toEqual(["list_repos", "get_repo", "tail"]);
     // Każde narzędzie z kontraktu, który pokazuje UI, jest zarejestrowane w daemonie.
     expect(tools.map((t) => t.name)).toEqual(Object.values(mcpTools).map((t) => t.name));
     for (const tool of tools) expect(tool.annotations?.readOnlyHint).toBe(true);
@@ -116,6 +117,39 @@ describe("serwer MCP przez Streamable HTTP", () => {
     // Odrzuca schemat w SDK, zanim identyfikator dotrze do workspace (tam byłoby `not_found`).
     expect(JSON.stringify(result.content)).toContain("identyfikator repo");
     expect(JSON.stringify(result.content)).not.toContain("not_found");
+    await client.close();
+  });
+
+  test("tail zwraca zamaskowany log taska mise od kursora", async () => {
+    const output = facade.logs.open({ kind: "mise-task", repo: "orders-bff", miseTask: "dev" }, "r1", { DB_PASSWORD: "tajne-haslo-123" });
+    output.push("stdout", Buffer.from("start\nERROR baza: tajne-haslo-123\n"));
+    const client = await connectHttpClient(api.port, TOKEN);
+
+    const first = LogTail.parse(
+      (await client.callTool({ name: "tail", arguments: { repo: "orders-bff", miseTask: "dev", limit: 1 } })).structuredContent,
+    );
+    expect(first.records.map((r) => [r.level, r.msg])).toEqual([["error", "ERROR baza: ***"]]);
+
+    output.push("stdout", Buffer.from("gotowe\n"));
+    const next = LogTail.parse(
+      (await client.callTool({ name: "tail", arguments: { repo: "orders-bff", miseTask: "dev", sinceSeq: first.nextSeq, limit: 10 } }))
+        .structuredContent,
+    );
+    expect(next.records.map((r) => r.msg)).toEqual(["gotowe"]);
+    expect(next.dropped).toBe(false);
+    await client.close();
+  });
+
+  test("tail z nieznanym repo zwraca not_found, a task bez wyjścia pusty log", async () => {
+    const client = await connectHttpClient(api.port, TOKEN);
+    const missing = await client.callTool({ name: "tail", arguments: { repo: "nie-ma-takiego", miseTask: "dev", limit: 10 } });
+    expect(missing.isError).toBe(true);
+    expect(missing.content).toEqual([{ type: "text", text: 'not_found: w folderze z projektami nie ma repo "nie-ma-takiego"' }]);
+
+    const empty = LogTail.parse(
+      (await client.callTool({ name: "tail", arguments: { repo: "orders-bff", miseTask: "build", limit: 10 } })).structuredContent,
+    );
+    expect(empty.records).toEqual([]);
     await client.close();
   });
 

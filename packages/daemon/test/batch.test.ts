@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { BatchRun, SyncResult } from "@trackwall/protocol";
 import { DomainError } from "../src/errors.ts";
 import { Batch } from "../src/modules/batch/batch.ts";
+import { Logs } from "../src/modules/logs/logs.ts";
 import { Mise } from "../src/modules/mise/mise.ts";
 import { ProcessGroups } from "../src/modules/procs/process-groups.ts";
 import { RuntimeFile } from "../src/modules/procs/runtime-file.ts";
@@ -36,14 +37,16 @@ function setup(
     if (!dir) throw new DomainError("not_found", `w folderze z projektami nie ma repo "${id}"`);
     return dir;
   };
+  const logs = new Logs({ dir: join(home, "logs"), maxFileBytes: 1024 * 1024, log: () => {} });
   const procs = new ProcessGroups({
+    logs,
     runtime: new RuntimeFile(join(home, "runtime.json")),
     platform: platform.then((p) => ({ ...p, graceMs: 300 })),
     log: () => {},
   });
   const mise = new Mise({ procs, repos: { repoPath }, command: FAKE_MISE, env: async () => process.env });
   const batch = new Batch({ workspace: { repoPath, syncRepo: sync }, mise, log: () => {} });
-  return { batch, mise, procs, home, dirs, dir: (id: string) => dirs.get(id) ?? "" };
+  return { batch, mise, procs, logs, home, dirs, dir: (id: string) => dirs.get(id) ?? "" };
 }
 
 /** Platforma, na której zabicie grupy się nie potwierdza: procesy giną, ale grupa nigdy nie jest pusta. */
@@ -206,9 +209,9 @@ describe("komenda zbiorcza", () => {
   );
 
   test(
-    "nieudany mise install pomija zależności i build tego repo",
+    "nieudany mise install pomija zależności i build tego repo, a jego wyjście ma własny log",
     async () => {
-      const { batch, dir } = setup({ web: { tasks: [SETUP, BUILD], exits: { setup: 0, build: 0 }, installExit: 1 } });
+      const { batch, logs, dir } = setup({ web: { tasks: [SETUP, BUILD], exits: { setup: 0, build: 0 }, installExit: 1 } });
 
       await batch.start({ repos: ["web"], steps: ["tools", "setup", "build"] });
       const run = await finished(batch);
@@ -219,6 +222,8 @@ describe("komenda zbiorcza", () => {
         { step: "build", state: "skipped", message: "pominięty po błędzie kroku tools" },
       ]);
       expect(calls(dir("web"))).toEqual(["install"]);
+      const installLog = logs.tail({ source: { kind: "mise-install", repo: "web" }, limit: 10 });
+      expect(installLog.records.map((r) => [r.stream, r.msg])).toEqual([["stderr", "mise all tools are installed"]]);
     },
     TIMEOUT,
   );

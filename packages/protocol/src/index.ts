@@ -2,6 +2,7 @@ export * from "./agents.ts";
 export * from "./api.ts";
 export * from "./batch.ts";
 export * from "./daemon.ts";
+export * from "./logs.ts";
 export * from "./mcp.ts";
 export * from "./mise.ts";
 export * from "./procs.ts";
