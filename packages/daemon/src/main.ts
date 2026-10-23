@@ -5,12 +5,16 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
-import { type DaemonArgs, parseDaemonArgs, USAGE } from "./args.ts";
+import { COPILOT_HOOK_COMMAND, type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./args.ts";
 import { newToken, probeRunningDaemon, removeDaemonFile, watchDaemonFile, withStartLock, writeDaemonFile } from "./discovery.ts";
-import { createFacade, type Facade } from "./facade.ts";
+import { createFacade, type Facade, runCopilotHook } from "./facade.ts";
 import { trackwallHome } from "./home.ts";
+import { createMcpEndpoint } from "./mcp/endpoint.ts";
+import { runStdioBridge } from "./mcp/stdio-bridge.ts";
+import { mcpStdioCommand } from "./mcp/stdio-command.ts";
 import { openBrowser } from "./open-browser.ts";
 import { runtimeInfo } from "./platform/runtime.ts";
+import { selfCommand } from "./self-command.ts";
 import { userEnv } from "./user-env.ts";
 import { VERSION } from "./version.ts";
 
@@ -37,6 +41,7 @@ async function main(args: DaemonArgs): Promise<void> {
     stopWatching();
     // Grupy procesów przed zamknięciem API: UI widzi „stopping”, a nie zerwane połączenie w trakcie zatrzymywania.
     await facade?.procs.stopAll();
+    facade?.agents.close();
     removeDaemonFile(home, process.pid);
     await api?.close();
     // Na końcu: ostatnie linie zatrzymanych grup, także te, które przyszły po `exit` lidera, trafiają do plików logów.
@@ -48,7 +53,17 @@ async function main(args: DaemonArgs): Promise<void> {
     const running = await probeRunningDaemon(home);
     if (running) return { kind: "existing" as const, ...running };
     const token = newToken();
-    facade = createFacade({ home, openUrl: openBrowser, miseCommand: ["mise"], userEnv, log });
+    facade = createFacade({
+      home,
+      openUrl: openBrowser,
+      miseCommand: ["mise"],
+      copilotCommand: ["copilot"],
+      hookCommand: (event, hooksFile) => selfCommand([COPILOT_HOOK_COMMAND, event, hooksFile]),
+      mcpStdioCommand: mcpStdioCommand(home),
+      userEnv,
+      log,
+    });
+    facade.agents.sweepLeftovers();
     // Pod blokadą startu: drugi daemon nie może w tym czasie uruchomić grupy, którą ten wziąłby za sierotę.
     await facade.procs.sweepOrphans().catch((err: unknown) => log(`sprzątanie sierot z runtime.json: ${String(err)}`));
     api = await startApi(
@@ -67,9 +82,11 @@ async function main(args: DaemonArgs): Promise<void> {
           runtime: runtimeInfo(),
           launchedBy: args.parent === undefined ? "manual" : "desktop",
           home,
+          mcpStdioCommand: mcpStdioCommand(home),
         }),
         onShutdown: () => void shutdown("POST /api/daemon/shutdown"),
         facade,
+        mcp: createMcpEndpoint({ facade, version: VERSION, log: (msg) => log(`[mcp] ${msg}`) }),
       },
       args.port,
     );
@@ -127,20 +144,44 @@ function log(msg: string): void {
 // Komunikaty walidacji zod trafiają do UI (`bad_request`, `invalid_config`), więc po polsku jak reszta tekstów.
 z.config(z.locales.pl());
 
-let parsed: DaemonArgs;
+let commandLine: CommandLine;
 try {
-  parsed = parseDaemonArgs(process.argv.slice(2));
+  commandLine = parseCommandLine(process.argv.slice(2));
 } catch (err) {
   process.stderr.write(`${(err as Error).message}\n\n${USAGE}`);
   process.exit(EXIT_USAGE);
 }
-if (parsed.help) {
+if (commandLine.command === MCP_STDIO_COMMAND) {
+  runMcpStdio(trackwallHome(commandLine.home));
+} else if (commandLine.command === COPILOT_HOOK_COMMAND) {
+  runHook(commandLine.event, commandLine.hooksFile);
+} else if (commandLine.args.help) {
   process.stdout.write(USAGE);
-} else if (parsed.version) {
+} else if (commandLine.args.version) {
   process.stdout.write(`${VERSION}\n`);
 } else {
-  main(parsed).catch((err: unknown) => {
+  main(commandLine.args).catch((err: unknown) => {
     process.stderr.write(`[daemon] błąd startu: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
     process.exit(1);
   });
+}
+
+/**
+ * Most stdio do serwera MCP działającego daemona. stdout należy do protokołu MCP, więc komunikaty mostu idą tylko na
+ * stderr; proces kończy się sam po opróżnieniu stdout (`process.exit` ucięłoby odpowiedzi czekające w buforze rury).
+ */
+function runMcpStdio(home: string): void {
+  const log = (msg: string) => process.stderr.write(`[mcp-stdio] ${msg}\n`);
+  runStdioBridge({ home, input: process.stdin, output: process.stdout, log }).catch((err: unknown) => {
+    log(String(err));
+    process.exitCode = 1;
+  });
+}
+
+/** Hook wtyczki sesji: payload na stdin, rekord do `hooks.jsonl`; nic na stdout i zawsze kod 0 (ADR-17). */
+function runHook(event: string | undefined, hooksFile: string | undefined): void {
+  const chunks: Buffer[] = [];
+  process.stdin.on("data", (chunk: Buffer) => chunks.push(chunk));
+  process.stdin.on("error", () => {});
+  process.stdin.on("end", () => runCopilotHook(event, hooksFile, Buffer.concat(chunks).toString("utf8")));
 }

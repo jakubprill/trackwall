@@ -123,11 +123,7 @@ function TaskRow({ conn, repo, task, onChange }: { conn: Connection; repo: strin
           {task.description && <span className="text-muted-foreground truncate text-xs">{task.description}</span>}
         </div>
         <span className="text-xs" title={task.run ? `od ${relativeTime(task.run.startedAt, new Date())}` : undefined}>
-          {state.tone ? (
-            <StatusLabel tone={state.tone} label={state.label} />
-          ) : (
-            <span className="text-muted-foreground">{state.label}</span>
-          )}
+          <StatusLabel tone={state.tone} label={state.label} />
         </span>
         <Button variant="ghost" size="sm" onClick={() => setShowLog((v) => !v)} aria-pressed={showLog}>
           <ScrollText /> {showLog ? "Ukryj log" : "Log"}

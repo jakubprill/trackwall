@@ -14,13 +14,15 @@ Dokumentacja:
 
 Etap 1 (szkielet): daemon z `/api/health`, UI z panelem daemona, powłoka Tauri z trayem, portable build na Windows i macOS, CI na Linuksie, Windowsie i macOS przy każdym PR (ADR-22), spike'i Job Objects i PTY.
 
-Nawigacja: widoki przełącza pasek przy lewej krawędzi okna, jak w VS Code: Repo (Ctrl+1) u góry, Daemon (Ctrl+9) i Ustawienia (Ctrl+,) na dole; na macOS ⌘ zamiast Ctrl. Nazwę i skrót widoku pokazuje podpowiedź po najechaniu na ikonę.
+Nawigacja: widoki przełącza pasek przy lewej krawędzi okna, jak w VS Code: Repo (Ctrl+1) i Sesje (Ctrl+2) u góry, Daemon (Ctrl+9) i Ustawienia (Ctrl+,) na dole; na macOS ⌘ zamiast Ctrl. Nazwę i skrót widoku pokazuje podpowiedź po najechaniu na ikonę.
 
 Przeglądanie repo: w widoku „Ustawienia” wskazujesz folder z projektami (pełną ścieżką), a widok „Repo” pokazuje każde repo gita, które leży bezpośrednio w nim: gałąź, liczbę zmian i ahead/behind, README, pliki i commity z ostatniego commita, oraz otwiera repo w VS Code. Repo sklonowane do folderu pojawia się na liście samo. Przycisk „+” na liście repo otwiera wyszukiwarkę repo z GitLab i GitHub (hostingi dodaje się w „Ustawieniach”) i klonuje wybrane jednym kliknięciem; wymaga zalogowanego `glab` (`glab auth login --hostname <host>`) albo `gh` (`gh auth login`) w `PATH`, a Trackwall nie przechowuje tokenu. Przycisk „Synchronizuj wszystko” pobiera zmiany każdego repo (`git fetch`) i przesuwa gałąź domyślną do zdalnej, gdy to czysty fast-forward; repo ze zmianami w gałęzi domyślnej albo z rozjechaną gałęzią zostaje nietknięte, a panel synchronizacji w miejscu karty repo mówi dlaczego. Ścieżka folderu jest kluczem `projectsDir`, a hostingi kluczem `repoHosts` w `~/.trackwall/workspace.yaml`; oba można ustawić też ręcznie. Wymaga `git` w `PATH`.
 
 Taski mise: zakładka „Taski mise” w karcie repo pokazuje taski z `mise tasks ls`, uruchamia je (`mise run <task>` w korzeniu repo) i zatrzymuje jako całą grupę procesów, razem z ich potomkami (Job Object na Windowsie, sesja POSIX na macOS, ADR-20); po błędzie pokazuje kod wyjścia i ostatnie linie wyjścia. Przycisk „Log” przy tasku pokazuje jego wyjście na żywo (stdout i stderr, bez kolorów ANSI, błędy i ostrzeżenia wyróżnione), a uruchomienie otwiera log samo; wartości zmiennych środowiskowych o nazwach sekretów (`*_TOKEN`, `*_PASSWORD`, `*_SECRET`…) są w logu zamienione na `***`. Pełny log każdego taska leży w `~/.trackwall/logs/mise-task/<repo>/<task>.jsonl` (najwyżej 10 MB plus jeden poprzedni plik `.1.jsonl`); w nazwie pliku znaki spoza małych liter, cyfr, `_` i `-` są zakodowane jako `%XX`, np. task `build:ui` to `build%3Aui.jsonl`. Konfiguracji mise, której mise nie ufa, można zaufać przyciskiem (`mise trust`). Wyjście daemona zatrzymuje wszystkie taski, a grupy po awarii daemona sprząta jego następny start. Wymaga `mise` w `PATH` (na macOS wystarczy `PATH` z powłoki logowania).
 
-Etap 2 (prototyp): wykrywanie stanu sesji Copilot CLI z hooków i sekwencji terminala (ADR-17), na razie jako skrypt nagrywający sesję, jeszcze bez widoku Zadania; opis niżej w „Nagrywanie sesji Copilot CLI”.
+Serwer MCP dla Copilot CLI: daemon wystawia serwer MCP tylko do odczytu (ADR-24) z narzędziami `list_repos` (repo z folderu z projektami: ścieżka, adres repo zdalnego, gałąź, stan, wynik ostatniej synchronizacji) , `get_repo` (README, ostatnie commity, taski mise jednego repo) i `tail` (log taska mise od kursora, z sekretami zamienionymi na `***`). Copilot CLI podłącza się raz, komendą z widoku „Daemon” (opis niżej w „Podłączenie Copilot CLI”).
+
+Sesje Copilot CLI: widok „Sesje” uruchamia Copilot CLI w wybranym repo z folderu z projektami, z podłączonym serwerem MCP Trackwall, kilka sesji naraz, każdą w terminalu należącym do daemona (ADR-26), więc sesja działa dalej po zamknięciu okna. Lista pokazuje stan każdej sesji z hooków Copilot CLI (pracuje, czeka na Ciebie, prosi o zgodę; ADR-17) i nad czym agent pracuje, przycisk „Następna czekająca” przełącza na sesję, która czeka na odpowiedź, a pasek widoków pokazuje, ile sesji czeka. Gdy sesja kończy pracę i czeka, okno miga na pasku zadań (na macOS ikona podskakuje w Docku), a menu traya ma pozycję „Czeka: <repo>”, która otwiera tę sesję. „Zatrzymaj” kończy całą grupę procesów sesji, „Zamknij” usuwa zakończoną sesję z listy. Wymaga Copilot CLI w `PATH` (`copilot`; na Windowsie z `npm install -g` Trackwall uruchamia `copilot.exe` z paczki zamiast `copilot.cmd`) i daemona pod Bun (wydanie albo `pnpm dev`); pod Node sesji nie ma. Sesje nie przeżywają wyjścia daemona i nie są nagrywane; nagrania robi skrypt opisany niżej w „Nagrywanie sesji Copilot CLI”.
 
 ## Układ repo
 
@@ -70,6 +72,22 @@ macOS: zip zawiera niepodpisany `Trackwall.app`; pierwsze uruchomienie przez pra
 
 Każdy przebieg CI (PR, push na `main`, ręczne uruchomienie) publikuje oba archiwa jako artefakty.
 
+## Podłączenie Copilot CLI
+
+Copilot CLI uruchamia most stdio daemona (`trackwall-daemon mcp-stdio`) jako lokalny serwer MCP; most znajduje działający daemon przez `daemon.json`, więc konfiguracja nie zmienia się po restarcie daemona i nie zawiera tokenu. Gotową komendę dla tej instalacji pokazuje widok „Daemon” (Ctrl+9, przycisk kopiowania). Wygląda tak:
+
+```sh
+copilot mcp add trackwall -- /Applications/Trackwall.app/Contents/MacOS/trackwall-daemon mcp-stdio                     # macOS
+copilot mcp add trackwall '--' '<katalog z Trackwall>\trackwall-daemon.exe' mcp-stdio    # Windows (PowerShell; `--` w apostrofach)
+copilot mcp add trackwall -- bun --no-env-file --config=<trackwall>/packages/daemon/bunfig.toml <trackwall>/packages/daemon/src/main.ts mcp-stdio --home <katalog stanu>   # ze źródeł
+```
+
+Komenda dopisuje wpis `trackwall` do `~/.copilot/mcp-config.json` (na Windowsie `%USERPROFILE%\.copilot\mcp-config.json`; ten sam wpis w JSON jest w widoku „Daemon”, gdyby trzeba go wkleić ręcznie). Trackwall musi działać, zanim wystartuje Copilot CLI, bo Copilot uruchamia serwery MCP przy starcie sesji; `/mcp` w Copilot CLI pokazuje, czy serwer `trackwall` jest połączony. Potem wystarczy poprosić agenta np. „Jakie repo mam w folderze z projektami?”.
+
+Sprawdzenie ręczne (wymaga zalogowanego Copilot CLI): uruchom Trackwall z ustawionym folderem z projektami, wykonaj komendę z widoku „Daemon”, uruchom `copilot` w folderze z projektami, sprawdź w `/mcp`, że `trackwall` jest połączony z narzędziami `list_repos`, `get_repo` i `tail`, poproś o listę repo, a potem o szczegóły jednego z nich (README, taski mise). Log daemona (terminal `pnpm dev` albo `trackwall-daemon`) pokazuje każde wywołanie jako `[mcp] list_repos: ok w … ms`.
+
+Inne klienty MCP mogą też rozmawiać z daemonem wprost przez Streamable HTTP pod `http://127.0.0.1:<port>/mcp` z nagłówkiem `Authorization: Bearer <token>`; port i token są w `daemon.json` i zmieniają się przy każdym starcie daemona.
+
 ## Ikony
 
 Źródłem ikon są `apps/desktop/assets/icon.svg` (ikona aplikacji) i `apps/desktop/assets/tray-icon.svg` (jednobarwny znak traya). Po zmianie któregoś z nich:
@@ -82,7 +100,7 @@ Wygenerowane pliki trafiają do repo razem ze zmienionym SVG. `tauri icon` zapis
 
 ## Nagrywanie sesji Copilot CLI
 
-Prototyp wykrywania stanu zadania (ADR-17). Skrypt uruchamia Copilot CLI w PTY tak jak zrobi to daemon, pokazuje go w bieżącym terminalu, nagrywa i liczy stan (`Working`, `Input`, `Approval`…). Wymaga Bun i zainstalowanego, zalogowanego `copilot` w `PATH` (na Windowsie zarówno `copilot.exe`, jak i `copilot.cmd` z `npm install -g`). Uruchom go w katalogu repo, w którym ma pracować agent, z `bun --no-env-file`, żeby Bun nie wczytał `.env` repo do środowiska Copilot CLI (Bun nadal czyta `bunfig.toml` z bieżącego katalogu, więc w repo z `bunfig.toml` uruchom skrypt z `--config` wskazującym inny plik):
+Prototyp wykrywania stanu zadania (ADR-17), do zbierania nagrań. Skrypt uruchamia Copilot CLI w PTY tak jak daemon w widoku „Sesje”, pokazuje go w bieżącym terminalu, nagrywa i liczy stan (`Working`, `Input`, `Approval`…). Wymaga Bun i zainstalowanego, zalogowanego `copilot` w `PATH` (na Windowsie zarówno `copilot.exe`, jak i `copilot.cmd` z `npm install -g`). Uruchom go w katalogu repo, w którym ma pracować agent, z `bun --no-env-file`, żeby Bun nie wczytał `.env` repo do środowiska Copilot CLI (Bun nadal czyta `bunfig.toml` z bieżącego katalogu, więc w repo z `bunfig.toml` uruchom skrypt z `--config` wskazującym inny plik):
 
 ```sh
 bun --no-env-file <trackwall>/packages/daemon/scripts/copilot-record.ts record                         # zwykła sesja interaktywna

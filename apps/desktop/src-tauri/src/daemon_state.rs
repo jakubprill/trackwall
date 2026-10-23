@@ -70,6 +70,14 @@ impl DaemonState {
         self.start();
     }
 
+    /// Połączenie z działającym daemonem bez czekania; `None` w trakcie startu, po błędzie i przy zamykaniu.
+    pub fn ready(&self) -> Option<Connection> {
+        match &*self.lock() {
+            Phase::Ready(conn) => Some(conn.clone()),
+            _ => None,
+        }
+    }
+
     /// Czeka na koniec trwającego startu. `Idle` oznacza, że start nie był zlecony.
     pub fn wait(&self) -> Result<Connection, String> {
         let phase = self.wait_while(self.lock(), |p| matches!(p, Phase::Starting));

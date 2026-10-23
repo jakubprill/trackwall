@@ -51,7 +51,21 @@ for (const triple of triples) {
   const target = TARGETS[triple];
   const outfile = join(outDir, `trackwall-daemon-${triple}${target.exe ? ".exe" : ""}`);
   const proc = Bun.spawnSync(
-    ["bun", "build", "--compile", "--minify", "--sourcemap", `--target=${target.bun}`, "src/main.ts", "--outfile", outfile],
+    [
+      "bun",
+      "build",
+      "--compile",
+      // Binarka startuje też w cudzym katalogu (most MCP w repo, w którym pracuje agent), więc nie czyta jego `.env`
+      // ani `bunfig.toml`: repo nie może ustawić zmiennych ani opcji runtime daemona.
+      "--no-compile-autoload-dotenv",
+      "--no-compile-autoload-bunfig",
+      "--minify",
+      "--sourcemap",
+      `--target=${target.bun}`,
+      "src/main.ts",
+      "--outfile",
+      outfile,
+    ],
     { cwd: root, stdout: "inherit", stderr: "inherit" },
   );
   if (proc.exitCode !== 0) process.exit(proc.exitCode ?? 1);

@@ -13,7 +13,7 @@ Aplikacja Tauri: okno, tray, uruchamianie i nadzór daemona jako sidecara, spraw
 _Unikaj_: aplikacja (gdy chodzi tylko o Tauri)
 
 **Widok** (`View`):
-Ekran aplikacji w UI (Repo, Daemon, Ustawienia), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
+Ekran aplikacji w UI (Repo, Sesje, Daemon, Ustawienia), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
 _Unikaj_: zakładka (dla całego ekranu)
 
 **Zakładka** (`TabBar`):
@@ -34,7 +34,18 @@ _Unikaj_: workspace (to osobne pojęcie, patrz niżej)
 Cienki klient CLI daemona przez HTTP na loopbacku. Nie ma nic wspólnego z WebSocketem `/ws`.
 
 **Token daemona**:
-Sekret z `~/.trackwall/daemon.json`, którym UI, `ws` i powłoka uwierzytelniają się w API.
+Sekret z `~/.trackwall/daemon.json`, którym UI, `ws`, powłoka i most stdio uwierzytelniają się w API i serwerze MCP.
+
+**Serwer MCP** (`/mcp`, `createMcpEndpoint`):
+Część daemona, przez którą agenci czytają jego stan narzędziami MCP; ten sam port i token co API (§5.3, ADR-24).
+
+**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`, `tail`):
+Jedno wywołanie serwera MCP z nazwą po angielsku, wejściem i wynikiem opisanym schematem z `packages/protocol/src/mcp.ts`; mapowanie na fasadę, bez własnej logiki domenowej.
+_Unikaj_: komenda, akcja (to pojęcia z API i CLI)
+
+**Most stdio** (`trackwall-daemon mcp-stdio`, `mcpStdioCommand`):
+Proces, który CLI agenta uruchamia jako lokalny serwer MCP; przekazuje wiadomości ze stdin do serwera MCP działającego daemona, z portem i tokenem z `daemon.json`.
+_Unikaj_: proxy, cienki klient (bez dopowiedzenia)
 
 **Token zadania**:
 Osobny token dla sesji zadania; po nim daemon wie, które zadanie woła MCP, i ogranicza jego narzędzia (§8).
@@ -144,9 +155,23 @@ _Unikaj_: autoryzacja, akceptacja
 **Adapter**:
 Wszystko, co Trackwall wie o jednym CLI agenta: szablon komendy, konfiguracja MCP, wznowienie, detektory stanu. Jedyny adapter to Copilot CLI (ADR-8).
 
-**Sesja** (sesja zadania):
-CLI agenta działające w PTY należącym do daemona, nagrywane do `sessions/<zadanie>.cast`.
-_Unikaj_: sesja POSIX (to pojęcie z grupy procesów)
+**Agent nadrzędny**:
+CLI agenta (dziś Copilot CLI) uruchomione przez użytkownika poza zadaniem, np. w folderze z projektami, z dostępem do serwera MCP. W odróżnieniu od sesji zadania nie ma worktree, budżetu ani tokenu zadania. Pojęcie z dokumentacji i opisów narzędzi; w kodzie nie ma własnego identyfikatora, bo daemon niczego o nim nie trzyma.
+_Unikaj_: orkiestrator, główny agent
+
+**Sesja** (sesja zadania, `Session`, `SessionId`):
+CLI agenta działające w PTY należącym do daemona, w korzeniu repo, jako grupa procesów, z własnym katalogiem `sessions/<sesja>/` (wtyczka sesji, `hooks.jsonl`). Dziś sesja istnieje bez zadania: widok Sesje uruchamia ją w repo jednym kliknięciem (ADR-26); zadanie doda do niej prompt, worktree i budżet. Nagrywa ją tylko `copilot-record.ts`.
+_Unikaj_: sesja POSIX (to pojęcie z grupy procesów), okno (to okno terminala w UI)
+
+**Czeka na Ciebie** (`Session.needsAttention`):
+Działająca sesja w stanie `Input`, `Approval` albo `Plan`: agent nie ruszy dalej bez człowieka. Liczy to daemon, a UI (licznik na pasku widoków, „Następna czekająca”) i tray (menu „Czeka: <repo>”, miganie okna) tylko czytają pole.
+
+**Okno terminala** (`SessionTerminal`):
+xterm.js w widoku Sesje podłączony WebSocketem `/ws/pty/<sesja>` do PTY sesji. Kilka okien może pokazywać tę samą sesję; rozmiar PTY ustala ostatnie, które go zgłosiło.
+
+**Obraz ekranu** (`TerminalScreen`):
+Stan ekranu sesji, który daemon trzyma w emulatorze terminala bez okna i wysyła oknu terminala przy podłączeniu, zanim pójdzie dalsze wyjście.
+_Unikaj_: zrzut ekranu (to obrazek), historia wyjścia
 
 **Stan zadania** (`TaskState`, zmiana: `TaskStateChange`):
 `Working`, `Input`, `Approval`, `Plan`, `Done`, `Error` albo `Stale`, zawsze ze źródłem (`hook`, `osc`, `screen`, `timeout`, `exit`) i pewnością (§4.4).
@@ -184,12 +209,12 @@ _Unikaj_: wpis, event
 **Źródło** (`LogSource`):
 Skąd pochodzi rekord. Dziś task mise repo (`{ kind: "mise-task", repo, miseTask }`); serwis, zadanie i sam daemon dojdą jako kolejne rodzaje. Źródło ma rekordy wszystkich swoich uruchomień.
 
-**Log** (log taska mise, `logs/tail`, w UI przycisk „Log”):
+**Log** (log taska mise, `logs/tail` i narzędzie MCP `tail`, w UI przycisk „Log”):
 Rekordy jednego źródła w kolejności `seq`: ostatnie (do 2000) w pamięci daemona, nowsze niż ostatnia rotacja w pliku JSONL `logs/<rodzaj>/<repo>/<task mise>.jsonl` w katalogu stanu (bieżący plik i jeden poprzedni, po 10 MB, ADR-28). Nie myl z logiem daemona (stderr procesu `trackwall-daemon`).
 _Unikaj_: konsola, terminal (to PTY sesji zadania)
 
 **`seq`**:
-Globalny, rosnący numer rekordu dla wszystkich źródeł; każde działanie daemona zaczyna od chwili startu, więc numery się nie powtarzają. Kursor (`sinceSeq` w API, `since_seq` w narzędziach MCP) działa dla jednego źródła i dla całego workspace; `dropped` mówi, że część rekordów po kursorze przepadła.
+Globalny, rosnący numer rekordu dla wszystkich źródeł; każde działanie daemona zaczyna od chwili startu, więc numery się nie powtarzają. Kursor (`sinceSeq` w API i w narzędziach MCP) działa dla jednego źródła i dla całego workspace; `dropped` mówi, że część rekordów po kursorze przepadła.
 
 **Zdarzenie**:
 Wiadomość daemona na WebSocket `/ws` (`service.state`, `task.state`…) z własnym `seq` zdarzeń.

@@ -61,6 +61,11 @@ export class Logs {
     return new RunOutput(secretValues(env), (stream, msg) => this.append(log, source, { runId, stream, msg }));
   }
 
+  /** Wyjście tylko do ostatnich linii stanu, zamaskowane tak samo, ale bez logu (ekran PTY sesji zadania). */
+  lastLinesOnly(env: NodeJS.ProcessEnv): RunOutput {
+    return new RunOutput(secretValues(env), () => {});
+  }
+
   /**
    * Rekordy źródła po kursorze, od najstarszego, najwyżej `limit`. Bez kursora (albo z kursorem z innego działania
    * daemona) ostatnie `limit` rekordów.
