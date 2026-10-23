@@ -81,7 +81,8 @@ Repo ma zostać opublikowane jako open source (nagłówek `docs/architecture.md`
   - Biome (`biome.json`): zestaw `recommended` oraz zakaz `!` i `any`, limit złożoności funkcji (15), cykle importów, nieobsłużone obietnice, nazwy plików w kebab-case (PascalCase tylko dla `.tsx` w `packages/ui/src`), import `@pitwall/daemon` tylko w daemonie, moduły Node (`node:*`) zakazane w `packages/protocol/src` i `packages/ui/src`;
   - knip (`knip.json`): nieużywane pliki, eksporty i zależności;
   - `rustfmt.toml` i `cargo clippy -D warnings` dla powłoki Tauri;
-  - test `apps/desktop/test/toolchain.test.ts`: te same wersje narzędzi w `mise.toml` i workflow.
+  - test `apps/desktop/test/toolchain.test.ts`: te same wersje narzędzi w `mise.toml` i workflow;
+  - zgodność daemona z Node (ADR-1): `erasableSyntaxOnly` w `tsconfig.json` daemona i `protocol`, w Biome `useImportExtensions` w ich `src` i zakaz API Bun w daemonie poza `platform/`, testy procesu daemona pod Bun i pod Node.
 
   Granic między modułami daemona (§4) jeszcze nie pilnuje narzędzie, bo modułów jeszcze nie ma; z pierwszym modułem dochodzi reguła `noRestrictedImports` w `biome.json`. Rzutowań `as` na danych z zewnątrz też nie, więc tego pilnuje przegląd.
 

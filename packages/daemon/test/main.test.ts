@@ -1,16 +1,19 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DaemonInfoResult } from "@pitwall/protocol";
+import pkg from "../package.json" with { type: "json" };
 import { readDaemonFile } from "../src/discovery.ts";
 import { loopbackRequest } from "../src/loopback.ts";
 
 const MAIN = join(import.meta.dir, "..", "src", "main.ts");
 
-async function waitFor<T>(fn: () => T | undefined, timeoutMs = 10_000): Promise<T> {
+/** Czeka na wartość; gdy podany proces skończy się wcześniej, kończy test od razu z jego kodem wyjścia. */
+async function waitFor<T>(fn: () => T | undefined, proc?: { exitCode: number | null }, timeoutMs = 10_000): Promise<T> {
   const until = Date.now() + timeoutMs;
   while (Date.now() < until) {
+    if (proc?.exitCode != null) throw new Error(`proces zakończył się kodem ${proc.exitCode}, zanim pojawiła się wartość`);
     const v = fn();
     if (v !== undefined) return v;
     await Bun.sleep(50);
@@ -27,16 +30,31 @@ function isAlive(pid: number): boolean {
   }
 }
 
-describe("proces daemona", () => {
+/**
+ * Każdy test procesu idzie pod Bun i pod samym Node (ADR-1). Komenda Node pochodzi ze skryptu `start:node`,
+ * żeby flagi (`--experimental-strip-types` dla Node 22.12–22.17) były w jednym miejscu.
+ */
+function nodeArgv(script: string): string[] {
+  const suffix = " src/main.ts --ui";
+  if (!script.startsWith("node ") || !script.endsWith(suffix))
+    throw new Error(`start:node ma postać "node <flagi>${suffix}", jest "${script}"`);
+  return script.slice(0, -suffix.length).split(" ");
+}
+const RUNTIMES: [name: "bun" | "node", argv: string[]][] = [
+  ["bun", ["bun"]],
+  ["node", nodeArgv(pkg.scripts["start:node"])],
+];
+
+describe.each(RUNTIMES)("proces daemona pod %s", (name, runtime) => {
   test("start, drugi start z tą samą wersją kończy się 0, shutdown sprząta daemon.json", async () => {
     const home = mkdtempSync(join(tmpdir(), "pitwall-e2e-"));
     const env = { ...process.env, PITWALL_HOME: home };
-    const daemon = Bun.spawn(["bun", MAIN], { env, stdout: "ignore", stderr: "pipe" });
+    const daemon = Bun.spawn([...runtime, MAIN], { env, stdout: "ignore", stderr: "pipe" });
     try {
-      const file = await waitFor(() => readDaemonFile(home));
+      const file = await waitFor(() => readDaemonFile(home), daemon);
       expect(file.pid).toBe(daemon.pid);
 
-      const second = Bun.spawn(["bun", MAIN], { env, stdout: "ignore", stderr: "pipe" });
+      const second = Bun.spawn([...runtime, MAIN], { env, stdout: "ignore", stderr: "pipe" });
       expect(await second.exited).toBe(0);
       expect(await new Response(second.stderr).text()).toContain("już działa");
 
@@ -54,7 +72,7 @@ describe("proces daemona", () => {
   test("równoczesne starty zostawiają dokładnie jeden daemon", async () => {
     const home = mkdtempSync(join(tmpdir(), "pitwall-race-"));
     const env = { ...process.env, PITWALL_HOME: home };
-    const procs = Array.from({ length: 5 }, () => Bun.spawn(["bun", MAIN], { env, stdout: "ignore", stderr: "ignore" }));
+    const procs = Array.from({ length: 5 }, () => Bun.spawn([...runtime, MAIN], { env, stdout: "ignore", stderr: "ignore" }));
     try {
       const file = await waitFor(() => readDaemonFile(home));
       // Przegrani kończą się sami kodem 0; zwycięzca działa dalej.
@@ -70,9 +88,9 @@ describe("proces daemona", () => {
     const fakeHome = mkdtempSync(join(tmpdir(), "pitwall-userhome-"));
     // os.homedir(): HOME na Unixie, USERPROFILE na Windowsie.
     const env = { ...process.env, PITWALL_HOME: "", HOME: fakeHome, USERPROFILE: fakeHome };
-    const daemon = Bun.spawn(["bun", MAIN], { env, stdout: "ignore", stderr: "ignore" });
+    const daemon = Bun.spawn([...runtime, MAIN], { env, stdout: "ignore", stderr: "ignore" });
     try {
-      const file = await waitFor(() => readDaemonFile(join(fakeHome, ".pitwall")));
+      const file = await waitFor(() => readDaemonFile(join(fakeHome, ".pitwall")), daemon);
       expect(file.pid).toBe(daemon.pid);
       await loopbackRequest(file.port, "/api/daemon/shutdown", { method: "POST", token: file.token });
       expect(await daemon.exited).toBe(0);
@@ -81,8 +99,29 @@ describe("proces daemona", () => {
     }
   }, 20_000);
 
+  test("strona UI z --ui-dir jest serwowana, a info podaje runtime, pod którym działa daemon", async () => {
+    const home = mkdtempSync(join(tmpdir(), "pitwall-ui-"));
+    const ui = mkdtempSync(join(tmpdir(), "pitwall-ui-dir-"));
+    writeFileSync(join(ui, "index.html"), "<!doctype html><title>pitwall-test</title>");
+    const daemon = Bun.spawn([...runtime, MAIN, "--ui-dir", ui], {
+      env: { ...process.env, PITWALL_HOME: home },
+      stdout: "ignore",
+      stderr: "inherit",
+    });
+    try {
+      const file = await waitFor(() => readDaemonFile(home), daemon);
+      const info = DaemonInfoResult.parse(JSON.parse((await loopbackRequest(file.port, "/api/daemon/info", { token: file.token })).body));
+      expect(info.ok && info.data.runtime.name).toBe(name);
+      expect((await loopbackRequest(file.port, "/")).body).toContain("<title>pitwall-test</title>");
+      await loopbackRequest(file.port, "/api/daemon/shutdown", { method: "POST", token: file.token });
+      expect(await daemon.exited).toBe(0);
+    } finally {
+      daemon.kill();
+    }
+  }, 20_000);
+
   test("zły argument kończy się kodem 2", async () => {
-    const p = Bun.spawn(["bun", MAIN, "--port", "abc"], { stdout: "ignore", stderr: "pipe" });
+    const p = Bun.spawn([...runtime, MAIN, "--port", "abc"], { stdout: "ignore", stderr: "pipe" });
     expect(await p.exited).toBe(2);
   });
 });
