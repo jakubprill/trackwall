@@ -60,6 +60,8 @@ ditto -x -k trackwall-0.2.0-macos-arm64.zip /Applications
 xattr -dr com.apple.quarantine /Applications/Trackwall.app
 ```
 
+Przejście z 0.1.0 (wydanej jeszcze pod nazwą Pitwall, ADR-11): nowa wersja nie wykrywa starej, bo ma inny katalog stanu i identyfikator aplikacji. Przed pierwszym uruchomieniem zamknij Pitwall z traya (Wyjdź), usuń `%LOCALAPPDATA%\Programs\Pitwall` (macOS: `Pitwall.app` z Aplikacji) i, jeśli chcesz, `~/.pitwall`. Nic stamtąd nie jest potrzebne.
+
 Na obu systemach dane użytkownika (`~/.trackwall`, na Windowsie `%USERPROFILE%\.trackwall`) są poza folderem aplikacji, więc aktualizacja to zamknięcie aplikacji (tray > Wyjdź, żeby zatrzymać też daemona) i podmiana folderu lub `.app` na nowy.
 
 ## Przed upublicznieniem repo

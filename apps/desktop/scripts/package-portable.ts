@@ -4,7 +4,7 @@
  *   Windows: trackwall-<wersja>-windows-x64.zip
  *     Trackwall/trackwall.exe          okno + tray (wymaga WebView2)
  *     Trackwall/trackwall-daemon.exe   daemon (sidecar)
- *     Trackwall/ui/                  UI dla trybu bez okna: trackwall-daemon.exe --ui
+ *     Trackwall/ui/                    UI dla trybu bez okna: trackwall-daemon.exe --ui
  *     Trackwall/CZYTAJ.txt
  *   macOS:   trackwall-<wersja>-macos-<arch>.zip z Trackwall.app
  *

@@ -25,7 +25,7 @@ Ten dokument opisuje, jak aplikacja jest podzielona na komponenty, gdzie przebie
 │  ui (React + Tailwind + shadcn/ui)        daemon (TS, 1 binarka) │
 │  panele: Zadania, Serwisy, Logi (xterm),  ┌────────────────────┐ │
 │  Diff (Monaco), Graf, Sekrety, Audyt      │ fasada usług       │ │
-│  scena 3D: @trackwall/scene (Pawn)          │  workspace  cards  │ │
+│  scena 3D: @trackwall/scene (Pawn)        │  workspace  cards  │ │
 │      │ HTTP + WebSocket (loopback, token)  │  graph      tasks  │ │
 │      └────────────────────────────────────▶│  procs      leases │ │
 │                                            │  logs       secrets│ │
@@ -33,7 +33,7 @@ Ten dokument opisuje, jak aplikacja jest podzielona na komponenty, gdzie przebie
 │                                            └───┬──────────┬─────┘ │
 │   Copilot CLI / inne CLI ── MCP (HTTP lub stdio) ─┘          │     │
 │                                                   SQLite + JSONL   │
-│                                                   ~/.trackwall/      │
+│                                                   ~/.trackwall/    │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
