@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "bun --watch src/main.ts --home ../../.pitwall-dev",
     "start": "bun src/main.ts --ui",
+    "start:node": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/main.ts --ui",
     "build": "bun scripts/build.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "bun test"

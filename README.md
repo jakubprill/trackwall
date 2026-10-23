@@ -43,6 +43,8 @@ pnpm build
 bun packages/daemon/src/main.ts --ui
 ```
 
+Ten sam daemon działa też pod samym Node, bez Bun (ADR-1): `pnpm --filter @pitwall/ui build`, potem `pnpm --filter @pitwall/daemon start:node`.
+
 ## Portable build
 
 ```sh

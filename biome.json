@@ -103,6 +103,37 @@
       }
     },
     {
+      "includes": ["packages/daemon/src/**", "packages/protocol/src/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "useImportExtensions": "error"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/daemon/src/**", "!packages/daemon/src/platform/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": { "Bun": "API Bun tylko w packages/daemon/src/platform (ADR-1); reszta daemona działa też pod Node." }
+              }
+            },
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [{ "group": ["bun", "bun:*"], "message": "Moduły Bun tylko w packages/daemon/src/platform (ADR-1)." }]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["packages/protocol/src/**", "packages/ui/src/**"],
       "linter": {
         "rules": {

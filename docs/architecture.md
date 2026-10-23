@@ -292,7 +292,7 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 
 ## 12. Decyzje (ADR w skrócie)
 
-**ADR-1 Runtime daemona: Bun, z zachowaniem zgodności z Node.** Bun daje `bun build --compile` do jednej binarki i wbudowane SQLite. Kod pisany tak, by działał też pod Node 22 (`node:` API, bez API specyficznych dla Bun poza warstwą `platform/`). Jeśli spike z etapu 1 pokaże, że ConPTY lub Job Objects nie działają pod Bun, przechodzimy na Node 22 + SEA bez zmian w modułach.
+**ADR-1 Runtime daemona: Bun, z zachowaniem zgodności z Node.** Bun daje `bun build --compile` do jednej binarki i wbudowane SQLite. Kod pisany tak, by działał też pod Node 22 (`node:` API, bez API specyficznych dla Bun poza warstwą `platform/`). Jeśli spike z etapu 1 pokaże, że ConPTY lub Job Objects nie działają pod Bun, przechodzimy na Node 22 + SEA bez zmian w modułach. Uzupełnienie (2026-10-23): zgodności z Node pilnuje narzędzie, bo bez tego się rozjechała (właściwość w parametrze konstruktora w `api/guard.ts` blokowała start pod Node). Daemon i `protocol` mają `erasableSyntaxOnly` i wymagane rozszerzenia w importach, API Bun poza `platform/` odrzuca Biome, a testy procesu daemona idą pod Bun i pod Node z flagami ze skryptu `start:node` (Node 22.12+ uruchamia kod źródłowy bez kompilacji).
 
 **ADR-2 Transport UI: HTTP + WebSocket, nie tylko IPC Tauri.** Dzięki temu ten sam UI działa w przeglądarce (etap 1) i w Tauri, a `ws` CLI i testy używają tego samego API. Tauri IPC zostaje dla spraw natywnych: tray, autostart, token.
 
