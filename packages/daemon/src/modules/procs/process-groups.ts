@@ -64,6 +64,9 @@ interface Group {
   stopping?: Promise<RunState>;
   /** Zabijanie reszty grupy po końcu lidera; stop w tym czasie czeka na nie zamiast zabijać drugi raz. */
   draining?: Promise<boolean>;
+  /** Spełniona w `finish`, czyli po potwierdzeniu pustej grupy; grupa, której nie da się zabić, nie spełnia jej nigdy. */
+  readonly ended: Promise<void>;
+  readonly markEnded: () => void;
 }
 
 export class ProcessGroups {
@@ -95,6 +98,18 @@ export class ProcessGroups {
   state(owner: string): RunState | undefined {
     const group = this.groups.get(owner);
     return group && stateOf(group);
+  }
+
+  /**
+   * Stan `exited` bieżącej grupy właściciela, gdy system potwierdzi jej koniec; `undefined`, gdy właściciel nie ma
+   * grupy. Dla wołającego, który czeka na wynik (komenda zbiorcza), a nie tylko pokazuje stan.
+   */
+  async ended(owner: string): Promise<RunState | undefined> {
+    await this.starting.get(owner)?.catch(() => undefined);
+    const group = this.groups.get(owner);
+    if (!group) return undefined;
+    await group.ended;
+    return stateOf(group);
   }
 
   /**
@@ -187,7 +202,11 @@ export class ProcessGroups {
       pid,
       identity: await platform.identity(pid),
     };
-    const group: Group = { record, control, tail, leaderExit, phase: { kind: "live" }, stopRequested: false };
+    let markEnded = () => {};
+    const ended = new Promise<void>((resolve) => {
+      markEnded = resolve;
+    });
+    const group: Group = { record, control, tail, leaderExit, phase: { kind: "live" }, stopRequested: false, ended, markEnded };
     this.groups.set(spec.owner, group);
     this.persist();
     leaderExit
@@ -230,6 +249,7 @@ export class ProcessGroups {
     group.phase = { kind: "exited", exit: group.phase.exit };
     group.control.release();
     this.persist();
+    group.markEnded();
   }
 
   /**

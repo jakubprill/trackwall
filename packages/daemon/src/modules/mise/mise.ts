@@ -6,13 +6,15 @@ import { type MiseCliResult, runMiseCli } from "./mise-cli.ts";
 /**
  * Moduł `mise` (§4, ADR-20): taski mise repo z workspace i ich uruchomienia. Lista pochodzi z `mise tasks ls --json`
  * przy każdym zapytaniu, więc zmiana `mise.toml` widać od razu. Uruchomienie to `mise run <task>` w korzeniu repo,
- * w grupie procesów modułu `procs`; daemon uruchamia tylko task, który jest na aktualnej liście (§1.2).
+ * w grupie procesów modułu `procs`; daemon uruchamia tylko task, który jest na aktualnej liście (§1.2). Dla komendy
+ * zbiorczej (ADR-27) także `mise install` i uruchomienia doczekane do końca.
  */
 
 /** Czego `mise` potrzebuje od `procs`; podłączane w fasadzie. */
 interface MiseProcs {
   start(spec: { owner: string; command: readonly string[]; cwd: string; env: NodeJS.ProcessEnv }): Promise<RunState>;
   state(owner: string): RunState | undefined;
+  ended(owner: string): Promise<RunState | undefined>;
   stop(owner: string): Promise<RunState | undefined>;
 }
 
@@ -72,24 +74,32 @@ export class Mise {
 
   async start(repo: string, miseTask: string): Promise<RunState> {
     const dir = await this.deps.repos.repoPath(repo);
-    const listed = await this.list(dir);
-    if (listed.kind !== "ok") throw new DomainError("mise_unavailable", listed.message);
-    if (!listed.tasks.some((t) => t.name === miseTask)) throw new DomainError("not_found", `repo ${repo} nie ma taska mise "${miseTask}"`);
-    let run: RunState;
-    try {
-      run = await this.deps.procs.start({
-        owner: owner(repo, miseTask),
-        command: [...this.deps.command, "run", miseTask],
-        cwd: dir,
-        env: await this.deps.env(),
-      });
-    } catch (err) {
-      if (!(err instanceof SpawnFailure)) throw err;
-      throw new DomainError(err.reason === "cwd_invalid" ? "repo_unavailable" : "mise_unavailable", `${repo}: ${err.message}`);
-    }
-    const names = this.started.get(repo) ?? new Set<string>();
-    this.started.set(repo, names.add(miseTask));
-    return run;
+    if (!(await this.hasTask(dir, miseTask))) throw new DomainError("not_found", `repo ${repo} nie ma taska mise "${miseTask}"`);
+    return this.startTask(repo, dir, miseTask);
+  }
+
+  /**
+   * Komenda zbiorcza (§4.8): task z aktualnej listy uruchomiony i doczekany do potwierdzonego końca grupy; `null`,
+   * gdy repo nie ma takiego taska. Działający już task (np. z karty repo) nie startuje drugi raz: wynikiem jest jego
+   * koniec. `signal` zatrzymuje grupę tak jak stop z karty repo.
+   */
+  async runToEnd(repo: string, miseTask: string, signal: AbortSignal): Promise<RunState | null> {
+    const dir = await this.deps.repos.repoPath(repo);
+    if (!(await this.hasTask(dir, miseTask))) return null;
+    signal.throwIfAborted();
+    await this.startTask(repo, dir, miseTask);
+    return this.ended(owner(repo, miseTask), signal);
+  }
+
+  /**
+   * `mise install` w korzeniu repo, doczekany do końca: narzędzia (JDK, Node…) w wersjach z konfiguracji mise repo.
+   * W grupie procesów jak task, bo instalacja trwa minutami, a przerwanie komendy zbiorczej ma ją zatrzymać.
+   */
+  async installTools(repo: string, signal: AbortSignal): Promise<RunState> {
+    const dir = await this.deps.repos.repoPath(repo);
+    signal.throwIfAborted();
+    await this.launch(installOwner(repo), dir, ["install"], repo);
+    return this.ended(installOwner(repo), signal);
   }
 
   async stop(repo: string, miseTask: string): Promise<RunState> {
@@ -105,6 +115,50 @@ export class Mise {
     if (result.kind !== "exited") throw new DomainError("mise_unavailable", result.message);
     if (result.code !== 0) throw new DomainError("mise_unavailable", failure(result.stderr, result.code));
     return this.tasks(repo);
+  }
+
+  private async hasTask(dir: string, miseTask: string): Promise<boolean> {
+    const listed = await this.list(dir);
+    if (listed.kind !== "ok") throw new DomainError("mise_unavailable", listed.message);
+    return listed.tasks.some((t) => t.name === miseTask);
+  }
+
+  private async startTask(repo: string, dir: string, miseTask: string): Promise<RunState> {
+    const run = await this.launch(owner(repo, miseTask), dir, ["run", miseTask], repo);
+    const names = this.started.get(repo) ?? new Set<string>();
+    this.started.set(repo, names.add(miseTask));
+    return run;
+  }
+
+  private async launch(groupOwner: string, dir: string, args: readonly string[], repo: string): Promise<RunState> {
+    try {
+      return await this.deps.procs.start({
+        owner: groupOwner,
+        command: [...this.deps.command, ...args],
+        cwd: dir,
+        env: await this.deps.env(),
+      });
+    } catch (err) {
+      if (!(err instanceof SpawnFailure)) throw err;
+      throw new DomainError(err.reason === "cwd_invalid" ? "repo_unavailable" : "mise_unavailable", `${repo}: ${err.message}`);
+    }
+  }
+
+  /**
+   * Koniec grupy po potwierdzeniu w systemie. Stop po `signal` nie zgłasza błędu: gdy grupa przeżyje zabicie
+   * (`stop_unconfirmed`), zostaje `stopping` w karcie repo, a wołający czeka dalej, bo koniec nie jest potwierdzony.
+   */
+  private async ended(groupOwner: string, signal: AbortSignal): Promise<RunState> {
+    const stop = () => void this.deps.procs.stop(groupOwner).catch(() => {});
+    signal.addEventListener("abort", stop, { once: true });
+    if (signal.aborted) stop();
+    try {
+      const end = await this.deps.procs.ended(groupOwner);
+      if (!end) throw new Error(`grupa ${groupOwner} zniknęła przed końcem`);
+      return end;
+    } finally {
+      signal.removeEventListener("abort", stop);
+    }
   }
 
   private async list(dir: string): Promise<TaskList> {
@@ -138,6 +192,11 @@ export function parseTaskList(result: MiseCliResult): TaskList {
 /** Klucz właściciela grupy w `procs`; tylko budowany, nigdy rozbierany z powrotem. */
 function owner(repo: string, miseTask: string): string {
   return `mise:${repo}:${miseTask}`;
+}
+
+/** Właściciel grupy `mise install` repo; inny przedrostek niż taski, bo task może nazywać się `install`. */
+function installOwner(repo: string): string {
+  return `mise-install:${repo}`;
 }
 
 /** Komunikat błędu mise bez ostrzeżeń, które nie są przyczyną (np. nieudane sprawdzenie nowej wersji). */

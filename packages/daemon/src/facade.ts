@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { Batch } from "./modules/batch/batch.ts";
 import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
@@ -16,6 +17,7 @@ export interface Facade {
   workspace: Workspace;
   mise: Mise;
   procs: ProcessGroups;
+  batch: Batch;
 }
 
 const WORKSPACE_FILE = "workspace.yaml";
@@ -41,5 +43,6 @@ export function createFacade(o: FacadeOptions): Facade {
   });
   const procs = new ProcessGroups({ runtime: new RuntimeFile(join(o.home, RUNTIME_FILE)), platform: groupPlatform(), log: o.log });
   const mise = new Mise({ procs, repos: workspace, command: o.miseCommand, env: o.userEnv });
-  return { workspace, mise, procs };
+  const batch = new Batch({ workspace, mise });
+  return { workspace, mise, procs, batch };
 }

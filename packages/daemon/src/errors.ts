@@ -29,3 +29,8 @@ export function spawnFailure(program: string, err: NodeJS.ErrnoException): Spawn
     ? new SpawnFailure("program_not_found", `nie znaleziono programu ${program} w PATH`)
     : new SpawnFailure("spawn_failed", `nie udało się uruchomić ${program}: ${err.message}`);
 }
+
+/** Komunikat błędu dla użytkownika: wyjątek z kodu albo cokolwiek innego, co zostało rzucone. */
+export function messageOf(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}

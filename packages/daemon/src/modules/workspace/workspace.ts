@@ -18,11 +18,10 @@ import {
   type TreeEntry,
   type WorkspaceSettings,
 } from "@trackwall/protocol";
-import { DomainError } from "../../errors.ts";
+import { DomainError, messageOf } from "../../errors.ts";
+import { mapLimit } from "../../map-limit.ts";
 import { CloneJobs } from "./clone-jobs.ts";
 import { vscodeUrl } from "./editor-url.ts";
-import { messageOf } from "./error-message.ts";
-import { mapLimit } from "./map-limit.ts";
 import { dirKey, findRepos, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
@@ -153,6 +152,16 @@ export class Workspace {
     if (projectsDir === null) throw new DomainError("bad_request", "najpierw ustaw folder z projektami");
     const targets = entries.filter((entry) => !this.clones.runningInto(entry.path));
     return this.syncs.startOrJoin(dirKey(projectsDir), targets, SYNC_CONCURRENCY, (entry) => this.deps.vcs.sync(entry.path));
+  }
+
+  /**
+   * Synchronizacja jednego repo dla komendy zbiorczej (§4.8); repo, do którego trwa klonowanie, to błąd. Trwająca
+   * synchronizacja całego folderu nie przeszkadza, bo `vcs` synchronizuje jeden katalog `.git` po kolei.
+   */
+  async syncRepo(id: string): Promise<SyncResult> {
+    const entry = await this.entry(id);
+    if (this.clones.runningInto(entry.path)) throw new DomainError("bad_request", `${id}: trwa klonowanie tego repo`);
+    return this.deps.vcs.sync(entry.path);
   }
 
   /** Ostatnia synchronizacja bieżącego folderu z projektami; ta sprzed zmiany ustawień nie mówi nic o nim. */

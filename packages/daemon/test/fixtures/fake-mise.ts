@@ -1,14 +1,22 @@
-// Atrapa `mise` dla testów modułu `mise`: zachowanie wynika z `fake-mise.json` w katalogu roboczym (korzeń repo).
-// { tasks: [{ name, description?, hide? }], untrusted?: boolean }
-// `tasks ls --json` drukuje taski albo błąd zaufania, `trust` zdejmuje `untrusted`, `run <task>` uruchamia
-// drzewo procesów z `process-tree.ts` (PID-y w `<repo>/pids`) i drukuje nazwę taska.
+// Atrapa `mise` dla testów modułów `mise` i `batch`: zachowanie wynika z `fake-mise.json` w katalogu roboczym
+// (korzeń repo). { tasks: [{ name, description?, hide? }], untrusted?: boolean, exits?: { [task]: kod }, installExit?: kod }
+// `tasks ls --json` drukuje taski albo błąd zaufania, `trust` zdejmuje `untrusted`. `run <task>` drukuje nazwę taska
+// i, gdy task jest w `exits`, kończy się od razu z tym kodem, a inaczej uruchamia drzewo procesów z `process-tree.ts`
+// (PID-y w `<repo>/pids`), które działa do zatrzymania. `install` kończy się kodem `installExit` (domyślnie 0).
+// `run` i `install` dopisują się do `<repo>/calls.log`, żeby test widział kolejność.
 import { spawn } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const configPath = join(process.cwd(), "fake-mise.json");
-const config = JSON.parse(readFileSync(configPath, "utf8")) as { tasks: unknown[]; untrusted?: boolean };
+const config = JSON.parse(readFileSync(configPath, "utf8")) as {
+  tasks: unknown[];
+  untrusted?: boolean;
+  exits?: Record<string, number>;
+  installExit?: number;
+};
 const args = process.argv.slice(2);
+const calls = join(process.cwd(), "calls.log");
 
 if (args[0] === "tasks" && args[1] === "ls" && args[2] === "--json") {
   if (config.untrusted) {
@@ -20,7 +28,16 @@ if (args[0] === "tasks" && args[1] === "ls" && args[2] === "--json") {
 } else if (args[0] === "trust") {
   writeFileSync(configPath, JSON.stringify({ ...config, untrusted: false }));
   console.error(`mise trusted ${process.cwd()}`);
+} else if (args[0] === "install") {
+  appendFileSync(calls, "install\n");
+  console.error("mise all tools are installed");
+  process.exit(config.installExit ?? 0);
+} else if (args[0] === "run" && args[1] !== undefined && config.exits?.[args[1]] !== undefined) {
+  appendFileSync(calls, `run ${args[1]}\n`);
+  console.log(`[${args[1]}] $ koniec`);
+  process.exit(config.exits[args[1]]);
 } else if (args[0] === "run" && args[1] !== undefined) {
+  appendFileSync(calls, `run ${args[1]}\n`);
   const pids = join(process.cwd(), "pids");
   mkdirSync(pids, { recursive: true });
   console.log(`[${args[1]}] $ process-tree`);

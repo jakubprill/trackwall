@@ -20,6 +20,8 @@ Przeglądanie repo: w widoku „Ustawienia” wskazujesz folder z projektami (pe
 
 Taski mise: zakładka „Taski mise” w karcie repo pokazuje taski z `mise tasks ls`, uruchamia je (`mise run <task>` w korzeniu repo) i zatrzymuje jako całą grupę procesów, razem z ich potomkami (Job Object na Windowsie, sesja POSIX na macOS, ADR-20); po błędzie pokazuje kod wyjścia i ostatnie linie wyjścia. Konfiguracji mise, której mise nie ufa, można zaufać przyciskiem (`mise trust`). Wyjście daemona zatrzymuje wszystkie taski, a grupy po awarii daemona sprząta jego następny start. Wymaga `mise` w `PATH` (na macOS wystarczy `PATH` z powłoki logowania).
 
+Komenda zbiorcza: przycisk „Komenda zbiorcza” pod listą repo otwiera panel, w którym wybiera się repo (domyślnie wszystkie) i kroki: synchronizacja, narzędzia (`mise install`), zależności (task mise `setup`) i build (task mise `build`). Kroki idą w repo po kolei, a repo po trzy naraz; panel pokazuje wynik każdego kroku w każdym repo, a przy błędzie kod wyjścia i ostatnie linie. Repo bez taska ma krok pominięty, błąd kończy tylko to repo, a „Przerwij” zatrzymuje trwające taski i nie zaczyna kolejnych. Powtórka jest szybka, gdy taski mają w `mise.toml` `sources` i `outputs` (ADR-27).
+
 Etap 2 (prototyp): wykrywanie stanu sesji Copilot CLI z hooków i sekwencji terminala (ADR-17), na razie jako skrypt nagrywający sesję, jeszcze bez widoku Zadania; opis niżej w „Nagrywanie sesji Copilot CLI”.
 
 ## Układ repo

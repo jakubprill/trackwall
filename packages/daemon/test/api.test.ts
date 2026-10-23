@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { apiResult, DaemonInfoResult, HealthResult, RepoList, workspaceApi } from "@trackwall/protocol";
+import { apiResult, BatchRun, batchApi, DaemonInfoResult, HealthResult, miseApi, RepoList, workspaceApi } from "@trackwall/protocol";
 import { postRoutes } from "../src/api/routes.ts";
 import { type ApiServer, startApi } from "../src/api/server.ts";
 import { createFacade } from "../src/facade.ts";
@@ -139,8 +139,9 @@ describe("api", () => {
 describe("api workspace", () => {
   const post = (path: string, body: string) => authed(path, { method: "POST", headers: { "content-type": "application/json" }, body });
 
-  test("każda akcja z kontraktu workspace ma trasę w daemonie", () => {
-    expect(Object.values(workspaceApi).filter((endpoint) => !postRoutes.has(endpoint.path))).toEqual([]);
+  test("każda akcja z kontraktów workspace, mise i batch ma trasę w daemonie", () => {
+    const endpoints = [...Object.values(workspaceApi), ...Object.values(miseApi), ...Object.values(batchApi)];
+    expect(endpoints.filter((endpoint) => !postRoutes.has(endpoint.path))).toEqual([]);
   });
 
   test("trasy workspace wymagają tokenu", async () => {
@@ -183,6 +184,17 @@ describe("api workspace", () => {
     const res = await post(workspaceApi.overview.path, JSON.stringify({ repo: "nie-ma" }));
     expect(res.status).toBe(404);
     expect((await authed(workspaceApi.list.path)).status).toBe(404);
+  });
+
+  test("komenda zbiorcza bez repo albo z nieznanym krokiem to 400, a z nieznanym repo 404, i żadna nie startuje", async () => {
+    const noRepos = await post(batchApi.start.path, JSON.stringify({ repos: [], steps: ["build"] }));
+    expect(noRepos.status).toBe(400);
+    expect(JSON.parse(noRepos.body)).toMatchObject({ error: { message: expect.stringContaining("co najmniej jedno repo") } });
+    expect((await post(batchApi.start.path, JSON.stringify({ repos: ["sklep"], steps: ["deploy"] }))).status).toBe(400);
+    expect((await post(batchApi.start.path, JSON.stringify({ repos: ["nie-ma"], steps: ["build"] }))).status).toBe(404);
+
+    const last = apiResult(BatchRun.nullable()).parse(JSON.parse((await post(batchApi.run.path, "")).body));
+    expect(last).toEqual({ ok: true, data: null });
   });
 
   test("klon z nazwą, która byłaby opcją gh albo glab, to 400 jeszcze przed uruchomieniem programu", async () => {
