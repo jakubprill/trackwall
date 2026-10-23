@@ -23,7 +23,7 @@ export function run(cmd: string[], cwd: string, capture = false): string {
 const JsonManifest = z.object({ version: z.string().min(1) });
 const CargoManifest = z.object({ package: z.object({ version: z.string().min(1) }) });
 
-function parseFile<T>(path: string, schema: z.ZodType<T>, parse: (text: string) => unknown): T {
+export function parseFile<T>(path: string, schema: z.ZodType<T>, parse: (text: string) => unknown): T {
   const text = readFileSync(path, "utf8");
   let data: unknown;
   try {

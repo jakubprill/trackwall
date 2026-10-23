@@ -8,6 +8,7 @@
     "dev": "bun scripts/sidecar.ts && tauri dev",
     "build": "bun scripts/build-desktop.ts",
     "portable": "bun scripts/package-portable.ts",
+    "icons": "bun scripts/icons.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "bun test"
   },

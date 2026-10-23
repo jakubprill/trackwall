@@ -70,6 +70,16 @@ macOS: zip zawiera niepodpisany `Trackwall.app`; pierwsze uruchomienie przez pra
 
 Każdy przebieg CI (PR, push na `main`, ręczne uruchomienie) publikuje oba archiwa jako artefakty.
 
+## Ikony
+
+Źródłem ikon są `apps/desktop/assets/icon.svg` (ikona aplikacji) i `apps/desktop/assets/tray-icon.svg` (jednobarwny znak traya). Po zmianie któregoś z nich:
+
+```sh
+pnpm --filter @trackwall/desktop icons   # ikony z bundle.icon w tauri.conf.json, szablon traya dla macOS i favicon UI
+```
+
+Wygenerowane pliki trafiają do repo razem ze zmienionym SVG. `tauri icon` zapisuje `icon.icns` za każdym razem w innej kolejności wpisów, więc zmieniony `icon.icns` po przebiegu bez zmiany SVG odrzuć (`git checkout -- apps/desktop/src-tauri/icons/icon.icns`).
+
 ## Nagrywanie sesji Copilot CLI
 
 Prototyp wykrywania stanu zadania (ADR-17). Skrypt uruchamia Copilot CLI w PTY tak jak zrobi to daemon, pokazuje go w bieżącym terminalu, nagrywa i liczy stan (`Working`, `Input`, `Approval`…). Wymaga Bun i zainstalowanego, zalogowanego `copilot` w `PATH` (na Windowsie zarówno `copilot.exe`, jak i `copilot.cmd` z `npm install -g`). Uruchom go w katalogu repo, w którym ma pracować agent, z `bun --no-env-file`, żeby Bun nie wczytał `.env` repo do środowiska Copilot CLI (Bun nadal czyta `bunfig.toml` z bieżącego katalogu, więc w repo z `bunfig.toml` uruchom skrypt z `--config` wskazującym inny plik):
