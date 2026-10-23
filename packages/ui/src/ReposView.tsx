@@ -71,11 +71,11 @@ export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection;
         </nav>
       </aside>
       <section className="min-h-0 min-w-0 overflow-y-auto">
-        {current ? (
-          <RepoDetail key={current.id} conn={conn} repo={current} />
-        ) : (
+        {current && <RepoDetail key={current.id} conn={conn} repo={current} />}
+        {/* Bez repo do pokazania lista po lewej mówi, co zrobić; tu zostaje tylko ładowanie. */}
+        {!list.data && !list.error && (
           <div className="flex h-full items-center justify-center p-6">
-            {list.data || list.error ? <p className="text-muted-foreground text-sm">Wybierz repo z listy po lewej.</p> : <Loading />}
+            <Loading />
           </div>
         )}
       </section>
