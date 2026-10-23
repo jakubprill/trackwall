@@ -1,5 +1,5 @@
 import type { ConsumedPackage, Evidence } from "@trackwall/protocol";
-import { messageOf } from "../../error-message.ts";
+import { messageOf } from "../../errors.ts";
 import { baseName, dirOf, inDir, joinPath, rootFiles } from "./repo-path.ts";
 import { type Extracted, emptyExtracted, type RepoSnapshot } from "./snapshot.ts";
 import { child, children, childText, parseXml, type XmlElement } from "./xml.ts";

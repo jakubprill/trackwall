@@ -15,7 +15,7 @@ export class DomainError extends Error {
 
 /** Proces nie wystartował: wołający rozróżnia brak programu od złego katalogu roboczego i od reszty. */
 export class SpawnFailure extends Error {
-  readonly reason: "program_not_found" | "cwd_invalid" | "spawn_failed";
+  readonly reason: "program_not_found" | "cwd_invalid" | "terminal_unavailable" | "spawn_failed";
 
   constructor(reason: SpawnFailure["reason"], message: string) {
     super(message);
@@ -28,4 +28,9 @@ export function spawnFailure(program: string, err: NodeJS.ErrnoException): Spawn
   return err.code === "ENOENT"
     ? new SpawnFailure("program_not_found", `nie znaleziono programu ${program} w PATH`)
     : new SpawnFailure("spawn_failed", `nie udało się uruchomić ${program}: ${err.message}`);
+}
+
+/** Komunikat błędu dla użytkownika: wyjątek z kodu albo cokolwiek innego, co zostało rzucone. */
+export function messageOf(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }

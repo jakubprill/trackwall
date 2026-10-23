@@ -6,6 +6,7 @@ import type { Facade } from "../facade.ts";
 import { MCP_PATH, type McpEndpoint } from "../mcp/endpoint.ts";
 import { readBody } from "./body.ts";
 import { hasValidToken, OriginPolicy } from "./guard.ts";
+import { attachPtySockets } from "./pty-socket.ts";
 import { postRoutes } from "./routes.ts";
 import { serveStatic } from "./static.ts";
 
@@ -38,6 +39,7 @@ const STATUS: Record<ErrorCode, number> = {
   invalid_config: 500,
   mise_unavailable: 409,
   stop_unconfirmed: 500,
+  agent_unavailable: 409,
   internal: 500,
 };
 
@@ -65,10 +67,12 @@ export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer
   });
   const boundPort = (server.address() as AddressInfo).port;
   policy = new OriginPolicy(boundPort, options.allowOrigins);
+  const closePtySockets = attachPtySockets(server, { token: options.token, facade: options.facade, policy: () => policy });
   return {
     server,
     port: boundPort,
     close: async () => {
+      closePtySockets();
       await options.mcp.close();
       await new Promise<void>((resolve) => {
         server.close(() => resolve());

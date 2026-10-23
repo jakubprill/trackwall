@@ -10,10 +10,12 @@ import type { Connection } from "@/lib/connection";
 import { twoDigits } from "@/lib/format";
 import { branchLabel, repoStatusTone } from "@/lib/repo-status";
 import { listSyncBadge, syncedByPath } from "@/lib/sync-state";
+import { type BatchRunHandle, useBatchRun } from "@/lib/use-batch-run";
 import { useRemote } from "@/lib/use-remote";
-import { useSyncRun } from "@/lib/use-sync-run";
+import { type SyncRunHandle, useSyncRun } from "@/lib/use-sync-run";
 import { useTagFilter } from "@/lib/use-tag-filter";
 import { cn } from "@/lib/utils";
+import { BatchBar, BatchView } from "./BatchView.tsx";
 import { CloneView } from "./CloneView.tsx";
 import { RepoDetail } from "./RepoDetail.tsx";
 import { SyncBar, SyncView } from "./SyncView.tsx";
@@ -21,14 +23,18 @@ import { TagFilter } from "./TagFilter.tsx";
 
 /** Lista repo i ich stan pochodzą z folderu z projektami i z gita przy każdym zapytaniu (§4.5), więc lista jest odpytywana cyklicznie. */
 const POLL_MS = 10_000;
+
+/** Co pokazuje prawa strona: wybrane repo, wyszukiwarkę repo do sklonowania, synchronizację albo komendę zbiorczą. */
+type Panel = "repo" | "clone" | "sync" | "batch";
+
 export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection; onRetry: () => void; onOpenSettings: () => void }) {
   const [selected, setSelected] = useState<string>();
-  /** Co pokazuje prawa strona: wybrane repo, wyszukiwarkę repo do sklonowania albo synchronizację. */
-  const [panel, setPanel] = useState<"repo" | "clone" | "sync">("repo");
+  const [panel, setPanel] = useState<Panel>("repo");
   const load = useCallback(() => post(conn, workspaceApi.list, {}), [conn]);
   const list = useRemote(load, { pollMs: POLL_MS });
   const sync = useSyncRun(conn, list.reload);
   const synced = syncedByPath(sync.run);
+  const batch = useBatchRun(conn, list.reload);
 
   // Folder z projektami, który zniknął albo jest źle wpisany w `workspace.yaml`, poprawia się w ustawieniach,
   // a stara lista wyglądałaby na aktualną.
@@ -58,12 +64,9 @@ export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection;
             </Button>
           </span>
         </div>
-        {list.data?.projectsDir && !needsSettings && (
-          <p className="text-muted-foreground truncate px-4 pb-3 font-mono text-xs" title={list.data.projectsDir}>
-            {list.data.projectsDir}
-          </p>
+        {canSync && list.data?.projectsDir && (
+          <FolderActions projectsDir={list.data.projectsDir} sync={sync} batch={batch} onShow={setPanel} />
         )}
-        {canSync && <SyncBar sync={sync} onShow={() => setPanel("sync")} />}
         <TagFilter counts={filter.counts} selected={filter.selected} onToggle={filter.toggle} onClear={filter.clear} />
         <nav aria-label="Lista repo" className="flex-1 overflow-y-auto px-2 pb-4">
           {list.error && (
@@ -100,13 +103,11 @@ export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection;
       <section className="min-h-0 min-w-0 overflow-y-auto">
         {panel === "clone" && <CloneView conn={conn} onCloned={list.reload} onOpenSettings={onOpenSettings} />}
         {panel === "sync" && <SyncView sync={sync} canSync={canSync} />}
+        {/* Nowy filtr tagów to nowa grupa repo: panel zaczyna od zaznaczenia wszystkich z niej. */}
+        {panel === "batch" && <BatchView key={filter.selected.join(",")} batch={batch} repos={repos} />}
         {panel === "repo" && current && <RepoDetail key={current.id} conn={conn} repo={current} />}
         {/* Bez repo do pokazania lista po lewej mówi, co zrobić; tu zostaje tylko ładowanie. */}
-        {!list.data && !list.error && (
-          <div className="flex h-full items-center justify-center p-6">
-            <Loading />
-          </div>
-        )}
+        {!list.data && !list.error && <PanelLoading />}
       </section>
     </div>
   );
@@ -121,6 +122,37 @@ function NoTagMatch({ shown, all }: { shown: number; all: number }) {
 /** Liczba repo w nagłówku; przy filtrze po tagach także ile jest wszystkich. */
 function repoCount(shown: number, all: number): string {
   return shown === all ? twoDigits(all) : `${twoDigits(shown)}/${twoDigits(all)}`;
+}
+
+/** Pod nagłówkiem listy: ścieżka folderu z projektami i akcje na wszystkich jego repo naraz. */
+function FolderActions({
+  projectsDir,
+  sync,
+  batch,
+  onShow,
+}: {
+  projectsDir: string;
+  sync: SyncRunHandle;
+  batch: BatchRunHandle;
+  onShow: (panel: Extract<Panel, "sync" | "batch">) => void;
+}) {
+  return (
+    <>
+      <p className="text-muted-foreground truncate px-4 pb-3 font-mono text-xs" title={projectsDir}>
+        {projectsDir}
+      </p>
+      <SyncBar sync={sync} onShow={() => onShow("sync")} />
+      <BatchBar batch={batch} onShow={() => onShow("batch")} />
+    </>
+  );
+}
+
+function PanelLoading() {
+  return (
+    <div className="flex h-full items-center justify-center p-6">
+      <Loading />
+    </div>
+  );
 }
 
 /** Pusta lista ma dwa powody: folder z projektami nie jest ustawiony albo nie ma w nim repo gita. */

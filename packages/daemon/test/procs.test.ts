@@ -8,6 +8,7 @@ import { ProcessGroups } from "../src/modules/procs/process-groups.ts";
 import { RuntimeFile } from "../src/modules/procs/runtime-file.ts";
 import { groupPlatform } from "../src/platform/group-platform.ts";
 import { type GroupControl, type GroupPlatform, isAlive, waitUntil } from "../src/platform/process-group.ts";
+import { terminalPlatform } from "../src/platform/terminal.ts";
 import { RUNTIMES } from "./support/runtimes.ts";
 
 const TREE = join(import.meta.dir, "fixtures", "process-tree.ts");
@@ -70,6 +71,21 @@ describe("procs", () => {
       expect(stopped).toMatchObject({ kind: "exited", stoppedByUser: true, runId: started.runId });
       expect(pids.filter(isAlive)).toEqual([]);
       expect(runtime.read()).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "ended czeka na potwierdzony koniec grupy i zwraca jej stan, a dla właściciela bez grupy zwraca undefined",
+    async () => {
+      const { dir, groups } = setup();
+      expect(await groups.ended("nikt")).toBeUndefined();
+      await groups.start({ owner: "o", command: [process.execPath, TREE, dir, "0", "2", "exit-leader", "4"], cwd: dir, env: process.env });
+
+      const ended = await groups.ended("o");
+
+      expect(ended).toMatchObject({ kind: "exited", exitCode: 4, stoppedByUser: false });
+      expect(treePids(dir, 2).filter(isAlive)).toEqual([]);
     },
     TIMEOUT,
   );
@@ -379,5 +395,36 @@ describe("runtime.json", () => {
 
     writeFileSync(runtime.path, JSON.stringify({ groups: [{ pid: "x" }] }));
     expect(() => runtime.read()).toThrow(runtime.path);
+  });
+});
+
+describe.skipIf(process.versions.bun === undefined)("procs z liderem w PTY", () => {
+  test("nieudany start w terminalu odrzuca tylko wywołanie, bez nieobsłużonego błędu w daemonie", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (err: unknown) => unhandled.push(err);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const dir = mkdtempSync(join(tmpdir(), "trackwall-procs-"));
+      const groups = new ProcessGroups({
+        runtime: new RuntimeFile(join(dir, "runtime.json")),
+        platform: groupPlatform(),
+        terminals: terminalPlatform(),
+        log: () => {},
+      });
+      const start = groups.startTerminal({
+        owner: "agent:x",
+        command: [process.execPath, "-e", "0"],
+        cwd: join(dir, "nie-ma"),
+        env: process.env,
+        cols: 80,
+        rows: 24,
+        onData: () => {},
+      });
+      await expect(start).rejects.toMatchObject({ reason: "cwd_invalid" });
+      await new Promise((r) => setTimeout(r, 50));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
   });
 });

@@ -13,7 +13,7 @@ Aplikacja Tauri: okno, tray, uruchamianie i nadzór daemona jako sidecara, spraw
 _Unikaj_: aplikacja (gdy chodzi tylko o Tauri)
 
 **Widok** (`View`):
-Ekran aplikacji w UI (Repo, Daemon, Ustawienia), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
+Ekran aplikacji w UI (Repo, Sesje, Daemon, Ustawienia), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
 _Unikaj_: zakładka (dla całego ekranu)
 
 **Zakładka** (`TabBar`):
@@ -80,6 +80,10 @@ _Unikaj_: URL repo (URL ma protokół i bywa z tokenem), remote bez dopowiedzeni
 **Synchronizacja** (`SyncRun`, wynik repo `SyncRepo`):
 Fetch każdego repo z folderu z projektami i fast-forward jego gałęzi domyślnej, w tle, z wynikiem per repo: przesunięte, aktualne, pominięte z powodem (`SyncSkipReason`) albo błąd. Nigdy nie scala ani nie nadpisuje lokalnych zmian (ADR-21). Trzymana tylko w pamięci daemona.
 _Unikaj_: pull, aktualizacja (bez dopowiedzenia)
+
+**Komenda zbiorcza** (`BatchRun`, krok `BatchStep`, wynik repo `BatchRepo`):
+Wybrane kroki na wybranych repo jednym przyciskiem: synchronizacja (`sync`), narzędzia z konfiguracji mise repo (`tools`, `mise install`), zależności (`setup`, task mise `setup`) i build (`build`, task mise `build`), w repo zawsze w tej kolejności, kilka repo naraz, z wynikiem każdego kroku w każdym repo (ADR-27). Błąd kroku kończy repo, pozostałe idą dalej. Trzymana tylko w pamięci daemona.
+_Unikaj_: batch (w polskim tekście), operacja zbiorcza, workflow
 
 **Stan repo** (`RepoStatus`):
 Gałąź, ostatni commit, liczba zmian w katalogu roboczym i ahead/behind względem gałęzi śledzonej, odczytane z gita przy każdym zapytaniu (`ok`), albo `unavailable` z komunikatem, gdy git go nie czyta (repo, którego katalog zniknął, znika z listy). Nigdy nie jest zapisywany.
@@ -178,9 +182,19 @@ Wszystko, co Trackwall wie o jednym CLI agenta: szablon komendy, konfiguracja MC
 CLI agenta (dziś Copilot CLI) uruchomione przez użytkownika poza zadaniem, np. w folderze z projektami, z dostępem do serwera MCP. W odróżnieniu od sesji zadania nie ma worktree, budżetu ani tokenu zadania. Pojęcie z dokumentacji i opisów narzędzi; w kodzie nie ma własnego identyfikatora, bo daemon niczego o nim nie trzyma.
 _Unikaj_: orkiestrator, główny agent
 
-**Sesja** (sesja zadania):
-CLI agenta działające w PTY należącym do daemona, nagrywane do `sessions/<zadanie>.cast`.
-_Unikaj_: sesja POSIX (to pojęcie z grupy procesów)
+**Sesja** (sesja zadania, `Session`, `SessionId`):
+CLI agenta działające w PTY należącym do daemona, w korzeniu repo, jako grupa procesów, z własnym katalogiem `sessions/<sesja>/` (wtyczka sesji, `hooks.jsonl`). Dziś sesja istnieje bez zadania: widok Sesje uruchamia ją w repo jednym kliknięciem (ADR-26); zadanie doda do niej prompt, worktree i budżet. Nagrywa ją tylko `copilot-record.ts`.
+_Unikaj_: sesja POSIX (to pojęcie z grupy procesów), okno (to okno terminala w UI)
+
+**Czeka na Ciebie** (`Session.needsAttention`):
+Działająca sesja w stanie `Input`, `Approval` albo `Plan`: agent nie ruszy dalej bez człowieka. Liczy to daemon, a UI (licznik na pasku widoków, „Następna czekająca”) i tray (menu „Czeka: <repo>”, miganie okna) tylko czytają pole.
+
+**Okno terminala** (`SessionTerminal`):
+xterm.js w widoku Sesje podłączony WebSocketem `/ws/pty/<sesja>` do PTY sesji. Kilka okien może pokazywać tę samą sesję; rozmiar PTY ustala ostatnie, które go zgłosiło.
+
+**Obraz ekranu** (`TerminalScreen`):
+Stan ekranu sesji, który daemon trzyma w emulatorze terminala bez okna i wysyła oknu terminala przy podłączeniu, zanim pójdzie dalsze wyjście.
+_Unikaj_: zrzut ekranu (to obrazek), historia wyjścia
 
 **Stan zadania** (`TaskState`, zmiana: `TaskStateChange`):
 `Working`, `Input`, `Approval`, `Plan`, `Done`, `Error` albo `Stale`, zawsze ze źródłem (`hook`, `osc`, `screen`, `timeout`, `exit`) i pewnością (§4.4).

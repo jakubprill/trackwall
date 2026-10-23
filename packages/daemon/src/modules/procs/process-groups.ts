@@ -4,7 +4,8 @@ import { stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import type { RunState } from "@trackwall/protocol";
 import { DomainError, SpawnFailure, spawnFailure } from "../../errors.ts";
-import { type GroupControl, type GroupPlatform, waitUntil } from "../../platform/process-group.ts";
+import { type GroupControl, type GroupLeader, type GroupPlatform, waitUntil } from "../../platform/process-group.ts";
+import type { TerminalPlatform, TerminalProcess } from "../../platform/terminal.ts";
 import { OutputTail } from "./output-tail.ts";
 import type { RuntimeFile, RuntimeGroup } from "./runtime-file.ts";
 
@@ -32,9 +33,24 @@ export interface GroupSpec {
   env: NodeJS.ProcessEnv;
 }
 
+/** Grupa z liderem w PTY: rozmiar terminala i odbiorca jego wyjścia. */
+export interface TerminalGroupSpec extends GroupSpec {
+  cols: number;
+  rows: number;
+  onData: (bytes: Uint8Array) => void;
+}
+
+/** Terminal lidera grupy: wejście z klawiatury i rozmiar okna. */
+export interface GroupTerminal {
+  write(data: string): void;
+  resize(cols: number, rows: number): void;
+}
+
 export interface ProcessGroupsDeps {
   runtime: RuntimeFile;
   platform: Promise<GroupPlatform>;
+  /** PTY dla `startTerminal`; `null` albo brak, gdy runtime go nie ma (Node) albo wołający go nie używa. */
+  terminals?: Promise<TerminalPlatform | null>;
   log: (msg: string) => void;
 }
 
@@ -64,6 +80,8 @@ interface Group {
   stopping?: Promise<RunState>;
   /** Zabijanie reszty grupy po końcu lidera; stop w tym czasie czeka na nie zamiast zabijać drugi raz. */
   draining?: Promise<boolean>;
+  /** Spełniana w `finish`, czyli po potwierdzeniu pustej grupy; grupa, której nie da się zabić, nie kończy się nigdy. */
+  readonly ended: { promise: Promise<void>; resolve: () => void };
 }
 
 export class ProcessGroups {
@@ -86,15 +104,51 @@ export class ProcessGroups {
     if (current && current.phase.kind !== "exited") return Promise.resolve(stateOf(current));
     let started = this.starting.get(spec.owner);
     if (!started) {
-      started = this.spawnGroup(spec).finally(() => this.starting.delete(spec.owner));
+      started = this.spawnGroup(spec, (cwd, platform) => launchPiped(spec, cwd, platform.detached))
+        .then(({ group }) => stateOf(group))
+        .finally(() => this.starting.delete(spec.owner));
       this.starting.set(spec.owner, started);
     }
     return started;
   }
 
+  /**
+   * Uruchamia grupę, której lider działa w PTY (§4.4, ADR-26), i zwraca terminal do pisania i zmiany rozmiaru.
+   * Właściciel musi być nowy: sesja w terminalu nie ma „drugiego startu”, który oddałby istniejącą.
+   */
+  async startTerminal(spec: TerminalGroupSpec): Promise<{ run: RunState; terminal: GroupTerminal }> {
+    if (this.closing) throw new SpawnFailure("spawn_failed", "daemon się zatrzymuje");
+    if (this.groups.has(spec.owner) || this.starting.has(spec.owner)) throw new Error(`właściciel ${spec.owner} ma już grupę`);
+    const terminals = await this.deps.terminals;
+    if (!terminals) throw new SpawnFailure("terminal_unavailable", "ten runtime daemona nie ma PTY (daemon pod Node)");
+    const started = this.spawnGroup(spec, async (cwd) => launchTerminal(terminals, spec, cwd));
+    const run = started.then(({ group }) => stateOf(group));
+    // Błąd startu odbiera wołający przez `started`; `starting` służy tylko innym do czekania na koniec startu.
+    run.catch(() => {});
+    this.starting.set(spec.owner, run);
+    try {
+      const { group, launched } = await started;
+      return { run: stateOf(group), terminal: launched.leader };
+    } finally {
+      this.starting.delete(spec.owner);
+    }
+  }
+
   state(owner: string): RunState | undefined {
     const group = this.groups.get(owner);
     return group && stateOf(group);
+  }
+
+  /**
+   * Stan `exited` bieżącej grupy właściciela, gdy system potwierdzi jej koniec; `undefined`, gdy właściciel nie ma
+   * grupy. Dla wołającego, który czeka na wynik (komenda zbiorcza), a nie tylko pokazuje stan.
+   */
+  async ended(owner: string): Promise<RunState | undefined> {
+    await this.starting.get(owner)?.catch(() => undefined);
+    const group = this.groups.get(owner);
+    if (!group) return undefined;
+    await group.ended.promise;
+    return stateOf(group);
   }
 
   /**
@@ -150,32 +204,19 @@ export class ProcessGroups {
     this.persist();
   }
 
-  private async spawnGroup(spec: GroupSpec): Promise<RunState> {
-    const [program, ...args] = spec.command;
-    if (program === undefined) throw new Error("pusta komenda");
+  private async spawnGroup<L extends Launched>(
+    spec: GroupSpec,
+    launch: (cwd: string, platform: GroupPlatform) => Promise<L>,
+  ): Promise<{ group: Group; launched: L }> {
     await requireDirectory(spec.cwd);
     const platform = await this.deps.platform;
-    const child = spawn(program, args, {
-      cwd: spec.cwd,
-      env: spec.env,
-      detached: platform.detached,
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-    });
-    // Wyjście i koniec procesu są podłączone od razu: krótki task może skończyć się, zanim padnie pierwszy `await`.
-    const tail = new OutputTail();
-    attachOutput(child, tail);
-    const leaderExit = new Promise<Exit>((resolve) => {
-      child.once("exit", (code, signal) => resolve({ code, signal, at: new Date().toISOString() }));
-    });
-    await spawned(child, program);
-    const pid = child.pid;
-    if (pid === undefined) throw new Error(`${program} nie dostał PID-u`);
+    const launched = await launch(spec.cwd, platform);
+    const { leader, leaderExit, tail } = launched;
     let control: GroupControl;
     try {
-      control = platform.adopt(child);
+      control = platform.adopt(leader);
     } catch (err) {
-      child.kill("SIGKILL");
+      leader.kill();
       throw err;
     }
     const record: RuntimeGroup = {
@@ -184,16 +225,16 @@ export class ProcessGroups {
       command: [...spec.command],
       cwd: spec.cwd,
       startedAt: new Date().toISOString(),
-      pid,
-      identity: await platform.identity(pid),
+      pid: leader.pid,
+      identity: await platform.identity(leader.pid),
     };
-    const group: Group = { record, control, tail, leaderExit, phase: { kind: "live" }, stopRequested: false };
+    const group: Group = { record, control, tail, leaderExit, phase: { kind: "live" }, stopRequested: false, ended: deferred() };
     this.groups.set(spec.owner, group);
     this.persist();
     leaderExit
       .then((exit) => this.onLeaderExit(group, exit))
       .catch((err: unknown) => this.deps.log(`koniec grupy ${spec.owner}: ${String(err)}`));
-    return stateOf(group);
+    return { group, launched };
   }
 
   /** Lider skończył sam albo po stopie: reszta grupy jest zabijana, a uruchomienie kończy się dopiero przy pustej grupie. */
@@ -230,6 +271,7 @@ export class ProcessGroups {
     group.phase = { kind: "exited", exit: group.phase.exit };
     group.control.release();
     this.persist();
+    group.ended.resolve();
   }
 
   /**
@@ -257,6 +299,61 @@ export class ProcessGroups {
   }
 }
 
+/** Uruchomiony lider, zanim stanie się grupą: wyjście i koniec są już podłączone. */
+interface Launched {
+  leader: GroupLeader & { kill(): void };
+  leaderExit: Promise<Exit>;
+  tail: OutputTail;
+}
+
+/** Lider z rurami (stdin, stdout, stderr), jak task mise. */
+async function launchPiped(spec: GroupSpec, cwd: string, detached: boolean): Promise<Launched> {
+  const [program, ...args] = spec.command;
+  if (program === undefined) throw new Error("pusta komenda");
+  const child = spawn(program, args, { cwd, env: spec.env, detached, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+  // Wyjście i koniec procesu są podłączone od razu: krótki task może skończyć się, zanim padnie pierwszy `await`.
+  const tail = new OutputTail();
+  attachOutput(child, tail);
+  const leaderExit = new Promise<Exit>((resolve) => {
+    child.once("exit", (code, signal) => resolve({ code, signal, at: new Date().toISOString() }));
+  });
+  await spawned(child, program);
+  const pid = child.pid;
+  if (pid === undefined) throw new Error(`${program} nie dostał PID-u`);
+  const leader = {
+    pid,
+    closeInput: () => void child.stdin?.end(),
+    hasExited: () => child.exitCode !== null || child.signalCode !== null,
+    kill: () => void child.kill("SIGKILL"),
+  };
+  return { leader, leaderExit, tail };
+}
+
+/** Lider w PTY jest zarazem terminalem; jego wyjście idzie do wołającego i do ostatnich linii stanu `exited`. */
+function launchTerminal(terminals: TerminalPlatform, spec: TerminalGroupSpec, cwd: string): Launched & { leader: TerminalProcess } {
+  const [program] = spec.command;
+  if (program === undefined) throw new Error("pusta komenda");
+  const tail = new OutputTail();
+  let leader: TerminalProcess;
+  try {
+    leader = terminals.spawn({
+      command: spec.command,
+      cwd,
+      env: spec.env,
+      cols: spec.cols,
+      rows: spec.rows,
+      onData: (bytes) => {
+        tail.push("stdout", Buffer.from(bytes));
+        spec.onData(bytes);
+      },
+    });
+  } catch (err) {
+    throw spawnFailure(program, err as NodeJS.ErrnoException);
+  }
+  const leaderExit = leader.exited.then((exit) => ({ ...exit, at: new Date().toISOString() }));
+  return { leader, leaderExit, tail };
+}
+
 /**
  * stdout i stderr są czytane zawsze, bo nieczytana rura blokuje proces po kilkudziesięciu KB (§4.1).
  * Tu podłączy się moduł `logs`; na razie zostają ostatnie linie dla stanu `exited`.
@@ -268,6 +365,14 @@ function attachOutput(child: ChildProcess, tail: OutputTail): void {
   child.stdin?.on("error", () => {});
   // Błąd po starcie (np. nieudany `kill`) bez słuchacza zakończyłby daemon; stan i tak wynika z `exit`.
   child.on("error", () => {});
+}
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve = () => {};
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
 }
 
 function stateOf(group: Group): RunState {
