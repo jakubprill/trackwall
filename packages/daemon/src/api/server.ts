@@ -3,6 +3,8 @@ import type { AddressInfo } from "node:net";
 import type { ApiResult, DaemonInfo, ErrorCode, Health } from "@trackwall/protocol";
 import { DomainError } from "../errors.ts";
 import type { Facade } from "../facade.ts";
+import { MCP_PATH, type McpEndpoint } from "../mcp/endpoint.ts";
+import { readBody } from "./body.ts";
 import { hasValidToken, OriginPolicy } from "./guard.ts";
 import { postRoutes } from "./routes.ts";
 import { serveStatic } from "./static.ts";
@@ -13,6 +15,8 @@ export interface ApiOptions {
   info: () => DaemonInfo;
   onShutdown: () => void;
   facade: Facade;
+  /** Serwer MCP (§5.3) pod `/mcp`; trasa i ochrona są tu, narzędzia w `mcp/`. Zamykany razem z serwerem API. */
+  mcp: McpEndpoint;
   uiDir?: string;
   /** Dodatkowe originy przeglądarki z dostępem do API, np. serwer Vite przy `tauri dev`. */
   allowOrigins?: readonly string[];
@@ -40,7 +44,7 @@ const STATUS: Record<ErrorCode, number> = {
 /** Ciała żądań to małe obiekty JSON; większe są odrzucane, zanim trafią do pamięci w całości. */
 const MAX_BODY_BYTES = 64 * 1024;
 
-/** HTTP API daemona na `127.0.0.1` (§5.2). `port: 0` wybiera losowy wolny port. */
+/** HTTP API daemona na `127.0.0.1` (§5.2) i serwer MCP pod `/mcp` (§5.3). `port: 0` wybiera losowy wolny port. */
 export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer> {
   let policy: OriginPolicy | undefined;
   const server = createServer((req, res) => {
@@ -64,11 +68,13 @@ export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer
   return {
     server,
     port: boundPort,
-    close: () =>
-      new Promise<void>((resolve) => {
+    close: async () => {
+      await options.mcp.close();
+      await new Promise<void>((resolve) => {
         server.close(() => resolve());
         server.closeAllConnections();
-      }),
+      });
+    },
   };
 }
 
@@ -94,17 +100,18 @@ async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, 
     return void res.end();
   }
 
-  if (path.startsWith("/api/")) return handleApi(req, res, path, o);
+  // Publiczne są tylko `GET /api/health` i statyczne pliki UI; reszta API i MCP przechodzi jedno sprawdzenie tokenu.
+  if (path === "/api/health" && req.method === "GET") return ok<Health>(res, { status: "ok", version: o.version });
+  const api = path.startsWith("/api/");
+  if ((api || path === MCP_PATH) && !hasValidToken(req, o.token)) return fail(res, "unauthorized", "missing or invalid token");
+  if (api) return handleApi(req, res, path, o);
+  if (path === MCP_PATH) return o.mcp.handle(req, res);
   if (o.uiDir && (req.method === "GET" || req.method === "HEAD")) return serveStatic(o.uiDir, path, res);
   return fail(res, "not_found", `no route ${req.method} ${path}`);
 }
 
-/** Trasy `/api/*`: poza `/api/health` każda wymaga tokenu. */
+/** Trasy `/api/*` z tokenem, już sprawdzonym. */
 async function handleApi(req: IncomingMessage, res: ServerResponse, path: string, o: ApiOptions): Promise<void> {
-  if (path === "/api/health" && req.method === "GET") {
-    return ok<Health>(res, { status: "ok", version: o.version });
-  }
-  if (!hasValidToken(req, o.token)) return fail(res, "unauthorized", "missing or invalid token");
   if (path === "/api/daemon/info" && req.method === "GET") return ok<DaemonInfo>(res, o.info());
   if (path === "/api/daemon/shutdown" && req.method === "POST") {
     await drain(req);
@@ -132,14 +139,7 @@ function send(res: ServerResponse, status: number, body: unknown): void {
 
 /** Ciało JSON żądania; puste ciało to `{}`. */
 async function readJson(req: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of req as AsyncIterable<Buffer>) {
-    size += chunk.length;
-    if (size > MAX_BODY_BYTES) throw new DomainError("bad_request", `ciało żądania większe niż ${MAX_BODY_BYTES} bajtów`);
-    chunks.push(chunk);
-  }
-  const text = Buffer.concat(chunks).toString("utf8");
+  const text = (await readBody(req, MAX_BODY_BYTES)).toString("utf8");
   if (text.trim() === "") return {};
   try {
     return JSON.parse(text);

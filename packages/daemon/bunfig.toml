@@ -1,0 +1,2 @@
+# Celowo pusty. Most MCP uruchomiony ze źródeł (`mcpStdioCommand`) dostaje ten plik przez `--config`, żeby Bun nie
+# wczytał `bunfig.toml` z katalogu agenta, czyli z repo użytkownika (docs/architecture.md §8).

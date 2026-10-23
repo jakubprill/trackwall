@@ -34,7 +34,18 @@ _Unikaj_: workspace (to osobne pojęcie, patrz niżej)
 Cienki klient CLI daemona przez HTTP na loopbacku. Nie ma nic wspólnego z WebSocketem `/ws`.
 
 **Token daemona**:
-Sekret z `~/.trackwall/daemon.json`, którym UI, `ws` i powłoka uwierzytelniają się w API.
+Sekret z `~/.trackwall/daemon.json`, którym UI, `ws`, powłoka i most stdio uwierzytelniają się w API i serwerze MCP.
+
+**Serwer MCP** (`/mcp`, `createMcpEndpoint`):
+Część daemona, przez którą agenci czytają jego stan narzędziami MCP; ten sam port i token co API (§5.3, ADR-24).
+
+**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`):
+Jedno wywołanie serwera MCP z nazwą po angielsku, wejściem i wynikiem opisanym schematem z `packages/protocol/src/mcp.ts`; mapowanie na fasadę, bez własnej logiki domenowej.
+_Unikaj_: komenda, akcja (to pojęcia z API i CLI)
+
+**Most stdio** (`trackwall-daemon mcp-stdio`, `mcpStdioCommand`):
+Proces, który CLI agenta uruchamia jako lokalny serwer MCP; przekazuje wiadomości ze stdin do serwera MCP działającego daemona, z portem i tokenem z `daemon.json`.
+_Unikaj_: proxy, cienki klient (bez dopowiedzenia)
 
 **Token zadania**:
 Osobny token dla sesji zadania; po nim daemon wie, które zadanie woła MCP, i ogranicza jego narzędzia (§8).
@@ -143,6 +154,10 @@ _Unikaj_: autoryzacja, akceptacja
 
 **Adapter**:
 Wszystko, co Trackwall wie o jednym CLI agenta: szablon komendy, konfiguracja MCP, wznowienie, detektory stanu. Jedyny adapter to Copilot CLI (ADR-8).
+
+**Agent nadrzędny**:
+CLI agenta (dziś Copilot CLI) uruchomione przez użytkownika poza zadaniem, np. w folderze z projektami, z dostępem do serwera MCP. W odróżnieniu od sesji zadania nie ma worktree, budżetu ani tokenu zadania. Pojęcie z dokumentacji i opisów narzędzi; w kodzie nie ma własnego identyfikatora, bo daemon niczego o nim nie trzyma.
+_Unikaj_: orkiestrator, główny agent
 
 **Sesja** (sesja zadania):
 CLI agenta działające w PTY należącym do daemona, nagrywane do `sessions/<zadanie>.cast`.

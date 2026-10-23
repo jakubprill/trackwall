@@ -5,10 +5,13 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
-import { type DaemonArgs, parseDaemonArgs, USAGE } from "./args.ts";
+import { type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./args.ts";
 import { newToken, probeRunningDaemon, removeDaemonFile, watchDaemonFile, withStartLock, writeDaemonFile } from "./discovery.ts";
 import { createFacade, type Facade } from "./facade.ts";
 import { trackwallHome } from "./home.ts";
+import { createMcpEndpoint } from "./mcp/endpoint.ts";
+import { runStdioBridge } from "./mcp/stdio-bridge.ts";
+import { mcpStdioCommand } from "./mcp/stdio-command.ts";
 import { openBrowser } from "./open-browser.ts";
 import { runtimeInfo } from "./platform/runtime.ts";
 import { userEnv } from "./user-env.ts";
@@ -65,9 +68,11 @@ async function main(args: DaemonArgs): Promise<void> {
           runtime: runtimeInfo(),
           launchedBy: args.parent === undefined ? "manual" : "desktop",
           home,
+          mcpStdioCommand: mcpStdioCommand(home),
         }),
         onShutdown: () => void shutdown("POST /api/daemon/shutdown"),
         facade,
+        mcp: createMcpEndpoint({ facade, version: VERSION, log: (msg) => log(`[mcp] ${msg}`) }),
       },
       args.port,
     );
@@ -125,20 +130,34 @@ function log(msg: string): void {
 // Komunikaty walidacji zod trafiają do UI (`bad_request`, `invalid_config`), więc po polsku jak reszta tekstów.
 z.config(z.locales.pl());
 
-let parsed: DaemonArgs;
+let commandLine: CommandLine;
 try {
-  parsed = parseDaemonArgs(process.argv.slice(2));
+  commandLine = parseCommandLine(process.argv.slice(2));
 } catch (err) {
   process.stderr.write(`${(err as Error).message}\n\n${USAGE}`);
   process.exit(EXIT_USAGE);
 }
-if (parsed.help) {
+if (commandLine.command === MCP_STDIO_COMMAND) {
+  runMcpStdio(trackwallHome(commandLine.home));
+} else if (commandLine.args.help) {
   process.stdout.write(USAGE);
-} else if (parsed.version) {
+} else if (commandLine.args.version) {
   process.stdout.write(`${VERSION}\n`);
 } else {
-  main(parsed).catch((err: unknown) => {
+  main(commandLine.args).catch((err: unknown) => {
     process.stderr.write(`[daemon] błąd startu: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
     process.exit(1);
+  });
+}
+
+/**
+ * Most stdio do serwera MCP działającego daemona. stdout należy do protokołu MCP, więc komunikaty mostu idą tylko na
+ * stderr; proces kończy się sam po opróżnieniu stdout (`process.exit` ucięłoby odpowiedzi czekające w buforze rury).
+ */
+function runMcpStdio(home: string): void {
+  const log = (msg: string) => process.stderr.write(`[mcp-stdio] ${msg}\n`);
+  runStdioBridge({ home, input: process.stdin, output: process.stdout, log }).catch((err: unknown) => {
+    log(String(err));
+    process.exitCode = 1;
   });
 }
