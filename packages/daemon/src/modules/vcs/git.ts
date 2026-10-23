@@ -40,8 +40,11 @@ type GitOptions = Pick<RunOptions, "maxBytes" | "stdin"> & {
    * Komenda może łączyć się z serwerem (`fetch`, `remote set-head`, `merge` z filtrem LFS): środowisko bez pytań
    * (`networkEnv`); `sshCommand` to `core.sshCommand` z konfiguracji repo i użytkownika.
    */
-  network?: { sshCommand: string | undefined };
+  network?: GitNetwork;
 };
+
+/** `core.sshCommand` z konfiguracji repo i użytkownika dla komendy, która łączy się z serwerem. */
+export type GitNetwork = { sshCommand: string | undefined };
 
 export async function git(repoDir: string, args: readonly string[], opts: GitOptions = {}): Promise<RunOutput> {
   const ceiling = await ceilingFor(repoDir);

@@ -1,5 +1,5 @@
 import type { SyncResult, SyncSkipReason } from "@trackwall/protocol";
-import { git } from "./git.ts";
+import { type GitNetwork, git } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { parseStatus } from "./parse.ts";
 
@@ -36,10 +36,7 @@ export async function syncRepo(dir: string): Promise<SyncResult> {
  * z `prune` usunął starą), jedno pytanie do serwera (`remote set-head --auto`). Zmiany gałęzi domyślnej, której
  * stara wersja nadal istnieje, daemon nie wykryje bez pytania serwera przy każdej synchronizacji.
  */
-/** `core.sshCommand` dla komend, które łączą się z serwerem (`network` w `git`). */
-type Network = { sshCommand: string | undefined };
-
-async function defaultBranch(dir: string, remote: string, network: Network): Promise<string | undefined> {
+async function defaultBranch(dir: string, remote: string, network: GitNetwork): Promise<string | undefined> {
   const prefix = `refs/remotes/${remote}/`;
   const read = async () => {
     const ref = await git(dir, ["symbolic-ref", "--quiet", `${prefix}HEAD`]).then(
@@ -62,7 +59,7 @@ async function defaultBranch(dir: string, remote: string, network: Network): Pro
   return read();
 }
 
-async function fastForward(dir: string, branch: string, remoteRef: string, network: Network): Promise<SyncResult> {
+async function fastForward(dir: string, branch: string, remoteRef: string, network: GitNetwork): Promise<SyncResult> {
   const localRef = `refs/heads/${branch}`;
   if ((await revParse(dir, localRef)) === undefined)
     return skipped("no-local-branch", `gałęzi ${branch} nie ma lokalnie; pobrano tylko zmiany`);
