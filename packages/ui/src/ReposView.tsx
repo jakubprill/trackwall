@@ -1,11 +1,10 @@
-import { type Repo, workspaceApi } from "@trackwall/protocol";
-import { Plus, RefreshCw } from "lucide-react";
-import { type FormEvent, useCallback, useState } from "react";
+import { type Repo, type RepoList, workspaceApi } from "@trackwall/protocol";
+import { FolderOpen, RefreshCw } from "lucide-react";
+import { useCallback, useState } from "react";
 import { Loading } from "@/components/Loading";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { errorMessage, post } from "@/lib/api";
+import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { twoDigits } from "@/lib/format";
 import { branchLabel, repoStatusTone } from "@/lib/repo-status";
@@ -13,33 +12,36 @@ import { useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
 import { RepoDetail } from "./RepoDetail.tsx";
 
-/** Stan repo pochodzi z gita przy każdym zapytaniu (§4.5), więc lista jest odpytywana cyklicznie. */
+/** Lista repo i ich stan pochodzą z folderu z projektami i z gita przy każdym zapytaniu (§4.5), więc lista jest odpytywana cyklicznie. */
 const POLL_MS = 10_000;
 
-export function ReposView({ conn, onRetry }: { conn: Connection; onRetry: () => void }) {
+export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection; onRetry: () => void; onOpenSettings: () => void }) {
   const [selected, setSelected] = useState<string>();
   const load = useCallback(() => post(conn, workspaceApi.list, {}), [conn]);
   const list = useRemote(load, { pollMs: POLL_MS });
 
-  const repos = list.data ?? [];
+  const repos = list.data?.repos ?? [];
   const current = repos.find((r) => r.id === selected) ?? repos[0];
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[var(--spacing-sidebar)_1fr]">
       <aside className="bg-card flex min-h-0 flex-col border-r">
         <div className="flex items-center justify-between px-4 pt-3 pb-2">
-          <h2 className="hud-label">Repo {list.data && <span className="text-primary">{`// ${twoDigits(list.data.length)}`}</span>}</h2>
-          <Button variant="ghost" size="icon" onClick={list.reload} aria-label="Odśwież listę repo">
-            <RefreshCw />
-          </Button>
+          <h2 className="hud-label">Repo {list.data && <span className="text-primary">{`// ${twoDigits(repos.length)}`}</span>}</h2>
+          <span className="flex">
+            <Button variant="ghost" size="icon" onClick={onOpenSettings} aria-label="Zmień folder z projektami">
+              <FolderOpen />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={list.reload} aria-label="Odśwież listę repo">
+              <RefreshCw />
+            </Button>
+          </span>
         </div>
-        <AddRepoForm
-          conn={conn}
-          onAdded={(repo) => {
-            setSelected(repo.id);
-            list.reload();
-          }}
-        />
+        {list.data?.projectsDir && (
+          <p className="text-muted-foreground truncate px-4 pb-3 font-mono text-xs" title={list.data.projectsDir}>
+            {list.data.projectsDir}
+          </p>
+        )}
         <nav className="flex-1 overflow-y-auto px-2 pb-4">
           {list.error && (
             <div className="flex flex-col items-start gap-2 px-2 pb-2">
@@ -56,9 +58,7 @@ export function ReposView({ conn, onRetry }: { conn: Connection; onRetry: () => 
               </Button>
             </div>
           )}
-          {list.data?.length === 0 && (
-            <p className="text-muted-foreground px-2 text-sm">Dodaj pierwsze repo: wklej pełną ścieżkę do katalogu z gitem.</p>
-          )}
+          {list.data && <EmptyList list={list.data} onOpenSettings={onOpenSettings} />}
           {repos.map((repo, i) => (
             <RepoListItem
               key={repo.id}
@@ -72,22 +72,10 @@ export function ReposView({ conn, onRetry }: { conn: Connection; onRetry: () => 
       </aside>
       <section className="min-h-0 min-w-0 overflow-y-auto">
         {current ? (
-          <RepoDetail
-            key={current.id}
-            conn={conn}
-            repo={current}
-            onRemoved={() => {
-              setSelected(undefined);
-              list.reload();
-            }}
-          />
+          <RepoDetail key={current.id} conn={conn} repo={current} />
         ) : (
           <div className="flex h-full items-center justify-center p-6">
-            {list.data || list.error ? (
-              <p className="text-muted-foreground text-sm">Wybierz repo z listy albo dodaj nowe po lewej.</p>
-            ) : (
-              <Loading />
-            )}
+            {list.data || list.error ? <p className="text-muted-foreground text-sm">Wybierz repo z listy po lewej.</p> : <Loading />}
           </div>
         )}
       </section>
@@ -95,42 +83,24 @@ export function ReposView({ conn, onRetry }: { conn: Connection; onRetry: () => 
   );
 }
 
-function AddRepoForm({ conn, onAdded }: { conn: Connection; onAdded: (repo: Repo) => void }) {
-  const [path, setPath] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(undefined);
-    try {
-      onAdded(await post(conn, workspaceApi.add, { path: path.trim() }));
-      setPath("");
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-2 px-4 pb-3">
-      <div className="flex gap-2">
-        <Input
-          value={path}
-          onChange={(e) => setPath(e.target.value)}
-          placeholder="C:\repo albo /Users/ja/repo"
-          aria-label="Ścieżka do repo"
-          className="font-mono text-xs"
-        />
-        <Button type="submit" size="icon" disabled={busy || path.trim() === ""} aria-label="Dodaj repo">
-          <Plus />
+/** Pusta lista ma dwa powody: folder z projektami nie jest ustawiony albo nie ma w nim repo gita. */
+function EmptyList({ list, onOpenSettings }: { list: RepoList; onOpenSettings: () => void }) {
+  if (list.projectsDir === null)
+    return (
+      <div className="flex flex-col items-start gap-2 px-2">
+        <p className="text-muted-foreground text-sm">
+          Wskaż folder z projektami, a Trackwall pokaże wszystkie repo gita, które w nim leżą.
+        </p>
+        <Button variant="outline" size="sm" onClick={onOpenSettings}>
+          <FolderOpen /> Ustaw folder
         </Button>
       </div>
-      {error && <p className="text-destructive text-xs break-words">{error}</p>}
-    </form>
-  );
+    );
+  if (list.repos.length === 0)
+    return (
+      <p className="text-muted-foreground px-2 text-sm">W tym folderze nie ma repo gita. Sklonuj do niego repo albo wskaż inny folder.</p>
+    );
+  return null;
 }
 
 /**

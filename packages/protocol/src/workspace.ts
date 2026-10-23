@@ -2,12 +2,12 @@ import { z } from "zod";
 import type { Endpoint } from "./api.ts";
 
 /**
- * Kontrakt modułu `workspace` (§4.5, §6): lista repo i przeglądanie ich zawartości z ostatniego commita.
+ * Kontrakt modułu `workspace` (§4.5, §6): repo z folderu z projektami i przeglądanie ich zawartości z ostatniego commita.
  * Każda akcja to `POST /api/workspace/<akcja>`; `workspaceApi` trzyma ścieżkę, schemat ciała i schemat wyniku razem,
  * więc daemon i UI nie mogą ich sparować inaczej.
  */
 
-/** Slug repo w `workspace.yaml`; z nazwy katalogu, małe litery. */
+/** Slug repo z nazwy jego katalogu w folderze z projektami, małe litery. */
 export const RepoId = z
   .string()
   .min(1)
@@ -55,7 +55,7 @@ export type RepoStatusOk = z.infer<typeof RepoStatusOk>;
 /** Stan repo zaobserwowany w gicie przy każdym zapytaniu; nigdy nie jest zapisywany. */
 export const RepoStatus = z.discriminatedUnion("kind", [
   RepoStatusOk,
-  /** Katalog zniknął albo git go nie czyta; wpis w `workspace.yaml` zostaje. */
+  /** Katalog ma `.git`, ale git go nie czyta (uszkodzone repo, brak uprawnień, brak `git` w `PATH`). */
   z.object({ kind: z.literal("unavailable"), message: z.string() }),
 ]);
 export type RepoStatus = z.infer<typeof RepoStatus>;
@@ -66,6 +66,24 @@ export const Repo = z.object({
   status: RepoStatus,
 });
 export type Repo = z.infer<typeof Repo>;
+
+/**
+ * Repo z folderu z projektami (ADR-18). `projectsDir` to `null`, dopóki użytkownik go nie ustawi
+ * (w ustawieniach albo w `workspace.yaml`); wtedy lista jest pusta.
+ */
+export const RepoList = z.object({
+  projectsDir: z.string().nullable(),
+  /** Posortowane po nazwie katalogu. */
+  repos: z.array(Repo),
+});
+export type RepoList = z.infer<typeof RepoList>;
+
+export const WorkspaceSettings = z.object({
+  projectsDir: z.string().nullable(),
+  /** Pełna ścieżka `workspace.yaml`, żeby użytkownik wiedział, który plik edytować ręcznie. */
+  configFile: z.string(),
+});
+export type WorkspaceSettings = z.infer<typeof WorkspaceSettings>;
 
 export const TreeEntry = z.object({
   name: z.string(),
@@ -99,11 +117,10 @@ const RepoRequest = z.object({ repo: RepoId }).strict();
 const Done = z.null();
 
 export const workspaceApi = {
-  list: endpoint("list", z.object({}).strict(), z.array(Repo)),
-  /** `path` to katalog na dysku użytkownika (w repo albo jego korzeń), nie ścieżka w repo. */
-  add: endpoint("add", z.object({ path: z.string().min(1).max(4096) }).strict(), Repo),
-  /** Zdejmuje repo z listy; katalog na dysku zostaje. */
-  remove: endpoint("remove", RepoRequest, Done),
+  list: endpoint("list", z.object({}).strict(), RepoList),
+  settings: endpoint("settings", z.object({}).strict(), WorkspaceSettings),
+  /** `path` to pełna ścieżka istniejącego katalogu na dysku użytkownika; zapisywana w `workspace.yaml`. */
+  setProjectsDir: endpoint("set-projects-dir", z.object({ path: z.string().min(1).max(4096) }).strict(), WorkspaceSettings),
   overview: endpoint("overview", RepoRequest, RepoOverview),
   tree: endpoint("tree", z.object({ repo: RepoId, path: RepoPath }).strict(), z.array(TreeEntry)),
   file: endpoint(

@@ -1,5 +1,5 @@
 import { type Repo, type RepoOverview, workspaceApi } from "@trackwall/protocol";
-import { Code, Trash2 } from "lucide-react";
+import { Code } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
@@ -20,7 +20,7 @@ const TABS = [
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 
-export function RepoDetail({ conn, repo, onRemoved }: { conn: Connection; repo: Repo; onRemoved: () => void }) {
+export function RepoDetail({ conn, repo }: { conn: Connection; repo: Repo }) {
   const [tab, setTab] = useState<Tab>("readme");
   const { status } = repo;
   const available = status.kind === "ok";
@@ -37,7 +37,7 @@ export function RepoDetail({ conn, repo, onRemoved }: { conn: Connection; repo: 
           <h1 className="text-xl font-semibold tracking-tight">{repo.id}</h1>
           <p className="text-muted-foreground font-mono text-xs break-all">{repo.path}</p>
         </div>
-        <RepoActions conn={conn} repo={repo} onRemoved={onRemoved} />
+        <OpenEditor conn={conn} repo={repo} />
       </header>
       {status.kind === "unavailable" ? (
         <p className="text-destructive text-sm whitespace-pre-wrap">Repo jest niedostępne: {status.message}</p>
@@ -68,43 +68,18 @@ function Loaded({ remote, children }: { remote: RemoteHandle<RepoOverview>; chil
   return children(remote.data);
 }
 
-/**
- * Usunięcie potwierdza się drugim kliknięciem w UI, a nie `window.confirm`: okno WKWebView na macOS
- * nie pokazuje natywnych dialogów JavaScriptu i `confirm` zwraca tam od razu `false`.
- */
-function RepoActions({ conn, repo, onRemoved }: { conn: Connection; repo: Repo; onRemoved: () => void }) {
-  const [confirming, setConfirming] = useState(false);
+function OpenEditor({ conn, repo }: { conn: Connection; repo: Repo }) {
   const [error, setError] = useState<string>();
-
-  const run = (action: () => Promise<unknown>) => {
+  const open = () => {
     setError(undefined);
-    action().catch((err: unknown) => setError(errorMessage(err)));
+    post(conn, workspaceApi.openEditor, { repo: repo.id }).catch((err: unknown) => setError(errorMessage(err)));
   };
-  const openEditor = () => run(() => post(conn, workspaceApi.openEditor, { repo: repo.id }));
-  const remove = () => run(() => post(conn, workspaceApi.remove, { repo: repo.id }).then(onRemoved));
 
   return (
     <div className="flex flex-col items-end gap-2">
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={openEditor} disabled={repo.status.kind !== "ok"}>
-          <Code /> Otwórz w VS Code
-        </Button>
-        {confirming ? (
-          <>
-            <Button variant="destructive" size="sm" onClick={remove}>
-              Usuń z listy
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>
-              Anuluj
-            </Button>
-          </>
-        ) : (
-          <Button variant="ghost" size="sm" onClick={() => setConfirming(true)} aria-label="Usuń z listy">
-            <Trash2 />
-          </Button>
-        )}
-      </div>
-      {confirming && <p className="text-muted-foreground text-xs">Katalog na dysku zostanie nietknięty.</p>}
+      <Button variant="outline" size="sm" onClick={open} disabled={repo.status.kind !== "ok"}>
+        <Code /> Otwórz w VS Code
+      </Button>
       {error && <p className="text-destructive text-xs">{error}</p>}
     </div>
   );

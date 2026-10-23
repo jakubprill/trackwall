@@ -4,11 +4,13 @@ import { Button } from "@/components/ui/button";
 import { useConnection } from "@/lib/use-connection";
 import { DaemonPanel } from "./DaemonPanel.tsx";
 import { ReposView } from "./ReposView.tsx";
+import { SettingsView } from "./SettingsView.tsx";
 import { TabBar } from "./TabBar.tsx";
 
 const VIEWS = [
   { id: "repos", label: "Repo" },
   { id: "daemon", label: "Daemon" },
+  { id: "settings", label: "Ustawienia" },
 ] as const;
 type View = (typeof VIEWS)[number]["id"];
 
@@ -38,10 +40,15 @@ export function App() {
             <Loading text="Łączenie z daemonem…" />
           </div>
         )}
-        {conn && view === "repos" && <ReposView key={epoch} conn={conn} onRetry={retry} />}
+        {conn && view === "repos" && <ReposView key={epoch} conn={conn} onRetry={retry} onOpenSettings={() => setView("settings")} />}
         {conn && view === "daemon" && (
           <div className="flex justify-center p-6">
             <DaemonPanel key={epoch} conn={conn} onRetry={retry} />
+          </div>
+        )}
+        {conn && view === "settings" && (
+          <div className="flex justify-center p-6">
+            <SettingsView key={epoch} conn={conn} onRetry={retry} onSaved={() => setView("repos")} />
           </div>
         )}
       </main>

@@ -2,8 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { apiResult, DaemonInfoResult, HealthResult, Repo, workspaceApi } from "@trackwall/protocol";
-import { z } from "zod";
+import { apiResult, DaemonInfoResult, HealthResult, RepoList, workspaceApi } from "@trackwall/protocol";
 import { type ApiServer, startApi } from "../src/api/server.ts";
 import { createFacade } from "../src/facade.ts";
 import { type LoopbackOptions, loopbackRequest } from "../src/loopback.ts";
@@ -137,20 +136,30 @@ describe("api workspace", () => {
     expect((await req(workspaceApi.list.path, { method: "POST" })).status).toBe(401);
   });
 
-  test("dodane repo pojawia się na liście ze stanem z gita", async () => {
-    const dir = makeRepo({ "a.txt": "1" }, "sklep");
-    const added = await post(workspaceApi.add.path, JSON.stringify({ path: dir }));
-    expect(added.status).toBe(200);
+  test("po ustawieniu folderu z projektami jego repo są na liście ze stanem z gita", async () => {
+    const projects = mkdtempSync(join(tmpdir(), "trackwall-projekty-"));
+    makeRepo({ "a.txt": "1" }, "sklep", projects);
+    const set = await post(workspaceApi.setProjectsDir.path, JSON.stringify({ path: projects }));
+    expect(set.status).toBe(200);
 
-    const list = apiResult(z.array(Repo)).parse(JSON.parse((await post(workspaceApi.list.path, "")).body));
-    expect(list.ok && list.data.map((r) => [r.id, r.status.kind])).toEqual([["sklep", "ok"]]);
+    const list = apiResult(RepoList).parse(JSON.parse((await post(workspaceApi.list.path, "")).body));
+    expect(list.ok && list.data.repos.map((r) => [r.id, r.status.kind])).toEqual([["sklep", "ok"]]);
+  });
+
+  test("nieistniejący folder z projektami to 400 z opisem", async () => {
+    const res = await post(workspaceApi.setProjectsDir.path, JSON.stringify({ path: join(tmpdir(), "trackwall-nie-ma-takiego") }));
+    expect(res.status).toBe(400);
+    expect(JSON.parse(res.body)).toMatchObject({
+      ok: false,
+      error: { code: "bad_request", message: expect.stringContaining("nie istnieje") },
+    });
   });
 
   test("ciało niezgodne ze schematem albo niebędące JSON-em to 400 z opisem", async () => {
     const bad = await post(workspaceApi.tree.path, JSON.stringify({ repo: "sklep", path: "../poza" }));
     expect(bad.status).toBe(400);
     expect(JSON.parse(bad.body)).toMatchObject({ ok: false, error: { code: "bad_request", message: expect.stringContaining("..") } });
-    expect((await post(workspaceApi.add.path, "{nie json")).status).toBe(400);
+    expect((await post(workspaceApi.setProjectsDir.path, "{nie json")).status).toBe(400);
   });
 
   test("ciało większe niż 64 KB jest odrzucane przed parsowaniem", async () => {

@@ -1,14 +1,25 @@
+import { statSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
-import type { Commit, FileContent, Repo, RepoOverview, RepoStatus, RepoStatusOk, TreeEntry } from "@trackwall/protocol";
+import type {
+  Commit,
+  FileContent,
+  Repo,
+  RepoList,
+  RepoOverview,
+  RepoStatus,
+  RepoStatusOk,
+  TreeEntry,
+  WorkspaceSettings,
+} from "@trackwall/protocol";
 import { DomainError } from "../../errors.ts";
 import { vscodeUrl } from "./editor-url.ts";
-import { repoIdFor } from "./repo-id.ts";
-import { samePath } from "./same-path.ts";
-import type { WorkspaceFile, WorkspaceRepoEntry } from "./workspace-file.ts";
+import { findRepos, type RepoEntry } from "./projects-dir.ts";
+import type { WorkspaceFile } from "./workspace-file.ts";
 
 /**
- * Moduł `workspace` (§4): lista repo z `workspace.yaml` i ich stan zaobserwowany w gicie.
- * Stan nie jest nigdzie zapisywany; każde zapytanie pyta gita, więc nie rozjeżdża się z tym, co robi użytkownik.
+ * Moduł `workspace` (§4): repo z folderu z projektami wskazanego w `workspace.yaml` (ADR-18) i ich stan
+ * zaobserwowany w gicie. Ani lista, ani stan nie są nigdzie zapisywane; każde zapytanie czyta folder i pyta gita,
+ * więc nie rozjeżdżają się z tym, co robi użytkownik.
  */
 
 /** Ile commitów pokazuje przegląd repo. */
@@ -19,7 +30,6 @@ const README = /^readme(\.(md|markdown|txt|rst|adoc))?$/i;
 
 /** Czego `workspace` potrzebuje od `vcs`; podłączane w fasadzie (§4: moduły nie importują się nawzajem). */
 interface WorkspaceVcs {
-  toplevel(dir: string): Promise<string>;
   status(dir: string): Promise<RepoStatusOk>;
   log(dir: string, limit: number): Promise<Commit[]>;
   tree(dir: string, path: string): Promise<TreeEntry[] | undefined>;
@@ -40,30 +50,25 @@ export class Workspace {
     this.deps = deps;
   }
 
-  list(): Promise<Repo[]> {
-    return Promise.all(this.deps.file.repos().map((entry) => this.describe(entry)));
+  async list(): Promise<RepoList> {
+    const projectsDir = this.deps.file.projectsDir();
+    if (projectsDir === null) return { projectsDir, repos: [] };
+    return { projectsDir, repos: await Promise.all(findRepos(projectsDir).map((entry) => this.describe(entry))) };
   }
 
-  /** Dodaje repo, w którym leży `path`. To samo repo dodane drugi raz zwraca istniejący wpis. */
-  async add(path: string): Promise<Repo> {
-    if (!isAbsolute(path)) throw new DomainError("bad_request", `podaj pełną ścieżkę do katalogu, dostałem "${path}"`);
-    let root: string;
-    try {
-      root = await this.deps.vcs.toplevel(resolve(path));
-    } catch (err) {
-      throw new DomainError("bad_request", `${path} nie jest repozytorium gita: ${messageOf(err)}`);
+  settings(): WorkspaceSettings {
+    return { projectsDir: this.deps.file.projectsDir(), configFile: this.deps.file.path };
+  }
+
+  /** Zapisuje folder z projektami w `workspace.yaml`; musi istnieć, żeby literówka nie dała po cichu pustej listy. */
+  setProjectsDir(path: string): WorkspaceSettings {
+    if (!isAbsolute(path)) throw new DomainError("bad_request", `podaj pełną ścieżkę do folderu, dostałem "${path}"`);
+    const dir = resolve(path);
+    if (!statSync(dir, { throwIfNoEntry: false })?.isDirectory()) {
+      throw new DomainError("bad_request", `${dir} nie istnieje albo nie jest folderem`);
     }
-    const repos = this.deps.file.repos();
-    const existing = repos.find((r) => samePath(r.path, root));
-    if (existing) return this.describe(existing);
-    const entry = { id: repoIdFor(root, new Set(repos.map((r) => r.id))), path: root };
-    this.deps.file.add(entry);
-    return this.describe(entry);
-  }
-
-  /** Usuwa repo tylko z listy; katalog na dysku zostaje nietknięty. */
-  remove(id: string): void {
-    if (!this.deps.file.remove(id)) throw notFound(id);
+    this.deps.file.setProjectsDir(dir);
+    return this.settings();
   }
 
   async overview(id: string): Promise<RepoOverview> {
@@ -93,13 +98,14 @@ export class Workspace {
     this.deps.openUrl(vscodeUrl(this.entry(id).path));
   }
 
-  private entry(id: string): WorkspaceRepoEntry {
-    const entry = this.deps.file.repos().find((r) => r.id === id);
-    if (!entry) throw notFound(id);
+  private entry(id: string): RepoEntry {
+    const projectsDir = this.deps.file.projectsDir();
+    const entry = projectsDir === null ? undefined : findRepos(projectsDir).find((r) => r.id === id);
+    if (!entry) throw new DomainError("not_found", `w folderze z projektami nie ma repo "${id}"`);
     return entry;
   }
 
-  private async describe(entry: WorkspaceRepoEntry): Promise<Repo> {
+  private async describe(entry: RepoEntry): Promise<Repo> {
     let status: RepoStatus;
     try {
       status = await this.deps.vcs.status(entry.path);
@@ -119,17 +125,13 @@ export class Workspace {
   }
 
   /** Błąd gita przy czytaniu repo z listy to stan repo (`repo_unavailable`), nie błąd daemona. */
-  private async inRepo<T>(entry: WorkspaceRepoEntry, readFromGit: () => Promise<T>): Promise<T> {
+  private async inRepo<T>(entry: RepoEntry, readFromGit: () => Promise<T>): Promise<T> {
     try {
       return await readFromGit();
     } catch (err) {
       throw new DomainError("repo_unavailable", `${entry.id}: ${messageOf(err)}`);
     }
   }
-}
-
-function notFound(id: string): DomainError {
-  return new DomainError("not_found", `w workspace nie ma repo "${id}"`);
 }
 
 function messageOf(err: unknown): string {

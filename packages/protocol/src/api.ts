@@ -8,6 +8,8 @@ export const ErrorCode = z.enum([
   "bad_request",
   /** Repo z workspace jest niedostępne (katalog zniknął, git odmówił); szczegóły w `message`. */
   "repo_unavailable",
+  /** Folder z projektami z `workspace.yaml` nie istnieje albo nie jest katalogiem (np. odłączony dysk). */
+  "projects_dir_unavailable",
   /** `workspace.yaml` nie przechodzi walidacji; użytkownik musi go poprawić ręcznie. */
   "invalid_config",
   "internal",

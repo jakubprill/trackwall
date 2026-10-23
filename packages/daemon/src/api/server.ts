@@ -30,6 +30,7 @@ const STATUS: Record<ErrorCode, number> = {
   not_found: 404,
   bad_request: 400,
   repo_unavailable: 409,
+  projects_dir_unavailable: 409,
   invalid_config: 500,
   internal: 500,
 };

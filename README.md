@@ -14,7 +14,7 @@ Dokumentacja:
 
 Etap 1 (szkielet): daemon z `/api/health`, UI z panelem daemona, powłoka Tauri z trayem, portable build na Windows i macOS, CI na Linuksie przy PR i z macierzą Windows + macOS na `main` i ręcznie (ADR-15), spike'i Job Objects i PTY.
 
-Przeglądanie repo: w zakładce „Repo” dodajesz lokalny katalog z gitem (pełną ścieżką), a Trackwall pokazuje gałąź, liczbę zmian i ahead/behind, README, pliki i commity z ostatniego commita oraz otwiera repo w VS Code. Lista repo jest w `~/.trackwall/workspace.yaml` i można ją edytować ręcznie. Wymaga `git` w `PATH`.
+Przeglądanie repo: w zakładce „Ustawienia” wskazujesz folder z projektami (pełną ścieżką), a zakładka „Repo” pokazuje każde repo gita, które leży bezpośrednio w nim: gałąź, liczbę zmian i ahead/behind, README, pliki i commity z ostatniego commita, oraz otwiera repo w VS Code. Repo sklonowane do folderu pojawia się na liście samo. Ścieżka folderu jest kluczem `projectsDir` w `~/.trackwall/workspace.yaml` i można ją ustawić też ręcznie. Wymaga `git` w `PATH`.
 
 Etap 2 (prototyp): wykrywanie stanu sesji Copilot CLI z hooków i sekwencji terminala (ADR-17), na razie jako skrypt nagrywający sesję, jeszcze bez zakładki Zadania; opis niżej w „Nagrywanie sesji Copilot CLI”.
 
