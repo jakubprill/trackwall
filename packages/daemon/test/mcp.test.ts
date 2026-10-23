@@ -1,16 +1,19 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { DaemonInfoResult, GetRepoResult, ListReposResult, workspaceApi } from "@trackwall/protocol";
+import { z } from "zod";
 import { type ApiServer, startApi } from "../src/api/server.ts";
 import { readDaemonFile, writeDaemonFile } from "../src/discovery.ts";
 import { createFacade } from "../src/facade.ts";
 import { loopbackRequest } from "../src/loopback.ts";
-import { MCP_PATH } from "../src/mcp/endpoint.ts";
+import { createMcpEndpoint, MCP_PATH } from "../src/mcp/endpoint.ts";
 import { runStdioBridge } from "../src/mcp/stdio-bridge.ts";
 import { gitIn, makeRepo } from "./support/git-repo.ts";
 import { connectHttpClient } from "./support/mcp-client.ts";
@@ -46,7 +49,7 @@ beforeAll(async () => {
     },
     onShutdown: () => {},
     facade,
-    log: (msg) => logs.push(msg),
+    mcp: createMcpEndpoint({ facade, version: "9.9.9", log: (msg) => logs.push(msg) }),
   });
 });
 
@@ -78,7 +81,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
     });
     // Tekst wyniku to ten sam JSON dla klientów, które nie czytają `structuredContent`.
     expect(result.content).toEqual([{ type: "text", text: JSON.stringify(data) }]);
-    expect(logs.some((l) => l.startsWith("[mcp] list_repos: ok"))).toBe(true);
+    expect(logs.some((l) => l.startsWith("list_repos: ok"))).toBe(true);
     await client.close();
   });
 
@@ -105,6 +108,9 @@ describe("serwer MCP przez Streamable HTTP", () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const result = await client.callTool({ name: "get_repo", arguments: { repo: "../etc" } });
     expect(result.isError).toBe(true);
+    // Odrzuca schemat w SDK, zanim identyfikator dotrze do workspace (tam byłoby `not_found`).
+    expect(JSON.stringify(result.content)).toContain("identyfikator repo");
+    expect(JSON.stringify(result.content)).not.toContain("not_found");
     await client.close();
   });
 
@@ -125,18 +131,21 @@ describe("serwer MCP przez Streamable HTTP", () => {
   });
 });
 
-/** Most w tym samym procesie: wiadomości jako linie na wejściu, odpowiedzi jako linie z wyjścia. */
-async function throughBridge(home: string, messages: object[]): Promise<unknown[]> {
+/** Most w tym samym procesie: linie na wejściu (obiekty jako JSON), odpowiedzi jako obiekty z linii wyjścia. */
+async function throughBridge(home: string, messages: (object | string)[]): Promise<unknown[]> {
   const input = new PassThrough();
   const output = new PassThrough();
   const lines: string[] = [];
   output.on("data", (chunk: Buffer) => lines.push(...chunk.toString("utf8").split("\n").filter(Boolean)));
   const done = runStdioBridge({ home, input, output, log: () => {} });
-  for (const m of messages) input.write(`${JSON.stringify(m)}\n`);
+  for (const m of messages) input.write(`${typeof m === "string" ? m : JSON.stringify(m)}\n`);
   input.end();
   await done;
   return lines.map((l) => JSON.parse(l));
 }
+
+/** Odpowiedź z wynikiem wywołania narzędzia o `id` 2, sprawdzona schematem zamiast rzutowania. */
+const ToolCallReply = z.object({ id: z.literal(2), result: z.object({ structuredContent: z.unknown() }) });
 
 const INITIALIZE = {
   jsonrpc: "2.0",
@@ -157,8 +166,8 @@ describe("most stdio", () => {
     // Na powiadomienie nie ma odpowiedzi; kolejność odpowiedzi nie jest ustalona, bo most przekazuje równolegle.
     expect(replies).toHaveLength(2);
     expect(replies).toContainEqual(expect.objectContaining({ id: 1, result: expect.objectContaining({ protocolVersion: "2025-06-18" }) }));
-    const call = replies.find((r) => (r as { id?: number }).id === 2) as { result: { structuredContent: unknown } };
-    expect(ListReposResult.parse(call.result.structuredContent).repos.map((r) => r.id)).toEqual(["orders-bff"]);
+    const call = replies.map((r) => ToolCallReply.safeParse(r)).find((r) => r.success);
+    expect(ListReposResult.parse(call?.data?.result.structuredContent).repos.map((r) => r.id)).toEqual(["orders-bff"]);
   });
 
   test("sondę server/discover odrzuca jak serwer bez tej metody, żeby klient przeszedł na initialize", async () => {
@@ -190,25 +199,38 @@ describe("most stdio", () => {
     });
   });
 
-  test("linia, która nie jest JSON-RPC, dostaje błąd parsowania", async () => {
+  test("linia, która nie jest JSON-em, dostaje błąd parsowania, a JSON spoza JSON-RPC błąd żądania", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-mcp-garbage-"));
-    const input = new PassThrough();
-    const output = new PassThrough();
-    const lines: string[] = [];
-    output.on("data", (chunk: Buffer) => lines.push(chunk.toString("utf8")));
-    const done = runStdioBridge({ home, input, output, log: () => {} });
-    input.end("to nie json\n");
-    await done;
-    expect(JSON.parse(lines.join(""))).toEqual({
-      jsonrpc: "2.0",
-      id: null,
-      error: { code: -32700, message: "wiadomość nie jest obiektem JSON-RPC" },
+    expect(await throughBridge(home, ["to nie json"])).toEqual([
+      { jsonrpc: "2.0", id: null, error: { code: -32700, message: "wiadomość nie jest poprawnym JSON-em" } },
+    ]);
+    expect(await throughBridge(home, ["42"])).toEqual([
+      { jsonrpc: "2.0", id: null, error: { code: -32600, message: "wiadomość nie jest obiektem JSON-RPC" } },
+    ]);
+  });
+
+  test("odpowiedź daemona bez wiadomości o tym id kończy żądanie błędem zamiast ciszy", async () => {
+    // Daemon, który zrywa strumień SSE bez danych, jak przy wyjściu w trakcie żądania.
+    const silent = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end();
     });
+    await new Promise<void>((resolve) => silent.listen(0, "127.0.0.1", resolve));
+    try {
+      const home = mkdtempSync(join(tmpdir(), "trackwall-mcp-silent-"));
+      const { port } = silent.address() as AddressInfo;
+      writeDaemonFile(home, { pid: process.pid, port, token: TOKEN, startedAt: "2026-10-23T00:00:00Z", version: "9.9.9" });
+      expect(await throughBridge(home, [INITIALIZE])).toEqual([
+        { jsonrpc: "2.0", id: 1, error: { code: -32000, message: "Trackwall nie odpowiedział na żądanie" } },
+      ]);
+    } finally {
+      silent.close();
+    }
   });
 });
 
-describe.each(RUNTIMES)("Copilot CLI przez most stdio z komendy daemona pod %s", (_name, runtime) => {
-  test("komenda z /api/daemon/info uruchamia most w katalogu agenta i daje listę repo", async () => {
+describe.each(RUNTIMES)("klient MCP jak Copilot CLI przez komendę mostu z daemona pod %s", (_name, runtime) => {
+  test("komenda z /api/daemon/info uruchamia most w repo agenta, który nie wstrzyknie mu bunfig.toml, i daje listę repo", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-mcp-e2e-"));
     const daemon = Bun.spawn([...runtime, MAIN], { env: { ...process.env, TRACKWALL_HOME: home }, stdout: "ignore", stderr: "pipe" });
     try {
@@ -223,14 +245,19 @@ describe.each(RUNTIMES)("Copilot CLI przez most stdio z komendy daemona pod %s",
       const [command, ...args] = info.data.mcpStdioCommand;
       if (!command) throw new Error("pusta komenda mostu");
 
-      // Agent działa w swoim katalogu (tu: obcym) i z okrojonym środowiskiem SDK, bez TRACKWALL_HOME daemona.
+      // Agent działa w repo użytkownika i z okrojonym środowiskiem SDK, bez TRACKWALL_HOME daemona. Repo ma
+      // `bunfig.toml` z preloadem, który zostawia ślad, gdyby Bun go wczytał (dotyczy uruchomienia ze źródeł).
       const agentCwd = mkdtempSync(join(tmpdir(), "trackwall-mcp-agent-"));
+      const marker = join(agentCwd, "preload-z-repo");
+      writeFileSync(join(agentCwd, "bunfig.toml"), 'preload = ["./preload.ts"]\n');
+      writeFileSync(join(agentCwd, "preload.ts"), `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "");\n`);
       // Jak Copilot CLI: najpierw sonda rewizji 2026-07-28, potem `initialize`.
       const client = new Client({ name: "copilot-test", version: "1" }, { versionNegotiation: { mode: "auto" } });
       await client.connect(new StdioClientTransport({ command, args, cwd: agentCwd, stderr: "ignore" }));
       const result = await client.callTool({ name: "list_repos", arguments: {} });
       expect(ListReposResult.parse(result.structuredContent).repos.map((r) => r.id)).toEqual(["orders-bff"]);
       await client.close();
+      expect(existsSync(marker)).toBe(false);
     } finally {
       daemon.kill();
       await daemon.exited;

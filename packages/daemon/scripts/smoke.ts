@@ -9,7 +9,8 @@
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { DaemonInfoResult, HealthResult } from "@trackwall/protocol";
+import { DaemonInfoResult, HealthResult, MCP_SERVER_NAME } from "@trackwall/protocol";
+import { z } from "zod";
 import { daemonFilePath, readDaemonFile } from "../src/discovery.ts";
 import { loopbackRequest } from "../src/loopback.ts";
 
@@ -44,15 +45,16 @@ const info = DaemonInfoResult.parse(await get("/api/daemon/info"));
 if (!info.ok || info.data.runtime.name !== "bun") throw new Error(`info: ${JSON.stringify(info)}`);
 console.log(`info: ${info.data.platform}/${info.data.arch}, ${info.data.runtime.name} ${info.data.runtime.version}`);
 
-// Most stdio z binarki, tak jak uruchamia go Copilot CLI: jedna linia JSON-RPC na wejściu, odpowiedź w pierwszej linii.
-const bridge = Bun.spawn([bin, "mcp-stdio", "--home", home], { stdin: "pipe", stdout: "pipe", stderr: "inherit" });
-bridge.stdin.write(
-  `${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "smoke", version: "1" } } })}\n`,
-);
+// Most stdio z komendy, którą UI pokazuje do `copilot mcp add` (w binarce: sama binarka i `mcp-stdio`), tak jak
+// uruchamia go Copilot CLI: jedna linia JSON-RPC na wejściu, odpowiedź w pierwszej linii wyjścia.
+const bridge = Bun.spawn(info.data.mcpStdioCommand, { stdin: "pipe", stdout: "pipe", stderr: "inherit" });
+const initialize = { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "smoke", version: "1" } };
+bridge.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: initialize })}\n`);
 await bridge.stdin.end();
-const reply = (await new Response(bridge.stdout).text()).split("\n")[0] ?? "";
-if (!reply.includes('"serverInfo":{"name":"trackwall"')) throw new Error(`mcp-stdio initialize: ${reply}`);
-console.log("mcp-stdio: initialize OK");
+const firstLine = (await new Response(bridge.stdout).text()).split("\n")[0] ?? "";
+const InitializeReply = z.object({ id: z.literal(1), result: z.object({ serverInfo: z.object({ name: z.literal(MCP_SERVER_NAME) }) }) });
+if (!InitializeReply.safeParse(JSON.parse(firstLine)).success) throw new Error(`mcp-stdio initialize: ${firstLine}`);
+console.log(`mcp-stdio (${info.data.mcpStdioCommand.join(" ")}): initialize OK`);
 
 await get("/api/daemon/shutdown", "POST");
 const code = await Promise.race([proc.exited, Bun.sleep(10_000).then(() => "timeout")]);

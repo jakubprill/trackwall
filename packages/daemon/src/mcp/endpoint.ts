@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
-import { MCP_SERVER_NAME } from "@trackwall/protocol";
+import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
 import { readBody } from "../api/body.ts";
 import { MCP_TOOLS, type ToolContext } from "./tools.ts";
 
@@ -18,8 +18,8 @@ export const MCP_PATH = "/mcp";
 const MAX_REQUEST_BYTES = 256 * 1024;
 
 const INSTRUCTIONS =
-  "Trackwall zna repo z folderu z projektami użytkownika. Zacznij od list_repos; szczegóły jednego repo (README, " +
-  "ostatnie commity, taski mise) daje get_repo. Narzędzia tylko czytają.";
+  `Trackwall zna repo z folderu z projektami użytkownika. Zacznij od ${mcpTools.listRepos.name}; szczegóły jednego ` +
+  `repo (README, ostatnie commity, taski mise) daje ${mcpTools.getRepo.name}. Narzędzia tylko czytają.`;
 
 export interface McpEndpoint {
   handle: (req: IncomingMessage, res: ServerResponse) => Promise<void>;
@@ -36,32 +36,47 @@ export function createMcpEndpoint(o: ToolContext & { version: string }): McpEndp
     { onerror: (err) => o.log(`żądanie odrzucone: ${err.message}`), maxRequestBodySize: MAX_REQUEST_BYTES },
   );
   return {
-    handle: async (req, res) => send(res, await handler.fetch(await toWebRequest(req))),
+    handle: async (req, res) => {
+      // Rozłączony klient przerywa żądanie także w SDK (`request.signal`), nie tylko strumień odpowiedzi.
+      const aborted = new AbortController();
+      res.once("close", () => {
+        if (!res.writableFinished) aborted.abort();
+      });
+      await send(res, await handler.fetch(await toWebRequest(req, aborted.signal)));
+    },
     close: () => handler.close(),
   };
 }
 
 /** `IncomingMessage` jako `Request` ze standardu Fetch, którego oczekuje SDK; adres zawsze z loopbacku. */
-async function toWebRequest(req: IncomingMessage): Promise<Request> {
+async function toWebRequest(req: IncomingMessage, signal: AbortSignal): Promise<Request> {
   const headers = new Headers();
   for (const [name, value] of Object.entries(req.headers)) {
     for (const v of Array.isArray(value) ? value : value === undefined ? [] : [value]) headers.append(name, v);
   }
   const method = req.method ?? "GET";
   const body = method === "GET" || method === "HEAD" ? undefined : new Uint8Array(await readBody(req, MAX_REQUEST_BYTES));
-  return new Request(new URL(req.url ?? "/", "http://127.0.0.1").href, { method, headers, body });
+  return new Request(new URL(req.url ?? "/", "http://127.0.0.1").href, { method, headers, body, signal });
 }
 
-/** Odpowiedź SDK (JSON albo strumień SSE) przepisana do `ServerResponse`; rozłączony klient przerywa strumień. */
+/**
+ * Odpowiedź SDK (JSON albo strumień SSE) przepisana do `ServerResponse`; rozłączony klient przerywa strumień, a błąd
+ * strumienia zrywa połączenie, żeby klient nie czekał na koniec odpowiedzi, która nie przyjdzie.
+ */
 async function send(res: ServerResponse, response: Response): Promise<void> {
   res.writeHead(response.status, Object.fromEntries(response.headers));
   if (!response.body) return void res.end();
   const reader = response.body.getReader();
   res.once("close", () => void reader.cancel().catch(() => {}));
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done || res.destroyed) break;
-    res.write(value);
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done || res.destroyed) break;
+      res.write(value);
+    }
+    res.end();
+  } catch (err) {
+    res.destroy(err instanceof Error ? err : new Error(String(err)));
+    throw err;
   }
-  res.end();
 }

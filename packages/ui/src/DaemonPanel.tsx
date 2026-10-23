@@ -16,6 +16,8 @@ const POLL_MS = 5000;
 export function DaemonPanel({ conn, onRetry }: { conn: Connection; onRetry: () => void }) {
   const load = useCallback(() => call(conn, "/api/daemon/info", DaemonInfo), [conn]);
   const info = useRemote(load, { pollMs: POLL_MS });
+  /** Dane tylko z ostatniej udanej odpowiedzi; po błędzie panel pokazuje błąd zamiast starych wartości. */
+  const ready = info.error ? undefined : info.data;
 
   return (
     <div className="flex w-full max-w-xl flex-col gap-4">
@@ -42,10 +44,10 @@ export function DaemonPanel({ conn, onRetry }: { conn: Connection; onRetry: () =
               }}
             />
           )}
-          {info.data && !info.error && <InfoTable info={info.data} />}
+          {ready && <InfoTable info={ready} />}
         </div>
       </Surface>
-      {info.data && !info.error && <ConnectCopilot info={info.data} />}
+      {ready && <ConnectCopilot info={ready} />}
     </div>
   );
 }

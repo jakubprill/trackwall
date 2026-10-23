@@ -7,6 +7,7 @@ import { postRoutes } from "../src/api/routes.ts";
 import { type ApiServer, startApi } from "../src/api/server.ts";
 import { createFacade } from "../src/facade.ts";
 import { type LoopbackOptions, loopbackRequest } from "../src/loopback.ts";
+import { createMcpEndpoint } from "../src/mcp/endpoint.ts";
 import { makeRepo } from "./support/git-repo.ts";
 
 const TOKEN = "t".repeat(43);
@@ -41,18 +42,23 @@ beforeAll(async () => {
     onShutdown: () => {
       shutdowns++;
     },
-    facade: createFacade({
-      home: mkdtempSync(join(tmpdir(), "trackwall-home-")),
-      openUrl: () => {},
-      miseCommand: ["mise"],
-      userEnv: async () => process.env,
-      log: () => {},
-    }),
-    log: () => {},
+    ...modules(),
   });
 });
 
 afterAll(() => api.close());
+
+/** Fasada na pustym katalogu stanu i serwer MCP na niej: to, co `main.ts` podaje do `startApi`. */
+function modules() {
+  const facade = createFacade({
+    home: mkdtempSync(join(tmpdir(), "trackwall-home-")),
+    openUrl: () => {},
+    miseCommand: ["mise"],
+    userEnv: async () => process.env,
+    log: () => {},
+  });
+  return { facade, mcp: createMcpEndpoint({ facade, version: "test", log: () => {} }) };
+}
 
 /** Żądania przez node:http: pozwala ustawić `Host` i nie idzie przez HTTP_PROXY. */
 const req = (path: string, opts: LoopbackOptions = {}) => loopbackRequest(api.port, path, opts);
@@ -206,14 +212,7 @@ describe("--allow-origin", () => {
         throw new Error("nieużywane");
       },
       onShutdown: () => {},
-      facade: createFacade({
-        home: mkdtempSync(join(tmpdir(), "trackwall-home-")),
-        openUrl: () => {},
-        miseCommand: ["mise"],
-        userEnv: async () => process.env,
-        log: () => {},
-      }),
-      log: () => {},
+      ...modules(),
     });
     try {
       const res = await loopbackRequest(extra.port, "/api/health", { headers: { origin: "http://127.0.0.1:5173" } });

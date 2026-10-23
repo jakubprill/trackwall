@@ -17,6 +17,7 @@ const REQUEST_TIMEOUT_MS = 120_000;
 /** Kod JSON-RPC dla błędu po stronie serwera (zakres -32000…-32099 jest dla implementacji). */
 const DAEMON_UNAVAILABLE = -32000;
 const PARSE_ERROR = -32700;
+const INVALID_REQUEST = -32600;
 const METHOD_NOT_FOUND = -32601;
 /**
  * Sonda rewizji 2026-07-28, którą klient (np. Copilot CLI) zaczyna, zanim spróbuje `initialize`. W tej rewizji żądanie
@@ -30,6 +31,7 @@ const DISCOVER_METHOD = "server/discover";
 const Incoming = z.looseObject({ id: z.union([z.string(), z.number()]).optional(), method: z.string().optional() });
 /** Wiadomość od daemona: przekazywana dalej tylko, gdy to JSON-RPC. */
 const Outgoing = z.looseObject({ jsonrpc: z.literal("2.0") });
+const Reply = z.looseObject({ id: z.union([z.string(), z.number(), z.null()]).optional() });
 const InitializeResult = z.looseObject({ result: z.looseObject({ protocolVersion: z.string() }) });
 const ApiErrorBody = z.object({ error: z.object({ message: z.string() }) });
 
@@ -65,25 +67,43 @@ interface Session {
 }
 
 async function forward(line: string, o: StdioBridgeOptions, session: Session, write: (message: unknown) => void): Promise<void> {
-  const incoming = Incoming.safeParse(parseJson(line));
-  if (!incoming.success) return write(errorResponse(null, PARSE_ERROR, "wiadomość nie jest obiektem JSON-RPC"));
-  const { id, method } = incoming.data;
+  const incoming = parseIncoming(line);
+  if (!incoming.ok) return write(incoming.reply);
+  const { id, method } = incoming.message;
   if (method === DISCOVER_METHOD && id !== undefined) {
     return write(errorResponse(id, METHOD_NOT_FOUND, `most stdio Trackwall nie obsługuje ${DISCOVER_METHOD}; użyj initialize`));
   }
   try {
-    for (const reply of await postToDaemon(line, o.home, session)) {
-      if (method === "initialize") {
-        const init = InitializeResult.safeParse(reply);
-        if (init.success) session.protocolVersion = init.data.result.protocolVersion;
-      }
-      write(reply);
-    }
+    const replies = await postToDaemon(line, o.home, session);
+    if (method === "initialize") rememberProtocolVersion(replies, session);
+    for (const reply of replies) write(reply);
+    // Strumień zerwany w trakcie (np. wyjście daemona) zostawiłby żądanie bez odpowiedzi do limitu czasu klienta.
+    const answered = replies.some((r) => Reply.safeParse(r).data?.id === id);
+    if (method !== undefined && id !== undefined && !answered) throw new DaemonUnavailable("Trackwall nie odpowiedział na żądanie");
   } catch (err) {
     if (!(err instanceof DaemonUnavailable)) throw err;
     o.log(err.message);
     // Na powiadomienie (bez `id`) JSON-RPC nie przewiduje odpowiedzi, więc błąd zostaje tylko w logu.
     if (id !== undefined) write(errorResponse(id, DAEMON_UNAVAILABLE, err.message));
+  }
+}
+
+/** Pola wiadomości potrzebne mostowi albo odpowiedź z błędem dla linii, która nie jest obiektem JSON-RPC. */
+function parseIncoming(
+  line: string,
+): { ok: true; message: z.infer<typeof Incoming> } | { ok: false; reply: ReturnType<typeof errorResponse> } {
+  const json = parseJson(line);
+  if (json === undefined) return { ok: false, reply: errorResponse(null, PARSE_ERROR, "wiadomość nie jest poprawnym JSON-em") };
+  // Paczek (tablic) nie ma w MCP od rewizji 2025-06-18, a Copilot CLI ich nie wysyła.
+  const incoming = Incoming.safeParse(json);
+  if (!incoming.success) return { ok: false, reply: errorResponse(null, INVALID_REQUEST, "wiadomość nie jest obiektem JSON-RPC") };
+  return { ok: true, message: incoming.data };
+}
+
+function rememberProtocolVersion(replies: unknown[], session: Session): void {
+  for (const reply of replies) {
+    const init = InitializeResult.safeParse(reply);
+    if (init.success) session.protocolVersion = init.data.result.protocolVersion;
   }
 }
 

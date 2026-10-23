@@ -5,12 +5,13 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
-import { type DaemonArgs, parseDaemonArgs, parseMcpStdioArgs, USAGE } from "./args.ts";
+import { type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./args.ts";
 import { newToken, probeRunningDaemon, removeDaemonFile, watchDaemonFile, withStartLock, writeDaemonFile } from "./discovery.ts";
 import { createFacade, type Facade } from "./facade.ts";
 import { trackwallHome } from "./home.ts";
+import { createMcpEndpoint } from "./mcp/endpoint.ts";
 import { runStdioBridge } from "./mcp/stdio-bridge.ts";
-import { MCP_STDIO_COMMAND, mcpStdioCommand } from "./mcp/stdio-command.ts";
+import { mcpStdioCommand } from "./mcp/stdio-command.ts";
 import { openBrowser } from "./open-browser.ts";
 import { runtimeInfo } from "./platform/runtime.ts";
 import { userEnv } from "./user-env.ts";
@@ -71,7 +72,7 @@ async function main(args: DaemonArgs): Promise<void> {
         }),
         onShutdown: () => void shutdown("POST /api/daemon/shutdown"),
         facade,
-        log,
+        mcp: createMcpEndpoint({ facade, version: VERSION, log: (msg) => log(`[mcp] ${msg}`) }),
       },
       args.port,
     );
@@ -129,47 +130,34 @@ function log(msg: string): void {
 // Komunikaty walidacji zod trafiają do UI (`bad_request`, `invalid_config`), więc po polsku jak reszta tekstów.
 z.config(z.locales.pl());
 
-const argv = process.argv.slice(2);
-if (argv[0] === MCP_STDIO_COMMAND) {
-  runMcpStdio(argv.slice(1));
+let commandLine: CommandLine;
+try {
+  commandLine = parseCommandLine(process.argv.slice(2));
+} catch (err) {
+  process.stderr.write(`${(err as Error).message}\n\n${USAGE}`);
+  process.exit(EXIT_USAGE);
+}
+if (commandLine.command === MCP_STDIO_COMMAND) {
+  runMcpStdio(trackwallHome(commandLine.home));
+} else if (commandLine.args.help) {
+  process.stdout.write(USAGE);
+} else if (commandLine.args.version) {
+  process.stdout.write(`${VERSION}\n`);
 } else {
-  runDaemon(argv);
+  main(commandLine.args).catch((err: unknown) => {
+    process.stderr.write(`[daemon] błąd startu: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
+    process.exit(1);
+  });
 }
 
-function runMcpStdio(args: string[]): void {
-  let home: string;
-  try {
-    home = trackwallHome(parseMcpStdioArgs(args).home);
-  } catch (err) {
-    process.stderr.write(`${(err as Error).message}\n\n${USAGE}`);
-    process.exit(EXIT_USAGE);
-  }
-  // stdout należy do protokołu MCP, więc komunikaty mostu idą tylko na stderr.
-  runStdioBridge({ home, input: process.stdin, output: process.stdout, log: (msg) => process.stderr.write(`[mcp-stdio] ${msg}\n`) }).then(
-    () => process.exit(0),
-    (err: unknown) => {
-      process.stderr.write(`[mcp-stdio] ${String(err)}\n`);
-      process.exit(1);
-    },
-  );
-}
-
-function runDaemon(args: string[]): void {
-  let parsed: DaemonArgs;
-  try {
-    parsed = parseDaemonArgs(args);
-  } catch (err) {
-    process.stderr.write(`${(err as Error).message}\n\n${USAGE}`);
-    process.exit(EXIT_USAGE);
-  }
-  if (parsed.help) {
-    process.stdout.write(USAGE);
-  } else if (parsed.version) {
-    process.stdout.write(`${VERSION}\n`);
-  } else {
-    main(parsed).catch((err: unknown) => {
-      process.stderr.write(`[daemon] błąd startu: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
-      process.exit(1);
-    });
-  }
+/**
+ * Most stdio do serwera MCP działającego daemona. stdout należy do protokołu MCP, więc komunikaty mostu idą tylko na
+ * stderr; proces kończy się sam po opróżnieniu stdout (`process.exit` ucięłoby odpowiedzi czekające w buforze rury).
+ */
+function runMcpStdio(home: string): void {
+  const log = (msg: string) => process.stderr.write(`[mcp-stdio] ${msg}\n`);
+  runStdioBridge({ home, input: process.stdin, output: process.stdout, log }).catch((err: unknown) => {
+    log(String(err));
+    process.exitCode = 1;
+  });
 }

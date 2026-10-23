@@ -69,12 +69,14 @@ function toInt(value: string | undefined, name: string): number {
   return n;
 }
 
-export interface McpStdioArgs {
-  home?: string;
-}
+/** Podkomenda `trackwall-daemon`, która uruchamia most stdio do `/mcp` (§5.3). */
+export const MCP_STDIO_COMMAND = "mcp-stdio";
 
-/** Argumenty po `mcp-stdio`: tylko katalog stanu, bo most nie ma nic innego do ustawienia. */
-export function parseMcpStdioArgs(argv: string[]): McpStdioArgs {
-  const { values } = parseArgs({ args: argv, options: { home: { type: "string" } }, strict: true, allowPositionals: false });
-  return { home: values.home };
+/** Wiersz poleceń: daemon albo most stdio (`mcp-stdio [--home <dir>]`), który ma do ustawienia tylko katalog stanu. */
+export type CommandLine = { command: "daemon"; args: DaemonArgs } | { command: typeof MCP_STDIO_COMMAND; home?: string };
+
+export function parseCommandLine(argv: string[]): CommandLine {
+  if (argv[0] !== MCP_STDIO_COMMAND) return { command: "daemon", args: parseDaemonArgs(argv) };
+  const { values } = parseArgs({ args: argv.slice(1), options: { home: { type: "string" } }, strict: true, allowPositionals: false });
+  return { command: MCP_STDIO_COMMAND, home: values.home };
 }

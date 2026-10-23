@@ -1,9 +1,9 @@
-import type { DaemonInfo } from "@trackwall/protocol";
+import { type DaemonInfo, mcpTools } from "@trackwall/protocol";
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
-import { copilotMcpAddCommand, copilotMcpConfig } from "@/lib/copilot-mcp";
+import { copilotMcpAddCommand, copilotMcpConfig, copilotMcpConfigPath } from "@/lib/copilot-mcp";
 
 /**
  * Jak podłączyć serwer MCP Trackwall do Copilot CLI (§5.3, ADR-22): komenda do skopiowania i ten sam wpis w JSON.
@@ -15,10 +15,14 @@ export function ConnectCopilot({ info }: { info: DaemonInfo }) {
     <Surface label="Copilot CLI" note="Narzędzia tylko czytają. Trackwall musi działać, kiedy startuje Copilot CLI.">
       <div className="flex flex-col gap-3 p-4 text-sm">
         <p className="text-muted-foreground">
-          Daje agentowi mapę repo z folderu z projektami (list_repos, get_repo). Uruchom raz w terminalu, potem zrestartuj Copilot CLI:
+          Daje agentowi mapę repo z folderu z projektami (
+          {Object.values(mcpTools)
+            .map((t) => t.name)
+            .join(", ")}
+          ). Uruchom raz w terminalu, potem zrestartuj Copilot CLI:
         </p>
         <CopyableCode text={command} />
-        <p className="text-muted-foreground">Albo dopisz wpis do ~/.copilot/mcp-config.json:</p>
+        <p className="text-muted-foreground">Albo dopisz wpis do {copilotMcpConfigPath(info.platform)}:</p>
         <CopyableCode text={copilotMcpConfig(info.mcpStdioCommand)} />
       </div>
     </Surface>

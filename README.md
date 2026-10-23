@@ -78,11 +78,13 @@ Copilot CLI uruchamia most stdio daemona (`trackwall-daemon mcp-stdio`) jako lok
 
 ```sh
 copilot mcp add trackwall -- /Applications/Trackwall.app/Contents/MacOS/trackwall-daemon mcp-stdio                     # macOS
-copilot mcp add trackwall -- '<katalog z Trackwall>\trackwall-daemon.exe' mcp-stdio                                       # Windows (PowerShell)
-copilot mcp add trackwall -- bun --no-env-file <trackwall>/packages/daemon/src/main.ts mcp-stdio --home <katalog stanu>   # ze źródeł
+copilot mcp add trackwall '--' '<katalog z Trackwall>\trackwall-daemon.exe' mcp-stdio    # Windows (PowerShell; `--` w apostrofach)
+copilot mcp add trackwall -- bun --no-env-file --config=<trackwall>/packages/daemon/bunfig.toml <trackwall>/packages/daemon/src/main.ts mcp-stdio --home <katalog stanu>   # ze źródeł
 ```
 
-Komenda dopisuje wpis `trackwall` do `~/.copilot/mcp-config.json` (ten sam wpis w JSON jest w widoku „Daemon”, gdyby trzeba go wkleić ręcznie). Trackwall musi działać, zanim wystartuje Copilot CLI, bo Copilot uruchamia serwery MCP przy starcie sesji; `/mcp` w Copilot CLI pokazuje, czy serwer `trackwall` jest połączony. Potem wystarczy poprosić agenta np. „Jakie repo mam w folderze z projektami?”.
+Komenda dopisuje wpis `trackwall` do `~/.copilot/mcp-config.json` (na Windowsie `%USERPROFILE%\.copilot\mcp-config.json`; ten sam wpis w JSON jest w widoku „Daemon”, gdyby trzeba go wkleić ręcznie). Trackwall musi działać, zanim wystartuje Copilot CLI, bo Copilot uruchamia serwery MCP przy starcie sesji; `/mcp` w Copilot CLI pokazuje, czy serwer `trackwall` jest połączony. Potem wystarczy poprosić agenta np. „Jakie repo mam w folderze z projektami?”.
+
+Sprawdzenie ręczne (wymaga zalogowanego Copilot CLI): uruchom Trackwall z ustawionym folderem z projektami, wykonaj komendę z widoku „Daemon”, uruchom `copilot` w folderze z projektami, sprawdź w `/mcp`, że `trackwall` jest połączony z narzędziami `list_repos` i `get_repo`, poproś o listę repo, a potem o szczegóły jednego z nich (README, taski mise). Log daemona (terminal `pnpm dev` albo `trackwall-daemon`) pokazuje każde wywołanie jako `[mcp] list_repos: ok w … ms`.
 
 Inne klienty MCP mogą też rozmawiać z daemonem wprost przez Streamable HTTP pod `http://127.0.0.1:<port>/mcp` z nagłówkiem `Authorization: Bearer <token>`; port i token są w `daemon.json` i zmieniają się przy każdym starcie daemona.
 

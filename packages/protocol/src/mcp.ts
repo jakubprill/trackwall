@@ -4,9 +4,10 @@ import { SyncRepo } from "./sync.ts";
 import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
 
 /**
- * Kontrakt narzędzi MCP daemona (§5.3, ADR-22): wejście i wynik każdego narzędzia jako schematy zod. Daemon
- * ogłasza z nich JSON Schema w `tools/list` i sprawdza nimi argumenty oraz `structuredContent`, a testy i klienty
- * parsują nimi odpowiedź. Narzędzia tylko czytają; nazwy narzędzi i pól po angielsku (AGENTS.md).
+ * Kontrakt narzędzi MCP daemona (§5.3, ADR-22): nazwa, opis dla agenta, wejście i wynik każdego narzędzia w jednym
+ * obiekcie `McpTool`, tak jak `Endpoint` dla API. Daemon ogłasza z nich `tools/list` i sprawdza nimi argumenty oraz
+ * `structuredContent`, a testy, UI i klienty biorą z nich nazwy i parsują odpowiedź. Narzędzia tylko czytają; nazwy
+ * narzędzi i pól po angielsku, opisy po polsku (AGENTS.md).
  */
 
 /** Nazwa serwera MCP w `initialize` i w konfiguracji Copilot CLI (`copilot mcp add trackwall …`). */
@@ -32,9 +33,6 @@ export const ListReposResult = z.object({
 });
 export type ListReposResult = z.infer<typeof ListReposResult>;
 
-export const GetRepoArgs = z.object({ repo: RepoId.describe("identyfikator repo z list_repos (pole id)") }).strict();
-export type GetRepoArgs = z.infer<typeof GetRepoArgs>;
-
 export const GetRepoResult = z.object({
   repo: RepoWithLastSync,
   /** README z commita HEAD, przycięte dla kontekstu agenta; `null`, gdy repo go nie ma. */
@@ -45,3 +43,34 @@ export const GetRepoResult = z.object({
   miseTasks: MiseTasks,
 });
 export type GetRepoResult = z.infer<typeof GetRepoResult>;
+
+export interface McpTool<Args extends z.ZodObject = z.ZodObject, Result extends z.ZodObject = z.ZodObject> {
+  name: string;
+  /** Opis dla modelu agenta: co zwraca i kiedy go użyć. */
+  description: string;
+  args: Args;
+  result: Result;
+}
+
+const LIST_REPOS = "list_repos";
+
+export const mcpTools = {
+  listRepos: {
+    name: LIST_REPOS,
+    description:
+      "Lista repo z folderu z projektami użytkownika: identyfikator, ścieżka, adres repo zdalnego (host/ścieżka), " +
+      "gałąź, ostatni commit, liczba lokalnych zmian, ahead/behind i wynik w ostatniej synchronizacji od startu " +
+      "Trackwall (lastSync: null, gdy od startu jej nie było). Zacznij od tego narzędzia; identyfikator (pole id) " +
+      "podawaj do pozostałych.",
+    args: z.object({}).strict(),
+    result: ListReposResult,
+  },
+  getRepo: {
+    name: "get_repo",
+    description:
+      `Szczegóły jednego repo: to samo co w ${LIST_REPOS}, README z ostatniego commita (przycięte), ostatnie ` +
+      "commity i taski mise (nazwa, opis, stan uruchomienia) albo powód, dla którego mise ich nie podał.",
+    args: z.object({ repo: RepoId.describe(`identyfikator repo z ${LIST_REPOS} (pole id)`) }).strict(),
+    result: GetRepoResult,
+  },
+} satisfies Record<string, McpTool>;

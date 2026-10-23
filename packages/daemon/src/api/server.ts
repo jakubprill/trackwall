@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import type { ApiResult, DaemonInfo, ErrorCode, Health } from "@trackwall/protocol";
 import { DomainError } from "../errors.ts";
 import type { Facade } from "../facade.ts";
-import { createMcpEndpoint, MCP_PATH, type McpEndpoint } from "../mcp/endpoint.ts";
+import { MCP_PATH, type McpEndpoint } from "../mcp/endpoint.ts";
 import { readBody } from "./body.ts";
 import { hasValidToken, OriginPolicy } from "./guard.ts";
 import { postRoutes } from "./routes.ts";
@@ -15,11 +15,11 @@ export interface ApiOptions {
   info: () => DaemonInfo;
   onShutdown: () => void;
   facade: Facade;
+  /** Serwer MCP (§5.3) pod `/mcp`; trasa i ochrona są tu, narzędzia w `mcp/`. */
+  mcp: McpEndpoint;
   uiDir?: string;
   /** Dodatkowe originy przeglądarki z dostępem do API, np. serwer Vite przy `tauri dev`. */
   allowOrigins?: readonly string[];
-  /** Linie logu daemona; tu: wywołania narzędzi MCP. */
-  log: (msg: string) => void;
 }
 
 export interface ApiServer {
@@ -47,10 +47,9 @@ const MAX_BODY_BYTES = 64 * 1024;
 /** HTTP API daemona na `127.0.0.1` (§5.2) i serwer MCP pod `/mcp` (§5.3). `port: 0` wybiera losowy wolny port. */
 export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer> {
   let policy: OriginPolicy | undefined;
-  const mcp = createMcpEndpoint({ facade: options.facade, version: options.version, log: (msg) => options.log(`[mcp] ${msg}`) });
   const server = createServer((req, res) => {
     if (!policy) return void res.destroy();
-    handle(req, res, options, policy, mcp).catch((err: unknown) => {
+    handle(req, res, options, policy).catch((err: unknown) => {
       if (err instanceof DomainError && !res.headersSent) return fail(res, err.code, err.message);
       process.stderr.write(`[api] ${req.method} ${req.url}: ${String(err)}\n`);
       if (!res.headersSent) send(res, 500, { ok: false, error: { code: "internal", message: "internal error" } });
@@ -70,7 +69,7 @@ export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer
     server,
     port: boundPort,
     close: async () => {
-      await mcp.close();
+      await options.mcp.close();
       await new Promise<void>((resolve) => {
         server.close(() => resolve());
         server.closeAllConnections();
@@ -79,7 +78,7 @@ export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer
   };
 }
 
-async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, policy: OriginPolicy, mcp: McpEndpoint): Promise<void> {
+async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, policy: OriginPolicy): Promise<void> {
   const origin = req.headers.origin;
   if (!policy.isAllowedHost(req.headers.host) || !policy.isAllowedOrigin(origin)) {
     return fail(res, "forbidden_origin", "host or origin is not allowed");
@@ -101,21 +100,21 @@ async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, 
     return void res.end();
   }
 
-  if (path.startsWith("/api/")) return handleApi(req, res, path, o);
-  if (path === MCP_PATH) {
-    if (!hasValidToken(req, o.token)) return fail(res, "unauthorized", "missing or invalid token");
-    return mcp.handle(req, res);
-  }
+  // Jedno sprawdzenie tokenu dla API i MCP; publiczne są tylko `GET /api/health` i statyczne pliki UI.
+  const api = path.startsWith("/api/");
+  const isPublic = (path === "/api/health" && req.method === "GET") || (!api && path !== MCP_PATH);
+  if (!isPublic && !hasValidToken(req, o.token)) return fail(res, "unauthorized", "missing or invalid token");
+  if (api) return handleApi(req, res, path, o);
+  if (path === MCP_PATH) return o.mcp.handle(req, res);
   if (o.uiDir && (req.method === "GET" || req.method === "HEAD")) return serveStatic(o.uiDir, path, res);
   return fail(res, "not_found", `no route ${req.method} ${path}`);
 }
 
-/** Trasy `/api/*`: poza `/api/health` każda wymaga tokenu. */
+/** Trasy `/api/*`, już po sprawdzeniu tokenu tam, gdzie jest wymagany. */
 async function handleApi(req: IncomingMessage, res: ServerResponse, path: string, o: ApiOptions): Promise<void> {
   if (path === "/api/health" && req.method === "GET") {
     return ok<Health>(res, { status: "ok", version: o.version });
   }
-  if (!hasValidToken(req, o.token)) return fail(res, "unauthorized", "missing or invalid token");
   if (path === "/api/daemon/info" && req.method === "GET") return ok<DaemonInfo>(res, o.info());
   if (path === "/api/daemon/shutdown" && req.method === "POST") {
     await drain(req);

@@ -11,7 +11,12 @@ export function copilotMcpAddCommand(mcpStdioCommand: readonly string[], platfor
   return ["copilot", "mcp", "add", MCP_SERVER_NAME, "--", ...mcpStdioCommand].map(quote).join(" ");
 }
 
-/** Ten sam wpis w formacie `~/.copilot/mcp-config.json`. */
+/** Plik konfiguracji MCP Copilot CLI w katalogu domowym użytkownika, zapisany tak, jak zna go jego system. */
+export function copilotMcpConfigPath(platform: string): string {
+  return platform === "win32" ? "%USERPROFILE%\\.copilot\\mcp-config.json" : "~/.copilot/mcp-config.json";
+}
+
+/** Ten sam wpis w formacie `mcp-config.json`. */
 export function copilotMcpConfig(mcpStdioCommand: readonly string[]): string {
   const [command, ...args] = mcpStdioCommand;
   const config = { mcpServers: { [MCP_SERVER_NAME]: { type: "local", command, args, tools: ["*"] } } };
@@ -25,6 +30,10 @@ function quotePosix(arg: string): string {
   return PLAIN.test(arg) ? arg : `'${arg.replaceAll("'", `'\\''`)}'`;
 }
 
+/**
+ * Gołe `--` PowerShell bierze za koniec parametrów i nie przekazuje go skryptowi (`copilot.ps1` z `npm install -g`),
+ * a Copilot CLI potrzebuje go przed komendą mostu; w apostrofach przechodzi dosłownie.
+ */
 function quotePowerShell(arg: string): string {
-  return PLAIN.test(arg) ? arg : `'${arg.replaceAll("'", "''")}'`;
+  return PLAIN.test(arg) && arg !== "--" ? arg : `'${arg.replaceAll("'", "''")}'`;
 }

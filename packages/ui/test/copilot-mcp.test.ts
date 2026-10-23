@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { copilotMcpAddCommand, copilotMcpConfig } from "../src/lib/copilot-mcp.ts";
+import { copilotMcpAddCommand, copilotMcpConfig, copilotMcpConfigPath } from "../src/lib/copilot-mcp.ts";
 
 describe("podłączenie Copilot CLI", () => {
   test("komenda copilot mcp add z binarką z wydania na macOS", () => {
@@ -11,7 +11,12 @@ describe("podłączenie Copilot CLI", () => {
   test("ścieżka ze spacją i apostrofem w PowerShell na Windowsie", () => {
     expect(
       copilotMcpAddCommand(["C:\\Users\\Jan O'Neill\\AppData\\Local\\Programs\\trackwall\\trackwall-daemon.exe", "mcp-stdio"], "win32"),
-    ).toBe("copilot mcp add trackwall -- 'C:\\Users\\Jan O''Neill\\AppData\\Local\\Programs\\trackwall\\trackwall-daemon.exe' mcp-stdio");
+    ).toBe("copilot mcp add trackwall '--' 'C:\\Users\\Jan O''Neill\\AppData\\Local\\Programs\\trackwall\\trackwall-daemon.exe' mcp-stdio");
+  });
+
+  test("plik konfiguracji w zapisie systemu użytkownika", () => {
+    expect(copilotMcpConfigPath("win32")).toBe("%USERPROFILE%\\.copilot\\mcp-config.json");
+    expect(copilotMcpConfigPath("darwin")).toBe("~/.copilot/mcp-config.json");
   });
 
   test("apostrof w ścieżce w powłoce POSIX", () => {
