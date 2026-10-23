@@ -53,6 +53,10 @@ xattr -dr com.apple.quarantine /Applications/Pitwall.app
 
 Na obu systemach dane użytkownika (`~/.pitwall`, na Windowsie `%USERPROFILE%\.pitwall`) są poza folderem aplikacji, więc aktualizacja to zamknięcie aplikacji (tray > Wyjdź, żeby zatrzymać też daemona) i podmiana folderu lub `.app` na nowy.
 
+## Przed upublicznieniem repo
+
+Jednorazowo, robi to właściciel w ustawieniach repo (Settings > Security): włączyć prywatne zgłoszenia podatności (na nie wskazuje `SECURITY.md`), alerty Dependabot i secret scanning z push protection. Dopiero potem zmienić widoczność na publiczną.
+
 ## Czego jeszcze nie ma (kolejne kroki)
 
 - **Auto-update.** Wtyczka updatera Tauri na Windowsie aktualizuje przez instalator NSIS lub MSI, a my celowo budujemy portable bez instalatora. Na macOS działa z archiwum `.app.tar.gz`. Proponowana kolejność:

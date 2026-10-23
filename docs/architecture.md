@@ -259,7 +259,7 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 - Zmienne środowiskowe nigdy nie trafiają do logów ani do audytu; maskowanie wartości przed buforem.
 - Autostart i „podłącz agenta” tylko z UI; agent nie ma narzędzia do zmiany konfiguracji daemona.
 - Jeśli kiedyś pojawią się narzędzia bazodanowe, rola bez superużytkownika i transakcja tylko do odczytu.
-- Przed publikacją repo: `SECURITY.md` z kanałem zgłaszania podatności (prywatne zgłoszenia na GitHubie włącza właściciel w ustawieniach repo).
+- Podatności zgłasza się prywatnie według `SECURITY.md` (GitHub Security Advisories).
 
 ## 9. Windows: ryzyka i jak je sprawdzamy wcześnie
 
