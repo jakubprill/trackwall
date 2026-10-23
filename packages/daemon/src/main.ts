@@ -2,10 +2,12 @@
 import { arch, platform } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { z } from "zod";
 import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
 import { type DaemonArgs, parseDaemonArgs, USAGE } from "./args.ts";
 import { newToken, probeRunningDaemon, removeDaemonFile, watchDaemonFile, withStartLock, writeDaemonFile } from "./discovery.ts";
+import { createFacade } from "./facade.ts";
 import { trackwallHome } from "./home.ts";
 import { openBrowser } from "./open-browser.ts";
 import { runtimeInfo } from "./platform/runtime.ts";
@@ -59,6 +61,7 @@ async function main(args: DaemonArgs): Promise<void> {
           home,
         }),
         onShutdown: () => void shutdown("POST /api/daemon/shutdown"),
+        facade: createFacade({ home, openUrl: openBrowser }),
       },
       args.port,
     );
@@ -112,6 +115,9 @@ function uiUrl(port: number, token: string): string {
 function log(msg: string): void {
   process.stderr.write(`[daemon] ${msg}\n`);
 }
+
+// Komunikaty walidacji zod trafiają do UI (`bad_request`, `invalid_config`), więc po polsku jak reszta tekstów.
+z.config(z.locales.pl());
 
 let parsed: DaemonArgs;
 try {

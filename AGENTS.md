@@ -78,13 +78,13 @@ Repo ma zostać opublikowane jako open source (nagłówek `docs/architecture.md`
 - **Zależności npm w dokładnych wersjach** (bez `^` i `~`; `.npmrc` ma `save-exact=true`, więc `pnpm add` tego pilnuje). Nie dodawaj zależności do czegoś, co załatwia kilka linii kodu. Natywny addon wymaga sprawdzenia, że działa w `bun build --compile` na obu systemach (patrz `spikes/`).
 - **Testy czytają się jak dokumentacja**: nazwa testu to zdanie opisujące zachowanie, a test pokazuje wejście i oczekiwany wynik bez helperów, które je ukrywają.
 - **Reguły egzekwuje narzędzie wszędzie, gdzie się da**: reguła w linterze trzyma lepiej niż zdanie w tym pliku. Gdy powtarzasz tę samą uwagę w przeglądzie, zamień ją w regułę. Dziś pilnują:
-  - Biome (`biome.json`): zestaw `recommended` oraz zakaz `!` i `any`, limit złożoności funkcji (15), cykle importów, nieobsłużone obietnice, nazwy plików w kebab-case (PascalCase tylko dla `.tsx` w `packages/ui/src`), import `@trackwall/daemon` tylko w daemonie, moduły Node (`node:*`) zakazane w `packages/protocol/src` i `packages/ui/src`;
+  - Biome (`biome.json`): zestaw `recommended` oraz zakaz `!` i `any`, limit złożoności funkcji (15), cykle importów, nieobsłużone obietnice, nazwy plików w kebab-case (PascalCase tylko dla `.tsx` w `packages/ui/src`), import `@trackwall/daemon` tylko w daemonie, moduły Node (`node:*`) zakazane w `packages/protocol/src` i `packages/ui/src`, granice modułów daemona (§4: moduł nie importuje sąsiedniego modułu, a kod poza `src/modules` sięga do nich tylko przez `src/facade.ts`);
   - knip (`knip.json`): nieużywane pliki, eksporty i zależności;
   - `rustfmt.toml` i `cargo clippy -D warnings` dla powłoki Tauri;
   - test `apps/desktop/test/toolchain.test.ts`: te same wersje narzędzi w `mise.toml` i workflow;
   - zgodność daemona z Node (ADR-1): `erasableSyntaxOnly` w `tsconfig.json` daemona i `protocol`, w Biome `useImportExtensions` w ich `src` i zakaz API Bun w daemonie poza `platform/`, testy procesu daemona pod Bun i pod Node.
 
-  Granic między modułami daemona (§4) jeszcze nie pilnuje narzędzie, bo modułów jeszcze nie ma; z pierwszym modułem dochodzi reguła `noRestrictedImports` w `biome.json`. Rzutowań `as` na danych z zewnątrz też nie, więc tego pilnuje przegląd.
+  Rzutowań `as` na danych z zewnątrz nie pilnuje narzędzie, więc tego pilnuje przegląd.
 
 ## Komendy
 

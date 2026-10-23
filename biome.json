@@ -134,6 +134,46 @@
       }
     },
     {
+      "includes": ["packages/daemon/src/modules/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["../*/**", "!../../errors.ts", "!../../atomic-write.ts", "!../../platform/**"],
+                    "message": "Moduł nie importuje innego modułu; zadeklaruj potrzebny interfejs, a fasada (src/facade.ts) poda moduł (AGENTS.md, §4). Z zewnątrz modułu wolno brać tylko wymienione pliki infrastruktury i src/platform/; moduł jest płaskim katalogiem."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/daemon/src/**", "!packages/daemon/src/modules/**", "!packages/daemon/src/facade.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/modules/**"],
+                    "message": "Transporty i infrastruktura sięgają do modułów tylko przez fasadę (src/facade.ts, §4)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["packages/protocol/src/**", "packages/ui/src/**"],
       "linter": {
         "rules": {

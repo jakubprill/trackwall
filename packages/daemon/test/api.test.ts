@@ -2,9 +2,12 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DaemonInfoResult, HealthResult } from "@trackwall/protocol";
+import { apiResult, DaemonInfoResult, HealthResult, Repo, workspaceApi } from "@trackwall/protocol";
+import { z } from "zod";
 import { type ApiServer, startApi } from "../src/api/server.ts";
+import { createFacade } from "../src/facade.ts";
 import { type LoopbackOptions, loopbackRequest } from "../src/loopback.ts";
+import { makeRepo } from "./support/git-repo.ts";
 
 const TOKEN = "t".repeat(43);
 let api: ApiServer;
@@ -37,6 +40,7 @@ beforeAll(async () => {
     onShutdown: () => {
       shutdowns++;
     },
+    facade: createFacade({ home: mkdtempSync(join(tmpdir(), "trackwall-home-")), openUrl: () => {} }),
   });
 });
 
@@ -126,6 +130,42 @@ describe("api", () => {
   });
 });
 
+describe("api workspace", () => {
+  const post = (path: string, body: string) => authed(path, { method: "POST", headers: { "content-type": "application/json" }, body });
+
+  test("trasy workspace wymagają tokenu", async () => {
+    expect((await req(workspaceApi.list.path, { method: "POST" })).status).toBe(401);
+  });
+
+  test("dodane repo pojawia się na liście ze stanem z gita", async () => {
+    const dir = makeRepo({ "a.txt": "1" }, "sklep");
+    const added = await post(workspaceApi.add.path, JSON.stringify({ path: dir }));
+    expect(added.status).toBe(200);
+
+    const list = apiResult(z.array(Repo)).parse(JSON.parse((await post(workspaceApi.list.path, "")).body));
+    expect(list.ok && list.data.map((r) => [r.id, r.status.kind])).toEqual([["sklep", "ok"]]);
+  });
+
+  test("ciało niezgodne ze schematem albo niebędące JSON-em to 400 z opisem", async () => {
+    const bad = await post(workspaceApi.tree.path, JSON.stringify({ repo: "sklep", path: "../poza" }));
+    expect(bad.status).toBe(400);
+    expect(JSON.parse(bad.body)).toMatchObject({ ok: false, error: { code: "bad_request", message: expect.stringContaining("..") } });
+    expect((await post(workspaceApi.add.path, "{nie json")).status).toBe(400);
+  });
+
+  test("ciało większe niż 64 KB jest odrzucane przed parsowaniem", async () => {
+    const res = await post(workspaceApi.list.path, JSON.stringify({ zbyt: "x".repeat(70_000) }));
+    expect(res.status).toBe(400);
+    expect(JSON.parse(res.body)).toMatchObject({ error: { code: "bad_request", message: expect.stringContaining("większe niż") } });
+  });
+
+  test("nieznane repo to 404, a GET na trasie POST nie istnieje", async () => {
+    const res = await post(workspaceApi.overview.path, JSON.stringify({ repo: "nie-ma" }));
+    expect(res.status).toBe(404);
+    expect((await authed(workspaceApi.list.path)).status).toBe(404);
+  });
+});
+
 describe("--allow-origin", () => {
   test("dodatkowy origin dostaje dostęp i CORS, inne nie", async () => {
     const extra = await startApi({
@@ -136,6 +176,7 @@ describe("--allow-origin", () => {
         throw new Error("nieużywane");
       },
       onShutdown: () => {},
+      facade: createFacade({ home: mkdtempSync(join(tmpdir(), "trackwall-home-")), openUrl: () => {} }),
     });
     try {
       const res = await loopbackRequest(extra.port, "/api/health", { headers: { origin: "http://127.0.0.1:5173" } });

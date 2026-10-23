@@ -11,6 +11,7 @@ export interface LoopbackOptions {
   token?: string;
   headers?: Record<string, string>;
   timeoutMs?: number;
+  body?: string;
 }
 
 /**
@@ -20,7 +21,7 @@ export interface LoopbackOptions {
  */
 export function loopbackRequest(port: number, path: string, opts: LoopbackOptions = {}): Promise<LoopbackResponse> {
   return new Promise((resolve, reject) => {
-    const headers: Record<string, string> = { "content-length": "0", ...opts.headers };
+    const headers: Record<string, string> = { "content-length": String(Buffer.byteLength(opts.body ?? "")), ...opts.headers };
     if (opts.token) headers.authorization = `Bearer ${opts.token}`;
     const req = request({ host: "127.0.0.1", port, path, method: opts.method ?? "GET", headers, agent: false }, (res) => {
       const chunks: Buffer[] = [];
@@ -30,6 +31,6 @@ export function loopbackRequest(port: number, path: string, opts: LoopbackOption
     });
     req.setTimeout(opts.timeoutMs ?? 1500, () => req.destroy(new Error(`timeout ${path}`)));
     req.on("error", reject);
-    req.end();
+    req.end(opts.body);
   });
 }

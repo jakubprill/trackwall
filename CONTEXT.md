@@ -41,6 +41,13 @@ _Unikaj_: projekt
 **Repo** (`Repo`, `RepoId`):
 Jedno repozytorium z workspace, identyfikowane slugiem.
 
+**Stan repo** (`RepoStatus`):
+Gałąź, ostatni commit, liczba zmian w katalogu roboczym i ahead/behind względem gałęzi śledzonej, odczytane z gita przy każdym zapytaniu (`ok`), albo `unavailable` z komunikatem, gdy katalog zniknął lub git go nie czyta. Nigdy nie jest zapisywany.
+_Unikaj_: status (w polskim tekście), sync (to osobna akcja)
+
+**Przegląd repo** (`RepoOverview`):
+README i ostatnie commity repo w jednej odpowiedzi; stan repo przychodzi z listy repo. Pliki przeglądane są osobno, zawsze z commita HEAD (ADR-14).
+
 **Worktree**:
 Osobny katalog roboczy gita dla zadania, w `<repo>/.worktrees/<zadanie>`. Usuwany dopiero po potwierdzonym zatrzymaniu procesów, które z niego korzystają.
 

@@ -1,52 +1,18 @@
-import { type DaemonInfo, DaemonInfoResult } from "@trackwall/protocol";
+import { DaemonInfo } from "@trackwall/protocol";
 import { RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { call } from "@/lib/api";
-import { type Connection, resolveConnection, retryConnection } from "@/lib/connection";
-
-type State = { kind: "connecting" } | { kind: "connected"; info: DaemonInfo; at: Date } | { kind: "error"; message: string };
+import type { Connection } from "@/lib/connection";
+import { type Remote, useRemote } from "@/lib/use-remote";
 
 const POLL_MS = 5000;
 
-export function DaemonPanel() {
-  const [conn, setConn] = useState<Connection>();
-  const [state, setState] = useState<State>({ kind: "connecting" });
-
-  useEffect(() => {
-    resolveConnection().then(setConn, (err: unknown) => setState({ kind: "error", message: String(err) }));
-  }, []);
-
-  const refresh = useCallback(async () => {
-    if (!conn) return;
-    try {
-      const info = await call(conn, "/api/daemon/info", DaemonInfoResult);
-      setState({ kind: "connected", info, at: new Date() });
-    } catch (err) {
-      setState({ kind: "error", message: err instanceof Error ? err.message : String(err) });
-    }
-  }, [conn]);
-
-  /** Gdy daemon nie wstał, okno Tauri może go uruchomić ponownie; w przeglądarce zostaje zwykłe odświeżenie. */
-  const retry = useCallback(async () => {
-    setState({ kind: "connecting" });
-    try {
-      const next = await retryConnection();
-      if (next) setConn(next);
-      else await refresh();
-    } catch (err) {
-      setState({ kind: "error", message: err instanceof Error ? err.message : String(err) });
-    }
-  }, [refresh]);
-
-  useEffect(() => {
-    if (!conn) return;
-    void refresh();
-    const id = setInterval(refresh, POLL_MS);
-    return () => clearInterval(id);
-  }, [conn, refresh]);
+export function DaemonPanel({ conn, onRetry }: { conn: Connection; onRetry: () => void }) {
+  const load = useCallback(() => call(conn, "/api/daemon/info", DaemonInfo), [conn]);
+  const info = useRemote(load, { pollMs: POLL_MS });
 
   return (
     <Card className="w-full max-w-xl">
@@ -54,31 +20,38 @@ export function DaemonPanel() {
         <CardTitle>Daemon</CardTitle>
         <CardDescription>Proces, który trzyma cały stan Trackwalla.</CardDescription>
         <CardAction className="flex items-center gap-2">
-          <StatusBadge state={state} />
-          <Button variant="ghost" size="icon" onClick={() => void refresh()} disabled={!conn} aria-label="Odśwież">
+          <StatusBadge info={info} />
+          <Button variant="ghost" size="icon" onClick={info.reload} aria-label="Odśwież">
             <RefreshCw />
           </Button>
         </CardAction>
       </CardHeader>
       <CardContent>
-        {state.kind === "connecting" && <p className="text-muted-foreground text-sm">Łączenie z daemonem…</p>}
-        {state.kind === "error" && (
+        {!info.data && !info.error && <p className="text-muted-foreground text-sm">Łączenie z daemonem…</p>}
+        {info.error && (
           <div className="flex flex-col items-start gap-3">
-            <p className="text-destructive text-sm whitespace-pre-wrap break-words">{state.message}</p>
-            <Button variant="outline" size="sm" onClick={() => void retry()}>
+            <p className="text-destructive text-sm whitespace-pre-wrap break-words">{info.error}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                onRetry();
+                info.reload();
+              }}
+            >
               Spróbuj ponownie
             </Button>
           </div>
         )}
-        {state.kind === "connected" && <InfoTable info={state.info} />}
+        {info.data && !info.error && <InfoTable info={info.data} />}
       </CardContent>
     </Card>
   );
 }
 
-function StatusBadge({ state }: { state: State }) {
-  if (state.kind === "connected") return <Badge variant="success">połączony</Badge>;
-  if (state.kind === "error") return <Badge variant="destructive">błąd</Badge>;
+function StatusBadge({ info }: { info: Remote<DaemonInfo> }) {
+  if (info.error) return <Badge variant="destructive">błąd</Badge>;
+  if (info.data) return <Badge variant="success">połączony</Badge>;
   return <Badge variant="secondary">łączenie</Badge>;
 }
 

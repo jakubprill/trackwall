@@ -1,7 +1,17 @@
 import { z } from "zod";
 
 /** Kody błędów wspólne dla wszystkich modułów API. */
-export const ErrorCode = z.enum(["unauthorized", "forbidden_origin", "not_found", "bad_request", "internal"]);
+export const ErrorCode = z.enum([
+  "unauthorized",
+  "forbidden_origin",
+  "not_found",
+  "bad_request",
+  /** Repo z workspace jest niedostępne (katalog zniknął, git odmówił); szczegóły w `message`. */
+  "repo_unavailable",
+  /** `workspace.yaml` nie przechodzi walidacji; użytkownik musi go poprawić ręcznie. */
+  "invalid_config",
+  "internal",
+]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 
 export const ApiError = z.object({
@@ -23,3 +33,17 @@ export const EventEnvelope = z.object({
   payload: z.unknown(),
 });
 export type EventEnvelope = z.infer<typeof EventEnvelope>;
+
+/**
+ * Akcja `POST /api/<moduł>/<akcja>` (§5.2): ścieżka, schemat ciała i schemat wyniku w jednym obiekcie,
+ * z którego korzystają i daemon (walidacja wejścia), i klienty (typ ciała, walidacja odpowiedzi).
+ */
+export interface Endpoint<Req extends z.ZodType = z.ZodType, Data extends z.ZodType = z.ZodType> {
+  path: string;
+  request: Req;
+  /** Schemat pola `data` w odpowiedzi `{ ok: true, data }`. */
+  data: Data;
+}
+
+/** Koperta odpowiedzi bez znajomości `data`; klient sprawdza `data` schematem akcji w drugim kroku. */
+export const ApiEnvelope = apiResult(z.unknown());
