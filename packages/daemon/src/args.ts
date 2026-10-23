@@ -12,6 +12,8 @@ export interface DaemonArgs {
 }
 
 export const USAGE = `trackwall-daemon [opcje]
+trackwall-daemon copilot-hook <zdarzenie> <hooks.jsonl>
+                   hook wtyczki sesji Copilot CLI (uruchamia go Copilot CLI, nie człowiek)
 
   --ui             otwórz UI w domyślnej przeglądarce (tryb bez Tauri)
   --ui-dir <dir>   katalog zbudowanego UI (domyślnie ./ui obok binarki)
@@ -65,4 +67,18 @@ function toInt(value: string | undefined, name: string): number {
   const n = Number(value);
   if (!Number.isInteger(n)) throw new Error(`${name} oczekuje liczby całkowitej, dostał "${value}"`);
   return n;
+}
+
+/** Podkomenda `trackwall-daemon`, którą Copilot CLI uruchamia jako hook wtyczki sesji (ADR-17, ADR-24). */
+export const COPILOT_HOOK_COMMAND = "copilot-hook";
+
+/** Wiersz poleceń: daemon albo hook wtyczki sesji (`copilot-hook <zdarzenie> <hooks.jsonl>`). */
+export type CommandLine =
+  | { command: "daemon"; args: DaemonArgs }
+  | { command: typeof COPILOT_HOOK_COMMAND; event?: string; hooksFile?: string };
+
+/** Hook nie sprawdza argumentów: zły argument to tylko brak rekordu, a hook nie może zatrzymać agenta błędem. */
+export function parseCommandLine(argv: string[]): CommandLine {
+  if (argv[0] !== COPILOT_HOOK_COMMAND) return { command: "daemon", args: parseDaemonArgs(argv) };
+  return { command: COPILOT_HOOK_COMMAND, event: argv[1], hooksFile: argv[2] };
 }

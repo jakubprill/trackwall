@@ -5,12 +5,13 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
-import { type DaemonArgs, parseDaemonArgs, USAGE } from "./args.ts";
+import { COPILOT_HOOK_COMMAND, type CommandLine, type DaemonArgs, parseCommandLine, USAGE } from "./args.ts";
 import { newToken, probeRunningDaemon, removeDaemonFile, watchDaemonFile, withStartLock, writeDaemonFile } from "./discovery.ts";
-import { createFacade, type Facade } from "./facade.ts";
+import { createFacade, type Facade, runCopilotHook } from "./facade.ts";
 import { trackwallHome } from "./home.ts";
 import { openBrowser } from "./open-browser.ts";
 import { runtimeInfo } from "./platform/runtime.ts";
+import { selfCommand } from "./self-command.ts";
 import { userEnv } from "./user-env.ts";
 import { VERSION } from "./version.ts";
 
@@ -37,6 +38,7 @@ async function main(args: DaemonArgs): Promise<void> {
     stopWatching();
     // Grupy procesów przed zamknięciem API: UI widzi „stopping”, a nie zerwane połączenie w trakcie zatrzymywania.
     await facade?.procs.stopAll();
+    facade?.agents.close();
     removeDaemonFile(home, process.pid);
     await api?.close();
     process.exit(0);
@@ -46,7 +48,19 @@ async function main(args: DaemonArgs): Promise<void> {
     const running = await probeRunningDaemon(home);
     if (running) return { kind: "existing" as const, ...running };
     const token = newToken();
-    facade = createFacade({ home, openUrl: openBrowser, miseCommand: ["mise"], userEnv, log });
+    facade = createFacade({
+      home,
+      openUrl: openBrowser,
+      miseCommand: ["mise"],
+      copilotCommand: ["copilot"],
+      hookCommand: (event, hooksFile) => {
+        const [exec = process.execPath, ...args] = selfCommand([COPILOT_HOOK_COMMAND, event, hooksFile]);
+        return { exec, args };
+      },
+      userEnv,
+      log,
+    });
+    facade.agents.sweepLeftovers();
     // Pod blokadą startu: drugi daemon nie może w tym czasie uruchomić grupy, którą ten wziąłby za sierotę.
     await facade.procs.sweepOrphans().catch((err: unknown) => log(`sprzątanie sierot z runtime.json: ${String(err)}`));
     api = await startApi(
@@ -125,20 +139,30 @@ function log(msg: string): void {
 // Komunikaty walidacji zod trafiają do UI (`bad_request`, `invalid_config`), więc po polsku jak reszta tekstów.
 z.config(z.locales.pl());
 
-let parsed: DaemonArgs;
+let commandLine: CommandLine;
 try {
-  parsed = parseDaemonArgs(process.argv.slice(2));
+  commandLine = parseCommandLine(process.argv.slice(2));
 } catch (err) {
   process.stderr.write(`${(err as Error).message}\n\n${USAGE}`);
   process.exit(EXIT_USAGE);
 }
-if (parsed.help) {
+if (commandLine.command === COPILOT_HOOK_COMMAND) {
+  runHook(commandLine.event, commandLine.hooksFile);
+} else if (commandLine.args.help) {
   process.stdout.write(USAGE);
-} else if (parsed.version) {
+} else if (commandLine.args.version) {
   process.stdout.write(`${VERSION}\n`);
 } else {
-  main(parsed).catch((err: unknown) => {
+  main(commandLine.args).catch((err: unknown) => {
     process.stderr.write(`[daemon] błąd startu: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
     process.exit(1);
   });
+}
+
+/** Hook wtyczki sesji: payload na stdin, rekord do `hooks.jsonl`; nic na stdout i zawsze kod 0 (ADR-17). */
+function runHook(event: string | undefined, hooksFile: string | undefined): void {
+  const chunks: Buffer[] = [];
+  process.stdin.on("data", (chunk: Buffer) => chunks.push(chunk));
+  process.stdin.on("error", () => {});
+  process.stdin.on("end", () => runCopilotHook(event, hooksFile, Buffer.concat(chunks).toString("utf8")));
 }

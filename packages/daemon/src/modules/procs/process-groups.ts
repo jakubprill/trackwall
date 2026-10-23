@@ -4,7 +4,8 @@ import { stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import type { RunState } from "@trackwall/protocol";
 import { DomainError, SpawnFailure, spawnFailure } from "../../errors.ts";
-import { type GroupControl, type GroupPlatform, waitUntil } from "../../platform/process-group.ts";
+import { type GroupControl, type GroupLeader, type GroupPlatform, waitUntil } from "../../platform/process-group.ts";
+import type { TerminalPlatform, TerminalProcess } from "../../platform/terminal.ts";
 import { OutputTail } from "./output-tail.ts";
 import type { RuntimeFile, RuntimeGroup } from "./runtime-file.ts";
 
@@ -32,9 +33,24 @@ export interface GroupSpec {
   env: NodeJS.ProcessEnv;
 }
 
+/** Grupa z liderem w PTY: rozmiar terminala i odbiorca jego wyjścia. */
+export interface TerminalGroupSpec extends GroupSpec {
+  cols: number;
+  rows: number;
+  onData: (bytes: Uint8Array) => void;
+}
+
+/** Terminal lidera grupy: wejście z klawiatury i rozmiar okna. */
+export interface GroupTerminal {
+  write(data: string): void;
+  resize(cols: number, rows: number): void;
+}
+
 export interface ProcessGroupsDeps {
   runtime: RuntimeFile;
   platform: Promise<GroupPlatform>;
+  /** PTY dla `startTerminal`; `null` albo brak, gdy runtime go nie ma (Node) albo wołający go nie używa. */
+  terminals?: Promise<TerminalPlatform | null>;
   log: (msg: string) => void;
 }
 
@@ -86,10 +102,37 @@ export class ProcessGroups {
     if (current && current.phase.kind !== "exited") return Promise.resolve(stateOf(current));
     let started = this.starting.get(spec.owner);
     if (!started) {
-      started = this.spawnGroup(spec).finally(() => this.starting.delete(spec.owner));
+      started = this.spawnGroup(spec, (cwd, platform) => launchPiped(spec, cwd, platform.detached))
+        .then(stateOf)
+        .finally(() => this.starting.delete(spec.owner));
       this.starting.set(spec.owner, started);
     }
     return started;
+  }
+
+  /**
+   * Uruchamia grupę, której lider działa w PTY (§4.4, ADR-24), i zwraca terminal do pisania i zmiany rozmiaru.
+   * Właściciel musi być nowy: sesja w terminalu nie ma „drugiego startu”, który oddałby istniejącą.
+   */
+  async startTerminal(spec: TerminalGroupSpec): Promise<{ run: RunState; terminal: GroupTerminal }> {
+    if (this.closing) throw new SpawnFailure("spawn_failed", "daemon się zatrzymuje");
+    if (this.groups.has(spec.owner) || this.starting.has(spec.owner)) throw new Error(`właściciel ${spec.owner} ma już grupę`);
+    const terminals = await this.deps.terminals;
+    if (!terminals) throw new SpawnFailure("terminal_unavailable", "ten runtime daemona nie ma PTY (daemon pod Node)");
+    let terminal: GroupTerminal | undefined;
+    const started = this.spawnGroup(spec, async (cwd) => {
+      const launched = launchTerminal(terminals, spec, cwd);
+      terminal = launched.terminal;
+      return launched;
+    }).then(stateOf);
+    this.starting.set(spec.owner, started);
+    try {
+      const run = await started;
+      if (!terminal) throw new Error("grupa bez terminala");
+      return { run, terminal };
+    } finally {
+      this.starting.delete(spec.owner);
+    }
   }
 
   state(owner: string): RunState | undefined {
@@ -150,32 +193,15 @@ export class ProcessGroups {
     this.persist();
   }
 
-  private async spawnGroup(spec: GroupSpec): Promise<RunState> {
-    const [program, ...args] = spec.command;
-    if (program === undefined) throw new Error("pusta komenda");
+  private async spawnGroup(spec: GroupSpec, launch: (cwd: string, platform: GroupPlatform) => Promise<Launched>): Promise<Group> {
     await requireDirectory(spec.cwd);
     const platform = await this.deps.platform;
-    const child = spawn(program, args, {
-      cwd: spec.cwd,
-      env: spec.env,
-      detached: platform.detached,
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-    });
-    // Wyjście i koniec procesu są podłączone od razu: krótki task może skończyć się, zanim padnie pierwszy `await`.
-    const tail = new OutputTail();
-    attachOutput(child, tail);
-    const leaderExit = new Promise<Exit>((resolve) => {
-      child.once("exit", (code, signal) => resolve({ code, signal, at: new Date().toISOString() }));
-    });
-    await spawned(child, program);
-    const pid = child.pid;
-    if (pid === undefined) throw new Error(`${program} nie dostał PID-u`);
+    const { leader, leaderExit, tail } = await launch(spec.cwd, platform);
     let control: GroupControl;
     try {
-      control = platform.adopt(child);
+      control = platform.adopt(leader);
     } catch (err) {
-      child.kill("SIGKILL");
+      leader.kill();
       throw err;
     }
     const record: RuntimeGroup = {
@@ -184,8 +210,8 @@ export class ProcessGroups {
       command: [...spec.command],
       cwd: spec.cwd,
       startedAt: new Date().toISOString(),
-      pid,
-      identity: await platform.identity(pid),
+      pid: leader.pid,
+      identity: await platform.identity(leader.pid),
     };
     const group: Group = { record, control, tail, leaderExit, phase: { kind: "live" }, stopRequested: false };
     this.groups.set(spec.owner, group);
@@ -193,7 +219,7 @@ export class ProcessGroups {
     leaderExit
       .then((exit) => this.onLeaderExit(group, exit))
       .catch((err: unknown) => this.deps.log(`koniec grupy ${spec.owner}: ${String(err)}`));
-    return stateOf(group);
+    return group;
   }
 
   /** Lider skończył sam albo po stopie: reszta grupy jest zabijana, a uruchomienie kończy się dopiero przy pustej grupie. */
@@ -255,6 +281,74 @@ export class ProcessGroups {
       return [];
     }
   }
+}
+
+/** Uruchomiony lider, zanim stanie się grupą: wyjście i koniec są już podłączone. */
+interface Launched {
+  leader: GroupLeader & { kill(): void };
+  leaderExit: Promise<Exit>;
+  tail: OutputTail;
+}
+
+/** Lider z rurami (stdin, stdout, stderr), jak task mise. */
+async function launchPiped(spec: GroupSpec, cwd: string, detached: boolean): Promise<Launched> {
+  const [program, ...args] = spec.command;
+  if (program === undefined) throw new Error("pusta komenda");
+  const child = spawn(program, args, { cwd, env: spec.env, detached, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+  // Wyjście i koniec procesu są podłączone od razu: krótki task może skończyć się, zanim padnie pierwszy `await`.
+  const tail = new OutputTail();
+  attachOutput(child, tail);
+  const leaderExit = new Promise<Exit>((resolve) => {
+    child.once("exit", (code, signal) => resolve({ code, signal, at: new Date().toISOString() }));
+  });
+  await spawned(child, program);
+  const pid = child.pid;
+  if (pid === undefined) throw new Error(`${program} nie dostał PID-u`);
+  const leader = {
+    pid,
+    closeInput: () => void child.stdin?.end(),
+    hasExited: () => child.exitCode !== null || child.signalCode !== null,
+    kill: () => void child.kill("SIGKILL"),
+  };
+  return { leader, leaderExit, tail };
+}
+
+/** Lider w PTY: wyjście terminala idzie do wołającego i do ostatnich linii stanu `exited`. */
+function launchTerminal(terminals: TerminalPlatform, spec: TerminalGroupSpec, cwd: string): Launched & { terminal: GroupTerminal } {
+  const [program] = spec.command;
+  if (program === undefined) throw new Error("pusta komenda");
+  const tail = new OutputTail();
+  let proc: TerminalProcess;
+  try {
+    proc = terminals.spawn({
+      command: spec.command,
+      cwd,
+      env: spec.env,
+      cols: spec.cols,
+      rows: spec.rows,
+      onData: (bytes) => {
+        tail.push("stdout", Buffer.from(bytes));
+        spec.onData(bytes);
+      },
+    });
+  } catch (err) {
+    throw spawnFailure(program, err as NodeJS.ErrnoException);
+  }
+  const leaderExit = proc.exited.then((exit) => ({ ...exit, at: new Date().toISOString() }));
+  const leader = {
+    pid: proc.pid,
+    closeInput: () => proc.close(),
+    hasExited: () => proc.hasExited(),
+    kill: () => {
+      try {
+        process.kill(proc.pid, "SIGKILL");
+      } catch {
+        // już nie żyje
+      }
+    },
+  };
+  const terminal: GroupTerminal = { write: (data) => proc.write(data), resize: (cols, rows) => proc.resize(cols, rows) };
+  return { leader, leaderExit, tail, terminal };
 }
 
 /**

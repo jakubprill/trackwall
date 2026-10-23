@@ -1,5 +1,5 @@
-import { type ChildProcess, execFile } from "node:child_process";
-import { type GroupControl, type GroupPlatform, isAlive } from "./process-group.ts";
+import { execFile } from "node:child_process";
+import { type GroupControl, type GroupLeader, type GroupPlatform, isAlive } from "./process-group.ts";
 import type { Job } from "./win32-job.ts";
 
 /**
@@ -8,16 +8,17 @@ import type { Job } from "./win32-job.ts";
  * daemona, zabija całą grupę. Pod Node nie ma FFI, więc grupę wyznacza drzewo rodzic–dziecko z `taskkill /T`:
  * pusta grupa znaczy tam tylko „lider nie żyje”, a potomek, którego rodzic już nie żyje, wypada z drzewa (luka w §8).
  *
- * Łagodny stop to zamknięcie stdin lidera: Ctrl+C (`GenerateConsoleCtrlEvent`) wymaga wspólnej konsoli, której
- * proces z ukrytym oknem nie ma. Większość serwerów deweloperskich go nie słucha, stąd krótki czas łaski.
+ * Łagodny stop to zamknięcie wejścia lidera: Ctrl+C (`GenerateConsoleCtrlEvent`) wymaga wspólnej konsoli, której
+ * proces z ukrytym oknem nie ma. Większość serwerów deweloperskich zamknięcia stdin nie słucha, stąd krótki czas
+ * łaski; proces w ConPTY dostaje przy zamknięciu terminala `CTRL_CLOSE_EVENT`, jak przy zamknięciu okna konsoli.
  */
 
 const GRACE_MS = 2000;
 
 /** Błąd FFI przy zatrzymywaniu nie może zakończyć daemona; grupa wtedy po prostu nie jest potwierdzona jako pusta. */
-function jobControl(job: Job, child: ChildProcess): GroupControl {
+function jobControl(job: Job, leader: GroupLeader): GroupControl {
   return {
-    askToStop: () => void child.stdin?.end(),
+    askToStop: () => leader.closeInput(),
     kill: () => {
       try {
         job.terminate(1);
@@ -36,11 +37,11 @@ function jobControl(job: Job, child: ChildProcess): GroupControl {
   };
 }
 
-function treeControl(child: ChildProcess, pid: number): GroupControl {
+function treeControl(leader: GroupLeader): GroupControl {
   return {
-    askToStop: () => void child.stdin?.end(),
-    kill: () => void execFile("taskkill", ["/T", "/F", "/PID", String(pid)], { windowsHide: true }, () => {}),
-    isEmpty: () => child.exitCode !== null || child.signalCode !== null,
+    askToStop: () => leader.closeInput(),
+    kill: () => void execFile("taskkill", ["/T", "/F", "/PID", String(leader.pid)], { windowsHide: true }, () => {}),
+    isEmpty: () => leader.hasExited(),
     release: () => {},
   };
 }
@@ -50,18 +51,16 @@ export async function win32Groups(withJobs: boolean): Promise<GroupPlatform> {
   return {
     detached: false,
     graceMs: GRACE_MS,
-    adopt: (child) => {
-      const pid = child.pid;
-      if (pid === undefined) throw new Error("proces nie ma PID-u");
-      if (!JobClass) return treeControl(child, pid);
+    adopt: (leader) => {
+      if (!JobClass) return treeControl(leader);
       const job = new JobClass();
       try {
-        job.assign(pid);
+        job.assign(leader.pid);
       } catch (err) {
         job.close();
         throw err;
       }
-      return jobControl(job, child);
+      return jobControl(job, leader);
     },
     // Pod Bun sieroty nie powstają (job zabija grupę z daemonem), a pod Node nie ma taniego czasu startu procesu,
     // więc żywy PID z `runtime.json` jest zgłaszany, ale nie zabijany.
