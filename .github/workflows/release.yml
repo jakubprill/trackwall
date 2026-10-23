@@ -11,12 +11,13 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
-permissions:
-  contents: read
+permissions: {}
 
+# Te same wersje co w mise.toml; pilnuje tego apps/desktop/test/toolchain.test.ts.
 env:
   BUN_VERSION: "1.4.2"
   NODE_VERSION: "22"
+  RUST_VERSION: "1.90"
 
 # Akcje przypięte do SHA: ten workflow publikuje binarki, więc przesunięty tag akcji
 # nie może podmienić tego, co trafia do użytkowników.
@@ -29,6 +30,8 @@ jobs:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -60,7 +63,7 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
-          toolchain: stable
+          toolchain: ${{ env.RUST_VERSION }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: apps/desktop/src-tauri

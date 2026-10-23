@@ -67,7 +67,9 @@ pitwall/
     architecture.md       ten dokument
     adr/                  decyzje architektoniczne (od chwili, gdy zacznie ich przybywać)
   .github/workflows/
-    ci.yml                macierz windows-latest + macos-latest: lint, test, build portable
+    ci.yml                macierz windows-latest + macos-latest: lint (Biome, knip), test, clippy, build portable; audyt zależności
+    release.yml           wydanie z tagu vX.Y.Z (docs/release.md)
+  .github/dependabot.yml  cotygodniowe aktualizacje akcji, npm i cargo
 ```
 
 `packages/protocol` jest jedyną zależnością wspólną między daemonem, UI, sceną i CLI. Dzięki temu UI nie importuje nic z daemona (nie da się przypadkiem wciągnąć `node:child_process` do bundle'a WebView), a schematy zod są jednocześnie walidacją wejścia w daemonie i typami w UI.
