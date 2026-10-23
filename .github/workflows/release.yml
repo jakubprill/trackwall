@@ -63,8 +63,11 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: apps/desktop/src-tauri
-          # Wydanie czyta cache z main, ale go nie zapisuje.
+          # Ten sam klucz co job `desktop` w ci.yml: wydanie czyta cache z main, ale go nie zapisuje.
+          shared-key: desktop
           save-if: false
+      # Tag nie wymaga zielonego CI na main, a CI przy PR testuje tylko Linuksa (ADR-15), więc wydanie samo uruchamia testy na obu systemach.
+      - run: pnpm test
       - run: pnpm build:desktop
       - name: smoke test sidecara z buildu
         run: bun packages/daemon/scripts/smoke.ts apps/desktop/src-tauri/target/release/trackwall-daemon

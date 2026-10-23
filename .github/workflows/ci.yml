@@ -1,11 +1,21 @@
 name: CI
 
+# Minuta runnera Windows liczy się w limicie GitHub Actions podwójnie, a macOS dziesięciokrotnie (ADR-15), więc:
+# - każdy PR: lint, rustfmt, typecheck i testy na Linuksie plus audyt zależności;
+# - push na main i ręczne uruchomienie (także na gałęzi PR): do tego testy, portable build i spike'i
+#   na Windowsie i macOS.
+# Same zmiany w Markdownie i docs/ nie uruchamiają CI. Wydania buduje release.yml niezależnie od tego pliku.
 on:
   push:
     branches: [main]
+    paths-ignore: ["**/*.md", "docs/**"]
   pull_request:
+    paths-ignore: ["**/*.md", "docs/**"]
   workflow_dispatch:
 
+# Nowy push przerywa poprzedni przebieg tej samej gałęzi, także na main: następny przebieg obejmuje
+# te same zmiany, a minuty Windowsa i macOS są tu najdroższe. Commit wydania i tak przechodzi testy
+# na obu systemach w release.yml.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -24,13 +34,9 @@ env:
 # (poza audytem, który potrzebuje tylko pnpm i Node).
 jobs:
   check:
-    name: lint, typecheck, test (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    name: lint, typecheck, test (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -41,6 +47,13 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           bun-version: ${{ env.BUN_VERSION }}
+      # Jedyny krok Rust przy PR: rustfmt nie potrzebuje bibliotek systemowych Tauri, więc działa na Linuksie.
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # gałąź stable; wersję Rust daje RUST_VERSION
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: rustfmt
+      - name: cargo fmt (powłoka Tauri)
+        run: cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
@@ -64,9 +77,13 @@ jobs:
           package-manager-cache: false
       - run: pnpm audit --audit-level high
 
+  # Jeden job na system: każdy job macOS kosztuje co najmniej 10 minut limitu, więc testy, build
+  # i spike'i dzielą jeden. Lint i typecheck nie zależą od systemu, więc zostają w `check`.
   desktop:
-    name: portable (${{ matrix.os }})
+    name: test, portable, spike'i (${{ matrix.os }})
+    # Najpierw tani Linux: błąd lintu albo testu nie zużywa minut Windowsa i macOS.
     needs: check
+    if: github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:
@@ -80,18 +97,22 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
+        id: setup
         with:
           node-version: ${{ env.NODE_VERSION }}
           bun-version: ${{ env.BUN_VERSION }}
+      - run: pnpm test
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # gałąź stable; wersję Rust daje RUST_VERSION
         with:
           toolchain: ${{ env.RUST_VERSION }}
-          components: clippy, rustfmt
+          components: clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: apps/desktop/src-tauri
-      - name: cargo fmt (powłoka Tauri)
-        run: cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
+          # Ten sam klucz co w release.yml (bez niego klucz zawiera nazwę joba), żeby wydanie trafiało w cache z main.
+          shared-key: desktop
+          # Cache zapisuje tylko main; ręczne przebiegi na gałęziach go czytają, zamiast trzymać własne kopie.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: pnpm build:desktop
       # Po buildzie, bo tauri-build wymaga binarki sidecara, którą tworzy build:desktop.
       - name: cargo clippy (powłoka Tauri)
@@ -106,35 +127,18 @@ jobs:
           name: trackwall-${{ runner.os }}
           path: out/*.zip
           if-no-files-found: error
-
-  spikes:
-    name: spike'i (${{ matrix.os }})
-    needs: check
-    # Wynikiem spike'a jest tabela w podsumowaniu joba; czerwony spike nie blokuje PR.
-    continue-on-error: true
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          bun-version: ${{ env.BUN_VERSION }}
-      - name: Job Objects / grupy procesów
+      # Wynikiem spike'a jest tabela w podsumowaniu joba; czerwony spike nie blokuje przebiegu.
+      # Spike'i nie zależą od buildu, więc idą także po jego błędzie, ale nie bez zależności.
+      - name: "spike: Job Objects / grupy procesów"
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        continue-on-error: true
         run: pnpm --filter @trackwall/spike-job-objects spike
-      - name: PTY (ConPTY na Windowsie)
-        if: always()
+      - name: "spike: PTY (ConPTY na Windowsie)"
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        continue-on-error: true
         run: pnpm --filter @trackwall/spike-conpty spike
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
-        if: always()
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         with:
           name: spikes-${{ runner.os }}
           path: spikes/*/results/*.json

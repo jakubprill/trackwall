@@ -10,7 +10,7 @@
 
 ## Jak sprawdzone
 
-<!-- Komendy z Definition of done (AGENTS.md), testy dodane w tym PR, co uruchomiono na Windowsie i macOS. -->
+<!-- Komendy z Definition of done (AGENTS.md), testy dodane w tym PR, co uruchomiono na Windowsie i macOS. Gdy wymaga tego punkt 2 Definition of done: link do zielonego ręcznego przebiegu CI. -->
 
 Do sprawdzenia ręcznie:
 
@@ -23,7 +23,7 @@ Do sprawdzenia ręcznie:
 <!-- Pełne brzmienie punktów: AGENTS.md, sekcja „Definition of done”. -->
 
 - [ ] 1. Test na najtańszym poziomie (poprawka błędu: test, który bez niej nie przechodzi)
-- [ ] 2. Kod zależny od systemu ma test w macierzy Windows + macOS; reszta wypisana wyżej jako „do sprawdzenia ręcznie”
+- [ ] 2. Kod zależny od systemu ma test w macierzy Windows + macOS (przy PR: ręczny przebieg CI na gałęzi, link wyżej); reszta wypisana wyżej jako „do sprawdzenia ręcznie”
 - [ ] 3. Komendy z AGENTS.md przechodzą lokalnie
 - [ ] 4. Dokumentacja zaktualizowana w tym PR
 - [ ] 5. Nic firmowego

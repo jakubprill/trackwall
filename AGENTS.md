@@ -11,7 +11,7 @@ W tym pliku „agent” to agent piszący kod Trackwall. Agent uruchamiany przez
 Zmiana jest gotowa, gdy spełnia wszystkie punkty, a nie wtedy, gdy się kompiluje:
 
 1. **Działa i ma test** na najtańszym poziomie, który to udowadnia: test w katalogu `test/` paczki (`bun test`), test z prawdziwym procesem potomnym dla `procs` i `logs`, `cargo test` dla powłoki Tauri. Poprawka błędu zaczyna się od testu, który bez niej nie przechodzi.
-2. **Działa na Windowsie i macOS.** Kod zależny od systemu ma test, który CI uruchamia w macierzy `windows-latest` + `macos-latest`. Czego nie da się sprawdzić w CI (WebView2, SmartScreen, prawdziwy Windows poza CI), wypisz w PR jako „do sprawdzenia ręcznie”.
+2. **Działa na Windowsie i macOS.** Kod zależny od systemu ma test, który CI uruchamia w macierzy `windows-latest` + `macos-latest`. Przy PR CI sprawdza tylko Linuksa (ADR-15), więc PR z kodem zależnym od systemu albo dotykający `apps/desktop`, buildu daemona lub pakowania uruchamia ręcznie workflow CI na swojej gałęzi (`workflow_dispatch`) i podaje w opisie link do zielonego przebiegu na commicie po ostatniej zmianie takiego kodu. Czego nie da się sprawdzić w CI (WebView2, SmartScreen, prawdziwy Windows poza CI), wypisz w PR jako „do sprawdzenia ręcznie”.
 3. **Lokalnie przechodzą** `pnpm lint`, `pnpm typecheck` i `pnpm test`, a gdy zmiana dotyka `apps/desktop`, buildu daemona albo pakowania, także kroki joba `desktop` z `.github/workflows/ci.yml` (sekcja „Komendy”). CI potwierdza, a nie szuka błędów.
 4. **Dokumentacja opisuje nowe zachowanie w tym samym PR** (sekcja „Dokumentacja”).
 5. **Nic firmowego** w kodzie, testach, fixture'ach, dokumentacji i commitach (sekcja „Nic firmowego w repo”).
@@ -95,7 +95,7 @@ pnpm lint              # Biome (format, lint, kolejność importów; pnpm format
 pnpm typecheck
 pnpm test              # bun test we wszystkich paczkach
 
-# gdy zmiana dotyka apps/desktop, buildu daemona albo pakowania (job `desktop` w CI):
+# gdy zmiana dotyka apps/desktop, buildu daemona albo pakowania (job `desktop` w CI; cargo fmt także w `check`):
 cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
 pnpm build:desktop
 cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
