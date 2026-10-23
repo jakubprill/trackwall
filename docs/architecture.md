@@ -87,7 +87,7 @@ Daemon jest jednym procesem, ale wewnątrz jest podzielony na moduły z jawnie z
 | `logs` | magistrala: ring buffer, JSONL, sekwencje, kursory, maskowanie, `trace` | `secrets` (maski) | `logs/<repo>/<proces>.jsonl` |
 | `services` | serwis = repo + task `dev` + port + sonda; dzierżawy | `procs`, `mise`, `logs`, `leases` | tabela `services` |
 | `leases` | kto trzyma serwis na jakim porcie; przejęcie przez zadanie | – | tabela `leases` |
-| `secrets` | repo sekretów, odczyt `git show origin/<app>:<plik>`, wstrzyknięcie do env, `check_secrets` | `vcs` | klon poza workspace |
+| `secrets` | repo sekretów (manifesty k8s `Secret`), odczyt `git show origin/<app>:<plik>`, wstrzyknięcie do env, `check_secrets` | `vcs` | klon poza workspace |
 | `agents` | adaptery CLI, PTY, wykrywanie stanu, worktree per zadanie, budżet, nagrywanie | `vcs`, `procs`, `logs`, `leases` | tabela `tasks`, nagrania `sessions/` |
 | `mcp` | serwer MCP: mapowanie narzędzi na fasadę, audyt | wszystko przez fasadę | tabela `audit` |
 | `api` | HTTP + WebSocket dla UI i CLI, token, CORS, statyczne pliki UI | wszystko przez fasadę | – |
@@ -119,7 +119,7 @@ Dzierżawa mówi, **która gałąź/worktree** zajmuje serwis na jego porcie. Do
 
 ### 4.4 `agents`: zadania
 
-- **Adapter CLI** = szablon komendy (`copilot --prompt {prompt_file} ...`), sposób podania konfiguracji MCP, komenda wznowienia sesji, zestaw detektorów stanu. Copilot CLI jest pierwszym adapterem; Claude Code i Codex różnią się tylko konfiguracją adaptera (patrz pytania otwarte).
+- **Adapter CLI** = szablon komendy (`copilot --prompt {prompt_file} ...`), sposób podania konfiguracji MCP, komenda wznowienia sesji, zestaw detektorów stanu. **Jedynym adapterem jest Copilot CLI** (decyzja z 2026-10-23). Interfejs adaptera zostaje, bo porządkuje kod, ale nie projektujemy pod Claude Code ani Codex i nie testujemy ich detektorów.
 - Sesja działa w **PTY należącym do daemona** (ConPTY na Windowsie). UI podłącza xterm.js przez WebSocket, `ws attach` robi to samo w terminalu. Wyjście PTY jest nagrywane (format asciicast) do `sessions/<task>.cast`.
 - **Wykrywanie stanu**, od najpewniejszego źródła: (1) hooki CLI, jeśli adapter je ma, (2) sekwencje terminala OSC 9 / 777 / 99 oraz komenda `ws notify <state>` dostępna w skryptach agenta, (3) wzorce ekranu (parser VT po stronie daemona, nie w UI). Każda zmiana stanu niesie `source` i `confidence`, więc UI może pokazać „prawdopodobnie czeka na zgodę”.
 - Stany: `Working`, `Input`, `Approval`, `Plan`, `Done`, `Error`, plus `Stale` (brak sygnału dłużej niż próg). Budżet czasu i liczby commitów z wymuszonym zakończeniem.
@@ -241,7 +241,7 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 
 **`ws sync`.** Dla każdego repo równolegle (limit współbieżności): fetch, fast-forward gałęzi domyślnej, jeśli `head` ≠ `analysis.commit` to zależności (`mise run setup`) i ekstraktory kart; po wszystkim przeliczenie grafu i zdarzenie `graph.updated`. Repo zmienione lokalnie (brudny worktree) jest pomijane z ostrzeżeniem.
 
-**Uruchomienie serwisu.** UI → `services.start(id)` → `leases.check` → `secrets.resolve(repo)` (git show z repo sekretów, do env) → `mise.run('dev')` przez `procs.spawn` w grupie → `logs` rejestruje źródło i maski → sonda `mise run health` cyklicznie → `service.state`. Awaria: `crashed` z kodem i ostatnią linią stderr na wierszu serwisu, bez restartu w pętli (co najwyżej trzy próby, potem rezygnacja).
+**Uruchomienie serwisu.** UI → `services.start(id)` → `leases.check` → `secrets.resolve(repo)` (git show manifestu `Secret` z gałęzi `origin/<repo>`, klucze z `data` dekodowane z base64, z `stringData` brane wprost, do env) → `mise.run('dev')` przez `procs.spawn` w grupie → `logs` rejestruje źródło i maski → sonda `mise run health` cyklicznie → `service.state`. Awaria: `crashed` z kodem i ostatnią linią stderr na wierszu serwisu, bez restartu w pętli (co najwyżej trzy próby, potem rezygnacja).
 
 **Zadanie agenta.** UI tworzy zadanie (repo, prompt, adapter, budżet) → `vcs.worktree.add` → zapis promptu do pliku → adapter buduje komendę i konfigurację MCP (adres `/mcp`, token zadania) → `procs.spawnPty` → detektory stanu → zdarzenia `task.state` → tray i „skok do czekającego”. Gdy agent zmienia serwis, prosi o dzierżawę (`Approval` w UI lub automatycznie wg ustawienia). Zakończenie: blok podsumowania → `summary`, propozycja PR, oddanie dzierżaw, nagranie zamknięte.
 
@@ -274,7 +274,7 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 
 - `procs` i `logs`: testy integracyjne uruchamiające prawdziwe procesy potomne (skrypt, który odpala wnuka i ignoruje łagodny stop), na obu systemach w macierzy CI.
 - `cards`: testy na fixture'ach repo (małe pom.xml, application.yml, package.json) bez sieci.
-- `agents`: detektory stanu testowane na nagraniach `.cast` z prawdziwych sesji; nagrania zanonimizowane trafiają do repo jako fixture'y.
+- `agents`: detektory stanu testowane na nagraniach `.cast` z prawdziwych sesji Copilot CLI; nagrania zanonimizowane trafiają do repo jako fixture'y.
 - `api`/`mcp`: kontrakt z `packages/protocol`, testy przez prawdziwy klient MCP SDK.
 - CI: `windows-latest` i `macos-latest`, kroki lint → test → build daemona (binarka) → build Tauri portable → artefakty. Wydanie z tagu, draft publikowany po przejściu obu buildów.
 
@@ -301,3 +301,13 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 **ADR-6 Fakty z ekstraktorów, LLM tylko w polu `description` i w propozycjach z `origin: 'llm'`.** Powtarzalność analizy i możliwość testów bez modelu.
 
 **ADR-7 Nic firmowego w repo.** Wszystkie reguły specyficzne dla firmy (wzorce URL, nazwy topików, adapter GitLab z adresem instancji) są konfiguracją workspace, a ekstraktory przyjmują je jako parametry.
+
+**ADR-8 Tylko Copilot CLI.** (2026-10-23) Jeden adapter agenta. Abstrakcja adaptera zostaje jako granica w kodzie, ale nie jest rozwijana pod inne CLI.
+
+**ADR-9 Bez auto-merge i plannera, na stałe.** (2026-10-23) Zadanie kończy się podsumowaniem i propozycją PR; łączenie i rozbijanie celów robi człowiek. W modelu danych nie ma miejsca na zależności między zadaniami ani kolejkę.
+
+**ADR-10 Repo sekretów trzyma manifesty k8s `Secret`.** (2026-10-23) Gałąź `origin/<repo>` zawiera pliki YAML `kind: Secret`; `secrets.resolve` czyta `data` (base64) i `stringData` (jawny tekst) i mapuje klucze na zmienne środowiskowe 1:1. Nazwy kluczy są porównywane z `runtime.secretNames` z karty repo, stąd `check_secrets`. Docelowe szyfrowanie sops + age nie zmienia formatu, tylko dodaje krok odszyfrowania przed parsowaniem.
+
+## 13. Pytania otwarte
+
+Wszystkie pytania z wizji zostały rozstrzygnięte 2026-10-23 (ADR-8, ADR-9, ADR-10). Prototyp z etapu 2 może być uruchamiany na firmowym komputerze, gdzie Copilot CLI jest dostępny.
