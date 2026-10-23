@@ -1,7 +1,7 @@
 name: CI
 
 # Repo jest publiczne, więc standardowe runnery nie mają limitu minut (ADR-22). Każdy PR i push na main:
-# - lint, rustfmt, typecheck i testy na Linuksie oraz audyt zależności (poza `CI ok`, patrz job `audit`);
+# - lint, rustfmt, typecheck i testy na Linuksie oraz audyt zależności;
 # - testy i spike'i na Windowsie i macOS;
 # - build daemona i Tauri portable na Windowsie i macOS (clippy, cargo test, smoke test sidecara);
 # - zbiorczy job `CI ok`, jedyny check do wymagania w ochronie gałęzi main.
@@ -15,11 +15,11 @@ on:
   workflow_dispatch:
 
 # Nowy push na gałąź PR przerywa jej poprzedni przebieg, bo następny obejmuje te same zmiany. Na main
-# każdy commit ma własną grupę: wspólna grupa trzyma tylko jeden czekający przebieg i kasuje go, gdy
-# przyjdzie kolejny, więc commit main mógłby zostać bez werdyktu, a może na nim stanąć tag wydania.
+# każdy commit ma własną grupę, więc nic go nie przerywa: wspólna grupa trzyma tylko jeden czekający
+# przebieg i kasuje go, gdy przyjdzie kolejny, a wtedy nie wiadomo, który commit zepsuł main.
 concurrency:
   group: ci-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 
 # Domyślnie żadnych uprawnień; każdy job dostaje tylko to, czego potrzebuje.
 permissions: {}
@@ -59,8 +59,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
 
-  # Nie wchodzi do `CI ok`: wynik zależy od bazy podatności, a nie od PR, więc nowe zgłoszenie bez
-  # poprawionej wersji zablokowałoby każdy PR. Czerwony audyt widać przy PR i na main.
+  # Podatność bez poprawionej wersji blokowałaby każdy PR, więc trafia do auditConfig
+  # w pnpm-workspace.yaml (pnpm audit --ignore) z komentarzem dlaczego, a audyt zostaje w `CI ok`.
   audit:
     name: znane podatności zależności
     runs-on: ubuntu-latest
@@ -101,14 +101,17 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
       - run: pnpm test
       # Wynikiem spike'a jest tabela w podsumowaniu joba; czerwony spike nie blokuje przebiegu.
+      # Limit czasu na kroku, bo zawieszony spike (PTY, grupy procesów) przerwałby cały job.
       # Spike'i nie zależą od testów, więc idą także po ich błędzie, ale nie bez zależności.
       - name: "spike: Job Objects / grupy procesów"
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         continue-on-error: true
+        timeout-minutes: 5
         run: pnpm --filter @trackwall/spike-job-objects spike
       - name: "spike: PTY (ConPTY na Windowsie)"
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         continue-on-error: true
+        timeout-minutes: 5
         run: pnpm --filter @trackwall/spike-conpty spike
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
@@ -166,7 +169,7 @@ jobs:
   # przerwany job zależny daje czerwony wynik.
   ci-ok:
     name: CI ok
-    needs: [check, test, desktop]
+    needs: [check, audit, test, desktop]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
