@@ -67,7 +67,10 @@ pitwall/
     architecture.md       ten dokument
     adr/                  decyzje architektoniczne (od chwili, gdy zacznie ich przybywać)
   .github/workflows/
-    ci.yml                macierz windows-latest + macos-latest: lint, test, build portable
+    ci.yml                macierz windows-latest + macos-latest: lint (Biome, knip), test, clippy, build portable; audyt zależności
+    release.yml           wydanie z tagu vX.Y.Z (docs/release.md)
+  .github/actions/setup/  wspólne przygotowanie jobów: pnpm, Node, Bun, pnpm install
+  .github/dependabot.yml  cotygodniowe aktualizacje akcji, npm i cargo
 ```
 
 `packages/protocol` jest jedyną zależnością wspólną między daemonem, UI, sceną i CLI. Dzięki temu UI nie importuje nic z daemona (nie da się przypadkiem wciągnąć `node:child_process` do bundle'a WebView), a schematy zod są jednocześnie walidacją wejścia w daemonie i typami w UI.
@@ -256,6 +259,7 @@ Trwałość: SQLite (`~/.pitwall/pitwall.db`) dla repos, cards, edges (cache), s
 - Zmienne środowiskowe nigdy nie trafiają do logów ani do audytu; maskowanie wartości przed buforem.
 - Autostart i „podłącz agenta” tylko z UI; agent nie ma narzędzia do zmiany konfiguracji daemona.
 - Jeśli kiedyś pojawią się narzędzia bazodanowe, rola bez superużytkownika i transakcja tylko do odczytu.
+- Przed publikacją repo: `SECURITY.md` z kanałem zgłaszania podatności (prywatne zgłoszenia na GitHubie włącza właściciel w ustawieniach repo).
 
 ## 9. Windows: ryzyka i jak je sprawdzamy wcześnie
 

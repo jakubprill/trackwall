@@ -215,9 +215,7 @@ fn http(port: u16, method: &str, path: &str, token: Option<&str>) -> Result<(u16
     stream.set_read_timeout(Some(IO_TIMEOUT)).map_err(|e| e.to_string())?;
     stream.set_write_timeout(Some(IO_TIMEOUT)).map_err(|e| e.to_string())?;
     let auth = token.map(|t| format!("Authorization: Bearer {t}\r\n")).unwrap_or_default();
-    let req = format!(
-        "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{auth}Content-Length: 0\r\nConnection: close\r\n\r\n"
-    );
+    let req = format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{auth}Content-Length: 0\r\nConnection: close\r\n\r\n");
     stream.write_all(req.as_bytes()).map_err(|e| e.to_string())?;
     let mut raw = Vec::new();
     stream.take(1 << 20).read_to_end(&mut raw).map_err(|e| e.to_string())?;
@@ -228,11 +226,7 @@ fn parse_response(raw: &[u8]) -> Result<(u16, String), String> {
     let split = raw.windows(4).position(|w| w == b"\r\n\r\n").ok_or("niepełna odpowiedź HTTP")?;
     let head = String::from_utf8_lossy(&raw[..split]);
     let body = &raw[split + 4..];
-    let status = head
-        .split_whitespace()
-        .nth(1)
-        .and_then(|s| s.parse::<u16>().ok())
-        .ok_or("brak kodu statusu")?;
+    let status = head.split_whitespace().nth(1).and_then(|s| s.parse::<u16>().ok()).ok_or("brak kodu statusu")?;
     let chunked = head.lines().any(|l| {
         let l = l.to_ascii_lowercase();
         l.starts_with("transfer-encoding:") && l.contains("chunked")
