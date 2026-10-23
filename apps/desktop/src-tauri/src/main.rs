@@ -12,7 +12,6 @@ use std::sync::{Arc, Condvar, Mutex};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
-use window_effect::WindowEffect;
 
 /// Stan połączenia z daemonem widziany przez powłokę.
 #[derive(Clone, Default)]
@@ -99,12 +98,6 @@ async fn retry_daemon(state: tauri::State<'_, Arc<DaemonState>>) -> Result<Conne
     tauri::async_runtime::spawn_blocking(move || state.wait()).await.map_err(|e| e.to_string())?
 }
 
-/// Efekt tła, który system przyjął w `setup`; przy `None` UI maluje nieprzezroczyste tło.
-#[tauri::command]
-fn window_effect(effect: tauri::State<'_, WindowEffect>) -> WindowEffect {
-    *effect
-}
-
 fn main() {
     #[cfg(windows)]
     if let Err(err) = tauri::webview_version() {
@@ -128,7 +121,7 @@ fn main() {
     }));
     let app = builder
         .manage(Arc::clone(&state))
-        .invoke_handler(tauri::generate_handler![daemon_connection, retry_daemon, window_effect])
+        .invoke_handler(tauri::generate_handler![daemon_connection, retry_daemon])
         .setup(move |app| {
             state.start();
             let window = app.get_webview_window("main").ok_or("brak okna main z tauri.conf.json")?;
@@ -136,6 +129,7 @@ fn main() {
             build_tray(app.handle())?;
             Ok(())
         })
+        .on_page_load(window_effect::on_page_load)
         .on_window_event(|window, event| {
             // Zamknięcie okna chowa je do traya; daemon i serwisy działają dalej.
             if let WindowEvent::CloseRequested { api, .. } = event {

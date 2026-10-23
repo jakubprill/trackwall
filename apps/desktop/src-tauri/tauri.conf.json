@@ -22,6 +22,7 @@
         "minWidth": 640,
         "minHeight": 480,
         "transparent": true,
+        "visible": false,
         "theme": "Dark"
       }
     ],
