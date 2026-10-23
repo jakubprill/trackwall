@@ -29,13 +29,31 @@ export class CardCache {
   private readonly dir: string;
   private readonly log: (msg: string) => void;
   private readonly memory = new Map<string, RepoCard>();
+  /** Karty w trakcie liczenia po commicie: dwa pytania o ten sam commit (lista i karta naraz) czytają gita raz. */
+  private readonly computing = new Map<string, Promise<RepoCard>>();
 
   constructor(dir: string, log: (msg: string) => void) {
     this.dir = dir;
     this.log = log;
   }
 
-  async get(commit: string): Promise<RepoCard | undefined> {
+  /** Karta commita z pamięci albo z dysku, a bez niej policzona przez `compute` i zapamiętana. */
+  async getOrCompute(commit: string, compute: () => Promise<RepoCard>): Promise<RepoCard> {
+    const cached = await this.get(commit);
+    if (cached) return cached;
+    const running = this.computing.get(commit);
+    if (running) return running;
+    const computed = compute()
+      .then((card) => {
+        this.set(card);
+        return card;
+      })
+      .finally(() => this.computing.delete(commit));
+    this.computing.set(commit, computed);
+    return computed;
+  }
+
+  private async get(commit: string): Promise<RepoCard | undefined> {
     const cached = this.memory.get(commit);
     if (cached) return cached;
     if (!COMMIT.test(commit)) return undefined;
@@ -56,7 +74,7 @@ export class CardCache {
   }
 
   /** Nieudany zapis na dysk trafia do logu: karta w pamięci działa dalej, najwyżej restart policzy ją od nowa. */
-  set(card: RepoCard): void {
+  private set(card: RepoCard): void {
     this.remember(card);
     if (!COMMIT.test(card.commit)) return;
     try {

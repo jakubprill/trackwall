@@ -1,32 +1,38 @@
 import type { Consumed, RepoCard } from "@trackwall/protocol";
-import { extractGradle } from "./gradle.ts";
-import { extractMaven } from "./maven.ts";
+import { extractGradle, readsGradleFile } from "./gradle.ts";
+import { extractMaven, readsMavenFile } from "./maven.ts";
 import { detectMechanisms } from "./mechanisms.ts";
-import { extractNpm } from "./npm.ts";
-import { dirOf, type RepoSnapshot } from "./snapshot.ts";
-import { extractTools } from "./tools.ts";
+import { extractNpm, readsNpmFile } from "./npm.ts";
+import { dirOf } from "./repo-path.ts";
+import type { RepoSnapshot } from "./snapshot.ts";
+import { extractTools, readsToolFile } from "./tools.ts";
 
 /**
  * Karta repo z jednego commita (§4.6, ADR-25): ekstraktory systemów budowania, potem narzędzia z katalogów ich buildów
  * i spis mechanizmów z tego, czego repo używa. Czysta funkcja: ten sam commit daje tę samą kartę.
  */
+
+const BUILD_EXTRACTORS = [extractMaven, extractGradle, extractNpm];
+const FILE_READERS = [readsMavenFile, readsGradleFile, readsNpmFile, readsToolFile];
+
+/** Czy któryś ekstraktor czyta plik `path`; tylko takie pliki odczyt commita wyciąga z gita. */
+export function readsCardFile(path: string): boolean {
+  return FILE_READERS.some((reads) => reads(path));
+}
+
 export function extractCard(snapshot: RepoSnapshot): RepoCard {
-  const builds = [extractMaven(snapshot), extractGradle(snapshot), extractNpm(snapshot)];
-  const buildFiles = builds.flatMap((b) => b.buildFiles);
-  const provides = builds.flatMap((b) => b.provides);
-  const tools = extractTools(
-    snapshot,
-    buildFiles.map((f) => dirOf(f.path)),
-  );
-  const consumes = unique(builds.flatMap((b) => b.consumes));
+  const builds = BUILD_EXTRACTORS.map((extract) => extract(snapshot));
+  const buildDirs = builds.flatMap((b) => b.buildFiles.map((f) => dirOf(f.path)));
+  const all = [...builds, extractTools(snapshot, buildDirs)];
+  const consumes = unique(all.flatMap((e) => e.consumes));
   return {
     commit: snapshot.commit,
-    buildFiles,
-    provides,
+    buildFiles: all.flatMap((e) => e.buildFiles),
+    provides: all.flatMap((e) => e.provides),
     consumes,
-    tools: [...tools.tools, ...builds.flatMap((b) => b.tools)],
+    tools: all.flatMap((e) => e.tools),
     mechanisms: detectMechanisms(consumes, snapshot.paths),
-    problems: [...builds.flatMap((b) => b.problems), ...tools.problems],
+    problems: [...snapshot.problems, ...all.flatMap((e) => e.problems)],
   };
 }
 

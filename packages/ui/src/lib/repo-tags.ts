@@ -10,9 +10,12 @@ export function tagsByRepo(list: readonly RepoTags[] | undefined): Map<string, R
   return new Map((list ?? []).map((entry) => [entry.repo, entry.kind === "ok" ? entry.tags : []]));
 }
 
-/** Każdy tag z liczbą repo, które go mają: najczęstsze najpierw, przy równej liczbie po nazwie. */
-export function tagCounts(byRepo: ReadonlyMap<string, readonly RepoTag[]>): { name: string; count: number }[] {
-  const counts = new Map<string, number>();
+/**
+ * Każdy tag z liczbą repo, które go mają: najczęstsze najpierw, przy równej liczbie po nazwie. Wybrany tag, którego
+ * żadne repo już nie ma (zmiana reguł albo folderu z projektami), zostaje z liczbą 0, żeby dało się go odznaczyć.
+ */
+export function tagCounts(byRepo: ReadonlyMap<string, readonly RepoTag[]>, selected: readonly string[]): { name: string; count: number }[] {
+  const counts = new Map(selected.map((name) => [name, 0]));
   for (const tags of byRepo.values()) for (const tag of tags) counts.set(tag.name, (counts.get(tag.name) ?? 0) + 1);
   return [...counts]
     .map(([name, count]) => ({ name, count }))

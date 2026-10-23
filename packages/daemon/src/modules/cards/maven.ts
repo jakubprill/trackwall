@@ -1,6 +1,7 @@
 import type { ConsumedPackage, Evidence } from "@trackwall/protocol";
 import { messageOf } from "../../error-message.ts";
-import { dirOf, type Extracted, emptyExtracted, inDir, joinPath, type RepoSnapshot, rootFiles } from "./snapshot.ts";
+import { baseName, dirOf, inDir, joinPath, rootFiles } from "./repo-path.ts";
+import { type Extracted, emptyExtracted, type RepoSnapshot } from "./snapshot.ts";
 import { child, children, childText, parseXml, type XmlElement } from "./xml.ts";
 
 /**
@@ -15,6 +16,16 @@ const JAVA_VERSION_PROPERTIES = ["maven.compiler.release", "java.version", "mave
 const DEFAULT_PLUGIN_GROUP = "org.apache.maven.plugins";
 /** Ile razy podstawiać właściwości w jednej wartości: właściwość może odwoływać się do innej, ale nie w kółko. */
 const MAX_SUBSTITUTIONS = 10;
+/**
+ * Najdłuższa wartość po podstawieniu. Właściwość z setką odwołań do kolejnej, która ma ich setkę, rośnie wykładniczo;
+ * bez limitu kilka KB pom zajęłoby całą pamięć daemona (§8). Dłuższa wersja i tak nie jest wersją.
+ */
+const MAX_SUBSTITUTED_LENGTH = 4096;
+
+/** Pliki, które ten ekstraktor czyta, do wyboru plików z commita. */
+export function readsMavenFile(path: string): boolean {
+  return baseName(path) === POM;
+}
 
 interface Pom {
   path: string;
@@ -44,11 +55,11 @@ export function extractMaven(snapshot: RepoSnapshot): Extracted {
     }
     poms.set(path, { path, xml, memberOf });
     for (const module of moduleNames(xml)) {
-      const target = joinPath(dirOf(path), module);
-      if (target !== undefined) visit(target.endsWith(".xml") ? target : inDir(target, POM), path);
+      const target = pomAt(dirOf(path), module);
+      if (target !== undefined) visit(target, path);
     }
   };
-  for (const root of rootFiles(snapshot.paths.filter((p) => p === POM || p.endsWith(`/${POM}`)))) visit(root, null);
+  for (const root of rootFiles(snapshot.paths.filter(readsMavenFile))) visit(root, null);
 
   const coordinates = (pom: Pom) => resolveCoordinates(pom, poms);
   const internal = new Set([...poms.values()].map((pom) => key(coordinates(pom))));
@@ -117,10 +128,8 @@ function resolveCoordinates(pom: Pom, poms: ReadonlyMap<string, Pom>, seen = new
 function repoParent(pom: Pom, poms: ReadonlyMap<string, Pom>): Pom | undefined {
   const parent = child(pom.xml, "parent");
   if (!parent) return undefined;
-  const relative = childText(parent, "relativePath") ?? "../pom.xml";
-  const target = joinPath(dirOf(pom.path), relative);
-  if (target === undefined) return undefined;
-  const candidate = poms.get(target.endsWith(".xml") ? target : inDir(target, POM));
+  const target = pomAt(dirOf(pom.path), childText(parent, "relativePath") ?? "../pom.xml");
+  const candidate = target === undefined ? undefined : poms.get(target);
   return candidate && candidate !== pom && childText(candidate.xml, "artifactId") === childText(parent, "artifactId")
     ? candidate
     : undefined;
@@ -145,15 +154,31 @@ function properties(pom: Pom, poms: ReadonlyMap<string, Pom>, seen = new Set<str
   return props;
 }
 
-/** Podstawia `${nazwa}` znanymi właściwościami; nieznana zostaje w tekście, żeby było widać, skąd wersja pochodzi. */
+/**
+ * Podstawia `${nazwa}` znanymi właściwościami; nieznana (albo taka, która przekroczyłaby `MAX_SUBSTITUTED_LENGTH`)
+ * zostaje w tekście, żeby było widać, skąd wersja pochodzi.
+ */
 function substitute(value: string, props: ReadonlyMap<string, string>): string {
   let current = value;
   for (let i = 0; i < MAX_SUBSTITUTIONS && current.includes("${"); i++) {
-    const next = current.replace(/\$\{([^}]+)\}/g, (whole, name: string) => props.get(name) ?? whole);
+    let length = current.length;
+    const next = current.replace(/\$\{([^}]+)\}/g, (whole, name: string) => {
+      const value = props.get(name);
+      if (value === undefined || length + value.length > MAX_SUBSTITUTED_LENGTH) return whole;
+      length += value.length - whole.length;
+      return value;
+    });
     if (next === current) break;
     current = next;
   }
   return current;
+}
+
+/** Pom wskazany ścieżką względną (moduł, `relativePath`): plik `.xml` wprost albo `pom.xml` w katalogu. */
+function pomAt(dir: string, rel: string): string | undefined {
+  const target = joinPath(dir, rel);
+  if (target === undefined) return undefined;
+  return target.endsWith(".xml") ? target : inDir(target, POM);
 }
 
 function key(c: Coordinates): string {

@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { type RepoHost, RepoHosts, type RepoTagRules, RepoTagRules as RepoTagRulesSchema } from "@trackwall/protocol";
+import { type RepoHost, RepoHosts, RepoTagRules } from "@trackwall/protocol";
 import { type Document, isMap, parseDocument } from "yaml";
 import { z } from "zod";
 import { writeFileAtomic } from "../../atomic-write.ts";
@@ -28,7 +28,7 @@ const Keys = {
   // Hostingi repo (ADR-19); brak klucza to brak hostingów, bo adres GitLab zna tylko użytkownik.
   repoHosts: RepoHosts.nullish().transform((hosts) => hosts ?? []),
   // Reguły tagów repo (ADR-25); tylko ręcznie w pliku, bo nazwy zespołów i grup zna tylko użytkownik.
-  repoTags: RepoTagRulesSchema.nullish().transform((rules) => rules ?? {}),
+  repoTags: RepoTagRules.nullish().transform((rules) => rules ?? {}),
 };
 type Key = keyof typeof Keys;
 

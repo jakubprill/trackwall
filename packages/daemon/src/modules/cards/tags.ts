@@ -1,6 +1,6 @@
-import type { Evidence, MechanismId, RepoCard, RepoTag, RepoTagRules } from "@trackwall/protocol";
-import { globToRegExp } from "./glob.ts";
-import { dirOf } from "./snapshot.ts";
+import { type Evidence, evidenceLabel, type MechanismId, type RepoCard, type RepoTag, type RepoTagRules } from "@trackwall/protocol";
+import { globMatcher } from "./glob.ts";
+import { dirOf } from "./repo-path.ts";
 
 /**
  * Tagi repo (ADR-25): automatyczne z karty, każdy z powodem, oraz z reguł `repoTags` w `workspace.yaml`. Tagi
@@ -74,8 +74,8 @@ function ruleTags(repo: TaggedRepo, rules: RepoTagRules): [string, string][] {
   const tags: [string, string][] = [];
   for (const [name, patterns] of Object.entries(rules)) {
     const pattern = patterns.find((p) => {
-      const re = globToRegExp(p, { ignoreCase: true });
-      return re.test(repo.id) || (repo.remote !== null && re.test(repo.remote));
+      const match = globMatcher(p, { ignoreCase: true });
+      return match(repo.id) || (repo.remote !== null && match(repo.remote));
     });
     if (pattern) tags.push([name, `reguła repoTags w workspace.yaml: ${pattern}`]);
   }
@@ -83,6 +83,5 @@ function ruleTags(repo: TaggedRepo, rules: RepoTagRules): [string, string][] {
 }
 
 function where(evidence: Evidence | undefined): string {
-  if (!evidence) return "repo";
-  return evidence.line === null ? evidence.path : `${evidence.path}:${evidence.line}`;
+  return evidence ? evidenceLabel(evidence) : "repo";
 }

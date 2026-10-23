@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -27,6 +27,7 @@ const POM =
   "<project><parent><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-parent</artifactId>" +
   "<version>3.3.0</version></parent><groupId>com.example</groupId><artifactId>orders-bff</artifactId></project>\n";
 let api: ApiServer;
+let home: string;
 let projects: string;
 let orders: string;
 const logs: string[] = [];
@@ -35,8 +36,9 @@ beforeAll(async () => {
   projects = mkdtempSync(join(tmpdir(), "trackwall-mcp-projects-"));
   orders = makeRepo({ "README.md": README, "pom.xml": POM, "src/app.ts": "export {};\n" }, "orders-bff", projects);
   gitIn(orders, "remote", "add", "origin", "git@gitlab.example.com:sklep/orders-bff.git");
+  home = mkdtempSync(join(tmpdir(), "trackwall-mcp-home-"));
   const facade = createFacade({
-    home: mkdtempSync(join(tmpdir(), "trackwall-mcp-home-")),
+    home,
     openUrl: () => {},
     // Program, którego nie ma w PATH: lista tasków mise jest wtedy stanem `not_installed`, na każdej maszynie tak samo.
     miseCommand: ["trackwall-test-brak-mise"],
@@ -119,6 +121,24 @@ describe("serwer MCP przez Streamable HTTP", () => {
     expect(data.card?.mechanisms.map((m) => [m.id, m.evidence[0]?.path])).toEqual([["spring-boot", "pom.xml"]]);
     expect(data.tags.find((t) => t.name === "backend")?.reason).toBe("spring-boot w pom.xml:1");
     await client.close();
+  });
+
+  test("zły repoTags w workspace.yaml: list_repos bez filtra daje repo bez tagów, a z filtrem błąd konfiguracji", async () => {
+    const workspaceFile = join(home, "workspace.yaml");
+    const valid = readFileSync(workspaceFile, "utf8");
+    writeFileSync(workspaceFile, `${valid}repoTags:\n  Zła-Nazwa: ["*"]\n`);
+    const client = await connectHttpClient(api.port, TOKEN);
+    try {
+      const all = ListReposResult.parse((await client.callTool({ name: "list_repos", arguments: {} })).structuredContent);
+      expect(all.repos.map((r) => [r.id, r.tags])).toEqual([["orders-bff", []]]);
+      const filtered = await client.callTool({ name: "list_repos", arguments: { tags: ["java"] } });
+      expect(filtered.isError).toBe(true);
+      const repo = GetRepoResult.parse((await client.callTool({ name: "get_repo", arguments: { repo: "orders-bff" } })).structuredContent);
+      expect(repo.repo.tags).toEqual([]);
+    } finally {
+      writeFileSync(workspaceFile, valid);
+      await client.close();
+    }
   });
 
   test("get_repo z nieznanym repo zwraca błąd narzędzia z kodem, a nie błąd protokołu", async () => {

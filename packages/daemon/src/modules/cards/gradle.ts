@@ -1,7 +1,9 @@
 import type { ConsumedPackage, ToolRequirement } from "@trackwall/protocol";
 import { parse as parseToml } from "smol-toml";
+import { z } from "zod";
 import { messageOf } from "../../error-message.ts";
-import { baseName, dirOf, type Extracted, emptyExtracted, evidenceAt, inDir, type RepoSnapshot, rootFiles } from "./snapshot.ts";
+import { baseName, dirOf, inDir, rootFiles } from "./repo-path.ts";
+import { type Extracted, emptyExtracted, evidenceAt, type RepoSnapshot } from "./snapshot.ts";
 
 /**
  * Ekstraktor Gradle (§4.6). Skrypty Gradle to kod (Groovy albo Kotlin), więc ekstraktor nie wykonuje ich, tylko
@@ -12,19 +14,31 @@ import { baseName, dirOf, type Extracted, emptyExtracted, evidenceAt, inDir, typ
 
 const SETTINGS = ["settings.gradle.kts", "settings.gradle"];
 const BUILD = ["build.gradle.kts", "build.gradle"];
+const SCRIPTS = [...SETTINGS, ...BUILD];
 const CATALOG = "gradle/libs.versions.toml";
+
+/** Pliki, które ten ekstraktor czyta, do wyboru plików z commita. */
+export function readsGradleFile(path: string): boolean {
+  return SCRIPTS.includes(baseName(path)) || path === CATALOG || path.endsWith(`/${CATALOG}`);
+}
 
 /** Konfiguracja zależności: wbudowane Gradle i wtyczek Java/Kotlin oraz każda kończąca się tak jak one. */
 const CONFIGURATION =
   /^(api|implementation|compileOnly|runtimeOnly|annotationProcessor|kapt|ksp|developmentOnly|compile|runtime|classpath|\w+(Implementation|Api|CompileOnly|RuntimeOnly|AnnotationProcessor))$/;
+/*
+ * Wyrażenia niżej nie mają dwóch `\s*` obok siebie (`\s*\(?\s*`): linia z tysiącami spacji dawałaby kwadratowe
+ * dopasowanie, a plik buildu jest niezaufany (§8). Opcjonalny nawias to `(?:\(\s*)?`.
+ */
 /** `implementation("g:a:v")`, `implementation 'g:a'`, także w `platform(...)` i `enforcedPlatform(...)`. */
-const LITERAL_DEPENDENCY = /^\s*(\w+)\s*\(?\s*(?:(?:enforced)?[pP]latform\s*\(\s*)?["']([^"'\s:]+):([^"'\s:]+)(?::([^"'\s]+))?["']/;
+const LITERAL_DEPENDENCY = /^\s*(\w+)\s*(?:\(\s*)?(?:(?:enforced)?[pP]latform\s*\(\s*)?["']([^"'\s:]+):([^"'\s:]+)(?::([^"'\s]+))?["']/;
 /** `implementation(libs.spring.boot.web)` albo `implementation libs.spring.boot.web`. */
-const CATALOG_DEPENDENCY = /^\s*(\w+)\s*\(?\s*(?:(?:enforced)?[pP]latform\s*\(\s*)?libs\.([\w.]+)/;
+const CATALOG_DEPENDENCY = /^\s*(\w+)\s*(?:\(\s*)?(?:(?:enforced)?[pP]latform\s*\(\s*)?libs\.([\w.]+)/;
 /** `id("org.springframework.boot") version "3.3.0"`, `id 'x' version 'y'`, `apply plugin: 'x'`. */
 const PLUGIN_ID =
-  /(?:(?:^|[{;\s])id\s*\(?\s*|apply\s*\(?\s*plugin\s*[:=]\s*)["']([\w.-]+)["']\s*\)?(?:\s*version\s*\(?\s*["']([^"']+)["'])?/;
+  /(?:(?:^|[{;\s])id\s*(?:\(\s*)?|apply\s*(?:\(\s*)?plugin\s*[:=]\s*)["']([\w.-]+)["']\s*(?:\)\s*)?(?:version\s*(?:\(\s*)?["']([^"']+)["'])?/;
 const CATALOG_PLUGIN = /alias\s*\(\s*libs\.plugins\.([\w.]+)\s*\)/;
+/** Dłuższa linia to dane (wygenerowany kod, osadzony plik), nie zapis zależności; wyrażenia jej nie widzą. */
+const MAX_LINE_LENGTH = 2000;
 const JAVA_TOOLCHAIN =
   /JavaLanguageVersion\.of\(\s*["']?(\d+)["']?\s*\)|(?:source|target)Compatibility\s*=\s*(?:JavaVersion\.VERSION_)?["']?([\d._]+)["']?/;
 
@@ -48,7 +62,7 @@ interface Project {
 
 export function extractGradle(snapshot: RepoSnapshot): Extracted {
   const out = emptyExtracted();
-  const gradleFiles = snapshot.paths.filter((p) => [...SETTINGS, ...BUILD].includes(baseName(p)));
+  const gradleFiles = snapshot.paths.filter((p) => SCRIPTS.includes(baseName(p)));
   const rootDirs = [...new Set(rootFiles(gradleFiles).map(dirOf))];
   for (const dir of rootDirs) extractBuild(snapshot, dir, out);
   return out;
@@ -98,12 +112,20 @@ function buildProjects(snapshot: RepoSnapshot, dir: string): (Project & { text: 
   return projects.map((p) => ({ ...p, text: snapshot.text(p.buildPath) ?? "" }));
 }
 
-/** Ścieżki projektów z `include` w settings, bez `:` na początku (`:api:core` → `api:core`). */
+/**
+ * Ścieżki projektów z `include` w settings, bez `:` na początku (`:api:core` → `api:core`). `include` bywa rozpisany
+ * na wiele linii: w nawiasie (Kotlin) albo z przecinkiem na końcu linii (Groovy).
+ */
 function includedProjects(settings: string): string[] {
   const paths: string[] = [];
-  for (const line of codeLines(settings)) {
-    if (!/^\s*include\b/.test(line.text)) continue;
-    for (const m of line.text.matchAll(/["']([^"']+)["']/g)) paths.push((m[1] ?? "").replace(/^:/, ""));
+  let depth = 0;
+  let continued = false;
+  for (const { text } of codeLines(settings)) {
+    if (!continued && !/^\s*include\b/.test(text)) continue;
+    if (!continued) depth = 0;
+    for (const m of text.matchAll(/["']([^"']+)["']/g)) paths.push((m[1] ?? "").replace(/^:/, ""));
+    depth += (text.match(/\(/g)?.length ?? 0) - (text.match(/\)/g)?.length ?? 0);
+    continued = depth > 0 || text.trimEnd().endsWith(",");
   }
   return paths.filter((p) => p !== "");
 }
@@ -112,9 +134,14 @@ function buildFileIn(snapshot: RepoSnapshot, dir: string): string | undefined {
   return BUILD.map((name) => inDir(dir, name)).find((p) => snapshot.text(p) !== undefined);
 }
 
-/** Wartość przypisania `name = "…"` (także `name "…"` w Groovy); pierwsze w pliku. */
+/** Wartość przypisania `name = "…"` (także `name "…"` w Groovy); pierwsze w pliku poza komentarzem. */
 function assignment(text: string, name: string): string | undefined {
-  return new RegExp(`^\\s*${name}\\s*=?\\s*["']([^"']+)["']`, "m").exec(text)?.[1];
+  const pattern = new RegExp(`^\\s*${name}\\s*(?:=\\s*)?["']([^"']+)["']`);
+  for (const line of codeLines(text)) {
+    const value = pattern.exec(line.text)?.[1];
+    if (value) return value;
+  }
+  return undefined;
 }
 
 /** Zależności i wtyczki z linii skryptu; jedna linia daje najwyżej jedną paczkę. */
@@ -160,7 +187,7 @@ function javaVersion(path: string, text: string): ToolRequirement[] {
       return [
         {
           tool: "java",
-          version: version.replace(/^1\.(\d)$/, "$1").replaceAll("_", "."),
+          version: version.replaceAll("_", ".").replace(/^1\.(\d)$/, "$1"),
           source: "hint",
           evidence: { path, line: line.number },
         },
@@ -169,48 +196,80 @@ function javaVersion(path: string, text: string): ToolRequirement[] {
   return [];
 }
 
+/** Wersja w katalogu: napis, odwołanie do `[versions]` albo wersja bogata (`strictly`, `require`, `prefer`). */
+const CatalogVersion = z.union([
+  z.string(),
+  z.object({ ref: z.string() }),
+  z.object({ strictly: z.string().optional(), require: z.string().optional(), prefer: z.string().optional() }),
+]);
+type CatalogVersion = z.infer<typeof CatalogVersion>;
+const CatalogLibrary = z.union([
+  z.string(),
+  z.object({ module: z.string(), version: CatalogVersion.optional() }),
+  z.object({ group: z.string(), name: z.string(), version: CatalogVersion.optional() }),
+]);
+const CatalogPlugin = z.union([z.string(), z.object({ id: z.string(), version: CatalogVersion.optional() })]);
+/** `gradle/libs.versions.toml`; wpis w nieznanej postaci jest pomijany bez utraty reszty. */
+const VersionCatalog = z.object({
+  versions: z.record(z.string(), z.string().catch("")).catch({}),
+  libraries: z.record(z.string(), CatalogLibrary.nullable().catch(null)).catch({}),
+  plugins: z.record(z.string(), CatalogPlugin.nullable().catch(null)).catch({}),
+});
+type VersionCatalog = z.infer<typeof VersionCatalog>;
+
 /**
- * Katalog wersji Gradle: biblioteki (`module = "g:a"`, `group` + `name` albo `"g:a:v"`) i wtyczki, z wersją wprost
- * albo z `version.ref` do `[versions]`.
+ * Katalog wersji Gradle: biblioteki (`module = "g:a"`, `group` + `name` albo `"g:a:v"`) i wtyczki (`id` albo
+ * `"id:wersja"`), z wersją wprost albo z `version.ref` do `[versions]`.
  */
 function readCatalog(snapshot: RepoSnapshot, path: string, out: Extracted): Catalog {
   const catalog: Catalog = { libraries: new Map(), plugins: new Map() };
   const text = snapshot.text(path);
   if (text === undefined) return catalog;
-  let toml: Record<string, unknown>;
+  let parsed: VersionCatalog;
   try {
-    toml = parseToml(text);
+    parsed = VersionCatalog.parse(parseToml(text));
   } catch (err) {
     out.problems.push({ path, message: messageOf(err) });
     return catalog;
   }
-  const versions = table(toml.versions);
-  const version = (v: unknown): string | null => {
-    if (typeof v === "string") return v;
-    const t = table(v);
-    if (typeof t.ref === "string") return stringOr(versions[t.ref]);
-    return stringOr(t.strictly) ?? stringOr(t.require) ?? stringOr(t.prefer);
-  };
-  for (const [name, value] of Object.entries(table(toml.libraries))) {
-    const entry = libraryEntry(value, version);
-    if (entry) catalog.libraries.set(alias(name), entry);
+  const version = (v: CatalogVersion | undefined) => catalogVersion(v, parsed.versions);
+  for (const [name, entry] of Object.entries(parsed.libraries)) {
+    const library = entry === null ? undefined : libraryEntry(entry, version);
+    if (library) catalog.libraries.set(alias(name), library);
   }
-  for (const [name, value] of Object.entries(table(toml.plugins))) {
-    const t = table(value);
-    const [id, inline] = typeof value === "string" ? value.split(":") : [stringOr(t.id)];
-    if (id) catalog.plugins.set(alias(name), { name: id, version: inline ?? version(t.version) });
+  for (const [name, entry] of Object.entries(parsed.plugins)) {
+    const plugin = entry === null ? undefined : pluginEntry(entry, version);
+    if (plugin) catalog.plugins.set(alias(name), plugin);
   }
   return catalog;
 }
 
-function libraryEntry(value: unknown, version: (v: unknown) => string | null): CatalogEntry | undefined {
-  if (typeof value === "string") {
-    const [group, artifact, v] = value.split(":");
+function catalogVersion(v: CatalogVersion | undefined, versions: Readonly<Record<string, string>>): string | null {
+  if (v === undefined) return null;
+  if (typeof v === "string") return v;
+  if ("ref" in v) return versions[v.ref] || null;
+  return v.strictly ?? v.require ?? v.prefer ?? null;
+}
+
+function pluginEntry(
+  entry: z.infer<typeof CatalogPlugin>,
+  version: (v: CatalogVersion | undefined) => string | null,
+): CatalogEntry | undefined {
+  if (typeof entry !== "string") return { name: entry.id, version: version(entry.version) };
+  const [id, inline] = entry.split(":");
+  return id ? { name: id, version: inline ?? null } : undefined;
+}
+
+function libraryEntry(
+  entry: z.infer<typeof CatalogLibrary>,
+  version: (v: CatalogVersion | undefined) => string | null,
+): CatalogEntry | undefined {
+  if (typeof entry === "string") {
+    const [group, artifact, v] = entry.split(":");
     return group && artifact ? { name: `${group}:${artifact}`, version: v ?? null } : undefined;
   }
-  const t = table(value);
-  const module = stringOr(t.module) ?? (typeof t.group === "string" && typeof t.name === "string" ? `${t.group}:${t.name}` : null);
-  return module ? { name: module, version: version(t.version) } : undefined;
+  const module = "module" in entry ? entry.module : `${entry.group}:${entry.name}`;
+  return { name: module, version: version(entry.version) };
 }
 
 /** Klucz aliasu katalogu tak, jak Gradle tworzy akcesor: `spring-boot-web`, `spring_boot.web` i `spring.boot.web` to to samo. */
@@ -218,34 +277,84 @@ function alias(name: string): string {
   return name.replace(/[-_]/g, ".").toLowerCase();
 }
 
-function table(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? Object.fromEntries(Object.entries(value)) : {};
+/** Stan skanera między liniami: otwarty komentarz blokowy albo napis w potrójnym cudzysłowie. */
+interface ScanState {
+  inBlock: boolean;
+  quote: string | null;
 }
 
-function stringOr(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
+/** Początek komentarza albo napisu; potrójny cudzysłów przed pojedynczym. */
+const SCAN_TOKEN = /\/\*|\/\/|"""|'''|["']/g;
 
-/** Linie z numerami, bez komentarzy `//` i blokowych `/* … *\/`, które w skryptach Gradle często wyłączają zależność. */
+/**
+ * Linie z numerami, bez komentarzy `//` i blokowych `/* … *\/`, które w skryptach Gradle często wyłączają zależność.
+ * Napisy są pomijane przy szukaniu komentarzy, bo `exclude("META-INF/*.SF")` nie zaczyna komentarza. Linie dłuższe niż
+ * `MAX_LINE_LENGTH` nie trafiają do wyniku.
+ */
 function codeLines(text: string): { text: string; number: number }[] {
   const lines: { text: string; number: number }[] = [];
-  let inBlock = false;
+  const state: ScanState = { inBlock: false, quote: null };
   text.split("\n").forEach((raw, i) => {
-    let line = raw;
-    if (inBlock) {
-      const end = line.indexOf("*/");
-      if (end < 0) return;
-      line = line.slice(end + 2);
-      inBlock = false;
-    }
-    line = line.replace(/\/\*.*?\*\//g, "");
-    const start = line.indexOf("/*");
-    if (start >= 0) {
-      line = line.slice(0, start);
-      inBlock = true;
-    }
-    line = line.replace(/(^|\s)\/\/.*$/, "");
-    if (line.trim() !== "") lines.push({ text: line, number: i + 1 });
+    const line = stripComments(raw, state);
+    // Zwykły napis kończy się z linią; tylko potrójny cudzysłów ją przekracza.
+    if (state.quote?.length === 1) state.quote = null;
+    if (line.trim() !== "" && raw.length <= MAX_LINE_LENGTH) lines.push({ text: line, number: i + 1 });
   });
   return lines;
+}
+
+/** Kawałek linii przeczytany w jednym stanie skanera i pozycja, od której czytać dalej (`-1`: koniec linii). */
+interface ScanStep {
+  text: string;
+  next: number;
+}
+
+/** Linia bez komentarzy; `state` przenosi otwarty komentarz blokowy i napis do następnej linii. */
+function stripComments(raw: string, state: ScanState): string {
+  let out = "";
+  for (let i = 0; i >= 0 && i < raw.length; ) {
+    const step = state.inBlock ? skipBlock(raw, i, state) : state.quote !== null ? readString(raw, i, state) : readCode(raw, i, state);
+    out += step.text;
+    i = step.next;
+  }
+  return out;
+}
+
+function skipBlock(raw: string, from: number, state: ScanState): ScanStep {
+  const end = raw.indexOf("*/", from);
+  if (end < 0) return { text: "", next: -1 };
+  state.inBlock = false;
+  return { text: "", next: end + 2 };
+}
+
+function readString(raw: string, from: number, state: ScanState): ScanStep {
+  const end = stringEnd(raw, from, state.quote ?? "");
+  if (end < 0) return { text: raw.slice(from), next: -1 };
+  state.quote = null;
+  return { text: raw.slice(from, end), next: end };
+}
+
+/** Kod do początku komentarza (który zmienia stan) albo napisu (który zostaje w wyniku). */
+function readCode(raw: string, from: number, state: ScanState): ScanStep {
+  SCAN_TOKEN.lastIndex = from;
+  const token = SCAN_TOKEN.exec(raw);
+  if (!token) return { text: raw.slice(from), next: -1 };
+  const code = raw.slice(from, token.index);
+  if (token[0] === "//") return { text: code, next: -1 };
+  const next = token.index + token[0].length;
+  if (token[0] === "/*") {
+    state.inBlock = true;
+    return { text: code, next };
+  }
+  state.quote = token[0];
+  return { text: code + token[0], next };
+}
+
+/** Indeks za cudzysłowem zamykającym napis od `from` (z pominięciem `\` i znaku po nim); `-1`, gdy go nie ma. */
+function stringEnd(raw: string, from: number, quote: string): number {
+  for (let j = from; j < raw.length; j++) {
+    if (raw[j] === "\\") j++;
+    else if (raw.startsWith(quote, j)) return j + quote.length;
+  }
+  return -1;
 }

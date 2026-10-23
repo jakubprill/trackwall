@@ -1,6 +1,6 @@
-import { cardsApi, type Repo, type RepoList, type RepoTag, type SyncRepo, workspaceApi } from "@trackwall/protocol";
+import { type Repo, type RepoList, type RepoTag, type SyncRepo, workspaceApi } from "@trackwall/protocol";
 import { FolderOpen, Plus, RefreshCw } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -9,10 +9,10 @@ import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { twoDigits } from "@/lib/format";
 import { branchLabel, repoStatusTone } from "@/lib/repo-status";
-import { hasAllTags, tagCounts, tagsByRepo, toggleTag } from "@/lib/repo-tags";
 import { listSyncBadge, syncedByPath } from "@/lib/sync-state";
 import { useRemote } from "@/lib/use-remote";
 import { useSyncRun } from "@/lib/use-sync-run";
+import { useTagFilter } from "@/lib/use-tag-filter";
 import { cn } from "@/lib/utils";
 import { CloneView } from "./CloneView.tsx";
 import { RepoDetail } from "./RepoDetail.tsx";
@@ -21,12 +21,6 @@ import { TagFilter } from "./TagFilter.tsx";
 
 /** Lista repo i ich stan pochodzą z folderu z projektami i z gita przy każdym zapytaniu (§4.5), więc lista jest odpytywana cyklicznie. */
 const POLL_MS = 10_000;
-/**
- * Tagi zależą od commitów repo (karta) i od reguł w `workspace.yaml`: nowy HEAD na liście pobiera je od razu,
- * a ręczna zmiana reguł pojawia się najpóźniej po tym czasie.
- */
-const TAGS_POLL_MS = 60_000;
-
 export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection; onRetry: () => void; onOpenSettings: () => void }) {
   const [selected, setSelected] = useState<string>();
   /** Co pokazuje prawa strona: wybrane repo, wyszukiwarkę repo do sklonowania albo synchronizację. */
@@ -127,26 +121,6 @@ function NoTagMatch({ shown, all }: { shown: number; all: number }) {
 /** Liczba repo w nagłówku; przy filtrze po tagach także ile jest wszystkich. */
 function repoCount(shown: number, all: number): string {
   return shown === all ? twoDigits(all) : `${twoDigits(shown)}/${twoDigits(all)}`;
-}
-
-/**
- * Tagi repo z listy (ADR-25) i filtr po nich. Tagi są pobierane od nowa, gdy zmieni się zestaw repo albo HEAD
- * któregoś z nich; `repos` to repo z wszystkimi wybranymi tagami.
- */
-function useTagFilter(conn: Connection, all: readonly Repo[]) {
-  const [selected, setSelected] = useState<string[]>([]);
-  const heads = all.map((r) => `${r.id}@${r.status.kind === "ok" ? (r.status.head?.hash ?? "") : ""}`).join(",");
-  const load = useCallback(() => post(conn, cardsApi.tags, {}), [conn]);
-  const remote = useRemote(load, { pollMs: TAGS_POLL_MS, refreshKey: heads });
-  const tags = useMemo(() => tagsByRepo(remote.data), [remote.data]);
-  return {
-    tags,
-    counts: tagCounts(tags),
-    selected,
-    repos: all.filter((repo) => hasAllTags(tags.get(repo.id), selected)),
-    toggle: (name: string) => setSelected((current) => toggleTag(current, name)),
-    clear: () => setSelected([]),
-  };
 }
 
 /** Pusta lista ma dwa powody: folder z projektami nie jest ustawiony albo nie ma w nim repo gita. */

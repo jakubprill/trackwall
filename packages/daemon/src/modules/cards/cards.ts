@@ -1,9 +1,9 @@
-import type { RepoCard, RepoCardResult, RepoTagRules, RepoTags } from "@trackwall/protocol";
+import type { RepoCard, RepoCardResult, RepoTag, RepoTagRules, RepoTags } from "@trackwall/protocol";
 import { messageOf } from "../../error-message.ts";
 import { DomainError } from "../../errors.ts";
 import { mapLimit } from "../../map-limit.ts";
 import type { CardCache } from "./card-cache.ts";
-import { extractCard } from "./extract-card.ts";
+import { extractCard, readsCardFile } from "./extract-card.ts";
 import { readSnapshot, type SnapshotVcs } from "./read-snapshot.ts";
 import { repoTags } from "./tags.ts";
 
@@ -40,8 +40,6 @@ const TAGS_CONCURRENCY = 4;
 
 export class Cards {
   private readonly deps: CardsDeps;
-  /** Karty w trakcie liczenia po commicie: dwa pytania o ten sam commit (lista i karta naraz) czytają gita raz. */
-  private readonly computing = new Map<string, Promise<RepoCard>>();
 
   constructor(deps: CardsDeps) {
     this.deps = deps;
@@ -50,8 +48,7 @@ export class Cards {
   async card(id: string): Promise<RepoCardResult> {
     const dir = await this.deps.repos.repoPath(id);
     try {
-      const [card, remote] = await Promise.all([this.cardOf(dir), this.deps.vcs.remote(dir).catch(() => null)]);
-      return { repo: id, card, tags: repoTags(card, { id, remote }, this.deps.repos.tagRules()) };
+      return { repo: id, ...(await this.tagged(id, dir, this.deps.repos.tagRules())) };
     } catch (err) {
       if (err instanceof DomainError) throw err;
       throw new DomainError("repo_unavailable", `${id}: ${messageOf(err)}`);
@@ -64,32 +61,23 @@ export class Cards {
     const entries = await this.deps.repos.repoEntries();
     return mapLimit(entries, TAGS_CONCURRENCY, async ({ id, path }): Promise<RepoTags> => {
       try {
-        const [card, remote] = await Promise.all([this.cardOf(path), this.deps.vcs.remote(path).catch(() => null)]);
-        return { kind: "ok", repo: id, tags: repoTags(card, { id, remote }, rules) };
+        return { kind: "ok", repo: id, tags: (await this.tagged(id, path, rules)).tags };
       } catch (err) {
         return { kind: "unavailable", repo: id, message: messageOf(err) };
       }
     });
   }
 
+  /** Karta repo i tagi z niej, z adresu repo zdalnego (bez niego tylko z identyfikatora) i z reguł. */
+  private async tagged(id: string, dir: string, rules: RepoTagRules): Promise<{ card: RepoCard | null; tags: RepoTag[] }> {
+    const [card, remote] = await Promise.all([this.cardOf(dir), this.deps.vcs.remote(dir).catch(() => null)]);
+    return { card, tags: repoTags(card, { id, remote }, rules) };
+  }
+
   /** Karta commita HEAD repo w katalogu `dir`; `null` w repo bez commitów. */
   private async cardOf(dir: string): Promise<RepoCard | null> {
     const commit = await this.deps.vcs.headCommit(dir);
     if (commit === null) return null;
-    const cached = await this.deps.cache.get(commit);
-    if (cached) return cached;
-    const running = this.computing.get(commit);
-    if (running) return running;
-    const computed = this.compute(dir, commit).finally(() => this.computing.delete(commit));
-    this.computing.set(commit, computed);
-    return computed;
-  }
-
-  private async compute(dir: string, commit: string): Promise<RepoCard> {
-    const { snapshot, problems } = await readSnapshot(this.deps.vcs, dir, commit);
-    const extracted = extractCard(snapshot);
-    const card = { ...extracted, problems: [...problems, ...extracted.problems] };
-    this.deps.cache.set(card);
-    return card;
+    return this.deps.cache.getOrCompute(commit, async () => extractCard(await readSnapshot(this.deps.vcs, dir, commit, readsCardFile)));
   }
 }

@@ -15,6 +15,11 @@ export const Evidence = z.object({
 });
 export type Evidence = z.infer<typeof Evidence>;
 
+/** Dowód jako `ścieżka:linia`, a bez linii sama ścieżka; jeden zapis w powodach tagów i w UI. */
+export function evidenceLabel(evidence: Evidence): string {
+  return evidence.line === null ? evidence.path : `${evidence.path}:${evidence.line}`;
+}
+
 /**
  * System budowania albo menedżer paczek, którego plik buildu jest w repo. `npm`, `pnpm`, `yarn` i `bun` rozróżnia
  * pole `packageManager` albo plik blokady w katalogu z `package.json`.
@@ -52,10 +57,7 @@ export const ProvidedPackage = z.object({
 export type ProvidedPackage = z.infer<typeof ProvidedPackage>;
 
 /** Paczka spoza repo, której repo używa: zależność, rodzic Maven, BOM, wtyczka buildu. */
-export const ConsumedPackage = z.object({
-  kind: z.literal("package"),
-  ecosystem: PackageEcosystem,
-  name: z.string(),
+export const ConsumedPackage = ProvidedPackage.extend({
   /** Wersja tak, jak stoi w pliku (zakres npm, właściwość Maven, której nie dało się podstawić); `null` bez wersji. */
   version: z.string().nullable(),
   /**
@@ -63,7 +65,6 @@ export const ConsumedPackage = z.object({
    * (`implementation`…) albo pole `package.json` (`dependencies`, `devDependencies`…).
    */
   scope: z.string(),
-  evidence: Evidence,
 });
 export type ConsumedPackage = z.infer<typeof ConsumedPackage>;
 

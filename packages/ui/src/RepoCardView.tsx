@@ -1,6 +1,7 @@
 import {
   type ConsumedPackage,
   cardsApi,
+  evidenceLabel,
   type Mechanism,
   type ProvidedPackage,
   type RepoCard,
@@ -13,7 +14,7 @@ import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
 import { Badge } from "@/components/ui/badge";
 import { post } from "@/lib/api";
-import { evidenceLabel, MECHANISM_LABELS } from "@/lib/card";
+import { MECHANISM_LABELS } from "@/lib/card";
 import type { Connection } from "@/lib/connection";
 import { useRemote } from "@/lib/use-remote";
 
@@ -120,7 +121,7 @@ function Mechanisms({ mechanisms }: { mechanisms: Mechanism[] }) {
 
 function Tools({ tools }: { tools: ToolRequirement[] }) {
   return (
-    <Surface label="Narzędzia" meta={tools.length}>
+    <Surface label="Wymagane narzędzia" meta={tools.length}>
       {tools.length === 0 ? (
         <Empty>Repo nie podaje wersji narzędzi (mise, .tool-versions, .nvmrc, wrapper Maven lub Gradle).</Empty>
       ) : (

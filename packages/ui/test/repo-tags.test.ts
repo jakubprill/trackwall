@@ -12,11 +12,16 @@ const list: RepoTags[] = [
 
 describe("filtr repo po tagach", () => {
   test("liczby tagów: najczęstsze najpierw, przy remisie po nazwie", () => {
-    expect(tagCounts(tagsByRepo(list))).toEqual([
+    expect(tagCounts(tagsByRepo(list), [])).toEqual([
       { name: "java", count: 2 },
       { name: "bff", count: 1 },
       { name: "frontend", count: 1 },
     ]);
+  });
+
+  test("wybrany tag, którego żadne repo już nie ma, zostaje na liście z liczbą 0", () => {
+    expect(tagCounts(tagsByRepo(list), ["core-api"]).at(-1)).toEqual({ name: "core-api", count: 0 });
+    expect(tagCounts(new Map(), ["java"])).toEqual([{ name: "java", count: 0 }]);
   });
 
   test("repo musi mieć każdy wybrany tag; bez wyboru pasuje każde, także bez tagów", () => {

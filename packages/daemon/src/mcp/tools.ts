@@ -68,24 +68,30 @@ type ToolRuns = { [K in keyof typeof mcpTools]: (typeof mcpTools)[K] extends Mcp
 /** Po jednym wykonaniu na każde narzędzie z `mcpTools`: brak któregoś to błąd kompilacji. */
 const runs: ToolRuns = {
   listRepos: async (facade, { tags: wanted = [] }) => {
-    const [list, tags] = await Promise.all([facade.workspace.list(), facade.cards.tags()]);
+    // Bez filtra lista repo nie zależy od tagów: zły `repoTags` w workspace.yaml zostawia repo bez tagów, nie bez listy.
+    const tags = facade.cards.tags().catch((err: unknown) => {
+      if (wanted.length > 0) throw err;
+      return [];
+    });
+    const [list, tagList] = await Promise.all([facade.workspace.list(), tags]);
     const run = facade.workspace.syncRun();
-    const repos = list.repos.map((repo) => agentRepo(repo, run, tagNames(tags.find((t) => t.repo === repo.id))));
+    const repos = list.repos.map((repo) => agentRepo(repo, run, tagNames(tagList.find((t) => t.repo === repo.id))));
     return { projectsDir: list.projectsDir, repos: repos.filter((repo) => wanted.every((tag) => repo.tags.includes(tag))) };
   },
   getRepo: async (facade, { repo: id }) => {
-    const [repo, overview, miseTasks, card] = await Promise.all([
+    const [repo, overview, miseTasks, tags] = await Promise.all([
       facade.workspace.repo(id),
       facade.workspace.overview(id),
       facade.mise.tasks(id),
-      facade.cards.card(id),
+      // Karta nie zabiera README i tasków: repo, którego karty nie da się policzyć, ma tu tylko puste tagi, a powód
+      // podaje `get_repo_card`.
+      facade.cards.card(id).then(
+        (result) => result.tags.map((t) => t.name),
+        () => [],
+      ),
     ]);
     return {
-      repo: agentRepo(
-        repo,
-        facade.workspace.syncRun(),
-        card.tags.map((t) => t.name),
-      ),
+      repo: agentRepo(repo, facade.workspace.syncRun(), tags),
       readme: overview.readme && {
         ...overview.readme,
         text: overview.readme.text.slice(0, README_MAX_CHARS),

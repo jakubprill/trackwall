@@ -1,4 +1,5 @@
 import type { Consumed, Mechanism, MechanismEvidence, MechanismId } from "@trackwall/protocol";
+import { baseName } from "./repo-path.ts";
 
 /**
  * Spis mechanizmów (§4.6, ADR-25): framework, komunikacja i wdrożenie rozpoznane po paczkach, których repo używa,
@@ -79,7 +80,7 @@ function fileEvidence(rule: Rule, paths: readonly string[]): MechanismEvidence[]
   const found: MechanismEvidence[] = [];
   for (const path of paths) {
     if (found.length >= MAX_EVIDENCE) break;
-    if (pattern.test(path)) found.push({ path, line: null, detail: path.slice(path.lastIndexOf("/") + 1) });
+    if (pattern.test(path)) found.push({ path, line: null, detail: baseName(path) });
   }
   return found;
 }

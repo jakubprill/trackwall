@@ -98,4 +98,43 @@ describe("ekstraktor Gradle", () => {
     expect(out.consumes.map((c) => c.name)).toEqual(["org.springframework.boot", "org.projectlombok:lombok"]);
     expect(out.tools.map((t) => [t.tool, t.version])).toEqual([["java", "8"]]);
   });
+
+  test("/* w napisie (wzorzec ścieżki) nie zaczyna komentarza i nie wyłącza reszty pliku", () => {
+    const out = extractGradle(
+      snapshotOf({
+        "build.gradle": "jar { exclude 'META-INF/*.SF' }\ndependencies {\n  implementation 'com.example:lib:1.0' // */ w komentarzu\n}\n",
+      }),
+    );
+    expect(out.consumes.map((c) => [c.name, c.evidence.line])).toEqual([["com.example:lib", 3]]);
+  });
+
+  test("include w settings rozpisany na wiele linii wymienia wszystkie projekty", () => {
+    const out = extractGradle(
+      snapshotOf({
+        "settings.gradle.kts": 'rootProject.name = "shop"\ninclude(\n    ":app",\n    ":core",\n)\n',
+        "build.gradle.kts": "",
+        "app/build.gradle.kts": "",
+        "core/build.gradle.kts": "",
+      }),
+    );
+    expect(out.buildFiles.map((f) => [f.path, f.memberOf])).toEqual([
+      ["build.gradle.kts", null],
+      ["app/build.gradle.kts", "build.gradle.kts"],
+      ["core/build.gradle.kts", "build.gradle.kts"],
+    ]);
+    const groovy = extractGradle(
+      snapshotOf({
+        "settings.gradle": "include 'app',\n        'core'\n",
+        "build.gradle": "",
+        "app/build.gradle": "",
+        "core/build.gradle": "",
+      }),
+    );
+    expect(groovy.buildFiles.map((f) => f.path)).toEqual(["build.gradle", "app/build.gradle", "core/build.gradle"]);
+  });
+
+  test("JavaVersion.VERSION_1_8 to Java 8", () => {
+    const out = extractGradle(snapshotOf({ "build.gradle": "sourceCompatibility = JavaVersion.VERSION_1_8\n" }));
+    expect(out.tools.map((t) => t.version)).toEqual(["8"]);
+  });
 });

@@ -1,8 +1,9 @@
-import type { CardProblem, ToolRequirement } from "@trackwall/protocol";
+import type { ToolRequirement } from "@trackwall/protocol";
 import { parse as parseToml } from "smol-toml";
+import { z } from "zod";
 import { messageOf } from "../../error-message.ts";
-import type { RepoSnapshot } from "./snapshot.ts";
-import { escapeRegExp, evidenceAt, inDir } from "./snapshot.ts";
+import { baseName, inDir } from "./repo-path.ts";
+import { type Extracted, emptyExtracted, escapeRegExp, evidenceAt, type RepoSnapshot } from "./snapshot.ts";
 
 /**
  * Wymagane narzędzia z drzewa commita (§4.6, ADR-25): `[tools]` z konfiguracji mise w korzeniu repo i `.tool-versions`
@@ -34,53 +35,51 @@ const WRAPPERS: [string, string, RegExp][] = [
   ["gradle/wrapper/gradle-wrapper.properties", "gradle", /gradle-([\w.-]+?)-(?:bin|all)\.zip/],
 ];
 
-/** Wszystkie nazwy plików, które ten ekstraktor czyta, do wyboru plików z commita. */
-export const TOOL_FILE_NAMES = new Set([
-  ...MISE_CONFIG_FILES.map((p) => p.slice(p.lastIndexOf("/") + 1)),
-  TOOL_VERSIONS,
-  SDKMANRC,
-  ...SINGLE_VERSION_FILES.map(([name]) => name),
-  ...WRAPPERS.map(([path]) => path.slice(path.lastIndexOf("/") + 1)),
-]);
+/** Nazwy plików z podpowiedziami, czytanych w korzeniu i w katalogach buildów. */
+const HINT_FILE_NAMES = new Set([SDKMANRC, ...SINGLE_VERSION_FILES.map(([name]) => name), ...WRAPPERS.map(([path]) => baseName(path))]);
+
+/** Pliki, które ten ekstraktor czyta, do wyboru plików z commita: konfiguracja mise tylko w korzeniu repo. */
+export function readsToolFile(path: string): boolean {
+  return MISE_CONFIG_FILES.includes(path) || path === TOOL_VERSIONS || HINT_FILE_NAMES.has(baseName(path));
+}
+
+/** Wersja narzędzia w `[tools]` mise: napis, lista albo tabela z `version` (i opcjami, których karta nie potrzebuje). */
+const MiseVersion = z.union([z.string(), z.object({ version: z.string() })]);
+/** `[tools]` z konfiguracji mise; wpis w nieznanej postaci jest pomijany bez utraty reszty. */
+const MiseConfig = z.object({
+  tools: z.record(z.string(), z.union([MiseVersion, z.array(MiseVersion)]).catch([])).catch({}),
+});
 
 /** Narzędzia z mise w korzeniu repo i podpowiedzi z korzenia oraz katalogów buildów (`buildDirs`). */
-export function extractTools(snapshot: RepoSnapshot, buildDirs: readonly string[]): { tools: ToolRequirement[]; problems: CardProblem[] } {
-  const tools: ToolRequirement[] = [];
-  const problems: CardProblem[] = [];
+export function extractTools(snapshot: RepoSnapshot, buildDirs: readonly string[]): Extracted {
+  const out = emptyExtracted();
   for (const path of MISE_CONFIG_FILES) {
     const text = snapshot.text(path);
     if (text === undefined) continue;
     try {
-      tools.push(...miseTools(path, text));
+      out.tools.push(...miseTools(path, text));
     } catch (err) {
-      problems.push({ path, message: messageOf(err) });
+      out.problems.push({ path, message: messageOf(err) });
     }
   }
   const toolVersions = snapshot.text(TOOL_VERSIONS);
-  if (toolVersions !== undefined) tools.push(...toolVersionsFile(TOOL_VERSIONS, toolVersions));
-  for (const dir of new Set(["", ...buildDirs])) tools.push(...hints(snapshot, dir));
-  return { tools, problems };
+  if (toolVersions !== undefined) out.tools.push(...toolVersionsFile(TOOL_VERSIONS, toolVersions));
+  for (const dir of new Set(["", ...buildDirs])) out.tools.push(...hints(snapshot, dir));
+  return out;
 }
 
 /** `[tools]` z mise: wersja, lista wersji albo tabela z `version`. */
 function miseTools(path: string, text: string): ToolRequirement[] {
-  const section = parseToml(text).tools;
-  if (typeof section !== "object" || section === null || Array.isArray(section)) return [];
-  return Object.entries(section).flatMap(([tool, value]) =>
-    versionsOf(value).map((version) => ({
+  const parsed = MiseConfig.safeParse(parseToml(text));
+  if (!parsed.success) return [];
+  return Object.entries(parsed.data.tools).flatMap(([tool, value]) =>
+    [value].flat().map((v) => ({
       tool,
-      version,
+      version: typeof v === "string" ? v : v.version,
       source: "mise" as const,
       evidence: evidenceAt(path, text, new RegExp(`^\\s*["']?${escapeRegExp(tool)}["']?\\s*=`)),
     })),
   );
-}
-
-function versionsOf(value: unknown): string[] {
-  if (typeof value === "string") return [value];
-  if (Array.isArray(value)) return value.flatMap(versionsOf);
-  if (typeof value === "object" && value !== null && "version" in value && typeof value.version === "string") return [value.version];
-  return [];
 }
 
 /** `.tool-versions`: `narzędzie wersja [wersja…]`, `#` zaczyna komentarz. */

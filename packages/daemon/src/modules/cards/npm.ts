@@ -2,19 +2,9 @@ import { BuildTool, type ConsumedPackage, type ToolRequirement } from "@trackwal
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { messageOf } from "../../error-message.ts";
-import { globToRegExp } from "./glob.ts";
-import {
-  baseName,
-  dirOf,
-  type Extracted,
-  emptyExtracted,
-  escapeRegExp,
-  evidenceAt,
-  inDir,
-  isUnder,
-  type RepoSnapshot,
-  rootFiles,
-} from "./snapshot.ts";
+import { globMatcher } from "./glob.ts";
+import { baseName, dirOf, inDir, isUnder, rootFiles } from "./repo-path.ts";
+import { type Extracted, emptyExtracted, escapeRegExp, evidenceAt, type RepoSnapshot } from "./snapshot.ts";
 
 /**
  * Ekstraktor npm (§4.6): `package.json` korzeni i paczek workspace (`workspaces` w `package.json` albo
@@ -24,6 +14,12 @@ import {
  */
 
 const PACKAGE_JSON = "package.json";
+const PNPM_WORKSPACE = "pnpm-workspace.yaml";
+/** Pliki, które ten ekstraktor czyta, do wyboru plików z commita. */
+export function readsNpmFile(path: string): boolean {
+  const name = baseName(path);
+  return name === PACKAGE_JSON || name === PNPM_WORKSPACE;
+}
 const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"] as const;
 /** Plik blokady w katalogu korzenia mówi, którym menedżerem instaluje się zależności, gdy `packageManager` milczy. */
 const LOCKFILES: [string, BuildTool][] = [
@@ -119,13 +115,13 @@ function readManifest(snapshot: RepoSnapshot, path: string, out: Extracted): Pac
 /** `package.json` paczek workspace korzenia: wzorce z `workspaces` albo `pnpm-workspace.yaml`, `!` wyklucza. */
 function workspaceMembers(snapshot: RepoSnapshot, root: string, json: PackageJson, all: readonly string[], out: Extracted): string[] {
   const dir = dirOf(root);
-  const patterns = json.workspaces ?? pnpmWorkspaces(snapshot, inDir(dir, "pnpm-workspace.yaml"), out);
-  const include = patterns.filter((p) => !p.startsWith("!")).map((p) => globToRegExp(clean(p)));
-  const exclude = patterns.filter((p) => p.startsWith("!")).map((p) => globToRegExp(clean(p.slice(1))));
+  const patterns = json.workspaces ?? pnpmWorkspaces(snapshot, inDir(dir, PNPM_WORKSPACE), out);
+  const include = patterns.filter((p) => !p.startsWith("!")).map((p) => globMatcher(clean(p)));
+  const exclude = patterns.filter((p) => p.startsWith("!")).map((p) => globMatcher(clean(p.slice(1))));
   return all.filter((path) => {
     if (path === root || !isUnder(path, dir)) return false;
     const rel = dirOf(dir === "" ? path : path.slice(dir.length + 1));
-    return include.some((re) => re.test(rel)) && !exclude.some((re) => re.test(rel));
+    return include.some((match) => match(rel)) && !exclude.some((match) => match(rel));
   });
 }
 
