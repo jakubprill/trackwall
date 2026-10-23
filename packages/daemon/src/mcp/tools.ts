@@ -6,8 +6,7 @@ import type { Facade } from "../facade.ts";
 
 /**
  * Narzędzia MCP daemona (§5.3, ADR-24): każde to cienkie mapowanie na fasadę, więc agent widzi ten sam stan co UI
- * (§1.1). Wszystkie tylko czytają; żadne nie zmienia konfiguracji, repo ani procesów (§8). Graf dojdzie tu jako
- * kolejny wpis `mcpTools` w protocol i `runs` tutaj, razem z modułem `graph`.
+ * (§1.1). Wszystkie tylko czytają; żadne nie zmienia konfiguracji, repo ani procesów (§8).
  */
 
 /**
@@ -107,6 +106,8 @@ const runs: ToolRuns = {
     await facade.workspace.repo(repo);
     return facade.logs.tail({ source: { kind: "mise-task", repo, miseTask }, sinceSeq, limit });
   },
+  whoCalls: (facade, { repo }) => facade.graph.whoCalls(repo),
+  subgraphFor: (facade, { repo, depth }) => facade.graph.subgraph(repo, depth),
 };
 
 /**
@@ -118,6 +119,8 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.getRepo, runs.getRepo),
   defineTool(mcpTools.getRepoCard, runs.getRepoCard),
   defineTool(mcpTools.tail, runs.tail),
+  defineTool(mcpTools.whoCalls, runs.whoCalls),
+  defineTool(mcpTools.subgraphFor, runs.subgraphFor),
 ];
 
 /** Repo łączy się z wynikiem synchronizacji po ścieżce, bo identyfikator może się zmienić razem z nazwą katalogu (ADR-18). */

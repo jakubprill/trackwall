@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { type RepoHost, RepoHosts, RepoTagRules } from "@trackwall/protocol";
+import { GraphConfig, type RepoHost, RepoHosts, RepoTagRules } from "@trackwall/protocol";
 import { type Document, isMap, parseDocument } from "yaml";
 import { z } from "zod";
 import { writeFileAtomic } from "../../atomic-write.ts";
@@ -10,7 +10,7 @@ import { isFullPath, NOT_FULL_PATH } from "./full-path.ts";
 /**
  * `workspace.yaml` (§4.5, ADR-13): konfiguracja workspace, którą użytkownik może edytować ręcznie i trzymać
  * w prywatnym repo. Czytany przy każdym użyciu, więc ręczna edycja działa bez restartu daemona. Zapis zmienia
- * tylko jeden klucz (`projectsDir` albo `repoHosts`; `repoTags` tylko ręcznie) i zachowuje komentarze oraz pozostałe klucze, także nieczytaną
+ * tylko jeden klucz (`projectsDir` albo `repoHosts`; `repoTags` i `graph` tylko ręcznie) i zachowuje komentarze oraz pozostałe klucze, także nieczytaną
  * już listę `repos` z wersji 0.2.0 (ADR-18): to plik użytkownika, więc usunięcie jej zostawiamy jemu.
  */
 
@@ -29,6 +29,8 @@ const Keys = {
   repoHosts: RepoHosts.nullish().transform((hosts) => hosts ?? []),
   // Reguły tagów repo (ADR-25); tylko ręcznie w pliku, bo nazwy zespołów i grup zna tylko użytkownik.
   repoTags: RepoTagRules.nullish().transform((rules) => rules ?? {}),
+  // Aliasy paczek i ręczne krawędzie grafu (ADR-29); tylko ręcznie w pliku, jak `repoTags`.
+  graph: GraphConfig.nullish().transform((graph) => graph ?? GraphConfig.parse({})),
 };
 type Key = keyof typeof Keys;
 
@@ -52,6 +54,11 @@ export class WorkspaceFile {
   /** Reguły tagów repo (`repoTags`, ADR-25): tag i wzorce identyfikatora albo adresu repo zdalnego. */
   repoTagRules(): RepoTagRules {
     return this.get("repoTags", Keys.repoTags);
+  }
+
+  /** Aliasy paczek i ręczne krawędzie grafu (`graph`, ADR-29). */
+  graphConfig(): GraphConfig {
+    return this.get("graph", Keys.graph);
   }
 
   setProjectsDir(dir: string): void {

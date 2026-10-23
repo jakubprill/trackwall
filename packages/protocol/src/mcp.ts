@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { RepoCardResult, TagName } from "./cards.ts";
+import { MAX_SUBGRAPH_DEPTH, Subgraph, WhoCallsResult } from "./graph.ts";
 import { LOG_BUFFER_RECORDS, LOG_TAIL_MAX, LogTail } from "./logs.ts";
 import { MiseTaskName, MiseTasks } from "./mise.ts";
 import { SyncRepo } from "./sync.ts";
@@ -120,5 +121,27 @@ export const mcpTools = {
       })
       .strict(),
     result: LogTail,
+  },
+  whoCalls: {
+    name: "who_calls",
+    description:
+      "Kto używa danego repo: krawędzie grafu połączeń skierowane do tego repo, każda z rodzajem (package: repo " +
+      "używa paczki zbudowanej w tym repo; manual: połączenie wpisane przez użytkownika), kluczem (nazwa paczki albo " +
+      "opis), pewnością i dowodami (repo, plik, linia). Przed zmianą API albo paczki repo sprawdź, kogo dotknie.",
+    args: z.object({ repo: RepoArg }).strict(),
+    result: WhoCallsResult,
+  },
+  subgraphFor: {
+    name: "subgraph_for",
+    description:
+      "Fragment grafu połączeń wokół repo: repo w odległości do depth krawędzi w obie strony (kogo używa i kto " +
+      "używa jego) i krawędzie między nimi, z dowodami. Węzeł ma tagi i problem, gdy karty repo nie da się policzyć.",
+    args: z
+      .object({
+        repo: RepoArg,
+        depth: z.number().int().min(1).max(MAX_SUBGRAPH_DEPTH).default(1).describe("ile krawędzi od repo, domyślnie 1"),
+      })
+      .strict(),
+    result: Subgraph,
   },
 } satisfies Record<string, McpTool>;

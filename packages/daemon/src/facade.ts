@@ -3,6 +3,7 @@ import { Agents, type AgentsDeps } from "./modules/agents/agents.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { CardCache } from "./modules/cards/card-cache.ts";
 import { Cards } from "./modules/cards/cards.ts";
+import { Graph } from "./modules/graph/graph.ts";
 import { Logs } from "./modules/logs/logs.ts";
 import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
@@ -21,6 +22,7 @@ import { terminalPlatform } from "./platform/terminal.ts";
 export interface Facade {
   workspace: Workspace;
   cards: Cards;
+  graph: Graph;
   mise: Mise;
   procs: ProcessGroups;
   logs: Logs;
@@ -85,5 +87,6 @@ export function createFacade(o: FacadeOptions): Facade {
     mcpStdioCommand: o.mcpStdioCommand,
     log: o.log,
   });
-  return { workspace, cards, mise, procs, logs, batch, agents };
+  const graph = new Graph({ cards, workspace });
+  return { workspace, cards, graph, mise, procs, logs, batch, agents };
 }

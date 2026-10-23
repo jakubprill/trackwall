@@ -3,6 +3,7 @@ import {
   type CloneJob,
   type Commit,
   type FileContent,
+  type GraphConfig,
   type HostedRepo,
   type HostRepos,
   type RemoteRepoList,
@@ -90,7 +91,7 @@ export class Workspace {
   }
 
   settings(): WorkspaceSettings {
-    return { projectsDir: this.deps.file.projectsDir(), configFile: this.deps.file.path };
+    return { projectsDir: this.deps.file.projectsDir(), configFile: this.configFile() };
   }
 
   async setProjectsDir(path: string): Promise<WorkspaceSettings> {
@@ -216,6 +217,16 @@ export class Workspace {
   /** Reguły tagów repo z `workspace.yaml` (ADR-25). */
   tagRules(): RepoTagRules {
     return this.deps.file.repoTagRules();
+  }
+
+  /** Aliasy paczek i ręczne krawędzie grafu z `workspace.yaml` (ADR-29). */
+  graphConfig(): GraphConfig {
+    return this.deps.file.graphConfig();
+  }
+
+  /** Pełna ścieżka `workspace.yaml`, np. jako dowód wpisu użytkownika w grafie. */
+  configFile(): string {
+    return this.deps.file.path;
   }
 
   /** Bez ustawionego folderu z projektami nie ma repo. */

@@ -8,10 +8,12 @@ import {
   batchApi,
   cardsApi,
   DaemonInfoResult,
+  graphApi,
   HealthResult,
   LogTail,
   logsApi,
   miseApi,
+  RepoGraph,
   RepoList,
   workspaceApi,
 } from "@trackwall/protocol";
@@ -162,8 +164,14 @@ describe("api", () => {
 describe("api workspace", () => {
   const post = (path: string, body: string) => authed(path, { method: "POST", headers: { "content-type": "application/json" }, body });
 
-  test("każda akcja z kontraktów workspace, kart, mise i batch ma trasę w daemonie", () => {
-    const endpoints = [...Object.values(workspaceApi), ...Object.values(cardsApi), ...Object.values(miseApi), ...Object.values(batchApi)];
+  test("każda akcja z kontraktów workspace, kart, grafu, mise i batch ma trasę w daemonie", () => {
+    const endpoints = [
+      ...Object.values(workspaceApi),
+      ...Object.values(cardsApi),
+      ...Object.values(graphApi),
+      ...Object.values(miseApi),
+      ...Object.values(batchApi),
+    ];
     expect(endpoints.filter((endpoint) => !postRoutes.has(endpoint.path))).toEqual([]);
   });
 
@@ -179,6 +187,9 @@ describe("api workspace", () => {
 
     const list = apiResult(RepoList).parse(JSON.parse((await post(workspaceApi.list.path, "")).body));
     expect(list.ok && list.data.repos.map((r) => [r.id, r.status.kind])).toEqual([["sklep", "ok"]]);
+
+    const graph = apiResult(RepoGraph).parse(JSON.parse((await post(graphApi.graph.path, "")).body));
+    expect(graph.ok && graph.data.nodes.map((n) => n.repo)).toEqual(["sklep"]);
   });
 
   test("nieistniejący folder z projektami to 400 z opisem", async () => {

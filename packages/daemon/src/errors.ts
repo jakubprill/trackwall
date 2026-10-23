@@ -30,6 +30,19 @@ export function spawnFailure(program: string, err: NodeJS.ErrnoException): Spawn
     : new SpawnFailure("spawn_failed", `nie udało się uruchomić ${program}: ${err.message}`);
 }
 
+/**
+ * Odczyt klucza `workspace.yaml`, którego zły wpis nie może zabrać reszty widoku (graf, ADR-29): `invalid_config` daje
+ * wartość zastępczą i komunikat do pokazania, każdy inny błąd idzie dalej.
+ */
+export function configOrProblem<T>(read: () => T, fallback: T): { value: T; problem: string | null } {
+  try {
+    return { value: read(), problem: null };
+  } catch (err) {
+    if (!(err instanceof DomainError && err.code === "invalid_config")) throw err;
+    return { value: fallback, problem: err.message };
+  }
+}
+
 /** Komunikat błędu dla użytkownika: wyjątek z kodu albo cokolwiek innego, co zostało rzucone. */
 export function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);

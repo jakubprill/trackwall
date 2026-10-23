@@ -1,5 +1,5 @@
 import type { RepoCard, RepoCardResult, RepoTag, RepoTagRules, RepoTags } from "@trackwall/protocol";
-import { DomainError, messageOf } from "../../errors.ts";
+import { configOrProblem, DomainError, messageOf } from "../../errors.ts";
 import { mapLimit } from "../../map-limit.ts";
 import type { CardCache } from "./card-cache.ts";
 import { extractCard, readsCardFile } from "./extract-card.ts";
@@ -9,7 +9,7 @@ import { repoTags } from "./tags.ts";
 /**
  * Moduł `cards` (§4, §4.6, ADR-25): karta repo z plików buildu i konfiguracji w commicie HEAD, liczona raz na commit
  * (`CardCache`), i tagi repo z karty oraz z reguł w `workspace.yaml`. Bez LLM: każde pole ma dowód. Graf z kart
- * (moduł `graph`) przyjdzie osobno.
+ * liczy moduł `graph` z `all()` (ADR-29).
  */
 
 /** Czego `cards` potrzebuje od `vcs`; podłączane w fasadzie. */
@@ -24,6 +24,16 @@ interface CardsRepos {
   repoPath(id: string): Promise<string>;
   tagRules(): RepoTagRules;
 }
+
+interface TaggedCard {
+  card: RepoCard | null;
+  /** Adres repo zdalnego (`host/ścieżka`); `null` bez remote albo gdy git go nie podał. */
+  remote: string | null;
+  tags: RepoTag[];
+}
+
+/** Karta jednego repo z listy albo powód, dla którego jej nie ma (git nie czyta repo). */
+type CardOfRepo = ({ kind: "ok"; repo: string } & TaggedCard) | { kind: "unavailable"; repo: string; message: string };
 
 export interface CardsDeps {
   vcs: CardsVcs;
@@ -47,7 +57,8 @@ export class Cards {
   async card(id: string): Promise<RepoCardResult> {
     const dir = await this.deps.repos.repoPath(id);
     try {
-      return { repo: id, ...(await this.tagged(id, dir, this.deps.repos.tagRules())) };
+      const { card, tags } = await this.tagged(id, dir, this.deps.repos.tagRules());
+      return { repo: id, card, tags };
     } catch (err) {
       if (err instanceof DomainError) throw err;
       throw new DomainError("repo_unavailable", `${id}: ${messageOf(err)}`);
@@ -56,11 +67,25 @@ export class Cards {
 
   /** Tagi wszystkich repo z folderu z projektami; repo, którego git nie czyta, ma powód zamiast tagów. */
   async tags(): Promise<RepoTags[]> {
-    const rules = this.deps.repos.tagRules();
+    return (await this.withRules(this.deps.repos.tagRules())).map((c) =>
+      c.kind === "ok" ? { kind: "ok", repo: c.repo, tags: c.tags } : { kind: "unavailable", repo: c.repo, message: c.message },
+    );
+  }
+
+  /**
+   * Karty i tagi wszystkich repo z folderu z projektami w kolejności listy (dla grafu, §4.6, ADR-29). Zły `repoTags`
+   * nie zabiera kart: repo mają wtedy tylko tagi z karty, a komunikat wraca w `tagRulesProblem`.
+   */
+  async all(): Promise<{ cards: CardOfRepo[]; tagRulesProblem: string | null }> {
+    const { value: rules, problem: tagRulesProblem } = configOrProblem(() => this.deps.repos.tagRules(), {});
+    return { cards: await this.withRules(rules), tagRulesProblem };
+  }
+
+  private async withRules(rules: RepoTagRules): Promise<CardOfRepo[]> {
     const entries = await this.deps.repos.repoEntries();
-    return mapLimit(entries, TAGS_CONCURRENCY, async ({ id, path }): Promise<RepoTags> => {
+    return mapLimit(entries, TAGS_CONCURRENCY, async ({ id, path }): Promise<CardOfRepo> => {
       try {
-        return { kind: "ok", repo: id, tags: (await this.tagged(id, path, rules)).tags };
+        return { kind: "ok", repo: id, ...(await this.tagged(id, path, rules)) };
       } catch (err) {
         return { kind: "unavailable", repo: id, message: messageOf(err) };
       }
@@ -68,9 +93,9 @@ export class Cards {
   }
 
   /** Karta repo i tagi z niej, z adresu repo zdalnego (bez niego tylko z identyfikatora) i z reguł. */
-  private async tagged(id: string, dir: string, rules: RepoTagRules): Promise<{ card: RepoCard | null; tags: RepoTag[] }> {
+  private async tagged(id: string, dir: string, rules: RepoTagRules): Promise<TaggedCard> {
     const [card, remote] = await Promise.all([this.cardOf(dir), this.deps.vcs.remote(dir).catch(() => null)]);
-    return { card, tags: repoTags(card, { id, remote }, rules) };
+    return { card, remote, tags: repoTags(card, { id, remote }, rules) };
   }
 
   /** Karta commita HEAD repo w katalogu `dir`; `null` w repo bez commitów. */

@@ -1,5 +1,5 @@
 import { agentsApi } from "@trackwall/protocol";
-import { Activity, FolderGit2, Settings, SquareTerminal } from "lucide-react";
+import { Activity, FolderGit2, Network, Settings, SquareTerminal } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
@@ -11,14 +11,16 @@ import { useRemote } from "@/lib/use-remote";
 import { useSessionFocus } from "@/lib/use-session-focus";
 import { ActivityBar, type ActivityView } from "./ActivityBar.tsx";
 import { DaemonPanel } from "./DaemonPanel.tsx";
+import { GraphView } from "./GraphView.tsx";
 import { ReposView } from "./ReposView.tsx";
 import { type SessionSelection, SessionsView } from "./SessionsView.tsx";
 import { SettingsView } from "./SettingsView.tsx";
 
-/** Kolejność i skróty paska widoków; następne widoki pracy (np. graf, sesje) dostają kolejne cyfry. */
+/** Kolejność i skróty paska widoków; następne widoki pracy dostają kolejne cyfry. */
 const VIEWS = [
   { id: "repos", label: "Repo", icon: FolderGit2, shortcut: "1", placement: "top" },
   { id: "sessions", label: "Sesje", icon: SquareTerminal, shortcut: "2", placement: "top" },
+  { id: "graph", label: "Przegląd", icon: Network, shortcut: "3", placement: "top" },
   { id: "daemon", label: "Daemon", icon: Activity, shortcut: "9", placement: "bottom" },
   { id: "settings", label: "Ustawienia", icon: Settings, shortcut: ",", placement: "bottom" },
 ] as const satisfies readonly ActivityView<string>[];
@@ -59,6 +61,7 @@ export function App() {
           {conn && view === "sessions" && (
             <SessionsView key={epoch} conn={conn} sessions={sessions} selected={session} onSelect={setSession} />
           )}
+          {conn && view === "graph" && <GraphView key={epoch} conn={conn} />}
           {conn && view === "daemon" && (
             <div className="flex justify-center p-6">
               <DaemonPanel key={epoch} conn={conn} onRetry={retry} />
