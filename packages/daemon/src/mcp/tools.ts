@@ -24,6 +24,9 @@ export interface ToolContext {
   log: (msg: string) => void;
 }
 
+/** Wykonanie narzędzia na fasadzie: argumenty i wynik mają typy schematów z jego kontraktu. */
+type ToolRun<Args extends z.ZodObject, Result extends z.ZodObject> = (facade: Facade, args: z.output<Args>) => Promise<z.input<Result>>;
+
 /** Rejestruje jedno narzędzie w serwerze MCP utworzonym dla jednego żądania. */
 type ToolRegistration = (server: McpServer, ctx: ToolContext) => void;
 
@@ -33,7 +36,7 @@ type ToolRegistration = (server: McpServer, ctx: ToolContext) => void;
  */
 function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
   tool: McpTool<Args, Result>,
-  run: (facade: Facade, args: z.output<Args>) => Promise<z.input<Result>>,
+  run: ToolRun<Args, Result>,
 ): ToolRegistration {
   // SDK typuje argumenty z typu schematu, a z parametru generycznego nie umie; argumenty przechodzą więc przez
   // schemat narzędzia jeszcze raz (SDK sprawdza je już przed wywołaniem), co daje ich dokładny typ bez rzutowania.
@@ -60,11 +63,9 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
   };
 }
 
-/** Wykonanie narzędzia z kontraktu na fasadzie: argumenty i wynik mają typy jego schematów. */
-type ToolRun<T> = T extends McpTool<infer Args, infer Result> ? (facade: Facade, args: z.output<Args>) => Promise<z.input<Result>> : never;
-type ToolRuns = { [K in keyof typeof mcpTools]: ToolRun<(typeof mcpTools)[K]> };
+type ToolRuns = { [K in keyof typeof mcpTools]: (typeof mcpTools)[K] extends McpTool<infer A, infer R> ? ToolRun<A, R> : never };
 
-/** Po jednym wykonaniu na każde narzędzie z `mcpTools`: brak któregoś to błąd kompilacji, nie cicha luka w `tools/list`. */
+/** Po jednym wykonaniu na każde narzędzie z `mcpTools`: brak któregoś to błąd kompilacji. */
 const runs: ToolRuns = {
   listRepos: async (facade) => {
     const list = await facade.workspace.list();
@@ -90,7 +91,10 @@ const runs: ToolRuns = {
   },
 };
 
-/** Rejestracje narzędzi w kolejności `mcpTools`, czyli tej samej co w `tools/list` i w UI. */
+/**
+ * Rejestracje w kolejności `mcpTools`, w której UI wypisuje nazwy. TypeScript nie powiąże `mcpTools[k]` z `runs[k]`
+ * w pętli po kluczach, więc lista jest jawna, a jej komplet i kolejność względem `mcpTools` sprawdza test `tools/list`.
+ */
 export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.listRepos, runs.listRepos),
   defineTool(mcpTools.getRepo, runs.getRepo),

@@ -5,14 +5,14 @@ import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
 import { copilotMcpAddCommand, copilotMcpConfig, copilotMcpConfigPath } from "@/lib/copilot-mcp";
 
-/**
- * Jak podłączyć serwer MCP Trackwall do Copilot CLI (§5.3, ADR-22): komenda do skopiowania i ten sam wpis w JSON.
- * UI niczego nie zapisuje w konfiguracji Copilot CLI; robi to `copilot mcp add` po stronie użytkownika.
- */
 const TOOL_NAMES = Object.values(mcpTools)
   .map((t) => t.name)
   .join(", ");
 
+/**
+ * Jak podłączyć serwer MCP Trackwall do Copilot CLI (§5.3, ADR-22): komenda do skopiowania i ten sam wpis w JSON.
+ * UI niczego nie zapisuje w konfiguracji Copilot CLI; robi to `copilot mcp add` po stronie użytkownika.
+ */
 export function ConnectCopilot({ info }: { info: DaemonInfo }) {
   const command = copilotMcpAddCommand(info.mcpStdioCommand, info.platform);
   return (

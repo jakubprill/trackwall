@@ -25,6 +25,12 @@ describe("podłączenie Copilot CLI", () => {
     );
   });
 
+  test("apostrof typograficzny w ścieżce podwojony w PowerShell", () => {
+    expect(copilotMcpAddCommand(["C:\\Users\\O\u2019Neill\\trackwall-daemon.exe", "mcp-stdio"], "win32")).toBe(
+      "copilot mcp add trackwall '--' 'C:\\Users\\O\u2019\u2019Neill\\trackwall-daemon.exe' mcp-stdio",
+    );
+  });
+
   test("plik konfiguracji w zapisie systemu użytkownika", () => {
     expect(copilotMcpConfigPath("win32")).toBe("%USERPROFILE%\\.copilot\\mcp-config.json");
     expect(copilotMcpConfigPath("darwin")).toBe("~/.copilot/mcp-config.json");

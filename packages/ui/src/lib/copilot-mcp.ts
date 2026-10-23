@@ -38,5 +38,6 @@ function quotePosix(arg: string): string {
 }
 
 function quotePowerShell(arg: string): string {
-  return PLAIN_POWERSHELL.test(arg) ? arg : `'${arg.replaceAll("'", "''")}'`;
+  // PowerShell kończy napis także na apostrofach typograficznych (U+2018, U+2019), więc i je podwaja.
+  return PLAIN_POWERSHELL.test(arg) ? arg : `'${arg.replace(/['\u2018\u2019]/g, "$&$&")}'`;
 }
