@@ -6,8 +6,10 @@ Trackwall jest dystrybuowany jako archiwa zip w [GitHub Releases](https://github
 
 1. Podbij wersję w trzech miejscach (test `apps/desktop/test/versions.test.ts` pilnuje zgodności):
    `packages/daemon/package.json`, `apps/desktop/src-tauri/tauri.conf.json`, `apps/desktop/src-tauri/Cargo.toml`.
-2. Scal zmianę do `main` przez PR.
-3. Na `main` utwórz i wypchnij tag z tą samą wersją:
+   `Cargo.lock` zaktualizuje `cargo` przy najbliższym buildzie; zacommituj go razem z resztą.
+2. Dopisz notatkę o zmianach `docs/release-notes/v<wersja>.md` dla użytkownika: co nowego, jak przejść ze starszej wersji, znane ograniczenia (ten sam test pilnuje, że plik istnieje).
+3. Scal zmianę do `main` przez PR.
+4. Na `main` utwórz i wypchnij tag z tą samą wersją:
 
    ```sh
    git tag v0.2.0
@@ -24,7 +26,7 @@ Workflow sprawdza, że tag wskazuje commit z `main` i zgadza się z wersją w `t
 | `trackwall-<wersja>-macos-arm64.zip` | `Trackwall.app` (Apple Silicon) |
 | `SHA256SUMS.txt` | sumy SHA-256 obu archiwów |
 
-Opis release generuje GitHub z listy PR-ów od poprzedniego tagu. Jeśli workflow padnie w kroku publikacji, wystarczy go uruchomić ponownie: istniejący release dostanie podmienione pliki, drugi nie powstanie.
+Opis release to notatka z `docs/release-notes/v<wersja>.md`, a pod nią lista PR-ów od poprzedniego tagu wygenerowana przez GitHub. Jeśli workflow padnie w kroku publikacji, wystarczy go uruchomić ponownie: istniejący release dostanie podmienione pliki, drugi nie powstanie.
 
 ## Instalacja na nowym komputerze
 
