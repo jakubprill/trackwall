@@ -5,6 +5,7 @@ import type { Client } from "@modelcontextprotocol/client";
 import { ListRunningMiseTasksResult, LogTail, MiseTaskRunResult } from "@trackwall/protocol";
 import { z } from "zod";
 import { SESSION_TOKEN_HEADER } from "../src/mcp/endpoint.ts";
+import { waitFor } from "./support/agents.ts";
 import { connectHttpClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
 
@@ -28,10 +29,11 @@ beforeAll(async () => {
   clients.push(outside);
 });
 
+// A limit instead of none: a cleanup that hangs on Windows should fail this file, not take an hour of the job.
 afterAll(async () => {
   for (const client of clients) await client.close();
   await daemon.stop();
-});
+}, 30_000);
 
 async function call(client: Client, name: string, args: Record<string, unknown>) {
   return client.callTool({ name, arguments: args });
@@ -139,6 +141,9 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
         (await call(client, "wait_for_mise_task", { repo: "magazyn", miseTask: "test", timeoutSeconds: 20 })).structuredContent,
       );
       expect(ended.run).toMatchObject({ kind: "exited", runId: own.run.runId, exitCode: 3 });
+      // Stopped only after its sessionStart: killing a process in ConPTY while it starts could crash Bun on Windows.
+      await waitFor(daemon.facade.agents, session.id, (s) => s.state !== null, "sessionStart");
+      await daemon.facade.agents.stop(session.id);
     },
     TIMEOUT,
   );
