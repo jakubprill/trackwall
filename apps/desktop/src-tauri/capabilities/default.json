@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window: only the app's own commands (daemon_connection, retry_daemon, pick_projects_folder) and core events, no system plugin commands.",
-  "windows": ["main"],
+  "description": "Trackwall windows (the main window and extra windows, ADR-49): the app's commands (daemon_connection, retry_daemon, open_window, window_shows_sessions, pick_projects_folder) and core:default (events, the native context menu of view icons), no system plugin commands (ADR-51).",
+  "windows": ["main", "window-*"],
   "permissions": ["core:default"]
 }

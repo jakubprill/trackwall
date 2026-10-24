@@ -1,11 +1,12 @@
 import { agentsApi } from "@trackwall/protocol";
 import { Activity, FolderGit2, Network, Orbit, Settings, SquareTerminal } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
+import { ErrorBanner } from "@/components/ErrorBanner";
 import { FolderDrop } from "@/components/FolderDrop";
 import { Loading } from "@/components/Loading";
-import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
+import { inDesktopShell, openWindow, reportShowsSessions, showViewMenu, viewFromLocation } from "@/lib/app-window";
 import type { Connection } from "@/lib/connection";
 import type { DaemonEvents } from "@/lib/daemon-events";
 import { DROP_HINT } from "@/lib/dropped-folder";
@@ -38,6 +39,7 @@ const VIEWS = [
   { id: "settings", label: "Settings", icon: Settings, shortcut: ",", placement: "bottom" },
 ] as const satisfies readonly ActivityView<string>[];
 type View = (typeof VIEWS)[number]["id"];
+const VIEW_IDS = VIEWS.map((v) => v.id);
 
 /**
  * Lista sesji przychodzi na żywo z WebSocketu zdarzeń (ADR-36), bo pasek widoków pokazuje, ile czeka. Bez połączenia
@@ -47,8 +49,12 @@ const SESSIONS_POLL_MS = { open: 1000, closed: 3000 };
 
 export function App() {
   // Repo otwarte z pulpitu należy do przejścia, nie do widoku: każde inne przejście do „Repos” zaczyna bez niego.
-  // `visit` grows with every opening of a repo, so that Repos is mounted again with it even when it is already open.
-  const [{ view, repo, visit }, setNav] = useState<{ view: View; repo?: string; visit: number }>({ view: "home", visit: 0 });
+  // An extra window starts with the view it was opened with (ADR-49), the main window with Home. `visit` grows with
+  // every opening of a repo, so that Repos is mounted again with it even when it is already open.
+  const [{ view, repo, visit }, setNav] = useState<{ view: View; repo?: string; visit: number }>(() => ({
+    view: viewFromLocation(window.location.search, VIEW_IDS) ?? "home",
+    visit: 0,
+  }));
   const setView = useCallback((next: View) => setNav((nav) => ({ view: next, visit: nav.visit })), []);
   const openRepos = useCallback((openRepo?: string) => setNav((nav) => ({ view: "repos", repo: openRepo, visit: nav.visit + 1 })), []);
   const [session, setSession] = useState<SessionSelection>();
@@ -67,6 +73,23 @@ export function App() {
     },
     [openRepos],
   );
+  const [windowError, setWindowError] = useState<string>();
+  const newWindow = useMemo(() => {
+    if (!inDesktopShell()) return undefined;
+    const open = (id: View) => {
+      setWindowError(undefined);
+      openWindow(id).catch((err: unknown) => setWindowError(`Could not open a new window: ${String(err)}`));
+    };
+    const showMenu = (id: View) => {
+      showViewMenu(() => open(id)).catch((err: unknown) => setWindowError(`Could not show the menu: ${String(err)}`));
+    };
+    return { open, showMenu };
+  }, []);
+  useEffect(() => {
+    reportShowsSessions(view === "sessions").catch(() => {
+      // Without the report a session from the tray opens in the last focused window instead; nothing to show.
+    });
+  }, [view]);
   const events = useDaemonEvents(conn);
   const sessions = useSessions(conn, events, view === "sessions" || view === "home");
   const runningLive = useMemo(() => events?.feed("mise.running.changed"), [events]);
@@ -100,16 +123,16 @@ export function App() {
   );
   return (
     <div className="flex h-screen">
-      <ActivityBar views={VIEWS} active={view} onSelect={setView} badges={{ sessions: attentionCount(sessions.data) }} />
+      <ActivityBar
+        views={VIEWS}
+        active={view}
+        onSelect={setView}
+        newWindow={newWindow}
+        badges={{ sessions: attentionCount(sessions.data) }}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
-        {error && (
-          <div className="bg-destructive/10 flex items-center gap-3 border-b px-4 py-2">
-            <p className="text-destructive min-w-0 flex-1 text-sm whitespace-pre-wrap">{error}</p>
-            <Button variant="outline" size="sm" onClick={retry}>
-              Try again
-            </Button>
-          </div>
-        )}
+        {error && <ErrorBanner message={error} action={{ label: "Try again", onClick: retry }} />}
+        {windowError && <ErrorBanner message={windowError} action={{ label: "Dismiss", onClick: () => setWindowError(undefined) }} />}
         {conn && dropped && (
           <FolderDrop
             key={dropped.seq}

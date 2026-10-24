@@ -37,7 +37,7 @@ describe("sesja Copilot CLI w daemonie", () => {
     expect(session.view()?.state).toMatchObject({ state: "Working", source: "keyboard", reason: "key enter" });
   });
 
-  test("the end of a turn waits for you until a session terminal window comes in front of the user", () => {
+  test("the end of a turn waits for you until a session terminal comes in front of the user", () => {
     const { session, hooksFile } = runningSession();
     const window = session.attach(
       () => {},
