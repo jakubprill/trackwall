@@ -6,7 +6,8 @@ import { DomainError } from "../infra/errors.ts";
 
 /**
  * Narzędzia MCP daemona (§5.3, ADR-24): każde to cienkie mapowanie na fasadę, więc agent widzi ten sam stan co UI
- * (§1.1). Wszystkie tylko czytają; żadne nie zmienia konfiguracji, repo ani procesów (§8).
+ * (§1.1). Wszystkie tylko czytają; żadne nie zmienia konfiguracji, repo ani procesów (§8), więc sesji nie uruchamia,
+ * nie odpowiada w niej i jej nie zatrzymuje.
  */
 
 /**
@@ -109,6 +110,19 @@ const runs: ToolRuns = {
   whoCalls: (facade, { repo }) => facade.graph.whoCalls(repo),
   subgraphFor: (facade, { repo, depth }) => facade.graph.subgraph(repo, depth),
   findEndpoint: (facade, { query, method }) => facade.graph.findEndpoint(query, method),
+  listSessions: async (facade, { repo }) => {
+    const { sessions, tasks } = facade.agents.sessions();
+    const inRepo = (item: { repo: string }) => repo === undefined || item.repo === repo;
+    return { sessions: sessions.filter(inRepo), tasks: tasks.filter(inRepo) };
+  },
+  getSession: async (facade, { session: id }) => {
+    const session = facade.agents.session(id);
+    const task = facade.agents.sessions().tasks.find((t) => t.id === session.task) ?? null;
+    if (!task) return { session, task, changes: null };
+    // Diff (do 1 MB) zostaje w UI: agentowi wystarczą pliki i liczby, a treść przeczyta sam z worktree.
+    const { patch: _, truncated: __, ...changes } = await facade.agents.taskChanges(task.id);
+    return { session, task, changes };
+  },
 };
 
 /**
@@ -123,6 +137,8 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.whoCalls, runs.whoCalls),
   defineTool(mcpTools.subgraphFor, runs.subgraphFor),
   defineTool(mcpTools.findEndpoint, runs.findEndpoint),
+  defineTool(mcpTools.listSessions, runs.listSessions),
+  defineTool(mcpTools.getSession, runs.getSession),
 ];
 
 /** Repo łączy się z wynikiem synchronizacji po ścieżce, bo identyfikator może się zmienić razem z nazwą katalogu (ADR-18). */

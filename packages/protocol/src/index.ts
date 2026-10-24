@@ -3,6 +3,7 @@ export * from "./api.ts";
 export * from "./batch.ts";
 export * from "./cards.ts";
 export * from "./daemon.ts";
+export * from "./events.ts";
 export * from "./evidence.ts";
 export * from "./graph.ts";
 export * from "./http.ts";

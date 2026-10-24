@@ -39,7 +39,7 @@ Sekret z `~/.trackwall/daemon.json`, którym UI, `ws`, powłoka i most stdio uwi
 **Serwer MCP** (`/mcp`, `createMcpEndpoint`; po angielsku *MCP server*):
 Część daemona, przez którą agenci czytają jego stan narzędziami MCP; ten sam port i token co API (§5.3, ADR-24).
 
-**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`; po angielsku *MCP tool*):
+**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`, `list_sessions`; po angielsku *MCP tool*):
 Jedno wywołanie serwera MCP z nazwą po angielsku, wejściem i wynikiem opisanym schematem z `packages/protocol/src/mcp.ts`; mapowanie na fasadę, bez własnej logiki domenowej.
 _Unikaj_: komenda, akcja (to pojęcia z API i CLI)
 
@@ -284,12 +284,12 @@ _Unikaj_: konsola, terminal (to PTY sesji zadania)
 **`seq`**:
 Globalny, rosnący numer rekordu dla wszystkich źródeł; każde działanie daemona zaczyna od chwili startu, więc numery się nie powtarzają. Kursor (`sinceSeq` w API i w narzędziach MCP) działa dla jednego źródła i dla całego workspace; `dropped` mówi, że część rekordów po kursorze przepadła.
 
-**Zdarzenie**:
-Wiadomość daemona na WebSocket `/ws` (`service.state`, `task.state`…) z własnym `seq` zdarzeń.
-_Unikaj_: rekord (to log)
+**Zdarzenie** (`DaemonEvent`, `sessions.changed`, `mise.running.changed`; po angielsku *event*):
+Wiadomość daemona na WebSocket `/ws` (ADR-36) z całą migawką jednego tematu i własnym `seq` zdarzeń, rosnącym przez wszystkie tematy. Daemon wysyła je po podłączeniu (migawka każdego tematu) i przy każdej zmianie migawki.
+_Unikaj_: rekord (to log), powiadomienie (to OSC albo hook)
 
-**Snapshot**:
-Pełny stan z `GET /api/snapshot`, od którego UI zaczyna i do którego wraca po `resync`.
+**Migawka tematu** (`payload` zdarzenia, `LiveFeed` w UI; po angielsku *snapshot*):
+Cały stan jednego tematu zdarzeń, ta sama wartość co odpowiedź akcji HTTP (`SessionList` z `agents/sessions`, `RunningMiseTask[]` z `mise/running`). Nie myl z migawką pulpitu (`HomeModel`), którą UI składa z kilku tematów i odpowiedzi.
 
 **Maskowanie**:
 Zamiana wartości sekretów na `***` przed zapisem rekordu do bufora, pliku i ostatnich linii stanu. Dziś sekrety to wartości zmiennych środowiska procesu o nazwach sekretów (`GH_TOKEN`, `DB_PASSWORD`…, §4.2).
@@ -318,7 +318,7 @@ Lewy panel pulpitu: sesje, które czekają na Ciebie albo mają błąd, potem re
 
 **Migawka pulpitu** (`HomeModel`):
 To, co pulpit pokazuje, policzone przez UI z odpowiedzi daemona i podane scenie w całości przy każdej zmianie.
-_Unikaj_: snapshot (to `GET /api/snapshot`, stan całego daemona).
+_Unikaj_: snapshot (po angielsku to migawka tematu zdarzeń).
 
 **Warstwa** (`HomeRepo.layer`, `HomeModel.layerCount`):
 Poziom repo na pulpicie, ta sama kolumna co w widoku „Przegląd”: najdłuższa ścieżka od repo, którego nikt nie używa (wejścia po jednej stronie, biblioteki po drugiej). Repo bez połączeń nie ma warstwy (`null`).

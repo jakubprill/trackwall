@@ -109,6 +109,11 @@ export class Agents {
     return { sessions: this.#views(), tasks: this.#tasks.list(), worktreesDir: this.#worktreesDir };
   }
 
+  /** Jedna sesja z listy (`not_found`, gdy jej nie ma albo użytkownik ją zamknął). */
+  session(id: string): Session {
+    return this.#view(this.#get(id));
+  }
+
   async start(repo: string): Promise<Session> {
     return this.#launch(repo, await this.#deps.repos.repoPath(repo), null, []);
   }

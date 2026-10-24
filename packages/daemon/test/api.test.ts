@@ -17,6 +17,7 @@ import {
   RepoList,
   workspaceApi,
 } from "@trackwall/protocol";
+import { EventHub } from "../src/api/event-hub.ts";
 import { postRoutes } from "../src/api/routes.ts";
 import { type ApiServer, startApi } from "../src/api/server.ts";
 import { createFacade } from "../src/facade.ts";
@@ -62,7 +63,7 @@ beforeAll(async () => {
 
 afterAll(() => api.close());
 
-/** Fasada na pustym katalogu stanu i serwer MCP na niej: to, co `main.ts` podaje do `startApi`. */
+/** Fasada na pustym katalogu stanu, serwer MCP i zdarzenia na niej: to, co `main.ts` podaje do `startApi`. */
 function modules() {
   const facade = createFacade({
     home: mkdtempSync(join(tmpdir(), "trackwall-home-")),
@@ -74,7 +75,7 @@ function modules() {
     userEnv: async () => process.env,
     log: () => {},
   });
-  return { facade, mcp: createMcpEndpoint({ facade, version: "test", log: () => {} }) };
+  return { facade, mcp: createMcpEndpoint({ facade, version: "test", log: () => {} }), events: new EventHub({ facade, log: () => {} }) };
 }
 
 /** Żądania przez node:http: pozwala ustawić `Host` i nie idzie przez HTTP_PROXY. */

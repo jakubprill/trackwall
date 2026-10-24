@@ -36,13 +36,12 @@ export function apiResult<T extends z.ZodType>(data: T) {
 }
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: ApiError };
 
-/** Zdarzenie na WebSocket `/ws`. Typy zdarzeń dochodzą w kolejnych etapach. */
-export const EventEnvelope = z.object({
-  seq: z.number().int().nonnegative(),
-  type: z.string(),
-  payload: z.unknown(),
-});
-export type EventEnvelope = z.infer<typeof EventEnvelope>;
+/**
+ * Token daemona w WebSocketach (`/ws`, `/ws/pty/<sesja>`, §5.2). Przeglądarka nie ustawi nagłówka `Authorization`
+ * przy WebSocket, więc token idzie jako drugi podprotokół (`bearer.<token>`), a nie w adresie, który trafia do logów
+ * i historii; serwer potwierdza tylko podprotokół gniazda.
+ */
+export const SOCKET_TOKEN_PREFIX = "bearer.";
 
 /**
  * Akcja `POST /api/<moduł>/<akcja>` (§5.2): ścieżka, schemat ciała i schemat wyniku w jednym obiekcie,

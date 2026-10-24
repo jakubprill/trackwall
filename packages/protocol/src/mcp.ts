@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Session, SessionId, Task, TaskChanges } from "./agents.ts";
 import { RepoCardResult, TagName } from "./cards.ts";
 import { FindEndpointResult, MAX_FOUND_ENDPOINTS, MAX_SUBGRAPH_DEPTH, Subgraph, WhoCallsResult } from "./graph.ts";
 import { HttpMethod } from "./http.ts";
@@ -60,6 +61,27 @@ export const GetRepoResult = z.object({
 });
 export type GetRepoResult = z.infer<typeof GetRepoResult>;
 
+export const ListSessionsResult = z.object({
+  /** Sesje od najnowszej, także zakończone, dopóki użytkownik ich nie zamknie. */
+  sessions: z.array(Session),
+  /** Zadania od najnowszego; sesja zadania ma jego identyfikator w `Session.task`. */
+  tasks: z.array(Task),
+});
+export type ListSessionsResult = z.infer<typeof ListSessionsResult>;
+
+/** Zmiany zadania bez samego diffu: pliki z liczbą linii i liczba commitów, bez treści zmian (do 1 MB). */
+export const TaskChangesSummary = TaskChanges.omit({ patch: true, truncated: true });
+export type TaskChangesSummary = z.infer<typeof TaskChangesSummary>;
+
+export const GetSessionResult = z.object({
+  session: Session,
+  /** Zadanie sesji; `null` dla sesji w korzeniu repo. */
+  task: Task.nullable(),
+  /** Zmiany zadania względem commita bazowego; `null` dla sesji w korzeniu repo. */
+  changes: TaskChangesSummary.nullable(),
+});
+export type GetSessionResult = z.infer<typeof GetSessionResult>;
+
 export interface McpTool<Args extends z.ZodObject = z.ZodObject, Result extends z.ZodObject = z.ZodObject> {
   name: string;
   /** Opis dla modelu agenta: co zwraca i kiedy go użyć. */
@@ -70,6 +92,7 @@ export interface McpTool<Args extends z.ZodObject = z.ZodObject, Result extends 
 
 const LIST_REPOS = "list_repos";
 const GET_REPO = "get_repo";
+const LIST_SESSIONS = "list_sessions";
 const RepoArg = RepoId.describe(`repo id from ${LIST_REPOS} (the id field)`);
 
 export const mcpTools = {
@@ -165,5 +188,28 @@ export const mcpTools = {
       })
       .strict(),
     result: FindEndpointResult,
+  },
+  listSessions: {
+    name: LIST_SESSIONS,
+    description:
+      "Copilot CLI sessions that Trackwall runs (the Sessions view), newest first, and tasks. A session has an id, " +
+      "repo, start time, process state (run: running, stopping, exited with exit code and last screen lines), the " +
+      "latest state change (state: Working, Input, Approval, Plan, Done, Error, Stale, with source and confidence; " +
+      "null before the first signal), window title (what the agent is working on), needsAttention (running and " +
+      "waiting for the user) and task: the id of the task whose worktree it runs in, null in the repo root. A task " +
+      "is work in its own worktree on its own branch: prompt, branch, base branch and commit, worktree path. Sessions " +
+      "end with Trackwall, tasks stay until the user ends them. The repo argument narrows both lists to one repo. " +
+      "The tool is read-only: only the user starts, answers and stops sessions.",
+    args: z.object({ repo: RepoArg.optional() }).strict(),
+    result: ListSessionsResult,
+  },
+  getSession: {
+    name: "get_session",
+    description:
+      `One session from ${LIST_SESSIONS}, its task (null in the repo root) and, for a task, the changes in its ` +
+      "worktree against the base commit: changed files with added and deleted lines, commits on the task branch and " +
+      "the number of uncommitted entries, without the diff itself.",
+    args: z.object({ session: SessionId.describe(`session id from ${LIST_SESSIONS} (the id field)`) }).strict(),
+    result: GetSessionResult,
   },
 } satisfies Record<string, McpTool>;

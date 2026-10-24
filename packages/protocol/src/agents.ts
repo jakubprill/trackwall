@@ -131,12 +131,8 @@ export const agentsApi = {
 /** Ścieżka WebSocketu terminala sesji: `/ws/pty/<sesja>` (§5.2). */
 export const PTY_SOCKET_PREFIX = "/ws/pty/";
 
-/**
- * Podprotokół WebSocketu terminala. Przeglądarka nie ustawi nagłówka `Authorization` przy WebSocket, więc token
- * daemona idzie jako drugi podprotokół (`bearer.<token>`), a nie w adresie, który trafia do logów i historii.
- */
+/** Podprotokół WebSocketu terminala; token idzie obok niego (`SOCKET_TOKEN_PREFIX`). */
 export const PTY_SUBPROTOCOL = "trackwall.pty";
-export const PTY_TOKEN_PREFIX = "bearer.";
 
 /**
  * Kody zamknięcia WebSocketu terminala z zakresu aplikacji (4000–4999), żeby okno terminala odróżniło koniec sesji
