@@ -45,6 +45,7 @@ export function App() {
   const { conn, epoch, error, retry } = useConnection();
   const events = useDaemonEvents(conn);
   const sessions = useSessions(conn, events, view === "sessions" || view === "home");
+  const runningLive = useMemo(() => events?.feed("mise.running.changed"), [events]);
   const openSession = (id: string) => {
     setView("sessions");
     setSession({ kind: "session", id });
@@ -73,7 +74,7 @@ export function App() {
             <HomeView
               key={epoch}
               conn={conn}
-              events={events}
+              runningLive={runningLive}
               sessions={sessions}
               onOpenSession={openSession}
               onOpenRepo={(id) => setView("repos", id)}

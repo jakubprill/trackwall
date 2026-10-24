@@ -3,16 +3,7 @@ import { type IncomingMessage, request } from "node:http";
 import { join } from "node:path";
 import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
-import {
-  DAEMON_FILE,
-  DaemonFile,
-  EVENTS_SOCKET_PATH,
-  EVENTS_SUBPROTOCOL,
-  PTY_SOCKET_PREFIX,
-  PTY_SUBPROTOCOL,
-  SOCKET_TOKEN_PREFIX,
-  TRACKWALL_HOME_ENV,
-} from "@trackwall/protocol";
+import { DAEMON_FILE, DaemonFile, daemonSocketAt, SOCKET_TOKEN_PREFIX, TRACKWALL_HOME_ENV } from "@trackwall/protocol";
 import type { Plugin } from "vite";
 
 /**
@@ -45,11 +36,11 @@ export function daemonDevProxy(): Plugin {
       };
       const ownOrigins = () => [`http://127.0.0.1:${server.config.server.port}`, `http://localhost:${server.config.server.port}`];
       server.httpServer?.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
-        const subprotocol = daemonSubprotocol(req.url);
-        if (!subprotocol) return; // HMR Vite ma własną obsługę
+        const target = daemonSocketAt(URL.parse(req.url ?? "/", "http://127.0.0.1")?.pathname ?? "");
+        if (!target) return; // HMR Vite ma własną obsługę
         const daemon = readDaemon();
         if (!daemon || (req.headers.origin !== undefined && !ownOrigins().includes(req.headers.origin))) return void socket.destroy();
-        proxyDaemonSocket(req, socket, head, daemon, subprotocol);
+        proxyDaemonSocket(req, socket, head, daemon, target.subprotocol);
       });
       server.middlewares.use("/api", (req, res) => {
         const reply = (status: number, message: string) => {
@@ -100,14 +91,6 @@ export function daemonDevProxy(): Plugin {
       });
     },
   };
-}
-
-/** Podprotokół WebSocketu daemona pod tym adresem; `undefined` dla adresów spoza daemona (HMR Vite). */
-function daemonSubprotocol(url: string | undefined): string | undefined {
-  const path = url?.split("?")[0];
-  if (path === EVENTS_SOCKET_PATH) return EVENTS_SUBPROTOCOL;
-  if (path?.startsWith(PTY_SOCKET_PREFIX)) return PTY_SUBPROTOCOL;
-  return undefined;
 }
 
 /**

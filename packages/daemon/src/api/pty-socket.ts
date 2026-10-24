@@ -20,10 +20,10 @@ export function ptySocketRoute(facade: Facade): SocketRoute {
   return {
     subprotocol: PTY_SUBPROTOCOL,
     maxPayload: MAX_FRAME_BYTES,
-    route: (path) => {
-      if (!path.startsWith(PTY_SOCKET_PREFIX)) return undefined;
+    serve: (ws, path) => {
       const session = SessionId.safeParse(path.slice(PTY_SOCKET_PREFIX.length));
-      return session.success ? (ws) => serve(ws, session.data, facade) : "not_found";
+      if (session.success) serve(ws, session.data, facade);
+      else ws.close(PTY_CLOSE_NOT_FOUND, "no such session");
     },
   };
 }

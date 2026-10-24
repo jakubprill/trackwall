@@ -1,4 +1,4 @@
-import { EVENTS_CLOSE_SLOW, EVENTS_SOCKET_PATH, EVENTS_SUBPROTOCOL } from "@trackwall/protocol";
+import { EVENTS_CLOSE_SLOW, EVENTS_SOCKET } from "@trackwall/protocol";
 import type { WebSocket } from "ws";
 import type { EventHub } from "./event-hub.ts";
 import type { SocketRoute } from "./sockets.ts";
@@ -15,17 +15,23 @@ const MAX_BUFFERED_BYTES = 4 * 1024 * 1024;
 
 export function eventSocketRoute(hub: EventHub): SocketRoute {
   return {
-    subprotocol: EVENTS_SUBPROTOCOL,
+    subprotocol: EVENTS_SOCKET.subprotocol,
     maxPayload: MAX_FRAME_BYTES,
-    route: (path) => (path === EVENTS_SOCKET_PATH ? (ws) => serve(ws, hub) : undefined),
+    serve: (ws) => serve(ws, hub),
   };
 }
 
+/** Temat przestał się dać odczytać: klient łączy się ponownie, dostaje migawki bez niego i pyta o niego HTTP. */
+const EVENTS_CLOSE_TOPIC_FAILED = 1011;
+
 function serve(ws: WebSocket, hub: EventHub): void {
-  const unsubscribe = hub.subscribe((event) => {
-    if (ws.readyState !== ws.OPEN) return;
-    if (ws.bufferedAmount > MAX_BUFFERED_BYTES) ws.close(EVENTS_CLOSE_SLOW, "the client cannot keep up with the events");
-    else ws.send(JSON.stringify(event));
+  const unsubscribe = hub.subscribe({
+    event: (frame) => {
+      if (ws.readyState !== ws.OPEN) return;
+      if (ws.bufferedAmount > MAX_BUFFERED_BYTES) ws.close(EVENTS_CLOSE_SLOW, "the client cannot keep up with the events");
+      else ws.send(frame);
+    },
+    topicFailed: () => ws.close(EVENTS_CLOSE_TOPIC_FAILED, "the daemon cannot read an event topic"),
   });
   ws.on("close", unsubscribe);
   ws.on("error", unsubscribe);

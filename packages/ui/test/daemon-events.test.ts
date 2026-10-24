@@ -44,8 +44,8 @@ describe("zdarzenia daemona w UI", () => {
     expect(feed.isLive()).toBe(false);
 
     sockets.open();
-    sockets.message(JSON.stringify({ seq: 1, type: "mise.running.changed", payload: [] }));
-    sockets.message(JSON.stringify({ seq: 2, type: "sessions.changed", payload: LIST }));
+    sockets.message(JSON.stringify({ type: "mise.running.changed", payload: [] }));
+    sockets.message(JSON.stringify({ type: "sessions.changed", payload: LIST }));
     expect(received).toEqual([LIST]);
     expect(feed.isLive()).toBe(true);
     events.close();
@@ -54,7 +54,7 @@ describe("zdarzenia daemona w UI", () => {
   test("słuchacz zapisany później dostaje od razu ostatnią migawkę z bieżącego połączenia", () => {
     const sockets = fakeSockets();
     const events = makeEvents(sockets);
-    sockets.message(JSON.stringify({ seq: 1, type: "sessions.changed", payload: LIST }));
+    sockets.message(JSON.stringify({ type: "sessions.changed", payload: LIST }));
     const received: SessionList[] = [];
     events.feed("sessions.changed").subscribe((list) => received.push(list));
     expect(received).toEqual([LIST]);
@@ -68,8 +68,8 @@ describe("zdarzenia daemona w UI", () => {
     const received: SessionList[] = [];
     feed.subscribe((list) => received.push(list));
     sockets.message("nie json");
-    sockets.message(JSON.stringify({ seq: 1, type: "sessions.changed", payload: { sessions: "?" } }));
-    sockets.message(JSON.stringify({ seq: 2, type: "nowy.temat", payload: {} }));
+    sockets.message(JSON.stringify({ type: "sessions.changed", payload: { sessions: "?" } }));
+    sockets.message(JSON.stringify({ type: "nowy.temat", payload: {} }));
     expect(received).toEqual([]);
     expect(feed.isLive()).toBe(false);
     events.close();
@@ -79,7 +79,7 @@ describe("zdarzenia daemona w UI", () => {
     const sockets = fakeSockets();
     const events = makeEvents(sockets);
     const feed = events.feed("sessions.changed");
-    sockets.message(JSON.stringify({ seq: 1, type: "sessions.changed", payload: LIST }));
+    sockets.message(JSON.stringify({ type: "sessions.changed", payload: LIST }));
     sockets.close();
     expect(feed.isLive()).toBe(false);
     expect(sockets.opened).toHaveLength(1);

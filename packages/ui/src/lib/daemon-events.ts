@@ -1,4 +1,4 @@
-import { DaemonEvent, type DaemonEventPayload, type DaemonEventType, EVENTS_SOCKET_PATH, EVENTS_SUBPROTOCOL } from "@trackwall/protocol";
+import { DaemonEvent, type DaemonEventOf, type DaemonEventPayload, type DaemonEventType, EVENTS_SOCKET } from "@trackwall/protocol";
 import type { Connection } from "./connection.ts";
 import { daemonSocket } from "./daemon-socket.ts";
 
@@ -34,7 +34,7 @@ export class DaemonEvents {
   readonly #o: DaemonEventsOptions;
   /** Migawki z bieżącego połączenia; po zerwaniu znikają, bo mogą być już stare. */
   readonly #latest = new Map<DaemonEventType, DaemonEvent>();
-  readonly #listeners = new Map<DaemonEventType, Set<(event: DaemonEvent) => void>>();
+  readonly #listeners = new Set<(event: DaemonEvent) => void>();
   #socket: EventSocket | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #delay = RECONNECT_MS;
@@ -46,18 +46,21 @@ export class DaemonEvents {
   }
 
   feed<T extends DaemonEventType>(type: T): LiveFeed<DaemonEventPayload<T>> {
+    const ofType = (event: DaemonEvent | undefined): event is DaemonEventOf<T> => event?.type === type;
+    // Jedyne rzutowanie: TypeScript nie wiąże pola `payload` zawężonego zdarzenia z parametrem `T` (dla `T` jako unii
+    // typów byłoby to nawet niepoprawne), choć `ofType` sprawdził typ zdarzenia sparsowanego schematem `DaemonEvent`.
+    const payloadOf = (event: DaemonEventOf<T>) => event.payload as DaemonEventPayload<T>;
     return {
       subscribe: (onData) => {
         const listener = (event: DaemonEvent) => {
-          // Słuchacze są w zbiorze swojego typu, ale TypeScript nie zawęzi unii po kluczu mapy.
-          if (event.type === type) onData(event.payload as DaemonEventPayload<T>);
+          if (ofType(event)) onData(payloadOf(event));
         };
-        const listeners = this.#listeners.get(type) ?? new Set();
-        this.#listeners.set(type, listeners);
-        listeners.add(listener);
+        this.#listeners.add(listener);
         const latest = this.#latest.get(type);
-        if (latest) listener(latest);
-        return () => listeners.delete(listener);
+        if (ofType(latest)) onData(payloadOf(latest));
+        return () => {
+          this.#listeners.delete(listener);
+        };
       },
       isLive: () => this.#latest.has(type),
     };
@@ -70,7 +73,7 @@ export class DaemonEvents {
   }
 
   #connect(): void {
-    const { url, protocols } = daemonSocket(this.#o.conn, EVENTS_SOCKET_PATH, EVENTS_SUBPROTOCOL, this.#o.location);
+    const { url, protocols } = daemonSocket(this.#o.conn, EVENTS_SOCKET, this.#o.location);
     const socket = this.#o.openSocket(url, protocols);
     this.#socket = socket;
     socket.onopen = () => {
@@ -91,7 +94,7 @@ export class DaemonEvents {
     // Zdarzenie niezgodne z kontraktem (inna wersja daemona) pomija się; temat zostaje na odpytywaniu.
     if (!event.success) return;
     this.#latest.set(event.data.type, event.data);
-    for (const listener of this.#listeners.get(event.data.type) ?? []) listener(event.data);
+    for (const listener of this.#listeners) listener(event.data);
   }
 }
 

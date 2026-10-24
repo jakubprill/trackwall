@@ -1,10 +1,11 @@
 import { z } from "zod";
-import { Session, SessionId, Task, TaskChanges } from "./agents.ts";
+import { Session, SessionId, Task, TaskChangesSummary } from "./agents.ts";
 import { RepoCardResult, TagName } from "./cards.ts";
 import { FindEndpointResult, MAX_FOUND_ENDPOINTS, MAX_SUBGRAPH_DEPTH, Subgraph, WhoCallsResult } from "./graph.ts";
 import { HttpMethod } from "./http.ts";
 import { LOG_BUFFER_RECORDS, LOG_TAIL_MAX, LogTail } from "./logs.ts";
 import { MiseTaskName, MiseTasks } from "./mise.ts";
+import { RunState } from "./procs.ts";
 import { SyncRepo } from "./sync.ts";
 import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
 
@@ -61,24 +62,33 @@ export const GetRepoResult = z.object({
 });
 export type GetRepoResult = z.infer<typeof GetRepoResult>;
 
+const [RunningSession, StoppingSession, ExitedSession] = RunState.options;
+
+/**
+ * Sesja dla agenta: to samo co `Session`, ale zakończona grupa procesów bez ostatnich linii ekranu. Wyjście PTY nie
+ * jest maskowane jak log (§4.2, §8), więc sekret wypisany w terminalu jednej sesji nie może trafić do innej (ADR-36).
+ */
+export const AgentSession = Session.extend({
+  run: z.discriminatedUnion("kind", [RunningSession, StoppingSession, ExitedSession.omit({ lastLines: true })]),
+});
+export type AgentSession = z.infer<typeof AgentSession>;
+
 export const ListSessionsResult = z.object({
   /** Sesje od najnowszej, także zakończone, dopóki użytkownik ich nie zamknie. */
-  sessions: z.array(Session),
+  sessions: z.array(AgentSession),
   /** Zadania od najnowszego; sesja zadania ma jego identyfikator w `Session.task`. */
   tasks: z.array(Task),
 });
 export type ListSessionsResult = z.infer<typeof ListSessionsResult>;
 
-/** Zmiany zadania bez samego diffu: pliki z liczbą linii i liczba commitów, bez treści zmian (do 1 MB). */
-export const TaskChangesSummary = TaskChanges.omit({ patch: true, truncated: true });
-export type TaskChangesSummary = z.infer<typeof TaskChangesSummary>;
-
 export const GetSessionResult = z.object({
-  session: Session,
+  session: AgentSession,
   /** Zadanie sesji; `null` dla sesji w korzeniu repo. */
   task: Task.nullable(),
-  /** Zmiany zadania względem commita bazowego; `null` dla sesji w korzeniu repo. */
+  /** Zmiany zadania względem commita bazowego; `null` dla sesji w korzeniu repo i gdy nie dało się ich policzyć. */
   changes: TaskChangesSummary.nullable(),
+  /** Dlaczego zmian zadania nie ma (`<kod>: <komunikat>`, np. worktree usunięty ręcznie); `null`, gdy są albo sesja nie ma zadania. */
+  changesError: z.string().nullable(),
 });
 export type GetSessionResult = z.infer<typeof GetSessionResult>;
 
@@ -193,12 +203,12 @@ export const mcpTools = {
     name: LIST_SESSIONS,
     description:
       "Copilot CLI sessions that Trackwall runs (the Sessions view), newest first, and tasks. A session has an id, " +
-      "repo, start time, process state (run: running, stopping, exited with exit code and last screen lines), the " +
+      "repo, start time, process state (run: running, stopping, exited with exit code; the screen is not shared), the " +
       "latest state change (state: Working, Input, Approval, Plan, Done, Error, Stale, with source and confidence; " +
       "null before the first signal), window title (what the agent is working on), needsAttention (running and " +
       "waiting for the user) and task: the id of the task whose worktree it runs in, null in the repo root. A task " +
       "is work in its own worktree on its own branch: prompt, branch, base branch and commit, worktree path. Sessions " +
-      "end with Trackwall, tasks stay until the user ends them. The repo argument narrows both lists to one repo. " +
+      "end with Trackwall, tasks stay until the user ends them. The repo argument narrows both lists to one repo (not_found for an unknown repo). " +
       "The tool is read-only: only the user starts, answers and stops sessions.",
     args: z.object({ repo: RepoArg.optional() }).strict(),
     result: ListSessionsResult,
@@ -207,8 +217,10 @@ export const mcpTools = {
     name: "get_session",
     description:
       `One session from ${LIST_SESSIONS}, its task (null in the repo root) and, for a task, the changes in its ` +
-      "worktree against the base commit: changed files with added and deleted lines, commits on the task branch and " +
-      "the number of uncommitted entries, without the diff itself.",
+      "worktree against the base commit: changed files with added and deleted lines (at most 200, filesTruncated: " +
+      "true when there were more), commits on the task branch and the number of uncommitted entries, without the diff " +
+      "itself; read the worktree for the content. changes: null with changesError when they cannot be computed " +
+      "(e.g. the worktree was deleted or the task is being ended).",
     args: z.object({ session: SessionId.describe(`session id from ${LIST_SESSIONS} (the id field)`) }).strict(),
     result: GetSessionResult,
   },

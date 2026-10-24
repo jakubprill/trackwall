@@ -62,11 +62,11 @@ describe.skipIf(process.versions.bun === undefined)("terminal sesji przez WebSoc
     const session = "00000000-0000-4000-8000-000000000000";
     await expect(connect(session, [PTY_SUBPROTOCOL]).opened).rejects.toThrow("status 401");
     await expect(connect(session, [PTY_SUBPROTOCOL, `bearer.${"x".repeat(43)}`]).opened).rejects.toThrow("status 401");
-    await expect(connect(session, [`bearer.${TOKEN}`]).opened).rejects.toThrow("status 401");
+    await expect(connect(session, [`bearer.${TOKEN}`]).opened).rejects.toThrow("status 400");
     await expect(connect(session, [PTY_SUBPROTOCOL, `bearer.${TOKEN}`], { origin: "https://evil.example" }).opened).rejects.toThrow(
       "status 403",
     );
-    await expect(connect("nie-uuid", [PTY_SUBPROTOCOL, `bearer.${TOKEN}`]).opened).rejects.toThrow("status 404");
+    expect(await connect("nie-uuid", [PTY_SUBPROTOCOL, `bearer.${TOKEN}`]).closed).toBe(PTY_CLOSE_NOT_FOUND);
 
     const unknown = connect(session, [PTY_SUBPROTOCOL, `bearer.${TOKEN}`]);
     expect(await unknown.closed).toBe(PTY_CLOSE_NOT_FOUND);
@@ -75,7 +75,10 @@ describe.skipIf(process.versions.bun === undefined)("terminal sesji przez WebSoc
   test("żądanie z adresem, którego nie da się sparsować, dostaje 404, a daemon działa dalej", async () => {
     const response = await new Promise<string>((resolve, reject) => {
       const socket = createConnection(daemon.api.port, "127.0.0.1", () => {
-        socket.write(`GET http://[x/ HTTP/1.1\r\nHost: 127.0.0.1:${daemon.api.port}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n`);
+        socket.write(
+          `GET http://[x/ HTTP/1.1\r\nHost: 127.0.0.1:${daemon.api.port}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n` +
+            `Sec-WebSocket-Protocol: ${PTY_SUBPROTOCOL}, bearer.${TOKEN}\r\n\r\n`,
+        );
       });
       let received = "";
       socket.on("data", (chunk) => {

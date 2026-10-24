@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { agentsApi, DaemonEvent, EVENTS_SUBPROTOCOL } from "@trackwall/protocol";
+import { agentsApi, DaemonEvent, EVENTS_SOCKET } from "@trackwall/protocol";
+
+const EVENTS_SUBPROTOCOL = EVENTS_SOCKET.subprotocol;
+
 import WebSocket from "ws";
 import { startSessionApi } from "./support/session-api.ts";
 
@@ -48,8 +51,6 @@ describe.skipIf(process.versions.bun === undefined)("zdarzenia daemona przez Web
       () => client.events.some((e) => sessionsIn(e).some((s) => s.id === session.id && s.state?.state === "Input")),
       "stan Input z hooka",
     );
-    const seqs = client.events.map((e) => e.seq);
-    expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
 
     await daemon.post(agentsApi.stop, { session: session.id });
     await until(() => client.events.some((e) => sessionsIn(e).some((s) => s.id === session.id && s.run.kind === "exited")), "koniec sesji");
@@ -59,7 +60,9 @@ describe.skipIf(process.versions.bun === undefined)("zdarzenia daemona przez Web
   test("bez tokenu, z obcym Origin, bez podprotokołu zdarzeń albo pod nieznanym adresem połączenie jest odrzucane", async () => {
     await expect(connect("/ws", [EVENTS_SUBPROTOCOL]).opened).rejects.toThrow("status 401");
     await expect(connect("/ws", [EVENTS_SUBPROTOCOL, `bearer.${"x".repeat(43)}`]).opened).rejects.toThrow("status 401");
-    await expect(connect("/ws", ["trackwall.pty", `bearer.${TOKEN}`]).opened).rejects.toThrow("status 401");
+    // Bez tokenu nieznany adres też daje 401: klient bez tokenu nie pozna adresów daemona.
+    await expect(connect("/ws/inne", [EVENTS_SUBPROTOCOL]).opened).rejects.toThrow("status 401");
+    await expect(connect("/ws", ["trackwall.pty", `bearer.${TOKEN}`]).opened).rejects.toThrow("status 400");
     await expect(connect("/ws", [EVENTS_SUBPROTOCOL, `bearer.${TOKEN}`], { origin: "https://evil.example" }).opened).rejects.toThrow(
       "status 403",
     );

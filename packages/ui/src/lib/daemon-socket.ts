@@ -1,4 +1,4 @@
-import { SOCKET_TOKEN_PREFIX } from "@trackwall/protocol";
+import { type DaemonSocket, SOCKET_TOKEN_PREFIX } from "@trackwall/protocol";
 import type { Connection } from "./connection.ts";
 
 /**
@@ -8,8 +8,7 @@ import type { Connection } from "./connection.ts";
  */
 export function daemonSocket(
   conn: Connection,
-  path: string,
-  subprotocol: string,
+  { path, subprotocol }: DaemonSocket,
   location: Pick<Location, "protocol" | "host">,
 ): { url: string; protocols: string[] } {
   const base = conn.baseUrl === "" ? `${location.protocol}//${location.host}` : conn.baseUrl;

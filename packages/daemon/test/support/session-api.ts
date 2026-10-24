@@ -19,7 +19,7 @@ const daemonMain = join(import.meta.dir, "..", "..", "src", "main.ts");
  */
 export async function startSessionApi(token: string) {
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
-  const repo = makeRepo({ "README.md": "# sklep\n" }, "sklep", projects);
+  makeRepo({ "README.md": "# sklep\n" }, "sklep", projects);
   const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
   writeFileSync(join(home, "workspace.yaml"), `projectsDir: ${JSON.stringify(projects)}\n`);
   const facade = createFacade({
@@ -58,5 +58,5 @@ export async function startSessionApi(token: string) {
     facade.agents.close();
     await api.close();
   };
-  return { api, facade, repo, post, stop };
+  return { api, facade, post, stop };
 }

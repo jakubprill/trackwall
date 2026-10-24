@@ -1,7 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { copilotMcpServers, type RunState, type Session, type SessionList, type Task, type TaskChanges } from "@trackwall/protocol";
+import {
+  copilotMcpServers,
+  type RunState,
+  type Session,
+  type SessionList,
+  type Task,
+  type TaskChanges,
+  type TaskChangesSummary,
+} from "@trackwall/protocol";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { findCopilot } from "./copilot-command.ts";
 import type { CopilotHookEvent } from "./copilot-hook-record.ts";
@@ -126,8 +134,18 @@ export class Agents {
     return this.#tasks.resume(id);
   }
 
+  /** Zadanie po identyfikatorze (`not_found`, gdy go nie ma albo użytkownik je zakończył). */
+  task(id: string): Task {
+    return this.#tasks.task(id);
+  }
+
   taskChanges(id: string): Promise<TaskChanges> {
     return this.#tasks.changes(id);
+  }
+
+  /** Zmiany zadania bez diffu, dla agenta (narzędzie MCP `get_session`). */
+  taskChangesSummary(id: string): Promise<TaskChangesSummary> {
+    return this.#tasks.summary(id);
   }
 
   openTaskEditor(id: string): void {

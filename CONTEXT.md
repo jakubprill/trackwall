@@ -285,7 +285,7 @@ _Unikaj_: konsola, terminal (to PTY sesji zadania)
 Globalny, rosnący numer rekordu dla wszystkich źródeł; każde działanie daemona zaczyna od chwili startu, więc numery się nie powtarzają. Kursor (`sinceSeq` w API i w narzędziach MCP) działa dla jednego źródła i dla całego workspace; `dropped` mówi, że część rekordów po kursorze przepadła.
 
 **Zdarzenie** (`DaemonEvent`, `sessions.changed`, `mise.running.changed`; po angielsku *event*):
-Wiadomość daemona na WebSocket `/ws` (ADR-36) z całą migawką jednego tematu i własnym `seq` zdarzeń, rosnącym przez wszystkie tematy. Daemon wysyła je po podłączeniu (migawka każdego tematu) i przy każdej zmianie migawki.
+Wiadomość daemona na WebSocket `/ws` (ADR-36) z całą migawką jednego tematu, bez numeru. Daemon wysyła je po podłączeniu (migawka każdego tematu) i przy każdej zmianie migawki.
 _Unikaj_: rekord (to log), powiadomienie (to OSC albo hook)
 
 **Migawka tematu** (`payload` zdarzenia, `LiveFeed` w UI; po angielsku *snapshot*):

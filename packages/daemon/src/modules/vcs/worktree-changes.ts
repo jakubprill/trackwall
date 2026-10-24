@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import type { TaskChanges } from "@trackwall/protocol";
 import { git } from "./git.ts";
 import { parseChangedFiles } from "./parse.ts";
-import { ExitCodeError } from "./run.ts";
+import { ExitCodeError, type RunOutput } from "./run.ts";
 import { commitCount, uncommittedCount } from "./worktree.ts";
 
 /**
@@ -19,6 +19,10 @@ import { commitCount, uncommittedCount } from "./worktree.ts";
 /** Duże worktree na Windowsie ze skanującym antywirusem potrafią liczyć `git status` kilkanaście sekund. */
 const CHANGES_TIMEOUT_MS = 60_000;
 
+/** Bez diffu: same pliki z liczbą linii i liczby commitów (narzędzie MCP `get_session`). */
+const NO_PATCH: RunOutput = { stdout: Buffer.alloc(0), truncated: false };
+
+/** `maxPatchBytes` 0 pomija diff: git nie liczy treści zmian, a `patch` jest pusty. */
 export async function worktreeChanges(dir: string, base: string, maxPatchBytes: number): Promise<TaskChanges> {
   const index = resolve(dir, (await git(dir, ["rev-parse", "--git-path", "index"])).stdout.toString("utf8").trim());
   const tmp = resolve(tmpdir(), `trackwall-index-${randomUUID()}`);
@@ -44,7 +48,7 @@ export async function worktreeChanges(dir: string, base: string, maxPatchBytes: 
     const work = [
       diff(["--name-status", "-z"]),
       diff(["--numstat", "-z"]),
-      diff([], maxPatchBytes),
+      maxPatchBytes > 0 ? diff([], maxPatchBytes) : Promise.resolve(NO_PATCH),
       commitCount(dir, base, "HEAD"),
       uncommittedCount(dir),
     ] as const;

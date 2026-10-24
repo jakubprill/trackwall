@@ -1,5 +1,5 @@
 import "@xterm/xterm/css/xterm.css";
-import { PTY_CLOSE_NOT_FOUND, PTY_SOCKET_PREFIX, PTY_SUBPROTOCOL, type PtyClientMessage } from "@trackwall/protocol";
+import { PTY_CLOSE_NOT_FOUND, type PtyClientMessage, ptySocket } from "@trackwall/protocol";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { useEffect, useRef, useState } from "react";
@@ -43,7 +43,7 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
     const sendSize = () => send({ type: "resize", cols: terminal.cols, rows: terminal.rows });
 
     const connect = () => {
-      const { url, protocols } = daemonSocket(conn, `${PTY_SOCKET_PREFIX}${session}`, PTY_SUBPROTOCOL, window.location);
+      const { url, protocols } = daemonSocket(conn, ptySocket(session), window.location);
       const ws = new WebSocket(url, protocols);
       ws.binaryType = "arraybuffer";
       socket = ws;

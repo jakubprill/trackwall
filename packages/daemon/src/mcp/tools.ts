@@ -1,5 +1,14 @@
 import type { McpServer } from "@modelcontextprotocol/server";
-import { type AgentRepo, type McpTool, mcpTools, type Repo, type RepoTags, type SyncRun } from "@trackwall/protocol";
+import {
+  type AgentRepo,
+  type AgentSession,
+  type McpTool,
+  mcpTools,
+  type Repo,
+  type RepoTags,
+  type Session,
+  type SyncRun,
+} from "@trackwall/protocol";
 import type { z } from "zod";
 import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
@@ -111,17 +120,24 @@ const runs: ToolRuns = {
   subgraphFor: (facade, { repo, depth }) => facade.graph.subgraph(repo, depth),
   findEndpoint: (facade, { query, method }) => facade.graph.findEndpoint(query, method),
   listSessions: async (facade, { repo }) => {
+    // Repo musi istnieć (`not_found` jak w get_repo): literówka w identyfikatorze nie może wyglądać jak „brak sesji”.
+    if (repo !== undefined) await facade.workspace.repo(repo);
     const { sessions, tasks } = facade.agents.sessions();
     const inRepo = (item: { repo: string }) => repo === undefined || item.repo === repo;
-    return { sessions: sessions.filter(inRepo), tasks: tasks.filter(inRepo) };
+    return { sessions: sessions.filter(inRepo).map(agentSession), tasks: tasks.filter(inRepo) };
   },
   getSession: async (facade, { session: id }) => {
-    const session = facade.agents.session(id);
-    const task = facade.agents.sessions().tasks.find((t) => t.id === session.task) ?? null;
-    if (!task) return { session, task, changes: null };
-    // Diff (do 1 MB) zostaje w UI: agentowi wystarczą pliki i liczby, a treść przeczyta sam z worktree.
-    const { patch: _, truncated: __, ...changes } = await facade.agents.taskChanges(task.id);
-    return { session, task, changes };
+    const session = agentSession(facade.agents.session(id));
+    if (session.task === null) return { session, task: null, changes: null, changesError: null };
+    const task = facade.agents.task(session.task);
+    // Sesja i zadanie istnieją, nawet gdy zmian nie da się policzyć (worktree usunięty ręcznie, trwa zakończenie).
+    return facade.agents.taskChangesSummary(task.id).then(
+      (changes) => ({ session, task, changes, changesError: null }),
+      (err: unknown) => {
+        if (!(err instanceof DomainError)) throw err;
+        return { session, task, changes: null, changesError: `${err.code}: ${err.message}` };
+      },
+    );
   },
 };
 
@@ -140,6 +156,13 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.listSessions, runs.listSessions),
   defineTool(mcpTools.getSession, runs.getSession),
 ];
+
+/** Sesja bez ostatnich linii ekranu zakończonej grupy: wyjście PTY nie jest maskowane (§8, ADR-36). */
+function agentSession({ run, ...session }: Session): AgentSession {
+  if (run.kind !== "exited") return { ...session, run };
+  const { lastLines: _, ...exited } = run;
+  return { ...session, run: exited };
+}
 
 /** Repo łączy się z wynikiem synchronizacji po ścieżce, bo identyfikator może się zmienić razem z nazwą katalogu (ADR-18). */
 function agentRepo(repo: Repo, run: SyncRun | null, tags: string[]): AgentRepo {

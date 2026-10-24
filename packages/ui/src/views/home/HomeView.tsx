@@ -1,11 +1,11 @@
-import { graphApi, miseApi, type SessionList, workspaceApi } from "@trackwall/protocol";
+import { graphApi, miseApi, type RunningMiseTask, type SessionList, workspaceApi } from "@trackwall/protocol";
 import { type HomeKey, parseHomeKey } from "@trackwall/scene/model";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import type { DaemonEvents } from "@/lib/daemon-events";
+import type { LiveFeed } from "@/lib/daemon-events";
 import { daemonAnswered, homeHasObject, homeModel } from "@/lib/home-model";
 import { listNeedsSettings, REPO_LIST_POLL_MS } from "@/lib/repo-status";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
@@ -31,7 +31,7 @@ const RUNNING_POLL_MS = 3000;
 
 export function HomeView({
   conn,
-  events,
+  runningLive,
   sessions,
   onOpenSession,
   onOpenRepo,
@@ -39,8 +39,8 @@ export function HomeView({
   onOpenSettings,
 }: {
   conn: Connection;
-  /** `undefined` przez chwilę po zmianie połączenia; do tego czasu taski mise są odpytywane. */
-  events: DaemonEvents | undefined;
+  /** Działające taski mise ze zdarzeń; `undefined` przez chwilę po zmianie połączenia, do tego czasu są odpytywane. */
+  runningLive: LiveFeed<RunningMiseTask[]> | undefined;
   sessions: RemoteHandle<SessionList>;
   onOpenSession: (id: string) => void;
   onOpenRepo: (id: string) => void;
@@ -55,7 +55,6 @@ export function HomeView({
     useCallback(() => post(conn, graphApi.graph, {}), [conn]),
     { pollMs: GRAPH_POLL_MS },
   );
-  const runningLive = useMemo(() => events?.feed("mise.running.changed"), [events]);
   const running = useRemote(
     useCallback(() => post(conn, miseApi.running, {}), [conn]),
     { pollMs: RUNNING_POLL_MS, live: runningLive },
