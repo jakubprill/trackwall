@@ -307,6 +307,8 @@ describe("poziom rekordu", () => {
     ["[SEVERE] Database unreachable", "error"],
     ["[ERROR:main] boom", "error"],
     ["e: something happened", "info"],
+    ["[debug-server] Error: boom", "error"],
+    ["[info] compiling 3 Scala sources", "info"],
   ])("%s → %s", (msg, level) => {
     expect(logLevel(msg)).toBe(level);
   });

@@ -76,19 +76,19 @@ function shownLines(block: ErrorBlock): { lines: string[]; omittedLines: number 
   };
   let frames = 0;
   let skipped = 0;
-  block.records.forEach((record, i) => {
-    const frame = STACK_FRAME.test(block.lines[i] ?? "");
+  for (const { record, line } of block.entries) {
+    const frame = STACK_FRAME.test(line);
     frames = frame ? frames + 1 : 0;
     if (frame && frames > FRAMES_SHOWN) {
       skipped += 1;
-      return;
+      continue;
     }
     if (skipped > 0) show(`\t… ${skipped} frames omitted`, false);
     skipped = 0;
     show(shorten(record.msg, LINE_CHARS), true);
-  });
+  }
   if (skipped > 0) show(`\t… ${skipped} frames omitted`, false);
-  return { lines, omittedLines: block.records.length - shownFromLog };
+  return { lines, omittedLines: block.entries.length - shownFromLog };
 }
 
 /**
@@ -98,10 +98,11 @@ function shownLines(block: ErrorBlock): { lines: string[]; omittedLines: number 
  * `Foo.java:[10,5]`) tell different compiler errors apart and stay.
  */
 function signature(block: ErrorBlock): string {
+  const lines = block.entries.map((e) => e.line);
   const text =
     block.exception === null
-      ? block.lines.slice(0, SIGNATURE_LINES).join("\n")
-      : `${block.exception}\n${block.lines.find((l) => STACK_FRAME.test(l))?.trim() ?? ""}`;
+      ? lines.slice(0, SIGNATURE_LINES).join("\n")
+      : `${block.exception}\n${lines.find((l) => STACK_FRAME.test(l))?.trim() ?? ""}`;
   return text.replace(VOLATILE, (match, location: string | undefined) => location ?? (match.startsWith("[") ? "[]" : "0"));
 }
 

@@ -67,7 +67,7 @@ describe("errors from the log", () => {
       "stdout",
       logs.open(DEV, "r1", {}),
       [
-        "2026-10-24T10:00:01.200+02:00 ERROR 4242 --- [main] o.s.b.d.LoggingFailureAnalysisReporter : ",
+        "2026-10-24T10:00:01.200+02:00 ERROR 4242 --- [main] o.s.b.d.LoggingFailureAnalysisReporter :",
         "",
         "***************************",
         "APPLICATION FAILED TO START",
@@ -348,7 +348,7 @@ describe("errors from the log", () => {
       [
         "**********************************",
         "2026-10-24T10:00:00.000+02:00  INFO 1 --- [main] c.e.App : starting",
-        "2026-10-24T10:00:01.000+02:00 ERROR 1 --- [main] o.s.b.d.LoggingFailureAnalysisReporter : ",
+        "2026-10-24T10:00:01.000+02:00 ERROR 1 --- [main] o.s.b.d.LoggingFailureAnalysisReporter :",
         "",
         "***************************",
         "APPLICATION FAILED TO START",
@@ -409,6 +409,79 @@ describe("errors from the log", () => {
     );
 
     expect(logs.errors(ALL).errors.map((e) => [e.level, e.lines.length])).toEqual([["error", 2]]);
+    expect(logs.errors({ ...ALL, minLevel: "warn" }).errors.map((e) => [e.level, e.lines.length])).toEqual([
+      ["error", 2],
+      ["warn", 1],
+    ]);
+  });
+
+  test("a Caused by under a Suppressed exception is not the cause of the error", () => {
+    const logs = newLogs();
+    write(
+      "stdout",
+      logs.open(DEV, "r1", {}),
+      [
+        "java.lang.IllegalStateException: write failed",
+        "\tat com.example.A.run(A.java:5)",
+        "\tSuppressed: java.io.IOException: close failed",
+        "\t\tat com.example.A.close(A.java:9)",
+        "\tCaused by: java.net.SocketException: Broken pipe",
+        "\t\t... 2 more",
+      ].join("\n"),
+    );
+
+    expect(logs.errors(ALL).errors.map((e) => [e.exception, e.lines.length])).toEqual([
+      ["java.lang.IllegalStateException: write failed", 6],
+    ]);
+  });
+
+  test("the prefix of a task whose name starts with a level word is still removed", () => {
+    const logs = newLogs();
+    write("stdout", logs.open(DEV, "r1", {}), ["[debug-server] Error: boom", "[debug-server]     at main (/repo/index.js:1:1)"].join("\n"));
+
+    expect(logs.errors(ALL).errors.map((e) => [e.exception, e.lines.length])).toEqual([["Error: boom", 2]]);
+  });
+
+  test("a Spring report without Action ends at the build tool's output, and a Gradle report after it is its own error", () => {
+    const logs = newLogs();
+    const report = [
+      "2026-10-24T10:00:01.000+02:00 ERROR 1 --- [main] o.s.b.d.LoggingFailureAnalysisReporter :",
+      "***************************",
+      "APPLICATION FAILED TO START",
+      "***************************",
+      "Description:",
+      "The dependencies of some of the beans form a cycle:",
+      "   a -> b",
+    ];
+    write(
+      "stdout",
+      logs.open(DEV, "r1", {}),
+      [
+        ...report,
+        "[INFO] BUILD FAILURE",
+        "[ERROR] Failed to execute goal spring-boot-maven-plugin: Process terminated with exit code: 1",
+      ].join("\n"),
+    );
+    write("stdout", logs.open(BUILD, "r2", {}), [...report, "FAILURE: Build failed with an exception.", "BUILD FAILED in 2s"].join("\n"));
+
+    expect(logs.errors({ ...ALL, repo: "orders", miseTask: "dev" }).errors.map((e) => e.lines.length)).toEqual([1, 7]);
+    expect(logs.errors({ ...ALL, miseTask: "build" }).errors.map((e) => e.lines)).toEqual([
+      ["FAILURE: Build failed with an exception.", "BUILD FAILED in 2s"],
+      report,
+    ]);
+  });
+
+  test("a Gradle report under a compiler warning is an error of its own with either level threshold", () => {
+    const logs = newLogs();
+    write(
+      "stdout",
+      logs.open(BUILD, "r1", {}),
+      ["w: file:///repo/App.kt:3:5 Parameter 'x' is never used", "", "FAILURE: Build failed with an exception.", "BUILD FAILED in 2s"].join(
+        "\n",
+      ),
+    );
+
+    expect(logs.errors(ALL).errors.map((e) => [e.level, e.lines[0]])).toEqual([["error", "FAILURE: Build failed with an exception."]]);
     expect(logs.errors({ ...ALL, minLevel: "warn" }).errors.map((e) => [e.level, e.lines.length])).toEqual([
       ["error", 2],
       ["warn", 1],

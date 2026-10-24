@@ -32,8 +32,13 @@ const RULES: readonly [LogLevel, RegExp][] = [
  */
 export const LEVEL_TAG = new RegExp(String.raw`^(?:\[(?:${ERROR_WORDS}|${WARN_WORDS})\]|npm (?:ERR!|error|warn))`);
 
-/** `[name] ` at the start of a line, unless the name starts with a level word (`[ERROR]`, `[info]`, `[ERROR:main]`). */
-const MISE_TASK_PREFIX = new RegExp(String.raw`^\[(?!(?:${ERROR_WORDS}|${WARN_WORDS}|${OTHER_WORDS})\b)[\w:./-]+\] `, "i");
+const LEVEL_WORDS = `${ERROR_WORDS}|${WARN_WORDS}|${OTHER_WORDS}`;
+/**
+ * `[name] ` at the start of a line, unless it is a level: an upper-case level word alone or with a thread or logger
+ * (`[ERROR]`, `[ERROR:main]`, `[WARN/worker]`) or a lower-case one alone, as in sbt (`[info]`). A mise task named
+ * exactly like a lower-case level (`debug`) therefore keeps its prefix; `debug-server` or `info:docs` lose it.
+ */
+const MISE_TASK_PREFIX = new RegExp(String.raw`^\[(?!(?:${LEVEL_WORDS})[\]:/]|(?:${LEVEL_WORDS.toLowerCase()})\])[\w:./-]+\] `);
 
 export function logLevel(msg: string): LogLevel {
   const line = withoutTaskPrefix(msg);
