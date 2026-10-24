@@ -7,7 +7,8 @@
 //! Odświeżenie strony (F5) maluje ją nieprzezroczyście do końca ładowania; to świadomie zostawione (ADR-11).
 //! `set_effects` z Tauri nie nadaje się tu, bo bierze tylko pierwszy efekt z listy i nie mówi, czy się udał.
 
-use crate::windows::{self, lock};
+use crate::lock::lock;
+use crate::windows;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -132,15 +133,15 @@ impl WindowEffects {
         Arc::clone(entries.entry(label.to_string()).or_insert_with(|| Arc::new(AppliedEffect::new())))
     }
 
-    /// Applies the first effect the system accepts. Must run on the main thread (AppKit on macOS). A page that has
-    /// already loaded and shown its window opaque gets the effect now.
-    pub fn apply(&self, window: &WebviewWindow) -> Arc<AppliedEffect> {
+    /// Applies the first effect the system accepts and starts the fallback timer. Must run on the main thread (AppKit
+    /// on macOS). A page that has already loaded and shown its window opaque gets the effect now.
+    pub fn apply(&self, window: &WebviewWindow) {
         let applied = self.register(window.label());
         let _ = applied.effect.set(first_applied(window, candidates()));
         if applied.is_revealed() {
-            pass_to_ui(window, &applied);
+            pass_to_ui(window.as_ref(), &applied);
         }
-        applied
+        reveal_fallback(window.app_handle(), window.label(), applied);
     }
 
     /// A window shown from the tray before its page has loaded does not pop up again after loading.
@@ -161,7 +162,7 @@ fn ui_script(effect: WindowEffect) -> String {
 }
 
 /// Sets the attribute of an applied effect on the page, without waiting for it.
-fn pass_to_ui(webview: &WebviewWindow, applied: &AppliedEffect) {
+fn pass_to_ui(webview: &Webview, applied: &AppliedEffect) {
     if let Some(Some(effect)) = applied.effect.get() {
         if let Err(err) = webview.eval(ui_script(*effect)) {
             eprintln!("[desktop] passing the window effect to the UI: {err}");
@@ -178,26 +179,18 @@ pub fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>) {
     let app = webview.app_handle().clone();
     let label = webview.label().to_string();
     let applied = app.state::<WindowEffects>().register(&label);
-    let effect = match applied.effect.get() {
-        Some(Some(effect)) => *effect,
-        Some(None) => return applied.reveal_once(|| windows::show(&app, &label)),
-        None => {
-            // An extra window's effect is applied on the main thread right after it is built; a page that is faster
-            // shows its window opaque, and whichever of the two comes second passes the effect to the UI.
-            applied.reveal_once(|| windows::show(&app, &label));
-            if let Some(window) = app.get_webview_window(&label) {
-                pass_to_ui(&window, &applied);
-            }
-            return;
-        }
+    let effect = applied.effect.get().copied();
+    let Some(Some(effect)) = effect.filter(|_| !applied.is_revealed()) else {
+        // Shown already (a reload, the tray), no effect on this system, or the effect is not applied yet: an extra
+        // window's effect is applied on the main thread right after it is built, so a faster page shows its window
+        // opaque and `apply` passes the effect to the UI when it comes.
+        applied.reveal_once(|| windows::show(&app, &label));
+        pass_to_ui(webview, &applied);
+        return;
     };
-    let result = if applied.is_revealed() {
-        webview.eval(ui_script(effect))
-    } else {
-        let (after, after_label, after_applied) = (app.clone(), label.clone(), Arc::clone(&applied));
-        webview.eval_with_callback(ui_script(effect), move |_| after_applied.reveal_once(|| windows::show(&after, &after_label)))
-    };
-    if let Err(err) = result {
+    let (after, after_label, after_applied) = (app.clone(), label.clone(), Arc::clone(&applied));
+    let shown = webview.eval_with_callback(ui_script(effect), move |_| after_applied.reveal_once(|| windows::show(&after, &after_label)));
+    if let Err(err) = shown {
         eprintln!("[desktop] passing the window effect to the UI: {err}");
         applied.reveal_once(|| windows::show(&app, &label));
     }
@@ -205,7 +198,7 @@ pub fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>) {
 
 /// Shows the window after `REVEAL_FALLBACK` if nothing has shown it before. The timer holds this window's entry, so
 /// a later window with the same label is not shown by it.
-pub fn reveal_fallback(app: &AppHandle, label: &str, applied: Arc<AppliedEffect>) {
+fn reveal_fallback(app: &AppHandle, label: &str, applied: Arc<AppliedEffect>) {
     let (app, label) = (app.clone(), label.to_string());
     std::thread::spawn(move || {
         std::thread::sleep(REVEAL_FALLBACK);

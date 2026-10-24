@@ -5,7 +5,7 @@ import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { Loading } from "@/components/Loading";
 import { post } from "@/lib/api";
-import { canOpenWindows, openWindow, reportShowsSessions, showViewMenu, viewFromLocation } from "@/lib/app-window";
+import { inDesktopShell, openWindow, reportShowsSessions, showViewMenu, viewFromLocation } from "@/lib/app-window";
 import type { Connection } from "@/lib/connection";
 import type { DaemonEvents } from "@/lib/daemon-events";
 import { IS_MAC } from "@/lib/platform";
@@ -54,16 +54,17 @@ export function App() {
   const [sessionLayout, setSessionLayout] = useState<SessionLayout>("1");
   const { conn, epoch, error, retry } = useConnection();
   const [windowError, setWindowError] = useState<string>();
-  const openInNewWindow = useMemo(
-    () =>
-      canOpenWindows()
-        ? (id: View) => {
-            setWindowError(undefined);
-            openWindow(id).catch((err: unknown) => setWindowError(`Could not open a new window: ${String(err)}`));
-          }
-        : undefined,
-    [],
-  );
+  const newWindow = useMemo(() => {
+    if (!inDesktopShell()) return undefined;
+    const open = (id: View) => {
+      setWindowError(undefined);
+      openWindow(id).catch((err: unknown) => setWindowError(`Could not open a new window: ${String(err)}`));
+    };
+    const showMenu = (id: View) => {
+      showViewMenu(() => open(id)).catch((err: unknown) => setWindowError(`Could not show the menu: ${String(err)}`));
+    };
+    return { open, showMenu };
+  }, []);
   useEffect(() => {
     reportShowsSessions(view === "sessions").catch(() => {
       // Without the report a session from the tray opens in the last focused window instead; nothing to show.
@@ -106,13 +107,7 @@ export function App() {
         views={VIEWS}
         active={view}
         onSelect={setView}
-        onOpenInNewWindow={openInNewWindow}
-        onViewContextMenu={
-          openInNewWindow &&
-          ((id: View) => {
-            showViewMenu(() => openInNewWindow(id)).catch((err: unknown) => setWindowError(`Could not show the menu: ${String(err)}`));
-          })
-        }
+        newWindow={newWindow}
         badges={{ sessions: attentionCount(sessions.data) }}
       />
       <div className="flex min-w-0 flex-1 flex-col">

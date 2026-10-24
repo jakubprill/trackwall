@@ -268,7 +268,7 @@ _Unikaj_: sesja POSIX (to pojęcie z grupy procesów), okno (to okno terminala w
 A running session in `Approval` or `Plan`, or in `Input` the user has not seen yet (ADR-47): the agent will not move on without a human, and the human does not know yet. The daemon computes it; the UI (the counter on the activity bar, which also counts task proposals waiting for a decision, ADR-39; "Next waiting") and the tray (the "Waiting: <repo>" menu, the flashing window) only read the field.
 
 **Seen** (`SessionAttention.focus`, `typed`; the `focus` frame of `PtyClientMessage`):
-The user has seen the session's current `Input`: a session terminal window was focused and visible, or the user typed into the session, after the state began.
+The user has seen the session's current `Input`: a session terminal was focused and visible, or the user typed into the session, after the state began.
 _Avoid_: read, acknowledged
 
 **Idle** (`isIdle`, `IDLE_LABEL`, dashboard state `idle`):

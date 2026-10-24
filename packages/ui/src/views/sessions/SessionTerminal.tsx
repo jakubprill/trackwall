@@ -15,7 +15,7 @@ import { FocusReporter, terminalInFront } from "@/lib/window-focus";
 const RECONNECT_MS = 1000;
 
 /**
- * The terminal window of one session (§4.4, ADR-26): xterm.js connected over a WebSocket to the PTY in the daemon. The
+ * The session terminal of one session (§4.4, ADR-26): xterm.js connected over a WebSocket to the PTY in the daemon. The
  * daemon sends the screen image first, so switching sessions or a dropped connection starts from the current screen,
  * not an empty terminal. Keys and the terminal size go to the session; the PTY takes the size of the last session
  * terminal that reported one, and a window that comes to the front reports its terminals' sizes again, so with the

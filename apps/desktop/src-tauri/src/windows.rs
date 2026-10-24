@@ -4,10 +4,11 @@
 //! the monitor, size and position of the last window with that label. The shell remembers which windows show the
 //! Sessions view and in which order they were last focused, to pick the window for a session from the tray (§5.4).
 
+use crate::lock::lock;
 use crate::window_effect::WindowEffects;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::Mutex;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
-use tauri_plugin_window_state::AppHandleExt;
+use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 /// Label of the window from `tauri.conf.json`; it hides to the tray instead of closing.
 pub const MAIN: &str = "main";
@@ -15,6 +16,9 @@ pub const MAIN: &str = "main";
 const EXTRA_PREFIX: &str = "window-";
 /// Query parameter with the view an extra window starts with; read by `viewFromLocation` in the UI.
 const VIEW_PARAM: &str = "view";
+/// What `tauri-plugin-window-state` keeps per window: where it was and how big, not whether it was visible, which
+/// stays with the reveal after page load (ADR-11).
+pub const STATE_FLAGS: StateFlags = StateFlags::POSITION.union(StateFlags::SIZE).union(StateFlags::MAXIMIZED).union(StateFlags::FULLSCREEN);
 /// A view id is a short lowercase word (`home`, `sessions`…); anything else never reaches the window URL.
 const MAX_VIEW_LEN: usize = 32;
 
@@ -25,12 +29,6 @@ const MAX_VIEW_LEN: usize = 32;
 pub struct Windows {
     registry: Mutex<Registry>,
     opening: Mutex<()>,
-}
-
-/// Locks a mutex that a panic cannot leave half-changed (every change under these locks is a single step), so a
-/// poisoned value is still usable.
-pub fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 #[derive(Default, Debug)]
@@ -132,11 +130,8 @@ pub fn open(app: &AppHandle, view: Option<&str>) -> Result<(), String> {
     };
     let label = window.label().to_string();
     let effects_app = app.clone();
-    app.run_on_main_thread(move || {
-        let applied = effects_app.state::<WindowEffects>().apply(&window);
-        crate::window_effect::reveal_fallback(&effects_app, window.label(), applied);
-    })
-    .map_err(|e| format!("applying the effect of {label}: {e}"))
+    app.run_on_main_thread(move || effects_app.state::<WindowEffects>().apply(&window))
+        .map_err(|e| format!("applying the effect of {label}: {e}"))
 }
 
 /// A window is gone: it no longer gets sessions, and the position and size of an extra window are saved now, not
@@ -144,7 +139,7 @@ pub fn open(app: &AppHandle, view: Option<&str>) -> Result<(), String> {
 pub fn closed(app: &AppHandle, label: &str) {
     app.state::<Windows>().with(|r| r.closed(label));
     app.state::<WindowEffects>().forget(label);
-    if let Err(err) = app.save_window_state(crate::WINDOW_STATE_FLAGS) {
+    if let Err(err) = app.save_window_state(STATE_FLAGS) {
         eprintln!("[desktop] saving the window state: {err}");
     }
 }

@@ -21,21 +21,18 @@ export function ActivityBar<Id extends string>({
   views,
   active,
   onSelect,
-  onOpenInNewWindow,
-  onViewContextMenu,
+  newWindow,
   badges = {},
 }: {
   views: readonly ActivityView<Id>[];
   active: Id;
   onSelect: (id: Id) => void;
-  /** Opens a view in a new window (ADR-49) from the Ctrl+Shift shortcuts; absent outside the shell. */
-  onOpenInNewWindow?: (id: Id) => void;
-  /** A right click on a view icon; without it the default context menu stays. */
-  onViewContextMenu?: (id: Id) => void;
+  /** Views in new windows (ADR-49): the Ctrl+Shift shortcuts and the icon's context menu; absent outside the shell. */
+  newWindow?: { open: (id: Id) => void; showMenu: (id: Id) => void };
   /** Liczba przy ikonie widoku, np. sesje, które czekają na Ciebie; zero i brak nie pokazują niczego. */
   badges?: Partial<Record<Id, number>>;
 }) {
-  useViewShortcuts(views, active, onSelect, onOpenInNewWindow);
+  useViewShortcuts(views, active, onSelect, newWindow?.open);
 
   const group = (placement: ActivityView<Id>["placement"]) =>
     views
@@ -47,7 +44,7 @@ export function ActivityBar<Id extends string>({
           active={v.id === active}
           badge={badges[v.id]}
           onSelect={() => onSelect(v.id)}
-          onContextMenu={onViewContextMenu && (() => onViewContextMenu(v.id))}
+          onContextMenu={newWindow && (() => newWindow.showMenu(v.id))}
         />
       ));
 
@@ -71,7 +68,7 @@ function useViewShortcuts<Id extends string>(
     (event) => viewKeyAction(event, views, active, { isMac: IS_MAC, newWindows: onOpenInNewWindow !== undefined }),
     (action) => {
       if (action.kind === "select") onSelect(action.id);
-      else onOpenInNewWindow?.(action.id);
+      if (action.kind === "new-window") onOpenInNewWindow?.(action.id);
       return true;
     },
   );

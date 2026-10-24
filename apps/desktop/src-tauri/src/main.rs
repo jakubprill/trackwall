@@ -6,6 +6,7 @@
 mod attention;
 mod daemon;
 mod daemon_state;
+mod lock;
 mod window_effect;
 mod windows;
 
@@ -14,7 +15,6 @@ use daemon_state::DaemonState;
 use std::sync::Arc;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, RunEvent, Window, WindowEvent};
-use tauri_plugin_window_state::StateFlags;
 use window_effect::WindowEffects;
 use windows::Windows;
 
@@ -49,11 +49,6 @@ fn window_shows_sessions(window: Window, windows: tauri::State<'_, Windows>, sho
     windows.shows_sessions(window.label(), shows);
 }
 
-/// What `tauri-plugin-window-state` keeps per window: where it was and how big, not whether it was visible, which
-/// stays with the reveal after page load (ADR-11).
-const WINDOW_STATE_FLAGS: StateFlags =
-    StateFlags::POSITION.union(StateFlags::SIZE).union(StateFlags::MAXIMIZED).union(StateFlags::FULLSCREEN);
-
 fn main() {
     #[cfg(windows)]
     if let Err(err) = tauri::webview_version() {
@@ -76,7 +71,7 @@ fn main() {
         show_main(app);
     }));
     let app = builder
-        .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(WINDOW_STATE_FLAGS).build())
+        .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(windows::STATE_FLAGS).build())
         .manage(Arc::clone(&state))
         .manage(WindowEffects::default())
         .manage(Windows::default())
@@ -84,8 +79,7 @@ fn main() {
         .setup(move |app| {
             state.start();
             let window = app.get_webview_window(windows::MAIN).ok_or("missing window main from tauri.conf.json")?;
-            let applied = app.state::<WindowEffects>().apply(&window);
-            window_effect::reveal_fallback(app.handle(), windows::MAIN, applied);
+            app.state::<WindowEffects>().apply(&window);
             build_tray(app.handle())?;
             attention::watch(app.handle().clone(), Arc::clone(&state), TRAY_ID);
             Ok(())

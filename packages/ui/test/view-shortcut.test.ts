@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ariaShortcut, matchesNewWindowShortcut, matchesShortcut, shortcutLabel, viewKeyAction } from "../src/lib/view-shortcut.ts";
+import { ariaShortcut, matchesShortcut, shortcutLabel, viewKeyAction } from "../src/lib/view-shortcut.ts";
 
 const none = { code: "", key: "", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false };
 const ctrl1 = { ...none, code: "Digit1", key: "1", ctrlKey: true };
@@ -78,8 +78,8 @@ describe("new window shortcuts", () => {
     expect(viewKeyAction({ ...optionCommand3, altKey: false, shiftKey: true }, views, "home", mac)).toBeUndefined();
   });
 
-  test("a held key does not open a window per autorepeat", () => {
-    expect(viewKeyAction({ ...ctrlShift3, repeat: true }, views, "home", windows)).toBeUndefined();
+  test("a held key opens one window, and its autorepeat is still taken so it does not reach a session terminal", () => {
+    expect(viewKeyAction({ ...ctrlShift3, repeat: true }, views, "home", windows)).toEqual({ kind: "held" });
   });
 
   test("without windows to open (the UI in a browser) new-window shortcuts do nothing", () => {
@@ -87,6 +87,6 @@ describe("new window shortcuts", () => {
   });
 
   test("Settings has no new-window shortcut", () => {
-    expect(matchesNewWindowShortcut({ ...none, key: ",", ctrlKey: true, shiftKey: true }, ",", false)).toBe(false);
+    expect(viewKeyAction({ ...ctrlShift3, code: "Comma", key: "," }, views, "home", windows)).toBeUndefined();
   });
 });
