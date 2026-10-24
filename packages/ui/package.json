@@ -13,6 +13,7 @@
   "dependencies": {
     "@pawnjs/core": "0.1.0-alpha.5",
     "@radix-ui/react-slot": "1.5.0",
+    "@streamdown/mermaid": "1.0.3",
     "@tauri-apps/api": "2.12.4",
     "@trackwall/protocol": "workspace:*",
     "@trackwall/scene": "workspace:*",
@@ -22,14 +23,9 @@
     "clsx": "2.1.1",
     "koota": "0.6.6",
     "lucide-react": "1.61.0",
-    "mermaid": "12.1.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "react-markdown": "10.1.0",
-    "rehype-raw": "7.0.0",
-    "rehype-sanitize": "6.0.0",
-    "rehype-slug": "6.0.0",
-    "remark-gfm": "4.0.1",
+    "streamdown": "2.7.0",
     "tailwind-merge": "3.7.0",
     "three": "0.186.1",
     "zod": "4.6.7"

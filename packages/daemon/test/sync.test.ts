@@ -14,7 +14,13 @@ async function setup() {
   const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projekty-"));
   const remotes = mkdtempSync(join(tmpdir(), "trackwall-zdalne-"));
-  const workspace = new Workspace({ file: new WorkspaceFile(file), vcs: new Vcs(), hosting: fakeHosting().hosting, openEditor: () => {}, openLink: () => {} });
+  const workspace = new Workspace({
+    file: new WorkspaceFile(file),
+    vcs: new Vcs(),
+    hosting: fakeHosting().hosting,
+    openEditor: () => {},
+    openLink: () => {},
+  });
   await workspace.setProjectsDir(projects);
   return { workspace, projects, remotes };
 }
@@ -285,7 +291,7 @@ describe("synchronizacja wszystkich repo", () => {
         vcs: new Vcs(),
         hosting: fakeHosting().hosting,
         openEditor: () => {},
-      openLink: () => {},
+        openLink: () => {},
       });
       await expect(empty.sync()).rejects.toMatchObject({ code: "bad_request" });
       expect(empty.syncRun()).toBeNull();

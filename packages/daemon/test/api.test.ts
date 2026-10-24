@@ -62,11 +62,14 @@ beforeAll(async () => {
 
 afterAll(() => api.close());
 
+/** Adresy, które daemon kazał otworzyć systemowi (`openUrl`), zamiast prawdziwej przeglądarki. */
+const openedUrls: string[] = [];
+
 /** Fasada na pustym katalogu stanu i serwer MCP na niej: to, co `main.ts` podaje do `startApi`. */
 function modules() {
   const facade = createFacade({
     home: mkdtempSync(join(tmpdir(), "trackwall-home-")),
-    openUrl: () => {},
+    openUrl: (url) => openedUrls.push(url),
     miseCommand: ["mise"],
     copilotCommand: ["copilot"],
     hookCommand: () => ({ exec: "true", args: [] }),
@@ -212,6 +215,17 @@ describe("api workspace", () => {
     const res = await post(workspaceApi.list.path, JSON.stringify({ zbyt: "x".repeat(70_000) }));
     expect(res.status).toBe(400);
     expect(JSON.parse(res.body)).toMatchObject({ error: { code: "bad_request", message: expect.stringContaining("larger than") } });
+  });
+
+  test("link z README otwiera się w systemie tylko jako strona albo poczta", async () => {
+    openedUrls.length = 0;
+    for (const url of ["https://example.com/docs?a=1#b", "mailto:dev@example.com"]) {
+      expect((await post(workspaceApi.openLink.path, JSON.stringify({ url }))).status).toBe(200);
+    }
+    for (const url of ["file:///C:/Windows/System32/calc.exe", "javascript:alert(1)", "vscode://file/tmp", "docs/a.md"]) {
+      expect((await post(workspaceApi.openLink.path, JSON.stringify({ url }))).status).toBe(400);
+    }
+    expect(openedUrls).toEqual(["https://example.com/docs?a=1#b", "mailto:dev@example.com"]);
   });
 
   test("nieznane repo to 404, a GET na trasie POST nie istnieje", async () => {

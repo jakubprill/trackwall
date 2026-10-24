@@ -1,4 +1,4 @@
-import { dirname, extname, join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   type CloneJob,
   type Commit,
@@ -9,7 +9,6 @@ import {
   type RemoteRepoList,
   type Repo,
   type RepoHost,
-  type RepoImage,
   type RepoList,
   type RepoOverview,
   type RepoStatus,
@@ -41,19 +40,6 @@ const OVERVIEW_COMMITS = 30;
 /** Limit podglądu pliku i README: więcej i tak nikt nie przewija w panelu. */
 const PREVIEW_MAX_BYTES = 512 * 1024;
 const README = /^readme(\.(md|markdown|txt|rst|adoc))?$/i;
-/** Limit obrazu z README: zrzut ekranu mieści się z zapasem, a odpowiedź w base64 rośnie o jedną trzecią. */
-const IMAGE_MAX_BYTES = 4 * 1024 * 1024;
-/** Obrazy, które pokazuje WebView2 i WKWebView, po rozszerzeniu pliku (bez wielkości liter). */
-const IMAGE_MEDIA_TYPES: ReadonlyMap<string, string> = new Map([
-  [".png", "image/png"],
-  [".jpg", "image/jpeg"],
-  [".jpeg", "image/jpeg"],
-  [".gif", "image/gif"],
-  [".webp", "image/webp"],
-  [".avif", "image/avif"],
-  [".svg", "image/svg+xml"],
-  [".ico", "image/x-icon"],
-]);
 /**
  * Ile repo naraz pyta gita przy liście: folder z projektami może mieć ich setki, a każde to dwa procesy `git`,
  * na Windowsie drogie w starcie i skanowane przez antywirus.
@@ -73,7 +59,6 @@ interface WorkspaceVcs {
   log(dir: string, limit: number): Promise<Commit[]>;
   tree(dir: string, path: string): Promise<TreeEntry[] | undefined>;
   file(dir: string, path: string, maxBytes: number): Promise<FileContent | undefined>;
-  blob(dir: string, path: string, maxBytes: number): Promise<{ size: number; bytes: Buffer | null } | undefined>;
 }
 
 /** Czego `workspace` potrzebuje od hostingów repo z modułu `vcs` (ADR-19). */
@@ -88,7 +73,7 @@ export interface WorkspaceDeps {
   hosting: WorkspaceHosting;
   /** Otwiera katalog w VS Code (`vscode://` w systemie, składane w fasadzie). */
   openEditor: (dir: string) => void;
-  /** Otwiera adres strony albo poczty w systemie (ADR-35); schemat adresu sprawdza kontrakt API. */
+  /** Otwiera link z README w systemie (ADR-35); schemat adresu sprawdza kontrakt API. */
   openLink: (url: string) => void;
 }
 
@@ -213,20 +198,6 @@ export class Workspace {
     const content = await this.inRepo(entry, () => this.deps.vcs.file(entry.path, path, PREVIEW_MAX_BYTES));
     if (!content) throw new DomainError("not_found", `${id} has no file "${path}" in the latest commit`);
     return content;
-  }
-
-  /**
-   * Obraz z ostatniego commita dla podglądu Markdown (ADR-35). Typ wynika z rozszerzenia, nie z treści: SVG w `<img>`
-   * nie uruchamia skryptów, a plik o złym rozszerzeniu po prostu się nie wyświetli.
-   */
-  async image(id: string, path: string): Promise<RepoImage> {
-    const mediaType = IMAGE_MEDIA_TYPES.get(extname(path).toLowerCase());
-    if (!mediaType) throw new DomainError("bad_request", `"${path}" is not an image Trackwall can show`);
-    const entry = await this.entry(id);
-    const blob = await this.inRepo(entry, () => this.deps.vcs.blob(entry.path, path, IMAGE_MAX_BYTES));
-    if (!blob) throw new DomainError("not_found", `${id} has no file "${path}" in the latest commit`);
-    if (!blob.bytes) return { kind: "too_large", size: blob.size };
-    return { kind: "ok", mediaType, base64: blob.bytes.toString("base64"), size: blob.size };
   }
 
   /** Jak `openEditor`: daemon nie wie, czy system obsłużył adres. */

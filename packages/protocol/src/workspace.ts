@@ -111,16 +111,6 @@ export const FileContent = z.discriminatedUnion("kind", [
 ]);
 export type FileContent = z.infer<typeof FileContent>;
 
-/**
- * Obraz z commita dla podglądu Markdown (ADR-35): treść w base64, z której UI składa adres `data:`, bo okno
- * Tauri wpuszcza obrazy tylko z `self` i `data:`. Większy niż limit daemona przychodzi bez treści.
- */
-export const RepoImage = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("ok"), mediaType: z.string(), base64: z.string(), size: z.number().int() }),
-  z.object({ kind: z.literal("too_large"), size: z.number().int() }),
-]);
-export type RepoImage = z.infer<typeof RepoImage>;
-
 /** Adres, który UI może otworzyć w systemie: strona albo poczta, nigdy `file:` ani własny protokół aplikacji. */
 export const ExternalLink = z.url({ protocol: /^(https?|mailto)$/ }).max(2048);
 
@@ -155,12 +145,6 @@ export const workspaceApi = {
     "file",
     z.object({ repo: RepoId, path: RepoPath.refine((p) => p !== "", "the file path cannot be empty") }).strict(),
     FileContent,
-  ),
-  /** Obraz z ostatniego commita po rozszerzeniu pliku (PNG, JPEG, GIF, WebP, AVIF, SVG, ICO), dla README (ADR-35). */
-  image: endpoint(
-    "image",
-    z.object({ repo: RepoId, path: RepoPath.refine((p) => p !== "", "the image path cannot be empty") }).strict(),
-    RepoImage,
   ),
   /** Otwiera adres z README w domyślnej przeglądarce albo programie poczty (ADR-35), zamiast w oknie aplikacji. */
   openLink: endpoint("open-link", z.object({ url: ExternalLink }).strict(), Done),

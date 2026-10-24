@@ -21,6 +21,7 @@ async function workspaceWithProjectsDir() {
     vcs: new Vcs(),
     hosting: fakeHosting().hosting,
     openEditor: (dir) => opened.push(dir),
+    openLink: () => {},
   });
   await workspace.setProjectsDir(projects);
   return { workspace, file, projects, opened };

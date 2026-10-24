@@ -107,18 +107,6 @@ export class Vcs {
     return { kind: "text", text: stdout.toString("utf8"), size: object.size, truncated };
   }
 
-  /**
-   * Cały plik `path` z HEAD jako bajty, bez wykrywania tekstu; `bytes: null`, gdy plik ma więcej niż `maxBytes`
-   * (git go wtedy nie czyta). `undefined`, gdy nie ma takiego pliku.
-   */
-  async blob(dir: string, path: string, maxBytes: number): Promise<{ size: number; bytes: Buffer | null } | undefined> {
-    const [object] = await this.objects(dir, [`HEAD:${path}`]);
-    if (object?.type !== "blob") return undefined;
-    if (object.size > maxBytes) return { size: object.size, bytes: null };
-    const { stdout } = await git(dir, ["cat-file", "blob", object.oid], { maxBytes });
-    return { size: object.size, bytes: stdout };
-  }
-
   /** Pełny hash commita HEAD; `null` w repo bez commitów. */
   async headCommit(dir: string): Promise<string | null> {
     const [head] = await this.objects(dir, ["HEAD"]);
