@@ -45,8 +45,8 @@ const SEARCH_CONCURRENCY = 4;
 /** Git output limit per repo: thousands of matches with context, yet bounded memory when the pattern matches everywhere. */
 const GREP_MAX_BYTES = 2 * 1024 * 1024;
 /**
- * After this long no new repo is searched (it goes to `skipped`): an MCP client gives up on a tool call after a minute or two, and a
- * pathological regular expression can keep git busy for its whole time limit in every repo.
+ * After this long no new repo is searched (it goes to `skipped`): an MCP client gives up on a tool call after a
+ * minute or two, and a pathological regular expression can keep git busy for its whole time limit in every repo.
  */
 const CODE_SEARCH_BUDGET_MS = 60_000;
 
