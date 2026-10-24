@@ -24,13 +24,13 @@ describe("stan uruchomienia taska mise w UI", () => {
       { ...exited, exitCode: null, signal: "SIGKILL" },
     ];
     expect(runs.map(runStateLabel)).toEqual([
-      { label: "nie uruchomiony" },
-      { tone: "ok", label: "działa" },
-      { tone: "warning", label: "zatrzymywanie" },
-      { label: "zakończony" },
-      { label: "zatrzymany" },
-      { tone: "error", label: "błąd, kod 4" },
-      { tone: "error", label: "przerwany (SIGKILL)" },
+      { label: "not started" },
+      { tone: "ok", label: "running" },
+      { tone: "warning", label: "stopping" },
+      { label: "finished" },
+      { label: "stopped" },
+      { tone: "error", label: "failed, code 4" },
+      { tone: "error", label: "killed (SIGKILL)" },
     ]);
     expect(runs.map(isLive)).toEqual([false, true, true, false, false, false, false]);
   });

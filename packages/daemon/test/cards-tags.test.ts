@@ -33,9 +33,9 @@ describe("tagi repo", () => {
   test("BFF w Spring: java, backend i bff (z nazwy), każdy z powodem", () => {
     const card = extractCard(snapshotOf({ "pom.xml": SPRING_BFF_POM }));
     expect(tagsOf(card, "orders-bff")).toEqual([
-      "backend: spring-boot w pom.xml:2",
-      "bff: „bff” w nazwie orders-bff",
-      "java: plik buildu pom.xml",
+      "backend: spring-boot in pom.xml:2",
+      "bff: “bff” in the name orders-bff",
+      "java: build file pom.xml",
     ]);
   });
 
@@ -48,9 +48,9 @@ describe("tagi repo", () => {
       }),
     );
     expect(tagsOf(card, "shop")).toEqual([
-      "frontend: react w apps/web/package.json:1",
-      "monorepo: package.json wymienia 2 moduły lub paczki",
-      "typescript: zależność typescript w package.json:1",
+      "frontend: react in apps/web/package.json:1",
+      "monorepo: package.json lists 2 modules or packages",
+      "typescript: typescript dependency in package.json:1",
     ]);
   });
 
@@ -59,28 +59,28 @@ describe("tagi repo", () => {
       snapshotOf({ "pom.xml": "<project><groupId>com.example</groupId><artifactId>common-model</artifactId></project>" }),
     );
     expect(tagsOf(lib, "common-model")).toEqual([
-      "java: plik buildu pom.xml",
-      "library: udostępnia com.example:common-model i nie ma frameworka aplikacji ani plików wdrożenia",
+      "java: build file pom.xml",
+      "library: provides com.example:common-model and has no app framework or deployment files",
     ]);
 
     const split = extractCard(
       snapshotOf({ "backend/pom.xml": SPRING_BFF_POM, "frontend/package.json": JSON.stringify({ name: "front", private: true }) }),
     );
-    expect(tagsOf(split, "app")).toContain("monorepo: osobne buildy w katalogach backend, frontend");
+    expect(tagsOf(split, "app")).toContain("monorepo: separate builds in directories backend, frontend");
   });
 
   test("bff tylko jako osobne słowo, nie fragment innego", () => {
     const card = extractCard(snapshotOf({}));
     expect(tagsOf(card, "bffcore")).toEqual([]);
-    expect(tagsOf(card, "web_bff")).toEqual(["bff: „bff” w nazwie web_bff"]);
+    expect(tagsOf(card, "web_bff")).toEqual(["bff: “bff” in the name web_bff"]);
   });
 
   test("reguły repoTags z workspace.yaml pasują do identyfikatora albo adresu repo zdalnego, bez wielkości liter", () => {
     const rules = { "core-api": ["*-core"], payments: ["gitlab.example.com/Payments/**"] };
     const card = extractCard(snapshotOf({}));
     expect(tagsOf(card, "billing-core", "gitlab.example.com/payments/billing", rules)).toEqual([
-      "core-api: reguła repoTags w workspace.yaml: *-core",
-      "payments: reguła repoTags w workspace.yaml: gitlab.example.com/Payments/**",
+      "core-api: repoTags rule in workspace.yaml: *-core",
+      "payments: repoTags rule in workspace.yaml: gitlab.example.com/Payments/**",
     ]);
     expect(repoTags(null, { id: "web", remote: null }, rules)).toEqual([]);
   });

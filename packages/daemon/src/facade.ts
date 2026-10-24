@@ -76,7 +76,7 @@ export function createFacade(o: FacadeOptions): Facade {
   });
   const mise = new Mise({ procs, repos: workspace, command: o.miseCommand, env: o.userEnv });
   const cache = new CardCache(join(o.home, CARDS_DIR), o.log);
-  cache.prune().catch((err: unknown) => o.log(`nie udało się posprzątać kart: ${String(err)}`));
+  cache.prune().catch((err: unknown) => o.log(`failed to clean up cards: ${String(err)}`));
   const cards = new Cards({ vcs, repos: workspace, cache });
   const batch = new Batch({ workspace, mise, log: o.log });
   const agents = new Agents({

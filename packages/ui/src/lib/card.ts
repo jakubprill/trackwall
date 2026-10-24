@@ -12,7 +12,7 @@ export const MECHANISM_LABELS: Record<MechanismId, string> = {
   rabbitmq: "RabbitMQ",
   eureka: "Eureka",
   "config-server": "Spring Cloud Config Server",
-  "config-client": "klient Spring Cloud Config",
+  "config-client": "Spring Cloud Config client",
   kubernetes: "Kubernetes",
   helm: "Helm",
   docker: "Docker",
@@ -31,7 +31,7 @@ export const HTTP_CLIENT_LABELS: Record<HttpClientVia, string> = {
   webclient: "WebClient",
   "rest-client": "RestClient",
   "rest-template": "RestTemplate",
-  config: "konfiguracja",
+  config: "configuration",
   env: ".env",
   proxy: "proxy",
 };

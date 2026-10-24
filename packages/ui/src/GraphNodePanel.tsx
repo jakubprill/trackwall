@@ -5,6 +5,7 @@ import {
   evidenceLabel,
   type GraphEdge,
   type GraphNode,
+  pluralNoun,
   type RepoGraph,
 } from "@trackwall/protocol";
 import { X } from "lucide-react";
@@ -16,16 +17,16 @@ import type { EdgePair } from "@/lib/graph-layout";
 
 /** Pewność krawędzi dla człowieka (ADR-29, ADR-30; reguły przy `EdgeConfidence`); `Record` wymusza wpis dla każdej. */
 const CONFIDENCE_LABELS: Record<EdgeConfidence, string> = {
-  exact: "pewne",
-  high: "prawie pewne",
-  medium: "prawdopodobne",
-  low: "możliwe",
+  exact: "certain",
+  high: "almost certain",
+  medium: "likely",
+  low: "possible",
 };
 
 const EDGE_KIND_LABELS: Record<EdgeKind, string> = {
-  package: "paczka",
+  package: "package",
   http: "HTTP",
-  manual: "ręczne",
+  manual: "manual",
 };
 
 /**
@@ -54,12 +55,16 @@ export function GraphNodePanel({
           <h3 className="truncate font-mono text-lg">{node.repo}</h3>
           {node.remote && <p className="text-muted-foreground truncate font-mono text-xs">{node.remote}</p>}
         </div>
-        <Button variant="ghost" size="icon" onClick={onClose} aria-label="Zamknij szczegóły repo">
+        <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close repo details">
           <X />
         </Button>
       </header>
-      {node.problem !== null && <p className="text-warning text-sm break-words">Karty nie da się policzyć: {node.problem}</p>}
-      {node.apps.length > 0 && <p className="text-muted-foreground truncate font-mono text-xs">aplikacja {node.apps.join(", ")}</p>}
+      {node.problem !== null && <p className="text-warning text-sm break-words">Cannot build the card: {node.problem}</p>}
+      {node.apps.length > 0 && (
+        <p className="text-muted-foreground truncate font-mono text-xs">
+          {pluralNoun(node.apps.length, { one: "app", other: "apps" })} {node.apps.join(", ")}
+        </p>
+      )}
       {node.tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {node.tags.map((t) => (
@@ -68,17 +73,17 @@ export function GraphNodePanel({
         </div>
       )}
       <dl className="grid grid-cols-2 gap-2">
-        <Stat label="Używa" value={uses.length} />
-        <Stat label="Używają go" value={usedBy.length} />
-        <Stat label="Paczki" value={node.provides ?? "–"} />
-        <Stat label="Endpointy" value={node.endpoints ?? "–"} />
+        <Stat label="Uses" value={uses.length} />
+        <Stat label="Used by" value={usedBy.length} />
+        <Stat label="Packages" value={node.provides ?? "–"} />
+        <Stat label="Endpoints" value={node.endpoints ?? "–"} />
       </dl>
-      <Section label="Używa" empty="Repo nie ma połączeń do innych repo z listy.">
+      <Section label="Uses" empty="The repo has no connections to other repos in the list.">
         {uses.map((pair) => (
           <PairItem key={pair.to} repo={pair.to} edges={pair.edges} onSelect={onSelect} />
         ))}
       </Section>
-      <Section label="Używają go" empty="Żadne repo z listy nie ma połączenia do tego repo.">
+      <Section label="Used by" empty="No repo in the list connects to this repo.">
         {usedBy.map((pair) => (
           <PairItem key={pair.from} repo={pair.from} edges={pair.edges} onSelect={onSelect} />
         ))}
@@ -92,18 +97,18 @@ export function GraphSummaryPanel({ graph, pairs }: { graph: RepoGraph; pairs: r
   const withProblems = graph.nodes.filter((n) => n.problem !== null).length;
   return (
     <div className="flex flex-col gap-4 p-4">
-      <p className="hud-label">Graf połączeń</p>
+      <p className="hud-label">Connection graph</p>
       <dl className="grid grid-cols-3 gap-2">
-        <Stat label="Repo" value={graph.nodes.length} />
-        <Stat label="Połączenia" value={pairs.length} />
-        <Stat label="Bez karty" value={withProblems} />
+        <Stat label="Repos" value={graph.nodes.length} />
+        <Stat label="Connections" value={pairs.length} />
+        <Stat label="No card" value={withProblems} />
       </dl>
       <p className="text-muted-foreground text-sm">
-        Linia prowadzi od repo, które używa, do repo, którego paczkę bierze jako zależność albo którego aplikację woła przez HTTP. Wybierz
-        repo, żeby zobaczyć połączenia, ich pewność i dowody (plik i linię).
+        A line goes from a repo to each repo whose package it depends on or whose app it calls over HTTP. Select a repo to see its
+        connections, their confidence and the evidence (file and line).
       </p>
       {graph.configProblems.length > 0 && (
-        <Section label="Błędy we wpisach graph" empty="">
+        <Section label="Errors in graph entries" empty="">
           {graph.configProblems.map((problem) => (
             <li key={problem} className="text-warning px-3 py-2 text-xs break-words">
               {problem}
@@ -113,8 +118,8 @@ export function GraphSummaryPanel({ graph, pairs }: { graph: RepoGraph; pairs: r
       )}
       <div className="flex flex-col gap-1">
         <p className="text-muted-foreground text-sm">
-          Połączenia, których karty nie widzą, paczki budowane poza plikami buildu i adresy aplikacji (graph.apps) dopiszesz pod kluczem
-          graph w pliku:
+          Add connections the cards cannot see, packages built outside build files and app addresses (graph.apps) under the graph key in
+          this file:
         </p>
         <p className="font-mono text-xs break-all">{graph.configFile}</p>
       </div>

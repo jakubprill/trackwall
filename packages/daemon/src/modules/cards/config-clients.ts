@@ -23,7 +23,7 @@ export function configClients(module: SpringModule, codeClients: readonly Consum
       if (clients.length >= MAX_CONFIG_CLIENTS) {
         out.problems.push({
           path: module.config.module,
-          message: `moduł ma ponad ${MAX_CONFIG_CLIENTS} adresów w konfiguracji; karta pokazuje pierwsze`,
+          message: `the module has more than ${MAX_CONFIG_CLIENTS} addresses in its config; the card shows the first ones`,
         });
         return clients;
       }

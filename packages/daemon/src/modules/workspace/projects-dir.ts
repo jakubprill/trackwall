@@ -24,16 +24,16 @@ export interface RepoEntry {
  * Asynchronicznie, bo wskazany folder może leżeć na uśpionym dysku.
  */
 export async function resolveProjectsDir(input: string): Promise<string> {
-  if (!isFullPath(input)) throw new DomainError("bad_request", `${NOT_FULL_PATH}, dostałem "${input}"`);
+  if (!isFullPath(input)) throw new DomainError("bad_request", `${NOT_FULL_PATH}, got "${input}"`);
   const dir = resolve(input);
   let isDir: boolean;
   try {
     isDir = (await stat(dir)).isDirectory();
   } catch (err) {
     // Nie tylko ENOENT: ENOTDIR, EACCES i zbyt długa nazwa to też zła ścieżka od użytkownika, nie błąd daemona.
-    throw new DomainError("bad_request", `${dir} nie istnieje albo nie da się go otworzyć (${errorCode(err)})`);
+    throw new DomainError("bad_request", `${dir} does not exist or cannot be opened (${errorCode(err)})`);
   }
-  if (!isDir) throw new DomainError("bad_request", `${dir} nie jest katalogiem`);
+  if (!isDir) throw new DomainError("bad_request", `${dir} is not a directory`);
   return dir;
 }
 
@@ -77,7 +77,7 @@ async function listDir(dir: string): Promise<Dirent[]> {
   } catch (err) {
     throw new DomainError(
       "projects_dir_unavailable",
-      `nie da się otworzyć folderu z projektami ${dir} (${errorCode(err)}); sprawdź, czy istnieje, albo zmień go w ustawieniach`,
+      `cannot open the projects folder ${dir} (${errorCode(err)}); check that it exists or change it in Settings`,
     );
   }
 }

@@ -37,7 +37,7 @@ export function ActivityBar<Id extends string>({
       .map((v) => <ActivityButton key={v.id} view={v} active={v.id === active} badge={badges[v.id]} onSelect={() => onSelect(v.id)} />);
 
   return (
-    <nav aria-label="Widoki" className="bg-card w-activity-bar flex shrink-0 flex-col border-r">
+    <nav aria-label="Views" className="bg-card w-activity-bar flex shrink-0 flex-col border-r">
       <img src="/favicon.png" alt="Trackwall" title="Trackwall" className="mx-auto my-3 size-6" />
       <ul className="flex flex-col">{group("top")}</ul>
       <ul className="mt-auto flex flex-col pb-1">{group("bottom")}</ul>
@@ -76,7 +76,7 @@ function ActivityButton<Id extends string>({
     <li>
       <button
         type="button"
-        aria-label={count === undefined ? view.label : `${view.label} (czeka: ${count})`}
+        aria-label={count === undefined ? view.label : `${view.label} (waiting: ${count})`}
         aria-current={active ? "page" : undefined}
         aria-keyshortcuts={ariaShortcut(view.shortcut, IS_MAC)}
         onClick={onSelect}

@@ -52,7 +52,7 @@ export function RepoHostsForm({ conn, initial }: { conn: Connection; initial: Re
                 variant="ghost"
                 size="icon"
                 disabled={busy}
-                aria-label={`Usuń ${h.host}`}
+                aria-label={`Remove ${h.host}`}
                 onClick={() => void save(hosts.filter((other) => other !== h))}
               >
                 <Trash2 />
@@ -80,11 +80,11 @@ export function RepoHostsForm({ conn, initial }: { conn: Connection; initial: Re
           value={host}
           onChange={(e) => setHost(e.target.value)}
           placeholder={HOST_HINT[kind]}
-          aria-label="Nazwa hosta, bez https://"
+          aria-label="Host name, without https://"
           className="font-mono text-xs"
         />
         <Button type="submit" size="sm" disabled={busy || host.trim() === ""}>
-          Dodaj
+          Add
         </Button>
       </form>
       {error && <p className="text-destructive text-xs break-words">{error}</p>}

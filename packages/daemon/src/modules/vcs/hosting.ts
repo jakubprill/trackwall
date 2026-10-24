@@ -114,7 +114,7 @@ function parsePage(api: HostingApi, text: string, host: RepoHost): ReturnType<Ho
   try {
     return api.parseReposPage(JSON.parse(text));
   } catch {
-    throw new Error(`${HOST_CLI[host.kind]} api zwrócił odpowiedź niezgodną z API ${host.host}`);
+    throw new Error(`${HOST_CLI[host.kind]} api returned a response that does not match the ${host.host} API`);
   }
 }
 

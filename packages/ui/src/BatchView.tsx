@@ -1,4 +1,4 @@
-import { BATCH_STEPS, type BatchRepo, type BatchRun, type BatchStep, type Repo } from "@trackwall/protocol";
+import { BATCH_STEPS, type BatchRepo, type BatchRun, type BatchStep, countLabel, type Repo } from "@trackwall/protocol";
 import { ListChecks, Play, Square } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Loading } from "@/components/Loading";
@@ -22,14 +22,15 @@ export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: read
   return (
     <div className="flex flex-col gap-4 p-6">
       <header className="flex flex-col gap-1">
-        <span className="hud-label">Komenda zbiorcza</span>
-        <h1 className="text-xl font-semibold tracking-tight">Te same kroki na wielu repo naraz</h1>
+        <span className="hud-label">Batch command</span>
+        <h1 className="text-xl font-semibold tracking-tight">The same steps on many repos at once</h1>
         <p className="text-muted-foreground max-w-prose text-sm">
-          Kroki idą w repo po kolei, a repo po trzy naraz. Błąd kroku kończy to repo, pozostałe idą dalej. Taski mise z <code>sources</code>{" "}
-          i <code>outputs</code> mise pomija, gdy nic się nie zmieniło, więc powtórka jest szybka.
+          Steps run one after another in each repo, three repos at a time. A failed step ends that repo; the others carry on. A mise task
+          with
+          <code>sources</code> and <code>outputs</code> is skipped when nothing changed, so a rerun is fast.
         </p>
       </header>
-      <Surface label="Kroki" meta={`${steps.size}/${BATCH_STEPS.length}`}>
+      <Surface label="Steps" meta={`${steps.size}/${BATCH_STEPS.length}`}>
         <ul className="grid sm:grid-cols-2">
           {BATCH_STEPS.map((step) => (
             <Choice key={step} checked={steps.has(step)} onChange={() => setSteps(toggle(steps, step))}>
@@ -39,13 +40,13 @@ export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: read
           ))}
         </ul>
       </Surface>
-      <Surface label="Repo" meta={`${chosen.length}/${repos.length}`}>
+      <Surface label="Repos" meta={`${chosen.length}/${repos.length}`}>
         <div className="flex gap-2 border-b px-3 py-2">
           <Button variant="ghost" size="sm" onClick={() => setSelected(new Set(repos.map((r) => r.id)))}>
-            Wszystkie
+            All
           </Button>
           <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
-            Żadne
+            None
           </Button>
         </div>
         {/* Kolumny zamiast jednej listy: przy kilkudziesięciu repo wyniki zostają blisko przycisku startu. */}
@@ -64,11 +65,11 @@ export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: read
           disabled={batch.running || chosen.length === 0 || steps.size === 0}
           onClick={() => batch.start({ repos: chosen.map((r) => r.id), steps: BATCH_STEPS.filter((s) => steps.has(s)) })}
         >
-          <Play /> Uruchom na {chosen.length} repo
+          <Play /> Run on {countLabel(chosen.length, { one: "repo", other: "repos" })}
         </Button>
         {run?.finishedAt === null && (
           <Button variant="outline" size="sm" disabled={run.cancelled} onClick={batch.cancel}>
-            <Square /> {run.cancelled ? "Przerywam…" : "Przerwij"}
+            <Square /> {run.cancelled ? "Cancelling…" : "Cancel"}
           </Button>
         )}
       </div>
@@ -85,7 +86,7 @@ export function BatchBar({ batch, onShow }: { batch: BatchRunHandle; onShow: () 
   return (
     <div className="flex px-4 pb-3">
       <Button variant="outline" size="sm" onClick={onShow}>
-        <ListChecks /> {progress ? `Komenda zbiorcza ${progress.done}/${progress.total}` : "Komenda zbiorcza"}
+        <ListChecks /> {progress ? `Batch command ${progress.done}/${progress.total}` : "Batch command"}
       </Button>
     </div>
   );
@@ -97,7 +98,7 @@ function Results({ run }: { run: BatchRun }) {
     <Surface
       label={batchRunLabel(run, new Date())}
       meta={`${progress.done}/${progress.total}`}
-      note={progress.failed > 0 ? `Repo z błędem: ${progress.failed}` : undefined}
+      note={progress.failed > 0 ? `Repos with errors: ${progress.failed}` : undefined}
     >
       <ul className="divide-y">
         {run.repos.map((repo) => (

@@ -29,7 +29,7 @@ export function stateFromHook(record: CopilotHookRecord): StateSignal | undefine
 }
 
 function sessionEnd(payload: CopilotHookRecord["payload"], reason: string): StateSignal {
-  const end = payload.reason ?? "nieznany";
+  const end = payload.reason ?? "unknown";
   const failed = end === "error" || end === "timeout";
   return { state: failed ? "Error" : "Done", source: "hook", confidence: "high", reason: `${reason} ${end}`, endsSession: true };
 }
@@ -61,5 +61,5 @@ function notification(payload: CopilotHookRecord["payload"], reason: string): St
   }
   const text = [payload.title, payload.message].filter(Boolean).join(" ");
   const state = TEXT_RULES.find((r) => r.pattern.test(text))?.state;
-  return state && { state, source: "hook", confidence: "low", reason: `${reason} (treść)` };
+  return state && { state, source: "hook", confidence: "low", reason: `${reason} (text)` };
 }

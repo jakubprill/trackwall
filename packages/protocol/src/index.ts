@@ -9,6 +9,7 @@ export * from "./http.ts";
 export * from "./logs.ts";
 export * from "./mcp.ts";
 export * from "./mise.ts";
+export * from "./plural.ts";
 export * from "./procs.ts";
 export * from "./repo-hosts.ts";
 export * from "./sync.ts";

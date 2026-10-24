@@ -107,7 +107,7 @@ function readManifest(snapshot: RepoSnapshot, path: string, out: Extracted): Pac
   try {
     const parsed = PackageJson.safeParse(JSON.parse(text));
     if (parsed.success) return parsed.data;
-    out.problems.push({ path, message: "package.json nie jest obiektem JSON" });
+    out.problems.push({ path, message: "package.json is not a JSON object" });
   } catch (err) {
     out.problems.push({ path, message: messageOf(err) });
   }

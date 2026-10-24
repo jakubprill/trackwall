@@ -83,10 +83,10 @@ function addAliasEdges(join: Join, from: string, pkg: ConsumedPackage): void {
 
 function checkAliases(join: Join): void {
   for (const [name, ref] of join.aliases) {
-    if (join.resolve(ref).length === 0) join.problems.push(`graph.packages „${name}”: ${missingRepo(ref)}`);
+    if (join.resolve(ref).length === 0) join.problems.push(`graph.packages “${name}”: ${missingRepo(ref)}`);
   }
   for (const [name, ref] of join.appAliases) {
-    if (join.resolve(ref).length === 0) join.problems.push(`graph.apps „${name}”: ${missingRepo(ref)}`);
+    if (join.resolve(ref).length === 0) join.problems.push(`graph.apps “${name}”: ${missingRepo(ref)}`);
   }
 }
 
@@ -98,7 +98,7 @@ function addManualEdges(join: Join, manual: ManualEdge, i: number): void {
   const evidence: EdgeEvidence = { repo: null, path: join.file, line: null, detail: `graph.edges[${i}]: ${manual.from} → ${manual.to}` };
   const pairs = froms.flatMap((from) => tos.filter((to) => to !== from).map((to) => ({ from, to })));
   if (froms.length > 0 && tos.length > 0 && pairs.length === 0) {
-    join.problems.push(`graph.edges[${i}]: from i to wskazują to samo repo (${froms.join(", ")})`);
+    join.problems.push(`graph.edges[${i}]: from and to point to the same repo (${froms.join(", ")})`);
   }
   for (const { from, to } of pairs) {
     join.edges.add({ from, to, kind: "manual", key: manual.note, confidence: "exact", evidence: [evidence] });
@@ -142,9 +142,9 @@ function providersByPackage(cards: readonly GraphCardInput[]): Map<string, Provi
 
 function consumerEvidence(repo: string, pkg: ConsumedPackage): EdgeEvidence {
   const version = pkg.version === null ? "" : ` ${pkg.version}`;
-  return { repo, ...pkg.evidence, detail: `używa ${pkg.name}${version} (${pkg.scope})` };
+  return { repo, ...pkg.evidence, detail: `uses ${pkg.name}${version} (${pkg.scope})` };
 }
 
 function providerEvidence({ repo, pkg }: Provider): EdgeEvidence {
-  return { repo, ...pkg.evidence, detail: `buduje ${pkg.name}` };
+  return { repo, ...pkg.evidence, detail: `builds ${pkg.name}` };
 }

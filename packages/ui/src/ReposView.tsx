@@ -50,16 +50,16 @@ export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection;
       <aside className="bg-card flex min-h-0 flex-col border-r">
         <div className="flex items-center justify-between px-4 pt-3 pb-2">
           <h2 className="hud-label">
-            Repo {list.data && <span className="text-primary">{`// ${repoCount(repos.length, allRepos.length)}`}</span>}
+            Repos {list.data && <span className="text-primary">{`// ${repoCount(repos.length, allRepos.length)}`}</span>}
           </h2>
           <span className="flex">
-            <Button variant="ghost" size="icon" onClick={() => setPanel("clone")} aria-label="Dodaj repo z GitLab albo GitHub">
+            <Button variant="ghost" size="icon" onClick={() => setPanel("clone")} aria-label="Add a repo from GitLab or GitHub">
               <Plus />
             </Button>
-            <Button variant="ghost" size="icon" onClick={onOpenSettings} aria-label="Zmień folder z projektami">
+            <Button variant="ghost" size="icon" onClick={onOpenSettings} aria-label="Change the projects folder">
               <FolderOpen />
             </Button>
-            <Button variant="ghost" size="icon" onClick={list.reload} aria-label="Odśwież listę repo">
+            <Button variant="ghost" size="icon" onClick={list.reload} aria-label="Refresh the repo list">
               <RefreshCw />
             </Button>
           </span>
@@ -68,7 +68,7 @@ export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection;
           <FolderActions projectsDir={list.data.projectsDir} sync={sync} batch={batch} onShow={setPanel} />
         )}
         <TagFilter counts={filter.counts} selected={filter.selected} onToggle={filter.toggle} onClear={filter.clear} />
-        <nav aria-label="Lista repo" className="flex-1 overflow-y-auto px-2 pb-4">
+        <nav aria-label="Repo list" className="flex-1 overflow-y-auto px-2 pb-4">
           {list.error && (
             <div className="px-2 pb-2">
               <ErrorWithRetry
@@ -116,7 +116,7 @@ export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection;
 /** Filtr po tagach odrzucił wszystkie repo. */
 function NoTagMatch({ shown, all }: { shown: number; all: number }) {
   if (shown > 0 || all === 0) return null;
-  return <p className="text-muted-foreground px-2 text-sm">Żadne repo nie ma wszystkich wybranych tagów.</p>;
+  return <p className="text-muted-foreground px-2 text-sm">No repo has all the selected tags.</p>;
 }
 
 /** Liczba repo w nagłówku; przy filtrze po tagach także ile jest wszystkich. */
@@ -160,18 +160,16 @@ function EmptyList({ list, onOpenSettings, onClone }: { list: RepoList; onOpenSe
   if (list.projectsDir === null)
     return (
       <div className="flex flex-col items-start gap-2 px-2">
-        <p className="text-muted-foreground text-sm">
-          Wskaż folder z projektami, a Trackwall pokaże wszystkie repo gita, które w nim leżą.
-        </p>
+        <p className="text-muted-foreground text-sm">Choose your projects folder and Trackwall shows every git repo in it.</p>
         <ChangeProjectsDir onClick={onOpenSettings} />
       </div>
     );
   if (list.repos.length === 0)
     return (
       <div className="flex flex-col items-start gap-2 px-2">
-        <p className="text-muted-foreground text-sm">W folderze z projektami nie ma repo gita. Sklonuj repo z GitLab albo GitHub.</p>
+        <p className="text-muted-foreground text-sm">The projects folder has no git repos. Clone one from GitLab or GitHub.</p>
         <Button variant="outline" size="sm" onClick={onClone}>
-          <Plus /> Dodaj repo
+          <Plus /> Add repo
         </Button>
       </div>
     );
@@ -181,7 +179,7 @@ function EmptyList({ list, onOpenSettings, onClone }: { list: RepoList; onOpenSe
 function ChangeProjectsDir({ onClick }: { onClick: () => void }) {
   return (
     <Button variant="outline" size="sm" onClick={onClick}>
-      <FolderOpen /> Ustaw folder z projektami
+      <FolderOpen /> Set projects folder
     </Button>
   );
 }

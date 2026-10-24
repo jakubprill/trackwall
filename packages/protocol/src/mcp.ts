@@ -11,7 +11,7 @@ import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
  * Kontrakt narzędzi MCP daemona (§5.3, ADR-24): nazwa, opis dla agenta, wejście i wynik każdego narzędzia w jednym
  * obiekcie `McpTool`, tak jak `Endpoint` dla API. Daemon ogłasza z nich `tools/list` i sprawdza nimi argumenty oraz
  * `structuredContent`, a testy, UI i klienty biorą z nich nazwy i parsują odpowiedź. Narzędzia tylko czytają; nazwy
- * narzędzi i pól po angielsku, opisy po polsku (AGENTS.md).
+ * narzędzi, pól i opisy po angielsku (ADR-32).
  */
 
 /** Nazwa serwera MCP w `initialize` i w konfiguracji Copilot CLI (`copilot mcp add trackwall …`). */
@@ -70,57 +70,58 @@ export interface McpTool<Args extends z.ZodObject = z.ZodObject, Result extends 
 
 const LIST_REPOS = "list_repos";
 const GET_REPO = "get_repo";
-const RepoArg = RepoId.describe(`identyfikator repo z ${LIST_REPOS} (pole id)`);
+const RepoArg = RepoId.describe(`repo id from ${LIST_REPOS} (the id field)`);
 
 export const mcpTools = {
   listRepos: {
     name: LIST_REPOS,
     description:
-      "Lista repo z folderu z projektami użytkownika: identyfikator, ścieżka, adres repo zdalnego (host/ścieżka), " +
-      "gałąź, ostatni commit, liczba lokalnych zmian, ahead/behind i wynik w ostatniej synchronizacji od startu " +
-      "Trackwall (lastSync: null, gdy od startu jej nie było) i tagi repo (np. java, frontend, bff, monorepo oraz " +
-      "tagi z reguł użytkownika). Argument tags zawęża listę do repo z każdym z podanych tagów. Zacznij od tego " +
-      "narzędzia; identyfikator (pole id) podawaj do pozostałych.",
+      "Repos in the user's projects folder: id, path, remote address (host/path), branch, latest commit, number of " +
+      "local changes, ahead/behind, the result of the latest sync since Trackwall started (lastSync: null when there " +
+      "was none) and repo tags (e.g. java, frontend, bff, monorepo and tags from the user's rules). The tags argument " +
+      "narrows the list to repos with every given tag. Start with this tool; pass the id field to the other tools.",
     args: z
-      .object({ tags: z.array(TagName).max(20).optional().describe('tylko repo z każdym z tych tagów, bez #, np. ["java", "bff"]') })
+      .object({
+        tags: z.array(TagName).max(20).optional().describe('only repos with every one of these tags, without #, e.g. ["java", "bff"]'),
+      })
       .strict(),
     result: ListReposResult,
   },
   getRepo: {
     name: GET_REPO,
     description:
-      `Szczegóły jednego repo: to samo co w ${LIST_REPOS} (z tagami; puste, gdy karty nie da się policzyć), README z ostatniego commita (przycięte), ostatnie ` +
-      "commity i taski mise (nazwa, opis, stan uruchomienia) albo powód, dla którego mise ich nie podał.",
+      `Details of one repo: the same as ${LIST_REPOS} (with tags; empty when the card cannot be built), the README from the latest commit (truncated), ` +
+      "recent commits and mise tasks (name, description, run state) or the reason mise did not list them.",
     args: z.object({ repo: RepoArg }).strict(),
     result: GetRepoResult,
   },
   getRepoCard: {
     name: "get_repo_card",
     description:
-      "Karta repo z plików buildu, konfiguracji i kodu w ostatnim commicie, każdy fakt z dowodem (plik i linia). " +
-      "provides: paczki (kind package: współrzędne Maven grupa:artefakt, nazwy npm), aplikacje Spring Boot (kind app: " +
-      "spring.application.name, port) i endpointy HTTP z kontrolerów (kind endpoint: metoda, pełna ścieżka, handler). " +
-      "consumes: paczki z zakresem i klienci HTTP (kind http: Feign, @HttpExchange, WebClient, RestClient, RestTemplate, " +
-      "adresy z application*.yml w każdym profilu Spring, .env i proxy frontendu; z nazwą aplikacji albo adresem i " +
-      "wywołaniami). Do tego wymagane wersje narzędzi, wykryte mechanizmy (Spring Boot, Feign, Kafka, Eureka, " +
-      "Kubernetes…) i tagi z powodami. card: null w repo bez commitów.",
+      "Repo card built from the build files, config and code in the latest commit, every fact with evidence (file and " +
+      "line). provides: packages (kind package: Maven group:artifact coordinates, npm names), Spring Boot apps (kind app: " +
+      "spring.application.name, port) and HTTP endpoints from controllers (kind endpoint: method, full path, handler). " +
+      "consumes: packages with scope and HTTP clients (kind http: Feign, @HttpExchange, WebClient, RestClient, " +
+      "RestTemplate, addresses from application*.yml in every Spring profile, .env and the frontend proxy; with the app " +
+      "name or address and the calls). Also required tool versions, detected mechanisms (Spring Boot, Feign, Kafka, " +
+      "Eureka, Kubernetes…) and tags with reasons. card: null in a repo without commits.",
     args: z.object({ repo: RepoArg }).strict(),
     result: RepoCardResult,
   },
   tail: {
     name: "tail",
     description:
-      "Log taska mise repo (wyjście stdout i stderr, od najstarszego): rekordy z numerem seq, uruchomieniem (runId), " +
-      "strumieniem, poziomem z treści linii (error, warn, info…) i treścią bez kolorów, z sekretami zamienionymi na ***. " +
-      "Bez sinceSeq zwraca ostatnie rekordy; potem podawaj nextSeq z poprzedniej odpowiedzi jako sinceSeq, żeby " +
-      `dostać tylko nowe. dropped: true znaczy, że część rekordów przepadła (daemon trzyma ostatnie rekordy taska, najwyżej ${LOG_BUFFER_RECORDS}) ` +
-      `albo kursor jest z poprzedniego działania Trackwall. Taski i ich stan podaje ${GET_REPO}.`,
+      "Log of a repo's mise task (stdout and stderr, oldest first): records with a seq number, run (runId), stream, " +
+      "level from the line text (error, warn, info…) and text without colors, with secrets replaced by ***. Without " +
+      "sinceSeq it returns the latest records; then pass nextSeq from the previous response as sinceSeq to get only " +
+      `new ones. dropped: true means some records were lost (the daemon keeps the latest records of a mise task, at most ${LOG_BUFFER_RECORDS}) ` +
+      `or the cursor is from a previous Trackwall run. ${GET_REPO} lists the mise tasks and their state.`,
     args: z
       .object({
         repo: RepoArg,
-        miseTask: MiseTaskName.describe(`nazwa taska mise z ${GET_REPO} (pole miseTasks)`),
-        sinceSeq: z.number().int().nonnegative().optional().describe("nextSeq z poprzedniej odpowiedzi"),
-        limit: z.number().int().min(1).max(LOG_TAIL_MAX).describe(`ile rekordów najwyżej (do ${LOG_TAIL_MAX})`),
+        miseTask: MiseTaskName.describe(`mise task name from ${GET_REPO} (the miseTasks field)`),
+        sinceSeq: z.number().int().nonnegative().optional().describe("nextSeq from the previous response"),
+        limit: z.number().int().min(1).max(LOG_TAIL_MAX).describe(`maximum number of records (up to ${LOG_TAIL_MAX})`),
       })
       .strict(),
     result: LogTail,
@@ -128,24 +129,24 @@ export const mcpTools = {
   whoCalls: {
     name: "who_calls",
     description:
-      "Kto używa danego repo: krawędzie grafu połączeń skierowane do tego repo, każda z rodzajem (package: repo " +
-      "używa paczki zbudowanej w tym repo; http: klient HTTP repo woła aplikację albo endpointy tego repo; manual: " +
-      "połączenie wpisane przez użytkownika), kluczem (nazwa paczki, nazwa aplikacji albo adres, opis), pewnością " +
-      "(exact, high, medium, low) i dowodami (repo, plik, linia; dla http także pary wywołanie–endpoint). Przed zmianą " +
-      "API albo paczki repo sprawdź, kogo dotknie; kto woła konkretny endpoint, podaje find_endpoint.",
+      "Who uses a repo: connections in the graph pointing to this repo, each with a kind (package: a repo uses a " +
+      "package built in this repo; http: a repo's HTTP client calls this repo's app or endpoints; manual: a connection " +
+      "entered by the user), a key (package name, app name or address, note), a confidence (exact, high, medium, low) " +
+      "and evidence (repo, file, line; for http also call–endpoint pairs). Before changing a repo's API or package, " +
+      "check whom it affects; find_endpoint tells who calls a specific endpoint.",
     args: z.object({ repo: RepoArg }).strict(),
     result: WhoCallsResult,
   },
   subgraphFor: {
     name: "subgraph_for",
     description:
-      "Fragment grafu połączeń wokół repo: repo w odległości do depth krawędzi w obie strony (kogo używa i kto " +
-      "używa jego) i krawędzie między nimi (paczki, HTTP, ręczne), z dowodami. Węzeł ma tagi, nazwy aplikacji Spring " +
-      "Boot, liczbę endpointów i problem, gdy karty repo nie da się policzyć.",
+      "Part of the connection graph around a repo: repos up to depth connections away in both directions (what it uses and " +
+      "who uses it) and the connections between them (packages, HTTP, manual), with evidence. A node has tags, Spring Boot " +
+      "app names, the number of endpoints and a problem when the repo card cannot be built.",
     args: z
       .object({
         repo: RepoArg,
-        depth: z.number().int().min(1).max(MAX_SUBGRAPH_DEPTH).default(1).describe("ile krawędzi od repo, domyślnie 1"),
+        depth: z.number().int().min(1).max(MAX_SUBGRAPH_DEPTH).default(1).describe("how many connections from the repo, default 1"),
       })
       .strict(),
     result: Subgraph,
@@ -153,14 +154,14 @@ export const mcpTools = {
   findEndpoint: {
     name: "find_endpoint",
     description:
-      "Endpointy HTTP z kontrolerów Spring we wszystkich repo pasujące do zapytania: ścieżka od / (także konkretna, " +
-      "/api/orders/42 znajdzie /api/orders/{id}) albo fragment ścieżki, nazwy handlera (Klasa.metoda) lub nazwy " +
-      "aplikacji. Każdy z repo, metodą, pełną ścieżką, plikiem i linią oraz callers: repo, których klienci HTTP go " +
-      `wołają, z pewnością i dowodem. Najwyżej ${MAX_FOUND_ENDPOINTS} wyników (truncated: true, gdy było więcej).`,
+      "HTTP endpoints from Spring controllers in all repos matching the query: a path starting with / (also a concrete " +
+      "one: /api/orders/42 finds /api/orders/{id}) or part of a path, handler name (Class.method) or app name. Each " +
+      "with repo, method, full path, file and line, plus callers: repos whose HTTP clients call it, with confidence " +
+      `and evidence. At most ${MAX_FOUND_ENDPOINTS} results (truncated: true when there were more).`,
     args: z
       .object({
-        query: z.string().min(1).max(300).describe("ścieżka albo fragment, np. /api/orders/{id}, orders, OrdersController"),
-        method: HttpMethod.optional().describe("tylko endpointy tej metody HTTP (i bez metody)"),
+        query: z.string().min(1).max(300).describe("path or part of it, e.g. /api/orders/{id}, orders, OrdersController"),
+        method: HttpMethod.optional().describe("only endpoints of this HTTP method (and those without a method)"),
       })
       .strict(),
     result: FindEndpointResult,

@@ -53,7 +53,7 @@ describe("łączenie sygnałów stanu zadania", () => {
     expect(tracker.tick()).toMatchObject({
       state: "Stale",
       source: "timeout",
-      reason: "brak wyjścia przez 60 s",
+      reason: "no output for 60 s",
       at: "1970-01-01T00:01:00.000Z",
     });
     now = 76_000;
@@ -72,11 +72,11 @@ describe("łączenie sygnałów stanu zadania", () => {
   test("kod wyjścia rozstrzyga Done albo Error, gdy hook nie zgłosił końca sesji", () => {
     const ok = new TaskStateTracker({ now: () => 0, staleAfterMs: 60_000 });
     ok.signal({ state: "Input", source: "hook", confidence: "high", reason: "hook agentStop" });
-    expect(ok.exit(0)).toMatchObject({ state: "Done", source: "exit", confidence: "exact", reason: "kod wyjścia 0" });
+    expect(ok.exit(0)).toMatchObject({ state: "Done", source: "exit", confidence: "exact", reason: "exit code 0" });
 
     const crashed = new TaskStateTracker({ now: () => 0, staleAfterMs: 60_000 });
     crashed.signal({ state: "Working", source: "osc", confidence: "high", reason: "osc 9;4;3" });
-    expect(crashed.exit(1)).toMatchObject({ state: "Error", source: "exit", reason: "kod wyjścia 1" });
+    expect(crashed.exit(1)).toMatchObject({ state: "Error", source: "exit", reason: "exit code 1" });
   });
 
   test("błąd z hooka bez końca sesji nie wygrywa z kodem wyjścia 0", () => {

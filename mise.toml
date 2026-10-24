@@ -5,7 +5,7 @@ bun = "1.4.2"
 pnpm = "10.28.0"
 rust = "1.90"
 
-# Taski (`mise tasks`, `mise run <nazwa>`): skróty do komend z README, które najpierw instalują zależności.
+# Taski (`mise tasks`, `mise run <nazwa>`): skróty do komend z docs/development.md, które najpierw instalują zależności.
 # Nazwy jak taski repo w workspace (CONTEXT.md: setup, dev, ...).
 [tasks.setup]
 description = "Zależności workspace z lockfile (pnpm install --frozen-lockfile)"

@@ -116,15 +116,15 @@ describe("komenda zbiorcza", () => {
     async () => {
       const { batch, dir } = setup(
         { web: { tasks: [BUILD], exits: { build: 0 } } },
-        { sync: async () => ({ state: "skipped", reason: "dirty", message: "w gałęzi main są niezacommitowane zmiany" }) },
+        { sync: async () => ({ state: "skipped", reason: "dirty", message: "main is checked out and has uncommitted changes" }) },
       );
 
       await batch.start({ repos: ["web"], steps: ["sync", "setup", "build"] });
       const run = await finished(batch);
 
       expect(run.repos[0]?.steps).toEqual([
-        { step: "sync", state: "skipped", message: "w gałęzi main są niezacommitowane zmiany" },
-        { step: "setup", state: "skipped", message: "repo nie ma taska mise setup" },
+        { step: "sync", state: "skipped", message: "main is checked out and has uncommitted changes" },
+        { step: "setup", state: "skipped", message: "the repo has no mise task setup" },
         { step: "build", state: "done", detail: null },
       ]);
       expect(calls(dir("web"))).toEqual(["run build"]);
@@ -144,8 +144,8 @@ describe("komenda zbiorcza", () => {
       const run = await finished(batch);
 
       expect(run.repos[0]?.steps).toEqual([
-        { step: "setup", state: "failed", message: "zakończony kodem 3", lastLines: ["[setup] $ koniec"] },
-        { step: "build", state: "skipped", message: "pominięty po błędzie kroku setup" },
+        { step: "setup", state: "failed", message: "exited with code 3", lastLines: ["[setup] $ koniec"] },
+        { step: "build", state: "skipped", message: "skipped after step setup failed" },
       ]);
       expect(calls(dir("api"))).toEqual(["run setup"]);
       expect(run.repos[1]?.steps.map((s) => s.state)).toEqual(["done", "done"]);
@@ -217,9 +217,9 @@ describe("komenda zbiorcza", () => {
       const run = await finished(batch);
 
       expect(run.repos[0]?.steps).toEqual([
-        { step: "tools", state: "failed", message: "zakończony kodem 1", lastLines: ["mise all tools are installed"] },
-        { step: "setup", state: "skipped", message: "pominięty po błędzie kroku tools" },
-        { step: "build", state: "skipped", message: "pominięty po błędzie kroku tools" },
+        { step: "tools", state: "failed", message: "exited with code 1", lastLines: ["mise all tools are installed"] },
+        { step: "setup", state: "skipped", message: "skipped after step tools failed" },
+        { step: "build", state: "skipped", message: "skipped after step tools failed" },
       ]);
       expect(calls(dir("web"))).toEqual(["install"]);
       const installLog = logs.tail({ source: { kind: "mise-install", repo: "web" }, limit: 10 });
@@ -296,7 +296,7 @@ describe("komenda zbiorcza", () => {
       expect(run.repos[0]?.steps[1]).toEqual({
         step: "build",
         state: "failed",
-        message: `web wskazuje teraz inny katalog niż ${webDir}`,
+        message: `web now points to a different directory than ${webDir}`,
         lastLines: [],
       });
       expect(calls(join(home, "inny"))).toEqual([]);
@@ -316,7 +316,7 @@ describe("komenda zbiorcza", () => {
 
       const [step] = run.repos[0]?.steps ?? [];
       expect(step).toMatchObject({ step: "build", state: "failed" });
-      expect(step?.state === "failed" && step.message).toContain("nadal działa");
+      expect(step?.state === "failed" && step.message).toContain("still running");
     },
     TIMEOUT,
   );

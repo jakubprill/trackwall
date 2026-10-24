@@ -112,7 +112,7 @@ describe("hostingi repo przez gh i glab", () => {
       "401 Unauthorized",
     );
     await expect(fakeHosting({ apiRaw: '{"message":"nie lista"}' }).hosting.repos(GITLAB, "")).rejects.toThrow(
-      "glab api zwrócił odpowiedź niezgodną z API gitlab.example.com",
+      "glab api returned a response that does not match the gitlab.example.com API",
     );
   });
 
@@ -121,7 +121,7 @@ describe("hostingi repo przez gh i glab", () => {
       github: { command: "trackwall-nie-ma-takiego-gh", args: [] },
       gitlab: { command: "trackwall-nie-ma-takiego-glab", args: [] },
     });
-    await expect(hosting.repos(GITLAB, "")).rejects.toThrow("nie znaleziono programu trackwall-nie-ma-takiego-glab w PATH");
+    await expect(hosting.repos(GITLAB, "")).rejects.toThrow("program trackwall-nie-ma-takiego-glab not found in PATH");
   });
 
   test("klon woła repo clone z pełną nazwą i katalogiem, bez odziedziczonego GIT_DIR", async () => {

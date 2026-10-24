@@ -138,7 +138,7 @@ export class Agents {
     const env = { ...(await this.#deps.env()), TERM: "xterm-256color", COLORTERM: "truecolor" };
     const [name = "copilot", ...prefix] = this.#deps.copilot;
     const program = findCopilot(name, env);
-    if (!program) throw new DomainError("agent_unavailable", `nie znaleziono Copilot CLI (${name}) w PATH`);
+    if (!program) throw new DomainError("agent_unavailable", `Copilot CLI (${name}) not found in PATH`);
     const id = randomUUID();
     const dir = this.#sessionDir(id);
     const session = this.#prepare(id, repo, task, dir);
@@ -195,7 +195,7 @@ export class Agents {
     try {
       rmSync(join(this.#deps.home, "sessions"), { recursive: true, force: true });
     } catch (err) {
-      this.#deps.log(`sprzątanie katalogu sesji: ${String(err)}`);
+      this.#deps.log(`cleaning up the session directory: ${String(err)}`);
     }
   }
 
@@ -208,7 +208,7 @@ export class Agents {
   #close(id: string): void {
     const session = this.#get(id);
     if (this.#deps.procs.state(owner(id))?.kind !== "exited") {
-      throw new DomainError("bad_request", "sesja jeszcze działa; zatrzymaj ją przed zamknięciem");
+      throw new DomainError("bad_request", "the session is still running; stop it before closing");
     }
     this.#sessions.delete(id);
     session.dispose();
@@ -251,7 +251,7 @@ export class Agents {
         if (session.tick()) live++;
       } catch (err) {
         live++;
-        this.#deps.log(`sesja ${session.id}: ${String(err)}`);
+        this.#deps.log(`session ${session.id}: ${String(err)}`);
       }
     }
     if (live === 0) this.close();
@@ -259,7 +259,7 @@ export class Agents {
 
   #get(id: string): LiveSession {
     const session = this.#sessions.get(id);
-    if (!session) throw new DomainError("not_found", `nie ma sesji ${id}`);
+    if (!session) throw new DomainError("not_found", `no session ${id}`);
     return session;
   }
 
@@ -271,7 +271,7 @@ export class Agents {
 
   #view(session: LiveSession): Session {
     const view = this.#fresh(session);
-    if (!view) throw new Error(`sesja ${session.id} bez grupy procesów`);
+    if (!view) throw new Error(`session ${session.id} has no process group`);
     return view;
   }
 
@@ -283,7 +283,7 @@ export class Agents {
     try {
       rmSync(this.#sessionDir(id), { recursive: true, force: true });
     } catch (err) {
-      this.#deps.log(`usuwanie plików sesji ${id}: ${String(err)}`);
+      this.#deps.log(`removing session files ${id}: ${String(err)}`);
     }
   }
 }

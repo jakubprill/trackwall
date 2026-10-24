@@ -171,7 +171,7 @@ describe("ekstraktor Maven", () => {
   test("uszkodzony pom to problem karty, nie błąd", () => {
     const out = extractMaven(snapshotOf({ "pom.xml": "<project><artifactId>x</project>" }));
     expect(out.provides).toEqual([]);
-    expect(out.problems).toEqual([{ path: "pom.xml", message: "niepasujący znacznik </project> w linii 1" }]);
+    expect(out.problems).toEqual([{ path: "pom.xml", message: "mismatched tag </project> on line 1" }]);
   });
 
   test("rodzice zapętleni przez relativePath nie zawieszają ekstraktora", () => {

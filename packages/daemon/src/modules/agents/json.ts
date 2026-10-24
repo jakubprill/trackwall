@@ -11,7 +11,7 @@ export function jsonOf<T extends z.ZodType>(schema: T) {
       try {
         return JSON.parse(text);
       } catch {
-        ctx.addIssue({ code: "custom", message: "to nie jest poprawny JSON" });
+        ctx.addIssue({ code: "custom", message: "not valid JSON" });
         return z.NEVER;
       }
     })

@@ -6,12 +6,12 @@ import type { StatusTone } from "./repo-status.ts";
  * task nieuruchamiany i zatrzymany przez użytkownika są bez tonu (zwykły tekst).
  */
 export function runStateLabel(run: RunState | null): { tone?: StatusTone; label: string } {
-  if (!run) return { label: "nie uruchomiony" };
-  if (run.kind === "running") return { tone: "ok", label: "działa" };
-  if (run.kind === "stopping") return { tone: "warning", label: "zatrzymywanie" };
-  if (run.stoppedByUser) return { label: "zatrzymany" };
-  if (run.exitCode === 0) return { label: "zakończony" };
-  return { tone: "error", label: run.exitCode === null ? `przerwany (${run.signal ?? "sygnał"})` : `błąd, kod ${run.exitCode}` };
+  if (!run) return { label: "not started" };
+  if (run.kind === "running") return { tone: "ok", label: "running" };
+  if (run.kind === "stopping") return { tone: "warning", label: "stopping" };
+  if (run.stoppedByUser) return { label: "stopped" };
+  if (run.exitCode === 0) return { label: "finished" };
+  return { tone: "error", label: run.exitCode === null ? `killed (${run.signal ?? "signal"})` : `failed, code ${run.exitCode}` };
 }
 
 /** Ostatnie linie wyjścia pokazujemy tylko wtedy, gdy task zakończył się sam i nie kodem 0. */

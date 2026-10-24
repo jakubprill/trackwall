@@ -86,35 +86,23 @@ pub fn newly_waiting(previous: &States, waiting: &[Waiting]) -> Vec<Waiting> {
 pub fn tooltip(waiting: &[Waiting]) -> String {
     match waiting {
         [] => "Trackwall".to_owned(),
-        [only] => format!("Trackwall: sesja {} czeka na Ciebie", only.repo),
-        _ => format!("Trackwall: {} na Ciebie", count_label(waiting.len(), "sesja czeka", "sesje czekają", "sesji czeka")),
+        [only] => format!("Trackwall: a session in {} is waiting for you", only.repo),
+        _ => format!("Trackwall: {} sessions are waiting for you", waiting.len()),
     }
-}
-
-/// Liczba z polską formą: 1 sesja, 2–4 sesje (ale 12–14 sesji), 5 sesji; to samo co `countLabel` w UI (`format.ts`).
-fn count_label(n: usize, one: &str, few: &str, many: &str) -> String {
-    let form = if n == 1 {
-        one
-    } else if (2..=4).contains(&(n % 10)) && !(12..=14).contains(&(n % 100)) {
-        few
-    } else {
-        many
-    };
-    format!("{n} {form}")
 }
 
 /// Menu traya: sesje czekające na górze, potem stałe pozycje.
 pub fn build_menu(app: &AppHandle, waiting: &[Waiting]) -> tauri::Result<Menu<tauri::Wry>> {
     let menu = Menu::new(app)?;
     for w in waiting {
-        let label = format!("Czeka: {}", w.repo);
+        let label = format!("Waiting: {}", w.repo);
         menu.append(&MenuItem::with_id(app, format!("{MENU_SESSION_PREFIX}{}", w.id), label, true, None::<&str>)?)?;
     }
     if !waiting.is_empty() {
         menu.append(&PredefinedMenuItem::separator(app)?)?;
     }
-    menu.append(&MenuItem::with_id(app, MENU_SHOW, "Pokaż Trackwall", true, None::<&str>)?)?;
-    menu.append(&MenuItem::with_id(app, MENU_QUIT, "Wyjdź (zatrzymuje daemon)", true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, MENU_SHOW, "Show Trackwall", true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, MENU_QUIT, "Quit (stops the daemon)", true, None::<&str>)?)?;
     Ok(menu)
 }
 
@@ -207,11 +195,9 @@ mod tests {
     fn tooltip_names_the_only_waiting_session_or_counts_them() {
         let w = |id: &str| Waiting { id: id.into(), repo: format!("repo-{id}") };
         assert_eq!(tooltip(&[]), "Trackwall");
-        assert_eq!(tooltip(&[w("a")]), "Trackwall: sesja repo-a czeka na Ciebie");
-        assert_eq!(tooltip(&[w("a"), w("b")]), "Trackwall: 2 sesje czekają na Ciebie");
-        assert_eq!(tooltip(&["a", "b", "c", "d", "e"].map(w)), "Trackwall: 5 sesji czeka na Ciebie");
-        assert_eq!(count_label(12, "sesja", "sesje", "sesji"), "12 sesji");
-        assert_eq!(count_label(22, "sesja", "sesje", "sesji"), "22 sesje");
+        assert_eq!(tooltip(&[w("a")]), "Trackwall: a session in repo-a is waiting for you");
+        assert_eq!(tooltip(&[w("a"), w("b")]), "Trackwall: 2 sessions are waiting for you");
+        assert_eq!(tooltip(&["a", "b", "c", "d", "e"].map(w)), "Trackwall: 5 sessions are waiting for you");
         assert_eq!(session_from_menu("session:abc"), Some("abc"));
         assert_eq!(session_from_menu(MENU_SHOW), None);
     }

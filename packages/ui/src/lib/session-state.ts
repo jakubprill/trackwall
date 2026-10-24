@@ -8,13 +8,13 @@ import type { StatusTone } from "./repo-status.ts";
  */
 
 const STATE_LABELS = {
-  Working: "pracuje",
-  Input: "czeka na Ciebie",
-  Approval: "prosi o zgodę",
-  Plan: "czeka na akceptację planu",
-  Done: "zakończona",
-  Error: "błąd",
-  Stale: "bez odpowiedzi",
+  Working: "working",
+  Input: "waiting for you",
+  Approval: "asking for approval",
+  Plan: "waiting for plan approval",
+  Done: "finished",
+  Error: "error",
+  Stale: "not responding",
 } as const;
 
 /** Proces sesji jeszcze działa (także w trakcie zatrzymywania): pisze w swoim katalogu i trzyma jego pliki. */
@@ -24,16 +24,16 @@ export function isLive(session: Session): boolean {
 
 export function sessionStateLabel(session: Session): { tone?: StatusTone; label: string } {
   const { run, state } = session;
-  if (run.kind === "stopping") return { tone: "warning", label: "zatrzymywanie" };
+  if (run.kind === "stopping") return { tone: "warning", label: "stopping" };
   if (run.kind === "exited") {
-    if (run.stoppedByUser) return { label: "zatrzymana" };
+    if (run.stoppedByUser) return { label: "stopped" };
     return state?.state === "Error" || (state?.state !== "Done" && run.exitCode !== 0)
-      ? { tone: "error", label: "błąd" }
-      : { label: "zakończona" };
+      ? { tone: "error", label: "error" }
+      : { label: "finished" };
   }
-  if (!state) return { label: "stan nieznany" };
+  if (!state) return { label: "state unknown" };
   const label = STATE_LABELS[state.state];
-  const likely = state.confidence === "medium" || state.confidence === "low" ? `prawdopodobnie ${label}` : label;
+  const likely = state.confidence === "medium" || state.confidence === "low" ? `probably ${label}` : label;
   if (session.needsAttention) return { tone: "warning", label: likely };
   if (state.state === "Error" || state.state === "Stale") return { tone: "error", label: likely };
   return { tone: "ok", label: likely };

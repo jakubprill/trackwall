@@ -36,8 +36,8 @@ class XmlParser {
 
   parse(): XmlElement {
     while (this.pos < this.src.length) this.step();
-    if (this.stack.length > 0) throw new Error(`niezamknięty element <${this.stack.at(-1)?.name}>`);
-    if (!this.root) throw new Error("brak elementu głównego");
+    if (this.stack.length > 0) throw new Error(`unclosed element <${this.stack.at(-1)?.name}>`);
+    if (!this.root) throw new Error("no root element");
     return this.root;
   }
 
@@ -56,7 +56,7 @@ class XmlParser {
 
   private tag(lt: number): void {
     const gt = this.src.indexOf(">", lt);
-    if (gt < 0) throw new Error(`niezamknięty znacznik w linii ${this.lineAt(lt)}`);
+    if (gt < 0) throw new Error(`unclosed tag on line ${this.lineAt(lt)}`);
     const tag = this.src.slice(lt + 1, gt);
     this.pos = gt + 1;
     if (tag.startsWith("/")) this.close(tag.slice(1).trim(), lt);
@@ -65,17 +65,17 @@ class XmlParser {
 
   private close(name: string, lt: number): void {
     const closed = this.stack.pop();
-    if (closed?.name !== name) throw new Error(`niepasujący znacznik </${name}> w linii ${this.lineAt(lt)}`);
+    if (closed?.name !== name) throw new Error(`mismatched tag </${name}> on line ${this.lineAt(lt)}`);
     closed.text = decode(closed.raw).trim();
   }
 
   private open(tag: string, lt: number): void {
     const name = /^[^\s/>]+/.exec(tag)?.[0];
-    if (!name) throw new Error(`pusty znacznik w linii ${this.lineAt(lt)}`);
+    if (!name) throw new Error(`empty tag on line ${this.lineAt(lt)}`);
     const element: OpenElement = { name, line: this.lineAt(lt), children: [], text: "", raw: "" };
     const top = this.stack.at(-1);
     if (top) top.children.push(element);
-    else if (this.root) throw new Error(`drugi element główny w linii ${this.lineAt(lt)}`);
+    else if (this.root) throw new Error(`second root element on line ${this.lineAt(lt)}`);
     else this.root = element;
     if (!tag.endsWith("/")) this.stack.push(element);
   }
@@ -104,7 +104,7 @@ function skipMarkup(src: string, lt: number, top: { raw: string } | undefined): 
   const skip = (open: string, close: string) => {
     if (!src.startsWith(open, lt)) return undefined;
     const end = src.indexOf(close, lt + open.length);
-    if (end < 0) throw new Error(`niezamknięte ${open}`);
+    if (end < 0) throw new Error(`unclosed ${open}`);
     return end + close.length;
   };
   const cdataEnd = skip("<![CDATA[", "]]>");

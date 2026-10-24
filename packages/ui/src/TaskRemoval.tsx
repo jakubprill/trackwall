@@ -42,36 +42,36 @@ export function TaskRemoval({
   );
 
   return (
-    <div role="alertdialog" aria-label="Zakończ zadanie" className="bg-card flex flex-col gap-3 border-b px-4 py-3">
+    <div role="alertdialog" aria-label="End task" className="bg-card flex flex-col gap-3 border-b px-4 py-3">
       {refusal ? (
         <>
           <p className="text-warning text-sm">
-            Uwaga: {refusal.message}. Jeśli to ma zostać, anuluj i zajmij się tym w VS Code; usunięcia mimo to nie da się cofnąć.
+            Warning: {refusal.message}. If you want to keep it, cancel and deal with it in VS Code; removing anyway cannot be undone.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button variant="destructive" size="sm" disabled={remove.pending} onClick={() => remove.run(refusal.keepBranch, true)}>
-              Usuń mimo to
+              Remove anyway
             </Button>
             <Button variant="ghost" size="sm" disabled={remove.pending} onClick={onCancel}>
-              Anuluj
+              Cancel
             </Button>
           </div>
         </>
       ) : (
         <>
           <p className="text-muted-foreground text-sm">
-            Worktree zadania zniknie z dysku razem z plikami ignorowanymi przez gita (np. zależnościami i wynikami buildu). Gałąź{" "}
-            <span className="text-foreground font-mono">{task.branch}</span> możesz zostawić, żeby ją wypchnąć albo scalić później.
+            The task's worktree will be deleted along with files git ignores (such as dependencies and build output). You can keep the
+            branch <span className="text-foreground font-mono">{task.branch}</span> to push or merge it later.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" disabled={remove.pending} onClick={() => remove.run(true, false)}>
-              Zostaw gałąź, usuń worktree
+              Keep branch, remove worktree
             </Button>
             <Button variant="destructive" size="sm" disabled={remove.pending} onClick={() => remove.run(false, false)}>
-              Usuń gałąź i worktree
+              Remove branch and worktree
             </Button>
             <Button variant="ghost" size="sm" disabled={remove.pending} onClick={onCancel}>
-              Anuluj
+              Cancel
             </Button>
           </div>
         </>

@@ -1,4 +1,4 @@
-import { agentsApi, type ChangedFile, type TaskChanges } from "@trackwall/protocol";
+import { agentsApi, type ChangedFile, countLabel, type TaskChanges } from "@trackwall/protocol";
 import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { type DiffLineKind, diffLines } from "@/lib/diff-lines";
-import { countLabel } from "@/lib/format";
 import { useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
 
@@ -19,9 +18,9 @@ const POLL_MS = 2000;
 const MAX_LINES = 4000;
 
 const CHANGE_LABELS = {
-  added: { label: "nowy", variant: "success" },
-  modified: { label: "zmieniony", variant: "default" },
-  deleted: { label: "usunięty", variant: "destructive" },
+  added: { label: "added", variant: "success" },
+  modified: { label: "modified", variant: "default" },
+  deleted: { label: "deleted", variant: "destructive" },
 } as const satisfies Record<ChangedFile["change"], { label: string; variant: string }>;
 
 const LINE_CLASSES: Record<DiffLineKind, string> = {
@@ -48,13 +47,13 @@ export function TaskChangesView({ conn, task, paused }: { conn: Connection; task
 
 function ChangesBody({ changes }: { changes: TaskChanges }) {
   const { files, commits, uncommitted } = changes;
-  if (files.length === 0) return <p className="text-muted-foreground text-sm">Agent jeszcze niczego nie zmienił.</p>;
+  if (files.length === 0) return <p className="text-muted-foreground text-sm">The agent has not changed anything yet.</p>;
   const { lines, more } = diffLines(changes.patch, MAX_LINES);
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <p className="text-muted-foreground text-xs">
-        {countLabel(files.length, { one: "plik", few: "pliki", many: "plików" })} ·{" "}
-        {countLabel(commits, { one: "commit", few: "commity", many: "commitów" })} zadania · niezacommitowane: {uncommitted}
+        {countLabel(files.length, { one: "file", other: "files" })} · {countLabel(commits, { one: "task commit", other: "task commits" })} ·
+        uncommitted: {uncommitted}
       </p>
       <ul className="flex flex-col gap-1">
         {files.map((file) => (
@@ -62,7 +61,7 @@ function ChangesBody({ changes }: { changes: TaskChanges }) {
             <Badge variant={CHANGE_LABELS[file.change].variant}>{CHANGE_LABELS[file.change].label}</Badge>
             <span className="truncate font-mono text-xs">{file.path}</span>
             <span className="text-muted-foreground ml-auto shrink-0 font-mono text-xs">
-              {file.additions === null ? "binarny" : `+${file.additions} −${file.deletions}`}
+              {file.additions === null ? "binary" : `+${file.additions} −${file.deletions}`}
             </span>
           </li>
         ))}
@@ -75,7 +74,7 @@ function ChangesBody({ changes }: { changes: TaskChanges }) {
         ))}
       </pre>
       {(changes.truncated || more) && (
-        <p className="text-muted-foreground text-xs">Diff jest dłuższy; pokazano początek. Całość zobaczysz w VS Code.</p>
+        <p className="text-muted-foreground text-xs">The diff is longer; showing the beginning. See all of it in VS Code.</p>
       )}
     </div>
   );

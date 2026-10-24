@@ -119,7 +119,7 @@ export class ProcessGroups {
 
   /** Uruchamia grupę; gdy właściciel ma już grupę, która nie skończyła się na pewno, zwraca jej stan zamiast drugiej. */
   start(spec: PipedGroupSpec): Promise<RunState> {
-    if (this.closing) return Promise.reject(new SpawnFailure("spawn_failed", "daemon się zatrzymuje"));
+    if (this.closing) return Promise.reject(new SpawnFailure("spawn_failed", "the daemon is stopping"));
     const current = this.groups.get(spec.owner);
     if (current && current.phase.kind !== "exited") return Promise.resolve(stateOf(current));
     let started = this.starting.get(spec.owner);
@@ -139,10 +139,10 @@ export class ProcessGroups {
    * Właściciel musi być nowy: sesja w terminalu nie ma „drugiego startu”, który oddałby istniejącą.
    */
   async startTerminal(spec: TerminalGroupSpec): Promise<{ run: RunState; terminal: GroupTerminal }> {
-    if (this.closing) throw new SpawnFailure("spawn_failed", "daemon się zatrzymuje");
-    if (this.groups.has(spec.owner) || this.starting.has(spec.owner)) throw new Error(`właściciel ${spec.owner} ma już grupę`);
+    if (this.closing) throw new SpawnFailure("spawn_failed", "the daemon is stopping");
+    if (this.groups.has(spec.owner) || this.starting.has(spec.owner)) throw new Error(`owner ${spec.owner} already has a group`);
     const terminals = await this.deps.terminals;
-    if (!terminals) throw new SpawnFailure("terminal_unavailable", "ten runtime daemona nie ma PTY (daemon pod Node)");
+    if (!terminals) throw new SpawnFailure("terminal_unavailable", "this daemon runtime has no PTY (daemon under Node)");
     const started = this.spawnGroup(spec, async (cwd) => launchTerminal(terminals, spec, cwd, this.deps.logs.lastLinesOnly(spec.env)));
     const run = started.then(({ group }) => stateOf(group));
     // Błąd startu odbiera wołający przez `started`; `starting` służy tylko innym do czekania na koniec startu.
@@ -197,7 +197,7 @@ export class ProcessGroups {
     const live = [...this.groups.entries()].filter(([, g]) => g.phase.kind !== "exited");
     const results = await Promise.allSettled(live.map(([owner]) => this.stop(owner)));
     results.forEach((r, i) => {
-      if (r.status === "rejected") this.deps.log(`nie zatrzymano ${live[i]?.[0]}: ${String(r.reason)}`);
+      if (r.status === "rejected") this.deps.log(`failed to stop ${live[i]?.[0]}: ${String(r.reason)}`);
     });
   }
 
@@ -212,13 +212,15 @@ export class ProcessGroups {
       const what = `${orphan.owner} (pid ${orphan.pid}, ${orphan.command.join(" ")})`;
       const target = await platform.reattach(orphan.pid, orphan.identity);
       if (target === "unverified")
-        this.deps.log(`pid ${orphan.pid} żyje, ale nie wiadomo, czy to sierota ${what}; zostawiono i usunięto z runtime.json`);
+        this.deps.log(
+          `pid ${orphan.pid} is alive, but it is unknown whether it is the orphaned ${what}; left running and removed from runtime.json`,
+        );
       if (typeof target === "string") continue;
       if (await terminate(target, platform.graceMs)) {
         target.release();
-        this.deps.log(`sprzątnięto sierotę ${what}`);
+        this.deps.log(`cleaned up orphan ${what}`);
       } else {
-        this.deps.log(`sierota ${what} przeżyła zabicie; spróbuję przy następnym starcie`);
+        this.deps.log(`orphan ${what} survived the kill; will retry on next start`);
         left.push(orphan);
       }
     }
@@ -257,7 +259,7 @@ export class ProcessGroups {
     this.persist();
     leaderExit
       .then((exit) => this.onLeaderExit(group, exit))
-      .catch((err: unknown) => this.deps.log(`koniec grupy ${spec.owner}: ${String(err)}`));
+      .catch((err: unknown) => this.deps.log(`waiting for group ${spec.owner} to end: ${String(err)}`));
     return { group, launched };
   }
 
@@ -269,7 +271,7 @@ export class ProcessGroups {
       group.draining = undefined;
     });
     if (await group.draining) this.finish(group);
-    else this.deps.log(`grupa ${group.record.owner} (pid ${group.record.pid}) żyje po zabiciu; zostaje w runtime.json`);
+    else this.deps.log(`group ${group.record.owner} (pid ${group.record.pid}) is alive after the kill; it stays in runtime.json`);
   }
 
   private async stopGroup(group: Group): Promise<RunState> {
@@ -280,7 +282,7 @@ export class ProcessGroups {
     if (!empty) {
       throw new DomainError(
         "stop_unconfirmed",
-        `${group.record.command.join(" ")} (pid ${group.record.pid}): część procesów grupy nadal działa po zabiciu`,
+        `${group.record.command.join(" ")} (pid ${group.record.pid}): some processes of the group are still running after the kill`,
       );
     }
     // Pusta grupa znaczy, że lider nie żyje; zdarzenie `exit` przychodzi najpóźniej chwilę później.
@@ -307,7 +309,7 @@ export class ProcessGroups {
     try {
       this.deps.runtime.write([...this.orphans, ...live]);
     } catch (err) {
-      this.deps.log(`zapis ${this.deps.runtime.path}: ${String(err)}`);
+      this.deps.log(`writing ${this.deps.runtime.path}: ${String(err)}`);
     }
   }
 
@@ -317,7 +319,7 @@ export class ProcessGroups {
       return this.deps.runtime.read();
     } catch (err) {
       const aside = this.deps.runtime.moveAside();
-      this.deps.log(`${String(err)}; plik odłożony jako ${aside}, sieroty z niego nie zostaną sprzątnięte`);
+      this.deps.log(`${String(err)}; file set aside as ${aside}, orphans from it will not be cleaned up`);
       return [];
     }
   }
@@ -333,7 +335,7 @@ interface Launched {
 /** Lider z rurami (stdin, stdout, stderr), jak task mise. */
 async function launchPiped(spec: GroupSpec, cwd: string, detached: boolean, output: RunOutput): Promise<Launched> {
   const [program, ...args] = spec.command;
-  if (program === undefined) throw new Error("pusta komenda");
+  if (program === undefined) throw new Error("empty command");
   const child = spawn(program, args, { cwd, env: spec.env, detached, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
   // Wyjście i koniec procesu są podłączone od razu: krótki task może skończyć się, zanim padnie pierwszy `await`.
   attachOutput(child, output);
@@ -342,7 +344,7 @@ async function launchPiped(spec: GroupSpec, cwd: string, detached: boolean, outp
   });
   await spawned(child, program);
   const pid = child.pid;
-  if (pid === undefined) throw new Error(`${program} nie dostał PID-u`);
+  if (pid === undefined) throw new Error(`${program} did not get a PID`);
   const leader = {
     pid,
     closeInput: () => void child.stdin?.end(),
@@ -360,7 +362,7 @@ function launchTerminal(
   output: RunOutput,
 ): Launched & { leader: TerminalProcess } {
   const [program] = spec.command;
-  if (program === undefined) throw new Error("pusta komenda");
+  if (program === undefined) throw new Error("empty command");
   let leader: TerminalProcess;
   try {
     leader = terminals.spawn({
@@ -430,9 +432,9 @@ async function killAndWait(control: GroupControl): Promise<boolean> {
 }
 
 async function requireDirectory(cwd: string): Promise<void> {
-  if (!isAbsolute(cwd)) throw new SpawnFailure("cwd_invalid", `katalog roboczy musi być pełną ścieżką: ${cwd}`);
+  if (!isAbsolute(cwd)) throw new SpawnFailure("cwd_invalid", `the working directory must be a full path: ${cwd}`);
   const info = await stat(cwd).catch(() => undefined);
-  if (!info?.isDirectory()) throw new SpawnFailure("cwd_invalid", `katalog roboczy nie istnieje: ${cwd}`);
+  if (!info?.isDirectory()) throw new SpawnFailure("cwd_invalid", `the working directory does not exist: ${cwd}`);
 }
 
 /** Czeka na `spawn` albo `error`: dopiero wtedy wiadomo, czy program w ogóle wystartował. */
