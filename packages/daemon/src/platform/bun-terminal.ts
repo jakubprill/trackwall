@@ -61,7 +61,10 @@ function spawn(spec: TerminalSpec): TerminalProcess {
     resize: (cols, rows) => {
       if (!terminal.closed) terminal.resize(cols, rows);
     },
-    closeInput: close,
+    closeInput: () => {
+      DBG("closeInput -> kill instead of close", proc.pid);
+      proc.kill();
+    },
     hasExited: () => proc.exitCode !== null || proc.signalCode !== null,
     kill: () => {
       DBG("kill", proc.pid);
