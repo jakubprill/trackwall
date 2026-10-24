@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 import { Surface } from "@/components/Surface";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { pluralNoun } from "@/lib/format";
 import type { EdgePair } from "@/lib/graph-layout";
 
 /** Pewność krawędzi dla człowieka (ADR-29, ADR-30; reguły przy `EdgeConfidence`); `Record` wymusza wpis dla każdej. */
@@ -61,7 +62,7 @@ export function GraphNodePanel({
       {node.problem !== null && <p className="text-warning text-sm break-words">Cannot build the card: {node.problem}</p>}
       {node.apps.length > 0 && (
         <p className="text-muted-foreground truncate font-mono text-xs">
-          {node.apps.length === 1 ? "app" : "apps"} {node.apps.join(", ")}
+          {pluralNoun(node.apps.length, { one: "app", other: "apps" })} {node.apps.join(", ")}
         </p>
       )}
       {node.tags.length > 0 && (
@@ -103,8 +104,8 @@ export function GraphSummaryPanel({ graph, pairs }: { graph: RepoGraph; pairs: r
         <Stat label="No card" value={withProblems} />
       </dl>
       <p className="text-muted-foreground text-sm">
-        A line goes from the repo that uses to the repo whose package it depends on or whose app it calls over HTTP. Select a repo to see
-        its connections, their confidence and the evidence (file and line).
+        A line goes from a repo to each repo whose package it depends on or whose app it calls over HTTP. Select a repo to see its
+        connections, their confidence and the evidence (file and line).
       </p>
       {graph.configProblems.length > 0 && (
         <Section label="Errors in graph entries" empty="">

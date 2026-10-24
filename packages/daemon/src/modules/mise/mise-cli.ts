@@ -14,7 +14,7 @@ const MAX_STDOUT_BYTES = 4 * 1024 * 1024;
 
 export type MiseCliResult =
   | { kind: "exited"; code: number | null; stdout: string; stderr: string }
-  /** Programu nie ma w `PATH` (albo nie da się go uruchomić); komunikat po polsku. */
+  /** Programu nie ma w `PATH` (albo nie da się go uruchomić); komunikat dla użytkownika. */
   | { kind: "not_started"; message: string }
   /** mise przekroczył limit czasu albo wyjścia i został zakończony. */
   | { kind: "failed"; message: string };

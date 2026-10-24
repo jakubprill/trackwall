@@ -142,7 +142,7 @@ export class AgentTasks {
   }
 
   changes(id: string): Promise<TaskChanges> {
-    if (this.#removing.has(id)) throw new DomainError("bad_request", "the task is being ended");
+    if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is already being ended");
     const task = this.#existingWorktree(id);
     const reading = asRepoUnavailable(task.branch, this.#deps.vcs.worktreeChanges(task.worktree, task.base, PATCH_MAX_BYTES));
     const reads = this.#reading.get(id) ?? new Set();

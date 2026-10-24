@@ -284,6 +284,6 @@ export class Workspace {
 /** Katalog klonu: ostatni segment pełnej nazwy, jak przy `git clone` bez podanego katalogu. */
 function cloneDir(fullName: string): string {
   const dir = fullName.split("/").at(-1);
-  if (!dir) throw new Error(`full repo name without a name: "${fullName}"`);
+  if (!dir) throw new Error(`full repo name has no final segment: "${fullName}"`);
   return dir;
 }

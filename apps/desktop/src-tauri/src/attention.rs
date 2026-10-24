@@ -86,7 +86,7 @@ pub fn newly_waiting(previous: &States, waiting: &[Waiting]) -> Vec<Waiting> {
 pub fn tooltip(waiting: &[Waiting]) -> String {
     match waiting {
         [] => "Trackwall".to_owned(),
-        [only] => format!("Trackwall: session {} is waiting for you", only.repo),
+        [only] => format!("Trackwall: a session in {} is waiting for you", only.repo),
         _ => format!("Trackwall: {} sessions are waiting for you", waiting.len()),
     }
 }
@@ -195,11 +195,9 @@ mod tests {
     fn tooltip_names_the_only_waiting_session_or_counts_them() {
         let w = |id: &str| Waiting { id: id.into(), repo: format!("repo-{id}") };
         assert_eq!(tooltip(&[]), "Trackwall");
-        assert_eq!(tooltip(&[w("a")]), "Trackwall: session repo-a is waiting for you");
+        assert_eq!(tooltip(&[w("a")]), "Trackwall: a session in repo-a is waiting for you");
         assert_eq!(tooltip(&[w("a"), w("b")]), "Trackwall: 2 sessions are waiting for you");
         assert_eq!(tooltip(&["a", "b", "c", "d", "e"].map(w)), "Trackwall: 5 sessions are waiting for you");
-        assert_eq!(count_label(12, "sesja", "sesje", "sesji"), "12 sesji");
-        assert_eq!(count_label(22, "sesja", "sesje", "sesji"), "22 sesje");
         assert_eq!(session_from_menu("session:abc"), Some("abc"));
         assert_eq!(session_from_menu(MENU_SHOW), None);
     }

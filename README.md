@@ -1,10 +1,10 @@
 # Trackwall
 
-A desktop app for one person working across many git repositories and many CLI coding agents at once. It lists and syncs the repos in your projects folder, shows how they connect, runs their mise tasks, and gives agents read access to all of it over MCP.
+A desktop app for working across many git repositories and many CLI coding agents at once.
 
 Trackwall is at a very early stage. Expect missing features, rough edges and breaking changes between versions.
 
-Runs on Windows and macOS. Builds are on the [Releases](https://github.com/jakubprill/trackwall/releases) page.
+Runs on Windows and macOS. Builds are on the [Releases](https://github.com/jakubprill/trackwall/releases) page; they are not signed yet, so see [installation notes](docs/release.md#instalacja-na-nowym-komputerze) (in Polish) before the first run.
 
 ## License
 

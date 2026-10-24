@@ -37,7 +37,8 @@ export function addHttpEdges(join: Join, index: HttpIndex): void {
 
 function clientEvidence(repo: string, client: ConsumedHttp): EdgeEvidence[] {
   const target = [client.app, client.url].filter((t) => t !== null).join(", ");
-  const profiles = client.profiles.length > 0 ? ` (profile: ${client.profiles.join(", ")})` : "";
+  const profiles =
+    client.profiles.length > 0 ? ` (${client.profiles.length === 1 ? "profile" : "profiles"}: ${client.profiles.join(", ")})` : "";
   const evidence: EdgeEvidence[] = [
     { repo, ...client.evidence, detail: `${VIA_LABELS[client.via]} ${client.name}: ${target || "no address"}${profiles}` },
   ];

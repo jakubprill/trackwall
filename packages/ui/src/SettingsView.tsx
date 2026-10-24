@@ -20,7 +20,7 @@ export function SettingsView({ conn, onRetry, onSaved }: { conn: Connection; onR
       <Surface label="Projects folder">
         <div className="flex flex-col gap-4 p-4">
           <p className="text-muted-foreground text-sm">
-            Repos shows every git repo directly inside this folder. A repo cloned into it appears in the list on its own.
+            The Repos view shows every git repo directly inside this folder. A repo cloned into it appears in the list on its own.
           </p>
           {settings.error && (
             <ErrorWithRetry
@@ -57,8 +57,8 @@ function RepoHostsSurface({ conn }: { conn: Connection }) {
     <Surface label="Repo hosts">
       <div className="flex flex-col gap-4 p-4">
         <p className="text-muted-foreground text-sm">
-          Repos searches these hosts and clones a repo into your projects folder in one click. Trackwall asks them through the glab (GitLab)
-          and gh (GitHub) CLIs you are signed in to, so it never stores a token.
+          The Repos view searches these hosts and clones a repo into your projects folder in one click. Trackwall asks them through the glab
+          (GitLab) and gh (GitHub) CLIs you are signed in to, so it never stores a token.
         </p>
         {hosts.error && <ErrorWithRetry message={hosts.error} onRetry={hosts.reload} />}
         {!hosts.data && !hosts.error && <Loading />}

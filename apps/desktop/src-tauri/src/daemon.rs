@@ -155,7 +155,7 @@ pub fn shutdown(conn: &Connection) -> Result<(), String> {
         }
         std::thread::sleep(Duration::from_millis(100));
     }
-    Err(format!("daemon still responds after {} s", STOP_TIMEOUT.as_secs()))
+    Err(format!("daemon is still responding after {} s", STOP_TIMEOUT.as_secs()))
 }
 
 /// Treść odpowiedzi `POST /api/agents/sessions` (lista sesji Copilot CLI, ADR-26).

@@ -116,14 +116,14 @@ describe("komenda zbiorcza", () => {
     async () => {
       const { batch, dir } = setup(
         { web: { tasks: [BUILD], exits: { build: 0 } } },
-        { sync: async () => ({ state: "skipped", reason: "dirty", message: "w gałęzi main są niezacommitowane zmiany" }) },
+        { sync: async () => ({ state: "skipped", reason: "dirty", message: "main is checked out and has uncommitted changes" }) },
       );
 
       await batch.start({ repos: ["web"], steps: ["sync", "setup", "build"] });
       const run = await finished(batch);
 
       expect(run.repos[0]?.steps).toEqual([
-        { step: "sync", state: "skipped", message: "w gałęzi main są niezacommitowane zmiany" },
+        { step: "sync", state: "skipped", message: "main is checked out and has uncommitted changes" },
         { step: "setup", state: "skipped", message: "the repo has no mise task setup" },
         { step: "build", state: "done", detail: null },
       ]);

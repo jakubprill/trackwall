@@ -24,10 +24,7 @@ export type RepoId = z.infer<typeof RepoId>;
 export const RepoPath = z
   .string()
   .max(4096)
-  .refine(
-    (p) => p === "" || p.split("/").every((s) => s !== "" && s !== "." && s !== ".."),
-    "path in the repo: segments without '.', '..' and empty ones",
-  )
+  .refine((p) => p === "" || p.split("/").every((s) => s !== "" && s !== "." && s !== ".."), "repo path: no empty, '.' or '..' segments")
   .refine((p) => [...p].every((c) => c >= " "), "a path in the repo cannot contain control characters");
 export type RepoPath = z.infer<typeof RepoPath>;
 

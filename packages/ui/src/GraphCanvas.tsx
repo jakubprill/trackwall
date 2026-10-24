@@ -1,5 +1,6 @@
 import type { GraphNode, RepoGraph } from "@trackwall/protocol";
 import { useMemo } from "react";
+import { countLabel } from "@/lib/format";
 import { type EdgePair, edgePath, type GraphLayout, NODE_HEIGHT, NODE_WIDTH, type NodeBox, neighbourhood } from "@/lib/graph-layout";
 import { cn } from "@/lib/utils";
 
@@ -162,7 +163,7 @@ function NodeCard({
       <span className="truncate font-mono text-sm">{node.repo}</span>
       <span className="text-muted-foreground flex min-w-0 items-center gap-2 font-mono text-2xs">
         {usedBy > 0 && (
-          <span className="text-primary shrink-0" title={`Used by ${usedBy} ${usedBy === 1 ? "repo" : "repos"}`}>
+          <span className="text-primary shrink-0" title={`Used by ${countLabel(usedBy, { one: "repo", other: "repos" })}`}>
             {`← ${usedBy}`}
           </span>
         )}

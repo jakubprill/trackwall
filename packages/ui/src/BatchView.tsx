@@ -6,6 +6,7 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
 import { batchProgress, batchRunLabel, STEP_HINT, STEP_LABEL, stepLabel, stepMessage } from "@/lib/batch-state";
+import { countLabel } from "@/lib/format";
 import type { BatchRunHandle } from "@/lib/use-batch-run";
 
 /**
@@ -64,7 +65,7 @@ export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: read
           disabled={batch.running || chosen.length === 0 || steps.size === 0}
           onClick={() => batch.start({ repos: chosen.map((r) => r.id), steps: BATCH_STEPS.filter((s) => steps.has(s)) })}
         >
-          <Play /> Run on {chosen.length} {chosen.length === 1 ? "repo" : "repos"}
+          <Play /> Run on {countLabel(chosen.length, { one: "repo", other: "repos" })}
         </Button>
         {run?.finishedAt === null && (
           <Button variant="outline" size="sm" disabled={run.cancelled} onClick={batch.cancel}>

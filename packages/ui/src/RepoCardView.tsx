@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { post } from "@/lib/api";
 import { HTTP_CLIENT_LABELS, MECHANISM_LABELS } from "@/lib/card";
 import type { Connection } from "@/lib/connection";
+import { pluralNoun } from "@/lib/format";
 import { useRemote } from "@/lib/use-remote";
 
 /**
@@ -238,7 +239,7 @@ function HttpClients({ clients }: { clients: ConsumedHttp[] }) {
               </span>
               {c.profiles.length > 0 && (
                 <span className="text-muted-foreground shrink-0 text-xs">
-                  {c.profiles.length === 1 ? "profile" : "profiles"} {c.profiles.join(", ")}
+                  {pluralNoun(c.profiles.length, { one: "profile", other: "profiles" })} {c.profiles.join(", ")}
                 </span>
               )}
               <Evidence label={evidenceLabel(c.evidence)} />

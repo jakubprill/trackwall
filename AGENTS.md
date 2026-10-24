@@ -40,7 +40,7 @@ Pierwsza runda idzie na najwyższym poziomie (`/code-review max`), kolejne na di
 
 ## Język
 
-- Produkt po angielsku (ADR-32): teksty UI, tray i okna powłoki desktopowej, komunikaty i logi daemona, komunikaty walidacji, opisy narzędzi i instrukcje MCP, komunikaty CLI, `README.md` i `README.txt` w portable buildzie. Słowa interfejsu bierz z `CONTEXT.md`.
+- Produkt po angielsku (ADR-32): teksty UI, tray i okna powłoki desktopowej, komunikaty i logi daemona, komunikaty walidacji, opisy narzędzi i instrukcje MCP, komunikaty CLI, `README.md`, `SECURITY.md`, `README.txt` w portable buildzie i nowe notatki o zmianach w `docs/release-notes/`. Słowa interfejsu bierz z `CONTEXT.md`.
 - Projekt po polsku: dokumentacja w `docs/`, ADR, ten plik, `CONTEXT.md`, komentarze, komunikaty commitów, tytuły i opisy PR, nazwy testów oraz skrypty narzędziowe dla osób rozwijających Trackwall (`scripts/` paczek).
 - Identyfikatory, kody błędów API (`error.code`), nazwy zdarzeń i narzędzi MCP po angielsku.
 

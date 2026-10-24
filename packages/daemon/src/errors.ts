@@ -23,7 +23,7 @@ export class SpawnFailure extends Error {
   }
 }
 
-/** Błąd `spawn` jako `SpawnFailure` z komunikatem po polsku; `ENOENT` znaczy brak programu w `PATH`. */
+/** Błąd `spawn` jako `SpawnFailure` z komunikatem dla użytkownika; `ENOENT` znaczy brak programu w `PATH`. */
 export function spawnFailure(program: string, err: NodeJS.ErrnoException): SpawnFailure {
   return err.code === "ENOENT"
     ? new SpawnFailure("program_not_found", `program ${program} not found in PATH`)

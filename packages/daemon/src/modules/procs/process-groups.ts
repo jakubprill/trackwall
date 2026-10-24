@@ -197,7 +197,7 @@ export class ProcessGroups {
     const live = [...this.groups.entries()].filter(([, g]) => g.phase.kind !== "exited");
     const results = await Promise.allSettled(live.map(([owner]) => this.stop(owner)));
     results.forEach((r, i) => {
-      if (r.status === "rejected") this.deps.log(`not stopped ${live[i]?.[0]}: ${String(r.reason)}`);
+      if (r.status === "rejected") this.deps.log(`failed to stop ${live[i]?.[0]}: ${String(r.reason)}`);
     });
   }
 
@@ -259,7 +259,7 @@ export class ProcessGroups {
     this.persist();
     leaderExit
       .then((exit) => this.onLeaderExit(group, exit))
-      .catch((err: unknown) => this.deps.log(`end of group ${spec.owner}: ${String(err)}`));
+      .catch((err: unknown) => this.deps.log(`waiting for group ${spec.owner} to end: ${String(err)}`));
     return { group, launched };
   }
 

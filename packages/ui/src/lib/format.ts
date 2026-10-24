@@ -13,7 +13,7 @@ export function relativeTime(iso: string, now: Date): string {
   if (hours < 24) return `${hours} h ago`;
   const days = Math.floor(hours / 24);
   if (days < 30) return days === 1 ? "yesterday" : `${days} days ago`;
-  return new Date(iso).toLocaleDateString("en-US");
+  return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
 export function formatBytes(bytes: number): string {
@@ -30,9 +30,14 @@ export function breadcrumbs(path: string): { name: string; path: string }[] {
   return [...crumbs, ...parts.map((name, i) => ({ name, path: parts.slice(0, i + 1).join("/") }))];
 }
 
-/** Liczba z rzeczownikiem w angielskiej formie: 1 change, 0 i 2+ changes. */
+/** Rzeczownik w angielskiej formie dla liczby: `one` dla 1, `other` dla 0 i 2+. Jedyne miejsce reguły liczby mnogiej w UI. */
+export function pluralNoun(n: number, forms: { one: string; other: string }): string {
+  return n === 1 ? forms.one : forms.other;
+}
+
+/** Liczba z rzeczownikiem: 1 change, 0 i 2+ changes. */
 export function countLabel(n: number, forms: { one: string; other: string }): string {
-  return `${n} ${n === 1 ? forms.one : forms.other}`;
+  return `${n} ${pluralNoun(n, forms)}`;
 }
 
 /** Liczba zmian w katalogu roboczym jako tekst; `undefined`, gdy repo jest czyste. */

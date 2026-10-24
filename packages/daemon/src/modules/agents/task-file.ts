@@ -15,7 +15,7 @@ import { TaskBranch } from "./task-branch.ts";
 export const StoredTask = Task.omit({ worktree: true }).extend({
   branch: TaskBranch,
   /** Korzeń repo z folderu z projektami, z którego wyszło zadanie: tam git trzyma rejestr worktree i gałąź. */
-  repoDir: z.string().refine(isAbsolute, "repo root: full path"),
+  repoDir: z.string().refine(isAbsolute, "repo root must be a full path"),
 });
 export type StoredTask = z.infer<typeof StoredTask>;
 

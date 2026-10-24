@@ -11,7 +11,7 @@ import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
  * Kontrakt narzędzi MCP daemona (§5.3, ADR-24): nazwa, opis dla agenta, wejście i wynik każdego narzędzia w jednym
  * obiekcie `McpTool`, tak jak `Endpoint` dla API. Daemon ogłasza z nich `tools/list` i sprawdza nimi argumenty oraz
  * `structuredContent`, a testy, UI i klienty biorą z nich nazwy i parsują odpowiedź. Narzędzia tylko czytają; nazwy
- * narzędzi i pól po angielsku, opisy po polsku (AGENTS.md).
+ * narzędzi, pól i opisy po angielsku (ADR-32).
  */
 
 /** Nazwa serwera MCP w `initialize` i w konfiguracji Copilot CLI (`copilot mcp add trackwall …`). */
@@ -114,8 +114,8 @@ export const mcpTools = {
       "Log of a repo's mise task (stdout and stderr, oldest first): records with a seq number, run (runId), stream, " +
       "level from the line text (error, warn, info…) and text without colors, with secrets replaced by ***. Without " +
       "sinceSeq it returns the latest records; then pass nextSeq from the previous response as sinceSeq to get only " +
-      `new ones. dropped: true means some records were lost (the daemon keeps the latest records of a task, at most ${LOG_BUFFER_RECORDS}) ` +
-      `or the cursor is from a previous Trackwall run. ${GET_REPO} lists the tasks and their state.`,
+      `new ones. dropped: true means some records were lost (the daemon keeps the latest records of a mise task, at most ${LOG_BUFFER_RECORDS}) ` +
+      `or the cursor is from a previous Trackwall run. ${GET_REPO} lists the mise tasks and their state.`,
     args: z
       .object({
         repo: RepoArg,
@@ -129,7 +129,7 @@ export const mcpTools = {
   whoCalls: {
     name: "who_calls",
     description:
-      "Who uses a repo: connection graph edges pointing to this repo, each with a kind (package: a repo uses a " +
+      "Who uses a repo: connections in the graph pointing to this repo, each with a kind (package: a repo uses a " +
       "package built in this repo; http: a repo's HTTP client calls this repo's app or endpoints; manual: a connection " +
       "entered by the user), a key (package name, app name or address, note), a confidence (exact, high, medium, low) " +
       "and evidence (repo, file, line; for http also call–endpoint pairs). Before changing a repo's API or package, " +
@@ -140,13 +140,13 @@ export const mcpTools = {
   subgraphFor: {
     name: "subgraph_for",
     description:
-      "Part of the connection graph around a repo: repos up to depth edges away in both directions (what it uses and " +
-      "who uses it) and the edges between them (packages, HTTP, manual), with evidence. A node has tags, Spring Boot " +
+      "Part of the connection graph around a repo: repos up to depth connections away in both directions (what it uses and " +
+      "who uses it) and the connections between them (packages, HTTP, manual), with evidence. A node has tags, Spring Boot " +
       "app names, the number of endpoints and a problem when the repo card cannot be built.",
     args: z
       .object({
         repo: RepoArg,
-        depth: z.number().int().min(1).max(MAX_SUBGRAPH_DEPTH).default(1).describe("how many edges from the repo, default 1"),
+        depth: z.number().int().min(1).max(MAX_SUBGRAPH_DEPTH).default(1).describe("how many connections from the repo, default 1"),
       })
       .strict(),
     result: Subgraph,

@@ -138,7 +138,7 @@ async function postToDaemon(line: string, home: string, session: Session): Promi
       },
     });
   } catch (err) {
-    throw new DaemonUnavailable(`Trackwall does not respond on port ${daemon.port} (${String(err)}). Start the Trackwall app.`);
+    throw new DaemonUnavailable(`Trackwall is not responding on port ${daemon.port} (${String(err)}). Start the Trackwall app.`);
   }
   const replies = res.headers["content-type"]?.startsWith("text/event-stream") ? sseData(res.body) : [parseJson(res.body)];
   const messages = replies.filter((m) => Outgoing.safeParse(m).success);

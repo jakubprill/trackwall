@@ -86,7 +86,7 @@ fn main() {
             api.prevent_exit();
         }
         // Cmd+Q i „Zakończ” z Docka na macOS (a według kodu tao także koniec sesji Windows) kończą pętlę zdarzeń
-        // z pominięciem `ExitRequested` i traya. Bez tego daemon zostawał osierocony. Po „Wyjdź” z traya daemon jest już zatrzymany.
+        // z pominięciem `ExitRequested` i traya. Bez tego daemon zostawał osierocony. Po „Quit” z traya daemon jest już zatrzymany.
         RunEvent::Exit => {
             // Pętla zdarzeń już stoi: bez schowania okno i tray wisiałyby zamrożone do końca zatrzymywania.
             hide_shell(handle);
@@ -139,7 +139,7 @@ fn show_main(app: &AppHandle) {
     }
 }
 
-/// „Wyjdź” z traya: zatrzymanie daemona w tle, żeby pętla zdarzeń działała, a pojedyncza instancja
+/// „Quit” z traya: zatrzymanie daemona w tle, żeby pętla zdarzeń działała, a pojedyncza instancja
 /// była trzymana do końca; potem koniec procesu okna.
 fn quit_app(app: &AppHandle) {
     hide_shell(app);

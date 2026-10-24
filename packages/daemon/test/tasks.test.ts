@@ -246,7 +246,7 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
 
     const reads = [agents.taskChanges(task.id), agents.taskChanges(task.id)];
     const removal = agents.removeTask(task.id, false, true);
-    expect(() => agents.taskChanges(task.id)).toThrow("the task is being ended");
+    expect(() => agents.taskChanges(task.id)).toThrow("this task is already being ended");
     for (const read of await Promise.all(reads)) expect(read.files.map((f) => f.path)).toEqual(["nowy.md"]);
     await removal;
     expect(existsSync(task.worktree)).toBe(false);

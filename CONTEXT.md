@@ -43,7 +43,7 @@ Część daemona, przez którą agenci czytają jego stan narzędziami MCP; ten 
 Jedno wywołanie serwera MCP z nazwą po angielsku, wejściem i wynikiem opisanym schematem z `packages/protocol/src/mcp.ts`; mapowanie na fasadę, bez własnej logiki domenowej.
 _Unikaj_: komenda, akcja (to pojęcia z API i CLI)
 
-**Most stdio** (`trackwall-daemon mcp-stdio`, `mcpStdioCommand`):
+**Most stdio** (`trackwall-daemon mcp-stdio`, `mcpStdioCommand`; po angielsku *stdio bridge*):
 Proces, który CLI agenta uruchamia jako lokalny serwer MCP; przekazuje wiadomości ze stdin do serwera MCP działającego daemona, z portem i tokenem z `daemon.json`.
 _Unikaj_: proxy, cienki klient (bez dopowiedzenia)
 
@@ -160,7 +160,7 @@ Połączenie wpisane przez użytkownika (`from`, `to`, `note`), np. wywołanie H
 Plik i linia, z których wynika fakt na karcie lub krawędź w grafie; dowód krawędzi ma też repo (albo `null` dla `workspace.yaml`) i zdanie, co w tym miejscu jest.
 
 **Pewność** (`confidence`, w grafie `EdgeConfidence`; po angielsku *confidence*):
-`exact`, `high`, `medium` albo `low`. Krawędź z paczki budowanej przez jedno repo i ręczna krawędź są `exact`, z aliasu paczki `high`, z paczki budowanej przez kilka repo `medium`. Krawędź HTTP: `exact`, gdy nazwa aplikacji wskazuje jedno repo, a każde wywołanie ma w nim endpoint, `high` za samą nazwę aplikacji albo alias aplikacji, `medium` za host równy nazwie repo, port na `localhost` albo ścieżki pasujące do jednego repo, `low` za ścieżki pasujące do kilku repo (ADR-30). W UI: pewne, prawie pewne, prawdopodobne, możliwe. Przy `low` daemon niczego nie robi automatycznie.
+`exact`, `high`, `medium` albo `low`. Krawędź z paczki budowanej przez jedno repo i ręczna krawędź są `exact`, z aliasu paczki `high`, z paczki budowanej przez kilka repo `medium`. Krawędź HTTP: `exact`, gdy nazwa aplikacji wskazuje jedno repo, a każde wywołanie ma w nim endpoint, `high` za samą nazwę aplikacji albo alias aplikacji, `medium` za host równy nazwie repo, port na `localhost` albo ścieżki pasujące do jednego repo, `low` za ścieżki pasujące do kilku repo (ADR-30). W UI: certain, almost certain, likely, possible. Przy `low` daemon niczego nie robi automatycznie.
 
 **Przegląd** (widok „Overview”, `GraphView`, identyfikator widoku `graph`; po angielsku *Overview*):
 Widok z grafem połączeń na całą szerokość i panelem szczegółów wybranego repo (kogo używa, kto używa jego, dowody).
@@ -175,7 +175,7 @@ _Unikaj_: aplikacja, mikroserwis (gdy chodzi o byt w Trackwall)
 **Stan serwisu**:
 `stopped`, `starting`, `healthy`, `unhealthy`, `stopping` albo `crashed`; zawsze zaobserwowany, nigdy założony.
 
-**Grupa procesów** (`ProcessGroup`):
+**Grupa procesów** (`ProcessGroup`; po angielsku *process group*):
 Proces-lider i wszyscy jego potomkowie, zatrzymywani razem: Job Object na Windowsie, nowa sesja POSIX (`setsid`) z zabijaniem po `-pgid` na macOS.
 _Unikaj_: drzewo procesów (gdy chodzi o jednostkę zarządzaną)
 
@@ -189,21 +189,21 @@ Task mise `health` uruchamiany cyklicznie; jego wynik decyduje o `healthy` / `un
 Informacja, która gałąź albo worktree zajmuje serwis na jego porcie. Domyślnie repo główne; zadanie może ją przejąć i oddać.
 _Unikaj_: lock, rezerwacja
 
-**Sierota**:
+**Sierota** (po angielsku *orphan*):
 Grupa procesów z `runtime.json`, której daemon już nie nadzoruje (np. po awarii). Sprzątana przy starcie daemona tylko, gdy lider to ten sam proces (ten sam czas startu) albo już nie żyje, a grupa tak.
 
 ## Agenci
 
 **Zadanie** (`Task`, `TaskId`; po angielsku *task*):
-Praca jednego agenta nad jednym repo: polecenie, worktree, gałąź `trackwall/<skrót>` od gałęzi domyślnej i sesje; docelowo także budżet, dzierżawy i podsumowanie. Dziś (ADR-31) tworzy je widok Sesje, zapisuje `tasks.json`, a sesję zadania można zatrzymać i wznowić. Zadanie nie wskazuje sesji; to sesja ma `Session.task`. W kodzie i API `task` znaczy zawsze zadanie.
-_Unikaj_: job; „task” w polskim tekście (myli się z taskiem mise)
+Praca jednego agenta nad jednym repo: polecenie, worktree, gałąź `trackwall/<skrót>` od gałęzi domyślnej i sesje; docelowo także budżet, dzierżawy i podsumowanie. Dziś (ADR-31) tworzy je widok Sessions, zapisuje `tasks.json`, a sesję zadania można zatrzymać i wznowić. Zadanie nie wskazuje sesji; to sesja ma `Session.task`. W kodzie i API `task` znaczy zawsze zadanie.
+_Unikaj_: job; „task” w polskim tekście (myli się z taskiem mise); w tekście po angielsku gołe *task* znaczy tylko zadanie, a task mise to zawsze *mise task*
 
 **Zakończenie zadania** (`removeTask`, „End task” w UI; po angielsku *End task*):
 Usunięcie worktree zadania, a do wyboru także jego gałęzi. Tylko bez działającej sesji; to, co by przepadło (niezacommitowane pliki, commity z odłączonego HEAD, katalog, którego git już nie zna, a z gałęzią także commity zadania), daemon wymienia w odmowie `unsaved_changes`, a przepada ono dopiero po potwierdzeniu. Pliki ignorowane przez gita przepadają zawsze.
 _Unikaj_: usunięcie zadania (zadanie znika z listy, ale gałąź może zostać)
 
 **Polecenie** (`Task.prompt`; po angielsku *prompt*):
-Treść zadania dla agenta, wpisana w widoku Sesje; Copilot CLI dostaje ją jako pierwszą wiadomość sesji zadania (`--interactive`).
+Treść zadania dla agenta, wpisana w widoku Sessions; Copilot CLI dostaje ją jako pierwszą wiadomość sesji zadania (`--interactive`).
 _Unikaj_: prompt (w polskim tekście)
 
 **Task mise** (po angielsku *mise task*):
@@ -224,26 +224,26 @@ CLI agenta (dziś Copilot CLI) uruchomione przez użytkownika poza zadaniem, np.
 _Unikaj_: orkiestrator, główny agent
 
 **Sesja** (sesja zadania, `Session`, `SessionId`; po angielsku *session*):
-CLI agenta działające w PTY należącym do daemona, w korzeniu repo albo w worktree zadania (`Session.task`), jako grupa procesów, z własnym katalogiem `sessions/<sesja>/` (wtyczka sesji, `hooks.jsonl`). Widok Sesje uruchamia ją w repo jednym kliknięciem (ADR-26) albo razem z zadaniem (ADR-31). Sesja żyje tylko do wyjścia daemona, zadanie dłużej. Nagrywa ją tylko `copilot-record.ts`.
+CLI agenta działające w PTY należącym do daemona, w korzeniu repo albo w worktree zadania (`Session.task`), jako grupa procesów, z własnym katalogiem `sessions/<sesja>/` (wtyczka sesji, `hooks.jsonl`). Widok Sessions uruchamia ją w repo jednym kliknięciem (ADR-26) albo razem z zadaniem (ADR-31). Sesja żyje tylko do wyjścia daemona, zadanie dłużej. Nagrywa ją tylko `copilot-record.ts`.
 _Unikaj_: sesja POSIX (to pojęcie z grupy procesów), okno (to okno terminala w UI)
 
 **Czeka na Ciebie** (`Session.needsAttention`; po angielsku *waiting for you*):
 Działająca sesja w stanie `Input`, `Approval` albo `Plan`: agent nie ruszy dalej bez człowieka. Liczy to daemon, a UI (licznik na pasku widoków, „Next waiting”) i tray (menu „Waiting: <repo>”, miganie okna) tylko czytają pole.
 
-**Okno terminala** (`SessionTerminal`):
-xterm.js w widoku Sesje podłączony WebSocketem `/ws/pty/<sesja>` do PTY sesji. Kilka okien może pokazywać tę samą sesję; rozmiar PTY ustala ostatnie, które go zgłosiło.
+**Okno terminala** (`SessionTerminal`; po angielsku *session terminal*):
+xterm.js w widoku Sessions podłączony WebSocketem `/ws/pty/<sesja>` do PTY sesji. Kilka okien może pokazywać tę samą sesję; rozmiar PTY ustala ostatnie, które go zgłosiło.
 
 **Obraz ekranu** (`TerminalScreen`):
 Stan ekranu sesji, który daemon trzyma w emulatorze terminala bez okna i wysyła oknu terminala przy podłączeniu, zanim pójdzie dalsze wyjście.
 _Unikaj_: zrzut ekranu (to obrazek), historia wyjścia
 
-**Stan zadania** (`TaskState`, zmiana: `TaskStateChange`; po angielsku *session state*):
+**Stan zadania** (`TaskState`, zmiana: `TaskStateChange`; po angielsku *state*):
 `Working`, `Input`, `Approval`, `Plan`, `Done`, `Error` albo `Stale`, zawsze ze źródłem (`hook`, `osc`, `screen`, `timeout`, `exit`) i pewnością (§4.4).
 
 **Detektor stanu**:
 Reguła, która z hooków, sekwencji terminala albo wyglądu ekranu wnioskuje stan zadania.
 
-**Wtyczka sesji** (`writeCopilotPlugin`):
+**Wtyczka sesji** (`writeCopilotPlugin`; po angielsku *session plugin*):
 Katalog z `plugin.json` i `hooks.json`, który daemon podaje Copilot CLI przez `--plugin-dir`, żeby hooki zgłaszały stan tylko tej jednej sesji (ADR-17).
 _Unikaj_: plugin (w polskim tekście), konfiguracja hooków
 

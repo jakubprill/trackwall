@@ -54,7 +54,7 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
         } catch (err) {
           ctx.log(`${tool.name}: error in ${Date.now() - started} ms: ${String(err)}`);
           // Błąd zgłoszony świadomie przez moduł idzie do agenta z kodem i treścią, jak w API (§5.2); inny bez szczegółów.
-          const text = err instanceof DomainError ? `${err.code}: ${err.message}` : "internal: internal daemon error";
+          const text = err instanceof DomainError ? `${err.code}: ${err.message}` : "internal: daemon error";
           return { content: [{ type: "text", text }], isError: true };
         }
       },

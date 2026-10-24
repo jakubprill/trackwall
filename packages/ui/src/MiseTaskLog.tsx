@@ -32,8 +32,8 @@ export function MiseTaskLog({ conn, repo, miseTask }: { conn: Connection; repo: 
     <div className="flex flex-col gap-1">
       {log.data?.dropped && (
         <p className="text-muted-foreground text-xs">
-          Some lines were dropped: the daemon keeps only the last (at most {LOG_BUFFER_RECORDS}) lines of a task in memory and forgets them
-          on restart. Older lines are in the log file in the state directory (logs/).
+          Some lines were dropped: the daemon keeps only the last (at most {LOG_BUFFER_RECORDS}) lines of a mise task in memory and forgets
+          them on restart. Older lines are in the log file in the state directory (logs/).
         </p>
       )}
       <div ref={box} onScroll={onScroll} className="bg-muted max-h-96 overflow-auto rounded-md border px-2 py-1 font-mono text-xs">
@@ -41,7 +41,7 @@ export function MiseTaskLog({ conn, repo, miseTask }: { conn: Connection; repo: 
           <LogLines records={records} />
         ) : (
           <p className="text-muted-foreground py-1">
-            {records ? "No log lines: the task has not printed anything since the daemon started." : "Loading the log…"}
+            {records ? "No log lines: the mise task has not printed anything since the daemon started." : "Loading the log…"}
           </p>
         )}
       </div>
