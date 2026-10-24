@@ -39,6 +39,7 @@ Zadania agenta: przycisk „+” w widoku „Sesje” otwiera formularz nowego z
 | `packages/protocol` | typy i schematy zod wspólne dla daemona, UI i CLI |
 | `packages/daemon` | daemon (Bun, kod zgodny z Node), budowany do jednej binarki |
 | `packages/ui` | React + Tailwind + shadcn/ui, Vite |
+| `packages/scene` | scena 3D pulpitu na Pawn (`@pawnjs/core` z npm): model widoku, układ „Orbit”, modele |
 | `apps/desktop` | powłoka Tauri 2: okno (półprzezroczyste, ADR-11), tray, start i zatrzymanie daemona |
 | `spikes/` | eksperymenty etapu 1, nie trafiają do aplikacji |
 
