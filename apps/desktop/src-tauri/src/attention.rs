@@ -9,17 +9,16 @@
 
 use crate::daemon;
 use crate::daemon_state::DaemonState;
-use crate::windows::{self, Windows};
-use serde::{Deserialize, Serialize};
+use crate::jump::Jump;
+use crate::windows::Windows;
+use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-use tauri::{AppHandle, Emitter, Manager, UserAttentionType};
+use tauri::{AppHandle, Manager, UserAttentionType};
 
 const POLL: Duration = Duration::from_secs(2);
-/// Event for the UI with the session or proposal to show (`Focus`; same name and shape in `use-session-focus.ts`).
-const FOCUS_EVENT: &str = "focus-session";
 /// Tray menu item ids; a session or proposal item is a prefix plus its id.
 pub const MENU_SHOW: &str = "show";
 pub const MENU_NEW_WINDOW: &str = "new-window";
@@ -164,28 +163,12 @@ pub fn build_menu(app: &AppHandle, waiting: &[Waiting], proposals: &[Proposal]) 
     Ok(menu)
 }
 
-/// What to show after a tray menu item is clicked; for the UI `{"kind":"session"|"proposal","id":...}`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(tag = "kind", content = "id", rename_all = "lowercase")]
-pub enum Focus<'a> {
-    Session(&'a str),
-    Proposal(&'a str),
-}
-
 /// The session or proposal of a tray menu item; `None` for the fixed items.
-pub fn focus_from_menu(id: &str) -> Option<Focus<'_>> {
+pub fn jump_from_menu(id: &str) -> Option<Jump> {
     if let Some(session) = id.strip_prefix(MENU_SESSION_PREFIX) {
-        return Some(Focus::Session(session));
+        return Some(Jump::Session(session.to_owned()));
     }
-    id.strip_prefix(MENU_PROPOSAL_PREFIX).map(Focus::Proposal)
-}
-
-/// Shows the window for sessions (ADR-49: the last focused one showing Sessions) and asks its UI to switch to the
-/// session or proposal.
-pub fn focus(app: &AppHandle, target: Focus<'_>) {
-    let label = app.state::<Windows>().session_window();
-    windows::show(app, &label);
-    let _ = app.emit_to(label.as_str(), FOCUS_EVENT, target);
+    id.strip_prefix(MENU_PROPOSAL_PREFIX).map(|proposal| Jump::Proposal(proposal.to_owned()))
 }
 
 /// Wątek pytający daemon o sesje, dopóki działa powłoka.
@@ -311,10 +294,9 @@ mod tests {
 
     #[test]
     fn menu_item_points_at_a_session_or_a_proposal() {
-        assert_eq!(focus_from_menu("session:abc"), Some(Focus::Session("abc")));
-        assert_eq!(focus_from_menu("proposal:abc"), Some(Focus::Proposal("abc")));
-        assert_eq!(focus_from_menu(MENU_SHOW), None);
+        assert_eq!(jump_from_menu("session:abc"), Some(Jump::Session("abc".into())));
+        assert_eq!(jump_from_menu("proposal:abc"), Some(Jump::Proposal("abc".into())));
+        assert_eq!(jump_from_menu(MENU_SHOW), None);
         assert_eq!(menu_text("Fix A & B"), "Fix A && B");
-        assert_eq!(serde_json::to_string(&Focus::Proposal("abc")).unwrap(), r#"{"kind":"proposal","id":"abc"}"#);
     }
 }

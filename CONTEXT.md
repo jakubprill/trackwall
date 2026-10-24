@@ -20,6 +20,14 @@ _Unikaj_: zakładka (dla całego ekranu)
 A desktop shell window with the whole UI and its own view (ADR-49). The main window comes from `tauri.conf.json` and hides to the tray; an extra window is opened with “Open in new window” and closes for real.
 _Avoid_: screen (that is a monitor), tab (that is `TabBar`), terminal window (that is a session terminal)
 
+**Trackwall link** (`trackwall://`, `trackwallLink`, `TRACKWALL_LINK_SCHEME`, `TRACKWALL_LINK_KINDS`; in the shell `link.rs`):
+`trackwall://repo/<repo id>`, `trackwall://session/<session id>` or `trackwall://task/<task id>`: shows that thing in the window (ADR-52). Only navigates, never runs anything.
+_Avoid_: deep link; plain "link" (that is a link in a README, ADR-35)
+
+**Jump** (`Jump`, `jump::request`, `take_jump`, `useJumpRequest`):
+The shell's request to the UI to show a repo, session, task or task proposal, from the tray or from a Trackwall link.
+_Avoid_: focus (that is keyboard focus and the "seen" frame)
+
 **Zakładka** (`TabBar`; po angielsku *tab*):
 Przełącznik części treści wewnątrz widoku, np. README, Files, Commits i mise tasks w widoku Repos.
 

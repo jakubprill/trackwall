@@ -154,6 +154,11 @@ impl WindowEffects {
     pub fn forget(&self, label: &str) {
         lock(&self.0).remove(label);
     }
+
+    /// Whether the window's page has yet to load and show it: showing it now would flash the opaque background.
+    pub fn reveal_pending(&self, label: &str) -> bool {
+        lock(&self.0).get(label).is_some_and(|applied| !applied.is_revealed())
+    }
 }
 
 /// Skrypt, który przekazuje UI przyjęty efekt.

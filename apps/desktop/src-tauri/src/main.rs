@@ -6,6 +6,8 @@
 mod attention;
 mod daemon;
 mod daemon_state;
+mod jump;
+mod link;
 mod lock;
 mod saved_windows;
 mod window_effect;
@@ -68,18 +70,31 @@ fn main() {
     let builder = tauri::Builder::default();
     // Ponowne uruchomienie trackwall.exe pokazuje istniejące okno zamiast drugiej powłoki i drugiej ikony w trayu.
     // Tylko w wydaniu: identyfikator instancji jest wspólny, a `tauri dev` ma działać obok zainstalowanej aplikacji.
+    // On Windows a `trackwall://` link starts a second trackwall.exe; the plugin's `deep-link` feature hands the link
+    // to the first instance before this callback (ADR-52), and the link shows its own window.
     #[cfg(not(debug_assertions))]
-    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
         let state = Arc::clone(app.state::<Arc<DaemonState>>().inner());
         std::thread::spawn(move || state.restart_if_down());
-        show_main(app);
+        if !link::in_args(&args) {
+            windows::show_once_loaded(app, windows::MAIN);
+        }
     }));
     let app = builder
         .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(windows::STATE_FLAGS).build())
+        .plugin(tauri_plugin_deep_link::init())
         .manage(Arc::clone(&state))
         .manage(WindowEffects::default())
         .manage(Windows::default())
-        .invoke_handler(tauri::generate_handler![daemon_connection, retry_daemon, open_window, window_shows])
+        .manage(jump::PendingJump::default())
+        .invoke_handler(tauri::generate_handler![
+            daemon_connection,
+            retry_daemon,
+            open_window,
+            window_shows,
+            jump::take_jump,
+            link::open_link
+        ])
         .setup(move |app| {
             state.start();
             let window = app.get_webview_window(windows::MAIN).ok_or("missing window main from tauri.conf.json")?;
@@ -87,6 +102,7 @@ fn main() {
             build_tray(app.handle())?;
             windows::restore(app.handle());
             attention::watch(app.handle().clone(), Arc::clone(&state), TRAY_ID);
+            link::listen(app.handle());
             Ok(())
         })
         .on_page_load(window_effect::on_page_load)
@@ -142,8 +158,8 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             }
             attention::MENU_QUIT => quit_app(app),
             id => {
-                if let Some(target) = attention::focus_from_menu(id) {
-                    attention::focus(app, target);
+                if let Some(target) = attention::jump_from_menu(id) {
+                    jump::request(app, target);
                 }
             }
         })
