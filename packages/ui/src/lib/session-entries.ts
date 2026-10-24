@@ -21,17 +21,71 @@ export type SessionSelection =
   | undefined;
 
 /**
+ * Kolejność na jednym poziomie drzewa (`sessionRows`).
  * Najpierw propozycje zadań, bo czekają na decyzję, od najnowszej; potem od ostatnio uruchomionej: sesja po starcie,
  * zadanie po starcie swojej ostatniej sesji, a bez sesji po utworzeniu. Propozycji, z której jest już zadanie,
  * daemon nie zwraca, więc ten sam identyfikator jest na liście raz.
  */
-export function sessionEntries({ sessions, tasks, proposals }: SessionList): SessionEntry[] {
+function sessionEntries({ sessions, tasks, proposals }: SessionList): SessionEntry[] {
   const started: SessionEntry[] = [
     ...sessions.filter((s) => s.task === null).map((session) => ({ kind: "session" as const, session })),
     ...tasks.map((task) => ({ kind: "task" as const, task, session: latestSession(sessions, task.id) })),
   ];
   const waiting = proposals.map((proposal) => ({ kind: "proposal" as const, proposal }));
   return [...waiting, ...started.sort((a, b) => entryTime(b).localeCompare(entryTime(a)))];
+}
+
+/**
+ * Wiersz listy w widoku „Sesje”: pozycja, jej głębokość w drzewie i liczba pozycji wprost pod nią. Zadanie
+ * i propozycja leżą pod pozycją z sesją, która je zaproponowała (sesja główna, `proposedBy`), więc praca zlecona
+ * przez jedną sesję jest razem z nią. Gdy tej sesji nie ma już na liście (zamknięta albo po restarcie daemona),
+ * pozycja jest na górnym poziomie.
+ */
+export interface SessionRow {
+  entry: SessionEntry;
+  depth: number;
+  children: number;
+}
+
+/**
+ * Drzewo pozycji spłaszczone do wierszy w kolejności wyświetlania: pozycja, a zaraz pod nią jej dzieci, na każdym
+ * poziomie w kolejności `sessionEntries`. Cykl jest niemożliwy (sesja istnieje dopiero po swoim zadaniu, a zadanie po
+ * propozycji od innej sesji), ale dane przychodzą z daemona, więc pozycja z cyklu trafia na górny poziom, zamiast
+ * zapętlić listę albo z niej zniknąć.
+ */
+export function sessionRows(list: SessionList): SessionRow[] {
+  const entries = sessionEntries(list);
+  const ids = new Set(entries.map(entryId));
+  // Pozycja, która trzyma sesję: zadanie dla sesji zadania (także starszej niż ostatnia), inaczej sama sesja.
+  const holder = new Map(list.sessions.map((s) => [s.id, s.task ?? s.id]));
+  const children = new Map<string, SessionEntry[]>();
+  const roots: SessionEntry[] = [];
+  for (const entry of entries) {
+    const proposer = entryProposer(entry);
+    const parent = proposer === null ? undefined : holder.get(proposer);
+    if (parent !== undefined && parent !== entryId(entry) && ids.has(parent))
+      children.set(parent, [...(children.get(parent) ?? []), entry]);
+    else roots.push(entry);
+  }
+  const rows: SessionRow[] = [];
+  const placed = new Set<string>();
+  const place = (entry: SessionEntry, depth: number) => {
+    const id = entryId(entry);
+    if (placed.has(id)) return;
+    placed.add(id);
+    const below = children.get(id) ?? [];
+    rows.push({ entry, depth, children: below.length });
+    for (const child of below) place(child, depth + 1);
+  };
+  for (const entry of [...roots, ...entries]) place(entry, 0);
+  return rows;
+}
+
+/** Sesja, która zaproponowała zadanie albo propozycję; `null` dla sesji, zadania z formularza i agenta spoza Trackwall. */
+function entryProposer(entry: SessionEntry): string | null {
+  if (entry.kind === "session") return null;
+  const proposedBy = entry.kind === "proposal" ? entry.proposal.proposedBy : entry.task.proposedBy;
+  return proposedBy?.session ?? null;
 }
 
 /** `SessionList.sessions` idzie od najnowszej. */
@@ -62,6 +116,9 @@ export function findEntry(entries: readonly SessionEntry[], selection: SessionSe
 export function entrySession(entry: SessionEntry | undefined): Session | undefined {
   return entry?.kind === "proposal" ? undefined : entry?.session;
 }
+
+/** Stan propozycji zadania tam, gdzie ją widać (lista „Sessions”, „Needs you” na pulpicie): czeka na decyzję. */
+export const PROPOSAL_STATUS = { tone: "warning", label: "waiting for your decision" } as const;
 
 /** Nazwa zadania na liście i w panelu: tytuł z propozycji, a zadanie z formularza nie ma tytułu, więc polecenie. */
 export function taskName(task: Task): string {

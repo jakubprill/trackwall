@@ -228,7 +228,7 @@ Zadanie, które sesja albo agent spoza Trackwall zgłosił przez MCP, a które c
 _Unikaj_: zlecenie, prośba, wniosek
 
 **Sesja główna** (`proposedBy` zadania i propozycji; po angielsku *main session*):
-Sesja albo agent nadrzędny, który rozmawia z użytkownikiem i zleca pracę innym agentom propozycjami zadań, a potem czeka na ich sesje (`wait_for_session`) i czyta podsumowania, jak koordynator z wątkami w Claude (ADR-39). To rola, nie osobny rodzaj sesji: dziś to każda sesja Trackwall albo agent spoza Trackwall (`proposedBy.session: null`).
+Sesja albo agent nadrzędny, który rozmawia z użytkownikiem i zleca pracę innym agentom propozycjami zadań, a potem czeka na ich sesje (`wait_for_session`) i czyta podsumowania, jak koordynator z wątkami w Claude (ADR-39). To rola, nie osobny rodzaj sesji: dziś to każda sesja Trackwall albo agent spoza Trackwall (`proposedBy.session: null`). W widoku Sessions jej zadania i propozycje leżą pod nią, a ona ma znacznik „main” z ich liczbą.
 _Unikaj_: orkiestrator, planner (ADR-9: rozbijanie celów robi człowiek)
 
 **Task mise** (po angielsku *mise task*):

@@ -1,5 +1,6 @@
 import {
   agentsApi,
+  countLabel,
   type Session,
   type SessionList,
   TASK_PROMPT_MAX,
@@ -12,6 +13,7 @@ import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { StatusLabel } from "@/components/StatusLabel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
@@ -22,9 +24,11 @@ import {
   entrySelection,
   entrySession,
   findEntry,
+  PROPOSAL_STATUS,
   type SessionEntry,
+  type SessionRow,
   type SessionSelection,
-  sessionEntries,
+  sessionRows,
   taskName,
 } from "@/lib/session-entries";
 import { isLive, nextWaiting, sessionStateLabel, waitingCount } from "@/lib/session-state";
@@ -57,7 +61,8 @@ export function SessionsView({
   // Zakończone zadanie znika od razu, a nie po odświeżeniu listy, żeby panel nie pokazał go znowu bez worktree.
   const [removed, setRemoved] = useState<{ task: string; afterLoad: number }>();
   const hidden = removed && actionIsNewer(removed.afterLoad, sessions.loadNumber) ? removed.task : undefined;
-  const entries = sessions.data ? sessionEntries(sessions.data).filter((e) => e.kind !== "task" || e.task.id !== hidden) : [];
+  const rows = sessions.data ? sessionRows({ ...sessions.data, tasks: sessions.data.tasks.filter((t) => t.id !== hidden) }) : [];
+  const entries = rows.map((r) => r.entry);
   const current = findEntry(entries, selected);
   const show = (id: string) => onSelect({ kind: "session", id });
   const next = nextWaiting(list, entrySession(current)?.id);
@@ -88,13 +93,13 @@ export function SessionsView({
               No sessions yet. Give the agent a task or start Copilot CLI in a repo from your projects folder.
             </p>
           )}
-          {entries.map((entry, i) => (
+          {rows.map((row, i) => (
             <SessionListItem
-              key={entryId(entry)}
-              entry={entry}
+              key={entryId(row.entry)}
+              row={row}
               position={i + 1}
-              active={current !== undefined && entryId(entry) === entryId(current)}
-              onSelect={() => onSelect(entrySelection(entry))}
+              active={current !== undefined && entryId(row.entry) === entryId(current)}
+              onSelect={() => onSelect(entrySelection(row.entry))}
             />
           ))}
         </nav>
@@ -161,19 +166,50 @@ export function SessionsView({
   );
 }
 
+/** Wcięcie na poziom drzewa; głębiej wiersze już się nie przesuwają, żeby nazwa repo zmieściła się w panelu. */
+const INDENT = ["", "ml-4", "ml-8", "ml-12"] as const;
+
+/**
+ * Wiersz listy: pozycja wcięta pod sesją, która ją zaproponowała, z linią wzdłuż dzieci jednej sesji głównej.
+ * Sesja albo zadanie, które zleciło pracę, ma znacznik „main” z liczbą pozycji pod sobą.
+ */
 function SessionListItem({
-  entry,
+  row,
   position,
   active,
   onSelect,
 }: {
-  entry: SessionEntry;
+  row: SessionRow;
   position: number;
   active: boolean;
   onSelect: () => void;
 }) {
-  if (entry.kind === "proposal")
-    return <ProposalListItem proposal={entry.proposal} position={position} active={active} onSelect={onSelect} />;
+  const { entry, depth } = row;
+  return (
+    <div className={cn(INDENT[Math.min(depth, INDENT.length - 1)], depth > 0 && "border-l pl-1")}>
+      {entry.kind === "proposal" ? (
+        <ProposalListItem proposal={entry.proposal} position={position} active={active} onSelect={onSelect} />
+      ) : (
+        <StartedListItem entry={entry} delegated={row.children} position={position} active={active} onSelect={onSelect} />
+      )}
+    </div>
+  );
+}
+
+function StartedListItem({
+  entry,
+  delegated,
+  position,
+  active,
+  onSelect,
+}: {
+  entry: Exclude<SessionEntry, { kind: "proposal" }>;
+  /** Zadania i propozycje wprost pod tą pozycją. */
+  delegated: number;
+  position: number;
+  active: boolean;
+  onSelect: () => void;
+}) {
   const { session } = entry;
   const task = entry.kind === "task" ? entry.task : undefined;
   return (
@@ -190,6 +226,11 @@ function SessionListItem({
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate text-sm font-medium">{task?.repo ?? session?.repo}</span>
+          {delegated > 0 && (
+            <Badge
+              aria-label={`main session with ${countLabel(delegated, { one: "task", other: "tasks" })}`}
+            >{`main · ${delegated}`}</Badge>
+          )}
           {session?.needsAttention && <BellRing className="text-warning size-3.5 shrink-0" aria-label="waiting for you" />}
         </span>
         {task && <TaskLine task={task} />}
@@ -230,7 +271,7 @@ function ProposalListItem({
         </span>
         <span className="text-muted-foreground truncate text-xs">{proposal.title}</span>
         <span className="text-xs">
-          <StatusLabel tone="warning" label="waiting for your decision" />
+          <StatusLabel {...PROPOSAL_STATUS} />
         </span>
       </span>
     </button>

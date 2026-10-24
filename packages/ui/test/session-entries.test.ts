@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Session, Task, TaskProposal } from "@trackwall/protocol";
-import { entryId, entrySelection, findEntry, proposerLabel, sessionEntries } from "../src/lib/session-entries.ts";
+import { entryId, entrySelection, findEntry, proposerLabel, sessionRows } from "../src/lib/session-entries.ts";
 import { attentionCount } from "../src/lib/session-state.ts";
 
 function session(id: string, startedAt: string, task: string | null = null): Session {
@@ -32,9 +32,18 @@ function task(id: string, createdAt: string): Task {
   };
 }
 
-function proposal(id: string, createdAt: string): TaskProposal {
-  return { id, repo: "sklep", title: "Dodaj test", prompt: "dodaj test", proposedBy: { session: "s1" }, createdAt };
+function proposal(id: string, createdAt: string, proposer: string | null = null): TaskProposal {
+  return { id, repo: "sklep", title: "Dodaj test", prompt: "dodaj test", proposedBy: { session: proposer }, createdAt };
 }
+
+function delegated(id: string, createdAt: string, proposer: string): Task {
+  return { ...task(id, createdAt), title: "Dodaj test", proposedBy: { session: proposer } };
+}
+
+/** Pozycje bez drzewa, w kolejności wyświetlania. */
+const sessionEntries = (list: Parameters<typeof sessionRows>[0]) => sessionRows(list).map((r) => r.entry);
+/** Wiersz jako „rodzaj identyfikator @głębokość”, żeby kształt drzewa było widać w jednej linii. */
+const shape = (list: Parameters<typeof sessionRows>[0]) => sessionRows(list).map((r) => `${r.entry.kind} ${entryId(r.entry)} @${r.depth}`);
 
 describe("pozycje widoku Sesje", () => {
   test("zadanie to jedna pozycja z ostatnią sesją, a kolejność idzie od ostatnio uruchomionej", () => {
@@ -110,6 +119,47 @@ describe("pozycje widoku Sesje", () => {
     };
     expect(attentionCount({ ...list, worktreesDir: "/w" })).toBe(2);
     expect(attentionCount(undefined)).toBe(0);
+  });
+
+  test("zadania i propozycje sesji głównej leżą pod nią, a ona zna ich liczbę", () => {
+    const list = {
+      sessions: [session("s2", "2026-10-23T12:00:00Z"), session("s1", "2026-10-23T10:00:00Z")],
+      tasks: [delegated("t1", "2026-10-23T11:00:00Z", "s1"), task("t2", "2026-10-23T09:00:00Z")],
+      proposals: [proposal("p1", "2026-10-23T11:30:00Z", "s1")],
+      worktreesDir: "/w",
+    };
+    expect(shape(list)).toEqual(["session s2 @0", "session s1 @0", "proposal p1 @1", "task t1 @1", "task t2 @0"]);
+    expect(sessionRows(list).find((r) => entryId(r.entry) === "s1")?.children).toBe(2);
+  });
+
+  test("zadanie zlecone przez sesję innego zadania leży pod tym zadaniem, także gdy to nie jego ostatnia sesja", () => {
+    const list = {
+      sessions: [session("s2", "2026-10-23T12:00:00Z", "t1"), session("s1", "2026-10-23T10:00:00Z", "t1")],
+      tasks: [delegated("t2", "2026-10-23T11:00:00Z", "s1"), task("t1", "2026-10-23T09:00:00Z")],
+      proposals: [],
+      worktreesDir: "/w",
+    };
+    expect(shape(list)).toEqual(["task t1 @0", "task t2 @1"]);
+  });
+
+  test("zadanie od sesji, której nie ma już na liście, i propozycja od agenta spoza Trackwall są na górnym poziomie", () => {
+    const list = {
+      sessions: [session("s1", "2026-10-23T10:00:00Z")],
+      tasks: [delegated("t1", "2026-10-23T11:00:00Z", "zamknieta")],
+      proposals: [proposal("p1", "2026-10-23T09:00:00Z")],
+      worktreesDir: "/w",
+    };
+    expect(shape(list)).toEqual(["proposal p1 @0", "task t1 @0", "session s1 @0"]);
+  });
+
+  test("zadania, które zlecają się nawzajem, zostają na liście zamiast ją zapętlić", () => {
+    const list = {
+      sessions: [session("s2", "2026-10-23T12:00:00Z", "t2"), session("s1", "2026-10-23T11:00:00Z", "t1")],
+      tasks: [delegated("t2", "2026-10-23T10:00:00Z", "s1"), delegated("t1", "2026-10-23T09:00:00Z", "s2")],
+      proposals: [],
+      worktreesDir: "/w",
+    };
+    expect(shape(list)).toEqual(["task t2 @0", "task t1 @1"]);
   });
 
   test("propozycja mówi, czy przyszła od sesji z listy, od zamkniętej sesji, czy od agenta spoza Trackwall", () => {

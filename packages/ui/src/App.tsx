@@ -46,12 +46,12 @@ export function App() {
   const events = useDaemonEvents(conn);
   const sessions = useSessions(conn, events, view === "sessions" || view === "home");
   const runningLive = useMemo(() => events?.feed("mise.running.changed"), [events]);
-  const openSession = (id: string) => {
+  const openInSessions = (selection: SessionSelection) => {
     setView("sessions");
-    setSession({ kind: "session", id });
+    setSession(selection);
   };
-  // Skok do sesji z traya (ADR-26): powłoka pokazuje okno i podaje sesję, która czeka.
-  useSessionFocus(openSession);
+  // Skok z traya (ADR-26, ADR-39): powłoka pokazuje okno i podaje sesję, która czeka, albo propozycję zadania.
+  useSessionFocus(openInSessions);
   return (
     <div className="flex h-screen">
       <ActivityBar views={VIEWS} active={view} onSelect={setView} badges={{ sessions: attentionCount(sessions.data) }} />
@@ -76,7 +76,8 @@ export function App() {
               conn={conn}
               runningLive={runningLive}
               sessions={sessions}
-              onOpenSession={openSession}
+              onOpenSession={(id) => openInSessions({ kind: "session", id })}
+              onOpenProposal={(id) => openInSessions({ kind: "proposal", id })}
               onOpenRepo={(id) => setView("repos", id)}
               onOpenDaemon={() => setView("daemon")}
               onOpenSettings={() => setView("settings")}

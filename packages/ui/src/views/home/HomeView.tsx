@@ -15,7 +15,7 @@ import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
 
 /**
  * Widok „Home” (ADR-33, §5.5): pierwszy ekran. Po lewej kolejka „Needs you” (sesje, które czekają albo mają błąd,
- * i repo, które nie są czyste), w środku pulpit 3D w układzie „Orbit”, po prawej szczegóły wybranego obiektu.
+ * propozycje zadań, które czekają na decyzję, i repo, które nie są czyste), w środku pulpit 3D w układzie „Orbit”, po prawej szczegóły wybranego obiektu.
  * Klik wybiera, dwuklik albo przycisk w szczegółach przechodzi do sesji lub repo. Dane to te same odpowiedzi daemona
  * co w innych widokach; sesje i działające taski mise przychodzą na żywo z WebSocketu zdarzeń (ADR-36), a sesje
  * pobiera `App`, bo ich liczba jest też na pasku widoków. Poza płótnem widok bierze ze sceny
@@ -34,6 +34,7 @@ export function HomeView({
   runningLive,
   sessions,
   onOpenSession,
+  onOpenProposal,
   onOpenRepo,
   onOpenDaemon,
   onOpenSettings,
@@ -43,6 +44,7 @@ export function HomeView({
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
   sessions: RemoteHandle<SessionList>;
   onOpenSession: (id: string) => void;
+  onOpenProposal: (id: string) => void;
   onOpenRepo: (id: string) => void;
   onOpenDaemon: () => void;
   onOpenSettings: () => void;
@@ -117,7 +119,15 @@ export function HomeView({
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[var(--spacing-sidebar)_1fr_var(--spacing-sidebar)]">
-      <NeedsYouPanel model={model} sessions={lookup.sessions} selected={current} onSelect={setSelected} onOpen={open} />
+      <NeedsYouPanel
+        model={model}
+        sessions={lookup.sessions}
+        proposals={sessions.data?.proposals ?? []}
+        selected={current}
+        onSelect={setSelected}
+        onOpen={open}
+        onOpenProposal={onOpenProposal}
+      />
       <div className="relative min-h-0 min-w-0">
         {unavailable ? (
           <div className="flex flex-col items-start gap-3 p-6">

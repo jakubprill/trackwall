@@ -1,28 +1,36 @@
-import type { Session } from "@trackwall/protocol";
+import type { Session, TaskProposal } from "@trackwall/protocol";
 import { type HomeKey, type HomeModel, repoKey, sessionKey } from "@trackwall/scene/model";
+import { Lightbulb } from "lucide-react";
 import type { ReactNode } from "react";
 import { StatusLabel } from "@/components/StatusLabel";
 import { twoDigits } from "@/lib/format";
 import { HOME_SESSION_STATUS, homeRepoStatus } from "@/lib/home-model";
+import { PROPOSAL_STATUS } from "@/lib/session-entries";
 import { sessionStateLabel } from "@/lib/session-state";
 import { cn } from "@/lib/utils";
 
 /**
- * Kolejka po lewej stronie pulpitu: najpierw sesje, które czekają na Ciebie albo skończyły się błędem, potem repo,
- * które nie są czyste. To ta sama lista co etykiety na scenie, więc pulpit da się obsłużyć także bez WebGL.
+ * Kolejka po lewej stronie pulpitu: najpierw sesje, które czekają na Ciebie albo skończyły się błędem, potem propozycje
+ * zadań (ADR-39), potem repo, które nie są czyste. Sesje i repo to te same obiekty co etykiety na scenie, więc pulpit
+ * da się obsłużyć także bez WebGL. Propozycji nie ma na scenie, a decyzja (z poprawką polecenia) zapada w widoku
+ * „Sessions”, więc klik w propozycję od razu ją tam otwiera.
  */
 export function NeedsYouPanel({
   model,
   sessions,
+  proposals,
   selected,
   onSelect,
   onOpen,
+  onOpenProposal,
 }: {
   model: HomeModel;
   sessions: ReadonlyMap<string, Session>;
+  proposals: readonly TaskProposal[];
   selected: HomeKey | null;
   onSelect: (key: HomeKey) => void;
   onOpen: (key: HomeKey) => void;
+  onOpenProposal: (id: string) => void;
 }) {
   const urgent = model.sessions.filter((s) => s.state === "attention" || s.state === "error");
   const repos = model.repos.filter((r) => r.state !== "clean");
@@ -47,6 +55,30 @@ export function NeedsYouPanel({
           );
         })}
       </ul>
+      {proposals.length > 0 && (
+        <>
+          <h2 className="hud-label flex items-center gap-1.5 px-4 pt-4 pb-2">
+            <Lightbulb className="text-warning size-3" aria-hidden />
+            Proposals <span className="text-primary">{`// ${twoDigits(proposals.length)}`}</span>
+          </h2>
+          <ul aria-label="Task proposals waiting for your decision" className="px-2">
+            {proposals.map((p) => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  onClick={() => onOpenProposal(p.id)}
+                  className="flex w-full flex-col items-start gap-1 rounded-md border border-transparent px-2 py-2 text-left transition-colors hover:bg-accent"
+                >
+                  <span className="w-full truncate text-sm font-medium">{`${p.repo} · ${p.title}`}</span>
+                  <span className="text-xs">
+                    <StatusLabel {...PROPOSAL_STATUS} />
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
       <h2 className="hud-label px-4 pt-4 pb-2">
         Repos <span className="text-primary">{`// ${twoDigits(repos.length)} of ${twoDigits(model.repos.length)}`}</span>
       </h2>
