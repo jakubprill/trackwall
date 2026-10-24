@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { GraphEdge, Repo, RepoGraph, Session } from "@trackwall/protocol";
-import { homeModel, homeRepoStatus, homeSessionState } from "../src/lib/home-model.ts";
+import { daemonAnswered, homeHasObject, homeModel, homeRepoStatus, homeSessionState } from "../src/lib/home-model.ts";
+import { listNeedsSettings } from "../src/lib/repo-status.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-24T10:00:00Z", pid: 10 } as const;
 
@@ -131,5 +132,31 @@ describe("stan repo na pulpicie słowami", () => {
     expect(homeRepoStatus({ ...repo, state: "behind", count: 3 })).toEqual({ tone: "warning", label: "3 commits to pull" });
     expect(homeRepoStatus({ ...repo, state: "unavailable", count: 0 })).toEqual({ tone: "error", label: "unavailable" });
     expect(homeRepoStatus({ ...repo, state: "clean", count: 0 })).toEqual({ tone: "ok", label: "clean" });
+  });
+});
+
+describe("wybór i stan daemona na pulpicie", () => {
+  test("wybór wskazuje obiekt z migawki; repo albo sesja, która zniknęła, nie jest w niej", () => {
+    const model = homeModel({ repos: [repo("api")], sessions: [session("s1", "api")], graph: undefined, running: [], daemonRunning: true });
+
+    expect(homeHasObject(model, "repo:api")).toBe(true);
+    expect(homeHasObject(model, "session:s1")).toBe(true);
+    expect(homeHasObject(model, "daemon")).toBe(true);
+    expect(homeHasObject(model, "repo:gone")).toBe(false);
+    expect(homeHasObject(model, "session:gone")).toBe(false);
+  });
+
+  test("daemon działa, dopóki odpowiada: błąd z jego kodem tak, zerwane połączenie i odpowiedź spoza kontraktu nie", () => {
+    expect(daemonAnswered(undefined, undefined)).toBe(true);
+    expect(daemonAnswered("workspace.yaml: bad key", "invalid_config")).toBe(true);
+    expect(daemonAnswered("Failed to fetch", undefined)).toBe(false);
+    expect(daemonAnswered("unexpected response 502", "bad_response")).toBe(false);
+  });
+
+  test("folder z projektami do poprawienia w ustawieniach: zniknął albo zły workspace.yaml", () => {
+    expect(listNeedsSettings("projects_dir_unavailable")).toBe(true);
+    expect(listNeedsSettings("invalid_config")).toBe(true);
+    expect(listNeedsSettings("not_found")).toBe(false);
+    expect(listNeedsSettings(undefined)).toBe(false);
   });
 });

@@ -14,7 +14,7 @@ import type { ReactNode } from "react";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { twoDigits } from "@/lib/format";
-import { homeDaemonStatus, homeRepoStatus } from "@/lib/home-model";
+import { homeDaemonStatus, homeRepoStatus, pullLabel } from "@/lib/home-model";
 import { branchLabel } from "@/lib/repo-status";
 import { sessionStateLabel } from "@/lib/session-state";
 
@@ -124,6 +124,7 @@ function RepoDetails({
   onSelect: (key: HomeKey) => void;
 }) {
   const tasks = running.filter((t) => t.repo === repo.id);
+  const behind = repo.status.kind === "ok" ? (repo.status.upstream?.behind ?? 0) : 0;
   return (
     <dl className="grid w-full grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-xs">
       <Field name="State">
@@ -132,6 +133,8 @@ function RepoDetails({
       {repo.status.kind === "ok" && (
         <Field name="Branch">
           <span className="font-mono">{branchLabel(repo.status)}</span>
+          {/* Repo ze zmianami ma stan „changed”, więc commity do pobrania widać dopiero tutaj. */}
+          {behind > 0 && <span className="text-warning">{` · ${pullLabel(behind)}`}</span>}
         </Field>
       )}
       <Field name="Tasks">{tasks.length === 0 ? "none running" : tasks.map((t) => t.miseTask).join(", ")}</Field>

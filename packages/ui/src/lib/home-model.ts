@@ -8,10 +8,11 @@ import {
   type HomeSessionState,
   parseHomeKey,
 } from "@trackwall/scene/model";
+import type { CallErrorCode } from "./api.ts";
 import { changesLabel } from "./format.ts";
 import { layoutGraph } from "./graph-layout.ts";
 import type { StatusTone } from "./repo-status.ts";
-import { sessionStateLabel } from "./session-state.ts";
+import { STATE_LABELS, sessionStateLabel } from "./session-state.ts";
 
 /**
  * Migawka pulpitu (ADR-33, §5.5) z odpowiedzi daemona, którymi żyją też inne widoki: lista repo, sesje, graf
@@ -71,17 +72,30 @@ const REPO_TONES: Record<HomeRepoState, StatusTone> = { clean: "ok", behind: "wa
 export function homeRepoStatus(repo: HomeRepo): HomeStatus {
   const tone = REPO_TONES[repo.state];
   if (repo.state === "changed") return { tone, label: changesLabel(repo.count) ?? "changed" };
-  if (repo.state === "behind") return { tone, label: `${countLabel(repo.count, { one: "commit", other: "commits" })} to pull` };
+  if (repo.state === "behind") return { tone, label: pullLabel(repo.count) };
   return { tone, label: repo.state };
 }
 
-/** Słowa jak w widoku „Sessions” (`sessionStateLabel`), bez „prawdopodobnie”, bo pulpit pokazuje tylko kategorię. */
+/** Commity do pobrania z gałęzi nadrzędnej: „1 commit to pull”, „3 commits to pull”. */
+export function pullLabel(behind: number): string {
+  return `${countLabel(behind, { one: "commit", other: "commits" })} to pull`;
+}
+
+/** Słowa z widoku „Sessions” (`STATE_LABELS`), bez „prawdopodobnie”, bo pulpit pokazuje tylko kategorię. */
 export const HOME_SESSION_STATUS: Record<HomeSessionState, HomeStatus> = {
-  working: { tone: "ok", label: "working" },
-  attention: { tone: "warning", label: "waiting for you" },
-  error: { tone: "error", label: "error" },
-  done: { label: "finished" },
+  working: { tone: "ok", label: STATE_LABELS.Working },
+  attention: { tone: "warning", label: STATE_LABELS.Input },
+  error: { tone: "error", label: STATE_LABELS.Error },
+  done: { label: STATE_LABELS.Done },
 };
+
+/**
+ * Daemon działa, dopóki odpowiada: błąd z kodem daemona (np. zły `workspace.yaml`) przyszedł od niego, a bez kodu
+ * albo z `bad_response` (np. strona błędu proxy zamiast koperty API) to zerwane połączenie.
+ */
+export function daemonAnswered(error: string | undefined, errorCode: CallErrorCode | undefined): boolean {
+  return error === undefined || (errorCode !== undefined && errorCode !== "bad_response");
+}
 
 export function homeDaemonStatus(running: boolean): HomeStatus {
   return running ? { tone: "ok", label: "daemon running" } : { tone: "error", label: "daemon not responding" };

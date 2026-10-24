@@ -208,7 +208,7 @@
       }
     },
     {
-      "includes": ["packages/ui/src/**", "!packages/ui/src/views/home/HomeCanvas.tsx", "!packages/ui/src/lib/scene-palette.ts"],
+      "includes": ["packages/ui/src/**", "!packages/ui/src/views/home/HomeCanvas.tsx"],
       "linter": {
         "rules": {
           "style": {

@@ -11,13 +11,23 @@ export function dropUnreferencedDraco(): Plugin {
     name: "trackwall:drop-unreferenced-draco",
     apply: "build",
     generateBundle(_options, bundle) {
-      const code = Object.values(bundle)
-        .map((file) => (file.type === "chunk" ? file.code : ""))
-        .join("\n");
-      for (const [fileName, file] of Object.entries(bundle)) {
-        const name = fileName.split("/").at(-1) ?? fileName;
-        if (file.type === "asset" && name.startsWith("draco_") && !code.includes(name)) delete bundle[fileName];
-      }
+      const files = Object.values(bundle).map((file) => ({
+        fileName: file.fileName,
+        code: file.type === "chunk" ? file.code : undefined,
+      }));
+      for (const fileName of unreferencedDraco(files)) delete bundle[fileName];
     },
   };
+}
+
+/** Pliki `draco_*` paczki (bez kodu, czyli zasoby), których nazwy nie ma w kodzie żadnego kawałka. */
+export function unreferencedDraco(files: readonly { fileName: string; code: string | undefined }[]): string[] {
+  const code = files.map((f) => f.code ?? "").join("\n");
+  return files
+    .filter((f) => f.code === undefined)
+    .map((f) => f.fileName)
+    .filter((fileName) => {
+      const name = fileName.split("/").at(-1) ?? fileName;
+      return name.startsWith("draco_") && !code.includes(name);
+    });
 }

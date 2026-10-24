@@ -2,9 +2,12 @@ import { CameraRig, Engine, Labels, Pointer } from "@pawnjs/core";
 import { HomeScene, type LabelTarget } from "@trackwall/scene";
 import type { HomeKey, HomeModel } from "@trackwall/scene/model";
 import { useEffect, useRef } from "react";
+import { errorMessage } from "@/lib/api";
 import { HOME_CAMERA_FOV, HOME_CAMERA_MAX_DISTANCE, homeCameraDistance, homeCameraPosition } from "@/lib/home-camera";
 import { HOME_SESSION_STATUS, type HomeStatus, homeRepoStatus } from "@/lib/home-model";
 import { readScenePalette } from "@/lib/scene-palette";
+import { statusTextClass } from "@/lib/status-tone";
+import { cn } from "@/lib/utils";
 
 /**
  * Płótno pulpitu: silnik Pawn z kamerą, wskaźnikiem i etykietami, a w nim `HomeScene` (ADR-33). Ładowane leniwie
@@ -50,20 +53,33 @@ export function HomeCanvas(props: HomeCanvasProps) {
       .use(new Pointer())
       .use(new Labels({ container: host }))
       .use(rig);
-    const scene = new HomeScene(engine, {
-      palette: readScenePalette(host),
-      motion: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-      onSelect: (key) => latest.current.onSelect(key),
-      onOpen: (key) => latest.current.onOpen(key),
-      onHover: (key) => latest.current.onHover(key),
-      createLabel: sceneLabel,
-    });
-    const overview = () => rig.focus(ORIGIN, { distance: homeCameraDistance(host.clientWidth, host.clientHeight) });
+    let scene: HomeScene;
+    try {
+      scene = new HomeScene(engine, {
+        palette: readScenePalette(host),
+        motion: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+        onSelect: (key) => latest.current.onSelect(key),
+        onOpen: (key) => latest.current.onOpen(key),
+        onHover: (key) => latest.current.onHover(key),
+        createLabel: sceneLabel,
+      });
+    } catch (err) {
+      // Paleta bez płótna 2D albo kolor tokenu, którego scena nie przyjmie: bez sceny silnik też znika.
+      engine.dispose();
+      canvas.remove();
+      latest.current.onUnavailable(errorMessage(err));
+      return;
+    }
+    // Ten sam kąt co na starcie (`reset` cofa obrót użytkownika) i odległość dla bieżących proporcji płótna.
+    const overview = (immediate = false) => {
+      rig.reset({ immediate });
+      rig.focus(ORIGIN, { distance: homeCameraDistance(host.clientWidth, host.clientHeight), immediate });
+    };
     mountedRef.current = { scene, rig, overview };
     scene.apply(latest.current.model);
     // Zmiana rozmiaru okna albo paneli: bez wybranego obiektu kadr wraca do całej sceny dla nowych proporcji.
     engine.fitToElement(host, () => {
-      if (!latest.current.focus) overview();
+      if (!latest.current.focus) overview(true);
     });
     const lost = (event: Event) => {
       event.preventDefault();
@@ -105,10 +121,13 @@ export function HomeCanvas(props: HomeCanvasProps) {
  * silnikiem, bo nieudany konstruktor `Engine` zostawia świat koota, którego nie da się zwolnić (limit 16 na stronę).
  */
 function createEngine(host: HTMLElement, onUnavailable: (reason: string) => void): { engine: Engine; canvas: HTMLCanvasElement } | null {
-  if (!document.createElement("canvas").getContext("webgl2")) {
+  const probe = document.createElement("canvas").getContext("webgl2");
+  if (!probe) {
     onUnavailable("WebGL 2 is not available");
     return null;
   }
+  // Kontekst próbny zwalniany od razu: przeglądarka trzyma najwyżej kilkanaście naraz i gubi najstarsze.
+  probe.getExtension("WEBGL_lose_context")?.loseContext();
   const canvas = document.createElement("canvas");
   canvas.className = "block size-full";
   host.prepend(canvas);
@@ -123,7 +142,7 @@ function createEngine(host: HTMLElement, onUnavailable: (reason: string) => void
     return { engine, canvas };
   } catch (err) {
     canvas.remove();
-    onUnavailable(err instanceof Error ? err.message : String(err));
+    onUnavailable(errorMessage(err));
     return null;
   }
 }
@@ -133,8 +152,9 @@ function sceneLabel(target: LabelTarget): HTMLElement {
   const status: HomeStatus = target.kind === "repo" ? homeRepoStatus(target.repo) : HOME_SESSION_STATUS[target.session.state];
   const label = document.createElement("div");
   label.textContent = target.kind === "repo" ? target.repo.id : status.label;
-  label.className = `bg-background/80 pointer-events-none rounded-sm border px-1.5 py-0.5 font-mono text-2xs whitespace-nowrap ${LABEL_TONES[status.tone ?? "ok"]}`;
+  label.className = cn(
+    "bg-background/80 text-foreground pointer-events-none rounded-sm border px-1.5 py-0.5 font-mono text-2xs whitespace-nowrap",
+    statusTextClass(status.tone),
+  );
   return label;
 }
-
-const LABEL_TONES = { ok: "text-foreground", warning: "text-warning", error: "text-destructive" } as const;

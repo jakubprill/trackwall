@@ -1,4 +1,4 @@
-import type { ScenePalette } from "@trackwall/scene";
+import type { ScenePalette } from "@trackwall/scene/model";
 
 /**
  * Kolory sceny pulpitu z tokenów `index.css` (ADR-16, ADR-33). Tokeny są w `oklch`, którego three.js nie czyta, więc

@@ -1,12 +1,12 @@
 import { graphApi, miseApi, type SessionList, workspaceApi } from "@trackwall/protocol";
 import { type HomeKey, parseHomeKey } from "@trackwall/scene/model";
-import { lazy, Suspense, useCallback, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { homeHasObject, homeModel } from "@/lib/home-model";
-import { listNeedsSettings } from "@/lib/repo-status";
+import { daemonAnswered, homeHasObject, homeModel } from "@/lib/home-model";
+import { listNeedsSettings, REPO_LIST_POLL_MS } from "@/lib/repo-status";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { HomeDetails } from "./HomeDetails.tsx";
 import { HomeHoverCard } from "./HomeHoverCard.tsx";
@@ -22,8 +22,6 @@ import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
 
 const HomeCanvas = lazy(() => import("./HomeCanvas.tsx").then((m) => ({ default: m.HomeCanvas })));
 
-/** Lista repo to `git status` w każdym repo, więc tak samo rzadko jak w widoku „Repos”. */
-const REPOS_POLL_MS = 10_000;
 /** Graf liczy się z kart wszystkich repo, a zmienia się z commitami, więc rzadko. */
 const GRAPH_POLL_MS = 30_000;
 /** Działające taski mise to odczyt z pamięci daemona, bez uruchamiania mise. */
@@ -46,7 +44,7 @@ export function HomeView({
 }) {
   const repos = useRemote(
     useCallback(() => post(conn, workspaceApi.list, {}), [conn]),
-    { pollMs: REPOS_POLL_MS },
+    { pollMs: REPO_LIST_POLL_MS },
   );
   const graph = useRemote(
     useCallback(() => post(conn, graphApi.graph, {}), [conn]),
@@ -60,9 +58,7 @@ export function HomeView({
   const [hovered, setHovered] = useState<HomeKey | null>(null);
   const [unavailable, setUnavailable] = useState<string>();
 
-  // Daemon działa, dopóki odpowiada: błąd z kodem (np. zły `workspace.yaml`) przyszedł od niego, a bez kodu to
-  // zerwane połączenie albo odpowiedź spoza kontraktu.
-  const daemonRunning = repos.error === undefined || repos.errorCode !== undefined;
+  const daemonRunning = daemonAnswered(repos.error, repos.errorCode);
   const repoList = repos.data?.repos;
   const sessionList = sessions.data?.sessions;
   const model = useMemo(
@@ -76,7 +72,11 @@ export function HomeView({
       }),
     [repoList, sessionList, graph.data, running.data, daemonRunning],
   );
+  // Wybór obiektu, który zniknął z migawki, przepada: nie wraca sam, gdy repo albo sesja o tym kluczu pojawi się znowu.
   const current = selected && homeHasObject(model, selected) ? selected : null;
+  useEffect(() => {
+    if (selected && !current) setSelected(null);
+  }, [selected, current]);
   const unavailableNow = useCallback((reason: string) => {
     setHovered(null);
     setUnavailable(reason);
