@@ -9,8 +9,8 @@ Trackwall jest dystrybuowany jako archiwa zip w [GitHub Releases](https://github
    Potem `cargo update --workspace --manifest-path apps/desktop/src-tauri/Cargo.toml` przenosi nową wersję do `Cargo.lock` (bez podbijania zależności); zacommituj go razem z resztą.
 2. Dopisz po angielsku (ADR-32) notatkę o zmianach `docs/release-notes/v<wersja>.md` dla użytkownika: co nowego, jak przejść ze starszej wersji, znane ograniczenia (ten sam test pilnuje, że plik istnieje i nie jest pusty).
 3. Scal zmianę do `main` przez PR.
-   Przed tagiem uruchom portable build z artefaktu CI tego commita na Windowsie i macOS i w widoku „Sessions” uruchom oraz zatrzymaj jedną sesję. CI sprawdza Job Object i PTY tylko ze źródeł, a w skompilowanej binarce nie (ADR-1); przy zmianie wersji Bun ten krok jest obowiązkowy.
-4. Na `main` utwórz i wypchnij tag z tą samą wersją:
+4. Pobierz portable build z artefaktu CI commita na `main`, który otagujesz, uruchom go na Windowsie i macOS i w widoku „Sessions” uruchom oraz zatrzymaj jedną sesję. CI sprawdza Job Object i PTY tylko ze źródeł, a w skompilowanej binarce nie (ADR-1). Workflow wydania buduje binarkę od nowa tymi samymi skryptami i wersjami narzędzi, więc ten krok łapie błąd Bun w `--compile`, ale nie różnicę między dwoma przebiegami.
+5. Na `main` utwórz i wypchnij tag z tą samą wersją:
 
    ```sh
    git tag v0.2.0

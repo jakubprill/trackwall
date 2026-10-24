@@ -70,7 +70,7 @@ Repo ma zostać opublikowane jako open source (nagłówek `docs/architecture.md`
 
 - **Nazwy mówią, czym rzecz jest w domenie**, tym samym słowem co `CONTEXT.md`, UI i narzędzia MCP. Jedno pojęcie, jedna nazwa.
 - **Granice modułów z §4 są twarde.** Moduł daemona nie importuje innego modułu bezpośrednio, tylko przez fasadę; nowa zależność między modułami wymaga zmiany tabeli w §4. UI, scena i CLI nie importują `@trackwall/daemon`; wspólny kod biorą tylko z `@trackwall/protocol`. Pliki infrastruktury daemona (`main.ts`, `infra/`, `platform/`) nie są modułami i nie trzymają stanu domenowego.
-- **Każdy plik ma swoje miejsce** (`docs/development.md`, „Układ repo”): w daemonie moduł w `src/modules/<moduł>/`, transport w `src/api/` albo `src/mcp/`, API systemu w `src/platform/`, reszta infrastruktury w `src/infra/`; w UI komponent jednego widoku w `src/views/<identyfikator widoku>/` (`repos`, `sessions`, `graph`, `daemon`, `settings`), komponent kilku widoków w `src/components/`, logika bez Reacta i hooki w `src/lib/`. W korzeniu `src/` leżą tylko punkty wejścia; listę trzyma `docs/development.md`, a pilnuje test `apps/desktop/test/layout.test.ts`.
+- **Każdy plik ma swoje miejsce** (`docs/development.md`, „Układ repo”): w daemonie moduł w `src/modules/<moduł>/`, transport w `src/api/` albo `src/mcp/`, API systemu w `src/platform/`, reszta infrastruktury w `src/infra/`; w UI komponent jednego widoku w `src/views/<identyfikator widoku>/`, komponent kilku widoków w `src/components/`, logika bez Reacta i hooki w `src/lib/`. W korzeniu `src/` leżą tylko punkty wejścia. Listy punktów wejścia i widoków trzyma `docs/development.md`, a pilnuje test `apps/desktop/test/layout.test.ts`.
 - **Typy są kontraktem i pochodzą z kodu**: z wartości, ze schematów zod (`z.infer`). Bez `any`. Zamiast `!` jawne sprawdzenie i wyjątek z opisem. Asercja `as` to twierdzenie, którego kompilator nie sprawdzi: dane z zewnątrz (`JSON.parse`, odpowiedzi HTTP, pliki, argumenty CLI) nigdy nie są rzutowane, tylko parsowane schematem. Poza tym `as` tylko tam, gdzie typ z biblioteki jest szerszy niż to, co wiadomo w danym miejscu (`server.address() as AddressInfo`, błąd w `catch` jako `NodeJS.ErrnoException`), oraz w testach do budowania atrap.
 - **Małe funkcje i pliki o jednym celu.** Plik, który robi dwie rzeczy, staje się dwoma plikami.
 - **Jedno miejsce dla każdej reguły.** Zanim napiszesz helper, poszukaj istniejącego. Zduplikowana logika to błąd, który czeka, aż kopie się rozjadą.
@@ -85,7 +85,8 @@ Repo ma zostać opublikowane jako open source (nagłówek `docs/architecture.md`
   - knip (`knip.json`): nieużywane pliki, eksporty i zależności;
   - `rustfmt.toml` i `cargo clippy -D warnings` dla powłoki Tauri;
   - test `apps/desktop/test/toolchain.test.ts`: te same wersje narzędzi w `mise.toml` i workflow;
-  - test `apps/desktop/test/layout.test.ts`: zawartość korzenia `src/` daemona i UI, foldery widoków oraz zakaz importów Bun powtórzony w każdym nadpisaniu `noRestrictedImports` daemona (Biome nie łączy opcji nadpisań);
+  - test `apps/desktop/test/layout.test.ts`: zawartość korzenia `src/` daemona i UI oraz foldery widoków;
+  - test `apps/desktop/test/biome-config.test.ts`: zakaz importów `bun` i globalnego `Bun` obowiązuje w każdym miejscu daemona poza `platform/` (Biome nie łączy opcji nadpisań, więc zakaz stoi w kilku);
   - test `packages/ui/test/design-tokens.test.ts`: komponenty UI bez surowych kolorów i dowolnych wartości wyglądu, tylko tokeny z `index.css` (ADR-16);
   - zgodność daemona z Node (ADR-1): `erasableSyntaxOnly` w `tsconfig.json` daemona i `protocol`, w Biome `useImportExtensions` w ich `src` i zakaz API Bun w daemonie poza `platform/`, testy procesu daemona pod Bun i pod Node.
 

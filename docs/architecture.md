@@ -57,11 +57,10 @@ trackwall/
   mise.toml               wersje narzędzi dla samego projektu (node/bun, pnpm, rust) i taski setup, dev, portable
   packages/
     protocol/             typy zdarzeń, DTO, schemat JSON API (zod); zero zależności runtime
-    daemon/               binarka daemona; w src/: punkty wejścia main.ts i facade.ts, transporty api/ i mcp/, moduły z §4 w modules/,
-                          API systemu i Bun w platform/, pozostała infrastruktura (odkrywanie, katalog stanu, błędy) w infra/
-    ui/                   React, Vite; buduje statyczne pliki serwowane przez daemon lub Tauri; w src/: punkty wejścia main.tsx, App.tsx i index.css,
-                          widoki w views/<identyfikator widoku>/ (repos, sessions, graph, daemon, settings), wspólne komponenty
-                          w components/, logika bez Reacta i hooki w lib/
+    daemon/               binarka daemona; w src/ transporty api/ i mcp/, moduły z §4 w modules/, API systemu i Bun
+                          w platform/, pozostała infrastruktura (odkrywanie, katalog stanu, błędy) w infra/ (docs/development.md)
+    ui/                   React, Vite; buduje statyczne pliki serwowane przez daemon lub Tauri; w src/ widoki
+                          w views/<identyfikator widoku>/, wspólne komponenty w components/, logika i hooki w lib/
     scene/                adapter Pawn: stan ze WebSocket -> encje koota, render on demand
     cli/                  `ws` (cienki klient HTTP do daemona); wspólny kod z daemonem przez protocol
   apps/
