@@ -16,9 +16,10 @@ import {
   visibleText,
 } from "./agents.ts";
 import { RepoCardResult, TagName } from "./cards.ts";
+import { CODE_SEARCH_LINE_MAX_CHARS, CODE_SEARCH_MAX_MATCHES, CodeQuery, SearchCodeResult } from "./code-search.ts";
 import { FindEndpointResult, MAX_FOUND_ENDPOINTS, MAX_SUBGRAPH_DEPTH, Subgraph, WhoCallsResult } from "./graph.ts";
 import { HttpMethod } from "./http.ts";
-import { LOG_BUFFER_RECORDS, LOG_TAIL_MAX, LogTail } from "./logs.ts";
+import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErrors, LogTail } from "./logs.ts";
 import { MiseTaskName, MiseTasks } from "./mise.ts";
 import { RunState } from "./procs.ts";
 import { SyncRepo } from "./sync.ts";
@@ -173,6 +174,7 @@ const PROPOSE_TASK = "propose_task";
 const REPORT_RESULT = "report_result";
 const WAIT_FOR_SESSION = "wait_for_session";
 const RepoArg = RepoId.describe(`repo id from ${LIST_REPOS} (the id field)`);
+const RepoTagsArg = z.array(TagName).max(20);
 
 export const mcpTools = {
   listRepos: {
@@ -185,7 +187,7 @@ export const mcpTools = {
       "narrows the list to repos with every given tag. Start with this tool; pass the id field to the other tools.",
     args: z
       .object({
-        tags: z.array(TagName).max(20).optional().describe('only repos with every one of these tags, without #, e.g. ["java", "bff"]'),
+        tags: RepoTagsArg.optional().describe('only repos with every one of these tags, without #, e.g. ["java", "bff"]'),
       })
       .strict(),
     result: ListReposResult,
@@ -235,6 +237,38 @@ export const mcpTools = {
       .strict(),
     result: LogTail,
   },
+  getErrors: {
+    name: "get_errors",
+    readOnly: true,
+    description:
+      "Errors from the logs of mise tasks and mise install in all repos (or one repo or one mise task), the most recent first: " +
+      "a line with ERROR/FATAL (or WARN with minLevel warn), a compiler error (javac, tsc, kotlinc, Maven [ERROR], npm error) " +
+      "or an exception header together with the lines that belong to it: Java and Node stack traces with Caused by, the " +
+      "Spring Boot APPLICATION FAILED TO START report and the Gradle FAILURE report. Each error has its source (repo, mise " +
+      "task), run (runId), exception (the root cause: the last Caused by or the first exception header; null without one), " +
+      "lines (from each stack trace the first frames, the rest replaced by a line '… N frames omitted'; omittedLines counts what is left out), seq and time. " +
+      "The same error repeated in one source (same exception and first frame, or same lines; ids, numbers and thread names ignored, file " +
+      "locations not) is one entry with count and firstTs. An error still being written when you call is returned with the lines it had then. " +
+      `Only the latest records are kept (at most ${LOG_BUFFER_RECORDS} per mise task, since Trackwall started). Pass nextSeq as sinceSeq ` +
+      "to get only errors that started after the previous call; dropped: true as in tail. To read the log of a mise task from an error on, " +
+      "call tail with sinceSeq one less than the error's seq.",
+    args: z
+      .object({
+        repo: RepoArg.optional(),
+        miseTask: MiseTaskName.optional().describe(`only the log of this mise task (from ${GET_REPO}, the miseTasks field)`),
+        minLevel: LogErrorLevel.default("error").describe("error (default) or warn to include warnings"),
+        sinceSeq: z.number().int().nonnegative().optional().describe("nextSeq from the previous response"),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(LOG_ERRORS_MAX)
+          .default(20)
+          .describe(`maximum number of errors (default 20, up to ${LOG_ERRORS_MAX})`),
+      })
+      .strict(),
+    result: LogErrors,
+  },
   whoCalls: {
     name: "who_calls",
     readOnly: true,
@@ -277,6 +311,39 @@ export const mcpTools = {
       })
       .strict(),
     result: FindEndpointResult,
+  },
+  searchCode: {
+    name: "search_code",
+    readOnly: true,
+    description:
+      "Search code in many repos at once (git grep in each repo's latest commit, not in uncommitted changes): a fixed " +
+      "string by default, a POSIX extended regular expression with regex: true (use [0-9] and [[:space:]], not \\d " +
+      "or \\s). Each match has repo, path, line, " +
+      `column, the line text (cut to ${CODE_SEARCH_LINE_MAX_CHARS} characters) and context lines before and after. ` +
+      "Narrow with repos (ids), tags (every given tag) and paths (git pathspecs: *.java in any directory, src/, " +
+      ":!*.test.ts to exclude). searched lists the repos with the commit searched; failed the repos git could not " +
+      "search, with the reason (e.g. an invalid regular expression); skipped the repos not searched because the limit " +
+      "was already reached or time ran out. truncated: true when matches may be missing (also per repo in searched); " +
+      "narrow the query.",
+    args: z
+      .object({
+        pattern: CodeQuery.shape.pattern.describe("text to find, or a regular expression with regex: true"),
+        regex: CodeQuery.shape.regex.default(false).describe("pattern is a POSIX extended regular expression (git grep -E), default false"),
+        ignoreCase: CodeQuery.shape.ignoreCase.default(false).describe("case-insensitive, default false"),
+        repos: z.array(RepoId).min(1).max(200).optional().describe(`only these repos (ids from ${LIST_REPOS}); default all`),
+        tags: RepoTagsArg.optional().describe('only repos with every one of these tags, without #, e.g. ["java"]'),
+        paths: CodeQuery.shape.paths.default([]).describe('only these paths (git pathspecs), e.g. ["*.java", ":!src/test/"]'),
+        context: CodeQuery.shape.context.default(2).describe("context lines before and after each match, default 2"),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(CODE_SEARCH_MAX_MATCHES)
+          .default(100)
+          .describe(`maximum number of matches (up to ${CODE_SEARCH_MAX_MATCHES}), default 100`),
+      })
+      .strict(),
+    result: SearchCodeResult,
   },
   listSessions: {
     name: LIST_SESSIONS,
