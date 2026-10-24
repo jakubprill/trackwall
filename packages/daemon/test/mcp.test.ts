@@ -121,7 +121,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
     const result = await client.callTool({ name: "get_repo", arguments: { repo: "orders-bff" } });
     const data = GetRepoResult.parse(result.structuredContent);
     expect(data.repo.id).toBe("orders-bff");
-    expect(data.readme).toEqual({ path: "README.md", text: README, truncated: false });
+    expect(data.readme).toEqual({ path: "README.md", text: README, truncated: false, format: "markdown" });
     expect(data.commits.map((c) => c.subject)).toEqual(["pierwszy commit"]);
     expect(data.miseTasks.kind).toBe("not_installed");
     await client.close();

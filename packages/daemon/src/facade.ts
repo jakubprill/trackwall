@@ -29,6 +29,11 @@ export interface Facade {
   logs: Logs;
   agents: Agents;
   batch: Batch;
+  /**
+   * Otwiera w systemie link z README (ADR-35): adres `http` albo `https` sprawdzony schematem `ExternalLink`.
+   * Nie należy do żadnego modułu, bo nie dotyczy repo ani stanu daemona.
+   */
+  openLink: (url: string) => void;
 }
 
 export { runCopilotHook } from "./modules/agents/copilot-hook-command.ts";
@@ -65,7 +70,6 @@ export function createFacade(o: FacadeOptions): Facade {
     vcs,
     hosting: new Hosting(HOSTING_CLIS),
     openEditor,
-    openLink: o.openUrl,
   });
   const logs = new Logs({ dir: join(o.home, LOGS_DIR), maxFileBytes: LOG_FILE_MAX_BYTES, log: o.log });
   const procs = new ProcessGroups({
@@ -93,5 +97,5 @@ export function createFacade(o: FacadeOptions): Facade {
     log: o.log,
   });
   const graph = new Graph({ cards, workspace });
-  return { workspace, cards, graph, mise, procs, logs, batch, agents };
+  return { workspace, cards, graph, mise, procs, logs, batch, agents, openLink: o.openUrl };
 }

@@ -32,7 +32,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.file, (f, b) => f.workspace.file(b.repo, b.path)),
   route(workspaceApi.changes, (f, b) => f.workspace.changes(b.repo)),
   route(workspaceApi.openLink, (f, b) => {
-    f.workspace.openLink(b.url);
+    f.openLink(b.url);
     return null;
   }),
   route(workspaceApi.openEditor, async (f, b) => {

@@ -217,15 +217,16 @@ describe("api workspace", () => {
     expect(JSON.parse(res.body)).toMatchObject({ error: { code: "bad_request", message: expect.stringContaining("larger than") } });
   });
 
-  test("link z README otwiera się w systemie tylko jako strona albo poczta", async () => {
+  test("link z README otwiera się w systemie tylko jako strona, w postaci kanonicznej", async () => {
     openedUrls.length = 0;
-    for (const url of ["https://example.com/docs?a=1#b", "mailto:dev@example.com"]) {
+    for (const url of ["https://example.com/docs?a=1#b", 'https://example.com/a b"c', "https://example.com\\..\\x"]) {
       expect((await post(workspaceApi.openLink.path, JSON.stringify({ url }))).status).toBe(200);
     }
-    for (const url of ["file:///C:/Windows/System32/calc.exe", "javascript:alert(1)", "vscode://file/tmp", "docs/a.md"]) {
+    const rejected = ["file:///C:/Windows/System32/calc.exe", "javascript:alert(1)", "mailto:a@example.com?attach=id_rsa", "docs/a.md"];
+    for (const url of rejected) {
       expect((await post(workspaceApi.openLink.path, JSON.stringify({ url }))).status).toBe(400);
     }
-    expect(openedUrls).toEqual(["https://example.com/docs?a=1#b", "mailto:dev@example.com"]);
+    expect(openedUrls).toEqual(["https://example.com/docs?a=1#b", "https://example.com/a%20b%22c", "https://example.com/x"]);
   });
 
   test("nieznane repo to 404, a GET na trasie POST nie istnieje", async () => {

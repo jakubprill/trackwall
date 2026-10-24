@@ -42,6 +42,8 @@ const OVERVIEW_COMMITS = 30;
 /** Limit podglądu pliku i README: więcej i tak nikt nie przewija w panelu. */
 const PREVIEW_MAX_BYTES = 512 * 1024;
 const README = /^readme(\.(md|markdown|txt|rst|adoc))?$/i;
+/** README, które nie jest Markdownem; bez rozszerzenia to Markdown, tak jak na GitHubie (ADR-35). */
+const PLAIN_TEXT_README = /\.(txt|rst|adoc)$/i;
 /**
  * Ile repo naraz pyta gita przy liście: folder z projektami może mieć ich setki, a każde to dwa procesy `git`,
  * na Windowsie drogie w starcie i skanowane przez antywirus.
@@ -76,8 +78,6 @@ export interface WorkspaceDeps {
   hosting: WorkspaceHosting;
   /** Otwiera katalog w VS Code (`vscode://` w systemie, składane w fasadzie). */
   openEditor: (dir: string) => void;
-  /** Otwiera link z README w systemie (ADR-35); schemat adresu sprawdza kontrakt API. */
-  openLink: (url: string) => void;
 }
 
 export class Workspace {
@@ -209,11 +209,6 @@ export class Workspace {
     return this.inRepo(entry, () => this.deps.vcs.changes(entry.path, PATCH_MAX_BYTES));
   }
 
-  /** Jak `openEditor`: daemon nie wie, czy system obsłużył adres. */
-  openLink(url: string): void {
-    this.deps.openLink(url);
-  }
-
   /** Daemon nie wie, czy system obsłużył adres; wynik to tylko potwierdzenie przyjęcia. */
   async openEditor(id: string): Promise<void> {
     this.deps.openEditor((await this.entry(id)).path);
@@ -284,7 +279,9 @@ export class Workspace {
     const best = candidates.find((e) => /\.md$/i.test(e.name)) ?? candidates[0];
     if (!best) return null;
     const content = await this.deps.vcs.file(dir, best.path, PREVIEW_MAX_BYTES);
-    return content?.kind === "text" ? { path: best.path, text: content.text, truncated: content.truncated } : null;
+    if (content?.kind !== "text") return null;
+    const format = PLAIN_TEXT_README.test(best.name) ? "text" : "markdown";
+    return { path: best.path, text: content.text, truncated: content.truncated, format };
   }
 
   /** Błąd gita przy czytaniu repo z listy to stan repo (`repo_unavailable`), nie błąd daemona. */

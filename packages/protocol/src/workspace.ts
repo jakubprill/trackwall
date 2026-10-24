@@ -119,11 +119,16 @@ export const FileContent = z.discriminatedUnion("kind", [
 ]);
 export type FileContent = z.infer<typeof FileContent>;
 
-/** Adres, który UI może otworzyć w systemie: strona albo poczta, nigdy `file:` ani własny protokół aplikacji. */
-export const ExternalLink = z.url({ protocol: /^(https?|mailto)$/ }).max(2048);
+/**
+ * Adres z README, który UI może otworzyć w przeglądarce systemu (ADR-35): tylko strona, nigdy `file:`, `mailto:`
+ * ani własny protokół aplikacji. `normalize` oddaje postać kanoniczną z kodowaniem procentowym, więc do systemu
+ * nie trafia spacja, cudzysłów, `\` ani znak sterujący z treści repo.
+ */
+export const ExternalLink = z.url({ protocol: /^https?$/, normalize: true }).max(2048);
 
 export const RepoOverview = z.object({
-  readme: z.object({ path: z.string(), text: z.string(), truncated: z.boolean() }).nullable(),
+  /** `format` mówi, czy README jest Markdownem (ADR-35); `.txt`, `.rst` i `.adoc` są tekstem. */
+  readme: z.object({ path: z.string(), text: z.string(), truncated: z.boolean(), format: z.enum(["markdown", "text"]) }).nullable(),
   /** Ostatnie commity, od najnowszego; puste w repo bez commitów. */
   commits: z.array(Commit),
 });
@@ -159,7 +164,7 @@ export const workspaceApi = {
    * użytkownika zostaje nietknięty. W repo bez commitów względem pustego drzewa.
    */
   changes: endpoint("changes", RepoRequest, WorkingTreeChanges),
-  /** Otwiera adres z README w domyślnej przeglądarce albo programie poczty (ADR-35), zamiast w oknie aplikacji. */
+  /** Otwiera adres z README w domyślnej przeglądarce (ADR-35), zamiast w oknie aplikacji. */
   openLink: endpoint("open-link", z.object({ url: ExternalLink }).strict(), Done),
   /** Otwiera `vscode://` w systemie; daemon nie wie, czy coś obsłużyło adres. */
   openEditor: endpoint("open-editor", RepoRequest, Done),

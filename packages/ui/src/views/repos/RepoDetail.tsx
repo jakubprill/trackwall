@@ -10,6 +10,7 @@ import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { TRUNCATED_NOTE } from "@/lib/format";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
+import { PlainReadme, ReadmeFallback } from "./ReadmeFallback.tsx";
 import { RepoCardView } from "./RepoCardView.tsx";
 import { RepoChanges } from "./RepoChanges.tsx";
 import { RepoCommits } from "./RepoCommits.tsx";
@@ -95,18 +96,15 @@ function Readme({ conn, readme }: { conn: Connection; readme: RepoOverview["read
   if (!readme) return <p className="text-muted-foreground text-sm">This repo has no README in the latest commit.</p>;
   return (
     <Surface path={readme.path} note={readme.truncated ? TRUNCATED_NOTE : undefined}>
-      {isMarkdown(readme.path) ? (
-        <Suspense fallback={<Loading />}>
-          <ReadmeMarkdown conn={conn} text={readme.text} />
-        </Suspense>
+      {readme.format === "markdown" ? (
+        <ReadmeFallback text={readme.text}>
+          <Suspense fallback={<Loading />}>
+            <ReadmeMarkdown conn={conn} text={readme.text} />
+          </Suspense>
+        </ReadmeFallback>
       ) : (
-        <pre className="overflow-x-auto p-4 text-sm leading-relaxed whitespace-pre-wrap break-words">{readme.text}</pre>
+        <PlainReadme text={readme.text} />
       )}
     </Surface>
   );
-}
-
-/** README bez rozszerzenia też jest zwykle Markdownem (tak traktuje go GitHub); `.txt`, `.rst` i `.adoc` zostają tekstem. */
-function isMarkdown(path: string): boolean {
-  return !/\.(txt|rst|adoc)$/i.test(path);
 }

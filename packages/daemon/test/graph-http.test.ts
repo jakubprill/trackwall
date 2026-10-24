@@ -313,7 +313,6 @@ describe("graf i find_endpoint na prawdziwym gicie", () => {
       vcs,
       hosting: fakeHosting().hosting,
       openEditor: () => {},
-      openLink: () => {},
     });
     await workspace.setProjectsDir(projects);
     for (const name of SHOP) makeRepo(fixtureFiles(name), name, projects);

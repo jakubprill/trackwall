@@ -26,7 +26,6 @@ async function workspaceWithGitLab(config: FakeHostingConfig = {}) {
     vcs: new Vcs(),
     hosting: fakeHosting(config).hosting,
     openEditor: () => {},
-    openLink: () => {},
   });
   await workspace.setProjectsDir(projects);
   workspace.setRepoHosts([GITLAB]);
@@ -149,13 +148,7 @@ describe("klonowanie z hostingu do folderu z projektami", () => {
     await expect(workspace.clone({ kind: "gitlab", host: "inny.example.com" }, "sklep/api")).rejects.toMatchObject({ code: "bad_request" });
 
     const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
-    const bare = new Workspace({
-      file: new WorkspaceFile(file),
-      vcs: new Vcs(),
-      hosting: fakeHosting().hosting,
-      openEditor: () => {},
-      openLink: () => {},
-    });
+    const bare = new Workspace({ file: new WorkspaceFile(file), vcs: new Vcs(), hosting: fakeHosting().hosting, openEditor: () => {} });
     bare.setRepoHosts([GITLAB]);
     await expect(bare.clone(GITLAB, "sklep/api")).rejects.toMatchObject({
       code: "bad_request",
