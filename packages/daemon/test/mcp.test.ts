@@ -20,6 +20,7 @@ import {
   workspaceApi,
 } from "@trackwall/protocol";
 import { z } from "zod";
+import { EventHub } from "../src/api/event-hub.ts";
 import { type ApiServer, startApi } from "../src/api/server.ts";
 import { createFacade, type Facade } from "../src/facade.ts";
 import { readDaemonFile, writeDaemonFile } from "../src/infra/discovery.ts";
@@ -70,13 +71,14 @@ beforeAll(async () => {
     onShutdown: () => {},
     facade,
     mcp: createMcpEndpoint({ facade, version: "9.9.9", log: (msg) => logs.push(msg) }),
+    events: new EventHub({ facade, log: () => {} }),
   });
 });
 
 afterAll(() => api.close());
 
 describe("serwer MCP przez Streamable HTTP", () => {
-  test("ogłasza tylko narzędzia do odczytu: list_repos, get_repo, get_repo_card, tail, who_calls, subgraph_for i find_endpoint", async () => {
+  test("ogłasza tylko narzędzia do odczytu: repo, karta, log, graf i sesje", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual([
@@ -87,6 +89,8 @@ describe("serwer MCP przez Streamable HTTP", () => {
       "who_calls",
       "subgraph_for",
       "find_endpoint",
+      "list_sessions",
+      "get_session",
     ]);
     // Każde narzędzie z kontraktu, który pokazuje UI, jest zarejestrowane w daemonie.
     expect(tools.map((t) => t.name)).toEqual(Object.values(mcpTools).map((t) => t.name));

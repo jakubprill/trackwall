@@ -6,9 +6,11 @@ import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import type { DaemonEvents } from "@/lib/daemon-events";
 import type { SessionSelection } from "@/lib/session-entries";
 import { waitingCount } from "@/lib/session-state";
 import { useConnection } from "@/lib/use-connection";
+import { useDaemonEvents } from "@/lib/use-daemon-events";
 import { useRemote } from "@/lib/use-remote";
 import { useSessionFocus } from "@/lib/use-session-focus";
 import { DaemonPanel } from "@/views/daemon/DaemonPanel";
@@ -30,8 +32,8 @@ const VIEWS = [
 type View = (typeof VIEWS)[number]["id"];
 
 /**
- * Lista sesji jest odpytywana zawsze, bo pasek widoków pokazuje, ile czeka; częściej, gdy otwarty jest widok, który
- * pokazuje sesje („Home” albo „Sessions”).
+ * Lista sesji przychodzi na żywo z WebSocketu zdarzeń (ADR-36), bo pasek widoków pokazuje, ile czeka. Bez połączenia
+ * zdarzeń jest odpytywana, częściej, gdy otwarty jest widok, który pokazuje sesje („Home” albo „Sessions”).
  */
 const SESSIONS_POLL_MS = { open: 1000, closed: 3000 };
 
@@ -41,7 +43,9 @@ export function App() {
   const setView = useCallback((next: View, openRepo?: string) => setNav({ view: next, repo: openRepo }), []);
   const [session, setSession] = useState<SessionSelection>();
   const { conn, epoch, error, retry } = useConnection();
-  const sessions = useSessions(conn, view === "sessions" || view === "home");
+  const events = useDaemonEvents(conn);
+  const sessions = useSessions(conn, events, view === "sessions" || view === "home");
+  const runningLive = useMemo(() => events?.feed("mise.running.changed"), [events]);
   const openSession = (id: string) => {
     setView("sessions");
     setSession({ kind: "session", id });
@@ -70,6 +74,7 @@ export function App() {
             <HomeView
               key={epoch}
               conn={conn}
+              runningLive={runningLive}
               sessions={sessions}
               onOpenSession={openSession}
               onOpenRepo={(id) => setView("repos", id)}
@@ -100,7 +105,8 @@ export function App() {
   );
 }
 
-function useSessions(conn: Connection | undefined, open: boolean) {
+function useSessions(conn: Connection | undefined, events: DaemonEvents | undefined, open: boolean) {
   const load = useMemo(() => conn && (() => post(conn, agentsApi.sessions, {})), [conn]);
-  return useRemote(load, { pollMs: () => (open ? SESSIONS_POLL_MS.open : SESSIONS_POLL_MS.closed) });
+  const live = useMemo(() => events?.feed("sessions.changed"), [events]);
+  return useRemote(load, { pollMs: () => (open ? SESSIONS_POLL_MS.open : SESSIONS_POLL_MS.closed), live });
 }

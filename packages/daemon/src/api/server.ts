@@ -5,9 +5,12 @@ import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
 import { MCP_PATH, type McpEndpoint } from "../mcp/endpoint.ts";
 import { readBody } from "./body.ts";
+import type { EventHub } from "./event-hub.ts";
+import { eventSocketRoute } from "./event-socket.ts";
 import { hasValidToken, OriginPolicy } from "./guard.ts";
-import { attachPtySockets } from "./pty-socket.ts";
+import { ptySocketRoute } from "./pty-socket.ts";
 import { postRoutes } from "./routes.ts";
+import { attachSockets } from "./sockets.ts";
 import { serveStatic } from "./static.ts";
 
 export interface ApiOptions {
@@ -18,6 +21,8 @@ export interface ApiOptions {
   facade: Facade;
   /** Serwer MCP (§5.3) pod `/mcp`; trasa i ochrona są tu, narzędzia w `mcp/`. Zamykany razem z serwerem API. */
   mcp: McpEndpoint;
+  /** Zdarzenia dla WebSocketu `/ws` (§5.2, ADR-36); zamykane razem z serwerem API. */
+  events: EventHub;
   uiDir?: string;
   /** Dodatkowe originy przeglądarki z dostępem do API, np. serwer Vite przy `tauri dev`. */
   allowOrigins?: readonly string[];
@@ -47,7 +52,7 @@ const STATUS: Record<ErrorCode, number> = {
 /** Ciała żądań to małe obiekty JSON; większe są odrzucane, zanim trafią do pamięci w całości. */
 const MAX_BODY_BYTES = 64 * 1024;
 
-/** HTTP API daemona na `127.0.0.1` (§5.2) i serwer MCP pod `/mcp` (§5.3). `port: 0` wybiera losowy wolny port. */
+/** HTTP API daemona na `127.0.0.1` z WebSocketami (§5.2) i serwer MCP pod `/mcp` (§5.3). `port: 0` wybiera losowy wolny port. */
 export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer> {
   let policy: OriginPolicy | undefined;
   const server = createServer((req, res) => {
@@ -68,12 +73,17 @@ export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer
   });
   const boundPort = (server.address() as AddressInfo).port;
   policy = new OriginPolicy(boundPort, options.allowOrigins);
-  const closePtySockets = attachPtySockets(server, { token: options.token, facade: options.facade, policy: () => policy });
+  const closeSockets = attachSockets(server, {
+    token: options.token,
+    policy: () => policy,
+    routes: [eventSocketRoute(options.events), ptySocketRoute(options.facade)],
+  });
   return {
     server,
     port: boundPort,
     close: async () => {
-      closePtySockets();
+      closeSockets();
+      options.events.close();
       await options.mcp.close();
       await new Promise<void>((resolve) => {
         server.close(() => resolve());

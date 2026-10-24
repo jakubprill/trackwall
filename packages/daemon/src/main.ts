@@ -2,6 +2,7 @@
 import { arch, platform } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { EventHub } from "./api/event-hub.ts";
 import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
 import { createFacade, type Facade, runCopilotHook } from "./facade.ts";
@@ -88,6 +89,7 @@ async function main(args: DaemonArgs): Promise<void> {
         onShutdown: () => void shutdown("POST /api/daemon/shutdown"),
         facade,
         mcp: createMcpEndpoint({ facade, version: VERSION, log: (msg) => log(`[mcp] ${msg}`) }),
+        events: new EventHub({ facade, log: (msg) => log(`[events] ${msg}`) }),
       },
       args.port,
     );

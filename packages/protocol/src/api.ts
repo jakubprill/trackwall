@@ -36,14 +36,6 @@ export function apiResult<T extends z.ZodType>(data: T) {
 }
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: ApiError };
 
-/** Zdarzenie na WebSocket `/ws`. Typy zdarzeń dochodzą w kolejnych etapach. */
-export const EventEnvelope = z.object({
-  seq: z.number().int().nonnegative(),
-  type: z.string(),
-  payload: z.unknown(),
-});
-export type EventEnvelope = z.infer<typeof EventEnvelope>;
-
 /**
  * Akcja `POST /api/<moduł>/<akcja>` (§5.2): ścieżka, schemat ciała i schemat wyniku w jednym obiekcie,
  * z którego korzystają i daemon (walidacja wejścia), i klienty (typ ciała, walidacja odpowiedzi).

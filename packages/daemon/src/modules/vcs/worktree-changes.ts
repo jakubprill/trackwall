@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import type { TaskChanges, WorkingTreeChanges } from "@trackwall/protocol";
 import { git } from "./git.ts";
 import { parseChangedFiles } from "./parse.ts";
-import { ExitCodeError } from "./run.ts";
+import { ExitCodeError, type RunOutput } from "./run.ts";
 import { commitCount, uncommittedCount } from "./worktree.ts";
 
 /**
@@ -20,7 +20,13 @@ import { commitCount, uncommittedCount } from "./worktree.ts";
 /** Duże worktree na Windowsie ze skanującym antywirusem potrafią liczyć `git status` kilkanaście sekund. */
 const CHANGES_TIMEOUT_MS = 60_000;
 
-/** Zmiany worktree zadania razem z liczbą commitów zadania i niezacommitowanych plików. */
+/** Bez diffu: same pliki z liczbą linii i liczby commitów (narzędzie MCP `get_session`). */
+const NO_PATCH: RunOutput = { stdout: Buffer.alloc(0), truncated: false };
+
+/**
+ * Zmiany worktree zadania razem z liczbą commitów zadania i niezacommitowanych plików. `maxPatchBytes` 0 pomija diff:
+ * git nie liczy treści zmian, a `patch` jest pusty.
+ */
 export async function worktreeChanges(dir: string, base: string, maxPatchBytes: number): Promise<TaskChanges> {
   // Do końca każdej: zakończenie zadania czeka na ten odczyt, zanim skasuje worktree, więc odrzucenie jednej części
   // nie może zostawić gita, który nadal czyta katalog.
@@ -53,7 +59,11 @@ export async function workingTreeChanges(dir: string, base: string, maxPatchByte
         maxBytes,
       });
     // Wszystkie naraz, ale do końca każdej: indeks tymczasowy można usunąć dopiero, gdy żaden git go nie czyta.
-    const work = [diff(["--name-status", "-z"]), diff(["--numstat", "-z"]), diff([], maxPatchBytes)] as const;
+    const work = [
+      diff(["--name-status", "-z"]),
+      diff(["--numstat", "-z"]),
+      maxPatchBytes > 0 ? diff([], maxPatchBytes) : Promise.resolve(NO_PATCH),
+    ] as const;
     await Promise.allSettled(work);
     const [names, stats, patch] = await Promise.all(work);
     return {
