@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { twoDigits } from "@/lib/format";
-import { branchLabel, repoStatusTone } from "@/lib/repo-status";
+import { branchLabel, listNeedsSettings, REPO_LIST_POLL_MS, repoStatusTone } from "@/lib/repo-status";
 import { listSyncBadge, syncedByPath } from "@/lib/sync-state";
 import { type BatchRunHandle, useBatchRun } from "@/lib/use-batch-run";
 import { useRemote } from "@/lib/use-remote";
@@ -21,24 +21,30 @@ import { RepoDetail } from "./RepoDetail.tsx";
 import { SyncBar, SyncView } from "./SyncView.tsx";
 import { TagFilter } from "./TagFilter.tsx";
 
-/** Lista repo i ich stan pochodzą z folderu z projektami i z gita przy każdym zapytaniu (§4.5), więc lista jest odpytywana cyklicznie. */
-const POLL_MS = 10_000;
-
 /** Co pokazuje prawa strona: wybrane repo, wyszukiwarkę repo do sklonowania, synchronizację albo komendę zbiorczą. */
 type Panel = "repo" | "clone" | "sync" | "batch";
 
-export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection; onRetry: () => void; onOpenSettings: () => void }) {
-  const [selected, setSelected] = useState<string>();
+export function ReposView({
+  conn,
+  initialRepo,
+  onRetry,
+  onOpenSettings,
+}: {
+  conn: Connection;
+  /** Repo wybrane na starcie, np. otwarte z pulpitu w widoku „Home”. */
+  initialRepo?: string;
+  onRetry: () => void;
+  onOpenSettings: () => void;
+}) {
+  const [selected, setSelected] = useState(initialRepo);
   const [panel, setPanel] = useState<Panel>("repo");
   const load = useCallback(() => post(conn, workspaceApi.list, {}), [conn]);
-  const list = useRemote(load, { pollMs: POLL_MS });
+  const list = useRemote(load, { pollMs: REPO_LIST_POLL_MS });
   const sync = useSyncRun(conn, list.reload);
   const synced = syncedByPath(sync.run);
   const batch = useBatchRun(conn, list.reload);
 
-  // Folder z projektami, który zniknął albo jest źle wpisany w `workspace.yaml`, poprawia się w ustawieniach,
-  // a stara lista wyglądałaby na aktualną.
-  const needsSettings = list.errorCode === "projects_dir_unavailable" || list.errorCode === "invalid_config";
+  const needsSettings = listNeedsSettings(list.errorCode);
   const allRepos = needsSettings ? [] : (list.data?.repos ?? []);
   const filter = useTagFilter(conn, allRepos);
   const repos = filter.repos;

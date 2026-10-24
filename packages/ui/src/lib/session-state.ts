@@ -7,7 +7,7 @@ import type { StatusTone } from "./repo-status.ts";
  * z wnioskowania albo z rodzaju powiadomienia, którego nie potwierdziło jeszcze nagranie prawdziwej sesji.
  */
 
-const STATE_LABELS = {
+export const STATE_LABELS = {
   Working: "working",
   Input: "waiting for you",
   Approval: "asking for approval",

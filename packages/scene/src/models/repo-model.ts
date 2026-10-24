@@ -6,7 +6,7 @@ import { box, cylinder, flatRing, type HomeVisual, light, outline, solid } from 
 
 /**
  * Model repo (ADR-33): płyta z paskiem stanu, na niej bryła rodzaju z warstwy, obok słupki liczby zmian albo
- * commitów do pobrania, szara płytka, gdy brak mise, i pierścień z iskrą, gdy działa task mise. Wszystko, co trzeba
+ * commitów do pobrania i pierścień z iskrą, gdy działa task mise. Wszystko, co trzeba
  * wiedzieć bez czytania, jest kolorem albo kształtem; nazwa repo jest w etykiecie i karcie podglądu.
  */
 
@@ -20,7 +20,6 @@ export interface RepoLook {
   kind: RepoKind;
   state: HomeRepoState;
   bars: number;
-  hasMise: boolean;
   taskRunning: boolean;
 }
 
@@ -30,7 +29,6 @@ export function repoLook(repo: HomeRepo, kind: RepoKind): RepoLook {
     kind,
     state: repo.state,
     bars: counted ? Math.min(repo.count, MAX_COUNT_BARS) : 0,
-    hasMise: repo.hasMise,
     taskRunning: repo.runningTask !== null,
   };
 }
@@ -49,7 +47,6 @@ export function repoModel(look: RepoLook, palette: ScenePalette): HomeVisual {
   add(plate(color, palette));
   add(BODIES[look.kind](look, color, palette));
   add(countBars(look, color));
-  if (!look.hasMise) group.add(box([0.16, 0.02, 0.16], solid(palette.muted, 0.2), [-0.33, 0.09, -0.24]));
   if (look.taskRunning) add(runningHalo(palette));
   return {
     object: group,

@@ -13,7 +13,7 @@ Aplikacja Tauri: okno, tray, uruchamianie i nadzór daemona jako sidecara, spraw
 _Unikaj_: aplikacja (gdy chodzi tylko o Tauri)
 
 **Widok** (`View`; po angielsku *view*):
-Ekran aplikacji w UI (Repos, Sessions, Overview, Daemon, Settings), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
+Ekran aplikacji w UI (Home, Repos, Sessions, Overview, Daemon, Settings), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
 _Unikaj_: zakładka (dla całego ekranu)
 
 **Zakładka** (`TabBar`; po angielsku *tab*):
@@ -307,7 +307,10 @@ Klucz z `data` albo `stringData` manifestu, wstrzykiwany jako zmienna środowisk
 Scena 3D pulpitu na Pawn. Nie zna API daemona: dostaje kolejne migawki `HomeModel` i trzyma jedną encję na obiekt.
 
 **Pulpit**:
-Pierwszy ekran (widok w UI dochodzi po paczce sceny): stan daemona, sesje (zwłaszcza czekające na Ciebie), repo i połączenia między nimi, w układzie „Orbit” (`orbitLayout`).
+Pierwszy ekran, widok „Home” (`HomeView`): stan daemona, sesje (zwłaszcza czekające na Ciebie), repo i połączenia między nimi, w układzie „Orbit” (`orbitLayout`).
+
+**Kolejka „Needs you”** (`NeedsYouPanel`):
+Lewy panel pulpitu: sesje, które czekają na Ciebie albo mają błąd, potem repo, które nie są czyste. Te same obiekty mają podpis na scenie.
 
 **Migawka pulpitu** (`HomeModel`):
 To, co pulpit pokazuje, policzone przez UI z odpowiedzi daemona i podane scenie w całości przy każdej zmianie.

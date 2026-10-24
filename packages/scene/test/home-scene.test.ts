@@ -18,10 +18,10 @@ const PALETTE: ScenePalette = {
 const MODEL: HomeModel = {
   layerCount: 3,
   repos: [
-    { id: "web-shop", layer: 0, state: "behind", count: 1, hasMise: true, runningTask: null },
-    { id: "orders-api", layer: 1, state: "clean", count: 0, hasMise: true, runningTask: "dev" },
-    { id: "payments-api", layer: 1, state: "changed", count: 3, hasMise: false, runningTask: null },
-    { id: "common-dto", layer: 2, state: "clean", count: 0, hasMise: true, runningTask: null },
+    { id: "web-shop", layer: 0, state: "behind", count: 1, runningTask: null },
+    { id: "orders-api", layer: 1, state: "clean", count: 0, runningTask: "dev" },
+    { id: "payments-api", layer: 1, state: "changed", count: 3, runningTask: null },
+    { id: "common-dto", layer: 2, state: "clean", count: 0, runningTask: null },
   ],
   sessions: [
     { id: "s1", repo: "orders-api", state: "attention" },
@@ -228,7 +228,7 @@ describe("scena pulpitu", () => {
 
   test("połączenia repo, których nazwy zawierają separatory, nie zlewają się w jedno", () => {
     const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
-    const repo = (id: string, layer: number) => ({ id, layer, state: "clean" as const, count: 0, hasMise: true, runningTask: null });
+    const repo = (id: string, layer: number) => ({ id, layer, state: "clean" as const, count: 0, runningTask: null });
 
     scene.apply({
       layerCount: 2,

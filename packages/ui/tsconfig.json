@@ -7,5 +7,5 @@
     "baseUrl": ".",
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src", "test", "vite.config.ts", "dev-proxy.ts"]
+  "include": ["src", "test", "vite.config.ts", "dev-proxy.ts", "drop-unreferenced-draco.ts"]
 }

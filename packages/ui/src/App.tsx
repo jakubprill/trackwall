@@ -1,6 +1,6 @@
 import { agentsApi } from "@trackwall/protocol";
-import { Activity, FolderGit2, Network, Settings, SquareTerminal } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Activity, FolderGit2, Network, Orbit, Settings, SquareTerminal } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
@@ -13,33 +13,41 @@ import { useRemote } from "@/lib/use-remote";
 import { useSessionFocus } from "@/lib/use-session-focus";
 import { DaemonPanel } from "@/views/daemon/DaemonPanel";
 import { GraphView } from "@/views/graph/GraphView";
+import { HomeView } from "@/views/home/HomeView";
 import { ReposView } from "@/views/repos/ReposView";
 import { SessionsView } from "@/views/sessions/SessionsView";
 import { SettingsView } from "@/views/settings/SettingsView";
 
-/** Kolejność i skróty paska widoków; następne widoki pracy dostają kolejne cyfry. */
+/** Kolejność i skróty paska widoków; „Home” jest pierwszy (ADR-33), następne widoki pracy dostają kolejne cyfry. */
 const VIEWS = [
-  { id: "repos", label: "Repos", icon: FolderGit2, shortcut: "1", placement: "top" },
-  { id: "sessions", label: "Sessions", icon: SquareTerminal, shortcut: "2", placement: "top" },
-  { id: "graph", label: "Overview", icon: Network, shortcut: "3", placement: "top" },
+  { id: "home", label: "Home", icon: Orbit, shortcut: "1", placement: "top" },
+  { id: "repos", label: "Repos", icon: FolderGit2, shortcut: "2", placement: "top" },
+  { id: "sessions", label: "Sessions", icon: SquareTerminal, shortcut: "3", placement: "top" },
+  { id: "graph", label: "Overview", icon: Network, shortcut: "4", placement: "top" },
   { id: "daemon", label: "Daemon", icon: Activity, shortcut: "9", placement: "bottom" },
   { id: "settings", label: "Settings", icon: Settings, shortcut: ",", placement: "bottom" },
 ] as const satisfies readonly ActivityView<string>[];
 type View = (typeof VIEWS)[number]["id"];
 
-/** Lista sesji jest odpytywana zawsze, bo pasek widoków pokazuje, ile czeka; częściej, gdy widok „Sesje” jest otwarty. */
+/**
+ * Lista sesji jest odpytywana zawsze, bo pasek widoków pokazuje, ile czeka; częściej, gdy otwarty jest widok, który
+ * pokazuje sesje („Home” albo „Sessions”).
+ */
 const SESSIONS_POLL_MS = { open: 1000, closed: 3000 };
 
 export function App() {
-  const [view, setView] = useState<View>("repos");
+  // Repo otwarte z pulpitu należy do przejścia, nie do widoku: każde inne przejście do „Repos” zaczyna bez niego.
+  const [{ view, repo }, setNav] = useState<{ view: View; repo?: string }>({ view: "home" });
+  const setView = useCallback((next: View, openRepo?: string) => setNav({ view: next, repo: openRepo }), []);
   const [session, setSession] = useState<SessionSelection>();
   const { conn, epoch, error, retry } = useConnection();
-  const sessions = useSessions(conn, view === "sessions");
-  // Skok do sesji z traya (ADR-26): powłoka pokazuje okno i podaje sesję, która czeka.
-  useSessionFocus((id) => {
+  const sessions = useSessions(conn, view === "sessions" || view === "home");
+  const openSession = (id: string) => {
     setView("sessions");
     setSession({ kind: "session", id });
-  });
+  };
+  // Skok do sesji z traya (ADR-26): powłoka pokazuje okno i podaje sesję, która czeka.
+  useSessionFocus(openSession);
   return (
     <div className="flex h-screen">
       <ActivityBar views={VIEWS} active={view} onSelect={setView} badges={{ sessions: waitingCount(sessions.data?.sessions ?? []) }} />
@@ -58,7 +66,20 @@ export function App() {
               <Loading text="Connecting to the daemon…" />
             </div>
           )}
-          {conn && view === "repos" && <ReposView key={epoch} conn={conn} onRetry={retry} onOpenSettings={() => setView("settings")} />}
+          {conn && view === "home" && (
+            <HomeView
+              key={epoch}
+              conn={conn}
+              sessions={sessions}
+              onOpenSession={openSession}
+              onOpenRepo={(id) => setView("repos", id)}
+              onOpenDaemon={() => setView("daemon")}
+              onOpenSettings={() => setView("settings")}
+            />
+          )}
+          {conn && view === "repos" && (
+            <ReposView key={epoch} conn={conn} initialRepo={repo} onRetry={retry} onOpenSettings={() => setView("settings")} />
+          )}
           {conn && view === "sessions" && (
             <SessionsView key={epoch} conn={conn} sessions={sessions} selected={session} onSelect={setSession} />
           )}

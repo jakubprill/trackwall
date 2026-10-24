@@ -23,8 +23,6 @@ export interface HomeRepo {
   state: HomeRepoState;
   /** Lokalne zmiany przy `changed`, commity do pobrania przy `behind`; inaczej 0. */
   count: number;
-  /** Repo ma `mise.toml`, więc da się w nim uruchamiać taski. */
-  hasMise: boolean;
   /** Nazwa działającego taska mise albo `null`. */
   runningTask: string | null;
 }

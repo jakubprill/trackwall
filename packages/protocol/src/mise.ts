@@ -47,6 +47,10 @@ export const MiseTasks = z.discriminatedUnion("kind", [
 ]);
 export type MiseTasks = z.infer<typeof MiseTasks>;
 
+/** Działający task mise (także zatrzymywany) z tego działania daemona: pulpit pokazuje go przy repo bez pytania mise. */
+export const RunningMiseTask = z.object({ repo: RepoId, miseTask: MiseTaskName, run: RunState });
+export type RunningMiseTask = z.infer<typeof RunningMiseTask>;
+
 function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
   return { path: `/api/mise/${action}`, request, data };
 }
@@ -55,6 +59,8 @@ const MiseTaskRequest = z.object({ repo: RepoId, miseTask: MiseTaskName }).stric
 
 export const miseApi = {
   tasks: endpoint("tasks", z.object({ repo: RepoId }).strict(), MiseTasks),
+  /** Działające taski wszystkich repo, bez uruchamiania mise: tani do częstego odpytywania (pulpit, ADR-33). */
+  running: endpoint("running", z.object({}).strict(), z.array(RunningMiseTask)),
   /** Uruchamia task w grupie procesów (`mise run <task>` w korzeniu repo); działający już task zwraca jego stan. */
   start: endpoint("start", MiseTaskRequest, RunState),
   /** Wraca po potwierdzeniu, że żaden proces grupy nie żyje; zakończony już task zwraca jego stan. */

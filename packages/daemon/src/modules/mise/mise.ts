@@ -1,4 +1,4 @@
-import { type LogSource, type MiseTask, MiseTaskName, type MiseTasks, type RunState } from "@trackwall/protocol";
+import { type LogSource, type MiseTask, MiseTaskName, type MiseTasks, type RunningMiseTask, type RunState } from "@trackwall/protocol";
 import { z } from "zod";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { type MiseCliResult, runMiseCli } from "./mise-cli.ts";
@@ -59,17 +59,27 @@ export class Mise {
     return { kind: "ok", tasks: [...tasks, ...this.liveOutside(repo, tasks)] };
   }
 
+  /** Działające taski wszystkich repo uruchomione w tym działaniu daemona; stan z `procs`, bez pytania mise. */
+  running(): RunningMiseTask[] {
+    return [...this.started.keys()].flatMap((repo) => this.liveRuns(repo).map(({ name, run }) => ({ repo, miseTask: name, run })));
+  }
+
   /**
    * Działające taski repo spoza listy: usunięte z konfiguracji w trakcie działania albo pokazane, gdy mise listy
    * nie podał. Bez nich nie dałoby się ich zatrzymać z UI.
    */
   private liveOutside(repo: string, listed: readonly ListedMiseTask[]): MiseTask[] {
-    const live: MiseTask[] = [];
-    for (const name of this.started.get(repo) ?? []) {
+    return this.liveRuns(repo)
+      .filter(({ name }) => !listed.some((t) => t.name === name))
+      .map(({ name, run }) => ({ name, description: "", run }));
+  }
+
+  /** Taski repo uruchomione przez daemon, których grupa jeszcze nie skończyła (także w trakcie zatrzymywania). */
+  private liveRuns(repo: string): { name: string; run: RunState }[] {
+    return [...(this.started.get(repo) ?? [])].flatMap((name) => {
       const run = this.deps.procs.state(owner(repo, name));
-      if (run && run.kind !== "exited" && !listed.some((t) => t.name === name)) live.push({ name, description: "", run });
-    }
-    return live;
+      return run && run.kind !== "exited" ? [{ name, run }] : [];
+    });
   }
 
   async start(repo: string, miseTask: string): Promise<RunState> {

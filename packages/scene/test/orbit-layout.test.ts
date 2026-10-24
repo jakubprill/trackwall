@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { HomeRepo } from "../src/home-model.ts";
 import { orbitLayout, REPO_RADIUS, SESSION_RADIUS } from "../src/orbit-layout.ts";
 
-const repo = (id: string, layer: number | null): HomeRepo => ({ id, layer, state: "clean", count: 0, hasMise: true, runningTask: null });
+const repo = (id: string, layer: number | null): HomeRepo => ({ id, layer, state: "clean", count: 0, runningTask: null });
 
 describe("układ Orbit", () => {
   test("repo leżą na zewnętrznym pierścieniu, a pierwsza warstwa jest z tyłu sceny", () => {
