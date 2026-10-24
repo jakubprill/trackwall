@@ -6,6 +6,9 @@ describe("klawisze w terminalu sesji Copilot CLI", () => {
     expect(sessionKey("\r")).toBe("enter");
     expect(sessionKey("\u001b")).toBe("escape");
     expect(sessionKey("\u0003")).toBe("interrupt");
+    expect(sessionKey("3")).toBe("choice");
+    expect(sessionKey("0")).toBeUndefined();
+    expect(sessionKey("12")).toBeUndefined();
     expect(sessionKey("y\r")).toBeUndefined();
     expect(sessionKey("\u001b[B")).toBeUndefined();
     expect(sessionKey("\u001b[200~ls\r\u001b[201~")).toBeUndefined();
@@ -13,9 +16,15 @@ describe("klawisze w terminalu sesji Copilot CLI", () => {
     expect(sessionKey("__proto__")).toBeUndefined();
   });
 
-  test("Enter przy prośbie o zgodę albo o zatwierdzenie planu to praca z pewnością medium", () => {
+  test("Enter albo cyfra przy prośbie o zgodę albo o zatwierdzenie planu to praca z pewnością medium", () => {
     expect(stateFromKey("enter", "Approval")).toEqual({ state: "Working", source: "keyboard", confidence: "medium", reason: "key enter" });
     expect(stateFromKey("enter", "Plan")).toMatchObject({ state: "Working" });
+    expect(stateFromKey("choice", "Approval")).toEqual({
+      state: "Working",
+      source: "keyboard",
+      confidence: "medium",
+      reason: "key choice",
+    });
   });
 
   test("Esc i Ctrl+C w trakcie pracy, także zawieszonej, albo przy prośbie o zgodę przerywają turę, więc sesja czeka na Ciebie", () => {
@@ -25,9 +34,11 @@ describe("klawisze w terminalu sesji Copilot CLI", () => {
     expect(stateFromKey("escape", "Stale")).toMatchObject({ state: "Input" });
   });
 
-  test("Enter przy wpisywaniu promptu albo komendy nie zmienia stanu, bo turę zgłasza hook, a komenda w rodzaju /model nie ma hooka", () => {
+  test("Enter i cyfra przy wpisywaniu promptu albo komendy nie zmieniają stanu, bo turę zgłasza hook, a komenda w rodzaju /model nie ma hooka", () => {
     expect(stateFromKey("enter", "Input")).toBeUndefined();
     expect(stateFromKey("enter", "Working")).toBeUndefined();
+    expect(stateFromKey("choice", "Input")).toBeUndefined();
+    expect(stateFromKey("choice", "Working")).toBeUndefined();
     expect(stateFromKey("escape", "Input")).toBeUndefined();
     expect(stateFromKey("enter", undefined)).toBeUndefined();
     expect(stateFromKey("escape", "Done")).toBeUndefined();

@@ -244,7 +244,7 @@ _Unikaj_: zrzut ekranu (to obrazek), historia wyjścia
 Reguła, która z hooków, sekwencji terminala, wyglądu ekranu albo klawiszy człowieka w terminalu sesji wnioskuje stan zadania.
 
 **Klawisz sesji** (`SessionKey`, `sessionKey`; po angielsku *key*):
-Enter, Esc albo Ctrl+C wysłany do terminala sesji jako cały kawałek wejścia (`enter`, `escape`, `interrupt`). Odpowiada na prośbę o zgodę albo przerywa turę, czego Copilot CLI nie zgłasza hookiem, więc jest źródłem stanu `keyboard`; nagranie zapisuje sam rodzaj klawisza.
+Enter, cyfra 1–9, Esc albo Ctrl+C wysłany do terminala sesji jako cały kawałek wejścia (`enter`, `choice`, `escape`, `interrupt`). Odpowiada na prośbę o zgodę albo przerywa turę, czego Copilot CLI nie zgłasza hookiem, więc jest źródłem stanu `keyboard`; nagranie zapisuje sam rodzaj klawisza.
 _Unikaj_: wejście (to cała treść z klawiatury), skrót
 
 **Wtyczka sesji** (`writeCopilotPlugin`; po angielsku *session plugin*):
