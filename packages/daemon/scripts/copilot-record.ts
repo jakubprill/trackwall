@@ -120,36 +120,42 @@ class Recording {
   readonly #cast: AsciicastWriter;
   readonly #session: CopilotSessionState;
   readonly #statesFd: number;
+  /**
+   * Czas, z którego sesja liczy stan: czas ostatniego zapisanego zdarzenia, a nie chwila liczenia. Odtwarzanie widzi
+   * tylko czasy zdarzeń, więc inaczej zmiana stanu na żywo i z nagrania różniłaby się o czas między zapisem a liczeniem.
+   */
+  #clock: number;
 
   constructor(out: string, size: { cols: number; rows: number }) {
     this.#cast = new AsciicastWriter(join(out, "session.cast"), { width: size.cols, height: size.rows });
-    // Zegar nagrania, a nie `Date.now`: odtworzenie nagrania liczy stan z tych samych czasów.
-    this.#session = new CopilotSessionState({ now: () => this.#cast.now(), staleAfterMs: STALE_AFTER_MS });
+    this.#clock = this.#cast.startedAt;
+    this.#session = new CopilotSessionState({ now: () => this.#clock, staleAfterMs: STALE_AFTER_MS });
     this.#statesFd = openSync(join(out, "states.jsonl"), "w");
   }
 
   output(bytes: Uint8Array, text: string): void {
     process.stdout.write(bytes);
-    this.#cast.output(text);
+    this.#clock = this.#cast.output(text);
     for (const change of this.#session.output(text)) this.#report(change);
   }
 
   hook(r: CopilotHookRecord): void {
-    this.#cast.marker(encodeMarker({ kind: "hook", record: r }));
+    this.#clock = this.#cast.marker(encodeMarker({ kind: "hook", record: r }));
     for (const change of this.#session.hook(r)) this.#report(change);
   }
 
   resize(cols: number, rows: number): void {
-    this.#cast.resize(cols, rows);
+    this.#clock = this.#cast.resize(cols, rows);
   }
 
   tick(): void {
+    this.#clock = this.#cast.now();
     this.#report(this.#session.tick());
   }
 
   exit(code: number): void {
-    this.#cast.marker(encodeMarker({ kind: "exit", code }));
-    this.#report(this.#session.exit(code));
+    this.#clock = this.#cast.marker(encodeMarker({ kind: "exit", code }));
+    for (const change of this.#session.exit(code)) this.#report(change);
   }
 
   close(): void {

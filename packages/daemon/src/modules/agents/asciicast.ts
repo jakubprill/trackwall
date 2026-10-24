@@ -32,6 +32,15 @@ export function parseAsciicast(text: string): Asciicast {
   return { header: parseLine(HeaderLine, first, 1), events: rest.map((line, i) => parseLine(EventLine, line, i + 2)) };
 }
 
+/**
+ * Czas zdarzenia w ms od epoki. Writer zapisuje pełne ms jako sekundy od pełnej sekundy nagłówka, a sekundy jako
+ * liczba zmiennoprzecinkowa nie zawsze mają dokładny zapis (1.005 * 1000 to 1004.999…), więc zaokrąglenie wraca
+ * do zapisanej milisekundy.
+ */
+export function eventTimeMs(header: AsciicastHeader, seconds: number): number {
+  return header.timestamp * 1000 + Math.round(seconds * 1000);
+}
+
 const HeaderLine = jsonOf(AsciicastHeader);
 const EventLine = jsonOf(AsciicastEvent);
 
@@ -66,32 +75,40 @@ export class AsciicastWriter {
     writeSync(this.#fd, `${JSON.stringify(header)}\n`);
   }
 
+  /** Pełna sekunda z nagłówka, ms od epoki: od niej odtwarzanie liczy czasy zdarzeń. */
+  get startedAt(): number {
+    return this.#startedAt;
+  }
+
   /**
-   * Czas nagrania, ms od epoki: ten sam, z którego odtwarzanie liczy stan. Tracker na żywo używa go zamiast
-   * `Date.now`, żeby uśpienie komputera albo korekta zegara nie dały innego stanu na żywo i z nagrania.
+   * Czas nagrania w pełnych ms od epoki. Zegar monotoniczny zamiast `Date.now`, żeby uśpienie komputera albo korekta
+   * zegara nie dały innego stanu na żywo i z nagrania; pełne ms, bo tyle ma czas zmiany stanu.
    */
   now(): number {
-    return this.#startedAt + (performance.now() - this.#origin);
+    return this.#startedAt + Math.round(performance.now() - this.#origin);
   }
 
-  output(data: string): void {
-    this.#event("o", data);
+  /** Zapis zdarzenia zwraca jego czas w nagraniu: z tego czasu liczy stan i sesja na żywo, i odtwarzanie. */
+  output(data: string): number {
+    return this.#event("o", data);
   }
 
-  resize(width: number, height: number): void {
-    this.#event("r", `${width}x${height}`);
+  resize(width: number, height: number): number {
+    return this.#event("r", `${width}x${height}`);
   }
 
-  marker(label: string): void {
-    this.#event("m", label);
+  marker(label: string): number {
+    return this.#event("m", label);
   }
 
   close(): void {
     closeSync(this.#fd);
   }
 
-  #event(code: AsciicastEvent[1], data: string): void {
-    const event: AsciicastEvent = [(this.now() - this.#startedAt) / 1000, code, data];
+  #event(code: AsciicastEvent[1], data: string): number {
+    const at = this.now();
+    const event: AsciicastEvent = [(at - this.#startedAt) / 1000, code, data];
     writeSync(this.#fd, `${JSON.stringify(event)}\n`);
+    return at;
   }
 }
