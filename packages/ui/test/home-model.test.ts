@@ -121,6 +121,12 @@ describe("stan sesji na pulpicie", () => {
     );
   });
 
+  test("Input that no longer waits for you is idle", () => {
+    expect(homeSessionState(session("s", "a", { state: { state: "Input", source: "hook", confidence: "high", at: "", reason: "" } }))).toBe(
+      "idle",
+    );
+  });
+
   test("zakończona błędem albo zwykle; zatrzymana przez Ciebie to zakończona", () => {
     expect(homeSessionState(session("s", "a", { run: exited(1) }))).toBe("error");
     expect(homeSessionState(session("s", "a", { run: exited(0) }))).toBe("done");
