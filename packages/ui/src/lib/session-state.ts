@@ -1,4 +1,4 @@
-import type { Session, SessionList } from "@trackwall/protocol";
+import type { Session, SessionList, TaskStateChange } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 
 /**
@@ -17,6 +17,17 @@ export const STATE_LABELS = {
   Stale: "not responding",
 } as const;
 
+/** `Input` the user has already seen (ADR-47): the agent is idle and no longer waits for you. */
+export const IDLE_LABEL = "idle";
+
+/**
+ * The agent is idle: the session runs in `Input` the user has already seen, so it no longer waits for you (ADR-47).
+ * Whether the user has seen it is decided by the daemon in `needsAttention`.
+ */
+export function isIdle(session: Session): boolean {
+  return session.run.kind === "running" && session.state?.state === "Input" && !session.needsAttention;
+}
+
 /** Proces sesji jeszcze działa (także w trakcie zatrzymywania): pisze w swoim katalogu i trzyma jego pliki. */
 export function isLive(session: Session): boolean {
   return session.run.kind !== "exited";
@@ -32,9 +43,14 @@ export function sessionStateLabel(session: Session): { tone?: StatusTone; label:
       : { label: "finished" };
   }
   if (!state) return { label: "state unknown" };
-  const label = STATE_LABELS[state.state];
+  return runningStateLabel(state, session.needsAttention, isIdle(session));
+}
+
+function runningStateLabel(state: TaskStateChange, needsAttention: boolean, idle: boolean): { tone?: StatusTone; label: string } {
+  const label = idle ? IDLE_LABEL : STATE_LABELS[state.state];
   const likely = state.confidence === "medium" || state.confidence === "low" ? `probably ${label}` : label;
-  if (session.needsAttention) return { tone: "warning", label: likely };
+  if (needsAttention) return { tone: "warning", label: likely };
+  if (idle) return { label: likely };
   if (state.state === "Error" || state.state === "Stale") return { tone: "error", label: likely };
   return { tone: "ok", label: likely };
 }
@@ -48,6 +64,20 @@ export function nextWaiting(sessions: readonly Session[], current: string | unde
   const at = sessions.findIndex((s) => s.id === current);
   const after = waiting.find((s) => sessions.indexOf(s) > at);
   return after ?? waiting[0];
+}
+
+/**
+ * Alt+J (ADR-48): the session to open, after the selected one, and whether the shortcut takes the key. In Sessions it
+ * always does, so that the key never reaches a terminal; elsewhere only when a session is waiting, so that ⌥J still
+ * types in a text field.
+ */
+export function nextWaitingShortcut(
+  sessions: readonly Session[],
+  selected: string | undefined,
+  inSessionsView: boolean,
+): { open: Session | undefined; taken: boolean } {
+  const open = nextWaiting(sessions, selected);
+  return { open, taken: open !== undefined || inSessionsView };
 }
 
 export function waitingCount(sessions: readonly Session[]): number {

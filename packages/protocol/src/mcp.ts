@@ -388,7 +388,7 @@ export const mcpTools = {
       "repo, start time, process state (run: running, stopping, exited with exit code; the screen is not shared), the " +
       "latest state change (state: Working, Input, Approval, Plan, Done, Error, Stale, with source and confidence; " +
       "null before the first signal), window title (what the agent is working on), needsAttention (running and " +
-      "waiting for the user) and task: the id of the task whose worktree it runs in, null in the repo root. A task " +
+      "waiting for the user: approval, plan approval, or an ended turn the user has not seen yet) and task: the id of the task whose worktree it runs in, null in the repo root. A task " +
       "is work in its own worktree on its own branch: prompt, branch, base branch and commit, worktree path. Sessions " +
       "end with Trackwall, tasks stay until the user ends them. Also task proposals waiting for the user's decision " +
       `(${PROPOSE_TASK}) and caller: your own session id when you run in Trackwall, null otherwise. The repo argument ` +

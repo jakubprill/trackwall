@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Session } from "@trackwall/protocol";
-import { nextWaiting, sessionStateLabel, waitingCount } from "../src/lib/session-state.ts";
+import { nextWaiting, nextWaitingShortcut, sessionStateLabel, waitingCount } from "../src/lib/session-state.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-23T10:00:00Z", pid: 10 } as const;
 
@@ -26,6 +26,11 @@ describe("stan sesji w jednej linii", () => {
     expect(sessionStateLabel(waiting("a", change("Input")))).toEqual({ tone: "warning", label: "waiting for you" });
     expect(sessionStateLabel(waiting("a", change("Approval")))).toEqual({ tone: "warning", label: "asking for approval" });
     expect(sessionStateLabel(session("a", change("Working")))).toEqual({ tone: "ok", label: "working" });
+  });
+
+  test("Input the user has already seen is shown as idle, without a warning", () => {
+    expect(sessionStateLabel(session("a", change("Input")))).toEqual({ label: "idle" });
+    expect(sessionStateLabel(session("a", change("Input", "medium")))).toEqual({ label: "probably idle" });
   });
 
   test("słabszy sygnał jest podany jako „prawdopodobnie”", () => {
@@ -62,5 +67,19 @@ describe("skok do sesji czekającej", () => {
     expect(nextWaiting(ended, undefined)).toBeUndefined();
     expect(waitingCount(ended)).toBe(0);
     expect(waitingCount(list)).toBe(2);
+  });
+});
+
+describe("Alt+J", () => {
+  test("opens the next waiting session after the selected one", () => {
+    const list = [waiting("a", change("Input")), session("b", change("Working")), waiting("c", change("Approval"))];
+    expect(nextWaitingShortcut(list, "a", true).open?.id).toBe("c");
+    expect(nextWaitingShortcut(list, undefined, false).open?.id).toBe("a");
+  });
+
+  test("in Sessions takes the key also when nothing is waiting, elsewhere leaves it for a text field", () => {
+    const list = [session("b", change("Working"))];
+    expect(nextWaitingShortcut(list, "b", true)).toEqual({ open: undefined, taken: true });
+    expect(nextWaitingShortcut(list, undefined, false)).toEqual({ open: undefined, taken: false });
   });
 });
