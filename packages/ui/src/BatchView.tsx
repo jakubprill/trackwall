@@ -25,8 +25,9 @@ export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: read
         <span className="hud-label">Batch command</span>
         <h1 className="text-xl font-semibold tracking-tight">The same steps on many repos at once</h1>
         <p className="text-muted-foreground max-w-prose text-sm">
-          Steps run one after another in each repo, three repos at a time. A failed step ends that repo; the others carry on. mise skips
-          mise tasks with <code>sources</code> and <code>outputs</code> when nothing changed, so a rerun is fast.
+          Steps run one after another in each repo, three repos at a time. A failed step ends that repo; the others carry on. A mise task
+          with
+          <code>sources</code> and <code>outputs</code> is skipped when nothing changed, so a rerun is fast.
         </p>
       </header>
       <Surface label="Steps" meta={`${steps.size}/${BATCH_STEPS.length}`}>

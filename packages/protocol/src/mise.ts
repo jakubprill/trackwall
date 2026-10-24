@@ -17,7 +17,7 @@ export const MiseTaskName = z
   .min(1)
   .max(200)
   .refine((n) => !n.startsWith("-"), "a mise task name cannot start with '-'")
-  .refine((n) => [...n].every((c) => c >= " "), "a mise task name cannot contain control characters");
+  .refine((n) => [...n].every((c) => c >= " "), "mise task name: no control characters");
 export type MiseTaskName = z.infer<typeof MiseTaskName>;
 
 export const MiseTask = z.object({
