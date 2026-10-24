@@ -232,10 +232,10 @@ Sesja albo agent nadrzędny, który rozmawia z użytkownikiem i zleca pracę inn
 _Unikaj_: orkiestrator, planner (ADR-9: rozbijanie celów robi człowiek)
 
 **Task mise** (po angielsku *mise task*):
-Nazwana komenda z `mise.toml` repo: `setup`, `dev`, `test`, `build`, `lint`, `health`. W kodzie zawsze z dopowiedzeniem (`miseTask`, `mise.run(...)`), nigdy gołe `task`. Taski zapisane w commicie (`DeclaredMiseTask` w `RepoCard.mise`, typ `MiseSetup`: pliki konfiguracji mise i taski z `[tasks]` oraz katalogów tasków) liczy karta repo; repo bez nich ma tag `no-mise` (ADR-34). Jedyny wyjątek to argument `task` narzędzia MCP `run_task` (§5.3), gdzie kontekst jest jednoznaczny.
+Nazwana komenda z `mise.toml` repo: `setup`, `dev`, `test`, `build`, `lint`, `health`. W kodzie zawsze z dopowiedzeniem (`miseTask`, `mise.run(...)`), nigdy gołe `task`. Taski zapisane w commicie (`DeclaredMiseTask` w `RepoCard.mise`, typ `MiseSetup`: pliki konfiguracji mise i taski z `[tasks]` oraz katalogów tasków) liczy karta repo; repo bez nich ma tag `no-mise` (ADR-34). Narzędzia MCP do tasków mise mają `mise` w nazwie i argument `miseTask` (`run_mise_task`, `stop_mise_task`, `wait_for_mise_task`, `list_running_mise_tasks`, ADR-41).
 
 **Uruchomienie** (`run`, `runId`, stan: `RunState`; po angielsku *run*):
-Jednorazowe wykonanie taska mise przez `run_task` albo z UI, z własną grupą procesów i logami. Stan `running`, `stopping` albo `exited` (kod wyjścia, sygnał, czy zatrzymał je użytkownik, ostatnie linie wyjścia), zawsze zaobserwowany. Nie jest zadaniem ani serwisem.
+Jednorazowe wykonanie taska mise z UI albo przez `run_mise_task`, z własną grupą procesów i logami. Stan `running`, `stopping` albo `exited` (kod wyjścia, sygnał, czy zatrzymał je użytkownik, ostatnie linie wyjścia), zawsze zaobserwowany. Nie jest zadaniem ani serwisem.
 
 **Zaufanie mise** (`mise trust`, akcja `trust`; po angielsku *trust*):
 Zgoda użytkownika, żeby mise czytał konfigurację repo, która może uruchamiać programy (`[env]`, szablony, hooki). Bez niej mise nie poda listy tasków (`untrusted`). Daje się tylko w UI.

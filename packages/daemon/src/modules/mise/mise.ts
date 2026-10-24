@@ -111,9 +111,25 @@ export class Mise {
     return this.runGroupToEnd(installOwner(repo), dir, ["install"], repo, { kind: "mise-install", repo }, signal);
   }
 
+  /**
+   * The task's current run once the system has confirmed its end, or after `timeoutMs` (then still `running` or
+   * `stopping`), for an agent waiting for the result (`wait_for_mise_task`, ADR-41). `signal` (the client cancelled
+   * the call) ends the wait but does not stop the task.
+   */
+  async waitForEnd(repo: string, miseTask: string, timeoutMs: number, signal: AbortSignal): Promise<RunState> {
+    await this.deps.repos.repoPath(repo);
+    const groupOwner = owner(repo, miseTask);
+    const current = this.deps.procs.state(groupOwner);
+    if (!current) throw notRun(repo, miseTask);
+    if (current.kind === "exited") return current;
+    const giveUp = AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
+    const end = await Promise.race([this.deps.procs.ended(groupOwner), aborted(giveUp)]);
+    return end ?? this.deps.procs.state(groupOwner) ?? current;
+  }
+
   async stop(repo: string, miseTask: string): Promise<RunState> {
     const stopped = await this.deps.procs.stop(owner(repo, miseTask));
-    if (!stopped) throw new DomainError("not_found", `mise task "${miseTask}" in ${repo} has not been run`);
+    if (!stopped) throw notRun(repo, miseTask);
     return stopped;
   }
 
@@ -209,6 +225,18 @@ export function parseTaskList(result: MiseCliResult): TaskList {
     .filter((t) => !t.hide && MiseTaskName.safeParse(t.name).success)
     .map((t) => ({ name: t.name, description: t.description ?? "" }));
   return { kind: "ok", tasks };
+}
+
+function notRun(repo: string, miseTask: string): DomainError {
+  return new DomainError("not_found", `mise task "${miseTask}" in ${repo} has not been run`);
+}
+
+/** A promise that resolves (to `undefined`) when `signal` aborts. */
+function aborted(signal: AbortSignal): Promise<undefined> {
+  return new Promise((resolve) => {
+    if (signal.aborted) resolve(undefined);
+    else signal.addEventListener("abort", () => resolve(undefined), { once: true });
+  });
 }
 
 /** Klucz właściciela grupy w `procs`; tylko budowany, nigdy rozbierany z powrotem. */
