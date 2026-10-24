@@ -10,10 +10,15 @@ import { TaskBranch } from "./task-branch.ts";
  * na dysku, dopóki użytkownik ich nie zakończy. Sesja zadania żyje tylko w pamięci, a worktree wynika z repo i gałęzi
  * (`taskWorktree`), więc żadne z nich nie jest zapisywane. Plik można zmienić ręcznie, a jego pola trafiają do gita
  * (`branch -D`, `diff <commit bazowy>`), więc schemat dopuszcza tylko gałąź zadania i pełny hash commita (`CommitHash` w `Task`).
+ * Pola dodane później (tytuł, pochodzenie i podsumowanie, ADR-39) mają w pliku wartość domyślną, żeby zadania zapisane
+ * przez starszą wersję nie trafiły obok jako plik nieczytelny.
  */
 
 export const StoredTask = Task.omit({ worktree: true }).extend({
   branch: TaskBranch,
+  title: Task.shape.title.default(null),
+  proposedBy: Task.shape.proposedBy.default(null),
+  summary: Task.shape.summary.default(null),
   /** Korzeń repo z folderu z projektami, z którego wyszło zadanie: tam git trzyma rejestr worktree i gałąź. */
   repoDir: z.string().refine(isAbsolute, "repo root must be a full path"),
 });

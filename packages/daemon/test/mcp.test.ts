@@ -59,7 +59,7 @@ beforeAll(async () => {
     miseCommand: ["trackwall-test-brak-mise"],
     copilotCommand: ["copilot"],
     hookCommand: () => ({ exec: "true", args: [] }),
-    mcpStdioCommand: ["trackwall-daemon", "mcp-stdio"],
+    sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
     userEnv: async () => process.env,
     log: () => {},
   });
@@ -80,7 +80,7 @@ beforeAll(async () => {
 afterAll(() => api.close());
 
 describe("serwer MCP przez Streamable HTTP", () => {
-  test("announces only read-only tools: repos, card, log, graph, code search and sessions", async () => {
+  test("announces the repo, card, log, graph, code search and session tools, and only the task proposal and summary tools write", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual([
@@ -95,10 +95,16 @@ describe("serwer MCP przez Streamable HTTP", () => {
       "search_code",
       "list_sessions",
       "get_session",
+      "propose_task",
+      "report_result",
+      "wait_for_session",
     ]);
     // Każde narzędzie z kontraktu, który pokazuje UI, jest zarejestrowane w daemonie.
     expect(tools.map((t) => t.name)).toEqual(Object.values(mcpTools).map((t) => t.name));
-    for (const tool of tools) expect(tool.annotations?.readOnlyHint).toBe(true);
+    const writing = tools.filter((t) => t.annotations?.readOnlyHint !== true).map((t) => t.name);
+    expect(writing).toEqual(["propose_task", "report_result"]);
+    // Zapisują tylko tekst dla człowieka, więc klient MCP nie musi ich traktować jak niszczących.
+    expect(tools.filter((t) => t.annotations?.destructiveHint !== false)).toEqual([]);
     expect(client.getServerVersion()).toMatchObject({ name: "trackwall", version: "9.9.9" });
     await client.close();
   });
@@ -338,12 +344,12 @@ describe("serwer MCP przez Streamable HTTP", () => {
 });
 
 /** Most w tym samym procesie: linie na wejściu (obiekty jako JSON), odpowiedzi jako obiekty z linii wyjścia. */
-async function throughBridge(home: string, messages: (object | string)[]): Promise<unknown[]> {
+async function throughBridge(home: string, messages: (object | string)[], sessionTokenFile?: string): Promise<unknown[]> {
   const input = new PassThrough();
   const output = new PassThrough();
   const lines: string[] = [];
   output.on("data", (chunk: Buffer) => lines.push(...chunk.toString("utf8").split("\n").filter(Boolean)));
-  const done = runStdioBridge({ home, input, output, log: () => {} });
+  const done = runStdioBridge({ home, sessionTokenFile, input, output, log: () => {} });
   for (const m of messages) input.write(`${typeof m === "string" ? m : JSON.stringify(m)}\n`);
   input.end();
   await done;
@@ -374,6 +380,26 @@ describe("most stdio", () => {
     expect(replies).toContainEqual(expect.objectContaining({ id: 1, result: expect.objectContaining({ protocolVersion: "2025-06-18" }) }));
     const call = replies.map((r) => ToolCallReply.safeParse(r)).find((r) => r.success);
     expect(ListReposResult.parse(call?.data?.result.structuredContent).repos.map((r) => r.id)).toEqual(["orders-bff"]);
+  });
+
+  test("w sesji Trackwall wysyła token sesji z pliku, a daemon odrzuca token, którego nie zna", async () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-mcp-session-"));
+    writeDaemonFile(home, { pid: process.pid, port: api.port, token: TOKEN, startedAt: "2026-10-23T00:00:00Z", version: "9.9.9" });
+    const tokenFile = join(home, "session-token");
+    writeFileSync(tokenFile, "token-zamknietej-sesji");
+
+    const [reply] = await throughBridge(home, [INITIALIZE], tokenFile);
+    expect(reply).toMatchObject({ id: 1, error: { code: -32000 } });
+    expect(JSON.stringify(reply)).toContain("unknown session token");
+  });
+
+  test("bez pliku tokenu sesji nie wysyła żądania jako agent spoza Trackwall, tylko zgłasza koniec sesji", async () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-mcp-notoken-"));
+    writeDaemonFile(home, { pid: process.pid, port: api.port, token: TOKEN, startedAt: "2026-10-23T00:00:00Z", version: "9.9.9" });
+
+    const [reply] = await throughBridge(home, [INITIALIZE], join(home, "nie-ma"));
+    expect(reply).toMatchObject({ id: 1, error: { code: -32000 } });
+    expect(JSON.stringify(reply)).toContain("this session has ended");
   });
 
   test("sondę server/discover odrzuca jak serwer bez tej metody, żeby klient przeszedł na initialize", async () => {

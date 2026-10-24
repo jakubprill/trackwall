@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
+import { proposerLabel, taskName } from "@/lib/session-entries";
 import { isLive, sessionStateLabel } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
 import { SessionTerminal } from "./SessionTerminal.tsx";
@@ -16,19 +17,23 @@ import { TaskRemoval } from "./TaskRemoval.tsx";
 type TaskTab = "terminal" | "changes";
 
 /**
- * Wybrane zadanie (ADR-31): polecenie, gałąź i stan sesji w nagłówku, terminal sesji i zmiany w worktree w zakładkach.
- * Zadanie bez działającej sesji można wznowić albo zakończyć; worktree otwiera się w VS Code zawsze.
+ * Wybrane zadanie (ADR-31): tytuł albo polecenie, gałąź i stan sesji w nagłówku, terminal sesji i zmiany w worktree
+ * w zakładkach. Zadanie z propozycji mówi, kto je zaproponował, a podsumowanie od sesji zadania (ADR-39) stoi nad
+ * zakładkami. Zadanie bez działającej sesji można wznowić albo zakończyć; worktree otwiera się w VS Code zawsze.
  */
 export function TaskPanel({
   conn,
   task,
   session,
+  sessions,
   onChanged,
   onRemoved,
 }: {
   conn: Connection;
   task: Task;
   session: Session | undefined;
+  /** Wszystkie sesje z listy, żeby nazwać sesję, która zaproponowała zadanie. */
+  sessions: readonly Session[];
   onChanged: () => void;
   onRemoved: () => void;
 }) {
@@ -72,7 +77,7 @@ export function TaskPanel({
             <span className="text-muted-foreground shrink-0 text-xs">{relativeTime(session?.startedAt ?? task.createdAt, new Date())}</span>
           </span>
           <span className="text-muted-foreground truncate text-xs" title={task.prompt}>
-            {task.prompt}
+            {taskSubtitle(task, sessions)}
           </span>
         </div>
         {error && <span className="text-destructive max-w-xs truncate text-xs">{error}</span>}
@@ -93,6 +98,7 @@ export function TaskPanel({
         )}
       </header>
       {confirmingRemoval && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
+      {task.summary && <TaskSummary summary={task.summary} />}
       <div className="px-4">
         <TabBar tabs={tabs} active={shown} onSelect={setTab} />
       </div>
@@ -105,6 +111,25 @@ export function TaskPanel({
         </div>
       )}
     </>
+  );
+}
+
+/** Tytuł albo polecenie zadania, a przy zadaniu z propozycji także to, kto je zaproponował. */
+function taskSubtitle(task: Task, sessions: readonly Session[]): string {
+  const name = taskName(task);
+  return task.proposedBy ? `${name} · ${proposerLabel(task.proposedBy, sessions)}` : name;
+}
+
+/** Podsumowanie od sesji zadania (`report_result`) z czasem zgłoszenia. */
+function TaskSummary({ summary }: { summary: NonNullable<Task["summary"]> }) {
+  return (
+    <section aria-label="Summary from the task session" className="flex flex-col gap-1 border-b px-4 py-3">
+      <span className="hud-label">
+        Summary <span className="text-muted-foreground font-sans normal-case">{relativeTime(summary.reportedAt, new Date())}</span>
+      </span>
+      {/* Najwyżej kilka linii: dłuższe podsumowanie przewija się, a nie ściska terminala sesji pod spodem. */}
+      <p className="max-h-32 max-w-prose overflow-auto text-sm whitespace-pre-wrap">{summary.text}</p>
+    </section>
   );
 }
 

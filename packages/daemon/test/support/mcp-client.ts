@@ -4,11 +4,17 @@ import { MCP_PATH } from "../../src/mcp/endpoint.ts";
 
 /**
  * Prawdziwy klient MCP z SDK (§10) połączony przez Streamable HTTP z daemonem na `port`. `fetch` idzie przez
- * `loopbackRequest`, bo `fetch` w Bun kieruje 127.0.0.1 przez `HTTP_PROXY` (AGENTS.md, Windows pierwszy).
+ * `loopbackRequest`, bo `fetch` w Bun kieruje 127.0.0.1 przez `HTTP_PROXY` (AGENTS.md, Windows pierwszy). `headers`
+ * dokłada nagłówki do każdego żądania, np. token sesji, który w sesji Trackwall dokłada most stdio.
  */
-export async function connectHttpClient(port: number, token: string, versionNegotiation?: VersionNegotiationOptions): Promise<Client> {
+export async function connectHttpClient(
+  port: number,
+  token: string,
+  versionNegotiation?: VersionNegotiationOptions,
+  headers: Record<string, string> = {},
+): Promise<Client> {
   const transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}${MCP_PATH}`), {
-    requestInit: { headers: { authorization: `Bearer ${token}` } },
+    requestInit: { headers: { authorization: `Bearer ${token}`, ...headers } },
     fetch: loopbackFetch(port),
   });
   const client = new Client({ name: "trackwall-test", version: "1" }, { versionNegotiation });

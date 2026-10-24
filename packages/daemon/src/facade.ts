@@ -55,8 +55,8 @@ export interface FacadeOptions {
   copilotCommand: readonly string[];
   /** Program hooka wtyczki sesji (`trackwall-daemon copilot-hook …` w daemonie). */
   hookCommand: AgentsDeps["hookCommand"];
-  /** Most stdio do serwera MCP tego daemona (`mcpStdioCommand`), który dostaje każda sesja Copilot CLI. */
-  mcpStdioCommand: readonly string[];
+  /** Most stdio do serwera MCP tego daemona z plikiem tokenu sesji (`sessionMcpStdioCommand`), który dostaje każda sesja Copilot CLI. */
+  sessionMcpCommand: AgentsDeps["sessionMcpCommand"];
   /** Środowisko procesów uruchamianych dla użytkownika (`userEnv`). */
   userEnv: () => Promise<NodeJS.ProcessEnv>;
   log: (msg: string) => void;
@@ -92,7 +92,7 @@ export function createFacade(o: FacadeOptions): Facade {
     copilot: o.copilotCommand,
     env: o.userEnv,
     hookCommand: o.hookCommand,
-    mcpStdioCommand: o.mcpStdioCommand,
+    sessionMcpCommand: o.sessionMcpCommand,
     openEditor,
     log: o.log,
   });

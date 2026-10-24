@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
@@ -7,6 +8,31 @@ import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 const vcs = new Vcs();
 
 describe("vcs na prawdziwym gicie", () => {
+  test("nieudane utworzenie worktree nie zostawia gałęzi, więc ponowna próba z tą samą gałęzią się udaje", async () => {
+    const dir = makeRepo({ "README.md": "# repo\n" });
+    const commit = gitIn(dir, "rev-parse", "HEAD").trim();
+    const path = join(mkdtempSync(join(tmpdir(), "trackwall-worktrees-")), "zadanie");
+    mkdirSync(path);
+    writeFileSync(join(path, "zajete.txt"), "katalog nie jest pusty");
+
+    await expect(vcs.addWorktree(dir, path, "trackwall/zadanie-abc123", commit)).rejects.toThrow();
+    expect(gitIn(dir, "branch", "--list", "trackwall/*").trim()).toBe("");
+    expect(existsSync(path)).toBe(false);
+
+    await vcs.addWorktree(dir, path, "trackwall/zadanie-abc123", commit);
+    expect(gitIn(path, "branch", "--show-current").trim()).toBe("trackwall/zadanie-abc123");
+  });
+
+  test("utworzenie worktree na gałęzi, która już jest, odmawia i jej nie usuwa", async () => {
+    const dir = makeRepo({ "README.md": "# repo\n" });
+    const commit = gitIn(dir, "rev-parse", "HEAD").trim();
+    gitIn(dir, "branch", "trackwall/moja");
+    const path = join(mkdtempSync(join(tmpdir(), "trackwall-worktrees-")), "zadanie");
+
+    await expect(vcs.addWorktree(dir, path, "trackwall/moja", commit)).rejects.toThrow("a branch named 'trackwall/moja' already exists");
+    expect(gitIn(dir, "branch", "--list", "trackwall/moja").trim()).toBe("trackwall/moja");
+  });
+
   test("status pokazuje gałąź, ostatni commit i niezacommitowane zmiany", async () => {
     const dir = makeRepo({ "README.md": "# repo\n" });
     commitFiles(dir, { "src/app.ts": "export {};\n" }, "Dodaj aplikację");

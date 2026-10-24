@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agents } from "../src/modules/agents/agents.ts";
@@ -15,7 +15,7 @@ afterAll(async () => {
 describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziwy PTY, atrapa Copilot CLI)", () => {
   test("sesja startuje w katalogu repo z serwerem MCP Trackwall, stan idzie za hookami, a /exit kończy ją jako Done", async () => {
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
-    const { agents, procs } = makeAgents({ sklep: repoDir });
+    const { agents, procs, home } = makeAgents({ sklep: repoDir });
     cleanups.push(() => procs.stopAll());
 
     const started = await agents.start("sklep");
@@ -29,6 +29,12 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
     await waitFor(agents, started.id, () => window.text().includes("Witaj w atrapie"), "obraz ekranu");
     expect(window.unwrappedText()).toContain(repoDir);
     expect(window.text()).toContain("MCP: trackwall");
+    // Most stdio sesji dostaje plik z tokenem tej sesji, po którym serwer MCP wie, kto woła (ADR-39).
+    const tokenFile = join(home, "sessions", started.id, "session-token");
+    const mcpConfig = readFileSync(join(home, "sessions", started.id, "mcp-config.json"), "utf8");
+    expect(JSON.parse(mcpConfig).mcpServers.trackwall.args).toEqual(["mcp-stdio", "--session-token-file", tokenFile]);
+    expect(agents.callerSession(readFileSync(tokenFile, "utf8"))).toBe(started.id);
+    expect(agents.callerSession("inny token")).toBeUndefined();
 
     window.attachment.input("napraw test\r");
     const approval = await waitFor(agents, started.id, (s) => s.state?.state === "Approval", "prośba o zgodę");
@@ -123,7 +129,7 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
       copilot: ["copilot-ktorego-nie-ma"],
       env: async () => ({ PATH: repoDir }),
       hookCommand: () => ({ exec: "nieuzywane", args: [] }),
-      mcpStdioCommand: ["nieuzywane"],
+      sessionMcpCommand: () => ["nieuzywane"],
       openEditor: () => {},
       log: () => {},
     });

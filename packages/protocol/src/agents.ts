@@ -22,7 +22,48 @@ export type TaskId = z.infer<typeof TaskId>;
  * Polecenie zadania. Idzie do Copilot CLI jednym argumentem (`--interactive=<polecenie>`), a wiersz poleceń Windowsa
  * mieści 32 767 znaków razem z resztą komendy.
  */
-export const TaskPrompt = z.string().trim().min(1).max(8000);
+export const TASK_PROMPT_MAX = 8000;
+export const TaskPrompt = z.string().trim().min(1).max(TASK_PROMPT_MAX);
+
+/**
+ * Tytuł zadania (ADR-39): krótki opis na liście sesji, który nadaje sesja proponująca zadanie, tak jak tytuł wątku.
+ * Jedna linia bez znaków sterujących, bo UI pokazuje go jako tekst w jednym wierszu.
+ */
+export const TASK_TITLE_MAX = 80;
+export const TaskTitle = z
+  .string()
+  .trim()
+  .min(1)
+  .max(TASK_TITLE_MAX)
+  // `refine` zamiast `regex` z tego samego powodu co w `visibleText`.
+  .refine((value) => !/\p{Cc}/u.test(value), { message: "the title must be a single line without control characters" });
+
+/**
+ * Tekst od agenta, który człowiek czyta przed decyzją albo który trafia do innego agenta (propozycja zadania,
+ * podsumowanie, ADR-39): bez znaków, których w UI nie widać, a model je czyta (znaki formatujące, w tym znaczniki
+ * U+E0000–E007F i zmiana kierunku tekstu, prywatne i separatory linii; nieprzypisanych nie, bo to, co jest nieprzypisane, zależy od tablic Unicode silnika, a Bun i
+ * Node mają różne). Inaczej polecenie, które
+ * w panelu wygląda niewinnie, mogłoby nieść ukryte instrukcje dla sesji zadania (§8). Tekst wpisany w UI tego nie
+ * potrzebuje, bo człowiek pisze go sam.
+ */
+export function visibleText(text: z.ZodString): z.ZodString {
+  // `refine` zamiast `regex`: wzorzec trafiłby do JSON Schema narzędzia MCP, a klient, który kompiluje go bez flagi `u`,
+  // czytałby `\p{Cf}` jako zwykłe litery i odrzucał zwykły tekst.
+  return text.refine((value) => !/[\p{Cf}\p{Co}\u2028\u2029]/u.test(value), {
+    message: "the text must not contain invisible characters (format or private-use characters, line separators)",
+  });
+}
+
+/** Podsumowanie zadania od jego sesji (`report_result`, ADR-39): co zrobiła i co zostało, dla sesji, która zleciła zadanie. */
+export const TASK_SUMMARY_MAX = 4000;
+export const TaskSummaryText = z.string().trim().min(1).max(TASK_SUMMARY_MAX);
+
+/**
+ * Kto zaproponował zadanie (ADR-39): sesja Trackwall po swoim tokenie sesji albo `null` dla agenta spoza Trackwall
+ * (agent nadrzędny z tokenem daemona).
+ */
+export const ProposedBy = z.object({ session: SessionId.nullable() });
+export type ProposedBy = z.infer<typeof ProposedBy>;
 
 export const Session = z.object({
   id: SessionId,
@@ -59,8 +100,31 @@ export const Task = z.object({
   worktree: z.string(),
   /** ISO 8601. */
   createdAt: z.string(),
+  /** Tytuł z propozycji zadania; `null` dla zadania wpisanego w UI, które UI pokazuje po poleceniu. */
+  title: z.string().nullable(),
+  /** Skąd zadanie: z zatwierdzonej propozycji (`ProposedBy`) albo `null`, gdy wpisał je użytkownik. */
+  proposedBy: ProposedBy.nullable(),
+  /** Ostatnie podsumowanie od sesji zadania (`report_result`); `null`, dopóki go nie zgłosiła. */
+  summary: z.object({ text: z.string(), reportedAt: z.string() }).nullable(),
 });
 export type Task = z.infer<typeof Task>;
+
+/**
+ * Propozycja zadania (ADR-39): zadanie, które sesja albo agent spoza Trackwall zgłosił narzędziem MCP `propose_task`.
+ * Nic się nie uruchamia, dopóki użytkownik jej nie zatwierdzi w widoku Sessions; zatwierdzona staje się zadaniem
+ * z tym samym identyfikatorem, odrzucona znika. Żyje tylko w pamięci daemona, jak sesja, która ją zgłosiła.
+ */
+export const TaskProposal = z.object({
+  /** Identyfikator, który dostanie zadanie po zatwierdzeniu. */
+  id: TaskId,
+  repo: RepoId,
+  title: z.string(),
+  prompt: z.string(),
+  proposedBy: ProposedBy,
+  /** ISO 8601. */
+  createdAt: z.string(),
+});
+export type TaskProposal = z.infer<typeof TaskProposal>;
 
 /**
  * Najnowsze sesje na górze; sesje zakończone zostają na liście, dopóki użytkownik ich nie zamknie (`dismiss`).
@@ -70,6 +134,8 @@ export type Task = z.infer<typeof Task>;
 export const SessionList = z.object({
   sessions: z.array(Session),
   tasks: z.array(Task),
+  /** Propozycje zadań czekające na decyzję użytkownika, od najnowszej. */
+  proposals: z.array(TaskProposal),
   /** Katalog worktree zadań; UI podpowiada go do zaufanych folderów Copilot CLI, bo zaufanie obejmuje podkatalogi. */
   worktreesDir: z.string(),
 });
@@ -103,6 +169,7 @@ function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string,
 
 const SessionRequest = z.object({ session: SessionId }).strict();
 const TaskRequest = z.object({ task: TaskId }).strict();
+const ProposalRequest = z.object({ proposal: TaskId }).strict();
 
 export const agentsApi = {
   sessions: endpoint("sessions", z.object({}).strict(), SessionList),
@@ -124,6 +191,13 @@ export const agentsApi = {
    * inaczej `unsaved_changes`.
    */
   removeTask: endpoint("remove-task", z.object({ task: TaskId, keepBranch: z.boolean(), discardChanges: z.boolean() }).strict(), Done),
+  /**
+   * Zatwierdzenie propozycji zadania (ADR-39): zadanie z jej identyfikatorem, jak `create-task`, z poleceniem, które
+   * użytkownik mógł poprawić przed startem. Nieudany start zostawia propozycję do ponownej próby albo odrzucenia.
+   */
+  approveProposal: endpoint("approve-proposal", ProposalRequest.extend({ prompt: TaskPrompt }), Task),
+  /** Odrzucenie propozycji: znika z listy, a sesja, która na nią czeka, dostaje `proposal_rejected`. */
+  rejectProposal: endpoint("reject-proposal", ProposalRequest, Done),
 };
 
 /**

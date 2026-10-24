@@ -15,8 +15,9 @@ import { DomainError } from "../infra/errors.ts";
 
 /**
  * Narzędzia MCP daemona (§5.3, ADR-24): każde to cienkie mapowanie na fasadę, więc agent widzi ten sam stan co UI
- * (§1.1). Wszystkie tylko czytają; żadne nie zmienia konfiguracji, repo ani procesów (§8), więc sesji nie uruchamia,
- * nie odpowiada w niej i jej nie zatrzymuje.
+ * (§1.1). Żadne nie zmienia konfiguracji, repo ani procesów (§8), więc sesji nie uruchamia, nie odpowiada w niej
+ * i jej nie zatrzymuje. Zapisują tylko `propose_task` (propozycja, którą zadaniem robi dopiero użytkownik w UI)
+ * i `report_result` (podsumowanie własnego zadania sesji), ADR-39.
  */
 
 /**
@@ -33,11 +34,21 @@ export interface ToolContext {
   log: (msg: string) => void;
 }
 
-/** Wykonanie narzędzia na fasadzie: argumenty i wynik mają typy schematów z jego kontraktu. */
-type ToolRun<Args extends z.ZodObject, Result extends z.ZodObject> = (facade: Facade, args: z.output<Args>) => Promise<z.input<Result>>;
+/** Jedno wywołanie: sesja, która woła (po tokenie sesji, ADR-39; `null` dla agenta spoza Trackwall), i przerwanie przez klienta. */
+interface ToolCall {
+  caller: string | null;
+  signal: AbortSignal;
+}
 
-/** Rejestruje jedno narzędzie w serwerze MCP utworzonym dla jednego żądania. */
-type ToolRegistration = (server: McpServer, ctx: ToolContext) => void;
+/** Wykonanie narzędzia na fasadzie: argumenty i wynik mają typy schematów z jego kontraktu. */
+type ToolRun<Args extends z.ZodObject, Result extends z.ZodObject> = (
+  facade: Facade,
+  args: z.output<Args>,
+  call: ToolCall,
+) => Promise<z.input<Result>>;
+
+/** Rejestruje jedno narzędzie w serwerze MCP utworzonym dla jednego żądania jednej sesji (`caller`). */
+type ToolRegistration = (server: McpServer, ctx: ToolContext & { caller: string | null }) => void;
 
 /**
  * Narzędzie z kontraktu (`mcpTools` w protocol) i jego wykonanie na fasadzie; wynik musi zgadzać się z kontraktem
@@ -54,15 +65,23 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
   return (server, ctx) => {
     server.registerTool(
       tool.name,
-      { description: tool.description, inputSchema, outputSchema, annotations: { readOnlyHint: true, openWorldHint: false } },
-      async (args) => {
+      {
+        description: tool.description,
+        inputSchema,
+        outputSchema,
+        annotations: { readOnlyHint: tool.readOnly, destructiveHint: false, openWorldHint: false },
+      },
+      async (args, extra) => {
         const started = Date.now();
+        // Wołająca sesja w logu, bo propozycja i podsumowanie zapisują coś w jej imieniu; tabela `audit` przyjdzie z SQLite.
+        const label = ctx.caller === null ? tool.name : `${tool.name} (session ${ctx.caller})`;
         try {
-          const result = tool.result.parse(await run(ctx.facade, tool.args.parse(args)));
-          ctx.log(`${tool.name}: ok in ${Date.now() - started} ms`);
+          const call = { caller: ctx.caller, signal: extra.mcpReq.signal };
+          const result = tool.result.parse(await run(ctx.facade, tool.args.parse(args), call));
+          ctx.log(`${label}: ok in ${Date.now() - started} ms`);
           return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
         } catch (err) {
-          ctx.log(`${tool.name}: error in ${Date.now() - started} ms: ${String(err)}`);
+          ctx.log(`${label}: error in ${Date.now() - started} ms: ${String(err)}`);
           // Błąd zgłoszony świadomie przez moduł idzie do agenta z kodem i treścią, jak w API (§5.2); inny bez szczegółów.
           const text = err instanceof DomainError ? `${err.code}: ${err.message}` : "internal: daemon error";
           return { content: [{ type: "text", text }], isError: true };
@@ -134,12 +153,17 @@ const runs: ToolRuns = {
     const isUnknown = (id: string) => !cards.some((entry) => entry.repo === id);
     return facade.workspace.searchCode(query, repos ? repos.filter((id) => tagged.includes(id) || isUnknown(id)) : tagged);
   },
-  listSessions: async (facade, { repo }) => {
+  listSessions: async (facade, { repo }, { caller }) => {
     // Repo musi istnieć (`not_found` jak w get_repo): literówka w identyfikatorze nie może wyglądać jak „brak sesji”.
     if (repo !== undefined) await facade.workspace.repo(repo);
-    const { sessions, tasks } = facade.agents.sessions();
+    const { sessions, tasks, proposals } = facade.agents.sessions();
     const inRepo = (item: { repo: string }) => repo === undefined || item.repo === repo;
-    return { sessions: sessions.filter(inRepo).map(agentSession), tasks: tasks.filter(inRepo) };
+    return {
+      sessions: sessions.filter(inRepo).map(agentSession),
+      tasks: tasks.filter(inRepo),
+      proposals: proposals.filter(inRepo),
+      caller,
+    };
   },
   getSession: async (facade, { session: id }) => {
     const session = agentSession(facade.agents.session(id));
@@ -153,6 +177,15 @@ const runs: ToolRuns = {
         return { session, task, changes: null, changesError: `${err.code}: ${err.message}` };
       },
     );
+  },
+  proposeTask: async (facade, proposal, { caller }) => ({ proposal: await facade.agents.propose(caller, proposal) }),
+  reportResult: async (facade, { summary }, { caller }) => ({ task: facade.agents.reportSummary(caller, summary) }),
+  waitForSession: async (facade, { session, task, timeoutSeconds }, { caller, signal }) => {
+    // Schemat narzędzia przepuszcza dokładnie jedno z nich; drugie sprawdzenie daje typ bez rzutowania.
+    const target = session !== undefined ? { session } : task !== undefined ? { task } : undefined;
+    if (!target) throw new DomainError("bad_request", "pass exactly one of session and task");
+    const outcome = await facade.agents.waitFor(caller, target, timeoutSeconds * 1000, signal);
+    return { ...outcome, session: outcome.session && agentSession(outcome.session) };
   },
 };
 
@@ -172,6 +205,9 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.searchCode, runs.searchCode),
   defineTool(mcpTools.listSessions, runs.listSessions),
   defineTool(mcpTools.getSession, runs.getSession),
+  defineTool(mcpTools.proposeTask, runs.proposeTask),
+  defineTool(mcpTools.reportResult, runs.reportResult),
+  defineTool(mcpTools.waitForSession, runs.waitForSession),
 ];
 
 /** Tag filter of `list_repos` and `search_code`: the repo has every wanted tag. */

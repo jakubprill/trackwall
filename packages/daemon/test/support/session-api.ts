@@ -28,7 +28,7 @@ export async function startSessionApi(token: string) {
     miseCommand: ["mise"],
     copilotCommand: [process.execPath, fakeCopilot],
     hookCommand: (event, hooksFile) => ({ exec: process.execPath, args: ["--no-env-file", daemonMain, "copilot-hook", event, hooksFile] }),
-    mcpStdioCommand: ["trackwall-daemon", "mcp-stdio"],
+    sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
     userEnv: async () => process.env,
     log: () => {},
   });
@@ -58,5 +58,5 @@ export async function startSessionApi(token: string) {
     facade.agents.close();
     await api.close();
   };
-  return { api, facade, post, stop };
+  return { api, facade, home, post, stop };
 }

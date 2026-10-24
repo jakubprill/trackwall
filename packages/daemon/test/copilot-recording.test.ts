@@ -115,9 +115,19 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     );
   });
 
+  test("pierwszy sessionStart sesji zadania, która startuje z poleceniem, to praca, a kolejny i w zwykłej sesji czekanie na Ciebie", () => {
+    const record = { event: "sessionStart" as const, receivedAt: 0, payload: {}, omitted: [] };
+    const task = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: true });
+    expect(task.hook(record).map((c) => `${c.state} ${c.reason}`)).toEqual(["Working hook sessionStart with a prompt"]);
+    // `/clear` w sesji zadania: nowa rozmowa nie ma polecenia, więc sesja czeka na Ciebie.
+    expect(task.hook(record).map((c) => `${c.state} ${c.reason}`)).toEqual(["Input hook sessionStart"]);
+    const plain = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false });
+    expect(plain.hook(record).map((c) => `${c.state} ${c.reason}`)).toEqual(["Input hook sessionStart"]);
+  });
+
   test("koniec procesu po progu bez cyklicznego sprawdzenia daje najpierw Stale, tak jak odtwarzanie nagrania", () => {
     let now = 0;
-    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000 });
+    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false });
     session.output("\x1b]9;4;3;0\x07");
 
     now = 61_100;
@@ -126,7 +136,7 @@ describe("stan sesji Copilot CLI z nagrania", () => {
 
   test("komunikat o przerwanej turze tuż po klawiszu kończy pracę bez hooka, także rozdzielony na dwa kawałki wyjścia", () => {
     let now = 0;
-    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000 });
+    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false });
     session.hook({ event: "notification", receivedAt: 0, payload: { notification_type: "permission_prompt" }, omitted: [] });
     // Enter na „No, and tell Copilot…”, a Copilot CLI kończy turę zamiast czekać na tekst.
     now = 1_000;
@@ -141,7 +151,7 @@ describe("stan sesji Copilot CLI z nagrania", () => {
 
   test("komunikat o przerwanej turze bez niedawnej odpowiedzi klawiszem to przerysowana historia ekranu i nie zmienia stanu", () => {
     let now = 0;
-    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000 });
+    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false });
     session.hook({ event: "notification", receivedAt: 0, payload: { notification_type: "permission_prompt" }, omitted: [] });
     session.key("enter");
     now = 20_000;
@@ -157,7 +167,7 @@ describe("stan sesji Copilot CLI z nagrania", () => {
 
   test("Esc po progu bez cyklicznego sprawdzenia daje najpierw Stale, a potem czekanie na Ciebie, tak jak na żywo", () => {
     let now = 0;
-    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000 });
+    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false });
     session.output("\x1b]9;4;3;0\x07");
 
     now = 61_100;
@@ -169,7 +179,7 @@ describe("stan sesji Copilot CLI z nagrania", () => {
 
   test("wyjście po progu bez cyklicznego sprawdzenia daje Stale i powrót, tak jak odtwarzanie nagrania", () => {
     let now = 0;
-    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000 });
+    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false });
     session.output("\x1b]9;4;3;0\x07");
 
     now = 61_100;

@@ -8,10 +8,10 @@ import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { DaemonEvents } from "@/lib/daemon-events";
 import { IS_MAC } from "@/lib/platform";
-import { findEntry, type SessionSelection, sessionEntries } from "@/lib/session-entries";
+import { entrySession, findEntry, type SessionSelection, sessionEntries } from "@/lib/session-entries";
 import type { SessionLayout } from "@/lib/session-grid";
 import { sessionShortcut } from "@/lib/session-shortcut";
-import { nextWaitingShortcut, waitingCount } from "@/lib/session-state";
+import { attentionCount, nextWaitingShortcut } from "@/lib/session-state";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
 import { useRemote } from "@/lib/use-remote";
@@ -65,7 +65,7 @@ export function App() {
     },
     () => {
       const inSessions = view === "sessions";
-      const selected = inSessions && sessions.data ? findEntry(sessionEntries(sessions.data), session)?.session?.id : undefined;
+      const selected = inSessions && sessions.data ? entrySession(findEntry(sessionEntries(sessions.data), session))?.id : undefined;
       const { open, taken } = nextWaitingShortcut(sessions.data?.sessions ?? [], selected, inSessions);
       if (open) openSession(open.id);
       return taken;
@@ -73,7 +73,7 @@ export function App() {
   );
   return (
     <div className="flex h-screen">
-      <ActivityBar views={VIEWS} active={view} onSelect={setView} badges={{ sessions: waitingCount(sessions.data?.sessions ?? []) }} />
+      <ActivityBar views={VIEWS} active={view} onSelect={setView} badges={{ sessions: attentionCount(sessions.data) }} />
       <div className="flex min-w-0 flex-1 flex-col">
         {error && (
           <div className="bg-destructive/10 flex items-center gap-3 border-b px-4 py-2">

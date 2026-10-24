@@ -138,7 +138,7 @@ class Recording {
   constructor(out: string, size: { cols: number; rows: number }) {
     this.#cast = new AsciicastWriter(join(out, "session.cast"), { width: size.cols, height: size.rows });
     this.#clock = this.#cast.startedAt;
-    this.#session = new CopilotSessionState({ now: () => this.#clock, staleAfterMs: STALE_AFTER_MS });
+    this.#session = new CopilotSessionState({ now: () => this.#clock, staleAfterMs: STALE_AFTER_MS, promptOnStart: false });
     this.#statesFd = openSync(join(out, "states.jsonl"), "w");
   }
 

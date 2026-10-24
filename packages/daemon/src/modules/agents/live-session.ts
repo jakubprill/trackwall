@@ -45,6 +45,8 @@ export interface LiveSessionOptions {
   rows: number;
   /** `hooks.jsonl` sesji, do którego dopisują procesy hooków wtyczki sesji. */
   hooksFile: string;
+  /** Copilot CLI dostał polecenie jako pierwszą wiadomość (`--interactive`), więc po starcie od razu pracuje. */
+  promptOnStart: boolean;
   /** Stan grupy procesów sesji w `procs`; `undefined` przed startem. */
   run: () => RunState | undefined;
 }
@@ -56,7 +58,7 @@ export class LiveSession {
   readonly startedAt = new Date().toISOString();
   readonly #run: () => RunState | undefined;
   readonly #screen: TerminalScreen;
-  readonly #state = new CopilotSessionState({ now: Date.now, staleAfterMs: STALE_AFTER_MS });
+  readonly #state: CopilotSessionState;
   readonly #hooks: HookTail;
   readonly #decoder = new TextDecoder();
   #terminal: SessionPty | undefined;
@@ -70,6 +72,7 @@ export class LiveSession {
     this.repo = o.repo;
     this.task = o.task;
     this.#run = o.run;
+    this.#state = new CopilotSessionState({ now: Date.now, staleAfterMs: STALE_AFTER_MS, promptOnStart: o.promptOnStart });
     this.#screen = new TerminalScreen(o.cols, o.rows);
     this.#hooks = new HookTail(o.hooksFile);
   }

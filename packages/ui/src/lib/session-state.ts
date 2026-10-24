@@ -1,4 +1,4 @@
-import type { Session, TaskStateChange } from "@trackwall/protocol";
+import type { Session, SessionList, TaskStateChange } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 
 /**
@@ -82,4 +82,9 @@ export function nextWaitingShortcut(
 
 export function waitingCount(sessions: readonly Session[]): number {
   return sessions.filter((s) => s.needsAttention).length;
+}
+
+/** Na pasku widoków: sesje, które czekają na Ciebie, i propozycje zadań czekające na decyzję (ADR-39). */
+export function attentionCount(list: SessionList | undefined): number {
+  return list ? waitingCount(list.sessions) + list.proposals.length : 0;
 }

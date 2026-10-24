@@ -4,7 +4,7 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
 import { IS_MAC } from "@/lib/platform";
-import { entryId, type SessionEntry } from "@/lib/session-entries";
+import { entryId, entrySession, type SessionEntry } from "@/lib/session-entries";
 import { type GridPage, gridShape } from "@/lib/session-grid";
 import { sessionShortcutLabel } from "@/lib/session-shortcut";
 import { isLive, sessionStateLabel } from "@/lib/session-state";
@@ -15,7 +15,7 @@ import { TaskLine } from "./TaskLine.tsx";
 /**
  * A page of the Sessions list as a grid of terminals (ADR-48). The selected tile has the accent ring and the keyboard,
  * a session that is waiting for you has the warning frame (also when selected). Clicking a tile or into its terminal
- * selects it; a task without a session has no terminal, so its tile only leads to the full panel. Tiles appear once
+ * selects it; a task without a session and a task proposal (ADR-39) have no terminal, so their tile only leads to the full panel. Tiles appear once
  * the area is measured, so that no terminal reports a size to its session from a layout that is about to change.
  */
 export function SessionGrid({
@@ -81,8 +81,7 @@ function SessionTile({
   onSelect: () => void;
   onOpenAlone: () => void;
 }) {
-  const { session } = entry;
-  const task = entry.kind === "task" ? entry.task : undefined;
+  const session = entrySession(entry);
   const tile = useRef<HTMLDivElement>(null);
   // A selected tile without a terminal takes the keyboard itself, so that keys stop going to the terminal selected before.
   useEffect(() => {
@@ -113,13 +112,7 @@ function SessionTile({
         >
           {sessionShortcutLabel({ kind: "position", position }, IS_MAC) ?? position}
         </span>
-        <span className="min-w-0 truncate text-xs font-medium">{task?.repo ?? session?.repo}</span>
-        <span className="text-muted-foreground shrink-0 text-xs">
-          {session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}
-        </span>
-        <span className="min-w-0 flex-1 truncate" title={task?.prompt ?? session?.windowTitle ?? undefined}>
-          {task ? <TaskLine task={task} /> : <span className="text-muted-foreground text-xs">{session?.windowTitle}</span>}
-        </span>
+        <TileTitle entry={entry} />
         <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={onOpenAlone} aria-label="Open alone">
           <Maximize2 />
         </Button>
@@ -128,9 +121,40 @@ function SessionTile({
         <SessionTerminal conn={conn} session={session.id} live={isLive(session)} focused={selected} />
       ) : (
         <div className="text-muted-foreground flex flex-1 items-center justify-center p-4 text-center text-xs">
-          This task has no session. Open it alone to resume it or to see its changes.
+          {entry.kind === "proposal"
+            ? "This task proposal waits for your decision. Open it alone to read its prompt, then start or reject it."
+            : "This task has no session. Open it alone to resume it or to see its changes."}
         </div>
       )}
     </div>
+  );
+}
+
+/** The tile header after its number: repo, state and what the entry is about (task, proposal or window title). */
+function TileTitle({ entry }: { entry: SessionEntry }) {
+  if (entry.kind === "proposal")
+    return (
+      <>
+        <span className="min-w-0 truncate text-xs font-medium">{entry.proposal.repo}</span>
+        <span className="shrink-0 text-xs">
+          <StatusLabel tone="warning" label="waiting for your decision" />
+        </span>
+        <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs" title={entry.proposal.title}>
+          {entry.proposal.title}
+        </span>
+      </>
+    );
+  const session = entrySession(entry);
+  const task = entry.kind === "task" ? entry.task : undefined;
+  return (
+    <>
+      <span className="min-w-0 truncate text-xs font-medium">{task?.repo ?? session?.repo}</span>
+      <span className="text-muted-foreground shrink-0 text-xs">
+        {session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}
+      </span>
+      <span className="min-w-0 flex-1 truncate" title={task?.prompt ?? session?.windowTitle ?? undefined}>
+        {task ? <TaskLine task={task} /> : <span className="text-muted-foreground text-xs">{session?.windowTitle}</span>}
+      </span>
+    </>
   );
 }

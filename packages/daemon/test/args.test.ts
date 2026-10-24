@@ -24,8 +24,16 @@ describe("argumenty", () => {
   });
 
   test("mcp-stdio jako pierwszy argument uruchamia most z opcjonalnym --home, bez opcji daemona", () => {
-    expect(parseCommandLine(["mcp-stdio"])).toEqual({ command: "mcp-stdio", home: undefined });
-    expect(parseCommandLine(["mcp-stdio", "--home", "/stan"])).toEqual({ command: "mcp-stdio", home: "/stan" });
+    expect(parseCommandLine(["mcp-stdio"])).toEqual({ command: "mcp-stdio", home: undefined, sessionTokenFile: undefined });
+    expect(parseCommandLine(["mcp-stdio", "--home", "/stan"])).toEqual({
+      command: "mcp-stdio",
+      home: "/stan",
+      sessionTokenFile: undefined,
+    });
+    expect(parseCommandLine(["mcp-stdio", "--session-token-file", "/stan/sessions/s1/session-token"])).toEqual({
+      command: "mcp-stdio",
+      sessionTokenFile: "/stan/sessions/s1/session-token",
+    });
     expect(() => parseCommandLine(["mcp-stdio", "--port", "1"])).toThrow();
     expect(parseCommandLine(["--port", "7"])).toMatchObject({ command: "daemon", args: { port: 7 } });
   });

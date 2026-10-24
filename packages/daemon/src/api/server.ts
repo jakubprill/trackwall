@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import type { ApiResult, DaemonInfo, ErrorCode, Health } from "@trackwall/protocol";
 import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
-import { MCP_PATH, type McpEndpoint } from "../mcp/endpoint.ts";
+import { MCP_PATH, type McpEndpoint, SESSION_TOKEN_HEADER } from "../mcp/endpoint.ts";
 import { readBody } from "./body.ts";
 import type { EventHub } from "./event-hub.ts";
 import { eventSocketRoute } from "./event-socket.ts";
@@ -120,7 +120,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, 
   const api = path.startsWith("/api/");
   if ((api || path === MCP_PATH) && !hasValidToken(req, o.token)) return fail(res, "unauthorized", "missing or invalid token");
   if (api) return handleApi(req, res, path, o);
-  if (path === MCP_PATH) return o.mcp.handle(req, res);
+  if (path === MCP_PATH) return handleMcp(req, res, o);
   if (o.uiDir && (req.method === "GET" || req.method === "HEAD")) return serveStatic(o.uiDir, path, res);
   return fail(res, "not_found", `no route ${req.method} ${path}`);
 }
@@ -137,6 +137,15 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
   const post = req.method === "POST" ? postRoutes.get(path) : undefined;
   if (post) return ok(res, await post(o.facade, await readJson(req)));
   return fail(res, "not_found", `no route ${req.method} ${path}`);
+}
+
+/** MCP z tokenem daemona; nagłówek tokenu sesji mówi, która sesja Trackwall woła (ADR-39), a nieznany token to odmowa. */
+function handleMcp(req: IncomingMessage, res: ServerResponse, o: ApiOptions): Promise<void> | void {
+  const token = req.headers[SESSION_TOKEN_HEADER];
+  if (token === undefined) return o.mcp.handle(req, res, null);
+  const caller = typeof token === "string" ? o.facade.agents.callerSession(token) : undefined;
+  if (caller === undefined) return fail(res, "unauthorized", "unknown session token: this Trackwall session has ended");
+  return o.mcp.handle(req, res, caller);
 }
 
 function ok<T>(res: ServerResponse, data: T): void {

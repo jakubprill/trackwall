@@ -73,4 +73,9 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     await f.agents.removeTask(b.task, b.keepBranch, b.discardChanges);
     return null;
   }),
+  route(agentsApi.approveProposal, (f, b) => f.agents.approveProposal(b.proposal, b.prompt)),
+  route(agentsApi.rejectProposal, (f, b) => {
+    f.agents.rejectProposal(b.proposal);
+    return null;
+  }),
 ]);

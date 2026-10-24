@@ -41,7 +41,7 @@ export interface ReplayOptions {
 /** Zmiany stanu w kolejności, w jakiej pojawiły się na żywo; czas liczony od nagłówka nagrania. */
 export function replayCopilotRecording(cast: Asciicast, o: ReplayOptions): TaskStateChange[] {
   let now = eventTimeMs(cast.header, 0);
-  const session = new CopilotSessionState({ now: () => now, staleAfterMs: o.staleAfterMs });
+  const session = new CopilotSessionState({ now: () => now, staleAfterMs: o.staleAfterMs, promptOnStart: false });
   const changes: (TaskStateChange | undefined)[] = [];
   for (const [seconds, code, data] of cast.events) {
     now = eventTimeMs(cast.header, seconds);
