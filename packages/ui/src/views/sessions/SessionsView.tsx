@@ -165,12 +165,12 @@ export function SessionsView({
   );
 }
 
-/** Wcięcie na poziom drzewa; głębiej wiersze już się nie przesuwają, żeby nazwa repo zmieściła się w panelu. */
+/** Indent per tree level; deeper rows do not move further, so the repo name still fits in the panel. */
 const INDENT = ["", "ml-4", "ml-8", "ml-12"] as const;
 
 /**
- * Wiersz listy: pozycja wcięta pod sesją, która ją zaproponowała, z linią wzdłuż dzieci jednej sesji głównej.
- * Sesja albo zadanie, które zleciło pracę, ma znacznik „main” z liczbą pozycji pod sobą.
+ * A list row: an entry indented under the session that proposed it, with a line along the children of one main session.
+ * A session or task that delegated work has a “main” badge with the number of entries under it.
  */
 function SessionListItem({
   row,
@@ -203,7 +203,7 @@ function StartedListItem({
   onSelect,
 }: {
   entry: Exclude<SessionEntry, { kind: "proposal" }>;
-  /** Zadania i propozycje wprost pod tą pozycją. */
+  /** Tasks and proposals directly under this entry. */
   delegated: number;
   position: number;
   active: boolean;

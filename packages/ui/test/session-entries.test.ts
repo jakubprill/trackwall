@@ -40,9 +40,9 @@ function delegated(id: string, createdAt: string, proposer: string): Task {
   return { ...task(id, createdAt), title: "Dodaj test", proposedBy: { session: proposer } };
 }
 
-/** Pozycje z wierszy, w kolejności wyświetlania, bez głębokości. */
+/** The entries of the rows, in display order, without depth. */
 const rowEntries = (list: Parameters<typeof sessionRows>[0]) => sessionRows(list).map((r) => r.entry);
-/** Wiersz jako „rodzaj identyfikator @głębokość”, żeby kształt drzewa było widać w jednej linii. */
+/** A row as “kind id @depth”, so the shape of the tree is visible on one line. */
 const shape = (list: Parameters<typeof sessionRows>[0]) => sessionRows(list).map((r) => `${r.entry.kind} ${entryId(r.entry)} @${r.depth}`);
 
 describe("pozycje widoku Sesje", () => {
@@ -121,7 +121,7 @@ describe("pozycje widoku Sesje", () => {
     expect(attentionCount(undefined)).toBe(0);
   });
 
-  test("zadania i propozycje sesji głównej leżą pod nią, a ona zna ich liczbę", () => {
+  test("tasks and proposals of a main session sit under it, and it knows their count", () => {
     const list = {
       sessions: [session("s2", "2026-10-23T12:00:00Z"), session("s1", "2026-10-23T10:00:00Z")],
       tasks: [delegated("t1", "2026-10-23T11:00:00Z", "s1"), task("t2", "2026-10-23T09:00:00Z")],
@@ -132,7 +132,7 @@ describe("pozycje widoku Sesje", () => {
     expect(sessionRows(list).find((r) => entryId(r.entry) === "s1")?.children).toBe(2);
   });
 
-  test("zadanie zlecone przez sesję innego zadania leży pod tym zadaniem, także gdy to nie jego ostatnia sesja", () => {
+  test("a task delegated by the session of another task sits under that task, also when it is not its latest session", () => {
     const list = {
       sessions: [session("s2", "2026-10-23T12:00:00Z", "t1"), session("s1", "2026-10-23T10:00:00Z", "t1")],
       tasks: [delegated("t2", "2026-10-23T11:00:00Z", "s1"), task("t1", "2026-10-23T09:00:00Z")],
@@ -142,7 +142,7 @@ describe("pozycje widoku Sesje", () => {
     expect(shape(list)).toEqual(["task t1 @0", "task t2 @1"]);
   });
 
-  test("zadanie od sesji, której nie ma już na liście, i propozycja od agenta spoza Trackwall są na górnym poziomie", () => {
+  test("a task from a session no longer listed and a proposal from an agent outside Trackwall are at the top level", () => {
     const list = {
       sessions: [session("s1", "2026-10-23T10:00:00Z")],
       tasks: [delegated("t1", "2026-10-23T11:00:00Z", "zamknieta")],
@@ -152,7 +152,7 @@ describe("pozycje widoku Sesje", () => {
     expect(shape(list)).toEqual(["proposal p1 @0", "task t1 @0", "session s1 @0"]);
   });
 
-  test("zadania, które zlecają się nawzajem, zostają na liście zamiast ją zapętlić", () => {
+  test("tasks that delegate to each other stay on the list instead of looping it", () => {
     const list = {
       sessions: [session("s2", "2026-10-23T12:00:00Z", "t2"), session("s1", "2026-10-23T11:00:00Z", "t1")],
       tasks: [delegated("t2", "2026-10-23T10:00:00Z", "s1"), delegated("t1", "2026-10-23T09:00:00Z", "s2")],
@@ -160,7 +160,7 @@ describe("pozycje widoku Sesje", () => {
       worktreesDir: "/w",
     };
     expect(shape(list)).toEqual(["task t2 @0", "task t1 @1"]);
-    // t1 zlecił t2, ale t2 stoi już wyżej, więc t1 nie ma nikogo pod sobą i nie dostaje znacznika „main”.
+    // t1 delegated t2, but t2 is already above it, so t1 has nothing under it and gets no “main” badge.
     expect(sessionRows(list).map((r) => r.children)).toEqual([1, 0]);
   });
 

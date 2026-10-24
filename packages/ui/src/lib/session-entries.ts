@@ -21,7 +21,7 @@ export type SessionSelection =
   | undefined;
 
 /**
- * Kolejność na jednym poziomie drzewa (`sessionRows`).
+ * Order on one level of the tree (`sessionRows`).
  * Najpierw propozycje zadań, bo czekają na decyzję, od najnowszej; potem od ostatnio uruchomionej: sesja po starcie,
  * zadanie po starcie swojej ostatniej sesji, a bez sesji po utworzeniu. Propozycji, z której jest już zadanie,
  * daemon nie zwraca, więc ten sam identyfikator jest na liście raz.
@@ -36,10 +36,10 @@ function sessionEntries({ sessions, tasks, proposals }: SessionList): SessionEnt
 }
 
 /**
- * Wiersz listy w widoku „Sesje”: pozycja, jej głębokość w drzewie i liczba pozycji wprost pod nią. Zadanie
- * i propozycja leżą pod pozycją z sesją, która je zaproponowała (sesja główna, `proposedBy`), więc praca zlecona
- * przez jedną sesję jest razem z nią. Gdy tej sesji nie ma już na liście (zamknięta albo po restarcie daemona),
- * pozycja jest na górnym poziomie.
+ * A row of the Sessions list: an entry, its depth in the tree and the number of entries directly under it. A task or
+ * proposal sits under the entry with the session that proposed it (the main session, `proposedBy`), so the work one
+ * session delegated stays with it. When that session is no longer listed (closed, or after a daemon restart), the
+ * entry is at the top level.
  */
 export interface SessionRow {
   entry: SessionEntry;
@@ -48,15 +48,15 @@ export interface SessionRow {
 }
 
 /**
- * Drzewo pozycji spłaszczone do wierszy w kolejności wyświetlania: pozycja, a zaraz pod nią jej dzieci, na każdym
- * poziomie w kolejności `sessionEntries`. Cykl jest niemożliwy (sesja istnieje dopiero po swoim zadaniu, a zadanie po
- * propozycji od innej sesji), ale dane przychodzą z daemona, więc pozycja z cyklu trafia na górny poziom, zamiast
- * zapętlić listę albo z niej zniknąć.
+ * The tree of entries flattened into rows in display order: an entry, then its children right below it, on every level
+ * in `sessionEntries` order. A cycle is impossible (a session exists only after its task, and a task only after a
+ * proposal from another session), but the data comes from the daemon, so an entry in a cycle goes to the top level
+ * instead of looping the list or vanishing from it.
  */
 export function sessionRows(list: SessionList): SessionRow[] {
   const entries = sessionEntries(list);
   const ids = new Set(entries.map(entryId));
-  // Pozycja, która trzyma sesję: zadanie dla sesji zadania (także starszej niż ostatnia), inaczej sama sesja.
+  // The entry that holds a session: the task for a task's session (also an older one), otherwise the session itself.
   const holder = new Map(list.sessions.map((s) => [s.id, s.task ?? s.id]));
   const children = new Map<string, SessionEntry[]>();
   const roots: SessionEntry[] = [];
@@ -81,12 +81,12 @@ export function sessionRows(list: SessionList): SessionRow[] {
       place(child, depth + 1);
     }
   };
-  // Po korzeniach jeszcze raz wszystkie pozycje: te z cyklu nie mają korzenia, więc stają na górnym poziomie.
+  // After the roots, all entries once more: entries in a cycle have no root, so they go to the top level.
   for (const entry of [...roots, ...entries]) place(entry, 0);
   return rows;
 }
 
-/** Sesja, która zaproponowała zadanie albo propozycję; `null` dla sesji, zadania z formularza i agenta spoza Trackwall. */
+/** The session that proposed a task or proposal; `null` for a session, a task from the form and an agent outside Trackwall. */
 function entryProposer(entry: SessionEntry): string | null {
   if (entry.kind === "session") return null;
   const proposedBy = entry.kind === "proposal" ? entry.proposal.proposedBy : entry.task.proposedBy;

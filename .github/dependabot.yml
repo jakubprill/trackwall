@@ -1,5 +1,5 @@
-# Aktualizacje zależności raz w tygodniu, zgrupowane per ekosystem, żeby nie zasypać kolejki.
-# Akcje GitHub są przypięte do SHA; Dependabot podbija SHA razem z komentarzem wersji.
+# Dependency updates once a week, grouped per ecosystem, so that they do not flood the queue.
+# GitHub actions are pinned to a SHA; Dependabot bumps the SHA together with the version comment.
 version: 2
 updates:
   - package-ecosystem: github-actions

@@ -6,8 +6,8 @@ import { z } from "zod";
 import type { SessionSelection } from "./session-entries.ts";
 
 /**
- * Zdarzenie powłoki Tauri: użytkownik kliknął w trayu sesję, która czeka (ADR-26), albo propozycję zadania (ADR-39).
- * Nazwa i kształt (`Focus`) są też w `apps/desktop/src-tauri/src/attention.rs`.
+ * Tauri shell event: the user clicked a waiting session (ADR-26) or a task proposal (ADR-39) in the tray.
+ * The name and shape (`Focus`) are also in `apps/desktop/src-tauri/src/attention.rs`.
  */
 const FOCUS_EVENT = "focus-session";
 const Focus = z.discriminatedUnion("kind", [
@@ -15,7 +15,7 @@ const Focus = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("proposal"), id: TaskId }),
 ]);
 
-/** Wywołuje `onFocus` z pozycją widoku „Sessions”, gdy powłoka prosi o pokazanie jej; poza oknem Tauri nic nie robi. */
+/** Calls `onFocus` with a Sessions view entry when the shell asks to show it; does nothing outside the Tauri window. */
 export function useSessionFocus(onFocus: (selection: SessionSelection) => void): void {
   const handler = useRef(onFocus);
   handler.current = onFocus;

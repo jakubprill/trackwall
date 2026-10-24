@@ -50,7 +50,7 @@ export function App() {
     setView("sessions");
     setSession(selection);
   };
-  // Skok z traya (ADR-26, ADR-39): powłoka pokazuje okno i podaje sesję, która czeka, albo propozycję zadania.
+  // Jump from the tray (ADR-26, ADR-39): the shell shows the window and passes a waiting session or a task proposal.
   useSessionFocus(openInSessions);
   return (
     <div className="flex h-screen">

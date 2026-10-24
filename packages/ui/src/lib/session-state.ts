@@ -17,7 +17,7 @@ export const STATE_LABELS = {
   Stale: "not responding",
 } as const;
 
-/** Stan propozycji zadania tam, gdzie ją widać (lista „Sessions”, „Needs you” na pulpicie): czeka na decyzję. */
+/** The status of a task proposal wherever it shows (the Sessions list, “Needs you” on the dashboard): waiting for a decision. */
 export const PROPOSAL_STATUS = { tone: "warning", label: "waiting for your decision" } as const;
 
 /** Proces sesji jeszcze działa (także w trakcie zatrzymywania): pisze w swoim katalogu i trzyma jego pliki. */

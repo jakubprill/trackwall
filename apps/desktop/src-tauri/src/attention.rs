@@ -1,7 +1,7 @@
-//! Sesje Copilot CLI, które czekają na Ciebie (ADR-26), i propozycje zadań, które czekają na decyzję (ADR-39): powłoka
-//! co chwilę pyta daemon o listę sesji i, gdy któraś sesja przestaje pracować i zaczyna czekać albo przychodzi nowa
-//! propozycja, zwraca uwagę użytkownika (miganie na pasku zadań, podskok w Docku), zmienia podpowiedź i menu traya.
-//! Kliknięcie pozycji w menu pokazuje okno z tą sesją albo propozycją.
+//! Copilot CLI sessions that are waiting for you (ADR-26) and task proposals waiting for a decision (ADR-39): the shell
+//! asks the daemon for the session list every few seconds and, when a session stops working and starts waiting or a new
+//! proposal arrives, draws the user's attention (taskbar flash, Dock bounce) and updates the tray tooltip and menu.
+//! Clicking a menu item shows the window with that session or proposal.
 //!
 //! Pytanie idzie z powłoki, a nie z UI: schowane okno WebView może mieć wstrzymane timery, a tray ma działać także
 //! przy zamkniętym oknie. Czy sesja czeka na Ciebie, liczy daemon (`Session.needsAttention`), tak samo dla UI i traya.
@@ -16,9 +16,9 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::{AppHandle, Emitter, Manager, UserAttentionType};
 
 const POLL: Duration = Duration::from_secs(2);
-/// Zdarzenie dla UI z sesją albo propozycją do pokazania (`Focus`; ta sama nazwa i kształt w `use-session-focus.ts`).
+/// Event for the UI with the session or proposal to show (`Focus`; same name and shape in `use-session-focus.ts`).
 const FOCUS_EVENT: &str = "focus-session";
-/// Identyfikatory pozycji menu traya; pozycja sesji albo propozycji to prefiks i jej identyfikator.
+/// Tray menu item ids; a session or proposal item is a prefix plus its id.
 pub const MENU_SHOW: &str = "show";
 pub const MENU_QUIT: &str = "quit";
 const MENU_SESSION_PREFIX: &str = "session:";
@@ -31,7 +31,7 @@ pub struct Waiting {
     pub repo: String,
 }
 
-/// Propozycja zadania, która czeka na decyzję (`TaskProposal` w protocol, tylko pola dla traya).
+/// A task proposal waiting for a decision (`TaskProposal` in protocol, only the fields the tray needs).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Proposal {
     pub id: String,
@@ -42,14 +42,14 @@ pub struct Proposal {
 /// Stan sesji z ostatniego pytania: identyfikator i stan z `TaskState` (albo `None` bez sygnału).
 type States = HashMap<String, Option<String>>;
 
-/// Odpowiedź daemona przełożona na to, co pokazuje tray.
+/// The daemon's reply translated into what the tray shows.
 #[derive(Debug)]
 pub struct Snapshot {
     states: States,
     waiting: Vec<Waiting>,
     proposals: Vec<Proposal>,
-    /// Identyfikatory propozycji i zadań: zatwierdzana propozycja jest już zadaniem, a po nieudanym starcie wraca
-    /// jako propozycja z tym samym identyfikatorem, która nie jest nowa.
+    /// Ids of proposals and tasks: a proposal being approved is already a task, and after a failed start it comes back
+    /// as a proposal with the same id, which is not new.
     known: HashSet<String>,
 }
 
@@ -91,7 +91,7 @@ struct StateChange {
     state: String,
 }
 
-/// Sesje i propozycje z odpowiedzi daemona: stan każdej działającej sesji, te, które czekają na Ciebie, i propozycje.
+/// Sessions and proposals from the daemon's reply: the state of every running session, the waiting ones, and proposals.
 pub fn parse_sessions(body: &str) -> Option<Snapshot> {
     let reply: Reply = serde_json::from_str(body).ok()?;
     let mut states = States::new();
@@ -112,8 +112,8 @@ pub fn newly_waiting(previous: &States, waiting: &[Waiting]) -> Vec<Waiting> {
     waiting.iter().filter(|w| matches!(previous.get(&w.id), Some(Some(state)) if state == "Working" || state == "Stale")).cloned().collect()
 }
 
-/// Propozycje, których przy poprzednim pytaniu nie było ani jako propozycji, ani jako zadania. Przy pierwszym
-/// pytaniu od startu powłoki (`None`) żadna nie jest nowa, tak jak sesja, która czekała już przed startem.
+/// Proposals that were neither a proposal nor a task at the previous poll. At the first poll after the shell starts
+/// (`None`) none is new, just like a session that was already waiting before the start.
 pub fn new_proposals<'a>(previous: Option<&Snapshot>, proposals: &'a [Proposal]) -> Vec<&'a Proposal> {
     let Some(previous) = previous else { return Vec::new() };
     proposals.iter().filter(|p| !previous.known.contains(&p.id)).collect()
@@ -135,12 +135,12 @@ pub fn tooltip(waiting: &[Waiting], proposals: &[Proposal]) -> String {
     }
 }
 
-/// Tekst pozycji menu: `&` w menu oznacza klawisz skrótu, więc tytuł od agenta dostaje go podwojonego.
+/// Menu item text: `&` marks a mnemonic in menus, so it is doubled in a title that comes from an agent.
 fn menu_text(text: &str) -> String {
     text.replace('&', "&&")
 }
 
-/// Menu traya: propozycje i sesje czekające na górze, potem stałe pozycje.
+/// Tray menu: proposals and waiting sessions at the top, then the fixed items.
 pub fn build_menu(app: &AppHandle, waiting: &[Waiting], proposals: &[Proposal]) -> tauri::Result<Menu<tauri::Wry>> {
     let menu = Menu::new(app)?;
     for p in proposals {
@@ -159,7 +159,7 @@ pub fn build_menu(app: &AppHandle, waiting: &[Waiting], proposals: &[Proposal]) 
     Ok(menu)
 }
 
-/// Co pokazać po kliknięciu pozycji menu traya; dla UI `{"kind":"session"|"proposal","id":...}`.
+/// What to show after a tray menu item is clicked; for the UI `{"kind":"session"|"proposal","id":...}`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", content = "id", rename_all = "lowercase")]
 pub enum Focus<'a> {
@@ -167,7 +167,7 @@ pub enum Focus<'a> {
     Proposal(&'a str),
 }
 
-/// Sesja albo propozycja z pozycji menu traya; `None` dla stałych pozycji.
+/// The session or proposal of a tray menu item; `None` for the fixed items.
 pub fn focus_from_menu(id: &str) -> Option<Focus<'_>> {
     if let Some(session) = id.strip_prefix(MENU_SESSION_PREFIX) {
         return Some(Focus::Session(session));
@@ -175,7 +175,7 @@ pub fn focus_from_menu(id: &str) -> Option<Focus<'_>> {
     id.strip_prefix(MENU_PROPOSAL_PREFIX).map(Focus::Proposal)
 }
 
-/// Pokazuje okno i prosi UI o przełączenie na sesję albo propozycję.
+/// Shows the window and asks the UI to switch to the session or proposal.
 pub fn focus(app: &AppHandle, target: Focus<'_>, show: fn(&AppHandle)) {
     show(app);
     let _ = app.emit_to("main", FOCUS_EVENT, target);
@@ -250,7 +250,7 @@ mod tests {
             session("c", "exited", Some("Input")),
             session("d", "running", None),
         ];
-        let now = parse_sessions(&body(&list.join(","), &proposal_json("p"))).expect("poprawna odpowiedź");
+        let now = parse_sessions(&body(&list.join(","), &proposal_json("p"))).expect("a valid reply");
         assert_eq!(now.waiting, vec![waiting("b")]);
         assert_eq!(now.proposals, vec![proposal("p")]);
         assert_eq!(now.states.len(), 3);
@@ -277,7 +277,7 @@ mod tests {
 
     #[test]
     fn a_proposal_back_after_a_failed_start_is_not_new() {
-        // W trakcie zatwierdzania propozycja jest już zadaniem; po nieudanym starcie wraca jako propozycja.
+        // While being approved the proposal is already a task; after a failed start it comes back as a proposal.
         let approving = parse_sessions(&body_with_tasks("", r#"{"id":"p"}"#, "")).unwrap();
         let back = parse_sessions(&body("", &proposal_json("p"))).unwrap();
         assert_eq!(new_proposals(Some(&approving), &back.proposals), Vec::<&Proposal>::new());

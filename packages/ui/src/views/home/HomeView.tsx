@@ -43,7 +43,7 @@ export function HomeView({
   /** Działające taski mise ze zdarzeń; `undefined` przez chwilę po zmianie połączenia, do tego czasu są odpytywane. */
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
   sessions: RemoteHandle<SessionList>;
-  /** Przejście do widoku „Sessions” z sesją albo propozycją zadania. */
+  /** Go to the Sessions view with a session or a task proposal. */
   onOpenInSessions: (selection: SessionSelection) => void;
   onOpenRepo: (id: string) => void;
   onOpenDaemon: () => void;

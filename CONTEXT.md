@@ -228,7 +228,7 @@ Zadanie, które sesja albo agent spoza Trackwall zgłosił przez MCP, a które c
 _Unikaj_: zlecenie, prośba, wniosek
 
 **Sesja główna** (`proposedBy` zadania i propozycji; po angielsku *main session*):
-Sesja albo agent nadrzędny, który rozmawia z użytkownikiem i zleca pracę innym agentom propozycjami zadań, a potem czeka na ich sesje (`wait_for_session`) i czyta podsumowania, jak koordynator z wątkami w Claude (ADR-39). To rola, nie osobny rodzaj sesji: dziś to każda sesja Trackwall albo agent spoza Trackwall (`proposedBy.session: null`). W widoku Sessions jej zadania i propozycje leżą pod nią, a ona ma znacznik „main” z ich liczbą.
+Sesja albo agent nadrzędny, który rozmawia z użytkownikiem i zleca pracę innym agentom propozycjami zadań, a potem czeka na ich sesje (`wait_for_session`) i czyta podsumowania, jak koordynator z wątkami w Claude (ADR-39). To rola, nie osobny rodzaj sesji: dziś to każda sesja Trackwall albo agent spoza Trackwall (`proposedBy.session: null`). In the Sessions view its tasks and proposals sit indented under it, and it carries a “main” badge with their count.
 _Unikaj_: orkiestrator, planner (ADR-9: rozbijanie celów robi człowiek)
 
 **Task mise** (po angielsku *mise task*):
@@ -339,7 +339,7 @@ Scena 3D pulpitu na Pawn. Nie zna API daemona: dostaje kolejne migawki `HomeMode
 Pierwszy ekran, widok „Home” (`HomeView`): stan daemona, sesje (zwłaszcza czekające na Ciebie), repo i połączenia między nimi, w układzie „Orbit” (`orbitLayout`).
 
 **Kolejka „Needs you”** (`NeedsYouPanel`):
-Lewy panel pulpitu: sesje, które czekają na Ciebie albo mają błąd, potem propozycje zadań, które czekają na decyzję (ADR-39), potem repo, które nie są czyste. Sesje i repo mają też podpis na scenie; propozycji na scenie nie ma, a klik otwiera je w widoku Sessions.
+Left panel of the dashboard: sessions that are waiting for you or have an error, then task proposals waiting for a decision (ADR-39), then repos that are not clean. Sessions and repos also have a label on the scene; proposals are not on the scene, and a click opens them in the Sessions view.
 
 **Migawka pulpitu** (`HomeModel`):
 To, co pulpit pokazuje, policzone przez UI z odpowiedzi daemona i podane scenie w całości przy każdej zmianie.

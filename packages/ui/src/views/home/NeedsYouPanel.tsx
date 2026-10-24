@@ -9,10 +9,10 @@ import { PROPOSAL_STATUS, sessionStateLabel } from "@/lib/session-state";
 import { cn } from "@/lib/utils";
 
 /**
- * Kolejka po lewej stronie pulpitu: najpierw sesje, które czekają na Ciebie albo skończyły się błędem, potem propozycje
- * zadań (ADR-39), potem repo, które nie są czyste. Sesje i repo to te same obiekty co etykiety na scenie, więc pulpit
- * da się obsłużyć także bez WebGL. Propozycji nie ma na scenie, a decyzja (z poprawką polecenia) zapada w widoku
- * „Sessions”, więc klik w propozycję od razu ją tam otwiera.
+ * The queue on the left of the dashboard: first sessions that are waiting for you or ended with an error, then task
+ * proposals (ADR-39), then repos that are not clean. Sessions and repos are the same objects as the labels on the scene,
+ * so the dashboard also works without WebGL. Proposals are not on the scene, and the decision (with an edited prompt)
+ * is made in the Sessions view, so a click on a proposal opens it there right away.
  */
 export function NeedsYouPanel({
   model,
@@ -106,7 +106,7 @@ function Row({
   );
 }
 
-/** Pozycja kolejki: tytuł i stan w jednej linii pod nim. */
+/** A queue item: the title, with the status on one line below it. */
 function QueueItem({
   title,
   active,
