@@ -20,7 +20,7 @@ import { CODE_SEARCH_LINE_MAX_CHARS, CODE_SEARCH_MAX_MATCHES, CodeQuery, SearchC
 import { FindEndpointResult, MAX_FOUND_ENDPOINTS, MAX_SUBGRAPH_DEPTH, Subgraph, WhoCallsResult } from "./graph.ts";
 import { HttpMethod } from "./http.ts";
 import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErrors, LogTail } from "./logs.ts";
-import { MiseTaskName, MiseTasks } from "./mise.ts";
+import { MiseTaskName, MiseTasks, RunningMiseTask } from "./mise.ts";
 import { RunState } from "./procs.ts";
 import { SyncRepo } from "./sync.ts";
 import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
@@ -29,8 +29,9 @@ import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
  * Kontrakt narzędzi MCP daemona (§5.3, ADR-24): nazwa, opis dla agenta, wejście i wynik każdego narzędzia w jednym
  * obiekcie `McpTool`, tak jak `Endpoint` dla API. Daemon ogłasza z nich `tools/list` i sprawdza nimi argumenty oraz
  * `structuredContent`, a testy, UI i klienty biorą z nich nazwy i parsują odpowiedź. Narzędzia czytają, a te
- * z `readOnly: false` (ADR-39) tylko zgłaszają propozycję albo podsumowanie zadania: niczego nie uruchamiają, bo zadanie
- * startuje dopiero po zatwierdzeniu w UI. Nazwy narzędzi, pól i opisy po angielsku (ADR-32).
+ * z `readOnly: false` zgłaszają propozycję albo podsumowanie zadania (ADR-39; zadanie startuje dopiero po zatwierdzeniu
+ * w UI) albo uruchamiają i zatrzymują taski mise z zaufanej konfiguracji repo (ADR-41). Nazwy narzędzi, pól i opisy
+ * po angielsku (ADR-32).
  */
 
 /** Nazwa serwera MCP w `initialize` i w konfiguracji Copilot CLI (`copilot mcp add trackwall …`). */
@@ -156,15 +157,43 @@ export type WaitForSessionResult = z.infer<typeof WaitForSessionResult>;
 /** Najdłuższe czekanie w jednym wywołaniu: poniżej minuty, żeby klient MCP nie przerwał wywołania swoim limitem czasu. */
 export const WAIT_MAX_SECONDS = 55;
 
-export interface McpTool<Args extends z.ZodObject = z.ZodObject, Result extends z.ZodObject = z.ZodObject> {
+/** How long one waiting call waits (`wait_for_session`, `wait_for_mise_task`). */
+const WaitTimeoutArg = z
+  .number()
+  .int()
+  .min(1)
+  .max(WAIT_MAX_SECONDS)
+  .default(30)
+  .describe(`how long to wait at most, up to ${WAIT_MAX_SECONDS} s, default 30`);
+
+/** A mise task run after `run_mise_task`, `stop_mise_task` and `wait_for_mise_task` (ADR-41). */
+export const MiseTaskRunResult = z.object({ run: RunState });
+export type MiseTaskRunResult = z.infer<typeof MiseTaskRunResult>;
+
+export const ListRunningMiseTasksResult = z.object({
+  /** mise tasks started in this Trackwall run (from the UI or over MCP) whose process group is still alive. */
+  miseTasks: z.array(RunningMiseTask),
+});
+export type ListRunningMiseTasksResult = z.infer<typeof ListRunningMiseTasksResult>;
+
+interface McpToolBase<Args extends z.ZodObject, Result extends z.ZodObject> {
   name: string;
   /** Opis dla modelu agenta: co zwraca i kiedy go użyć. */
   description: string;
-  /** Narzędzie tylko czyta (`readOnlyHint`); `false` dla tych, które zapisują propozycję albo podsumowanie (ADR-39). */
-  readOnly: boolean;
   args: Args;
   result: Result;
 }
+
+/**
+ * How a tool affects state; the daemon builds the MCP annotations from it. `readOnly` is `readOnlyHint`, and a tool
+ * that changes state says explicitly whether it can destroy something outside Trackwall (`destructiveHint`): writing
+ * text for a human cannot (ADR-39), running repo code or killing a process the user may need (a dev server, a
+ * migration) can (ADR-41).
+ */
+type McpToolEffect = { readOnly: true } | { readOnly: false; destructive: boolean };
+
+export type McpTool<Args extends z.ZodObject = z.ZodObject, Result extends z.ZodObject = z.ZodObject> = McpToolBase<Args, Result> &
+  McpToolEffect;
 
 const LIST_REPOS = "list_repos";
 const GET_REPO = "get_repo";
@@ -173,8 +202,14 @@ const GET_SESSION = "get_session";
 const PROPOSE_TASK = "propose_task";
 const REPORT_RESULT = "report_result";
 const WAIT_FOR_SESSION = "wait_for_session";
+const RUN_MISE_TASK = "run_mise_task";
+const WAIT_FOR_MISE_TASK = "wait_for_mise_task";
+const TAIL = "tail";
 const RepoArg = RepoId.describe(`repo id from ${LIST_REPOS} (the id field)`);
 const RepoTagsArg = z.array(TagName).max(20);
+const MiseTaskArg = MiseTaskName.describe(`mise task name from ${GET_REPO} (the miseTasks field)`);
+/** Arguments of the tools that act on one mise task of a repo. */
+const MiseTaskArgs = z.object({ repo: RepoArg, miseTask: MiseTaskArg }).strict();
 
 export const mcpTools = {
   listRepos: {
@@ -219,7 +254,7 @@ export const mcpTools = {
     result: RepoCardResult,
   },
   tail: {
-    name: "tail",
+    name: TAIL,
     readOnly: true,
     description:
       "Log of a repo's mise task (stdout and stderr, oldest first): records with a seq number, run (runId), stream, " +
@@ -230,7 +265,7 @@ export const mcpTools = {
     args: z
       .object({
         repo: RepoArg,
-        miseTask: MiseTaskName.describe(`mise task name from ${GET_REPO} (the miseTasks field)`),
+        miseTask: MiseTaskArg,
         sinceSeq: z.number().int().nonnegative().optional().describe("nextSeq from the previous response"),
         limit: z.number().int().min(1).max(LOG_TAIL_MAX).describe(`maximum number of records (up to ${LOG_TAIL_MAX})`),
       })
@@ -376,6 +411,7 @@ export const mcpTools = {
   proposeTask: {
     name: PROPOSE_TASK,
     readOnly: false,
+    destructive: false,
     description:
       "Propose a task for another agent: Trackwall shows it to the user in the Sessions view, and nothing runs until the " +
       "user approves it (the user may edit the prompt first, or reject it). An approved proposal becomes a task with the " +
@@ -397,6 +433,7 @@ export const mcpTools = {
   reportResult: {
     name: REPORT_RESULT,
     readOnly: false,
+    destructive: false,
     description:
       "Report the result of your task: what you did, what is left and what the user or the session that proposed the " +
       `task should check. Only for a session that runs a task in Trackwall; the summary is saved to your own task (shown in ${GET_SESSION}, ` +
@@ -419,16 +456,58 @@ export const mcpTools = {
       .object({
         session: SessionId.optional().describe(`session id from ${LIST_SESSIONS}`),
         task: TaskId.optional().describe(`task or proposal id from ${PROPOSE_TASK} or ${LIST_SESSIONS}`),
-        timeoutSeconds: z
-          .number()
-          .int()
-          .min(1)
-          .max(WAIT_MAX_SECONDS)
-          .default(30)
-          .describe(`how long to wait at most, up to ${WAIT_MAX_SECONDS} s, default 30`),
+        timeoutSeconds: WaitTimeoutArg,
       })
       .strict()
       .refine((args) => (args.session === undefined) !== (args.task === undefined), "pass exactly one of session and task"),
     result: WaitForSessionResult,
+  },
+  runMiseTask: {
+    name: RUN_MISE_TASK,
+    readOnly: false,
+    destructive: true,
+    description:
+      "Run a repo's mise task (mise run <task>) in the repo root in the user's projects folder, not in a task worktree, " +
+      `the same as the Run button in Trackwall. Only tasks listed by ${GET_REPO} (miseTasks) can run; a task that is ` +
+      "already running is not started again, and the result is its current run. Returns run: running with runId. Then " +
+      `call ${WAIT_FOR_MISE_TASK} to learn the exit code and ${TAIL} for the output (records of this run have its runId). ` +
+      "A mise config the user has not trusted gives mise_unavailable: only the user can trust it, in Trackwall; ask them. " +
+      "A session in Trackwall can run only mise tasks of its own repo. Long-running tasks (dev servers) keep running " +
+      "until stopped; stop them when you no longer need them.",
+    args: MiseTaskArgs,
+    result: MiseTaskRunResult,
+  },
+  stopMiseTask: {
+    name: "stop_mise_task",
+    readOnly: false,
+    destructive: true,
+    description:
+      "Stop a running mise task of a repo, also one the user started in Trackwall: a gentle stop, then the whole " +
+      "process group is killed. Returns after Trackwall has confirmed that no process of the group is alive " +
+      "(run: exited with stoppedByUser: true); stop_unconfirmed when some process survived. A task that has already " +
+      "ended returns its run; not_found when it has not been run since Trackwall started. A session in Trackwall can " +
+      "stop only mise tasks of its own repo.",
+    args: MiseTaskArgs,
+    result: MiseTaskRunResult,
+  },
+  waitForMiseTask: {
+    name: WAIT_FOR_MISE_TASK,
+    readOnly: true,
+    description:
+      `Wait until a repo's mise task started with ${RUN_MISE_TASK} (or in Trackwall) ends: returns run: exited with ` +
+      "the exit code (exitCode, signal, stoppedByUser) as soon as the process group has ended, or after timeoutSeconds " +
+      "with run: running; then call it again. A task that has already ended returns its last run at once; not_found " +
+      `when it has not been run since Trackwall started. ${TAIL} gives the output.`,
+    args: MiseTaskArgs.extend({ timeoutSeconds: WaitTimeoutArg }),
+    result: MiseTaskRunResult,
+  },
+  listRunningMiseTasks: {
+    name: "list_running_mise_tasks",
+    readOnly: true,
+    description:
+      "mise tasks running in all repos (also those being stopped) that Trackwall started since it started, from the " +
+      `UI or with ${RUN_MISE_TASK}: repo, mise task name and run (runId, start time, pid). Cheap: it does not ask mise.`,
+    args: z.object({}).strict(),
+    result: ListRunningMiseTasksResult,
   },
 } satisfies Record<string, McpTool>;
