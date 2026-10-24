@@ -26,6 +26,7 @@ async function workspaceWithGitLab(config: FakeHostingConfig = {}) {
     vcs: new Vcs(),
     hosting: fakeHosting(config).hosting,
     openEditor: () => {},
+      openLink: () => {},
   });
   await workspace.setProjectsDir(projects);
   workspace.setRepoHosts([GITLAB]);

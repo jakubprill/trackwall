@@ -106,6 +106,7 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
       hookCommand: () => ({ exec: "nieuzywane", args: [] }),
       mcpStdioCommand: ["nieuzywane"],
       openEditor: () => {},
+      openLink: () => {},
       log: () => {},
     });
     await expect(missing.start("sklep")).rejects.toMatchObject({ code: "agent_unavailable" });
