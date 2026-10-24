@@ -1,6 +1,6 @@
 # Trackwall glossary
 
-Terms that are easy to confuse. Code, UI, MCP tools and documentation use these words and only these: in prose, the UI, daemon messages and MCP tool descriptions the word in bold, in code the identifier given with the entry. Details are in `docs/architecture.md`; here is only what you need to know to name a thing correctly. A new term is added in the same PR in which it appears.
+Terms that are easy to confuse. Code, UI, MCP tools and documentation use these words and only these: in prose, the UI, daemon messages and MCP tool descriptions the word in bold (or the product word the entry names, ADR-32), in code the identifier given with the entry. Details are in `docs/architecture.md`; here is only what you need to know to name a thing correctly. A new term is added in the same PR in which it appears.
 
 ## Application
 
@@ -24,9 +24,9 @@ The set of daemon module interfaces passed to the transports (HTTP, MCP, events)
 
 **Module**:
 A separate part of the daemon from §4 of the architecture (`procs`, `logs`, `workspace`…), with an explicit interface and a list of dependencies. §4 calls its interface a "service class"; in code do not give it the `Service` suffix, because that word belongs to a service from the workspace.
-_Avoid_: service (that is a workspace entity, see below), package
+_Avoid_: service (that is a workspace entity, see below), pnpm package
 
-**Package** (pnpm):
+**pnpm package**:
 A pnpm package from `pnpm-workspace.yaml` (`@trackwall/daemon`, `@trackwall/protocol`, `@trackwall/ui`, `@trackwall/desktop`).
 _Avoid_: workspace (that is a separate term, see below)
 
@@ -40,7 +40,7 @@ The secret from `~/.trackwall/daemon.json` with which the UI, `ws`, the shell an
 The part of the daemon through which agents read its state with MCP tools; the same port and token as the API (§5.3, ADR-24).
 
 **MCP tool** (`McpTool`, the `mcpTools` list in protocol, for example `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`, `search_code`, `list_sessions`):
-One call of the MCP server with a name, input and result described by a schema from `packages/protocol/src/mcp.ts`; a mapping to the facade, without domain logic of its own.
+One call of the MCP server with an English name, input and result described by a schema from `packages/protocol/src/mcp.ts`; a mapping to the facade, without domain logic of its own.
 _Avoid_: command, action (those are API and CLI terms)
 
 **Stdio bridge** (`trackwall-daemon mcp-stdio`, `mcpStdioCommand`):
@@ -88,7 +88,7 @@ _Avoid_: bulk operation, workflow
 
 **Repo status** (`RepoStatus`):
 The branch, the last commit, the number of changes in the working directory (of which, separately, new untracked files, `untracked`) and ahead/behind against the tracking branch, read from git on every request (`ok`), or `unavailable` with a message when git does not read it (a repo whose directory disappeared drops off the list). It is never stored.
-_Avoid_: state (that is a session's or service's), sync (that is a separate action)
+_Avoid_: state (that is a task state or a service state), sync (that is a separate action)
 
 **Changes** (working directory changes, `WorkingTreeChanges`, the `changes` action; the "Changes" tab in the UI):
 The files and diff of the working directory (with new files, without ignored ones) against a commit: a repo against HEAD in the repo details (ADR-34), a task's worktree against the base commit in the task changes (`TaskChanges`, ADR-31). Read-only.
