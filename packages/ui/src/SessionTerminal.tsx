@@ -4,8 +4,9 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { useEffect, useRef, useState } from "react";
 import type { Connection } from "@/lib/connection";
+import { oncePerFrame } from "@/lib/once-per-frame";
 import { ptySocket } from "@/lib/pty-socket";
-import { terminalResizer } from "@/lib/terminal-resizer";
+import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { terminalTheme } from "@/lib/terminal-theme";
 
 const RECONNECT_MS = 1000;
@@ -24,14 +25,7 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
     const element = host.current;
     const container = frame.current;
     if (!element || !container) return;
-    const terminal = new Terminal({
-      theme: terminalTheme(document.documentElement),
-      fontFamily: getComputedStyle(element).fontFamily,
-      fontSize: 13,
-      cursorBlink: true,
-      scrollback: 5000,
-      allowProposedApi: false,
-    });
+    const terminal = new Terminal(sessionTerminalOptions(terminalTheme(document.documentElement), getComputedStyle(element).fontFamily));
     const fit = new FitAddon();
     terminal.loadAddon(fit);
     terminal.open(element);
@@ -74,18 +68,14 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
     connect();
 
     const input = terminal.onData((data) => send({ type: "input", data }));
-    const resizer = terminalResizer({
-      initial: { cols: terminal.cols, rows: terminal.rows },
-      measure: () => fit.proposeDimensions(),
-      apply: ({ cols, rows }) => {
-        terminal.resize(cols, rows);
-        sendSize();
-      },
-      schedule: (callback) => requestAnimationFrame(callback),
-      cancel: (handle) => cancelAnimationFrame(handle),
+    const resizer = oncePerFrame(() => {
+      const { cols, rows } = terminal;
+      fit.fit();
+      if (terminal.cols !== cols || terminal.rows !== rows) sendSize();
     });
     // Obserwowana jest ramka, której rozmiar wynika tylko z układu strony; terminal leży w niej absolutnie, więc jego
-    // wymiary nie zmieniają ramki ani nie wywołują pasków przewijania strony.
+    // wymiary nie zmieniają ramki ani nie wywołują pasków przewijania strony. Odstęp od brzegu to `inset`, nie
+    // `padding` kontenera: FitAddon liczy miejsce z rozmiaru kontenera i nie odejmuje jego paddingu.
     const resize = new ResizeObserver(() => resizer.request());
     resize.observe(container);
 
@@ -109,7 +99,7 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
         </p>
       )}
       <div ref={frame} className="bg-background relative min-h-0 flex-1 overflow-hidden">
-        <div ref={host} className="absolute inset-0 p-2 font-mono" />
+        <div ref={host} className="absolute inset-2 font-mono" />
       </div>
     </div>
   );
