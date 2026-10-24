@@ -86,7 +86,12 @@ async function listDir(dir: string): Promise<Dirent[]> {
 async function isRepoDir(parent: string, entry: Dirent): Promise<boolean> {
   const dir = join(parent, entry.name);
   const isDir = entry.isDirectory() || (entry.isSymbolicLink() && (await stat(dir).catch(() => undefined))?.isDirectory() === true);
-  return isDir && (await stat(join(dir, ".git")).catch(() => undefined)) !== undefined;
+  return isDir && (await hasGit(dir));
+}
+
+/** A `.git` directory or file (as in a worktree) makes a directory a repo. */
+export async function hasGit(dir: string): Promise<boolean> {
+  return (await stat(join(dir, ".git")).catch(() => undefined)) !== undefined;
 }
 
 /** Bez `localeCompare`: porządek nie może zależeć od danych ICU w Bun i Node. */
@@ -96,6 +101,6 @@ function byName(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-function errorCode(err: unknown): string {
+export function errorCode(err: unknown): string {
   return (err as NodeJS.ErrnoException).code ?? String(err);
 }

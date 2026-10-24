@@ -2,6 +2,7 @@ import { dirname, join } from "node:path";
 import {
   type CloneJob,
   type Commit,
+  type DroppedFolder,
   type FileContent,
   type GraphConfig,
   type HostedRepo,
@@ -23,10 +24,11 @@ import {
   type WorkingTreeChanges,
   type WorkspaceSettings,
 } from "@trackwall/protocol";
-import { DomainError, messageOf } from "../../infra/errors.ts";
+import { configOrProblem, DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
 import { CloneJobs } from "./clone-jobs.ts";
 import { type CodeSearchQuery, type CodeSearchVcs, searchCode } from "./code-search.ts";
+import { describeDroppedFolder } from "./dropped-folder.ts";
 import { dirKey, findRepos, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
@@ -103,6 +105,16 @@ export class Workspace {
   async setProjectsDir(path: string): Promise<WorkspaceSettings> {
     this.deps.file.setProjectsDir(await resolveProjectsDir(path));
     return this.settings();
+  }
+
+  /**
+   * What a folder dropped on the window is (ADR-51). A bad `projectsDir` or a missing projects folder does not get in
+   * the way: dropping a folder is one of the ways to fix them.
+   */
+  async droppedFolder(path: string): Promise<DroppedFolder> {
+    const projectsDir = configOrProblem(() => this.deps.file.projectsDir(), null).value;
+    const listed = projectsDir === null ? [] : await findRepos(projectsDir).catch(unlessProjectsDirUnavailable);
+    return describeDroppedFolder(path, projectsDir, listed);
   }
 
   repoHosts(): RepoHost[] {
@@ -305,6 +317,12 @@ export class Workspace {
       throw new DomainError("repo_unavailable", `${entry.id}: ${messageOf(err)}`);
     }
   }
+}
+
+/** A projects folder that is gone has no listed repos; any other error goes on. */
+function unlessProjectsDirUnavailable(err: unknown): RepoEntry[] {
+  if (err instanceof DomainError && err.code === "projects_dir_unavailable") return [];
+  throw err;
 }
 
 function unknownRepo(id: string): DomainError {

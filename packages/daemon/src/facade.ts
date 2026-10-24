@@ -34,6 +34,8 @@ export interface Facade {
    * Nie należy do żadnego modułu, bo nie dotyczy repo ani stanu daemona.
    */
   openLink: (url: string) => void;
+  /** Opens a folder in Explorer, Finder or the Linux file manager (ADR-51); the route gives it the path of a listed repo. */
+  openFolder: (dir: string) => void;
 }
 
 export { runCopilotHook } from "./modules/agents/copilot-hook-command.ts";
@@ -49,6 +51,7 @@ export interface FacadeOptions {
   /** Katalog stanu daemona; tam leżą `workspace.yaml` (ADR-13), `runtime.json` (§4.1) `logs/` (§4.2) i karty repo (`cards/`, ADR-25). */
   home: string;
   openUrl: (url: string) => void;
+  openFolder: (dir: string) => void;
   /** Program `mise` z argumentami przed komendą (`["mise"]` w daemonie). */
   miseCommand: readonly string[];
   /** Program Copilot CLI z argumentami przed argumentami sesji (`["copilot"]` w daemonie, atrapa w testach). */
@@ -97,5 +100,5 @@ export function createFacade(o: FacadeOptions): Facade {
     log: o.log,
   });
   const graph = new Graph({ cards, workspace });
-  return { workspace, cards, graph, mise, procs, logs, batch, agents, openLink: o.openUrl };
+  return { workspace, cards, graph, mise, procs, logs, batch, agents, openLink: o.openUrl, openFolder: o.openFolder };
 }

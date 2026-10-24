@@ -2,6 +2,7 @@ import { agentsApi } from "@trackwall/protocol";
 import { Activity, FolderGit2, Network, Orbit, Settings, SquareTerminal } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
+import { FolderDrop } from "@/components/FolderDrop";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
@@ -14,6 +15,7 @@ import { sessionShortcut } from "@/lib/session-shortcut";
 import { attentionCount, nextWaitingShortcut } from "@/lib/session-state";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
+import { useFileDrop } from "@/lib/use-file-drop";
 import { useRemote } from "@/lib/use-remote";
 import { useSessionFocus } from "@/lib/use-session-focus";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
@@ -47,6 +49,19 @@ export function App() {
   const setView = useCallback((next: View, openRepo?: string) => setNav({ view: next, repo: openRepo }), []);
   const [session, setSession] = useState<SessionSelection>();
   const [sessionLayout, setSessionLayout] = useState<SessionLayout>("1");
+  // A folder dropped outside a session (ADR-51); `seq` mounts a new bar for every drop, also of the same folder.
+  const [dropped, setDropped] = useState<{ paths: readonly string[]; seq: number }>();
+  const dragging = useFileDrop((paths) => setDropped((last) => ({ paths, seq: (last?.seq ?? 0) + 1 })));
+  // Bumped when a drop opens Repos, so that the list is read again even when Repos is already open.
+  const [reposVisit, setReposVisit] = useState(0);
+  const openReposFromDrop = useCallback(
+    (openRepo?: string) => {
+      setDropped(undefined);
+      setView("repos", openRepo);
+      setReposVisit((n) => n + 1);
+    },
+    [setView],
+  );
   const { conn, epoch, error, retry } = useConnection();
   const events = useDaemonEvents(conn);
   const sessions = useSessions(conn, events, view === "sessions" || view === "home");
@@ -91,6 +106,21 @@ export function App() {
             </Button>
           </div>
         )}
+        {conn && dropped && (
+          <FolderDrop
+            key={dropped.seq}
+            conn={conn}
+            paths={dropped.paths}
+            onOpenRepos={openReposFromDrop}
+            onDismiss={() => setDropped(undefined)}
+          />
+        )}
+        {dragging && (
+          // Over the page, not in its flow: a bar that pushes the page down would move the terminals under the pointer.
+          <p className="bg-card text-muted-foreground pointer-events-none fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md border px-4 py-2 text-sm shadow-lg">
+            Drop a file on a session terminal to paste its path, or a folder anywhere else to add its repos.
+          </p>
+        )}
         <main className="hud-grid min-h-0 flex-1 overflow-y-auto">
           {!conn && !error && (
             <div className="p-6">
@@ -110,7 +140,13 @@ export function App() {
             />
           )}
           {conn && view === "repos" && (
-            <ReposView key={epoch} conn={conn} initialRepo={repo} onRetry={retry} onOpenSettings={() => setView("settings")} />
+            <ReposView
+              key={`${epoch}:${reposVisit}`}
+              conn={conn}
+              initialRepo={repo}
+              onRetry={retry}
+              onOpenSettings={() => setView("settings")}
+            />
           )}
           {conn && view === "sessions" && (
             <SessionsView

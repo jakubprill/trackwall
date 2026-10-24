@@ -61,6 +61,10 @@ _Unikaj_: projekt
 Jeden katalog na dysku użytkownika, wskazany w `workspace.yaml` albo w ustawieniach. Każdy jego bezpośredni podkatalog z `.git` to repo z workspace (ADR-18); repo dodaje się, klonując je do tego folderu.
 _Unikaj_: katalog workspace, root, folder (bez dopowiedzenia)
 
+**Dropped folder** (`DroppedFolder`, action `dropped-folder`, UI `FolderDrop`; in Polish *upuszczony folder*):
+A folder or file dropped on the Trackwall window outside a session terminal, described by the daemon: a listed repo, a repo elsewhere, a folder with repos, a folder without repos or a file (ADR-51). It never adds a repo by itself; it can only lead to a new projects folder.
+_Avoid_: imported repo, added repo
+
 **Hosting repo** (`RepoHost`, w `workspace.yaml` `repoHosts`; po angielsku *repo host*):
 GitLab albo GitHub z nazwą hosta (`gitlab.example.com`), z którego Trackwall wyszukuje repo i klonuje je do folderu z projektami przez zalogowane `glab` albo `gh` (ADR-19).
 _Unikaj_: remote (to nazwa repo zdalnego w gicie, np. `origin`), serwer, źródło (to pojęcie z logów)

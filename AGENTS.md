@@ -77,7 +77,7 @@ The repo is meant to be published as open source (header of `docs/architecture.m
 - **Comments explain why, not what.** A non-obvious module starts with a short comment: what it is for, what it guarantees, where it is described (architecture section).
 - **Explicit over clever**: no magic strings shared between files (export a constant), no hidden global state, no silent defaults for something that must be set.
 - **Delete dead code** instead of commenting it out.
-- **File names**: kebab-case (`open-browser.ts`), React components in PascalCase (`DaemonPanel.tsx`). Exception: shadcn/ui components in `components/ui/` keep the names the generator gives them (`button.tsx`).
+- **File names**: kebab-case (`system-open.ts`), React components in PascalCase (`DaemonPanel.tsx`). Exception: shadcn/ui components in `components/ui/` keep the names the generator gives them (`button.tsx`).
 - **npm dependencies at exact versions** (no `^` or `~`; `.npmrc` has `save-exact=true`, so `pnpm add` takes care of it). Do not add a dependency for something a few lines of code can do. A native addon requires checking that it works in `bun build --compile` on both systems (a spike in a separate PR, findings in an ADR, like ADR-1).
 - **Tests read like documentation**: a test name is a sentence describing the behaviour, and the test shows the input and the expected result without helpers that hide them.
 - **Rules are enforced by a tool wherever possible**: a linter rule holds better than a sentence in this file. When you repeat the same finding in reviews, turn it into a rule. Today these guard the code:

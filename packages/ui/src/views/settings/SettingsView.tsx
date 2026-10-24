@@ -1,4 +1,5 @@
 import { workspaceApi } from "@trackwall/protocol";
+import { FolderOpen } from "lucide-react";
 import { type FormEvent, useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
@@ -7,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { canPickFolder, pickFolder } from "@/lib/folder-picker";
 import { useRemote } from "@/lib/use-remote";
 import { RepoHostsForm } from "./RepoHostsForm.tsx";
 
@@ -86,12 +88,11 @@ function ProjectsDirForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
+  async function save(dir: string) {
     setBusy(true);
     setError(undefined);
     try {
-      await post(conn, workspaceApi.setProjectsDir, { path: path.trim() });
+      await post(conn, workspaceApi.setProjectsDir, { path: dir });
       onSaved();
     } catch (err) {
       setError(errorMessage(err));
@@ -99,8 +100,26 @@ function ProjectsDirForm({
     }
   }
 
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    void save(path.trim());
+  }
+
+  /** A folder chosen in the system picker is saved at once: choosing it already says what the user wants. */
+  async function browse() {
+    setError(undefined);
+    try {
+      const picked = await pickFolder(path.trim());
+      if (picked === undefined) return;
+      setPath(picked);
+      await save(picked);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
   return (
-    <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-2">
+    <form onSubmit={submit} className="flex flex-col gap-2">
       <div className="flex gap-2">
         <Input
           value={path}
@@ -109,6 +128,11 @@ function ProjectsDirForm({
           aria-label="Full path to the projects folder"
           className="font-mono text-xs"
         />
+        {canPickFolder() && (
+          <Button type="button" variant="outline" size="sm" onClick={() => void browse()} disabled={busy}>
+            <FolderOpen /> Choose…
+          </Button>
+        )}
         <Button type="submit" size="sm" disabled={busy || path.trim() === ""}>
           Save
         </Button>
