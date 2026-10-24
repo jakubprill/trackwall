@@ -25,9 +25,9 @@ const SESSION_LAYOUT_PARAM: &str = "sessionLayout";
 pub const STATE_FLAGS: StateFlags = StateFlags::POSITION.union(StateFlags::SIZE).union(StateFlags::MAXIMIZED).union(StateFlags::FULLSCREEN);
 
 /// What each window shows (which ones show Sessions, and for extra windows the list saved for the next start) and the
-/// order of focus, most recently focused last. `opening` makes opening windows
-/// one at a time, so two quick opens do not pick the same free label; it is separate from the registry, which the main
-/// thread locks on focus while `open` waits for the main thread to build the window.
+/// order of focus, most recently focused last. `opening` makes opening windows one at a time, so two quick opens do
+/// not pick the same free label; it is separate from the registry, which the main thread locks on focus while `open`
+/// waits for the main thread to build the window.
 #[derive(Default)]
 pub struct Windows {
     registry: Mutex<Registry>,
@@ -153,7 +153,8 @@ pub fn open(app: &AppHandle, view: Option<&str>) -> Result<(), String> {
 ///
 /// The saved list goes into the registry before the first window is built, so a report from one restored window or
 /// a closed one does not save a list without the others still loading; opening is held for the whole restore, so a
-/// "New window" meanwhile cannot take a saved label. A window that cannot be built leaves the list.
+/// "New window" meanwhile cannot take a saved label. A window that cannot be built stays in the list: the failure
+/// may be the app quitting in the middle of the restore, and the file's entries are already checked by `parse`.
 pub fn restore(app: &AppHandle) {
     let Some(path) = saved_path(app) else { return };
     let app = app.clone();
@@ -167,7 +168,6 @@ pub fn restore(app: &AppHandle) {
             let opened = url.ok_or_else(|| "not an id".to_string()).and_then(|url| build_while_opening(&app, Some(w.label.clone()), url));
             if let Err(err) = opened {
                 eprintln!("[desktop] reopening {}: {err}", w.label);
-                closed_by_user(&app, &w.label);
             }
         }
     });
@@ -211,29 +211,28 @@ fn build_while_opening(app: &AppHandle, label: Option<String>, url: String) -> R
 
 /// A window reports what it shows; an extra window's change is saved for the next start.
 pub fn shows(app: &AppHandle, label: &str, shown: Shown) {
-    let saved = app.state::<Windows>().with(|r| {
+    app.state::<Windows>().with(|r| {
         r.shows(label, shown);
-        r.saved()
+        if is_extra(label) {
+            persist(app, &r.saved());
+        }
     });
-    if is_extra(label) {
-        persist(app, &saved);
-    }
 }
 
 /// The user closed an extra window (not the app quitting, which closes windows without asking): the next start does
 /// not open it.
 pub fn closed_by_user(app: &AppHandle, label: &str) {
-    let saved = app.state::<Windows>().with(|r| {
+    app.state::<Windows>().with(|r| {
         r.closed_by_user(label);
-        r.saved()
+        persist(app, &r.saved());
     });
-    persist(app, &saved);
 }
 
 fn saved_path(app: &AppHandle) -> Option<std::path::PathBuf> {
     app.path().app_config_dir().ok().map(|dir| dir.join(saved_windows::FILE))
 }
 
+/// Called with the registry locked, so two threads never write the file at once and the last write is the newest list.
 fn persist(app: &AppHandle, saved: &[SavedWindow]) {
     let written = saved_path(app)
         .ok_or_else(|| std::io::Error::other("no configuration directory"))
@@ -286,6 +285,20 @@ mod tests {
         assert_eq!(
             r.saved(),
             [SavedWindow { label: "window-2".into(), shown: sessions() }, SavedWindow { label: "window-3".into(), shown: home() }]
+        );
+    }
+
+    #[test]
+    fn a_restored_window_reporting_first_keeps_the_others_still_opening_in_the_list() {
+        let mut r = Registry::default();
+        r.restoring(&[
+            SavedWindow { label: "window-2".into(), shown: home() },
+            SavedWindow { label: "window-3".into(), shown: sessions() },
+        ]);
+        r.shows("window-2", sessions());
+        assert_eq!(
+            r.saved(),
+            [SavedWindow { label: "window-2".into(), shown: sessions() }, SavedWindow { label: "window-3".into(), shown: sessions() }]
         );
     }
 
