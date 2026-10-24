@@ -10,7 +10,7 @@ describe("tekst od agenta", () => {
   test("polecenie od agenta odrzuca znaki, których człowiek w panelu nie zobaczy, a zwykły tekst z emoji przechodzi", () => {
     const fromAgent = visibleText(TaskPrompt);
     expect(fromAgent.parse("Napraw test ✅\nSprawdź `pnpm test`.")).toBe("Napraw test ✅\nSprawdź `pnpm test`.");
-    for (const hidden of ["\u{E0049}\u{E0047}\u{E004E}", "a​b", "abc‮def", "linia druga", "\u{F0000}"]) {
+    for (const hidden of ["\u{E0049}\u{E0047}\u{E004E}", "a\u200Bb", "abc\u202Edef", "linia\u2028druga", "\u{F0000}"]) {
       expect(fromAgent.safeParse(`Napraw test ${hidden}`).success).toBe(false);
     }
   });

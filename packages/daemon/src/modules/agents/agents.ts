@@ -130,7 +130,10 @@ export class Agents {
   }
 
   sessions(): SessionList {
-    return { sessions: this.#views(), tasks: this.#tasks.list(), proposals: this.#proposals.list(), worktreesDir: this.#worktreesDir };
+    const tasks = this.#tasks.list();
+    // Zatwierdzana propozycja, z której jest już zadanie, jest tylko zadaniem: UI i `list_sessions` widzą jeden obiekt.
+    const proposals = this.#proposals.list().filter((p) => !tasks.some((t) => t.id === p.id));
+    return { sessions: this.#views(), tasks, proposals, worktreesDir: this.#worktreesDir };
   }
 
   /** Jedna sesja z listy (`not_found`, gdy jej nie ma albo użytkownik ją zamknął). */
@@ -154,9 +157,9 @@ export class Agents {
   }
 
   /**
-   * Zadanie z propozycji, z poleceniem poprawionym przez użytkownika. Propozycja znika z listy od razu, więc drugie
-   * zatwierdzenie to `not_found`; wraca na listę, gdy zadanie nie powstało. Zadanie, które zostało po nieudanym
-   * sprzątaniu, użytkownik kończy sam, więc wtedy propozycja nie wraca.
+   * Zadanie z propozycji, z poleceniem poprawionym przez użytkownika. Propozycja zostaje na liście, dopóki nie ma
+   * zadania z jej identyfikatorem, ale drugie zatwierdzenie to `not_found`; znów czeka na decyzję, gdy zadanie nie
+   * powstało. Zadanie, które zostało po nieudanym sprzątaniu, użytkownik kończy sam, więc wtedy propozycja znika.
    */
   async approveProposal(id: string, prompt: string): Promise<Task> {
     const { repo, title, proposedBy } = this.#proposals.take(id);

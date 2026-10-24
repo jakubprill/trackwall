@@ -41,15 +41,16 @@ export const TaskTitle = z
 /**
  * Tekst od agenta, który człowiek czyta przed decyzją albo który trafia do innego agenta (propozycja zadania,
  * podsumowanie, ADR-39): bez znaków, których w UI nie widać, a model je czyta (znaki formatujące, w tym znaczniki
- * U+E0000–E007F i zmiana kierunku tekstu, prywatne, nieprzypisane i separatory linii). Inaczej polecenie, które
+ * U+E0000–E007F i zmiana kierunku tekstu, prywatne i separatory linii; nieprzypisanych nie, bo to, co jest nieprzypisane, zależy od tablic Unicode silnika, a Bun i
+ * Node mają różne). Inaczej polecenie, które
  * w panelu wygląda niewinnie, mogłoby nieść ukryte instrukcje dla sesji zadania (§8). Tekst wpisany w UI tego nie
  * potrzebuje, bo człowiek pisze go sam.
  */
 export function visibleText(text: z.ZodString): z.ZodString {
   // `refine` zamiast `regex`: wzorzec trafiłby do JSON Schema narzędzia MCP, a klient, który kompiluje go bez flagi `u`,
   // czytałby `\p{Cf}` jako zwykłe litery i odrzucał zwykły tekst.
-  return text.refine((value) => !/[\p{Cf}\p{Co}\p{Cn}\u2028\u2029]/u.test(value), {
-    message: "the text must not contain invisible characters (format, private-use or unassigned)",
+  return text.refine((value) => !/[\p{Cf}\p{Co}\u2028\u2029]/u.test(value), {
+    message: "the text must not contain invisible characters (format or private-use characters, line separators)",
   });
 }
 

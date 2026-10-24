@@ -1,6 +1,5 @@
 import type { Session, SessionList } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
-import { openProposals } from "./session-entries.ts";
 
 /**
  * Stan sesji Copilot CLI w jednej linii (§4.4): z grupy procesów, gdy sesja się kończy albo skończyła, inaczej ze
@@ -57,5 +56,5 @@ export function waitingCount(sessions: readonly Session[]): number {
 
 /** Na pasku widoków: sesje, które czekają na Ciebie, i propozycje zadań czekające na decyzję (ADR-39). */
 export function attentionCount(list: SessionList | undefined): number {
-  return list ? waitingCount(list.sessions) + openProposals(list).length : 0;
+  return list ? waitingCount(list.sessions) + list.proposals.length : 0;
 }

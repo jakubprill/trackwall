@@ -22,21 +22,16 @@ export type SessionSelection =
 
 /**
  * Najpierw propozycje zadań, bo czekają na decyzję, od najnowszej; potem od ostatnio uruchomionej: sesja po starcie,
- * zadanie po starcie swojej ostatniej sesji, a bez sesji po utworzeniu. Propozycja w trakcie zatwierdzania zostaje
- * na liście daemona, a gdy jest już zadaniem (`openProposals`), jest tylko zadaniem.
+ * zadanie po starcie swojej ostatniej sesji, a bez sesji po utworzeniu. Propozycji, z której jest już zadanie,
+ * daemon nie zwraca, więc ten sam identyfikator jest na liście raz.
  */
 export function sessionEntries({ sessions, tasks, proposals }: SessionList): SessionEntry[] {
   const started: SessionEntry[] = [
     ...sessions.filter((s) => s.task === null).map((session) => ({ kind: "session" as const, session })),
     ...tasks.map((task) => ({ kind: "task" as const, task, session: latestSession(sessions, task.id) })),
   ];
-  const waiting = openProposals({ tasks, proposals }).map((proposal) => ({ kind: "proposal" as const, proposal }));
+  const waiting = proposals.map((proposal) => ({ kind: "proposal" as const, proposal }));
   return [...waiting, ...started.sort((a, b) => entryTime(b).localeCompare(entryTime(a)))];
-}
-
-/** Propozycje, które czekają na decyzję: bez tych, z których w trakcie zatwierdzania powstało już zadanie. */
-export function openProposals({ tasks, proposals }: Pick<SessionList, "tasks" | "proposals">): TaskProposal[] {
-  return proposals.filter((p) => !tasks.some((t) => t.id === p.id));
 }
 
 /** `SessionList.sessions` idzie od najnowszej. */

@@ -50,9 +50,13 @@ export async function addWorktree(repoDir: string, path: string, branch: string,
   try {
     await git(repoDir, ["worktree", "add", "--quiet", "-b", branch, path, commit], { timeoutMs: CHECKOUT_TIMEOUT_MS });
   } catch (err) {
-    await removeWorktree(repoDir, path).catch(() => {});
-    await deleteBranch(repoDir, branch).catch(() => {});
-    throw err;
+    // Nieudane sprzątanie (na Windowsie plik trzymany przez inny proces) idzie w treści błędu: ponowna próba
+    // skończy się wtedy „already exists”, a użytkownik musi wiedzieć, co usunąć ręcznie.
+    const leftovers: string[] = [];
+    await removeWorktree(repoDir, path).catch((e: unknown) => leftovers.push(`directory ${path} (${String(e)})`));
+    await deleteBranch(repoDir, branch).catch((e: unknown) => leftovers.push(`branch ${branch} (${String(e)})`));
+    if (leftovers.length === 0) throw err;
+    throw new Error(`${String(err)}; could not clean up, remove by hand: ${leftovers.join(", ")}`);
   }
 }
 
