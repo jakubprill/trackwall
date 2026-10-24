@@ -8,6 +8,7 @@ import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { daemonAnswered, homeHasObject, homeModel } from "@/lib/home-model";
 import { listNeedsSettings, REPO_LIST_POLL_MS } from "@/lib/repo-status";
+import type { SessionSelection } from "@/lib/session-entries";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { HomeDetails } from "./HomeDetails.tsx";
 import { HomeHoverCard } from "./HomeHoverCard.tsx";
@@ -15,7 +16,7 @@ import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
 
 /**
  * Widok „Home” (ADR-33, §5.5): pierwszy ekran. Po lewej kolejka „Needs you” (sesje, które czekają albo mają błąd,
- * i repo, które nie są czyste), w środku pulpit 3D w układzie „Orbit”, po prawej szczegóły wybranego obiektu.
+ * propozycje zadań, które czekają na decyzję, i repo, które nie są czyste), w środku pulpit 3D w układzie „Orbit”, po prawej szczegóły wybranego obiektu.
  * Klik wybiera, dwuklik albo przycisk w szczegółach przechodzi do sesji lub repo. Dane to te same odpowiedzi daemona
  * co w innych widokach; sesje i działające taski mise przychodzą na żywo z WebSocketu zdarzeń (ADR-36), a sesje
  * pobiera `App`, bo ich liczba jest też na pasku widoków. Poza płótnem widok bierze ze sceny
@@ -33,7 +34,7 @@ export function HomeView({
   conn,
   runningLive,
   sessions,
-  onOpenSession,
+  onOpenInSessions,
   onOpenRepo,
   onOpenDaemon,
   onOpenSettings,
@@ -42,7 +43,8 @@ export function HomeView({
   /** Działające taski mise ze zdarzeń; `undefined` przez chwilę po zmianie połączenia, do tego czasu są odpytywane. */
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
   sessions: RemoteHandle<SessionList>;
-  onOpenSession: (id: string) => void;
+  /** Go to the Sessions view with a session or a task proposal. */
+  onOpenInSessions: (selection: SessionSelection) => void;
   onOpenRepo: (id: string) => void;
   onOpenDaemon: () => void;
   onOpenSettings: () => void;
@@ -96,11 +98,11 @@ export function HomeView({
   const open = useCallback(
     (key: HomeKey) => {
       const target = parseHomeKey(key);
-      if (target?.kind === "session") onOpenSession(target.id);
+      if (target?.kind === "session") onOpenInSessions({ kind: "session", id: target.id });
       if (target?.kind === "repo") onOpenRepo(target.id);
       if (target?.kind === "daemon") onOpenDaemon();
     },
-    [onOpenSession, onOpenRepo, onOpenDaemon],
+    [onOpenInSessions, onOpenRepo, onOpenDaemon],
   );
 
   const needsSettings = listNeedsSettings(repos.errorCode);
@@ -117,7 +119,15 @@ export function HomeView({
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[var(--spacing-sidebar)_1fr_var(--spacing-sidebar)]">
-      <NeedsYouPanel model={model} sessions={lookup.sessions} selected={current} onSelect={setSelected} onOpen={open} />
+      <NeedsYouPanel
+        model={model}
+        sessions={lookup.sessions}
+        proposals={sessions.data?.proposals ?? []}
+        selected={current}
+        onSelect={setSelected}
+        onOpen={open}
+        onOpenProposal={(id) => onOpenInSessions({ kind: "proposal", id })}
+      />
       <div className="relative min-h-0 min-w-0">
         {unavailable ? (
           <div className="flex flex-col items-start gap-3 p-6">

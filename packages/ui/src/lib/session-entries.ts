@@ -21,17 +21,76 @@ export type SessionSelection =
   | undefined;
 
 /**
+ * Order on one level of the tree (`sessionRows`).
  * Najpierw propozycje zadań, bo czekają na decyzję, od najnowszej; potem od ostatnio uruchomionej: sesja po starcie,
  * zadanie po starcie swojej ostatniej sesji, a bez sesji po utworzeniu. Propozycji, z której jest już zadanie,
  * daemon nie zwraca, więc ten sam identyfikator jest na liście raz.
  */
-export function sessionEntries({ sessions, tasks, proposals }: SessionList): SessionEntry[] {
+function sessionEntries({ sessions, tasks, proposals }: SessionList): SessionEntry[] {
   const started: SessionEntry[] = [
     ...sessions.filter((s) => s.task === null).map((session) => ({ kind: "session" as const, session })),
     ...tasks.map((task) => ({ kind: "task" as const, task, session: latestSession(sessions, task.id) })),
   ];
   const waiting = proposals.map((proposal) => ({ kind: "proposal" as const, proposal }));
   return [...waiting, ...started.sort((a, b) => entryTime(b).localeCompare(entryTime(a)))];
+}
+
+/**
+ * A row of the Sessions list: an entry, its depth in the tree and the number of entries directly under it. A task or
+ * proposal sits under the entry with the session that proposed it (the main session, `proposedBy`), so the work one
+ * session delegated stays with it. When that session is no longer listed (closed, or after a daemon restart), the
+ * entry is at the top level.
+ */
+export interface SessionRow {
+  entry: SessionEntry;
+  depth: number;
+  children: number;
+}
+
+/**
+ * The tree of entries flattened into rows in display order: an entry, then its children right below it, on every level
+ * in `sessionEntries` order. A cycle is impossible (a session exists only after its task, and a task only after a
+ * proposal from another session), but the data comes from the daemon, so an entry in a cycle goes to the top level
+ * instead of looping the list or vanishing from it.
+ */
+export function sessionRows(list: SessionList): SessionRow[] {
+  const entries = sessionEntries(list);
+  const ids = new Set(entries.map(entryId));
+  // The entry that holds a session: the task for a task's session (also an older one), otherwise the session itself.
+  const holder = new Map(list.sessions.map((s) => [s.id, s.task ?? s.id]));
+  const children = new Map<string, SessionEntry[]>();
+  const roots: SessionEntry[] = [];
+  for (const entry of entries) {
+    const proposer = entryProposer(entry);
+    const parent = proposer === null ? undefined : holder.get(proposer);
+    if (parent !== undefined && parent !== entryId(entry) && ids.has(parent))
+      children.set(parent, [...(children.get(parent) ?? []), entry]);
+    else roots.push(entry);
+  }
+  const rows: SessionRow[] = [];
+  const placed = new Set<string>();
+  const place = (entry: SessionEntry, depth: number) => {
+    const id = entryId(entry);
+    if (placed.has(id)) return;
+    placed.add(id);
+    const row = { entry, depth, children: 0 };
+    rows.push(row);
+    for (const child of children.get(id) ?? []) {
+      if (placed.has(entryId(child))) continue;
+      row.children++;
+      place(child, depth + 1);
+    }
+  };
+  // After the roots, all entries once more: entries in a cycle have no root, so they go to the top level.
+  for (const entry of [...roots, ...entries]) place(entry, 0);
+  return rows;
+}
+
+/** The session that proposed a task or proposal; `null` for a session, a task from the form and an agent outside Trackwall. */
+function entryProposer(entry: SessionEntry): string | null {
+  if (entry.kind === "session") return null;
+  const proposedBy = entry.kind === "proposal" ? entry.proposal.proposedBy : entry.task.proposedBy;
+  return proposedBy?.session ?? null;
 }
 
 /** `SessionList.sessions` idzie od najnowszej. */
