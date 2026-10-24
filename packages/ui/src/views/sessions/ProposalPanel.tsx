@@ -1,4 +1,4 @@
-import { agentsApi, type Session, type Task, type TaskProposal } from "@trackwall/protocol";
+import { agentsApi, type Session, TASK_PROMPT_MAX, type Task, type TaskProposal } from "@trackwall/protocol";
 import { GitBranch, Lightbulb, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -49,7 +49,13 @@ export function ProposalPanel({
         worktree and starts Copilot CLI there with this prompt. The prompt comes from an agent, so read it before you start; you can edit
         it.
       </p>
-      <Textarea aria-label="Prompt for the agent" value={prompt} onChange={(e) => setPrompt(e.target.value)} maxLength={8000} rows={10} />
+      <Textarea
+        aria-label="Prompt for the agent"
+        value={prompt}
+        onChange={(e) => setPrompt(e.target.value)}
+        maxLength={TASK_PROMPT_MAX}
+        rows={10}
+      />
       <div className="flex flex-wrap items-center gap-2">
         <Button onClick={approve.run} disabled={pending || prompt.trim() === ""}>
           <GitBranch /> Start task

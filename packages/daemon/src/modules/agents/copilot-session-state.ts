@@ -5,7 +5,15 @@ import { type SessionKey, stateFromKey } from "./copilot-keys.ts";
 import { stateFromOsc, windowTitleFromOsc } from "./copilot-osc.ts";
 import { CopilotScreen } from "./copilot-screen.ts";
 import { OscParser } from "./osc-parser.ts";
-import { TaskStateTracker, type TaskStateTrackerOptions } from "./task-state-tracker.ts";
+import { type StateSignal, TaskStateTracker, type TaskStateTrackerOptions } from "./task-state-tracker.ts";
+
+/** `sessionStart` sesji, która startuje z poleceniem (`promptOnStart`). */
+const SESSION_START_WITH_PROMPT: StateSignal = {
+  state: "Working",
+  source: "hook",
+  confidence: "medium",
+  reason: "hook sessionStart with a prompt",
+};
 
 /**
  * Komunikat o przerwanej turze liczy się tylko tyle po odpowiedzi klawiszem: ten sam tekst wraca na ekran przy
@@ -19,8 +27,13 @@ const CANCEL_AFTER_ANSWER_MS = 10_000;
  * co działa w sesji.
  */
 export interface CopilotSessionStateOptions extends TaskStateTrackerOptions {
-  /** Sesja startuje z poleceniem (`--interactive`): `sessionStart` znaczy pracę, a nie czekanie na Ciebie. */
-  promptOnStart?: boolean;
+  /**
+   * Sesja startuje z poleceniem jako pierwszą wiadomością (`--interactive`, sesja nowego zadania, ADR-31), więc
+   * `sessionStart` znaczy początek pracy nad poleceniem, a nie czekanie na Ciebie. Bez tego sesja zadania przez chwilę
+   * między `sessionStart` a `userPromptSubmitted` czekałaby na Ciebie, a `wait_for_session` (ADR-39) kończyłby
+   * czekanie, zanim agent zacznie.
+   */
+  promptOnStart: boolean;
 }
 
 export class CopilotSessionState {
@@ -36,7 +49,7 @@ export class CopilotSessionState {
   constructor(o: CopilotSessionStateOptions) {
     this.#tracker = new TaskStateTracker(o);
     this.#now = o.now;
-    this.#promptOnStart = o.promptOnStart ?? false;
+    this.#promptOnStart = o.promptOnStart;
   }
 
   /** Ostatni tytuł okna ustawiony przez Copilot CLI: nad czym agent pracuje. */
@@ -61,7 +74,7 @@ export class CopilotSessionState {
   }
 
   hook(record: CopilotHookRecord): TaskStateChange[] {
-    const signal = stateFromHook(record, this.#promptOnStart);
+    const signal = this.#promptOnStart && record.event === "sessionStart" ? SESSION_START_WITH_PROMPT : stateFromHook(record);
     return [this.#tracker.tick(), signal && this.#tracker.signal(signal)].filter((c) => c !== undefined);
   }
 

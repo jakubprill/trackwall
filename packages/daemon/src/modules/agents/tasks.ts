@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import {
@@ -77,11 +76,11 @@ export interface AgentTasksDeps {
   log: (msg: string) => void;
 }
 
-/** Zadanie z zatwierdzonej propozycji (ADR-39): jej identyfikator, tytuł i to, kto ją zgłosił. */
+/** Skąd zadanie: z formularza (bez tytułu i zgłaszającego) albo z zatwierdzonej propozycji (ADR-39), której bierze identyfikator. */
 export interface TaskOrigin {
   id: string;
-  title: string;
-  proposedBy: ProposedBy;
+  title: string | null;
+  proposedBy: ProposedBy | null;
 }
 
 /** Zadanie z pliku z worktree, który z niego wynika. */
@@ -108,28 +107,26 @@ export class AgentTasks {
   }
 
   /**
-   * Worktree na nowej gałęzi od gałęzi domyślnej i Copilot CLI w nim z poleceniem jako pierwszą wiadomością; z `origin`
-   * zadanie dostaje identyfikator, tytuł i pochodzenie zatwierdzonej propozycji.
+   * Worktree na nowej gałęzi od gałęzi domyślnej i Copilot CLI w nim z poleceniem jako pierwszą wiadomością; gałąź
+   * nazywa tytuł, a bez niego polecenie.
    */
-  async create(repo: string, prompt: string, origin?: TaskOrigin): Promise<Task> {
+  async create(repo: string, prompt: string, { id, title, proposedBy }: TaskOrigin): Promise<Task> {
     const repoDir = await this.#deps.repos.repoPath(repo);
     const base = await asRepoUnavailable(repo, this.#deps.vcs.defaultBase(repoDir));
-    const id = origin?.id ?? randomUUID();
     const task = this.#known({
       id,
       repo,
       repoDir,
       prompt,
-      branch: `${TASK_BRANCH_PREFIX}${taskSlug(origin?.title ?? prompt, id)}`,
+      branch: `${TASK_BRANCH_PREFIX}${taskSlug(title ?? prompt, id)}`,
       baseBranch: base.branch,
       base: base.commit,
       createdAt: new Date().toISOString(),
-      title: origin?.title ?? null,
-      proposedBy: origin?.proposedBy ?? null,
+      title,
+      proposedBy,
       summary: null,
     });
     return this.#exclusive(id, async () => {
-      if (this.#tasks.some((t) => t.id === id)) throw new DomainError("bad_request", `task ${id} already exists`);
       mkdirSync(dirname(task.worktree), { recursive: true });
       await asRepoUnavailable(repo, this.#deps.vcs.addWorktree(repoDir, task.worktree, task.branch, task.base));
       // Zapis przed startem sesji: worktree już jest na dysku i nie może zniknąć z listy, gdy daemon padnie.

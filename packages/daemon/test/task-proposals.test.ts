@@ -4,15 +4,32 @@ import { MAX_PENDING_PROPOSALS, TaskProposals } from "../src/modules/agents/task
 const PROPOSAL = { repo: "sklep", title: "Dodaj test", prompt: "dodaj test logowania", proposedBy: { session: null } };
 
 describe("propozycje zadań", () => {
-  test("nowa propozycja jest na górze listy, a zatwierdzona znika bez śladu odrzucenia", () => {
+  test("zatwierdzana propozycja znika z listy od razu, więc drugie zatwierdzenie i odrzucenie to not_found", () => {
     const proposals = new TaskProposals();
     const first = proposals.add(PROPOSAL);
     const second = proposals.add({ ...PROPOSAL, title: "Druga" });
     expect(proposals.list()).toEqual([second, first]);
 
-    proposals.approved(first.id);
+    expect(proposals.take(first.id)).toEqual(first);
+    expect(proposals.list()).toEqual([second]);
+    expect(proposals.approving(first.id)).toEqual(first);
+    expect(() => proposals.take(first.id)).toThrow(`no task proposal ${first.id} is waiting for a decision`);
+    expect(() => proposals.reject(first.id)).toThrow(`no task proposal ${first.id} is waiting for a decision`);
+
+    proposals.release(first.id, false);
+    expect(proposals.approving(first.id)).toBeUndefined();
     expect(proposals.list()).toEqual([second]);
     expect(proposals.wasRejected(first.id)).toBe(false);
+  });
+
+  test("propozycja, z której nie powstało zadanie, wraca na swoje miejsce na liście", () => {
+    const proposals = new TaskProposals();
+    const first = proposals.add(PROPOSAL);
+    const second = proposals.add({ ...PROPOSAL, title: "Druga" });
+    proposals.take(first.id);
+    proposals.release(first.id, true);
+    expect(proposals.list()).toEqual([second, first]);
+    expect(proposals.approving(first.id)).toBeUndefined();
   });
 
   test("odrzucona propozycja znika z listy, ale daemon pamięta odrzucenie dla sesji, która na nią czeka", () => {

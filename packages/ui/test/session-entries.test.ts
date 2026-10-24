@@ -80,14 +80,14 @@ describe("pozycje widoku Sesje", () => {
     expect(entrySelection(entry)).toEqual({ kind: "task", id: "t1" });
   });
 
-  test("propozycje zadań są na górze, a propozycja, która już jest zadaniem, jest tylko zadaniem", () => {
+  test("propozycje zadań są na górze, od najnowszej, przed sesjami i zadaniami", () => {
     const entries = sessionEntries({
       sessions: [session("s1", "2026-10-23T12:00:00Z")],
-      tasks: [task("p2", "2026-10-23T13:00:00Z")],
+      tasks: [task("t1", "2026-10-23T13:00:00Z")],
       proposals: [proposal("p2", "2026-10-23T11:00:00Z"), proposal("p1", "2026-10-23T10:00:00Z")],
       worktreesDir: "/home/ja/.trackwall/worktrees",
     });
-    expect(entries.map((e) => `${e.kind} ${entryId(e)}`)).toEqual(["proposal p1", "task p2", "session s1"]);
+    expect(entries.map((e) => `${e.kind} ${entryId(e)}`)).toEqual(["proposal p2", "proposal p1", "task t1", "session s1"]);
     expect(findEntry(entries, { kind: "proposal", id: "p1" })).toMatchObject({ kind: "proposal", proposal: { id: "p1" } });
   });
 

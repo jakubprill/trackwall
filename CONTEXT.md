@@ -210,6 +210,7 @@ _Unikaj_: usunięcie zadania (zadanie znika z listy, ale gałąź może zostać)
 
 **Polecenie** (`Task.prompt`; po angielsku *prompt*):
 Treść zadania dla agenta, wpisana w widoku Sessions albo przyniesiona przez propozycję zadania (i poprawiona przez użytkownika przed startem); Copilot CLI dostaje ją jako pierwszą wiadomość sesji zadania (`--interactive`).
+_Unikaj_: prompt (w polskim tekście)
 
 **Tytuł zadania** (`Task.title`, `TaskTitle`; po angielsku *title*):
 Krótki opis zadania w jednej linii (do 80 znaków), który nadaje sesja proponująca zadanie, jak tytuł wątku; z niego powstaje skrót gałęzi. Zadanie z formularza nie ma tytułu (`null`), a UI pokazuje wtedy polecenie.
@@ -222,7 +223,6 @@ _Unikaj_: zlecenie, prośba, wniosek
 **Sesja główna** (`proposedBy` zadania i propozycji; po angielsku *main session*):
 Sesja albo agent nadrzędny, który rozmawia z użytkownikiem i zleca pracę innym agentom propozycjami zadań, a potem czeka na ich sesje (`wait_for_session`) i czyta podsumowania, jak koordynator z wątkami w Claude (ADR-39). To rola, nie osobny rodzaj sesji: dziś to każda sesja Trackwall albo agent spoza Trackwall (`proposedBy.session: null`).
 _Unikaj_: orkiestrator, planner (ADR-9: rozbijanie celów robi człowiek)
-_Unikaj_: prompt (w polskim tekście)
 
 **Task mise** (po angielsku *mise task*):
 Nazwana komenda z `mise.toml` repo: `setup`, `dev`, `test`, `build`, `lint`, `health`. W kodzie zawsze z dopowiedzeniem (`miseTask`, `mise.run(...)`), nigdy gołe `task`. Taski zapisane w commicie (`DeclaredMiseTask` w `RepoCard.mise`, typ `MiseSetup`: pliki konfiguracji mise i taski z `[tasks]` oraz katalogów tasków) liczy karta repo; repo bez nich ma tag `no-mise` (ADR-34). Jedyny wyjątek to argument `task` narzędzia MCP `run_task` (§5.3), gdzie kontekst jest jednoznaczny.

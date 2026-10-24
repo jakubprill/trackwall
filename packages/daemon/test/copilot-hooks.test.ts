@@ -51,15 +51,6 @@ describe("stan zadania z hooków Copilot CLI", () => {
     expect(stateFromHook({ event: "errorOccurred", receivedAt: 0, payload: {}, omitted: [] })?.state).toBe("Error");
   });
 
-  test("start sesji zadania z poleceniem to praca, a nie czekanie na Ciebie", () => {
-    expect(stateFromHook({ event: "sessionStart", receivedAt: 0, payload: {}, omitted: [] }, true)).toEqual({
-      state: "Working",
-      source: "hook",
-      confidence: "medium",
-      reason: "hook sessionStart with a prompt",
-    });
-  });
-
   test("koniec sesji to Done albo Error po powodzie i kończy sesję", () => {
     expect(stateFromHook({ event: "sessionEnd", receivedAt: 0, payload: { reason: "user_exit" }, omitted: [] })).toEqual({
       state: "Done",

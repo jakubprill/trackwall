@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -16,6 +16,7 @@ import { findCopilot } from "./copilot-command.ts";
 import type { CopilotHookEvent } from "./copilot-hook-record.ts";
 import { type HookCommand, writeCopilotPlugin } from "./copilot-plugin.ts";
 import { LiveSession, type SessionPty } from "./live-session.ts";
+import { SessionTokens } from "./session-tokens.ts";
 import { sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
 import { TaskFile } from "./task-file.ts";
 import { TaskProposals } from "./task-proposals.ts";
@@ -40,7 +41,7 @@ const TICK_MS = 200;
 /** Konfiguracja MCP sesji w katalogu sesji; plik zamiast JSON w argumencie, żeby cudzysłowy JSON-u nie zależały od cytowania argumentów na Windowsie. */
 const MCP_CONFIG_FILE = "mcp-config.json";
 /** Token sesji w katalogu sesji, który most stdio sesji czyta i wysyła do serwera MCP (ADR-39). */
-const SESSION_TOKEN_FILE = "session-token";
+const SESSION_TOKEN_FILENAME = "session-token";
 const TASKS_FILE = "tasks.json";
 const WORKTREES_DIR = "worktrees";
 
@@ -103,8 +104,7 @@ export type WaitTarget = { session: string } | { task: string };
 export class Agents {
   readonly #deps: AgentsDeps;
   readonly #sessions = new Map<string, LiveSession>();
-  /** Skrót SHA-256 tokenu sesji → sesja; sam token zna tylko plik w katalogu sesji. */
-  readonly #callers = new Map<string, string>();
+  readonly #tokens = new SessionTokens();
   readonly #tasks: AgentTasks;
   readonly #proposals = new TaskProposals();
   readonly #worktreesDir: string;
@@ -144,7 +144,7 @@ export class Agents {
 
   /** Sesja, której token sesji przyszedł z mostu stdio; `undefined` dla nieznanego tokenu. */
   callerSession(token: string): string | undefined {
-    return this.#callers.get(tokenHash(token));
+    return this.#tokens.session(token);
   }
 
   /** Propozycja zadania od sesji `caller` (`null`: agent spoza Trackwall) w repo z folderu z projektami (ADR-39). */
@@ -153,12 +153,18 @@ export class Agents {
     return this.#proposals.add({ ...proposal, proposedBy: { session: caller } });
   }
 
-  /** Zadanie z propozycji, z poleceniem poprawionym przez użytkownika; nieudany start zostawia propozycję. */
+  /**
+   * Zadanie z propozycji, z poleceniem poprawionym przez użytkownika. Propozycja znika z listy od razu, więc drugie
+   * zatwierdzenie to `not_found`; wraca na listę, gdy zadanie nie powstało. Zadanie, które zostało po nieudanym
+   * sprzątaniu, użytkownik kończy sam, więc wtedy propozycja nie wraca.
+   */
   async approveProposal(id: string, prompt: string): Promise<Task> {
-    const { repo, title, proposedBy } = this.#proposals.get(id);
-    const task = await this.#tasks.create(repo, prompt, { id, title, proposedBy });
-    this.#proposals.approved(id);
-    return task;
+    const { repo, title, proposedBy } = this.#proposals.take(id);
+    try {
+      return await this.#tasks.create(repo, prompt, { id, title, proposedBy });
+    } finally {
+      this.#proposals.release(id, this.#tasks.find(id) === undefined);
+    }
   }
 
   rejectProposal(id: string): void {
@@ -190,6 +196,8 @@ export class Agents {
       const status = session ? sessionWaitStatus(session) : this.#tasks.busy(task.id) ? "starting" : "no_session";
       return { status, proposal: null, task, session };
     }
+    const approving = this.#proposals.approving(target.task);
+    if (approving) return { status: "starting", proposal: approving, task: null, session: null };
     const proposal = this.#proposals.find(target.task);
     if (proposal) return { status: "proposal_pending", proposal, task: null, session: null };
     if (this.#proposals.wasRejected(target.task)) return { status: "proposal_rejected", proposal: null, task: null, session: null };
@@ -197,7 +205,7 @@ export class Agents {
   }
 
   createTask(repo: string, prompt: string): Promise<Task> {
-    return this.#tasks.create(repo, prompt);
+    return this.#tasks.create(repo, prompt, { id: randomUUID(), title: null, proposedBy: null });
   }
 
   resumeTask(id: string): Promise<Task> {
@@ -237,7 +245,7 @@ export class Agents {
     if (!program) throw new DomainError("agent_unavailable", `Copilot CLI (${name}) not found in PATH`);
     const id = randomUUID();
     const dir = this.#sessionDir(id);
-    const token = randomBytes(32).toString("base64url");
+    const token = this.#tokens.issue(id);
     const session = this.#prepare({ id, repo, task, dir, token, promptOnStart });
     try {
       const { terminal } = await this.#deps.procs.startTerminal({
@@ -259,12 +267,12 @@ export class Agents {
       });
       session.connect(terminal);
     } catch (err) {
+      this.#tokens.revoke(id);
       session.dispose();
       rmSync(dir, { recursive: true, force: true });
       throw domainError(repo, err);
     }
     this.#sessions.set(id, session);
-    this.#callers.set(tokenHash(token), id);
     this.#startTicking();
     return this.#view(session);
   }
@@ -309,7 +317,7 @@ export class Agents {
       throw new DomainError("bad_request", "the session is still running; stop it before closing");
     }
     this.#sessions.delete(id);
-    for (const [hash, caller] of this.#callers) if (caller === id) this.#callers.delete(hash);
+    this.#tokens.revoke(id);
     session.dispose();
     this.#removeDir(id);
   }
@@ -323,7 +331,7 @@ export class Agents {
   #prepare({ id, repo, task, dir, token, promptOnStart }: SessionFiles): LiveSession {
     const pluginDir = join(dir, "plugin");
     const hooksFile = join(dir, "hooks.jsonl");
-    const tokenFile = join(dir, SESSION_TOKEN_FILE);
+    const tokenFile = join(dir, SESSION_TOKEN_FILENAME);
     mkdirSync(dir, { recursive: true });
     writeFileSync(hooksFile, "");
     writeFileSync(tokenFile, token, { mode: 0o600 });
@@ -408,11 +416,6 @@ interface SessionFiles {
   dir: string;
   token: string;
   promptOnStart: boolean;
-}
-
-/** Mapa tokenów trzyma skróty: odczyt pamięci daemona nie daje tokenu, a szukanie po skrócie nie zdradza tokenu czasem porównania. */
-function tokenHash(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
 }
 
 /** Klucz właściciela grupy w `procs`; tylko budowany, nigdy rozbierany z powrotem. */

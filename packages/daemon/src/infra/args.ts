@@ -78,8 +78,8 @@ export const MCP_STDIO_COMMAND = "mcp-stdio";
  * Opcja mostu stdio z plikiem tokenu sesji (ADR-39): podaje ją daemon w konfiguracji MCP każdej swojej sesji, żeby
  * serwer MCP wiedział, która sesja woła. Ścieżka zamiast samego tokenu, bo argumenty procesu widzą inni użytkownicy systemu.
  */
-const SESSION_TOKEN_FILE = "session-token-file";
-export const SESSION_TOKEN_FILE_OPTION = `--${SESSION_TOKEN_FILE}`;
+const SESSION_TOKEN_FILE_KEY = "session-token-file";
+export const SESSION_TOKEN_FILE_OPTION = `--${SESSION_TOKEN_FILE_KEY}`;
 /** Podkomenda `trackwall-daemon`, którą Copilot CLI uruchamia jako hook wtyczki sesji (ADR-17, ADR-26). */
 export const COPILOT_HOOK_COMMAND = "copilot-hook";
 
@@ -99,9 +99,9 @@ export function parseCommandLine(argv: string[]): CommandLine {
   if (argv[0] !== MCP_STDIO_COMMAND) return { command: "daemon", args: parseDaemonArgs(argv) };
   const { values } = parseArgs({
     args: argv.slice(1),
-    options: { home: { type: "string" }, [SESSION_TOKEN_FILE]: { type: "string" } },
+    options: { home: { type: "string" }, [SESSION_TOKEN_FILE_KEY]: { type: "string" } },
     strict: true,
     allowPositionals: false,
   });
-  return { command: MCP_STDIO_COMMAND, home: values.home, sessionTokenFile: values[SESSION_TOKEN_FILE] };
+  return { command: MCP_STDIO_COMMAND, home: values.home, sessionTokenFile: values[SESSION_TOKEN_FILE_KEY] };
 }

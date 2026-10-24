@@ -22,21 +22,24 @@ export type TaskId = z.infer<typeof TaskId>;
  * Polecenie zadania. Idzie do Copilot CLI jednym argumentem (`--interactive=<polecenie>`), a wiersz poleceń Windowsa
  * mieści 32 767 znaków razem z resztą komendy.
  */
-export const TaskPrompt = z.string().trim().min(1).max(8000);
+export const TASK_PROMPT_MAX = 8000;
+export const TaskPrompt = z.string().trim().min(1).max(TASK_PROMPT_MAX);
 
 /**
  * Tytuł zadania (ADR-39): krótki opis na liście sesji, który nadaje sesja proponująca zadanie, tak jak tytuł wątku.
  * Jedna linia bez znaków sterujących, bo UI pokazuje go jako tekst w jednym wierszu.
  */
+export const TASK_TITLE_MAX = 80;
 export const TaskTitle = z
   .string()
   .trim()
   .min(1)
-  .max(80)
+  .max(TASK_TITLE_MAX)
   .regex(/^[^\p{Cc}]*$/u, "the title must be a single line without control characters");
 
 /** Podsumowanie zadania od jego sesji (`report_result`, ADR-39): co zrobiła i co zostało, dla sesji, która zleciła zadanie. */
-export const TaskSummaryText = z.string().trim().min(1).max(4000);
+export const TASK_SUMMARY_MAX = 4000;
+export const TaskSummaryText = z.string().trim().min(1).max(TASK_SUMMARY_MAX);
 
 /**
  * Kto zaproponował zadanie (ADR-39): sesja Trackwall po swoim tokenie sesji albo `null` dla agenta spoza Trackwall

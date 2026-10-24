@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
-import { proposerLabel } from "@/lib/session-entries";
+import { proposerLabel, taskName } from "@/lib/session-entries";
 import { isLive, sessionStateLabel } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
 import { SessionTerminal } from "./SessionTerminal.tsx";
@@ -116,7 +116,7 @@ export function TaskPanel({
 
 /** Tytuł albo polecenie zadania, a przy zadaniu z propozycji także to, kto je zaproponował. */
 function taskSubtitle(task: Task, sessions: readonly Session[]): string {
-  const name = task.title ?? task.prompt;
+  const name = taskName(task);
   return task.proposedBy ? `${name} · ${proposerLabel(task.proposedBy, sessions)}` : name;
 }
 

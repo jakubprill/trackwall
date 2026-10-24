@@ -74,7 +74,7 @@ function modules() {
     miseCommand: ["mise"],
     copilotCommand: ["copilot"],
     hookCommand: () => ({ exec: "true", args: [] }),
-    mcpStdioCommand: ["trackwall-daemon", "mcp-stdio"],
+    sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
     userEnv: async () => process.env,
     log: () => {},
   });

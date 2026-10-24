@@ -12,6 +12,7 @@ import {
 } from "@trackwall/protocol";
 import { loopbackRequest } from "../src/infra/loopback.ts";
 import { MCP_PATH, SESSION_TOKEN_HEADER } from "../src/mcp/endpoint.ts";
+import { viewer } from "./support/agents.ts";
 import { connectHttpClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
 
@@ -100,7 +101,18 @@ describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (p
       (await call(mainClient, "wait_for_session", { task: task.id, timeoutSeconds: 2 })).structuredContent,
     );
     expect(working).toMatchObject({ status: "working", task: { id: task.id }, session: { task: task.id } });
-    const taskSession = working.session?.id ?? "";
+    if (!working.session) throw new Error("czekanie na zadanie w pracy nie zwróciło jego sesji");
+    const taskSession = working.session.id;
+
+    // Agent zadania kończy turę prośbą o zgodę: czekanie wraca, bo sesja potrzebuje człowieka.
+    const window = viewer(daemon.facade.agents, taskSession);
+    window.attachment.input("napraw logowanie\r");
+    const needsYou = WaitForSessionResult.parse(
+      (await call(mainClient, "wait_for_session", { task: task.id, timeoutSeconds: 10 })).structuredContent,
+    );
+    expect(needsYou).toMatchObject({ status: "needs_attention", task: { id: task.id }, session: { id: taskSession } });
+    window.attachment.input("y\r");
+    window.attachment.detach();
 
     const reported = ReportResultResult.parse(
       (await call(await clientOfSession(taskSession), "report_result", { summary: "Logowanie naprawione, test w login.test.ts." }))
@@ -116,6 +128,13 @@ describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (p
     );
     expect(exited).toMatchObject({ status: "exited", session: { id: taskSession, run: { kind: "exited" } } });
     expect(exited.session?.run).not.toHaveProperty("lastLines");
+
+    // Zadanie bez sesji (zamkniętej w UI albo po restarcie daemona) nie ma na co czekać.
+    daemon.facade.agents.dismiss(taskSession);
+    const orphan = WaitForSessionResult.parse(
+      (await call(mainClient, "wait_for_session", { task: task.id, timeoutSeconds: 10 })).structuredContent,
+    );
+    expect(orphan).toMatchObject({ status: "no_session", task: { id: task.id }, session: null });
   }, 60_000);
 
   test("report_result działa tylko w sesji zadania: agent spoza Trackwall i sesja w korzeniu repo dostają bad_request", async () => {

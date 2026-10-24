@@ -2,7 +2,10 @@ import { z } from "zod";
 import {
   Session,
   SessionId,
+  TASK_PROMPT_MAX,
+  TASK_SUMMARY_MAX,
   TASK_SUMMARY_MAX_FILES,
+  TASK_TITLE_MAX,
   Task,
   TaskChangesSummary,
   TaskId,
@@ -166,6 +169,7 @@ const GET_REPO = "get_repo";
 const LIST_SESSIONS = "list_sessions";
 const GET_SESSION = "get_session";
 const PROPOSE_TASK = "propose_task";
+const REPORT_RESULT = "report_result";
 const WAIT_FOR_SESSION = "wait_for_session";
 const RepoArg = RepoId.describe(`repo id from ${LIST_REPOS} (the id field)`);
 
@@ -307,25 +311,27 @@ export const mcpTools = {
       "user approves it (the user may edit the prompt first, or reject it). An approved proposal becomes a task with the " +
       "same id: a new branch from the repo's default branch in its own worktree and a Copilot CLI session there with the " +
       "prompt as its first message. Write the prompt so that it stands alone (the agent sees nothing else), with the goal, " +
-      "the relevant repos and files, and how to check the result; ask the agent to call report_result when it is done. " +
+      `the relevant repos and files, and how to check the result; ask the agent to call ${REPORT_RESULT} when it is done. ` +
       `Then call ${WAIT_FOR_SESSION} with task: the returned id to learn about approval and the session.`,
     args: z
       .object({
         repo: RepoArg,
-        title: TaskTitle.describe("short single-line title for the task list, e.g. Add email validation to sign-up"),
-        prompt: TaskPrompt.describe("the complete instructions for the agent, up to 8000 characters"),
+        title: TaskTitle.describe(
+          `short single-line title for the task list, up to ${TASK_TITLE_MAX} characters, e.g. Add email validation to sign-up`,
+        ),
+        prompt: TaskPrompt.describe(`the complete instructions for the agent, up to ${TASK_PROMPT_MAX} characters`),
       })
       .strict(),
     result: ProposeTaskResult,
   },
   reportResult: {
-    name: "report_result",
+    name: REPORT_RESULT,
     readOnly: false,
     description:
       "Report the result of your task: what you did, what is left and what the user or the session that proposed the " +
       `task should check. Only for a session that runs a task in Trackwall; the summary is saved to your own task (shown in ${GET_SESSION}, ` +
       `${LIST_SESSIONS} and the Sessions view). Calling it again replaces the summary. Commit your changes on the task branch before reporting.`,
-    args: z.object({ summary: TaskSummaryText.describe("the result in a few sentences, up to 4000 characters") }).strict(),
+    args: z.object({ summary: TaskSummaryText.describe(`the result in a few sentences, up to ${TASK_SUMMARY_MAX} characters`) }).strict(),
     result: ReportResultResult,
   },
   waitForSession: {
@@ -336,7 +342,7 @@ export const mcpTools = {
       `or ${LIST_SESSIONS}). Returns as soon as the status is proposal_rejected, stale, needs_attention (the session ` +
       "finished its turn or asks the user for approval), exited or no_session, or after timeoutSeconds with " +
       "proposal_pending, starting or working; then call it again. Waiting on a task follows its latest session. " +
-      `The result has the proposal, task (with its summary from report_result) and session; ${GET_SESSION} gives the changed files.`,
+      `The result has the proposal, task (with its summary from ${REPORT_RESULT}) and session; ${GET_SESSION} gives the changed files.`,
     args: z
       .object({
         session: SessionId.optional().describe(`session id from ${LIST_SESSIONS}`),

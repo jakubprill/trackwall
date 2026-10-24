@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
-import { type ApiResult, MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
+import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
 import { readBody } from "../api/body.ts";
 import { TOOL_REGISTRATIONS, type ToolContext } from "./tools.ts";
 
@@ -33,7 +33,8 @@ const INSTRUCTIONS =
   "No tool changes repos, configuration or processes.";
 
 export interface McpEndpoint {
-  handle: (req: IncomingMessage, res: ServerResponse) => Promise<void>;
+  /** Żądanie z tokenem daemona od sesji `caller` (`null`: agent spoza Trackwall), już rozpoznanej po tokenie sesji. */
+  handle: (req: IncomingMessage, res: ServerResponse, caller: string | null) => Promise<void>;
   close: () => Promise<void>;
 }
 
@@ -49,30 +50,18 @@ export function createMcpEndpoint(o: ToolContext & { version: string }): McpEndp
     { onerror: (err) => o.log(`request rejected: ${err.message}`), maxRequestBodySize: MAX_REQUEST_BYTES },
   );
   return {
-    handle: async (req, res) => {
-      const token = req.headers[SESSION_TOKEN_HEADER];
-      const caller = typeof token === "string" ? o.facade.agents.callerSession(token) : undefined;
-      if (token !== undefined && caller === undefined) return rejectSessionToken(res);
+    handle: async (req, res, caller) => {
       // Rozłączony klient przerywa żądanie także w SDK (`request.signal`), nie tylko strumień odpowiedzi.
       const aborted = new AbortController();
       res.once("close", () => {
         if (!res.writableFinished) aborted.abort();
       });
-      const authInfo = caller === undefined ? undefined : { token: SESSION_TOKEN_HEADER, clientId: caller, scopes: [] };
+      // `token` jest w SDK wymagany, ale serwer go nie czyta; sam token sesji nie wychodzi poza `handle()` w API.
+      const authInfo = caller === null ? undefined : { token: "", clientId: caller, scopes: [] };
       await send(res, await handler.fetch(await toWebRequest(req, aborted.signal), { authInfo }));
     },
     close: () => handler.close(),
   };
-}
-
-/** Odmowa w kopercie API, którą most stdio pokazuje agentowi jako „Trackwall rejected the request”. */
-function rejectSessionToken(res: ServerResponse): void {
-  const body: ApiResult<never> = {
-    ok: false,
-    error: { code: "unauthorized", message: "unknown session token: this Trackwall session has ended" },
-  };
-  res.writeHead(401, { "content-type": "application/json" });
-  res.end(JSON.stringify(body));
 }
 
 /** `IncomingMessage` jako `Request` ze standardu Fetch, którego oczekuje SDK; adres zawsze z loopbacku. */

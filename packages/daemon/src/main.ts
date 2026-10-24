@@ -15,7 +15,7 @@ import { userEnv } from "./infra/user-env.ts";
 import { VERSION } from "./infra/version.ts";
 import { createMcpEndpoint } from "./mcp/endpoint.ts";
 import { runStdioBridge } from "./mcp/stdio-bridge.ts";
-import { mcpStdioCommand } from "./mcp/stdio-command.ts";
+import { mcpStdioCommand, sessionMcpStdioCommand } from "./mcp/stdio-command.ts";
 import { runtimeInfo } from "./platform/runtime.ts";
 
 /** Kody wyjścia czytane przez Tauri. */
@@ -61,7 +61,7 @@ async function main(args: DaemonArgs): Promise<void> {
       miseCommand: ["mise"],
       copilotCommand: ["copilot"],
       hookCommand: (event, hooksFile) => selfCommand([COPILOT_HOOK_COMMAND, event, hooksFile]),
-      mcpStdioCommand: mcpStdioCommand(home),
+      sessionMcpCommand: (tokenFile) => sessionMcpStdioCommand(home, tokenFile),
       userEnv,
       log,
     });

@@ -8,7 +8,7 @@ import type { ProposedBy, Session, SessionList, Task, TaskProposal } from "@trac
  * ani sesji; zatwierdzona staje się zadaniem z tym samym identyfikatorem.
  */
 export type SessionEntry =
-  | { kind: "proposal"; proposal: TaskProposal; session: undefined }
+  | { kind: "proposal"; proposal: TaskProposal }
   | { kind: "session"; session: Session }
   | { kind: "task"; task: Task; session: Session | undefined };
 
@@ -22,17 +22,15 @@ export type SessionSelection =
 
 /**
  * Najpierw propozycje zadań, bo czekają na decyzję, od najnowszej; potem od ostatnio uruchomionej: sesja po starcie,
- * zadanie po starcie swojej ostatniej sesji, a bez sesji po utworzeniu. Propozycja, która w trakcie zatwierdzania jest
- * już zadaniem, jest tylko zadaniem.
+ * zadanie po starcie swojej ostatniej sesji, a bez sesji po utworzeniu. Daemon zdejmuje propozycję z listy, zanim
+ * powstanie z niej zadanie, więc ten sam identyfikator nie trafia na listę dwa razy.
  */
 export function sessionEntries({ sessions, tasks, proposals }: SessionList): SessionEntry[] {
   const started: SessionEntry[] = [
     ...sessions.filter((s) => s.task === null).map((session) => ({ kind: "session" as const, session })),
     ...tasks.map((task) => ({ kind: "task" as const, task, session: latestSession(sessions, task.id) })),
   ];
-  const waiting = proposals
-    .filter((p) => !tasks.some((t) => t.id === p.id))
-    .map((proposal) => ({ kind: "proposal" as const, proposal, session: undefined }));
+  const waiting = proposals.map((proposal) => ({ kind: "proposal" as const, proposal }));
   return [...waiting, ...started.sort((a, b) => entryTime(b).localeCompare(entryTime(a)))];
 }
 
@@ -52,9 +50,21 @@ export function findEntry(entries: readonly SessionEntry[], selection: SessionSe
   if (selection?.kind === "new") return undefined;
   if (!selection) return entries[0];
   const found = entries.find((entry) =>
-    selection.kind === "session" ? entry.session?.id === selection.id : entry.kind === selection.kind && entryId(entry) === selection.id,
+    selection.kind === "session"
+      ? entrySession(entry)?.id === selection.id
+      : entry.kind === selection.kind && entryId(entry) === selection.id,
   );
   return found ?? entries[0];
+}
+
+/** Sesja pozycji: sesja w korzeniu repo albo ostatnia sesja zadania; propozycja jeszcze nie ma sesji, a brak pozycji też. */
+export function entrySession(entry: SessionEntry | undefined): Session | undefined {
+  return entry?.kind === "proposal" ? undefined : entry?.session;
+}
+
+/** Nazwa zadania na liście i w panelu: tytuł z propozycji, a zadanie z formularza nie ma tytułu, więc polecenie. */
+export function taskName(task: Task): string {
+  return task.title ?? task.prompt;
 }
 
 /** Wybór, który wskazuje tę pozycję. */

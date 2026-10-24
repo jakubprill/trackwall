@@ -1,4 +1,12 @@
-import { agentsApi, type Session, type SessionList, type Task, type TaskProposal, workspaceApi } from "@trackwall/protocol";
+import {
+  agentsApi,
+  type Session,
+  type SessionList,
+  TASK_PROMPT_MAX,
+  type Task,
+  type TaskProposal,
+  workspaceApi,
+} from "@trackwall/protocol";
 import { BellRing, GitBranch, Lightbulb, Play, Plus, Square, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -9,7 +17,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { relativeTime, twoDigits } from "@/lib/format";
-import { entryId, entrySelection, findEntry, type SessionEntry, type SessionSelection, sessionEntries } from "@/lib/session-entries";
+import {
+  entryId,
+  entrySelection,
+  entrySession,
+  findEntry,
+  type SessionEntry,
+  type SessionSelection,
+  sessionEntries,
+  taskName,
+} from "@/lib/session-entries";
 import { isLive, nextWaiting, sessionStateLabel, waitingCount } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
 import { actionIsNewer, type RemoteHandle, useRemote } from "@/lib/use-remote";
@@ -43,7 +60,7 @@ export function SessionsView({
   const entries = sessions.data ? sessionEntries(sessions.data).filter((e) => e.kind !== "task" || e.task.id !== hidden) : [];
   const current = findEntry(entries, selected);
   const show = (id: string) => onSelect({ kind: "session", id });
-  const next = nextWaiting(list, current?.session?.id);
+  const next = nextWaiting(list, entrySession(current)?.id);
   const waiting = waitingCount(list);
 
   return (
@@ -228,7 +245,7 @@ function TaskLine({ task }: { task: Task }) {
   return (
     <span className="text-muted-foreground flex min-w-0 items-center gap-1 text-xs" title={task.branch}>
       <GitBranch className="size-3 shrink-0" aria-label="task in a worktree" />
-      <span className="truncate">{task.title ?? task.prompt}</span>
+      <span className="truncate">{taskName(task)}</span>
     </span>
   );
 }
@@ -346,7 +363,7 @@ function NewSession({
             placeholder="What the agent should do, e.g. “Add email validation to the sign-up form, with a test”"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            maxLength={8000}
+            maxLength={TASK_PROMPT_MAX}
             rows={5}
           />
           {chosen && (
