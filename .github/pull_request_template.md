@@ -1,30 +1,30 @@
-## Co się zmienia
+## What changes
 
-<!-- Dla użytkownika Trackwall: jak było, jak jest. Przy zmianie wewnętrznej: co i gdzie. -->
+<!-- For a Trackwall user: how it was, how it is. For an internal change: what and where. -->
 
-## Dlaczego
+## Why
 
-## Jak
+## How
 
-<!-- Najważniejsze decyzje w kodzie. Nowa decyzja architektoniczna: numer ADR w docs/architecture.md §12. -->
+<!-- The key decisions in the code. A new architectural decision: the ADR number in docs/architecture.md §12. -->
 
-## Jak sprawdzone
+## How it was checked
 
-<!-- Komendy z Definition of done (AGENTS.md), testy dodane w tym PR, co uruchomiono na Windowsie i macOS poza CI. -->
+<!-- Commands from the Definition of done (AGENTS.md), tests added in this PR, what was run on Windows and macOS outside CI. -->
 
-Do sprawdzenia ręcznie:
+To check manually:
 
-## Przegląd przed PR
+## Pre-PR review
 
-<!-- Rundy: thermo-nuclear, /code-review, mattpocock-skills:code-review. Co poprawiono, co odrzucono i dlaczego. -->
+<!-- Rounds: thermo-nuclear, /code-review, mattpocock-skills:code-review. What was fixed, what was rejected and why. -->
 
 ## Definition of done
 
-<!-- Pełne brzmienie punktów: AGENTS.md, sekcja „Definition of done”. -->
+<!-- Full wording of the points: AGENTS.md, section "Definition of done". -->
 
-- [ ] 1. Test na najtańszym poziomie (poprawka błędu: test, który bez niej nie przechodzi)
-- [ ] 2. Kod zależny od systemu ma test w macierzy Windows + macOS (CI przy PR, check `CI ok`); reszta wypisana wyżej jako „do sprawdzenia ręcznie”
-- [ ] 3. Komendy z AGENTS.md przechodzą lokalnie
-- [ ] 4. Dokumentacja zaktualizowana w tym PR
-- [ ] 5. Nic firmowego
-- [ ] 6. Przegląd przed PR do czystej rundy albo trzy rundy, a to, co zostało, opisane wyżej
+- [ ] 1. A test at the cheapest level (bug fix: a test that fails without it)
+- [ ] 2. System-dependent code has a test in the Windows + macOS matrix (CI on the PR, `CI ok` check); the rest listed above as "to check manually"
+- [ ] 3. The commands from AGENTS.md pass locally
+- [ ] 4. Documentation updated in this PR
+- [ ] 5. Nothing company-specific
+- [ ] 6. Pre-PR review until a clean round or three rounds, with what is left described above
