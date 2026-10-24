@@ -42,12 +42,16 @@ export class ModuleConfig {
   readonly module: string;
   /** Profile wymienione w plikach, bez `default`, po nazwie. */
   readonly profiles: string[];
+  /** Ile profili ponad `MAX_PROFILES` pominięto. */
+  readonly skippedProfiles: number;
   private readonly views = new Map<string, Map<string, ConfigEntry>>();
 
   constructor(module: string, docs: readonly ConfigDoc[]) {
     this.module = module;
     const base = docs.filter((d) => d.profiles === null);
-    this.profiles = [...new Set(docs.flatMap((d) => d.profiles ?? []))].sort().slice(0, MAX_PROFILES);
+    const all = [...new Set(docs.flatMap((d) => d.profiles ?? []))].sort();
+    this.profiles = all.slice(0, MAX_PROFILES);
+    this.skippedProfiles = all.length - this.profiles.length;
     this.views.set(DEFAULT_PROFILE, merge(base));
     for (const p of this.profiles) this.views.set(p, merge([...base, ...docs.filter((d) => d.profiles?.includes(p))]));
   }
@@ -105,7 +109,17 @@ export function readSpringConfigs(snapshot: RepoSnapshot, out: ProblemSink): Map
     docs.push(...readConfigFile(path, text, out));
     byModule.set(module, docs);
   }
-  return new Map([...byModule].map(([module, docs]) => [module, new ModuleConfig(module, docs)]));
+  return new Map(
+    [...byModule].map(([module, docs]) => {
+      const config = new ModuleConfig(module, docs);
+      if (config.skippedProfiles > 0)
+        out.problems.push({
+          path: module,
+          message: `moduł ma ${config.skippedProfiles} profili ponad ${MAX_PROFILES}; karta pomija je (po nazwie)`,
+        });
+      return [module, config];
+    }),
+  );
 }
 
 /** Katalog modułu dla pliku pod `src/main/…`; `""`, gdy plik leży w `src/main` korzenia albo poza nim. */
@@ -115,8 +129,8 @@ export function moduleOf(path: string): string {
 }
 
 /**
- * Kolejność, w której Spring czyta pliki: `bootstrap` przed `application`, YAML przed `.properties`, które go nadpisuje,
- * a plik profilu (`application-prod.yml`) po plikach bez profilu, także po dokumentach `on-profile` w nich.
+ * Kolejność, w której Spring czyta pliki: każdy `bootstrap*` przed każdym `application*`, w nich plik profilu
+ * (`application-prod.yml`) po pliku bez profilu, także po jego dokumentach `on-profile`, a YAML przed `.properties`.
  */
 function byLoadOrder(a: string, b: string): number {
   return rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0);
@@ -125,7 +139,7 @@ function byLoadOrder(a: string, b: string): number {
 function rank(path: string): number {
   const name = baseName(path);
   const profileFile = CONFIG_FILE.exec(path)?.[2] !== undefined;
-  return (profileFile ? 4 : 0) + (name.startsWith("bootstrap") ? 0 : 2) + (name.endsWith(".properties") ? 1 : 0);
+  return (name.startsWith("bootstrap") ? 0 : 4) + (profileFile ? 2 : 0) + (name.endsWith(".properties") ? 1 : 0);
 }
 
 function readConfigFile(path: string, text: string, out: ProblemSink): ConfigDoc[] {

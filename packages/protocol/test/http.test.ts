@@ -37,7 +37,17 @@ describe("adresy i ścieżki HTTP", () => {
       "https://hooks.example.com/services/T000/B000/***",
     );
     expect(withoutCredentials("http://orders:8080/api/v1/orders/{id}")).toBe("http://orders:8080/api/v1/orders/{id}");
+    expect(withoutCredentials("http://orders/customer-service-v2-api/getOrdersByCustomerId2")).toBe(
+      "http://orders/customer-service-v2-api/getOrdersByCustomerId2",
+    );
+    expect(withoutCredentials("http://example.com?email=a@b.com")).toBe("http://example.com");
+    expect(parseHttpUrl("http://example.com?email=a@b.com")?.host).toBe("example.com");
+    expect(parseHttpUrl("http://ja:p@ss@orders/x")?.host).toBe("orders");
     expect(parseHttpUrl("http://[::1]:8090/api")).toEqual({ scheme: "http", host: "[::1]", port: 8090, path: "/api" });
+    expect(withoutCredentials("http://ja:p/ss@orders/api")).toBe("http://***@orders/api");
+    expect(parseHttpUrl("http://ja:p/ss@orders/api")?.host).toBe("orders");
+    expect(withoutCredentials("http://orders:8080/users/@me")).toBe("http://orders:8080/users/@me");
+    expect(parseHttpUrl("http://orders#a@evil/x")?.host).toBe("orders");
   });
 
   test("ścieżki sklejają się z jednym ukośnikiem między częściami", () => {

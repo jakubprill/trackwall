@@ -162,6 +162,7 @@ class SourceParser {
     this.pendingType = { name, keyword, line: this.tokens[this.i]?.line ?? 0, annotations: this.pending, methods: [], supertypes: [] };
     this.pending = [];
     this.i = nameToken?.kind === "ident" ? j + 1 : j;
+    this.i = afterTypeParameters(this.tokens, this.i);
     if (isPunct(this.tokens[this.i], "(")) this.i = closingIndex(this.tokens, this.i);
   }
 
@@ -189,6 +190,17 @@ class SourceParser {
     this.i = end;
     this.statementStart = end;
   }
+}
+
+/** Indeks za parametrami typu (`<T : Base>`) od `from`; `from`, gdy ich nie ma. Ograniczony, bo plik jest z repo. */
+function afterTypeParameters(tokens: readonly Token[], from: number): number {
+  if (!isPunct(tokens[from], "<")) return from;
+  let depth = 0;
+  for (let i = from; i < tokens.length && i < from + 200; i++) {
+    if (isPunct(tokens[i], "<")) depth++;
+    else if (isPunct(tokens[i], ">") && --depth === 0) return i + 1;
+  }
+  return from;
 }
 
 /** Indeks za wyrażeniem od `from`: do `;` poza nawiasami albo do nowej linii bez `+` na styku. */

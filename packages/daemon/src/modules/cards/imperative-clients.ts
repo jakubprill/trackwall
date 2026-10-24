@@ -50,6 +50,8 @@ const MAX_CHAIN = 60;
  * tokenów, a wywołania zagnieżdżone tysiące razy (plik z repo, §8) kopiowałyby resztę pliku przy każdym wywołaniu.
  */
 const MAX_ARGUMENT_TOKENS = 256;
+/** Najwięcej wywołań `.uri(…)` i metod `RestTemplate` rozkładanych w jednym pliku: dłuższa lista to nie kod aplikacji. */
+const MAX_SCANNED_CALLS = 2000;
 
 interface FoundCall extends HttpCall {
   /** Adres bazowy sklejony z wywołaniem (`baseUrl + "/orders"`, `"http://…/orders"`); `undefined`, gdy go nie ma. */
@@ -140,18 +142,33 @@ function baseText(arg: readonly Token[], ctx: ScanContext): string | undefined {
   return value !== undefined && (value.includes("${") || parseHttpUrl(value)) ? value : undefined;
 }
 
-/** Argumenty wywołania z nawiasem `(` pod `open`; `undefined` dla listy dłuższej niż `MAX_ARGUMENT_TOKENS`. */
+/**
+ * Argumenty wywołania z nawiasem `(` pod `open`. Z listy dłuższej niż `MAX_ARGUMENT_TOKENS` (np. ciało żądania
+ * `Map.of(…)` w wywołaniu) tylko argumenty, które mieszczą się w limicie w całości: adres i metoda są na początku.
+ */
 function argumentsAt(tokens: readonly Token[], open: number): Token[][] | undefined {
   const end = closingIndex(tokens, open);
-  return end - open > MAX_ARGUMENT_TOKENS ? undefined : splitTopLevel(tokens.slice(open + 1, end - 1));
+  if (end - open <= MAX_ARGUMENT_TOKENS) return splitTopLevel(tokens.slice(open + 1, end - 1));
+  let lastComma = -1;
+  for (let i = open + 1; i < open + 1 + MAX_ARGUMENT_TOKENS && i < end - 1; ) {
+    const t = tokens[i];
+    if (isPunct(t, "(") || isPunct(t, "{") || isPunct(t, "[")) i = closingIndex(tokens, i);
+    else {
+      if (isPunct(t, ",")) lastComma = i;
+      i++;
+    }
+  }
+  return lastComma < 0 ? undefined : splitTopLevel(tokens.slice(open + 1, lastComma));
 }
 
 function findCalls(ctx: ScanContext): FoundCall[] {
   const calls: FoundCall[] = [];
-  for (let i = 0; i + 2 < ctx.tokens.length; i++) {
+  let scanned = 0;
+  for (let i = 0; i + 2 < ctx.tokens.length && scanned < MAX_SCANNED_CALLS; i++) {
     const t = ctx.tokens[i + 1];
     if (!isPunct(ctx.tokens[i], ".") || t?.kind !== "ident" || !isPunct(ctx.tokens[i + 2], "(")) continue;
     if (t.text !== "uri" && !Object.hasOwn(TEMPLATE_METHODS, t.text)) continue;
+    scanned++;
     const args = argumentsAt(ctx.tokens, i + 2);
     if (args === undefined) continue;
     const call = t.text === "uri" ? fluentCall(ctx, i, args) : templateCall(ctx, t.text, args);

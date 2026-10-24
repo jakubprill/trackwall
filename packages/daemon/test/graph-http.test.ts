@@ -189,6 +189,17 @@ describe("krawędzie http: dopasowanie celu", () => {
     expect(graph.edges.map((e) => [e.from, e.to, e.key, e.confidence])).toEqual([["gateway", "orders-api", "orders", "high"]]);
   });
 
+  test("aplikacja o tej samej nazwie w repo klienta nie obniża pewności krawędzi do jedynego innego repo", () => {
+    const graph = buildGraph(
+      [
+        repo("bff", card([app("orders")], [client({ via: "feign", name: "OrdersClient", app: "orders" })])),
+        repo("orders-api", card([app("orders")], [])),
+      ],
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
+    );
+    expect(graph.edges.map((e) => [e.to, e.confidence])).toEqual([["orders-api", "high"]]);
+  });
+
   test("ta sama nazwa aplikacji w dwóch repo (klon, fork) daje krawędź do każdego z pewnością medium", () => {
     const graph = buildGraph(
       [

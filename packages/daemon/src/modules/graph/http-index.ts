@@ -142,10 +142,10 @@ export class HttpIndex {
     const port = url?.port ?? null;
     const local = host !== undefined && LOCAL_HOSTS.has(host) && port !== null;
     const attempts: (() => HttpTarget[])[] = [
-      () => (name ? this.byApp(name, client, base) : []),
+      () => (name ? this.byApp(from, name, client, base) : []),
       () => (name ? this.byAlias(name, client, base) : []),
       () => (host ? this.byAlias(host, client, base) : []),
-      () => (label && !local ? this.byApp(label, client, base) : []),
+      () => (label && !local ? this.byApp(from, label, client, base) : []),
       () => (label && !local ? this.byRepoName(label, client, base) : []),
       () => (local && port !== null ? this.byPort(port, client, base) : []),
     ];
@@ -156,9 +156,10 @@ export class HttpIndex {
     return undefined;
   }
 
-  private byApp(name: string, client: ConsumedHttp, base: string): HttpTarget[] {
+  private byApp(from: string, name: string, client: ConsumedHttp, base: string): HttpTarget[] {
     const apps = this.apps.get(name.toLowerCase()) ?? [];
-    const repos = new Set(apps.map((a) => a.repo));
+    // Pewność liczy się z innych repo: aplikacja o tej nazwie w repo klienta nie robi z celu niepewnego.
+    const repos = new Set(apps.map((a) => a.repo).filter((r) => r !== from));
     return apps.map(({ repo, app }) => {
       const calls = this.match(repo, client, base, app.name);
       // `exact` dopiero, gdy każde wywołanie ma endpoint w tym repo: sama nazwa aplikacji to `high`.

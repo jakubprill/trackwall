@@ -127,6 +127,23 @@ describe("endpointy Spring", () => {
     ).toEqual(["app orders src/orders", "endpoint /orders"]);
   });
 
+  test("projekt przykładowy w zasobach testów (src/test/resources/…/src/main) to kod testów", () => {
+    const c = card({
+      "src/main/java/a/Api.java": '@RestController\nclass Api {\n  @GetMapping("/orders") String list() { return ""; }\n}\n',
+      "src/test/resources/demo/src/main/java/a/Demo.java":
+        '@RestController\nclass Demo {\n  @GetMapping("/demo") String demo() { return ""; }\n}\n',
+    });
+    expect(endpoints(c)).toEqual(["GET /orders Api.list:3"]);
+  });
+
+  test("klasa generyczna Kotlina: parametry konstruktora głównego za <T> nie są nadtypami", () => {
+    const c = card({
+      "src/main/kotlin/a/Base.kt": '@RequestMapping("/base")\ninterface Base {\n  @GetMapping("/x") fun x(): String\n}\n',
+      "src/main/kotlin/a/Api.kt": "@RestController\nclass Api<T : Any>(private val base: Base) {\n}\n",
+    });
+    expect(endpoints(c)).toEqual([]);
+  });
+
   test("@RequestMapping bez metody to endpoint dla każdej metody, a klasa bez @Controller nie ma endpointów", () => {
     const c = card({
       "src/main/java/a/Any.java": '@Controller\nclass Any {\n  @RequestMapping("/any")\n  String any() { return ""; }\n}\n',
@@ -181,6 +198,20 @@ describe("klienci HTTP Spring", () => {
       "feign Direct app=direct url=http://localhost:7000 [default] {DELETE /x}",
       "config gateway.uri app=pricing url=lb://pricing [default] {}",
     ]);
+  });
+
+  test("wywołanie z długim ciałem żądania zachowuje adres i metodę, a moduł z ponad 32 profilami ma problem karty", () => {
+    const body = Array.from({ length: 100 }, (_, i) => `"k${i}", ${i}`).join(", ");
+    const profiles = Array.from(
+      { length: 33 },
+      (_, i) => `---\nspring.config.activate.on-profile: p${String(i).padStart(2, "0")}\nx: ${i}`,
+    ).join("\n");
+    const c = card({
+      "src/main/resources/application.yml": `x: 0\n${profiles}\n`,
+      "src/main/java/a/Rest.java": `class Rest {\n  RestTemplate rest;\n  void x() { rest.exchange("/api/orders", HttpMethod.POST, new HttpEntity<>(Map.of(${body})), String.class); }\n}\n`,
+    });
+    expect(summary(c)).toEqual(["rest-template Rest app=null url=null [] {POST /api/orders}"]);
+    expect(c.problems).toEqual([{ path: "", message: "moduł ma 1 profili ponad 32; karta pomija je (po nazwie)" }]);
   });
 
   test("plik profilu (application-prod.yml) nadpisuje dokument on-profile z application.yml, jak w Spring Boot", () => {
@@ -238,6 +269,23 @@ describe("klienci HTTP Spring", () => {
     expect(summary(c)).toEqual([
       "webclient Orders app=null url=http://localhost:8081 [default] {GET /api/orders}",
       "webclient Orders app=null url=http://orders [k8s] {GET /api/orders}",
+    ]);
+  });
+
+  test("dwa adresy w jednej linii YAML ({a: …, b: …}): adres klienta z kodu nie ukrywa drugiego adresu z konfiguracji", () => {
+    const c = card({
+      "src/main/resources/application.yml": "clients: {orders: http://orders, users: http://users}\n",
+      "src/main/java/a/Orders.java": [
+        "class Orders {",
+        "  WebClient client;",
+        `  Orders(@Value("\${clients.orders}") String url) { client = WebClient.create(url); }`,
+        '  void load() { client.get().uri("/api/orders").retrieve(); }',
+        "}",
+      ].join("\n"),
+    });
+    expect(summary(c)).toEqual([
+      "webclient Orders app=null url=http://orders [default] {GET /api/orders}",
+      "config clients.users app=null url=http://users [default] {}",
     ]);
   });
 });

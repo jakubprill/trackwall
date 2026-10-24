@@ -32,6 +32,8 @@ export const JVM_SOURCE_GLOBS = ["*.java", "*.kt"];
 export function isJvmSource(path: string): boolean {
   if (path.length > 1024 || !(path.endsWith(".java") || path.endsWith(".kt"))) return false;
   const segments = path.split("/");
+  // Projekt przykładowy w zasobach testów (`src/test/resources/demo/src/main/java`) to też kod testów.
+  if (segments.some((s, i) => s === "src" && segments[i + 1] === "test")) return false;
   return segments.some((s, i) => s === "src" && segments[i + 1] === "main") || !segments.includes("src");
 }
 
@@ -59,7 +61,8 @@ export function extractSpring(snapshot: RepoSnapshot): SpringFacts {
       out.provides.push(...springEndpoints(file, module, lookup));
       codeClients.push(...declarativeClients(file, module, lookup), ...imperativeClients(file, module, lookup));
     }
-    out.consumes.push(...codeClients, ...configClients(module, codeClients));
+    // Bez `push(...lista)`: lista z dużego repo przekroczyłaby limit argumentów wywołania.
+    for (const client of [...codeClients, ...configClients(module, codeClients, out)]) out.consumes.push(client);
   }
   return out;
 }

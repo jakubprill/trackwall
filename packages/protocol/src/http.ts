@@ -95,12 +95,66 @@ export interface HttpUrl {
   path: string;
 }
 
-/** Dłuższy tekst nie jest adresem z konfiguracji, a wyrażenie niżej i tak go nie dotknie. */
+/** Dłuższy tekst nie jest adresem z konfiguracji, a wyrażenia niżej i tak go nie dotkną. */
 const MAX_URL_LENGTH = 2048;
-const HTTP_URL = /^(https?|wss?|lb):\/\/(?:[^/@\s]*@)?(\[[^\]/\s]{1,64}\]|[^/:?#@\s]+)(?::(\d{1,5}))?([^?#\s]*)/i;
 const SCHEME = /^[a-z][a-z0-9+.-]{0,20}:\/\//i;
-/** Człon ścieżki, który wygląda na token (klucz webhooka, identyfikator z hasłem): długi, z literami i cyframi. */
-const OPAQUE_SEGMENT = /^(?=[^/]*\d)(?=[^/]*[A-Za-z])[\w-]{20,}$/;
+const HTTP_SCHEMES = new Set(["http", "https", "ws", "wss", "lb"]);
+const HOST_PORT = /^(\[[^\]\s]{1,64}\]|[^:[\]\s]+)(?::(\d{1,5}))?$/;
+/**
+ * Człon ścieżki, który wygląda na token (klucz webhooka, identyfikator z hasłem): co najmniej 20 liter i cyfr bez
+ * łączników, w tym co najmniej trzy cyfry. Nazwa w kebab-case (`customer-service-v2`) i metoda
+ * (`getOrdersByCustomerId2`) nim nie są.
+ */
+const OPAQUE_SEGMENT = /^(?=(?:\D*\d){3})(?=[^A-Za-z]*[A-Za-z])\w{20,}$/;
+
+/** Adres rozłożony raz, jedną regułą dla `parseHttpUrl` i `withoutCredentials`. */
+interface UrlParts {
+  /** Schemat z `://`, np. `http://`. */
+  scheme: string;
+  /** Czy adres ma użytkownika (i hasło) przed hostem. */
+  userInfo: boolean;
+  /** Host i port, bez użytkownika. */
+  authority: string;
+  /** Ścieżka bez zapytania i fragmentu, `""` bez ścieżki. */
+  path: string;
+}
+
+/**
+ * Użytkownik i hasło kończą się na ostatnim `@` przed ścieżką, bo hasło może mieć `@`, `?` i `#`; `@` w zapytaniu
+ * bez `/` (`http://host?email=a@b`) nie jest użytkownikiem, bo przed `?` nie ma `:` hasła.
+ */
+function urlParts(text: string): UrlParts | undefined {
+  const scheme = SCHEME.exec(text)?.[0];
+  if (scheme === undefined) return undefined;
+  const rest = text.slice(scheme.length);
+  const end = authorityEnd(rest);
+  const raw = end < 0 ? rest : rest.slice(0, end);
+  const at = raw.lastIndexOf("@");
+  const before = at < 0 ? "" : raw.slice(0, at);
+  const query = before.search(/[?#]/);
+  const userInfo = at >= 0 && (query < 0 || before.slice(0, query).includes(":"));
+  const hostPart = userInfo ? raw.slice(at + 1) : raw;
+  const hostEnd = hostPart.search(/[?#]/);
+  const authority = hostEnd < 0 ? hostPart : hostPart.slice(0, hostEnd);
+  const path = hostEnd >= 0 || end < 0 ? "" : (rest.slice(end).split(/[?#\s]/)[0] ?? "");
+  return { scheme, userInfo, authority, path };
+}
+
+/**
+ * Koniec części `user:hasło@host:port` w `rest` (adres bez schematu). Zwykle to pierwszy `/`, ale hasło może mieć `/`
+ * (`u:p/ss@host`): gdy przed pierwszym `/` jest `:` z czymś innym niż numer portu, a dalej (przed zapytaniem) `@`,
+ * to `@` kończy hasło, inaczej reszta hasła trafiłaby do ścieżki na karcie.
+ */
+function authorityEnd(rest: string): number {
+  const end = rest.search(/[/\s]/);
+  const raw = end < 0 ? rest : rest.slice(0, end);
+  if (end < 0 || raw.includes("@") || !/:(?!\d*$)/.test(raw)) return end;
+  const beforeQuery = rest.slice(0, rest.search(/[?#\s]|$/));
+  const at = beforeQuery.lastIndexOf("@");
+  if (at < 0) return end;
+  const after = rest.slice(at).search(/[/\s]/);
+  return after < 0 ? -1 : at + after;
+}
 
 /**
  * Adres bez użytkownika, hasła, zapytania i członów ścieżki wyglądających na token (`http://ja:tajne@host/api?key=x`
@@ -108,16 +162,9 @@ const OPAQUE_SEGMENT = /^(?=[^/]*\d)(?=[^/]*[A-Za-z])[\w-]{20,}$/;
  * `application.yml` trafia na kartę, do UI i do agenta, a sekret nie może (§8).
  */
 export function withoutCredentials(url: string): string {
-  const scheme = SCHEME.exec(url)?.[0];
-  if (scheme === undefined) return maskPath(url.split(/[?#]/)[0] ?? "");
-  const rest = url.slice(scheme.length);
-  const slash = rest.indexOf("/");
-  const authority = slash < 0 ? rest : rest.slice(0, slash);
-  // Hasło może mieć `@`, `?` i `#`: użytkownik i hasło kończą się na ostatnim `@` przed ścieżką.
-  const at = authority.lastIndexOf("@");
-  const host = authority.slice(at + 1).split(/[?#]/)[0] ?? "";
-  const path = slash < 0 || /[?#]/.test(authority.slice(at + 1)) ? "" : (rest.slice(slash).split(/[?#]/)[0] ?? "");
-  return `${scheme}${at < 0 ? "" : "***@"}${host}${maskPath(path)}`;
+  const parts = url.length > MAX_URL_LENGTH ? undefined : urlParts(url);
+  if (parts === undefined) return maskPath(url.split(/[?#]/)[0] ?? "");
+  return `${parts.scheme}${parts.userInfo ? "***@" : ""}${parts.authority}${maskPath(parts.path)}`;
 }
 
 function maskPath(path: string): string {
@@ -130,10 +177,12 @@ function maskPath(path: string): string {
 /** Adres HTTP z tekstu; `undefined` dla innego tekstu i dla hosta z nierozwiniętym `${…}`. */
 export function parseHttpUrl(text: string): HttpUrl | undefined {
   if (text.length > MAX_URL_LENGTH) return undefined;
-  const m = HTTP_URL.exec(text.trim());
-  const [, scheme, host, port, path] = m ?? [];
-  if (!scheme || !host || /[${}]/.test(host)) return undefined;
-  return { scheme: scheme.toLowerCase(), host: host.toLowerCase(), port: port ? Number(port) : null, path: path ?? "" };
+  const parts = urlParts(text.trim());
+  const scheme = parts?.scheme.slice(0, -3).toLowerCase();
+  if (!parts || !scheme || !HTTP_SCHEMES.has(scheme)) return undefined;
+  const [, host, port] = HOST_PORT.exec(parts.authority) ?? [];
+  if (!host || /[${}]/.test(host)) return undefined;
+  return { scheme, host: host.toLowerCase(), port: port ? Number(port) : null, path: parts.path };
 }
 
 /** Nazwa aplikacji z adresu `lb://nazwa` (load balancer Spring Cloud); `null` dla innego adresu. */

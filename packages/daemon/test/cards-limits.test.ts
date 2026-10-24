@@ -124,6 +124,21 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
+  test("application.yml z tysiącami adresów w jednym module daje kartę z pierwszymi 500 i problemem", () => {
+    const urls = Array.from({ length: 5_000 }, (_, i) => `url${i}: http://h${i}`).join("\n");
+    const card = extractCard(snapshotOf({ "src/main/resources/application.yml": `${urls}\n` }));
+    expect(card.consumes.filter((c) => c.kind === "http")).toHaveLength(500);
+    expect(card.problems).toContainEqual({ path: "", message: "moduł ma ponad 500 adresów w konfiguracji; karta pokazuje pierwsze" });
+  });
+
+  test("plik z dziesiątkami tysięcy wywołań RestTemplate rozkłada najwyżej 2000 z nich", () => {
+    const calls = Array.from({ length: 30_000 }, (_, i) => `    rest.getForObject("http://h/p${i}", String.class);`).join("\n");
+    const java = `class C {\n  RestTemplate rest;\n  void f() {\n${calls}\n  }\n}`;
+    const started = performance.now();
+    extractCard(snapshotOf({ "src/main/java/a/C.java": java }));
+    expect(performance.now() - started).toBeLessThan(2000);
+  });
+
   test("application.yml z dziesiątkami tysięcy kluczy i setkami profili nie blokuje daemona", () => {
     const flat = Array.from({ length: 30_000 }, (_, i) => `k${i}: v${i}`).join("\n");
     const profiles = Array.from({ length: 800 }, (_, i) => `---\nspring.config.activate.on-profile: p${i}\nurl${i}: http://h${i}`).join(
