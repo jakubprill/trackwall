@@ -138,8 +138,8 @@ const gateway: Part = (_look, color, palette) => {
   };
 };
 
-/** Serwis: szafa z diodami; górna dioda to stan, druga mruga, gdy działa task mise, dwie dolne są ozdobą. */
-const service: Part = (look, color, palette) => {
+/** Backend: szafa z diodami; górna dioda to stan, druga mruga, gdy działa task mise, dwie dolne są ozdobą. */
+const backend: Part = (look, color, palette) => {
   const group = new Group();
   const body = box([0.56, 0.62, 0.44], solid(palette.body), [0, 0.39, 0]);
   group.add(body, outline(body, palette.primary, 0.35));
@@ -171,4 +171,4 @@ const library: Part = (_look, color, palette) => {
   };
 };
 
-const BODIES: Record<RepoKind, Part> = { entry, gateway, service, library };
+const BODIES: Record<RepoKind, Part> = { entry, gateway, backend, library };

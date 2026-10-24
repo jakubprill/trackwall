@@ -270,7 +270,7 @@ export class HomeScene {
     });
   }
 
-  /** Przestawia encję tylko wtedy, gdy zmieniło się jej miejsce, żeby migawka bez zmian nie budziła zmian w świecie. */
+  /** Przestawia encję tylko wtedy, gdy zmieniło się jej miejsce, więc migawka bez zmian nie przesuwa encji. */
   #place(key: string, entity: Entity, place: Placement): void {
     const signature = JSON.stringify(place);
     if (this.#places.get(key) === signature) return;

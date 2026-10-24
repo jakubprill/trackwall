@@ -212,6 +212,38 @@ describe("scena pulpitu", () => {
     expect(hits).toEqual([]);
   });
 
+  test("zamknięta scena nie zgłasza końca wskazania ani wyboru", () => {
+    const calls: Array<HomeKey | null> = [];
+    const scene = new HomeScene(engine, { palette: PALETTE, motion: true, onHover: (k) => calls.push(k), onSelect: (k) => calls.push(k) });
+    scene.apply(MODEL);
+    const session = scene.entity("session:s1");
+    if (!session) throw new Error("brak encji sesji s1");
+    engine.events.emit(session, "pointerenter", {});
+    engine.events.emit(session, "click", { button: 0, point: undefined });
+
+    scene.dispose();
+
+    expect(calls).toEqual(["session:s1", "session:s1"]);
+  });
+
+  test("połączenia repo, których nazwy zawierają separatory, nie zlewają się w jedno", () => {
+    const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
+    const repo = (id: string, layer: number) => ({ id, layer, state: "clean" as const, count: 0, hasMise: true, runningTask: null });
+
+    scene.apply({
+      layerCount: 2,
+      repos: [repo("a>b", 0), repo("a", 0), repo("c", 1), repo("b>c", 1)],
+      sessions: [],
+      links: [
+        { from: "a>b", to: "c", kind: "http" },
+        { from: "a", to: "b>c", kind: "http" },
+      ],
+      daemonRunning: true,
+    });
+
+    expect(linkOpacities()).toHaveLength(2);
+  });
+
   test("kolor spoza zapisu #rrggbb, np. token oklch wprost z CSS, to błąd przy tworzeniu sceny", () => {
     expect(() => new HomeScene(engine, { palette: { ...PALETTE, primary: "oklch(0.82 0.12 210)" }, motion: true })).toThrow("primary");
   });
