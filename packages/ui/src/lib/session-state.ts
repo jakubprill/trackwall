@@ -3,8 +3,8 @@ import type { StatusTone } from "./repo-status.ts";
 
 /**
  * Stan sesji Copilot CLI w jednej linii (§4.4): z grupy procesów, gdy sesja się kończy albo skończyła, inaczej ze
- * stanu z hooków i OSC. Słabszy sygnał (pewność `medium` albo `low`) jest podany jako „prawdopodobnie”, bo stan
- * pochodzi z wnioskowania, a nie z hooka, który mówi wprost.
+ * stanu z hooków i OSC. Słabszy sygnał (pewność `medium` albo `low`) jest podany jako „prawdopodobnie”, bo pochodzi
+ * z wnioskowania albo z rodzaju powiadomienia, którego nie potwierdziło jeszcze nagranie prawdziwej sesji.
  */
 
 const STATE_LABELS = {

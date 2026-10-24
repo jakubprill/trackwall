@@ -4,7 +4,11 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { useEffect, useRef, useState } from "react";
 import type { Connection } from "@/lib/connection";
+import { oncePerFrame } from "@/lib/once-per-frame";
+import { IS_MAC } from "@/lib/platform";
 import { ptySocket } from "@/lib/pty-socket";
+import { copiesSelection } from "@/lib/terminal-copy";
+import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { terminalTheme } from "@/lib/terminal-theme";
 
 const RECONNECT_MS = 1000;
@@ -15,20 +19,15 @@ const RECONNECT_MS = 1000;
  * pustego terminala. Klawisze i rozmiar okna idą do sesji; rozmiar PTY ustala ostatnie okno, które go zgłosiło.
  */
 export function SessionTerminal({ conn, session, live }: { conn: Connection; session: string; live: boolean }) {
+  const frame = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const [notice, setNotice] = useState<string>();
 
   useEffect(() => {
     const element = host.current;
-    if (!element) return;
-    const terminal = new Terminal({
-      theme: terminalTheme(document.documentElement),
-      fontFamily: getComputedStyle(element).fontFamily,
-      fontSize: 13,
-      cursorBlink: true,
-      scrollback: 5000,
-      allowProposedApi: false,
-    });
+    const container = frame.current;
+    if (!element || !container) return;
+    const terminal = new Terminal(sessionTerminalOptions(terminalTheme(document.documentElement), getComputedStyle(element).fontFamily));
     const fit = new FitAddon();
     terminal.loadAddon(fit);
     terminal.open(element);
@@ -71,15 +70,31 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
     connect();
 
     const input = terminal.onData((data) => send({ type: "input", data }));
-    const resize = new ResizeObserver(() => {
-      fit.fit();
-      sendSize();
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (!copiesSelection(event, { mac: IS_MAC, hasSelection: terminal.hasSelection() })) return true;
+      // Bez tego przeglądarka wykona też własny skrót: Ctrl+Shift+C otwiera inspektor w Chrome i WebView2 w trybie dev.
+      event.preventDefault();
+      navigator.clipboard.writeText(terminal.getSelection()).then(
+        () => terminal.clearSelection(),
+        () => setNotice("Nie udało się skopiować zaznaczenia do schowka; zaznacz tekst jeszcze raz."),
+      );
+      return false;
     });
-    resize.observe(element);
+    const resizer = oncePerFrame(() => {
+      const { cols, rows } = terminal;
+      fit.fit();
+      if (terminal.cols !== cols || terminal.rows !== rows) sendSize();
+    });
+    // Obserwowana jest ramka, której rozmiar wynika tylko z układu strony; terminal leży w niej absolutnie, więc jego
+    // wymiary nie zmieniają ramki ani nie wywołują pasków przewijania strony. Odstęp od brzegu to `inset`, nie
+    // `padding` kontenera: FitAddon liczy miejsce z rozmiaru kontenera i nie odejmuje jego paddingu.
+    const resize = new ResizeObserver(() => resizer.request());
+    resize.observe(container);
 
     return () => {
       disposed = true;
       clearTimeout(timer);
+      resizer.dispose();
       resize.disconnect();
       input.dispose();
       socket?.close();
@@ -95,7 +110,9 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
           The session has ended; the terminal shows what was left on its screen.
         </p>
       )}
-      <div ref={host} className="bg-background min-h-0 flex-1 p-2 font-mono" />
+      <div ref={frame} className="bg-background relative min-h-0 flex-1 overflow-hidden">
+        <div ref={host} className="absolute inset-2 font-mono" />
+      </div>
     </div>
   );
 }
