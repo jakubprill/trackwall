@@ -16,6 +16,10 @@ _Unikaj_: aplikacja (gdy chodzi tylko o Tauri)
 Ekran aplikacji w UI (Home, Repos, Sessions, Overview, Daemon, Settings), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
 _Unikaj_: zakładka (dla całego ekranu)
 
+**Window** (`windows.rs` in the shell; label `main` or `window-<n>`; *window*):
+A desktop shell window with the whole UI and its own view (ADR-49). The main window comes from `tauri.conf.json` and hides to the tray; an extra window is opened with “Open in new window” and closes for real.
+_Avoid_: screen (that is a monitor), tab (that is `TabBar`)
+
 **Zakładka** (`TabBar`; po angielsku *tab*):
 Przełącznik części treści wewnątrz widoku, np. README, Files, Commits i mise tasks w widoku Repos.
 

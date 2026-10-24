@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Główne okno: tylko komendy aplikacji (daemon_connection, retry_daemon), żadnych wtyczek systemowych.",
-  "windows": ["main"],
+  "description": "Trackwall windows (the main window and extra windows, ADR-49): only the app's commands (daemon_connection, retry_daemon, open_window, window_shows_sessions), no system plugins.",
+  "windows": ["main", "window-*"],
   "permissions": ["core:default"]
 }

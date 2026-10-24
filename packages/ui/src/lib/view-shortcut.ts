@@ -10,12 +10,31 @@ export type ViewShortcut = "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" |
 type KeyPress = Pick<KeyboardEvent, "code" | "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey">;
 
 export function matchesShortcut(press: KeyPress, shortcut: ViewShortcut, isMac: boolean): boolean {
+  return withModifier(press, isMac, false) && matchesKey(press, shortcut);
+}
+
+/**
+ * The view shortcut with Shift opens the view in a new window (ADR-49): Ctrl+Shift+2 (⌘⇧2) opens Repos. Settings has no
+ * such shortcut where the comma needs Shift, because then Shift changes the character.
+ */
+export function matchesNewWindowShortcut(press: KeyPress, shortcut: ViewShortcut, isMac: boolean): boolean {
+  return withModifier(press, isMac, true) && matchesKey(press, shortcut);
+}
+
+/** Ctrl+Shift+N (⌘⇧N) opens the current view in a new window; the letter by character, like in every layout's menus. */
+export function isNewWindowShortcut(press: KeyPress, isMac: boolean): boolean {
+  return withModifier(press, isMac, true) && press.key.toLowerCase() === "n";
+}
+
+function withModifier(press: KeyPress, isMac: boolean, shift: boolean): boolean {
   const modifier = isMac ? press.metaKey && !press.ctrlKey : press.ctrlKey && !press.metaKey;
-  const key =
-    shortcut === ","
-      ? press.key === ","
-      : press.code === `Digit${shortcut}` || (press.code === `Numpad${shortcut}` && press.key === shortcut);
-  return modifier && !press.altKey && !press.shiftKey && key;
+  return modifier && !press.altKey && press.shiftKey === shift;
+}
+
+function matchesKey(press: KeyPress, shortcut: ViewShortcut): boolean {
+  return shortcut === ","
+    ? press.key === ","
+    : press.code === `Digit${shortcut}` || (press.code === `Numpad${shortcut}` && press.key === shortcut);
 }
 
 /** Podpis skrótu w konwencji systemu: `⌘1` na macOS, `Ctrl+1` gdzie indziej. */

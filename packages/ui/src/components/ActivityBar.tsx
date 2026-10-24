@@ -1,8 +1,16 @@
 import type { LucideIcon } from "lucide-react";
+import { showViewMenu } from "@/lib/app-window";
 import { IS_MAC } from "@/lib/platform";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { cn } from "@/lib/utils";
-import { ariaShortcut, matchesShortcut, shortcutLabel, type ViewShortcut } from "@/lib/view-shortcut";
+import {
+  ariaShortcut,
+  isNewWindowShortcut,
+  matchesNewWindowShortcut,
+  matchesShortcut,
+  shortcutLabel,
+  type ViewShortcut,
+} from "@/lib/view-shortcut";
 
 export type ActivityView<Id extends string> = {
   id: Id;
@@ -21,20 +29,32 @@ export function ActivityBar<Id extends string>({
   views,
   active,
   onSelect,
+  onOpenInNewWindow,
   badges = {},
 }: {
   views: readonly ActivityView<Id>[];
   active: Id;
   onSelect: (id: Id) => void;
+  /** Opens a view in a new window (ADR-49): the icon's context menu and Ctrl+Shift shortcuts; absent outside the shell. */
+  onOpenInNewWindow?: (id: Id) => void;
   /** Liczba przy ikonie widoku, np. sesje, które czekają na Ciebie; zero i brak nie pokazują niczego. */
   badges?: Partial<Record<Id, number>>;
 }) {
-  useViewShortcuts(views, onSelect);
+  useViewShortcuts(views, active, onSelect, onOpenInNewWindow);
 
   const group = (placement: ActivityView<Id>["placement"]) =>
     views
       .filter((v) => v.placement === placement)
-      .map((v) => <ActivityButton key={v.id} view={v} active={v.id === active} badge={badges[v.id]} onSelect={() => onSelect(v.id)} />);
+      .map((v) => (
+        <ActivityButton
+          key={v.id}
+          view={v}
+          active={v.id === active}
+          badge={badges[v.id]}
+          onSelect={() => onSelect(v.id)}
+          onOpenInNewWindow={onOpenInNewWindow && (() => onOpenInNewWindow(v.id))}
+        />
+      ));
 
   return (
     <nav aria-label="Views" className="bg-card w-activity-bar flex shrink-0 flex-col border-r">
@@ -45,12 +65,27 @@ export function ActivityBar<Id extends string>({
   );
 }
 
+type ViewAction<Id extends string> = { id: Id; newWindow: boolean };
+
 /** Shortcuts work in the whole window, also when the focus is in a text field or a session terminal. */
-function useViewShortcuts<Id extends string>(views: readonly ActivityView<Id>[], onSelect: (id: Id) => void) {
+function useViewShortcuts<Id extends string>(
+  views: readonly ActivityView<Id>[],
+  active: Id,
+  onSelect: (id: Id) => void,
+  onOpenInNewWindow: ((id: Id) => void) | undefined,
+) {
   useWindowShortcuts(
-    (event) => views.find((v) => matchesShortcut(event, v.shortcut, IS_MAC)),
-    (view) => {
-      onSelect(view.id);
+    (event): ViewAction<Id> | undefined => {
+      const view = views.find((v) => matchesShortcut(event, v.shortcut, IS_MAC));
+      if (view) return { id: view.id, newWindow: false };
+      if (!onOpenInNewWindow) return undefined;
+      if (isNewWindowShortcut(event, IS_MAC)) return { id: active, newWindow: true };
+      const inNewWindow = views.find((v) => matchesNewWindowShortcut(event, v.shortcut, IS_MAC));
+      return inNewWindow && { id: inNewWindow.id, newWindow: true };
+    },
+    ({ id, newWindow }) => {
+      if (!newWindow) onSelect(id);
+      else onOpenInNewWindow?.(id);
       return true;
     },
   );
@@ -61,11 +96,13 @@ function ActivityButton<Id extends string>({
   active,
   badge,
   onSelect,
+  onOpenInNewWindow,
 }: {
   view: ActivityView<Id>;
   active: boolean;
   badge: number | undefined;
   onSelect: () => void;
+  onOpenInNewWindow: (() => void) | undefined;
 }) {
   const Icon = view.icon;
   const count = badge !== undefined && badge > 0 ? badge : undefined;
@@ -77,6 +114,13 @@ function ActivityButton<Id extends string>({
         aria-current={active ? "page" : undefined}
         aria-keyshortcuts={ariaShortcut(view.shortcut, IS_MAC)}
         onClick={onSelect}
+        onContextMenu={
+          onOpenInNewWindow &&
+          ((event) => {
+            event.preventDefault();
+            void showViewMenu(onOpenInNewWindow);
+          })
+        }
         className={cn(
           "group focus-visible:ring-ring/50 relative flex h-12 w-full items-center justify-center transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset",
           active ? "hud-active-edge text-primary" : "text-muted-foreground hover:text-foreground",
