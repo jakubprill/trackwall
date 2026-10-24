@@ -67,9 +67,9 @@ Moving from 0.1.0 (released under the name Pitwall, ADR-12) is described in the 
 
 On both systems the user data (`~/.trackwall`, on Windows `%USERPROFILE%\.trackwall`) lives outside the app folder, so an update means closing the app (tray > Quit, so that the daemon stops too) and replacing the folder or `.app` with the new one.
 
-## Before making the repo public
+## Repo security settings
 
-Once, done by the owner in the repo settings (Settings > Security): enable private vulnerability reporting (which `SECURITY.md` points to), Dependabot alerts and secret scanning with push protection. Only then change the visibility to public.
+The repo is public. The owner keeps these enabled in the repo settings (Settings > Security): private vulnerability reporting (which `SECURITY.md` points to), Dependabot alerts and secret scanning with push protection.
 
 ## What is not there yet (next steps)
 
