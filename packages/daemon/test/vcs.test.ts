@@ -20,6 +20,44 @@ describe("vcs na prawdziwym gicie", () => {
     expect(status.head?.hash).toMatch(/^[0-9a-f]{40}$/);
   });
 
+  test.each(["sha1", "sha256"] as const)(
+    "liczenie zmian z nowymi plikami, także pustym i osadzonym repo, nie zapisuje do repo żadnego obiektu (%s)",
+    async (objectFormat) => {
+      // Zapis obiektu przy każdym liczeniu sprawiał, że kilka okien „Changes” naraz pisało ten sam pusty blob, a na Windowsie
+      // drugi zapis kończył się „Permission denied” (#36).
+      const dir = makeRepo({ "README.md": "# repo\n" }, "repo", undefined, objectFormat);
+      const base = gitIn(dir, "rev-parse", "HEAD").trim();
+      writeFileSync(join(dir, "nowy.md"), "x\n");
+      writeFileSync(join(dir, "pusty.md"), "");
+      const embeddedHead = gitIn(makeRepo({ "a.txt": "a\n" }, "osadzone", dir, objectFormat), "rev-parse", "HEAD").trim();
+      makeRepo({}, "osadzone-bez-commitow", dir, objectFormat);
+      // Repo z obiektami w innym formacie nie może być submodułem; `update-index` odrzuciłby przez nie wszystkie wpisy.
+      makeRepo({ "b.txt": "b\n" }, "osadzone-w-innym-formacie", dir, objectFormat === "sha1" ? "sha256" : "sha1");
+      const objectsBefore = gitIn(dir, "count-objects", "-v");
+
+      const changes = await vcs.worktreeChanges(dir, base, 1_000_000);
+
+      expect(changes.files.map((f) => f.path)).toEqual(["nowy.md", "osadzone", "pusty.md"]);
+      expect(changes.patch).toContain("+x");
+      expect(changes.patch).toContain(`+Subproject commit ${embeddedHead}`);
+      expect(gitIn(dir, "count-objects", "-v")).toBe(objectsBefore);
+    },
+  );
+
+  test.skipIf(process.platform !== "linux")(
+    "nowy plik z nazwą spoza UTF-8 jest w zmianach (Linux; Windows i macOS takich nazw nie mają)",
+    async () => {
+      const dir = makeRepo({ "README.md": "# repo\n" });
+      const base = gitIn(dir, "rev-parse", "HEAD").trim();
+      writeFileSync(Buffer.concat([Buffer.from(join(dir, "zly-")), Buffer.from([0xff])]), "x\n");
+
+      const changes = await vcs.worktreeChanges(dir, base, 1_000_000);
+
+      expect(changes.files).toHaveLength(1);
+      expect(changes.patch).toContain("+x");
+    },
+  );
+
   test("status repo bez commitów ma pusty HEAD, log jest pusty, a korzeń drzewa jest pusty", async () => {
     const dir = makeRepo();
     expect(await vcs.status(dir)).toMatchObject({ kind: "ok", branch: "main", head: null, changes: 0 });

@@ -156,3 +156,17 @@ function parseNumstat(numstat: string): Map<string, Pick<ChangedFile, "additions
   }
   return counts;
 }
+
+/**
+ * Wpisy wyjścia `-z` jako bajty, bez dekodowania: nazwa pliku spoza UTF-8 (na Linuksie) po dekodowaniu wskazywałaby
+ * plik, którego nie ma. Kawałek bez końcowego NUL (ucięte wyjście) to niepełna ścieżka, więc odpada.
+ */
+export function parseNulTerminated(out: Buffer): Buffer[] {
+  const entries: Buffer[] = [];
+  let start = 0;
+  for (let end = out.indexOf(0); end !== -1; end = out.indexOf(0, start)) {
+    entries.push(out.subarray(start, end));
+    start = end + 1;
+  }
+  return entries;
+}

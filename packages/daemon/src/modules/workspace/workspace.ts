@@ -42,6 +42,8 @@ const OVERVIEW_COMMITS = 30;
 /** Limit podglądu pliku i README: więcej i tak nikt nie przewija w panelu. */
 const PREVIEW_MAX_BYTES = 512 * 1024;
 const README = /^readme(\.(md|markdown|txt|rst|adoc))?$/i;
+/** README, które nie jest Markdownem; bez rozszerzenia to Markdown, tak jak na GitHubie (ADR-35). */
+const PLAIN_TEXT_README = /\.(txt|rst|adoc)$/i;
 /**
  * Ile repo naraz pyta gita przy liście: folder z projektami może mieć ich setki, a każde to dwa procesy `git`,
  * na Windowsie drogie w starcie i skanowane przez antywirus.
@@ -277,7 +279,9 @@ export class Workspace {
     const best = candidates.find((e) => /\.md$/i.test(e.name)) ?? candidates[0];
     if (!best) return null;
     const content = await this.deps.vcs.file(dir, best.path, PREVIEW_MAX_BYTES);
-    return content?.kind === "text" ? { path: best.path, text: content.text, truncated: content.truncated } : null;
+    if (content?.kind !== "text") return null;
+    const format = PLAIN_TEXT_README.test(best.name) ? "text" : "markdown";
+    return { path: best.path, text: content.text, truncated: content.truncated, format };
   }
 
   /** Błąd gita przy czytaniu repo z listy to stan repo (`repo_unavailable`), nie błąd daemona. */
