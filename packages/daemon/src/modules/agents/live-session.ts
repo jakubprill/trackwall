@@ -1,7 +1,8 @@
-import type { RunState, Session, TaskState, TaskStateChange } from "@trackwall/protocol";
+import type { RunState, Session, TaskStateChange } from "@trackwall/protocol";
 import { sessionKey } from "./copilot-keys.ts";
 import { CopilotSessionState } from "./copilot-session-state.ts";
 import { HookTail } from "./hook-tail.ts";
+import { SessionAttention } from "./session-attention.ts";
 import { type ScreenViewer, TerminalScreen } from "./terminal-screen.ts";
 
 /**
@@ -12,13 +13,17 @@ import { type ScreenViewer, TerminalScreen } from "./terminal-screen.ts";
 /** Ten sam próg co w prototypie (`copilot-record.ts`), żeby nagranie i daemon liczyły `Stale` tak samo. */
 export const STALE_AFTER_MS = 60_000;
 
-/** Stany, w których działająca sesja czeka na Ciebie (`Session.needsAttention`). */
-const WAITING_STATES: ReadonlySet<TaskState> = new Set(["Input", "Approval", "Plan"]);
-
 /** PTY procesu sesji: terminal lidera grupy z `procs` (`GroupTerminal`). */
 export interface SessionPty {
   write(data: string): void;
   resize(cols: number, rows: number): void;
+}
+
+/** One session terminal window attached to the session's screen. */
+export interface SessionWindow {
+  /** The window came in front of the user (focused and visible) or left (ADR-47). */
+  focus(focused: boolean): void;
+  detach(): void;
 }
 
 export interface LiveSessionOptions {
@@ -46,6 +51,7 @@ export class LiveSession {
   readonly #decoder = new TextDecoder();
   #terminal: SessionPty | undefined;
   #last: TaskStateChange | null = null;
+  readonly #attention = new SessionAttention();
   #finished = false;
   readonly #closers = new Set<() => void>();
 
@@ -73,6 +79,7 @@ export class LiveSession {
   input(data: string): void {
     if (this.#finished || !this.#terminal) return;
     this.#terminal.write(data);
+    this.#attention.typed();
     const key = sessionKey(data);
     if (!key) return;
     // Klawisz liczy się ze stanu po hookach, które już przyszły, a nie po tych z ostatniego cyklu.
@@ -88,12 +95,17 @@ export class LiveSession {
   }
 
   /** `onClosed` dostaje widz, którego sesja znika (`dismiss`), żeby jego okno nie czekało na wyjście, które nie przyjdzie. */
-  attach(viewer: ScreenViewer, onSnapshot: (snapshot: string) => void, onClosed: () => void): () => void {
+  attach(viewer: ScreenViewer, onSnapshot: (snapshot: string) => void, onClosed: () => void): SessionWindow {
     const detach = this.#screen.attach(viewer, onSnapshot);
     this.#closers.add(onClosed);
-    return () => {
-      this.#closers.delete(onClosed);
-      detach();
+    const focusKey = {};
+    return {
+      focus: (focused) => this.#attention.focus(focusKey, focused),
+      detach: () => {
+        this.#attention.focus(focusKey, false);
+        this.#closers.delete(onClosed);
+        detach();
+      },
     };
   }
 
@@ -124,7 +136,7 @@ export class LiveSession {
       run,
       state: this.#last,
       windowTitle: this.#state.windowTitle ?? null,
-      needsAttention: run.kind === "running" && this.#last !== null && WAITING_STATES.has(this.#last.state),
+      needsAttention: run.kind === "running" && this.#attention.waiting,
       task: this.task,
     };
   }
@@ -142,6 +154,10 @@ export class LiveSession {
   }
 
   #report(changes: readonly (TaskStateChange | undefined)[]): void {
-    for (const change of changes) if (change) this.#last = change;
+    for (const change of changes) {
+      if (!change) continue;
+      this.#last = change;
+      this.#attention.state(change.state);
+    }
   }
 }

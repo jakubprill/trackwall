@@ -1,4 +1,4 @@
-import type { Session } from "@trackwall/protocol";
+import type { Session, TaskStateChange } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 
 /**
@@ -17,6 +17,9 @@ export const STATE_LABELS = {
   Stale: "not responding",
 } as const;
 
+/** `Input` the user has already seen (ADR-47): the agent is idle and no longer waits for you. */
+export const IDLE_LABEL = "idle";
+
 /** Proces sesji jeszcze działa (także w trakcie zatrzymywania): pisze w swoim katalogu i trzyma jego pliki. */
 export function isLive(session: Session): boolean {
   return session.run.kind !== "exited";
@@ -32,9 +35,16 @@ export function sessionStateLabel(session: Session): { tone?: StatusTone; label:
       : { label: "finished" };
   }
   if (!state) return { label: "state unknown" };
-  const label = STATE_LABELS[state.state];
+  return runningStateLabel(state, session.needsAttention);
+}
+
+function runningStateLabel(state: TaskStateChange, needsAttention: boolean): { tone?: StatusTone; label: string } {
+  // `Input` that does not wait for you is one the user has already seen.
+  const idle = state.state === "Input" && !needsAttention;
+  const label = idle ? IDLE_LABEL : STATE_LABELS[state.state];
   const likely = state.confidence === "medium" || state.confidence === "low" ? `probably ${label}` : label;
-  if (session.needsAttention) return { tone: "warning", label: likely };
+  if (needsAttention) return { tone: "warning", label: likely };
+  if (idle) return { label: likely };
   if (state.state === "Error" || state.state === "Stale") return { tone: "error", label: likely };
   return { tone: "ok", label: likely };
 }

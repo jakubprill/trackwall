@@ -41,5 +41,6 @@ export function sessionStateColor(state: HomeSessionState, palette: ScenePalette
   if (state === "attention") return palette.warning;
   if (state === "error") return palette.destructive;
   if (state === "working") return palette.primary;
+  if (state === "idle") return palette.idle;
   return palette.muted;
 }

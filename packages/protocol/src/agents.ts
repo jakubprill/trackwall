@@ -36,8 +36,8 @@ export const Session = z.object({
   /** Tytuł okna z OSC 0 / 2: nad czym agent pracuje. */
   windowTitle: z.string().nullable(),
   /**
-   * Czeka na Ciebie: działa, a stan to `Input`, `Approval` albo `Plan`. Liczy to daemon, żeby UI i tray w powłoce
-   * (Rust) czytały jedną regułę zamiast jej kopii.
+   * Waiting for you: the session runs and is in `Approval` or `Plan`, or in `Input` the user has not seen yet (ADR-47).
+   * The daemon computes it so that the UI and the tray in the shell (Rust) read one rule instead of copies of it.
    */
   needsAttention: z.boolean(),
   /** Zadanie, w którego worktree działa sesja; `null` dla sesji w korzeniu repo. */
@@ -140,5 +140,7 @@ export const PTY_CLOSE_SLOW = 4429;
 export const PtyClientMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("input"), data: z.string().max(64 * 1024) }),
   z.object({ type: z.literal("resize"), cols: z.number().int().min(10).max(1000), rows: z.number().int().min(4).max(500) }),
+  /** The window is (or stops being) in front of the user: focused and visible. A focused window marks the session seen (ADR-47). */
+  z.object({ type: z.literal("focus"), focused: z.boolean() }),
 ]);
 export type PtyClientMessage = z.infer<typeof PtyClientMessage>;

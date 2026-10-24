@@ -5,8 +5,9 @@ import { DomainError } from "../infra/errors.ts";
 import type { SocketRoute } from "./sockets.ts";
 
 /**
- * Terminal sesji przez WebSocket `/ws/pty/<sesja>` (§5.2, ADR-26); `Host`, `Origin` i token sprawdza `sockets.ts`.
- * Daemon wysyła obraz ekranu (ramka tekstowa), potem wyjście (ramki binarne); klient wysyła wejście i rozmiar.
+ * Session terminal over the WebSocket `/ws/pty/<session>` (§5.2, ADR-26); `sockets.ts` checks `Host`, `Origin` and the
+ * token. The daemon sends the screen image (a text frame), then the output (binary frames); the client sends input,
+ * size and whether the window is in front of the user (ADR-47).
  */
 
 /** Wejście z klawiatury i wklejony tekst; większa ramka to nie człowiek przy klawiaturze. */
@@ -50,8 +51,10 @@ function serve(ws: WebSocket, session: string, facade: Facade): void {
     if (isBinary) return;
     const message = PtyClientMessage.safeParse(parseJson(data));
     if (!message.success) return;
-    if (message.data.type === "input") attachment.input(message.data.data);
-    else attachment.resize(message.data.cols, message.data.rows);
+    const m = message.data;
+    if (m.type === "input") attachment.input(m.data);
+    else if (m.type === "resize") attachment.resize(m.cols, m.rows);
+    else attachment.focus(m.focused);
   });
   ws.on("close", () => attachment.detach());
   ws.on("error", () => attachment.detach());

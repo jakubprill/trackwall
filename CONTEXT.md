@@ -239,8 +239,12 @@ _Unikaj_: orkiestrator, główny agent
 CLI agenta działające w PTY należącym do daemona, w korzeniu repo albo w worktree zadania (`Session.task`), jako grupa procesów, z własnym katalogiem `sessions/<sesja>/` (wtyczka sesji, `hooks.jsonl`). Widok Sessions uruchamia ją w repo jednym kliknięciem (ADR-26) albo razem z zadaniem (ADR-31). Sesja żyje tylko do wyjścia daemona, zadanie dłużej. Nagrywa ją tylko `copilot-record.ts`.
 _Unikaj_: sesja POSIX (to pojęcie z grupy procesów), okno (to okno terminala w UI)
 
-**Czeka na Ciebie** (`Session.needsAttention`; po angielsku *waiting for you*):
-Działająca sesja w stanie `Input`, `Approval` albo `Plan`: agent nie ruszy dalej bez człowieka. Liczy to daemon, a UI (licznik na pasku widoków, „Next waiting”) i tray (menu „Waiting: <repo>”, miganie okna) tylko czytają pole.
+**Waiting for you** (`Session.needsAttention`, `SessionAttention`; Polish *czeka na Ciebie*):
+A running session in `Approval` or `Plan`, or in `Input` the user has not seen yet (ADR-47): the agent will not move on without a human, and the human does not know yet. The daemon computes it; the UI (the counter on the activity bar, "Next waiting") and the tray (the "Waiting: <repo>" menu, the flashing window) only read the field.
+
+**Seen** (`SessionAttention.focus`, `typed`; the `focus` frame of `PtyClientMessage`):
+The user has seen the session's current `Input`: a session terminal window was focused and visible, or the user typed into the session, after the state began. Seen `Input` is shown as **idle**.
+_Avoid_: read, acknowledged
 
 **Okno terminala** (`SessionTerminal`; po angielsku *session terminal*):
 xterm.js w widoku Sessions podłączony WebSocketem `/ws/pty/<sesja>` do PTY sesji. Kilka okien może pokazywać tę samą sesję; rozmiar PTY ustala ostatnie, które go zgłosiło.
