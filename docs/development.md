@@ -1,6 +1,6 @@
 # Rozwój
 
-Układ repo, uruchomienie ze źródeł i narzędzia dla osób, które rozwijają Trackwall. Dokumentacja projektu (po polsku, ADR-32):
+Układ repo, uruchomienie ze źródeł i narzędzia dla osób, które rozwijają Trackwall. Dokumentacja projektu (przechodzi na angielski, ADR-43):
 
 - [Funkcje](features.md)
 - [Architektura](architecture.md)
