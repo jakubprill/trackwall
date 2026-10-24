@@ -39,7 +39,7 @@ Sekret z `~/.trackwall/daemon.json`, którym UI, `ws`, powłoka i most stdio uwi
 **Serwer MCP** (`/mcp`, `createMcpEndpoint`; po angielsku *MCP server*):
 Część daemona, przez którą agenci czytają jego stan narzędziami MCP; ten sam port i token co API (§5.3, ADR-24).
 
-**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`, `list_sessions`; po angielsku *MCP tool*):
+**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`, `search_code`, `list_sessions`; po angielsku *MCP tool*):
 Jedno wywołanie serwera MCP z nazwą po angielsku, wejściem i wynikiem opisanym schematem z `packages/protocol/src/mcp.ts`; mapowanie na fasadę, bez własnej logiki domenowej.
 _Unikaj_: komenda, akcja (to pojęcia z API i CLI)
 
@@ -96,6 +96,10 @@ _Unikaj_: diff (to tylko część), status
 
 **Przegląd repo** (`RepoOverview`):
 README i ostatnie commity repo w jednej odpowiedzi; stan repo przychodzi z listy repo. Pliki przeglądane są osobno, zawsze z commita HEAD (ADR-14).
+
+**Code search** (`searchCode`, MCP tool `search_code`, result `SearchCodeResult`):
+A fixed string or a regular expression in the files of the latest commit of many repos of the projects folder at once, through `git grep` (ADR-40); a match (`CodeMatch`) is a repo, path, line, column and context lines. It does not see uncommitted changes, just like browsing a repo.
+_Avoid_: grep (the tool underneath), index (there is none)
 
 **Worktree** (worktree zadania, `Task.worktree`; po angielsku *worktree*):
 Osobny katalog roboczy gita dla zadania, na gałęzi zadania, w `worktrees/<repo>/<gałąź bez prefiksu>` w katalogu stanu, poza folderem z projektami (ADR-31). Liczony z repo i gałęzi (`taskWorktree`), nie zapisywany w `tasks.json`. Usuwany tylko na prośbę użytkownika i tylko bez działającej sesji zadania; niezacommitowane zmiany przepadają dopiero po potwierdzeniu.
@@ -239,8 +243,15 @@ _Unikaj_: orkiestrator, główny agent
 CLI agenta działające w PTY należącym do daemona, w korzeniu repo albo w worktree zadania (`Session.task`), jako grupa procesów, z własnym katalogiem `sessions/<sesja>/` (wtyczka sesji, `hooks.jsonl`). Widok Sessions uruchamia ją w repo jednym kliknięciem (ADR-26) albo razem z zadaniem (ADR-31). Sesja żyje tylko do wyjścia daemona, zadanie dłużej. Nagrywa ją tylko `copilot-record.ts`.
 _Unikaj_: sesja POSIX (to pojęcie z grupy procesów), okno (to okno terminala w UI)
 
-**Czeka na Ciebie** (`Session.needsAttention`; po angielsku *waiting for you*):
-Działająca sesja w stanie `Input`, `Approval` albo `Plan`: agent nie ruszy dalej bez człowieka. Liczy to daemon, a UI (licznik na pasku widoków, „Next waiting”) i tray (menu „Waiting: <repo>”, miganie okna) tylko czytają pole.
+**Waiting for you** (`Session.needsAttention`, `SessionAttention`; Polish *czeka na Ciebie*):
+A running session in `Approval` or `Plan`, or in `Input` the user has not seen yet (ADR-47): the agent will not move on without a human, and the human does not know yet. The daemon computes it; the UI (the counter on the activity bar, "Next waiting") and the tray (the "Waiting: <repo>" menu, the flashing window) only read the field.
+
+**Seen** (`SessionAttention.focus`, `typed`; the `focus` frame of `PtyClientMessage`):
+The user has seen the session's current `Input`: a session terminal window was focused and visible, or the user typed into the session, after the state began.
+_Avoid_: read, acknowledged
+
+**Idle** (`isIdle`, `IDLE_LABEL`, dashboard state `idle`):
+A running session in `Input` the user has already seen (ADR-47): the agent waits for the next prompt, but no longer waits for you. Shown as "idle" in Sessions and in calm grey on the dashboard.
 
 **Okno terminala** (`SessionTerminal`; po angielsku *session terminal*):
 xterm.js w widoku Sessions podłączony WebSocketem `/ws/pty/<sesja>` do PTY sesji. Kilka okien może pokazywać tę samą sesję; rozmiar PTY ustala ostatnie, które go zgłosiło.
@@ -304,6 +315,10 @@ Skąd pochodzi rekord. Dziś task mise repo (`{ kind: "mise-task", repo, miseTas
 **Log** (log taska mise, `logs/tail` i narzędzie MCP `tail`, w UI przycisk „Log”; po angielsku *log*):
 Rekordy jednego źródła w kolejności `seq`: ostatnie (do 2000) w pamięci daemona, nowsze niż ostatnia rotacja w pliku JSONL `logs/<rodzaj>/<repo>/<task mise>.jsonl` w katalogu stanu (bieżący plik i jeden poprzedni, po 10 MB, ADR-28). Nie myl z logiem daemona (stderr procesu `trackwall-daemon`).
 _Unikaj_: konsola, terminal (to PTY sesji zadania)
+
+**Błąd z logu** (`LogError`, MCP tool `get_errors`; in English *error*):
+A record at `error` (or `warn`) level or an exception header together with the lines that belong to it (stack trace, `Caused by:`, a Spring or Gradle report), from one source, run and stream. The same error repeated in a source is one error with a count (`count`); `exception` is its cause (ADR-42).
+_Unikaj_: exception (only one kind of error), problem (that is the repo card and the graph), incident
 
 **`seq`**:
 Globalny, rosnący numer rekordu dla wszystkich źródeł; każde działanie daemona zaczyna od chwili startu, więc numery się nie powtarzają. Kursor (`sinceSeq` w API i w narzędziach MCP) działa dla jednego źródła i dla całego workspace; `dropped` mówi, że część rekordów po kursorze przepadła.

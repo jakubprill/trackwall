@@ -28,6 +28,11 @@ describe("stan sesji w jednej linii", () => {
     expect(sessionStateLabel(session("a", change("Working")))).toEqual({ tone: "ok", label: "working" });
   });
 
+  test("Input the user has already seen is shown as idle, without a warning", () => {
+    expect(sessionStateLabel(session("a", change("Input")))).toEqual({ label: "idle" });
+    expect(sessionStateLabel(session("a", change("Input", "medium")))).toEqual({ label: "probably idle" });
+  });
+
   test("słabszy sygnał jest podany jako „prawdopodobnie”", () => {
     expect(sessionStateLabel(waiting("a", change("Input", "low"))).label).toBe("probably waiting for you");
     expect(sessionStateLabel(session("a", change("Working", "medium"))).label).toBe("probably working");

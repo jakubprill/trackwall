@@ -4,6 +4,7 @@
 //!
 //! Pytanie idzie z powłoki, a nie z UI: schowane okno WebView może mieć wstrzymane timery, a tray ma działać także
 //! przy zamkniętym oknie. Czy sesja czeka na Ciebie, liczy daemon (`Session.needsAttention`), tak samo dla UI i traya.
+//! The daemon also clears it, without a state change, once the user has seen an ended turn (ADR-47).
 
 use crate::daemon;
 use crate::daemon_state::DaemonState;
@@ -77,8 +78,9 @@ pub fn parse_sessions(body: &str) -> Option<(States, Vec<Waiting>)> {
     Some((states, waiting))
 }
 
-/// Sesje, które właśnie skończyły pracę i czekają: wcześniej `Working` albo `Stale`. Sesja po starcie czeka na pierwszy
-/// prompt, ale wtedy użytkownik i tak na nią patrzy, więc nie jest powodem do zwracania uwagi.
+/// Sessions that just finished working and wait: `Working` or `Stale` before. A session after start waits for its first
+/// prompt while the user looks at it anyway, and a turn that ends in a window the user is looking at never waits (the
+/// daemon marks it seen, ADR-47), so the window flashes only for unseen ends of turns.
 pub fn newly_waiting(previous: &States, waiting: &[Waiting]) -> Vec<Waiting> {
     waiting.iter().filter(|w| matches!(previous.get(&w.id), Some(Some(state)) if state == "Working" || state == "Stale")).cloned().collect()
 }
@@ -154,6 +156,7 @@ mod tests {
     }
 
     fn session(id: &str, run: &str, state: Option<&str>) -> String {
+        // The daemon decides `needsAttention` (ADR-47); here an unseen `Input`, `Approval` or `Plan` stands for it.
         let attention = run == "running" && matches!(state, Some("Input" | "Approval" | "Plan"));
         let state = state.map(|s| format!(r#"{{"state":"{s}","source":"hook","confidence":"high","at":"x","reason":"r"}}"#));
         format!(

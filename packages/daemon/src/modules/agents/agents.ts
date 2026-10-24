@@ -14,7 +14,7 @@ import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { findCopilot } from "./copilot-command.ts";
 import type { CopilotHookEvent } from "./copilot-hook-record.ts";
 import { type HookCommand, writeCopilotPlugin } from "./copilot-plugin.ts";
-import { LiveSession, type SessionPty } from "./live-session.ts";
+import { LiveSession, type SessionPty, type SessionWindow } from "./live-session.ts";
 import { TaskFile } from "./task-file.ts";
 import { AgentTasks, type TasksVcs } from "./tasks.ts";
 import type { ScreenViewer } from "./terminal-screen.ts";
@@ -78,13 +78,6 @@ export interface AgentsDeps {
   /** Otwiera katalog w VS Code (worktree zadania). */
   openEditor: (dir: string) => void;
   log: (msg: string) => void;
-}
-
-/** Widz terminala sesji (okno w UI): wyjście, obraz ekranu na start i wejście z klawiatury. */
-export interface SessionAttachment {
-  input(data: string): void;
-  resize(cols: number, rows: number): void;
-  detach(): void;
 }
 
 export class Agents {
@@ -207,10 +200,8 @@ export class Agents {
   }
 
   /** Okno terminala sesji: najpierw obraz ekranu, potem wyjście na bieżąco, a `onClosed`, gdy sesja zniknie. */
-  attach(id: string, viewer: ScreenViewer, onSnapshot: (snapshot: string) => void, onClosed: () => void): SessionAttachment {
-    const session = this.#get(id);
-    const detach = session.attach(viewer, onSnapshot, onClosed);
-    return { input: (data) => session.input(data), resize: (cols, rows) => session.resize(cols, rows), detach };
+  attach(id: string, viewer: ScreenViewer, onSnapshot: (snapshot: string) => void, onClosed: () => void): SessionWindow {
+    return this.#get(id).attach(viewer, onSnapshot, onClosed);
   }
 
   /** Start daemona: pliki sesji z poprzedniego działania (sesje nie przeżywają daemona). */

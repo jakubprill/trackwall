@@ -12,7 +12,7 @@ import type { CallErrorCode } from "./api.ts";
 import { changesLabel } from "./format.ts";
 import { layoutGraph } from "./graph-layout.ts";
 import type { StatusTone } from "./repo-status.ts";
-import { STATE_LABELS, sessionStateLabel } from "./session-state.ts";
+import { IDLE_LABEL, isIdle, STATE_LABELS, sessionStateLabel } from "./session-state.ts";
 
 /**
  * Migawka pulpitu (ADR-33, §5.5) z odpowiedzi daemona, którymi żyją też inne widoki: lista repo, sesje, graf
@@ -85,6 +85,7 @@ export function pullLabel(behind: number): string {
 export const HOME_SESSION_STATUS: Record<HomeSessionState, HomeStatus> = {
   working: { tone: "ok", label: STATE_LABELS.Working },
   attention: { tone: "warning", label: STATE_LABELS.Input },
+  idle: { label: IDLE_LABEL },
   error: { tone: "error", label: STATE_LABELS.Error },
   done: { label: STATE_LABELS.Done },
 };
@@ -102,13 +103,14 @@ export function homeDaemonStatus(running: boolean): HomeStatus {
 }
 
 /**
- * Stan sesji na pulpicie z tych samych reguł co `sessionStateLabel`: czekająca na Ciebie, zakończona błędem albo
- * zakończona; reszta (także „not responding”) pracuje.
+ * A session's state on the dashboard from the same rules as `sessionStateLabel`: waiting for you, idle (`Input` the
+ * user has seen, ADR-47), ended with an error or ended; the rest (also "not responding") is working.
  */
 export function homeSessionState(session: Session): HomeSessionState {
   if (session.needsAttention) return "attention";
   const { tone } = sessionStateLabel(session);
   if (session.run.kind === "exited") return tone === "error" ? "error" : "done";
+  if (isIdle(session)) return "idle";
   return session.state?.state === "Error" ? "error" : "working";
 }
 

@@ -189,6 +189,7 @@ function Summary({ model }: { model: HomeModel }) {
     ["Not clean", model.repos.filter((r) => r.state !== "clean").length],
     ["Sessions working", count("working")],
     ["Waiting for you", count("attention")],
+    ["Sessions idle", count("idle")],
     ["Links", model.links.length],
   ] as const;
   return (
