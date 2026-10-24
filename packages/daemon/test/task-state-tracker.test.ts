@@ -30,6 +30,19 @@ describe("łączenie sygnałów stanu zadania", () => {
     expect(tracker.current?.state).toBe("Approval");
   });
 
+  test("klawisz człowieka zmienia stan także po hooku, bo hooki nie zgłaszają odpowiedzi na prośbę o zgodę", () => {
+    const tracker = new TaskStateTracker({ now: () => 0, staleAfterMs: 60_000 });
+    tracker.signal({ state: "Approval", source: "hook", confidence: "high", reason: "hook notification permission_prompt" });
+
+    expect(tracker.keyboard({ state: "Working", source: "keyboard", confidence: "medium", reason: "key enter" })).toMatchObject({
+      state: "Working",
+      source: "keyboard",
+    });
+    // Klawisz nie obniża rangi źródeł: pasek postępu dalej nie zaczyna pracy po hooku.
+    tracker.signal({ state: "Input", source: "hook", confidence: "high", reason: "hook agentStop" });
+    expect(tracker.signal({ state: "Working", source: "osc", confidence: "high", reason: "osc 9;4;3" })).toBeUndefined();
+  });
+
   test("słabsze źródło może zakończyć Working, gdy hook końca tury nie przyszedł, ale nie zaczyna pracy po hooku", () => {
     const tracker = new TaskStateTracker({ now: () => 0, staleAfterMs: 60_000 });
     tracker.signal({ state: "Working", source: "hook", confidence: "high", reason: "hook userPromptSubmitted" });

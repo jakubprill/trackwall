@@ -9,10 +9,11 @@ export const TaskState = z.enum(["Working", "Input", "Approval", "Plan", "Done",
 export type TaskState = z.infer<typeof TaskState>;
 
 /**
- * `hook`: hook CLI agenta; `osc`: sekwencja terminala; `screen`: wzorzec ekranu; `timeout`: brak sygnału
- * dłużej niż próg; `exit`: zakończenie procesu sesji zaobserwowane przez daemon.
+ * `hook`: hook CLI agenta; `osc`: sekwencja terminala; `screen`: wzorzec ekranu; `keyboard`: klawisz, którym
+ * człowiek odpowiedział w terminalu sesji; `timeout`: brak sygnału dłużej niż próg; `exit`: zakończenie procesu
+ * sesji zaobserwowane przez daemon.
  */
-export const TaskStateSource = z.enum(["hook", "osc", "screen", "timeout", "exit"]);
+export const TaskStateSource = z.enum(["hook", "osc", "screen", "keyboard", "timeout", "exit"]);
 export type TaskStateSource = z.infer<typeof TaskStateSource>;
 
 /** Pewność (słownik w `CONTEXT.md`); ta sama skala co przy krawędziach grafu. */

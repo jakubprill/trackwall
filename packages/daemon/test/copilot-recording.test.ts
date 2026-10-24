@@ -25,6 +25,37 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     expect(changes[2]?.at).toBe("2026-10-23T12:00:04.000Z");
   });
 
+  test("odmowa zgody z tekstem dla agenta: Enter kończy czekanie na zgodę od razu, a nie dopiero przy następnym narzędziu", () => {
+    const changes = replayCopilotRecording(fixture("refused-approval-session.cast"), { staleAfterMs: 60_000 });
+
+    expect(summary(changes)).toEqual([
+      "Input hook medium hook sessionStart",
+      "Working hook high hook userPromptSubmitted",
+      "Approval hook high hook notification permission_prompt",
+      "Working keyboard medium key enter",
+      "Working hook high hook postToolUse",
+      "Input hook high hook agentStop",
+      "Done hook high hook sessionEnd user_exit",
+    ]);
+    expect(changes[3]?.at).toBe("2026-10-23T12:00:08.800Z");
+  });
+
+  test("Esc przy prośbie o zgodę przerywa turę bez hooka, więc sesja czeka na Ciebie zamiast prosić o zgodę do końca", () => {
+    const cast = parseAsciicast(
+      [
+        '{"version": 2, "width": 80, "height": 24, "timestamp": 0}',
+        '[1.0, "m", "{\\"kind\\":\\"hook\\",\\"record\\":{\\"event\\":\\"notification\\",\\"receivedAt\\":1000,\\"payload\\":{\\"notification_type\\":\\"permission_prompt\\"},\\"omitted\\":[]}}"]',
+        '[3.0, "m", "{\\"kind\\":\\"key\\",\\"key\\":\\"escape\\"}"]',
+        '[3.1, "o", "Operation cancelled by user\\r\\n> "]',
+      ].join("\n"),
+    );
+
+    expect(summary(replayCopilotRecording(cast, { staleAfterMs: 60_000 }))).toEqual([
+      "Approval hook high hook notification permission_prompt",
+      "Input keyboard medium key escape",
+    ]);
+  });
+
   test("sesja bez hooków: stan z paska postępu OSC 9;4, Stale po ciszy i kod wyjścia na końcu", () => {
     const cast = parseAsciicast(
       [
@@ -74,6 +105,49 @@ describe("stan sesji Copilot CLI z nagrania", () => {
 
     now = 61_100;
     expect(session.exit(0).map((c) => `${c.state} ${c.at}`)).toEqual(["Stale 1970-01-01T00:01:00.000Z", "Done 1970-01-01T00:01:01.100Z"]);
+  });
+
+  test("komunikat o przerwanej turze tuż po klawiszu kończy pracę bez hooka, także rozdzielony na dwa kawałki wyjścia", () => {
+    let now = 0;
+    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000 });
+    session.hook({ event: "notification", receivedAt: 0, payload: { notification_type: "permission_prompt" }, omitted: [] });
+    // Enter na „No, and tell Copilot…”, a Copilot CLI kończy turę zamiast czekać na tekst.
+    now = 1_000;
+    session.key("enter");
+
+    now = 1_300;
+    expect(session.output("\u001b[34m●\u001b[m Operation cance")).toEqual([]);
+    expect(session.output("lled by user\u001b[30;2H").map((c) => `${c.state} ${c.source} ${c.confidence} ${c.reason}`)).toEqual([
+      "Input screen medium screen operation cancelled",
+    ]);
+  });
+
+  test("komunikat o przerwanej turze bez niedawnej odpowiedzi klawiszem to przerysowana historia ekranu i nie zmienia stanu", () => {
+    let now = 0;
+    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000 });
+    session.hook({ event: "notification", receivedAt: 0, payload: { notification_type: "permission_prompt" }, omitted: [] });
+    session.key("enter");
+    now = 20_000;
+    expect(session.output(" ● Operation cancelled by user")).toEqual([]);
+
+    // Enter, który wysyła nowy prompt, nie jest odpowiedzią i nie otwiera okna.
+    session.hook({ event: "agentStop", receivedAt: 20_000, payload: {}, omitted: [] });
+    session.key("enter");
+    session.hook({ event: "userPromptSubmitted", receivedAt: 20_100, payload: {}, omitted: [] });
+    now = 21_000;
+    expect(session.output(" ● Operation cancelled by user")).toEqual([]);
+  });
+
+  test("Esc po progu bez cyklicznego sprawdzenia daje najpierw Stale, a potem czekanie na Ciebie, tak jak na żywo", () => {
+    let now = 0;
+    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000 });
+    session.output("\x1b]9;4;3;0\x07");
+
+    now = 61_100;
+    expect(session.key("escape").map((c) => `${c.state} ${c.source} ${c.at}`)).toEqual([
+      "Stale timeout 1970-01-01T00:01:00.000Z",
+      "Input keyboard 1970-01-01T00:01:01.100Z",
+    ]);
   });
 
   test("wyjście po progu bez cyklicznego sprawdzenia daje Stale i powrót, tak jak odtwarzanie nagrania", () => {

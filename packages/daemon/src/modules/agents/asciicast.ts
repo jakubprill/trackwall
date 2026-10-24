@@ -4,9 +4,9 @@ import { jsonOf } from "./json.ts";
 
 /**
  * Nagranie sesji w formacie asciicast v2 (§4.4): nagłówek JSON, potem po linii `[sekundy, kod, dane]`.
- * Zapisywane jest wyjście (`o`), zmiana rozmiaru (`r`) i znaczniki (`m`) z rekordami hooków, żeby jedno
- * nagranie wystarczyło do odtworzenia wykrywania stanu. Wejście z klawiatury (`i`) nie jest zapisywane,
- * bo może zawierać hasła wpisane w sesji.
+ * Zapisywane jest wyjście (`o`), zmiana rozmiaru (`r`) i znaczniki (`m`) z rekordami hooków i rodzajem klawisza
+ * sesji, żeby jedno nagranie wystarczyło do odtworzenia wykrywania stanu. Wejście z klawiatury (`i`) nie jest
+ * zapisywane, bo może zawierać hasła wpisane w sesji.
  */
 
 const AsciicastHeader = z.looseObject({

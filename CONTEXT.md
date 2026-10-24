@@ -238,10 +238,14 @@ Stan ekranu sesji, który daemon trzyma w emulatorze terminala bez okna i wysył
 _Unikaj_: zrzut ekranu (to obrazek), historia wyjścia
 
 **Stan zadania** (`TaskState`, zmiana: `TaskStateChange`; po angielsku *state*):
-`Working`, `Input`, `Approval`, `Plan`, `Done`, `Error` albo `Stale`, zawsze ze źródłem (`hook`, `osc`, `screen`, `timeout`, `exit`) i pewnością (§4.4).
+`Working`, `Input`, `Approval`, `Plan`, `Done`, `Error` albo `Stale`, zawsze ze źródłem (`hook`, `osc`, `screen`, `keyboard`, `timeout`, `exit`) i pewnością (§4.4).
 
 **Detektor stanu**:
-Reguła, która z hooków, sekwencji terminala albo wyglądu ekranu wnioskuje stan zadania.
+Reguła, która z hooków, sekwencji terminala, wyglądu ekranu albo klawiszy człowieka w terminalu sesji wnioskuje stan zadania.
+
+**Klawisz sesji** (`SessionKey`, `sessionKey`; po angielsku *key*):
+Enter, Esc albo Ctrl+C wysłany do terminala sesji jako cały kawałek wejścia (`enter`, `escape`, `interrupt`). Odpowiada na prośbę o zgodę albo przerywa turę, czego Copilot CLI nie zgłasza hookiem, więc jest źródłem stanu `keyboard`; nagranie zapisuje sam rodzaj klawisza.
+_Unikaj_: wejście (to cała treść z klawiatury), skrót
 
 **Wtyczka sesji** (`writeCopilotPlugin`; po angielsku *session plugin*):
 Katalog z `plugin.json` i `hooks.json`, który daemon podaje Copilot CLI przez `--plugin-dir`, żeby hooki zgłaszały stan tylko tej jednej sesji (ADR-17).
@@ -256,7 +260,7 @@ Tytuł, który CLI agenta ustawia sekwencją OSC 0 / 2; w Copilot CLI to opis bi
 _Unikaj_: intencja, intent
 
 **Nagranie** (nagranie sesji, `session.cast`):
-Wyjście sesji w formacie asciicast v2 ze znacznikami rekordów hooków i kodu wyjścia, z którego da się policzyć stan jeszcze raz (`replayCopilotRecording`). Bez wejścia z klawiatury.
+Wyjście sesji w formacie asciicast v2 ze znacznikami rekordów hooków, klawiszy sesji i kodu wyjścia, z którego da się policzyć stan jeszcze raz (`replayCopilotRecording`). Bez treści wejścia z klawiatury.
 
 **Budżet**:
 Limit czasu i liczby commitów zadania; po przekroczeniu daemon kończy sesję.
