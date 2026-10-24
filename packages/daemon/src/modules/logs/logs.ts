@@ -73,6 +73,11 @@ export class Logs {
     return new RunOutput(secretValues(env), (stream, msg) => this.append(log, source, { runId, stream, msg }));
   }
 
+  /** A cursor before every record of this daemon run: `tail` from it pages from the oldest record still buffered. */
+  runStartCursor(): number {
+    return this.baseSeq;
+  }
+
   /** Text from a process (an HTTP response of a service, ADR-45) masked the same way as its log lines. */
   mask(text: string, env: NodeJS.ProcessEnv): string {
     return maskSecrets(text, secretValues(env));

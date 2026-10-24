@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { GraphEdge, RepoCardResult, RepoGraph } from "@trackwall/protocol";
 import { DomainError } from "../src/infra/errors.ts";
+import { loopbackRequest } from "../src/infra/loopback.ts";
 import { Logs } from "../src/modules/logs/logs.ts";
 import { Mise } from "../src/modules/mise/mise.ts";
 import { ProcessGroups } from "../src/modules/procs/process-groups.ts";
@@ -47,7 +48,7 @@ function setup(repos: Record<string, object>, opts: { edges?: GraphEdge[]; cardP
   };
   const services = new Services({ mise, logs, graph, cards, env, intervalMs: 100, startupMs: 1500, settleMs: 300 });
   cleanups.push(() => procs.stopAll());
-  return { services, procs };
+  return { services, procs, mise };
 }
 
 const cleanups: (() => Promise<unknown>)[] = [];
@@ -90,7 +91,7 @@ describe("services (real process groups, fake mise and fake service)", () => {
       expect(api?.portSource).toBe("log");
       // The root starts only after its dependency has settled.
       expect(Date.parse(web?.run.startedAt ?? "")).toBeGreaterThanOrEqual(Date.parse(api?.since ?? ""));
-      expect(services.list().map((s) => [s.repo, s.state])).toEqual([
+      expect((await services.list()).map((s) => [s.repo, s.state])).toEqual([
         ["api", "healthy"],
         ["web", "healthy"],
       ]);
@@ -154,7 +155,7 @@ describe("services (real process groups, fake mise and fake service)", () => {
 
       expect(slice.members[0]).toMatchObject({
         outcome: "skipped",
-        problem: `port ${port} (server.port on the card) is already taken by a process Trackwall did not start`,
+        problem: `port ${port} (server.port on the card) is already in use by a program Trackwall did not start`,
       });
     },
     TIMEOUT,
@@ -164,7 +165,7 @@ describe("services (real process groups, fake mise and fake service)", () => {
     const { services } = setup({ web: { tasks: [{ name: "build" }] } });
 
     await expect(services.start({ repo: "web", dependencies: true, waitMs: 0 })).rejects.toMatchObject({ code: "not_found" });
-    expect(services.list()).toEqual([]);
+    expect(await services.list()).toEqual([]);
   });
 
   test(
@@ -216,8 +217,103 @@ describe("services (real process groups, fake mise and fake service)", () => {
         ["web", "stopped"],
         ["api", "stopped"],
       ]);
-      expect(services.list().find((s) => s.repo === "auth")?.state).toBe("healthy");
+      expect((await services.list()).find((s) => s.repo === "auth")?.state).toBe("healthy");
     },
     TIMEOUT,
   );
+
+  test(
+    "a dev started from the mise tasks tab is adopted: the list shows it ready on the port from its log",
+    async () => {
+      const { services, mise } = setup({ web: { ...DEV, servers: { dev: {} } } });
+      await mise.start("web", "dev");
+
+      await waitFor(async () => (await services.list())[0]?.state === "healthy");
+
+      expect((await services.list()).map((s) => [s.repo, s.state, s.portSource])).toEqual([["web", "healthy", "log"]]);
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a stop while the dependencies start cancels the start: the root never starts and the started dependency stops",
+    async () => {
+      const { services, mise } = setup(
+        { web: { ...DEV, servers: { dev: {} } }, api: { ...DEV, servers: { dev: { delayMs: 1000 } } } },
+        { edges: [http("web", "api")] },
+      );
+      const first = await services.start({ repo: "web", dependencies: true, waitMs: 300 });
+      expect(first.members.map((m) => [m.repo, m.outcome])).toEqual([
+        ["api", "started"],
+        ["web", "pending"],
+      ]);
+
+      const stopped = await services.stop({ repo: "web", dependencies: true });
+
+      expect(stopped.map((s) => [s.repo, s.state])).toEqual([["api", "stopped"]]);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      expect(mise.run("web", "dev")).toBeUndefined();
+      // A new start after the stop makes a new slice instead of reusing the cancelled one.
+      const again = await services.start({ repo: "web", dependencies: true, waitMs: 20_000 });
+      expect(again.members.map((m) => [m.repo, m.service?.state])).toEqual([
+        ["api", "healthy"],
+        ["web", "healthy"],
+      ]);
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "call returns the errors a downstream service logged while it handled the call",
+    async () => {
+      const { services } = setup(
+        { web: { ...DEV, servers: { dev: {} } }, api: { ...DEV, servers: { dev: {} } } },
+        { edges: [http("web", "api")] },
+      );
+      const slice = await services.start({ repo: "web", dependencies: true, waitMs: 20_000 });
+      const apiPort = slice.members.find((m) => m.repo === "api")?.service?.port;
+
+      const result = await services.call({
+        repo: "web",
+        method: "GET",
+        path: `/forward/${apiPort}/boom`,
+        headers: {},
+        body: null,
+        timeoutMs: 5000,
+      });
+
+      expect(result.response?.status).toBe(502);
+      expect(result.errors.map((e) => [e.source, e.exception])).toEqual([
+        [{ kind: "mise-task", repo: "api", miseTask: "dev" }, "java.lang.NullPointerException: order is null"],
+      ]);
+    },
+    TIMEOUT,
+  );
+});
+
+async function waitFor(condition: () => Promise<boolean>): Promise<void> {
+  const until = Date.now() + 20_000;
+  while (!(await condition())) {
+    if (Date.now() > until) throw new Error("condition not met within 20 s");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
+describe("loopback request deadline", () => {
+  test("a stream that keeps sending is cut at the deadline, not kept open by its keepalives", async () => {
+    const stream: Server = createServer((_, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      const timer = setInterval(() => res.write(": ping\n"), 100);
+      res.on("close", () => clearInterval(timer));
+    });
+    await new Promise<void>((resolve) => stream.listen(0, "127.0.0.1", resolve));
+    const { port } = stream.address() as AddressInfo;
+    const began = Date.now();
+
+    await expect(loopbackRequest(port, "/events", { timeoutMs: 500 })).rejects.toThrow("no response within 500 ms");
+
+    expect(Date.now() - began).toBeLessThan(2000);
+    stream.closeAllConnections();
+    await new Promise((resolve) => stream.close(resolve));
+  });
 });

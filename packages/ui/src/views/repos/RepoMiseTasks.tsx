@@ -1,4 +1,4 @@
-import { type MiseTask, type MiseTasks, miseApi, SERVICE_MISE_TASK } from "@trackwall/protocol";
+import { hasService, type MiseTask, type MiseTasks, miseApi } from "@trackwall/protocol";
 import { Play, ScrollText, ShieldCheck, Square } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -55,7 +55,7 @@ function TaskPanel({ conn, repo, tasks, onChange }: { conn: Connection; repo: st
       </p>
     ) : (
       <div className="flex flex-col gap-4">
-        {tasks.tasks.some((t) => t.name === SERVICE_MISE_TASK) && <RepoService conn={conn} repo={repo} />}
+        {hasService(tasks.tasks) && <RepoService conn={conn} repo={repo} />}
         {rows(tasks.tasks, "mise tasks")}
       </div>
     );

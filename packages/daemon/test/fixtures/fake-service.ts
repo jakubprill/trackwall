@@ -2,8 +2,9 @@
 // `fake-mise.json`: { port?: number (0 or none: a free one), delayMs?: number, crash?: boolean, quiet?: boolean }.
 // It listens on 127.0.0.1 after `delayMs` and logs the port as Spring Boot does (`quiet` leaves the line out). GET and
 // POST answer JSON with the method, path, body and `FAKE_API_TOKEN` from the environment (a secret to be masked);
-// `/boom` logs an exception with a stack trace and answers 500. `crash` logs a startup failure and exits with code 1.
-import { createServer } from "node:http";
+// `/boom` logs an exception with a stack trace and answers 500; `/forward/<port><path>` passes the request to another
+// fake service on 127.0.0.1 and answers 502 when that one fails. `crash` logs a startup failure and exits with code 1.
+import { createServer, request } from "node:http";
 
 const config = JSON.parse(process.argv[2] ?? "{}") as { port?: number; delayMs?: number; crash?: boolean; quiet?: boolean };
 
@@ -18,6 +19,16 @@ const server = createServer((req, res) => {
   const chunks: Buffer[] = [];
   req.on("data", (c: Buffer) => chunks.push(c));
   req.on("end", () => {
+    const forward = /^\/forward\/(\d+)(\/.*)$/.exec(req.url ?? "");
+    if (forward) {
+      const upstream = request({ host: "127.0.0.1", port: Number(forward[1]), path: forward[2] }, (up) => {
+        up.resume();
+        res.writeHead((up.statusCode ?? 500) >= 500 ? 502 : 200);
+        res.end();
+      });
+      upstream.end();
+      return;
+    }
     if (req.url === "/boom") {
       console.error("ERROR c.e.orders.OrderController - Request failed");
       console.error("java.lang.NullPointerException: order is null");

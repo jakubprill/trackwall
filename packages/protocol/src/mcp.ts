@@ -194,11 +194,6 @@ interface McpToolBase<Args extends z.ZodObject, Result extends z.ZodObject> {
   description: string;
   args: Args;
   result: Result;
-  /**
-   * The arguments a destructive tool writes to the daemon log before acting (ADR-41); all of them without it. A tool
-   * whose other arguments are free text that may carry a secret (headers, a request body) lists only its identifiers.
-   */
-  auditArgs?: readonly string[];
 }
 
 /**
@@ -207,10 +202,21 @@ interface McpToolBase<Args extends z.ZodObject, Result extends z.ZodObject> {
  * text for a human cannot (ADR-39), running repo code or killing a process the user may need (a dev server, a
  * migration) can (ADR-41).
  */
-type McpToolEffect = { readOnly: true } | { readOnly: false; destructive: boolean };
+type McpToolEffect<Args extends z.ZodObject> =
+  | { readOnly: true }
+  | { readOnly: false; destructive: false }
+  | {
+      readOnly: false;
+      destructive: true;
+      /**
+       * The arguments the daemon log gets before the tool acts (ADR-41, until the `audit` table exists). Listed
+       * explicitly, so a new destructive tool cannot log free text that may carry a secret (headers, a body) by default.
+       */
+      auditArgs: readonly (keyof z.output<Args> & string)[];
+    };
 
 export type McpTool<Args extends z.ZodObject = z.ZodObject, Result extends z.ZodObject = z.ZodObject> = McpToolBase<Args, Result> &
-  McpToolEffect;
+  McpToolEffect<Args>;
 
 const LIST_REPOS = "list_repos";
 const GET_REPO = "get_repo";
@@ -451,6 +457,7 @@ export const mcpTools = {
     name: RUN_MISE_TASK,
     readOnly: false,
     destructive: true,
+    auditArgs: ["repo", "miseTask"],
     description:
       "Run a repo's mise task (mise run <task>) in the repo root in the user's projects folder, not in a task worktree, " +
       `the same as the Run button in Trackwall. Only tasks listed by ${GET_REPO} (miseTasks) can run; a task that is ` +
@@ -466,6 +473,7 @@ export const mcpTools = {
     name: "stop_mise_task",
     readOnly: false,
     destructive: true,
+    auditArgs: ["repo", "miseTask"],
     description:
       "Stop a running mise task of a repo, also one the user started in Trackwall: a gentle stop, then the whole " +
       "process group is killed. Returns after Trackwall has confirmed that no process of the group is alive " +
@@ -499,9 +507,10 @@ export const mcpTools = {
     name: START_SERVICE,
     readOnly: false,
     destructive: true,
+    auditArgs: ["repo", "dependencies"],
     description:
       `Start a repo's service (its mise task ${SERVICE_MISE_TASK}, in the repo root) together with the services it calls, ` +
-      "found in the connection graph (http and manual connections, as in subgraph_for; not packages), dependencies " +
+      "found in the connection graph (http and manual connections, not packages, not low confidence), dependencies " +
       "first: a repo starts once the repos it calls are up. A service is ready (healthy) when its port accepts a " +
       "connection: the port from its log (e.g. 'Tomcat started on port 8081') or server.port on its card. Waits up " +
       "to timeoutSeconds and returns the slice: each repo with calledBy (why it is in the slice), outcome (pending, " +
@@ -525,6 +534,7 @@ export const mcpTools = {
     name: "stop_service",
     readOnly: false,
     destructive: true,
+    auditArgs: ["repo", "dependencies"],
     description:
       "Stop a repo's service (its whole process group) and, with dependencies: true, the services the latest " +
       `${START_SERVICE} of this repo started (not those that were already running or that another started slice uses). ` +
@@ -551,6 +561,7 @@ export const mcpTools = {
     name: CALL_ENDPOINT,
     readOnly: false,
     destructive: true,
+    // The path (a query), headers and body may carry a secret.
     auditArgs: ["repo", "method"],
     description:
       `Send an HTTP request to a running (healthy) service started by Trackwall, on its port on this computer ` +

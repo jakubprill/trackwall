@@ -22,7 +22,8 @@ export function RepoService({ conn, repo }: { conn: Connection; repo: string }) 
   const load = useCallback(() => post(conn, servicesApi.list, {}), [conn]);
   const remote = useRemote(load, { pollMs: (list) => (list?.some(isServiceLive) ? POLL_LIVE_MS : POLL_IDLE_MS) });
   const [slice, setSlice] = useState<ServiceSlice>();
-  const service = remote.data?.find((s) => s.repo === repo) ?? null;
+  const byRepo = new Map((remote.data ?? []).map((s) => [s.repo, s]));
+  const service = byRepo.get(repo) ?? null;
   const live = isServiceLive(service);
   const start = useAction(
     () => post(conn, servicesApi.start, { repo, dependencies: true, waitMs: 0 }),
@@ -37,6 +38,7 @@ export function RepoService({ conn, repo }: { conn: Connection; repo: string }) 
   );
   const state = serviceStateLabel(service);
   const dependencies = slice?.members.filter((m) => m.repo !== repo) ?? [];
+  const error = start.error ?? stop.error;
 
   return (
     <Surface label="Service" meta="mise run dev">
@@ -59,7 +61,7 @@ export function RepoService({ conn, repo }: { conn: Connection; repo: string }) 
         {dependencies.length > 0 && (
           <ul className="flex flex-col gap-1">
             {dependencies.map((member) => {
-              const label = memberLabel(member, remote.data?.find((s) => s.repo === member.repo) ?? null);
+              const label = memberLabel(member, byRepo.get(member.repo) ?? null);
               return (
                 <li key={member.repo} className="flex items-center gap-3 text-xs">
                   <code className="text-primary min-w-0 truncate">{member.repo}</code>
@@ -69,7 +71,7 @@ export function RepoService({ conn, repo }: { conn: Connection; repo: string }) 
             })}
           </ul>
         )}
-        {(start.error ?? stop.error) && <p className="text-destructive text-xs whitespace-pre-wrap">{start.error ?? stop.error}</p>}
+        {error && <p className="text-destructive text-xs whitespace-pre-wrap">{error}</p>}
       </div>
     </Surface>
   );

@@ -28,7 +28,8 @@ import { DomainError } from "../infra/errors.ts";
 const README_MAX_CHARS = 32_000;
 /** Ile ostatnich commitów zwraca `get_repo`: tyle wystarcza, żeby agent wiedział, co się ostatnio działo. */
 const RECENT_COMMITS = 10;
-/** What a session may do only in its own repo with `start_service` and `stop_service` (ADR-45). */
+/** What a session may do only in its own repo, in the `bad_request` message of `assertCallerRepo` (ADR-41, ADR-45). */
+const MISE_TASK_ACTION = "run and stop only mise tasks";
 const SERVICE_ACTION = "start and stop only the service";
 
 export interface ToolContext {
@@ -187,11 +188,11 @@ const runs: ToolRuns = {
     return { ...outcome, session: outcome.session && agentSession(outcome.session) };
   },
   runMiseTask: async (facade, { repo, miseTask }, { caller }) => {
-    assertCallerRepo(facade, caller, repo);
+    assertCallerRepo(facade, caller, repo, MISE_TASK_ACTION);
     return { run: await facade.mise.start(repo, miseTask) };
   },
   stopMiseTask: async (facade, { repo, miseTask }, { caller }) => {
-    assertCallerRepo(facade, caller, repo);
+    assertCallerRepo(facade, caller, repo, MISE_TASK_ACTION);
     return { run: await facade.mise.stop(repo, miseTask) };
   },
   waitForMiseTask: async (facade, { repo, miseTask, timeoutSeconds }, { signal }) => ({
@@ -207,7 +208,7 @@ const runs: ToolRuns = {
     assertCallerRepo(facade, caller, repo, SERVICE_ACTION);
     return { services: await facade.services.stop({ repo, dependencies }) };
   },
-  listServices: async (facade) => ({ services: facade.services.list() }),
+  listServices: async (facade) => ({ services: await facade.services.list() }),
   callEndpoint: (facade, { timeoutSeconds, ...request }) => facade.services.call({ ...request, timeoutMs: timeoutSeconds * 1000 }),
 };
 
@@ -239,9 +240,9 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.callEndpoint, runs.callEndpoint),
 ];
 
-/** The arguments a destructive tool logs: only `keys` when the tool names them (the rest may be free text with secrets). */
-function auditView(args: Record<string, unknown>, keys: readonly string[] | undefined): Record<string, unknown> {
-  return keys ? Object.fromEntries(keys.map((k) => [k, args[k]])) : args;
+/** The arguments a destructive tool logs: only the ones its contract names (the rest may be free text with secrets). */
+function auditView(args: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
+  return Object.fromEntries(keys.map((k) => [k, args[k]]));
 }
 
 /**
@@ -250,7 +251,7 @@ function auditView(args: Record<string, unknown>, keys: readonly string[] | unde
  * the user's program, like a terminal, and reaches every repo. A guard for the agent, not a security boundary: a
  * session process can call `/mcp` without its session token (§8).
  */
-function assertCallerRepo(facade: Facade, caller: string | null, repo: string, action = "run and stop only mise tasks"): void {
+function assertCallerRepo(facade: Facade, caller: string | null, repo: string, action: string): void {
   if (caller === null) return;
   const own = facade.agents.session(caller).repo;
   if (own !== repo) throw new DomainError("bad_request", `a session in ${own} can ${action} of ${own}, not of ${repo}`);

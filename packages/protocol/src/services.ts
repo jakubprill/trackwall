@@ -59,6 +59,11 @@ export const SliceMember = z.object({
 });
 export type SliceMember = z.infer<typeof SliceMember>;
 
+/** Whether a repo's mise tasks include the one that runs its service. */
+export function hasService(tasks: readonly { name: string }[]): boolean {
+  return tasks.some((t) => t.name === SERVICE_MISE_TASK);
+}
+
 /** At most this many repos in one slice; a larger one is a sign the graph pulls in half of the projects folder. */
 export const MAX_SLICE_REPOS = 12;
 
@@ -92,7 +97,7 @@ export const StopServiceRequest = z
 export type StopServiceRequest = z.infer<typeof StopServiceRequest>;
 
 /** Request headers the daemon sets itself; the caller cannot override them. */
-export const RESERVED_HEADERS = ["host", "content-length", "transfer-encoding", "connection"];
+const RESERVED_HEADERS = ["host", "content-length", "transfer-encoding", "connection"];
 
 /** An HTTP header name (RFC 9110 token) that is not one of `RESERVED_HEADERS`. */
 const HeaderName = z

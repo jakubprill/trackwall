@@ -182,11 +182,11 @@ _Unikaj_: dashboard (to scena 3D), przegląd repo (to README i commity jednego r
 ## Procesy i serwisy
 
 **Serwis** (`Service`, `ServiceId`; po angielsku *service*):
-Repo plus jego task mise `dev` (`SERVICE_MISE_TASK`), port i gotowość. Today one per repo, run from the repo root (ADR-45); docelowo jedno repo może mieć kilka serwisów.
+A repo with its mise task `dev` (`SERVICE_MISE_TASK`), its port and its readiness. Today one per repo, run from the repo root (ADR-45); later a repo may have several services.
 _Unikaj_: aplikacja, mikroserwis (gdy chodzi o byt w Trackwall)
 
 **Stan serwisu** (`ServiceState`):
-`stopped`, `starting`, `healthy`, `unhealthy`, `stopping` albo `crashed`; zawsze zaobserwowany, nigdy założony. In the UI `healthy` reads "ready on port N" and `unhealthy` "not answering".
+`stopped`, `starting`, `healthy`, `unhealthy`, `stopping` or `crashed`; always observed, never assumed. In the UI `healthy` reads "ready on port N" and `unhealthy` "not answering".
 
 **Slice** (`ServiceSlice`, member `SliceMember`; in English *slice*):
 A service with every service it calls at runtime (graph edges `http` and `manual`), started together by `start_service`, dependencies first in waves (ADR-45). A member is `pending`, `started`, `running` (it was already running) or `skipped` with the reason.
