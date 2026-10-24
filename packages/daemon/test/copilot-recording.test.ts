@@ -56,6 +56,23 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     ]);
   });
 
+  test("odmowa cyfrą bez Entera: cyfra kończy czekanie na zgodę, a komunikat o przerwanej turze daje czekanie na Ciebie", () => {
+    const cast = parseAsciicast(
+      [
+        '{"version": 2, "width": 80, "height": 24, "timestamp": 0}',
+        '[1.0, "m", "{\\"kind\\":\\"hook\\",\\"record\\":{\\"event\\":\\"notification\\",\\"receivedAt\\":1000,\\"payload\\":{\\"notification_type\\":\\"permission_prompt\\"},\\"omitted\\":[]}}"]',
+        '[3.0, "m", "{\\"kind\\":\\"key\\",\\"key\\":\\"choice\\"}"]',
+        '[3.2, "o", " ● Operation cancelled by user\\r\\n> "]',
+      ].join("\n"),
+    );
+
+    expect(summary(replayCopilotRecording(cast, { staleAfterMs: 60_000 }))).toEqual([
+      "Approval hook high hook notification permission_prompt",
+      "Working keyboard medium key choice",
+      "Input screen medium screen operation cancelled",
+    ]);
+  });
+
   test("sesja bez hooków: stan z paska postępu OSC 9;4, Stale po ciszy i kod wyjścia na końcu", () => {
     const cast = parseAsciicast(
       [
