@@ -3,7 +3,7 @@ import { type HomeKey, type HomeModel, repoKey, sessionKey } from "@trackwall/sc
 import type { ReactNode } from "react";
 import { StatusLabel } from "@/components/StatusLabel";
 import { twoDigits } from "@/lib/format";
-import { homeRepoStateText } from "@/lib/home-model";
+import { HOME_SESSION_STATUS, homeRepoStatus } from "@/lib/home-model";
 import { sessionStateLabel } from "@/lib/session-state";
 import { cn } from "@/lib/utils";
 
@@ -36,11 +36,13 @@ export function NeedsYouPanel({
       <ul aria-label="Sessions that need you" className="px-2">
         {urgent.length === 0 && <li className="text-muted-foreground px-2 py-1 text-sm">No session is waiting for you.</li>}
         {urgent.map((s) => {
+          // Pełny stan z widoku „Sessions” (np. „asking for approval”), a tytuł okna odróżnia dwie sesje jednego repo.
           const session = sessions.get(s.id);
-          const state = session ? sessionStateLabel(session) : { label: s.state };
+          const status = session ? sessionStateLabel(session) : HOME_SESSION_STATUS[s.state];
+          const title = session?.windowTitle ? `${s.repo} · ${session.windowTitle}` : s.repo;
           return (
-            <Row key={s.id} id={sessionKey(s.id)} selected={selected} onSelect={onSelect} onOpen={onOpen} title={s.repo}>
-              <StatusLabel tone={s.state === "error" ? "error" : "warning"} label={state.label} />
+            <Row key={s.id} id={sessionKey(s.id)} selected={selected} onSelect={onSelect} onOpen={onOpen} title={title}>
+              <StatusLabel tone={status.tone} label={status.label} />
             </Row>
           );
         })}
@@ -48,10 +50,10 @@ export function NeedsYouPanel({
       <h2 className="hud-label px-4 pt-4 pb-2">
         Repos <span className="text-primary">{`// ${twoDigits(repos.length)} of ${twoDigits(model.repos.length)}`}</span>
       </h2>
-      <ul aria-label="Repos with changes" className="min-h-0 flex-1 overflow-y-auto px-2">
+      <ul aria-label="Repos that are not clean" className="min-h-0 flex-1 overflow-y-auto px-2">
         {repos.map((r) => (
           <Row key={r.id} id={repoKey(r.id)} selected={selected} onSelect={onSelect} onOpen={onOpen} title={r.id}>
-            <StatusLabel tone={r.state === "unavailable" ? "error" : "warning"} label={homeRepoStateText(r)} />
+            <StatusLabel {...homeRepoStatus(r)} />
           </Row>
         ))}
       </ul>

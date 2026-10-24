@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { GraphEdge, Repo, RepoGraph, Session } from "@trackwall/protocol";
-import { homeModel, homeRepoStateText, homeSessionState } from "../src/lib/home-model.ts";
+import { homeModel, homeRepoStatus, homeSessionState } from "../src/lib/home-model.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-24T10:00:00Z", pid: 10 } as const;
 
@@ -124,11 +124,12 @@ describe("stan sesji na pulpicie", () => {
 });
 
 describe("stan repo na pulpicie słowami", () => {
-  test("liczba zmian i commitów do pobrania jak na liście repo", () => {
+  test("liczba zmian i commitów do pobrania jak na liście repo; repo do pobrania nie jest czyste", () => {
     const repo = { id: "api", layer: null, runningTask: null };
-    expect(homeRepoStateText({ ...repo, state: "changed", count: 1 })).toBe("1 change");
-    expect(homeRepoStateText({ ...repo, state: "behind", count: 3 })).toBe("3 commits to pull");
-    expect(homeRepoStateText({ ...repo, state: "unavailable", count: 0 })).toBe("unavailable");
-    expect(homeRepoStateText({ ...repo, state: "clean", count: 0 })).toBe("clean");
+    expect(homeRepoStatus({ ...repo, state: "changed", count: 1 })).toEqual({ tone: "warning", label: "1 change" });
+    expect(homeRepoStatus({ ...repo, state: "behind", count: 1 })).toEqual({ tone: "warning", label: "1 commit to pull" });
+    expect(homeRepoStatus({ ...repo, state: "behind", count: 3 })).toEqual({ tone: "warning", label: "3 commits to pull" });
+    expect(homeRepoStatus({ ...repo, state: "unavailable", count: 0 })).toEqual({ tone: "error", label: "unavailable" });
+    expect(homeRepoStatus({ ...repo, state: "clean", count: 0 })).toEqual({ tone: "ok", label: "clean" });
   });
 });

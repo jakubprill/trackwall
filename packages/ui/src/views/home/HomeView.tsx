@@ -1,12 +1,12 @@
 import { graphApi, miseApi, type SessionList, workspaceApi } from "@trackwall/protocol";
-import type { LabelTarget } from "@trackwall/scene";
 import { type HomeKey, parseHomeKey } from "@trackwall/scene/model";
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { homeModel } from "@/lib/home-model";
+import { homeHasObject, homeModel } from "@/lib/home-model";
+import { listNeedsSettings } from "@/lib/repo-status";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { HomeDetails } from "./HomeDetails.tsx";
 import { HomeHoverCard } from "./HomeHoverCard.tsx";
@@ -22,8 +22,8 @@ import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
 
 const HomeCanvas = lazy(() => import("./HomeCanvas.tsx").then((m) => ({ default: m.HomeCanvas })));
 
-/** Lista repo z gita: jak na liście repo, ale częściej, bo to pierwszy ekran. */
-const REPOS_POLL_MS = 5000;
+/** Lista repo to `git status` w każdym repo, więc tak samo rzadko jak w widoku „Repos”. */
+const REPOS_POLL_MS = 10_000;
 /** Graf liczy się z kart wszystkich repo, a zmienia się z commitami, więc rzadko. */
 const GRAPH_POLL_MS = 30_000;
 /** Działające taski mise to odczyt z pamięci daemona, bez uruchamiania mise. */
@@ -60,6 +60,9 @@ export function HomeView({
   const [hovered, setHovered] = useState<HomeKey | null>(null);
   const [unavailable, setUnavailable] = useState<string>();
 
+  // Daemon działa, dopóki odpowiada: błąd z kodem (np. zły `workspace.yaml`) przyszedł od niego, a bez kodu to
+  // zerwane połączenie albo odpowiedź spoza kontraktu.
+  const daemonRunning = repos.error === undefined || repos.errorCode !== undefined;
   const repoList = repos.data?.repos;
   const sessionList = sessions.data?.sessions;
   const model = useMemo(
@@ -69,10 +72,15 @@ export function HomeView({
         sessions: sessionList ?? [],
         graph: graph.data,
         running: running.data ?? [],
-        daemonRunning: repos.error === undefined,
+        daemonRunning,
       }),
-    [repoList, sessionList, graph.data, running.data, repos.error],
+    [repoList, sessionList, graph.data, running.data, daemonRunning],
   );
+  const current = selected && homeHasObject(model, selected) ? selected : null;
+  const unavailableNow = useCallback((reason: string) => {
+    setHovered(null);
+    setUnavailable(reason);
+  }, []);
   const lookup = useMemo(
     () => ({ repos: new Map((repoList ?? []).map((r) => [r.id, r])), sessions: new Map((sessionList ?? []).map((s) => [s.id, s])) }),
     [repoList, sessionList],
@@ -87,15 +95,12 @@ export function HomeView({
     },
     [onOpenSession, onOpenRepo, onOpenDaemon],
   );
-  const labelText = useCallback((target: LabelTarget) => {
-    if (target.kind === "repo") return target.repo.id;
-    return target.session.state === "error" ? "error" : "waiting for you";
-  }, []);
 
-  if (repos.data && repos.data.projectsDir === null) {
+  const needsSettings = listNeedsSettings(repos.errorCode);
+  if (needsSettings || repos.data?.projectsDir === null) {
     return (
       <div className="flex flex-col items-start gap-3 p-6">
-        <p className="text-sm">Choose a projects folder to see your repos and sessions here.</p>
+        <p className="text-sm">{needsSettings ? repos.error : "Choose a projects folder to see your repos and sessions here."}</p>
         <Button variant="outline" size="sm" onClick={onOpenSettings}>
           Open Settings
         </Button>
@@ -105,11 +110,14 @@ export function HomeView({
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[var(--spacing-sidebar)_1fr_var(--spacing-sidebar)]">
-      <NeedsYouPanel model={model} sessions={lookup.sessions} selected={selected} onSelect={setSelected} onOpen={open} />
+      <NeedsYouPanel model={model} sessions={lookup.sessions} selected={current} onSelect={setSelected} onOpen={open} />
       <div className="relative min-h-0 min-w-0">
         {unavailable ? (
-          <div className="p-6">
+          <div className="flex flex-col items-start gap-3 p-6">
             <p className="text-muted-foreground text-sm">{`The 3D view is unavailable here (${unavailable}). The lists on both sides still work.`}</p>
+            <Button variant="outline" size="sm" onClick={() => setUnavailable(undefined)}>
+              Try again
+            </Button>
           </div>
         ) : (
           <Suspense
@@ -121,20 +129,19 @@ export function HomeView({
           >
             <HomeCanvas
               model={model}
-              focus={selected}
+              focus={current}
               onSelect={setSelected}
               onOpen={open}
               onHover={setHovered}
-              labelText={labelText}
-              onUnavailable={setUnavailable}
+              onUnavailable={unavailableNow}
             />
           </Suspense>
         )}
-        {hovered && hovered !== selected && <HomeHoverCard target={hovered} model={model} />}
+        {!unavailable && hovered && hovered !== current && <HomeHoverCard target={hovered} model={model} />}
         {repos.error && <p className="text-destructive absolute bottom-3 left-3 text-sm">{repos.error}</p>}
       </div>
       <HomeDetails
-        selected={selected}
+        selected={current}
         model={model}
         repos={lookup.repos}
         sessions={lookup.sessions}

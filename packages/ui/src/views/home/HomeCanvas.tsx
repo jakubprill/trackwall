@@ -1,6 +1,9 @@
 import { CameraRig, Engine, Labels, Pointer } from "@pawnjs/core";
-import { type HomeKey, type HomeModel, HomeScene, type LabelTarget } from "@trackwall/scene";
+import { HomeScene, type LabelTarget } from "@trackwall/scene";
+import type { HomeKey, HomeModel } from "@trackwall/scene/model";
 import { useEffect, useRef } from "react";
+import { HOME_CAMERA_FOV, HOME_CAMERA_MAX_DISTANCE, homeCameraDistance, homeCameraPosition } from "@/lib/home-camera";
+import { HOME_SESSION_STATUS, type HomeStatus, homeRepoStatus } from "@/lib/home-model";
 import { readScenePalette } from "@/lib/scene-palette";
 
 /**
@@ -17,32 +20,21 @@ export interface HomeCanvasProps {
   onSelect: (key: HomeKey | null) => void;
   onOpen: (key: HomeKey) => void;
   onHover: (key: HomeKey | null) => void;
-  labelText: (target: LabelTarget) => string;
   onUnavailable: (reason: string) => void;
 }
 
-/** Kamera patrzy z góry i z przodu, pod tym samym kątem przy każdym rozmiarze okna. */
-const CAMERA_DIRECTION = { y: 15, z: 13 };
-const CAMERA_FOV = 40;
-/** Promień, który musi zmieścić się w kadrze: pierścień repo (6,6 w jednostkach sceny), łuki sektorów i kafle. */
-const SCENE_EXTENT = 8.6;
-const MAX_DISTANCE = 44;
+const ORIGIN = { x: 0, y: 0, z: 0 };
 
-/**
- * Odległość kamery dobrana do proporcji płótna: w wąskim płótnie decyduje szerokość, w szerokim wysokość, więc cały
- * pierścień jest w kadrze bez względu na to, jak szerokie są panele po bokach.
- */
-export function homeCamera(width: number, height: number) {
-  const halfHeight = Math.tan((CAMERA_FOV * Math.PI) / 360);
-  const aspect = width > 0 && height > 0 ? width / height : 1;
-  const distance = Math.min(MAX_DISTANCE, SCENE_EXTENT / Math.min(halfHeight, halfHeight * aspect));
-  const scale = distance / Math.hypot(CAMERA_DIRECTION.y, CAMERA_DIRECTION.z);
-  return { position: { x: 0, y: CAMERA_DIRECTION.y * scale, z: CAMERA_DIRECTION.z * scale }, fov: CAMERA_FOV };
+interface Mounted {
+  scene: HomeScene;
+  rig: CameraRig;
+  /** Kadr całej sceny dla bieżącego rozmiaru płótna. */
+  overview: () => void;
 }
 
 export function HomeCanvas(props: HomeCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const sceneRef = useRef<{ scene: HomeScene; rig: CameraRig } | null>(null);
+  const mountedRef = useRef<Mounted | null>(null);
   // Najświeższe wywołania zwrotne bez odtwarzania silnika przy każdym renderze rodzica.
   const latest = useRef(props);
   latest.current = props;
@@ -50,42 +42,32 @@ export function HomeCanvas(props: HomeCanvasProps) {
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const canvas = document.createElement("canvas");
-    canvas.className = "block size-full";
-    host.prepend(canvas);
-    let engine: Engine;
-    try {
-      engine = new Engine({
-        canvas,
-        fit: host,
-        enableTransparency: true,
-        lights: "studio",
-        camera: homeCamera(host.clientWidth, host.clientHeight),
-      });
-    } catch (err) {
-      canvas.remove();
-      latest.current.onUnavailable(err instanceof Error ? err.message : String(err));
-      return;
-    }
-    const rig = new CameraRig({ minDistance: 8, maxDistance: MAX_DISTANCE, maxPolarAngle: Math.PI * 0.45, enablePan: false });
+    const created = createEngine(host, (reason) => latest.current.onUnavailable(reason));
+    if (!created) return;
+    const { engine, canvas } = created;
+    const rig = new CameraRig({ minDistance: 8, maxDistance: HOME_CAMERA_MAX_DISTANCE, maxPolarAngle: Math.PI * 0.45, enablePan: false });
     engine
       .use(new Pointer())
       .use(new Labels({ container: host }))
       .use(rig);
-    const motion = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const scene = new HomeScene(engine, {
       palette: readScenePalette(host),
-      motion,
+      motion: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
       onSelect: (key) => latest.current.onSelect(key),
       onOpen: (key) => latest.current.onOpen(key),
       onHover: (key) => latest.current.onHover(key),
-      createLabel: (target) => sceneLabel(latest.current.labelText(target), target),
+      createLabel: sceneLabel,
     });
-    sceneRef.current = { scene, rig };
+    const overview = () => rig.focus(ORIGIN, { distance: homeCameraDistance(host.clientWidth, host.clientHeight) });
+    mountedRef.current = { scene, rig, overview };
     scene.apply(latest.current.model);
+    // Zmiana rozmiaru okna albo paneli: bez wybranego obiektu kadr wraca do całej sceny dla nowych proporcji.
+    engine.fitToElement(host, () => {
+      if (!latest.current.focus) overview();
+    });
     const lost = (event: Event) => {
       event.preventDefault();
-      latest.current.onUnavailable("The graphics context was lost");
+      latest.current.onUnavailable("the graphics context was lost");
     };
     canvas.addEventListener("webglcontextlost", lost);
     // Schowane okno nie rysuje: Pawn sam nie wstrzymuje pętli (zgłoszenie do Pawn), a WebView w trayu dalej liczyłby klatki.
@@ -95,7 +77,7 @@ export function HomeCanvas(props: HomeCanvasProps) {
     return () => {
       document.removeEventListener("visibilitychange", visibility);
       canvas.removeEventListener("webglcontextlost", lost);
-      sceneRef.current = null;
+      mountedRef.current = null;
       scene.dispose();
       engine.dispose();
       canvas.remove();
@@ -103,31 +85,56 @@ export function HomeCanvas(props: HomeCanvasProps) {
   }, []);
 
   useEffect(() => {
-    sceneRef.current?.scene.apply(props.model);
+    mountedRef.current?.scene.apply(props.model);
   }, [props.model]);
 
   useEffect(() => {
-    const current = sceneRef.current;
-    if (!current) return;
-    current.scene.focus(props.focus);
-    const entity = props.focus && current.scene.entity(props.focus);
-    if (entity) current.rig.focus(entity);
-    else current.rig.reset();
+    const mounted = mountedRef.current;
+    if (!mounted) return;
+    mounted.scene.focus(props.focus);
+    const entity = props.focus && mounted.scene.entity(props.focus);
+    if (entity) mounted.rig.focus(entity);
+    else mounted.overview();
   }, [props.focus]);
 
   return <div ref={hostRef} className="relative size-full overflow-hidden" />;
 }
 
-/** Etykieta przy obiekcie: zwięzła, w stylu podpisów HUD; czekająca sesja i błąd mają swój kolor. */
-function sceneLabel(text: string, target: LabelTarget): HTMLElement {
+/**
+ * Silnik na nowym płótnie albo `null` z powodem w `onUnavailable`. WebGL 2 jest sprawdzany na osobnym płótnie przed
+ * silnikiem, bo nieudany konstruktor `Engine` zostawia świat koota, którego nie da się zwolnić (limit 16 na stronę).
+ */
+function createEngine(host: HTMLElement, onUnavailable: (reason: string) => void): { engine: Engine; canvas: HTMLCanvasElement } | null {
+  if (!document.createElement("canvas").getContext("webgl2")) {
+    onUnavailable("WebGL 2 is not available");
+    return null;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.className = "block size-full";
+  host.prepend(canvas);
+  const distance = homeCameraDistance(host.clientWidth, host.clientHeight);
+  try {
+    const engine = new Engine({
+      canvas,
+      enableTransparency: true,
+      lights: "studio",
+      camera: { position: homeCameraPosition(distance), fov: HOME_CAMERA_FOV },
+    });
+    return { engine, canvas };
+  } catch (err) {
+    canvas.remove();
+    onUnavailable(err instanceof Error ? err.message : String(err));
+    return null;
+  }
+}
+
+/** Etykieta przy obiekcie: sama nazwa repo albo stan sesji, w stylu podpisów HUD i w kolorze stanu. */
+function sceneLabel(target: LabelTarget): HTMLElement {
+  const status: HomeStatus = target.kind === "repo" ? homeRepoStatus(target.repo) : HOME_SESSION_STATUS[target.session.state];
   const label = document.createElement("div");
-  label.textContent = text;
-  label.className = `bg-background/80 pointer-events-none rounded-sm border px-1.5 py-0.5 font-mono text-2xs whitespace-nowrap ${labelTone(target)}`;
+  label.textContent = target.kind === "repo" ? target.repo.id : status.label;
+  label.className = `bg-background/80 pointer-events-none rounded-sm border px-1.5 py-0.5 font-mono text-2xs whitespace-nowrap ${LABEL_TONES[status.tone ?? "ok"]}`;
   return label;
 }
 
-function labelTone(target: LabelTarget): string {
-  const error = target.kind === "session" ? target.session.state === "error" : target.repo.state === "unavailable";
-  if (error) return "text-destructive";
-  return target.kind === "session" ? "text-warning" : "text-foreground";
-}
+const LABEL_TONES = { ok: "text-foreground", warning: "text-warning", error: "text-destructive" } as const;

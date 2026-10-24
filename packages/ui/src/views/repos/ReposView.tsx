@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { twoDigits } from "@/lib/format";
-import { branchLabel, repoStatusTone } from "@/lib/repo-status";
+import { branchLabel, listNeedsSettings, repoStatusTone } from "@/lib/repo-status";
 import { listSyncBadge, syncedByPath } from "@/lib/sync-state";
 import { type BatchRunHandle, useBatchRun } from "@/lib/use-batch-run";
 import { useRemote } from "@/lib/use-remote";
@@ -47,9 +47,7 @@ export function ReposView({
   const synced = syncedByPath(sync.run);
   const batch = useBatchRun(conn, list.reload);
 
-  // Folder z projektami, który zniknął albo jest źle wpisany w `workspace.yaml`, poprawia się w ustawieniach,
-  // a stara lista wyglądałaby na aktualną.
-  const needsSettings = list.errorCode === "projects_dir_unavailable" || list.errorCode === "invalid_config";
+  const needsSettings = listNeedsSettings(list.errorCode);
   const allRepos = needsSettings ? [] : (list.data?.repos ?? []);
   const filter = useTagFilter(conn, allRepos);
   const repos = filter.repos;

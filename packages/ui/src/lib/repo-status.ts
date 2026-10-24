@@ -14,6 +14,14 @@ export function repoStatusTone(status: RepoStatus): { tone: StatusTone; label: s
   return changes ? { tone: "warning", label: changes } : { tone: "ok", label: "clean" };
 }
 
+/**
+ * Lista repo nie istnieje, dopóki folder z projektami nie zostanie poprawiony w ustawieniach: zniknął albo jest źle
+ * wpisany w `workspace.yaml`. Stara lista wyglądałaby wtedy na aktualną, więc widoki jej nie pokazują.
+ */
+export function listNeedsSettings(errorCode: string | undefined): boolean {
+  return errorCode === "projects_dir_unavailable" || errorCode === "invalid_config";
+}
+
 export function branchLabel(status: RepoStatusOk): string {
   return status.branch ?? "detached HEAD";
 }

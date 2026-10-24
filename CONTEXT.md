@@ -309,6 +309,9 @@ Scena 3D pulpitu na Pawn. Nie zna API daemona: dostaje kolejne migawki `HomeMode
 **Pulpit**:
 Pierwszy ekran, widok „Home” (`HomeView`): stan daemona, sesje (zwłaszcza czekające na Ciebie), repo i połączenia między nimi, w układzie „Orbit” (`orbitLayout`).
 
+**Kolejka „Needs you”** (`NeedsYouPanel`):
+Lewy panel pulpitu: sesje, które czekają na Ciebie albo mają błąd, potem repo, które nie są czyste. Te same obiekty mają podpis na scenie.
+
 **Migawka pulpitu** (`HomeModel`):
 To, co pulpit pokazuje, policzone przez UI z odpowiedzi daemona i podane scenie w całości przy każdej zmianie.
 _Unikaj_: snapshot (to `GET /api/snapshot`, stan całego daemona).

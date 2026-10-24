@@ -26,5 +26,5 @@ test("w korzeniu src/ daemona leżą tylko punkty wejścia i katalogi z docs/dev
 
 test("w korzeniu src/ UI leżą tylko punkty wejścia, a widoki mają foldery nazwane identyfikatorem widoku", () => {
   expect(trackedRootEntries("packages/ui/src")).toEqual(["App.tsx", "components", "index.css", "lib", "main.tsx", "views"]);
-  expect(trackedRootEntries("packages/ui/src/views")).toEqual(["daemon", "graph", "repos", "sessions", "settings"]);
+  expect(trackedRootEntries("packages/ui/src/views")).toEqual(["daemon", "graph", "home", "repos", "sessions", "settings"]);
 });

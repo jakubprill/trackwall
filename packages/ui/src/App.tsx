@@ -1,6 +1,6 @@
 import { agentsApi } from "@trackwall/protocol";
 import { Activity, FolderGit2, Network, Orbit, Settings, SquareTerminal } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
@@ -36,9 +36,10 @@ type View = (typeof VIEWS)[number]["id"];
 const SESSIONS_POLL_MS = { open: 1000, closed: 3000 };
 
 export function App() {
-  const [view, setView] = useState<View>("home");
+  // Repo otwarte z pulpitu należy do przejścia, nie do widoku: każde inne przejście do „Repos” zaczyna bez niego.
+  const [{ view, repo }, setNav] = useState<{ view: View; repo?: string }>({ view: "home" });
+  const setView = useCallback((next: View, openRepo?: string) => setNav({ view: next, repo: openRepo }), []);
   const [session, setSession] = useState<SessionSelection>();
-  const [repo, setRepo] = useState<string>();
   const { conn, epoch, error, retry } = useConnection();
   const sessions = useSessions(conn, view === "sessions" || view === "home");
   const openSession = (id: string) => {
@@ -49,16 +50,7 @@ export function App() {
   useSessionFocus(openSession);
   return (
     <div className="flex h-screen">
-      <ActivityBar
-        views={VIEWS}
-        active={view}
-        onSelect={(next) => {
-          // Repo otwarte z pulpitu jest wybrane tylko przy tym jednym przejściu, nie przy każdym powrocie do listy.
-          setRepo(undefined);
-          setView(next);
-        }}
-        badges={{ sessions: waitingCount(sessions.data?.sessions ?? []) }}
-      />
+      <ActivityBar views={VIEWS} active={view} onSelect={setView} badges={{ sessions: waitingCount(sessions.data?.sessions ?? []) }} />
       <div className="flex min-w-0 flex-1 flex-col">
         {error && (
           <div className="bg-destructive/10 flex items-center gap-3 border-b px-4 py-2">
@@ -80,10 +72,7 @@ export function App() {
               conn={conn}
               sessions={sessions}
               onOpenSession={openSession}
-              onOpenRepo={(id) => {
-                setRepo(id);
-                setView("repos");
-              }}
+              onOpenRepo={(id) => setView("repos", id)}
               onOpenDaemon={() => setView("daemon")}
               onOpenSettings={() => setView("settings")}
             />

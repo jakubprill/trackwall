@@ -1,11 +1,21 @@
 import type { Repo, RunningMiseTask, Session } from "@trackwall/protocol";
-import { type HomeKey, type HomeModel, parseHomeKey, repoKey, sessionKey } from "@trackwall/scene/model";
+import {
+  DAEMON_KEY,
+  type HomeKey,
+  type HomeModel,
+  type HomeRepo,
+  type HomeSessionState,
+  parseHomeKey,
+  repoKey,
+  sessionKey,
+} from "@trackwall/scene/model";
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { twoDigits } from "@/lib/format";
-import { branchLabel, repoStatusTone } from "@/lib/repo-status";
+import { homeDaemonStatus, homeRepoStatus } from "@/lib/home-model";
+import { branchLabel } from "@/lib/repo-status";
 import { sessionStateLabel } from "@/lib/session-state";
 
 /**
@@ -30,32 +40,58 @@ export function HomeDetails({
   onOpen: (key: HomeKey) => void;
 }) {
   const target = selected && parseHomeKey(selected);
-  const repo = target?.kind === "repo" ? repos.get(target.id) : undefined;
-  const session = target?.kind === "session" ? sessions.get(target.id) : undefined;
-  return (
-    <aside aria-label="Details" className="bg-card flex min-h-0 flex-col overflow-y-auto border-l">
-      {repo && selected ? (
-        <Panel title={repo.id} onClose={() => onSelect(null)}>
+  const close = () => onSelect(null);
+  const body = () => {
+    if (target?.kind === "daemon") {
+      return (
+        <Panel title="Daemon" onClose={close}>
+          <Summary model={model} />
+          <Button size="sm" onClick={() => onOpen(DAEMON_KEY)}>
+            Open Daemon
+          </Button>
+        </Panel>
+      );
+    }
+    const repo = target?.kind === "repo" ? repos.get(target.id) : undefined;
+    const homeRepo = repo && model.repos.find((r) => r.id === repo.id);
+    if (repo && homeRepo) {
+      return (
+        <Panel title={repo.id} onClose={close}>
           <RepoDetails
             repo={repo}
+            homeRepo={homeRepo}
             running={running}
             sessions={[...sessions.values()].filter((s) => s.repo === repo.id)}
             onSelect={onSelect}
           />
-          <Button size="sm" onClick={() => onOpen(selected)}>
+          <Button size="sm" onClick={() => onOpen(repoKey(repo.id))}>
             Open repo
           </Button>
         </Panel>
-      ) : session && selected ? (
-        <Panel title={session.repo} onClose={() => onSelect(null)}>
+      );
+    }
+    const session = target?.kind === "session" ? sessions.get(target.id) : undefined;
+    if (session) {
+      return (
+        <Panel title={session.repo} onClose={close}>
           <SessionDetails session={session} onSelect={onSelect} />
-          <Button size="sm" onClick={() => onOpen(selected)}>
+          <Button size="sm" onClick={() => onOpen(sessionKey(session.id))}>
             Open session
           </Button>
         </Panel>
-      ) : (
+      );
+    }
+    return (
+      <div className="flex flex-col gap-4 p-4">
+        <h2 className="hud-label">Environment</h2>
         <Summary model={model} />
-      )}
+        <p className="text-muted-foreground text-xs">Click an object to see it here; double-click to open it.</p>
+      </div>
+    );
+  };
+  return (
+    <aside aria-label="Details" className="bg-card flex min-h-0 flex-col overflow-y-auto border-l">
+      {body()}
     </aside>
   );
 }
@@ -76,27 +112,26 @@ function Panel({ title, onClose, children }: { title: string; onClose: () => voi
 
 function RepoDetails({
   repo,
+  homeRepo,
   running,
   sessions,
   onSelect,
 }: {
   repo: Repo;
+  homeRepo: HomeRepo;
   running: readonly RunningMiseTask[];
   sessions: readonly Session[];
   onSelect: (key: HomeKey) => void;
 }) {
-  const state = repoStatusTone(repo.status);
-  const behind = repo.status.kind === "ok" ? (repo.status.upstream?.behind ?? 0) : 0;
   const tasks = running.filter((t) => t.repo === repo.id);
   return (
     <dl className="grid w-full grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-xs">
       <Field name="State">
-        <StatusLabel tone={state.tone} label={state.label} />
+        <StatusLabel {...homeRepoStatus(homeRepo)} />
       </Field>
       {repo.status.kind === "ok" && (
         <Field name="Branch">
           <span className="font-mono">{branchLabel(repo.status)}</span>
-          {behind > 0 && <span className="text-warning">{` · ${behind} to pull`}</span>}
         </Field>
       )}
       <Field name="Tasks">{tasks.length === 0 ? "none running" : tasks.map((t) => t.miseTask).join(", ")}</Field>
@@ -143,9 +178,9 @@ function Field({ name, children }: { name: string; children: ReactNode }) {
   );
 }
 
-/** Bez wyboru: to samo, co mówi rdzeń sceny, ale słowami. */
+/** Stan środowiska słowami: to samo, co mówi rdzeń sceny i liczby obiektów na niej. */
 function Summary({ model }: { model: HomeModel }) {
-  const count = (state: string) => model.sessions.filter((s) => s.state === state).length;
+  const count = (state: HomeSessionState) => model.sessions.filter((s) => s.state === state).length;
   const rows = [
     ["Repos", model.repos.length],
     ["Not clean", model.repos.filter((r) => r.state !== "clean").length],
@@ -154,9 +189,8 @@ function Summary({ model }: { model: HomeModel }) {
     ["Links", model.links.length],
   ] as const;
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <h2 className="hud-label">Environment</h2>
-      <StatusLabel tone={model.daemonRunning ? "ok" : "error"} label={model.daemonRunning ? "daemon running" : "daemon not responding"} />
+    <div className="flex w-full flex-col gap-4">
+      <StatusLabel {...homeDaemonStatus(model.daemonRunning)} />
       <dl className="grid grid-cols-[1fr_auto] gap-y-2 text-xs">
         {rows.map(([name, value]) => (
           <Field key={name} name={name}>
@@ -164,7 +198,6 @@ function Summary({ model }: { model: HomeModel }) {
           </Field>
         ))}
       </dl>
-      <p className="text-muted-foreground text-xs">Click an object to see it here; double-click to open it.</p>
     </div>
   );
 }
