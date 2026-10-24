@@ -5,12 +5,12 @@ import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { Loading } from "@/components/Loading";
 import { post } from "@/lib/api";
-import { inDesktopShell, openWindow, reportShowsSessions, showViewMenu, viewFromLocation } from "@/lib/app-window";
+import { inDesktopShell, openWindow, reportShown, START_PARAMS, showViewMenu, startFromLocation } from "@/lib/app-window";
 import type { Connection } from "@/lib/connection";
 import type { DaemonEvents } from "@/lib/daemon-events";
 import { IS_MAC } from "@/lib/platform";
 import { entrySession, findEntry, type SessionSelection, sessionRows } from "@/lib/session-entries";
-import type { SessionLayout } from "@/lib/session-grid";
+import { SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
 import { sessionShortcut } from "@/lib/session-shortcut";
 import { attentionCount, nextWaitingShortcut } from "@/lib/session-state";
 import { useConnection } from "@/lib/use-connection";
@@ -45,13 +45,15 @@ const SESSIONS_POLL_MS = { open: 1000, closed: 3000 };
 
 export function App() {
   // Repo otwarte z pulpitu należy do przejścia, nie do widoku: każde inne przejście do „Repos” zaczyna bez niego.
-  // An extra window starts with the view it was opened with (ADR-49), the main window with Home.
+  // An extra window starts with the view it was opened with or showed at the last run (ADR-49), the main window with Home.
   const [{ view, repo }, setNav] = useState<{ view: View; repo?: string }>(() => ({
-    view: viewFromLocation(window.location.search, VIEW_IDS) ?? "home",
+    view: startFromLocation(window.location.search, START_PARAMS.view, VIEW_IDS) ?? "home",
   }));
   const setView = useCallback((next: View, openRepo?: string) => setNav({ view: next, repo: openRepo }), []);
   const [session, setSession] = useState<SessionSelection>();
-  const [sessionLayout, setSessionLayout] = useState<SessionLayout>("1");
+  const [sessionLayout, setSessionLayout] = useState<SessionLayout>(
+    () => startFromLocation(window.location.search, START_PARAMS.sessionLayout, SESSION_LAYOUTS) ?? "1",
+  );
   const { conn, epoch, error, retry } = useConnection();
   const [windowError, setWindowError] = useState<string>();
   const newWindow = useMemo(() => {
@@ -66,10 +68,11 @@ export function App() {
     return { open, showMenu };
   }, []);
   useEffect(() => {
-    reportShowsSessions(view === "sessions").catch(() => {
-      // Without the report a session from the tray opens in the last focused window instead; nothing to show.
+    reportShown(view, sessionLayout).catch(() => {
+      // Without the report a session from the tray opens in the last focused window, and the next start opens this
+      // window with what it showed before; nothing to show.
     });
-  }, [view]);
+  }, [view, sessionLayout]);
   const events = useDaemonEvents(conn);
   const sessions = useSessions(conn, events, view === "sessions" || view === "home");
   const runningLive = useMemo(() => events?.feed("mise.running.changed"), [events]);

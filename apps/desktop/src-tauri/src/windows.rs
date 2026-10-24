@@ -1,11 +1,14 @@
 //! Trackwall windows (ADR-49): the main window from `tauri.conf.json` and extra windows the user opens on other
 //! monitors. Every window is the same UI with its own view, connected to the same daemon. Extra windows have stable
 //! labels (`window-2`, `window-3`…, the lowest free number), so `tauri-plugin-window-state` gives a reopened window
-//! the monitor, size and position of the last window with that label. The shell remembers which windows show the
-//! Sessions view and in which order they were last focused, to pick the window for a session from the tray (§5.4).
+//! the monitor, size and position of the last window with that label. The shell remembers what each window shows and
+//! in which order they were last focused, to pick the window for a session from the tray (§5.4), and saves the open
+//! extra windows so that the next start opens them again (`saved_windows`).
 
 use crate::lock::lock;
+use crate::saved_windows::{self, SavedWindow, Shown};
 use crate::window_effect::WindowEffects;
+use std::collections::BTreeMap;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
@@ -14,13 +17,12 @@ use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 pub const MAIN: &str = "main";
 /// Extra window labels are this prefix plus a number from 2; `capabilities/default.json` allows `window-*`.
 const EXTRA_PREFIX: &str = "window-";
-/// Query parameter with the view an extra window starts with; read by `viewFromLocation` in the UI.
+/// Query parameters with the view and session layout an extra window starts with; read by `app-window.ts` in the UI.
 const VIEW_PARAM: &str = "view";
+const SESSION_LAYOUT_PARAM: &str = "sessionLayout";
 /// What `tauri-plugin-window-state` keeps per window: where it was and how big, not whether it was visible, which
 /// stays with the reveal after page load (ADR-11).
 pub const STATE_FLAGS: StateFlags = StateFlags::POSITION.union(StateFlags::SIZE).union(StateFlags::MAXIMIZED).union(StateFlags::FULLSCREEN);
-/// A view id is a short lowercase word (`home`, `sessions`…); anything else never reaches the window URL.
-const MAX_VIEW_LEN: usize = 32;
 
 /// Which windows show Sessions and the order of focus, most recently focused last. `opening` makes opening windows
 /// one at a time, so two quick opens do not pick the same free label; it is separate from the registry, which the main
@@ -35,6 +37,8 @@ pub struct Windows {
 struct Registry {
     focus_order: Vec<String>,
     showing_sessions: Vec<String>,
+    /// What each open extra window shows, the list that is saved for the next start.
+    extra_shown: BTreeMap<String, Shown>,
 }
 
 impl Registry {
@@ -43,11 +47,23 @@ impl Registry {
         self.focus_order.push(label.to_string());
     }
 
-    fn shows_sessions(&mut self, label: &str, shows: bool) {
+    fn shows(&mut self, label: &str, shown: Shown) {
         self.showing_sessions.retain(|l| l != label);
-        if shows {
+        if shown.view == SESSIONS_VIEW {
             self.showing_sessions.push(label.to_string());
         }
+        if is_extra(label) {
+            self.extra_shown.insert(label.to_string(), shown);
+        }
+    }
+
+    /// The user closed an extra window, so the next start does not open it again.
+    fn closed_by_user(&mut self, label: &str) {
+        self.extra_shown.remove(label);
+    }
+
+    fn saved(&self) -> Vec<SavedWindow> {
+        self.extra_shown.iter().map(|(label, shown)| SavedWindow { label: label.clone(), shown: shown.clone() }).collect()
     }
 
     fn closed(&mut self, label: &str) {
@@ -77,13 +93,16 @@ impl Windows {
         self.with(|r| r.focused(label));
     }
 
-    pub fn shows_sessions(&self, label: &str, shows: bool) {
-        self.with(|r| r.shows_sessions(label, shows));
-    }
-
     pub fn session_window(&self) -> String {
         self.with(|r| r.session_window().to_string())
     }
+}
+
+/// The view id of Sessions in the UI (`App.tsx`).
+const SESSIONS_VIEW: &str = "sessions";
+
+fn is_extra(label: &str) -> bool {
+    label.strip_prefix(EXTRA_PREFIX).is_some_and(|n| n.parse::<u32>().is_ok_and(|n| n >= 2))
 }
 
 /// The lowest free extra window label, so that a reopened window takes the place of the one closed before.
@@ -99,28 +118,61 @@ fn next_label<'a>(open: impl IntoIterator<Item = &'a str>) -> String {
     }
 }
 
-/// The UI page of an extra window that starts with `view`, or with the UI's first view without one; `None` for
-/// something that is not a view id.
-fn window_url(view: Option<&str>) -> Option<String> {
-    let Some(view) = view else { return Some("index.html".into()) };
-    let is_view_id = !view.is_empty() && view.len() <= MAX_VIEW_LEN && view.bytes().all(|b| b.is_ascii_lowercase());
-    is_view_id.then(|| format!("index.html?{VIEW_PARAM}={view}"))
+/// The UI page of an extra window: the view and session layout it starts with, each only if it is an id, or the UI's
+/// defaults without them; `None` for something that is not an id.
+fn window_url(view: Option<&str>, session_layout: Option<&str>) -> Option<String> {
+    let mut params = Vec::new();
+    for (name, value) in [(VIEW_PARAM, view), (SESSION_LAYOUT_PARAM, session_layout)] {
+        if let Some(value) = value {
+            if !saved_windows::is_id(value) {
+                return None;
+            }
+            params.push(format!("{name}={value}"));
+        }
+    }
+    Some(if params.is_empty() { "index.html".into() } else { format!("index.html?{}", params.join("&")) })
 }
 
-/// Opens an extra window with `view`, built from the main window's configuration (size, minimum size,
-/// transparency, theme) and hidden until its page has loaded, like the main window (ADR-11).
-///
-/// Must not run on the main thread: on Windows building a window there deadlocks (Tauri docs), so the tray calls it
-/// from the async runtime and the UI through an async command.
-/// It gets the same background effect and reveal after page load as the main window (ADR-11): its effect entry exists
-/// before the window, the effect is applied on the main thread and a fallback timer shows it if the page never loads.
+/// Opens an extra window with `view` under the lowest free label.
 pub fn open(app: &AppHandle, view: Option<&str>) -> Result<(), String> {
-    let url = window_url(view).ok_or_else(|| format!("not a view id: {view:?}"))?;
+    let url = window_url(view, None).ok_or_else(|| format!("not a view id: {view:?}"))?;
+    build(app, None, url)
+}
+
+/// Opens the extra windows saved at the last run, each under its own label and with what it showed. Runs in the async
+/// runtime, because windows are not built on the main thread.
+pub fn restore(app: &AppHandle) {
+    let Some(path) = saved_path(app) else { return };
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        for saved in saved_windows::load(&path, is_extra) {
+            let url = window_url(Some(&saved.shown.view), Some(&saved.shown.session_layout));
+            let opened = url.ok_or_else(|| "not an id".to_string()).and_then(|url| build(&app, Some(saved.label.clone()), url));
+            if let Err(err) = opened {
+                eprintln!("[desktop] reopening {}: {err}", saved.label);
+            }
+        }
+    });
+}
+
+/// Builds an extra window from the main window's configuration (size, minimum size, transparency, theme), hidden
+/// until its page has loaded, with the same background effect and reveal as the main window (ADR-11): its effect
+/// entry exists before the window, the effect is applied on the main thread and a fallback timer shows it if the page
+/// never loads.
+///
+/// Must not run on the main thread: on Windows building a window there deadlocks (Tauri docs), so the tray and the
+/// restore call it from the async runtime and the UI through an async command.
+fn build(app: &AppHandle, label: Option<String>, url: String) -> Result<(), String> {
     let config = app.config().app.windows.iter().find(|w| w.label == MAIN).ok_or("missing window main from tauri.conf.json")?;
     let window = {
         let windows = app.state::<Windows>();
         let _one_at_a_time = lock(&windows.opening);
-        let label = next_label(app.webview_windows().keys().map(String::as_str));
+        let taken = || app.webview_windows().keys().cloned().collect::<Vec<_>>();
+        let label = match label {
+            Some(label) if taken().contains(&label) => return Err(format!("{label} is already open")),
+            Some(label) => label,
+            None => next_label(taken().iter().map(String::as_str)),
+        };
         app.state::<WindowEffects>().register(&label);
         let mut window_config = config.clone();
         window_config.label = label.clone();
@@ -132,6 +184,40 @@ pub fn open(app: &AppHandle, view: Option<&str>) -> Result<(), String> {
     let effects_app = app.clone();
     app.run_on_main_thread(move || effects_app.state::<WindowEffects>().apply(&window))
         .map_err(|e| format!("applying the effect of {label}: {e}"))
+}
+
+/// A window reports what it shows; an extra window's change is saved for the next start.
+pub fn shows(app: &AppHandle, label: &str, shown: Shown) {
+    let saved = app.state::<Windows>().with(|r| {
+        r.shows(label, shown);
+        r.saved()
+    });
+    if is_extra(label) {
+        persist(app, &saved);
+    }
+}
+
+/// The user closed an extra window (not the app quitting, which closes windows without asking): the next start does
+/// not open it.
+pub fn closed_by_user(app: &AppHandle, label: &str) {
+    let saved = app.state::<Windows>().with(|r| {
+        r.closed_by_user(label);
+        r.saved()
+    });
+    persist(app, &saved);
+}
+
+fn saved_path(app: &AppHandle) -> Option<std::path::PathBuf> {
+    app.path().app_config_dir().ok().map(|dir| dir.join(saved_windows::FILE))
+}
+
+fn persist(app: &AppHandle, saved: &[SavedWindow]) {
+    let written = saved_path(app)
+        .ok_or_else(|| std::io::Error::other("no configuration directory"))
+        .and_then(|path| saved_windows::save(&path, saved));
+    if let Err(err) = written {
+        eprintln!("[desktop] saving the open windows: {err}");
+    }
 }
 
 /// A window is gone: it no longer gets sessions, and the position and size of an extra window are saved now, not
@@ -159,6 +245,47 @@ pub fn show(app: &AppHandle, label: &str) {
 mod tests {
     use super::*;
 
+    fn sessions() -> Shown {
+        Shown { view: "sessions".into(), session_layout: "auto".into() }
+    }
+
+    fn home() -> Shown {
+        Shown { view: "home".into(), session_layout: "1".into() }
+    }
+
+    #[test]
+    fn only_extra_windows_are_saved_for_the_next_start_with_what_they_show() {
+        let mut r = Registry::default();
+        r.shows("main", sessions());
+        r.shows("window-3", home());
+        r.shows("window-2", home());
+        r.shows("window-2", sessions());
+        assert_eq!(
+            r.saved(),
+            [SavedWindow { label: "window-2".into(), shown: sessions() }, SavedWindow { label: "window-3".into(), shown: home() }]
+        );
+    }
+
+    #[test]
+    fn a_window_the_user_closed_is_not_reopened_but_one_closed_by_quitting_is() {
+        let mut r = Registry::default();
+        r.shows("window-2", home());
+        r.shows("window-3", sessions());
+        r.closed_by_user("window-2");
+        r.closed("window-2");
+        r.closed("window-3");
+        assert_eq!(r.saved(), [SavedWindow { label: "window-3".into(), shown: sessions() }]);
+    }
+
+    #[test]
+    fn an_extra_window_label_is_the_prefix_and_a_number_from_two() {
+        assert!(is_extra("window-2"));
+        assert!(is_extra("window-12"));
+        assert!(!is_extra("main"));
+        assert!(!is_extra("window-1"));
+        assert!(!is_extra("window-x"));
+    }
+
     #[test]
     fn a_new_window_takes_the_lowest_free_number() {
         assert_eq!(next_label(["main"]), "window-2");
@@ -168,28 +295,29 @@ mod tests {
 
     #[test]
     fn a_view_id_becomes_the_view_parameter_of_the_page() {
-        assert_eq!(window_url(Some("sessions")).as_deref(), Some("index.html?view=sessions"));
+        assert_eq!(window_url(Some("sessions"), None).as_deref(), Some("index.html?view=sessions"));
+        assert_eq!(window_url(Some("sessions"), Some("auto")).as_deref(), Some("index.html?view=sessions&sessionLayout=auto"));
     }
 
     #[test]
     fn a_window_without_a_view_opens_the_first_view_of_the_ui() {
-        assert_eq!(window_url(None).as_deref(), Some("index.html"));
+        assert_eq!(window_url(None, None).as_deref(), Some("index.html"));
     }
 
     #[test]
-    fn anything_but_a_lowercase_word_is_not_a_view_id() {
-        assert_eq!(window_url(Some("")), None);
-        assert_eq!(window_url(Some("home&token=x")), None);
-        assert_eq!(window_url(Some("../index")), None);
-        assert_eq!(window_url(Some("Sessions")), None);
-        assert_eq!(window_url(Some(&"a".repeat(MAX_VIEW_LEN + 1))), None);
+    fn anything_but_a_lowercase_word_or_number_is_not_a_view_id() {
+        assert_eq!(window_url(Some(""), None), None);
+        assert_eq!(window_url(Some("home&token=x"), None), None);
+        assert_eq!(window_url(Some("../index"), None), None);
+        assert_eq!(window_url(Some("Sessions"), None), None);
+        assert_eq!(window_url(Some(&"a".repeat(33)), None), None);
     }
 
     #[test]
     fn a_session_goes_to_the_last_focused_window_that_shows_sessions() {
         let mut r = Registry::default();
-        r.shows_sessions("main", true);
-        r.shows_sessions("window-2", true);
+        r.shows("main", sessions());
+        r.shows("window-2", sessions());
         r.focused("window-2");
         r.focused("main");
         r.focused("window-3");
@@ -200,7 +328,7 @@ mod tests {
     fn a_window_showing_sessions_wins_even_if_it_was_never_focused() {
         let mut r = Registry::default();
         r.focused("main");
-        r.shows_sessions("window-2", true);
+        r.shows("window-2", sessions());
         assert_eq!(r.session_window(), "window-2");
     }
 
@@ -211,8 +339,8 @@ mod tests {
         r.focused("main");
         r.focused("window-2");
         assert_eq!(r.session_window(), "window-2");
-        r.shows_sessions("window-2", true);
-        r.shows_sessions("window-2", false);
+        r.shows("window-2", sessions());
+        r.shows("window-2", home());
         assert_eq!(r.session_window(), "window-2");
     }
 
@@ -220,7 +348,7 @@ mod tests {
     fn a_closed_window_no_longer_gets_sessions() {
         let mut r = Registry::default();
         r.focused("main");
-        r.shows_sessions("window-2", true);
+        r.shows("window-2", sessions());
         r.focused("window-2");
         r.closed("window-2");
         assert_eq!(r.session_window(), "main");
