@@ -1,42 +1,38 @@
-import { GitBranch, Maximize2 } from "lucide-react";
+import { Maximize2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
 import { IS_MAC } from "@/lib/platform";
 import { entryId, type SessionEntry } from "@/lib/session-entries";
-import { gridShape } from "@/lib/session-grid";
-import { positionShortcutLabel } from "@/lib/session-shortcut";
+import { type GridPage, gridShape } from "@/lib/session-grid";
+import { sessionShortcutLabel } from "@/lib/session-shortcut";
 import { isLive, sessionStateLabel } from "@/lib/session-state";
 import { cn } from "@/lib/utils";
 import { SessionTerminal } from "./SessionTerminal.tsx";
-
-/** An entry on the grid's page with its position in the whole list, which its shortcut and number refer to. */
-export interface GridTile {
-  entry: SessionEntry;
-  position: number;
-}
+import { TaskLine } from "./TaskLine.tsx";
 
 /**
- * A page of the Sessions list as a grid of terminals (ADR-48). The focused tile has the accent frame and the keyboard
- * focus, a session that is waiting for you has the warning frame. Clicking a tile or into its terminal focuses it;
- * a task without a session has no terminal, so its tile only leads to the full panel.
+ * A page of the Sessions list as a grid of terminals (ADR-48). The selected tile has the accent ring and the keyboard,
+ * a session that is waiting for you has the warning frame (also when selected). Clicking a tile or into its terminal
+ * selects it; a task without a session has no terminal, so its tile only leads to the full panel. Tiles appear once
+ * the area is measured, so that no terminal reports a size to its session from a layout that is about to change.
  */
 export function SessionGrid({
   conn,
-  tiles,
-  focused,
-  onFocus,
+  page,
+  selected,
+  onSelect,
   onOpenAlone,
 }: {
   conn: Connection;
-  tiles: readonly GridTile[];
-  focused: string | undefined;
-  onFocus: (entry: SessionEntry) => void;
+  page: GridPage<SessionEntry>;
+  selected: string;
+  onSelect: (entry: SessionEntry) => void;
   onOpenAlone: (entry: SessionEntry) => void;
 }) {
   const area = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [size, setSize] = useState<{ width: number; height: number }>();
   useEffect(() => {
     const element = area.current;
     if (!element) return;
@@ -46,7 +42,7 @@ export function SessionGrid({
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
-  const { cols, rows } = gridShape(tiles.length, size.width, size.height);
+  const { cols, rows } = gridShape(page.slots, size?.width ?? 0, size?.height ?? 0);
 
   return (
     <div
@@ -54,17 +50,18 @@ export function SessionGrid({
       className="grid min-h-0 flex-1 gap-2 p-2"
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }}
     >
-      {tiles.map(({ entry, position }) => (
-        <SessionTile
-          key={entryId(entry)}
-          conn={conn}
-          entry={entry}
-          position={position}
-          focused={entryId(entry) === focused}
-          onFocus={() => onFocus(entry)}
-          onOpenAlone={() => onOpenAlone(entry)}
-        />
-      ))}
+      {size &&
+        page.tiles.map(({ entry, position }) => (
+          <SessionTile
+            key={entryId(entry)}
+            conn={conn}
+            entry={entry}
+            position={position}
+            selected={entryId(entry) === selected}
+            onSelect={() => onSelect(entry)}
+            onOpenAlone={() => onOpenAlone(entry)}
+          />
+        ))}
     </div>
   );
 }
@@ -73,62 +70,62 @@ function SessionTile({
   conn,
   entry,
   position,
-  focused,
-  onFocus,
+  selected,
+  onSelect,
   onOpenAlone,
 }: {
   conn: Connection;
   entry: SessionEntry;
   position: number;
-  focused: boolean;
-  onFocus: () => void;
+  selected: boolean;
+  onSelect: () => void;
   onOpenAlone: () => void;
 }) {
   const { session } = entry;
   const task = entry.kind === "task" ? entry.task : undefined;
-  const shortcut = positionShortcutLabel(position, IS_MAC);
+  const tile = useRef<HTMLDivElement>(null);
+  // A selected tile without a terminal takes the keyboard itself, so that keys stop going to the terminal selected before.
+  useEffect(() => {
+    if (selected && !session) tile.current?.focus();
+  }, [selected, session]);
+  const select = () => {
+    if (!selected) onSelect();
+  };
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: focus inside the tile (its terminal or buttons) selects it; the tile itself is not a control.
     <div
-      onFocus={() => {
-        if (!focused) onFocus();
-      }}
-      onMouseDown={() => {
-        if (!focused) onFocus();
-      }}
+      ref={tile}
+      tabIndex={-1}
+      onFocus={select}
+      onMouseDown={select}
       className={cn(
-        "bg-background flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border",
-        focused
-          ? "border-primary ring-primary shadow-glow-primary ring-1"
-          : session?.needsAttention && "border-warning shadow-glow-warning",
+        "bg-background flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border outline-none",
+        session?.needsAttention && "border-warning shadow-glow-warning",
+        selected && "ring-primary ring-2",
       )}
     >
       <header className="bg-card flex min-w-0 items-center gap-2 border-b px-2 py-1">
         <span
           className={cn(
             "text-2xs shrink-0 rounded-sm px-1 font-mono",
-            focused ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground",
+            selected ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground",
           )}
         >
-          {shortcut ?? position}
+          {sessionShortcutLabel({ kind: "position", position }, IS_MAC) ?? position}
         </span>
-        <span className="shrink-0 truncate text-xs font-medium">{task?.repo ?? session?.repo}</span>
+        <span className="min-w-0 truncate text-xs font-medium">{task?.repo ?? session?.repo}</span>
         <span className="text-muted-foreground shrink-0 text-xs">
           {session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}
         </span>
-        <span
-          className="text-muted-foreground flex min-w-0 flex-1 items-center gap-1 text-xs"
-          title={task?.prompt ?? session?.windowTitle ?? undefined}
-        >
-          {task && <GitBranch className="size-3 shrink-0" aria-label="task in a worktree" />}
-          <span className="truncate">{task?.prompt ?? session?.windowTitle}</span>
+        <span className="min-w-0 flex-1 truncate">
+          {task ? <TaskLine task={task} /> : <span className="text-muted-foreground text-xs">{session?.windowTitle}</span>}
         </span>
-        <Button variant="ghost" size="icon" className="size-6" onClick={onOpenAlone} aria-label="Open this session alone">
+        <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={onOpenAlone} aria-label="Open alone">
           <Maximize2 />
         </Button>
       </header>
       {session ? (
-        <SessionTerminal conn={conn} session={session.id} live={isLive(session)} focused={focused} />
+        <SessionTerminal conn={conn} session={session.id} live={isLive(session)} focused={selected} />
       ) : (
         <div className="text-muted-foreground flex flex-1 items-center justify-center p-4 text-center text-xs">
           This task has no session. Open it alone to resume it or to see its changes.

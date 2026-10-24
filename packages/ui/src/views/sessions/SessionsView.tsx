@@ -1,4 +1,4 @@
-import { agentsApi, type Session, type SessionList, type Task, workspaceApi } from "@trackwall/protocol";
+import { agentsApi, type Session, type SessionList, workspaceApi } from "@trackwall/protocol";
 import { BellRing, GitBranch, Play, Plus, Square, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -12,22 +12,25 @@ import { relativeTime, twoDigits } from "@/lib/format";
 import { IS_MAC } from "@/lib/platform";
 import { entryId, entrySelection, findEntry, type SessionEntry, type SessionSelection, sessionEntries } from "@/lib/session-entries";
 import { gridPage, SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
-import { ARIA_NEXT_WAITING_SHORTCUT, ariaPositionShortcut, nextWaitingShortcutLabel, positionShortcutLabel } from "@/lib/session-shortcut";
+import { ariaSessionShortcut, SHORTCUT_POSITIONS, sessionShortcut, sessionShortcutLabel } from "@/lib/session-shortcut";
 import { isLive, nextWaiting, sessionStateLabel, waitingCount } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
 import { actionIsNewer, type RemoteHandle, useRemote } from "@/lib/use-remote";
-import { useSessionShortcuts } from "@/lib/use-session-shortcuts";
+import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { cn } from "@/lib/utils";
 import { SessionGrid } from "./SessionGrid.tsx";
 import { SessionTerminal } from "./SessionTerminal.tsx";
+import { TaskLine } from "./TaskLine.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
 
 /**
  * Widok „Sesje” (§4.4, ADR-26, ADR-31): kilka sesji Copilot CLI naraz, każda w repo z folderu z projektami albo
  * w worktree zadania. Po lewej lista sesji i zadań ze stanem i skokiem do następnej sesji, która czeka na Ciebie;
  * po prawej terminal wybranej sesji, a przy zadaniu także jego zmiany. Listę odpytuje `App`, bo liczba czekających
- * sesji jest też na pasku widoków. The right side shows the selected entry alone or a grid of terminals (ADR-48),
- * and Alt + digit and Alt+J switch between entries from the keyboard; `App` keeps the layout across views.
+ * sesji jest też na pasku widoków.
+ *
+ * Since ADR-48 the right side shows the selected entry alone or a page of the list as a grid of terminals, and
+ * Alt + digit selects an entry by its position; `App` keeps the layout across views and owns Alt+J.
  */
 export function SessionsView({
   conn,
@@ -53,16 +56,18 @@ export function SessionsView({
   const show = (id: string) => onSelect({ kind: "session", id });
   const next = nextWaiting(list, current?.session?.id);
   const waiting = waitingCount(list);
-  // In this view the session shortcuts are always taken, also with nothing to switch to, so that they never reach a terminal.
-  useSessionShortcuts((shortcut) => {
-    if (shortcut.kind === "next-waiting") {
-      if (next) show(next.id);
-    } else {
-      const entry = entries[shortcut.position - 1];
+  // Taken also with no entry at that position, so that the key never reaches a session terminal by accident.
+  useWindowShortcuts(
+    (event) => {
+      const shortcut = sessionShortcut(event, IS_MAC);
+      return shortcut?.kind === "position" ? shortcut : undefined;
+    },
+    ({ position }) => {
+      const entry = entries[position - 1];
       if (entry) onSelect(entrySelection(entry));
-    }
-    return true;
-  });
+      return true;
+    },
+  );
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[var(--spacing-sidebar)_1fr]">
@@ -82,10 +87,10 @@ export function SessionsView({
               size="sm"
               className="w-full"
               onClick={() => show(next.id)}
-              aria-keyshortcuts={ARIA_NEXT_WAITING_SHORTCUT}
+              aria-keyshortcuts={ariaSessionShortcut(NEXT_WAITING)}
             >
               <BellRing /> {waiting === 1 ? "A session is waiting for you" : `Next waiting (${waiting})`}
-              <span className="text-muted-foreground ml-auto font-mono text-2xs">{nextWaitingShortcutLabel(IS_MAC)}</span>
+              <span className="text-muted-foreground ml-auto font-mono text-2xs">{sessionShortcutLabel(NEXT_WAITING, IS_MAC)}</span>
             </Button>
           </div>
         )}
@@ -158,13 +163,13 @@ function SessionListItem({
 }) {
   const { session } = entry;
   const task = entry.kind === "task" ? entry.task : undefined;
-  const shortcut = positionShortcutLabel(position, IS_MAC);
+  const shortcut = sessionShortcutLabel({ kind: "position", position }, IS_MAC);
   return (
     <button
       type="button"
       onClick={onSelect}
       aria-current={active || undefined}
-      aria-keyshortcuts={ariaPositionShortcut(position)}
+      aria-keyshortcuts={ariaSessionShortcut({ kind: "position", position })}
       className={cn(
         "flex w-full items-start gap-3 rounded-md border border-transparent px-2 py-2 text-left transition-colors hover:bg-accent",
         active && "bg-accent border-primary/25 hud-active-edge",
@@ -207,58 +212,76 @@ function SelectedEntry({
   onChanged: () => void;
   onTaskRemoved: (task: string) => void;
 }) {
-  const page = gridPage(layout, entries.length, entries.indexOf(current));
-  const summary = `${entries.length} in the list${page.pages > 1 ? ` · page ${page.page + 1} of ${page.pages}` : ""}`;
+  if (layout === "1")
+    return (
+      <>
+        <LayoutBar layout={layout} onLayout={onLayout} />
+        <EntryPanel conn={conn} entry={current} onSelect={onSelect} onChanged={onChanged} onTaskRemoved={onTaskRemoved} />
+      </>
+    );
+  const selected = entryId(current);
+  const page = gridPage(
+    layout,
+    entries,
+    entries.findIndex((e) => entryId(e) === selected),
+  );
   return (
     <>
-      <LayoutBar layout={layout} onLayout={onLayout} summary={layout === "1" ? undefined : summary} />
-      {layout !== "1" && (
-        <SessionGrid
-          conn={conn}
-          tiles={entries.slice(page.start, page.start + page.count).map((entry, i) => ({ entry, position: page.start + i + 1 }))}
-          focused={entryId(current)}
-          onFocus={(entry) => onSelect(entrySelection(entry))}
-          onOpenAlone={(entry) => {
-            onSelect(entrySelection(entry));
-            onLayout("1");
-          }}
-        />
-      )}
-      {layout === "1" && current.kind === "task" && (
-        <TaskPanel
-          key={current.task.id}
-          conn={conn}
-          task={current.task}
-          session={current.session}
-          onChanged={onChanged}
-          onRemoved={() => onTaskRemoved(current.task.id)}
-        />
-      )}
-      {layout === "1" && current.kind === "session" && (
-        <SessionPanel
-          key={current.session.id}
-          conn={conn}
-          session={current.session}
-          onChanged={onChanged}
-          onClosed={() => onSelect(undefined)}
-        />
-      )}
+      <LayoutBar
+        layout={layout}
+        onLayout={onLayout}
+        summary={`${entries.length} in the list${page.pages > 1 ? ` · page ${page.page + 1} of ${page.pages}` : ""}`}
+      />
+      <SessionGrid
+        conn={conn}
+        page={page}
+        selected={selected}
+        onSelect={(entry) => onSelect(entrySelection(entry))}
+        onOpenAlone={(entry) => {
+          onSelect(entrySelection(entry));
+          onLayout("1");
+        }}
+      />
     </>
   );
 }
 
+/** The full panel of one entry: a task with its tabs, or a session in a repo root. */
+function EntryPanel({
+  conn,
+  entry,
+  onSelect,
+  onChanged,
+  onTaskRemoved,
+}: {
+  conn: Connection;
+  entry: SessionEntry;
+  onSelect: (selection: SessionSelection) => void;
+  onChanged: () => void;
+  onTaskRemoved: (task: string) => void;
+}) {
+  if (entry.kind === "task")
+    return (
+      <TaskPanel
+        key={entry.task.id}
+        conn={conn}
+        task={entry.task}
+        session={entry.session}
+        onChanged={onChanged}
+        onRemoved={() => onTaskRemoved(entry.task.id)}
+      />
+    );
+  return (
+    <SessionPanel key={entry.session.id} conn={conn} session={entry.session} onChanged={onChanged} onClosed={() => onSelect(undefined)} />
+  );
+}
+
+const NEXT_WAITING = { kind: "next-waiting" } as const;
+
 const LAYOUT_LABELS: Record<SessionLayout, string> = { "1": "1", "2": "2", "4": "4", auto: "Auto" };
 
 /** The layout switch above the right side: one entry with its full panel, or a grid of 2, 4 or all entries. */
-function LayoutBar({
-  layout,
-  onLayout,
-  summary,
-}: {
-  layout: SessionLayout;
-  onLayout: (layout: SessionLayout) => void;
-  summary: string | undefined;
-}) {
+function LayoutBar({ layout, onLayout, summary }: { layout: SessionLayout; onLayout: (layout: SessionLayout) => void; summary?: string }) {
   return (
     <div className="flex items-center gap-3 border-b px-4 py-1.5">
       <span className="hud-label">Layout</span>
@@ -280,19 +303,9 @@ function LayoutBar({
       </fieldset>
       {summary && <span className="text-muted-foreground text-xs">{summary}</span>}
       <span className="text-muted-foreground ml-auto font-mono text-2xs">
-        {`${positionShortcutLabel(1, IS_MAC)}…9 focus · ${nextWaitingShortcutLabel(IS_MAC)} next waiting`}
+        {`${sessionShortcutLabel({ kind: "position", position: 1 }, IS_MAC)}…${SHORTCUT_POSITIONS} select · ${sessionShortcutLabel(NEXT_WAITING, IS_MAC)} next waiting`}
       </span>
     </div>
-  );
-}
-
-/** Polecenie zadania w jednej linii, z ikoną gałęzi, żeby zadanie odróżniało się od sesji w korzeniu repo. */
-function TaskLine({ task }: { task: Task }) {
-  return (
-    <span className="text-muted-foreground flex min-w-0 items-center gap-1 text-xs" title={task.branch}>
-      <GitBranch className="size-3 shrink-0" aria-label="task in a worktree" />
-      <span className="truncate">{task.prompt}</span>
-    </span>
   );
 }
 
@@ -342,7 +355,7 @@ function SessionPanel({
           </Button>
         )}
       </header>
-      <SessionTerminal conn={conn} session={session.id} live={live} />
+      <SessionTerminal conn={conn} session={session.id} live={live} focused />
     </>
   );
 }

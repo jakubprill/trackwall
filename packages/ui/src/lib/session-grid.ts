@@ -1,6 +1,6 @@
 /**
  * The layout of the Sessions view (ADR-48): one session with its full panel, or a grid of session terminals. Layouts 2
- * and 4 split the list into pages of that many entries and show the page with the focused entry, so a shortcut to any
+ * and 4 split the list into pages of that many entries and show the page with the selected entry, so a shortcut to any
  * position also turns the page. Auto shows every entry at once, up to `MAX_TILES`, on as many pages as needed.
  */
 export const SESSION_LAYOUTS = ["1", "2", "4", "auto"] as const;
@@ -12,11 +12,16 @@ const MAX_TILES = 9;
 /** Width to height of the tile the shape tries to make as large as possible; a terminal reads better wide than tall. */
 const TILE_ASPECT = 1.6;
 
-export interface GridPage {
-  /** Index of the page's first entry in the list. */
-  start: number;
-  /** How many entries the page shows; the last page can show fewer than a full page. */
-  count: number;
+/** A tile: an entry of the list with its position (from 1), which its number and shortcut refer to. */
+interface GridTile<Entry> {
+  entry: Entry;
+  position: number;
+}
+
+export interface GridPage<Entry> {
+  tiles: GridTile<Entry>[];
+  /** Cells of a full page, so that the last page keeps the tile size of the others instead of stretching its tiles. */
+  slots: number;
   page: number;
   pages: number;
 }
@@ -27,13 +32,14 @@ export function tilesPerPage(layout: SessionLayout, entries: number): number {
   return Number(layout);
 }
 
-/** The page with the focused entry; with no focused entry (−1) the first page. */
-export function gridPage(layout: SessionLayout, entries: number, focused: number): GridPage {
-  const size = tilesPerPage(layout, entries);
-  const pages = Math.max(Math.ceil(entries / size), 1);
-  const page = Math.min(Math.floor(Math.max(focused, 0) / size), pages - 1);
-  const start = page * size;
-  return { start, count: Math.max(Math.min(size, entries - start), 0), page, pages };
+/** The page with the selected entry; with no selected entry (−1) the first page. */
+export function gridPage<Entry>(layout: SessionLayout, entries: readonly Entry[], selected: number): GridPage<Entry> {
+  const slots = tilesPerPage(layout, entries.length);
+  const pages = Math.max(Math.ceil(entries.length / slots), 1);
+  const page = Math.min(Math.floor(Math.max(selected, 0) / slots), pages - 1);
+  const start = page * slots;
+  const tiles = entries.slice(start, start + slots).map((entry, i) => ({ entry, position: start + i + 1 }));
+  return { tiles, slots, page, pages };
 }
 
 /**

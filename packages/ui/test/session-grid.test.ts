@@ -10,20 +10,36 @@ describe("session grid", () => {
     expect(tilesPerPage("auto", 0)).toBe(1);
   });
 
-  test("the page is the one with the focused entry, so focusing position 6 in layout 4 turns to page 2", () => {
-    expect(gridPage("4", 7, 0)).toEqual({ start: 0, count: 4, page: 0, pages: 2 });
-    expect(gridPage("4", 7, 5)).toEqual({ start: 4, count: 3, page: 1, pages: 2 });
-    expect(gridPage("2", 7, 3)).toEqual({ start: 2, count: 2, page: 1, pages: 4 });
+  test("the page is the one with the selected entry, so selecting position 6 in layout 4 turns to page 2", () => {
+    const list = ["a", "b", "c", "d", "e", "f", "g"];
+    expect(gridPage("4", list, 0)).toMatchObject({ page: 0, pages: 2, slots: 4 });
+    expect(gridPage("4", list, 5)).toEqual({
+      tiles: [
+        { entry: "e", position: 5 },
+        { entry: "f", position: 6 },
+        { entry: "g", position: 7 },
+      ],
+      slots: 4,
+      page: 1,
+      pages: 2,
+    });
+    expect(gridPage("2", list, 3).tiles).toEqual([
+      { entry: "c", position: 3 },
+      { entry: "d", position: 4 },
+    ]);
   });
 
   test("Auto shows everything on one page, and a longer list goes on in pages of nine", () => {
-    expect(gridPage("auto", 6, 4)).toEqual({ start: 0, count: 6, page: 0, pages: 1 });
-    expect(gridPage("auto", 12, 10)).toEqual({ start: 9, count: 3, page: 1, pages: 2 });
+    expect(gridPage("auto", ["a", "b", "c", "d", "e", "f"], 4)).toMatchObject({ slots: 6, page: 0, pages: 1 });
+    const twelve = Array.from({ length: 12 }, (_, i) => i);
+    const second = gridPage("auto", twelve, 10);
+    expect(second).toMatchObject({ slots: 9, page: 1, pages: 2 });
+    expect(second.tiles.map((t) => t.position)).toEqual([10, 11, 12]);
   });
 
-  test("with no focused entry or an empty list the grid shows the first page", () => {
-    expect(gridPage("4", 7, -1)).toEqual({ start: 0, count: 4, page: 0, pages: 2 });
-    expect(gridPage("auto", 0, -1)).toEqual({ start: 0, count: 0, page: 0, pages: 1 });
+  test("with no selected entry or an empty list the grid shows the first page", () => {
+    expect(gridPage("4", ["a", "b", "c", "d", "e"], -1)).toMatchObject({ page: 0, pages: 2 });
+    expect(gridPage("auto", [], -1)).toEqual({ tiles: [], slots: 1, page: 0, pages: 1 });
   });
 
   test("on a 34-inch ultrawide two tiles sit side by side, four in 2 × 2, six in 3 × 2 and eight in 4 × 2", () => {

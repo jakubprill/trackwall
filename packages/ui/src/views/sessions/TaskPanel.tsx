@@ -97,7 +97,7 @@ export function TaskPanel({
         <TabBar tabs={tabs} active={shown} onSelect={setTab} />
       </div>
       {shown === "terminal" && session && (
-        <SessionTerminal key={session.id} conn={conn} session={session.id} live={liveSession !== undefined} />
+        <SessionTerminal key={session.id} conn={conn} session={session.id} live={liveSession !== undefined} focused />
       )}
       {shown === "changes" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">

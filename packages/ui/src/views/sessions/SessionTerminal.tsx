@@ -14,22 +14,12 @@ import { terminalTheme } from "@/lib/terminal-theme";
 const RECONNECT_MS = 1000;
 
 /**
- * Okno terminala jednej sesji (§4.4, ADR-26): xterm.js podłączony WebSocketem do PTY w daemonie. Daemon najpierw
- * przysyła obraz ekranu, więc przełączenie sesji albo zerwane połączenie zaczyna od aktualnego ekranu, a nie od
- * pustego terminala. Klawisze i rozmiar okna idą do sesji; rozmiar PTY ustala ostatnie okno, które go zgłosiło.
- * In the grid (ADR-48) several terminals are open at once and only the focused one takes the keyboard focus.
+ * The terminal window of one session (§4.4, ADR-26): xterm.js connected over a WebSocket to the PTY in the daemon. The
+ * daemon sends the screen image first, so switching sessions or a dropped connection starts from the current screen,
+ * not an empty terminal. Keys and the window size go to the session; the PTY takes the size of the last window that
+ * reported one. In the grid (ADR-48) several terminals are open at once, and only the `focused` one takes the keyboard.
  */
-export function SessionTerminal({
-  conn,
-  session,
-  live,
-  focused = true,
-}: {
-  conn: Connection;
-  session: string;
-  live: boolean;
-  focused?: boolean;
-}) {
+export function SessionTerminal({ conn, session, live, focused }: { conn: Connection; session: string; live: boolean; focused: boolean }) {
   const frame = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const term = useRef<Terminal>(undefined);

@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
-import { useEffect } from "react";
 import { IS_MAC } from "@/lib/platform";
+import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { cn } from "@/lib/utils";
 import { ariaShortcut, matchesShortcut, shortcutLabel, type ViewShortcut } from "@/lib/view-shortcut";
 
@@ -45,23 +45,15 @@ export function ActivityBar<Id extends string>({
   );
 }
 
-/**
- * Shortcuts work in the whole window, also when the focus is in a text field. The listener runs in the capture phase
- * and stops the event there, because the session terminal (xterm.js) turns Ctrl + digit into a control character and stops
- * the event from reaching the window.
- */
+/** Shortcuts work in the whole window, also when the focus is in a text field or a session terminal. */
 function useViewShortcuts<Id extends string>(views: readonly ActivityView<Id>[], onSelect: (id: Id) => void) {
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const view = views.find((v) => matchesShortcut(event, v.shortcut, IS_MAC));
-      if (!view) return;
-      event.preventDefault();
-      event.stopPropagation();
+  useWindowShortcuts(
+    (event) => views.find((v) => matchesShortcut(event, v.shortcut, IS_MAC)),
+    (view) => {
       onSelect(view.id);
-    };
-    window.addEventListener("keydown", onKeyDown, { capture: true });
-    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [views, onSelect]);
+      return true;
+    },
+  );
 }
 
 function ActivityButton<Id extends string>({

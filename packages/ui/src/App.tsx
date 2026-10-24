@@ -7,14 +7,16 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { DaemonEvents } from "@/lib/daemon-events";
-import type { SessionSelection } from "@/lib/session-entries";
+import { IS_MAC } from "@/lib/platform";
+import { findEntry, type SessionSelection, sessionEntries } from "@/lib/session-entries";
 import type { SessionLayout } from "@/lib/session-grid";
+import { sessionShortcut } from "@/lib/session-shortcut";
 import { nextWaiting, waitingCount } from "@/lib/session-state";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
 import { useRemote } from "@/lib/use-remote";
 import { useSessionFocus } from "@/lib/use-session-focus";
-import { useSessionShortcuts } from "@/lib/use-session-shortcuts";
+import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { DaemonPanel } from "@/views/daemon/DaemonPanel";
 import { GraphView } from "@/views/graph/GraphView";
 import { HomeView } from "@/views/home/HomeView";
@@ -55,13 +57,18 @@ export function App() {
   };
   // Skok do sesji z traya (ADR-26): powłoka pokazuje okno i podaje sesję, która czeka.
   useSessionFocus(openSession);
-  // Alt+J from any other view opens the next waiting session; in Sessions the view handles its shortcuts itself.
-  useSessionShortcuts((shortcut) => {
-    if (view === "sessions" || shortcut.kind !== "next-waiting") return false;
-    const next = nextWaiting(sessions.data?.sessions ?? [], undefined);
-    if (next) openSession(next.id);
-    return next !== undefined;
-  });
+  // Alt+J from every view (ADR-48), after the selected session like "Next waiting"; outside Sessions it does not take
+  // the key when no session is waiting, so ⌥J still types in a text field.
+  useWindowShortcuts(
+    (event) => (sessionShortcut(event, IS_MAC)?.kind === "next-waiting" ? true : undefined),
+    () => {
+      const list = sessions.data?.sessions ?? [];
+      const selected = view === "sessions" && sessions.data ? findEntry(sessionEntries(sessions.data), session)?.session?.id : undefined;
+      const next = nextWaiting(list, selected);
+      if (next) openSession(next.id);
+      return next !== undefined || view === "sessions";
+    },
+  );
   return (
     <div className="flex h-screen">
       <ActivityBar views={VIEWS} active={view} onSelect={setView} badges={{ sessions: waitingCount(sessions.data?.sessions ?? []) }} />
