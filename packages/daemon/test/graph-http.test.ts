@@ -292,6 +292,9 @@ describe("krawędzie http: dopasowanie celu", () => {
 });
 
 describe("graf i find_endpoint na prawdziwym gicie", () => {
+  // Kilka repo z commitami i dwa liczenia kart na prawdziwym gicie trwają na Windowsie w CI dłużej niż domyślne 5 s.
+  const REAL_GIT_TIMEOUT = 30_000;
+
   async function setup() {
     const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
     const projects = mkdtempSync(join(tmpdir(), "trackwall-projekty-"));
@@ -323,7 +326,7 @@ describe("graf i find_endpoint na prawdziwym gicie", () => {
     ]);
     // Kontroler z src/test nie jest endpointem aplikacji.
     expect((await graph.findEndpoint("test-only", undefined)).endpoints).toEqual([]);
-  });
+  }, REAL_GIT_TIMEOUT);
 
   test("find_endpoint szuka też po fragmencie ścieżki, handlera i nazwy aplikacji, bez wielkości liter", async () => {
     const { graph } = await setup();
@@ -331,7 +334,7 @@ describe("graf i find_endpoint na prawdziwym gicie", () => {
     expect(await paths("payments-SERVICE")).toEqual(["POST /api/payments/{orderId}"]);
     expect(await paths("ordersController.cancel")).toEqual(["PUT /api/orders/{id}/cancel"]);
     expect(await paths("/api/orders")).toEqual(["POST /api/orders", "GET /api/orders/{id}", "PUT /api/orders/{id}/cancel"]);
-  });
+  }, REAL_GIT_TIMEOUT);
 
   test("nowy commit w repo zmienia graf przy następnym pytaniu", async () => {
     const { graph, projects } = await setup();
@@ -347,7 +350,7 @@ describe("graf i find_endpoint na prawdziwym gicie", () => {
     expect((await graph.graph()).edges.filter((e) => e.from === "orders-api").map((e) => [e.to, e.key, e.confidence])).toEqual([
       ["payments", "payments-service", "exact"],
     ]);
-  });
+  }, REAL_GIT_TIMEOUT);
 
   test("alias aplikacji z workspace.yaml działa od razu, bez nowego commita", async () => {
     const { graph, workspace } = await setup();
@@ -358,5 +361,5 @@ describe("graf i find_endpoint na prawdziwym gicie", () => {
     expect(after.edges.filter((e) => e.key === "zipkin").map((e) => [e.from, e.to, e.confidence])).toEqual([
       ["orders-bff", "payments", "high"],
     ]);
-  });
+  }, REAL_GIT_TIMEOUT);
 });
