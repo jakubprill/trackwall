@@ -22,7 +22,7 @@ pub enum Focus {
 }
 
 pub fn show(app: &AppHandle) {
-    // Okno pokazane z traya przed końcem ładowania strony nie wyskoczy drugi raz po załadowaniu.
+    // A window shown from the tray before its page has loaded does not pop up again after the load.
     if let Some(applied) = app.try_state::<window_effect::AppliedEffect>() {
         applied.mark_revealed();
     }

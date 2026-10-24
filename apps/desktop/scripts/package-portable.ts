@@ -46,9 +46,9 @@ if (process.platform === "win32") {
       "The daemon keeps running after you close the window (tray icon). To quit fully: tray icon > Quit.",
       "Daemon startup log: %USERPROFILE%\\.trackwall\\logs\\daemon-start.log",
       "",
-      "For its notifications Trackwall registers itself under",
-      `HKEY_CURRENT_USER\\Software\\Classes\\AppUserModelId\\${tauriIdentifier()}.`,
-      "Delete that key after removing Trackwall if you want no trace of it.",
+      "For its notifications Trackwall registers itself under this registry key:",
+      `HKEY_CURRENT_USER\\Software\\Classes\\AppUserModelId\\${tauriIdentifier()}`,
+      "Delete it after removing Trackwall if you want no trace of it.",
       "",
     ].join("\r\n"),
   );

@@ -100,8 +100,14 @@ mod platform {
         let key = key(app_id);
         set_string(&key, "DisplayName", DISPLAY_NAME)?;
         // The icon only decorates the toast: without it Windows shows a generic one.
-        let icon = daemon::trackwall_home().map(|home| home.join(ICON_FILE));
-        match icon.and_then(|path| std::fs::write(&path, ICON).map(|()| path).map_err(|e| e.to_string())) {
+        // The state directory may not exist yet on the first start: the daemon is started in parallel.
+        let icon = daemon::trackwall_home().and_then(|home| {
+            std::fs::create_dir_all(&home).map_err(|e| e.to_string())?;
+            let path = home.join(ICON_FILE);
+            std::fs::write(&path, ICON).map_err(|e| e.to_string())?;
+            Ok(path)
+        });
+        match icon {
             Ok(path) => set_string(&key, "IconUri", &path.to_string_lossy())?,
             Err(err) => eprintln!("[desktop] writing the notification icon: {err}"),
         }

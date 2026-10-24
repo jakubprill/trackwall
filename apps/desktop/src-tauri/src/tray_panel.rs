@@ -57,10 +57,35 @@ pub fn panel_position(icon: Area, panel: (f64, f64), work: Area, gap: f64) -> (f
     (x.min(work.x + work.width - width).max(work.x), y.min(work.y + work.height - height).max(work.y))
 }
 
+/// What releasing the left button on the icon does with the panel.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Release {
+    Show,
+    Hide,
+    Nothing,
+}
+
+/// `closing_press`: the press found the panel open or just hidden (taking the focus from the panel hides it before
+/// the release, however long the press). `recently_hidden` also covers the second release of a double click on
+/// Windows, which comes without a press of its own after the double click has hidden the panel.
+pub fn release_action(visible: bool, closing_press: bool, recently_hidden: bool) -> Release {
+    if visible {
+        Release::Hide
+    } else if closing_press || recently_hidden {
+        Release::Nothing
+    } else {
+        Release::Show
+    }
+}
+
+fn is_visible(panel: &WebviewWindow) -> bool {
+    panel.is_visible().unwrap_or(false)
+}
+
 /// Left button pressed on the tray icon.
 pub fn press(app: &AppHandle) {
     let state = app.state::<PanelState>();
-    let open = app.get_webview_window(LABEL).is_some_and(|p| p.is_visible().unwrap_or(false));
+    let open = app.get_webview_window(LABEL).is_some_and(|p| is_visible(&p));
     state.closing_press.store(open || state.recently_hidden(), Ordering::SeqCst);
 }
 
@@ -68,14 +93,17 @@ pub fn press(app: &AppHandle) {
 pub fn release(app: &AppHandle, icon: Rect) {
     let Some(panel) = app.get_webview_window(LABEL) else { return };
     let state = app.state::<PanelState>();
-    if panel.is_visible().unwrap_or(false) {
-        hide(app);
-    } else if !state.closing_press.swap(false, Ordering::SeqCst) && !state.recently_hidden() {
-        if let Err(err) = place(&panel, icon) {
-            eprintln!("[desktop] placing the tray panel: {err}");
+    let closing_press = state.closing_press.swap(false, Ordering::SeqCst);
+    match release_action(is_visible(&panel), closing_press, state.recently_hidden()) {
+        Release::Hide => hide(app),
+        Release::Nothing => {}
+        Release::Show => {
+            if let Err(err) = place(&panel, icon) {
+                eprintln!("[desktop] placing the tray panel: {err}");
+            }
+            let _ = panel.show();
+            let _ = panel.set_focus();
         }
-        let _ = panel.show();
-        let _ = panel.set_focus();
     }
 }
 
@@ -119,36 +147,68 @@ fn place(panel: &WebviewWindow, icon: Rect) -> tauri::Result<()> {
     panel.set_position(tauri::PhysicalPosition::new(x, y))
 }
 
-/// macOS lays screens out in points, and reports the icon and each monitor in physical pixels of its own scale factor
-/// (points times that factor), which do not add up across a Retina and a standard display. So the panel is placed in
-/// points: the monitor is the one whose bounds in points hold the icon in that monitor's scale.
+impl Area {
+    fn in_points(self, scale: f64) -> Area {
+        Area { x: self.x / scale, y: self.y / scale, width: self.width / scale, height: self.height / scale }
+    }
+
+    fn holds(self, x: f64, y: f64) -> bool {
+        x >= self.x && x < self.x + self.width && y >= self.y && y < self.y + self.height
+    }
+}
+
+/// A display as macOS reports it: bounds and work area in physical pixels of its own scale factor.
+#[derive(Debug, Clone, Copy)]
+pub struct Screen {
+    pub bounds: Area,
+    pub work: Area,
+    pub scale: f64,
+}
+
+/// The display with the tray icon on macOS, where the icon comes in physical pixels of its own display's scale. Read
+/// in a display's scale, the icon can fall inside more than one display (a point on the right of a Retina screen, read
+/// at 2x, lands on the left half of it); the icon's height in points is the menu bar's height only in the right scale,
+/// so among the displays that hold it the one whose menu bar (bounds minus work area) matches the icon wins.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub fn screen_for_icon(icon: Area, screens: &[Screen]) -> Option<usize> {
+    let mismatch = |s: &Screen| {
+        let icon = icon.in_points(s.scale);
+        let menu_bar = (s.work.y - s.bounds.y) / s.scale;
+        s.bounds.in_points(s.scale).holds(icon.x, icon.y).then_some((icon.height - menu_bar).abs())
+    };
+    screens.iter().enumerate().filter_map(|(i, s)| mismatch(s).map(|m| (i, m))).min_by(|a, b| a.1.total_cmp(&b.1)).map(|(i, _)| i)
+}
+
+/// macOS lays displays out in points and reports each one in physical pixels of its own scale factor, which do not add
+/// up across a Retina and a standard display, so the panel is placed in points.
 #[cfg(target_os = "macos")]
 fn place(panel: &WebviewWindow, icon: Rect) -> tauri::Result<()> {
     let (at, size) = (icon.position.to_physical::<f64>(1.0), icon.size.to_physical::<f64>(1.0));
-    let in_points = |x: f64, y: f64, width: f64, height: f64, scale: f64| Area {
-        x: x / scale,
-        y: y / scale,
-        width: width / scale,
-        height: height / scale,
+    let icon = Area { x: at.x, y: at.y, width: size.width, height: size.height };
+    let area = |x: i32, y: i32, width: u32, height: u32| Area {
+        x: f64::from(x),
+        y: f64::from(y),
+        width: f64::from(width),
+        height: f64::from(height),
     };
-    let monitors = panel.available_monitors()?;
-    let found = monitors.iter().find_map(|m| {
-        let scale = m.scale_factor();
-        let bounds =
-            in_points(f64::from(m.position().x), f64::from(m.position().y), f64::from(m.size().width), f64::from(m.size().height), scale);
-        let icon = in_points(at.x, at.y, size.width, size.height, scale);
-        let inside = icon.x >= bounds.x && icon.x < bounds.x + bounds.width && icon.y >= bounds.y && icon.y < bounds.y + bounds.height;
-        inside.then_some((m, icon, scale))
-    });
-    let Some((monitor, icon, scale)) = found else { return Ok(()) };
-    let work = monitor.work_area();
+    let screens: Vec<Screen> = panel
+        .available_monitors()?
+        .iter()
+        .map(|m| {
+            let work = m.work_area();
+            Screen {
+                bounds: area(m.position().x, m.position().y, m.size().width, m.size().height),
+                work: area(work.position.x, work.position.y, work.size.width, work.size.height),
+                scale: m.scale_factor(),
+            }
+        })
+        .collect();
+    let Some(screen) = screen_for_icon(icon, &screens).and_then(|i| screens.get(i)) else {
+        eprintln!("[desktop] no display holds the tray icon at {icon:?}");
+        return Ok(());
+    };
     let outer = panel.outer_size()?.to_logical::<f64>(panel.scale_factor()?);
-    let (x, y) = panel_position(
-        icon,
-        (outer.width, outer.height),
-        in_points(f64::from(work.position.x), f64::from(work.position.y), f64::from(work.size.width), f64::from(work.size.height), scale),
-        GAP,
-    );
+    let (x, y) = panel_position(icon.in_points(screen.scale), (outer.width, outer.height), screen.work.in_points(screen.scale), GAP);
     panel.set_position(tauri::LogicalPosition::new(x, y))
 }
 
@@ -158,6 +218,49 @@ mod tests {
 
     const PANEL: (f64, f64) = (340.0, 420.0);
     const SCREEN: Area = Area { x: 0.0, y: 0.0, width: 1920.0, height: 1040.0 };
+
+    #[test]
+    fn a_click_opens_the_closed_panel_and_closes_the_open_one() {
+        assert_eq!(release_action(false, false, false), Release::Show);
+        assert_eq!(release_action(true, true, false), Release::Hide);
+    }
+
+    #[test]
+    fn a_press_that_took_the_focus_from_the_open_panel_does_not_reopen_it_however_long_it_lasts() {
+        // The press found the panel open; losing the focus hid it before the release, maybe long ago.
+        assert_eq!(release_action(false, true, false), Release::Nothing);
+    }
+
+    #[test]
+    fn the_second_release_of_a_double_click_does_not_reopen_the_panel() {
+        // The double click hid the panel; its second release has no press of its own.
+        assert_eq!(release_action(false, false, true), Release::Nothing);
+    }
+
+    const RETINA: Screen = Screen {
+        bounds: Area { x: 0.0, y: 0.0, width: 3024.0, height: 1964.0 },
+        work: Area { x: 0.0, y: 48.0, width: 3024.0, height: 1916.0 },
+        scale: 2.0,
+    };
+    const EXTERNAL: Screen = Screen {
+        bounds: Area { x: 1512.0, y: 0.0, width: 1920.0, height: 1080.0 },
+        work: Area { x: 1512.0, y: 24.0, width: 1920.0, height: 1056.0 },
+        scale: 1.0,
+    };
+
+    #[test]
+    fn an_icon_on_a_standard_display_next_to_a_retina_one_is_on_the_standard_one() {
+        // 2000 px at 1x is 2000 pt on the external display; read at 2x it would be 1000 pt on the Retina one.
+        let icon = Area { x: 2000.0, y: 0.0, width: 30.0, height: 24.0 };
+        assert_eq!(screen_for_icon(icon, &[RETINA, EXTERNAL]), Some(1));
+    }
+
+    #[test]
+    fn an_icon_on_a_retina_display_next_to_a_standard_one_is_on_the_retina_one() {
+        let icon = Area { x: 2600.0, y: 0.0, width: 60.0, height: 48.0 };
+        assert_eq!(screen_for_icon(icon, &[RETINA, EXTERNAL]), Some(0));
+        assert_eq!(screen_for_icon(Area { x: 9000.0, ..icon }, &[RETINA, EXTERNAL]), None);
+    }
 
     #[test]
     fn above_an_icon_in_the_taskbar_at_the_bottom() {

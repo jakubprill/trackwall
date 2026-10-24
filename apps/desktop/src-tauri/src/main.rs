@@ -96,7 +96,7 @@ fn main() {
         })
         .on_window_event(|window, event| match window.label() {
             tray_panel::LABEL => tray_panel::on_window_event(window, event),
-            // Zamknięcie okna chowa je do traya; daemon i serwisy działają dalej.
+            // Closing the window hides it to the tray; the daemon and services keep running.
             _ => {
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();

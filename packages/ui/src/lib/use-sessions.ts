@@ -7,7 +7,7 @@ import { useRemote } from "./use-remote.ts";
 
 /**
  * The session list comes live from the event WebSocket (ADR-36). Without that connection it is polled, more often while
- * it is on screen (`open`: "Home" or "Sessions" in the main window, always in the tray panel).
+ * it is on screen (`open`: "Home" or "Sessions" in the main window).
  */
 const SESSIONS_POLL_MS = { open: 1000, closed: 3000 };
 

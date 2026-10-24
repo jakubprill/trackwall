@@ -26,10 +26,6 @@ export function useConnection(): ConnectionHandle {
   const [epoch, setEpoch] = useState(0);
   const [error, setError] = useState<string>();
 
-  useEffect(() => {
-    resolveConnection().then(setConn, (err: unknown) => setError(errorMessage(err)));
-  }, []);
-
   const retry = useCallback(() => {
     setError(undefined);
     retryConnection().then(
@@ -51,6 +47,7 @@ export function useConnection(): ConnectionHandle {
       (err: unknown) => setError(errorMessage(err)),
     );
   }, []);
+  useEffect(refresh, []);
 
   return { conn, epoch, error, retry, refresh };
 }

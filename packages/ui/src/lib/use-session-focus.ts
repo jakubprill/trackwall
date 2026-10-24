@@ -7,7 +7,7 @@ import { z } from "zod";
 /**
  * Tauri shell event: the user clicked a waiting session (ADR-26) or a task proposal (ADR-39) in the tray menu, in a
  * system notification or in the tray panel, or pressed the global shortcut for the next waiting session (ADR-50).
- * The name and shape (`Focus`) are also in `apps/desktop/src-tauri/src/attention.rs`.
+ * The name and shape (`Focus`) are also in `apps/desktop/src-tauri/src/main_window.rs`.
  */
 const FOCUS_EVENT = "focus-session";
 const ShellFocus = z.discriminatedUnion("kind", [
