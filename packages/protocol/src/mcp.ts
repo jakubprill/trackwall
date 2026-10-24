@@ -4,7 +4,7 @@ import { RepoCardResult, TagName } from "./cards.ts";
 import { CODE_SEARCH_LINE_MAX_CHARS, CODE_SEARCH_MAX_MATCHES, CodeQuery, SearchCodeResult } from "./code-search.ts";
 import { FindEndpointResult, MAX_FOUND_ENDPOINTS, MAX_SUBGRAPH_DEPTH, Subgraph, WhoCallsResult } from "./graph.ts";
 import { HttpMethod } from "./http.ts";
-import { LOG_BUFFER_RECORDS, LOG_TAIL_MAX, LogTail } from "./logs.ts";
+import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErrors, LogTail } from "./logs.ts";
 import { MiseTaskName, MiseTasks } from "./mise.ts";
 import { RunState } from "./procs.ts";
 import { SyncRepo } from "./sync.ts";
@@ -164,6 +164,37 @@ export const mcpTools = {
       })
       .strict(),
     result: LogTail,
+  },
+  getErrors: {
+    name: "get_errors",
+    description:
+      "Errors from the logs of mise tasks and mise install in all repos (or one repo or one mise task), the most recent first: " +
+      "a line with ERROR/FATAL (or WARN with minLevel warn), a compiler error (javac, tsc, kotlinc, Maven [ERROR], npm error) " +
+      "or an exception header together with the lines that belong to it: Java and Node stack traces with Caused by, the " +
+      "Spring Boot APPLICATION FAILED TO START report and the Gradle FAILURE report. Each error has its source (repo, mise " +
+      "task), run (runId), exception (the root cause: the last Caused by or the first exception header; null without one), " +
+      "lines (from each stack trace the first frames, the rest replaced by a line '… N frames omitted'; omittedLines counts what is left out), seq and time. " +
+      "The same error repeated in one source (same exception and first frame, or same lines; ids, numbers and thread names ignored, file " +
+      "locations not) is one entry with count and firstTs. An error still being written when you call is returned with the lines it had then. " +
+      `Only the latest records are kept (at most ${LOG_BUFFER_RECORDS} per mise task, since Trackwall started). Pass nextSeq as sinceSeq ` +
+      "to get only errors that started after the previous call; dropped: true as in tail. To read the log of a mise task from an error on, " +
+      "call tail with sinceSeq one less than the error's seq.",
+    args: z
+      .object({
+        repo: RepoArg.optional(),
+        miseTask: MiseTaskName.optional().describe(`only the log of this mise task (from ${GET_REPO}, the miseTasks field)`),
+        minLevel: LogErrorLevel.default("error").describe("error (default) or warn to include warnings"),
+        sinceSeq: z.number().int().nonnegative().optional().describe("nextSeq from the previous response"),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(LOG_ERRORS_MAX)
+          .default(20)
+          .describe(`maximum number of errors (default 20, up to ${LOG_ERRORS_MAX})`),
+      })
+      .strict(),
+    result: LogErrors,
   },
   whoCalls: {
     name: "who_calls",

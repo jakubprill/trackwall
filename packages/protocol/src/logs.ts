@@ -69,6 +69,68 @@ export const LogTailRequest = z
   .strict();
 export type LogTailRequest = z.infer<typeof LogTailRequest>;
 
+/** The most errors in one `get_errors` response. */
+export const LOG_ERRORS_MAX = 100;
+/** The most lines of one error in a response; `omittedLines` counts the rest. */
+export const LOG_ERROR_LINES = 60;
+
+/** The lowest level at which a record starts an error: errors only, or warnings too. */
+export const LogErrorLevel = z.enum(["warn", "error"]);
+export type LogErrorLevel = z.infer<typeof LogErrorLevel>;
+
+/**
+ * An error from a log (§4.2, ADR-42): a record at `warn`/`error` level or an exception header together with the lines
+ * that belong to it (Java and Node stack traces, `Caused by:`, the Spring "APPLICATION FAILED TO START" report, the
+ * Gradle report, indented compiler lines). The same errors of one source (the same first line and exception once
+ * numbers are replaced) are one entry with a count; the lines and `seq` come from the latest occurrence.
+ */
+export const LogError = z.object({
+  source: LogSource,
+  runId: z.string(),
+  stream: LogStream,
+  level: LogErrorLevel,
+  /** The cause: the last `Caused by:` or the first exception header (`java.net.ConnectException: Connection refused`); `null` without one. */
+  exception: z.string().nullable(),
+  /** Lines of the latest occurrence; each stack trace keeps its first frames and a line `… N frames omitted` replaces the rest. */
+  lines: z.array(z.string()),
+  /** How many lines of the error are not in `lines` (beyond `LOG_ERROR_LINES` or omitted frames). */
+  omittedLines: z.number().int().nonnegative(),
+  /** `seq` of the first record of the latest occurrence. */
+  seq: z.number().int().positive(),
+  /** ISO 8601, the latest occurrence. */
+  ts: z.string(),
+  /** ISO 8601, the first occurrence among the records read. */
+  firstTs: z.string(),
+  count: z.number().int().positive(),
+});
+export type LogError = z.infer<typeof LogError>;
+
+export const LogErrors = z.object({
+  /** Most recent first. */
+  errors: z.array(LogError),
+  /** There were more errors than `limit`; the most recent ones are kept. */
+  truncated: z.boolean(),
+  /** Cursor for the next request (`sinceSeq`): the last `seq` of all sources. */
+  nextSeq: z.number().int().nonnegative(),
+  /** As in `LogTail`: some records after the cursor were evicted from the buffer, or the cursor is from another daemon run. */
+  dropped: z.boolean(),
+});
+export type LogErrors = z.infer<typeof LogErrors>;
+
+export const LogErrorsRequest = z
+  .object({
+    /** Only the sources of this repo; all of them without it. */
+    repo: RepoId.optional(),
+    /** Only the log of this mise task (in every repo or in `repo`); without it `mise install` too. */
+    miseTask: MiseTaskName.optional(),
+    minLevel: LogErrorLevel,
+    /** Only errors whose first record has a `seq` greater than the cursor. */
+    sinceSeq: z.number().int().nonnegative().optional(),
+    limit: z.number().int().min(1).max(LOG_ERRORS_MAX),
+  })
+  .strict();
+export type LogErrorsRequest = z.infer<typeof LogErrorsRequest>;
+
 function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
   return { path: `/api/logs/${action}`, request, data };
 }
