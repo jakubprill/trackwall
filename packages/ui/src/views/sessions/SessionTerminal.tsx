@@ -10,19 +10,25 @@ import { IS_MAC } from "@/lib/platform";
 import { copiesSelection } from "@/lib/terminal-copy";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { terminalTheme } from "@/lib/terminal-theme";
-import { FocusReporter, windowInFront } from "@/lib/window-focus";
+import { FocusReporter, terminalInFront } from "@/lib/window-focus";
 
 const RECONNECT_MS = 1000;
 
 /**
- * Okno terminala jednej sesji (§4.4, ADR-26): xterm.js podłączony WebSocketem do PTY w daemonie. Daemon najpierw
- * przysyła obraz ekranu, więc przełączenie sesji albo zerwane połączenie zaczyna od aktualnego ekranu, a nie od
- * pustego terminala. Klawisze i rozmiar okna idą do sesji; rozmiar PTY ustala ostatnie okno, które go zgłosiło.
- * The window also tells the daemon whether it is in front of the user, which marks the session seen (ADR-47).
+ * The terminal window of one session (§4.4, ADR-26): xterm.js connected over a WebSocket to the PTY in the daemon. The
+ * daemon sends the screen image first, so switching sessions or a dropped connection starts from the current screen,
+ * not an empty terminal. Keys and the window size go to the session; the PTY takes the size of the last window that
+ * reported one. The window also tells the daemon whether it is in front of the user, which marks the session seen
+ * (ADR-47). In the grid (ADR-48) several terminals are open at once; only the `focused` one takes the keyboard and
+ * counts as in front, so a waiting session in another tile keeps waiting until the user selects it.
  */
-export function SessionTerminal({ conn, session, live }: { conn: Connection; session: string; live: boolean }) {
+export function SessionTerminal({ conn, session, live, focused }: { conn: Connection; session: string; live: boolean; focused: boolean }) {
   const frame = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
+  const term = useRef<Terminal>(undefined);
+  const takesFocus = useRef(focused);
+  takesFocus.current = focused;
+  const updateFocus = useRef<() => void>(undefined);
   const [notice, setNotice] = useState<string>();
 
   useEffect(() => {
@@ -34,7 +40,8 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
     terminal.loadAddon(fit);
     terminal.open(element);
     fit.fit();
-    terminal.focus();
+    term.current = terminal;
+    if (takesFocus.current) terminal.focus();
 
     let socket: WebSocket | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -44,11 +51,12 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
     };
     const sendSize = () => send({ type: "resize", cols: terminal.cols, rows: terminal.rows });
     const focus = new FocusReporter(
-      (focused) => send({ type: "focus", focused }),
-      () => windowInFront(document),
-      { set: (run, ms) => setTimeout(run, ms), clear: (timer) => clearTimeout(timer) },
+      (inFront) => send({ type: "focus", focused: inFront }),
+      () => terminalInFront(takesFocus.current, document),
+      { set: (run, ms) => setTimeout(run, ms), clear: (focusTimer) => clearTimeout(focusTimer) },
     );
     const sendFocus = () => focus.update();
+    updateFocus.current = sendFocus;
 
     const connect = () => {
       const { url, protocols } = daemonSocket(conn, ptySocket(session), window.location);
@@ -114,9 +122,16 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
       focus.dispose();
       input.dispose();
       socket?.close();
+      term.current = undefined;
+      updateFocus.current = undefined;
       terminal.dispose();
     };
   }, [conn, session]);
+
+  useEffect(() => {
+    if (focused) term.current?.focus();
+    updateFocus.current?.();
+  }, [focused]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
