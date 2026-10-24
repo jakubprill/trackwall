@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
@@ -30,25 +30,9 @@ beforeAll(async () => {
 
 // Limit zamiast domyślnego braku: zawieszone sprzątanie na Windowsie ma być błędem tego pliku, a nie godziną joba.
 afterAll(async () => {
-  process.stderr.write("[dbg] afterAll start\n");
   for (const client of clients) await client.close();
-  process.stderr.write("[dbg] clients closed\n");
   await daemon.stop();
-  process.stderr.write("[dbg] daemon stopped\n");
-  for (let i = 0; i < 3; i++) {
-    await Bun.sleep(300);
-    process.stderr.write(`[dbg] gc ${i}\n`);
-    Bun.gc(true);
-  }
-  process.stderr.write("[dbg] gc done\n");
 }, 30_000);
-
-afterEach(async () => {
-  await Bun.sleep(700);
-  process.stderr.write("[dbg] afterEach gc\n");
-  Bun.gc(true);
-  process.stderr.write("[dbg] afterEach gc done\n");
-});
 
 /** Klient MCP tak, jak widzi go most stdio sesji: z tokenem z pliku w katalogu sesji. */
 async function clientOfSession(session: string): Promise<Client> {
