@@ -4,6 +4,7 @@ import { declarativeClients } from "./declarative-clients.ts";
 import { imperativeClients } from "./imperative-clients.ts";
 import { ConstantTable } from "./java-expr.ts";
 import { parseJavaFile } from "./java-source.ts";
+import { tokenize } from "./java-tokens.ts";
 import { type Extracted, emptyExtracted, type RepoSnapshot } from "./snapshot.ts";
 import { isTestPath, ModuleConfig, moduleOf, readSpringConfigs } from "./spring-config.ts";
 import { springEndpoints } from "./spring-endpoints.ts";
@@ -24,6 +25,22 @@ export const JVM_SOURCE_PATTERN =
   '@(RestController|Controller|RequestMapping|GetMapping|PostMapping|PutMapping|PatchMapping|DeleteMapping|FeignClient|HttpExchange|GetExchange|PostExchange|PutExchange|PatchExchange|DeleteExchange)|WebClient|RestClient|RestTemplate|(final|const val)[[:space:]].*=[[:space:]]*"/';
 /** Rozszerzenia plików źródłowych, które czyta ekstraktor. */
 export const JVM_SOURCE_GLOBS = ["*.java", "*.kt"];
+
+/**
+ * Nazwy typów, które plik może wymieniać w kontrakcie endpointu (ADR-38): identyfikatory od wielkiej litery. To nadzbiór
+ * (są wśród nich adnotacje i serwisy), bo odczyt commita dociąga po nich pliki, zanim powstanie drzewo składni.
+ */
+export function referencedTypeNames(text: string): Set<string> {
+  const names = new Set<string>();
+  for (const token of tokenize(text)) if (token.kind === "ident" && isTypeName(token.text)) names.add(token.text);
+  return names;
+}
+
+/** Czy identyfikator wygląda na nazwę typu: zaczyna się wielką literą, jak każą konwencje Javy i Kotlina. */
+export function isTypeName(name: string): boolean {
+  const first = name[0] ?? "";
+  return first !== first.toLowerCase();
+}
 
 /**
  * Plik źródłowy Javy albo Kotlina z kodu aplikacji: z `src/main/` na dowolnej głębokości (także moduł w katalogu

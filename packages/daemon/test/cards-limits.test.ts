@@ -5,9 +5,12 @@ import { extractGradle } from "../src/modules/cards/gradle.ts";
 import { extractMaven } from "../src/modules/cards/maven.ts";
 import { extractNpm } from "../src/modules/cards/npm.ts";
 import { readSnapshot } from "../src/modules/cards/read-snapshot.ts";
+import { loadSyntaxParsers } from "../src/modules/cards/syntax-tree.ts";
 import { extractTools } from "../src/modules/cards/tools.ts";
 import { buildGraph } from "../src/modules/graph/build-graph.ts";
 import { snapshotOf } from "./support/snapshot.ts";
+
+const parsers = await loadSyntaxParsers();
 
 /**
  * Pliki z repo są niezaufane (§8): repo, którego użytkownik nie wybrał, może mieć plik buildu ułożony tak, żeby
@@ -68,7 +71,7 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
 
   test("ścieżka z tysiącami powtórzeń k8s/ nie blokuje spisu mechanizmów", () => {
     const started = performance.now();
-    extractCard(snapshotOf({}, [`${"k8s/".repeat(8000)}x.yaml`, `${"k8s/".repeat(8000)}y.yaml`]));
+    extractCard(snapshotOf({}, [`${"k8s/".repeat(8000)}x.yaml`, `${"k8s/".repeat(8000)}y.yaml`]), parsers);
     expect(performance.now() - started).toBeLessThan(1000);
   });
 
@@ -106,30 +109,30 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
       "}",
     ].join("\n");
     const started = performance.now();
-    extractCard(snapshotOf({ "src/main/java/a/Deep.java": java }));
+    extractCard(snapshotOf({ "src/main/java/a/Deep.java": java }), parsers);
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
   test("klasa z RestTemplate, dziesiątkami tysięcy niedomkniętych wywołań i różnych adresów bazowych nie blokuje daemona", () => {
     const java = `class C {\n  RestTemplate rest;\n${"x.a(".repeat(50_000)}\n${Array.from({ length: 20_000 }, (_, i) => `b.baseUrl("http://h${i}");`).join("\n")}\n}`;
     const started = performance.now();
-    extractCard(snapshotOf({ "src/main/java/a/C.java": java }));
+    extractCard(snapshotOf({ "src/main/java/a/C.java": java }), parsers);
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
   test("tysiące wywołań zagnieżdżonych w ciele metody i łańcuch .uri( nie blokują daemona", () => {
     const nested = `class C {\n  RestTemplate rest;\n  void f() { ${"x.a(".repeat(20_000)}${")".repeat(20_000)} }\n  void g() { ${"w.get().uri(".repeat(20_000)}${")".repeat(20_000)} }\n}`;
     const started = performance.now();
-    extractCard(snapshotOf({ "src/main/java/a/C.java": nested }));
+    extractCard(snapshotOf({ "src/main/java/a/C.java": nested }), parsers);
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
   test("application.yml z tysiącami adresów w jednym module daje kartę z pierwszymi 500 i problemem, a 500 adresów problemu nie daje", () => {
     const urls = Array.from({ length: 5_000 }, (_, i) => `url${i}: http://h${i}`).join("\n");
-    const card = extractCard(snapshotOf({ "src/main/resources/application.yml": `${urls}\n` }));
+    const card = extractCard(snapshotOf({ "src/main/resources/application.yml": `${urls}\n` }), parsers);
     expect(card.consumes.filter((c) => c.kind === "http")).toHaveLength(500);
     const exactly500 = Array.from({ length: 500 }, (_, i) => `url${i}: http://h${i}`).join("\n");
-    expect(extractCard(snapshotOf({ "src/main/resources/application.yml": `${exactly500}\nplain: v\n` })).problems).toEqual([]);
+    expect(extractCard(snapshotOf({ "src/main/resources/application.yml": `${exactly500}\nplain: v\n` }), parsers).problems).toEqual([]);
     expect(card.problems).toContainEqual({
       path: "",
       message: "the module has more than 500 addresses in its config; the card shows the first ones",
@@ -140,7 +143,7 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     const calls = Array.from({ length: 30_000 }, (_, i) => `    rest.getForObject("http://h/p${i}", String.class);`).join("\n");
     const java = `class C {\n  RestTemplate rest;\n  void f() {\n${calls}\n  }\n}`;
     const started = performance.now();
-    extractCard(snapshotOf({ "src/main/java/a/C.java": java }));
+    extractCard(snapshotOf({ "src/main/java/a/C.java": java }), parsers);
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
@@ -150,7 +153,7 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
       "\n",
     );
     const started = performance.now();
-    extractCard(snapshotOf({ "src/main/resources/application.yml": `${flat}\n${profiles}\n` }));
+    extractCard(snapshotOf({ "src/main/resources/application.yml": `${flat}\n${profiles}\n` }), parsers);
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
@@ -179,7 +182,7 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     const constants = Array.from({ length: 30 }, (_, i) => `static final String C${i} = C${i + 1} + C${i + 1};`).join("\n");
     const java = `@RestController class Api {\n${constants}\nstatic final String C30 = "${"x".repeat(1000)}";\nstatic final String L = L + "/a";\n@GetMapping(C0) void a() {}\n@GetMapping(L) void b() {}\n}`;
     const started = performance.now();
-    const card = extractCard(snapshotOf({ "src/main/java/a/Api.java": java }));
+    const card = extractCard(snapshotOf({ "src/main/java/a/Api.java": java }), parsers);
     expect(performance.now() - started).toBeLessThan(1000);
     for (const p of card.provides) if (p.kind === "endpoint") expect(p.path.length).toBeLessThanOrEqual(4096);
   });
@@ -192,6 +195,7 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
         "src/main/resources/application.yml": `${yml}\nk30: http://x\na: \${b}\nb: \${a}\nserver:\n  port: \${k0}\n`,
         "src/main/java/a/C.java": `@FeignClient(name = "c", url = "\${k0}") interface C {}`,
       }),
+      parsers,
     );
     expect(performance.now() - started).toBeLessThan(1000);
   });
@@ -202,8 +206,8 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
       { length: 200 },
       (_, i) => `  void c${i}() { rest.getForObject("/api/r${i % 50}/" + id + "/x${i}", String.class); }`,
     ).join("\n");
-    const api = extractCard(snapshotOf({ "src/main/java/a/Api.java": `@RestController class Api {\n${endpoints}\n}` }));
-    const client = extractCard(snapshotOf({ "src/main/java/a/Client.java": `class Client {\n  RestTemplate rest;\n${calls}\n}` }));
+    const api = extractCard(snapshotOf({ "src/main/java/a/Api.java": `@RestController class Api {\n${endpoints}\n}` }), parsers);
+    const client = extractCard(snapshotOf({ "src/main/java/a/Client.java": `class Client {\n  RestTemplate rest;\n${calls}\n}` }), parsers);
     const cards = Array.from({ length: 30 }, (_, i) => ({
       kind: "ok" as const,
       repo: `r${i}`,

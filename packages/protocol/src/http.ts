@@ -40,9 +40,40 @@ export const ProvidedEndpoint = z.object({
   app: z.string().nullable(),
   /** `Klasa.metoda` kontrolera. */
   handler: z.string(),
+  /**
+   * Typ ciała żądania (parametr z `@RequestBody`) tak, jak w kodzie (`CreateOrder`, `List<Line>`); `null` bez ciała
+   * albo gdy drzewo składni pliku nie powstało (ADR-38).
+   */
+  request: z.string().nullable(),
+  /**
+   * Typ odpowiedzi: typ zwracany bez opakowań, które nie zmieniają treści (`ResponseEntity<T>`, `Mono<T>`,
+   * `Optional<T>`…); `null` bez treści (`void`, `Unit`, `ResponseEntity<Void>`), bez jawnego typu (funkcja Kotlina
+   * z wyrażeniem) albo bez drzewa składni (ADR-38).
+   */
+  response: z.string().nullable(),
   evidence: Evidence,
 });
 export type ProvidedEndpoint = z.infer<typeof ProvidedEndpoint>;
+
+/** Pole DTO: nazwa i typ tak, jak w kodzie (`List<Line>`, `String?`). */
+export const DtoField = z.object({ name: z.string(), type: z.string() });
+export type DtoField = z.infer<typeof DtoField>;
+
+/**
+ * DTO (ADR-38): typ z repo, który jest ciałem żądania albo odpowiedzią endpointu HTTP, wprost albo przez pole innego
+ * DTO. Rekord i `data class` mają pola z konstruktora, klasa pola instancji (bez `static`, także te, do których
+ * Lombok dopisuje akcesory), enum stałe.
+ */
+export const Dto = z.object({
+  /** Prosta nazwa typu; typ zagnieżdżony też tylko swoją nazwą (`Inner`, nie `Outer.Inner`). */
+  name: z.string(),
+  kind: z.enum(["record", "data-class", "class", "enum"]),
+  fields: z.array(DtoField),
+  /** Stałe enuma; `[]` dla pozostałych. */
+  values: z.array(z.string()),
+  evidence: Evidence,
+});
+export type Dto = z.infer<typeof Dto>;
 
 /**
  * Skąd jest klient HTTP: interfejs `@FeignClient`, interfejs `@HttpExchange` (Spring 6), wywołania `WebClient`,

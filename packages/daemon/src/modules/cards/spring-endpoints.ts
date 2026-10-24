@@ -60,6 +60,9 @@ function endpointsOf(type: JavaType, method: JavaMethod, m: MethodMapping, modul
           path: full,
           app: module.app,
           handler: `${type.name}.${method.name}`,
+          // Typy kontraktu dopisuje `endpoint-contracts.ts` z drzewa składni (ADR-38); tokeny ich nie znają.
+          request: null,
+          response: null,
           evidence: { path: m.path, line: m.mapping.line },
         });
       }

@@ -1,5 +1,6 @@
 import type { CardProblem, TreeEntry } from "@trackwall/protocol";
 import { messageOf } from "../../infra/errors.ts";
+import { stemOf } from "./repo-path.ts";
 import type { RepoSnapshot } from "./snapshot.ts";
 
 /**
@@ -27,6 +28,12 @@ export interface SourceSelection {
   pattern: string;
   globs: readonly string[];
   accepts: (path: string) => boolean;
+  /**
+   * Nazwy typów, które plik źródłowy wymienia (ADR-38). Odczyt dociąga pliki źródłowe o tych nazwach (`OrderDto.java`,
+   * `OrderDto.kt`), w kolejnych rundach także nazwy z nich, bo DTO z kontraktu endpointu zwykle nie ma adnotacji,
+   * po której wyszukiwanie by go znalazło.
+   */
+  referencedTypes: (text: string) => Iterable<string>;
 }
 
 /** Katalogi z zależnościami skopiowanymi do repo: ich pliki nie są częścią repo ani dla buildów, ani dla mechanizmów. */
@@ -41,6 +48,10 @@ const MAX_SOURCE_FILES = 3000;
 /** Lista nazw z `git grep`: 3000 ścieżek po 300 znaków to niecały 1 MB. */
 const MAX_GREP_BYTES = 4 * 1024 * 1024;
 const MAX_READ_BYTES = 64 * 1024 * 1024;
+/** Rundy dociągania plików typów: kontroler → DTO → typ pola → typ pola zagnieżdżonego. */
+const RELATED_ROUNDS = 3;
+/** Plików dociągniętych po nazwach typów razem ze wszystkich rund. */
+const MAX_RELATED_FILES = 3000;
 
 export async function readSnapshot(
   vcs: SnapshotVcs,
@@ -61,11 +72,90 @@ export async function readSnapshot(
   if (wanted.length > MAX_FILES)
     problems.push({ path: "", message: `the repo has ${wanted.length} build files; the card reads the first ${MAX_FILES}` });
   const requested = [...wanted.slice(0, MAX_FILES), ...(await sourceFiles(vcs, dir, commit, files, sources, problems))];
-  const contents = await vcs.readFiles(dir, commit, requested, MAX_READ_BYTES);
-  for (const path of requested)
-    if (!contents.has(path)) problems.push({ path, message: `the file was not read within the ${MAX_READ_BYTES} B commit read limit` });
-  const texts = new Map([...contents].map(([path, content]) => [path, toText(content)]));
-  return { commit, paths: files.map((f) => f.path), text: (path) => texts.get(path), problems };
+  const reader = new BudgetedReader(vcs, dir, commit, problems);
+  await reader.read(requested);
+  await readRelated(reader, files, sources, problems);
+  return { commit, paths: files.map((f) => f.path), text: (path) => reader.texts.get(path), problems };
+}
+
+/** Odczyt plików commita w kolejnych porcjach ze wspólnym limitem `MAX_READ_BYTES`. */
+class BudgetedReader {
+  readonly texts = new Map<string, string>();
+  private bytes = 0;
+  private readonly vcs: SnapshotVcs;
+  private readonly dir: string;
+  private readonly commit: string;
+  private readonly problems: CardProblem[];
+
+  constructor(vcs: SnapshotVcs, dir: string, commit: string, problems: CardProblem[]) {
+    this.vcs = vcs;
+    this.dir = dir;
+    this.commit = commit;
+    this.problems = problems;
+  }
+
+  async read(paths: readonly string[]): Promise<void> {
+    const left = MAX_READ_BYTES - this.bytes;
+    const contents =
+      paths.length === 0 || left <= 0 ? new Map<string, Buffer>() : await this.vcs.readFiles(this.dir, this.commit, paths, left);
+    for (const path of paths) {
+      const content = contents.get(path);
+      if (content === undefined) {
+        this.problems.push({ path, message: `the file was not read within the ${MAX_READ_BYTES} B commit read limit` });
+        continue;
+      }
+      this.bytes += content.length;
+      this.texts.set(path, toText(content));
+    }
+  }
+}
+
+/**
+ * Pliki źródłowe o nazwach typów, które wymieniają już przeczytane pliki źródłowe, w `RELATED_ROUNDS` rundach.
+ * Nazwa pliku to jedyne, co odczyt wie o typie bez parsowania; typ z pliku o innej nazwie (kilka `data class`
+ * w jednym pliku Kotlina) zostaje bez pól, chyba że ten plik i tak był czytany.
+ */
+async function readRelated(reader: BudgetedReader, files: readonly TreeEntry[], sources: SourceSelection, problems: CardProblem[]) {
+  const byType = sourcesByTypeName(files, sources);
+  let fresh = [...reader.texts.keys()].filter(sources.accepts);
+  let budget = MAX_RELATED_FILES;
+  for (let round = 0; round < RELATED_ROUNDS && fresh.length > 0; round++) {
+    const next = [...referencedFiles(fresh, reader, byType, sources)];
+    const batch = next.slice(0, budget);
+    if (batch.length < next.length)
+      problems.push({
+        path: "",
+        message: `the repo references more than ${MAX_RELATED_FILES} type files from HTTP code; the card reads the first ones`,
+      });
+    budget -= batch.length;
+    await reader.read(batch);
+    fresh = batch.filter((p) => reader.texts.has(p));
+  }
+}
+
+/** Pliki źródłowe, które można przeczytać, po nazwie typu z nazwy pliku. */
+function sourcesByTypeName(files: readonly TreeEntry[], sources: SourceSelection): Map<string, string[]> {
+  const byType = new Map<string, string[]>();
+  for (const f of files.filter((f) => sources.accepts(f.path) && isReadable(f))) {
+    const paths = byType.get(stemOf(f.path));
+    if (paths) paths.push(f.path);
+    else byType.set(stemOf(f.path), [f.path]);
+  }
+  return byType;
+}
+
+/** Jeszcze nieprzeczytane pliki typów, które wymieniają pliki `paths`. */
+function referencedFiles(
+  paths: readonly string[],
+  reader: BudgetedReader,
+  byType: Map<string, string[]>,
+  sources: SourceSelection,
+): Set<string> {
+  const found = new Set<string>();
+  for (const path of paths)
+    for (const name of sources.referencedTypes(reader.texts.get(path) ?? ""))
+      for (const candidate of byType.get(name) ?? []) if (!reader.texts.has(candidate)) found.add(candidate);
+  return found;
 }
 
 /**

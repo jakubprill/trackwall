@@ -4,6 +4,7 @@ import { mapLimit } from "../../infra/map-limit.ts";
 import type { CardCache } from "./card-cache.ts";
 import { CARD_SOURCES, extractCard, readsCardFile } from "./extract-card.ts";
 import { readSnapshot, type SnapshotVcs } from "./read-snapshot.ts";
+import { loadSyntaxParsers } from "./syntax-tree.ts";
 import { repoTags } from "./tags.ts";
 
 /**
@@ -102,8 +103,9 @@ export class Cards {
   private async cardOf(dir: string): Promise<RepoCard | null> {
     const commit = await this.deps.vcs.headCommit(dir);
     if (commit === null) return null;
-    return this.deps.cache.getOrCompute(commit, async () =>
-      extractCard(await readSnapshot(this.deps.vcs, dir, commit, readsCardFile, CARD_SOURCES)),
-    );
+    return this.deps.cache.getOrCompute(commit, async () => {
+      const snapshot = await readSnapshot(this.deps.vcs, dir, commit, readsCardFile, CARD_SOURCES);
+      return extractCard(snapshot, await loadSyntaxParsers());
+    });
   }
 }

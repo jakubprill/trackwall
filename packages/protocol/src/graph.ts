@@ -167,6 +167,9 @@ export const FoundEndpoint = z.object({
   method: HttpMethod.nullable(),
   path: z.string(),
   handler: z.string(),
+  /** Typ ciała żądania i odpowiedzi z karty (ADR-38). */
+  request: z.string().nullable(),
+  response: z.string().nullable(),
   evidence: Evidence,
   callers: z.array(EndpointCaller),
 });

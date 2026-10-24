@@ -32,6 +32,7 @@ function card(p: ProvidedPackage[], c: ConsumedPackage[]): RepoCard {
     buildFiles: [],
     provides: p,
     consumes: c,
+    dtos: [],
     tools: [],
     mise: { configFiles: [], tasks: [], complete: true },
     mechanisms: [],
