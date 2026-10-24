@@ -12,7 +12,7 @@ import {
 } from "@trackwall/protocol";
 import { loopbackRequest } from "../src/infra/loopback.ts";
 import { MCP_PATH, SESSION_TOKEN_HEADER } from "../src/mcp/endpoint.ts";
-import { viewer } from "./support/agents.ts";
+import { viewer, waitFor } from "./support/agents.ts";
 import { connectHttpClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
 
@@ -40,6 +40,15 @@ async function clientOfSession(session: string): Promise<Client> {
   const client = await connectHttpClient(daemon.api.port, TOKEN, undefined, { [SESSION_TOKEN_HEADER]: token });
   clients.push(client);
   return client;
+}
+
+/**
+ * Zatrzymanie sesji dopiero po jej `sessionStart`: zabicie procesu w ConPTY w trakcie startu potrafiło na Windowsie
+ * zawiesić albo wysypać Bun (segfault w `bun test`).
+ */
+async function stopStarted(session: string): Promise<void> {
+  await waitFor(daemon.facade.agents, session, (s) => s.state !== null, "sessionStart");
+  await daemon.facade.agents.stop(session);
 }
 
 async function call(client: Client, name: string, args: Record<string, unknown>) {
@@ -148,7 +157,7 @@ describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (p
         { type: "text", text: "bad_request: only a session that runs a task in Trackwall can report a result" },
       ]);
     }
-    await daemon.facade.agents.stop(root.id);
+    await stopStarted(root.id);
   }, 30_000);
 
   test("sesja nie może czekać na samą siebie, a czekanie na nieznane zadanie to not_found", async () => {
@@ -161,7 +170,7 @@ describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (p
 
     const both = await call(outside, "wait_for_session", { session: session.id, task: session.id });
     expect(both.isError).toBe(true);
-    await daemon.facade.agents.stop(session.id);
+    await stopStarted(session.id);
   }, 30_000);
 
   test("propozycja w nieznanym repo to not_found, a zatwierdzenie propozycji, której już nie ma, też", async () => {
