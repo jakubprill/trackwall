@@ -41,38 +41,41 @@ export const ProvidedEndpoint = z.object({
   /** `Klasa.metoda` kontrolera. */
   handler: z.string(),
   /**
-   * Typ ciała żądania (parametr z `@RequestBody`) tak, jak w kodzie (`CreateOrder`, `List<Line>`); `null` bez ciała
-   * albo gdy drzewo składni pliku nie powstało (ADR-38).
+   * Typ ciała żądania (parametr z `@RequestBody`) w zapisie typu (`CreateOrder`, `List<Line>`); `null` bez ciała albo
+   * gdy drzewo składni pliku nie powstało (ADR-38). Zapis typu to tekst z kodu bez adnotacji, ze spacją tylko przed
+   * słowem po słowie albo po `?` (`List<? extends Line>`), najwyżej 256 znaków.
    */
   request: z.string().nullable(),
   /**
    * Typ odpowiedzi: typ zwracany bez opakowań, które nie zmieniają treści (`ResponseEntity<T>`, `Mono<T>`,
-   * `Optional<T>`…); `null` bez treści (`void`, `Unit`, `ResponseEntity<Void>`), bez jawnego typu (funkcja Kotlina
-   * z wyrażeniem) albo bez drzewa składni (ADR-38).
+   * `Optional<T>`…), w zapisie typu jak `request`; `null` bez treści (`void`, `Unit`, `ResponseEntity<Void>`,
+   * `ResponseEntity<*>`, samo `ResponseEntity`), bez jawnego typu (funkcja Kotlina z wyrażeniem) albo bez drzewa
+   * składni (ADR-38).
    */
   response: z.string().nullable(),
   evidence: Evidence,
 });
 export type ProvidedEndpoint = z.infer<typeof ProvidedEndpoint>;
 
-/** Pole DTO: nazwa i typ tak, jak w kodzie (`List<Line>`, `String?`). */
+/** Pole DTO: nazwa i typ w zapisie typu jak `ProvidedEndpoint.request` (`List<Line>`, `String?`). */
 export const DtoField = z.object({ name: z.string(), type: z.string() });
 export type DtoField = z.infer<typeof DtoField>;
 
 /**
  * DTO (ADR-38): typ z repo, który jest ciałem żądania albo odpowiedzią endpointu HTTP, wprost albo przez pole innego
  * DTO. Rekord i `data class` mają pola z konstruktora, klasa pola instancji (bez `static`, także te, do których
- * Lombok dopisuje akcesory), enum stałe.
+ * Lombok dopisuje akcesory; klasa bez pól nie jest DTO), enum stałe.
  */
-export const Dto = z.object({
-  /** Prosta nazwa typu; typ zagnieżdżony też tylko swoją nazwą (`Inner`, nie `Outer.Inner`). */
-  name: z.string(),
-  kind: z.enum(["record", "data-class", "class", "enum"]),
-  fields: z.array(DtoField),
-  /** Stałe enuma; `[]` dla pozostałych. */
-  values: z.array(z.string()),
-  evidence: Evidence,
-});
+export const Dto = z.discriminatedUnion("kind", [
+  z.object({
+    /** Prosta nazwa typu; typ zagnieżdżony też tylko swoją nazwą (`Inner`, nie `Outer.Inner`). */
+    name: z.string(),
+    kind: z.enum(["record", "data-class", "class"]),
+    fields: z.array(DtoField),
+    evidence: Evidence,
+  }),
+  z.object({ name: z.string(), kind: z.literal("enum"), values: z.array(z.string()), evidence: Evidence }),
+]);
 export type Dto = z.infer<typeof Dto>;
 
 /**

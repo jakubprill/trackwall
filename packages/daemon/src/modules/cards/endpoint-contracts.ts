@@ -1,16 +1,17 @@
-import type { CardProblem, Dto, Provided, ProvidedEndpoint } from "@trackwall/protocol";
-import { readJavaSyntax } from "./dto-java.ts";
-import { readKotlinSyntax } from "./dto-kotlin.ts";
-import type { SourceSyntax, TypeDeclaration } from "./dto-syntax.ts";
+import type { CardProblem, Dto, DtoField, Provided, ProvidedEndpoint } from "@trackwall/protocol";
+import { readJavaSyntax } from "./contract-java.ts";
+import { readKotlinSyntax } from "./contract-kotlin.ts";
+import { type MethodContract, type SourceSyntax, simpleName, type TypeDeclaration } from "./contract-syntax.ts";
+import { isTypeName } from "./java-tokens.ts";
 import { stemOf } from "./repo-path.ts";
 import type { RepoSnapshot } from "./snapshot.ts";
-import { isJvmSource, isTypeName } from "./spring.ts";
+import { isJvmSource, jvmLanguageOf } from "./spring.ts";
 import { PARSE_TIME_LIMIT_MS, type SyntaxParsers } from "./syntax-tree.ts";
 
 /**
  * Kontrakty endpointów HTTP i DTO (§4.6, ADR-38): endpoint z karty dostaje typ ciała żądania (`@RequestBody`)
- * i odpowiedzi z drzewa składni pliku, w którym leży jego metoda, a karta typy z repo osiągalne z tych typów przez
- * pola. Typ wskazuje prosta nazwa, więc z dwóch typów o tej samej nazwie w repo wygrywa ten z pliku o tej nazwie
+ * i odpowiedzi z metody, w której leży jego mapowanie, a karta typy z repo osiągalne z tych typów przez pola. Typ
+ * wskazuje prosta nazwa, więc z dwóch typów o tej samej nazwie w repo wygrywa ten z pliku o tej nazwie
  * (`OrderDto.java`), a potem pierwszy w kolejności plików.
  */
 
@@ -21,13 +22,12 @@ export interface Contracts {
   problems: CardProblem[];
 }
 
-/**
- * Łączny czas parsowania na kartę (test podaje inny, żeby nie czekać): limit na plik (`PARSE_TIME_LIMIT_MS`) nie wystarcza, gdy złośliwych plików jest
- * wiele, a parser blokuje wątek daemona (§8).
- */
-const CARD_PARSE_BUDGET_MS = 10_000;
 /** Najwięcej DTO na karcie; więcej to wygenerowany model, a nie kontrakt pisany ręcznie. */
 const MAX_DTOS = 500;
+/** Najwięcej pól jednego DTO na karcie. */
+const MAX_DTO_FIELDS = 200;
+/** Najdłuższy zapis typu na karcie; dłuższy jest przycinany, żeby jeden plik z repo nie rozdął karty i kontekstu agenta. */
+const MAX_TYPE_LENGTH = 256;
 /** Opakowania, które nie zmieniają treści odpowiedzi: odpowiedzią jest ich argument. */
 const RESPONSE_WRAPPERS = new Set([
   "ResponseEntity",
@@ -40,47 +40,59 @@ const RESPONSE_WRAPPERS = new Set([
   "DeferredResult",
   "WebAsyncTask",
 ]);
-/** Typy zwracane bez treści odpowiedzi. */
+/** Typy zwracane bez treści odpowiedzi (`*` to `ResponseEntity<*>` w Kotlinie). */
 const NO_CONTENT = new Set(["void", "Void", "Unit", "?", "*"]);
 
-export function extractContracts(
-  snapshot: RepoSnapshot,
-  provides: readonly Provided[],
-  parsers: SyntaxParsers,
-  budgetMs: number = CARD_PARSE_BUDGET_MS,
-): Contracts {
-  const syntax = new SyntaxOfFiles(snapshot, parsers, budgetMs);
-  const withContracts = provides.map((p) => (p.kind === "endpoint" ? withContract(p, syntax) : p));
+export function extractContracts(snapshot: RepoSnapshot, provides: readonly Provided[], parsers: SyntaxParsers): Contracts {
+  const problems: CardProblem[] = [];
+  const syntax = new SyntaxOfFiles(snapshot, parsers, problems);
+  const clip = new TypeClipper(problems);
+  const withContracts = provides.map((p) => (p.kind === "endpoint" ? withContract(p, syntax, clip) : p));
   const dtos = reachableDtos(
     withContracts.filter((p) => p.kind === "endpoint"),
     syntax,
+    clip,
+    problems,
   );
-  return { provides: withContracts, dtos, problems: syntax.problems };
+  return { provides: withContracts, dtos, problems };
 }
 
-function withContract(endpoint: ProvidedEndpoint, syntax: SyntaxOfFiles): ProvidedEndpoint {
-  const contract = syntax.of(endpoint.evidence.path)?.methods.get(methodName(endpoint.handler));
-  return { ...endpoint, request: contract?.request ?? null, response: contract ? responseType(contract.returns) : null };
+function withContract(endpoint: ProvidedEndpoint, syntax: SyntaxOfFiles, clip: TypeClipper): ProvidedEndpoint {
+  const methods = syntax.of(endpoint.evidence.path)?.methods ?? [];
+  const contract = methodAt(methods, endpoint.evidence.line) ?? methods.find((m) => m.name === simpleName(endpoint.handler));
+  const request = contract?.request ?? null;
+  const response = contract ? responseType(contract.returns) : null;
+  return { ...endpoint, request: request === null ? null : clip.type(request), response: response === null ? null : clip.type(response) };
 }
 
-/** `metoda` z handlera `Klasa.metoda`. */
-function methodName(handler: string): string {
-  return handler.slice(handler.lastIndexOf(".") + 1);
+/**
+ * Metoda, w której leży linia mapowania endpointu; z zagnieżdżonych (metoda klasy lokalnej) najwęższa. Bez linii albo
+ * bez metody w tej linii wołający szuka po nazwie z handlera.
+ */
+function methodAt(methods: readonly MethodContract[], line: number | null): MethodContract | undefined {
+  if (line === null) return undefined;
+  let found: MethodContract | undefined;
+  for (const m of methods)
+    if (m.startLine <= line && line <= m.endLine && (!found || m.endLine - m.startLine < found.endLine - found.startLine)) found = m;
+  return found;
 }
 
-/** Typ zwracany bez opakowań z `RESPONSE_WRAPPERS`; `null`, gdy odpowiedź nie ma treści. */
+/** Typ zwracany bez opakowań z `RESPONSE_WRAPPERS` (także `ResponseEntity<T>?`); `null`, gdy odpowiedź nie ma treści. */
 export function responseType(returns: string | null): string | null {
-  let type = returns?.replaceAll(/\s+/g, "") ?? null;
+  let type = returns;
   while (type !== null) {
-    const open = type.indexOf("<");
-    if (open < 0 || !type.endsWith(">") || !RESPONSE_WRAPPERS.has(type.slice(0, open).replace(/^.*\./, ""))) break;
-    type = type.slice(open + 1, -1);
+    const nullable = type.endsWith("?") && type.length > 1 ? type.slice(0, -1) : type;
+    const open = nullable.indexOf("<");
+    const wrapper = simpleName(open < 0 ? nullable : nullable.slice(0, open));
+    if (!RESPONSE_WRAPPERS.has(wrapper)) break;
+    // Opakowanie bez argumentu (`ResponseEntity`) nie mówi, co jest treścią.
+    type = open < 0 || !nullable.endsWith(">") ? null : nullable.slice(open + 1, -1);
   }
   return type === null || type === "" || NO_CONTENT.has(type) ? null : type;
 }
 
 /** DTO osiągalne z typów żądań i odpowiedzi endpointów przez typy pól, w kolejności odkrycia. */
-function reachableDtos(endpoints: readonly ProvidedEndpoint[], syntax: SyntaxOfFiles): Dto[] {
+function reachableDtos(endpoints: readonly ProvidedEndpoint[], syntax: SyntaxOfFiles, clip: TypeClipper, problems: CardProblem[]): Dto[] {
   const queue = endpoints.flatMap((e) => [e.request, e.response]).flatMap((t) => (t === null ? [] : typeNames(t)));
   const seen = new Set<string>();
   const dtos: Dto[] = [];
@@ -91,39 +103,68 @@ function reachableDtos(endpoints: readonly ProvidedEndpoint[], syntax: SyntaxOfF
     const found = syntax.declaration(name);
     if (!found) continue;
     if (dtos.length === MAX_DTOS) {
-      syntax.problems.push({ path: "", message: `the repo has more than ${MAX_DTOS} DTOs; the card lists the first ones` });
+      problems.push({ path: "", message: `the repo has more than ${MAX_DTOS} DTOs; the card lists the first ones` });
       break;
     }
-    const { line, ...dto } = found.type;
-    dtos.push({ ...dto, evidence: { path: found.path, line } });
-    for (const field of dto.fields) queue.push(...typeNames(field.type));
+    const dto = toDto(found.type, found.path, clip, problems);
+    dtos.push(dto);
+    if (dto.kind !== "enum") for (const field of dto.fields) queue.push(...typeNames(field.type));
   }
   return dtos;
 }
 
-/** Nazwy typów w zapisie typu (`Map<String, List<Line>>` → `Map`, `String`, `List`, `Line`): człony od wielkiej litery. */
-function typeNames(type: string): string[] {
-  return (type.match(/[A-Za-z_$][\w$]*/g) ?? []).filter(isTypeName);
+function toDto(declared: TypeDeclaration, path: string, clip: TypeClipper, problems: CardProblem[]): Dto {
+  const evidence = { path, line: declared.line };
+  if (declared.kind === "enum") return { name: declared.name, kind: "enum", values: declared.values, evidence };
+  if (declared.fields.length > MAX_DTO_FIELDS)
+    problems.push({ path, message: `${declared.name} has more than ${MAX_DTO_FIELDS} fields; the card lists the first ones` });
+  const fields: DtoField[] = declared.fields.slice(0, MAX_DTO_FIELDS).map((f) => ({ name: f.name, type: clip.type(f.type) }));
+  return { name: declared.name, kind: declared.kind, fields, evidence };
 }
 
-/** Drzewa składni plików karty, każde liczone raz, we wspólnym budżecie czasu. */
-class SyntaxOfFiles {
-  readonly problems: CardProblem[] = [];
-  private readonly snapshot: RepoSnapshot;
-  private readonly parsers: SyntaxParsers;
-  private readonly parsed = new Map<string, SourceSyntax | null>();
-  private declaredIn: Map<string, string[]> | undefined;
-  private readonly budgetMs: number;
-  private spentMs = 0;
-  private overBudget = false;
+/**
+ * Nazwy typów w zapisie typu (`Map<String,List<Api.Line>>` → `Map`, `String`, `List`, `Line`): ostatni człon każdej
+ * nazwy kwalifikowanej, gdy zaczyna się wielką literą, bo wcześniejsze to pakiet albo typ zewnętrzny, a nie DTO.
+ */
+function typeNames(type: string): string[] {
+  return (type.match(/[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*/g) ?? []).map(simpleName).filter(isTypeName);
+}
 
-  constructor(snapshot: RepoSnapshot, parsers: SyntaxParsers, budgetMs: number) {
-    this.snapshot = snapshot;
-    this.parsers = parsers;
-    this.budgetMs = budgetMs;
+/** Przycina zapisy typów do `MAX_TYPE_LENGTH` z jednym problemem na kartę. */
+class TypeClipper {
+  private readonly problems: CardProblem[];
+  private reported = false;
+
+  constructor(problems: CardProblem[]) {
+    this.problems = problems;
   }
 
-  /** Składnia pliku; `null`, gdy go nie przeczytano, nie jest Javą ani Kotlinem albo parsowanie przekroczyło limit. */
+  type(text: string): string {
+    if (text.length <= MAX_TYPE_LENGTH) return text;
+    if (!this.reported) {
+      this.reported = true;
+      this.problems.push({ path: "", message: `some types are longer than ${MAX_TYPE_LENGTH} characters; the card shows their beginning` });
+    }
+    return `${text.slice(0, MAX_TYPE_LENGTH)}…`;
+  }
+}
+
+/** Drzewa składni plików karty, każde liczone raz; problemy parsowania trafiają do `problems` karty. */
+class SyntaxOfFiles {
+  private readonly snapshot: RepoSnapshot;
+  private readonly parsers: SyntaxParsers;
+  private readonly problems: CardProblem[];
+  private readonly parsed = new Map<string, SourceSyntax | null>();
+  private declaredIn: Map<string, string[]> | undefined;
+  private stopped = false;
+
+  constructor(snapshot: RepoSnapshot, parsers: SyntaxParsers, problems: CardProblem[]) {
+    this.snapshot = snapshot;
+    this.parsers = parsers;
+    this.problems = problems;
+  }
+
+  /** Składnia pliku; `null`, gdy go nie przeczytano, nie jest Javą ani Kotlinem albo nie ma drzewa. */
   of(path: string): SourceSyntax | null {
     const cached = this.parsed.get(path);
     if (cached !== undefined) return cached;
@@ -149,29 +190,42 @@ class SyntaxOfFiles {
 
   private parse(path: string): SourceSyntax | null {
     const text = this.snapshot.text(path);
-    const language = path.endsWith(".java") ? "java" : path.endsWith(".kt") ? "kotlin" : null;
-    if (text === undefined || language === null || this.overBudget) return null;
-    if (this.spentMs > this.budgetMs) {
-      this.overBudget = true;
-      this.problems.push({
-        path: "",
-        message: `parsing Java and Kotlin took longer than ${this.budgetMs} ms; the remaining endpoints have no request and response types and the DTO list is incomplete`,
-      });
-      return null;
-    }
-    const started = performance.now();
+    const language = jvmLanguageOf(path);
+    if (text === undefined || language === null || this.stopped) return null;
     const result = this.parsers.read(language, text, language === "java" ? readJavaSyntax : readKotlinSyntax);
-    this.spentMs += performance.now() - started;
-    if (result.kind === "parsed") return result.value;
-    this.problems.push({
-      path,
-      message: `parsing the file took longer than ${PARSE_TIME_LIMIT_MS} ms; its endpoints and types are missing from contracts`,
-    });
-    return null;
+    switch (result.kind) {
+      case "parsed":
+        return result.value;
+      case "timeout":
+        this.problems.push({
+          path,
+          message: `parsing the file took longer than ${PARSE_TIME_LIMIT_MS} ms; its endpoints have no request and response types and its DTOs are missing`,
+        });
+        return null;
+      case "over-budget":
+        this.stop(
+          `parsing Java and Kotlin took longer than ${result.budgetMs} ms; the remaining endpoints have no request and response types and the DTO list is incomplete`,
+        );
+        return null;
+      case "unavailable":
+        this.stop(
+          `Java and Kotlin parsers could not be loaded (${result.reason}); endpoints have no request and response types and the card has no DTOs`,
+        );
+        return null;
+    }
+  }
+
+  /** Po wyczerpaniu budżetu albo bez parserów żaden kolejny plik nie dostanie drzewa, więc jeden problem na kartę. */
+  private stop(message: string): void {
+    this.stopped = true;
+    this.problems.push({ path: "", message });
   }
 }
 
-/** Pliki źródłowe karty po nazwach typów, które w nich deklarowano (wyszukiwanie tekstu, bez parsowania). */
+/**
+ * Pliki źródłowe karty po nazwach typów, które w nich deklarowano: wyszukiwanie tekstu bez parsowania, więc nazwa
+ * z komentarza też trafia do indeksu, ale `declaration` sprawdza ją potem w drzewie składni.
+ */
 function declarationIndex(snapshot: RepoSnapshot): Map<string, string[]> {
   const index = new Map<string, string[]>();
   for (const path of snapshot.paths) {

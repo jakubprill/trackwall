@@ -2,6 +2,7 @@ import type { Consumed, Provided, RepoCard } from "@trackwall/protocol";
 import { extractContracts } from "./endpoint-contracts.ts";
 import { extractFrontendHttp, readsFrontendHttpFile } from "./frontend-http.ts";
 import { extractGradle, readsGradleFile } from "./gradle.ts";
+import { referencedTypeNames } from "./java-tokens.ts";
 import { extractMaven, readsMavenFile } from "./maven.ts";
 import { detectMechanisms } from "./mechanisms.ts";
 import { extractMiseSetup, isMiseConfigFile } from "./mise-tasks.ts";
@@ -9,15 +10,16 @@ import { extractNpm, readsNpmFile } from "./npm.ts";
 import type { SourceSelection } from "./read-snapshot.ts";
 import { dirOf } from "./repo-path.ts";
 import type { Extracted, RepoSnapshot } from "./snapshot.ts";
-import { extractSpring, isJvmSource, JVM_SOURCE_GLOBS, JVM_SOURCE_PATTERN, referencedTypeNames } from "./spring.ts";
+import { extractSpring, isJvmSource, JVM_SOURCE_GLOBS, JVM_SOURCE_PATTERN } from "./spring.ts";
 import { readsSpringConfigFile } from "./spring-config.ts";
 import type { SyntaxParsers } from "./syntax-tree.ts";
 import { extractTools, readsToolFile } from "./tools.ts";
 
 /**
  * Karta repo z jednego commita (§4.6, ADR-25, ADR-30): ekstraktory systemów budowania, potem narzędzia z katalogów ich
- * buildów, konfiguracja i taski mise (ADR-34), fakty HTTP (Spring i frontend) z kontraktami endpointów i DTO (ADR-38) i spis mechanizmów z tego, czego repo używa. Czysta funkcja: ten sam commit
- * daje tę samą kartę.
+ * buildów, konfiguracja i taski mise (ADR-34), fakty HTTP (Spring i frontend) z kontraktami
+ * endpointów i DTO (ADR-38) i spis mechanizmów z tego, czego repo używa. Ten sam commit daje tę samą kartę, chyba że
+ * parsery nie dały drzewa składni w czasie (`CardParsers.complete`).
  */
 
 /** Ekstraktor systemu budowania razem z wyborem plików, które czyta, żeby nowy nie mógł zapomnieć o drugim. */

@@ -71,7 +71,21 @@ writeFileSync(join(sources, "OrderDto.java"), "public record OrderDto(String id,
 for (const args of [
   ["init", "-q"],
   ["add", "."],
-  ["-c", "user.name=smoke", "-c", "user.email=smoke@example.invalid", "commit", "-q", "-m", "smoke"],
+  // Bez podpisu i hooków z globalnej konfiguracji gita osoby, która uruchamia smoke.
+  [
+    "-c",
+    "user.name=smoke",
+    "-c",
+    "user.email=smoke@example.invalid",
+    "-c",
+    "commit.gpgsign=false",
+    "-c",
+    "core.hooksPath=",
+    "commit",
+    "-q",
+    "-m",
+    "smoke",
+  ],
 ]) {
   const git = spawnSync("git", args, { cwd: repo, encoding: "utf8" });
   if (git.status !== 0) throw new Error(`git ${args.join(" ")}: ${git.stderr}`);
@@ -80,8 +94,9 @@ const post = async (path: string, body: unknown): Promise<unknown> =>
   JSON.parse((await loopbackRequest(port, path, { method: "POST", token, body: JSON.stringify(body), timeoutMs: 15_000 })).body);
 const settings = apiResult(workspaceApi.setProjectsDir.data).parse(await post(workspaceApi.setProjectsDir.path, { path: projects }));
 const listed = apiResult(workspaceApi.list.data).parse(await post(workspaceApi.list.path, {}));
-const orders = listed.ok ? listed.data.repos.find((r) => r.path === repo) : undefined;
-if (!settings.ok || !orders) throw new Error(`repo ${repo} nie ma na liście: ${JSON.stringify({ settings, listed })}`);
+// Folder z projektami ma tylko to repo; ścieżka z listy może mieć inny zapis (krótkie nazwy na Windowsie, /private na macOS).
+const orders = listed.ok && listed.data.repos.length === 1 ? listed.data.repos[0] : undefined;
+if (!settings.ok || !orders) throw new Error(`repo ${repo} nie jest jedynym na liście: ${JSON.stringify({ settings, listed })}`);
 const result = apiResult(cardsApi.card.data).parse(await post(cardsApi.card.path, { repo: orders.id }));
 const card = result.ok ? result.data.card : null;
 const endpoint = card?.provides.find((p) => p.kind === "endpoint");

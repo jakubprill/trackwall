@@ -120,8 +120,11 @@ _Unikaj_: serwis, mikroserwis (dla faktu z karty)
 **Endpoint HTTP** (`ProvidedEndpoint`, na karcie `kind: "endpoint"`; po angielsku *HTTP endpoint*):
 Metoda i pełna ścieżka (ścieżka kontekstu, prefiks kontrolera, ścieżka metody) z kontrolera Spring, z handlerem `Klasa.metoda`. Metoda `null` to każda metoda (`@RequestMapping` bez `method`). Ma typ żądania (`request`, parametr z `@RequestBody`) i typ odpowiedzi (`response`, typ zwracany bez `ResponseEntity`, `Mono` i podobnych opakowań), `null`, gdy go nie ma albo nie został przeczytany (ADR-38).
 
+**Kontrakt endpointu** (`MethodContract`, `extractContracts`; po angielsku *request and response types*):
+Typ żądania i typ odpowiedzi endpointu HTTP (`ProvidedEndpoint.request`, `response`) razem, z metody, w której leży mapowanie endpointu (ADR-38). W tekstach produktu „request and response types”.
+
 **DTO** (`Dto`, `RepoCard.dtos`; po angielsku *DTO*):
-Typ danych z repo, który endpoint przyjmuje albo zwraca, i typy jego pól: rekord, `data class`, klasa z polami albo enum (rodzaj `kind`), z polami i ich typami albo stałymi enuma. Wskazuje go prosta nazwa typu, bez pakietu (ADR-38).
+Typ danych z repo, który endpoint przyjmuje albo zwraca, i typy jego pól: rekord, `data class`, klasa z polami (klasa bez pól nie jest DTO) albo enum (rodzaj `kind`), z polami i ich typami albo stałymi enuma. Wskazuje go prosta nazwa typu, bez pakietu (ADR-38).
 _Unikaj_: model, encja (dla typu z karty)
 
 **Klient HTTP** (`ConsumedHttp`, na karcie `kind: "http"`, rodzaj `HttpClientVia`; po angielsku *HTTP client*):

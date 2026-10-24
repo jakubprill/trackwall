@@ -17,6 +17,22 @@ export function tokenize(text: string): Token[] {
   return new Tokenizer(text).run();
 }
 
+/**
+ * Nazwy typów, które plik może wymieniać w kontrakcie endpointu (ADR-38): identyfikatory od wielkiej litery. To nadzbiór
+ * (są wśród nich adnotacje i serwisy), bo odczyt commita dociąga po nich pliki, zanim powstanie drzewo składni.
+ */
+export function referencedTypeNames(text: string): Set<string> {
+  const names = new Set<string>();
+  for (const token of tokenize(text)) if (token.kind === "ident" && isTypeName(token.text)) names.add(token.text);
+  return names;
+}
+
+/** Czy identyfikator wygląda na nazwę typu: zaczyna się wielką literą, jak każą konwencje Javy i Kotlina. */
+export function isTypeName(name: string): boolean {
+  const first = name[0] ?? "";
+  return first !== first.toLowerCase();
+}
+
 class Tokenizer {
   private readonly src: string;
   private readonly tokens: Token[] = [];

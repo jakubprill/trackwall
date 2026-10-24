@@ -72,10 +72,11 @@ export async function readSnapshot(
   if (wanted.length > MAX_FILES)
     problems.push({ path: "", message: `the repo has ${wanted.length} build files; the card reads the first ${MAX_FILES}` });
   const requested = [...wanted.slice(0, MAX_FILES), ...(await sourceFiles(vcs, dir, commit, files, sources, problems))];
-  const reader = new BudgetedReader(vcs, dir, commit, problems);
-  await reader.read(requested);
-  await readRelated(reader, files, sources, problems);
-  return { commit, paths: files.map((f) => f.path), text: (path) => reader.texts.get(path), problems };
+  const reader = new BudgetedReader(vcs, dir, commit);
+  for (const path of await reader.read(requested))
+    problems.push({ path, message: `the file was not read within the ${MAX_READ_BYTES} B commit read limit` });
+  const typeFiles = await readTypeFiles(reader, files, sources, problems);
+  return { commit, paths: files.map((f) => f.path), text: (path) => reader.texts.get(path), typeFiles, problems };
 }
 
 /** Odczyt plików commita w kolejnych porcjach ze wspólnym limitem `MAX_READ_BYTES`. */
@@ -85,52 +86,63 @@ class BudgetedReader {
   private readonly vcs: SnapshotVcs;
   private readonly dir: string;
   private readonly commit: string;
-  private readonly problems: CardProblem[];
 
-  constructor(vcs: SnapshotVcs, dir: string, commit: string, problems: CardProblem[]) {
+  constructor(vcs: SnapshotVcs, dir: string, commit: string) {
     this.vcs = vcs;
     this.dir = dir;
     this.commit = commit;
-    this.problems = problems;
   }
 
-  async read(paths: readonly string[]): Promise<void> {
+  /** Czyta `paths`, a pliki, które nie zmieściły się w limicie, zwraca; problem dla każdego z nich zapisuje wołający. */
+  async read(paths: readonly string[]): Promise<string[]> {
     const left = MAX_READ_BYTES - this.bytes;
     const contents =
       paths.length === 0 || left <= 0 ? new Map<string, Buffer>() : await this.vcs.readFiles(this.dir, this.commit, paths, left);
+    const missed: string[] = [];
     for (const path of paths) {
       const content = contents.get(path);
       if (content === undefined) {
-        this.problems.push({ path, message: `the file was not read within the ${MAX_READ_BYTES} B commit read limit` });
+        missed.push(path);
         continue;
       }
       this.bytes += content.length;
       this.texts.set(path, toText(content));
     }
+    return missed;
   }
 }
 
 /**
- * Pliki źródłowe o nazwach typów, które wymieniają już przeczytane pliki źródłowe, w `RELATED_ROUNDS` rundach.
- * Nazwa pliku to jedyne, co odczyt wie o typie bez parsowania; typ z pliku o innej nazwie (kilka `data class`
- * w jednym pliku Kotlina) zostaje bez pól, chyba że ten plik i tak był czytany.
+ * Pliki źródłowe o nazwach typów, które wymieniają już przeczytane pliki źródłowe, w `RELATED_ROUNDS` rundach; zwraca
+ * przeczytane. Nazwa pliku to jedyne, co odczyt wie o typie bez parsowania; typ z pliku o innej nazwie (kilka
+ * `data class` w jednym pliku Kotlina) zostaje bez pól, chyba że ten plik i tak był czytany. Pliki są zgadywane po
+ * nazwach, więc te, które nie zmieściły się w limitach, dają jeden problem, a nie problem na plik.
  */
-async function readRelated(reader: BudgetedReader, files: readonly TreeEntry[], sources: SourceSelection, problems: CardProblem[]) {
+async function readTypeFiles(
+  reader: BudgetedReader,
+  files: readonly TreeEntry[],
+  sources: SourceSelection,
+  problems: CardProblem[],
+): Promise<Set<string>> {
   const byType = sourcesByTypeName(files, sources);
+  const typeFiles = new Set<string>();
   let fresh = [...reader.texts.keys()].filter(sources.accepts);
-  let budget = MAX_RELATED_FILES;
+  const skipped = new Set<string>();
   for (let round = 0; round < RELATED_ROUNDS && fresh.length > 0; round++) {
-    const next = [...referencedFiles(fresh, reader, byType, sources)];
-    const batch = next.slice(0, budget);
-    if (batch.length < next.length)
-      problems.push({
-        path: "",
-        message: `the repo references more than ${MAX_RELATED_FILES} type files from HTTP code; the card reads the first ones`,
-      });
-    budget -= batch.length;
-    await reader.read(batch);
-    fresh = batch.filter((p) => reader.texts.has(p));
+    const next = [...referencedFiles(fresh, reader, byType, sources)].filter((p) => !skipped.has(p));
+    const batch = next.slice(0, MAX_RELATED_FILES - typeFiles.size);
+    for (const path of next.slice(batch.length)) skipped.add(path);
+    const missed = new Set(await reader.read(batch));
+    for (const path of missed) skipped.add(path);
+    fresh = batch.filter((p) => !missed.has(p));
+    for (const path of fresh) typeFiles.add(path);
   }
+  if (skipped.size > 0)
+    problems.push({
+      path: "",
+      message: `${skipped.size} type files referenced from HTTP code were not read (at most ${MAX_RELATED_FILES} files within the ${MAX_READ_BYTES} B commit read limit); their DTOs are missing`,
+    });
+  return typeFiles;
 }
 
 /** Pliki źródłowe, które można przeczytać, po nazwie typu z nazwy pliku. */

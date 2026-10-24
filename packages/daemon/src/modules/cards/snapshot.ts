@@ -20,6 +20,11 @@ export interface RepoSnapshot {
   paths: readonly string[];
   /** Treść pliku; `undefined`, gdy go nie ma albo nie był czytany (nie jest plikiem buildu ani konfiguracji). */
   text(path: string): string | undefined;
+  /**
+   * Pliki źródłowe dociągnięte tylko dla kontraktów endpointów (ADR-38), po nazwach typów: kontrakty czytają z nich DTO,
+   * ale ekstraktory HTTP ich nie widzą, więc fakty HTTP zależą tylko od plików z wyszukiwania.
+   */
+  typeFiles: ReadonlySet<string>;
   /** Czego odczyt commita nie dał rady przeczytać (limity); trafia na kartę razem z problemami ekstraktorów. */
   problems: readonly CardProblem[];
 }

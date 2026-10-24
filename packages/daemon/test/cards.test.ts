@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { RepoCard } from "@trackwall/protocol";
 import { CardCache } from "../src/modules/cards/card-cache.ts";
 import { Cards } from "../src/modules/cards/cards.ts";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
@@ -56,6 +57,26 @@ describe("cards", () => {
     const second = await cards.card("web");
     expect(second.card?.commit).not.toBe(first.card?.commit);
     expect(second.card?.mechanisms.map((m) => m.id)).toEqual(["angular"]);
+  });
+
+  test("karta zależna od czasu liczenia (persist: false) zostaje tylko w pamięci, a restart liczy ją od nowa", async () => {
+    const cardsDir = join(mkdtempSync(join(tmpdir(), "trackwall-home-")), "cards");
+    const commit = "b".repeat(40);
+    const card: RepoCard = {
+      commit,
+      buildFiles: [],
+      provides: [],
+      consumes: [],
+      dtos: [],
+      tools: [],
+      mise: { configFiles: [], tasks: [], complete: true },
+      mechanisms: [],
+      problems: [],
+    };
+    const cache = new CardCache(cardsDir, () => {});
+    expect(await cache.getOrCompute(commit, async () => ({ card, persist: false }))).toEqual(card);
+    expect(await cache.getOrCompute(commit, () => Promise.reject(new Error("karta jest w pamięci")))).toEqual(card);
+    expect(existsSync(join(cardsDir, `${commit}.json`))).toBe(false);
   });
 
   test("równoczesne pytania o kartę tego samego commita (lista tagów i karta naraz) czytają gita raz", async () => {

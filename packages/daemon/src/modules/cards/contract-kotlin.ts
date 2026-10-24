@@ -1,6 +1,6 @@
 import type { DtoField } from "@trackwall/protocol";
 import type { Node } from "web-tree-sitter";
-import { addMethod, lineOf, type MethodContract, type SourceSyntax, simpleName, type TypeDeclaration } from "./dto-syntax.ts";
+import { lineOf, linesOf, type SourceSyntax, simpleName, type TypeDeclaration, typeText } from "./contract-syntax.ts";
 
 /**
  * Deklaracje typów i kontrakty funkcji z drzewa składni pliku Kotlina (ADR-38). Gramatyka nie nazywa pól typu
@@ -8,9 +8,11 @@ import { addMethod, lineOf, type MethodContract, type SourceSyntax, simpleName, 
  */
 export function readKotlinSyntax(root: Node): SourceSyntax {
   const types = root.descendantsOfType("class_declaration").flatMap(kotlinType);
-  const methods = new Map<string, MethodContract>();
-  for (const fn of root.descendantsOfType("function_declaration"))
-    addMethod(methods, fn.childForFieldName("name")?.text, { request: requestBody(fn), returns: typeAfterColon(fn)?.text ?? null });
+  const methods = root.descendantsOfType("function_declaration").flatMap((fn) => {
+    const name = fn.childForFieldName("name");
+    const returns = typeAfterColon(fn);
+    return name ? [{ name: name.text, ...linesOf(fn), request: requestBody(fn), returns: returns ? typeText(returns) : null }] : [];
+  });
   return { types, methods };
 }
 
@@ -20,10 +22,12 @@ function kotlinType(node: Node): TypeDeclaration[] {
   const declared = { name: name.text, line: lineOf(name) };
   const modifiers = classModifiers(node);
   const enumBody = node.namedChildren.find((c) => c.type === "enum_class_body");
-  if (modifiers.includes("enum") || enumBody) return [{ ...declared, kind: "enum", fields: [], values: enumEntries(enumBody) }];
+  if (modifiers.includes("enum") || enumBody) return [{ ...declared, kind: "enum", values: enumEntries(enumBody) }];
   const data = modifiers.includes("data");
   const fields = [...constructorProperties(node, data), ...bodyProperties(node)];
-  return [{ ...declared, kind: data ? "data-class" : "class", fields, values: [] }];
+  if (data) return [{ ...declared, kind: "data-class", fields }];
+  // Klasa bez właściwości (serwis z zależnościami w konstruktorze, wyjątek) nie niesie danych, więc nie jest DTO.
+  return fields.length > 0 ? [{ ...declared, kind: "class", fields }] : [];
 }
 
 function classModifiers(node: Node): string[] {
@@ -56,7 +60,7 @@ function bodyProperties(node: Node): DtoField[] {
 function namedTyped(node: Node): DtoField[] {
   const name = node.namedChildren.find((c) => c.type === "identifier");
   const type = typeAfterColon(node);
-  return name && type ? [{ name: name.text, type: type.text }] : [];
+  return name && type ? [{ name: name.text, type: typeText(type) }] : [];
 }
 
 function typeAfterColon(node: Node): Node | null {
@@ -76,7 +80,8 @@ function requestBody(fn: Node): string | null {
   for (const child of fn.namedChildren.find((c) => c.type === "function_value_parameters")?.namedChildren ?? []) {
     if (child.type === "parameter_modifiers") annotated = annotationNames(child).includes("RequestBody");
     else if (child.type === "parameter") {
-      if (annotated) return typeAfterColon(child)?.text ?? null;
+      const type = typeAfterColon(child);
+      if (annotated) return type ? typeText(type) : null;
       annotated = false;
     }
   }

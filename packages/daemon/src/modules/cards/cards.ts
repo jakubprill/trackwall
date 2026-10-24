@@ -4,7 +4,7 @@ import { mapLimit } from "../../infra/map-limit.ts";
 import type { CardCache } from "./card-cache.ts";
 import { CARD_SOURCES, extractCard, readsCardFile } from "./extract-card.ts";
 import { readSnapshot, type SnapshotVcs } from "./read-snapshot.ts";
-import { loadSyntaxParsers } from "./syntax-tree.ts";
+import { CARD_PARSE_BUDGET_MS, type CardParsers, loadSyntaxParsers, unavailableParsers, withParseBudget } from "./syntax-tree.ts";
 import { repoTags } from "./tags.ts";
 
 /**
@@ -105,7 +105,18 @@ export class Cards {
     if (commit === null) return null;
     return this.deps.cache.getOrCompute(commit, async () => {
       const snapshot = await readSnapshot(this.deps.vcs, dir, commit, readsCardFile, CARD_SOURCES);
-      return extractCard(snapshot, await loadSyntaxParsers());
+      const parsers = await cardParsers();
+      // Karta bez części drzew składni (czas, brak parsera) zależy od chwili liczenia, więc nie trafia na dysk.
+      return { card: extractCard(snapshot, parsers), persist: parsers.complete };
     });
+  }
+}
+
+/** Parsery jednej karty; bez gramatyk karta powstaje dalej, tylko bez kontraktów endpointów i DTO. */
+async function cardParsers(): Promise<CardParsers> {
+  try {
+    return withParseBudget(await loadSyntaxParsers(), CARD_PARSE_BUDGET_MS);
+  } catch (err) {
+    return unavailableParsers(messageOf(err));
   }
 }

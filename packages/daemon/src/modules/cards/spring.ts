@@ -4,7 +4,6 @@ import { declarativeClients } from "./declarative-clients.ts";
 import { imperativeClients } from "./imperative-clients.ts";
 import { ConstantTable } from "./java-expr.ts";
 import { parseJavaFile } from "./java-source.ts";
-import { tokenize } from "./java-tokens.ts";
 import { type Extracted, emptyExtracted, type RepoSnapshot } from "./snapshot.ts";
 import { isTestPath, ModuleConfig, moduleOf, readSpringConfigs } from "./spring-config.ts";
 import { springEndpoints } from "./spring-endpoints.ts";
@@ -27,30 +26,18 @@ export const JVM_SOURCE_PATTERN =
 export const JVM_SOURCE_GLOBS = ["*.java", "*.kt"];
 
 /**
- * Nazwy typów, które plik może wymieniać w kontrakcie endpointu (ADR-38): identyfikatory od wielkiej litery. To nadzbiór
- * (są wśród nich adnotacje i serwisy), bo odczyt commita dociąga po nich pliki, zanim powstanie drzewo składni.
- */
-export function referencedTypeNames(text: string): Set<string> {
-  const names = new Set<string>();
-  for (const token of tokenize(text)) if (token.kind === "ident" && isTypeName(token.text)) names.add(token.text);
-  return names;
-}
-
-/** Czy identyfikator wygląda na nazwę typu: zaczyna się wielką literą, jak każą konwencje Javy i Kotlina. */
-export function isTypeName(name: string): boolean {
-  const first = name[0] ?? "";
-  return first !== first.toLowerCase();
-}
-
-/**
  * Plik źródłowy Javy albo Kotlina z kodu aplikacji: z `src/main/` na dowolnej głębokości (także moduł w katalogu
  * `src/`, jak `src/orders/src/main/java`), a bez `src/main/` tylko poza katalogami `src` (bez testów).
  */
 export function isJvmSource(path: string): boolean {
-  if (path.length > 1024 || !(path.endsWith(".java") || path.endsWith(".kt"))) return false;
-  if (isTestPath(path)) return false;
+  if (path.length > 1024 || jvmLanguageOf(path) === null || isTestPath(path)) return false;
   const segments = path.split("/");
   return segments.some((s, i) => s === "src" && segments[i + 1] === "main") || !segments.includes("src");
+}
+
+/** Język pliku źródłowego po rozszerzeniu; `null` dla innych plików. */
+export function jvmLanguageOf(path: string): "java" | "kotlin" | null {
+  return path.endsWith(".java") ? "java" : path.endsWith(".kt") ? "kotlin" : null;
 }
 
 /** Fakty ekstraktora Spring. */
@@ -59,10 +46,13 @@ type SpringFacts = Extracted<ProvidedApp | ProvidedEndpoint, ConsumedHttp>;
 export function extractSpring(snapshot: RepoSnapshot): SpringFacts {
   const out: SpringFacts = emptyExtracted();
   const configs = readSpringConfigs(snapshot, out);
-  const files = snapshot.paths.filter(isJvmSource).flatMap((path) => {
-    const text = snapshot.text(path);
-    return text === undefined ? [] : [parseJavaFile(path, text)];
-  });
+  // Pliki typów dociągnięte dla kontraktów (ADR-38) nie zmieniają faktów HTTP: Spring czyta tylko pliki z wyszukiwania.
+  const files = snapshot.paths
+    .filter((p) => isJvmSource(p) && !snapshot.typeFiles.has(p))
+    .flatMap((path) => {
+      const text = snapshot.text(path);
+      return text === undefined ? [] : [parseJavaFile(path, text)];
+    });
   const constants = new ConstantTable(files);
   const types: TypeIndex = new Map();
   for (const file of files) for (const type of file.types) if (!types.has(type.name)) types.set(type.name, { type, path: file.path });

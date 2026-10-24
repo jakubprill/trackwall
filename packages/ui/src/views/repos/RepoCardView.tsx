@@ -213,11 +213,7 @@ function Endpoints({ endpoints }: { endpoints: ProvidedEndpoint[] }) {
               <span className="min-w-0 flex-1 truncate font-mono text-xs" title={e.path}>
                 {e.path}
               </span>
-              {(e.request ?? e.response) !== null && (
-                <span className="text-muted-foreground max-w-64 truncate font-mono text-xs" title={contractLabel(e)}>
-                  {contractLabel(e)}
-                </span>
-              )}
+              {(e.request !== null || e.response !== null) && <Contract endpoint={e} />}
               <span className="text-muted-foreground max-w-48 truncate font-mono text-xs">{e.handler}</span>
               <Evidence label={evidenceLabel(e.evidence)} />
             </Row>
@@ -229,8 +225,13 @@ function Endpoints({ endpoints }: { endpoints: ProvidedEndpoint[] }) {
 }
 
 /** Typ ciała żądania i odpowiedzi endpointu (ADR-38): `CreateOrder → OrderDto`, brak strony to `–`. */
-function contractLabel(e: ProvidedEndpoint): string {
-  return `${e.request ?? "–"} → ${e.response ?? "–"}`;
+function Contract({ endpoint }: { endpoint: ProvidedEndpoint }) {
+  const label = `${endpoint.request ?? "–"} → ${endpoint.response ?? "–"}`;
+  return (
+    <span className="text-muted-foreground max-w-64 truncate font-mono text-xs" title={label}>
+      {label}
+    </span>
+  );
 }
 
 /** DTO z kontraktów endpointów (ADR-38): rodzaj, nazwa, pola z typami albo stałe enuma. */
@@ -246,7 +247,7 @@ function Dtos({ dtos }: { dtos: Dto[] }) {
               <Evidence label={evidenceLabel(d.evidence)} />
             </span>
             <span className="text-muted-foreground min-w-0 font-mono text-xs break-words">
-              {d.kind === "enum" ? d.values.join(", ") : d.fields.map((f) => `${f.name}: ${f.type}`).join(", ") || "no fields"}
+              {d.kind === "enum" ? d.values.join(", ") : d.fields.map((f) => `${f.name}: ${f.type}`).join(", ")}
             </span>
           </li>
         ))}

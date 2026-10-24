@@ -3,7 +3,7 @@ import type { ProvidedEndpoint, RepoCard } from "@trackwall/protocol";
 import { extractContracts, responseType } from "../src/modules/cards/endpoint-contracts.ts";
 import { CARD_SOURCES, extractCard } from "../src/modules/cards/extract-card.ts";
 import { readSnapshot } from "../src/modules/cards/read-snapshot.ts";
-import { loadSyntaxParsers } from "../src/modules/cards/syntax-tree.ts";
+import { loadSyntaxParsers, unavailableParsers, withParseBudget } from "../src/modules/cards/syntax-tree.ts";
 import { snapshotOf } from "./support/snapshot.ts";
 import { fixtureFiles } from "./support/spring-fixtures.ts";
 
@@ -20,10 +20,10 @@ function contracts(provides: RepoCard["provides"]): string[] {
 }
 
 function dtos(c: RepoCard): string[] {
-  return c.dtos.map(
-    (d) =>
-      `${d.kind} ${d.name}(${[...d.fields.map((f) => `${f.name}: ${f.type}`), ...d.values].join(", ")}) ${d.evidence.path}:${d.evidence.line}`,
-  );
+  return c.dtos.map((d) => {
+    const members = d.kind === "enum" ? d.values : d.fields.map((f) => `${f.name}: ${f.type}`);
+    return `${d.kind} ${d.name}(${members.join(", ")}) ${d.evidence.path}:${d.evidence.line}`;
+  });
 }
 
 describe("kontrakty endpointów i DTO", () => {
@@ -93,7 +93,8 @@ describe("kontrakty endpointów i DTO", () => {
 
   test("odpowiedź bez opakowań, które nie zmieniają treści, i bez treści dla void, Unit i ResponseEntity<Void>", () => {
     expect(responseType("ResponseEntity<OrderDto>")).toBe("OrderDto");
-    expect(responseType("Mono<ResponseEntity<Map<String, OrderDto>>>")).toBe("Map<String,OrderDto>");
+    expect(responseType("ResponseEntity<OrderDto>?")).toBe("OrderDto");
+    expect(responseType("Mono<ResponseEntity<Map<String,OrderDto>>>")).toBe("Map<String,OrderDto>");
     expect(responseType("org.springframework.http.ResponseEntity<OrderDto>")).toBe("OrderDto");
     expect(responseType("Flux<OrderDto>")).toBe("Flux<OrderDto>");
     expect(responseType("CompletableFuture<Optional<OrderDto>>")).toBe("OrderDto");
@@ -101,6 +102,8 @@ describe("kontrakty endpointów i DTO", () => {
     expect(responseType("Unit")).toBeNull();
     expect(responseType("ResponseEntity<Void>")).toBeNull();
     expect(responseType("ResponseEntity<?>")).toBeNull();
+    expect(responseType("ResponseEntity<*>")).toBeNull();
+    expect(responseType("ResponseEntity")).toBeNull();
     expect(responseType(null)).toBeNull();
   });
 
@@ -128,23 +131,100 @@ describe("kontrakty endpointów i DTO", () => {
     expect(c.problems).toEqual([
       {
         path: "src/main/kotlin/a/Api.kt",
-        message: "parsing the file took longer than 1000 ms; its endpoints and types are missing from contracts",
+        message: "parsing the file took longer than 1000 ms; its endpoints have no request and response types and its DTOs are missing",
       },
     ]);
   });
-  test("po przekroczeniu łącznego czasu parsowania karty kolejne pliki zostają bez kontraktów, z jednym problemem", () => {
+
+  test("po przekroczeniu łącznego czasu parsowania karty pliki zostają bez kontraktów, z jednym problemem", () => {
     const snapshot = snapshotOf({
       "src/main/java/a/A.java": '@RestController class A { @GetMapping("/a") public Dto a() { return null; } }',
       "src/main/java/a/B.java": '@RestController class B { @GetMapping("/b") public Dto b() { return null; } }',
     });
-    const { provides, problems } = extractContracts(snapshot, extractCard(snapshot, parsers).provides, parsers, 0);
-    expect(contracts(provides)).toEqual(["GET /a - -> Dto", "GET /b - -> -"]);
+    const budgeted = withParseBudget(parsers, 0);
+    const { provides, problems } = extractContracts(snapshot, extractCard(snapshot, parsers).provides, budgeted);
+    expect(contracts(provides)).toEqual(["GET /a - -> -", "GET /b - -> -"]);
+    expect(budgeted.complete).toBe(false);
     expect(problems).toEqual([
       {
         path: "",
         message:
           "parsing Java and Kotlin took longer than 0 ms; the remaining endpoints have no request and response types and the DTO list is incomplete",
       },
+    ]);
+  });
+
+  test("bez parserów karta powstaje bez kontraktów i DTO, z jednym problemem", () => {
+    const c = extractCard(snapshotOf(fixtureFiles("orders-api")), unavailableParsers("grammar missing"));
+    expect(contracts(c.provides)).toEqual(["GET /api/orders/{id} - -> -", "POST /api/orders - -> -", "PUT /api/orders/{id}/cancel - -> -"]);
+    expect(c.dtos).toEqual([]);
+    expect(c.problems).toEqual([
+      {
+        path: "",
+        message:
+          "Java and Kotlin parsers could not be loaded (grammar missing); endpoints have no request and response types and the card has no DTOs",
+      },
+    ]);
+  });
+
+  test("kontrakt to metoda, w której leży mapowanie, a nie pierwsza metoda o tej nazwie w pliku", () => {
+    const c = card({
+      "src/main/java/a/Api.java": [
+        "@RestController class Api {",
+        "  private Helper create(String s) { return null; }",
+        '  @PostMapping("/a") OrderDto create(@RequestBody OrderIn body) { return null; }',
+        '  @PostMapping("/b") OrderDto create(@RequestBody OtherIn body, int x) { return null; }',
+        "}",
+        "@RestController class Second {",
+        '  @GetMapping("/c") PaymentDto create() { return null; }',
+        "}",
+      ].join("\n"),
+    });
+    expect(contracts(c.provides)).toEqual(["POST /a OrderIn -> OrderDto", "POST /b OtherIn -> OrderDto", "GET /c - -> PaymentDto"]);
+  });
+
+  test("typ kwalifikowany wskazuje DTO swoim ostatnim członem, a klasa bez pól (serwis) nie jest DTO", () => {
+    const c = card({
+      "src/main/kotlin/a/Api.kt": [
+        "@RestController",
+        "class Api(private val service: OrderService) {",
+        '    @GetMapping("/a")',
+        "    fun a(): ResponseEntity<Api.Summary>? = null",
+        "    data class Summary(val name: String)",
+        "}",
+        "class OrderService(repo: OrderRepository)",
+      ].join("\n"),
+    });
+    expect(contracts(c.provides)).toEqual(["GET /a - -> Api.Summary"]);
+    expect(dtos(c)).toEqual(["data-class Summary(name: String) src/main/kotlin/a/Api.kt:5"]);
+  });
+
+  test("zapis typu jest bez adnotacji, ze spacją tylko między słowami, z wymiarami tablicy przy nazwie pola", () => {
+    const c = card({
+      "src/main/java/a/Api.java": [
+        "@RestController class Api {",
+        '  @PostMapping("/a") ResponseEntity<@Valid OrderDto> a(@RequestBody Map<String,   List<? extends @NotNull Line>> body) { return null; }',
+        "}",
+        "class OrderDto { int a, b[]; }",
+      ].join("\n"),
+    });
+    expect(contracts(c.provides)).toEqual(["POST /a Map<String,List<? extends Line>> -> OrderDto"]);
+    expect(dtos(c)).toEqual(["class OrderDto(a: int, b: int[]) src/main/java/a/Api.java:4"]);
+  });
+
+  test("DTO z ponad 200 polami i typy dłuższe niż 256 znaków są przycięte, z problemem", () => {
+    const fields = Array.from({ length: 201 }, (_, i) => `String f${i};`).join(" ");
+    const long = `Map<${"A".repeat(300)},String>`;
+    const c = card({
+      "src/main/java/a/Api.java": `@RestController class Api { @GetMapping("/a") Wide a(@RequestBody ${long} body) { return null; } }\nclass Wide { ${fields} }`,
+    });
+    const endpoint = c.provides.find((p) => p.kind === "endpoint");
+    expect(endpoint?.kind === "endpoint" ? endpoint.request : null).toBe(`${long.slice(0, 256)}…`);
+    const wide = c.dtos[0];
+    expect(wide?.kind === "class" ? wide.fields.length : 0).toBe(200);
+    expect(c.problems).toEqual([
+      { path: "", message: "some types are longer than 256 characters; the card shows their beginning" },
+      { path: "src/main/java/a/Api.java", message: "Wide has more than 200 fields; the card lists the first ones" },
     ]);
   });
 });
@@ -177,6 +257,42 @@ describe("odczyt plików typów, które wymienia kod HTTP", () => {
       ["src/main/java/a/Sku.java"],
     ]);
     expect(snapshot.text("src/main/java/a/Code.java")).toBeUndefined();
+    expect([...snapshot.typeFiles]).toEqual(["src/main/java/a/OrderDto.java", "src/main/java/a/Line.java", "src/main/java/a/Sku.java"]);
     expect(snapshot.problems).toEqual([]);
+  });
+
+  test("pliki typów, które nie zmieściły się w limicie odczytu, dają jeden problem zamiast problemu na plik", async () => {
+    const source = (path: string) => ({ name: path.split("/").pop() ?? path, path, kind: "file" as const, size: 10 });
+    const paths = ["src/main/java/a/Api.java", "src/main/java/a/OrderDto.java", "src/main/java/a/Line.java"];
+    const vcs = {
+      commitFiles: async () => ({ files: paths.map(source), truncated: false }),
+      // Limit bajtów wyczerpany po pierwszym pliku: kolejne odczyty nie dają nic.
+      readFiles: async (_dir: string, _commit: string, wanted: readonly string[]) =>
+        new Map(
+          wanted.includes("src/main/java/a/Api.java")
+            ? [["src/main/java/a/Api.java", Buffer.from("class Api { OrderDto a; Line b; }")]]
+            : [],
+        ),
+      grepFiles: async () => ({ paths: ["src/main/java/a/Api.java"], truncated: false }),
+    };
+    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES);
+    expect(snapshot.problems).toEqual([
+      {
+        path: "",
+        message:
+          "2 type files referenced from HTTP code were not read (at most 3000 files within the 67108864 B commit read limit); their DTOs are missing",
+      },
+    ]);
+  });
+
+  test("plik typu dociągnięty dla kontraktów nie daje faktów HTTP, nawet gdy wygląda jak kontroler", () => {
+    const files = {
+      "src/main/java/a/Api.java": '@RestController class Api { @GetMapping("/a") OrderDto a() { return null; } }',
+      "src/main/java/a/OrderDto.java": '@RestController class OrderDto { String id; @GetMapping("/b") void b() {} }',
+    };
+    const snapshot = { ...snapshotOf(files), typeFiles: new Set(["src/main/java/a/OrderDto.java"]) };
+    const c = extractCard(snapshot, parsers);
+    expect(contracts(c.provides)).toEqual(["GET /a - -> OrderDto"]);
+    expect(dtos(c)).toEqual(["class OrderDto(id: String) src/main/java/a/OrderDto.java:1"]);
   });
 });
