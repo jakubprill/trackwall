@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Connection } from "@/lib/connection";
 import { oncePerFrame } from "@/lib/once-per-frame";
 import { ptySocket } from "@/lib/pty-socket";
+import { copiesSelection } from "@/lib/terminal-copy";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { terminalTheme } from "@/lib/terminal-theme";
 
@@ -68,6 +69,15 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
     connect();
 
     const input = terminal.onData((data) => send({ type: "input", data }));
+    const mac = navigator.userAgent.includes("Mac");
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (!copiesSelection(event, { mac, hasSelection: terminal.hasSelection() })) return true;
+      navigator.clipboard.writeText(terminal.getSelection()).then(
+        () => terminal.clearSelection(),
+        () => setNotice("Nie udało się skopiować zaznaczenia do schowka."),
+      );
+      return false;
+    });
     const resizer = oncePerFrame(() => {
       const { cols, rows } = terminal;
       fit.fit();

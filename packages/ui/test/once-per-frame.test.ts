@@ -5,27 +5,27 @@ describe("jedno wywołanie na klatkę", () => {
   test("seria próśb przed następną klatką daje jedno wywołanie, a kolejna klatka następne", () => {
     const frames: (() => void)[] = [];
     let calls = 0;
-    const fit = oncePerFrame(
+    const perFrame = oncePerFrame(
       () => calls++,
       (frame) => frames.push(frame),
       () => {},
     );
 
-    fit.request();
-    fit.request();
-    fit.request();
+    perFrame.request();
+    perFrame.request();
+    perFrame.request();
     expect(frames).toHaveLength(1);
     frames.shift()?.();
     expect(calls).toBe(1);
 
-    fit.request();
+    perFrame.request();
     frames.shift()?.();
     expect(calls).toBe(2);
   });
 
   test("zamknięcie odwołuje zaplanowane wywołanie", () => {
     const cancelled: number[] = [];
-    const fit = oncePerFrame(
+    const perFrame = oncePerFrame(
       () => {
         throw new Error("wywołanie po zamknięciu");
       },
@@ -33,8 +33,8 @@ describe("jedno wywołanie na klatkę", () => {
       (handle) => cancelled.push(handle),
     );
 
-    fit.request();
-    fit.dispose();
+    perFrame.request();
+    perFrame.dispose();
     expect(cancelled).toEqual([9]);
   });
 });
