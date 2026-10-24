@@ -3,6 +3,7 @@ import { Activity, FolderGit2, Network, Orbit, Settings, SquareTerminal } from "
 import { useCallback, useMemo, useState } from "react";
 import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
 import { Loading } from "@/components/Loading";
+import { UpdateBanner } from "@/components/UpdateBanner";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
@@ -12,6 +13,7 @@ import { entrySession, findEntry, type SessionSelection, sessionRows } from "@/l
 import type { SessionLayout } from "@/lib/session-grid";
 import { sessionShortcut } from "@/lib/session-shortcut";
 import { attentionCount, nextWaitingShortcut } from "@/lib/session-state";
+import { useAppUpdate } from "@/lib/use-app-update";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
 import { useRemote } from "@/lib/use-remote";
@@ -48,6 +50,7 @@ export function App() {
   const [session, setSession] = useState<SessionSelection>();
   const [sessionLayout, setSessionLayout] = useState<SessionLayout>("1");
   const { conn, epoch, error, retry } = useConnection();
+  const appUpdate = useAppUpdate();
   const events = useDaemonEvents(conn);
   const sessions = useSessions(conn, events, view === "sessions" || view === "home");
   const runningLive = useMemo(() => events?.feed("mise.running.changed"), [events]);
@@ -83,6 +86,7 @@ export function App() {
     <div className="flex h-screen">
       <ActivityBar views={VIEWS} active={view} onSelect={setView} badges={{ sessions: attentionCount(sessions.data) }} />
       <div className="flex min-w-0 flex-1 flex-col">
+        {appUpdate && <UpdateBanner handle={appUpdate} />}
         {error && (
           <div className="bg-destructive/10 flex items-center gap-3 border-b px-4 py-2">
             <p className="text-destructive min-w-0 flex-1 text-sm whitespace-pre-wrap">{error}</p>
@@ -131,7 +135,7 @@ export function App() {
           )}
           {conn && view === "settings" && (
             <div className="flex justify-center p-6">
-              <SettingsView key={epoch} conn={conn} onRetry={retry} onSaved={() => setView("repos")} />
+              <SettingsView key={epoch} conn={conn} update={appUpdate} onRetry={retry} onSaved={() => setView("repos")} />
             </div>
           )}
         </main>

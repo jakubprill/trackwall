@@ -6,6 +6,10 @@
 mod attention;
 mod daemon;
 mod daemon_state;
+// Tested on every system, used only on Windows (ADR-53).
+#[cfg_attr(not(windows), allow(dead_code))]
+mod portable_update;
+mod updates;
 mod window_effect;
 
 use daemon::Connection;
@@ -55,10 +59,17 @@ fn main() {
         show_main(app);
     }));
     let app = builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Arc::clone(&state))
-        .invoke_handler(tauri::generate_handler![daemon_connection, retry_daemon])
+        .manage(updates::Updates::default())
+        .invoke_handler(tauri::generate_handler![daemon_connection, retry_daemon, updates::check_update, updates::install_update])
         .setup(move |app| {
             state.start();
+            // Files of the version this one replaced (ADR-53); in the background, because they are freed only once it exits.
+            #[cfg(windows)]
+            if let Ok(dir) = portable_update::app_dir() {
+                std::thread::spawn(move || portable_update::clean_up(&dir));
+            }
             let window = app.get_webview_window("main").ok_or("missing window main from tauri.conf.json")?;
             app.manage(window_effect::apply(&window));
             window_effect::reveal_fallback(app.handle(), show_main);
@@ -87,6 +98,7 @@ fn main() {
         }
         // Cmd+Q i „Zakończ” z Docka na macOS (a według kodu tao także koniec sesji Windows) kończą pętlę zdarzeń
         // z pominięciem `ExitRequested` i traya. Bez tego daemon zostawał osierocony. Po „Quit” z traya daemon jest już zatrzymany.
+        // The restart after an update (ADR-53) comes this way too, so the new shell never finds the old daemon running.
         RunEvent::Exit => {
             // Pętla zdarzeń już stoi: bez schowania okno i tray wisiałyby zamrożone do końca zatrzymywania.
             hide_shell(handle);

@@ -12,6 +12,10 @@ _Unikaj_: backend, serwer (bez dopowiedzenia)
 Aplikacja Tauri: okno, tray, uruchamianie i nadzór daemona jako sidecara, sprawdzenie WebView2. Nie zawiera logiki domenowej.
 _Unikaj_: aplikacja (gdy chodzi tylko o Tauri)
 
+**App update** (`updates.rs`, `UpdateCheck`; in the UI *update*):
+A newer version of Trackwall from GitHub Releases, installed by the shell after the user's click and followed by a restart (ADR-53). Its **update package** is the archive the updater downloads and checks against the signature: the release zip on Windows (`portable_update.rs`), `.app.tar.gz` on macOS; the **update manifest** is `latest.json` in the release.
+_Avoid_: upgrade, sync (that is the repo synchronization)
+
 **Widok** (`View`; po angielsku *view*):
 Ekran aplikacji w UI (Home, Repos, Sessions, Overview, Daemon, Settings), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
 _Unikaj_: zakładka (dla całego ekranu)

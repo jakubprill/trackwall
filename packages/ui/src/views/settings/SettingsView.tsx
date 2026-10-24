@@ -7,11 +7,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import type { AppUpdateHandle } from "@/lib/use-app-update";
 import { useRemote } from "@/lib/use-remote";
 import { RepoHostsForm } from "./RepoHostsForm.tsx";
+import { UpdatesSurface } from "./UpdatesSurface.tsx";
 
 /** Ustawienia workspace; każde z nich jest też kluczem w `workspace.yaml`, który można edytować ręcznie (ADR-13, ADR-18). */
-export function SettingsView({ conn, onRetry, onSaved }: { conn: Connection; onRetry: () => void; onSaved: () => void }) {
+export function SettingsView({
+  conn,
+  update,
+  onRetry,
+  onSaved,
+}: {
+  conn: Connection;
+  update: AppUpdateHandle | undefined;
+  onRetry: () => void;
+  onSaved: () => void;
+}) {
   const load = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
   const settings = useRemote(load);
 
@@ -45,6 +57,7 @@ export function SettingsView({ conn, onRetry, onSaved }: { conn: Connection; onR
         </div>
       </Surface>
       <RepoHostsSurface conn={conn} />
+      <UpdatesSurface handle={update} />
     </div>
   );
 }
