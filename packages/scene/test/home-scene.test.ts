@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Label, Position, Scale, Visual } from "@pawnjs/core";
 import { createTestEngine, runFor } from "@pawnjs/core/testing";
-import { Mesh, type MeshBasicMaterial } from "three";
+import { type Intersection, Mesh, type MeshBasicMaterial, Raycaster, TubeGeometry, Vector3 } from "three";
 import { type HomeKey, type HomeModel, HomeScene, type ScenePalette } from "../src/index.ts";
+import { TUBE_NAMES } from "../src/models/link-tube.ts";
 
 const PALETTE: ScenePalette = {
   primary: "#3fd2e8",
@@ -55,11 +56,11 @@ function pose(key: HomeKey, scene: HomeScene): string {
   return parts.map((n) => n.toFixed(4)).join(",");
 }
 
-/** Przezroczystość przewodów połączeń z grafu (obiekty o nazwie `link`; przewody sesji nazywają się `tether`). */
+/** Przezroczystość przewodów połączeń z grafu; przewody sesji mają inną nazwę i nie mają podświetlenia. */
 function linkOpacities(): number[] {
   const found: number[] = [];
   engine.scene.traverse((o) => {
-    if (o instanceof Mesh && o.name === "link") found.push((o.material as MeshBasicMaterial).opacity);
+    if (o instanceof Mesh && o.name === TUBE_NAMES.link) found.push((o.material as MeshBasicMaterial).opacity);
   });
   return found.sort();
 }
@@ -118,7 +119,7 @@ describe("scena pulpitu", () => {
   });
 
   test("kliknięcie wybiera obiekt, a dwuklik go otwiera", () => {
-    const selected: HomeKey[] = [];
+    const selected: Array<HomeKey | null> = [];
     const opened: HomeKey[] = [];
     const scene = new HomeScene(engine, {
       palette: PALETTE,
@@ -180,6 +181,35 @@ describe("scena pulpitu", () => {
     scene.apply({ ...MODEL, sessions: MODEL.sessions.filter((s) => s.id !== "s2") });
 
     expect(hovered).toEqual(["session:s2", null]);
+  });
+
+  test("wybrany obiekt, który zniknął z migawki, kończy wybór", () => {
+    const selected: Array<HomeKey | null> = [];
+    const scene = new HomeScene(engine, { palette: PALETTE, motion: true, onSelect: (k) => selected.push(k) });
+    scene.apply(MODEL);
+    const session = scene.entity("session:s2");
+    if (!session) throw new Error("brak encji sesji s2");
+
+    engine.events.emit(session, "click", { button: 0, point: undefined });
+    scene.apply({ ...MODEL, sessions: MODEL.sessions.filter((s) => s.id !== "s2") });
+
+    expect(selected).toEqual(["session:s2", null]);
+    expect(linkOpacities()).toEqual([0.22, 0.22, 0.22]);
+  });
+
+  test("przewody nie zasłaniają repo ani sesji przed wskaźnikiem", () => {
+    const scene = new HomeScene(engine, { palette: PALETTE, motion: false });
+    scene.apply(MODEL);
+    const hits: Intersection[] = [];
+    engine.scene.traverse((o) => {
+      if (!(o instanceof Mesh && o.geometry instanceof TubeGeometry)) return;
+      // Promień z góry prosto w środek przewodu.
+      const middle = o.geometry.parameters.path.getPoint(0.5);
+      const ray = new Raycaster(new Vector3(middle.x, 5, middle.z), new Vector3(0, -1, 0));
+      o.raycast(ray, hits);
+    });
+
+    expect(hits).toEqual([]);
   });
 
   test("kolor spoza zapisu #rrggbb, np. token oklch wprost z CSS, to błąd przy tworzeniu sceny", () => {

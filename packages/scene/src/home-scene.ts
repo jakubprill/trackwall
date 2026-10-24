@@ -56,8 +56,11 @@ export interface HomeSceneOptions {
    * ustawienia w trakcie działania wymaga nowej sceny.
    */
   motion: boolean;
-  /** Klik: scena sama podświetla obiekt i jego połączenia (`focus`), a UI pokazuje szczegóły. */
-  onSelect?: (key: HomeKey) => void;
+  /**
+   * Klik: scena sama podświetla obiekt i jego połączenia (`focus`), a UI pokazuje szczegóły. `null`, gdy wybrany
+   * obiekt zniknął z migawki.
+   */
+  onSelect?: (key: HomeKey | null) => void;
   /** Dwuklik: przejście do sesji albo repo. */
   onOpen?: (key: HomeKey) => void;
   /** Wskaźnik wszedł na obiekt albo z niego zszedł (`null`), także gdy wskazany obiekt zniknął z migawki. */
@@ -72,7 +75,10 @@ const SESSION_Y = 0.55;
 const TETHER_END_Y = 0.4;
 /** Wysokość przewodów połączeń. */
 const LINK_Y = 0.12;
-/** Punkt kontrolny krzywej połączenia to środek cięciwy razy ta wartość: 1 to prosta cięciwa, 0 to łuk przez środek. */
+/**
+ * Punkt kontrolny krzywej połączenia to środek cięciwy razy ta wartość: 1 to prosta cięciwa, mniej ściąga krzywą do
+ * środka pierścienia, a 0 najmocniej (środek krzywej wypada w połowie drogi od cięciwy do środka).
+ */
 const LINK_BEND = 0.2;
 const FOCUS_SCALE = 1.12;
 const LABEL_OFFSET: Record<LabelTarget["kind"], number> = { repo: 1.05, session: 0.5 };
@@ -101,6 +107,8 @@ export class HomeScene {
   readonly #links = new Map<string, { link: HomeLink; visual: LinkVisual }>();
   /** Repo każdej sesji z ostatniej migawki: wybór sesji podświetla połączenia jej repo. */
   readonly #sessionRepos = new Map<string, string>();
+  /** Ostatnie miejsce każdej encji. */
+  readonly #places = new Map<string, string>();
   readonly #removeSystem: () => void;
   #focus: HomeKey | null = null;
   #hovered: HomeKey | null = null;
@@ -130,7 +138,9 @@ export class HomeScene {
     this.#putSessions(keep, model, layout);
     for (const link of model.links) this.#putLink(keep, link, layout);
     this.#entities.retain(keep);
-    this.focus(this.#focus && this.#nodes.has(this.#focus) ? this.#focus : null);
+    const lost = this.#focus !== null && !this.#nodes.has(this.#focus);
+    this.focus(lost ? null : this.#focus);
+    if (lost) this.#options.onSelect?.(null);
   }
 
   /** Podświetla obiekt i jego połączenia; `null` wraca do widoku całości. */
@@ -150,6 +160,9 @@ export class HomeScene {
 
   dispose(): void {
     this.#removeSystem();
+    // Zamykana scena nie zgłasza już wskazania ani wyboru, więc UI w trakcie odmontowania nie dostaje wywołań.
+    this.#hovered = null;
+    this.#focus = null;
     // Zasoby zwalniane wprost, a nie przez `release`, bo `KeyedEntities.clear()` pomija go po zamknięciu silnika.
     for (const node of this.#nodes.values()) {
       for (const off of node.offs) off();
@@ -157,6 +170,7 @@ export class HomeScene {
     }
     this.#nodes.clear();
     this.#links.clear();
+    this.#places.clear();
     this.#sessionRepos.clear();
     this.#entities.clear();
   }
@@ -217,7 +231,8 @@ export class HomeScene {
     const from = layout.repos.get(link.from);
     const to = layout.repos.get(link.to);
     if (!from || !to) return;
-    const key = `link:${link.from}>${link.to}:${link.kind}`;
+    // JSON, bo identyfikator repo może zawierać każdy znak, także separator.
+    const key = `link:${JSON.stringify([link.from, link.to, link.kind])}`;
     this.#put(keep, key, { from, to, kind: link.kind }, ORIGIN, () => {
       const curve = new QuadraticBezierCurve3(
         new Vector3(from.x, LINK_Y, from.z),
@@ -238,8 +253,7 @@ export class HomeScene {
     keep.add(key);
     const entity = this.#entities.ensure(key, () => this.#spawn(key));
     if (!entity) throw new Error(`Nie udało się utworzyć encji ${key} na pulpicie`);
-    entity.set(Position, place.position);
-    if (place.angle !== undefined) entity.set(Rotation, euler({ y: -place.angle - Math.PI / 2 }));
+    this.#place(key, entity, place);
     const signature = JSON.stringify(look);
     const existing = this.#nodes.get(key);
     if (existing?.signature === signature) return;
@@ -254,6 +268,15 @@ export class HomeScene {
       labelSignature: existing?.labelSignature ?? null,
       offs: existing?.offs ?? this.#listen(entity, key),
     });
+  }
+
+  /** Przestawia encję tylko wtedy, gdy zmieniło się jej miejsce, żeby migawka bez zmian nie budziła zmian w świecie. */
+  #place(key: string, entity: Entity, place: Placement): void {
+    const signature = JSON.stringify(place);
+    if (this.#places.get(key) === signature) return;
+    this.#places.set(key, signature);
+    entity.set(Position, place.position);
+    if (place.angle !== undefined) entity.set(Rotation, euler({ y: -place.angle - Math.PI / 2 }));
   }
 
   #spawn(key: string): Entity {
@@ -299,6 +322,7 @@ export class HomeScene {
     const node = this.#nodes.get(key);
     this.#nodes.delete(key);
     this.#links.delete(key);
+    this.#places.delete(key);
     for (const off of node?.offs ?? []) off();
     if (node) disposeObject3D(node.visual.object);
     if (key === this.#hovered) this.#hover(null);

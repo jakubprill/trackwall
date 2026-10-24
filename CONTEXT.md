@@ -306,7 +306,7 @@ Klucz z `data` albo `stringData` manifestu, wstrzykiwany jako zmienna środowisk
 **Scena** (`@trackwall/scene`, `HomeScene`):
 Scena 3D pulpitu na Pawn. Nie zna API daemona: dostaje kolejne migawki `HomeModel` i trzyma jedną encję na obiekt.
 
-**Pulpit** (`HomeModel`, `HomeScene`):
+**Pulpit** (`orbitLayout`):
 Pierwszy ekran (widok w UI dochodzi po paczce sceny): stan daemona, sesje (zwłaszcza czekające na Ciebie), repo i połączenia między nimi, w układzie „Orbit” (`orbitLayout`).
 
 **Migawka pulpitu** (`HomeModel`):
@@ -314,4 +314,7 @@ To, co pulpit pokazuje, policzone przez UI z odpowiedzi daemona i podane scenie 
 _Unikaj_: snapshot (to `GET /api/snapshot`, stan całego daemona).
 
 **Warstwa** (`HomeRepo.layer`, `HomeModel.layerCount`):
-Poziom repo na pulpicie, ta sama kolumna co w widoku „Przegląd”: najdłuższa ścieżka od repo, którego nikt nie używa (wejścia po jednej stronie, biblioteki po drugiej). Repo bez połączeń nie ma warstwy (`null`). Od warstwy zależy rodzaj bryły: wejście, brama, serwis, biblioteka.
+Poziom repo na pulpicie, ta sama kolumna co w widoku „Przegląd”: najdłuższa ścieżka od repo, którego nikt nie używa (wejścia po jednej stronie, biblioteki po drugiej). Repo bez połączeń nie ma warstwy (`null`).
+
+**Rodzaj repo** (`RepoKind`: `entry`, `gateway`, `service`, `library`):
+Rola repo w grafie wyliczona z warstwy: wejście, brama, serwis, biblioteka. Na pulpicie każdy rodzaj ma inną bryłę.

@@ -85,12 +85,24 @@ export function flatRing<M extends Material>(radius: number, tube: number, segme
 }
 
 /**
+ * Wyłącza wskazywanie obiektu i jego dzieci. Wskaźnik Pawn bierze pierwsze trafienie w scenie, także w obiekt bez
+ * `Hoverable`, więc ozdoba (przewód, łuk, słup światła) zasłaniałaby repo i sesje za sobą.
+ */
+export function unpickable<T extends Object3D>(object: T): T {
+  object.traverse((o) => {
+    o.raycast = () => {};
+  });
+  return object;
+}
+
+/**
  * Krawędzie bryły jako cienkie linie: daje rysunek HUD bez cieniowania. Linii nie da się wskazać, bo three.js trafia
  * w linię z odległości do 1 jednostki i obrys modelu przejmowałby kliknięcia sąsiada.
  */
 export function outline(mesh: Mesh, color: string, opacity: number): LineSegments {
-  const lines = new LineSegments(new EdgesGeometry(mesh.geometry), new LineBasicMaterial({ color, transparent: true, opacity }));
-  lines.raycast = () => {};
+  const lines = unpickable(
+    new LineSegments(new EdgesGeometry(mesh.geometry), new LineBasicMaterial({ color, transparent: true, opacity })),
+  );
   lines.position.copy(mesh.position);
   lines.rotation.copy(mesh.rotation);
   return lines;

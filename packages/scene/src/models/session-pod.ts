@@ -1,7 +1,7 @@
 import { Group } from "three";
 import type { HomeSession } from "../home-model.ts";
 import { type ScenePalette, sessionStateColor } from "../palette.ts";
-import { cylinder, flatRing, type HomeVisual, light, outline, solid } from "./kit.ts";
+import { cylinder, flatRing, type HomeVisual, light, outline, solid, unpickable } from "./kit.ts";
 
 /**
  * Sesja Copilot jako dron (ADR-33): sześciokątny korpus z pierścieniem, który kręci się, gdy sesja pracuje.
@@ -37,7 +37,7 @@ export function sessionPod(session: HomeSession, palette: ScenePalette): HomeVis
 
 /** Słup światła i pierścień, który wznosi się po nim i gaśnie; zwraca animację. */
 function addBeacon(group: Group, color: string): (elapsed: number) => void {
-  const shaft = cylinder([0.045, 0.1], BEACON_HEIGHT, 12, light(color, 0.25), [0, BEACON_HEIGHT / 2 + 0.05, 0]);
+  const shaft = unpickable(cylinder([0.045, 0.1], BEACON_HEIGHT, 12, light(color, 0.25), [0, BEACON_HEIGHT / 2 + 0.05, 0]));
   const rising = flatRing(0.14, 0.012, 24, light(color, 0.9));
   group.add(shaft, rising);
   return (t) => {

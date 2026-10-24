@@ -48,7 +48,7 @@ export function repoModel(look: RepoLook, palette: ScenePalette): HomeVisual {
   const color = repoStateColor(look.state, palette);
   add(plate(color, palette));
   add(BODIES[look.kind](look, color, palette));
-  add(countBars(look, palette));
+  add(countBars(look, color));
   if (!look.hasMise) group.add(box([0.16, 0.02, 0.16], solid(palette.muted, 0.2), [-0.33, 0.09, -0.24]));
   if (look.taskRunning) add(runningHalo(palette));
   return {
@@ -67,9 +67,9 @@ function plate(color: string, palette: ScenePalette): HomeVisual {
   return { object: group };
 }
 
-function countBars(look: RepoLook, palette: ScenePalette): HomeVisual {
+/** Słupki są tylko przy `changed` i `behind`, więc mają kolor stanu repo. */
+function countBars(look: RepoLook, color: string): HomeVisual {
   const group = new Group();
-  const color = look.state === "behind" ? palette.primary : palette.warning;
   for (let i = 0; i < look.bars; i++) {
     const height = 0.05 + i * 0.03;
     group.add(box([0.05, height, 0.05], light(color), [0.38, 0.12 + height / 2, 0.24 - i * 0.07]));
@@ -90,8 +90,8 @@ function runningHalo(palette: ScenePalette): HomeVisual {
   };
 }
 
-/** Wejście: ekran na stojaku, świecący kolorem stanu; niedostępne repo migocze. */
-const terminal: Part = (look, color, palette) => {
+/** Wejście: terminal, czyli ekran na stojaku, świecący kolorem stanu; niedostępne repo migocze. */
+const entry: Part = (look, color, palette) => {
   const group = new Group();
   const tilt = -0.12;
   group.add(cylinder([0.03, 0.05], 0.22, 8, solid(palette.body), [0, 0.19, -0.05]));
@@ -139,7 +139,7 @@ const gateway: Part = (_look, color, palette) => {
 };
 
 /** Serwis: szafa z diodami; górna dioda to stan, druga mruga, gdy działa task mise, dwie dolne są ozdobą. */
-const rack: Part = (look, color, palette) => {
+const service: Part = (look, color, palette) => {
   const group = new Group();
   const body = box([0.56, 0.62, 0.44], solid(palette.body), [0, 0.39, 0]);
   group.add(body, outline(body, palette.primary, 0.35));
@@ -157,7 +157,7 @@ const rack: Part = (look, color, palette) => {
 };
 
 /** Biblioteka: przezroczysta skrzynka z obracającym się rdzeniem. */
-const crate: Part = (_look, color, palette) => {
+const library: Part = (_look, color, palette) => {
   const group = new Group();
   const shell = box([0.46, 0.46, 0.46], solid(palette.body, 0, 0.35), [0, 0.31, 0]);
   group.add(shell, outline(shell, palette.primary, 0.5));
@@ -171,4 +171,4 @@ const crate: Part = (_look, color, palette) => {
   };
 };
 
-const BODIES: Record<RepoKind, Part> = { terminal, gateway, rack, crate };
+const BODIES: Record<RepoKind, Part> = { entry, gateway, service, library };

@@ -54,7 +54,7 @@ describe("układ Orbit", () => {
     expect(s3?.angle).toBeCloseTo(layout.repos.get("users")?.angle ?? Number.NaN);
   });
 
-  test("wiele sesji sąsiednich repo nie wchodzi sobie w drogę: sesje repo leżą w kolejności repo", () => {
+  test("przy wielu sesjach sąsiednich repo sesje zostają przy swoim repo, w kolejności repo", () => {
     const repos = Array.from({ length: 15 }, (_, i) => repo(`r${i}`, 0));
     const sessions = repos.flatMap((r) => [1, 2, 3, 4].map((n) => ({ id: `${r.id}-${n}`, repo: r.id, state: "working" as const })));
     const layout = orbitLayout({ layerCount: 1, repos, sessions });
