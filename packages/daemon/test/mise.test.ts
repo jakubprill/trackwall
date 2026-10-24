@@ -25,14 +25,19 @@ function setup(config: object, command: readonly string[] = FAKE_MISE) {
     platform: groupPlatform().then((p) => ({ ...p, graceMs: 300 })),
     log: () => {},
   });
+  let present = true;
   const repos = {
     repoPath: async (id: string) => {
-      if (id !== "web") throw new DomainError("not_found", `nie ma repo ${id}`);
+      if (id !== "web" || !present) throw new DomainError("not_found", `nie ma repo ${id}`);
       return repoDir;
     },
   };
+  /** The repo leaves the projects folder (renamed, deleted, another folder chosen in settings). */
+  const removeRepo = () => {
+    present = false;
+  };
   const mise = new Mise({ procs, repos, command, env: async () => process.env });
-  return { mise, repoDir, procs };
+  return { mise, repoDir, procs, removeRepo };
 }
 
 function writeConfig(repoDir: string, config: object): void {
@@ -167,6 +172,19 @@ describe("mise", () => {
       expect(await waiting).toEqual(started);
       expect(mise.running().map((t) => t.run.kind)).toEqual(["running"]);
       await mise.stop("web", "dev");
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a running task of a repo that left the projects folder can still be waited for and stopped",
+    async () => {
+      const { mise, removeRepo } = setup({ tasks: [DEV] });
+      const started = await mise.start("web", "dev");
+      removeRepo();
+
+      expect(await mise.waitForEnd("web", "dev", 1, new AbortController().signal)).toEqual(started);
+      expect(await mise.stop("web", "dev")).toMatchObject({ kind: "exited", runId: started.runId, stoppedByUser: true });
     },
     TIMEOUT,
   );

@@ -156,6 +156,15 @@ export type WaitForSessionResult = z.infer<typeof WaitForSessionResult>;
 /** Najdłuższe czekanie w jednym wywołaniu: poniżej minuty, żeby klient MCP nie przerwał wywołania swoim limitem czasu. */
 export const WAIT_MAX_SECONDS = 55;
 
+/** How long one waiting call waits (`wait_for_session`, `wait_for_mise_task`). */
+const WaitTimeoutArg = z
+  .number()
+  .int()
+  .min(1)
+  .max(WAIT_MAX_SECONDS)
+  .default(30)
+  .describe(`how long to wait at most, up to ${WAIT_MAX_SECONDS} s, default 30`);
+
 /** A mise task run after `run_mise_task`, `stop_mise_task` and `wait_for_mise_task` (ADR-41). */
 export const MiseTaskRunResult = z.object({ run: RunState });
 export type MiseTaskRunResult = z.infer<typeof MiseTaskRunResult>;
@@ -177,7 +186,8 @@ interface McpToolBase<Args extends z.ZodObject, Result extends z.ZodObject> {
 /**
  * How a tool affects state; the daemon builds the MCP annotations from it. `readOnly` is `readOnlyHint`, and a tool
  * that changes state says explicitly whether it can destroy something outside Trackwall (`destructiveHint`): writing
- * text for a human cannot (ADR-39), running repo code can (ADR-41).
+ * text for a human cannot (ADR-39), running repo code or killing a process the user may need (a dev server, a
+ * migration) can (ADR-41).
  */
 type McpToolEffect = { readOnly: true } | { readOnly: false; destructive: boolean };
 
@@ -410,13 +420,7 @@ export const mcpTools = {
       .object({
         session: SessionId.optional().describe(`session id from ${LIST_SESSIONS}`),
         task: TaskId.optional().describe(`task or proposal id from ${PROPOSE_TASK} or ${LIST_SESSIONS}`),
-        timeoutSeconds: z
-          .number()
-          .int()
-          .min(1)
-          .max(WAIT_MAX_SECONDS)
-          .default(30)
-          .describe(`how long to wait at most, up to ${WAIT_MAX_SECONDS} s, default 30`),
+        timeoutSeconds: WaitTimeoutArg,
       })
       .strict()
       .refine((args) => (args.session === undefined) !== (args.task === undefined), "pass exactly one of session and task"),
@@ -440,7 +444,7 @@ export const mcpTools = {
   stopMiseTask: {
     name: "stop_mise_task",
     readOnly: false,
-    destructive: false,
+    destructive: true,
     description:
       "Stop a running mise task of a repo, also one the user started in Trackwall: a gentle stop, then the whole " +
       "process group is killed. Returns after Trackwall has confirmed that no process of the group is alive " +
@@ -458,15 +462,7 @@ export const mcpTools = {
       "the exit code (exitCode, signal, stoppedByUser) as soon as the process group has ended, or after timeoutSeconds " +
       "with run: running; then call it again. A task that has already ended returns its last run at once; not_found " +
       `when it has not been run since Trackwall started. ${TAIL} gives the output.`,
-    args: MiseTaskArgs.extend({
-      timeoutSeconds: z
-        .number()
-        .int()
-        .min(1)
-        .max(WAIT_MAX_SECONDS)
-        .default(30)
-        .describe(`how long to wait at most, up to ${WAIT_MAX_SECONDS} s, default 30`),
-    }),
+    args: MiseTaskArgs.extend({ timeoutSeconds: WaitTimeoutArg }),
     result: MiseTaskRunResult,
   },
   listRunningMiseTasks: {

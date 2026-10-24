@@ -31,7 +31,10 @@ const RECENT_COMMITS = 10;
 
 export interface ToolContext {
   facade: Facade;
-  /** Linia logu daemona o wywołaniu (narzędzie, czas, wynik), bez argumentów; tabela `audit` przyjdzie z SQLite. */
+  /**
+   * Linia logu daemona o wywołaniu (narzędzie, czas, wynik), bez argumentów poza narzędziami niszczącymi (ADR-41);
+   * tabela `audit` przyjdzie z SQLite.
+   */
   log: (msg: string) => void;
 }
 
@@ -39,8 +42,6 @@ export interface ToolContext {
 interface ToolCall {
   caller: string | null;
   signal: AbortSignal;
-  /** A daemon log line about this call (with the calling session), e.g. the arguments of an action that starts a process. */
-  log: (msg: string) => void;
 }
 
 /** Wykonanie narzędzia na fasadzie: argumenty i wynik mają typy schematów z jego kontraktu. */
@@ -79,8 +80,11 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
         // Wołająca sesja w logu, bo propozycja i podsumowanie zapisują coś w jej imieniu; tabela `audit` przyjdzie z SQLite.
         const label = ctx.caller === null ? tool.name : `${tool.name} (session ${ctx.caller})`;
         try {
-          const call = { caller: ctx.caller, signal: extra.mcpReq.signal, log: (msg: string) => ctx.log(`${label}: ${msg}`) };
-          const result = tool.result.parse(await run(ctx.facade, tool.args.parse(args), call));
+          const parsed = tool.args.parse(args);
+          // A destructive tool (it runs or stops repo code) logs its arguments before acting: until the `audit` table
+          // exists, this line says who ran what (ADR-41). Their arguments are identifiers, never free text.
+          if (!tool.readOnly && tool.destructive) ctx.log(`${label}: ${JSON.stringify(parsed)}`);
+          const result = tool.result.parse(await run(ctx.facade, parsed, { caller: ctx.caller, signal: extra.mcpReq.signal }));
           ctx.log(`${label}: ok in ${Date.now() - started} ms`);
           return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
         } catch (err) {
@@ -180,14 +184,12 @@ const runs: ToolRuns = {
     const outcome = await facade.agents.waitFor(caller, target, timeoutSeconds * 1000, signal);
     return { ...outcome, session: outcome.session && agentSession(outcome.session) };
   },
-  runMiseTask: async (facade, { repo, miseTask }, call) => {
-    callerRepo(facade, call.caller, repo);
-    call.log(`run mise task "${miseTask}" in ${repo}`);
+  runMiseTask: async (facade, { repo, miseTask }, { caller }) => {
+    assertCallerRepo(facade, caller, repo);
     return { run: await facade.mise.start(repo, miseTask) };
   },
-  stopMiseTask: async (facade, { repo, miseTask }, call) => {
-    callerRepo(facade, call.caller, repo);
-    call.log(`stop mise task "${miseTask}" in ${repo}`);
+  stopMiseTask: async (facade, { repo, miseTask }, { caller }) => {
+    assertCallerRepo(facade, caller, repo);
     return { run: await facade.mise.stop(repo, miseTask) };
   },
   waitForMiseTask: async (facade, { repo, miseTask, timeoutSeconds }, { signal }) => ({
@@ -222,10 +224,11 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
 
 /**
  * A Trackwall session starts and stops processes only in the repo it works in (§8, ADR-41), so a task session does
- * not reach other repos in the projects folder. An agent outside Trackwall (`caller: null`) is the user's program,
- * like a terminal, and reaches every repo.
+ * not reach other repos in the projects folder through its own bridge. An agent outside Trackwall (`caller: null`) is
+ * the user's program, like a terminal, and reaches every repo. A guard for the agent, not a security boundary: a
+ * session process can call `/mcp` without its session token (§8).
  */
-function callerRepo(facade: Facade, caller: string | null, repo: string): void {
+function assertCallerRepo(facade: Facade, caller: string | null, repo: string): void {
   if (caller === null) return;
   const own = facade.agents.session(caller).repo;
   if (own !== repo) throw new DomainError("bad_request", `a session in ${own} can run and stop only mise tasks of ${own}, not of ${repo}`);
