@@ -15,7 +15,7 @@ export interface ParsedStatus extends Omit<RepoStatusOk, "head"> {
 }
 
 export function parseStatus(out: string): ParsedStatus {
-  const status: ParsedStatus = { kind: "ok", branch: null, changes: 0, upstream: null, hasCommits: true };
+  const status: ParsedStatus = { kind: "ok", branch: null, changes: 0, untracked: 0, upstream: null, hasCommits: true };
   let upstreamName: string | undefined;
   const fields = out.split("\0");
   for (let i = 0; i < fields.length; i++) {
@@ -24,6 +24,7 @@ export function parseStatus(out: string): ParsedStatus {
       upstreamName = applyHeader(status, field.slice(2), upstreamName);
     } else if (/^[12u?] /.test(field)) {
       status.changes++;
+      if (field.startsWith("? ")) status.untracked++;
       // Wpis zmiany nazwy (`2`) ma po sobie osobne pole ze starą ścieżką.
       if (field.startsWith("2 ")) i++;
     }

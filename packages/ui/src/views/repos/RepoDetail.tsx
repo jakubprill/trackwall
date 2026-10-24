@@ -1,6 +1,6 @@
 import { type Repo, type RepoOverview, workspaceApi } from "@trackwall/protocol";
 import { Code } from "lucide-react";
-import { type ReactNode, useCallback, useState } from "react";
+import { lazy, type ReactNode, Suspense, useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
@@ -10,17 +10,23 @@ import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { TRUNCATED_NOTE } from "@/lib/format";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
+import { PlainReadme, ReadmeFallback } from "./ReadmeFallback.tsx";
 import { RepoCardView } from "./RepoCardView.tsx";
+import { RepoChanges } from "./RepoChanges.tsx";
 import { RepoCommits } from "./RepoCommits.tsx";
 import { RepoFiles } from "./RepoFiles.tsx";
 import { RepoMiseTasks } from "./RepoMiseTasks.tsx";
 import { RepoStats } from "./RepoStats.tsx";
+
+/** Streamdown z Mermaidem to kilka MB, więc trafia do osobnego pliku ładowanego dopiero przy pierwszym README. */
+const ReadmeMarkdown = lazy(() => import("./ReadmeMarkdown.tsx").then((m) => ({ default: m.ReadmeMarkdown })));
 
 const TABS = [
   { id: "readme", label: "README" },
   { id: "card", label: "Card" },
   { id: "files", label: "Files" },
   { id: "commits", label: "Commits" },
+  { id: "changes", label: "Changes" },
   { id: "mise", label: "mise tasks" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
@@ -49,10 +55,11 @@ export function RepoDetail({ conn, repo }: { conn: Connection; repo: Repo }) {
         <p className="text-destructive text-sm whitespace-pre-wrap">The repo is unavailable: {status.message}</p>
       ) : (
         <>
-          <RepoStats status={status} />
+          <RepoStats status={status} onShowChanges={() => setTab("changes")} />
           <TabBar tabs={TABS} active={tab} onSelect={setTab} />
-          {tab === "readme" && <Loaded remote={overview}>{(o) => <Readme readme={o.readme} />}</Loaded>}
+          {tab === "readme" && <Loaded remote={overview}>{(o) => <Readme conn={conn} readme={o.readme} />}</Loaded>}
           {tab === "commits" && <Loaded remote={overview}>{(o) => <RepoCommits commits={o.commits} />}</Loaded>}
+          {tab === "changes" && <RepoChanges conn={conn} repo={repo.id} refreshKey={head} />}
           {tab === "card" && <RepoCardView conn={conn} repo={repo.id} head={head} />}
           {tab === "files" && <RepoFiles conn={conn} repo={repo.id} head={head} />}
           {tab === "mise" && <RepoMiseTasks conn={conn} repo={repo.id} />}
@@ -85,11 +92,19 @@ function OpenEditor({ conn, repo }: { conn: Connection; repo: Repo }) {
   );
 }
 
-function Readme({ readme }: { readme: RepoOverview["readme"] }) {
+function Readme({ conn, readme }: { conn: Connection; readme: RepoOverview["readme"] }) {
   if (!readme) return <p className="text-muted-foreground text-sm">This repo has no README in the latest commit.</p>;
   return (
     <Surface path={readme.path} note={readme.truncated ? TRUNCATED_NOTE : undefined}>
-      <pre className="overflow-x-auto p-4 text-sm leading-relaxed whitespace-pre-wrap break-words">{readme.text}</pre>
+      {readme.format === "markdown" ? (
+        <ReadmeFallback key={readme.text} text={readme.text}>
+          <Suspense fallback={<Loading />}>
+            <ReadmeMarkdown conn={conn} text={readme.text} />
+          </Suspense>
+        </ReadmeFallback>
+      ) : (
+        <PlainReadme text={readme.text} />
+      )}
     </Surface>
   );
 }

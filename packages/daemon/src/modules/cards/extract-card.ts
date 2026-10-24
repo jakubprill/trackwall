@@ -3,6 +3,7 @@ import { extractFrontendHttp, readsFrontendHttpFile } from "./frontend-http.ts";
 import { extractGradle, readsGradleFile } from "./gradle.ts";
 import { extractMaven, readsMavenFile } from "./maven.ts";
 import { detectMechanisms } from "./mechanisms.ts";
+import { extractMiseSetup, isMiseConfigFile } from "./mise-tasks.ts";
 import { extractNpm, readsNpmFile } from "./npm.ts";
 import type { SourceSelection } from "./read-snapshot.ts";
 import { dirOf } from "./repo-path.ts";
@@ -13,7 +14,7 @@ import { extractTools, readsToolFile } from "./tools.ts";
 
 /**
  * Karta repo z jednego commita (§4.6, ADR-25, ADR-30): ekstraktory systemów budowania, potem narzędzia z katalogów ich
- * buildów, fakty HTTP (Spring i frontend) i spis mechanizmów z tego, czego repo używa. Czysta funkcja: ten sam commit
+ * buildów, konfiguracja i taski mise (ADR-34), fakty HTTP (Spring i frontend) i spis mechanizmów z tego, czego repo używa. Czysta funkcja: ten sam commit
  * daje tę samą kartę.
  */
 
@@ -32,13 +33,14 @@ const HTTP_EXTRACTORS = [
 
 /** Czy któryś ekstraktor czyta plik `path`; tylko takie pliki (i wybrane pliki źródłowe) odczyt commita wyciąga z gita. */
 export function readsCardFile(path: string): boolean {
-  return readsToolFile(path) || [...BUILD_EXTRACTORS, ...HTTP_EXTRACTORS].some((e) => e.reads(path));
+  return readsToolFile(path) || isMiseConfigFile(path) || [...BUILD_EXTRACTORS, ...HTTP_EXTRACTORS].some((e) => e.reads(path));
 }
 
 /** Pliki źródłowe Javy i Kotlina, które czyta ekstraktor Spring: tylko z mapowaniami, klientami HTTP albo stałymi ścieżek. */
 export const CARD_SOURCES: SourceSelection = { pattern: JVM_SOURCE_PATTERN, globs: JVM_SOURCE_GLOBS, accepts: isJvmSource };
 
 export function extractCard(snapshot: RepoSnapshot): RepoCard {
+  const mise = extractMiseSetup(snapshot);
   const builds = BUILD_EXTRACTORS.map((e) => e.extract(snapshot));
   const buildDirs = builds.flatMap((b) => b.buildFiles.map((f) => dirOf(f.path)));
   // Ekstraktory buildu dają tylko paczki, a HTTP aplikacje, endpointy i klientów; karta trzyma je razem.
@@ -54,11 +56,12 @@ export function extractCard(snapshot: RepoSnapshot): RepoCard {
     provides: all.flatMap((e) => e.provides),
     consumes,
     tools: all.flatMap((e) => e.tools),
+    mise: mise.mise,
     mechanisms: detectMechanisms(
       consumes.filter((c) => c.kind === "package"),
       snapshot.paths,
     ),
-    problems: [...snapshot.problems, ...all.flatMap((e) => e.problems)],
+    problems: [...snapshot.problems, ...all.flatMap((e) => e.problems), ...mise.problems],
   };
 }
 

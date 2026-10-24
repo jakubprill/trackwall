@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
@@ -15,7 +15,7 @@ describe("vcs na prawdziwym gicie", () => {
 
     const status = await vcs.status(dir);
 
-    expect(status).toMatchObject({ kind: "ok", branch: "main", changes: 2, upstream: null });
+    expect(status).toMatchObject({ kind: "ok", branch: "main", changes: 2, untracked: 1, upstream: null });
     expect(status.head).toMatchObject({ subject: "Dodaj aplikację", author: "Testowy Autor" });
     expect(status.head?.hash).toMatch(/^[0-9a-f]{40}$/);
   });
@@ -64,6 +64,36 @@ describe("vcs na prawdziwym gicie", () => {
     expect(await vcs.log(dir, 10)).toEqual([]);
     expect(await vcs.tree(dir, "")).toEqual([]);
     expect(await vcs.tree(dir, "src")).toBeUndefined();
+  });
+
+  test("changes pokazuje zmienione, usunięte i nowe pliki względem HEAD z diffem, bez ignorowanych i bez zmiany indeksu", async () => {
+    const dir = makeRepo({ "README.md": "# repo\n", "stary.txt": "x\n", ".gitignore": "build/\n" });
+    writeFileSync(join(dir, "README.md"), "# repo zmienione\n");
+    rmSync(join(dir, "stary.txt"));
+    writeFileSync(join(dir, "nowy.txt"), "nowa linia\n");
+    mkdirSync(join(dir, "build"));
+    writeFileSync(join(dir, "build", "wynik.txt"), "ignorowany\n");
+    const index = readFileSync(join(dir, ".git", "index"));
+
+    const changes = await vcs.changes(dir, 1024 * 1024);
+
+    expect(changes.files).toEqual([
+      { path: "README.md", change: "modified", additions: 1, deletions: 1 },
+      { path: "nowy.txt", change: "added", additions: 1, deletions: 0 },
+      { path: "stary.txt", change: "deleted", additions: 0, deletions: 1 },
+    ]);
+    expect(changes.patch).toContain("+# repo zmienione");
+    expect(changes.patch).toContain("+nowa linia");
+    expect(changes.truncated).toBe(false);
+    expect(readFileSync(join(dir, ".git", "index"))).toEqual(index);
+    expect(gitIn(dir, "status", "--porcelain")).toContain("?? nowy.txt");
+  });
+
+  test("changes w repo bez commitów pokazuje każdy plik jako nowy", async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "pierwszy.txt"), "a\n");
+
+    expect((await vcs.changes(dir, 1024 * 1024)).files).toEqual([{ path: "pierwszy.txt", change: "added", additions: 1, deletions: 0 }]);
   });
 
   test("ahead/behind względem gałęzi śledzonej", async () => {
@@ -155,5 +185,19 @@ describe("vcs na prawdziwym gicie", () => {
 
   test("brak katalogu repo to błąd gita z komunikatem, a nie wyjątek uruchomienia", async () => {
     await expect(vcs.status(join(makeRepo(), "..", "nie-istnieje"))).rejects.toThrow(/nie-istnieje/);
+  });
+
+  test("zmiany worktree z limitem diffu 0 dają pliki i liczby bez treści zmian", async () => {
+    const dir = makeRepo({ "a.txt": "a\n" }, "bez-diffu");
+    const base = gitIn(dir, "rev-parse", "HEAD").trim();
+    writeFileSync(join(dir, "a.txt"), "b\n");
+    const changes = await vcs.worktreeChanges(dir, base, 0);
+    expect(changes).toEqual({
+      files: [{ path: "a.txt", change: "modified", additions: 1, deletions: 1 }],
+      patch: "",
+      truncated: false,
+      commits: 0,
+      uncommitted: 1,
+    });
   });
 });

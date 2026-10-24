@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { breadcrumbs, changesLabel, formatBytes, formatUptime, relativeTime, twoDigits } from "../src/lib/format.ts";
+import { breadcrumbs, changesLabel, formatBytes, formatUptime, relativeTime, twoDigits, workingTreeLabel } from "../src/lib/format.ts";
 
 describe("format", () => {
   const now = new Date("2026-10-23T12:00:00Z");
@@ -22,6 +22,15 @@ describe("format", () => {
       "12 changes",
       "22 changes",
       "25 changes",
+    ]);
+  });
+
+  test("katalog roboczy: zmienione i nowe pliki osobno, czyste repo bez etykiety", () => {
+    expect([workingTreeLabel(0, 0), workingTreeLabel(3, 0), workingTreeLabel(0, 1), workingTreeLabel(2, 5)]).toEqual([
+      undefined,
+      "3 changed",
+      "1 new",
+      "2 changed, 5 new",
     ]);
   });
 

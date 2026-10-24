@@ -39,7 +39,7 @@ Sekret z `~/.trackwall/daemon.json`, którym UI, `ws`, powłoka i most stdio uwi
 **Serwer MCP** (`/mcp`, `createMcpEndpoint`; po angielsku *MCP server*):
 Część daemona, przez którą agenci czytają jego stan narzędziami MCP; ten sam port i token co API (§5.3, ADR-24).
 
-**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`; po angielsku *MCP tool*):
+**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`, `list_sessions`; po angielsku *MCP tool*):
 Jedno wywołanie serwera MCP z nazwą po angielsku, wejściem i wynikiem opisanym schematem z `packages/protocol/src/mcp.ts`; mapowanie na fasadę, bez własnej logiki domenowej.
 _Unikaj_: komenda, akcja (to pojęcia z API i CLI)
 
@@ -78,7 +78,7 @@ Adres głównego remote (`origin` albo jedynego remote w gicie, `mainRemote`) ja
 _Unikaj_: URL repo (URL ma protokół i bywa z tokenem), remote bez dopowiedzenia (to nazwa w gicie, np. `origin`)
 
 **Synchronizacja** (`SyncRun`, wynik repo `SyncRepo`; po angielsku *sync*):
-Fetch każdego repo z folderu z projektami i fast-forward jego gałęzi domyślnej, w tle, z wynikiem per repo: przesunięte, aktualne, pominięte z powodem (`SyncSkipReason`) albo błąd. Nigdy nie scala ani nie nadpisuje lokalnych zmian (ADR-21). Trzymana tylko w pamięci daemona.
+Fetch każdego repo z folderu z projektami i fast-forward jego gałęzi domyślnej, w tle, z wynikiem per repo: przesunięte, aktualne, pominięte z powodem (`SyncSkipReason`) albo błąd; bez błędu także ze stanem katalogu roboczego po synchronizacji (`SyncWorkingTree`, ADR-34). Nigdy nie scala ani nie nadpisuje lokalnych zmian (ADR-21). Trzymana tylko w pamięci daemona.
 _Unikaj_: pull, aktualizacja (bez dopowiedzenia)
 
 **Komenda zbiorcza** (`BatchRun`, krok `BatchStep`, wynik repo `BatchRepo`; po angielsku *Batch command*):
@@ -86,8 +86,13 @@ Wybrane kroki na wybranych repo jednym przyciskiem: synchronizacja (`sync`), nar
 _Unikaj_: batch (w polskim tekście), operacja zbiorcza, workflow
 
 **Stan repo** (`RepoStatus`; po angielsku *repo status*):
-Gałąź, ostatni commit, liczba zmian w katalogu roboczym i ahead/behind względem gałęzi śledzonej, odczytane z gita przy każdym zapytaniu (`ok`), albo `unavailable` z komunikatem, gdy git go nie czyta (repo, którego katalog zniknął, znika z listy). Nigdy nie jest zapisywany.
+Gałąź, ostatni commit, liczba zmian w katalogu roboczym (z nich osobno nowe nieśledzone pliki, `untracked`) i ahead/behind względem gałęzi śledzonej, odczytane z gita przy każdym zapytaniu (`ok`), albo `unavailable` z komunikatem, gdy git go nie czyta (repo, którego katalog zniknął, znika z listy). Nigdy nie jest zapisywany.
 _Unikaj_: status (w polskim tekście), sync (to osobna akcja)
+
+**Zmiany katalogu roboczego** (`WorkingTreeChanges`, akcja `changes`; w UI zakładka „Changes”; po angielsku *changes*):
+Pliki i diff katalogu roboczego (z nowymi plikami, bez ignorowanych) względem commita: repo względem HEAD w szczegółach repo (ADR-34), worktree zadania względem commita bazowego w zmianach zadania (`TaskChanges`, ADR-31). Tylko do odczytu.
+W liczbach katalogu roboczego „zmienione” (`changed`) to śledzone pliki, a „nowe” (`untracked`) nieśledzone wpisy; `RepoStatus.changes` to ich suma (`trackedChanges` liczy zmienione).
+_Unikaj_: diff (to tylko część), status
 
 **Przegląd repo** (`RepoOverview`):
 README i ostatnie commity repo w jednej odpowiedzi; stan repo przychodzi z listy repo. Pliki przeglądane są osobno, zawsze z commita HEAD (ADR-14).
@@ -134,7 +139,7 @@ Technologia rozpoznana w repo po paczce albo pliku (Spring Boot, Feign, Kafka, H
 Czysta funkcja na migawce commita (`RepoSnapshot`) w `modules/cards/` (`maven.ts`, `gradle.ts`, `npm.ts`, `tools.ts`, `mechanisms.ts`, `spring.ts`, `frontend-http.ts`), która zwraca fakty z pozycją w pliku. Niczego nie wykonuje.
 
 **Tag repo** (`RepoTag`; po angielsku *tag*):
-Krótka nazwa grupy repo (`java`, `frontend`, `bff`, `monorepo`…) z powodem, liczona z karty, identyfikatora i adresu repo zdalnego albo z reguły tagów. Tagi są ortogonalne: filtr z kilkoma tagami pokazuje repo, które mają wszystkie.
+Krótka nazwa grupy repo (`java`, `frontend`, `bff`, `monorepo`, `no-mise`…) z powodem, liczona z karty, identyfikatora i adresu repo zdalnego albo z reguły tagów. Tagi są ortogonalne: filtr z kilkoma tagami pokazuje repo, które mają wszystkie.
 _Unikaj_: etykieta, kategoria
 
 **Reguła tagów** (`repoTags` w `workspace.yaml`, `RepoTagRules`):
@@ -207,7 +212,7 @@ Treść zadania dla agenta, wpisana w widoku Sessions; Copilot CLI dostaje ją j
 _Unikaj_: prompt (w polskim tekście)
 
 **Task mise** (po angielsku *mise task*):
-Nazwana komenda z `mise.toml` repo: `setup`, `dev`, `test`, `build`, `lint`, `health`. W kodzie zawsze z dopowiedzeniem (`miseTask`, `mise.run(...)`), nigdy gołe `task`. Jedyny wyjątek to argument `task` narzędzia MCP `run_task` (§5.3), gdzie kontekst jest jednoznaczny.
+Nazwana komenda z `mise.toml` repo: `setup`, `dev`, `test`, `build`, `lint`, `health`. W kodzie zawsze z dopowiedzeniem (`miseTask`, `mise.run(...)`), nigdy gołe `task`. Taski zapisane w commicie (`DeclaredMiseTask` w `RepoCard.mise`, typ `MiseSetup`: pliki konfiguracji mise i taski z `[tasks]` oraz katalogów tasków) liczy karta repo; repo bez nich ma tag `no-mise` (ADR-34). Jedyny wyjątek to argument `task` narzędzia MCP `run_task` (§5.3), gdzie kontekst jest jednoznaczny.
 
 **Uruchomienie** (`run`, `runId`, stan: `RunState`; po angielsku *run*):
 Jednorazowe wykonanie taska mise przez `run_task` albo z UI, z własną grupą procesów i logami. Stan `running`, `stopping` albo `exited` (kod wyjścia, sygnał, czy zatrzymał je użytkownik, ostatnie linie wyjścia), zawsze zaobserwowany. Nie jest zadaniem ani serwisem.
@@ -284,12 +289,12 @@ _Unikaj_: konsola, terminal (to PTY sesji zadania)
 **`seq`**:
 Globalny, rosnący numer rekordu dla wszystkich źródeł; każde działanie daemona zaczyna od chwili startu, więc numery się nie powtarzają. Kursor (`sinceSeq` w API i w narzędziach MCP) działa dla jednego źródła i dla całego workspace; `dropped` mówi, że część rekordów po kursorze przepadła.
 
-**Zdarzenie**:
-Wiadomość daemona na WebSocket `/ws` (`service.state`, `task.state`…) z własnym `seq` zdarzeń.
-_Unikaj_: rekord (to log)
+**Zdarzenie** (`DaemonEvent`, `sessions.changed`, `mise.running.changed`; po angielsku *event*):
+Wiadomość daemona na WebSocket `/ws` (ADR-36) z całą migawką jednego tematu, bez numeru. Daemon wysyła je po podłączeniu (migawka każdego tematu) i przy każdej zmianie migawki.
+_Unikaj_: rekord (to log), powiadomienie (to OSC albo hook)
 
-**Snapshot**:
-Pełny stan z `GET /api/snapshot`, od którego UI zaczyna i do którego wraca po `resync`.
+**Migawka tematu** (`payload` zdarzenia, `LiveFeed` w UI; po angielsku *snapshot*):
+Cały stan jednego tematu zdarzeń, ta sama wartość co odpowiedź akcji HTTP (`SessionList` z `agents/sessions`, `RunningMiseTask[]` z `mise/running`). Nie myl z migawką pulpitu (`HomeModel`), którą UI składa z kilku tematów i odpowiedzi.
 
 **Maskowanie**:
 Zamiana wartości sekretów na `***` przed zapisem rekordu do bufora, pliku i ostatnich linii stanu. Dziś sekrety to wartości zmiennych środowiska procesu o nazwach sekretów (`GH_TOKEN`, `DB_PASSWORD`…, §4.2).
@@ -318,7 +323,7 @@ Lewy panel pulpitu: sesje, które czekają na Ciebie albo mają błąd, potem re
 
 **Migawka pulpitu** (`HomeModel`):
 To, co pulpit pokazuje, policzone przez UI z odpowiedzi daemona i podane scenie w całości przy każdej zmianie.
-_Unikaj_: snapshot (to `GET /api/snapshot`, stan całego daemona).
+_Unikaj_: snapshot (po angielsku to migawka tematu zdarzeń).
 
 **Warstwa** (`HomeRepo.layer`, `HomeModel.layerCount`):
 Poziom repo na pulpicie, ta sama kolumna co w widoku „Przegląd”: najdłuższa ścieżka od repo, którego nikt nie używa (wejścia po jednej stronie, biblioteki po drugiej). Repo bez połączeń nie ma warstwy (`null`).

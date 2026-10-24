@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Session, Task, TaskChanges } from "@trackwall/protocol";
+import {
+  PATCH_MAX_BYTES,
+  type Session,
+  TASK_SUMMARY_MAX_FILES,
+  type Task,
+  type TaskChanges,
+  type TaskChangesSummary,
+} from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
@@ -12,9 +19,6 @@ import type { StoredTask, TaskFile } from "./task-file.ts";
  * przeżywa restart daemona (`tasks.json`), a jego sesja nie; worktree i gałąź znikają tylko przy zakończeniu zadania,
  * a zmiany, które by przy tym przepadły, tylko po potwierdzeniu użytkownika.
  */
-
-/** Diff zadania w UI: więcej i tak nikt nie przewija. */
-const PATCH_MAX_BYTES = 1024 * 1024;
 
 // Typy niżej powtarzają kształt typów z `vcs` (`WorktreeBase`, `WorktreeBranch`, `PendingWork`) zamiast je
 // importować, bo moduł nie importuje sąsiedniego modułu (§4); zgodność sprawdza kompilator tam, gdzie `facade.ts` podaje `Vcs` jako `TasksVcs` (zależności `Agents`).
@@ -141,10 +145,28 @@ export class AgentTasks {
     });
   }
 
+  /** Zadanie po identyfikatorze (`not_found`, gdy go nie ma). */
+  task(id: string): Task {
+    return view(this.#get(id));
+  }
+
   changes(id: string): Promise<TaskChanges> {
+    return this.#readChanges(id, PATCH_MAX_BYTES);
+  }
+
+  /**
+   * Zmiany bez diffu, z najwyżej `TASK_SUMMARY_MAX_FILES` plikami, dla kontekstu agenta (narzędzie MCP `get_session`);
+   * agent, który chce treści, czyta worktree sam.
+   */
+  async summary(id: string): Promise<TaskChangesSummary> {
+    const { files, commits, uncommitted } = await this.#readChanges(id, 0);
+    return { files: files.slice(0, TASK_SUMMARY_MAX_FILES), filesTruncated: files.length > TASK_SUMMARY_MAX_FILES, commits, uncommitted };
+  }
+
+  #readChanges(id: string, maxPatchBytes: number): Promise<TaskChanges> {
     if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is already being ended");
     const task = this.#existingWorktree(id);
-    const reading = asRepoUnavailable(task.branch, this.#deps.vcs.worktreeChanges(task.worktree, task.base, PATCH_MAX_BYTES));
+    const reading = asRepoUnavailable(task.branch, this.#deps.vcs.worktreeChanges(task.worktree, task.base, maxPatchBytes));
     const reads = this.#reading.get(id) ?? new Set();
     this.#reading.set(id, reads.add(reading));
     void reading

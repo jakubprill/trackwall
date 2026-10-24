@@ -40,6 +40,18 @@ export function breadcrumbs(path: string): { name: string; path: string }[] {
   return [...crumbs, ...parts.map((name, i) => ({ name, path: parts.slice(0, i + 1).join("/") }))];
 }
 
+/**
+ * Zmiany w katalogu roboczym z nowymi osobno, bo „4 changes” nie mówi, czy coś zmieniono, czy tylko przybyło:
+ * „3 changed, 1 new”. Nowe to wpisy `git status`, więc nowy katalog to jeden wpis, a nie liczba jego plików.
+ * `undefined`, gdy repo jest czyste.
+ */
+export function workingTreeLabel(changed: number, untracked: number): string | undefined {
+  const parts = [changed > 0 ? `${changed} changed` : undefined, untracked > 0 ? `${untracked} new` : undefined].filter(
+    (p) => p !== undefined,
+  );
+  return parts.length === 0 ? undefined : parts.join(", ");
+}
+
 /** Liczba zmian w katalogu roboczym jako tekst; `undefined`, gdy repo jest czyste. */
 export function changesLabel(changes: number): string | undefined {
   return changes === 0 ? undefined : countLabel(changes, { one: "change", other: "changes" });

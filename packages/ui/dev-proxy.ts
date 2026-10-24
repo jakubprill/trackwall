@@ -3,11 +3,11 @@ import { type IncomingMessage, request } from "node:http";
 import { join } from "node:path";
 import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
-import { DAEMON_FILE, DaemonFile, PTY_SOCKET_PREFIX, PTY_SUBPROTOCOL, PTY_TOKEN_PREFIX, TRACKWALL_HOME_ENV } from "@trackwall/protocol";
+import { DAEMON_FILE, DaemonFile, daemonSocketAt, SOCKET_TOKEN_PREFIX, TRACKWALL_HOME_ENV } from "@trackwall/protocol";
 import type { Plugin } from "vite";
 
 /**
- * Tylko `vite dev`: przekazuje `/api/*` i WebSocket terminala sesji (`/ws/pty/*`) do daemona z `pnpm dev` z tokenem
+ * Tylko `vite dev`: przekazuje `/api/*` i WebSockety zdarzeń (`/ws`) i terminala sesji (`/ws/pty/*`) do daemona z `pnpm dev` z tokenem
  * z `daemon.json`.
  * Daemon deweloperski trzyma stan w `<repo>/.trackwall-dev`, osobno od wydanej aplikacji w `~/.trackwall`
  * (`TRACKWALL_HOME` nadpisuje oba).
@@ -36,10 +36,11 @@ export function daemonDevProxy(): Plugin {
       };
       const ownOrigins = () => [`http://127.0.0.1:${server.config.server.port}`, `http://localhost:${server.config.server.port}`];
       server.httpServer?.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
-        if (!req.url?.startsWith(PTY_SOCKET_PREFIX)) return; // HMR Vite ma własną obsługę
+        const target = daemonSocketAt(URL.parse(req.url ?? "/", "http://127.0.0.1")?.pathname ?? "");
+        if (!target) return; // HMR Vite ma własną obsługę
         const daemon = readDaemon();
         if (!daemon || (req.headers.origin !== undefined && !ownOrigins().includes(req.headers.origin))) return void socket.destroy();
-        proxyPtySocket(req, socket, head, daemon);
+        proxyDaemonSocket(req, socket, head, daemon, target.subprotocol);
       });
       server.middlewares.use("/api", (req, res) => {
         const reply = (status: number, message: string) => {
@@ -93,10 +94,10 @@ export function daemonDevProxy(): Plugin {
 }
 
 /**
- * WebSocket terminala: proxy podmienia podprotokoły na `trackwall.pty` z tokenem i bez `Origin` strony Vite (sprawdzonego
- * wyżej), a po przełączeniu protokołu przepuszcza ramki w obie strony bez zmian.
+ * WebSocket daemona: proxy podmienia podprotokoły na podprotokół gniazda z tokenem i bez `Origin` strony Vite
+ * (sprawdzonego wyżej), a po przełączeniu protokołu przepuszcza ramki w obie strony bez zmian.
  */
-function proxyPtySocket(req: IncomingMessage, socket: Duplex, head: Buffer, daemon: DaemonFile): void {
+function proxyDaemonSocket(req: IncomingMessage, socket: Duplex, head: Buffer, daemon: DaemonFile, subprotocol: string): void {
   const { origin: _, host: __, "sec-websocket-protocol": ___, ...headers } = req.headers;
   const upstream = request({
     host: "127.0.0.1",
@@ -106,7 +107,7 @@ function proxyPtySocket(req: IncomingMessage, socket: Duplex, head: Buffer, daem
     headers: {
       ...headers,
       host: `127.0.0.1:${daemon.port}`,
-      "sec-websocket-protocol": `${PTY_SUBPROTOCOL}, ${PTY_TOKEN_PREFIX}${daemon.token}`,
+      "sec-websocket-protocol": `${subprotocol}, ${SOCKET_TOKEN_PREFIX}${daemon.token}`,
     },
   });
   upstream.on("upgrade", (res, upSocket, upHead) => {

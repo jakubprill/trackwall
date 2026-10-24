@@ -2,19 +2,21 @@ import { randomUUID } from "node:crypto";
 import { copyFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import type { TaskChanges } from "@trackwall/protocol";
+import type { TaskChanges, WorkingTreeChanges } from "@trackwall/protocol";
 import { mapLimit } from "../../infra/map-limit.ts";
 import { git, revParse } from "./git.ts";
 import { parseChangedFiles, parseNulTerminated } from "./parse.ts";
+import type { RunOutput } from "./run.ts";
 import { commitCount, uncommittedCount } from "./worktree.ts";
 
 /**
- * Zmiany worktree zadania (ADR-31): katalog roboczy względem commita bazowego, z nowymi plikami i bez ignorowanych.
- * Nowe pliki trafiają do indeksu tymczasowego (kopia indeksu worktree, żeby git nie liczył od nowa niezmienionych
- * plików) wpisem z hashem pustego bloba, tak jak przy `git add --intent-to-add`, ale bez zapisu tego bloba do
- * `.git/objects`. Liczenie zmian niczego więc nie zapisuje do repo: indeks agenta zostaje nietknięty, a kilka okien
- * naraz nie pisze tego samego obiektu, co na Windowsie kończyło się „Permission denied” (#36). Diff bez zewnętrznych
- * programów diff i `textconv` z konfiguracji repo.
+ * Zmiany katalogu roboczego względem commita, z nowymi plikami i bez ignorowanych: worktree zadania względem commita
+ * bazowego (ADR-31) i repo z folderu z projektami względem HEAD (ADR-34). Nowe pliki trafiają do indeksu tymczasowego
+ * (kopia indeksu katalogu roboczego, żeby git nie liczył od nowa niezmienionych plików) wpisem z hashem pustego bloba,
+ * tak jak przy `git add --intent-to-add`, ale bez zapisu tego bloba do `.git/objects`. Liczenie zmian niczego więc nie
+ * zapisuje do repo: indeks agenta i użytkownika zostaje nietknięty, a kilka okien naraz nie pisze tego samego obiektu,
+ * co na Windowsie kończyło się „Permission denied” (#36). Diff bez zewnętrznych programów diff i `textconv`
+ * z konfiguracji repo.
  */
 
 /** Hash pustego bloba w obu formatach obiektów gita (`git hash-object -t blob /dev/null`). */
@@ -32,12 +34,28 @@ const SUBMODULE_CONCURRENCY = 4;
 /** Duże worktree na Windowsie ze skanującym antywirusem potrafią liczyć `git status` kilkanaście sekund. */
 const CHANGES_TIMEOUT_MS = 60_000;
 
+/** Bez diffu: same pliki z liczbą linii i liczby commitów (narzędzie MCP `get_session`). */
+const NO_PATCH: RunOutput = { stdout: Buffer.alloc(0), truncated: false };
+
+/**
+ * Zmiany worktree zadania razem z liczbą commitów zadania i niezacommitowanych plików. `maxPatchBytes` 0 pomija diff:
+ * git nie liczy treści zmian, a `patch` jest pusty.
+ */
 export async function worktreeChanges(dir: string, base: string, maxPatchBytes: number): Promise<TaskChanges> {
-  const revParsed = (await git(dir, ["rev-parse", "--git-path", "index", "--show-object-format"])).stdout.toString("utf8").trim();
-  const [indexPath, objectFormat] = revParsed.split(/\r?\n/);
+  // Do końca każdej: zakończenie zadania czeka na ten odczyt, zanim skasuje worktree, więc odrzucenie jednej części
+  // nie może zostawić gita, który nadal czyta katalog.
+  const work = [workingTreeChanges(dir, base, maxPatchBytes), commitCount(dir, base, "HEAD"), uncommittedCount(dir)] as const;
+  await Promise.allSettled(work);
+  const [changes, commits, uncommitted] = await Promise.all(work);
+  return { ...changes, commits, uncommitted };
+}
+
+/** Katalog roboczy `dir` względem `base` (commit albo drzewo). */
+export async function workingTreeChanges(dir: string, base: string, maxPatchBytes: number): Promise<WorkingTreeChanges> {
+  const out = (await git(dir, ["rev-parse", "--git-path", "index", "--show-object-format"])).stdout.toString("utf8").trim();
+  const [indexPath, objectFormat] = out.split(/\r?\n/);
   const emptyBlob = objectFormat === undefined ? undefined : EMPTY_BLOB.get(objectFormat);
-  if (!indexPath || emptyBlob === undefined)
-    throw new Error(`git rev-parse did not give the index path and a known object format: ${revParsed}`);
+  if (!indexPath || emptyBlob === undefined) throw new Error(`git rev-parse did not give the index path and a known object format: ${out}`);
   const index = resolve(dir, indexPath);
   const tmp = resolve(tmpdir(), `trackwall-index-${randomUUID()}`);
   try {
@@ -55,18 +73,16 @@ export async function worktreeChanges(dir: string, base: string, maxPatchBytes: 
     const work = [
       diff(["--name-status", "-z"]),
       diff(["--numstat", "-z"]),
-      diff([], maxPatchBytes),
-      commitCount(dir, base, "HEAD"),
-      uncommittedCount(dir),
+      maxPatchBytes > 0 ? diff([], maxPatchBytes) : Promise.resolve(NO_PATCH),
     ] as const;
     await Promise.allSettled(work);
-    const [names, stats, patch, commits, uncommitted] = await Promise.all(work);
+    const [names, stats, patch] = await Promise.all(work);
     return {
-      files: parseChangedFiles(names.stdout.toString("utf8"), stats.stdout.toString("utf8")),
+      // Ostatni wpis uciętej listy może mieć niepełną ścieżkę.
+      files: parseChangedFiles(names.stdout.toString("utf8"), stats.stdout.toString("utf8")).slice(0, names.truncated ? -1 : undefined),
       patch: patch.stdout.toString("utf8"),
-      truncated: patch.truncated || untrackedTruncated,
-      commits,
-      uncommitted,
+      // Ucięta lista plików (dziesiątki tysięcy nowych plików bez `.gitignore`) też jest niepełnym wynikiem.
+      truncated: patch.truncated || names.truncated || stats.truncated || untrackedTruncated,
     };
   } finally {
     // Pozostałość po gicie zabitym po limicie czasu; plik w katalogu tymczasowym nie jest wart przykrycia błędu.
@@ -89,9 +105,9 @@ async function addUntracked(dir: string, index: string, emptyBlob: string): Prom
   const files = paths.filter((path) => path.at(-1) !== SLASH).map((path) => Buffer.concat([fileHeader, path, NUL]));
   const repos = paths.filter((path) => path.at(-1) === SLASH).map((path) => path.subarray(0, -1));
   const submodules = await mapLimit(repos, SUBMODULE_CONCURRENCY, (repo) => submoduleEntry(dir, repo, emptyBlob.length));
-  const input = Buffer.concat([...files, ...submodules.filter((entry) => entry !== undefined)]);
-  if (input.length > 0)
-    await git(dir, ["update-index", "-z", "--index-info"], { indexFile: index, stdin: input, timeoutMs: CHANGES_TIMEOUT_MS });
+  const indexInfo = Buffer.concat([...files, ...submodules.filter((entry) => entry !== undefined)]);
+  if (indexInfo.length > 0)
+    await git(dir, ["update-index", "-z", "--index-info"], { indexFile: index, stdin: indexInfo, timeoutMs: CHANGES_TIMEOUT_MS });
   return listed.truncated;
 }
 

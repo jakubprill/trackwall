@@ -20,6 +20,7 @@ import {
   workspaceApi,
 } from "@trackwall/protocol";
 import { z } from "zod";
+import { EventHub } from "../src/api/event-hub.ts";
 import { type ApiServer, startApi } from "../src/api/server.ts";
 import { createFacade, type Facade } from "../src/facade.ts";
 import { readDaemonFile, writeDaemonFile } from "../src/infra/discovery.ts";
@@ -70,13 +71,14 @@ beforeAll(async () => {
     onShutdown: () => {},
     facade,
     mcp: createMcpEndpoint({ facade, version: "9.9.9", log: (msg) => logs.push(msg) }),
+    events: new EventHub({ facade, log: () => {} }),
   });
 });
 
 afterAll(() => api.close());
 
 describe("serwer MCP przez Streamable HTTP", () => {
-  test("ogłasza tylko narzędzia do odczytu: list_repos, get_repo, get_repo_card, tail, who_calls, subgraph_for i find_endpoint", async () => {
+  test("ogłasza tylko narzędzia do odczytu: repo, karta, log, graf i sesje", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual([
@@ -87,6 +89,8 @@ describe("serwer MCP przez Streamable HTTP", () => {
       "who_calls",
       "subgraph_for",
       "find_endpoint",
+      "list_sessions",
+      "get_session",
     ]);
     // Każde narzędzie z kontraktu, który pokazuje UI, jest zarejestrowane w daemonie.
     expect(tools.map((t) => t.name)).toEqual(Object.values(mcpTools).map((t) => t.name));
@@ -108,7 +112,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
       remote: "gitlab.example.com/sklep/orders-bff",
       status: { kind: "ok", branch: "main", changes: 0 },
       lastSync: null,
-      tags: ["backend", "bff", "java"],
+      tags: ["backend", "bff", "java", "no-mise"],
     });
     // Tekst wyniku to ten sam JSON dla klientów, które nie czytają `structuredContent`.
     expect(result.content).toEqual([{ type: "text", text: JSON.stringify(data) }]);
@@ -121,7 +125,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
     const result = await client.callTool({ name: "get_repo", arguments: { repo: "orders-bff" } });
     const data = GetRepoResult.parse(result.structuredContent);
     expect(data.repo.id).toBe("orders-bff");
-    expect(data.readme).toEqual({ path: "README.md", text: README, truncated: false });
+    expect(data.readme).toEqual({ path: "README.md", text: README, truncated: false, format: "markdown" });
     expect(data.commits.map((c) => c.subject)).toEqual(["pierwszy commit"]);
     expect(data.miseTasks.kind).toBe("not_installed");
     await client.close();
@@ -153,7 +157,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
     const sub = Subgraph.parse((await client.callTool({ name: "subgraph_for", arguments: { repo: "orders-bff" } })).structuredContent);
     expect(sub.depth).toBe(1);
     expect(sub.nodes.map((n) => [n.repo, n.remote, n.tags])).toEqual([
-      ["orders-bff", "gitlab.example.com/sklep/orders-bff", ["backend", "bff", "java"]],
+      ["orders-bff", "gitlab.example.com/sklep/orders-bff", ["backend", "bff", "java", "no-mise"]],
     ]);
     const unknown = await client.callTool({ name: "who_calls", arguments: { repo: "nie-ma" } });
     expect(unknown.isError).toBe(true);

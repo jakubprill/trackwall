@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { isBinary, parseBlobs, parseLog, parseNulTerminated, parseObjects, parseStatus, parseTree } from "../src/modules/vcs/parse.ts";
 
 describe("parseStatus", () => {
-  test("czyta gałąź, gałąź śledzoną z ahead/behind i liczy zmiany, także zmianę nazwy jako jedną", () => {
+  test("czyta gałąź, gałąź śledzoną z ahead/behind i liczy zmiany, także zmianę nazwy jako jedną, a nieśledzone osobno", () => {
     const out = [
       "# branch.oid 1111111111111111111111111111111111111111",
       "# branch.head main",
@@ -18,6 +18,7 @@ describe("parseStatus", () => {
       kind: "ok",
       branch: "main",
       changes: 3,
+      untracked: 1,
       upstream: { name: "origin/main", ahead: 2, behind: 3 },
       hasCommits: true,
     });
