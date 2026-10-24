@@ -15,8 +15,8 @@ import { sessionShortcut } from "@/lib/session-shortcut";
 import { attentionCount, nextWaitingShortcut } from "@/lib/session-state";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
+import { useJumpRequest } from "@/lib/use-jump-request";
 import { useRemote } from "@/lib/use-remote";
-import { useSessionFocus } from "@/lib/use-session-focus";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { DaemonPanel } from "@/views/daemon/DaemonPanel";
 import { GraphView } from "@/views/graph/GraphView";
@@ -50,6 +50,8 @@ export function App() {
     view: viewFromLocation(window.location.search, VIEW_IDS) ?? "home",
   }));
   const setView = useCallback((next: View, openRepo?: string) => setNav({ view: next, repo: openRepo }), []);
+  // A jump to a repo while "Repos" is open must still select it, and `ReposView` takes the repo only when it mounts.
+  const [repoJumps, setRepoJumps] = useState(0);
   const [session, setSession] = useState<SessionSelection>();
   const [sessionLayout, setSessionLayout] = useState<SessionLayout>("1");
   const { conn, epoch, error, retry } = useConnection();
@@ -77,8 +79,12 @@ export function App() {
     setView("sessions");
     setSession(selection);
   };
-  // Jump from the tray (ADR-26, ADR-39): the shell shows the window and passes a waiting session or a task proposal.
-  useSessionFocus(openInSessions);
+  // Jump from the tray (ADR-26, ADR-39) or from a `trackwall://` link (ADR-52): the shell shows the window first.
+  useJumpRequest((jump) => {
+    if (jump.kind !== "repo") return openInSessions(jump);
+    setView("repos", jump.id);
+    setRepoJumps((n) => n + 1);
+  });
   // Alt+J from every view (ADR-48), after the selected session like the "Next waiting" button.
   useWindowShortcuts(
     (event) => {
@@ -132,7 +138,13 @@ export function App() {
             />
           )}
           {conn && view === "repos" && (
-            <ReposView key={epoch} conn={conn} initialRepo={repo} onRetry={retry} onOpenSettings={() => setView("settings")} />
+            <ReposView
+              key={`${epoch}:${repoJumps}`}
+              conn={conn}
+              initialRepo={repo}
+              onRetry={retry}
+              onOpenSettings={() => setView("settings")}
+            />
           )}
           {conn && view === "sessions" && (
             <SessionsView
