@@ -253,7 +253,7 @@ describe("Graph na kartach z prawdziwego gita", () => {
     const projects = mkdtempSync(join(tmpdir(), "trackwall-graph-projekty-"));
     const vcs = new Vcs();
     const file = new WorkspaceFile(join(home, "workspace.yaml"));
-    const workspace = new Workspace({ file, vcs, hosting: fakeHosting().hosting, openUrl: () => {} });
+    const workspace = new Workspace({ file, vcs, hosting: fakeHosting().hosting, openEditor: () => {} });
     await workspace.setProjectsDir(projects);
     const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(join(home, "cards"), () => {}) });
     return { projects, workspaceFile: file.path, graph: new Graph({ cards, workspace }) };

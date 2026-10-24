@@ -15,7 +15,7 @@ async function setup(vcs: Vcs = new Vcs()) {
   const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projekty-"));
   const file = new WorkspaceFile(join(home, "workspace.yaml"));
-  const workspace = new Workspace({ file, vcs, hosting: fakeHosting().hosting, openUrl: () => {} });
+  const workspace = new Workspace({ file, vcs, hosting: fakeHosting().hosting, openEditor: () => {} });
   await workspace.setProjectsDir(projects);
   const cardsDir = join(home, "cards");
   const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(cardsDir, () => {}) });

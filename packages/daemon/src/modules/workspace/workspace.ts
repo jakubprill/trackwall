@@ -23,7 +23,6 @@ import {
 import { DomainError, messageOf } from "../../errors.ts";
 import { mapLimit } from "../../map-limit.ts";
 import { CloneJobs } from "./clone-jobs.ts";
-import { vscodeUrl } from "./editor-url.ts";
 import { dirKey, findRepos, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
@@ -72,8 +71,8 @@ export interface WorkspaceDeps {
   file: WorkspaceFile;
   vcs: WorkspaceVcs;
   hosting: WorkspaceHosting;
-  /** Otwiera URL w systemie (tu: `vscode://`); w daemonie `openBrowser`. */
-  openUrl: (url: string) => void;
+  /** Otwiera katalog w VS Code (`vscode://` w systemie, składane w fasadzie). */
+  openEditor: (dir: string) => void;
 }
 
 export class Workspace {
@@ -201,7 +200,7 @@ export class Workspace {
 
   /** Daemon nie wie, czy system obsłużył adres; wynik to tylko potwierdzenie przyjęcia. */
   async openEditor(id: string): Promise<void> {
-    this.deps.openUrl(vscodeUrl((await this.entry(id)).path));
+    this.deps.openEditor((await this.entry(id)).path);
   }
 
   /** Korzeń repo po identyfikatorze, dla modułów, które uruchamiają w nim procesy (`mise`). */

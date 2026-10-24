@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Endpoint } from "./api.ts";
+import { Done, type Endpoint } from "./api.ts";
 import { CloneJob, CloneRequest, HostRepos, RepoHosts } from "./repo-hosts.ts";
 import { SyncRun } from "./sync.ts";
 
@@ -30,6 +30,9 @@ export const RepoPath = z
   )
   .refine((p) => [...p].every((c) => c >= " "), "ścieżka w repo nie może zawierać znaków sterujących");
 export type RepoPath = z.infer<typeof RepoPath>;
+
+/** Pełny hash commita, SHA-1 albo SHA-256; tylko taki daemon podaje gitowi jako rewizję i wpisuje w nazwy plików. */
+export const CommitHash = z.string().regex(/^[0-9a-f]{40}([0-9a-f]{24})?$/, "pełny hash commita");
 
 export const Commit = z.object({
   hash: z.string(),
@@ -130,8 +133,6 @@ function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string,
 }
 
 const RepoRequest = z.object({ repo: RepoId }).strict();
-/** Akcja bez wyniku poza potwierdzeniem. */
-const Done = z.null();
 
 export const workspaceApi = {
   list: endpoint("list", z.object({}).strict(), RepoList),

@@ -5,6 +5,7 @@ import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import type { SessionSelection } from "@/lib/session-entries";
 import { waitingCount } from "@/lib/session-state";
 import { useConnection } from "@/lib/use-connection";
 import { useRemote } from "@/lib/use-remote";
@@ -13,7 +14,7 @@ import { ActivityBar, type ActivityView } from "./ActivityBar.tsx";
 import { DaemonPanel } from "./DaemonPanel.tsx";
 import { GraphView } from "./GraphView.tsx";
 import { ReposView } from "./ReposView.tsx";
-import { type SessionSelection, SessionsView } from "./SessionsView.tsx";
+import { SessionsView } from "./SessionsView.tsx";
 import { SettingsView } from "./SettingsView.tsx";
 
 /** Kolejność i skróty paska widoków; następne widoki pracy dostają kolejne cyfry. */

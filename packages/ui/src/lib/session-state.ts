@@ -17,6 +17,11 @@ const STATE_LABELS = {
   Stale: "bez odpowiedzi",
 } as const;
 
+/** Proces sesji jeszcze działa (także w trakcie zatrzymywania): pisze w swoim katalogu i trzyma jego pliki. */
+export function isLive(session: Session): boolean {
+  return session.run.kind !== "exited";
+}
+
 export function sessionStateLabel(session: Session): { tone?: StatusTone; label: string } {
   const { run, state } = session;
   if (run.kind === "stopping") return { tone: "warning", label: "zatrzymywanie" };

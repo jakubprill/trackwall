@@ -3,8 +3,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, posix, win32 } from "node:path";
+import { vscodeUrl } from "../src/editor-url.ts";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
-import { vscodeUrl } from "../src/modules/workspace/editor-url.ts";
 import { isFullPath } from "../src/modules/workspace/full-path.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
@@ -20,7 +20,7 @@ async function workspaceWithProjectsDir() {
     file: new WorkspaceFile(file),
     vcs: new Vcs(),
     hosting: fakeHosting().hosting,
-    openUrl: (url) => opened.push(url),
+    openEditor: (dir) => opened.push(dir),
   });
   await workspace.setProjectsDir(projects);
   return { workspace, file, projects, opened };
@@ -80,7 +80,12 @@ describe("workspace", () => {
 
   test("bez ustawionego folderu lista jest pusta, a repo nie da się otworzyć", async () => {
     const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
-    const workspace = new Workspace({ file: new WorkspaceFile(file), vcs: new Vcs(), hosting: fakeHosting().hosting, openUrl: () => {} });
+    const workspace = new Workspace({
+      file: new WorkspaceFile(file),
+      vcs: new Vcs(),
+      hosting: fakeHosting().hosting,
+      openEditor: () => {},
+    });
 
     expect(await workspace.list()).toEqual({ projectsDir: null, repos: [] });
     expect(workspace.settings()).toEqual({ projectsDir: null, configFile: file });
@@ -125,7 +130,12 @@ describe("workspace", () => {
   test("puste .git w folderze z projektami leżącym w innym repo nie pokazuje tamtego repo", async () => {
     const outer = makeRepo({ "a.txt": "zewnętrzne" }, "dom");
     const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
-    const workspace = new Workspace({ file: new WorkspaceFile(file), vcs: new Vcs(), hosting: fakeHosting().hosting, openUrl: () => {} });
+    const workspace = new Workspace({
+      file: new WorkspaceFile(file),
+      vcs: new Vcs(),
+      hosting: fakeHosting().hosting,
+      openEditor: () => {},
+    });
     mkdirSync(join(outer, "Projects", "puste", ".git"), { recursive: true });
     await workspace.setProjectsDir(join(outer, "Projects"));
 
@@ -219,7 +229,7 @@ describe("workspace", () => {
     const { workspace, projects, opened } = await workspaceWithProjectsDir();
     const dir = makeRepo({ a: "1" }, "api", projects);
     await workspace.openEditor("api");
-    expect(opened).toEqual([vscodeUrl(dir)]);
+    expect(opened).toEqual([dir]);
   });
 });
 

@@ -1,8 +1,8 @@
 import { z } from "zod";
-import type { Endpoint } from "./api.ts";
+import { Done, type Endpoint } from "./api.ts";
 import { RunState } from "./procs.ts";
 import { TaskStateChange } from "./task-state.ts";
-import { RepoId } from "./workspace.ts";
+import { CommitHash, RepoId } from "./workspace.ts";
 
 /**
  * Kontrakt modułu `agents` (§4.4, ADR-26): sesje Copilot CLI w PTY należącym do daemona, kilka naraz. Każda akcja
@@ -12,6 +12,16 @@ import { RepoId } from "./workspace.ts";
 
 export const SessionId = z.uuid();
 export type SessionId = z.infer<typeof SessionId>;
+
+/** Zadanie (ADR-31): polecenie dla agenta w osobnym worktree na własnej gałęzi. Ten sam UUID nosi sesja Copilot CLI zadania. */
+export const TaskId = z.uuid();
+export type TaskId = z.infer<typeof TaskId>;
+
+/**
+ * Polecenie zadania. Idzie do Copilot CLI jednym argumentem (`--interactive=<polecenie>`), a wiersz poleceń Windowsa
+ * mieści 32 767 znaków razem z resztą komendy.
+ */
+export const TaskPrompt = z.string().trim().min(1).max(8000);
 
 export const Session = z.object({
   id: SessionId,
@@ -29,18 +39,72 @@ export const Session = z.object({
    * (Rust) czytały jedną regułę zamiast jej kopii.
    */
   needsAttention: z.boolean(),
+  /** Zadanie, w którego worktree działa sesja; `null` dla sesji w korzeniu repo. */
+  task: TaskId.nullable(),
 });
 export type Session = z.infer<typeof Session>;
 
-/** Najnowsze sesje na górze; sesje zakończone zostają na liście, dopóki użytkownik ich nie zamknie (`dismiss`). */
-export const SessionList = z.object({ sessions: z.array(Session) });
+export const Task = z.object({
+  id: TaskId,
+  repo: RepoId,
+  prompt: z.string(),
+  /** Gałąź zadania, `trackwall/<skrót polecenia>-<6 znaków identyfikatora>`. */
+  branch: z.string(),
+  /** Gałąź, od której zadanie wyszło (domyślna repo); `null`, gdy repo nie miało gałęzi domyślnej ani wybranej. */
+  baseBranch: z.string().nullable(),
+  /** Commit bazowy: zmiany zadania to różnica między nim a katalogiem roboczym worktree. */
+  base: CommitHash,
+  /** Pełna ścieżka worktree w katalogu stanu (`worktrees/<repo>/<gałąź bez prefiksu>`). */
+  worktree: z.string(),
+  /** ISO 8601. */
+  createdAt: z.string(),
+});
+export type Task = z.infer<typeof Task>;
+
+/**
+ * Najnowsze sesje na górze; sesje zakończone zostają na liście, dopóki użytkownik ich nie zamknie (`dismiss`).
+ * Zadania (od najnowszego) zostają, dopóki użytkownik ich nie zakończy, także po restarcie daemona; sesja zadania to
+ * najnowsza sesja z jego `Session.task` (po restarcie daemona żadnej).
+ */
+export const SessionList = z.object({
+  sessions: z.array(Session),
+  tasks: z.array(Task),
+  /** Katalog worktree zadań; UI podpowiada go do zaufanych folderów Copilot CLI, bo zaufanie obejmuje podkatalogi. */
+  worktreesDir: z.string(),
+});
 export type SessionList = z.infer<typeof SessionList>;
+
+/** Plik zmieniony w worktree względem commita bazowego; `null` w liczbie linii dla pliku binarnego. */
+export const ChangedFile = z.object({
+  path: z.string(),
+  change: z.enum(["added", "modified", "deleted"]),
+  additions: z.number().int().nonnegative().nullable(),
+  deletions: z.number().int().nonnegative().nullable(),
+});
+export type ChangedFile = z.infer<typeof ChangedFile>;
+
+/**
+ * Zmiany zadania: katalog roboczy worktree (z nowymi plikami, bez ignorowanych) względem commita bazowego, czyli
+ * commity zadania i to, czego agent jeszcze nie zacommitował, razem.
+ */
+export const TaskChanges = z.object({
+  files: z.array(ChangedFile),
+  /** Zunifikowany diff, ucięty do 1 MB (`truncated`). */
+  patch: z.string(),
+  truncated: z.boolean(),
+  /** Commity na gałęzi zadania od commita bazowego. */
+  commits: z.number().int().nonnegative(),
+  /** Wpisy `git status`: zmienione, nowe i usunięte pliki, których nie ma w żadnym commicie. */
+  uncommitted: z.number().int().nonnegative(),
+});
+export type TaskChanges = z.infer<typeof TaskChanges>;
 
 function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
   return { path: `/api/agents/${action}`, request, data };
 }
 
 const SessionRequest = z.object({ session: SessionId }).strict();
+const TaskRequest = z.object({ task: TaskId }).strict();
 
 export const agentsApi = {
   sessions: endpoint("sessions", z.object({}).strict(), SessionList),
@@ -50,6 +114,18 @@ export const agentsApi = {
   stop: endpoint("stop", SessionRequest, Session),
   /** Usuwa zakończoną sesję z listy; działającej nie da się zamknąć bez zatrzymania. */
   dismiss: endpoint("dismiss", SessionRequest, SessionList),
+  /** Tworzy worktree na nowej gałęzi od gałęzi domyślnej i uruchamia w nim Copilot CLI z poleceniem (ADR-31). */
+  createTask: endpoint("create-task", z.object({ repo: RepoId, prompt: TaskPrompt }).strict(), Task),
+  /** Nowa sesja zadania, które nie ma działającej sesji: Copilot CLI wznawia rozmowę zadania (`--resume`). */
+  resumeTask: endpoint("resume-task", TaskRequest, Task),
+  taskChanges: endpoint("task-changes", TaskRequest, TaskChanges),
+  openTaskEditor: endpoint("open-task-editor", TaskRequest, Done),
+  /**
+   * Zakończenie zadania: usuwa worktree, a bez `keepBranch` także gałąź. Zmiany, które by przepadły (niezacommitowane
+   * pliki i commity spoza gałęzi, a bez `keepBranch` także commity zadania), daemon usuwa tylko z `discardChanges`;
+   * inaczej `unsaved_changes`.
+   */
+  removeTask: endpoint("remove-task", z.object({ task: TaskId, keepBranch: z.boolean(), discardChanges: z.boolean() }).strict(), Done),
 };
 
 /** Ścieżka WebSocketu terminala sesji: `/ws/pty/<sesja>` (§5.2). */
