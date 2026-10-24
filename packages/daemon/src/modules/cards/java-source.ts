@@ -137,6 +137,8 @@ class SourceParser {
   private memberIdent(text: string): void {
     const next = this.tokens[this.i + 1];
     if (TYPE_KEYWORDS.has(text)) this.typeDeclaration(text);
+    // Konstruktor główny Kotlina (`class A(val b: B)`, `class A @Inject constructor(…)`): typy parametrów to nie nadtypy.
+    else if (this.pendingType && text === "constructor" && isPunct(next, "(")) this.i = closingIndex(this.tokens, this.i + 1);
     else if (isPunct(next, "(") && !this.pendingType && this.currentType() && !NOT_METHODS.has(text)) this.method(text);
     else if (isPunct(next, "=") && !this.pendingType) this.constant(text);
     else {
@@ -160,6 +162,7 @@ class SourceParser {
     this.pendingType = { name, keyword, line: this.tokens[this.i]?.line ?? 0, annotations: this.pending, methods: [], supertypes: [] };
     this.pending = [];
     this.i = nameToken?.kind === "ident" ? j + 1 : j;
+    if (isPunct(this.tokens[this.i], "(")) this.i = closingIndex(this.tokens, this.i);
   }
 
   private method(name: string): void {

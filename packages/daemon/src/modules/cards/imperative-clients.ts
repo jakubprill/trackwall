@@ -45,6 +45,11 @@ const TEMPLATE_METHODS: Record<string, HttpMethod | null> = {
 const BASE_METHODS = new Set(["baseUrl", "rootUri", "create"]);
 /** Ile tokenów wstecz szukać metody HTTP w łańcuchu przed `.uri(…)`. */
 const MAX_CHAIN = 60;
+/**
+ * Najdłuższa lista argumentów (w tokenach), którą ekstraktor rozkłada: adres z kilkoma sklejeniami to kilkadziesiąt
+ * tokenów, a wywołania zagnieżdżone tysiące razy (plik z repo, §8) kopiowałyby resztę pliku przy każdym wywołaniu.
+ */
+const MAX_ARGUMENT_TOKENS = 256;
 
 interface FoundCall extends HttpCall {
   /** Adres bazowy sklejony z wywołaniem (`baseUrl + "/orders"`, `"http://…/orders"`); `undefined`, gdy go nie ma. */
@@ -119,7 +124,7 @@ function findBases(ctx: ScanContext): { text: string; line: number }[] {
   for (let i = 0; i + 2 < ctx.tokens.length; i++) {
     const t = ctx.tokens[i + 1];
     if (!isPunct(ctx.tokens[i], ".") || t?.kind !== "ident" || !BASE_METHODS.has(t.text) || !isPunct(ctx.tokens[i + 2], "(")) continue;
-    const [arg] = splitTopLevel(ctx.tokens.slice(i + 3, closingIndex(ctx.tokens, i + 2) - 1));
+    const [arg] = argumentsAt(ctx.tokens, i + 2) ?? [];
     const text = arg && baseText(arg, ctx);
     if (text) bases.push({ text, line: t.line });
   }
@@ -135,14 +140,21 @@ function baseText(arg: readonly Token[], ctx: ScanContext): string | undefined {
   return value !== undefined && (value.includes("${") || parseHttpUrl(value)) ? value : undefined;
 }
 
+/** Argumenty wywołania z nawiasem `(` pod `open`; `undefined` dla listy dłuższej niż `MAX_ARGUMENT_TOKENS`. */
+function argumentsAt(tokens: readonly Token[], open: number): Token[][] | undefined {
+  const end = closingIndex(tokens, open);
+  return end - open > MAX_ARGUMENT_TOKENS ? undefined : splitTopLevel(tokens.slice(open + 1, end - 1));
+}
+
 function findCalls(ctx: ScanContext): FoundCall[] {
   const calls: FoundCall[] = [];
   for (let i = 0; i + 2 < ctx.tokens.length; i++) {
     const t = ctx.tokens[i + 1];
     if (!isPunct(ctx.tokens[i], ".") || t?.kind !== "ident" || !isPunct(ctx.tokens[i + 2], "(")) continue;
-    const args = splitTopLevel(ctx.tokens.slice(i + 3, closingIndex(ctx.tokens, i + 2) - 1));
-    const call =
-      t.text === "uri" ? fluentCall(ctx, i, args) : Object.hasOwn(TEMPLATE_METHODS, t.text) ? templateCall(ctx, t.text, args) : undefined;
+    if (t.text !== "uri" && !Object.hasOwn(TEMPLATE_METHODS, t.text)) continue;
+    const args = argumentsAt(ctx.tokens, i + 2);
+    if (args === undefined) continue;
+    const call = t.text === "uri" ? fluentCall(ctx, i, args) : templateCall(ctx, t.text, args);
     // Bez zapytania: `?apiKey=…` w adresie z kodu nie trafia na kartę.
     if (call) calls.push({ ...call, path: joinHttpPath(call.path), evidence: { path: ctx.path, line: t.line } });
   }
@@ -167,7 +179,7 @@ function chainMethod(tokens: readonly Token[], dot: number): HttpMethod | null {
     if (isPunct(t, ";") || isPunct(t, "{") || isPunct(t, "}")) break;
     if (t?.kind !== "ident" || !isPunct(tokens[j - 1], ".") || !isPunct(tokens[j + 1], "(")) continue;
     if (FLUENT_METHODS.has(t.text)) return HttpMethodSchema.parse(t.text.toUpperCase());
-    if (t.text === "method") return httpMethodIn(tokens.slice(j + 2, closingIndex(tokens, j + 1) - 1));
+    if (t.text === "method") return httpMethodIn((argumentsAt(tokens, j + 1) ?? []).flat());
   }
   return null;
 }

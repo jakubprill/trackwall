@@ -113,7 +113,7 @@ _Unikaj_: serwis, mikroserwis (dla faktu z karty)
 Metoda i pełna ścieżka (ścieżka kontekstu, prefiks kontrolera, ścieżka metody) z kontrolera Spring, z handlerem `Klasa.metoda`. Metoda `null` to każda metoda (`@RequestMapping` bez `method`).
 
 **Klient HTTP** (`ConsumedHttp`, na karcie `kind: "http"`, rodzaj `HttpClientVia`):
-Miejsce, z którego repo woła HTTP: interfejs Feign albo `@HttpExchange`, klasa z `WebClient`, `RestClient` albo `RestTemplate`, adres z konfiguracji Spring, `.env` albo proxy frontendu. Ma nazwę aplikacji celu albo adres, profile, w których ten adres obowiązuje, i wywołania. Adres na karcie nie ma użytkownika, hasła ani zapytania.
+Miejsce, z którego repo woła HTTP: interfejs Feign albo `@HttpExchange`, klasa z `WebClient`, `RestClient` albo `RestTemplate`, adres z konfiguracji Spring, `.env` albo proxy frontendu. Ma nazwę aplikacji celu albo adres, profile, w których ten adres obowiązuje, i wywołania. Adres na karcie nie ma użytkownika, hasła, zapytania ani członów ścieżki wyglądających na token.
 
 **Wywołanie** (`HttpCall`):
 Metoda i ścieżka, które klient HTTP woła, z linią w kodzie. Część ścieżki znana dopiero w czasie działania to `{}`.

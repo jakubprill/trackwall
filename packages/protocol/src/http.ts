@@ -97,15 +97,34 @@ export interface HttpUrl {
 
 /** Dłuższy tekst nie jest adresem z konfiguracji, a wyrażenie niżej i tak go nie dotknie. */
 const MAX_URL_LENGTH = 2048;
-const HTTP_URL = /^(https?|wss?|lb):\/\/(?:[^/?#@\s]*@)?([^/:?#@\s]+)(?::(\d{1,5}))?([^?#\s]*)/i;
-const USER_INFO = /^([a-z][a-z0-9+.-]{0,20}:\/\/)[^/?#@\s]*@/i;
+const HTTP_URL = /^(https?|wss?|lb):\/\/(?:[^/@\s]*@)?(\[[^\]/\s]{1,64}\]|[^/:?#@\s]+)(?::(\d{1,5}))?([^?#\s]*)/i;
+const SCHEME = /^[a-z][a-z0-9+.-]{0,20}:\/\//i;
+/** Człon ścieżki, który wygląda na token (klucz webhooka, identyfikator z hasłem): długi, z literami i cyframi. */
+const OPAQUE_SEGMENT = /^(?=[^/]*\d)(?=[^/]*[A-Za-z])[\w-]{20,}$/;
 
 /**
- * Adres bez użytkownika, hasła i zapytania (`http://ja:tajne@host/api?key=x` → `http://***@host/api`): adres z `.env`
- * albo `application.yml` trafia na kartę, do UI i do agenta, a sekret nie może (§8).
+ * Adres bez użytkownika, hasła, zapytania i członów ścieżki wyglądających na token (`http://ja:tajne@host/api?key=x`
+ * → `http://***@host/api`, `/services/T00/B00/XXXXSECRET1234567890` → `/services/T00/B00/***`): adres z `.env` albo
+ * `application.yml` trafia na kartę, do UI i do agenta, a sekret nie może (§8).
  */
 export function withoutCredentials(url: string): string {
-  return (url.split(/[?#]/)[0] ?? "").replace(USER_INFO, "$1***@");
+  const scheme = SCHEME.exec(url)?.[0];
+  if (scheme === undefined) return maskPath(url.split(/[?#]/)[0] ?? "");
+  const rest = url.slice(scheme.length);
+  const slash = rest.indexOf("/");
+  const authority = slash < 0 ? rest : rest.slice(0, slash);
+  // Hasło może mieć `@`, `?` i `#`: użytkownik i hasło kończą się na ostatnim `@` przed ścieżką.
+  const at = authority.lastIndexOf("@");
+  const host = authority.slice(at + 1).split(/[?#]/)[0] ?? "";
+  const path = slash < 0 || /[?#]/.test(authority.slice(at + 1)) ? "" : (rest.slice(slash).split(/[?#]/)[0] ?? "");
+  return `${scheme}${at < 0 ? "" : "***@"}${host}${maskPath(path)}`;
+}
+
+function maskPath(path: string): string {
+  return path
+    .split("/")
+    .map((segment) => (OPAQUE_SEGMENT.test(segment) ? "***" : segment))
+    .join("/");
 }
 
 /** Adres HTTP z tekstu; `undefined` dla innego tekstu i dla hosta z nierozwiniętym `${…}`. */

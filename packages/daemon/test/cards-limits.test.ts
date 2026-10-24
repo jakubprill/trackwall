@@ -117,6 +117,44 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
+  test("tysiące wywołań zagnieżdżonych w ciele metody i łańcuch .uri( nie blokują daemona", () => {
+    const nested = `class C {\n  RestTemplate rest;\n  void f() { ${"x.a(".repeat(20_000)}${")".repeat(20_000)} }\n  void g() { ${"w.get().uri(".repeat(20_000)}${")".repeat(20_000)} }\n}`;
+    const started = performance.now();
+    extractCard(snapshotOf({ "src/main/java/a/C.java": nested }));
+    expect(performance.now() - started).toBeLessThan(2000);
+  });
+
+  test("application.yml z dziesiątkami tysięcy kluczy i setkami profili nie blokuje daemona", () => {
+    const flat = Array.from({ length: 30_000 }, (_, i) => `k${i}: v${i}`).join("\n");
+    const profiles = Array.from({ length: 800 }, (_, i) => `---\nspring.config.activate.on-profile: p${i}\nurl${i}: http://h${i}`).join(
+      "\n",
+    );
+    const started = performance.now();
+    extractCard(snapshotOf({ "src/main/resources/application.yml": `${flat}\n${profiles}\n` }));
+    expect(performance.now() - started).toBeLessThan(2000);
+  });
+
+  test("błąd wyszukiwania plików źródłowych jest problemem karty, a pliki buildu zostają", async () => {
+    const vcs = {
+      commitFiles: async () => ({
+        files: [
+          { name: "pom.xml", path: "pom.xml", kind: "file" as const, size: 10 },
+          { name: "Api.java", path: "src/main/java/Api.java", kind: "file" as const, size: 10 },
+        ],
+        truncated: false,
+      }),
+      readFiles: async () => new Map([["pom.xml", Buffer.from("<project/>")]]),
+      grepFiles: async () => {
+        throw new Error("git grep: przekroczony limit czasu");
+      },
+    };
+    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), (path) => path.endsWith("pom.xml"), CARD_SOURCES);
+    expect(snapshot.text("pom.xml")).toBe("<project/>");
+    expect(snapshot.problems).toEqual([
+      { path: "", message: "wyszukiwanie plików z kontrolerami i klientami HTTP nie powiodło się: git grep: przekroczony limit czasu" },
+    ]);
+  });
+
   test("stałe, które sklejają się same ze sobą albo podwajają, nie zajmują pamięci", () => {
     const constants = Array.from({ length: 30 }, (_, i) => `static final String C${i} = C${i + 1} + C${i + 1};`).join("\n");
     const java = `@RestController class Api {\n${constants}\nstatic final String C30 = "${"x".repeat(1000)}";\nstatic final String L = L + "/a";\n@GetMapping(C0) void a() {}\n@GetMapping(L) void b() {}\n}`;

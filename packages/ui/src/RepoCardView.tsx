@@ -205,7 +205,7 @@ function Endpoints({ endpoints }: { endpoints: ProvidedEndpoint[] }) {
       ) : (
         <ul className="divide-y">
           {endpoints.map((e) => (
-            <Row key={`${e.method} ${e.path} ${e.handler}`}>
+            <Row key={`${e.method} ${e.path} ${evidenceLabel(e.evidence)}`}>
               <Badge variant="secondary">{e.method ?? "każda"}</Badge>
               <span className="min-w-0 flex-1 truncate font-mono text-xs" title={e.path}>
                 {e.path}
@@ -225,8 +225,9 @@ function HttpClients({ clients }: { clients: ConsumedHttp[] }) {
   return (
     <Surface label="Klienci HTTP" meta={clients.length}>
       <ul className="divide-y">
-        {clients.map((c) => (
-          <li key={`${c.via}:${c.name}:${c.url}:${c.profiles.join(",")}`} className="flex min-w-0 flex-col gap-1 px-3 py-2">
+        {clients.map((c, i) => (
+          // Dwa wpisy proxy do tego samego adresu mają te same pola: pozycja na liście odróżnia je bez zmiany kolejności.
+          <li key={`${i}:${c.via}:${c.name}:${c.url}`} className="flex min-w-0 flex-col gap-1 px-3 py-2">
             <span className="flex min-w-0 items-center gap-3">
               <Badge variant="secondary">{HTTP_CLIENT_LABELS[c.via]}</Badge>
               <span className="min-w-0 truncate font-mono text-xs" title={c.name}>

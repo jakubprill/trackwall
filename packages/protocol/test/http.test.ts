@@ -30,6 +30,16 @@ describe("adresy i ścieżki HTTP", () => {
     expect(withoutCredentials("http://orders/api")).toBe("http://orders/api");
   });
 
+  test("hasło z @, ? albo # i token w ścieżce nie przechodzą przez maskowanie, a adres IPv6 ma host i port", () => {
+    expect(withoutCredentials("http://ja:p@ss@orders/api")).toBe("http://***@orders/api");
+    expect(withoutCredentials("http://ja:pa#ss@orders/api")).toBe("http://***@orders/api");
+    expect(withoutCredentials("https://hooks.example.com/services/T000/B000/XXXXSECRET1234567890ab")).toBe(
+      "https://hooks.example.com/services/T000/B000/***",
+    );
+    expect(withoutCredentials("http://orders:8080/api/v1/orders/{id}")).toBe("http://orders:8080/api/v1/orders/{id}");
+    expect(parseHttpUrl("http://[::1]:8090/api")).toEqual({ scheme: "http", host: "[::1]", port: 8090, path: "/api" });
+  });
+
   test("ścieżki sklejają się z jednym ukośnikiem między częściami", () => {
     expect(joinHttpPath("/ctx/", "api", "/orders/", "{id}?full=true")).toBe("/ctx/api/orders/{id}");
     expect(joinHttpPath("", "")).toBe("/");

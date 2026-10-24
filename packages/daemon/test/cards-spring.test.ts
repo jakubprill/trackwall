@@ -100,6 +100,33 @@ describe("endpointy Spring", () => {
     ]);
   });
 
+  test("konstruktor główny Kotlina z klientem Feign nie daje kontrolerowi endpointów klienta", () => {
+    const c = card({
+      "src/main/kotlin/a/PaymentsClient.kt":
+        '@FeignClient(name = "payments")\ninterface PaymentsClient {\n  @GetMapping("/payments/{id}") fun get(@PathVariable id: String): String\n}\n',
+      "src/main/kotlin/a/Checkout.kt": [
+        "@RestController",
+        '@RequestMapping("/bff")',
+        "class CheckoutController(private val payments: PaymentsClient) : BaseController() {",
+        '  @PostMapping("/checkout") fun checkout() = payments.get("1")',
+        "}",
+        "class Other @Inject constructor(val p: PaymentsClient)",
+      ].join("\n"),
+    });
+    expect(endpoints(c)).toEqual(["POST /bff/checkout CheckoutController.checkout:4"]);
+  });
+
+  test("moduł w katalogu src/ ma endpointy z src/main, a kod testów z src/test nie", () => {
+    const c = card({
+      "src/orders/src/main/resources/application.yml": "spring:\n  application:\n    name: orders\n",
+      "src/orders/src/main/java/a/Api.java": '@RestController\nclass Api {\n  @GetMapping("/orders") String list() { return ""; }\n}\n',
+      "src/orders/src/test/java/a/Fake.java": '@RestController\nclass Fake {\n  @GetMapping("/fake") String fake() { return ""; }\n}\n',
+    });
+    expect(
+      c.provides.filter((p) => p.kind !== "package").map((p) => (p.kind === "app" ? `app ${p.name} ${p.module}` : `${p.kind} ${p.path}`)),
+    ).toEqual(["app orders src/orders", "endpoint /orders"]);
+  });
+
   test("@RequestMapping bez metody to endpoint dla każdej metody, a klasa bez @Controller nie ma endpointów", () => {
     const c = card({
       "src/main/java/a/Any.java": '@Controller\nclass Any {\n  @RequestMapping("/any")\n  String any() { return ""; }\n}\n',
@@ -153,6 +180,18 @@ describe("klienci HTTP Spring", () => {
       "feign StockClient app=stock url=http://stock.internal:9000 [default] {GET /v2/stock/{sku}}",
       "feign Direct app=direct url=http://localhost:7000 [default] {DELETE /x}",
       "config gateway.uri app=pricing url=lb://pricing [default] {}",
+    ]);
+  });
+
+  test("plik profilu (application-prod.yml) nadpisuje dokument on-profile z application.yml, jak w Spring Boot", () => {
+    const c = card({
+      "src/main/resources/application.yml":
+        "orders:\n  url: http://localhost:8081\n---\nspring:\n  config:\n    activate:\n      on-profile: prod\norders:\n  url: http://old-prod\n",
+      "src/main/resources/application-prod.yml": "orders:\n  url: http://new-prod\n",
+    });
+    expect(summary(c)).toEqual([
+      "config orders.url app=null url=http://localhost:8081 [default] {}",
+      "config orders.url app=null url=http://new-prod [prod] {}",
     ]);
   });
 

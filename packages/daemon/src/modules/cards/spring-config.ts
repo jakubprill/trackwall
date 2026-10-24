@@ -18,6 +18,8 @@ const CONFIG_FILE = /(?:^|\/)src\/main\/resources\/(application|bootstrap)(?:-([
 /** Ile wpisów czytać z jednego pliku i jak głęboko w YAML: więcej to nie konfiguracja aplikacji (§8). */
 const MAX_ENTRIES = 20_000;
 const MAX_YAML_DEPTH = 64;
+/** Ile profili modułu brać pod uwagę: każdy to osobny widok konfiguracji, a aplikacja ma ich kilka. */
+const MAX_PROFILES = 32;
 
 /** Pliki, które ten odczyt czyta, do wyboru plików z commita. */
 export function readsSpringConfigFile(path: string): boolean {
@@ -45,7 +47,7 @@ export class ModuleConfig {
   constructor(module: string, docs: readonly ConfigDoc[]) {
     this.module = module;
     const base = docs.filter((d) => d.profiles === null);
-    this.profiles = [...new Set(docs.flatMap((d) => d.profiles ?? []))].sort();
+    this.profiles = [...new Set(docs.flatMap((d) => d.profiles ?? []))].sort().slice(0, MAX_PROFILES);
     this.views.set(DEFAULT_PROFILE, merge(base));
     for (const p of this.profiles) this.views.set(p, merge([...base, ...docs.filter((d) => d.profiles?.includes(p))]));
   }
@@ -58,6 +60,15 @@ export class ModuleConfig {
   /** Klucze (znormalizowane) wszystkich widoków. */
   keys(): Set<string> {
     return new Set([...this.views.values()].flatMap((v) => [...v.keys()]));
+  }
+
+  /** Wartości klucza bez rozwijania we wszystkich widokach. */
+  rawValues(key: string): string[] {
+    const normalized = normalizeKey(key);
+    return [...this.views.values()].flatMap((v) => {
+      const entry = v.get(normalized);
+      return entry ? [entry.value] : [];
+    });
   }
 
   /** Tekst z rozwiniętymi `${…}` w widoku profilu. */
@@ -103,14 +114,18 @@ export function moduleOf(path: string): string {
   return at <= 0 ? "" : path.slice(0, at);
 }
 
-/** Kolejność, w której Spring czyta pliki: `bootstrap` przed `application`, YAML przed `.properties`, które go nadpisuje. */
+/**
+ * Kolejność, w której Spring czyta pliki: `bootstrap` przed `application`, YAML przed `.properties`, które go nadpisuje,
+ * a plik profilu (`application-prod.yml`) po plikach bez profilu, także po dokumentach `on-profile` w nich.
+ */
 function byLoadOrder(a: string, b: string): number {
   return rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0);
 }
 
 function rank(path: string): number {
   const name = baseName(path);
-  return (name.startsWith("bootstrap") ? 0 : 2) + (name.endsWith(".properties") ? 1 : 0);
+  const profileFile = CONFIG_FILE.exec(path)?.[2] !== undefined;
+  return (profileFile ? 4 : 0) + (name.startsWith("bootstrap") ? 0 : 2) + (name.endsWith(".properties") ? 1 : 0);
 }
 
 function readConfigFile(path: string, text: string, out: ProblemSink): ConfigDoc[] {
@@ -142,13 +157,15 @@ function activationProfiles(entries: Map<string, ConfigEntry>): string[] | null 
 /** Dokumenty YAML (`---`) jako płaskie wpisy `a.b[0].c` z linią klucza. Aliasy (`*kotwica`) są pomijane (§8). */
 function readYaml(path: string, text: string): Map<string, ConfigEntry>[] {
   const lineCounter = new LineCounter();
-  const docs = parseAllDocuments(text, { lineCounter });
+  // Bez sprawdzania powtórzonych kluczy: biblioteka porównuje każdy klucz mapy z każdym, a plik jest z repo (§8).
+  const docs = parseAllDocuments(text, { lineCounter, uniqueKeys: false });
+  const budget = { left: MAX_ENTRIES };
   if (!Array.isArray(docs)) return [];
   return docs.map((doc) => {
     const [error] = doc.errors;
     if (error) throw new Error(error.message);
     const entries = new Map<string, ConfigEntry>();
-    if (doc.contents) flatten(doc.contents, "", { path, lineCounter, entries }, 0);
+    if (doc.contents) flatten(doc.contents, "", { path, lineCounter, entries, budget }, 0);
     return entries;
   });
 }
@@ -157,16 +174,19 @@ interface FlattenContext {
   path: string;
   lineCounter: LineCounter;
   entries: Map<string, ConfigEntry>;
+  /** Ile wpisów zostało do limitu pliku (wszystkie dokumenty razem). */
+  budget: { left: number };
 }
 
 function flatten(node: Node, prefix: string, ctx: FlattenContext, depth: number): void {
-  if (depth > MAX_YAML_DEPTH || ctx.entries.size >= MAX_ENTRIES) return;
+  if (depth > MAX_YAML_DEPTH || ctx.budget.left <= 0) return;
   if (isMap(node)) flattenMap(node.items, prefix, ctx, depth);
   else if (isSeq(node)) flattenSeq(node.items, prefix, ctx, depth);
 }
 
 function flattenMap(items: readonly Pair[], prefix: string, ctx: FlattenContext, depth: number): void {
   for (const pair of items) {
+    if (ctx.budget.left <= 0) return;
     const key = isScalar(pair.key) ? String(pair.key.value) : undefined;
     if (key === undefined || !isNode(pair.value)) continue;
     const child = key.startsWith("[") || prefix === "" ? `${prefix}${key}` : `${prefix}.${key}`;
@@ -188,6 +208,8 @@ function addValue(node: Node, key: string, line: number, ctx: FlattenContext, de
 }
 
 function add(ctx: FlattenContext, key: string, value: unknown, line: number): void {
+  if (ctx.budget.left <= 0) return;
+  ctx.budget.left--;
   const text = value === null || value === undefined ? "" : String(value);
   ctx.entries.set(normalizeKey(key), { key, value: text, path: ctx.path, line });
 }
@@ -199,6 +221,7 @@ function add(ctx: FlattenContext, key: string, value: unknown, line: number): vo
 function readProperties(path: string, text: string): Map<string, ConfigEntry>[] {
   const docs = [new Map<string, ConfigEntry>()];
   const lines = text.split("\n");
+  let read = 0;
   for (let i = 0; i < lines.length; i++) {
     const start = i;
     // Części linii z kontynuacją składane tablicą: sklejanie napisu w pętli byłoby kwadratowe na złośliwym pliku.
@@ -210,7 +233,7 @@ function readProperties(path: string, text: string): Map<string, ConfigEntry>[] 
     const line = parts.join("");
     const current = docs.at(-1);
     if (line === "#---" || line === "!---") docs.push(new Map());
-    else if (current && line !== "" && !line.startsWith("#") && !line.startsWith("!") && current.size < MAX_ENTRIES)
+    else if (current && line !== "" && !line.startsWith("#") && !line.startsWith("!") && read++ < MAX_ENTRIES)
       addProperty(current, path, line, start + 1);
   }
   return docs;

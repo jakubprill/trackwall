@@ -25,12 +25,14 @@ export const JVM_SOURCE_PATTERN =
 /** Rozszerzenia plików źródłowych, które czyta ekstraktor. */
 export const JVM_SOURCE_GLOBS = ["*.java", "*.kt"];
 
-/** Plik źródłowy Javy albo Kotlina z kodu aplikacji: pod `src/` tylko z `src/main/`, bez testów. */
+/**
+ * Plik źródłowy Javy albo Kotlina z kodu aplikacji: z `src/main/` na dowolnej głębokości (także moduł w katalogu
+ * `src/`, jak `src/orders/src/main/java`), a bez `src/main/` tylko poza katalogami `src` (bez testów).
+ */
 export function isJvmSource(path: string): boolean {
   if (path.length > 1024 || !(path.endsWith(".java") || path.endsWith(".kt"))) return false;
   const segments = path.split("/");
-  const src = segments.indexOf("src");
-  return src < 0 || segments[src + 1] === "main";
+  return segments.some((s, i) => s === "src" && segments[i + 1] === "main") || !segments.includes("src");
 }
 
 /** Fakty ekstraktora Spring. */

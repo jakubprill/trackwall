@@ -142,6 +142,42 @@ describe("krawędzie http: dopasowanie celu", () => {
     ]);
   });
 
+  test("endpoint przekierowujący wszystko (SPA) nie jest celem wywołań, a pasujące wywołanie jest dowodem każdego pasującego endpointu", () => {
+    const calls = [{ method: "GET" as const, path: "/api/orders/search", evidence: { path: "src/main/java/R.java", line: 20 } }];
+    const graph = buildGraph(
+      [
+        repo("reports", card([], [client({ via: "rest-template", name: "Report", calls })])),
+        repo("web-shell", card([endpoint("/**"), endpoint("/{path}")], [])),
+        repo("orders-api", card([endpoint("/api/orders/{id}"), endpoint("/api/orders/search")], [])),
+      ],
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
+    );
+    expect(graph.edges.map((e) => [e.to, e.confidence, e.evidence.filter((v) => v.detail.startsWith("obsługuje")).length])).toEqual([
+      ["orders-api", "medium", 2],
+    ]);
+  });
+
+  test("nazwa aplikacji albo port wskazujące repo klienta kończą szukanie bez krawędzi", () => {
+    const calls = [{ method: "GET" as const, path: "/api/orders/{id}", evidence: { path: "src/main/java/B.java", line: 20 } }];
+    const graph = buildGraph(
+      [
+        repo(
+          "shop",
+          card(
+            [app("orders", 8080), app("billing")],
+            [
+              client({ via: "feign", name: "OrdersClient", app: "orders", calls }),
+              client({ name: "self.url", url: "http://localhost:8080" }),
+            ],
+          ),
+        ),
+        repo("legacy", card([endpoint("/api/orders/{id}")], [])),
+      ],
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
+    );
+    expect(graph.edges).toEqual([]);
+  });
+
   test("lb://nazwa w konfiguracji wskazuje aplikację po nazwie, a bez wywołań pewność jest high", () => {
     const graph = buildGraph(
       [

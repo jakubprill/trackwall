@@ -1,4 +1,5 @@
 import type { CardProblem, TreeEntry } from "@trackwall/protocol";
+import { messageOf } from "../../errors.ts";
 import type { RepoSnapshot } from "./snapshot.ts";
 
 /**
@@ -78,7 +79,14 @@ async function sourceFiles(
 ): Promise<string[]> {
   const candidates = new Map(files.filter((f) => sources.accepts(f.path) && isReadable(f)).map((f) => [f.path, f]));
   if (candidates.size === 0) return [];
-  const found = await vcs.grepFiles(dir, commit, sources.pattern, sources.globs, MAX_GREP_BYTES);
+  let found: { paths: string[]; truncated: boolean };
+  try {
+    found = await vcs.grepFiles(dir, commit, sources.pattern, sources.globs, MAX_GREP_BYTES);
+  } catch (err) {
+    // Błąd wyszukiwania (np. limit czasu w ogromnym repo) zabiera tylko fakty z kodu, nie karta z plików buildu.
+    problems.push({ path: "", message: `wyszukiwanie plików z kontrolerami i klientami HTTP nie powiodło się: ${messageOf(err)}` });
+    return [];
+  }
   const matched = found.paths.filter((p) => candidates.has(p));
   if (found.truncated || matched.length > MAX_SOURCE_FILES)
     problems.push({
