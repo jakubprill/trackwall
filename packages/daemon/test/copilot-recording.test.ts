@@ -107,6 +107,50 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     expect(session.exit(0).map((c) => `${c.state} ${c.at}`)).toEqual(["Stale 1970-01-01T00:01:00.000Z", "Done 1970-01-01T00:01:01.100Z"]);
   });
 
+  test("komunikat o przerwanej turze tuż po klawiszu kończy pracę bez hooka, także rozdzielony na dwa kawałki wyjścia", () => {
+    let now = 0;
+    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000 });
+    session.hook({ event: "notification", receivedAt: 0, payload: { notification_type: "permission_prompt" }, omitted: [] });
+    // Enter na „No, and tell Copilot…”, a Copilot CLI kończy turę zamiast czekać na tekst.
+    now = 1_000;
+    session.key("enter");
+
+    now = 1_300;
+    expect(session.output("\u001b[34m●\u001b[m Operation cance")).toEqual([]);
+    expect(session.output("lled by user\u001b[30;2H").map((c) => `${c.state} ${c.source} ${c.confidence} ${c.reason}`)).toEqual([
+      "Input screen medium screen operation cancelled",
+    ]);
+  });
+
+  test("komunikat o przerwanej turze bez niedawnego klawisza to przerysowana historia ekranu i nie zmienia stanu", () => {
+    let now = 0;
+    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000 });
+    session.key("escape");
+    session.hook({ event: "userPromptSubmitted", receivedAt: 5_000, payload: {}, omitted: [] });
+
+    now = 20_000;
+    expect(session.output(" ● Operation cancelled by user")).toEqual([]);
+  });
+
+  test("hook sprzed klawisza, odczytany dopiero po nim, nie nadpisuje stanu, na który człowiek już odpowiedział", () => {
+    let now = 0;
+    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000 });
+    session.hook({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] });
+
+    // Prośba o zgodę przyszła o 1,0 s, ale `hooks.jsonl` odczytano dopiero po Enter o 1,1 s.
+    now = 1_100;
+    expect(session.key("enter")).toEqual([]);
+    now = 1_200;
+    expect(
+      session.hook({ event: "notification", receivedAt: 1_000, payload: { notification_type: "permission_prompt" }, omitted: [] }),
+    ).toEqual([]);
+
+    now = 2_000;
+    expect(session.key("escape").map((c) => `${c.state} ${c.source}`)).toEqual(["Input keyboard"]);
+    // `postToolUse` z 1,9 s, odczytany po Esc: tura i tak jest przerwana.
+    expect(session.hook({ event: "postToolUse", receivedAt: 1_900, payload: { toolName: "bash" }, omitted: [] })).toEqual([]);
+  });
+
   test("Esc po progu bez cyklicznego sprawdzenia daje najpierw Stale, a potem czekanie na Ciebie, tak jak na żywo", () => {
     let now = 0;
     const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000 });

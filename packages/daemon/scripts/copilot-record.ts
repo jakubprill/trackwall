@@ -72,6 +72,8 @@ async function record(argv: string[]): Promise<number> {
   process.stdin.setRawMode?.(true);
   process.stdin.on("data", (d: Buffer) => {
     terminal.write(d);
+    // Hooki, które już przyszły, idą do nagrania przed klawiszem, żeby odtwarzanie widziało tę samą kolejność.
+    pumpHooks();
     recording.input(d.toString("utf8"));
   });
   process.stdout.on("resize", () => {
@@ -196,7 +198,7 @@ function copilotCommand(program: string | undefined, args: string[]): string[] {
 function printChanges(changes: TaskStateChange[]): void {
   console.error("\nZmiany stanu (czas, stan, źródło, pewność, powód):");
   for (const c of changes) {
-    console.error(`  ${c.at.slice(11, 23)}  ${c.state.padEnd(8)}  ${c.source.padEnd(7)}  ${c.confidence.padEnd(6)}  ${c.reason}`);
+    console.error(`  ${c.at.slice(11, 23)}  ${c.state.padEnd(8)}  ${c.source.padEnd(8)}  ${c.confidence.padEnd(6)}  ${c.reason}`);
   }
 }
 

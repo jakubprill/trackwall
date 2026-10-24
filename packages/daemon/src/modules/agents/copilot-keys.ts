@@ -13,7 +13,11 @@ import type { KeyboardSignal } from "./task-state-tracker.ts";
 export const SessionKey = z.enum(["enter", "escape", "interrupt"]);
 export type SessionKey = z.infer<typeof SessionKey>;
 
-const KEYS: Record<string, SessionKey> = { "\r": "enter", "\u001b": "escape", "\u0003": "interrupt" };
+const KEYS: ReadonlyMap<string, SessionKey> = new Map([
+  ["\r", "enter"],
+  ["\u001b", "escape"],
+  ["\u0003", "interrupt"],
+]);
 
 /** Stany, w których Copilot CLI pokazuje okno z wyborem, a Enter zatwierdza wybraną odpowiedź. */
 const ANSWERED_BY_ENTER: ReadonlySet<TaskState> = new Set(["Approval", "Plan"]);
@@ -24,8 +28,7 @@ const ANSWERED_BY_ENTER: ReadonlySet<TaskState> = new Set(["Approval", "Plan"]);
 const STOPPED_BY_ESCAPE: ReadonlySet<TaskState> = new Set(["Working", "Stale", "Approval", "Plan"]);
 
 export function sessionKey(data: string): SessionKey | undefined {
-  // `hasOwn`, bo wklejony tekst w rodzaju „constructor” trafiłby w prototyp obiektu.
-  return Object.hasOwn(KEYS, data) ? KEYS[data] : undefined;
+  return KEYS.get(data);
 }
 
 export function stateFromKey(key: SessionKey, current: TaskState | undefined): KeyboardSignal | undefined {
