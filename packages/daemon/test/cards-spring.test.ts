@@ -127,13 +127,16 @@ describe("endpointy Spring", () => {
     ).toEqual(["app orders src/orders", "endpoint /orders"]);
   });
 
-  test("projekt przykładowy w zasobach testów (src/test/resources/…/src/main) to kod testów", () => {
+  test("projekt przykładowy w zasobach testów (src/test/resources/…/src/main) to kod testów, także jego konfiguracja", () => {
     const c = card({
       "src/main/java/a/Api.java": '@RestController\nclass Api {\n  @GetMapping("/orders") String list() { return ""; }\n}\n',
       "src/test/resources/demo/src/main/java/a/Demo.java":
         '@RestController\nclass Demo {\n  @GetMapping("/demo") String demo() { return ""; }\n}\n',
+      "src/test/resources/demo/src/main/resources/application.yml": "spring.application.name: demo\nusers.url: http://users\n",
     });
     expect(endpoints(c)).toEqual(["GET /orders Api.list:3"]);
+    expect(c.provides.filter((p) => p.kind === "app")).toEqual([]);
+    expect(summary(c)).toEqual([]);
   });
 
   test("klasa generyczna Kotlina: parametry konstruktora głównego za <T> nie są nadtypami", () => {
@@ -272,19 +275,19 @@ describe("klienci HTTP Spring", () => {
     ]);
   });
 
-  test("dwa adresy w jednej linii YAML ({a: …, b: …}): adres klienta z kodu nie ukrywa drugiego adresu z konfiguracji", () => {
+  test("dwa adresy w jednej linii YAML ({a: …, b: …}): adres klienta z kodu (z doklejoną ścieżką) nie ukrywa drugiego adresu z konfiguracji", () => {
     const c = card({
       "src/main/resources/application.yml": "clients: {orders: http://orders, users: http://users}\n",
       "src/main/java/a/Orders.java": [
         "class Orders {",
         "  WebClient client;",
-        `  Orders(@Value("\${clients.orders}") String url) { client = WebClient.create(url); }`,
+        `  Orders(@Value("\${clients.orders}/v1") String url) { client = WebClient.create(url); }`,
         '  void load() { client.get().uri("/api/orders").retrieve(); }',
         "}",
       ].join("\n"),
     });
     expect(summary(c)).toEqual([
-      "webclient Orders app=null url=http://orders [default] {GET /api/orders}",
+      "webclient Orders app=null url=http://orders/v1 [default] {GET /api/orders}",
       "config clients.users app=null url=http://users [default] {}",
     ]);
   });

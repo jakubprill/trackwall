@@ -23,7 +23,13 @@ const MAX_PROFILES = 32;
 
 /** Pliki, które ten odczyt czyta, do wyboru plików z commita. */
 export function readsSpringConfigFile(path: string): boolean {
-  return path.length <= 1024 && CONFIG_FILE.test(path);
+  return path.length <= 1024 && CONFIG_FILE.test(path) && !isTestPath(path);
+}
+
+/** Ścieżka pod `src/test`, także projekt przykładowy w zasobach testów (`src/test/resources/demo/src/main/…`). */
+export function isTestPath(path: string): boolean {
+  const segments = path.split("/");
+  return segments.some((s, i) => s === "src" && segments[i + 1] === "test");
 }
 
 export interface ConfigEntry extends PlaceholderSource {

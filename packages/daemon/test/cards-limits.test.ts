@@ -124,14 +124,16 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
-  test("application.yml z tysiącami adresów w jednym module daje kartę z pierwszymi 500 i problemem", () => {
+  test("application.yml z tysiącami adresów w jednym module daje kartę z pierwszymi 500 i problemem, a 500 adresów problemu nie daje", () => {
     const urls = Array.from({ length: 5_000 }, (_, i) => `url${i}: http://h${i}`).join("\n");
     const card = extractCard(snapshotOf({ "src/main/resources/application.yml": `${urls}\n` }));
     expect(card.consumes.filter((c) => c.kind === "http")).toHaveLength(500);
+    const exactly500 = Array.from({ length: 500 }, (_, i) => `url${i}: http://h${i}`).join("\n");
+    expect(extractCard(snapshotOf({ "src/main/resources/application.yml": `${exactly500}\nplain: v\n` })).problems).toEqual([]);
     expect(card.problems).toContainEqual({ path: "", message: "moduł ma ponad 500 adresów w konfiguracji; karta pokazuje pierwsze" });
   });
 
-  test("plik z dziesiątkami tysięcy wywołań RestTemplate rozkłada najwyżej 2000 z nich", () => {
+  test("plik z dziesiątkami tysięcy wywołań RestTemplate nie blokuje daemona", () => {
     const calls = Array.from({ length: 30_000 }, (_, i) => `    rest.getForObject("http://h/p${i}", String.class);`).join("\n");
     const java = `class C {\n  RestTemplate rest;\n  void f() {\n${calls}\n  }\n}`;
     const started = performance.now();

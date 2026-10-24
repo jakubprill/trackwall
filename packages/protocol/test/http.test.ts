@@ -48,6 +48,10 @@ describe("adresy i ścieżki HTTP", () => {
     expect(parseHttpUrl("http://ja:p/ss@orders/api")?.host).toBe("orders");
     expect(withoutCredentials("http://orders:8080/users/@me")).toBe("http://orders:8080/users/@me");
     expect(parseHttpUrl("http://orders#a@evil/x")?.host).toBe("orders");
+    expect(withoutCredentials("http://ja:p/s?s@orders/x")).toBe("http://***");
+    expect(withoutCredentials("http://ja:pa ss@orders/x")).toBe("http://***");
+    expect(withoutCredentials("http://[::1]:8080/users/@me")).toBe("http://[::1]:8080/users/@me");
+    expect(withoutCredentials(`http://localhost:\${PORT}/users/@me`)).toBe(`http://localhost:\${PORT}/users/@me`);
   });
 
   test("ścieżki sklejają się z jednym ukośnikiem między częściami", () => {

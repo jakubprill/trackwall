@@ -5,7 +5,7 @@ import { imperativeClients } from "./imperative-clients.ts";
 import { ConstantTable } from "./java-expr.ts";
 import { parseJavaFile } from "./java-source.ts";
 import { type Extracted, emptyExtracted, type RepoSnapshot } from "./snapshot.ts";
-import { ModuleConfig, moduleOf, readSpringConfigs } from "./spring-config.ts";
+import { isTestPath, ModuleConfig, moduleOf, readSpringConfigs } from "./spring-config.ts";
 import { springEndpoints } from "./spring-endpoints.ts";
 import type { SpringModule, TypeIndex } from "./spring-module.ts";
 
@@ -31,9 +31,8 @@ export const JVM_SOURCE_GLOBS = ["*.java", "*.kt"];
  */
 export function isJvmSource(path: string): boolean {
   if (path.length > 1024 || !(path.endsWith(".java") || path.endsWith(".kt"))) return false;
+  if (isTestPath(path)) return false;
   const segments = path.split("/");
-  // Projekt przykładowy w zasobach testów (`src/test/resources/demo/src/main/java`) to też kod testów.
-  if (segments.some((s, i) => s === "src" && segments[i + 1] === "test")) return false;
   return segments.some((s, i) => s === "src" && segments[i + 1] === "main") || !segments.includes("src");
 }
 

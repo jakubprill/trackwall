@@ -142,13 +142,13 @@ function urlParts(text: string): UrlParts | undefined {
 
 /**
  * Koniec części `user:hasło@host:port` w `rest` (adres bez schematu). Zwykle to pierwszy `/`, ale hasło może mieć `/`
- * (`u:p/ss@host`): gdy przed pierwszym `/` jest `:` z czymś innym niż numer portu, a dalej (przed zapytaniem) `@`,
- * to `@` kończy hasło, inaczej reszta hasła trafiłaby do ścieżki na karcie.
+ * (`u:p/ss@host`): gdy przed pierwszym `/` nie ma hosta z portem, a dalej (przed zapytaniem) jest `@`, to `@` kończy
+ * hasło, inaczej reszta hasła trafiłaby do ścieżki na karcie.
  */
 function authorityEnd(rest: string): number {
   const end = rest.search(/[/\s]/);
   const raw = end < 0 ? rest : rest.slice(0, end);
-  if (end < 0 || raw.includes("@") || !/:(?!\d*$)/.test(raw)) return end;
+  if (end < 0 || raw.includes("@") || HOST_PORT.test(withoutPlaceholders(raw))) return end;
   const beforeQuery = rest.slice(0, rest.search(/[?#\s]|$/));
   const at = beforeQuery.lastIndexOf("@");
   if (at < 0) return end;
@@ -164,7 +164,14 @@ function authorityEnd(rest: string): number {
 export function withoutCredentials(url: string): string {
   const parts = url.length > MAX_URL_LENGTH ? undefined : urlParts(url);
   if (parts === undefined) return maskPath(url.split(/[?#]/)[0] ?? "");
+  // Część przed ścieżką, która nie jest hostem z portem, to resztka hasła (z `?`, `#` albo spacją), więc nie trafia na kartę.
+  if (!HOST_PORT.test(withoutPlaceholders(parts.authority))) return `${parts.scheme}***`;
   return `${parts.scheme}${parts.userInfo ? "***@" : ""}${parts.authority}${maskPath(parts.path)}`;
+}
+
+/** Tekst z `${…}` zastąpionym jednym znakiem: nierozwinięty klucz (`localhost:${PORT}`) może stać w miejscu hosta i portu. */
+function withoutPlaceholders(text: string): string {
+  return text.replace(/\$\{[^}]{0,256}\}/g, "0");
 }
 
 function maskPath(path: string): string {
