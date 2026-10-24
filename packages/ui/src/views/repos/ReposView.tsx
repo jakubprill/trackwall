@@ -1,4 +1,4 @@
-import { type Repo, type RepoList, type RepoTag, type SyncRepo, workspaceApi } from "@trackwall/protocol";
+import { NO_MISE_TAG, type Repo, type RepoList, type RepoTag, workspaceApi } from "@trackwall/protocol";
 import { FolderOpen, Plus, RefreshCw } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -7,9 +7,10 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { twoDigits } from "@/lib/format";
+import { relativeTime, twoDigits } from "@/lib/format";
 import { branchLabel, listNeedsSettings, REPO_LIST_POLL_MS, repoStatusTone } from "@/lib/repo-status";
-import { listSyncBadge, syncedByPath } from "@/lib/sync-state";
+import { statusTextClass } from "@/lib/status-tone";
+import { listSyncBadge, type SyncBadge, syncedByPath } from "@/lib/sync-state";
 import { type BatchRunHandle, useBatchRun } from "@/lib/use-batch-run";
 import { useRemote } from "@/lib/use-remote";
 import { type SyncRunHandle, useSyncRun } from "@/lib/use-sync-run";
@@ -50,6 +51,7 @@ export function ReposView({
   const repos = filter.repos;
   const current = repos.find((r) => r.id === selected) ?? repos[0];
   const canSync = Boolean(list.data?.projectsDir) && !needsSettings;
+  const syncedAgo = sync.run && relativeTime(sync.run.startedAt, new Date());
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[var(--spacing-sidebar)_1fr]">
@@ -95,7 +97,7 @@ export function ReposView({
               key={repo.id}
               repo={repo}
               position={i + 1}
-              syncResult={synced.get(repo.path)}
+              syncBadge={syncedAgo ? listSyncBadge(synced.get(repo.path), syncedAgo) : undefined}
               tags={filter.tags.get(repo.id) ?? []}
               active={panel === "repo" && repo.id === current?.id}
               onSelect={() => {
@@ -193,26 +195,27 @@ function ChangeProjectsDir({ onClick }: { onClick: () => void }) {
 /**
  * Wiersz listy w stylu HUD (ADR-16): numer pozycji, nazwa, gałąź oraz kropka i tekst stanu; aktywny ma świecącą kreskę z lewej.
  * Numer to tylko pozycja na liście, nie identyfikator repo. Pod stanem stoi wynik ostatniej synchronizacji (`listSyncBadge`)
- * i tagi repo (powody w podpowiedzi).
+ * i tagi repo (powody w podpowiedzi); tag `no-mise` jest napisem ostrzeżenia, bo w takim repo nie ma czego uruchomić (ADR-34).
  */
 function RepoListItem({
   repo,
   position,
-  syncResult,
+  syncBadge: badge,
   tags,
   active,
   onSelect,
 }: {
   repo: Repo;
   position: number;
-  syncResult: SyncRepo | undefined;
+  syncBadge: SyncBadge | undefined;
   tags: RepoTag[];
   active: boolean;
   onSelect: () => void;
 }) {
   const { status } = repo;
   const state = repoStatusTone(status);
-  const badge = listSyncBadge(syncResult);
+  const noMise = tags.some((t) => t.name === NO_MISE_TAG);
+  const otherTags = tags.filter((t) => t.name !== NO_MISE_TAG);
   return (
     <button
       type="button"
@@ -237,7 +240,8 @@ function RepoListItem({
         )}
         {tags.length > 0 && (
           <span className="text-muted-foreground text-2xs truncate font-mono" title={tags.map((t) => `#${t.name}: ${t.reason}`).join("\n")}>
-            {tags.map((t) => `#${t.name}`).join(" ")}
+            {noMise && <span className={cn(statusTextClass("warning"), "mr-2")}>no mise tasks</span>}
+            {otherTags.map((t) => `#${t.name}`).join(" ")}
           </span>
         )}
       </span>

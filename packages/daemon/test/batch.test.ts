@@ -62,7 +62,7 @@ function liveTree(dir: string): number[] {
 }
 
 async function upToDate(): Promise<SyncResult> {
-  return { state: "up-to-date", branch: "main" };
+  return { state: "up-to-date", branch: "main", remoteBranch: "origin/main", workingTree: { branch: "main", changed: 0, untracked: 0 } };
 }
 
 async function finished(batch: Batch): Promise<BatchRun> {
@@ -86,7 +86,15 @@ describe("komenda zbiorcza", () => {
     async () => {
       const { batch, dir } = setup(
         { web: { tasks: [SETUP, BUILD], exits: { setup: 0, build: 0 } } },
-        { sync: async () => ({ state: "updated", branch: "main", commits: 2 }) },
+        {
+          sync: async () => ({
+            state: "updated",
+            branch: "main",
+            remoteBranch: "origin/main",
+            commits: 2,
+            workingTree: { branch: "main", changed: 0, untracked: 0 },
+          }),
+        },
       );
 
       const started = await batch.start({ repos: ["web"], steps: ["build", "setup", "tools", "sync"] });
@@ -116,7 +124,14 @@ describe("komenda zbiorcza", () => {
     async () => {
       const { batch, dir } = setup(
         { web: { tasks: [BUILD], exits: { build: 0 } } },
-        { sync: async () => ({ state: "skipped", reason: "dirty", message: "main is checked out and has uncommitted changes" }) },
+        {
+          sync: async () => ({
+            state: "skipped",
+            reason: "dirty",
+            message: "main is checked out and has uncommitted changes",
+            workingTree: { branch: "main", changed: 1, untracked: 0 },
+          }),
+        },
       );
 
       await batch.start({ repos: ["web"], steps: ["sync", "setup", "build"] });
@@ -284,7 +299,12 @@ describe("komenda zbiorcza", () => {
         {
           sync: async () => {
             dirs.set("web", join(home, "inny"));
-            return { state: "up-to-date", branch: "main" };
+            return {
+              state: "up-to-date",
+              branch: "main",
+              remoteBranch: "origin/main",
+              workingTree: { branch: "main", changed: 0, untracked: 0 },
+            };
           },
         },
       );

@@ -1,4 +1,11 @@
-import { countLabel, type SyncResult, type SyncSkipReason } from "@trackwall/protocol";
+import {
+  countLabel,
+  type SyncBranchOutcome,
+  type SyncResult,
+  type SyncSkipReason,
+  type SyncWorkingTree,
+  trackedChanges,
+} from "@trackwall/protocol";
 import { type GitNetwork, git, knownDefaultBranch, revParse } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { parseStatus } from "./parse.ts";
@@ -6,7 +13,9 @@ import { parseStatus } from "./parse.ts";
 /**
  * Synchronizacja jednego repo (§4.5, ADR-21): `git fetch` głównego remote, potem fast-forward lokalnej gałęzi
  * domyślnej do zdalnej, i nic poza tym. Nie scala, nie robi rebase, nie przełącza gałęzi i nie dotyka katalogu
- * roboczego, w którym są zmiany; każdy taki przypadek to pominięcie z powodem, a błąd gita to wyjątek.
+ * roboczego, w którym są zmiany; każdy taki przypadek to pominięcie z powodem, a błąd gita to wyjątek. Każdy wynik
+ * mówi też, co zostało w katalogu roboczym (ADR-34), bo „aktualne” przy czterech zmienionych plikach albo przesunięta
+ * gałąź domyślna, gdy wybrana jest inna, bez tego wyglądają jak synchronizacja, która nic nie zrobiła.
  */
 
 /**
@@ -19,6 +28,11 @@ const FETCH_TIMEOUT_MS = 5 * 60_000;
 const MERGE_TIMEOUT_MS = 5 * 60_000;
 
 export async function syncRepo(dir: string): Promise<SyncResult> {
+  const outcome = await syncDefaultBranch(dir);
+  return { ...outcome, workingTree: await workingTree(dir) };
+}
+
+async function syncDefaultBranch(dir: string): Promise<SyncBranchOutcome> {
   const config = await readConfig(dir);
   const remote = mainRemote(config);
   if (!remote) return skipped("no-remote", "the repo has neither an origin remote nor a single other remote");
@@ -27,7 +41,7 @@ export async function syncRepo(dir: string): Promise<SyncResult> {
   const branch = await defaultBranch(dir, remote.name, network);
   if (branch === undefined)
     return skipped("no-default-branch", `${remote.name} does not point to a default branch (git remote set-head ${remote.name} --auto)`);
-  return fastForward(dir, branch, `refs/remotes/${remote.name}/${branch}`, network);
+  return fastForward(dir, branch, remote.name, network);
 }
 
 /**
@@ -51,15 +65,17 @@ async function defaultBranch(dir: string, remote: string, network: GitNetwork): 
   return read();
 }
 
-async function fastForward(dir: string, branch: string, remoteRef: string, network: GitNetwork): Promise<SyncResult> {
+async function fastForward(dir: string, branch: string, remote: string, network: GitNetwork): Promise<SyncBranchOutcome> {
   const localRef = `refs/heads/${branch}`;
+  const remoteRef = `refs/remotes/${remote}/${branch}`;
+  const remoteBranch = `${remote}/${branch}`;
   if ((await revParse(dir, localRef)) === undefined)
     return skipped("no-local-branch", `branch ${branch} does not exist locally; only fetched the changes`);
   const { ahead, behind } = await divergence(dir, localRef, remoteRef);
   if (ahead > 0 && behind > 0)
     return skipped("diverged", `${branch} has diverged from the remote (${ahead} local, ${behind} remote); merge by hand`);
   if (ahead > 0) return skipped("ahead", `${branch} has ${countLabel(ahead, { one: "unpushed commit", other: "unpushed commits" })}`);
-  if (behind === 0) return { state: "up-to-date", branch };
+  if (behind === 0) return { state: "up-to-date", branch, remoteBranch };
 
   const status = parseStatus(
     (await git(dir, ["status", "--porcelain=v2", "--branch", "-z", "--untracked-files=no"])).stdout.toString("utf8"),
@@ -80,7 +96,7 @@ async function fastForward(dir: string, branch: string, remoteRef: string, netwo
     // submodułów (`submodule.recurse` użytkownika pobierałby je drugi raz z sieci) i bez nadpisania `FETCH_HEAD`.
     await git(dir, ["fetch", "--quiet", "--no-recurse-submodules", "--no-write-fetch-head", ".", `${remoteRef}:${localRef}`]);
   }
-  return { state: "updated", branch, commits: behind };
+  return { state: "updated", branch, remoteBranch, commits: behind };
 }
 
 /** Ile commitów ma tylko lokalna gałąź (`ahead`), a ile tylko zdalna (`behind`). */
@@ -103,6 +119,20 @@ async function checkedOutInWorktree(dir: string, localRef: string): Promise<bool
     .some((line) => line === `branch ${localRef}`);
 }
 
-function skipped(reason: SyncSkipReason, message: string): SyncResult {
+/**
+ * Wybrana gałąź i niezacommitowane pliki po synchronizacji; nieśledzone osobno, bo nigdy jej nie blokują. Błąd to
+ * `null`, a nie wyjątek: po przesuniętej gałęzi (antywirus na Windowsie skanuje nowe pliki) `git status` potrafi
+ * przekroczyć limit, a synchronizacja i tak się udała.
+ */
+async function workingTree(dir: string): Promise<SyncWorkingTree | null> {
+  try {
+    const status = parseStatus((await git(dir, ["status", "--porcelain=v2", "--branch", "-z"])).stdout.toString("utf8"));
+    return { branch: status.branch, changed: trackedChanges(status), untracked: status.untracked };
+  } catch {
+    return null;
+  }
+}
+
+function skipped(reason: SyncSkipReason, message: string): SyncBranchOutcome {
   return { state: "skipped", reason, message };
 }
