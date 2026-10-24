@@ -9,8 +9,8 @@ import { type SyncProgress, syncMessage, syncProgress, syncRepoTone } from "@/li
 import type { SyncRunHandle } from "@/lib/use-sync-run";
 
 /**
- * Synchronizacja wszystkich repo (ADR-21): przycisk, postęp i wynik każdego repo z pełnym komunikatem, bo w wierszu
- * listy repo mieści się tylko krótki tekst.
+ * Synchronizacja wszystkich repo (ADR-21): przycisk, postęp i wynik każdego repo z pełnym komunikatem (także dla
+ * aktualnego, ADR-34), bo w wierszu listy repo mieści się tylko krótki tekst.
  */
 export function SyncView({ sync, canSync }: { sync: SyncRunHandle; canSync: boolean }) {
   const { run } = sync;
@@ -81,8 +81,8 @@ function SyncButton({ sync, canSync, onStart }: { sync: SyncRunHandle; canSync: 
 }
 
 function summary(p: SyncProgress): string | undefined {
-  if (p.updated + p.skipped + p.failed === 0) return undefined;
-  return `Updated: ${p.updated} · skipped: ${p.skipped} · failed: ${p.failed}`;
+  if (p.done === 0) return undefined;
+  return `Updated: ${p.updated} · up to date: ${p.upToDate} · skipped: ${p.skipped} · failed: ${p.failed}`;
 }
 
 function SyncRow({ repo }: { repo: SyncRepo }) {

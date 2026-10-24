@@ -42,7 +42,7 @@ async function finished(workspace: Workspace): Promise<SyncRun> {
 
 describe("synchronizacja wszystkich repo", () => {
   test(
-    "wybrana, czysta gałąź domyślna przesuwa się do zdalnej razem z plikami, a aktualna zostaje",
+    "wybrana, czysta gałąź domyślna przesuwa się do zdalnej razem z plikami, a aktualna zostaje; wynik mówi, co jest w katalogu roboczym",
     async () => {
       const { workspace, projects, remotes } = await setup();
       const api = cloned(projects, remotes, "api");
@@ -56,8 +56,23 @@ describe("synchronizacja wszystkich repo", () => {
       const run = await finished(workspace);
 
       expect(run.repos).toEqual([
-        { repo: "api", path: api.clone, state: "updated", branch: "main", commits: 2 },
-        { repo: "web", path: web.clone, state: "up-to-date", branch: "main" },
+        {
+          repo: "api",
+          path: api.clone,
+          state: "updated",
+          branch: "main",
+          remoteBranch: "origin/main",
+          commits: 2,
+          workingTree: { branch: "main", changed: 0, untracked: 0 },
+        },
+        {
+          repo: "web",
+          path: web.clone,
+          state: "up-to-date",
+          branch: "main",
+          remoteBranch: "origin/main",
+          workingTree: { branch: "main", changed: 0, untracked: 0 },
+        },
       ]);
       expect(head(api.clone)).toBe(head(api.upstream));
       expect(existsSync(join(api.clone, "drugi.txt"))).toBe(true);
@@ -75,7 +90,7 @@ describe("synchronizacja wszystkich repo", () => {
       commitFiles(web.upstream, { "nowy.txt": "1" }, "zdalny w web");
       const webBefore = head(web.clone);
 
-      expect(await workspace.syncRepo("api")).toEqual({ state: "updated", branch: "main", commits: 1 });
+      expect(await workspace.syncRepo("api")).toMatchObject({ state: "updated", branch: "main", commits: 1 });
 
       expect(head(api.clone)).toBe(head(api.upstream));
       expect(head(web.clone)).toBe(webBefore);
@@ -95,7 +110,12 @@ describe("synchronizacja wszystkich repo", () => {
 
       const run = await workspace.sync().then(() => finished(workspace));
 
-      expect(run.repos[0]).toMatchObject({ state: "updated", branch: "main", commits: 1 });
+      expect(run.repos[0]).toMatchObject({
+        state: "updated",
+        branch: "main",
+        commits: 1,
+        workingTree: { branch: "funkcja", changed: 1, untracked: 0 },
+      });
       expect(head(clone, "refs/heads/main")).toBe(head(upstream));
       expect(gitIn(clone, "branch", "--show-current").trim()).toBe("funkcja");
       expect(existsSync(join(clone, "nowy.txt"))).toBe(false);
@@ -118,7 +138,10 @@ describe("synchronizacja wszystkich repo", () => {
       const run = await workspace.sync().then(() => finished(workspace));
 
       expect(run.repos.map((r) => (r.state === "skipped" ? r.reason : r.state))).toEqual(["dirty", "diverged", "ahead"]);
-      expect(run.repos[0]).toMatchObject({ message: "main is checked out and has uncommitted changes" });
+      expect(run.repos[0]).toMatchObject({
+        message: "main is checked out and has uncommitted changes",
+        workingTree: { branch: "main", changed: 1, untracked: 0 },
+      });
       expect(run.repos[2]).toMatchObject({ message: "main has 1 unpushed commit" });
       expect([dirty, diverged, ahead].map((r) => head(r.clone))).toEqual(before);
     },
@@ -139,6 +162,27 @@ describe("synchronizacja wszystkich repo", () => {
       run = await workspace.sync().then(() => finished(workspace));
       expect(run.repos[0]).toMatchObject({ state: "failed" });
       expect(gitIn(clone, "status", "--porcelain")).toContain("notatka.txt");
+    },
+    GIT_HEAVY_MS,
+  );
+
+  test(
+    "aktualne repo ze zmienionymi i nowymi plikami podaje je osobno, a synchronizacja ich nie rusza",
+    async () => {
+      const { workspace, projects, remotes } = await setup();
+      const { clone } = cloned(projects, remotes, "api");
+      writeFileSync(join(clone, "README.md"), "lokalna zmiana\n");
+      writeFileSync(join(clone, "notatka.txt"), "moje");
+      writeFileSync(join(clone, "szkic.txt"), "moje");
+
+      const run = await workspace.sync().then(() => finished(workspace));
+
+      expect(run.repos[0]).toMatchObject({
+        state: "up-to-date",
+        remoteBranch: "origin/main",
+        workingTree: { branch: "main", changed: 1, untracked: 2 },
+      });
+      expect(gitIn(clone, "status", "--porcelain").split("\n").filter(Boolean)).toHaveLength(3);
     },
     GIT_HEAVY_MS,
   );

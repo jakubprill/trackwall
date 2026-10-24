@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import type { Commit, FileContent, RepoStatusOk, SyncResult, TreeEntry } from "@trackwall/protocol";
+import type { Commit, FileContent, RepoStatusOk, SyncResult, TreeEntry, WorkingTreeChanges } from "@trackwall/protocol";
 import { git } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { KeyedQueue } from "./keyed-queue.ts";
@@ -9,12 +9,13 @@ import { pathKey } from "./path-key.ts";
 import { remoteAddress } from "./remote.ts";
 import { syncRepo } from "./sync.ts";
 import { addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
-import { worktreeChanges } from "./worktree-changes.ts";
+import { workingTreeChanges, worktreeChanges } from "./worktree-changes.ts";
 
 /**
  * Moduł `vcs` (§4, §4.5): lokalny adapter gita. Zna katalogi, nie identyfikatory repo; te tłumaczy `workspace`.
  * Zawartość repo czyta z obiektów commita HEAD (ADR-14), więc ścieżka nie może wskazać pliku spoza repo,
- * a przeglądanie nie zależy od tego, co leży w katalogu roboczym. Zmieniają coś tylko `sync` (ADR-21): fetch,
+ * a przeglądanie nie zależy od tego, co leży w katalogu roboczym; katalog roboczy czytają tylko stan repo i jego
+ * zmiany (`changes`, ADR-34). Zmieniają coś tylko `sync` (ADR-21): fetch,
  * fast-forward gałęzi domyślnej i aktualizacja katalogu roboczego, gdy ta gałąź jest wybrana, oraz worktree zadań
  * agentów (ADR-31): nowa gałąź z worktree, jej usunięcie i usunięcie gałęzi.
  */
@@ -32,6 +33,14 @@ export class Vcs {
     const { hasCommits, ...status } = parseStatus(stdout.toString("utf8"));
     const [head] = hasCommits ? await this.log(dir, 1) : [];
     return { ...status, head: head ?? null };
+  }
+
+  /**
+   * Katalog roboczy względem HEAD (ADR-34), tym samym odczytem co zmiany zadania, więc bez zapisu do indeksu
+   * użytkownika. W repo bez commitów względem pustego drzewa: wtedy każdy plik jest nowy.
+   */
+  async changes(dir: string, maxPatchBytes: number): Promise<WorkingTreeChanges> {
+    return workingTreeChanges(dir, (await this.headCommit(dir)) ?? (await emptyTree(dir)), maxPatchBytes);
   }
 
   /** Adres głównego remote (`origin` albo jedyny) jako `host/ścieżka` (ADR-21); `null` bez takiego remote. */
@@ -176,4 +185,9 @@ export class Vcs {
     });
     return parseObjects(stdout.toString("utf8"), specs.length);
   }
+}
+
+/** Hash pustego drzewa w formacie obiektów repo (SHA-1 albo SHA-256), bez zapisu do `.git/objects`. */
+async function emptyTree(dir: string): Promise<string> {
+  return (await git(dir, ["hash-object", "-t", "tree", "--stdin"], { stdin: "" })).stdout.toString("utf8").trim();
 }
