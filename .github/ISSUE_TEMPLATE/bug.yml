@@ -1,0 +1,49 @@
+name: Bug
+description: Something works differently than it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not paste names of private repositories, internal hosts or secret values. Anonymize logs.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what happened and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
+  - type: dropdown
+    id: system
+    attributes:
+      label: System
+      multiple: true
+      options:
+        - Windows
+        - macOS
+    validations:
+      required: true
+  - type: input
+    id: system-version
+    attributes:
+      label: System version and architecture
+      placeholder: Windows 11 23H2 x64 / macOS 15.4 arm64
+  - type: input
+    id: version
+    attributes:
+      label: Trackwall version
+      description: From the Daemon view (the "Version" row), from the zip file name or, when running from source, the commit hash.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: An anonymized excerpt. The daemon start log is in `~/.trackwall/logs/daemon-start.log` (on Windows `%USERPROFILE%\.trackwall\logs`).
+      render: text

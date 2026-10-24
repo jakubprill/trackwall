@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DomainError } from "../src/errors.ts";
+import { DomainError } from "../src/infra/errors.ts";
 import { Logs } from "../src/modules/logs/logs.ts";
 import { Mise, parseTaskList } from "../src/modules/mise/mise.ts";
 import { ProcessGroups } from "../src/modules/procs/process-groups.ts";

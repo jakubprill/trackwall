@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { formatUptime } from "../src/DaemonPanel.tsx";
 import { takeTokenFromLocation } from "../src/lib/connection.ts";
+import { formatUptime } from "../src/views/daemon/DaemonPanel.tsx";
 
 function fakeEnv(hash: string) {
   const store = new Map<string, string>();

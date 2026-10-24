@@ -1,8 +1,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { ApiResult, DaemonInfo, ErrorCode, Health } from "@trackwall/protocol";
-import { DomainError } from "../errors.ts";
 import type { Facade } from "../facade.ts";
+import { DomainError } from "../infra/errors.ts";
 import { MCP_PATH, type McpEndpoint } from "../mcp/endpoint.ts";
 import { readBody } from "./body.ts";
 import { hasValidToken, OriginPolicy } from "./guard.ts";

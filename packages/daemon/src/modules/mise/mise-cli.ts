@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { spawnFailure } from "../../errors.ts";
+import { spawnFailure } from "../../infra/errors.ts";
 
 /**
  * Krótkie wywołania `mise` dla zapytań (`tasks ls`, `trust`): bez grupy procesów, z limitem czasu. Taski

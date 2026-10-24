@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isCompiledBinary, runtimeInfo } from "./platform/runtime.ts";
+import { isCompiledBinary, runtimeInfo } from "../platform/runtime.ts";
 
 /**
  * Komenda, która uruchamia ten sam daemon z podkomendą (most stdio MCP, hook wtyczki sesji), do podania innemu
@@ -19,6 +19,6 @@ export function selfCommand(args: readonly string[]): { exec: string; args: stri
  */
 function runtimeArgs(): string[] {
   if (runtimeInfo().name === "node") return process.execArgv;
-  const emptyBunfig = join(dirname(fileURLToPath(import.meta.url)), "..", "bunfig.toml");
+  const emptyBunfig = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "bunfig.toml");
   return ["--no-env-file", `--config=${emptyBunfig}`];
 }

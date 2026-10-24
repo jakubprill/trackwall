@@ -1,6 +1,7 @@
 import { agentsApi } from "@trackwall/protocol";
 import { Activity, FolderGit2, Network, Settings, SquareTerminal } from "lucide-react";
 import { useMemo, useState } from "react";
+import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
@@ -10,12 +11,11 @@ import { waitingCount } from "@/lib/session-state";
 import { useConnection } from "@/lib/use-connection";
 import { useRemote } from "@/lib/use-remote";
 import { useSessionFocus } from "@/lib/use-session-focus";
-import { ActivityBar, type ActivityView } from "./ActivityBar.tsx";
-import { DaemonPanel } from "./DaemonPanel.tsx";
-import { GraphView } from "./GraphView.tsx";
-import { ReposView } from "./ReposView.tsx";
-import { SessionsView } from "./SessionsView.tsx";
-import { SettingsView } from "./SettingsView.tsx";
+import { DaemonPanel } from "@/views/daemon/DaemonPanel";
+import { GraphView } from "@/views/overview/GraphView";
+import { ReposView } from "@/views/repos/ReposView";
+import { SessionsView } from "@/views/sessions/SessionsView";
+import { SettingsView } from "@/views/settings/SettingsView";
 
 /** Kolejność i skróty paska widoków; następne widoki pracy dostają kolejne cyfry. */
 const VIEWS = [

@@ -57,14 +57,19 @@ trackwall/
   mise.toml               wersje narzędzi dla samego projektu (node/bun, pnpm, rust) i taski setup, dev, portable
   packages/
     protocol/             typy zdarzeń, DTO, schemat JSON API (zod); zero zależności runtime
-    daemon/               binarka daemona; src/ podzielone na moduły z §4
-    ui/                   React, Vite; buduje statyczne pliki serwowane przez daemon lub Tauri
+    daemon/               binarka daemona; w src/: main.ts i facade.ts, transporty api/ i mcp/, moduły z §4 w modules/,
+                          API systemu i Bun w platform/, pozostała infrastruktura (odkrywanie, katalog stanu, błędy) w infra/
+    ui/                   React, Vite; buduje statyczne pliki serwowane przez daemon lub Tauri; w src/: App.tsx,
+                          widoki w views/<widok>/ (repos, sessions, overview, daemon, settings), wspólne komponenty
+                          w components/, logika bez Reacta i hooki w lib/
     scene/                adapter Pawn: stan ze WebSocket -> encje koota, render on demand
     cli/                  `ws` (cienki klient HTTP do daemona); wspólny kod z daemonem przez protocol
   apps/
     desktop/              Tauri (Rust shell), tauri.conf, ikony, sidecar binarka daemona
   docs/
     architecture.md       ten dokument
+    features.md           funkcje widok po widoku
+    development.md        układ repo, uruchomienie ze źródeł, portable build, ikony, nagrywanie sesji
     release.md            proces wydania i instalacja
     release-notes/        notatki o zmianach per wersja (v<wersja>.md), opis GitHub Release
     adr/                  decyzje architektoniczne (od chwili, gdy zacznie ich przybywać)
@@ -73,6 +78,7 @@ trackwall/
     release.yml           wydanie z tagu vX.Y.Z (docs/release.md)
   .github/actions/setup/  wspólne przygotowanie jobów: pnpm, Node, Bun, pnpm install
   .github/dependabot.yml  cotygodniowe aktualizacje akcji, npm i cargo
+  .github/ISSUE_TEMPLATE/ formularze zgłoszeń (bug.yml, feature.yml), po angielsku jak produkt (ADR-32)
 ```
 
 `packages/protocol` jest jedyną zależnością wspólną między daemonem, UI, sceną i CLI. Dzięki temu UI nie importuje nic z daemona (nie da się przypadkiem wciągnąć `node:child_process` do bundle'a WebView), a schematy zod są jednocześnie walidacją wejścia w daemonie i typami w UI.
@@ -81,7 +87,7 @@ trackwall/
 
 Daemon jest jednym procesem, ale wewnątrz jest podzielony na moduły z jawnie zadeklarowanym interfejsem. Każdy moduł wystawia klasę serwisu, a fasada (`Facade`) jest po prostu zbiorem tych serwisów przekazanym do trzech transportów (HTTP, MCP, zdarzenia). Moduł nie importuje innego modułu bezpośrednio, tylko przez fasadę, więc graf zależności między modułami jest widoczny w jednym pliku.
 
-W kodzie: moduł to katalog `packages/daemon/src/modules/<moduł>/`, fasada to `packages/daemon/src/facade.ts`. Moduł, który potrzebuje innego, deklaruje u siebie interfejs z tym, czego używa (np. `WorkspaceVcs`), a `createFacade` podaje mu instancję tamtego modułu. Biome pilnuje obu stron: plik modułu nie importuje z sąsiedniego katalogu modułu (z zewnątrz tylko pliki infrastruktury `src/errors.ts`, `src/atomic-write.ts`, `src/map-limit.ts` i katalog `src/platform/`, wymienione w `biome.json`, więc moduł jest płaskim katalogiem), a kod poza modułami (transporty, start) sięga do modułów tylko przez `facade.ts`.
+W kodzie: moduł to katalog `packages/daemon/src/modules/<moduł>/`, fasada to `packages/daemon/src/facade.ts`. Moduł, który potrzebuje innego, deklaruje u siebie interfejs z tym, czego używa (np. `WorkspaceVcs`), a `createFacade` podaje mu instancję tamtego modułu. Biome pilnuje obu stron: plik modułu nie importuje z sąsiedniego katalogu modułu (z zewnątrz tylko pliki infrastruktury `src/infra/errors.ts`, `src/infra/atomic-write.ts`, `src/infra/map-limit.ts` i katalog `src/platform/`, wymienione w `biome.json`, więc moduł jest płaskim katalogiem), a kod poza modułami (transporty, start) sięga do modułów tylko przez `facade.ts`.
 
 | Moduł | Odpowiada za | Zależy od | Trwały stan |
 |---|---|---|---|

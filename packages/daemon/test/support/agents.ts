@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Session } from "@trackwall/protocol";
-import { DomainError } from "../../src/errors.ts";
+import { DomainError } from "../../src/infra/errors.ts";
 import { Agents } from "../../src/modules/agents/agents.ts";
 import { Logs } from "../../src/modules/logs/logs.ts";
 import { ProcessGroups } from "../../src/modules/procs/process-groups.ts";

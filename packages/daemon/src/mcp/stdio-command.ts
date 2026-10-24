@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { MCP_STDIO_COMMAND } from "../args.ts";
-import { defaultTrackwallHome } from "../home.ts";
-import { selfCommand } from "../self-command.ts";
+import { defaultTrackwallHome } from "../infra/home.ts";
+import { selfCommand } from "../infra/self-command.ts";
 
 /**
  * Komenda mostu stdio dla tego daemona, do konfiguracji MCP CLI agenta (`copilot mcp add trackwall -- …`) i dla sesji

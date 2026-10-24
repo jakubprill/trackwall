@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mapLimit } from "../src/map-limit.ts";
+import { mapLimit } from "../src/infra/map-limit.ts";
 
 describe("mapLimit", () => {
   test("wyniki są w kolejności wejścia, a naraz działa najwyżej limit wywołań", async () => {

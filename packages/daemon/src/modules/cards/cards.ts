@@ -1,6 +1,6 @@
 import type { RepoCard, RepoCardResult, RepoTag, RepoTagRules, RepoTags } from "@trackwall/protocol";
-import { configOrProblem, DomainError, messageOf } from "../../errors.ts";
-import { mapLimit } from "../../map-limit.ts";
+import { configOrProblem, DomainError, messageOf } from "../../infra/errors.ts";
+import { mapLimit } from "../../infra/map-limit.ts";
 import type { CardCache } from "./card-cache.ts";
 import { CARD_SOURCES, extractCard, readsCardFile } from "./extract-card.ts";
 import { readSnapshot, type SnapshotVcs } from "./read-snapshot.ts";

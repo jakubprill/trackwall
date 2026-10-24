@@ -17,7 +17,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import type { TaskStateChange } from "@trackwall/protocol";
-import { trackwallHome } from "../src/home.ts";
+import { trackwallHome } from "../src/infra/home.ts";
 import { AsciicastWriter, parseAsciicast } from "../src/modules/agents/asciicast.ts";
 import { findCopilot } from "../src/modules/agents/copilot-command.ts";
 import { runCopilotHook } from "../src/modules/agents/copilot-hook-command.ts";

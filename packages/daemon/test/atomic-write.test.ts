@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeFileAtomic } from "../src/atomic-write.ts";
+import { writeFileAtomic } from "../src/infra/atomic-write.ts";
 
 describe("writeFileAtomic", () => {
   test("nadpisuje istniejący plik i nie zostawia pliku tymczasowego", () => {

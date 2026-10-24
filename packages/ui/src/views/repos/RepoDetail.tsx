@@ -4,6 +4,7 @@ import { type ReactNode, useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
+import { TabBar } from "@/components/TabBar";
 import { Button } from "@/components/ui/button";
 import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
@@ -14,7 +15,6 @@ import { RepoCommits } from "./RepoCommits.tsx";
 import { RepoFiles } from "./RepoFiles.tsx";
 import { RepoMiseTasks } from "./RepoMiseTasks.tsx";
 import { RepoStats } from "./RepoStats.tsx";
-import { TabBar } from "./TabBar.tsx";
 
 const TABS = [
   { id: "readme", label: "README" },

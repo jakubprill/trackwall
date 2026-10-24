@@ -3,8 +3,8 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DaemonInfoResult } from "@trackwall/protocol";
-import { readDaemonFile } from "../src/discovery.ts";
-import { loopbackRequest } from "../src/loopback.ts";
+import { readDaemonFile } from "../src/infra/discovery.ts";
+import { loopbackRequest } from "../src/infra/loopback.ts";
 import { RUNTIMES } from "./support/runtimes.ts";
 
 const MAIN = join(import.meta.dir, "..", "src", "main.ts");

@@ -1,5 +1,5 @@
 import { Client, StreamableHTTPClientTransport, type VersionNegotiationOptions } from "@modelcontextprotocol/client";
-import { loopbackRequest } from "../../src/loopback.ts";
+import { loopbackRequest } from "../../src/infra/loopback.ts";
 import { MCP_PATH } from "../../src/mcp/endpoint.ts";
 
 /**

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { vscodeUrl } from "./editor-url.ts";
+import { vscodeUrl } from "./infra/editor-url.ts";
 import { Agents, type AgentsDeps } from "./modules/agents/agents.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { CardCache } from "./modules/cards/card-cache.ts";

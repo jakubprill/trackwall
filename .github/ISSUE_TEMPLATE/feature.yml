@@ -1,0 +1,23 @@
+name: Feature or change
+description: A new feature, a change in behavior or cleanup work.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should change for the user, and why.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Which parts of Trackwall it touches (modules in docs/architecture.md §4) and what it deliberately leaves out.
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: Acceptance criteria beyond the Definition of done in AGENTS.md (e.g. a specific scenario on Windows).
+    validations:
+      required: true

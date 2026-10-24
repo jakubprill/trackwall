@@ -1,7 +1,6 @@
 import { DaemonInfo } from "@trackwall/protocol";
 import { RefreshCw } from "lucide-react";
 import { useCallback } from "react";
-import { ConnectCopilot } from "@/ConnectCopilot";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
@@ -10,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { call } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { type Remote, useRemote } from "@/lib/use-remote";
+import { ConnectCopilot } from "./ConnectCopilot.tsx";
 
 const POLL_MS = 5000;
 

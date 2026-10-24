@@ -2,6 +2,7 @@ import { agentsApi, type Session, type Task } from "@trackwall/protocol";
 import { Code, GitBranch, Play, Square, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { StatusLabel } from "@/components/StatusLabel";
+import { TabBar } from "@/components/TabBar";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
@@ -9,7 +10,6 @@ import { relativeTime } from "@/lib/format";
 import { isLive, sessionStateLabel } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
 import { SessionTerminal } from "./SessionTerminal.tsx";
-import { TabBar } from "./TabBar.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
 import { TaskRemoval } from "./TaskRemoval.tsx";
 

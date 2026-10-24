@@ -1,6 +1,6 @@
 import { type LogSource, type MiseTask, MiseTaskName, type MiseTasks, type RunState } from "@trackwall/protocol";
 import { z } from "zod";
-import { DomainError, SpawnFailure } from "../../errors.ts";
+import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { type MiseCliResult, runMiseCli } from "./mise-cli.ts";
 
 /**

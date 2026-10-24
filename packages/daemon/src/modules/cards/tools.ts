@@ -1,7 +1,7 @@
 import type { ToolRequirement } from "@trackwall/protocol";
 import { parse as parseToml } from "smol-toml";
 import { z } from "zod";
-import { messageOf } from "../../errors.ts";
+import { messageOf } from "../../infra/errors.ts";
 import { baseName, inDir } from "./repo-path.ts";
 import { type Extracted, emptyExtracted, keyLines, type RepoSnapshot } from "./snapshot.ts";
 

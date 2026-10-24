@@ -20,7 +20,7 @@ import {
 import { postRoutes } from "../src/api/routes.ts";
 import { type ApiServer, startApi } from "../src/api/server.ts";
 import { createFacade } from "../src/facade.ts";
-import { type LoopbackOptions, loopbackRequest } from "../src/loopback.ts";
+import { type LoopbackOptions, loopbackRequest } from "../src/infra/loopback.ts";
 import { createMcpEndpoint } from "../src/mcp/endpoint.ts";
 import { makeRepo } from "./support/git-repo.ts";
 

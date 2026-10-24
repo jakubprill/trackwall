@@ -2,7 +2,7 @@ import { readFileSync, renameSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { Task } from "@trackwall/protocol";
 import { z } from "zod";
-import { writeFileAtomic } from "../../atomic-write.ts";
+import { writeFileAtomic } from "../../infra/atomic-write.ts";
 import { TaskBranch } from "./task-branch.ts";
 
 /**

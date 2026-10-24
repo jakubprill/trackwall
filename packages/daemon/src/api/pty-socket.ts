@@ -10,8 +10,8 @@ import {
   SessionId,
 } from "@trackwall/protocol";
 import { type RawData, type WebSocket, WebSocketServer } from "ws";
-import { DomainError } from "../errors.ts";
 import type { Facade } from "../facade.ts";
+import { DomainError } from "../infra/errors.ts";
 import { type OriginPolicy, tokenMatches } from "./guard.ts";
 
 /**

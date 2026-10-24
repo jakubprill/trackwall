@@ -1,8 +1,8 @@
 import { createInterface } from "node:readline";
 import type { Readable, Writable } from "node:stream";
 import { z } from "zod";
-import { readDaemonFile } from "../discovery.ts";
-import { type LoopbackResponse, loopbackRequest } from "../loopback.ts";
+import { readDaemonFile } from "../infra/discovery.ts";
+import { type LoopbackResponse, loopbackRequest } from "../infra/loopback.ts";
 import { MCP_PATH } from "./endpoint.ts";
 
 /**

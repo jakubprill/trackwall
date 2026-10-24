@@ -14,8 +14,8 @@ Układ repo, uruchomienie ze źródeł i narzędzia dla osób, które rozwijają
 | Ścieżka | Co to jest |
 |---|---|
 | `packages/protocol` | typy i schematy zod wspólne dla daemona, UI i CLI |
-| `packages/daemon` | daemon (Bun, kod zgodny z Node), budowany do jednej binarki |
-| `packages/ui` | React + Tailwind + shadcn/ui, Vite |
+| `packages/daemon` | daemon (Bun, kod zgodny z Node), budowany do jednej binarki; `src/modules/` to moduły z §4 architektury, `src/api/` i `src/mcp/` transporty, `src/platform/` API systemu, `src/infra/` reszta infrastruktury |
+| `packages/ui` | React + Tailwind + shadcn/ui, Vite; `src/views/<widok>/` to widoki z paska po lewej, `src/components/` wspólne komponenty, `src/lib/` logika bez Reacta i hooki |
 | `apps/desktop` | powłoka Tauri 2: okno (półprzezroczyste, ADR-11), tray, start i zatrzymanie daemona |
 | `spikes/` | eksperymenty etapu 1, nie trafiają do aplikacji |
 

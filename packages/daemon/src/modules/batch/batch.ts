@@ -9,8 +9,8 @@ import {
   type RunState,
   type SyncResult,
 } from "@trackwall/protocol";
-import { DomainError, messageOf } from "../../errors.ts";
-import { mapLimit } from "../../map-limit.ts";
+import { DomainError, messageOf } from "../../infra/errors.ts";
+import { mapLimit } from "../../infra/map-limit.ts";
 import { runOutcome, syncOutcome } from "./step-outcome.ts";
 
 /**

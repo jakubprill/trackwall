@@ -7,7 +7,7 @@ import { agentsApi, apiResult, PTY_CLOSE_NOT_FOUND, PTY_SUBPROTOCOL, Session, Se
 import WebSocket from "ws";
 import { type ApiServer, startApi } from "../src/api/server.ts";
 import { createFacade, type Facade } from "../src/facade.ts";
-import { loopbackRequest } from "../src/loopback.ts";
+import { loopbackRequest } from "../src/infra/loopback.ts";
 import { createMcpEndpoint } from "../src/mcp/endpoint.ts";
 import { makeRepo } from "./support/git-repo.ts";
 

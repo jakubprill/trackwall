@@ -21,9 +21,9 @@ import {
 } from "@trackwall/protocol";
 import { z } from "zod";
 import { type ApiServer, startApi } from "../src/api/server.ts";
-import { readDaemonFile, writeDaemonFile } from "../src/discovery.ts";
 import { createFacade, type Facade } from "../src/facade.ts";
-import { loopbackRequest } from "../src/loopback.ts";
+import { readDaemonFile, writeDaemonFile } from "../src/infra/discovery.ts";
+import { loopbackRequest } from "../src/infra/loopback.ts";
 import { createMcpEndpoint, MCP_PATH } from "../src/mcp/endpoint.ts";
 import { runStdioBridge } from "../src/mcp/stdio-bridge.ts";
 import { gitIn, makeRepo } from "./support/git-repo.ts";

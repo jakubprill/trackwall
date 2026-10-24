@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, posix, win32 } from "node:path";
-import { vscodeUrl } from "../src/editor-url.ts";
+import { vscodeUrl } from "../src/infra/editor-url.ts";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
 import { isFullPath } from "../src/modules/workspace/full-path.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
