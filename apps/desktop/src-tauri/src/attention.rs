@@ -1,7 +1,8 @@
 //! Copilot CLI sessions that are waiting for you (ADR-26) and task proposals waiting for a decision (ADR-39): the shell
 //! asks the daemon for the session list every few seconds and, when a session stops working and starts waiting or a new
 //! proposal arrives, draws the user's attention (taskbar flash, Dock bounce) and updates the tray tooltip and menu.
-//! Clicking a menu item shows the window with that session or proposal.
+//! Clicking a menu item shows the window with that session or proposal. While no Trackwall window has the focus, the
+//! same moments also show a system notification (ADR-50, `notification.rs`).
 //!
 //! Pytanie idzie z powłoki, a nie z UI: schowane okno WebView może mieć wstrzymane timery, a tray ma działać także
 //! przy zamkniętym oknie. Czy sesja czeka na Ciebie, liczy daemon (`Session.needsAttention`), tak samo dla UI i traya.
@@ -9,6 +10,7 @@
 
 use crate::daemon;
 use crate::daemon_state::DaemonState;
+use crate::notification::{self, Notice};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -25,11 +27,12 @@ pub const MENU_QUIT: &str = "quit";
 const MENU_SESSION_PREFIX: &str = "session:";
 const MENU_PROPOSAL_PREFIX: &str = "proposal:";
 
-/// Sesja, która czeka na Ciebie.
+/// A session that is waiting for you, with its state from `TaskState` (`None` without a signal).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Waiting {
     pub id: String,
     pub repo: String,
+    pub state: Option<String>,
 }
 
 /// A task proposal waiting for a decision (`TaskProposal` in protocol, only the fields the tray needs).
@@ -98,10 +101,11 @@ pub fn parse_sessions(body: &str) -> Option<Snapshot> {
     let mut states = States::new();
     let mut waiting = Vec::new();
     for s in reply.data.sessions.into_iter().filter(|s| s.run.kind == "running") {
+        let state = s.state.map(|c| c.state);
         if s.needs_attention {
-            waiting.push(Waiting { id: s.id.clone(), repo: s.repo });
+            waiting.push(Waiting { id: s.id.clone(), repo: s.repo, state: state.clone() });
         }
-        states.insert(s.id, s.state.map(|c| c.state));
+        states.insert(s.id, state);
     }
     let known = reply.data.proposals.iter().map(|p| p.id.clone()).chain(reply.data.tasks.into_iter().map(|t| t.id)).collect();
     Some(Snapshot { states, waiting, proposals: reply.data.proposals, known })
@@ -161,41 +165,61 @@ pub fn build_menu(app: &AppHandle, waiting: &[Waiting], proposals: &[Proposal]) 
     Ok(menu)
 }
 
-/// What to show after a tray menu item is clicked; for the UI `{"kind":"session"|"proposal","id":...}`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(tag = "kind", content = "id", rename_all = "lowercase")]
-pub enum Focus<'a> {
-    Session(&'a str),
-    Proposal(&'a str),
+/// What to show after a tray menu item, a notification or the tray panel is clicked, or the global shortcut is pressed;
+/// for the UI `{"kind":"session"|"proposal","id":...}` or `{"kind":"next-waiting"}`, where the UI picks the session
+/// after the selected one like Alt+J (ADR-48, ADR-50).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "id", rename_all = "kebab-case")]
+pub enum Focus {
+    Session(String),
+    Proposal(String),
+    NextWaiting,
 }
 
 /// The session or proposal of a tray menu item; `None` for the fixed items.
-pub fn focus_from_menu(id: &str) -> Option<Focus<'_>> {
+pub fn focus_from_menu(id: &str) -> Option<Focus> {
     if let Some(session) = id.strip_prefix(MENU_SESSION_PREFIX) {
-        return Some(Focus::Session(session));
+        return Some(Focus::Session(session.to_owned()));
     }
-    id.strip_prefix(MENU_PROPOSAL_PREFIX).map(Focus::Proposal)
+    id.strip_prefix(MENU_PROPOSAL_PREFIX).map(|proposal| Focus::Proposal(proposal.to_owned()))
 }
 
 /// Shows the window and asks the UI to switch to the session or proposal.
-pub fn focus(app: &AppHandle, target: Focus<'_>, show: fn(&AppHandle)) {
+pub fn focus(app: &AppHandle, target: Focus, show: fn(&AppHandle)) {
     show(app);
     let _ = app.emit_to("main", FOCUS_EVENT, target);
 }
 
-/// Wątek pytający daemon o sesje, dopóki działa powłoka.
-pub fn watch(app: AppHandle, state: Arc<DaemonState>, tray_id: &'static str) {
+/// What deserves the user's attention since the previous poll: sessions that just started waiting, then new proposals.
+pub fn news(previous: Option<&Snapshot>, now: &Snapshot) -> Vec<Notice> {
+    let no_states = States::new();
+    let previous_states = previous.map_or(&no_states, |p| &p.states);
+    let sessions = newly_waiting(previous_states, &now.waiting).into_iter().map(|w| notification::session_notice(&w));
+    sessions.chain(new_proposals(previous, &now.proposals).into_iter().map(notification::proposal_notice)).collect()
+}
+
+fn any_window_focused(app: &AppHandle) -> bool {
+    app.webview_windows().values().any(|w| w.is_focused().unwrap_or(false))
+}
+
+/// Wątek pytający daemon o sesje, dopóki działa powłoka. `show` is `show_main` from `main.rs`.
+pub fn watch(app: AppHandle, state: Arc<DaemonState>, tray_id: &'static str, show: fn(&AppHandle)) {
     std::thread::spawn(move || {
-        let no_states = States::new();
         let mut last: Option<Snapshot> = None;
         loop {
             std::thread::sleep(POLL);
             let Some(conn) = state.ready() else { continue };
             let Some(now) = daemon::sessions(&conn).ok().and_then(|body| parse_sessions(&body)) else { continue };
-            let previous_states = last.as_ref().map_or(&no_states, |l| &l.states);
-            if !newly_waiting(previous_states, &now.waiting).is_empty() || !new_proposals(last.as_ref(), &now.proposals).is_empty() {
+            let news = news(last.as_ref(), &now);
+            if !news.is_empty() {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.request_user_attention(Some(UserAttentionType::Informational));
+                }
+                // The user looking at Trackwall sees the badges; a notification on top of that would only be noise.
+                if !any_window_focused(&app) {
+                    for notice in news {
+                        notification::show(&app, notice, show);
+                    }
                 }
             }
             if last.as_ref().is_none_or(|l| l.waiting != now.waiting || l.proposals != now.proposals) {
@@ -241,8 +265,8 @@ mod tests {
         Proposal { id: id.into(), repo: format!("repo-{id}"), title: format!("Fix {id}") }
     }
 
-    fn waiting(id: &str) -> Waiting {
-        Waiting { id: id.into(), repo: format!("repo-{id}") }
+    fn waiting(id: &str, state: &str) -> Waiting {
+        Waiting { id: id.into(), repo: format!("repo-{id}"), state: Some(state.into()) }
     }
 
     #[test]
@@ -254,7 +278,7 @@ mod tests {
             session("d", "running", None),
         ];
         let now = parse_sessions(&body(&list.join(","), &proposal_json("p"))).expect("a valid reply");
-        assert_eq!(now.waiting, vec![waiting("b")]);
+        assert_eq!(now.waiting, vec![waiting("b", "Approval")]);
         assert_eq!(now.proposals, vec![proposal("p")]);
         assert_eq!(now.states.len(), 3);
         assert_eq!(now.states["d"], None);
@@ -266,7 +290,7 @@ mod tests {
             parse_sessions(&body(&[session("a", "running", Some("Working")), session("b", "running", None)].join(","), "")).unwrap();
         let now =
             parse_sessions(&body(&[session("a", "running", Some("Input")), session("b", "running", Some("Input"))].join(","), "")).unwrap();
-        assert_eq!(newly_waiting(&before.states, &now.waiting), vec![waiting("a")]);
+        assert_eq!(newly_waiting(&before.states, &now.waiting), vec![waiting("a", "Input")]);
         assert_eq!(newly_waiting(&States::new(), &now.waiting), vec![]);
     }
 
@@ -294,11 +318,11 @@ mod tests {
     #[test]
     fn tooltip_names_the_only_waiting_item_or_counts_them() {
         assert_eq!(tooltip(&[], &[]), "Trackwall");
-        assert_eq!(tooltip(&[waiting("a")], &[]), "Trackwall: a session in repo-a is waiting for you");
+        assert_eq!(tooltip(&[waiting("a", "Input")], &[]), "Trackwall: a session in repo-a is waiting for you");
         assert_eq!(tooltip(&[], &[proposal("p")]), "Trackwall: a task proposal for repo-p is waiting for your decision");
-        assert_eq!(tooltip(&[waiting("a"), waiting("b")], &[]), "Trackwall: 2 sessions are waiting for you");
+        assert_eq!(tooltip(&[waiting("a", "Input"), waiting("b", "Input")], &[]), "Trackwall: 2 sessions are waiting for you");
         assert_eq!(
-            tooltip(&[waiting("a")], &[proposal("p"), proposal("q")]),
+            tooltip(&[waiting("a", "Input")], &[proposal("p"), proposal("q")]),
             "Trackwall: 1 session and 2 task proposals are waiting for you"
         );
         assert_eq!(tooltip(&[], &[proposal("p"), proposal("q")]), "Trackwall: 2 task proposals are waiting for you");
@@ -306,10 +330,27 @@ mod tests {
 
     #[test]
     fn menu_item_points_at_a_session_or_a_proposal() {
-        assert_eq!(focus_from_menu("session:abc"), Some(Focus::Session("abc")));
-        assert_eq!(focus_from_menu("proposal:abc"), Some(Focus::Proposal("abc")));
+        assert_eq!(focus_from_menu("session:abc"), Some(Focus::Session("abc".into())));
+        assert_eq!(focus_from_menu("proposal:abc"), Some(Focus::Proposal("abc".into())));
         assert_eq!(focus_from_menu(MENU_SHOW), None);
         assert_eq!(menu_text("Fix A & B"), "Fix A && B");
-        assert_eq!(serde_json::to_string(&Focus::Proposal("abc")).unwrap(), r#"{"kind":"proposal","id":"abc"}"#);
+    }
+
+    #[test]
+    fn focus_reaches_the_ui_in_the_shape_of_use_session_focus() {
+        assert_eq!(serde_json::to_string(&Focus::Proposal("abc".into())).unwrap(), r#"{"kind":"proposal","id":"abc"}"#);
+        assert_eq!(serde_json::to_string(&Focus::NextWaiting).unwrap(), r#"{"kind":"next-waiting"}"#);
+        assert_eq!(serde_json::from_str::<Focus>(r#"{"kind":"session","id":"s"}"#).unwrap(), Focus::Session("s".into()));
+    }
+
+    #[test]
+    fn news_are_the_sessions_that_started_waiting_and_the_new_proposals() {
+        let before = parse_sessions(&body(&session("a", "running", Some("Working")), &proposal_json("p1"))).unwrap();
+        let now = parse_sessions(&body(&session("a", "running", Some("Approval")), &[proposal_json("p1"), proposal_json("p2")].join(",")))
+            .unwrap();
+        let targets: Vec<Focus> = news(Some(&before), &now).into_iter().map(|n| n.target).collect();
+        assert_eq!(targets, vec![Focus::Session("a".into()), Focus::Proposal("p2".into())]);
+        assert_eq!(news(Some(&now), &now), vec![]);
+        assert_eq!(news(None, &now), vec![]);
     }
 }

@@ -6,6 +6,9 @@
 mod attention;
 mod daemon;
 mod daemon_state;
+mod global_shortcut;
+mod notification;
+mod tray_panel;
 mod window_effect;
 
 use daemon::Connection;
@@ -13,6 +16,7 @@ use daemon_state::DaemonState;
 use std::sync::Arc;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
+use tray_panel::PanelState;
 
 /// Identyfikator ikony w trayu: potrzebny, żeby usunąć ją przy wyjściu.
 const TRAY_ID: &str = "main";
@@ -31,6 +35,17 @@ async fn retry_daemon(state: tauri::State<'_, Arc<DaemonState>>) -> Result<Conne
     let restarter = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || restarter.restart_if_down()).await.map_err(|e| e.to_string())?;
     tauri::async_runtime::spawn_blocking(move || state.wait()).await.map_err(|e| e.to_string())?
+}
+
+/// A click in the tray panel: hides the panel and shows the main window with the entry, or without one for
+/// "Open Trackwall".
+#[tauri::command]
+fn open_from_tray_panel(app: AppHandle, target: Option<attention::Focus>) {
+    tray_panel::hide(&app);
+    match target {
+        Some(target) => attention::focus(&app, target, show_main),
+        None => show_main(&app),
+    }
 }
 
 fn main() {
@@ -55,24 +70,34 @@ fn main() {
         show_main(app);
     }));
     let app = builder
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(Arc::clone(&state))
-        .invoke_handler(tauri::generate_handler![daemon_connection, retry_daemon])
+        .manage(PanelState::default())
+        .invoke_handler(tauri::generate_handler![daemon_connection, retry_daemon, open_from_tray_panel])
         .setup(move |app| {
             state.start();
             let window = app.get_webview_window("main").ok_or("missing window main from tauri.conf.json")?;
             app.manage(window_effect::apply(&window));
             window_effect::reveal_fallback(app.handle(), show_main);
             build_tray(app.handle())?;
-            attention::watch(app.handle().clone(), Arc::clone(&state), TRAY_ID);
+            notification::init(app.handle());
+            global_shortcut::register(app.handle(), show_main);
+            attention::watch(app.handle().clone(), Arc::clone(&state), TRAY_ID, show_main);
             Ok(())
         })
-        .on_page_load(|webview, payload| window_effect::on_page_load(webview, payload, show_main))
+        .on_page_load(|webview, payload| {
+            // The tray panel paints its own opaque background and is shown by `tray_panel`, not by the window effect.
+            if webview.label() == "main" {
+                window_effect::on_page_load(webview, payload, show_main);
+            }
+        })
         .on_window_event(|window, event| {
             // Zamknięcie okna chowa je do traya; daemon i serwisy działają dalej.
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let _ = window.hide();
             }
+            tray_panel::on_window_event(window, event);
         })
         .build(tauri::generate_context!())
         .expect("failed to build the Tauri app");
@@ -111,10 +136,16 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 }
             }
         })
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+        .on_tray_icon_event(|tray, event| match event {
+            TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, rect, .. } => {
+                tray_panel::toggle(tray.app_handle(), rect);
+            }
+            // Windows only: a double click opens the main window, as it did before the panel.
+            TrayIconEvent::DoubleClick { button: MouseButton::Left, .. } => {
+                tray_panel::hide(tray.app_handle());
                 show_main(tray.app_handle());
             }
+            _ => {}
         });
     // Pasek menu macOS oczekuje jednobarwnego szablonu, który system sam przebarwia do jasnego i ciemnego paska.
     // Poza macOS zostaje kolorowa ikona aplikacji: zasobnik Windows i Linuksa bywa jasny albo ciemny, a ona jest czytelna na obu.
