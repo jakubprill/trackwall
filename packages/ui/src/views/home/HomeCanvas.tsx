@@ -27,6 +27,7 @@ export interface HomeCanvasProps {
 }
 
 const ORIGIN = { x: 0, y: 0, z: 0 };
+const SCENE_FAILED = "the 3D scene could not be built";
 
 interface Mounted {
   scene: HomeScene;
@@ -63,23 +64,26 @@ export function HomeCanvas(props: HomeCanvasProps) {
         onHover: (key) => latest.current.onHover(key),
         createLabel: sceneLabel,
       });
+      scene.apply(latest.current.model);
     } catch (err) {
-      // Paleta bez płótna 2D albo kolor tokenu, którego scena nie przyjmie: bez sceny silnik też znika.
+      // Paleta bez płótna 2D, kolor tokenu, którego scena nie przyjmie, albo błąd układu: bez sceny silnik też
+      // znika. Komunikaty sceny są dla osób rozwijających Trackwall (po polsku), więc UI dostaje ogólny tekst.
+      console.error(err);
       engine.dispose();
       canvas.remove();
-      latest.current.onUnavailable(errorMessage(err));
+      latest.current.onUnavailable(SCENE_FAILED);
       return;
     }
     // Ten sam kąt co na starcie (`reset` cofa obrót użytkownika) i odległość dla bieżących proporcji płótna.
-    const overview = (immediate = false) => {
-      rig.reset({ immediate });
-      rig.focus(ORIGIN, { distance: homeCameraDistance(host.clientWidth, host.clientHeight), immediate });
+    const overview = () => {
+      rig.reset();
+      rig.focus(ORIGIN, { distance: homeCameraDistance(host.clientWidth, host.clientHeight) });
     };
     mountedRef.current = { scene, rig, overview };
-    scene.apply(latest.current.model);
-    // Zmiana rozmiaru okna albo paneli: bez wybranego obiektu kadr wraca do całej sceny dla nowych proporcji.
+    // Zmiana rozmiaru okna albo paneli: bez wybranego obiektu odległość pasuje do nowych proporcji, a obrót
+    // użytkownika zostaje.
     engine.fitToElement(host, () => {
-      if (!latest.current.focus) overview(true);
+      if (!latest.current.focus) rig.focus(ORIGIN, { distance: homeCameraDistance(host.clientWidth, host.clientHeight), immediate: true });
     });
     const lost = (event: Event) => {
       event.preventDefault();
@@ -101,7 +105,12 @@ export function HomeCanvas(props: HomeCanvasProps) {
   }, []);
 
   useEffect(() => {
-    mountedRef.current?.scene.apply(props.model);
+    try {
+      mountedRef.current?.scene.apply(props.model);
+    } catch (err) {
+      console.error(err);
+      latest.current.onUnavailable(SCENE_FAILED);
+    }
   }, [props.model]);
 
   useEffect(() => {

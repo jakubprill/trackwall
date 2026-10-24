@@ -134,7 +134,7 @@ function RepoDetails({
         <Field name="Branch">
           <span className="font-mono">{branchLabel(repo.status)}</span>
           {/* Repo ze zmianami ma stan „changed”, więc commity do pobrania widać dopiero tutaj. */}
-          {behind > 0 && <span className="text-warning">{` · ${pullLabel(behind)}`}</span>}
+          {homeRepo.state === "changed" && behind > 0 && <span className="text-warning">{` · ${pullLabel(behind)}`}</span>}
         </Field>
       )}
       <Field name="Tasks">{tasks.length === 0 ? "none running" : tasks.map((t) => t.miseTask).join(", ")}</Field>

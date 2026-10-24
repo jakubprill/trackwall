@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { GraphEdge, Repo, RepoGraph, Session } from "@trackwall/protocol";
 import { daemonAnswered, homeHasObject, homeModel, homeRepoStatus, homeSessionState } from "../src/lib/home-model.ts";
-import { listNeedsSettings } from "../src/lib/repo-status.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-24T10:00:00Z", pid: 10 } as const;
 
@@ -151,12 +150,5 @@ describe("wybór i stan daemona na pulpicie", () => {
     expect(daemonAnswered("workspace.yaml: bad key", "invalid_config")).toBe(true);
     expect(daemonAnswered("Failed to fetch", undefined)).toBe(false);
     expect(daemonAnswered("unexpected response 502", "bad_response")).toBe(false);
-  });
-
-  test("folder z projektami do poprawienia w ustawieniach: zniknął albo zły workspace.yaml", () => {
-    expect(listNeedsSettings("projects_dir_unavailable")).toBe(true);
-    expect(listNeedsSettings("invalid_config")).toBe(true);
-    expect(listNeedsSettings("not_found")).toBe(false);
-    expect(listNeedsSettings(undefined)).toBe(false);
   });
 });

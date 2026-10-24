@@ -1,7 +1,7 @@
 import type { RepoStatus, RepoStatusOk } from "@trackwall/protocol";
 import { changesLabel } from "./format.ts";
 
-/** Ton stanu w UI; kolor do tonu dobiera `StatusLabel`, a tokeny są w `index.css` (ADR-16). */
+/** Ton stanu w UI; kolor do tonu dobiera `lib/status-tone.ts`, a tokeny są w `index.css` (ADR-16). */
 export type StatusTone = "ok" | "warning" | "error";
 
 /**

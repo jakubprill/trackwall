@@ -74,9 +74,11 @@ export function HomeView({
   );
   // Wybór obiektu, który zniknął z migawki, przepada: nie wraca sam, gdy repo albo sesja o tym kluczu pojawi się znowu.
   const current = selected && homeHasObject(model, selected) ? selected : null;
+  // Tylko przy wczytanych danych: po zmianie połączenia listy są chwilę puste, a obiekt wcale nie zniknął.
+  const loaded = repoList !== undefined && sessionList !== undefined;
   useEffect(() => {
-    if (selected && !current) setSelected(null);
-  }, [selected, current]);
+    if (loaded && selected && !current) setSelected(null);
+  }, [loaded, selected, current]);
   const unavailableNow = useCallback((reason: string) => {
     setHovered(null);
     setUnavailable(reason);
