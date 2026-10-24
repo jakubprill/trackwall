@@ -1,26 +1,26 @@
-# Wspólne przygotowanie joba: pnpm (wersja z packageManager), Node, Bun i zależności.
-# Jedno miejsce dla ci.yml i release.yml; akcje przypięte do SHA jak w workflow.
-name: Przygotowanie Node, pnpm i Bun
-description: pnpm, Node i Bun w wersjach z workflow (te same co w mise.toml) oraz pnpm install
+# Shared job setup: pnpm (version from packageManager), Node, Bun and dependencies.
+# One place for ci.yml and release.yml; actions pinned to a SHA as in the workflows.
+name: Set up Node, pnpm and Bun
+description: pnpm, Node and Bun at the versions from the workflow (the same as in mise.toml), plus pnpm install
 inputs:
   node-version:
-    description: wersja Node (NODE_VERSION z workflow)
+    description: Node version (NODE_VERSION from the workflow)
     required: true
   bun-version:
-    description: wersja Bun (BUN_VERSION z workflow)
+    description: Bun version (BUN_VERSION from the workflow)
     required: true
 runs:
   using: composite
   steps:
-    # GitHub nie wymusza `required` w akcjach złożonych; bez tego pusta wersja oznaczałaby cichy wybór najnowszej.
-    - name: Sprawdź wersje
+    # GitHub does not enforce `required` in composite actions; without this an empty version would silently pick the latest.
+    - name: Check versions
       shell: bash
       env:
         NODE: ${{ inputs.node-version }}
         BUN: ${{ inputs.bun-version }}
       run: |
         if [ -z "$NODE" ] || [ -z "$BUN" ]; then
-          echo "::error::.github/actions/setup wymaga node-version i bun-version"
+          echo "::error::.github/actions/setup requires node-version and bun-version"
           exit 1
         fi
     - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0

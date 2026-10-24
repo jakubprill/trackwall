@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { REPO } from "../scripts/lib.ts";
 
-// Pilnuje układu katalogów z docs/development.md („Układ repo”).
+// Guards the directory layout from docs/development.md ("Repo layout").
 // Sprawdza pliki całego repo, nie paczki desktop; leży tu, bo root nie ma własnych testów.
 
 /** Pierwsze człony ścieżek plików śledzonych przez gita w katalogu: nieśledzone `.DS_Store` czy pliki edytora się nie liczą. */
