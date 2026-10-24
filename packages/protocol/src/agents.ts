@@ -35,7 +35,23 @@ export const TaskTitle = z
   .trim()
   .min(1)
   .max(TASK_TITLE_MAX)
-  .regex(/^[^\p{Cc}]*$/u, "the title must be a single line without control characters");
+  // `refine` zamiast `regex` z tego samego powodu co w `visibleText`.
+  .refine((value) => !/\p{Cc}/u.test(value), { message: "the title must be a single line without control characters" });
+
+/**
+ * Tekst od agenta, który człowiek czyta przed decyzją albo który trafia do innego agenta (propozycja zadania,
+ * podsumowanie, ADR-39): bez znaków, których w UI nie widać, a model je czyta (znaki formatujące, w tym znaczniki
+ * U+E0000–E007F i zmiana kierunku tekstu, prywatne, nieprzypisane i separatory linii). Inaczej polecenie, które
+ * w panelu wygląda niewinnie, mogłoby nieść ukryte instrukcje dla sesji zadania (§8). Tekst wpisany w UI tego nie
+ * potrzebuje, bo człowiek pisze go sam.
+ */
+export function visibleText(text: z.ZodString): z.ZodString {
+  // `refine` zamiast `regex`: wzorzec trafiłby do JSON Schema narzędzia MCP, a klient, który kompiluje go bez flagi `u`,
+  // czytałby `\p{Cf}` jako zwykłe litery i odrzucał zwykły tekst.
+  return text.refine((value) => !/[\p{Cf}\p{Co}\p{Cn}\u2028\u2029]/u.test(value), {
+    message: "the text must not contain invisible characters (format, private-use or unassigned)",
+  });
+}
 
 /** Podsumowanie zadania od jego sesji (`report_result`, ADR-39): co zrobiła i co zostało, dla sesji, która zleciła zadanie. */
 export const TASK_SUMMARY_MAX = 4000;

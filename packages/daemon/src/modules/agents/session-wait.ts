@@ -21,10 +21,14 @@ export interface WaitOutcome {
   session: Session | null;
 }
 
-/** Stan sesji dla czekającego; zatrzymywana sesja wciąż pracuje, dopóki jej grupa nie skończy. */
+/**
+ * Stan sesji dla czekającego; zatrzymywana sesja wciąż pracuje, dopóki jej grupa nie skończy. Błąd (`Error` z hooka
+ * `errorOccurred`) też wymaga kogoś: nie wiadomo, czy Copilot CLI wyśle po nim koniec tury, a bez tego czekanie
+ * wracałoby z `working` po każdym limicie czasu.
+ */
 export function sessionWaitStatus(session: Session): WaitStatus {
   if (session.run.kind === "exited") return "exited";
-  if (session.needsAttention) return "needs_attention";
+  if (session.needsAttention || session.state?.state === "Error") return "needs_attention";
   return session.state?.state === "Stale" ? "stale" : "working";
 }
 

@@ -41,7 +41,8 @@ export class CopilotSessionState {
   readonly #screen = new CopilotScreen();
   readonly #tracker: TaskStateTracker;
   readonly #now: () => number;
-  readonly #promptOnStart: boolean;
+  /** Pierwszy `sessionStart` jeszcze nie przyszedł; tylko on niesie polecenie, a `/clear` albo `/resume` w sesji już nie. */
+  #promptPending: boolean;
   #windowTitle: string | undefined;
   /** Czas ostatniego klawisza sesji, który zmienił stan (odpowiedź na prośbę albo przerwanie). */
   #lastAnswerAt = Number.NEGATIVE_INFINITY;
@@ -49,7 +50,7 @@ export class CopilotSessionState {
   constructor(o: CopilotSessionStateOptions) {
     this.#tracker = new TaskStateTracker(o);
     this.#now = o.now;
-    this.#promptOnStart = o.promptOnStart;
+    this.#promptPending = o.promptOnStart;
   }
 
   /** Ostatni tytuł okna ustawiony przez Copilot CLI: nad czym agent pracuje. */
@@ -74,7 +75,9 @@ export class CopilotSessionState {
   }
 
   hook(record: CopilotHookRecord): TaskStateChange[] {
-    const signal = this.#promptOnStart && record.event === "sessionStart" ? SESSION_START_WITH_PROMPT : stateFromHook(record);
+    const withPrompt = this.#promptPending && record.event === "sessionStart";
+    if (record.event === "sessionStart") this.#promptPending = false;
+    const signal = withPrompt ? SESSION_START_WITH_PROMPT : stateFromHook(record);
     return [this.#tracker.tick(), signal && this.#tracker.signal(signal)].filter((c) => c !== undefined);
   }
 

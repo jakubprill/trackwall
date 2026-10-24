@@ -127,7 +127,8 @@ function TaskSummary({ summary }: { summary: NonNullable<Task["summary"]> }) {
       <span className="hud-label">
         Summary <span className="text-muted-foreground font-sans normal-case">{relativeTime(summary.reportedAt, new Date())}</span>
       </span>
-      <p className="max-w-prose text-sm whitespace-pre-wrap">{summary.text}</p>
+      {/* Najwyżej kilka linii: dłuższe podsumowanie przewija się, a nie ściska terminala sesji pod spodem. */}
+      <p className="max-h-32 max-w-prose overflow-auto text-sm whitespace-pre-wrap">{summary.text}</p>
     </section>
   );
 }

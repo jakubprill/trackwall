@@ -65,7 +65,12 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
   return (server, ctx) => {
     server.registerTool(
       tool.name,
-      { description: tool.description, inputSchema, outputSchema, annotations: { readOnlyHint: tool.readOnly, openWorldHint: false } },
+      {
+        description: tool.description,
+        inputSchema,
+        outputSchema,
+        annotations: { readOnlyHint: tool.readOnly, destructiveHint: false, openWorldHint: false },
+      },
       async (args, extra) => {
         const started = Date.now();
         // Wołająca sesja w logu, bo propozycja i podsumowanie zapisują coś w jej imieniu; tabela `audit` przyjdzie z SQLite.

@@ -17,13 +17,16 @@ const REMEMBERED_REJECTIONS = 100;
 export class TaskProposals {
   /** Od najnowszej. */
   #pending: TaskProposal[] = [];
-  /** Zatwierdzone, których zadanie jeszcze się tworzy: zostają w `#pending` na swoim miejscu, ale nikt ich nie widzi. */
+  /**
+   * Zatwierdzone, których zadanie jeszcze się tworzy: zostają na liście, żeby panel w UI nie zniknął w trakcie
+   * zatwierdzania (z błędem i poprawionym poleceniem), ale drugi raz nikt ich nie zatwierdzi ani nie odrzuci.
+   */
   readonly #approving = new Set<string>();
   /** Od najstarszego; najstarsze wypadają po `REMEMBERED_REJECTIONS`. */
   readonly #rejected = new Set<string>();
 
   list(): TaskProposal[] {
-    return this.#pending.filter((p) => !this.#approving.has(p.id));
+    return [...this.#pending];
   }
 
   add(proposal: { repo: string; title: string; prompt: string; proposedBy: ProposedBy }): TaskProposal {
@@ -38,7 +41,7 @@ export class TaskProposals {
     return added;
   }
 
-  /** Czekająca propozycja albo `undefined`. */
+  /** Propozycja, która czeka na decyzję (nie ta w trakcie zatwierdzania), albo `undefined`. */
   find(id: string): TaskProposal | undefined {
     return this.#approving.has(id) ? undefined : this.#pending.find((p) => p.id === id);
   }
@@ -55,14 +58,14 @@ export class TaskProposals {
     return this.#approving.has(id) ? this.#pending.find((p) => p.id === id) : undefined;
   }
 
-  /** Zabiera czekającą propozycję do zatwierdzenia: znika z listy, zanim powstanie zadanie (`not_found`, gdy jej nie ma). */
+  /** Bierze czekającą propozycję do zatwierdzenia; drugie `take` albo `reject` to `not_found`, dopóki trwa. */
   take(id: string): TaskProposal {
     const proposal = this.get(id);
     this.#approving.add(id);
     return proposal;
   }
 
-  /** Koniec zatwierdzania: z `restore` propozycja wraca na listę (zadanie nie powstało), bez niego jest już zadaniem. */
+  /** Koniec zatwierdzania: z `restore` propozycja znów czeka (zadanie nie powstało), bez niego znika, bo jest już zadaniem. */
   release(id: string, restore: boolean): void {
     this.#approving.delete(id);
     if (!restore) this.#pending = this.#pending.filter((p) => p.id !== id);

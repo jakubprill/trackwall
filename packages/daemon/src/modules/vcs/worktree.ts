@@ -38,9 +38,22 @@ export async function defaultBase(dir: string): Promise<WorktreeBase> {
   return { branch: current?.startsWith("refs/heads/") ? current.slice("refs/heads/".length) : null, commit: head };
 }
 
-/** Nowa gałąź `branch` od `commit` i jej worktree w `path`; git odmawia, gdy gałąź albo katalog już istnieją. */
+/**
+ * Nowa gałąź `branch` od `commit` i jej worktree w `path`; git odmawia, gdy gałąź albo katalog już istnieją.
+ * Git zakłada gałąź przed checkoutem i zostawia ją, gdy checkout się nie uda (zajęty katalog, filtr, limit czasu),
+ * więc nieudana próba sprząta po sobie gałąź i katalog; inaczej ponowna próba z tą samą gałęzią (zatwierdzenie tej
+ * samej propozycji zadania, ADR-39) zawsze kończyłaby się „already exists”. Gałęzi, która była przed próbą, nie rusza.
+ * `path` musi leżeć w katalogu worktree daemona, bo jest kasowany bez pytania gita.
+ */
 export async function addWorktree(repoDir: string, path: string, branch: string, commit: string): Promise<void> {
-  await git(repoDir, ["worktree", "add", "--quiet", "-b", branch, path, commit], { timeoutMs: CHECKOUT_TIMEOUT_MS });
+  if ((await revParse(repoDir, `refs/heads/${branch}`)) !== undefined) throw new Error(`a branch named '${branch}' already exists`);
+  try {
+    await git(repoDir, ["worktree", "add", "--quiet", "-b", branch, path, commit], { timeoutMs: CHECKOUT_TIMEOUT_MS });
+  } catch (err) {
+    await removeWorktree(repoDir, path).catch(() => {});
+    await deleteBranch(repoDir, branch).catch(() => {});
+    throw err;
+  }
 }
 
 /**

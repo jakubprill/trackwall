@@ -13,6 +13,7 @@ import {
   TaskProposal,
   TaskSummaryText,
   TaskTitle,
+  visibleText,
 } from "./agents.ts";
 import { RepoCardResult, TagName } from "./cards.ts";
 import { FindEndpointResult, MAX_FOUND_ENDPOINTS, MAX_SUBGRAPH_DEPTH, Subgraph, WhoCallsResult } from "./graph.ts";
@@ -316,10 +317,10 @@ export const mcpTools = {
     args: z
       .object({
         repo: RepoArg,
-        title: TaskTitle.describe(
+        title: visibleText(TaskTitle).describe(
           `short single-line title for the task list, up to ${TASK_TITLE_MAX} characters, e.g. Add email validation to sign-up`,
         ),
-        prompt: TaskPrompt.describe(`the complete instructions for the agent, up to ${TASK_PROMPT_MAX} characters`),
+        prompt: visibleText(TaskPrompt).describe(`the complete instructions for the agent, up to ${TASK_PROMPT_MAX} characters`),
       })
       .strict(),
     result: ProposeTaskResult,
@@ -331,7 +332,9 @@ export const mcpTools = {
       "Report the result of your task: what you did, what is left and what the user or the session that proposed the " +
       `task should check. Only for a session that runs a task in Trackwall; the summary is saved to your own task (shown in ${GET_SESSION}, ` +
       `${LIST_SESSIONS} and the Sessions view). Calling it again replaces the summary. Commit your changes on the task branch before reporting.`,
-    args: z.object({ summary: TaskSummaryText.describe(`the result in a few sentences, up to ${TASK_SUMMARY_MAX} characters`) }).strict(),
+    args: z
+      .object({ summary: visibleText(TaskSummaryText).describe(`the result in a few sentences, up to ${TASK_SUMMARY_MAX} characters`) })
+      .strict(),
     result: ReportResultResult,
   },
   waitForSession: {

@@ -99,6 +99,8 @@ describe("serwer MCP przez Streamable HTTP", () => {
     expect(tools.map((t) => t.name)).toEqual(Object.values(mcpTools).map((t) => t.name));
     const writing = tools.filter((t) => t.annotations?.readOnlyHint !== true).map((t) => t.name);
     expect(writing).toEqual(["propose_task", "report_result"]);
+    // Zapisują tylko tekst dla człowieka, więc klient MCP nie musi ich traktować jak niszczących.
+    expect(tools.filter((t) => t.annotations?.destructiveHint !== false)).toEqual([]);
     expect(client.getServerVersion()).toMatchObject({ name: "trackwall", version: "9.9.9" });
     await client.close();
   });

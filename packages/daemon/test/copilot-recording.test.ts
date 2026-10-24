@@ -115,10 +115,12 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     );
   });
 
-  test("sessionStart sesji zadania, która startuje z poleceniem, to praca, a w zwykłej sesji czekanie na Ciebie", () => {
+  test("pierwszy sessionStart sesji zadania, która startuje z poleceniem, to praca, a kolejny i w zwykłej sesji czekanie na Ciebie", () => {
     const record = { event: "sessionStart" as const, receivedAt: 0, payload: {}, omitted: [] };
     const task = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: true });
     expect(task.hook(record).map((c) => `${c.state} ${c.reason}`)).toEqual(["Working hook sessionStart with a prompt"]);
+    // `/clear` w sesji zadania: nowa rozmowa nie ma polecenia, więc sesja czeka na Ciebie.
+    expect(task.hook(record).map((c) => `${c.state} ${c.reason}`)).toEqual(["Input hook sessionStart"]);
     const plain = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false });
     expect(plain.hook(record).map((c) => `${c.state} ${c.reason}`)).toEqual(["Input hook sessionStart"]);
   });

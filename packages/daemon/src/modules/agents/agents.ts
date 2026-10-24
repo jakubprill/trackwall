@@ -246,7 +246,14 @@ export class Agents {
     const id = randomUUID();
     const dir = this.#sessionDir(id);
     const token = this.#tokens.issue(id);
-    const session = this.#prepare({ id, repo, task, dir, token, promptOnStart });
+    let session: LiveSession;
+    try {
+      session = this.#prepare({ id, repo, task, dir, token, promptOnStart });
+    } catch (err) {
+      this.#tokens.revoke(id);
+      rmSync(dir, { recursive: true, force: true });
+      throw err;
+    }
     try {
       const { terminal } = await this.#deps.procs.startTerminal({
         owner: owner(id),

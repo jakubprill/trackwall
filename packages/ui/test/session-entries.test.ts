@@ -91,6 +91,19 @@ describe("pozycje widoku Sesje", () => {
     expect(findEntry(entries, { kind: "proposal", id: "p1" })).toMatchObject({ kind: "proposal", proposal: { id: "p1" } });
   });
 
+  test("propozycja, z której w trakcie zatwierdzania powstało zadanie, jest tylko zadaniem i wybór przechodzi na nie", () => {
+    const list = {
+      sessions: [],
+      tasks: [task("p1", "2026-10-23T13:00:00Z")],
+      proposals: [proposal("p1", "2026-10-23T11:00:00Z")],
+      worktreesDir: "/home/ja/.trackwall/worktrees",
+    };
+    const entries = sessionEntries(list);
+    expect(entries.map((e) => `${e.kind} ${entryId(e)}`)).toEqual(["task p1"]);
+    expect(findEntry(entries, { kind: "proposal", id: "p1" })).toMatchObject({ kind: "task", task: { id: "p1" } });
+    expect(attentionCount(list)).toBe(0);
+  });
+
   test("licznik na pasku widoków liczy sesje, które czekają, i propozycje zadań", () => {
     const waiting = { ...session("s1", "2026-10-23T12:00:00Z"), needsAttention: true };
     const list = {

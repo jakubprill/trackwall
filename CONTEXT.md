@@ -246,7 +246,7 @@ CLI agenta działające w PTY należącym do daemona, w korzeniu repo albo w wor
 _Unikaj_: sesja POSIX (to pojęcie z grupy procesów), okno (to okno terminala w UI)
 
 **Czeka na Ciebie** (`Session.needsAttention`; po angielsku *waiting for you*):
-Działająca sesja w stanie `Input`, `Approval` albo `Plan`: agent nie ruszy dalej bez człowieka. Liczy to daemon, a UI (licznik na pasku widoków, „Next waiting”) i tray (menu „Waiting: <repo>”, miganie okna) tylko czytają pole.
+Działająca sesja w stanie `Input`, `Approval` albo `Plan`: agent nie ruszy dalej bez człowieka. Liczy to daemon, a UI (licznik na pasku widoków, który dolicza propozycje zadań czekające na decyzję, ADR-39; „Next waiting”) i tray (menu „Waiting: <repo>”, miganie okna) tylko czytają pole.
 
 **Okno terminala** (`SessionTerminal`; po angielsku *session terminal*):
 xterm.js w widoku Sessions podłączony WebSocketem `/ws/pty/<sesja>` do PTY sesji. Kilka okien może pokazywać tę samą sesję; rozmiar PTY ustala ostatnie, które go zgłosiło.
