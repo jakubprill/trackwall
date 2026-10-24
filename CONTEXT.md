@@ -247,7 +247,8 @@ xterm.js w widoku Sessions podłączony WebSocketem `/ws/pty/<sesja>` do PTY ses
 
 **Session layout** (`SessionLayout`):
 How the right side of the Sessions view shows entries (ADR-48): `1` is the selected entry alone with its full panel (tabs, Stop, Resume), `2` and `4` a grid page of that many entries, `auto` a grid of the whole list, up to nine per page.
-_Avoid_: view (that is a screen of the app), mode, layout alone (the repo layout is something else)
+In the Sessions view the switch is labelled just "Layout".
+_Avoid_: view (that is a screen of the app), mode
 
 **Session grid** (`SessionGrid`, tile):
 Several session terminals side by side in the Sessions view, one tile per list entry, on pages of the list. The tile of the selected entry has the accent ring and takes the keyboard; a tile that is waiting for you has the warning frame.

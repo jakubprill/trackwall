@@ -11,7 +11,7 @@ import { IS_MAC } from "@/lib/platform";
 import { findEntry, type SessionSelection, sessionEntries } from "@/lib/session-entries";
 import type { SessionLayout } from "@/lib/session-grid";
 import { sessionShortcut } from "@/lib/session-shortcut";
-import { nextWaiting, waitingCount } from "@/lib/session-state";
+import { nextWaitingShortcut, waitingCount } from "@/lib/session-state";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
 import { useRemote } from "@/lib/use-remote";
@@ -57,16 +57,18 @@ export function App() {
   };
   // Skok do sesji z traya (ADR-26): powłoka pokazuje okno i podaje sesję, która czeka.
   useSessionFocus(openSession);
-  // Alt+J from every view (ADR-48), after the selected session like "Next waiting"; outside Sessions it does not take
-  // the key when no session is waiting, so ⌥J still types in a text field.
+  // Alt+J from every view (ADR-48), after the selected session like the "Next waiting" button.
   useWindowShortcuts(
-    (event) => (sessionShortcut(event, IS_MAC)?.kind === "next-waiting" ? true : undefined),
+    (event) => {
+      const shortcut = sessionShortcut(event, IS_MAC);
+      return shortcut?.kind === "next-waiting" ? shortcut : undefined;
+    },
     () => {
-      const list = sessions.data?.sessions ?? [];
-      const selected = view === "sessions" && sessions.data ? findEntry(sessionEntries(sessions.data), session)?.session?.id : undefined;
-      const next = nextWaiting(list, selected);
-      if (next) openSession(next.id);
-      return next !== undefined || view === "sessions";
+      const inSessions = view === "sessions";
+      const selected = inSessions && sessions.data ? findEntry(sessionEntries(sessions.data), session)?.session?.id : undefined;
+      const { open, taken } = nextWaitingShortcut(sessions.data?.sessions ?? [], selected, inSessions);
+      if (open) openSession(open.id);
+      return taken;
     },
   );
   return (

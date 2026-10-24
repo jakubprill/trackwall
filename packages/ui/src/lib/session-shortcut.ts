@@ -34,5 +34,6 @@ export function sessionShortcutLabel(shortcut: SessionShortcut, isMac: boolean):
 
 /** The `aria-keyshortcuts` value: WAI-ARIA names Option `Alt` on macOS too. */
 export function ariaSessionShortcut(shortcut: SessionShortcut): string | undefined {
-  return sessionShortcutLabel(shortcut, false);
+  if (shortcut.kind === "next-waiting") return "Alt+J";
+  return shortcut.position >= 1 && shortcut.position <= SHORTCUT_POSITIONS ? `Alt+${shortcut.position}` : undefined;
 }

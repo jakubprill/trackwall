@@ -8,10 +8,10 @@ type ShortcutEvent = Pick<KeyboardEvent, "preventDefault" | "stopPropagation">;
 type ShortcutTarget = Pick<Window, "addEventListener" | "removeEventListener">;
 
 /** A keydown handler: `match` finds the shortcut, `handle` acts on it and says whether it took it. */
-export function shortcutHandler<Event extends ShortcutEvent, Shortcut>(
-  match: (event: Event) => Shortcut | undefined,
+export function shortcutHandler<KeyEvent extends ShortcutEvent, Shortcut>(
+  match: (event: KeyEvent) => Shortcut | undefined,
   handle: (shortcut: Shortcut) => boolean,
-): (event: Event) => void {
+): (event: KeyEvent) => void {
   return (event) => {
     const shortcut = match(event);
     if (shortcut === undefined || !handle(shortcut)) return;

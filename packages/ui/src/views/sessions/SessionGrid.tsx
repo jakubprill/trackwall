@@ -117,7 +117,7 @@ function SessionTile({
         <span className="text-muted-foreground shrink-0 text-xs">
           {session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}
         </span>
-        <span className="min-w-0 flex-1 truncate">
+        <span className="min-w-0 flex-1 truncate" title={task?.prompt ?? session?.windowTitle ?? undefined}>
           {task ? <TaskLine task={task} /> : <span className="text-muted-foreground text-xs">{session?.windowTitle}</span>}
         </span>
         <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={onOpenAlone} aria-label="Open alone">
