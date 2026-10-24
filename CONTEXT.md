@@ -245,6 +245,17 @@ Działająca sesja w stanie `Input`, `Approval` albo `Plan`: agent nie ruszy dal
 **Okno terminala** (`SessionTerminal`; po angielsku *session terminal*):
 xterm.js w widoku Sessions podłączony WebSocketem `/ws/pty/<sesja>` do PTY sesji. Kilka okien może pokazywać tę samą sesję; rozmiar PTY ustala ostatnie, które go zgłosiło.
 
+**Layout** (`SessionLayout`; *layout*):
+How the right side of the Sessions view shows entries (ADR-48): `1` is the selected entry alone with its full panel (tabs, Stop, Resume), `2` and `4` a grid page of that many entries, `auto` a grid of the whole list, up to nine per page.
+_Avoid_: view (that is a screen of the app), mode
+
+**Session grid** (`SessionGrid`, tile; *grid*):
+Several session terminals side by side in the Sessions view, one tile per list entry, on pages of the list. The focused tile takes the keyboard; a tile that is waiting for you has the warning frame.
+_Avoid_: split, dashboard (that is Home)
+
+**Session shortcut** (`SessionShortcut`; *Alt+1…9*, *Alt+J*):
+Alt (⌥ on macOS) + digit focuses the entry at that position in the Sessions list; Alt+J opens the next session that is waiting for you, also from other views. The keys never reach the session terminal.
+
 **Obraz ekranu** (`TerminalScreen`):
 Stan ekranu sesji, który daemon trzyma w emulatorze terminala bez okna i wysyła oknu terminala przy podłączeniu, zanim pójdzie dalsze wyjście.
 _Unikaj_: zrzut ekranu (to obrazek), historia wyjścia

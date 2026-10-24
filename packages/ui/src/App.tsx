@@ -8,11 +8,13 @@ import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { DaemonEvents } from "@/lib/daemon-events";
 import type { SessionSelection } from "@/lib/session-entries";
-import { waitingCount } from "@/lib/session-state";
+import type { SessionLayout } from "@/lib/session-grid";
+import { nextWaiting, waitingCount } from "@/lib/session-state";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
 import { useRemote } from "@/lib/use-remote";
 import { useSessionFocus } from "@/lib/use-session-focus";
+import { useSessionShortcuts } from "@/lib/use-session-shortcuts";
 import { DaemonPanel } from "@/views/daemon/DaemonPanel";
 import { GraphView } from "@/views/graph/GraphView";
 import { HomeView } from "@/views/home/HomeView";
@@ -42,6 +44,7 @@ export function App() {
   const [{ view, repo }, setNav] = useState<{ view: View; repo?: string }>({ view: "home" });
   const setView = useCallback((next: View, openRepo?: string) => setNav({ view: next, repo: openRepo }), []);
   const [session, setSession] = useState<SessionSelection>();
+  const [sessionLayout, setSessionLayout] = useState<SessionLayout>("1");
   const { conn, epoch, error, retry } = useConnection();
   const events = useDaemonEvents(conn);
   const sessions = useSessions(conn, events, view === "sessions" || view === "home");
@@ -52,6 +55,13 @@ export function App() {
   };
   // Skok do sesji z traya (ADR-26): powłoka pokazuje okno i podaje sesję, która czeka.
   useSessionFocus(openSession);
+  // Alt+J from any other view opens the next waiting session; in Sessions the view handles its shortcuts itself.
+  useSessionShortcuts((shortcut) => {
+    if (view === "sessions" || shortcut.kind !== "next-waiting") return false;
+    const next = nextWaiting(sessions.data?.sessions ?? [], undefined);
+    if (next) openSession(next.id);
+    return next !== undefined;
+  });
   return (
     <div className="flex h-screen">
       <ActivityBar views={VIEWS} active={view} onSelect={setView} badges={{ sessions: waitingCount(sessions.data?.sessions ?? []) }} />
@@ -86,7 +96,15 @@ export function App() {
             <ReposView key={epoch} conn={conn} initialRepo={repo} onRetry={retry} onOpenSettings={() => setView("settings")} />
           )}
           {conn && view === "sessions" && (
-            <SessionsView key={epoch} conn={conn} sessions={sessions} selected={session} onSelect={setSession} />
+            <SessionsView
+              key={epoch}
+              conn={conn}
+              sessions={sessions}
+              selected={session}
+              onSelect={setSession}
+              layout={sessionLayout}
+              onLayout={setSessionLayout}
+            />
           )}
           {conn && view === "graph" && <GraphView key={epoch} conn={conn} />}
           {conn && view === "daemon" && (

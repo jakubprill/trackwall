@@ -9,11 +9,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { relativeTime, twoDigits } from "@/lib/format";
+import { IS_MAC } from "@/lib/platform";
 import { entryId, entrySelection, findEntry, type SessionEntry, type SessionSelection, sessionEntries } from "@/lib/session-entries";
+import { gridPage, SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
+import { ARIA_NEXT_WAITING_SHORTCUT, ariaPositionShortcut, nextWaitingShortcutLabel, positionShortcutLabel } from "@/lib/session-shortcut";
 import { isLive, nextWaiting, sessionStateLabel, waitingCount } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
 import { actionIsNewer, type RemoteHandle, useRemote } from "@/lib/use-remote";
+import { useSessionShortcuts } from "@/lib/use-session-shortcuts";
 import { cn } from "@/lib/utils";
+import { SessionGrid } from "./SessionGrid.tsx";
 import { SessionTerminal } from "./SessionTerminal.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
 
@@ -21,18 +26,23 @@ import { TaskPanel } from "./TaskPanel.tsx";
  * Widok „Sesje” (§4.4, ADR-26, ADR-31): kilka sesji Copilot CLI naraz, każda w repo z folderu z projektami albo
  * w worktree zadania. Po lewej lista sesji i zadań ze stanem i skokiem do następnej sesji, która czeka na Ciebie;
  * po prawej terminal wybranej sesji, a przy zadaniu także jego zmiany. Listę odpytuje `App`, bo liczba czekających
- * sesji jest też na pasku widoków.
+ * sesji jest też na pasku widoków. The right side shows the selected entry alone or a grid of terminals (ADR-48),
+ * and Alt + digit and Alt+J switch between entries from the keyboard; `App` keeps the layout across views.
  */
 export function SessionsView({
   conn,
   sessions,
   selected,
   onSelect,
+  layout,
+  onLayout,
 }: {
   conn: Connection;
   sessions: RemoteHandle<SessionList>;
   selected: SessionSelection;
   onSelect: (selection: SessionSelection) => void;
+  layout: SessionLayout;
+  onLayout: (layout: SessionLayout) => void;
 }) {
   const list = sessions.data?.sessions ?? [];
   // Zakończone zadanie znika od razu, a nie po odświeżeniu listy, żeby panel nie pokazał go znowu bez worktree.
@@ -43,6 +53,16 @@ export function SessionsView({
   const show = (id: string) => onSelect({ kind: "session", id });
   const next = nextWaiting(list, current?.session?.id);
   const waiting = waitingCount(list);
+  // In this view the session shortcuts are always taken, also with nothing to switch to, so that they never reach a terminal.
+  useSessionShortcuts((shortcut) => {
+    if (shortcut.kind === "next-waiting") {
+      if (next) show(next.id);
+    } else {
+      const entry = entries[shortcut.position - 1];
+      if (entry) onSelect(entrySelection(entry));
+    }
+    return true;
+  });
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[var(--spacing-sidebar)_1fr]">
@@ -57,8 +77,15 @@ export function SessionsView({
         </div>
         {next && (
           <div className="px-4 pb-3">
-            <Button variant="outline" size="sm" className="w-full" onClick={() => show(next.id)}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => show(next.id)}
+              aria-keyshortcuts={ARIA_NEXT_WAITING_SHORTCUT}
+            >
               <BellRing /> {waiting === 1 ? "A session is waiting for you" : `Next waiting (${waiting})`}
+              <span className="text-muted-foreground ml-auto font-mono text-2xs">{nextWaitingShortcutLabel(IS_MAC)}</span>
             </Button>
           </div>
         )}
@@ -97,27 +124,20 @@ export function SessionsView({
             onCancel={entries.length > 0 ? () => onSelect(undefined) : undefined}
           />
         )}
-        {current?.kind === "task" && (
-          <TaskPanel
-            key={current.task.id}
+        {current && (
+          <SelectedEntry
             conn={conn}
-            task={current.task}
-            session={current.session}
+            entries={entries}
+            current={current}
+            layout={layout}
+            onLayout={onLayout}
+            onSelect={onSelect}
             onChanged={sessions.reload}
-            onRemoved={() => {
-              setRemoved({ task: current.task.id, afterLoad: sessions.sentLoads() });
+            onTaskRemoved={(task) => {
+              setRemoved({ task, afterLoad: sessions.sentLoads() });
               onSelect(undefined);
               sessions.reload();
             }}
-          />
-        )}
-        {current?.kind === "session" && (
-          <SessionPanel
-            key={current.session.id}
-            conn={conn}
-            session={current.session}
-            onChanged={sessions.reload}
-            onClosed={() => onSelect(undefined)}
           />
         )}
       </section>
@@ -138,17 +158,22 @@ function SessionListItem({
 }) {
   const { session } = entry;
   const task = entry.kind === "task" ? entry.task : undefined;
+  const shortcut = positionShortcutLabel(position, IS_MAC);
   return (
     <button
       type="button"
       onClick={onSelect}
       aria-current={active || undefined}
+      aria-keyshortcuts={ariaPositionShortcut(position)}
       className={cn(
         "flex w-full items-start gap-3 rounded-md border border-transparent px-2 py-2 text-left transition-colors hover:bg-accent",
         active && "bg-accent border-primary/25 hud-active-edge",
       )}
     >
-      <span className="text-muted-foreground text-2xs w-5 shrink-0 pt-0.5 text-right font-mono">{twoDigits(position)}</span>
+      <span className="flex w-8 shrink-0 flex-col items-end gap-0.5 pt-0.5 font-mono">
+        <span className="text-muted-foreground text-2xs">{twoDigits(position)}</span>
+        {shortcut && <span className="text-muted-foreground/70 text-2xs">{shortcut}</span>}
+      </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate text-sm font-medium">{task?.repo ?? session?.repo}</span>
@@ -159,6 +184,105 @@ function SessionListItem({
         {session?.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
       </span>
     </button>
+  );
+}
+
+/** The right side for a selected entry: the layout switch, then the entry with its full panel or a grid page with it. */
+function SelectedEntry({
+  conn,
+  entries,
+  current,
+  layout,
+  onLayout,
+  onSelect,
+  onChanged,
+  onTaskRemoved,
+}: {
+  conn: Connection;
+  entries: readonly SessionEntry[];
+  current: SessionEntry;
+  layout: SessionLayout;
+  onLayout: (layout: SessionLayout) => void;
+  onSelect: (selection: SessionSelection) => void;
+  onChanged: () => void;
+  onTaskRemoved: (task: string) => void;
+}) {
+  const page = gridPage(layout, entries.length, entries.indexOf(current));
+  const summary = `${entries.length} in the list${page.pages > 1 ? ` · page ${page.page + 1} of ${page.pages}` : ""}`;
+  return (
+    <>
+      <LayoutBar layout={layout} onLayout={onLayout} summary={layout === "1" ? undefined : summary} />
+      {layout !== "1" && (
+        <SessionGrid
+          conn={conn}
+          tiles={entries.slice(page.start, page.start + page.count).map((entry, i) => ({ entry, position: page.start + i + 1 }))}
+          focused={entryId(current)}
+          onFocus={(entry) => onSelect(entrySelection(entry))}
+          onOpenAlone={(entry) => {
+            onSelect(entrySelection(entry));
+            onLayout("1");
+          }}
+        />
+      )}
+      {layout === "1" && current.kind === "task" && (
+        <TaskPanel
+          key={current.task.id}
+          conn={conn}
+          task={current.task}
+          session={current.session}
+          onChanged={onChanged}
+          onRemoved={() => onTaskRemoved(current.task.id)}
+        />
+      )}
+      {layout === "1" && current.kind === "session" && (
+        <SessionPanel
+          key={current.session.id}
+          conn={conn}
+          session={current.session}
+          onChanged={onChanged}
+          onClosed={() => onSelect(undefined)}
+        />
+      )}
+    </>
+  );
+}
+
+const LAYOUT_LABELS: Record<SessionLayout, string> = { "1": "1", "2": "2", "4": "4", auto: "Auto" };
+
+/** The layout switch above the right side: one entry with its full panel, or a grid of 2, 4 or all entries. */
+function LayoutBar({
+  layout,
+  onLayout,
+  summary,
+}: {
+  layout: SessionLayout;
+  onLayout: (layout: SessionLayout) => void;
+  summary: string | undefined;
+}) {
+  return (
+    <div className="flex items-center gap-3 border-b px-4 py-1.5">
+      <span className="hud-label">Layout</span>
+      <fieldset aria-label="Layout" className="flex overflow-hidden rounded-md border">
+        {SESSION_LAYOUTS.map((option) => (
+          <button
+            key={option}
+            type="button"
+            aria-pressed={option === layout}
+            onClick={() => onLayout(option)}
+            className={cn(
+              "px-3 py-0.5 font-mono text-xs transition-colors",
+              option === layout ? "bg-accent text-primary" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {LAYOUT_LABELS[option]}
+          </button>
+        ))}
+      </fieldset>
+      {summary && <span className="text-muted-foreground text-xs">{summary}</span>}
+      <span className="text-muted-foreground ml-auto font-mono text-2xs">
+        {`${positionShortcutLabel(1, IS_MAC)}…9 focus · ${nextWaitingShortcutLabel(IS_MAC)} next waiting`}
+      </span>
+    </div>
   );
 }
 

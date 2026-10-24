@@ -45,17 +45,22 @@ export function ActivityBar<Id extends string>({
   );
 }
 
-/** Skróty działają w całym oknie, także gdy fokus jest w polu tekstowym. */
+/**
+ * Shortcuts work in the whole window, also when the focus is in a text field. The listener runs in the capture phase
+ * and stops the event there, because the session terminal (xterm.js) turns Ctrl + digit into a control character and stops
+ * the event from reaching the window.
+ */
 function useViewShortcuts<Id extends string>(views: readonly ActivityView<Id>[], onSelect: (id: Id) => void) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const view = views.find((v) => matchesShortcut(event, v.shortcut, IS_MAC));
       if (!view) return;
       event.preventDefault();
+      event.stopPropagation();
       onSelect(view.id);
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, [views, onSelect]);
 }
 

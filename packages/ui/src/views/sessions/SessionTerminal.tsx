@@ -17,10 +17,24 @@ const RECONNECT_MS = 1000;
  * Okno terminala jednej sesji (§4.4, ADR-26): xterm.js podłączony WebSocketem do PTY w daemonie. Daemon najpierw
  * przysyła obraz ekranu, więc przełączenie sesji albo zerwane połączenie zaczyna od aktualnego ekranu, a nie od
  * pustego terminala. Klawisze i rozmiar okna idą do sesji; rozmiar PTY ustala ostatnie okno, które go zgłosiło.
+ * In the grid (ADR-48) several terminals are open at once and only the focused one takes the keyboard focus.
  */
-export function SessionTerminal({ conn, session, live }: { conn: Connection; session: string; live: boolean }) {
+export function SessionTerminal({
+  conn,
+  session,
+  live,
+  focused = true,
+}: {
+  conn: Connection;
+  session: string;
+  live: boolean;
+  focused?: boolean;
+}) {
   const frame = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
+  const term = useRef<Terminal>(undefined);
+  const takesFocus = useRef(focused);
+  takesFocus.current = focused;
   const [notice, setNotice] = useState<string>();
 
   useEffect(() => {
@@ -32,7 +46,8 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
     terminal.loadAddon(fit);
     terminal.open(element);
     fit.fit();
-    terminal.focus();
+    term.current = terminal;
+    if (takesFocus.current) terminal.focus();
 
     let socket: WebSocket | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -98,9 +113,14 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
       resize.disconnect();
       input.dispose();
       socket?.close();
+      term.current = undefined;
       terminal.dispose();
     };
   }, [conn, session]);
+
+  useEffect(() => {
+    if (focused) term.current?.focus();
+  }, [focused]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
