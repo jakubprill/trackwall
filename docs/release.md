@@ -7,7 +7,7 @@ Trackwall jest dystrybuowany jako archiwa zip w [GitHub Releases](https://github
 1. Podbij wersję w trzech miejscach (test `apps/desktop/test/versions.test.ts` pilnuje zgodności):
    `packages/daemon/package.json`, `apps/desktop/src-tauri/tauri.conf.json`, `apps/desktop/src-tauri/Cargo.toml`.
    Potem `cargo update --workspace --manifest-path apps/desktop/src-tauri/Cargo.toml` przenosi nową wersję do `Cargo.lock` (bez podbijania zależności); zacommituj go razem z resztą.
-2. Dopisz notatkę o zmianach `docs/release-notes/v<wersja>.md` dla użytkownika: co nowego, jak przejść ze starszej wersji, znane ograniczenia (ten sam test pilnuje, że plik istnieje i nie jest pusty).
+2. Dopisz po angielsku (ADR-32) notatkę o zmianach `docs/release-notes/v<wersja>.md` dla użytkownika: co nowego, jak przejść ze starszej wersji, znane ograniczenia (ten sam test pilnuje, że plik istnieje i nie jest pusty).
 3. Scal zmianę do `main` przez PR.
 4. Na `main` utwórz i wypchnij tag z tą samą wersją:
 
@@ -22,7 +22,7 @@ Workflow sprawdza, że tag wskazuje commit z `main` i zgadza się z wersją w `t
 
 | Plik | Zawartość |
 |---|---|
-| `trackwall-<wersja>-windows-x64.zip` | folder `Trackwall` z `trackwall.exe`, `trackwall-daemon.exe`, `ui/`, `CZYTAJ.txt` |
+| `trackwall-<wersja>-windows-x64.zip` | folder `Trackwall` z `trackwall.exe`, `trackwall-daemon.exe`, `ui/`, `README.txt` |
 | `trackwall-<wersja>-macos-arm64.zip` | `Trackwall.app` (Apple Silicon) |
 | `SHA256SUMS.txt` | sumy SHA-256 obu archiwów |
 
@@ -46,7 +46,7 @@ Expand-Archive "$env:TEMP\$zip" "$env:LOCALAPPDATA\Programs"
 & "$env:LOCALAPPDATA\Programs\Trackwall\trackwall.exe"
 ```
 
-Stary folder znika dopiero po udanym pobraniu i zgodnej sumie. Przed aktualizacją zamknij Trackwall (tray > Wyjdź), bo `Remove-Item` nie usunie plików działającej aplikacji. Plik pobrany przeglądarką odblokuj przed rozpakowaniem: `Unblock-File <plik.zip>`. Folder usuwamy w całości, a nie rozpakowujemy na stary: zostałyby pliki poprzedniej wersji, a w folderze rozpakowanym wcześniej z pliku ze znacznikiem także sam znacznik.
+Stary folder znika dopiero po udanym pobraniu i zgodnej sumie. Przed aktualizacją zamknij Trackwall (tray > Quit), bo `Remove-Item` nie usunie plików działającej aplikacji. Plik pobrany przeglądarką odblokuj przed rozpakowaniem: `Unblock-File <plik.zip>`. Folder usuwamy w całości, a nie rozpakowujemy na stary: zostałyby pliki poprzedniej wersji, a w folderze rozpakowanym wcześniej z pliku ze znacznikiem także sam znacznik.
 
 Bez `gh`, gdy repo będzie publiczne, archiwum pobierze wbudowany w Windows 10 (od 1803) i 11 `curl.exe`, też bez znacznika: `curl.exe -fL -o "$env:TEMP\$zip" "https://github.com/jakubprill/trackwall/releases/download/v$v/$zip"` (i tak samo `SHA256SUMS.txt`). Pisz `curl.exe`, bo w Windows PowerShell 5.1 `curl` to alias `Invoke-WebRequest`; `-f` sprawia, że błąd HTTP kończy komendę, zamiast zapisać stronę błędu jako zip. Ani `gh`, ani `curl.exe` nie biorą proxy z ustawień systemu; dla `gh` ustaw `HTTPS_PROXY` (proxy z logowaniem Windows nie jest przez `gh` obsługiwane). Dla `curl.exe`: podaj proxy w `HTTPS_PROXY` albo `-x http://<proxy>:<port>` (proxy z logowaniem Windows: dodatkowo `--proxy-negotiate -U :`), a gdy proxy podmienia certyfikaty i pojawia się `CRYPT_E_NO_REVOCATION_CHECK`, dodaj `--ssl-no-revoke`.
 
@@ -64,7 +64,7 @@ xattr -dr com.apple.quarantine /Applications/Trackwall.app
 
 Przejście z 0.1.0 (wydanej jeszcze pod nazwą Pitwall, ADR-12) opisuje [notatka o zmianach 0.2.0](release-notes/v0.2.0.md#przejście-z-pitwall-010): Trackwall nie przejmuje starej instalacji, więc Pitwall trzeba zamknąć i usunąć ręcznie.
 
-Na obu systemach dane użytkownika (`~/.trackwall`, na Windowsie `%USERPROFILE%\.trackwall`) są poza folderem aplikacji, więc aktualizacja to zamknięcie aplikacji (tray > Wyjdź, żeby zatrzymać też daemona) i podmiana folderu lub `.app` na nowy.
+Na obu systemach dane użytkownika (`~/.trackwall`, na Windowsie `%USERPROFILE%\.trackwall`) są poza folderem aplikacji, więc aktualizacja to zamknięcie aplikacji (tray > Quit, żeby zatrzymać też daemona) i podmiana folderu lub `.app` na nowy.
 
 ## Przed upublicznieniem repo
 

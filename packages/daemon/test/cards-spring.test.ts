@@ -214,7 +214,7 @@ describe("klienci HTTP Spring", () => {
       "src/main/java/a/Rest.java": `class Rest {\n  RestTemplate rest;\n  void x() { rest.exchange("/api/orders", HttpMethod.POST, new HttpEntity<>(Map.of(${body})), String.class); }\n}\n`,
     });
     expect(summary(c)).toEqual(["rest-template Rest app=null url=null [] {POST /api/orders}"]);
-    expect(c.problems).toEqual([{ path: "", message: "moduł ma 1 profili ponad 32; karta pomija je (po nazwie)" }]);
+    expect(c.problems).toEqual([{ path: "", message: "profiles skipped over the limit of 32 in this module: 1 (the last ones by name)" }]);
   });
 
   test("plik profilu (application-prod.yml) nadpisuje dokument on-profile z application.yml, jak w Spring Boot", () => {

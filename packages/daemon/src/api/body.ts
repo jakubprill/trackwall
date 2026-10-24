@@ -10,7 +10,7 @@ export async function readBody(req: IncomingMessage, maxBytes: number): Promise<
   let size = 0;
   for await (const chunk of req as AsyncIterable<Buffer>) {
     size += chunk.length;
-    if (size > maxBytes) throw new DomainError("bad_request", `ciało żądania większe niż ${maxBytes} bajtów`);
+    if (size > maxBytes) throw new DomainError("bad_request", `request body larger than ${maxBytes} bytes`);
     chunks.push(chunk);
   }
   return Buffer.concat(chunks);

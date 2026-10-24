@@ -23,22 +23,22 @@ function exited(exitCode: number | null, stoppedByUser = false): Session["run"] 
 
 describe("stan sesji w jednej linii", () => {
   test("sesja, która czeka na Ciebie, ma ton ostrzeżenia, pracująca ok", () => {
-    expect(sessionStateLabel(waiting("a", change("Input")))).toEqual({ tone: "warning", label: "czeka na Ciebie" });
-    expect(sessionStateLabel(waiting("a", change("Approval")))).toEqual({ tone: "warning", label: "prosi o zgodę" });
-    expect(sessionStateLabel(session("a", change("Working")))).toEqual({ tone: "ok", label: "pracuje" });
+    expect(sessionStateLabel(waiting("a", change("Input")))).toEqual({ tone: "warning", label: "waiting for you" });
+    expect(sessionStateLabel(waiting("a", change("Approval")))).toEqual({ tone: "warning", label: "asking for approval" });
+    expect(sessionStateLabel(session("a", change("Working")))).toEqual({ tone: "ok", label: "working" });
   });
 
   test("słabszy sygnał jest podany jako „prawdopodobnie”", () => {
-    expect(sessionStateLabel(waiting("a", change("Input", "low"))).label).toBe("prawdopodobnie czeka na Ciebie");
-    expect(sessionStateLabel(session("a", change("Working", "medium"))).label).toBe("prawdopodobnie pracuje");
+    expect(sessionStateLabel(waiting("a", change("Input", "low"))).label).toBe("probably waiting for you");
+    expect(sessionStateLabel(session("a", change("Working", "medium"))).label).toBe("probably working");
   });
 
   test("bez sygnału stan jest nieznany; koniec procesu wygrywa ze stanem z hooków", () => {
-    expect(sessionStateLabel(session("a", null))).toEqual({ label: "stan nieznany" });
-    expect(sessionStateLabel(session("a", change("Input"), exited(null, true)))).toEqual({ label: "zatrzymana" });
-    expect(sessionStateLabel(session("a", change("Done"), exited(1)))).toEqual({ label: "zakończona" });
-    expect(sessionStateLabel(session("a", change("Input"), exited(1)))).toEqual({ tone: "error", label: "błąd" });
-    expect(sessionStateLabel(session("a", change("Error"), exited(0)))).toEqual({ tone: "error", label: "błąd" });
+    expect(sessionStateLabel(session("a", null))).toEqual({ label: "state unknown" });
+    expect(sessionStateLabel(session("a", change("Input"), exited(null, true)))).toEqual({ label: "stopped" });
+    expect(sessionStateLabel(session("a", change("Done"), exited(1)))).toEqual({ label: "finished" });
+    expect(sessionStateLabel(session("a", change("Input"), exited(1)))).toEqual({ tone: "error", label: "error" });
+    expect(sessionStateLabel(session("a", change("Error"), exited(0)))).toEqual({ tone: "error", label: "error" });
   });
 });
 

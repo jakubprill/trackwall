@@ -12,13 +12,13 @@ describe("stan repo w UI", () => {
       { kind: "unavailable", message: "brak katalogu" },
     ];
     expect(statuses.map(repoStatusTone)).toEqual([
-      { tone: "ok", label: "czysto" },
-      { tone: "warning", label: "3 zmiany" },
-      { tone: "error", label: "niedostępne" },
+      { tone: "ok", label: "clean" },
+      { tone: "warning", label: "3 changes" },
+      { tone: "error", label: "unavailable" },
     ]);
   });
 
   test("gałąź pokazuje swoją nazwę, a bez gałęzi napis „odłączony HEAD”", () => {
-    expect([branchLabel({ ...ok, changes: 0 }), branchLabel({ ...ok, branch: null, changes: 0 })]).toEqual(["main", "odłączony HEAD"]);
+    expect([branchLabel({ ...ok, changes: 0 }), branchLabel({ ...ok, branch: null, changes: 0 })]).toEqual(["main", "detached HEAD"]);
   });
 });

@@ -29,7 +29,7 @@ const k32 = dlopen("kernel32.dll", {
 const f = k32.symbols;
 
 function fail(what: string): never {
-  throw new Error(`${what} nie powiodło się, GetLastError=${f.GetLastError()}`);
+  throw new Error(`${what} failed, GetLastError=${f.GetLastError()}`);
 }
 
 /**
@@ -77,6 +77,6 @@ export class Job {
   }
 
   private requireHandle(): Pointer {
-    return this.handle ?? fail("job zamknięty");
+    return this.handle ?? fail("job closed");
   }
 }

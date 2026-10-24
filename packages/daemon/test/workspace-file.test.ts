@@ -51,7 +51,7 @@ describe("workspace.yaml", () => {
     const path = tempFile();
     writeFileSync(path, "projectsDir: ~/projekty\n");
     expect(() => new WorkspaceFile(path).projectsDir()).toThrow(
-      expect.objectContaining({ code: "invalid_config", message: expect.stringContaining("pełną ścieżką") }),
+      expect.objectContaining({ code: "invalid_config", message: expect.stringContaining("must be a full path") }),
     );
   });
 
@@ -63,7 +63,9 @@ describe("workspace.yaml", () => {
     );
 
     writeFileSync(path, "- /projekty\n");
-    expect(() => new WorkspaceFile(path).projectsDir()).toThrow(expect.objectContaining({ message: expect.stringContaining("mapą") }));
+    expect(() => new WorkspaceFile(path).projectsDir()).toThrow(
+      expect.objectContaining({ message: expect.stringContaining("map of keys") }),
+    );
   });
   test("zły wpis w repoHosts jest błędem konfiguracji tego klucza i nie psuje folderu z projektami", () => {
     const path = tempFile();

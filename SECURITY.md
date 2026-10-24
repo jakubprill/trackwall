@@ -1,20 +1,20 @@
-# Zgłaszanie podatności
+# Reporting a vulnerability
 
-Podatności zgłaszaj prywatnie przez [GitHub Security Advisories](https://github.com/jakubprill/trackwall/security/advisories/new) („Report a vulnerability” w zakładce Security), nie w publicznym issue ani PR.
+Report vulnerabilities privately through [GitHub Security Advisories](https://github.com/jakubprill/trackwall/security/advisories/new) ("Report a vulnerability" on the Security tab), not in a public issue or pull request.
 
-W zgłoszeniu opisz wersję Trackwall, system (Windows albo macOS), kroki do odtworzenia i to, co atakujący może dzięki temu zrobić. Nie wklejaj prawdziwych sekretów, tokenów ani nazw firmowych repo; zanonimizuj logi.
+Include the Trackwall version, the system (Windows or macOS), steps to reproduce and what an attacker can do with it. Do not paste real secrets, tokens or names of private repositories; anonymize logs.
 
-## Zakres
+## Scope
 
-Poprawki dostaje tylko najnowsze wydanie z [GitHub Releases](https://github.com/jakubprill/trackwall/releases).
+Only the latest release on [GitHub Releases](https://github.com/jakubprill/trackwall/releases) gets fixes.
 
-Szczególnie interesują nas:
+We are especially interested in:
 
-- dostęp do API, WebSocketu albo MCP daemona bez tokenu lub spoza `127.0.0.1` (sprawdzenie `Host`/`Origin`, DNS rebinding, CSRF);
-- uruchomienie komendy, której nie ma w konfiguracji, albo procesu poza repo lub worktree (poza terminalem interaktywnym w UI, który z założenia uruchamia to, co wpisze użytkownik);
-- wyciek sekretów do sesji zadania, logów, audytu albo komunikatów błędów;
-- zmiana konfiguracji daemona przez narzędzie MCP.
+- access to the daemon's API, WebSocket or MCP endpoint without the token or from outside `127.0.0.1` (`Host`/`Origin` checks, DNS rebinding, CSRF);
+- running a command that is not in the configuration, or a process outside a repo or worktree (other than the interactive terminal in the UI, which by design runs what the user types);
+- secrets leaking into agent sessions, logs, the audit trail or error messages;
+- changing the daemon's configuration through an MCP tool.
 
-Dziś daemon wystawia tylko HTTP; WebSocket, MCP i sesje zadań są dopiero planowane. Model docelowy opisuje `docs/architecture.md` §8.
+The threat model is described in `docs/architecture.md` §8 (in Polish).
 
-Trackwall to projekt jednej osoby, więc odpowiedź może potrwać kilka dni.
+Trackwall is maintained by one person, so a reply may take a few days.

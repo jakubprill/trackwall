@@ -88,11 +88,11 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
     const task = await agents.createTask("sklep", "popraw README");
     writeFileSync(join(task.worktree, "README.md"), "# sklep po zmianie\n");
 
-    await expect(agents.removeTask(task.id, true, false)).rejects.toThrow("ma działającą sesję");
+    await expect(agents.removeTask(task.id, true, false)).rejects.toThrow("has a running session");
     await agents.stop(sessionOf(agents, task.id));
     await expect(agents.removeTask(task.id, true, false)).rejects.toMatchObject({
       code: "unsaved_changes",
-      message: "zakończenie skasowałoby: niezacommitowane zmiany w worktree (1)",
+      message: "ending the task would delete: uncommitted changes in the worktree (1)",
     });
     expect(existsSync(join(task.worktree, "README.md"))).toBe(true);
 
@@ -114,7 +114,7 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
 
     await expect(agents.removeTask(task.id, false, false)).rejects.toMatchObject({
       code: "unsaved_changes",
-      message: `zakończenie skasowałoby: commity na gałęzi ${task.branch} (1)`,
+      message: `ending the task would delete: commits on branch ${task.branch} (1)`,
     });
     await agents.removeTask(task.id, false, true);
     expect(gitIn(dir, "branch", "--list", task.branch).trim()).toBe("");
@@ -132,7 +132,7 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
     expect(restarted.agents.sessions()).toEqual({ sessions: [], tasks: [task], worktreesDir: join(first.home, "worktrees") });
 
     expect(await restarted.agents.resumeTask(task.id)).toEqual(task);
-    await expect(restarted.agents.resumeTask(task.id)).rejects.toThrow("ma działającą sesję");
+    await expect(restarted.agents.resumeTask(task.id)).rejects.toThrow("has a running session");
     const session = sessionOf(restarted.agents, task.id);
     const window = viewer(restarted.agents, session);
     await waitFor(restarted.agents, session, () => window.text().includes("--resume="), "wznowienie na ekranie");
@@ -196,7 +196,7 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
 
     await expect(agents.removeTask(task.id, true, false)).rejects.toMatchObject({
       code: "unsaved_changes",
-      message: "zakończenie skasowałoby: commity poza gałęzią, z odłączonego HEAD (1)",
+      message: "ending the task would delete: commits outside the branch, from a detached HEAD (1)",
     });
     await agents.removeTask(task.id, true, true);
     expect(existsSync(task.worktree)).toBe(false);
@@ -213,7 +213,7 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
 
     await expect(agents.removeTask(task.id, false, false)).rejects.toMatchObject({
       code: "unsaved_changes",
-      message: `zakończenie skasowałoby: katalog ${task.worktree} z całą zawartością, bo git go nie zna jako worktree (przerwane usuwanie albo repo przeniesione lub usunięte)`,
+      message: `ending the task would delete: directory ${task.worktree} with all its contents, because git does not know it as a worktree (interrupted removal, or the repo was moved or deleted)`,
     });
     expect(existsSync(task.worktree)).toBe(true);
     await agents.removeTask(task.id, false, true);
@@ -246,7 +246,7 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
 
     const reads = [agents.taskChanges(task.id), agents.taskChanges(task.id)];
     const removal = agents.removeTask(task.id, false, true);
-    expect(() => agents.taskChanges(task.id)).toThrow("zadanie jest właśnie kończone");
+    expect(() => agents.taskChanges(task.id)).toThrow("this task is already being ended");
     for (const read of await Promise.all(reads)) expect(read.files.map((f) => f.path)).toEqual(["nowy.md"]);
     await removal;
     expect(existsSync(task.worktree)).toBe(false);

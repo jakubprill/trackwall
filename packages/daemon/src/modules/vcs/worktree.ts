@@ -33,7 +33,7 @@ export async function defaultBase(dir: string): Promise<WorktreeBase> {
     if (commit) return { branch, commit };
   }
   const head = await revParse(dir, "HEAD");
-  if (!head) throw new Error("repo nie ma jeszcze commitów");
+  if (!head) throw new Error("the repo has no commits yet");
   const current = await symbolicRef(dir, "HEAD");
   return { branch: current?.startsWith("refs/heads/") ? current.slice("refs/heads/".length) : null, commit: head };
 }

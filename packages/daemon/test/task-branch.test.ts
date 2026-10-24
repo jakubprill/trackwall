@@ -10,7 +10,7 @@ describe("nazwa gałęzi zadania z polecenia", () => {
 
   test("znaki spoza liter i cyfr tylko rozdzielają słowa, a polecenie bez nich daje nazwę zastępczą", () => {
     expect(taskSlug("--yolo: napraw #42 (pilne!)", ID)).toBe("yolo-napraw-42-pilne-3f2a9c");
-    expect(taskSlug("??? 🚀", ID)).toBe("zadanie-3f2a9c");
+    expect(taskSlug("??? 🚀", ID)).toBe("task-3f2a9c");
   });
 
   test("pierwsze słowo dłuższe niż limit jest ucinane, a nie gubione", () => {

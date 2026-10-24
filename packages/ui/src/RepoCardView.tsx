@@ -7,6 +7,7 @@ import {
   type ProvidedApp,
   type ProvidedEndpoint,
   type ProvidedPackage,
+  pluralNoun,
   type RepoCard,
   type RepoCardResult,
   type ToolRequirement,
@@ -37,9 +38,9 @@ function CardPanel({ result }: { result: RepoCardResult }) {
   const { card, tags } = result;
   return (
     <div className="flex flex-col gap-4">
-      <Surface label="Tagi" meta={tags.length}>
+      <Surface label="Tags" meta={tags.length}>
         {tags.length === 0 ? (
-          <Empty>Brak tagów. Tagi własne dodasz kluczem repoTags w workspace.yaml.</Empty>
+          <Empty>No tags. Add your own tags with the repoTags key in workspace.yaml.</Empty>
         ) : (
           <ul className="divide-y">
             {tags.map((tag) => (
@@ -51,7 +52,7 @@ function CardPanel({ result }: { result: RepoCardResult }) {
           </ul>
         )}
       </Surface>
-      {card === null ? <Empty>To repo nie ma jeszcze commitów, więc karta jest pusta.</Empty> : <CardFacts card={card} />}
+      {card === null ? <Empty>This repo has no commits yet, so the card is empty.</Empty> : <CardFacts card={card} />}
     </div>
   );
 }
@@ -65,7 +66,7 @@ function CardFacts({ card }: { card: RepoCard }) {
   return (
     <>
       {card.problems.length > 0 && (
-        <Surface label="Nie udało się przeczytać" meta={card.problems.length}>
+        <Surface label="Could not read" meta={card.problems.length}>
           <ul className="divide-y">
             {card.problems.map((p) => (
               <Row key={`${p.path}:${p.message}`}>
@@ -81,11 +82,11 @@ function CardFacts({ card }: { card: RepoCard }) {
       {apps.length > 0 && <Apps apps={apps} />}
       {(apps.length > 0 || endpoints.length > 0) && <Endpoints endpoints={endpoints} />}
       {clients.length > 0 && <HttpClients clients={clients} />}
-      <Packages label="Udostępnia" packages={provided} empty="Repo nie buduje paczki, którą inne repo mogłoby wziąć." />
-      <Packages label="Używa" packages={consumed} empty="Brak zależności w plikach buildu." />
-      <Surface label="Pliki buildu" meta={card.buildFiles.length}>
+      <Packages label="Provides" packages={provided} empty="The repo does not build a package that another repo could use." />
+      <Packages label="Uses" packages={consumed} empty="No dependencies in the build files." />
+      <Surface label="Build files" meta={card.buildFiles.length}>
         {card.buildFiles.length === 0 ? (
-          <Empty>Nie znaleziono pom.xml, build.gradle ani package.json.</Empty>
+          <Empty>No pom.xml, build.gradle or package.json found.</Empty>
         ) : (
           <ul className="divide-y">
             {card.buildFiles.map((f) => (
@@ -107,9 +108,9 @@ function CardFacts({ card }: { card: RepoCard }) {
 
 function Mechanisms({ mechanisms }: { mechanisms: Mechanism[] }) {
   return (
-    <Surface label="Mechanizmy" meta={mechanisms.length}>
+    <Surface label="Mechanisms" meta={mechanisms.length}>
       {mechanisms.length === 0 ? (
-        <Empty>Nie rozpoznano frameworka, komunikacji ani wdrożenia.</Empty>
+        <Empty>No framework, messaging or deployment recognized.</Empty>
       ) : (
         <ul className="divide-y">
           {mechanisms.map((m) => (
@@ -132,9 +133,9 @@ function Mechanisms({ mechanisms }: { mechanisms: Mechanism[] }) {
 
 function Tools({ tools }: { tools: ToolRequirement[] }) {
   return (
-    <Surface label="Wymagane narzędzia" meta={tools.length}>
+    <Surface label="Required tools" meta={tools.length}>
       {tools.length === 0 ? (
-        <Empty>Repo nie podaje wersji narzędzi (mise, .tool-versions, .nvmrc, wrapper Maven lub Gradle).</Empty>
+        <Empty>The repo does not pin tool versions (mise, .tool-versions, .nvmrc, Maven or Gradle wrapper).</Empty>
       ) : (
         <ul className="divide-y">
           {tools.map((t) => (
@@ -143,7 +144,7 @@ function Tools({ tools }: { tools: ToolRequirement[] }) {
               <span className="w-28 shrink-0 truncate font-mono text-sm">{t.version}</span>
               <Badge
                 variant={t.source === "mise" ? "default" : "secondary"}
-                title={t.source === "mise" ? "mise czyta tę wersję" : "podpowiedź z innego pliku"}
+                title={t.source === "mise" ? "mise reads this version" : "hint from another file"}
               >
                 {t.source}
               </Badge>
@@ -182,7 +183,7 @@ function Packages({ label, packages, empty }: { label: string; packages: (Provid
 
 function Apps({ apps }: { apps: ProvidedApp[] }) {
   return (
-    <Surface label="Aplikacje" meta={apps.length}>
+    <Surface label="Apps" meta={apps.length}>
       <ul className="divide-y">
         {apps.map((a) => (
           <Row key={`${a.module}:${a.name}`}>
@@ -199,14 +200,14 @@ function Apps({ apps }: { apps: ProvidedApp[] }) {
 
 function Endpoints({ endpoints }: { endpoints: ProvidedEndpoint[] }) {
   return (
-    <Surface label="Endpointy HTTP" meta={endpoints.length}>
+    <Surface label="HTTP endpoints" meta={endpoints.length}>
       {endpoints.length === 0 ? (
-        <Empty>Nie znaleziono kontrolerów z @RestController ani @Controller.</Empty>
+        <Empty>No @RestController or @Controller controllers found.</Empty>
       ) : (
         <ul className="divide-y">
           {endpoints.map((e) => (
             <Row key={`${e.method} ${e.path} ${evidenceLabel(e.evidence)}`}>
-              <Badge variant="secondary">{e.method ?? "każda"}</Badge>
+              <Badge variant="secondary">{e.method ?? "any"}</Badge>
               <span className="min-w-0 flex-1 truncate font-mono text-xs" title={e.path}>
                 {e.path}
               </span>
@@ -223,7 +224,7 @@ function Endpoints({ endpoints }: { endpoints: ProvidedEndpoint[] }) {
 /** Klient HTTP: dokąd woła (aplikacja albo adres, w których profilach) i jakie ścieżki. */
 function HttpClients({ clients }: { clients: ConsumedHttp[] }) {
   return (
-    <Surface label="Klienci HTTP" meta={clients.length}>
+    <Surface label="HTTP clients" meta={clients.length}>
       <ul className="divide-y">
         {clients.map((c, i) => (
           // Dwa wpisy proxy do tego samego adresu mają te same pola: pozycja na liście odróżnia je bez zmiany kolejności.
@@ -234,9 +235,13 @@ function HttpClients({ clients }: { clients: ConsumedHttp[] }) {
                 {c.name}
               </span>
               <span className="text-muted-foreground min-w-0 flex-1 truncate font-mono text-xs" title={c.url ?? undefined}>
-                {[c.app, c.url].filter((v) => v !== null).join(" · ") || "adres nieznany"}
+                {[c.app, c.url].filter((v) => v !== null).join(" · ") || "address unknown"}
               </span>
-              {c.profiles.length > 0 && <span className="text-muted-foreground shrink-0 text-xs">profil {c.profiles.join(", ")}</span>}
+              {c.profiles.length > 0 && (
+                <span className="text-muted-foreground shrink-0 text-xs">
+                  {pluralNoun(c.profiles.length, { one: "profile", other: "profiles" })} {c.profiles.join(", ")}
+                </span>
+              )}
               <Evidence label={evidenceLabel(c.evidence)} />
             </span>
             {c.calls.map((call) => (
@@ -244,7 +249,7 @@ function HttpClients({ clients }: { clients: ConsumedHttp[] }) {
                 key={`${call.method} ${call.path} ${call.evidence.line}`}
                 className="text-muted-foreground truncate pl-2 font-mono text-2xs"
               >
-                {call.method ?? "każda"} {call.path} <span className="opacity-70">{evidenceLabel(call.evidence)}</span>
+                {call.method ?? "any"} {call.path} <span className="opacity-70">{evidenceLabel(call.evidence)}</span>
               </span>
             ))}
           </li>

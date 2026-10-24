@@ -66,8 +66,8 @@ function unique<T>(items: readonly T[]): boolean {
 export const BatchRequest = z
   .object({
     /** Repo do objęcia komendą; wybór (ręcznie, później po tagach) robi klient. */
-    repos: z.array(RepoId).min(1, "wybierz co najmniej jedno repo").refine(unique, "repo powtarza się na liście"),
-    steps: z.array(BatchStep).min(1, "wybierz co najmniej jeden krok").refine(unique, "krok powtarza się na liście"),
+    repos: z.array(RepoId).min(1, "choose at least one repo").refine(unique, "a repo appears twice in the list"),
+    steps: z.array(BatchStep).min(1, "choose at least one step").refine(unique, "a step appears twice in the list"),
   })
   .strict();
 export type BatchRequest = z.infer<typeof BatchRequest>;

@@ -19,7 +19,7 @@ export function TagFilter({
 }) {
   if (counts.length === 0) return null;
   return (
-    <fieldset aria-label="Filtr po tagach" className="flex flex-wrap items-center gap-1 px-4 pb-3">
+    <fieldset aria-label="Filter by tags" className="flex flex-wrap items-center gap-1 px-4 pb-3">
       {counts.map(({ name, count }) => {
         const active = selected.includes(name);
         return (
@@ -38,8 +38,8 @@ export function TagFilter({
         );
       })}
       {selected.length > 0 && (
-        <Button variant="ghost" size="sm" onClick={onClear} aria-label="Wyczyść filtr tagów">
-          <X /> wyczyść
+        <Button variant="ghost" size="sm" onClick={onClear} aria-label="Clear the tag filter">
+          <X /> clear
         </Button>
       )}
     </fieldset>

@@ -11,21 +11,21 @@ export interface DaemonArgs {
   version: boolean;
 }
 
-export const USAGE = `trackwall-daemon [opcje]
+export const USAGE = `trackwall-daemon [options]
 trackwall-daemon mcp-stdio [--home <dir>]
-                   most stdio do serwera MCP działającego daemona (dla Copilot CLI)
-trackwall-daemon copilot-hook <zdarzenie> <hooks.jsonl>
-                   hook wtyczki sesji Copilot CLI (uruchamia go Copilot CLI, nie człowiek)
+                   stdio bridge to the MCP server of the running daemon (for Copilot CLI)
+trackwall-daemon copilot-hook <event> <hooks.jsonl>
+                   hook of the Copilot CLI session plugin (run by Copilot CLI, not by a person)
 
-  --ui             otwórz UI w domyślnej przeglądarce (tryb bez Tauri)
-  --ui-dir <dir>   katalog zbudowanego UI (domyślnie ./ui obok binarki)
-  --port <n>       port na 127.0.0.1 (domyślnie losowy)
-  --parent <pid>   PID procesu Tauri, który uruchomił daemon
-  --home <dir>     katalog stanu (domyślnie ~/.trackwall albo TRACKWALL_HOME)
+  --ui             open the UI in the default browser (mode without Tauri)
+  --ui-dir <dir>   directory of the built UI (default: ./ui next to the binary)
+  --port <n>       port on 127.0.0.1 (default: random)
+  --parent <pid>   PID of the Tauri process that started the daemon
+  --home <dir>     state directory (default: ~/.trackwall or TRACKWALL_HOME)
   --allow-origin <origin>
-                   dodatkowy origin przeglądarki z dostępem do API (np. serwer Vite przy tauri dev)
-  --version        wypisz wersję
-  -h, --help       ta pomoc
+                   extra browser origin allowed to call the API (e.g. the Vite server during tauri dev)
+  --version        print the version
+  -h, --help       this help
 `;
 
 export function parseDaemonArgs(argv: string[]): DaemonArgs {
@@ -45,11 +45,11 @@ export function parseDaemonArgs(argv: string[]): DaemonArgs {
     allowPositionals: false,
   });
   const port = toInt(values.port, "--port");
-  if (port < 0 || port > 65535) throw new Error("--port poza zakresem 0-65535");
+  if (port < 0 || port > 65535) throw new Error("--port out of range 0-65535");
   const allowOrigins = values["allow-origin"] ?? [];
   for (const origin of allowOrigins) {
     if (!/^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/.test(origin)) {
-      throw new Error(`--allow-origin przyjmuje tylko http://127.0.0.1:<port> albo http://localhost:<port>, dostał "${origin}"`);
+      throw new Error(`--allow-origin accepts only http://127.0.0.1:<port> or http://localhost:<port>, got "${origin}"`);
     }
   }
   const parent = values.parent === undefined ? undefined : toInt(values.parent, "--parent");
@@ -67,7 +67,7 @@ export function parseDaemonArgs(argv: string[]): DaemonArgs {
 
 function toInt(value: string | undefined, name: string): number {
   const n = Number(value);
-  if (!Number.isInteger(n)) throw new Error(`${name} oczekuje liczby całkowitej, dostał "${value}"`);
+  if (!Number.isInteger(n)) throw new Error(`${name} expects an integer, got "${value}"`);
   return n;
 }
 

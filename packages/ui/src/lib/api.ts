@@ -20,10 +20,10 @@ export async function call<S extends z.ZodType>(conn: Connection, path: string, 
   if (conn.token) headers.set("authorization", `Bearer ${conn.token}`);
   const res = await fetch(`${conn.baseUrl}${path}`, { ...init, headers });
   const envelope = ApiEnvelope.safeParse(await res.json().catch(() => undefined));
-  if (!envelope.success) throw new ApiCallError("bad_response", `nieoczekiwana odpowiedź ${res.status} z ${path}`);
+  if (!envelope.success) throw new ApiCallError("bad_response", `unexpected response ${res.status} from ${path}`);
   if (!envelope.data.ok) throw new ApiCallError(envelope.data.error.code, envelope.data.error.message);
   const parsed = data.safeParse(envelope.data.data);
-  if (!parsed.success) throw new ApiCallError("bad_response", `odpowiedź z ${path} nie zgadza się z kontraktem`);
+  if (!parsed.success) throw new ApiCallError("bad_response", `response from ${path} does not match the contract`);
   return parsed.data;
 }
 

@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
 /// Odpowiedź dla UI, które pyta o daemon, gdy powłoka już się zamyka.
-const SHELL_EXITING: &str = "aplikacja się zamyka";
+const SHELL_EXITING: &str = "the app is quitting";
 
 #[derive(Clone)]
 enum Phase {
@@ -84,7 +84,7 @@ impl DaemonState {
         match &*phase {
             Phase::Ready(conn) => Ok(conn.clone()),
             Phase::Failed(err) => Err(err.clone()),
-            Phase::Idle | Phase::Starting => Err("daemon nie był uruchamiany".into()),
+            Phase::Idle | Phase::Starting => Err("the daemon was not started".into()),
             Phase::Stopping | Phase::Stopped => Err(SHELL_EXITING.into()),
         }
     }
@@ -106,7 +106,7 @@ impl DaemonState {
                 _ => None,
             }
         };
-        eprintln!("[desktop] zamykanie aplikacji: zatrzymywanie daemona");
+        eprintln!("[desktop] quitting the app: stopping the daemon");
         self.shutdown(started.as_ref());
         *self.lock() = Phase::Stopped;
         self.changed.notify_all();
@@ -119,13 +119,13 @@ impl DaemonState {
         if let Some(conn) = own {
             match daemon::shutdown(conn) {
                 Ok(()) => return,
-                Err(err) => eprintln!("[desktop] zatrzymanie daemona: {err}"),
+                Err(err) => eprintln!("[desktop] stopping the daemon: {err}"),
             }
         }
         let other = self.home.as_deref().ok().and_then(daemon::discover).filter(|c| own.is_none_or(|o| o.port != c.port));
         if let Some(conn) = other {
             if let Err(err) = daemon::shutdown(&conn) {
-                eprintln!("[desktop] zatrzymanie daemona z daemon.json: {err}");
+                eprintln!("[desktop] stopping the daemon from daemon.json: {err}");
             }
         }
     }

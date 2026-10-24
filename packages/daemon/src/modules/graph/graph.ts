@@ -83,7 +83,7 @@ export class Graph {
 
   private async graphWith(repo: string): Promise<RepoGraph> {
     const graph = await this.graph();
-    if (!graph.nodes.some((n) => n.repo === repo)) throw new DomainError("not_found", `w folderze z projektami nie ma repo "${repo}"`);
+    if (!graph.nodes.some((n) => n.repo === repo)) throw new DomainError("not_found", `no repo "${repo}" in the projects folder`);
     return graph;
   }
 }

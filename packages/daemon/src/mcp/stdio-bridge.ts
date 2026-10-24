@@ -52,7 +52,7 @@ export async function runStdioBridge(o: StdioBridgeOptions): Promise<void> {
   for await (const line of createInterface({ input: o.input, crlfDelay: Number.POSITIVE_INFINITY })) {
     if (line.trim() === "") continue;
     // Wiadomości idą równolegle: agent może wołać kilka narzędzi naraz, a JSON-RPC paruje odpowiedzi po `id`.
-    const forwarded = forward(line, o, session, write).catch((err: unknown) => o.log(`przekazanie wiadomości: ${String(err)}`));
+    const forwarded = forward(line, o, session, write).catch((err: unknown) => o.log(`forwarding a message: ${String(err)}`));
     pending.add(forwarded);
     void forwarded.finally(() => pending.delete(forwarded));
   }
@@ -72,7 +72,7 @@ async function forward(line: string, o: StdioBridgeOptions, session: Session, wr
   if (!incoming.ok) return write(incoming.reply);
   const { id, method } = incoming.message;
   if (method === DISCOVER_METHOD && id !== undefined) {
-    return write(errorResponse(id, METHOD_NOT_FOUND, `most stdio Trackwall nie obsługuje ${DISCOVER_METHOD}; użyj initialize`));
+    return write(errorResponse(id, METHOD_NOT_FOUND, `the Trackwall stdio bridge does not support ${DISCOVER_METHOD}; use initialize`));
   }
   try {
     const replies = (await postToDaemon(line, o.home, session)).map((reply) => withRequestId(reply, id));
@@ -80,7 +80,7 @@ async function forward(line: string, o: StdioBridgeOptions, session: Session, wr
     for (const reply of replies) write(reply);
     // Strumień zerwany w trakcie (np. wyjście daemona) zostawiłby żądanie bez odpowiedzi do limitu czasu klienta.
     const answered = replies.some((r) => Reply.safeParse(r).data?.id === id);
-    if (method !== undefined && id !== undefined && !answered) throw new DaemonUnavailable("Trackwall nie odpowiedział na żądanie");
+    if (method !== undefined && id !== undefined && !answered) throw new DaemonUnavailable("Trackwall did not answer the request");
   } catch (err) {
     if (!(err instanceof DaemonUnavailable)) throw err;
     o.log(err.message);
@@ -94,10 +94,10 @@ function parseIncoming(
   line: string,
 ): { ok: true; message: z.infer<typeof Incoming> } | { ok: false; reply: ReturnType<typeof errorResponse> } {
   const json = parseJson(line);
-  if (json === undefined) return { ok: false, reply: errorResponse(null, PARSE_ERROR, "wiadomość nie jest poprawnym JSON-em") };
+  if (json === undefined) return { ok: false, reply: errorResponse(null, PARSE_ERROR, "the message is not valid JSON") };
   // Paczek (tablic) nie ma w MCP od rewizji 2025-06-18, a Copilot CLI ich nie wysyła.
   const incoming = Incoming.safeParse(json);
-  if (!incoming.success) return { ok: false, reply: errorResponse(null, INVALID_REQUEST, "wiadomość nie jest obiektem JSON-RPC") };
+  if (!incoming.success) return { ok: false, reply: errorResponse(null, INVALID_REQUEST, "the message is not a JSON-RPC object") };
   return { ok: true, message: incoming.data };
 }
 
@@ -123,7 +123,7 @@ class DaemonUnavailable extends Error {}
 /** Wiadomości JSON-RPC, którymi daemon odpowiedział na `line` (żadnej na powiadomienie). */
 async function postToDaemon(line: string, home: string, session: Session): Promise<unknown[]> {
   const daemon = readDaemonFile(home);
-  if (!daemon) throw new DaemonUnavailable(`Trackwall nie działa: brak daemon.json w ${home}. Uruchom aplikację Trackwall.`);
+  if (!daemon) throw new DaemonUnavailable(`Trackwall is not running: no daemon.json in ${home}. Start the Trackwall app.`);
   let res: LoopbackResponse;
   try {
     res = await loopbackRequest(daemon.port, MCP_PATH, {
@@ -138,14 +138,14 @@ async function postToDaemon(line: string, home: string, session: Session): Promi
       },
     });
   } catch (err) {
-    throw new DaemonUnavailable(`Trackwall nie odpowiada na porcie ${daemon.port} (${String(err)}). Uruchom aplikację Trackwall.`);
+    throw new DaemonUnavailable(`Trackwall is not responding on port ${daemon.port} (${String(err)}). Start the Trackwall app.`);
   }
   const replies = res.headers["content-type"]?.startsWith("text/event-stream") ? sseData(res.body) : [parseJson(res.body)];
   const messages = replies.filter((m) => Outgoing.safeParse(m).success);
   if (res.status >= 400 && messages.length === 0) {
     const api = ApiErrorBody.safeParse(parseJson(res.body));
     throw new DaemonUnavailable(
-      `Trackwall odrzucił żądanie (HTTP ${res.status}): ${api.success ? api.data.error.message : "bez komunikatu"}`,
+      `Trackwall rejected the request (HTTP ${res.status}): ${api.success ? api.data.error.message : "no message"}`,
     );
   }
   return messages;

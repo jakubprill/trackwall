@@ -160,7 +160,7 @@ describe("procs", () => {
       await groups.stopAll();
 
       expect(stopped).toMatchObject({ kind: "exited", runId: (await started).runId });
-      await expect(groups.start(spec)).rejects.toThrow("daemon się zatrzymuje");
+      await expect(groups.start(spec)).rejects.toThrow("the daemon is stopping");
     },
     TIMEOUT,
   );
@@ -174,7 +174,7 @@ describe("procs", () => {
       env: process.env,
       logSource: SOURCE,
     });
-    await expect(start).rejects.toThrow("nie znaleziono programu trackwall-nie-ma-takiego-programu w PATH");
+    await expect(start).rejects.toThrow("program trackwall-nie-ma-takiego-programu not found in PATH");
     expect(groups.state("o")).toBeUndefined();
   });
 
@@ -191,14 +191,14 @@ describe("procs", () => {
     const stopped = await groups.stop("o");
 
     expect(stopped).toBeUndefined();
-    await expect(start).rejects.toThrow("nie znaleziono programu");
+    await expect(start).rejects.toThrow("not found in PATH");
   });
 
   test("katalog roboczy musi być pełną ścieżką istniejącego katalogu", async () => {
     const { dir, groups } = setup();
     const spec = { owner: "o", command: [process.execPath, TREE, dir, "0", "1"], env: process.env, logSource: SOURCE };
-    await expect(groups.start({ ...spec, cwd: "wzgledny" })).rejects.toThrow("pełną ścieżką");
-    await expect(groups.start({ ...spec, cwd: join(dir, "nie-ma") })).rejects.toThrow("nie istnieje");
+    await expect(groups.start({ ...spec, cwd: "wzgledny" })).rejects.toThrow("must be a full path");
+    await expect(groups.start({ ...spec, cwd: join(dir, "nie-ma") })).rejects.toThrow("does not exist");
   });
 
   test(
@@ -266,7 +266,7 @@ describe("procs", () => {
       await groups.sweepOrphans();
 
       expect(isAlive(pid)).toBe(true);
-      expect(logs.join("\n")).toContain(`pid ${pid} żyje, ale nie wiadomo, czy to sierota`);
+      expect(logs.join("\n")).toContain(`pid ${pid} is alive, but it is unknown whether it is the orphaned`);
       expect(runtime.read()).toEqual([]);
       other.kill("SIGKILL");
     },
@@ -400,7 +400,7 @@ describe("runtime.json", () => {
     const aside = readdirSync(dir).find((f) => f.startsWith("runtime.json.broken-"));
     expect(aside && readFileSync(join(dir, aside), "utf8")).toBe("{ucięty");
     expect(runtime.read()).toEqual([]);
-    expect(logs.join("\n")).toContain("to nie jest JSON");
+    expect(logs.join("\n")).toContain("not JSON");
   });
 
   test("brak pliku to brak grup, a plik niezgodny ze schematem jest błędem z jego ścieżką", () => {

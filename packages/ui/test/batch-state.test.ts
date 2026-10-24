@@ -10,17 +10,17 @@ describe("komenda zbiorcza w UI", () => {
       { step: "sync", state: "done", detail: "main +2" },
       { step: "build", state: "done", detail: null },
       { step: "setup", state: "skipped", message: "repo nie ma taska mise setup" },
-      { step: "build", state: "failed", message: "zakończony kodem 1", lastLines: [] },
+      { step: "build", state: "failed", message: "exited with code 1", lastLines: [] },
       { step: "tools", state: "cancelled" },
     ];
     expect(steps.map(stepLabel)).toEqual([
-      { label: "czeka" },
-      { tone: "warning", label: "trwa…" },
+      { label: "waiting" },
+      { tone: "warning", label: "running…" },
       { tone: "ok", label: "main +2" },
-      { tone: "ok", label: "gotowe" },
-      { label: "pominięty" },
-      { tone: "error", label: "błąd" },
-      { label: "przerwany" },
+      { tone: "ok", label: "done" },
+      { label: "skipped" },
+      { tone: "error", label: "failed" },
+      { label: "cancelled" },
     ]);
     expect(steps.map(stepMessage)).toEqual([
       undefined,
@@ -28,7 +28,7 @@ describe("komenda zbiorcza w UI", () => {
       undefined,
       undefined,
       "repo nie ma taska mise setup",
-      "zakończony kodem 1",
+      "exited with code 1",
       undefined,
     ]);
   });
@@ -65,7 +65,7 @@ describe("komenda zbiorcza w UI", () => {
           ...repo,
           steps: [
             { step: "sync", state: "failed", message: "Permission denied (publickey).", lastLines: [] },
-            { step: "build", state: "skipped", message: "pominięty po błędzie kroku sync" },
+            { step: "build", state: "skipped", message: "skipped after step sync failed" },
           ],
         },
       ],
@@ -76,9 +76,9 @@ describe("komenda zbiorcza w UI", () => {
   test("nagłówek wyników mówi, czy komenda trwa, czy się skończyła, i czy ją przerwano", () => {
     const run = { startedAt: "2026-10-23T10:00:00Z", repos: [] };
     const now = new Date("2026-10-23T10:00:30Z");
-    expect(batchRunLabel({ ...run, finishedAt: null, cancelled: false }, now)).toBe("Trwa");
-    expect(batchRunLabel({ ...run, finishedAt: null, cancelled: true }, now)).toBe("Przerywanie");
-    expect(batchRunLabel({ ...run, finishedAt: "2026-10-23T10:00:20Z", cancelled: false }, now)).toBe("Zakończona przed chwilą");
-    expect(batchRunLabel({ ...run, finishedAt: "2026-10-23T10:00:20Z", cancelled: true }, now)).toBe("Przerwana przed chwilą");
+    expect(batchRunLabel({ ...run, finishedAt: null, cancelled: false }, now)).toBe("Running");
+    expect(batchRunLabel({ ...run, finishedAt: null, cancelled: true }, now)).toBe("Cancelling");
+    expect(batchRunLabel({ ...run, finishedAt: "2026-10-23T10:00:20Z", cancelled: false }, now)).toBe("Finished just now");
+    expect(batchRunLabel({ ...run, finishedAt: "2026-10-23T10:00:20Z", cancelled: true }, now)).toBe("Cancelled just now");
   });
 });

@@ -8,7 +8,7 @@ export function syncOutcome(result: SyncResult): BatchStepState {
     case "updated":
       return { state: "done", detail: `${result.branch} +${result.commits}` };
     case "up-to-date":
-      return { state: "done", detail: `${result.branch} aktualna` };
+      return { state: "done", detail: `${result.branch} up to date` };
     case "skipped":
       return { state: "skipped", message: result.message };
   }
@@ -16,9 +16,9 @@ export function syncOutcome(result: SyncResult): BatchStepState {
 
 /** Stop z UI, przerwanie komendy i wyjście daemona dają `stoppedByUser`, więc to przerwanie, a nie błąd. */
 export function runOutcome(run: RunState): BatchStepState {
-  if (run.kind !== "exited") throw new Error(`uruchomienie ${run.runId} jeszcze trwa (${run.kind})`);
+  if (run.kind !== "exited") throw new Error(`run ${run.runId} is still going (${run.kind})`);
   if (run.stoppedByUser) return { state: "cancelled" };
   if (run.exitCode === 0) return { state: "done", detail: null };
-  const message = run.exitCode === null ? `zakończony sygnałem ${run.signal}` : `zakończony kodem ${run.exitCode}`;
+  const message = run.exitCode === null ? `ended by signal ${run.signal}` : `exited with code ${run.exitCode}`;
   return { state: "failed", message, lastLines: run.lastLines };
 }

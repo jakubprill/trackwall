@@ -63,8 +63,8 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
       };
       ws.onclose = (event) => {
         if (disposed) return;
-        if (event.code === PTY_CLOSE_NOT_FOUND) return setNotice("Tej sesji nie ma już w daemonie.");
-        setNotice("Połączenie z terminalem sesji zerwane; łączenie ponownie…");
+        if (event.code === PTY_CLOSE_NOT_FOUND) return setNotice("This session no longer exists in the daemon.");
+        setNotice("Lost the connection to the session terminal; reconnecting…");
         timer = setTimeout(connect, RECONNECT_MS);
       };
     };
@@ -92,7 +92,7 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
       {notice && <p className="text-warning border-b px-3 py-1 text-xs">{notice}</p>}
       {!live && (
         <p className="text-muted-foreground border-b px-3 py-1 text-xs">
-          Sesja się zakończyła; terminal pokazuje to, co zostało na jej ekranie.
+          The session has ended; the terminal shows what was left on its screen.
         </p>
       )}
       <div ref={host} className="bg-background min-h-0 flex-1 p-2 font-mono" />

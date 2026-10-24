@@ -2,7 +2,7 @@
 
 Trackwall piszą głównie agenci, a człowiek czyta kod od czasu do czasu. Każda zasada poniżej istnieje po to, żeby następny agent albo osoba zaglądająca z boku mogli zrozumieć zmianę i jej zaufać bez dopytywania. Gdy zasada i intuicja się różnią, wygrywa zasada. Gdy zasada jest zła, zmień ją tutaj w tym samym PR i napisz dlaczego.
 
-Mapa repo i uruchomienie ze źródeł: `README.md`. Architektura i granice modułów: `docs/architecture.md`. Słownik pojęć: `CONTEXT.md`. Wydania: `docs/release.md`.
+Mapa repo i uruchomienie ze źródeł: `docs/development.md`. Funkcje: `docs/features.md`. Architektura i granice modułów: `docs/architecture.md`. Słownik pojęć: `CONTEXT.md`. Wydania: `docs/release.md`.
 
 W tym pliku „agent” to agent piszący kod Trackwall. Agent uruchamiany przez Trackwall w zadaniu nazywa się tu „sesją zadania”.
 
@@ -35,11 +35,13 @@ Pierwsza runda idzie na najwyższym poziomie (`/code-review max`), kolejne na di
 - **`docs/architecture.md` jest jedynym dokumentem architektury.** Zmiana granicy modułu, protokołu, modelu danych albo przepływu aktualizuje odpowiednią sekcję w tym samym PR. Przeszukaj cały dokument pod kątem starego zachowania, nie tylko oczywistą sekcję.
 - **Decyzje trafiają do §12 jako ADR.** Nowy ADR ma numer, datę, jedno zdanie decyzji, uzasadnienie i to, co by ją odwróciło. Wynik spike'a albo doprecyzowanie dopisuje się do istniejącego ADR (tak jak wnioski ze spike'ów do ADR-1). Decyzji odwróconej się nie kasuje: nowy ADR, a stary dostaje dopisek „zastąpiona przez ADR-N”.
 - **Nowe pojęcie domenowe trafia do `CONTEXT.md`** razem z identyfikatorem w kodzie. Od tej chwili to jedno słowo obowiązuje w kodzie, UI, narzędziach MCP i dokumentacji.
-- Zmiana komend, wymaganych narzędzi albo układu repo aktualizuje `README.md` (i sekcję „Komendy” poniżej, jeśli dotyczy Definition of done). Zmiana procesu wydania aktualizuje `docs/release.md`.
+- Zmiana komend, wymaganych narzędzi albo układu repo aktualizuje `docs/development.md` (i sekcję „Komendy” poniżej, jeśli dotyczy Definition of done). Nowa albo zmieniona funkcja aktualizuje `docs/features.md`. Zmiana procesu wydania aktualizuje `docs/release.md`.
+- `README.md` jest po angielsku i celowo krótki (ADR-32): czym jest Trackwall, że to wczesna wersja, gdzie są wydania i odnośnik do instrukcji instalacji. Nie dopisuj do niego opisu funkcji ani instrukcji.
 
 ## Język
 
-- Dokumentacja, komentarze, komunikaty commitów, tytuły i opisy PR, nazwy testów oraz teksty dla użytkownika (UI, komunikaty CLI) po polsku.
+- Produkt po angielsku (ADR-32): teksty UI, tray i okna powłoki desktopowej, komunikaty i logi daemona, komunikaty walidacji, opisy narzędzi i instrukcje MCP, komunikaty CLI, `README.md`, `SECURITY.md`, `README.txt` w portable buildzie i nowe notatki o zmianach w `docs/release-notes/`. Słowa interfejsu bierz z `CONTEXT.md`.
+- Projekt po polsku: dokumentacja w `docs/`, ADR, ten plik, `CONTEXT.md`, komentarze, komunikaty commitów, tytuły i opisy PR, nazwy testów oraz skrypty narzędziowe dla osób rozwijających Trackwall (`scripts/` paczek).
 - Identyfikatory, kody błędów API (`error.code`), nazwy zdarzeń i narzędzi MCP po angielsku.
 
 ## Nic firmowego w repo
@@ -89,7 +91,7 @@ Repo ma zostać opublikowane jako open source (nagłówek `docs/architecture.md`
 
 ## Komendy
 
-Pełny opis uruchamiania jest w `README.md`. Do Definition of done:
+Pełny opis uruchamiania jest w `docs/development.md`. Do Definition of done:
 
 ```sh
 pnpm lint              # Biome (format, lint, kolejność importów; pnpm format poprawia) i knip

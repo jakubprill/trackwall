@@ -92,7 +92,7 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     };
     const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), (path) => path.endsWith("pom.xml"), CARD_SOURCES);
     expect(snapshot.text("pom.xml")).toBe("<project/>");
-    expect(snapshot.problems).toEqual([{ path: "api/pom.xml", message: "pliku nie przeczytano w limicie 67108864 B odczytu commita" }]);
+    expect(snapshot.problems).toEqual([{ path: "api/pom.xml", message: "the file was not read within the 67108864 B commit read limit" }]);
   });
 
   test("plik Javy z tysiącami zagnieżdżonych nawiasów, niezamkniętymi napisami i adnotacjami nie blokuje daemona", () => {
@@ -130,7 +130,10 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     expect(card.consumes.filter((c) => c.kind === "http")).toHaveLength(500);
     const exactly500 = Array.from({ length: 500 }, (_, i) => `url${i}: http://h${i}`).join("\n");
     expect(extractCard(snapshotOf({ "src/main/resources/application.yml": `${exactly500}\nplain: v\n` })).problems).toEqual([]);
-    expect(card.problems).toContainEqual({ path: "", message: "moduł ma ponad 500 adresów w konfiguracji; karta pokazuje pierwsze" });
+    expect(card.problems).toContainEqual({
+      path: "",
+      message: "the module has more than 500 addresses in its config; the card shows the first ones",
+    });
   });
 
   test("plik z dziesiątkami tysięcy wywołań RestTemplate nie blokuje daemona", () => {
@@ -168,7 +171,7 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), (path) => path.endsWith("pom.xml"), CARD_SOURCES);
     expect(snapshot.text("pom.xml")).toBe("<project/>");
     expect(snapshot.problems).toEqual([
-      { path: "", message: "wyszukiwanie plików z kontrolerami i klientami HTTP nie powiodło się: git grep: przekroczony limit czasu" },
+      { path: "", message: "searching for files with controllers and HTTP clients failed: git grep: przekroczony limit czasu" },
     ]);
   });
 

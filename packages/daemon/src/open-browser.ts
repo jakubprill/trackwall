@@ -9,6 +9,6 @@ export function openBrowser(url: string): void {
         ? ["open", [url]]
         : ["xdg-open", [url]];
   const child = spawn(cmd, args, { detached: true, stdio: "ignore", windowsHide: true });
-  child.on("error", (err) => process.stderr.write(`[daemon] nie udało się otworzyć przeglądarki: ${err.message}\n`));
+  child.on("error", (err) => process.stderr.write(`[daemon] failed to open the browser: ${err.message}\n`));
   child.unref();
 }

@@ -49,15 +49,15 @@ function TaskPanel({ conn, repo, tasks, onChange }: { conn: Connection; repo: st
   );
   if (tasks.kind === "ok") {
     return tasks.tasks.length === 0 ? (
-      <p className="text-muted-foreground text-sm">To repo nie ma tasków mise.</p>
+      <p className="text-muted-foreground text-sm">This repo has no mise tasks.</p>
     ) : (
-      rows(tasks.tasks, "Taski mise")
+      rows(tasks.tasks, "mise tasks")
     );
   }
   return (
     <div className="flex flex-col gap-4">
       <NoList conn={conn} repo={repo} tasks={tasks} onChange={onChange} />
-      {tasks.running.length > 0 && rows(tasks.running, "Nadal działają")}
+      {tasks.running.length > 0 && rows(tasks.running, "Still running")}
     </div>
   );
 }
@@ -76,7 +76,7 @@ function NoList({
   if (tasks.kind === "not_installed") {
     return (
       <p className="text-muted-foreground text-sm">
-        Trackwall nie znalazł programu mise ({tasks.message}). Zainstaluj mise (mise.jdx.dev) i uruchom Trackwall ponownie.
+        Trackwall could not find mise ({tasks.message}). Install mise (mise.jdx.dev) and restart Trackwall.
       </p>
     );
   }
@@ -89,12 +89,12 @@ function Untrusted({ conn, repo, message, onTrusted }: { conn: Connection; repo:
   return (
     <div className="flex flex-col items-start gap-3">
       <p className="text-sm">
-        mise nie ufa konfiguracji tego repo, więc nie poda jej tasków. Zaufaj jej tylko wtedy, gdy znasz repo: konfiguracja mise może
-        uruchamiać programy.
+        mise does not trust this repo's config, so it will not list its mise tasks. Trust it only if you know the repo: a mise config can
+        run programs.
       </p>
       <p className="text-muted-foreground font-mono text-xs whitespace-pre-wrap break-all">{message}</p>
       <Button variant="outline" size="sm" onClick={trust.run} disabled={trust.pending}>
-        <ShieldCheck /> Zaufaj konfiguracji mise (mise trust)
+        <ShieldCheck /> Trust the mise config (mise trust)
       </Button>
       {trust.error && <p className="text-destructive text-xs">{trust.error}</p>}
     </div>
@@ -122,14 +122,14 @@ function TaskRow({ conn, repo, task, onChange }: { conn: Connection; repo: strin
           <code className="text-primary truncate text-xs">{task.name}</code>
           {task.description && <span className="text-muted-foreground truncate text-xs">{task.description}</span>}
         </div>
-        <span className="text-xs" title={task.run ? `od ${relativeTime(task.run.startedAt, new Date())}` : undefined}>
+        <span className="text-xs" title={task.run ? `started ${relativeTime(task.run.startedAt, new Date())}` : undefined}>
           <StatusLabel tone={state.tone} label={state.label} />
         </span>
         <Button variant="ghost" size="sm" onClick={() => setShowLog((v) => !v)} aria-pressed={showLog}>
-          <ScrollText /> {showLog ? "Ukryj log" : "Log"}
+          <ScrollText /> {showLog ? "Hide log" : "Log"}
         </Button>
         <Button variant="outline" size="sm" onClick={action.run} disabled={action.pending}>
-          {live ? <Square /> : <Play />} {live ? "Zatrzymaj" : "Uruchom"}
+          {live ? <Square /> : <Play />} {live ? "Stop" : "Run"}
         </Button>
       </div>
       {showLog && <MiseTaskLog conn={conn} repo={repo} miseTask={task.name} />}

@@ -99,7 +99,7 @@ describe("stan zadania z hooków Copilot CLI", () => {
       state: "Approval",
       source: "hook",
       confidence: "low",
-      reason: "hook notification (treść)",
+      reason: "hook notification (text)",
     });
     expect(stateFromHook({ event: "notification", receivedAt: 0, payload: { message: "Agent is idle" }, omitted: [] })?.state).toBe(
       "Input",

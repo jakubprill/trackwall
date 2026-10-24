@@ -73,7 +73,7 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
     await waitFor(agents, started.id, () => /PID pomocnika: \d+/.test(window.text()), "proces pomocnika");
     const helperPid = Number(/PID pomocnika: (\d+)/.exec(window.text())?.[1]);
     expect(isAlive(helperPid)).toBe(true);
-    expect(() => agents.dismiss(started.id)).toThrow("sesja jeszcze działa");
+    expect(() => agents.dismiss(started.id)).toThrow("the session is still running");
 
     const stopped = await agents.stop(started.id);
     expect(stopped.run).toMatchObject({ kind: "exited", stoppedByUser: true });

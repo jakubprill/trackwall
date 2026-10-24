@@ -75,7 +75,7 @@ export async function withStartLock<T>(home: string, fn: () => Promise<T>, timeo
       rmSync(lock, { force: true });
       continue;
     }
-    if (Date.now() > deadline) throw new Error(`blokada startu ${lock} trzymana dłużej niż ${timeoutMs} ms`);
+    if (Date.now() > deadline) throw new Error(`startup lock ${lock} held for longer than ${timeoutMs} ms`);
     await new Promise((r) => setTimeout(r, 50));
   }
   try {
