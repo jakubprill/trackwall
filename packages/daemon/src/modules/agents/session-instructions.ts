@@ -74,6 +74,7 @@ function taskRole(repo: string, task: string): string[] {
   return [
     `You run the task \`${task}\` in the repo \`${repo}\` (its id in Trackwall tools), in the task's own git worktree on its own branch. The user reviews the task's changes in Trackwall.`,
     "- Work only in this worktree: the repo root and other worktrees belong to the user and to other agents.",
+    `- ${mcpTools.runMiseTask.name} runs mise tasks in the repo root, not in this worktree, so it does not test your changes: run builds and tests here yourself.`,
     "- Commit your changes on the task branch. Do not switch branches, push, merge or open pull requests unless the task asks for it.",
     `- Work that belongs to another repo is not yours: propose it with ${mcpTools.proposeTask.name} and say so in your result.`,
     `- When you are done, or stuck and need the user, call ${mcpTools.reportResult.name}: what you did, what is left and what to check. Call it again if the result changes.`,

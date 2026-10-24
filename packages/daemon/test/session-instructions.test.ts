@@ -14,6 +14,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text.startsWith('---\napplyTo: "**"\n---\n# Working in Trackwall\n')).toBe(true);
     expect(text).toContain("You run the task `1b4e28ba-2fa1-11d2-883f-0016d3cca427` in the repo `shop`");
     expect(text).toContain("Do not switch branches, push, merge or open pull requests unless the task asks for it.");
+    expect(text).toContain("run_mise_task runs mise tasks in the repo root, not in this worktree");
     expect(text).toContain(MCP_INSTRUCTIONS);
   });
 

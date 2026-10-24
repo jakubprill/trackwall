@@ -33,7 +33,7 @@ export const MCP_INSTRUCTIONS = [
   "Trackwall is the user's local workbench for the git repos in their projects folder: it syncs them, reads their build " +
     "files and code into repo cards and a graph of connections between apps, runs mise tasks and Copilot CLI sessions. " +
     `Its tools give you that knowledge. ${runMiseTask.name} and ${stopMiseTask.name} start and stop mise tasks, ` +
-    `${proposeTask.name} and ${reportResult.name} record text for the user, and no tool changes repos or configuration.`,
+    `${proposeTask.name} and ${reportResult.name} record text for the user, and no tool edits repo files or configuration directly.`,
   "",
   "How to work with it:",
   `- Find repos: ${listRepos.name} (narrow it with tags such as java, bff or frontend) gives the repo ids the other tools ` +
