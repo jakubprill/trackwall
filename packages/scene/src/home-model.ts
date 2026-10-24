@@ -28,10 +28,11 @@ export interface HomeRepo {
 }
 
 /**
- * Stan sesji na pulpicie: `attention` to „czeka na Ciebie” (`Session.needsAttention`: `Input`, `Approval`, `Plan`),
- * `error` to sesja zakończona błędem, `done` to sesja zakończona, a `working` to reszta, także `Stale`.
+ * A session's state on the dashboard: `attention` is "waiting for you" (`Session.needsAttention`), `idle` is `Input`
+ * the user has already seen (ADR-47), `error` is a session that ended with an error, `done` a session that ended,
+ * and `working` the rest, `Stale` included.
  */
-export const HOME_SESSION_STATES = ["working", "attention", "error", "done"] as const;
+export const HOME_SESSION_STATES = ["working", "attention", "idle", "error", "done"] as const;
 export type HomeSessionState = (typeof HOME_SESSION_STATES)[number];
 
 export interface HomeSession {

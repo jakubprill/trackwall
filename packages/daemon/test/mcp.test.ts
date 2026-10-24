@@ -12,9 +12,11 @@ import {
   FindEndpointResult,
   GetRepoResult,
   ListReposResult,
+  LogErrors,
   LogTail,
   mcpTools,
   RepoCardResult,
+  SearchCodeResult,
   Subgraph,
   WhoCallsResult,
   workspaceApi,
@@ -78,7 +80,7 @@ beforeAll(async () => {
 afterAll(() => api.close());
 
 describe("serwer MCP przez Streamable HTTP", () => {
-  test("ogłasza narzędzia repo, karty, logu, grafu i sesji, a zapisujące tylko propozycję i podsumowanie zadania", async () => {
+  test("announces the repo, card, log, graph, code search and session tools, and only the task proposal and summary tools write", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual([
@@ -86,9 +88,11 @@ describe("serwer MCP przez Streamable HTTP", () => {
       "get_repo",
       "get_repo_card",
       "tail",
+      "get_errors",
       "who_calls",
       "subgraph_for",
       "find_endpoint",
+      "search_code",
       "list_sessions",
       "get_session",
       "propose_task",
@@ -183,6 +187,48 @@ describe("serwer MCP przez Streamable HTTP", () => {
     await client.close();
   });
 
+  test("search_code returns matches with context, with tags only from repos with every one of them, and an unknown repo is not_found", async () => {
+    const client = await connectHttpClient(api.port, TOKEN);
+    const search = async (args: Record<string, unknown>) =>
+      (await client.callTool({ name: "search_code", arguments: args })).structuredContent;
+    const head = gitIn(orders, "rev-parse", "HEAD").trim();
+
+    // By default a fixed string, case-sensitive, with two context lines.
+    expect(SearchCodeResult.parse(await search({ pattern: "BFF" }))).toEqual({
+      matches: [
+        {
+          repo: "orders-bff",
+          path: "README.md",
+          line: 3,
+          column: 1,
+          text: "BFF sklepu.",
+          before: [
+            { line: 1, text: "# Zamówienia" },
+            { line: 2, text: "" },
+          ],
+          after: [],
+        },
+      ],
+      truncated: false,
+      searched: [{ repo: "orders-bff", commit: head, truncated: false }],
+      failed: [],
+      skipped: [],
+    });
+    const searched = async (tags: string[]) => SearchCodeResult.parse(await search({ pattern: "x", tags })).searched.map((r) => r.repo);
+    expect(await searched(["java", "bff"])).toEqual(["orders-bff"]);
+    expect(await searched(["frontend"])).toEqual([]);
+    const unknown = await client.callTool({ name: "search_code", arguments: { pattern: "x", repos: ["missing"] } });
+    expect(unknown.content).toEqual([{ type: "text", text: 'not_found: no repo "missing" in the projects folder' }]);
+    // A repo outside the tags does not hide an unknown id, and an empty tag list is no filter.
+    const unknownTagged = await client.callTool({ name: "search_code", arguments: { pattern: "x", repos: ["missing"], tags: ["java"] } });
+    expect(unknownTagged.isError).toBe(true);
+    expect(await searched([])).toEqual(["orders-bff"]);
+    // A newline would make git search for every line of the pattern separately.
+    const multiline = await client.callTool({ name: "search_code", arguments: { pattern: "BFF\nsklepu" } });
+    expect(multiline.isError).toBe(true);
+    await client.close();
+  });
+
   test("zły repoTags w workspace.yaml: list_repos bez filtra daje repo bez tagów, z filtrem błąd, a get_repo README bez tagów", async () => {
     const workspaceFile = join(home, "workspace.yaml");
     const valid = readFileSync(workspaceFile, "utf8");
@@ -250,6 +296,33 @@ describe("serwer MCP przez Streamable HTTP", () => {
       (await client.callTool({ name: "tail", arguments: { repo: "orders-bff", miseTask: "build", limit: 10 } })).structuredContent,
     );
     expect(empty.records).toEqual([]);
+    await client.close();
+  });
+
+  test("get_errors returns a masked error with its stack trace after the cursor, and an unknown repo is not_found", async () => {
+    const output = facade.logs.open({ kind: "mise-task", repo: "orders-bff", miseTask: "test" }, "r2", { DB_PASSWORD: "tajne-haslo-123" });
+    const client = await connectHttpClient(api.port, TOKEN);
+    const cursor = LogErrors.parse(
+      (await client.callTool({ name: "get_errors", arguments: { repo: "orders-bff" } })).structuredContent,
+    ).nextSeq;
+    output.push("stderr", Buffer.from("java.sql.SQLException: login failed for tajne-haslo-123\n\tat com.example.Db.connect(Db.java:7)\n"));
+
+    const result = await client.callTool({ name: "get_errors", arguments: { repo: "orders-bff", sinceSeq: cursor } });
+    expect(LogErrors.parse(result.structuredContent)).toMatchObject({
+      errors: [
+        {
+          source: { kind: "mise-task", repo: "orders-bff", miseTask: "test" },
+          exception: "java.sql.SQLException: login failed for ***",
+          lines: ["java.sql.SQLException: login failed for ***", "\tat com.example.Db.connect(Db.java:7)"],
+          count: 1,
+        },
+      ],
+      truncated: false,
+      dropped: false,
+    });
+
+    const missing = await client.callTool({ name: "get_errors", arguments: { repo: "nie-ma-takiego" } });
+    expect(missing.content).toEqual([{ type: "text", text: 'not_found: no repo "nie-ma-takiego" in the projects folder' }]);
     await client.close();
   });
 

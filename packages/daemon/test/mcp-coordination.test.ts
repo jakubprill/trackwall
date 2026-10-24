@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
@@ -12,7 +12,7 @@ import {
 } from "@trackwall/protocol";
 import { loopbackRequest } from "../src/infra/loopback.ts";
 import { MCP_PATH, SESSION_TOKEN_HEADER } from "../src/mcp/endpoint.ts";
-import { viewer } from "./support/agents.ts";
+import { viewer, waitFor } from "./support/agents.ts";
 import { connectHttpClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
 
@@ -28,9 +28,26 @@ beforeAll(async () => {
   clients.push(outside);
 });
 
+// Limit zamiast domyślnego braku: zawieszone sprzątanie na Windowsie ma być błędem tego pliku, a nie godziną joba.
 afterAll(async () => {
+  process.stderr.write("[dbg] afterAll start\n");
   for (const client of clients) await client.close();
+  process.stderr.write("[dbg] clients closed\n");
   await daemon.stop();
+  process.stderr.write("[dbg] daemon stopped\n");
+  for (let i = 0; i < 3; i++) {
+    await Bun.sleep(300);
+    process.stderr.write(`[dbg] gc ${i}\n`);
+    Bun.gc(true);
+  }
+  process.stderr.write("[dbg] gc done\n");
+}, 30_000);
+
+afterEach(async () => {
+  await Bun.sleep(700);
+  process.stderr.write("[dbg] afterEach gc\n");
+  Bun.gc(true);
+  process.stderr.write("[dbg] afterEach gc done\n");
 });
 
 /** Klient MCP tak, jak widzi go most stdio sesji: z tokenem z pliku w katalogu sesji. */
@@ -39,6 +56,15 @@ async function clientOfSession(session: string): Promise<Client> {
   const client = await connectHttpClient(daemon.api.port, TOKEN, undefined, { [SESSION_TOKEN_HEADER]: token });
   clients.push(client);
   return client;
+}
+
+/**
+ * Zatrzymanie sesji dopiero po jej `sessionStart`: zabicie procesu w ConPTY w trakcie startu potrafiło na Windowsie
+ * zawiesić albo wysypać Bun (segfault w `bun test`).
+ */
+async function stopStarted(session: string): Promise<void> {
+  await waitFor(daemon.facade.agents, session, (s) => s.state !== null, "sessionStart");
+  await daemon.facade.agents.stop(session);
 }
 
 async function call(client: Client, name: string, args: Record<string, unknown>) {
@@ -135,6 +161,7 @@ describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (p
       (await call(mainClient, "wait_for_session", { task: task.id, timeoutSeconds: 10 })).structuredContent,
     );
     expect(orphan).toMatchObject({ status: "no_session", task: { id: task.id }, session: null });
+    await daemon.facade.agents.stop(main.id);
   }, 60_000);
 
   test("report_result działa tylko w sesji zadania: agent spoza Trackwall i sesja w korzeniu repo dostają bad_request", async () => {
@@ -146,6 +173,7 @@ describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (p
         { type: "text", text: "bad_request: only a session that runs a task in Trackwall can report a result" },
       ]);
     }
+    await stopStarted(root.id);
   }, 30_000);
 
   test("sesja nie może czekać na samą siebie, a czekanie na nieznane zadanie to not_found", async () => {
@@ -158,6 +186,7 @@ describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (p
 
     const both = await call(outside, "wait_for_session", { session: session.id, task: session.id });
     expect(both.isError).toBe(true);
+    await stopStarted(session.id);
   }, 30_000);
 
   test("propozycja w nieznanym repo to not_found, a zatwierdzenie propozycji, której już nie ma, też", async () => {

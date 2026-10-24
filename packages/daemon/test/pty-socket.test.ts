@@ -39,6 +39,21 @@ async function until(check: () => boolean | Promise<boolean>, what: string): Pro
 }
 
 describe.skipIf(process.versions.bun === undefined)("terminal sesji przez WebSocket", () => {
+  test("a window in front of the user marks the waiting session seen, and the session no longer waits for you", async () => {
+    const session = await daemon.post(agentsApi.start, { repo: "sklep" });
+    const current = async () => (await daemon.post(agentsApi.sessions, {})).sessions.find((s) => s.id === session.id);
+    await until(async () => (await current())?.needsAttention === true, "waiting for you after sessionStart");
+
+    const client = connect(session.id, [PTY_SUBPROTOCOL, `bearer.${TOKEN}`]);
+    await client.opened;
+    client.ws.send(JSON.stringify({ type: "focus", focused: true }));
+    await until(async () => (await current())?.needsAttention === false, "seen after focus");
+    expect((await current())?.state?.state).toBe("Input");
+
+    client.ws.close();
+    await daemon.post(agentsApi.stop, { session: session.id });
+  }, 60_000);
+
   test("okno dostaje ekran sesji, a klawisze i rozmiar trafiają do Copilot CLI", async () => {
     const session = await daemon.post(agentsApi.start, { repo: "sklep" });
     const client = connect(session.id, [PTY_SUBPROTOCOL, `bearer.${TOKEN}`]);

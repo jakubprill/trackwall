@@ -34,6 +34,8 @@ pnpm lint                      # Biome and knip (pnpm format fixes formatting)
 pnpm test                      # tests of every package
 ```
 
+The daemon tests run with `bun test --isolate`: each test file gets a fresh global object, so handles left by one file (PTY sessions, servers, timers) cannot hang or crash the next one. On Windows CI, without it the file after `mcp-coordination.test.ts` hung or Bun crashed.
+
 The daemon alone with the UI in the browser, without Tauri:
 
 ```sh
