@@ -81,7 +81,7 @@ beforeAll(async () => {
 afterAll(() => api.close());
 
 describe("serwer MCP przez Streamable HTTP", () => {
-  test("announces the repo, card, log, graph, code search and session tools, and only the task proposal and summary tools write", async () => {
+  test("announces the repo, card, log, graph, code search, session and mise task tools, with only running and stopping a mise task as destructive", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual([
@@ -99,13 +99,18 @@ describe("serwer MCP przez Streamable HTTP", () => {
       "propose_task",
       "report_result",
       "wait_for_session",
+      "run_mise_task",
+      "stop_mise_task",
+      "wait_for_mise_task",
+      "list_running_mise_tasks",
     ]);
     // Każde narzędzie z kontraktu, który pokazuje UI, jest zarejestrowane w daemonie.
     expect(tools.map((t) => t.name)).toEqual(Object.values(mcpTools).map((t) => t.name));
     const writing = tools.filter((t) => t.annotations?.readOnlyHint !== true).map((t) => t.name);
-    expect(writing).toEqual(["propose_task", "report_result"]);
-    // Zapisują tylko tekst dla człowieka, więc klient MCP nie musi ich traktować jak niszczących.
-    expect(tools.filter((t) => t.annotations?.destructiveHint !== false)).toEqual([]);
+    expect(writing).toEqual(["propose_task", "report_result", "run_mise_task", "stop_mise_task"]);
+    // A proposal and a summary only write text for a human; running a mise task executes repo code, and stopping one
+    // can kill a process the user started from the UI.
+    expect(tools.filter((t) => t.annotations?.destructiveHint !== false).map((t) => t.name)).toEqual(["run_mise_task", "stop_mise_task"]);
     expect(client.getServerVersion()).toMatchObject({ name: "trackwall", version: "9.9.9" });
     await client.close();
   });

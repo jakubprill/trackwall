@@ -23,13 +23,17 @@ const {
   proposeTask,
   reportResult,
   waitForSession,
+  runMiseTask,
+  stopMiseTask,
+  waitForMiseTask,
+  listRunningMiseTasks,
 } = mcpTools;
 
 export const MCP_INSTRUCTIONS = [
   "Trackwall is the user's local workbench for the git repos in their projects folder: it syncs them, reads their build " +
     "files and code into repo cards and a graph of connections between apps, runs mise tasks and Copilot CLI sessions. " +
-    `Its tools give you that knowledge. Only ${proposeTask.name} and ${reportResult.name} record anything, and no tool changes ` +
-    "repos, configuration or processes.",
+    `Its tools give you that knowledge. ${runMiseTask.name} and ${stopMiseTask.name} start and stop mise tasks, ` +
+    `${proposeTask.name} and ${reportResult.name} record text for the user, and no tool changes repos or configuration.`,
   "",
   "How to work with it:",
   `- Find repos: ${listRepos.name} (narrow it with tags such as java, bff or frontend) gives the repo ids the other tools ` +
@@ -45,6 +49,10 @@ export const MCP_INSTRUCTIONS = [
   `- Diagnose a failure: ${getErrors.name} gives the errors from the logs of all mise tasks with their stack traces and ` +
     `root cause; ${tail.name} reads the log of one mise task (${getRepo.name} lists them), from an error on with sinceSeq ` +
     "one less than its seq. In both, pass nextSeq as sinceSeq to get only what is new.",
+  `- Build, test or run a service: ${runMiseTask.name} runs a mise task listed by ${getRepo.name} in the repo root ` +
+    `(not in a task worktree), ${waitForMiseTask.name} waits for its exit code and ${tail.name} gives its output; ` +
+    `${listRunningMiseTasks.name} shows what already runs. Stop long-running tasks with ${stopMiseTask.name} when ` +
+    "you no longer need them.",
   `- Hand work to another agent, e.g. a change in another repo: ${proposeTask.name} with a prompt that stands on its own; ` +
     `the user approves, edits or rejects it in Trackwall. Then call ${waitForSession.name} with the task id: it returns ` +
     "when the proposal is rejected or the task's session needs someone (finished its turn, asks for approval, hit an error), goes " +

@@ -111,10 +111,46 @@ export class Mise {
     return this.runGroupToEnd(installOwner(repo), dir, ["install"], repo, { kind: "mise-install", repo }, signal);
   }
 
+  /**
+   * The task's current run once the system has confirmed its end, or after `timeoutMs` (then still `running` or
+   * `stopping`), for an agent waiting for the result (`wait_for_mise_task`, ADR-41). `signal` (the client cancelled
+   * the call) ends the wait but does not stop the task.
+   */
+  async waitForEnd(repo: string, miseTask: string, timeoutMs: number, signal: AbortSignal): Promise<RunState> {
+    const groupOwner = owner(repo, miseTask);
+    // `ended` first waits for a start in progress (e.g. the Run button clicked at the same moment), so the wait sees
+    // the new run instead of the previous one or none; an ended group resolves at once, an absent one as `undefined`.
+    const giveUp = AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
+    let stopWaiting = () => {};
+    const gaveUp = new Promise<"gave_up">((resolve) => {
+      stopWaiting = () => resolve("gave_up");
+    });
+    giveUp.addEventListener("abort", stopWaiting, { once: true });
+    if (giveUp.aborted) stopWaiting();
+    try {
+      const end = await Promise.race([this.deps.procs.ended(groupOwner), gaveUp]);
+      const run = end === "gave_up" ? this.deps.procs.state(groupOwner) : end;
+      if (!run) throw await this.notRun(repo, miseTask);
+      return run;
+    } finally {
+      giveUp.removeEventListener("abort", stopWaiting);
+    }
+  }
+
   async stop(repo: string, miseTask: string): Promise<RunState> {
     const stopped = await this.deps.procs.stop(owner(repo, miseTask));
-    if (!stopped) throw new DomainError("not_found", `mise task "${miseTask}" in ${repo} has not been run`);
+    if (!stopped) throw await this.notRun(repo, miseTask);
     return stopped;
+  }
+
+  /**
+   * `not_found` for a task without a run: about the repo when it is not in the projects folder (a typo in the id),
+   * otherwise about the task. Checked only after the run lookup, so a task of a repo that was renamed or removed
+   * while it ran can still be stopped and waited for.
+   */
+  private async notRun(repo: string, miseTask: string): Promise<DomainError> {
+    await this.deps.repos.repoPath(repo);
+    return new DomainError("not_found", `mise task "${miseTask}" in ${repo} has not been run`);
   }
 
   /** `mise trust` bez ścieżki ufa konfiguracji w korzeniu repo, nie w katalogach nadrzędnych. */

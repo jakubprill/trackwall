@@ -25,14 +25,19 @@ function setup(config: object, command: readonly string[] = FAKE_MISE) {
     platform: groupPlatform().then((p) => ({ ...p, graceMs: 300 })),
     log: () => {},
   });
+  let present = true;
   const repos = {
     repoPath: async (id: string) => {
-      if (id !== "web") throw new DomainError("not_found", `nie ma repo ${id}`);
+      if (id !== "web" || !present) throw new DomainError("not_found", `nie ma repo ${id}`);
       return repoDir;
     },
   };
+  /** The repo leaves the projects folder (renamed, deleted, another folder chosen in settings). */
+  const removeRepo = () => {
+    present = false;
+  };
   const mise = new Mise({ procs, repos, command, env: async () => process.env });
-  return { mise, repoDir, procs };
+  return { mise, repoDir, procs, removeRepo };
 }
 
 function writeConfig(repoDir: string, config: object): void {
@@ -153,6 +158,44 @@ describe("mise", () => {
     },
     TIMEOUT,
   );
+
+  test(
+    "a cancelled wait for the end of a task returns at once with the running state and does not stop the task",
+    async () => {
+      const { mise } = setup({ tasks: [DEV] });
+      const started = await mise.start("web", "dev");
+      const interrupted = new AbortController();
+
+      const waiting = mise.waitForEnd("web", "dev", 30_000, interrupted.signal);
+      interrupted.abort();
+
+      expect(await waiting).toEqual(started);
+      expect(mise.running().map((t) => t.run.kind)).toEqual(["running"]);
+      await mise.stop("web", "dev");
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a running task of a repo that left the projects folder can still be waited for and stopped",
+    async () => {
+      const { mise, removeRepo } = setup({ tasks: [DEV] });
+      const started = await mise.start("web", "dev");
+      removeRepo();
+
+      expect(await mise.waitForEnd("web", "dev", 1, new AbortController().signal)).toEqual(started);
+      expect(await mise.stop("web", "dev")).toMatchObject({ kind: "exited", runId: started.runId, stoppedByUser: true });
+    },
+    TIMEOUT,
+  );
+
+  test("waiting for a task in a repo that does not exist is not_found", async () => {
+    const { mise } = setup({ tasks: [DEV] });
+    await expect(mise.waitForEnd("api", "dev", 1000, new AbortController().signal)).rejects.toMatchObject({
+      code: "not_found",
+      message: "nie ma repo api",
+    });
+  });
 
   test("stop taska, który nie był uruchamiany, to not_found", async () => {
     const { mise } = setup({ tasks: [DEV] });

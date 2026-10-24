@@ -13,19 +13,28 @@ import { makeRepo } from "./git-repo.ts";
 const fakeCopilot = join(import.meta.dir, "..", "fixtures", "fake-copilot-session.ts");
 const daemonMain = join(import.meta.dir, "..", "..", "src", "main.ts");
 
+/** Projects-folder repos and the `mise` program for a test that needs something other than the single repo `sklep`. */
+interface SessionApiOptions {
+  /** Repo name and its files in the first commit. */
+  repos: Record<string, Record<string, string>>;
+  miseCommand: readonly string[];
+}
+
+const ONE_REPO: SessionApiOptions = { repos: { sklep: { "README.md": "# sklep\n" } }, miseCommand: ["mise"] };
+
 /**
- * API daemona z prawdziwą fasadą i atrapą Copilot CLI w PTY, na folderze z projektami z jednym repo `sklep`: to, co
- * `main.ts` podaje do `startApi`. `stop` zatrzymuje sesje i zamyka API.
+ * API daemona z prawdziwą fasadą i atrapą Copilot CLI w PTY, na folderze z projektami z repo z `options` (domyślnie
+ * jedno repo `sklep`): to, co `main.ts` podaje do `startApi`. `stop` zatrzymuje sesje i taski i zamyka API.
  */
-export async function startSessionApi(token: string) {
+export async function startSessionApi(token: string, options: SessionApiOptions = ONE_REPO) {
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
-  makeRepo({ "README.md": "# sklep\n" }, "sklep", projects);
+  for (const [name, files] of Object.entries(options.repos)) makeRepo(files, name, projects);
   const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
   writeFileSync(join(home, "workspace.yaml"), `projectsDir: ${JSON.stringify(projects)}\n`);
   const facade = createFacade({
     home,
     openUrl: () => {},
-    miseCommand: ["mise"],
+    miseCommand: options.miseCommand,
     copilotCommand: [process.execPath, fakeCopilot],
     hookCommand: (event, hooksFile) => ({ exec: process.execPath, args: ["--no-env-file", daemonMain, "copilot-hook", event, hooksFile] }),
     sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
@@ -58,5 +67,5 @@ export async function startSessionApi(token: string) {
     facade.agents.close();
     await api.close();
   };
-  return { api, facade, home, post, stop };
+  return { api, facade, home, projects, post, stop };
 }
