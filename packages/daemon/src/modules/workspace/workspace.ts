@@ -6,6 +6,7 @@ import {
   type GraphConfig,
   type HostedRepo,
   type HostRepos,
+  PATCH_MAX_BYTES,
   type RemoteRepoList,
   type Repo,
   type RepoHost,
@@ -18,6 +19,7 @@ import {
   type SyncRun,
   sameHost,
   type TreeEntry,
+  type WorkingTreeChanges,
   type WorkspaceSettings,
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
@@ -59,6 +61,7 @@ interface WorkspaceVcs {
   log(dir: string, limit: number): Promise<Commit[]>;
   tree(dir: string, path: string): Promise<TreeEntry[] | undefined>;
   file(dir: string, path: string, maxBytes: number): Promise<FileContent | undefined>;
+  changes(dir: string, maxPatchBytes: number): Promise<WorkingTreeChanges>;
 }
 
 /** Czego `workspace` potrzebuje od hostingów repo z modułu `vcs` (ADR-19). */
@@ -196,6 +199,12 @@ export class Workspace {
     const content = await this.inRepo(entry, () => this.deps.vcs.file(entry.path, path, PREVIEW_MAX_BYTES));
     if (!content) throw new DomainError("not_found", `${id} has no file "${path}" in the latest commit`);
     return content;
+  }
+
+  /** Zmiany katalogu roboczego repo względem HEAD (ADR-34). */
+  async changes(id: string): Promise<WorkingTreeChanges> {
+    const entry = await this.entry(id);
+    return this.inRepo(entry, () => this.deps.vcs.changes(entry.path, PATCH_MAX_BYTES));
   }
 
   /** Daemon nie wie, czy system obsłużył adres; wynik to tylko potwierdzenie przyjęcia. */

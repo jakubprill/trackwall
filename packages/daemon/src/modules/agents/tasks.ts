@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { type Session, TASK_SUMMARY_MAX_FILES, type Task, type TaskChanges, type TaskChangesSummary } from "@trackwall/protocol";
+import {
+  PATCH_MAX_BYTES,
+  type Session,
+  TASK_SUMMARY_MAX_FILES,
+  type Task,
+  type TaskChanges,
+  type TaskChangesSummary,
+} from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
@@ -12,9 +19,6 @@ import type { StoredTask, TaskFile } from "./task-file.ts";
  * przeżywa restart daemona (`tasks.json`), a jego sesja nie; worktree i gałąź znikają tylko przy zakończeniu zadania,
  * a zmiany, które by przy tym przepadły, tylko po potwierdzeniu użytkownika.
  */
-
-/** Diff zadania w UI: więcej i tak nikt nie przewija. */
-const PATCH_MAX_BYTES = 1024 * 1024;
 
 // Typy niżej powtarzają kształt typów z `vcs` (`WorktreeBase`, `WorktreeBranch`, `PendingWork`) zamiast je
 // importować, bo moduł nie importuje sąsiedniego modułu (§4); zgodność sprawdza kompilator tam, gdzie `facade.ts` podaje `Vcs` jako `TasksVcs` (zależności `Agents`).

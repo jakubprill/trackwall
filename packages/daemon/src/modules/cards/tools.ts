@@ -13,7 +13,7 @@ import { type Extracted, emptyExtracted, keyLines, type RepoSnapshot } from "./s
  */
 
 /** Pliki konfiguracji mise w korzeniu repo, w kolejności, w której mise je czyta (ostatni wygrywa, więc odwrotnie). */
-const MISE_CONFIG_FILES = [
+export const MISE_CONFIG_FILES = [
   "mise.toml",
   ".mise.toml",
   "mise/config.toml",
@@ -38,7 +38,7 @@ const WRAPPERS: [string, string, RegExp][] = [
   ["gradle/wrapper/gradle-wrapper.properties", "gradle", /^gradle-(.+)-(?:bin|all)\.zip$/],
 ];
 /** Klucz tabeli TOML na początku linii (`node =`, `"npm:prettier" =`, `"ubi:cli/cli[exe=gh]" =`). */
-const TOML_KEY = /^\s*(?:"([^"]*)"|'([^']*)'|([^"'\s=]+))\s*=/g;
+export const TOML_KEY = /^\s*(?:"([^"]*)"|'([^']*)'|([^"'\s=]+))\s*=/g;
 
 /** Nazwy plików z podpowiedziami, czytanych w korzeniu i w katalogach buildów. */
 const HINT_FILE_NAMES = new Set([SDKMANRC, ...SINGLE_VERSION_FILES.map(([name]) => name), ...WRAPPERS.map(([path]) => baseName(path))]);

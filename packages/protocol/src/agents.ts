@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Done, type Endpoint } from "./api.ts";
+import { WorkingTreeChanges } from "./changes.ts";
 import { RunState } from "./procs.ts";
 import { TaskStateChange } from "./task-state.ts";
 import { CommitHash, RepoId } from "./workspace.ts";
@@ -74,24 +75,11 @@ export const SessionList = z.object({
 });
 export type SessionList = z.infer<typeof SessionList>;
 
-/** Plik zmieniony w worktree względem commita bazowego; `null` w liczbie linii dla pliku binarnego. */
-export const ChangedFile = z.object({
-  path: z.string(),
-  change: z.enum(["added", "modified", "deleted"]),
-  additions: z.number().int().nonnegative().nullable(),
-  deletions: z.number().int().nonnegative().nullable(),
-});
-export type ChangedFile = z.infer<typeof ChangedFile>;
-
 /**
  * Zmiany zadania: katalog roboczy worktree (z nowymi plikami, bez ignorowanych) względem commita bazowego, czyli
  * commity zadania i to, czego agent jeszcze nie zacommitował, razem.
  */
-export const TaskChanges = z.object({
-  files: z.array(ChangedFile),
-  /** Zunifikowany diff, ucięty do 1 MB (`truncated`). */
-  patch: z.string(),
-  truncated: z.boolean(),
+export const TaskChanges = WorkingTreeChanges.extend({
   /** Commity na gałęzi zadania od commita bazowego. */
   commits: z.number().int().nonnegative(),
   /** Wpisy `git status`: zmienione, nowe i usunięte pliki, których nie ma w żadnym commicie. */

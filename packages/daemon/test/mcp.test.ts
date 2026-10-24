@@ -112,7 +112,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
       remote: "gitlab.example.com/sklep/orders-bff",
       status: { kind: "ok", branch: "main", changes: 0 },
       lastSync: null,
-      tags: ["backend", "bff", "java"],
+      tags: ["backend", "bff", "java", "no-mise"],
     });
     // Tekst wyniku to ten sam JSON dla klientów, które nie czytają `structuredContent`.
     expect(result.content).toEqual([{ type: "text", text: JSON.stringify(data) }]);
@@ -157,7 +157,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
     const sub = Subgraph.parse((await client.callTool({ name: "subgraph_for", arguments: { repo: "orders-bff" } })).structuredContent);
     expect(sub.depth).toBe(1);
     expect(sub.nodes.map((n) => [n.repo, n.remote, n.tags])).toEqual([
-      ["orders-bff", "gitlab.example.com/sklep/orders-bff", ["backend", "bff", "java"]],
+      ["orders-bff", "gitlab.example.com/sklep/orders-bff", ["backend", "bff", "java", "no-mise"]],
     ]);
     const unknown = await client.callTool({ name: "who_calls", arguments: { repo: "nie-ma" } });
     expect(unknown.isError).toBe(true);
