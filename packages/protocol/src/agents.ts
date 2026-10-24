@@ -99,9 +99,12 @@ export const TaskChanges = z.object({
 });
 export type TaskChanges = z.infer<typeof TaskChanges>;
 
+/** Tyle plików mieści się w kontekście agenta razem z resztą wyniku; więcej to zwykle wynik buildu bez `.gitignore`. */
+export const TASK_SUMMARY_MAX_FILES = 200;
+
 /**
- * Zmiany zadania bez diffu dla kontekstu agenta: pliki z liczbą linii (najwyżej 200; `filesTruncated`, gdy było
- * więcej) i liczby commitów, bez treści zmian.
+ * Zmiany zadania bez diffu dla kontekstu agenta: pliki z liczbą linii (najwyżej `TASK_SUMMARY_MAX_FILES`;
+ * `filesTruncated`, gdy było więcej) i liczby commitów, bez treści zmian.
  */
 export const TaskChangesSummary = TaskChanges.omit({ patch: true, truncated: true }).extend({ filesTruncated: z.boolean() });
 export type TaskChangesSummary = z.infer<typeof TaskChangesSummary>;

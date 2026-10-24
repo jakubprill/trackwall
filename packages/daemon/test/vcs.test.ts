@@ -118,4 +118,18 @@ describe("vcs na prawdziwym gicie", () => {
   test("brak katalogu repo to błąd gita z komunikatem, a nie wyjątek uruchomienia", async () => {
     await expect(vcs.status(join(makeRepo(), "..", "nie-istnieje"))).rejects.toThrow(/nie-istnieje/);
   });
+
+  test("zmiany worktree z limitem diffu 0 dają pliki i liczby bez treści zmian", async () => {
+    const dir = makeRepo({ "a.txt": "a\n" }, "bez-diffu");
+    const base = gitIn(dir, "rev-parse", "HEAD").trim();
+    writeFileSync(join(dir, "a.txt"), "b\n");
+    const changes = await vcs.worktreeChanges(dir, base, 0);
+    expect(changes).toEqual({
+      files: [{ path: "a.txt", change: "modified", additions: 1, deletions: 1 }],
+      patch: "",
+      truncated: false,
+      commits: 0,
+      uncommitted: 1,
+    });
+  });
 });

@@ -80,6 +80,15 @@ describe.skipIf(process.versions.bun === undefined)("sesje w narzędziach MCP (p
     expect(data.changesError).toStartWith("not_found: the worktree of task");
   }, 60_000);
 
+  test("zmiany zadania dla agenta mają najwyżej 200 plików i mówią, że było ich więcej", async () => {
+    const task = await daemon.facade.agents.createTask("sklep", "wynik buildu bez gitignore");
+    for (let i = 0; i < 201; i++) writeFileSync(join(task.worktree, `plik-${i}.txt`), "x\n");
+    const summary = await daemon.facade.agents.taskChangesSummary(task.id);
+    expect(summary.files).toHaveLength(200);
+    expect(summary.filesTruncated).toBe(true);
+    expect(summary.uncommitted).toBe(201);
+  }, 60_000);
+
   test("list_sessions z nieznanym repo to błąd not_found, a nie pusta lista", async () => {
     const result = await client.callTool({ name: "list_sessions", arguments: { repo: "skelp" } });
     expect(result.isError).toBe(true);

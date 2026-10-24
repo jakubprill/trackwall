@@ -1,12 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { agentsApi, DaemonEvent, EVENTS_SOCKET } from "@trackwall/protocol";
 
-const EVENTS_SUBPROTOCOL = EVENTS_SOCKET.subprotocol;
-
 import WebSocket from "ws";
 import { startSessionApi } from "./support/session-api.ts";
 
 const TOKEN = "e".repeat(43);
+const EVENTS_SUBPROTOCOL = EVENTS_SOCKET.subprotocol;
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
 
 beforeAll(async () => {

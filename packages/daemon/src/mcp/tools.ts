@@ -157,7 +157,7 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.getSession, runs.getSession),
 ];
 
-/** Sesja bez ostatnich linii ekranu zakończonej grupy: wyjście PTY nie jest maskowane (§8, ADR-36). */
+/** Sesja bez ostatnich linii ekranu zakończonej grupy: ekran jednej sesji nie trafia do innej (§8, ADR-36). */
 function agentSession({ run, ...session }: Session): AgentSession {
   if (run.kind !== "exited") return { ...session, run };
   const { lastLines: _, ...exited } = run;

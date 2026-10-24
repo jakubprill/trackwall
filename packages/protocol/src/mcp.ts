@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Session, SessionId, Task, TaskChangesSummary } from "./agents.ts";
+import { Session, SessionId, TASK_SUMMARY_MAX_FILES, Task, TaskChangesSummary } from "./agents.ts";
 import { RepoCardResult, TagName } from "./cards.ts";
 import { FindEndpointResult, MAX_FOUND_ENDPOINTS, MAX_SUBGRAPH_DEPTH, Subgraph, WhoCallsResult } from "./graph.ts";
 import { HttpMethod } from "./http.ts";
@@ -65,8 +65,9 @@ export type GetRepoResult = z.infer<typeof GetRepoResult>;
 const [RunningSession, StoppingSession, ExitedSession] = RunState.options;
 
 /**
- * Sesja dla agenta: to samo co `Session`, ale zakończona grupa procesów bez ostatnich linii ekranu. Wyjście PTY nie
- * jest maskowane jak log (§4.2, §8), więc sekret wypisany w terminalu jednej sesji nie może trafić do innej (ADR-36).
+ * Sesja dla agenta: to samo co `Session`, ale zakończona grupa procesów bez ostatnich linii ekranu: są
+ * maskowane tylko wartościami sekretów ze środowiska procesu (§4.2), a agent wypisuje w terminalu także to, co przeczytał
+ * z plików albo dostał w poleceniu, więc ekran jednej sesji nie trafia do innej (§8, ADR-36).
  */
 export const AgentSession = Session.extend({
   run: z.discriminatedUnion("kind", [RunningSession, StoppingSession, ExitedSession.omit({ lastLines: true })]),
@@ -217,7 +218,7 @@ export const mcpTools = {
     name: "get_session",
     description:
       `One session from ${LIST_SESSIONS}, its task (null in the repo root) and, for a task, the changes in its ` +
-      "worktree against the base commit: changed files with added and deleted lines (at most 200, filesTruncated: " +
+      `worktree against the base commit: changed files with added and deleted lines (at most ${TASK_SUMMARY_MAX_FILES}, filesTruncated: ` +
       "true when there were more), commits on the task branch and the number of uncommitted entries, without the diff " +
       "itself; read the worktree for the content. changes: null with changesError when they cannot be computed " +
       "(e.g. the worktree was deleted or the task is being ended).",
