@@ -1,12 +1,22 @@
 import type { McpServer } from "@modelcontextprotocol/server";
-import { type AgentRepo, type McpTool, mcpTools, type Repo, type RepoTags, type SyncRun } from "@trackwall/protocol";
+import {
+  type AgentRepo,
+  type AgentSession,
+  type McpTool,
+  mcpTools,
+  type Repo,
+  type RepoTags,
+  type Session,
+  type SyncRun,
+} from "@trackwall/protocol";
 import type { z } from "zod";
 import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
 
 /**
  * Narzędzia MCP daemona (§5.3, ADR-24): każde to cienkie mapowanie na fasadę, więc agent widzi ten sam stan co UI
- * (§1.1). Wszystkie tylko czytają; żadne nie zmienia konfiguracji, repo ani procesów (§8).
+ * (§1.1). Wszystkie tylko czytają; żadne nie zmienia konfiguracji, repo ani procesów (§8), więc sesji nie uruchamia,
+ * nie odpowiada w niej i jej nie zatrzymuje.
  */
 
 /**
@@ -109,6 +119,26 @@ const runs: ToolRuns = {
   whoCalls: (facade, { repo }) => facade.graph.whoCalls(repo),
   subgraphFor: (facade, { repo, depth }) => facade.graph.subgraph(repo, depth),
   findEndpoint: (facade, { query, method }) => facade.graph.findEndpoint(query, method),
+  listSessions: async (facade, { repo }) => {
+    // Repo musi istnieć (`not_found` jak w get_repo): literówka w identyfikatorze nie może wyglądać jak „brak sesji”.
+    if (repo !== undefined) await facade.workspace.repo(repo);
+    const { sessions, tasks } = facade.agents.sessions();
+    const inRepo = (item: { repo: string }) => repo === undefined || item.repo === repo;
+    return { sessions: sessions.filter(inRepo).map(agentSession), tasks: tasks.filter(inRepo) };
+  },
+  getSession: async (facade, { session: id }) => {
+    const session = agentSession(facade.agents.session(id));
+    if (session.task === null) return { session, task: null, changes: null, changesError: null };
+    const task = facade.agents.task(session.task);
+    // Sesja i zadanie istnieją, nawet gdy zmian nie da się policzyć (worktree usunięty ręcznie, trwa zakończenie).
+    return facade.agents.taskChangesSummary(task.id).then(
+      (changes) => ({ session, task, changes, changesError: null }),
+      (err: unknown) => {
+        if (!(err instanceof DomainError)) throw err;
+        return { session, task, changes: null, changesError: `${err.code}: ${err.message}` };
+      },
+    );
+  },
 };
 
 /**
@@ -123,7 +153,16 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.whoCalls, runs.whoCalls),
   defineTool(mcpTools.subgraphFor, runs.subgraphFor),
   defineTool(mcpTools.findEndpoint, runs.findEndpoint),
+  defineTool(mcpTools.listSessions, runs.listSessions),
+  defineTool(mcpTools.getSession, runs.getSession),
 ];
+
+/** Sesja bez ostatnich linii ekranu zakończonej grupy: ekran jednej sesji nie trafia do innej (§8, ADR-36). */
+function agentSession({ run, ...session }: Session): AgentSession {
+  if (run.kind !== "exited") return { ...session, run };
+  const { lastLines: _, ...exited } = run;
+  return { ...session, run: exited };
+}
 
 /** Repo łączy się z wynikiem synchronizacji po ścieżce, bo identyfikator może się zmienić razem z nazwą katalogu (ADR-18). */
 function agentRepo(repo: Repo, run: SyncRun | null, tags: string[]): AgentRepo {
