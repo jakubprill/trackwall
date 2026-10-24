@@ -231,6 +231,10 @@ _Unikaj_: tytuł okna (to `windowTitle` sesji)
 Zadanie, które sesja albo agent spoza Trackwall zgłosił przez MCP, a które czeka w widoku Sessions na decyzję użytkownika: „Start task” robi z niej zadanie z tym samym identyfikatorem, „Reject” ją odrzuca. Do tej chwili nic się nie uruchamia. Żyje tylko w pamięci daemona (ADR-39).
 _Unikaj_: zlecenie, prośba, wniosek
 
+**Shared files** (`TaskSharedFiles`, action `task-shared-files`):
+Files that both this task and another task of the same repo change, each compared with its own base commit. The one merged second will likely get a conflict, so the task panel warns about them and leads to the other task. It is only a warning: nothing is stopped (ADR-44).
+_Avoid_: overlap, collision, conflict (a conflict is only the result of a merge)
+
 **Sesja główna** (`proposedBy` zadania i propozycji; po angielsku *main session*):
 Sesja albo agent nadrzędny, który rozmawia z użytkownikiem i zleca pracę innym agentom propozycjami zadań, a potem czeka na ich sesje (`wait_for_session`) i czyta podsumowania, jak koordynator z wątkami w Claude (ADR-39). To rola, nie osobny rodzaj sesji: dziś to każda sesja Trackwall albo agent spoza Trackwall (`proposedBy.session: null`). In the Sessions view its tasks and proposals sit indented under it, and it carries a “main” badge with their count.
 _Unikaj_: orkiestrator, planner (ADR-9: rozbijanie celów robi człowiek)

@@ -10,6 +10,7 @@ import {
   type TaskChanges,
   type TaskChangesSummary,
   type TaskProposal,
+  type TaskSharedFiles,
 } from "@trackwall/protocol";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { findCopilot } from "./copilot-command.ts";
@@ -215,6 +216,11 @@ export class Agents {
 
   taskChanges(id: string): Promise<TaskChanges> {
     return this.#tasks.changes(id);
+  }
+
+  /** Other tasks of the same repo that change the same files (ADR-44). */
+  taskSharedFiles(id: string): Promise<TaskSharedFiles[]> {
+    return this.#tasks.sharedFiles(id);
   }
 
   /** Zmiany zadania bez diffu, dla agenta (narzędzie MCP `get_session`). */
