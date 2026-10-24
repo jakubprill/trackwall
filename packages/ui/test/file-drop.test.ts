@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { cssPoint, DROP_HOVER, DROP_HOVER_RING, dropTargetAt, FILE_DROP_TARGET } from "../src/lib/file-drop.ts";
 
 describe("file drop", () => {
-  test("the shell's physical point becomes CSS pixels by the device pixel ratio", () => {
-    expect(cssPoint({ x: 300, y: 150 }, 1.5)).toEqual({ x: 200, y: 100 });
-    expect(cssPoint({ x: 300, y: 150 }, 1)).toEqual({ x: 300, y: 150 });
+  test("the drop point is divided by the device pixel ratio only on Windows, where WebView2 gives physical pixels", () => {
+    expect(cssPoint({ x: 300, y: 150 }, true, 1.5)).toEqual({ x: 200, y: 100 });
+    expect(cssPoint({ x: 300, y: 150 }, false, 2)).toEqual({ x: 300, y: 150 });
   });
 
   test("the drop target is the marked element that holds the point, and none when nothing marked holds it", () => {

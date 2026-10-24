@@ -1,4 +1,4 @@
-import { dirname, sep } from "node:path";
+import { basename, dirname, resolve, sep } from "node:path";
 import type { DroppedFolder } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 import { dirKey, findRepos, hasGit, type RepoEntry, statFullPath } from "./projects-dir.ts";
@@ -10,18 +10,20 @@ import { dirKey, findRepos, hasGit, type RepoEntry, statFullPath } from "./proje
 export async function describeDroppedFolder(
   input: string,
   projectsDir: string | null,
-  listed: readonly RepoEntry[],
+  listed: () => Promise<readonly RepoEntry[]>,
 ): Promise<DroppedFolder> {
   const { path, isDir } = await statFullPath(input, "the dropped path must be a full path");
   if (!isDir) return { kind: "file", path };
   const key = dirKey(path);
-  if (projectsDir !== null && dirKey(projectsDir) === key) return { kind: "projects-dir" };
+  // `projectsDir` may come from a hand-edited `workspace.yaml`, with a trailing separator or `/` on Windows.
+  if (projectsDir !== null && dirKey(resolve(projectsDir)) === key) return { kind: "projects-dir" };
   // A folder inside a listed repo (e.g. its `src`) is that repo too.
-  const repo = listed.find((entry) => key === dirKey(entry.path) || key.startsWith(dirKey(entry.path) + sep));
+  const repo = (await listed()).find((entry) => key === dirKey(entry.path) || key.startsWith(dirKey(entry.path) + sep));
   if (repo) return { kind: "listed-repo", repo: repo.id };
   if (await hasGit(path)) {
+    // The list skips names with a dot (ADR-18), so the folder that holds such a repo would not list it either.
+    if (basename(path).startsWith(".")) return { kind: "hidden-repo", path };
     const parent = dirname(path);
-    if (projectsDir !== null && dirKey(parent) === dirKey(projectsDir)) return { kind: "hidden-repo", path };
     return { kind: "repo-elsewhere", path, parent, parentRepos: (await reposIn(parent)).length };
   }
   const repos = (await reposIn(path)).length;

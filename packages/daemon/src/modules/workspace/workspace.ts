@@ -115,7 +115,8 @@ export class Workspace {
    */
   async droppedFolder(path: string): Promise<DroppedFolder> {
     const projectsDir = configOrProblem(() => this.deps.file.projectsDir(), null).value;
-    const listed = projectsDir === null ? [] : await findRepos(projectsDir).catch(unlessProjectsDirUnavailable);
+    // Read only when needed: a dropped file or the projects folder itself does not wait for a scan of a slow disk.
+    const listed = async () => (projectsDir === null ? [] : await findRepos(projectsDir).catch(unlessProjectsDirUnavailable));
     return describeDroppedFolder(path, projectsDir, listed);
   }
 

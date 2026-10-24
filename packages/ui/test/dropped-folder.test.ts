@@ -20,7 +20,7 @@ describe("dropped folder", () => {
     expect(dropOutcome({ kind: "repo-elsewhere", path: "C:\\Work\\api", parent: "C:\\Work", parentRepos: 4 })).toEqual({
       kind: "prompt",
       message:
-        "C:\\Work\\api is not in the projects folder. Trackwall lists the repos directly inside one folder; the folder that holds this repo, C:\\Work, has 4 git repos.",
+        "C:\\Work\\api is not in the projects folder. Trackwall lists the repos directly inside one folder; the folder that holds this repo, C:\\Work, has 4 git repos; using it as the projects folder lists them instead of the current ones.",
       projectsDir: { path: "C:\\Work", label: "Use its folder as the projects folder" },
     });
   });

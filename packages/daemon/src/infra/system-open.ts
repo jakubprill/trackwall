@@ -5,7 +5,8 @@ import { spawn } from "node:child_process";
  * whether anything handled it, so the callers only confirm that they asked.
  */
 
-type Command = { program: string; args: string[]; verbatim: boolean };
+/** `hidden` starts the program with SW_HIDE on Windows, which suits a helper without a window but not Explorer itself. */
+type Command = { program: string; args: string[]; verbatim: boolean; hidden: boolean };
 
 /** Opens a URL in the default browser. */
 export function openBrowser(url: string): void {
@@ -18,7 +19,7 @@ export function openFolder(dir: string): void {
 }
 
 export function browserCommand(platform: NodeJS.Platform, url: string): Command {
-  if (platform === "win32") return { program: "rundll32", args: ["url.dll,FileProtocolHandler", url], verbatim: false };
+  if (platform === "win32") return { program: "rundll32", args: ["url.dll,FileProtocolHandler", url], verbatim: false, hidden: true };
   return elsewhere(platform, url);
 }
 
@@ -27,17 +28,17 @@ export function browserCommand(platform: NodeJS.Platform, url: string): Command 
  * contain `"`). The path is a full path from the daemon's own list of repos, so it never starts with `-`.
  */
 export function folderCommand(platform: NodeJS.Platform, dir: string): Command {
-  if (platform === "win32") return { program: "explorer.exe", args: [`"${dir}"`], verbatim: true };
+  if (platform === "win32") return { program: "explorer.exe", args: [`"${dir}"`], verbatim: true, hidden: false };
   return elsewhere(platform, dir);
 }
 
 /** macOS and Linux open a URL and a folder with the same program. */
 function elsewhere(platform: NodeJS.Platform, target: string): Command {
-  return { program: platform === "darwin" ? "open" : "xdg-open", args: [target], verbatim: false };
+  return { program: platform === "darwin" ? "open" : "xdg-open", args: [target], verbatim: false, hidden: true };
 }
 
-function run({ program, args, verbatim }: Command, what: string): void {
-  const child = spawn(program, args, { detached: true, stdio: "ignore", windowsHide: true, windowsVerbatimArguments: verbatim });
+function run({ program, args, verbatim, hidden }: Command, what: string): void {
+  const child = spawn(program, args, { detached: true, stdio: "ignore", windowsHide: hidden, windowsVerbatimArguments: verbatim });
   child.on("error", (err) => process.stderr.write(`[daemon] failed to open ${what}: ${err.message}\n`));
   child.unref();
 }

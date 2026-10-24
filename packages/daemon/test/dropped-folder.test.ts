@@ -77,6 +77,28 @@ describe("dropped folder", () => {
     expect(await workspace.droppedFolder(hidden)).toEqual({ kind: "hidden-repo", path: hidden });
   });
 
+  test("a repo whose name starts with a dot is hidden anywhere, so its folder is not offered", async () => {
+    const workspace = newWorkspace();
+    const dotfiles = fakeRepo(tempDir("trackwall-home-"), ".dotfiles");
+
+    expect(await workspace.droppedFolder(dotfiles)).toEqual({ kind: "hidden-repo", path: dotfiles });
+  });
+
+  test("a projects folder written with a trailing separator in workspace.yaml is still the projects folder", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "trackwall-ws-"));
+    const projects = tempDir("trackwall-projects-");
+    writeFileSync(join(dir, "workspace.yaml"), `projectsDir: ${JSON.stringify(projects + sep)}\n`);
+    const workspace = new Workspace({
+      file: new WorkspaceFile(join(dir, "workspace.yaml")),
+      vcs: new Vcs(),
+      hosting: fakeHosting().hosting,
+      openEditor: () => {},
+      openFolder: () => {},
+    });
+
+    expect(await workspace.droppedFolder(projects)).toEqual({ kind: "projects-dir" });
+  });
+
   test("a folder whose repos are deeper than one level has no repos, and a file is a file", async () => {
     const workspace = newWorkspace();
     const folder = tempDir("trackwall-deep-");

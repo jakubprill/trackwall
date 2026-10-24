@@ -47,7 +47,6 @@ const SESSIONS_POLL_MS = { open: 1000, closed: 3000 };
 
 export function App() {
   // Repo otwarte z pulpitu należy do przejścia, nie do widoku: każde inne przejście do „Repos” zaczyna bez niego.
-  // Repo otwarte z pulpitu należy do przejścia, nie do widoku: każde inne przejście do „Repos” zaczyna bez niego.
   // `visit` grows with every opening of a repo, so that Repos is mounted again with it even when it is already open.
   const [{ view, repo, visit }, setNav] = useState<{ view: View; repo?: string; visit: number }>({ view: "home", visit: 0 });
   const setView = useCallback((next: View) => setNav((nav) => ({ view: next, visit: nav.visit })), []);

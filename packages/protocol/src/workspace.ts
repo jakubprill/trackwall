@@ -144,7 +144,7 @@ export type RemoteRepoList = z.infer<typeof RemoteRepoList>;
 /**
  * What a folder dropped on the window means for the repo list (ADR-51): a listed repo (or a folder inside one), the
  * projects folder itself, a git repo somewhere else, a folder with repos directly inside it, which can become the
- * projects folder, a hidden repo in the projects folder, a folder without any repos, or a file. Repo counts use the
+ * projects folder, a repo whose name starts with a dot, a folder without any repos, or a file. Repo counts use the
  * same rule as the list (ADR-18): direct subfolders with `.git`, without those starting with a dot.
  */
 export const DroppedFolder = z.discriminatedUnion("kind", [
@@ -153,7 +153,7 @@ export const DroppedFolder = z.discriminatedUnion("kind", [
   /** `parent` is the folder that holds the repo; `parentRepos` counts the repos in it. */
   z.object({ kind: z.literal("repo-elsewhere"), path: z.string(), parent: z.string(), parentRepos: z.number().int().nonnegative() }),
   z.object({ kind: z.literal("folder-with-repos"), path: z.string(), repos: z.number().int().positive() }),
-  /** A repo directly in the projects folder whose name starts with a dot, which the list skips. */
+  /** A git repo whose name starts with a dot, which the list skips wherever it is (ADR-18). */
   z.object({ kind: z.literal("hidden-repo"), path: z.string() }),
   z.object({ kind: z.literal("no-repos"), path: z.string() }),
   z.object({ kind: z.literal("file"), path: z.string() }),
