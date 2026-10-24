@@ -112,6 +112,11 @@ impl AppliedEffect {
     }
 }
 
+/// Whether the page has yet to load and show the window itself: showing it now would flash the opaque background.
+pub fn reveal_pending(app: &AppHandle) -> bool {
+    app.try_state::<AppliedEffect>().is_some_and(|applied| !applied.is_revealed())
+}
+
 /// Musi działać na wątku głównym (wymóg AppKit na macOS), czyli w `setup`.
 pub fn apply(window: &WebviewWindow) -> AppliedEffect {
     AppliedEffect { effect: first_applied(window, candidates()), revealed: AtomicBool::new(false) }

@@ -16,6 +16,12 @@ _Unikaj_: aplikacja (gdy chodzi tylko o Tauri)
 Ekran aplikacji w UI (Home, Repos, Sessions, Overview, Daemon, Settings), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
 _Unikaj_: zakładka (dla całego ekranu)
 
+**Link** (`trackwall://`, `trackwallLink`, `TRACKWALL_LINK_SCHEME`; in the shell `link.rs`):
+`trackwall://repo/<repo id>`, `trackwall://session/<session id>` or `trackwall://task/<task id>`: shows that thing in the window (ADR-52). Only navigates, never runs anything.
+
+**Jump** (`Focus`, `take_focus`, `useFocusRequest`):
+The shell's request to the UI to show a repo, session, task or task proposal, from the tray or from a link.
+
 **Zakładka** (`TabBar`; po angielsku *tab*):
 Przełącznik części treści wewnątrz widoku, np. README, Files, Commits i mise tasks w widoku Repos.
 

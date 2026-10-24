@@ -9,16 +9,15 @@
 
 use crate::daemon;
 use crate::daemon_state::DaemonState;
-use serde::{Deserialize, Serialize};
+use crate::focus::Focus;
+use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-use tauri::{AppHandle, Emitter, Manager, UserAttentionType};
+use tauri::{AppHandle, Manager, UserAttentionType};
 
 const POLL: Duration = Duration::from_secs(2);
-/// Event for the UI with the session or proposal to show (`Focus`; same name and shape in `use-session-focus.ts`).
-const FOCUS_EVENT: &str = "focus-session";
 /// Tray menu item ids; a session or proposal item is a prefix plus its id.
 pub const MENU_SHOW: &str = "show";
 pub const MENU_QUIT: &str = "quit";
@@ -161,26 +160,12 @@ pub fn build_menu(app: &AppHandle, waiting: &[Waiting], proposals: &[Proposal]) 
     Ok(menu)
 }
 
-/// What to show after a tray menu item is clicked; for the UI `{"kind":"session"|"proposal","id":...}`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(tag = "kind", content = "id", rename_all = "lowercase")]
-pub enum Focus<'a> {
-    Session(&'a str),
-    Proposal(&'a str),
-}
-
 /// The session or proposal of a tray menu item; `None` for the fixed items.
-pub fn focus_from_menu(id: &str) -> Option<Focus<'_>> {
+pub fn focus_from_menu(id: &str) -> Option<Focus> {
     if let Some(session) = id.strip_prefix(MENU_SESSION_PREFIX) {
-        return Some(Focus::Session(session));
+        return Some(Focus::Session(session.to_owned()));
     }
-    id.strip_prefix(MENU_PROPOSAL_PREFIX).map(Focus::Proposal)
-}
-
-/// Shows the window and asks the UI to switch to the session or proposal.
-pub fn focus(app: &AppHandle, target: Focus<'_>, show: fn(&AppHandle)) {
-    show(app);
-    let _ = app.emit_to("main", FOCUS_EVENT, target);
+    id.strip_prefix(MENU_PROPOSAL_PREFIX).map(|proposal| Focus::Proposal(proposal.to_owned()))
 }
 
 /// Wątek pytający daemon o sesje, dopóki działa powłoka.
@@ -306,10 +291,9 @@ mod tests {
 
     #[test]
     fn menu_item_points_at_a_session_or_a_proposal() {
-        assert_eq!(focus_from_menu("session:abc"), Some(Focus::Session("abc")));
-        assert_eq!(focus_from_menu("proposal:abc"), Some(Focus::Proposal("abc")));
+        assert_eq!(focus_from_menu("session:abc"), Some(Focus::Session("abc".into())));
+        assert_eq!(focus_from_menu("proposal:abc"), Some(Focus::Proposal("abc".into())));
         assert_eq!(focus_from_menu(MENU_SHOW), None);
         assert_eq!(menu_text("Fix A & B"), "Fix A && B");
-        assert_eq!(serde_json::to_string(&Focus::Proposal("abc")).unwrap(), r#"{"kind":"proposal","id":"abc"}"#);
     }
 }

@@ -14,8 +14,8 @@ import { sessionShortcut } from "@/lib/session-shortcut";
 import { attentionCount, nextWaitingShortcut } from "@/lib/session-state";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
+import { useFocusRequest } from "@/lib/use-focus-request";
 import { useRemote } from "@/lib/use-remote";
-import { useSessionFocus } from "@/lib/use-session-focus";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { DaemonPanel } from "@/views/daemon/DaemonPanel";
 import { GraphView } from "@/views/graph/GraphView";
@@ -43,8 +43,12 @@ const SESSIONS_POLL_MS = { open: 1000, closed: 3000 };
 
 export function App() {
   // Repo otwarte z pulpitu należy do przejścia, nie do widoku: każde inne przejście do „Repos” zaczyna bez niego.
-  const [{ view, repo }, setNav] = useState<{ view: View; repo?: string }>({ view: "home" });
-  const setView = useCallback((next: View, openRepo?: string) => setNav({ view: next, repo: openRepo }), []);
+  // Each opening of a repo gets a new `opened`, so a link to a repo while "Repos" is open shows it too.
+  const [{ view, repo, opened }, setNav] = useState<{ view: View; repo?: string; opened: number }>({ view: "home", opened: 0 });
+  const setView = useCallback(
+    (next: View, openRepo?: string) => setNav((nav) => ({ view: next, repo: openRepo, opened: openRepo ? nav.opened + 1 : nav.opened })),
+    [],
+  );
   const [session, setSession] = useState<SessionSelection>();
   const [sessionLayout, setSessionLayout] = useState<SessionLayout>("1");
   const { conn, epoch, error, retry } = useConnection();
@@ -55,8 +59,8 @@ export function App() {
     setView("sessions");
     setSession(selection);
   };
-  // Jump from the tray (ADR-26, ADR-39): the shell shows the window and passes a waiting session or a task proposal.
-  useSessionFocus(openInSessions);
+  // Jump from the tray (ADR-26, ADR-39) or from a `trackwall://` link (ADR-52): the shell shows the window first.
+  useFocusRequest((focus) => (focus.kind === "repo" ? setView("repos", focus.id) : openInSessions(focus)));
   // Alt+J from every view (ADR-48), after the selected session like the "Next waiting" button.
   useWindowShortcuts(
     (event) => {
@@ -110,7 +114,13 @@ export function App() {
             />
           )}
           {conn && view === "repos" && (
-            <ReposView key={epoch} conn={conn} initialRepo={repo} onRetry={retry} onOpenSettings={() => setView("settings")} />
+            <ReposView
+              key={`${epoch}:${opened}`}
+              conn={conn}
+              initialRepo={repo}
+              onRetry={retry}
+              onOpenSettings={() => setView("settings")}
+            />
           )}
           {conn && view === "sessions" && (
             <SessionsView

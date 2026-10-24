@@ -6,6 +6,8 @@
 mod attention;
 mod daemon;
 mod daemon_state;
+mod focus;
+mod link;
 mod window_effect;
 
 use daemon::Connection;
@@ -48,6 +50,8 @@ fn main() {
     let builder = tauri::Builder::default();
     // Ponowne uruchomienie trackwall.exe pokazuje istniejące okno zamiast drugiej powłoki i drugiej ikony w trayu.
     // Tylko w wydaniu: identyfikator instancji jest wspólny, a `tauri dev` ma działać obok zainstalowanej aplikacji.
+    // On Windows a `trackwall://` link starts a second trackwall.exe; the plugin's `deep-link` feature hands the link
+    // to the first instance before this callback (ADR-52).
     #[cfg(not(debug_assertions))]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
         let state = Arc::clone(app.state::<Arc<DaemonState>>().inner());
@@ -55,8 +59,10 @@ fn main() {
         show_main(app);
     }));
     let app = builder
+        .plugin(tauri_plugin_deep_link::init())
         .manage(Arc::clone(&state))
-        .invoke_handler(tauri::generate_handler![daemon_connection, retry_daemon])
+        .manage(focus::PendingFocus::default())
+        .invoke_handler(tauri::generate_handler![daemon_connection, retry_daemon, focus::take_focus])
         .setup(move |app| {
             state.start();
             let window = app.get_webview_window("main").ok_or("missing window main from tauri.conf.json")?;
@@ -64,6 +70,7 @@ fn main() {
             window_effect::reveal_fallback(app.handle(), show_main);
             build_tray(app.handle())?;
             attention::watch(app.handle().clone(), Arc::clone(&state), TRAY_ID);
+            link::listen(app.handle(), show_main);
             Ok(())
         })
         .on_page_load(|webview, payload| window_effect::on_page_load(webview, payload, show_main))
@@ -107,7 +114,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             attention::MENU_QUIT => quit_app(app),
             id => {
                 if let Some(target) = attention::focus_from_menu(id) {
-                    attention::focus(app, target, show_main);
+                    focus::request(app, target, show_main);
                 }
             }
         })
