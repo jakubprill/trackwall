@@ -45,6 +45,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(cardsApi.tags, (f) => f.cards.tags()),
   route(graphApi.graph, (f) => f.graph.graph()),
   route(miseApi.tasks, (f, b) => f.mise.tasks(b.repo)),
+  route(miseApi.running, (f) => f.mise.running()),
   route(miseApi.start, (f, b) => f.mise.start(b.repo, b.miseTask)),
   route(miseApi.stop, (f, b) => f.mise.stop(b.repo, b.miseTask)),
   route(miseApi.trust, (f, b) => f.mise.trust(b.repo)),

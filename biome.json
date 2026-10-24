@@ -208,6 +208,30 @@
       }
     },
     {
+      "includes": ["packages/ui/src/**", "!packages/ui/src/views/home/HomeCanvas.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@trackwall/daemon", "@trackwall/daemon/**", "**/daemon/src/**"],
+                    "message": "Tylko daemon importuje swój kod; wspólny kod bierz z @trackwall/protocol (AGENTS.md, granice modułów)."
+                  },
+                  {
+                    "group": ["@trackwall/scene"],
+                    "message": "Poza płótnem pulpitu (HomeCanvas.tsx) bierz ze sceny tylko @trackwall/scene/model, żeby three.js i Pawn zostały w leniwie ładowanym kawałku (§5.5)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["packages/protocol/src/**", "packages/scene/src/**", "packages/ui/src/**"],
       "linter": {
         "rules": {
