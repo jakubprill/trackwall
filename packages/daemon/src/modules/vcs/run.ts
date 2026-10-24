@@ -29,16 +29,6 @@ export interface RunOptions {
   okExitCodes?: readonly number[];
 }
 
-/** Program zakończył się kodem innym niż 0; `exitCode` dla wołającego, dla którego jakiś kod nie jest porażką. */
-export class ExitCodeError extends Error {
-  readonly exitCode: number;
-
-  constructor(message: string, exitCode: number) {
-    super(message);
-    this.exitCode = exitCode;
-  }
-}
-
 export function runProgram(command: string, args: readonly string[], opts: RunOptions): Promise<RunOutput> {
   const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
   return new Promise((resolve, reject) => {
@@ -85,7 +75,7 @@ export function runProgram(command: string, args: readonly string[], opts: RunOp
         return finish(() => resolve({ stdout: Buffer.concat(out), truncated: false }));
       const reason = signal ? `killed by signal ${signal}` : `exited with code ${code}`;
       const message = stderr.toString("utf8").trim() || `${opts.label} ${reason}`;
-      finish(() => reject(code === null ? new Error(message) : new ExitCodeError(message, code)));
+      finish(() => reject(new Error(message)));
     });
     // Program, który nie czyta stdin, może go zamknąć przed zapisem; EPIPE nie jest wtedy błędem wywołania.
     child.stdin.on("error", () => {});

@@ -33,7 +33,7 @@ function sessionOf(agents: Agents, task: string): string {
 describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (prawdziwy git i PTY, atrapa Copilot CLI)", () => {
   test("zadanie dostaje gałąź od gałęzi domyślnej w worktree poza repo, a Copilot CLI startuje w nim z poleceniem", async () => {
     const { dir, mainCommit } = cloneOnFeatureBranch();
-    // Wiersz ze ścieżką worktree dłuższy niż ekran (120 kolumn), więc ConPTY na Windowsie by go złamał; nie dłuższy,
+    // Wiersz ze ścieżką worktree dłuższy niż ekran sesji (`INITIAL_COLS`), więc ConPTY na Windowsie by go złamał; nie dłuższy,
     // bo ponad 260 znaków git na Windowsie nie przyjmie katalogu `.git` worktree.
     const longHome = join(mkdtempSync(join(tmpdir(), "trackwall-agents-")), "katalog-stanu-o-dlugiej-nazwie-na-ekranie");
     mkdirSync(longHome);

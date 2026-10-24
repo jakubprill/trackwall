@@ -20,19 +20,22 @@ describe("vcs na prawdziwym gicie", () => {
     expect(status.head?.hash).toMatch(/^[0-9a-f]{40}$/);
   });
 
-  test("liczenia zmian z kilku okien naraz w świeżym repo kończą się wynikiem, choć każde dodaje nowy pusty plik do indeksu", async () => {
-    // Każde liczenie zapisuje pusty blob (`add --intent-to-add`); na Windowsie dwa zapisy tego samego obiektu naraz
-    // kończą się „Permission denied” (#36). Kilka rund, bo w świeżym repo tego obiektu jeszcze nie ma.
-    for (let round = 0; round < 8; round++) {
-      const dir = makeRepo({ "README.md": "# repo\n" });
-      const base = gitIn(dir, "rev-parse", "HEAD").trim();
-      writeFileSync(join(dir, "nowy.md"), "x\n");
+  test("liczenie zmian z nowymi plikami, także pustym i osadzonym repo, nie zapisuje do repo żadnego obiektu", async () => {
+    // Zapis obiektu przy każdym liczeniu sprawiał, że kilka okien „Changes” naraz pisało ten sam pusty blob, a na Windowsie
+    // drugi zapis kończył się „Permission denied” (#36).
+    const dir = makeRepo({ "README.md": "# repo\n" });
+    const base = gitIn(dir, "rev-parse", "HEAD").trim();
+    writeFileSync(join(dir, "nowy.md"), "x\n");
+    writeFileSync(join(dir, "pusty.md"), "");
+    makeRepo({ "a.txt": "a\n" }, "osadzone", dir);
+    const objectsBefore = gitIn(dir, "count-objects", "-v");
 
-      const reads = await Promise.all(Array.from({ length: 12 }, () => vcs.worktreeChanges(dir, base, 1_000_000)));
+    const changes = await vcs.worktreeChanges(dir, base, 1_000_000);
 
-      for (const read of reads) expect(read.files.map((f) => f.path)).toEqual(["nowy.md"]);
-    }
-  }, 60_000);
+    expect(changes.files.map((f) => f.path)).toEqual(["nowy.md", "osadzone", "pusty.md"]);
+    expect(changes.patch).toContain("+x");
+    expect(gitIn(dir, "count-objects", "-v")).toBe(objectsBefore);
+  });
 
   test("status repo bez commitów ma pusty HEAD, log jest pusty, a korzeń drzewa jest pusty", async () => {
     const dir = makeRepo();
