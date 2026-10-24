@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agents } from "../src/modules/agents/agents.ts";
@@ -52,7 +52,8 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
     });
     const window = viewer(agents, session);
     await waitFor(agents, session, () => window.text().includes("--interactive="), "polecenie na ekranie");
-    expect(window.text()).toContain(`katalog ${task.worktree}`);
+    // Proces widzi katalog po rozwinięciu dowiązań (na macOS `/var` to `/private/var`).
+    expect(window.text()).toContain(`katalog ${realpathSync(task.worktree)}`);
     expect(window.text()).toContain("Argument: --interactive=Napraw logowanie w sklepie");
     expect(window.text()).toContain(`Argument: --session-id=${task.id}`);
     window.attachment.detach();
@@ -136,7 +137,8 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
     const window = viewer(restarted.agents, session);
     await waitFor(restarted.agents, session, () => window.text().includes("--resume="), "wznowienie na ekranie");
     expect(window.text()).toContain(`Argument: --resume=${task.id}`);
-    expect(window.text()).toContain(`katalog ${task.worktree}`);
+    // Proces widzi katalog po rozwinięciu dowiązań (na macOS `/var` to `/private/var`).
+    expect(window.text()).toContain(`katalog ${realpathSync(task.worktree)}`);
     expect(window.text()).not.toContain("--interactive=");
     window.attachment.detach();
 
