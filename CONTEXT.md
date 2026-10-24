@@ -39,7 +39,7 @@ Sekret z `~/.trackwall/daemon.json`, którym UI, `ws`, powłoka i most stdio uwi
 **Serwer MCP** (`/mcp`, `createMcpEndpoint`; po angielsku *MCP server*):
 Część daemona, przez którą agenci czytają jego stan narzędziami MCP; ten sam port i token co API (§5.3, ADR-24).
 
-**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`, `list_sessions`, `start_service`, `call_endpoint`; po angielsku *MCP tool*):
+**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`, `search_code`, `list_sessions`, `start_service`, `call_endpoint`; po angielsku *MCP tool*):
 Jedno wywołanie serwera MCP z nazwą po angielsku, wejściem i wynikiem opisanym schematem z `packages/protocol/src/mcp.ts`; mapowanie na fasadę, bez własnej logiki domenowej.
 _Unikaj_: komenda, akcja (to pojęcia z API i CLI)
 
@@ -97,6 +97,10 @@ _Unikaj_: diff (to tylko część), status
 
 **Przegląd repo** (`RepoOverview`):
 README i ostatnie commity repo w jednej odpowiedzi; stan repo przychodzi z listy repo. Pliki przeglądane są osobno, zawsze z commita HEAD (ADR-14).
+
+**Code search** (`searchCode`, MCP tool `search_code`, result `SearchCodeResult`):
+A fixed string or a regular expression in the files of the latest commit of many repos of the projects folder at once, through `git grep` (ADR-40); a match (`CodeMatch`) is a repo, path, line, column and context lines. It does not see uncommitted changes, just like browsing a repo.
+_Avoid_: grep (the tool underneath), index (there is none)
 
 **Worktree** (worktree zadania, `Task.worktree`; po angielsku *worktree*):
 Osobny katalog roboczy gita dla zadania, na gałęzi zadania, w `worktrees/<repo>/<gałąź bez prefiksu>` w katalogu stanu, poza folderem z projektami (ADR-31). Liczony z repo i gałęzi (`taskWorktree`), nie zapisywany w `tasks.json`. Usuwany tylko na prośbę użytkownika i tylko bez działającej sesji zadania; niezacommitowane zmiany przepadają dopiero po potwierdzeniu.
@@ -232,7 +236,7 @@ Zadanie, które sesja albo agent spoza Trackwall zgłosił przez MCP, a które c
 _Unikaj_: zlecenie, prośba, wniosek
 
 **Sesja główna** (`proposedBy` zadania i propozycji; po angielsku *main session*):
-Sesja albo agent nadrzędny, który rozmawia z użytkownikiem i zleca pracę innym agentom propozycjami zadań, a potem czeka na ich sesje (`wait_for_session`) i czyta podsumowania, jak koordynator z wątkami w Claude (ADR-39). To rola, nie osobny rodzaj sesji: dziś to każda sesja Trackwall albo agent spoza Trackwall (`proposedBy.session: null`).
+Sesja albo agent nadrzędny, który rozmawia z użytkownikiem i zleca pracę innym agentom propozycjami zadań, a potem czeka na ich sesje (`wait_for_session`) i czyta podsumowania, jak koordynator z wątkami w Claude (ADR-39). To rola, nie osobny rodzaj sesji: dziś to każda sesja Trackwall albo agent spoza Trackwall (`proposedBy.session: null`). In the Sessions view its tasks and proposals sit indented under it, and it carries a “main” badge with their count.
 _Unikaj_: orkiestrator, planner (ADR-9: rozbijanie celów robi człowiek)
 
 **Task mise** (po angielsku *mise task*):
@@ -256,11 +260,30 @@ _Unikaj_: orkiestrator, główny agent
 CLI agenta działające w PTY należącym do daemona, w korzeniu repo albo w worktree zadania (`Session.task`), jako grupa procesów, z własnym katalogiem `sessions/<sesja>/` (wtyczka sesji, `hooks.jsonl`). Widok Sessions uruchamia ją w repo jednym kliknięciem (ADR-26) albo razem z zadaniem (ADR-31). Sesja żyje tylko do wyjścia daemona, zadanie dłużej. Nagrywa ją tylko `copilot-record.ts`.
 _Unikaj_: sesja POSIX (to pojęcie z grupy procesów), okno (to okno terminala w UI)
 
-**Czeka na Ciebie** (`Session.needsAttention`; po angielsku *waiting for you*):
-Działająca sesja w stanie `Input`, `Approval` albo `Plan`: agent nie ruszy dalej bez człowieka. Liczy to daemon, a UI (licznik na pasku widoków, który dolicza propozycje zadań czekające na decyzję, ADR-39; „Next waiting”) i tray (menu „Waiting: <repo>”, miganie okna) tylko czytają pole.
+**Waiting for you** (`Session.needsAttention`, `SessionAttention`; Polish *czeka na Ciebie*):
+A running session in `Approval` or `Plan`, or in `Input` the user has not seen yet (ADR-47): the agent will not move on without a human, and the human does not know yet. The daemon computes it; the UI (the counter on the activity bar, which also counts task proposals waiting for a decision, ADR-39; "Next waiting") and the tray (the "Waiting: <repo>" menu, the flashing window) only read the field.
+
+**Seen** (`SessionAttention.focus`, `typed`; the `focus` frame of `PtyClientMessage`):
+The user has seen the session's current `Input`: a session terminal window was focused and visible, or the user typed into the session, after the state began.
+_Avoid_: read, acknowledged
+
+**Idle** (`isIdle`, `IDLE_LABEL`, dashboard state `idle`):
+A running session in `Input` the user has already seen (ADR-47): the agent waits for the next prompt, but no longer waits for you. Shown as "idle" in Sessions and in calm grey on the dashboard.
 
 **Okno terminala** (`SessionTerminal`; po angielsku *session terminal*):
 xterm.js w widoku Sessions podłączony WebSocketem `/ws/pty/<sesja>` do PTY sesji. Kilka okien może pokazywać tę samą sesję; rozmiar PTY ustala ostatnie, które go zgłosiło.
+
+**Session layout** (`SessionLayout`):
+How the right side of the Sessions view shows entries (ADR-48): `1` is the selected entry alone with its full panel (tabs, Stop, Resume), `2` and `4` a grid page of that many entries, `auto` a grid of the whole list, up to nine per page.
+In the Sessions view the switch is labelled just "Layout".
+_Avoid_: view (that is a screen of the app), mode
+
+**Session grid** (`SessionGrid`, tile):
+Several session terminals side by side in the Sessions view, one tile per list entry, on pages of the list. The tile of the selected entry has the accent ring and takes the keyboard; a tile that is waiting for you has the warning frame.
+_Avoid_: split, dashboard (that is Home)
+
+**Session shortcut** (`SessionShortcut`; Alt+1…9, Alt+J):
+Alt (⌥ on macOS) + digit selects the entry at that position in the Sessions list; Alt+J opens the next session that is waiting for you, also from other views. A shortcut never reaches the session terminal.
 
 **Obraz ekranu** (`TerminalScreen`):
 Stan ekranu sesji, który daemon trzyma w emulatorze terminala bez okna i wysyła oknu terminala przy podłączeniu, zanim pójdzie dalsze wyjście.
@@ -279,6 +302,10 @@ _Unikaj_: wejście (to cała treść z klawiatury), skrót
 **Wtyczka sesji** (`writeCopilotPlugin`; po angielsku *session plugin*):
 Katalog z `plugin.json` i `hooks.json`, który daemon podaje Copilot CLI przez `--plugin-dir`, żeby hooki zgłaszały stan tylko tej jednej sesji (ADR-17).
 _Unikaj_: plugin (w polskim tekście), konfiguracja hooków
+
+**Instrukcje sesji** (`writeSessionInstructions`, file `trackwall.instructions.md`; in English *session instructions*):
+The instruction file in the session directory that the daemon gives Copilot CLI through `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`: the session's role (a main session in the repo root, or a task session in its worktree with the task rules and `report_result` at the end) and the **MCP instruction** (`MCP_INSTRUCTIONS`, also the MCP server's `instructions`): when to reach for which Trackwall tool (ADR-46). It changes neither the repo nor `~/.copilot`.
+_Avoid_: system prompt (Copilot CLI builds it itself), repository instructions (those are files in the user's repo)
 
 **Rekord hooka** (`CopilotHookRecord`):
 Jedno wywołanie hooka z wtyczki sesji: zdarzenie, czas odebrania i tylko pola payloadu potrzebne do stanu, a o reszcie same nazwy (bez promptu, argumentów i wyników narzędzi). Linia `hooks.jsonl` i znacznik w nagraniu.
@@ -312,7 +339,7 @@ _Unikaj_: konsola, terminal (to PTY sesji zadania)
 
 **Błąd z logu** (`LogError`, MCP tool `get_errors`; in English *error*):
 A record at `error` (or `warn`) level or an exception header together with the lines that belong to it (stack trace, `Caused by:`, a Spring or Gradle report), from one source, run and stream. The same error repeated in a source is one error with a count (`count`); `exception` is its cause (ADR-42).
-_Avoid_: exception (only one kind of error), problem (that is the repo card and the graph), incident
+_Unikaj_: exception (only one kind of error), problem (that is the repo card and the graph), incident
 
 **`seq`**:
 Globalny, rosnący numer rekordu dla wszystkich źródeł; każde działanie daemona zaczyna od chwili startu, więc numery się nie powtarzają. Kursor (`sinceSeq` w API i w narzędziach MCP) działa dla jednego źródła i dla całego workspace; `dropped` mówi, że część rekordów po kursorze przepadła.
@@ -347,7 +374,7 @@ Scena 3D pulpitu na Pawn. Nie zna API daemona: dostaje kolejne migawki `HomeMode
 Pierwszy ekran, widok „Home” (`HomeView`): stan daemona, sesje (zwłaszcza czekające na Ciebie), repo i połączenia między nimi, w układzie „Orbit” (`orbitLayout`).
 
 **Kolejka „Needs you”** (`NeedsYouPanel`):
-Lewy panel pulpitu: sesje, które czekają na Ciebie albo mają błąd, potem repo, które nie są czyste. Te same obiekty mają podpis na scenie.
+Left panel of the dashboard: sessions that are waiting for you or have an error, then task proposals waiting for a decision (ADR-39), then repos that are not clean. Sessions and repos also have a label on the scene; proposals are not on the scene, and a click opens them in the Sessions view.
 
 **Migawka pulpitu** (`HomeModel`):
 To, co pulpit pokazuje, policzone przez UI z odpowiedzi daemona i podane scenie w całości przy każdej zmianie.

@@ -97,17 +97,17 @@ fn main() {
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let menu = attention::build_menu(app, &[])?;
+    let menu = attention::build_menu(app, &[], &[])?;
     let mut tray = TrayIconBuilder::with_id(TRAY_ID)
-        .tooltip(attention::tooltip(&[]))
+        .tooltip(attention::tooltip(&[], &[]))
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
             attention::MENU_SHOW => show_main(app),
             attention::MENU_QUIT => quit_app(app),
             id => {
-                if let Some(session) = attention::session_from_menu(id) {
-                    attention::focus_session(app, session, show_main);
+                if let Some(target) = attention::focus_from_menu(id) {
+                    attention::focus(app, target, show_main);
                 }
             }
         })

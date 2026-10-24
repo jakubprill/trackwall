@@ -1,6 +1,6 @@
-# Wydanie z tagu vX.Y.Z: portable build na Windows i macOS, potem jeden GitHub Release.
-# Release powstaje dopiero, gdy oba buildy przejdą, więc nigdy nie jest połowiczny.
-# Kroki budowania są te same co w jobie `desktop` w ci.yml. Instrukcja: docs/release.md
+# Release from a vX.Y.Z tag: portable build on Windows and macOS, then one GitHub Release.
+# The release is created only once both builds pass, so it is never half-done.
+# The build steps are the same as in the `desktop` job in ci.yml. Instructions: docs/release.md
 name: Release
 
 on:
@@ -13,14 +13,14 @@ concurrency:
 
 permissions: {}
 
-# Te same wersje co w mise.toml; pilnuje tego apps/desktop/test/toolchain.test.ts.
+# The same versions as in mise.toml; apps/desktop/test/toolchain.test.ts guards this.
 env:
-  BUN_VERSION: "1.4.2"
+  BUN_VERSION: "1.4.4"
   NODE_VERSION: "22"
   RUST_VERSION: "1.90"
 
-# Akcje przypięte do SHA: ten workflow publikuje binarki, więc przesunięty tag akcji
-# nie może podmienić tego, co trafia do użytkowników.
+# Actions pinned to a SHA: this workflow publishes binaries, so a moved action tag
+# must not be able to swap what reaches users.
 jobs:
   build:
     name: portable (${{ matrix.os }})
@@ -38,18 +38,18 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Tag na main i zgodny z wersją aplikacji
+      - name: Tag on main and matching the app version
         shell: bash
         env:
           TAG: ${{ github.ref_name }}
         run: |
           if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::error::Tag $TAG wskazuje commit spoza main"
+            echo "::error::Tag $TAG points to a commit outside main"
             exit 1
           fi
           version=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
           if [ "v$version" != "$TAG" ]; then
-            echo "::error::Tag $TAG nie pasuje do wersji $version w tauri.conf.json"
+            echo "::error::Tag $TAG does not match version $version in tauri.conf.json"
             exit 1
           fi
 
@@ -57,19 +57,19 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           bun-version: ${{ env.BUN_VERSION }}
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # gałąź stable; wersję Rust daje RUST_VERSION
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch; RUST_VERSION sets the Rust version
         with:
           toolchain: ${{ env.RUST_VERSION }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: apps/desktop/src-tauri
-          # Ten sam klucz co job `desktop` w ci.yml: wydanie czyta cache z main, ale go nie zapisuje.
+          # The same key as the `desktop` job in ci.yml: a release reads the cache from main but does not save it.
           shared-key: desktop
           save-if: false
-      # Tag nie wymaga zielonego CI na swoim commicie, więc wydanie samo uruchamia testy na obu systemach.
+      # A tag does not require green CI on its commit, so the release runs the tests on both systems itself.
       - run: pnpm test
       - run: pnpm build:desktop
-      - name: smoke test sidecara z buildu
+      - name: smoke test of the built sidecar
         run: bun packages/daemon/scripts/smoke.ts apps/desktop/src-tauri/target/release/trackwall-daemon
       - run: pnpm portable
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
@@ -86,7 +86,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      # Tylko notatka o zmianach; test versions.test.ts pilnuje, że istnieje dla wersji z tagu.
+      # Only the release note; the versions.test.ts test makes sure it exists for the tagged version.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           sparse-checkout: docs/release-notes
@@ -98,7 +98,7 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Sumy kontrolne
+      - name: Checksums
         working-directory: dist
         env:
           TAG: ${{ github.ref_name }}
@@ -106,11 +106,11 @@ jobs:
           shopt -s nullglob
           version="${TAG#v}"
           for f in "trackwall-$version-windows-x64.zip" "trackwall-$version-macos-arm64.zip"; do
-            [ -f "$f" ] || { echo "::error::Brak $f, są: $(ls)"; exit 1; }
+            [ -f "$f" ] || { echo "::error::Missing $f, found: $(ls)"; exit 1; }
           done
           zips=(trackwall-*.zip)
           if [ ${#zips[@]} -ne 2 ]; then
-            echo "::error::Oczekiwano 2 archiwów, są: ${zips[*]}"
+            echo "::error::Expected 2 archives, found: ${zips[*]}"
             exit 1
           fi
           sha256sum "${zips[@]}" > SHA256SUMS.txt
@@ -123,12 +123,12 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            # Ponowne uruchomienie po awarii: podmień pliki, nie twórz drugiego release.
+            # Rerun after a failure: replace the files, do not create a second release.
             gh release upload "$TAG" dist/* --clobber
           else
             prerelease=()
             if [[ "$TAG" == *-* ]]; then prerelease=(--prerelease); fi
-            # Notatka z repo idzie przed listą PR-ów, którą generuje GitHub.
+            # The note from the repo goes before the list of PRs that GitHub generates.
             gh release create "$TAG" dist/* --verify-tag --generate-notes \
               --notes-file "docs/release-notes/$TAG.md" --title "Trackwall ${TAG#v}" "${prerelease[@]}"
           fi

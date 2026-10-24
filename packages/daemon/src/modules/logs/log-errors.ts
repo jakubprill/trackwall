@@ -1,6 +1,6 @@
 import { LOG_ERROR_LINES, type LogError, type LogErrorLevel, type LogRecord, type LogSource } from "@trackwall/protocol";
-import { type ErrorBlock, errorBlocks, firstRecord as first, STACK_FRAME } from "./error-blocks.ts";
-import { withoutTaskPrefix } from "./log-level.ts";
+import { type ErrorBlock, errorBlocks, STACK_FRAME } from "./error-blocks.ts";
+import { shorten } from "./run-output.ts";
 
 /**
  * Errors of several sources as entries for the agent (§4.2, ADR-42): blocks from `errorBlocks`, the same error of one
@@ -11,6 +11,8 @@ import { withoutTaskPrefix } from "./log-level.ts";
 const FRAMES_SHOWN = 10;
 /** An error line has a limit: a JSON record with the stack trace in one field has up to 16 KB. */
 const LINE_CHARS = 4000;
+/** How many lines of an error without an exception identify it (a compiler diagnostic, a Spring or Gradle report). */
+const SIGNATURE_LINES = 20;
 
 export interface SourceRecords {
   readonly source: LogSource;
@@ -40,58 +42,69 @@ export function collectErrors(
   const found = new Map<string, Occurrences>();
   for (const { source, key, records } of sources) {
     for (const block of errorBlocks(records, minLevel)) {
-      if (sinceSeq !== undefined && first(block).seq <= sinceSeq) continue;
+      if (sinceSeq !== undefined && block.first.seq <= sinceSeq) continue;
       const id = `${key}\0${signature(block)}`;
       const seen = found.get(id);
       if (seen) {
         seen.latest = block;
         seen.count += 1;
-      } else found.set(id, { source, latest: block, firstTs: first(block).ts, count: 1 });
+      } else found.set(id, { source, latest: block, firstTs: block.first.ts, count: 1 });
     }
   }
-  const newestFirst = [...found.values()].sort((a, b) => first(b.latest).seq - first(a.latest).seq);
+  const newestFirst = [...found.values()].sort((a, b) => b.latest.first.seq - a.latest.first.seq);
   return { errors: newestFirst.slice(0, limit).map(logError), truncated: newestFirst.length > limit };
 }
 
 function logError({ source, latest, firstTs, count }: Occurrences): LogError {
-  const { runId, stream, seq, ts } = first(latest);
-  const { lines, omittedLines } = shownLines(latest.records.map((r) => r.msg));
+  const { runId, stream, seq, ts } = latest.first;
+  const { lines, omittedLines } = shownLines(latest);
   return { source, runId, stream, level: latest.level, exception: latest.exception, lines, omittedLines, seq, ts, firstTs, count };
 }
 
 /**
  * Lines for the agent: the first `FRAMES_SHOWN` frames of each run of stack frames, one line with the count in place
- * of the rest, then at most `LOG_ERROR_LINES` lines.
+ * of the rest, then at most `LOG_ERROR_LINES` lines. Frames are recognised without the mise task prefix, but shown as
+ * they are in the log.
  */
-function shownLines(msgs: readonly string[]): { lines: string[]; omittedLines: number } {
-  // `true` for a line from the log, `false` for the omitted-frames line (those frames are already counted as omitted).
-  const lines: [string, boolean][] = [];
+function shownLines(block: ErrorBlock): { lines: string[]; omittedLines: number } {
+  const lines: string[] = [];
+  let shownFromLog = 0;
+  const show = (line: string, fromLog: boolean) => {
+    if (lines.length >= LOG_ERROR_LINES) return;
+    lines.push(line);
+    if (fromLog) shownFromLog += 1;
+  };
   let frames = 0;
   let skipped = 0;
-  const flushSkipped = () => {
-    if (skipped > 0) lines.push([`\t… ${skipped} frames omitted`, false]);
-    skipped = 0;
-  };
-  for (const msg of msgs) {
-    if (!STACK_FRAME.test(msg)) {
-      flushSkipped();
-      frames = 0;
-    } else if (++frames > FRAMES_SHOWN) {
+  for (const { record, line } of block.entries) {
+    const frame = STACK_FRAME.test(line);
+    frames = frame ? frames + 1 : 0;
+    if (frame && frames > FRAMES_SHOWN) {
       skipped += 1;
       continue;
     }
-    lines.push([msg.length > LINE_CHARS ? `${msg.slice(0, LINE_CHARS)}…` : msg, true]);
+    if (skipped > 0) show(`\t… ${skipped} frames omitted`, false);
+    skipped = 0;
+    show(shorten(record.msg, LINE_CHARS), true);
   }
-  flushSkipped();
-  const shown = lines.slice(0, LOG_ERROR_LINES);
-  return { lines: shown.map(([line]) => line), omittedLines: msgs.length - shown.filter(([, fromLog]) => fromLog).length };
+  if (skipped > 0) show(`\t… ${skipped} frames omitted`, false);
+  return { lines, omittedLines: block.entries.length - shownFromLog };
 }
 
 /**
- * The same error is the same first line and exception once ids and numbers are replaced: the time, PID, thread
- * (`nio-8080-exec-3`), request id or port differ between occurrences of the same error.
+ * What makes errors the same: the exception and the first frame, or, without an exception, the first lines. Ids,
+ * numbers and bracketed parts (thread names, which Spring cuts to 15 characters from the left, trace ids) differ
+ * between occurrences of the same error and are replaced; file locations (`Orders.java:12`, `a.ts(3,5)`,
+ * `Foo.java:[10,5]`) tell different compiler errors apart and stay.
  */
 function signature(block: ErrorBlock): string {
-  const text = `${withoutTaskPrefix(first(block).msg)}\0${block.exception ?? ""}`;
-  return text.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "<uuid>").replace(/0x[0-9a-f]+|\d+/gi, "0");
+  const lines = block.entries.map((e) => e.line);
+  const text =
+    block.exception === null
+      ? lines.slice(0, SIGNATURE_LINES).join("\n")
+      : `${block.exception}\n${lines.find((l) => STACK_FRAME.test(l))?.trim() ?? ""}`;
+  return text.replace(VOLATILE, (match, location: string | undefined) => location ?? (match.startsWith("[") ? "[]" : "0"));
 }
+
+const VOLATILE =
+  /(\.[A-Za-z]\w*(?::\[\d+,\d+\]|:\d+(?::\d+)?|\(\d+,\d+\)))|\[[^\]\n]*\]|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\b[0-9a-f]{8,}\b|0x[0-9a-f]+|\d+/gi;

@@ -1,9 +1,9 @@
 import {
   agentsApi,
+  countLabel,
   type Session,
   type SessionList,
   TASK_PROMPT_MAX,
-  type Task,
   type TaskProposal,
   workspaceApi,
 } from "@trackwall/protocol";
@@ -12,27 +12,34 @@ import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { StatusLabel } from "@/components/StatusLabel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { relativeTime, twoDigits } from "@/lib/format";
+import { IS_MAC } from "@/lib/platform";
 import {
   entryId,
   entrySelection,
   entrySession,
   findEntry,
   type SessionEntry,
+  type SessionRow,
   type SessionSelection,
-  sessionEntries,
-  taskName,
+  sessionRows,
 } from "@/lib/session-entries";
-import { isLive, nextWaiting, sessionStateLabel, waitingCount } from "@/lib/session-state";
+import { gridPage, SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
+import { ariaSessionShortcut, SHORTCUT_POSITIONS, sessionShortcut, sessionShortcutLabel } from "@/lib/session-shortcut";
+import { isLive, nextWaiting, PROPOSAL_STATUS, sessionStateLabel, waitingCount } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
 import { actionIsNewer, type RemoteHandle, useRemote } from "@/lib/use-remote";
+import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { cn } from "@/lib/utils";
 import { ProposalPanel } from "./ProposalPanel.tsx";
+import { SessionGrid } from "./SessionGrid.tsx";
 import { SessionTerminal } from "./SessionTerminal.tsx";
+import { TaskLine } from "./TaskLine.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
 
 /**
@@ -41,27 +48,47 @@ import { TaskPanel } from "./TaskPanel.tsx";
  * a nad nimi propozycje zadań od agentów (ADR-39); po prawej terminal wybranej sesji, przy zadaniu także jego zmiany,
  * a przy propozycji jej polecenie do zatwierdzenia. Listę odpytuje `App`, bo liczba czekających
  * sesji jest też na pasku widoków.
+ *
+ * Since ADR-48 the right side shows the selected entry alone or a page of the list as a grid of terminals, and
+ * Alt + digit selects an entry by its position; `App` keeps the layout across views and owns Alt+J.
  */
 export function SessionsView({
   conn,
   sessions,
   selected,
   onSelect,
+  layout,
+  onLayout,
 }: {
   conn: Connection;
   sessions: RemoteHandle<SessionList>;
   selected: SessionSelection;
   onSelect: (selection: SessionSelection) => void;
+  layout: SessionLayout;
+  onLayout: (layout: SessionLayout) => void;
 }) {
   const list = sessions.data?.sessions ?? [];
   // Zakończone zadanie znika od razu, a nie po odświeżeniu listy, żeby panel nie pokazał go znowu bez worktree.
   const [removed, setRemoved] = useState<{ task: string; afterLoad: number }>();
   const hidden = removed && actionIsNewer(removed.afterLoad, sessions.loadNumber) ? removed.task : undefined;
-  const entries = sessions.data ? sessionEntries(sessions.data).filter((e) => e.kind !== "task" || e.task.id !== hidden) : [];
+  const rows = sessions.data ? sessionRows({ ...sessions.data, tasks: sessions.data.tasks.filter((t) => t.id !== hidden) }) : [];
+  const entries = rows.map((r) => r.entry);
   const current = findEntry(entries, selected);
   const show = (id: string) => onSelect({ kind: "session", id });
   const next = nextWaiting(list, entrySession(current)?.id);
   const waiting = waitingCount(list);
+  // Taken also with no entry at that position, so that the key never reaches a session terminal by accident.
+  useWindowShortcuts(
+    (event) => {
+      const shortcut = sessionShortcut(event, IS_MAC);
+      return shortcut?.kind === "position" ? shortcut : undefined;
+    },
+    ({ position }) => {
+      const entry = entries[position - 1];
+      if (entry) onSelect(entrySelection(entry));
+      return true;
+    },
+  );
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[var(--spacing-sidebar)_1fr]">
@@ -76,8 +103,15 @@ export function SessionsView({
         </div>
         {next && (
           <div className="px-4 pb-3">
-            <Button variant="outline" size="sm" className="w-full" onClick={() => show(next.id)}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => show(next.id)}
+              aria-keyshortcuts={ariaSessionShortcut(NEXT_WAITING)}
+            >
               <BellRing /> {waiting === 1 ? "A session is waiting for you" : `Next waiting (${waiting})`}
+              <span className="text-muted-foreground ml-auto font-mono text-2xs">{sessionShortcutLabel(NEXT_WAITING, IS_MAC)}</span>
             </Button>
           </div>
         )}
@@ -88,13 +122,13 @@ export function SessionsView({
               No sessions yet. Give the agent a task or start Copilot CLI in a repo from your projects folder.
             </p>
           )}
-          {entries.map((entry, i) => (
+          {rows.map((row, i) => (
             <SessionListItem
-              key={entryId(entry)}
-              entry={entry}
+              key={entryId(row.entry)}
+              row={row}
               position={i + 1}
-              active={current !== undefined && entryId(entry) === entryId(current)}
-              onSelect={() => onSelect(entrySelection(entry))}
+              active={current !== undefined && entryId(row.entry) === entryId(current)}
+              onSelect={() => onSelect(entrySelection(row.entry))}
             />
           ))}
         </nav>
@@ -116,44 +150,21 @@ export function SessionsView({
             onCancel={entries.length > 0 ? () => onSelect(undefined) : undefined}
           />
         )}
-        {current?.kind === "proposal" && (
-          <ProposalPanel
-            key={current.proposal.id}
+        {current && (
+          <SelectedEntry
             conn={conn}
-            proposal={current.proposal}
+            entries={entries}
+            current={current}
+            layout={layout}
+            onLayout={onLayout}
+            onSelect={onSelect}
             sessions={list}
-            onApproved={(task) => {
-              onSelect({ kind: "task", id: task.id });
-              sessions.reload();
-            }}
-            onRejected={() => {
+            onChanged={sessions.reload}
+            onTaskRemoved={(task) => {
+              setRemoved({ task, afterLoad: sessions.sentLoads() });
               onSelect(undefined);
               sessions.reload();
             }}
-          />
-        )}
-        {current?.kind === "task" && (
-          <TaskPanel
-            key={current.task.id}
-            conn={conn}
-            task={current.task}
-            session={current.session}
-            sessions={list}
-            onChanged={sessions.reload}
-            onRemoved={() => {
-              setRemoved({ task: current.task.id, afterLoad: sessions.sentLoads() });
-              onSelect(undefined);
-              sessions.reload();
-            }}
-          />
-        )}
-        {current?.kind === "session" && (
-          <SessionPanel
-            key={current.session.id}
-            conn={conn}
-            session={current.session}
-            onChanged={sessions.reload}
-            onClosed={() => onSelect(undefined)}
           />
         )}
       </section>
@@ -161,19 +172,50 @@ export function SessionsView({
   );
 }
 
+/** Indent per tree level; deeper rows do not move further, so the repo name still fits in the panel. */
+const INDENT = ["", "ml-4", "ml-8", "ml-12"] as const;
+
+/**
+ * A list row: an entry indented under the session that proposed it, with a line along the children of one main session.
+ * A session or task that delegated work has a “main” badge with the number of entries under it.
+ */
 function SessionListItem({
-  entry,
+  row,
   position,
   active,
   onSelect,
 }: {
-  entry: SessionEntry;
+  row: SessionRow;
   position: number;
   active: boolean;
   onSelect: () => void;
 }) {
-  if (entry.kind === "proposal")
-    return <ProposalListItem proposal={entry.proposal} position={position} active={active} onSelect={onSelect} />;
+  const { entry, depth } = row;
+  return (
+    <div className={cn(INDENT[Math.min(depth, INDENT.length - 1)], depth > 0 && "border-l pl-1")}>
+      {entry.kind === "proposal" ? (
+        <ProposalListItem proposal={entry.proposal} position={position} active={active} onSelect={onSelect} />
+      ) : (
+        <StartedListItem entry={entry} delegated={row.children} position={position} active={active} onSelect={onSelect} />
+      )}
+    </div>
+  );
+}
+
+function StartedListItem({
+  entry,
+  delegated,
+  position,
+  active,
+  onSelect,
+}: {
+  entry: Exclude<SessionEntry, { kind: "proposal" }>;
+  /** Tasks and proposals directly under this entry. */
+  delegated: number;
+  position: number;
+  active: boolean;
+  onSelect: () => void;
+}) {
   const { session } = entry;
   const task = entry.kind === "task" ? entry.task : undefined;
   return (
@@ -181,15 +223,21 @@ function SessionListItem({
       type="button"
       onClick={onSelect}
       aria-current={active || undefined}
+      aria-keyshortcuts={ariaSessionShortcut({ kind: "position", position })}
       className={cn(
         "flex w-full items-start gap-3 rounded-md border border-transparent px-2 py-2 text-left transition-colors hover:bg-accent",
         active && "bg-accent border-primary/25 hud-active-edge",
       )}
     >
-      <span className="text-muted-foreground text-2xs w-5 shrink-0 pt-0.5 text-right font-mono">{twoDigits(position)}</span>
+      <PositionLabel position={position} />
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate text-sm font-medium">{task?.repo ?? session?.repo}</span>
+          {delegated > 0 && (
+            <Badge
+              aria-label={`main session, ${countLabel(delegated, { one: "task or proposal", other: "tasks and proposals" })} under it`}
+            >{`main · ${delegated}`}</Badge>
+          )}
           {session?.needsAttention && <BellRing className="text-warning size-3.5 shrink-0" aria-label="waiting for you" />}
         </span>
         {task && <TaskLine task={task} />}
@@ -197,6 +245,17 @@ function SessionListItem({
         {session?.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
       </span>
     </button>
+  );
+}
+
+/** The position of a list entry and its Alt + digit shortcut, the same for sessions, tasks and proposals. */
+function PositionLabel({ position }: { position: number }) {
+  const shortcut = sessionShortcutLabel({ kind: "position", position }, IS_MAC);
+  return (
+    <span className="flex w-8 shrink-0 flex-col items-end gap-0.5 pt-0.5 font-mono">
+      <span className="text-muted-foreground text-2xs">{twoDigits(position)}</span>
+      {shortcut && <span className="text-muted-foreground/70 text-2xs">{shortcut}</span>}
+    </span>
   );
 }
 
@@ -217,12 +276,13 @@ function ProposalListItem({
       type="button"
       onClick={onSelect}
       aria-current={active || undefined}
+      aria-keyshortcuts={ariaSessionShortcut({ kind: "position", position })}
       className={cn(
         "flex w-full items-start gap-3 rounded-md border border-transparent px-2 py-2 text-left transition-colors hover:bg-accent",
         active && "bg-accent border-primary/25 hud-active-edge",
       )}
     >
-      <span className="text-muted-foreground text-2xs w-5 shrink-0 pt-0.5 text-right font-mono">{twoDigits(position)}</span>
+      <PositionLabel position={position} />
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate text-sm font-medium">{proposal.repo}</span>
@@ -230,23 +290,156 @@ function ProposalListItem({
         </span>
         <span className="text-muted-foreground truncate text-xs">{proposal.title}</span>
         <span className="text-xs">
-          <StatusLabel tone="warning" label="waiting for your decision" />
+          <StatusLabel {...PROPOSAL_STATUS} />
         </span>
       </span>
     </button>
   );
 }
 
-/**
- * Tytuł zadania z propozycji albo polecenie w jednej linii, z ikoną gałęzi, żeby zadanie odróżniało się od sesji
- * w korzeniu repo.
- */
-function TaskLine({ task }: { task: Task }) {
+/** The right side for a selected entry: the layout switch, then the entry with its full panel or a grid page with it. */
+function SelectedEntry({
+  conn,
+  entries,
+  current,
+  layout,
+  onLayout,
+  onSelect,
+  sessions,
+  onChanged,
+  onTaskRemoved,
+}: {
+  conn: Connection;
+  entries: readonly SessionEntry[];
+  current: SessionEntry;
+  layout: SessionLayout;
+  onLayout: (layout: SessionLayout) => void;
+  onSelect: (selection: SessionSelection) => void;
+  sessions: readonly Session[];
+  onChanged: () => void;
+  onTaskRemoved: (task: string) => void;
+}) {
+  if (layout === "1")
+    return (
+      <>
+        <LayoutBar layout={layout} onLayout={onLayout} />
+        <EntryPanel
+          conn={conn}
+          entry={current}
+          sessions={sessions}
+          onSelect={onSelect}
+          onChanged={onChanged}
+          onTaskRemoved={onTaskRemoved}
+        />
+      </>
+    );
+  const selected = entryId(current);
+  const page = gridPage(
+    layout,
+    entries,
+    entries.findIndex((e) => entryId(e) === selected),
+  );
   return (
-    <span className="text-muted-foreground flex min-w-0 items-center gap-1 text-xs" title={task.branch}>
-      <GitBranch className="size-3 shrink-0" aria-label="task in a worktree" />
-      <span className="truncate">{taskName(task)}</span>
-    </span>
+    <>
+      <LayoutBar
+        layout={layout}
+        onLayout={onLayout}
+        summary={`${entries.length} in the list${page.pages > 1 ? ` · page ${page.page + 1} of ${page.pages}` : ""}`}
+      />
+      <SessionGrid
+        conn={conn}
+        page={page}
+        selected={selected}
+        onSelect={(entry) => onSelect(entrySelection(entry))}
+        onOpenAlone={(entry) => {
+          onSelect(entrySelection(entry));
+          onLayout("1");
+        }}
+      />
+    </>
+  );
+}
+
+/** The full panel of one entry: a task proposal to decide on, a task with its tabs, or a session in a repo root. */
+function EntryPanel({
+  conn,
+  entry,
+  sessions,
+  onSelect,
+  onChanged,
+  onTaskRemoved,
+}: {
+  conn: Connection;
+  entry: SessionEntry;
+  sessions: readonly Session[];
+  onSelect: (selection: SessionSelection) => void;
+  onChanged: () => void;
+  onTaskRemoved: (task: string) => void;
+}) {
+  if (entry.kind === "proposal")
+    return (
+      <ProposalPanel
+        key={entry.proposal.id}
+        conn={conn}
+        proposal={entry.proposal}
+        sessions={sessions}
+        onApproved={(task) => {
+          onSelect({ kind: "task", id: task.id });
+          onChanged();
+        }}
+        onRejected={() => {
+          onSelect(undefined);
+          onChanged();
+        }}
+      />
+    );
+  if (entry.kind === "task")
+    return (
+      <TaskPanel
+        key={entry.task.id}
+        conn={conn}
+        task={entry.task}
+        session={entry.session}
+        sessions={sessions}
+        onChanged={onChanged}
+        onRemoved={() => onTaskRemoved(entry.task.id)}
+      />
+    );
+  return (
+    <SessionPanel key={entry.session.id} conn={conn} session={entry.session} onChanged={onChanged} onClosed={() => onSelect(undefined)} />
+  );
+}
+
+const NEXT_WAITING = { kind: "next-waiting" } as const;
+
+const LAYOUT_LABELS: Record<SessionLayout, string> = { "1": "1", "2": "2", "4": "4", auto: "Auto" };
+
+/** The layout switch above the right side: one entry with its full panel, or a grid of 2, 4 or all entries. */
+function LayoutBar({ layout, onLayout, summary }: { layout: SessionLayout; onLayout: (layout: SessionLayout) => void; summary?: string }) {
+  return (
+    <div className="flex items-center gap-3 border-b px-4 py-1.5">
+      <span className="hud-label">Layout</span>
+      <fieldset aria-label="Layout" className="flex overflow-hidden rounded-md border">
+        {SESSION_LAYOUTS.map((option) => (
+          <button
+            key={option}
+            type="button"
+            aria-pressed={option === layout}
+            onClick={() => onLayout(option)}
+            className={cn(
+              "px-3 py-0.5 font-mono text-xs transition-colors",
+              option === layout ? "bg-accent text-primary" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {LAYOUT_LABELS[option]}
+          </button>
+        ))}
+      </fieldset>
+      {summary && <span className="text-muted-foreground text-xs">{summary}</span>}
+      <span className="text-muted-foreground ml-auto font-mono text-2xs">
+        {`${sessionShortcutLabel({ kind: "position", position: 1 }, IS_MAC)}…${SHORTCUT_POSITIONS} select · ${sessionShortcutLabel(NEXT_WAITING, IS_MAC)} next waiting`}
+      </span>
+    </div>
   );
 }
 
@@ -296,7 +489,7 @@ function SessionPanel({
           </Button>
         )}
       </header>
-      <SessionTerminal conn={conn} session={session.id} live={live} />
+      <SessionTerminal conn={conn} session={session.id} live={live} focused />
     </>
   );
 }

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { LogStream } from "@trackwall/protocol";
 import { Logs } from "../src/modules/logs/logs.ts";
 import type { RunOutput } from "../src/modules/logs/run-output.ts";
 
@@ -14,19 +15,16 @@ function newLogs(): Logs {
   return new Logs({ dir: mkdtempSync(join(tmpdir(), "trackwall-errors-")), maxFileBytes: 1024 * 1024, log: () => {} });
 }
 
-/** Lines on stdout, each as a separate chunk, as from a process. */
-function stdout(output: RunOutput, text: string): void {
-  for (const line of text.split("\n")) output.push("stdout", Buffer.from(`${line}\n`));
-}
-
-function stderr(output: RunOutput, text: string): void {
-  for (const line of text.split("\n")) output.push("stderr", Buffer.from(`${line}\n`));
+/** Lines on one stream, each as a separate chunk, as from a process. */
+function write(stream: LogStream, output: RunOutput, text: string): void {
+  for (const line of text.split("\n")) output.push(stream, Buffer.from(`${line}\n`));
 }
 
 describe("errors from the log", () => {
   test("a Spring ERROR line with an exception and stack trace is one error whose cause is the last Caused by", () => {
     const logs = newLogs();
-    stdout(
+    write(
+      "stdout",
       logs.open(DEV, "r1", {}),
       [
         "2026-10-24T10:00:00.100+02:00  INFO 4242 --- [main] o.s.b.w.e.tomcat.TomcatWebServer : Tomcat initialized with port 8080",
@@ -65,10 +63,11 @@ describe("errors from the log", () => {
 
   test("the Spring APPLICATION FAILED TO START report belongs to the error with its description and action", () => {
     const logs = newLogs();
-    stdout(
+    write(
+      "stdout",
       logs.open(DEV, "r1", {}),
       [
-        "2026-10-24T10:00:01.200+02:00 ERROR 4242 --- [main] o.s.b.d.LoggingFailureAnalysisReporter : ",
+        "2026-10-24T10:00:01.200+02:00 ERROR 4242 --- [main] o.s.b.d.LoggingFailureAnalysisReporter :",
         "",
         "***************************",
         "APPLICATION FAILED TO START",
@@ -107,12 +106,14 @@ describe("errors from the log", () => {
   test("an uncaught Node exception on stderr starts the error at its header, and stdout between its lines does not break it", () => {
     const logs = newLogs();
     const output = logs.open(WEB, "r1", {});
-    stderr(
+    write(
+      "stderr",
       output,
       ["/repo/server.js:5", '  throw new TypeError("port is not a number");', "  ^", "", "TypeError: port is not a number"].join("\n"),
     );
-    stdout(output, "listening soon");
-    stderr(
+    write("stdout", output, "listening soon");
+    write(
+      "stderr",
       output,
       [
         "    at Object.<anonymous> (/repo/server.js:5:9)",
@@ -144,7 +145,8 @@ describe("errors from the log", () => {
       ["10:00:05", "exec-7", 42],
       ["10:00:09", "exec-3", 43],
     ] as const) {
-      stdout(
+      write(
+        "stdout",
         output,
         [
           `2026-10-24T${time}.000+02:00 ERROR 4242 --- [nio-8080-${thread}] o.a.c.c.C.[.[.[/].[dispatcherServlet] : Servlet.service() threw exception`,
@@ -176,9 +178,12 @@ describe("errors from the log", () => {
   test("a long stack trace keeps the first 10 frames of each exception and the rest becomes one line with the count", () => {
     const logs = newLogs();
     const frames = (cls: string) => Array.from({ length: 30 }, (_, i) => `\tat com.example.${cls}.m${i}(${cls}.java:${i + 1})`);
-    stdout(
+    write(
+      "stdout",
       logs.open(DEV, "r1", {}),
-      ["java.lang.RuntimeException: outer", ...frames("A"), "Caused by: java.io.IOException: inner", ...frames("B")].join("\n"),
+      ["java.lang.RuntimeException: outer", ...frames("A"), "Caused by: java.io.IOException: inner", ...frames("B"), "\t... 25 more"].join(
+        "\n",
+      ),
     );
 
     const [error] = logs.errors(ALL).errors;
@@ -189,6 +194,7 @@ describe("errors from the log", () => {
       "Caused by: java.io.IOException: inner",
       ...frames("B").slice(0, 10),
       "\t… 20 frames omitted",
+      "\t... 25 more",
     ]);
     expect(error?.omittedLines).toBe(40);
     expect(error?.exception).toBe("java.io.IOException: inner");
@@ -196,7 +202,8 @@ describe("errors from the log", () => {
 
   test("build errors: javac with its context, consecutive Maven [ERROR] lines and the Gradle FAILURE report up to BUILD FAILED", () => {
     const logs = newLogs();
-    stdout(
+    write(
+      "stdout",
       logs.open(BUILD, "r1", {}),
       [
         "> Task :compileJava",
@@ -250,7 +257,8 @@ describe("errors from the log", () => {
 
   test("warnings come only with minLevel warn, and the mise task prefix does not get in the way", () => {
     const logs = newLogs();
-    stdout(
+    write(
+      "stdout",
       logs.open(BUILD, "r1", {}),
       [
         "[build] WARN deprecated option --legacy",
@@ -267,11 +275,11 @@ describe("errors from the log", () => {
 
   test("repo and task filters, a cursor across all sources and a limit keeping the most recent", () => {
     const logs = newLogs();
-    stdout(logs.open(DEV, "r1", {}), "ERROR orders dev 1");
-    stdout(logs.open({ kind: "mise-install", repo: "orders" }, "r2", {}), "mise ERROR failed to install java@21");
-    stdout(logs.open(WEB, "r3", {}), "ERROR web dev");
+    write("stdout", logs.open(DEV, "r1", {}), "ERROR orders dev 1");
+    write("stdout", logs.open({ kind: "mise-install", repo: "orders" }, "r2", {}), "mise ERROR failed to install java@21");
+    write("stdout", logs.open(WEB, "r3", {}), "ERROR web dev");
     const cursor = logs.errors(ALL).nextSeq;
-    stdout(logs.open(BUILD, "r4", {}), "ERROR orders build");
+    write("stdout", logs.open(BUILD, "r4", {}), "ERROR orders build");
 
     expect(logs.errors(ALL).errors.map((e) => e.lines[0])).toEqual([
       "ERROR orders build",
@@ -285,5 +293,252 @@ describe("errors from the log", () => {
     expect(logs.errors({ ...ALL, sinceSeq: cursor })).toMatchObject({ errors: [{ source: BUILD }], dropped: false });
     // A cursor from another daemon run: all errors, as without a cursor.
     expect(logs.errors({ ...ALL, sinceSeq: 5 })).toMatchObject({ dropped: true, errors: { length: 4 } });
+  });
+
+  test("a stack trace with the mise task prefix is trimmed like one without it", () => {
+    const logs = newLogs();
+    const frames = Array.from({ length: 15 }, (_, i) => `[build]     at f${i} (/repo/a.js:${i + 1}:1)`);
+    write("stdout", logs.open(BUILD, "r1", {}), ["[build] TypeError: boom", ...frames].join("\n"));
+
+    const [error] = logs.errors(ALL).errors;
+    expect(error?.lines).toEqual(["[build] TypeError: boom", ...frames.slice(0, 10), "\t… 5 frames omitted"]);
+    expect(error?.omittedLines).toBe(5);
+  });
+
+  test("two compiler errors in one file at different lines are two entries", () => {
+    const logs = newLogs();
+    write(
+      "stdout",
+      logs.open(BUILD, "r1", {}),
+      ["/repo/src/Orders.java:12: error: cannot find symbol", "/repo/src/Orders.java:40: error: cannot find symbol"].join("\n"),
+    );
+
+    expect(logs.errors(ALL).errors.map((e) => [e.lines[0], e.count])).toEqual([
+      ["/repo/src/Orders.java:40: error: cannot find symbol", 1],
+      ["/repo/src/Orders.java:12: error: cannot find symbol", 1],
+    ]);
+  });
+
+  test("the same request error with a thread name cut differently and other trace ids is one entry", () => {
+    const logs = newLogs();
+    const output = logs.open(DEV, "r1", {});
+    for (const [thread, trace] of [
+      ["nio-8080-exec-9", "6f1e2d3c4b5a69788796a5b4c3d2e1f0-a1b2c3d4e5f60718"],
+      ["io-8080-exec-10", "0a1b2c3d4e5f60718293a4b5c6d7e8f9-1029384756abcdef"],
+    ]) {
+      write(
+        "stdout",
+        output,
+        [
+          `2026-10-24T10:00:01.000+02:00 ERROR [orders,${trace}] 4242 --- [${thread}] c.e.o.OrdersController : lookup failed`,
+          "java.lang.IllegalStateException: order 7 not found",
+          "\tat com.example.orders.OrdersController.get(OrdersController.java:31)",
+        ].join("\n"),
+      );
+    }
+
+    expect(logs.errors(ALL).errors.map((e) => e.count)).toEqual([2]);
+  });
+
+  test("a line of asterisks alone is not an error, and a Spring report without Action ends at the next logger line", () => {
+    const logs = newLogs();
+    write(
+      "stdout",
+      logs.open(DEV, "r1", {}),
+      [
+        "**********************************",
+        "2026-10-24T10:00:00.000+02:00  INFO 1 --- [main] c.e.App : starting",
+        "2026-10-24T10:00:01.000+02:00 ERROR 1 --- [main] o.s.b.d.LoggingFailureAnalysisReporter :",
+        "",
+        "***************************",
+        "APPLICATION FAILED TO START",
+        "***************************",
+        "",
+        "Description:",
+        "",
+        "Failed to bind properties under 'server.port' to java.lang.Integer.",
+        "",
+        "2026-10-24T10:00:02.000+02:00  INFO 1 --- [main] c.e.App : retrying",
+        "2026-10-24T10:00:03.000+02:00 ERROR 1 --- [main] c.e.App : second failure",
+      ].join("\n"),
+    );
+
+    expect(logs.errors(ALL).errors.map((e) => [e.lines.length, e.lines.at(-1)])).toEqual([
+      [1, "2026-10-24T10:00:03.000+02:00 ERROR 1 --- [main] c.e.App : second failure"],
+      [9, "Failed to bind properties under 'server.port' to java.lang.Integer."],
+    ]);
+  });
+
+  test("Suppressed is part of the error but not its cause, and Require stack belongs to the Node error", () => {
+    const logs = newLogs();
+    write(
+      "stdout",
+      logs.open(DEV, "r1", {}),
+      [
+        "java.lang.RuntimeException: request failed",
+        "\tat com.example.A.run(A.java:1)",
+        "Caused by: java.sql.SQLException: connection reset",
+        "\tat com.example.Db.query(Db.java:9)",
+        "\tSuppressed: java.io.IOException: Broken pipe",
+        "\t\tat com.example.Db.close(Db.java:12)",
+      ].join("\n"),
+    );
+    write(
+      "stderr",
+      logs.open(WEB, "r2", {}),
+      [
+        "Error: Cannot find module 'left-pad'",
+        "Require stack:",
+        "- /repo/index.js",
+        "    at Module._resolveFilename (node:internal/modules/cjs/loader:1225:15)",
+      ].join("\n"),
+    );
+
+    expect(logs.errors(ALL).errors.map((e) => [e.exception, e.lines.length])).toEqual([
+      ["Error: Cannot find module 'left-pad'", 4],
+      ["java.sql.SQLException: connection reset", 6],
+    ]);
+  });
+
+  test("an exception under a warning is an error of its own with either level threshold", () => {
+    const logs = newLogs();
+    write(
+      "stdout",
+      logs.open(WEB, "r1", {}),
+      ["WARN deprecated option", "TypeError: x is not a function", "    at f (/repo/a.js:1:1)"].join("\n"),
+    );
+
+    expect(logs.errors(ALL).errors.map((e) => [e.level, e.lines.length])).toEqual([["error", 2]]);
+    expect(logs.errors({ ...ALL, minLevel: "warn" }).errors.map((e) => [e.level, e.lines.length])).toEqual([
+      ["error", 2],
+      ["warn", 1],
+    ]);
+  });
+
+  test("a Caused by under a Suppressed exception is not the cause of the error", () => {
+    const logs = newLogs();
+    write(
+      "stdout",
+      logs.open(DEV, "r1", {}),
+      [
+        "java.lang.IllegalStateException: write failed",
+        "\tat com.example.A.run(A.java:5)",
+        "\tSuppressed: java.io.IOException: close failed",
+        "\t\tat com.example.A.close(A.java:9)",
+        "\tCaused by: java.net.SocketException: Broken pipe",
+        "\t\t... 2 more",
+      ].join("\n"),
+    );
+
+    expect(logs.errors(ALL).errors.map((e) => [e.exception, e.lines.length])).toEqual([
+      ["java.lang.IllegalStateException: write failed", 6],
+    ]);
+  });
+
+  test("the prefix of a task whose name starts with a level word is still removed", () => {
+    const logs = newLogs();
+    write("stdout", logs.open(DEV, "r1", {}), ["[debug-server] Error: boom", "[debug-server]     at main (/repo/index.js:1:1)"].join("\n"));
+
+    expect(logs.errors(ALL).errors.map((e) => [e.exception, e.lines.length])).toEqual([["Error: boom", 2]]);
+    // A task named exactly like an sbt level keeps its prefix, so its lines are not recognised.
+    write("stdout", logs.open(BUILD, "r2", {}), "[debug] TypeError: boom");
+    expect(logs.errors({ ...ALL, miseTask: "build" }).errors).toEqual([]);
+  });
+
+  test("a Spring report without Action ends at the build tool's output, and a Gradle report after it is its own error", () => {
+    const logs = newLogs();
+    const report = [
+      "2026-10-24T10:00:01.000+02:00 ERROR 1 --- [main] o.s.b.d.LoggingFailureAnalysisReporter :",
+      "***************************",
+      "APPLICATION FAILED TO START",
+      "***************************",
+      "Description:",
+      "The dependencies of some of the beans form a cycle:",
+      "   a -> b",
+    ];
+    write(
+      "stdout",
+      logs.open(DEV, "r1", {}),
+      [
+        ...report,
+        "[INFO] BUILD FAILURE",
+        "[ERROR] Failed to execute goal spring-boot-maven-plugin: Process terminated with exit code: 1",
+      ].join("\n"),
+    );
+    write("stdout", logs.open(BUILD, "r2", {}), [...report, "FAILURE: Build failed with an exception.", "BUILD FAILED in 2s"].join("\n"));
+
+    write("stdout", logs.open(WEB, "r3", {}), [...report, "> Task :bootRun FAILED", "random output"].join("\n"));
+
+    expect(logs.errors({ ...ALL, repo: "orders", miseTask: "dev" }).errors.map((e) => e.lines.length)).toEqual([1, 7]);
+    expect(logs.errors({ ...ALL, repo: "web" }).errors.map((e) => e.lines.length)).toEqual([7]);
+    expect(logs.errors({ ...ALL, miseTask: "build" }).errors.map((e) => e.lines)).toEqual([
+      ["FAILURE: Build failed with an exception.", "BUILD FAILED in 2s"],
+      report,
+    ]);
+  });
+
+  test("a Gradle report under a compiler warning is an error of its own with either level threshold", () => {
+    const logs = newLogs();
+    write(
+      "stdout",
+      logs.open(BUILD, "r1", {}),
+      ["w: file:///repo/App.kt:3:5 Parameter 'x' is never used", "", "FAILURE: Build failed with an exception.", "BUILD FAILED in 2s"].join(
+        "\n",
+      ),
+    );
+
+    expect(logs.errors(ALL).errors.map((e) => [e.level, e.lines[0]])).toEqual([["error", "FAILURE: Build failed with an exception."]]);
+    expect(logs.errors({ ...ALL, minLevel: "warn" }).errors.map((e) => [e.level, e.lines.length])).toEqual([
+      ["error", 2],
+      ["warn", 1],
+    ]);
+  });
+
+  test("a failed Gradle test is an error whose cause is the last Caused by of its indented chain", () => {
+    const logs = newLogs();
+    write(
+      "stdout",
+      logs.open(BUILD, "r1", {}),
+      [
+        "OrdersTest > rejects FAILED",
+        "    java.lang.IllegalStateException at OrdersTest.java:3",
+        "        Caused by: java.lang.RuntimeException at OrdersTest.java:3",
+        "",
+        "1 test completed, 1 failed",
+      ].join("\n"),
+    );
+
+    expect(logs.errors(ALL).errors.map((e) => [e.exception, e.lines.length])).toEqual([
+      ["java.lang.RuntimeException at OrdersTest.java:3", 3],
+    ]);
+  });
+
+  test("an indented context line with an error word under a compiler warning is not an error", () => {
+    const logs = newLogs();
+    write(
+      "stdout",
+      logs.open(BUILD, "r1", {}),
+      ["/repo/src/A.java:10: warning: [deprecation] old() in B has been deprecated", "        b.old(Level.SEVERE);", "         ^"].join(
+        "\n",
+      ),
+    );
+
+    expect(logs.errors(ALL).errors).toEqual([]);
+    expect(logs.errors({ ...ALL, minLevel: "warn" }).errors.map((e) => [e.level, e.lines.length])).toEqual([["warn", 3]]);
+  });
+
+  test("a Vite internal server error is an error with its indented context", () => {
+    const logs = newLogs();
+    write(
+      "stdout",
+      logs.open(WEB, "r1", {}),
+      [
+        '10:41:22 AM [vite] Internal server error: Failed to resolve import "./x" from "src/App.tsx".',
+        "  Plugin: vite:import-analysis",
+        "  File: /repo/src/App.tsx:1:7",
+      ].join("\n"),
+    );
+
+    expect(logs.errors(ALL).errors.map((e) => e.lines.length)).toEqual([3]);
   });
 });

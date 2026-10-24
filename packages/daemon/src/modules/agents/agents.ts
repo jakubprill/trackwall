@@ -15,7 +15,8 @@ import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { findCopilot } from "./copilot-command.ts";
 import type { CopilotHookEvent } from "./copilot-hook-record.ts";
 import { type HookCommand, writeCopilotPlugin } from "./copilot-plugin.ts";
-import { LiveSession, type SessionPty } from "./live-session.ts";
+import { LiveSession, type SessionPty, type SessionWindow } from "./live-session.ts";
+import { withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import { SessionTokens } from "./session-tokens.ts";
 import { sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
 import { TaskFile } from "./task-file.ts";
@@ -89,13 +90,6 @@ export interface AgentsDeps {
   /** Otwiera katalog w VS Code (worktree zadania). */
   openEditor: (dir: string) => void;
   log: (msg: string) => void;
-}
-
-/** Widz terminala sesji (okno w UI): wyjście, obraz ekranu na start i wejście z klawiatury. */
-export interface SessionAttachment {
-  input(data: string): void;
-  resize(cols: number, rows: number): void;
-  detach(): void;
 }
 
 /** Na co czeka `wait_for_session`: sesja albo zadanie (także propozycja, która ma stać się zadaniem). */
@@ -249,14 +243,15 @@ export class Agents {
     const id = randomUUID();
     const dir = this.#sessionDir(id);
     const token = this.#tokens.issue(id);
-    let session: LiveSession;
+    let prepared: PreparedSession;
     try {
-      session = this.#prepare({ id, repo, task, dir, token, promptOnStart });
+      prepared = this.#prepare({ id, repo, task, dir, token, promptOnStart });
     } catch (err) {
       this.#tokens.revoke(id);
       rmSync(dir, { recursive: true, force: true });
       throw err;
     }
+    const { session, instructionsDir } = prepared;
     try {
       const { terminal } = await this.#deps.procs.startTerminal({
         owner: owner(id),
@@ -270,7 +265,7 @@ export class Agents {
           ...args,
         ],
         cwd,
-        env,
+        env: instructionsDir === null ? env : withInstructionsDir(env, instructionsDir),
         cols: INITIAL_COLS,
         rows: INITIAL_ROWS,
         onData: (bytes) => session.output(bytes),
@@ -300,10 +295,8 @@ export class Agents {
   }
 
   /** Okno terminala sesji: najpierw obraz ekranu, potem wyjście na bieżąco, a `onClosed`, gdy sesja zniknie. */
-  attach(id: string, viewer: ScreenViewer, onSnapshot: (snapshot: string) => void, onClosed: () => void): SessionAttachment {
-    const session = this.#get(id);
-    const detach = session.attach(viewer, onSnapshot, onClosed);
-    return { input: (data) => session.input(data), resize: (cols, rows) => session.resize(cols, rows), detach };
+  attach(id: string, viewer: ScreenViewer, onSnapshot: (snapshot: string) => void, onClosed: () => void): SessionWindow {
+    return this.#get(id).attach(viewer, onSnapshot, onClosed);
   }
 
   /** Start daemona: pliki sesji z poprzedniego działania (sesje nie przeżywają daemona). */
@@ -337,8 +330,11 @@ export class Agents {
     return [...this.#sessions.values()].flatMap((s) => this.#fresh(s) ?? []).reverse();
   }
 
-  /** Katalog sesji z wtyczką sesji, konfiguracją MCP, tokenem sesji i pustym `hooks.jsonl`, zanim Copilot CLI wystartuje. */
-  #prepare({ id, repo, task, dir, token, promptOnStart }: SessionFiles): LiveSession {
+  /**
+   * The session directory with the session plugin, MCP config, session token, session instructions and an empty
+   * `hooks.jsonl`, before Copilot CLI starts.
+   */
+  #prepare({ id, repo, task, dir, token, promptOnStart }: SessionFiles): PreparedSession {
     const pluginDir = join(dir, "plugin");
     const hooksFile = join(dir, "hooks.jsonl");
     const tokenFile = join(dir, SESSION_TOKEN_FILENAME);
@@ -348,7 +344,10 @@ export class Agents {
     const mcpConfig = copilotMcpServers(this.#deps.sessionMcpCommand(tokenFile));
     writeFileSync(join(dir, MCP_CONFIG_FILE), JSON.stringify(mcpConfig, null, 2));
     writeCopilotPlugin(pluginDir, (event) => ({ ...this.#deps.hookCommand(event, hooksFile), cwd: pluginDir }));
-    return new LiveSession({
+    const instructionsDir = writeSessionInstructions(dir, { repo, task });
+    if (instructionsDir === null)
+      this.#deps.log(`session ${id} starts without Trackwall instructions: the session directory path has a comma`);
+    const session = new LiveSession({
       id,
       repo,
       task,
@@ -358,6 +357,7 @@ export class Agents {
       promptOnStart,
       run: () => this.#deps.procs.state(owner(id)),
     });
+    return { session, instructionsDir };
   }
 
   #startTicking(): void {
@@ -426,6 +426,12 @@ interface SessionFiles {
   dir: string;
   token: string;
   promptOnStart: boolean;
+}
+
+/** A prepared session directory: the session and its instructions directory (`null` when it could not be written). */
+interface PreparedSession {
+  session: LiveSession;
+  instructionsDir: string | null;
 }
 
 /** Klucz właściciela grupy w `procs`; tylko budowany, nigdy rozbierany z powrotem. */

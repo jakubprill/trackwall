@@ -1,6 +1,7 @@
 import { statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { delimiter, dirname, extname, isAbsolute, join } from "node:path";
+import { envKey } from "./env-key.ts";
 
 /**
  * Program Copilot CLI (§4.4): pełna ścieżka pliku, który da się uruchomić bez powłoki. `npm install -g` daje na
@@ -44,11 +45,8 @@ function which(program: string, env: NodeJS.ProcessEnv): string | undefined {
   return undefined;
 }
 
-/** Na Windowsie nazwy zmiennych nie zależą od wielkości liter (`Path`), a kopia `process.env` to zwykły obiekt. */
 function pathValue(env: NodeJS.ProcessEnv, name: string): string | undefined {
-  if (process.platform !== "win32") return env[name];
-  const key = Object.keys(env).find((k) => k.toUpperCase() === name);
-  return key === undefined ? undefined : env[key];
+  return env[envKey(env, name)];
 }
 
 function isFile(path: string): boolean {

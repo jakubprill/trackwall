@@ -304,6 +304,11 @@ describe("poziom rekordu", () => {
     ["/repo/src/A.java:7: warning: [deprecation] Date(int,int,int) in Date has been deprecated", "warn"],
     ["npm warn deprecated inflight@1.0.6", "warn"],
     ["[INFO] Building orders-bff 1.0.0", "info"],
+    ["[SEVERE] Database unreachable", "error"],
+    ["[ERROR:main] boom", "error"],
+    ["e: something happened", "info"],
+    ["[debug-server] Error: boom", "error"],
+    ["[info] compiling 3 Scala sources", "info"],
   ])("%s → %s", (msg, level) => {
     expect(logLevel(msg)).toBe(level);
   });
