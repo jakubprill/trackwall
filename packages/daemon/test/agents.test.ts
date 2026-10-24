@@ -27,7 +27,7 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
 
     const window = viewer(agents, started.id);
     await waitFor(agents, started.id, () => window.text().includes("Witaj w atrapie"), "obraz ekranu");
-    expect(window.text()).toContain(repoDir);
+    expect(window.unwrappedText()).toContain(repoDir);
     expect(window.text()).toContain("MCP: trackwall");
     // Most stdio sesji dostaje plik z tokenem tej sesji, po którym serwer MCP wie, kto woła (ADR-39).
     const tokenFile = join(home, "sessions", started.id, "session-token");

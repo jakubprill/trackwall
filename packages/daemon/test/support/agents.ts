@@ -5,6 +5,7 @@ import type { Session } from "@trackwall/protocol";
 import { DomainError } from "../../src/infra/errors.ts";
 import { Agents } from "../../src/modules/agents/agents.ts";
 import { Logs } from "../../src/modules/logs/logs.ts";
+import { stripAnsi } from "../../src/modules/logs/stream-lines.ts";
 import { ProcessGroups } from "../../src/modules/procs/process-groups.ts";
 import { RuntimeFile } from "../../src/modules/procs/runtime-file.ts";
 import { Vcs } from "../../src/modules/vcs/vcs.ts";
@@ -59,7 +60,10 @@ export async function waitFor(agents: Agents, id: string, check: (s: Session) =>
   }
 }
 
-/** Okno terminala na niby: obraz ekranu i wyjście jako tekst oraz to, czy daemon je zamknął. */
+/**
+ * Okno terminala na niby: obraz ekranu i wyjście jako tekst oraz to, czy daemon je zamknął. `unwrappedText` to tekst
+ * bez końców linii i sekwencji terminala, do szukania tego, co program wypisał w kilku liniach.
+ */
 export function viewer(agents: Agents, id: string) {
   let screen = "";
   let closed = false;
@@ -76,5 +80,10 @@ export function viewer(agents: Agents, id: string) {
       closed = true;
     },
   );
-  return { attachment, text: () => screen, closed: () => closed };
+  return {
+    attachment,
+    text: () => screen,
+    unwrappedText: () => stripAnsi(screen).replace(/[\r\n]/g, ""),
+    closed: () => closed,
+  };
 }
