@@ -1,9 +1,18 @@
-import { agentsApi, type Session, type SessionList, TASK_PROMPT_MAX, type TaskProposal, workspaceApi } from "@trackwall/protocol";
+import {
+  agentsApi,
+  countLabel,
+  type Session,
+  type SessionList,
+  TASK_PROMPT_MAX,
+  type TaskProposal,
+  workspaceApi,
+} from "@trackwall/protocol";
 import { BellRing, GitBranch, Lightbulb, Play, Plus, Square, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { StatusLabel } from "@/components/StatusLabel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
@@ -16,12 +25,13 @@ import {
   entrySession,
   findEntry,
   type SessionEntry,
+  type SessionRow,
   type SessionSelection,
-  sessionEntries,
+  sessionRows,
 } from "@/lib/session-entries";
 import { gridPage, SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
 import { ariaSessionShortcut, SHORTCUT_POSITIONS, sessionShortcut, sessionShortcutLabel } from "@/lib/session-shortcut";
-import { isLive, nextWaiting, sessionStateLabel, waitingCount } from "@/lib/session-state";
+import { isLive, nextWaiting, PROPOSAL_STATUS, sessionStateLabel, waitingCount } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
 import { actionIsNewer, type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
@@ -61,7 +71,8 @@ export function SessionsView({
   // Zakończone zadanie znika od razu, a nie po odświeżeniu listy, żeby panel nie pokazał go znowu bez worktree.
   const [removed, setRemoved] = useState<{ task: string; afterLoad: number }>();
   const hidden = removed && actionIsNewer(removed.afterLoad, sessions.loadNumber) ? removed.task : undefined;
-  const entries = sessions.data ? sessionEntries(sessions.data).filter((e) => e.kind !== "task" || e.task.id !== hidden) : [];
+  const rows = sessions.data ? sessionRows({ ...sessions.data, tasks: sessions.data.tasks.filter((t) => t.id !== hidden) }) : [];
+  const entries = rows.map((r) => r.entry);
   const current = findEntry(entries, selected);
   const show = (id: string) => onSelect({ kind: "session", id });
   const next = nextWaiting(list, entrySession(current)?.id);
@@ -111,13 +122,13 @@ export function SessionsView({
               No sessions yet. Give the agent a task or start Copilot CLI in a repo from your projects folder.
             </p>
           )}
-          {entries.map((entry, i) => (
+          {rows.map((row, i) => (
             <SessionListItem
-              key={entryId(entry)}
-              entry={entry}
+              key={entryId(row.entry)}
+              row={row}
               position={i + 1}
-              active={current !== undefined && entryId(entry) === entryId(current)}
-              onSelect={() => onSelect(entrySelection(entry))}
+              active={current !== undefined && entryId(row.entry) === entryId(current)}
+              onSelect={() => onSelect(entrySelection(row.entry))}
             />
           ))}
         </nav>
@@ -161,19 +172,50 @@ export function SessionsView({
   );
 }
 
+/** Indent per tree level; deeper rows do not move further, so the repo name still fits in the panel. */
+const INDENT = ["", "ml-4", "ml-8", "ml-12"] as const;
+
+/**
+ * A list row: an entry indented under the session that proposed it, with a line along the children of one main session.
+ * A session or task that delegated work has a “main” badge with the number of entries under it.
+ */
 function SessionListItem({
-  entry,
+  row,
   position,
   active,
   onSelect,
 }: {
-  entry: SessionEntry;
+  row: SessionRow;
   position: number;
   active: boolean;
   onSelect: () => void;
 }) {
-  if (entry.kind === "proposal")
-    return <ProposalListItem proposal={entry.proposal} position={position} active={active} onSelect={onSelect} />;
+  const { entry, depth } = row;
+  return (
+    <div className={cn(INDENT[Math.min(depth, INDENT.length - 1)], depth > 0 && "border-l pl-1")}>
+      {entry.kind === "proposal" ? (
+        <ProposalListItem proposal={entry.proposal} position={position} active={active} onSelect={onSelect} />
+      ) : (
+        <StartedListItem entry={entry} delegated={row.children} position={position} active={active} onSelect={onSelect} />
+      )}
+    </div>
+  );
+}
+
+function StartedListItem({
+  entry,
+  delegated,
+  position,
+  active,
+  onSelect,
+}: {
+  entry: Exclude<SessionEntry, { kind: "proposal" }>;
+  /** Tasks and proposals directly under this entry. */
+  delegated: number;
+  position: number;
+  active: boolean;
+  onSelect: () => void;
+}) {
   const { session } = entry;
   const task = entry.kind === "task" ? entry.task : undefined;
   return (
@@ -191,6 +233,11 @@ function SessionListItem({
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate text-sm font-medium">{task?.repo ?? session?.repo}</span>
+          {delegated > 0 && (
+            <Badge
+              aria-label={`main session, ${countLabel(delegated, { one: "task or proposal", other: "tasks and proposals" })} under it`}
+            >{`main · ${delegated}`}</Badge>
+          )}
           {session?.needsAttention && <BellRing className="text-warning size-3.5 shrink-0" aria-label="waiting for you" />}
         </span>
         {task && <TaskLine task={task} />}
@@ -243,7 +290,7 @@ function ProposalListItem({
         </span>
         <span className="text-muted-foreground truncate text-xs">{proposal.title}</span>
         <span className="text-xs">
-          <StatusLabel tone="warning" label="waiting for your decision" />
+          <StatusLabel {...PROPOSAL_STATUS} />
         </span>
       </span>
     </button>
