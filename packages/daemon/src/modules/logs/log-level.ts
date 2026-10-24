@@ -3,7 +3,7 @@ import type { LogLevel } from "@trackwall/protocol";
 /**
  * Record level from the line text (§4.2), until there is an ECS parser. What counts are upper-case words, as in Spring,
  * Maven and Gradle logs (`ERROR`, `[WARNING]`), `error:` / `warning:` at the start of a line as in rustc, `npm ERR!` /
- * `npm error`, and compiler diagnostics with a file location (javac `Foo.java:10: error:`, tsc
+ * `npm error`, Vite's `Internal server error:`, and compiler diagnostics with a file location (javac `Foo.java:10: error:`, tsc
  * `a.ts(3,5): error TS2322:`, kotlinc `e: file:///a/App.kt:3:5`). The stream does not decide: many tools write ordinary
  * progress to stderr. The task prefix mise puts before the lines of dependencies (`[build] `) does not change the level.
  */
@@ -18,7 +18,7 @@ const RULES: readonly [LogLevel, RegExp][] = [
   [
     "error",
     new RegExp(
-      String.raw`\b(${ERROR_WORDS})\b|\bERR!|^\s*([Ee]rror|[Ff]atal)\b|:\d+(:\d+)?: error:|\(\d+,\d+\): error TS\d+|^e${KOTLINC}|^npm error\b`,
+      String.raw`\b(${ERROR_WORDS})\b|\bERR!|^\s*([Ee]rror|[Ff]atal)\b|:\d+(:\d+)?: error:|\(\d+,\d+\): error TS\d+|^e${KOTLINC}|^npm error\b|\bInternal server error:`,
     ),
   ],
   ["warn", new RegExp(String.raw`\b(${WARN_WORDS})\b|^\s*[Ww]arn(ing)?\b|:\d+(:\d+)?: warning:|^w${KOTLINC}|^npm warn\b`)],
@@ -33,6 +33,8 @@ const RULES: readonly [LogLevel, RegExp][] = [
 export const LEVEL_TAG = new RegExp(String.raw`^(?:\[(?:${ERROR_WORDS}|${WARN_WORDS})\]|npm (?:ERR!|error|warn))`);
 
 const LEVEL_WORDS = `${ERROR_WORDS}|${WARN_WORDS}|${OTHER_WORDS}`;
+/** A Maven-style level tag of any level at the start of a line (`[INFO] `, `[ERROR] `). */
+export const BRACKETED_LEVEL = new RegExp(String.raw`^\[(?:${LEVEL_WORDS})\] `);
 /**
  * `[name] ` at the start of a line, unless it is a level: an upper-case level word alone or with a thread or logger
  * (`[ERROR]`, `[ERROR:main]`, `[WARN/worker]`) or a lower-case one alone, as in sbt (`[info]`). A mise task named

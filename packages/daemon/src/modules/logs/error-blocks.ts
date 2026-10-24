@@ -1,15 +1,15 @@
 import type { LogErrorLevel, LogRecord } from "@trackwall/protocol";
-import { LEVEL_TAG, withoutTaskPrefix } from "./log-level.ts";
+import { BRACKETED_LEVEL, LEVEL_TAG, withoutTaskPrefix } from "./log-level.ts";
 
 /**
- * Errors in the records of one source (§4.2, ADR-42): a record at the level threshold or an exception header starts
- * a block, and the lines that belong to it extend it: Java and Node stack frames, `Caused by:` and `Suppressed:`, an
+ * Errors in the records of one source (§4.2, ADR-42): a record at the level threshold, an exception header, a
+ * `Caused by:`, a failed Gradle test or the start of a report starts a block, and the lines that belong to it extend it: Java and Node stack frames, `Caused by:` and `Suppressed:`, an
  * exception header under a logger's `ERROR` line, indented lines (context of javac, tsc and Vite diagnostics), blank
  * lines, a line of asterisks, Node's `Require stack:` and further lines with the same level tag and no timestamp (Maven
- * `[ERROR]`, `npm error`). Whatever starts an error (an exception header, a report) under a warning starts an error of
+ * `[ERROR]`, `npm error`). Whatever starts an error (an `error` record, an exception header, `Caused by:`, a report) under a warning starts an error of
  * its own, so an error does not depend on the requested level threshold. The Spring "APPLICATION FAILED TO START"
  * report and the Gradle `FAILURE:` report are regions that last until their end, because their paragraphs are not
- * indented. Only records of the same run and stream extend a block: stdout and stderr interleave arbitrarily.
+ * indented, or until a line of the logger or build tool that follows them (`REPORT_END`) or another region's start. Only records of the same run and stream extend a block: stdout and stderr interleave arbitrarily.
  */
 
 /** A Java (`\tat a.B.c(B.java:1)`) or Node (`    at fn (file.js:1:2)`) stack frame. */
@@ -18,8 +18,10 @@ export const STACK_FRAME = /^\s+at\s/;
 const FRAMES_TAIL = /^\s*\.\.\. \d+ (more|common frames omitted)\s*$/;
 /** `Caused by:` in a Java stack trace, also indented under a `Suppressed:` exception. */
 const CAUSE = /^\s*Caused by: /;
-/** `Caused by:` of the main chain, which Java prints at column 0; group 1 is the cause's exception. */
-const ROOT_CAUSE = /^Caused by: (.+)$/;
+/** `Caused by:` and the cause's exception (group 1). */
+const CAUSE_PARTS = /^\s*Caused by: (.+)$/;
+/** A failed test in Gradle's test output (`OrdersTest > rejects FAILED`); its indented lines are the exception. */
+const TEST_FAILED = /^\S.* > .+ FAILED\s*$/;
 /** `Suppressed:` in a Java stack trace: part of the error, but not its cause. */
 const SUPPRESSED = /^\s*Suppressed: /;
 /**
@@ -37,7 +39,7 @@ const BANNER = /^\*{10,}\s*$/;
  * A line that is no longer part of a report: the logger's next event (a date or a time at the start of the line), or
  * the build tool that ran the app (a Maven level tag, a Gradle `> Task`).
  */
-const REPORT_END = /^\[?(\d{4}-\d{2}-\d{2}[T ])?\d{2}:\d{2}:\d{2}|^\[(?:INFO|WARNING|WARN|ERROR|DEBUG)\] |^> Task /;
+const REPORT_END = [/^\[?(\d{4}-\d{2}-\d{2}[T ])?\d{2}:\d{2}:\d{2}/, BRACKETED_LEVEL, /^> Task /];
 const INDENTED = /^\s+\S/;
 const BLANK = /^\s*$/;
 /** A longer block is closed: a region without its end (process killed mid-report) does not swallow the rest of the log. */
@@ -66,7 +68,7 @@ export interface ErrorBlock {
   readonly first: LogRecord;
   readonly entries: readonly BlockEntry[];
   readonly level: LogErrorLevel;
-  /** The last `Caused by:` or the first exception header in the block. */
+  /** The last `Caused by:` of the main chain (not one under a `Suppressed:` exception) or the first exception header. */
   readonly exception: string | null;
 }
 
@@ -121,13 +123,19 @@ function startLevel(record: LogRecord, line: string, opened: Region | null, minL
   return null;
 }
 
+/**
+ * An indented line at `error` level is the context of a diagnostic (`b.old(Level.SEVERE);` under a javac warning), not
+ * an error of its own; the level alone starts an error only at the start of a line.
+ */
 function startsError(record: LogRecord, line: string, opened: Region | null): boolean {
-  return record.level === "error" || opened !== null || EXCEPTION.test(line) || CAUSE.test(line);
+  if (opened !== null || EXCEPTION.test(line) || CAUSE.test(line) || TEST_FAILED.test(line)) return true;
+  return record.level === "error" && !INDENTED.test(line);
 }
 
 function continues(block: OpenBlock, record: LogRecord, line: string, opened: Region | null): boolean {
   if (block.entries.length >= MAX_BLOCK_RECORDS) return false;
-  if (block.region) return !opened && !REPORT_END.test(line) && !(block.region.phase === "last-paragraph" && BLANK.test(line));
+  if (block.region)
+    return !opened && !REPORT_END.some((pattern) => pattern.test(line)) && !(block.region.phase === "last-paragraph" && BLANK.test(line));
   // What starts an error under a warning is an error of its own, whatever level threshold the request has.
   if (block.level === "warn" && startsError(record, line, opened)) return false;
   if (opened || belongsToAnyBlock(line)) return true;
@@ -159,9 +167,22 @@ function closed(block: OpenBlock): ErrorBlock {
   return { first: start.record, entries, level: block.level, exception: exceptionOf(entries.map((e) => e.line)) };
 }
 
+/**
+ * The cause is the last `Caused by:` of the main chain. Java prints the causes of a `Suppressed:` exception at its
+ * indentation or deeper, while the main chain is less indented (column 0 in Java, deeper in Gradle's test output).
+ */
 function exceptionOf(lines: readonly string[]): string | null {
-  const cause = lines.findLast((l) => ROOT_CAUSE.test(l));
-  if (cause !== undefined) return ROOT_CAUSE.exec(cause)?.[1] ?? null;
+  let cause: string | null = null;
+  let suppressedIndent: number | null = null;
+  for (const line of lines) {
+    const indent = line.length - line.trimStart().length;
+    if (SUPPRESSED.test(line)) suppressedIndent ??= indent;
+    const match = CAUSE_PARTS.exec(line);
+    if (!match || (suppressedIndent !== null && indent >= suppressedIndent)) continue;
+    cause = match[1] ?? null;
+    suppressedIndent = null;
+  }
+  if (cause !== null) return cause;
   for (const line of lines) {
     const match = EXCEPTION.exec(line);
     if (match?.[1]) return match[1];

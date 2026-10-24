@@ -440,6 +440,9 @@ describe("errors from the log", () => {
     write("stdout", logs.open(DEV, "r1", {}), ["[debug-server] Error: boom", "[debug-server]     at main (/repo/index.js:1:1)"].join("\n"));
 
     expect(logs.errors(ALL).errors.map((e) => [e.exception, e.lines.length])).toEqual([["Error: boom", 2]]);
+    // A task named exactly like an sbt level keeps its prefix, so its lines are not recognised.
+    write("stdout", logs.open(BUILD, "r2", {}), "[debug] TypeError: boom");
+    expect(logs.errors({ ...ALL, miseTask: "build" }).errors).toEqual([]);
   });
 
   test("a Spring report without Action ends at the build tool's output, and a Gradle report after it is its own error", () => {
@@ -464,7 +467,10 @@ describe("errors from the log", () => {
     );
     write("stdout", logs.open(BUILD, "r2", {}), [...report, "FAILURE: Build failed with an exception.", "BUILD FAILED in 2s"].join("\n"));
 
+    write("stdout", logs.open(WEB, "r3", {}), [...report, "> Task :bootRun FAILED", "random output"].join("\n"));
+
     expect(logs.errors({ ...ALL, repo: "orders", miseTask: "dev" }).errors.map((e) => e.lines.length)).toEqual([1, 7]);
+    expect(logs.errors({ ...ALL, repo: "web" }).errors.map((e) => e.lines.length)).toEqual([7]);
     expect(logs.errors({ ...ALL, miseTask: "build" }).errors.map((e) => e.lines)).toEqual([
       ["FAILURE: Build failed with an exception.", "BUILD FAILED in 2s"],
       report,
@@ -486,5 +492,53 @@ describe("errors from the log", () => {
       ["error", 2],
       ["warn", 1],
     ]);
+  });
+
+  test("a failed Gradle test is an error whose cause is the last Caused by of its indented chain", () => {
+    const logs = newLogs();
+    write(
+      "stdout",
+      logs.open(BUILD, "r1", {}),
+      [
+        "OrdersTest > rejects FAILED",
+        "    java.lang.IllegalStateException at OrdersTest.java:3",
+        "        Caused by: java.lang.RuntimeException at OrdersTest.java:3",
+        "",
+        "1 test completed, 1 failed",
+      ].join("\n"),
+    );
+
+    expect(logs.errors(ALL).errors.map((e) => [e.exception, e.lines.length])).toEqual([
+      ["java.lang.RuntimeException at OrdersTest.java:3", 3],
+    ]);
+  });
+
+  test("an indented context line with an error word under a compiler warning is not an error", () => {
+    const logs = newLogs();
+    write(
+      "stdout",
+      logs.open(BUILD, "r1", {}),
+      ["/repo/src/A.java:10: warning: [deprecation] old() in B has been deprecated", "        b.old(Level.SEVERE);", "         ^"].join(
+        "\n",
+      ),
+    );
+
+    expect(logs.errors(ALL).errors).toEqual([]);
+    expect(logs.errors({ ...ALL, minLevel: "warn" }).errors.map((e) => [e.level, e.lines.length])).toEqual([["warn", 3]]);
+  });
+
+  test("a Vite internal server error is an error with its indented context", () => {
+    const logs = newLogs();
+    write(
+      "stdout",
+      logs.open(WEB, "r1", {}),
+      [
+        '10:41:22 AM [vite] Internal server error: Failed to resolve import "./x" from "src/App.tsx".',
+        "  Plugin: vite:import-analysis",
+        "  File: /repo/src/App.tsx:1:7",
+      ].join("\n"),
+    );
+
+    expect(logs.errors(ALL).errors.map((e) => e.lines.length)).toEqual([3]);
   });
 });
