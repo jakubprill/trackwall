@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
-import { sessionStateLabel } from "@/lib/session-state";
+import { isLive, sessionStateLabel } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
 import { SessionTerminal } from "./SessionTerminal.tsx";
 import { TabBar } from "./TabBar.tsx";
-import { TaskChanges } from "./TaskChanges.tsx";
+import { TaskChangesView } from "./TaskChangesView.tsx";
 import { TaskRemoval } from "./TaskRemoval.tsx";
 
 type TaskTab = "terminal" | "changes";
@@ -32,10 +32,9 @@ export function TaskPanel({
   onChanged: () => void;
   onRemoved: () => void;
 }) {
-  const live = session !== undefined && session.run.kind !== "exited";
+  const live = session !== undefined && isLive(session);
   const [tab, setTab] = useState<TaskTab>("terminal");
   const [removing, setRemoving] = useState(false);
-  const stop = useAction(() => post(conn, agentsApi.stop, { session: session?.id ?? "" }), onChanged);
   const resume = useAction(
     () => post(conn, agentsApi.resumeTask, { task: task.id }),
     () => {
@@ -47,7 +46,7 @@ export function TaskPanel({
     () => post(conn, agentsApi.openTaskEditor, { task: task.id }),
     () => {},
   );
-  const error = stop.error ?? resume.error ?? openEditor.error;
+  const error = resume.error ?? openEditor.error;
   const shown: TaskTab = session ? tab : "changes";
   const tabs = session
     ? ([
@@ -79,13 +78,11 @@ export function TaskPanel({
         <Button variant="outline" size="sm" onClick={openEditor.run} disabled={openEditor.pending}>
           <Code /> VS Code
         </Button>
-        {live ? (
-          <Button variant="outline" size="sm" onClick={stop.run} disabled={stop.pending || session.run.kind === "stopping"}>
-            <Square /> Zatrzymaj
-          </Button>
+        {session && live ? (
+          <StopButton conn={conn} session={session} onStopped={onChanged} />
         ) : (
           <>
-            <Button variant="outline" size="sm" onClick={resume.run} disabled={resume.pending}>
+            <Button variant="outline" size="sm" onClick={resume.run} disabled={resume.pending || removing}>
               <Play /> Wznów
             </Button>
             <Button variant="outline" size="sm" onClick={() => setRemoving(true)} disabled={removing}>
@@ -101,9 +98,22 @@ export function TaskPanel({
       {shown === "terminal" && session && <SessionTerminal key={session.id} conn={conn} session={session.id} live={live} />}
       {shown === "changes" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <TaskChanges conn={conn} task={task.id} />
+          <TaskChangesView conn={conn} task={task.id} paused={removing} />
         </div>
       )}
+    </>
+  );
+}
+
+/** Zatrzymanie działającej sesji zadania; błąd obok przycisku. */
+function StopButton({ conn, session, onStopped }: { conn: Connection; session: Session; onStopped: () => void }) {
+  const stop = useAction(() => post(conn, agentsApi.stop, { session: session.id }), onStopped);
+  return (
+    <>
+      {stop.error && <span className="text-destructive max-w-xs truncate text-xs">{stop.error}</span>}
+      <Button variant="outline" size="sm" onClick={stop.run} disabled={stop.pending || session.run.kind === "stopping"}>
+        <Square /> Zatrzymaj
+      </Button>
     </>
   );
 }

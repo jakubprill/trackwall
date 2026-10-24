@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Session, Task } from "@trackwall/protocol";
-import { findEntry, sessionEntries } from "../src/lib/session-entries.ts";
+import { entrySelection, findEntry, sessionEntries } from "../src/lib/session-entries.ts";
 
 function session(id: string, startedAt: string, task: string | null = null): Session {
   return {
@@ -15,7 +15,7 @@ function session(id: string, startedAt: string, task: string | null = null): Ses
   };
 }
 
-function task(id: string, createdAt: string, sessionId: string | null): Task {
+function task(id: string, createdAt: string): Task {
   return {
     id,
     repo: "sklep",
@@ -25,15 +25,18 @@ function task(id: string, createdAt: string, sessionId: string | null): Task {
     base: "a".repeat(40),
     worktree: `/home/ja/.trackwall/worktrees/sklep/napraw-${id}`,
     createdAt,
-    session: sessionId,
   };
 }
 
 describe("pozycje widoku Sesje", () => {
   test("zadanie to jedna pozycja z ostatnią sesją, a kolejność idzie od ostatnio uruchomionej", () => {
     const list = {
-      sessions: [session("s3", "2026-10-23T12:00:00Z", "t1"), session("s2", "2026-10-23T11:00:00Z")],
-      tasks: [task("t2", "2026-10-23T11:30:00Z", null), task("t1", "2026-10-23T09:00:00Z", "s3")],
+      sessions: [
+        session("s1", "2026-10-23T10:00:00Z", "t1"),
+        session("s3", "2026-10-23T12:00:00Z", "t1"),
+        session("s2", "2026-10-23T11:00:00Z"),
+      ],
+      tasks: [task("t2", "2026-10-23T11:30:00Z"), task("t1", "2026-10-23T09:00:00Z")],
       worktreesDir: "/home/ja/.trackwall/worktrees",
     };
     expect(
@@ -44,11 +47,22 @@ describe("pozycje widoku Sesje", () => {
   test("wybór sesji zadania (z traya albo „Następna czekająca”) wskazuje jej zadanie", () => {
     const entries = sessionEntries({
       sessions: [session("s1", "2026-10-23T12:00:00Z", "t1")],
-      tasks: [task("t1", "2026-10-23T09:00:00Z", "s1")],
+      tasks: [task("t1", "2026-10-23T09:00:00Z")],
       worktreesDir: "/home/ja/.trackwall/worktrees",
     });
     expect(findEntry(entries, { kind: "session", id: "s1" })).toMatchObject({ kind: "task", task: { id: "t1" } });
     expect(findEntry(entries, { kind: "new" })).toBeUndefined();
     expect(findEntry(entries, { kind: "task", id: "nieznane" })).toBe(entries[0]);
+    expect(findEntry(entries, undefined)).toBe(entries[0]);
+  });
+
+  test("wybór z pozycji listy wskazuje zadanie, a nie jego sesję", () => {
+    const [entry] = sessionEntries({
+      sessions: [session("s1", "2026-10-23T12:00:00Z", "t1")],
+      tasks: [task("t1", "2026-10-23T09:00:00Z")],
+      worktreesDir: "/home/ja/.trackwall/worktrees",
+    });
+    if (!entry) throw new Error("brak pozycji");
+    expect(entrySelection(entry)).toEqual({ kind: "task", id: "t1" });
   });
 });

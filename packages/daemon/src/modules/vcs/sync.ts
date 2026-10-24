@@ -1,5 +1,5 @@
 import type { SyncResult, SyncSkipReason } from "@trackwall/protocol";
-import { type GitNetwork, git, revParse } from "./git.ts";
+import { type GitNetwork, git, knownDefaultBranch, revParse } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { parseStatus } from "./parse.ts";
 
@@ -37,15 +37,7 @@ export async function syncRepo(dir: string): Promise<SyncResult> {
  * stara wersja nadal istnieje, daemon nie wykryje bez pytania serwera przy każdej synchronizacji.
  */
 async function defaultBranch(dir: string, remote: string, network: GitNetwork): Promise<string | undefined> {
-  const prefix = `refs/remotes/${remote}/`;
-  const read = async () => {
-    const ref = await git(dir, ["symbolic-ref", "--quiet", `${prefix}HEAD`]).then(
-      ({ stdout }) => stdout.toString("utf8").trim(),
-      () => "",
-    );
-    const exists = ref.startsWith(prefix) && (await revParse(dir, ref)) !== undefined;
-    return exists ? ref.slice(prefix.length) : undefined;
-  };
+  const read = () => knownDefaultBranch(dir, remote);
   const known = await read();
   if (known !== undefined) return known;
   try {

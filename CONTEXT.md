@@ -93,10 +93,10 @@ _Unikaj_: status (w polskim tekście), sync (to osobna akcja)
 README i ostatnie commity repo w jednej odpowiedzi; stan repo przychodzi z listy repo. Pliki przeglądane są osobno, zawsze z commita HEAD (ADR-14).
 
 **Worktree** (worktree zadania, `Task.worktree`):
-Osobny katalog roboczy gita dla zadania, na gałęzi zadania, w `worktrees/<repo>/<gałąź bez prefiksu>` w katalogu stanu, poza folderem z projektami (ADR-31). Usuwany tylko na prośbę użytkownika i tylko bez działającej sesji zadania; niezacommitowane zmiany przepadają dopiero po potwierdzeniu.
+Osobny katalog roboczy gita dla zadania, na gałęzi zadania, w `worktrees/<repo>/<gałąź bez prefiksu>` w katalogu stanu, poza folderem z projektami (ADR-31). Liczony z repo i gałęzi (`taskWorktree`), nie zapisywany w `tasks.json`. Usuwany tylko na prośbę użytkownika i tylko bez działającej sesji zadania; niezacommitowane zmiany przepadają dopiero po potwierdzeniu.
 
 **Commit bazowy** (`Task.base`):
-Commit gałęzi domyślnej, od którego wyszła gałąź zadania. Zmiany zadania (`WorktreeChanges`) to katalog roboczy worktree względem niego: commity zadania i niezacommitowane pliki razem.
+Commit gałęzi domyślnej, od którego wyszła gałąź zadania. Zmiany zadania (`TaskChanges`) to katalog roboczy worktree względem niego: commity zadania i niezacommitowane pliki razem.
 
 **Karta** (karta repo, `RepoCard`):
 Fakty o repo wyciągnięte deterministycznie z plików buildu i konfiguracji w commicie HEAD: pliki buildu, co repo udostępnia (`provides`), czego używa (`consumes`), wymagane narzędzia, mechanizmy i problemy, każdy fakt z dowodem. Zależy tylko od commita, więc liczy się raz na commit (ADR-25). LLM dopisze tylko opis i propozycje połączeń oznaczone `origin: 'llm'` (ADR-6). W UI zakładka „Karta” w szczegółach repo.
@@ -176,8 +176,12 @@ Grupa procesów z `runtime.json`, której daemon już nie nadzoruje (np. po awar
 ## Agenci
 
 **Zadanie** (`Task`, `TaskId`):
-Praca jednego agenta nad jednym repo: polecenie, worktree, gałąź `trackwall/<skrót>` od gałęzi domyślnej i sesja; docelowo także budżet, dzierżawy i podsumowanie. Dziś (ADR-31) tworzy je widok Sesje, zapisuje `tasks.json`, a sesję zadania można zatrzymać i wznowić. W kodzie i API `task` znaczy zawsze zadanie.
+Praca jednego agenta nad jednym repo: polecenie, worktree, gałąź `trackwall/<skrót>` od gałęzi domyślnej i sesje; docelowo także budżet, dzierżawy i podsumowanie. Dziś (ADR-31) tworzy je widok Sesje, zapisuje `tasks.json`, a sesję zadania można zatrzymać i wznowić. Zadanie nie wskazuje sesji; to sesja ma `Session.task`. W kodzie i API `task` znaczy zawsze zadanie.
 _Unikaj_: job; „task” w polskim tekście (myli się z taskiem mise)
+
+**Zakończenie zadania** (`removeTask`, „Zakończ zadanie” w UI):
+Usunięcie worktree zadania, a do wyboru także jego gałęzi. Tylko bez działającej sesji; to, co by przepadło (niezacommitowane pliki, commity z odłączonego HEAD, a z gałęzią także commity zadania), daemon wymienia w odmowie `unsaved_changes`, a przepada ono dopiero po potwierdzeniu. Pliki ignorowane przez gita przepadają zawsze.
+_Unikaj_: usunięcie zadania (zadanie znika z listy, ale gałąź może zostać)
 
 **Polecenie** (`Task.prompt`):
 Treść zadania dla agenta, wpisana w widoku Sesje; Copilot CLI dostaje ją jako pierwszą wiadomość sesji zadania (`--interactive`).

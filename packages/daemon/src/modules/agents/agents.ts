@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { copilotMcpServers, type RunState, type Session, type SessionList, type Task, type WorktreeChanges } from "@trackwall/protocol";
+import { copilotMcpServers, type RunState, type Session, type SessionList, type Task, type TaskChanges } from "@trackwall/protocol";
 import { DomainError, SpawnFailure } from "../../errors.ts";
 import { findCopilot } from "./copilot-command.ts";
 import type { CopilotHookEvent } from "./copilot-hook-record.ts";
@@ -93,7 +93,7 @@ export class Agents {
     this.#tasks = new AgentTasks({
       vcs: deps.vcs,
       repos: deps.repos,
-      file: new TaskFile(join(deps.home, TASKS_FILE), worktreesDir, deps.log),
+      file: new TaskFile(join(deps.home, TASKS_FILE), deps.log),
       worktreesDir,
       openEditor: deps.openEditor,
       log: deps.log,
@@ -106,8 +106,7 @@ export class Agents {
   }
 
   sessions(): SessionList {
-    const sessions = this.#views();
-    return { sessions, tasks: this.#tasks.list(sessions), worktreesDir: this.#worktreesDir };
+    return { sessions: this.#views(), tasks: this.#tasks.list(), worktreesDir: this.#worktreesDir };
   }
 
   async start(repo: string): Promise<Session> {
@@ -122,7 +121,7 @@ export class Agents {
     return this.#tasks.resume(id);
   }
 
-  taskChanges(id: string): Promise<WorktreeChanges> {
+  taskChanges(id: string): Promise<TaskChanges> {
     return this.#tasks.changes(id);
   }
 
@@ -130,9 +129,8 @@ export class Agents {
     this.#tasks.openEditor(id);
   }
 
-  async removeTask(id: string, keepBranch: boolean, discardChanges: boolean): Promise<SessionList> {
-    await this.#tasks.remove(id, keepBranch, discardChanges);
-    return this.sessions();
+  removeTask(id: string, keepBranch: boolean, discardChanges: boolean): Promise<void> {
+    return this.#tasks.remove(id, keepBranch, discardChanges);
   }
 
   /** Copilot CLI w `cwd` (korzeń repo albo worktree zadania `task`) z argumentami przed argumentami sesji. */

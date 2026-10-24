@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Endpoint } from "./api.ts";
+import { Done, type Endpoint } from "./api.ts";
 import { RunState } from "./procs.ts";
 import { TaskStateChange } from "./task-state.ts";
 import { RepoId } from "./workspace.ts";
@@ -58,14 +58,13 @@ export const Task = z.object({
   worktree: z.string(),
   /** ISO 8601. */
   createdAt: z.string(),
-  /** Ostatnia sesja zadania w tym działaniu daemona; `null` po restarcie daemona albo po zamknięciu sesji. */
-  session: SessionId.nullable(),
 });
 export type Task = z.infer<typeof Task>;
 
 /**
  * Najnowsze sesje na górze; sesje zakończone zostają na liście, dopóki użytkownik ich nie zamknie (`dismiss`).
- * Zadania (od najnowszego) zostają, dopóki użytkownik ich nie usunie, także po restarcie daemona.
+ * Zadania (od najnowszego) zostają, dopóki użytkownik ich nie zakończy, także po restarcie daemona; sesja zadania to
+ * najnowsza sesja z jego `Session.task` (po restarcie daemona żadnej).
  */
 export const SessionList = z.object({
   sessions: z.array(Session),
@@ -88,7 +87,7 @@ export type ChangedFile = z.infer<typeof ChangedFile>;
  * Zmiany zadania: katalog roboczy worktree (z nowymi plikami, bez ignorowanych) względem commita bazowego, czyli
  * commity zadania i to, czego agent jeszcze nie zacommitował, razem.
  */
-export const WorktreeChanges = z.object({
+export const TaskChanges = z.object({
   files: z.array(ChangedFile),
   /** Zunifikowany diff, ucięty do 1 MB (`truncated`). */
   patch: z.string(),
@@ -98,7 +97,7 @@ export const WorktreeChanges = z.object({
   /** Wpisy `git status`: zmienione, nowe i usunięte pliki, których nie ma w żadnym commicie. */
   uncommitted: z.number().int().nonnegative(),
 });
-export type WorktreeChanges = z.infer<typeof WorktreeChanges>;
+export type TaskChanges = z.infer<typeof TaskChanges>;
 
 function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
   return { path: `/api/agents/${action}`, request, data };
@@ -119,17 +118,14 @@ export const agentsApi = {
   createTask: endpoint("create-task", z.object({ repo: RepoId, prompt: TaskPrompt }).strict(), Task),
   /** Nowa sesja zadania, które nie ma działającej sesji: Copilot CLI wznawia rozmowę zadania (`--resume`). */
   resumeTask: endpoint("resume-task", TaskRequest, Task),
-  taskChanges: endpoint("task-changes", TaskRequest, WorktreeChanges),
-  openTaskEditor: endpoint("open-task-editor", TaskRequest, z.null()),
+  taskChanges: endpoint("task-changes", TaskRequest, TaskChanges),
+  openTaskEditor: endpoint("open-task-editor", TaskRequest, Done),
   /**
-   * Usuwa worktree zadania, a bez `keepBranch` także gałąź. Zmiany, które by przepadły (niezacommitowane pliki, a bez
-   * `keepBranch` także commity zadania), daemon usuwa tylko z `discardChanges`; inaczej `unsaved_changes`.
+   * Zakończenie zadania: usuwa worktree, a bez `keepBranch` także gałąź. Zmiany, które by przepadły (niezacommitowane
+   * pliki i commity spoza gałęzi, a bez `keepBranch` także commity zadania), daemon usuwa tylko z `discardChanges`;
+   * inaczej `unsaved_changes`.
    */
-  removeTask: endpoint(
-    "remove-task",
-    z.object({ task: TaskId, keepBranch: z.boolean(), discardChanges: z.boolean() }).strict(),
-    SessionList,
-  ),
+  removeTask: endpoint("remove-task", z.object({ task: TaskId, keepBranch: z.boolean(), discardChanges: z.boolean() }).strict(), Done),
 };
 
 /** Ścieżka WebSocketu terminala sesji: `/ws/pty/<sesja>` (§5.2). */

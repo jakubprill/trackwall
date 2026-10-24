@@ -5,11 +5,12 @@ import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { relativeTime, twoDigits } from "@/lib/format";
-import { entryId, findEntry, type SessionEntry, type SessionSelection, sessionEntries } from "@/lib/session-entries";
-import { nextWaiting, sessionStateLabel, waitingCount } from "@/lib/session-state";
+import { entryId, entrySelection, findEntry, type SessionEntry, type SessionSelection, sessionEntries } from "@/lib/session-entries";
+import { isLive, nextWaiting, sessionStateLabel, waitingCount } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
@@ -34,7 +35,11 @@ export function SessionsView({
   onSelect: (selection: SessionSelection) => void;
 }) {
   const list = sessions.data?.sessions ?? [];
-  const entries = sessions.data ? sessionEntries(sessions.data) : [];
+  // Zakończone zadanie znika od razu, a nie po odświeżeniu listy, żeby panel nie pokazał go znowu bez worktree.
+  // Pytanie wysłane jeszcze przed zakończeniem może je zwrócić, więc liczy się dopiero odpowiedź na późniejsze.
+  const [removed, setRemoved] = useState<{ task: string; sentLoads: number }>();
+  const hidden = removed && (sessions.loadNumber ?? 0) <= removed.sentLoads ? removed.task : undefined;
+  const entries = sessions.data ? sessionEntries(sessions.data).filter((e) => e.kind !== "task" || e.task.id !== hidden) : [];
   const current = findEntry(entries, selected);
   const show = (id: string) => onSelect({ kind: "session", id });
   const next = nextWaiting(list, current?.session?.id);
@@ -69,9 +74,7 @@ export function SessionsView({
               entry={entry}
               position={i + 1}
               active={current !== undefined && entryId(entry) === entryId(current)}
-              onSelect={() =>
-                onSelect(entry.kind === "task" ? { kind: "task", id: entry.task.id } : { kind: "session", id: entry.session.id })
-              }
+              onSelect={() => onSelect(entrySelection(entry))}
             />
           ))}
         </nav>
@@ -101,6 +104,7 @@ export function SessionsView({
             session={current.session}
             onChanged={sessions.reload}
             onRemoved={() => {
+              setRemoved({ task: current.task.id, sentLoads: sessions.sentLoads() });
               onSelect(undefined);
               sessions.reload();
             }}
@@ -179,7 +183,7 @@ function SessionPanel({
   onChanged: () => void;
   onClosed: () => void;
 }) {
-  const live = session.run.kind !== "exited";
+  const live = isLive(session);
   const stop = useAction(() => post(conn, agentsApi.stop, { session: session.id }), onChanged);
   const dismiss = useAction(
     () => post(conn, agentsApi.dismiss, { session: session.id }),
@@ -239,11 +243,11 @@ function NewSession({
   const [prompt, setPrompt] = useState("");
   const chosen = repo ?? repos.data?.repos[0]?.id;
   const createTask = useAction(
-    () => post(conn, agentsApi.createTask, { repo: chosen ?? "", prompt }),
+    (repo: string) => post(conn, agentsApi.createTask, { repo, prompt }),
     (task) => onStarted({ kind: "task", id: task.id }),
   );
   const start = useAction(
-    () => post(conn, agentsApi.start, { repo: chosen ?? "" }),
+    (repo: string) => post(conn, agentsApi.start, { repo }),
     (session) => onStarted({ kind: "session", id: session.id }),
   );
   const pending = createTask.pending || start.pending;
@@ -275,28 +279,29 @@ function NewSession({
               </option>
             ))}
           </select>
-          <textarea
+          <Textarea
             aria-label="Polecenie dla agenta"
             placeholder="Co agent ma zrobić, np. „Dodaj walidację adresu e-mail w formularzu rejestracji i test”"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             maxLength={8000}
             rows={5}
-            className="placeholder:text-muted-foreground border-input dark:bg-muted focus-visible:border-ring focus-visible:ring-ring/50 rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-[3px]"
           />
-          <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={createTask.run} disabled={pending || !chosen || prompt.trim() === ""}>
-              <GitBranch /> Utwórz zadanie
-            </Button>
-            <Button variant="outline" onClick={start.run} disabled={pending || !chosen}>
-              <Play /> Sesja w repo bez zadania
-            </Button>
-            {onCancel && (
-              <Button variant="ghost" onClick={onCancel}>
-                Anuluj
+          {chosen && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button onClick={() => createTask.run(chosen)} disabled={pending || prompt.trim() === ""}>
+                <GitBranch /> Utwórz zadanie
               </Button>
-            )}
-          </div>
+              <Button variant="outline" onClick={() => start.run(chosen)} disabled={pending}>
+                <Play /> Sesja w repo bez zadania
+              </Button>
+              {onCancel && (
+                <Button variant="ghost" onClick={onCancel}>
+                  Anuluj
+                </Button>
+              )}
+            </div>
+          )}
           <p className="text-muted-foreground max-w-prose text-xs">
             Copilot CLI pyta o zaufanie w każdym nowym folderze, więc też w każdym worktree. Żeby nie pytał przy każdym zadaniu, dopisz{" "}
             <span className="text-foreground font-mono">{worktreesDir}</span> do <span className="font-mono">trustedFolders</span> w{" "}

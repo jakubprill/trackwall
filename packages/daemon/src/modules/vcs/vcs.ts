@@ -1,22 +1,14 @@
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { Commit, FileContent, RepoStatusOk, SyncResult, TreeEntry, WorktreeChanges } from "@trackwall/protocol";
+import type { Commit, FileContent, RepoStatusOk, SyncResult, TreeEntry } from "@trackwall/protocol";
 import { git } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { KeyedQueue } from "./keyed-queue.ts";
 import { type GitObject, isBinary, LOG_FORMAT, parseBlobs, parseLog, parseObjects, parseStatus, parseTree } from "./parse.ts";
 import { remoteAddress } from "./remote.ts";
 import { syncRepo } from "./sync.ts";
-import {
-  addWorktree,
-  defaultBase,
-  deleteBranch,
-  pendingWork,
-  removeWorktree,
-  type WorktreeBase,
-  type WorktreeBranch,
-  worktreeChanges,
-} from "./worktree.ts";
+import { addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
+import { worktreeChanges } from "./worktree-changes.ts";
 
 /**
  * Moduł `vcs` (§4, §4.5): lokalny adapter gita. Zna katalogi, nie identyfikatory repo; te tłumaczy `workspace`.
@@ -32,7 +24,6 @@ export class Vcs {
    * same refy i jeden pada.
    */
   private readonly syncing = new KeyedQueue();
-  /** Zmiany worktree w jednym repo po kolei: dwa równoczesne `worktree add` walczą o blokady w `.git`. */
   private readonly worktreeOps = new KeyedQueue();
 
   async status(dir: string): Promise<RepoStatusOk> {
@@ -57,28 +48,28 @@ export class Vcs {
   }
 
   /** Gałąź domyślna i jej commit, bez łączenia z serwerem (ADR-31). */
-  defaultBase(dir: string): Promise<WorktreeBase> {
-    return defaultBase(dir);
+  readonly defaultBase = defaultBase;
+  readonly pendingWork = pendingWork;
+  readonly worktreeChanges = worktreeChanges;
+
+  addWorktree(repoDir: string, path: string, branch: string, commit: string): Promise<void> {
+    return this.serialWorktreeOp(repoDir, () => addWorktree(repoDir, path, branch, commit));
   }
 
-  async addWorktree(repoDir: string, path: string, branch: string, commit: string): Promise<void> {
-    return this.worktreeOps.run(await this.commonDir(repoDir), () => addWorktree(repoDir, path, branch, commit));
+  removeWorktree(repoDir: string, path: string): Promise<void> {
+    return this.serialWorktreeOp(repoDir, () => removeWorktree(repoDir, path));
   }
 
-  async removeWorktree(repoDir: string, path: string): Promise<void> {
-    return this.worktreeOps.run(await this.commonDir(repoDir), () => removeWorktree(repoDir, path));
+  deleteBranch(repoDir: string, branch: string): Promise<void> {
+    return this.serialWorktreeOp(repoDir, () => deleteBranch(repoDir, branch));
   }
 
-  async deleteBranch(repoDir: string, branch: string): Promise<void> {
-    return this.worktreeOps.run(await this.commonDir(repoDir), () => deleteBranch(repoDir, branch));
-  }
-
-  pendingWork(work: WorktreeBranch): Promise<{ uncommitted: number; commits: number }> {
-    return pendingWork(work);
-  }
-
-  worktreeChanges(dir: string, base: string, maxPatchBytes: number): Promise<WorktreeChanges> {
-    return worktreeChanges(dir, base, maxPatchBytes);
+  /**
+   * Zmiany worktree w jednym repo po kolei: dwa równoczesne `worktree add` walczą o blokady w `.git`. Osobno od
+   * synchronizacji, bo fetch trwa minutami, a nie zmienia rejestru worktree ani gałęzi zadań.
+   */
+  private async serialWorktreeOp(repoDir: string, job: () => Promise<void>): Promise<void> {
+    return this.worktreeOps.run(await this.commonDir(repoDir), job);
   }
 
   /** Katalog `.git` wspólny dla repo i jego worktree, po rozwinięciu dowiązań; klucz bez wielkości liter jak dyski Windowsa i macOS. */

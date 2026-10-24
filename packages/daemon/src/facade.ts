@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { vscodeUrl } from "./editor-url.ts";
 import { Agents, type AgentsDeps } from "./modules/agents/agents.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { CardCache } from "./modules/cards/card-cache.ts";
@@ -10,7 +11,6 @@ import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
 import { HOSTING_CLIS, Hosting } from "./modules/vcs/hosting.ts";
 import { Vcs } from "./modules/vcs/vcs.ts";
-import { vscodeUrl } from "./modules/workspace/editor-url.ts";
 import { Workspace } from "./modules/workspace/workspace.ts";
 import { WorkspaceFile } from "./modules/workspace/workspace-file.ts";
 import { groupPlatform } from "./platform/group-platform.ts";
@@ -59,11 +59,12 @@ export interface FacadeOptions {
 
 export function createFacade(o: FacadeOptions): Facade {
   const vcs = new Vcs();
+  const openEditor = (dir: string) => o.openUrl(vscodeUrl(dir));
   const workspace = new Workspace({
     file: new WorkspaceFile(join(o.home, WORKSPACE_FILE)),
     vcs,
     hosting: new Hosting(HOSTING_CLIS),
-    openUrl: o.openUrl,
+    openEditor,
   });
   const logs = new Logs({ dir: join(o.home, LOGS_DIR), maxFileBytes: LOG_FILE_MAX_BYTES, log: o.log });
   const procs = new ProcessGroups({
@@ -87,7 +88,7 @@ export function createFacade(o: FacadeOptions): Facade {
     env: o.userEnv,
     hookCommand: o.hookCommand,
     mcpStdioCommand: o.mcpStdioCommand,
-    openEditor: (dir) => o.openUrl(vscodeUrl(dir)),
+    openEditor,
     log: o.log,
   });
   const graph = new Graph({ cards, workspace });

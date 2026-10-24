@@ -4,7 +4,13 @@
  * Tylko `[a-z0-9-]`, więc nazwa jest poprawną gałęzią gita i katalogiem na Windowsie i macOS bez cytowania.
  */
 
+import { join } from "node:path";
+import { z } from "zod";
+
 export const TASK_BRANCH_PREFIX = "trackwall/";
+
+/** Gałąź zadania; w `tasks.json` tylko taka, bo daemon usuwa ją z `branch -D`, a plik można zmienić ręcznie. */
+export const TaskBranch = z.string().regex(/^trackwall\/[a-z0-9][a-z0-9-]*$/, "gałąź zadania: trackwall/ i [a-z0-9-]");
 /** Krótko: katalog worktree leży w katalogu stanu, a Windows ma limit 260 znaków na całą ścieżkę pliku w repo. */
 const SLUG_MAX = 32;
 const ID_CHARS = 6;
@@ -31,4 +37,12 @@ export function taskSlug(prompt: string, taskId: string): string {
   if (slug === "" && words[0]) slug = words[0].slice(0, SLUG_MAX);
   const suffix = taskId.replaceAll("-", "").slice(0, ID_CHARS);
   return slug === "" ? `zadanie-${suffix}` : `${slug}-${suffix}`;
+}
+
+/**
+ * Worktree zadania: `<katalog worktree>/<repo>/<gałąź bez prefiksu>`. Liczony, a nie zapisywany, więc z `tasks.json`
+ * nie da się wskazać katalogu poza katalogiem worktree (identyfikator repo i gałąź nie mają separatorów ścieżki).
+ */
+export function taskWorktree(worktreesDir: string, repo: string, branch: string): string {
+  return join(worktreesDir, repo, branch.slice(TASK_BRANCH_PREFIX.length));
 }

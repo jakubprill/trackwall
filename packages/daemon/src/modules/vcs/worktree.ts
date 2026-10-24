@@ -1,22 +1,18 @@
-import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { copyFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { realpath, rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { WorktreeChanges } from "@trackwall/protocol";
-import { git, revParse } from "./git.ts";
+import { git, knownDefaultBranch, revParse, symbolicRef } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
-import { parseChangedFiles, parseStatus } from "./parse.ts";
+import { parseStatus } from "./parse.ts";
 
 /**
- * Worktree zadań agentów (§4.4, ADR-31): gałąź zadania w osobnym katalogu roboczym obok repo, jej zmiany względem
- * commita bazowego i usunięcie. Funkcje dostają katalogi; które repo i który worktree, wie moduł `agents`.
+ * Worktree zadań agentów (§4.4, ADR-31): gałąź zadania w osobnym katalogu roboczym (w katalogu stanu daemona),
+ * od czego wychodzi, co przepadłoby przy jej usunięciu i samo usunięcie. Funkcje dostają katalogi; które repo
+ * i który worktree, wie moduł `agents`. Zmiany worktree liczy `worktree-changes.ts`.
  */
 
 /** `worktree add` wypełnia katalog roboczy, a filtr LFS może przy tym pobierać obiekty. */
 const CHECKOUT_TIMEOUT_MS = 5 * 60_000;
-/** `add --all` do indeksu tymczasowego liczy skróty nowych plików; duże wygenerowane pliki trwają. */
-const CHANGES_TIMEOUT_MS = 60_000;
 
 /** Skąd zadanie wychodzi: gałąź domyślna repo (albo wybrana, gdy domyślnej nie ma) i jej commit. */
 export interface WorktreeBase {
@@ -31,11 +27,9 @@ export interface WorktreeBase {
  */
 export async function defaultBase(dir: string): Promise<WorktreeBase> {
   const remote = mainRemote(await readConfig(dir));
-  const prefix = remote && `refs/remotes/${remote.name}/`;
-  const remoteHead = prefix ? await symbolicRef(dir, `${prefix}HEAD`) : undefined;
-  if (prefix && remoteHead?.startsWith(prefix)) {
-    const branch = remoteHead.slice(prefix.length);
-    const commit = (await revParse(dir, `refs/heads/${branch}`)) ?? (await revParse(dir, remoteHead));
+  const branch = remote && (await knownDefaultBranch(dir, remote.name));
+  if (remote && branch) {
+    const commit = (await revParse(dir, `refs/heads/${branch}`)) ?? (await revParse(dir, `refs/remotes/${remote.name}/${branch}`));
     if (commit) return { branch, commit };
   }
   const head = await revParse(dir, "HEAD");
@@ -44,28 +38,46 @@ export async function defaultBase(dir: string): Promise<WorktreeBase> {
   return { branch: current?.startsWith("refs/heads/") ? current.slice("refs/heads/".length) : null, commit: head };
 }
 
-async function symbolicRef(dir: string, ref: string): Promise<string | undefined> {
-  return git(dir, ["symbolic-ref", "--quiet", ref]).then(
-    ({ stdout }) => stdout.toString("utf8").trim() || undefined,
-    () => undefined,
-  );
-}
-
 /** Nowa gałąź `branch` od `commit` i jej worktree w `path`; git odmawia, gdy gałąź albo katalog już istnieją. */
 export async function addWorktree(repoDir: string, path: string, branch: string, commit: string): Promise<void> {
   await git(repoDir, ["worktree", "add", "--quiet", "-b", branch, path, commit], { timeoutMs: CHECKOUT_TIMEOUT_MS });
 }
 
 /**
- * Usuwa worktree razem z niezacommitowanymi zmianami (`--force`): wołający sprawdził `pendingWork` albo użytkownik
- * potwierdził utratę. Katalog, którego już nie ma (usunięty ręcznie), znika tylko z rejestru worktree w repo.
+ * Usuwa worktree razem z niezacommitowanymi i ignorowanymi plikami (`--force`): wołający sprawdził `pendingWork`
+ * albo użytkownik potwierdził utratę. Git zdejmuje rejestrację worktree przed kasowaniem plików, więc usunięcie
+ * przerwane przez plik trzymany przez inny proces (Windows) zostawia katalog, który nie jest już worktree; taki
+ * katalog, tak jak niezarejestrowany, kasujemy sami, a rejestrację po katalogu usuniętym ręcznie czyści `prune`.
+ * `path` musi leżeć w katalogu worktree daemona, bo jest kasowany bez pytania gita.
  */
 export async function removeWorktree(repoDir: string, path: string): Promise<void> {
-  if (!existsSync(path)) {
-    await git(repoDir, ["worktree", "prune"]);
-    return;
+  if (existsSync(path) && (await isRegistered(repoDir, path))) {
+    try {
+      await git(repoDir, ["worktree", "remove", "--force", path], { timeoutMs: CHECKOUT_TIMEOUT_MS });
+    } catch (err) {
+      if (await isRegistered(repoDir, path)) throw err;
+    }
   }
-  await git(repoDir, ["worktree", "remove", "--force", path], { timeoutMs: CHECKOUT_TIMEOUT_MS });
+  await rm(path, { recursive: true, force: true, maxRetries: 3 });
+  await git(repoDir, ["worktree", "prune"]);
+}
+
+/** Czy `path` jest worktree repo według `git worktree list`. */
+async function isRegistered(repoDir: string, path: string): Promise<boolean> {
+  const { stdout } = await git(repoDir, ["worktree", "list", "--porcelain"]);
+  const target = await canonical(path);
+  const listed = stdout
+    .toString("utf8")
+    .split("\n")
+    .filter((line) => line.startsWith("worktree "));
+  for (const line of listed) if ((await canonical(line.slice("worktree ".length))) === target) return true;
+  return false;
+}
+
+/** Ścieżka do porównania: po rozwinięciu dowiązań (`/var` i `/private/var` na macOS), bez wielkości liter na Windowsie i macOS. */
+async function canonical(path: string): Promise<string> {
+  const real = await realpath(path).catch(() => resolve(path));
+  return process.platform === "linux" ? real : real.toLowerCase();
 }
 
 /** Usuwa gałąź niezależnie od tego, czy jest scalona; gałęzi, której już nie ma, nie ma czego usuwać. */
@@ -82,64 +94,38 @@ export interface WorktreeBranch {
   base: string;
 }
 
-/**
- * Co przepadłoby przy usunięciu zadania: wpisy `git status` worktree (każdy nowy plik osobno; worktree usunięty
- * ręcznie nie ma żadnych) i commity gałęzi zadania od `base` (gałęzi usuniętej ręcznie nie ma czego liczyć).
- */
-export async function pendingWork(work: WorktreeBranch): Promise<{ uncommitted: number; commits: number }> {
-  const branchRef = `refs/heads/${work.branch}`;
-  const [uncommitted, commits] = await Promise.all([
-    existsSync(work.worktree) ? uncommittedCount(work.worktree) : 0,
-    revParse(work.repoDir, branchRef).then((tip) => (tip ? commitCount(work.repoDir, work.base, branchRef) : 0)),
-  ]);
-  return { uncommitted, commits };
+/** Co przepadłoby przy usunięciu worktree, a bez gałęzi także przy usunięciu gałęzi. */
+export interface PendingWork {
+  /** Wpisy `git status` worktree, każdy nowy plik osobno. */
+  uncommitted: number;
+  /** Commity HEAD worktree, których nie ma na żadnej gałęzi ani tagu (odłączony HEAD): znikają razem z worktree. */
+  strayCommits: number;
+  /** Commity gałęzi od `base`. */
+  branchCommits: number;
 }
 
-async function uncommittedCount(dir: string): Promise<number> {
+/** Worktree usunięty ręcznie (albo już nie zarejestrowany) nie ma czego stracić; gałąź usunięta ręcznie też nie. */
+export async function pendingWork(work: WorktreeBranch): Promise<PendingWork> {
+  const branchRef = `refs/heads/${work.branch}`;
+  const registered = existsSync(work.worktree) && (await isRegistered(work.repoDir, work.worktree));
+  const [uncommitted, strayCommits, branchCommits] = await Promise.all([
+    registered ? uncommittedCount(work.worktree) : 0,
+    registered ? count(work.worktree, ["HEAD", "--not", "--branches", "--tags", "--remotes"]) : 0,
+    revParse(work.repoDir, branchRef).then((tip) => (tip ? commitCount(work.repoDir, work.base, branchRef) : 0)),
+  ]);
+  return { uncommitted, strayCommits, branchCommits };
+}
+
+export async function uncommittedCount(dir: string): Promise<number> {
   const { stdout } = await git(dir, ["status", "--porcelain=v2", "-z", "--untracked-files=all"]);
   return parseStatus(stdout.toString("utf8")).changes;
 }
 
-async function commitCount(dir: string, from: string, to: string): Promise<number> {
-  const { stdout } = await git(dir, ["rev-list", "--count", `${from}..${to}`]);
-  return Number(stdout.toString("utf8").trim());
+export function commitCount(dir: string, from: string, to: string): Promise<number> {
+  return count(dir, [`${from}..${to}`]);
 }
 
-/**
- * Katalog roboczy względem `base`, z nowymi plikami i bez ignorowanych. Nowe pliki trafiają do indeksu tymczasowego
- * (kopia indeksu worktree, żeby git nie liczył od nowa skrótów niezmienionych plików), więc indeks, którego używa
- * agent, zostaje nietknięty. Diff bez zewnętrznych programów diff i `textconv` z konfiguracji repo.
- */
-export async function worktreeChanges(dir: string, base: string, maxPatchBytes: number): Promise<WorktreeChanges> {
-  const index = resolve(dir, (await git(dir, ["rev-parse", "--git-path", "index"])).stdout.toString("utf8").trim());
-  const tmp = resolve(tmpdir(), `trackwall-index-${randomUUID()}`);
-  try {
-    await copyFile(index, tmp).catch((err: NodeJS.ErrnoException) => {
-      if (err.code !== "ENOENT") throw err;
-    });
-    // Plik trzymany przez działający proces (Windows) nie zatrzymuje reszty.
-    await git(dir, ["add", "--all", "--ignore-errors", "--", "."], { indexFile: tmp, timeoutMs: CHANGES_TIMEOUT_MS });
-    const diff = (args: string[], maxBytes?: number) =>
-      git(dir, ["diff", "--cached", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", ...args, base, "--"], {
-        indexFile: tmp,
-        timeoutMs: CHANGES_TIMEOUT_MS,
-        maxBytes,
-      });
-    const [names, stats, patch, commits, uncommitted] = await Promise.all([
-      diff(["--name-status", "-z"]),
-      diff(["--numstat", "-z"]),
-      diff([], maxPatchBytes),
-      commitCount(dir, base, "HEAD"),
-      uncommittedCount(dir),
-    ]);
-    return {
-      files: parseChangedFiles(names.stdout.toString("utf8"), stats.stdout.toString("utf8")),
-      patch: patch.stdout.toString("utf8"),
-      truncated: patch.truncated,
-      commits,
-      uncommitted,
-    };
-  } finally {
-    await rm(tmp, { force: true });
-  }
+async function count(dir: string, revs: string[]): Promise<number> {
+  const { stdout } = await git(dir, ["rev-list", "--count", ...revs, "--"]);
+  return Number(stdout.toString("utf8").trim());
 }

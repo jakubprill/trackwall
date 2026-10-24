@@ -63,5 +63,8 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     f.agents.openTaskEditor(b.task);
     return null;
   }),
-  route(agentsApi.removeTask, (f, b) => f.agents.removeTask(b.task, b.keepBranch, b.discardChanges)),
+  route(agentsApi.removeTask, async (f, b) => {
+    await f.agents.removeTask(b.task, b.keepBranch, b.discardChanges);
+    return null;
+  }),
 ]);

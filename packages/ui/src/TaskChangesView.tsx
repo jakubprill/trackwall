@@ -1,4 +1,4 @@
-import { agentsApi, type ChangedFile, type WorktreeChanges } from "@trackwall/protocol";
+import { agentsApi, type ChangedFile, type TaskChanges } from "@trackwall/protocol";
 import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
@@ -10,7 +10,10 @@ import { countLabel } from "@/lib/format";
 import { useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
 
-/** Diff na żywo: tyle, ile trwa jeden `git status` w worktree, i rzadziej nie ma sensu, gdy agent pisze pliki. */
+/**
+ * Diff na żywo: agent zmienia pliki w ciągu sekund, a jedno pytanie to kilka szybkich poleceń gita na worktree
+ * (koszt w ADR-31); następne idzie dopiero po odpowiedzi, więc wolny git nie piętrzy pytań.
+ */
 const POLL_MS = 2000;
 /** Ponad tyle linii przeglądarka zaczyna się dławić, a resztę i tak lepiej czytać w VS Code. */
 const MAX_LINES = 4000;
@@ -32,17 +35,18 @@ const LINE_CLASSES: Record<DiffLineKind, string> = {
 
 /**
  * Zakładka „Zmiany” zadania (ADR-31): pliki i diff worktree względem commita bazowego, odpytywane co 2 s, póki
- * zakładka jest otwarta, więc widać, co agent robi, zanim cokolwiek zacommituje.
+ * zakładka jest otwarta, więc widać, co agent robi, zanim cokolwiek zacommituje. `paused` wstrzymuje odpytywanie
+ * (w trakcie zakończenia zadania worktree znika), zostawiając ostatnie dane.
  */
-export function TaskChanges({ conn, task }: { conn: Connection; task: string }) {
+export function TaskChangesView({ conn, task, paused }: { conn: Connection; task: string; paused: boolean }) {
   const load = useCallback(() => post(conn, agentsApi.taskChanges, { task }), [conn, task]);
-  const changes = useRemote(load, { pollMs: POLL_MS });
+  const changes = useRemote(paused ? undefined : load, { pollMs: POLL_MS });
   if (changes.error && !changes.data) return <ErrorWithRetry message={changes.error} onRetry={changes.reload} />;
   if (!changes.data) return <Loading />;
   return <ChangesBody changes={changes.data} />;
 }
 
-function ChangesBody({ changes }: { changes: WorktreeChanges }) {
+function ChangesBody({ changes }: { changes: TaskChanges }) {
   const { files, commits, uncommitted } = changes;
   if (files.length === 0) return <p className="text-muted-foreground text-sm">Agent jeszcze niczego nie zmienił.</p>;
   const { lines, more } = diffLines(changes.patch, MAX_LINES);
