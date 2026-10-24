@@ -64,18 +64,21 @@ describe("stan zadania z hooków Copilot CLI", () => {
     expect(stateFromHook({ event: "sessionEnd", receivedAt: 0, payload: { reason: "timeout" }, omitted: [] })?.state).toBe("Error");
   });
 
-  test("powiadomienie z rodzajem jest klasyfikowane po rodzaju, nie po treści", () => {
+  test("powiadomienie z rodzajem jest klasyfikowane po rodzaju, nie po treści; prośba o zgodę potwierdzona w prawdziwej sesji ma wysoką pewność", () => {
     expect(
       stateFromHook({
         event: "notification",
         receivedAt: 0,
-        payload: { notification_type: "permission_prompt", message: "Copilot needs permission to run shell command" },
+        payload: { notification_type: "permission_prompt", title: "Permission needed", message: "Path permission needed: <ścieżka>" },
         omitted: [],
       }),
-    ).toEqual({ state: "Approval", source: "hook", confidence: "medium", reason: "hook notification permission_prompt" });
-    expect(stateFromHook({ event: "notification", receivedAt: 0, payload: { type: "elicitation_dialog" }, omitted: [] })?.state).toBe(
-      "Input",
-    );
+    ).toEqual({ state: "Approval", source: "hook", confidence: "high", reason: "hook notification permission_prompt" });
+    expect(stateFromHook({ event: "notification", receivedAt: 0, payload: { type: "elicitation_dialog" }, omitted: [] })).toEqual({
+      state: "Input",
+      source: "hook",
+      confidence: "medium",
+      reason: "hook notification elicitation_dialog",
+    });
   });
 
   test("powiadomienia o agentach i komendach w tle oraz nieznane rodzaje nie zmieniają stanu", () => {

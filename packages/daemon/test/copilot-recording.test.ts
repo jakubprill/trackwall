@@ -16,7 +16,7 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     expect(summary(changes)).toEqual([
       "Input hook medium hook sessionStart",
       "Working hook high hook userPromptSubmitted",
-      "Approval hook medium hook notification permission_prompt",
+      "Approval hook high hook notification permission_prompt",
       "Working hook high hook postToolUse",
       "Input osc low osc 9;4;0",
       "Input hook high hook agentStop",

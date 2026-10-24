@@ -5,9 +5,8 @@ import type { StateSignal } from "./task-state-tracker.ts";
 /**
  * Detektor stanu Copilot CLI z rekordów hooków (§4.4, ADR-17), najpewniejsze źródło. Pewne z dokumentacji
  * Copilot CLI: nazwy zdarzeń, `sessionEnd.reason`, `agentStop.stopReason`. Niepewne: pola i rodzaje
- * `notification`, których dokumentacja nie wylicza (`permission_prompt` w typach `@github/copilot-sdk` i w sesji
- * na macOS, `elicitation_dialog` w tekstach Copilot CLI 1.0.103). Dlatego powiadomienie jest klasyfikowane po znanym
- * rodzaju (pewność `medium`), a bez rodzaju po słowach treści (pewność `low`).
+ * `notification`, których dokumentacja nie wylicza. Dlatego powiadomienie jest klasyfikowane po znanym rodzaju,
+ * a bez rodzaju po słowach treści (pewność `low`).
  */
 
 export function stateFromHook(record: CopilotHookRecord): StateSignal | undefined {
@@ -36,13 +35,15 @@ function sessionEnd(payload: CopilotHookRecord["payload"], reason: string): Stat
 }
 
 /**
- * Rodzaje powiadomień głównego agenta znalezione przy Copilot CLI 1.0.103. Inne rodzaje (np. `agent_idle`,
- * `agent_completed` i `shell_completed` dotyczą agentów i komend w tle) nie zmieniają stanu, nawet jeśli treść
- * brzmi jak prośba o zgodę. Rodzaju dla planu nie znaleziono; `Plan` daje tylko treść.
+ * Rodzaje powiadomień głównego agenta znalezione przy Copilot CLI 1.0.103. `permission_prompt` (typy
+ * `@github/copilot-sdk`) przyszedł w prawdziwej sesji na macOS przy prośbie o zgodę, więc ma pewność `high`;
+ * `elicitation_dialog` zna tylko teksty Copilot CLI, więc `medium`, dopóki nagranie go nie potwierdzi. Inne rodzaje
+ * (np. `agent_idle`, `agent_completed` i `shell_completed` dotyczą agentów i komend w tle) nie zmieniają stanu, nawet
+ * jeśli treść brzmi jak prośba o zgodę. Rodzaju dla planu nie znaleziono; `Plan` daje tylko treść.
  */
-const KIND_STATES: Record<string, TaskState> = {
-  permission_prompt: "Approval",
-  elicitation_dialog: "Input",
+const KIND_STATES: Record<string, Pick<StateSignal, "state" | "confidence">> = {
+  permission_prompt: { state: "Approval", confidence: "high" },
+  elicitation_dialog: { state: "Input", confidence: "medium" },
 };
 
 /** Treść bez rodzaju: tylko całe słowa, żeby „explanation” nie było planem, a „task” pytaniem. */
@@ -55,8 +56,8 @@ const TEXT_RULES: { pattern: RegExp; state: TaskState }[] = [
 function notification(payload: CopilotHookRecord["payload"], reason: string): StateSignal | undefined {
   const kind = payload.notificationType ?? payload.notification_type ?? payload.type;
   if (kind !== undefined) {
-    const state = Object.hasOwn(KIND_STATES, kind) ? KIND_STATES[kind] : undefined;
-    return state && { state, source: "hook", confidence: "medium", reason: `${reason} ${kind}` };
+    const known = Object.hasOwn(KIND_STATES, kind) ? KIND_STATES[kind] : undefined;
+    return known && { ...known, source: "hook", reason: `${reason} ${kind}` };
   }
   const text = [payload.title, payload.message].filter(Boolean).join(" ");
   const state = TEXT_RULES.find((r) => r.pattern.test(text))?.state;
