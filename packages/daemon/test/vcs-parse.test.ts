@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isBinary, parseBlobs, parseLog, parseObjects, parseStatus, parseTree } from "../src/modules/vcs/parse.ts";
+import { isBinary, parseBlobs, parseLog, parseNulTerminated, parseObjects, parseStatus, parseTree } from "../src/modules/vcs/parse.ts";
 
 describe("parseStatus", () => {
   test("czyta gałąź, gałąź śledzoną z ahead/behind i liczy zmiany, także zmianę nazwy jako jedną", () => {
@@ -88,5 +88,13 @@ describe("parseBlobs", () => {
       Buffer.from(`${oid} blob 10\nucięt`),
     ]);
     expect(parseBlobs(out, 5).map((b) => b?.toString("utf8"))).toEqual(["abc", undefined, undefined, "", undefined]);
+  });
+});
+
+describe("parseNulTerminated", () => {
+  test("wpisy zakończone NUL jako bajty, a niepełny ostatni kawałek uciętego wyjścia odpada", () => {
+    const out = Buffer.concat([Buffer.from("a.md\0katalog/\0"), Buffer.from([0x7a, 0xff, 0]), Buffer.from("uci")]);
+    expect(parseNulTerminated(out)).toEqual([Buffer.from("a.md"), Buffer.from("katalog/"), Buffer.from([0x7a, 0xff])]);
+    expect(parseNulTerminated(Buffer.alloc(0))).toEqual([]);
   });
 });

@@ -3,8 +3,8 @@ import { copyFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import type { TaskChanges } from "@trackwall/protocol";
-import { git } from "./git.ts";
-import { parseChangedFiles } from "./parse.ts";
+import { git, revParse } from "./git.ts";
+import { parseChangedFiles, parseNulTerminated } from "./parse.ts";
 import { commitCount, uncommittedCount } from "./worktree.ts";
 
 /**
@@ -17,20 +17,23 @@ import { commitCount, uncommittedCount } from "./worktree.ts";
  */
 
 /** Hash pustego bloba w obu formatach obiektów gita (`git hash-object -t blob /dev/null`). */
-const EMPTY_BLOB: Record<string, string> = {
-  sha1: "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
-  sha256: "473a0f4c3be8a93681a267e3b1e9a7dcda1185436fe141f7749120a303721813",
-};
+const EMPTY_BLOB = new Map([
+  ["sha1", "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"],
+  ["sha256", "473a0f4c3be8a93681a267e3b1e9a7dcda1185436fe141f7749120a303721813"],
+]);
+
+const NUL = Buffer.from([0]);
+const SLASH = "/".charCodeAt(0);
 
 /** Duże worktree na Windowsie ze skanującym antywirusem potrafią liczyć `git status` kilkanaście sekund. */
 const CHANGES_TIMEOUT_MS = 60_000;
 
 export async function worktreeChanges(dir: string, base: string, maxPatchBytes: number): Promise<TaskChanges> {
-  const [indexPath = "", objectFormat = ""] = (await git(dir, ["rev-parse", "--git-path", "index", "--show-object-format"])).stdout
-    .toString("utf8")
-    .split("\n");
-  const emptyBlob = EMPTY_BLOB[objectFormat];
-  if (emptyBlob === undefined) throw new Error(`unknown git object format "${objectFormat}"`);
+  const revParsed = (await git(dir, ["rev-parse", "--git-path", "index", "--show-object-format"])).stdout.toString("utf8").trim();
+  const [indexPath, objectFormat] = revParsed.split(/\r?\n/);
+  const emptyBlob = objectFormat === undefined ? undefined : EMPTY_BLOB.get(objectFormat);
+  if (!indexPath || emptyBlob === undefined)
+    throw new Error(`git rev-parse did not give the index path and a known object format: ${revParsed}`);
   const index = resolve(dir, indexPath);
   const tmp = resolve(tmpdir(), `trackwall-index-${randomUUID()}`);
   try {
@@ -69,24 +72,31 @@ export async function worktreeChanges(dir: string, base: string, maxPatchBytes: 
 
 /**
  * Nowe pliki katalogu roboczego (bez ignorowanych) jako wpisy indeksu `index` z hashem pustego bloba: `diff` z katalogiem
- * roboczym i tak czyta ich treść z dysku, a `update-index --index-info`, w przeciwieństwie do `add --intent-to-add`,
- * nie zapisuje bloba do `.git/objects`. Katalog z własnym repo `ls-files` podaje z `/` na końcu; to wpis submodułu,
- * którego hash też nie jest czytany, bo diff bierze HEAD tamtego repo. Zwraca, czy lista nowych plików była ucięta.
+ * roboczym i tak czyta ich treść i tryb z dysku, a `update-index --index-info`, w przeciwieństwie do
+ * `add --intent-to-add`, nie zapisuje bloba do `.git/objects`. Zwraca, czy lista nowych plików była ucięta.
  */
 async function addUntracked(dir: string, index: string, emptyBlob: string): Promise<boolean> {
   const listed = await git(dir, ["ls-files", "--others", "--exclude-standard", "-z"], {
     indexFile: index,
     timeoutMs: CHANGES_TIMEOUT_MS,
   });
-  const paths = listed.stdout.toString("utf8").split("\0");
-  // Ostatni kawałek to pusty napis po końcowym NUL albo niepełna ścieżka uciętej listy.
-  paths.pop();
-  if (paths.length === 0) return listed.truncated;
-  const entries = paths.map((path) => (path.endsWith("/") ? `160000 ${emptyBlob}\t${path.slice(0, -1)}` : `100644 ${emptyBlob}\t${path}`));
-  await git(dir, ["update-index", "-z", "--index-info"], {
-    indexFile: index,
-    stdin: `${entries.join("\0")}\0`,
-    timeoutMs: CHANGES_TIMEOUT_MS,
-  });
+  const entries = await Promise.all(parseNulTerminated(listed.stdout).map((path) => indexEntry(dir, path, emptyBlob)));
+  const input = Buffer.concat(entries.filter((entry) => entry !== undefined));
+  if (input.length > 0)
+    await git(dir, ["update-index", "-z", "--index-info"], { indexFile: index, stdin: input, timeoutMs: CHANGES_TIMEOUT_MS });
   return listed.truncated;
+}
+
+/**
+ * Wpis `--index-info` dla nowej ścieżki. Katalog z własnym repo (`ls-files` podaje go z `/` na końcu) to submoduł
+ * z HEAD tamtego repo, jak w `git add`; repo bez commitów albo w innym formacie obiektów `git add` pomija, więc tu też
+ * odpada.
+ */
+async function indexEntry(dir: string, path: Buffer, emptyBlob: string): Promise<Buffer | undefined> {
+  if (path.at(-1) !== SLASH) return Buffer.concat([Buffer.from(`100644 ${emptyBlob}\t`), path, NUL]);
+  const repo = path.subarray(0, -1);
+  const head = await revParse(resolve(dir, repo.toString("utf8")), "HEAD");
+  // Repo w innym formacie obiektów (SHA-1 w SHA-256) nie może być submodułem, a jeden zły wpis psułby cały indeks.
+  if (head === undefined || head.length !== emptyBlob.length) return undefined;
+  return Buffer.concat([Buffer.from(`160000 ${head}\t`), repo, NUL]);
 }

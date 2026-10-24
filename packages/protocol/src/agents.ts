@@ -89,7 +89,7 @@ export type ChangedFile = z.infer<typeof ChangedFile>;
  */
 export const TaskChanges = z.object({
   files: z.array(ChangedFile),
-  /** Zunifikowany diff, ucięty do 1 MB (`truncated`). */
+  /** Zunifikowany diff, ucięty do 1 MB; `truncated`, gdy ucięty był diff albo lista nowych plików. */
   patch: z.string(),
   truncated: z.boolean(),
   /** Commity na gałęzi zadania od commita bazowego. */

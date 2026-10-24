@@ -24,7 +24,7 @@ export interface RunOptions {
   timeoutMs: number;
   maxBytes?: number;
   /** Wejście dla komend czytających z stdin (`cat-file --batch-check`). */
-  stdin?: string;
+  stdin?: string | Buffer;
   /** Kody wyjścia poza 0, które są wynikiem, a nie błędem (`git grep`: 1, gdy nic nie pasuje). */
   okExitCodes?: readonly number[];
 }

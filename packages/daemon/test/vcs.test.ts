@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
@@ -20,22 +21,45 @@ describe("vcs na prawdziwym gicie", () => {
     expect(status.head?.hash).toMatch(/^[0-9a-f]{40}$/);
   });
 
-  test("liczenie zmian z nowymi plikami, także pustym i osadzonym repo, nie zapisuje do repo żadnego obiektu", async () => {
-    // Zapis obiektu przy każdym liczeniu sprawiał, że kilka okien „Changes” naraz pisało ten sam pusty blob, a na Windowsie
-    // drugi zapis kończył się „Permission denied” (#36).
-    const dir = makeRepo({ "README.md": "# repo\n" });
-    const base = gitIn(dir, "rev-parse", "HEAD").trim();
-    writeFileSync(join(dir, "nowy.md"), "x\n");
-    writeFileSync(join(dir, "pusty.md"), "");
-    makeRepo({ "a.txt": "a\n" }, "osadzone", dir);
-    const objectsBefore = gitIn(dir, "count-objects", "-v");
+  test.each(["sha1", "sha256"])(
+    "liczenie zmian z nowymi plikami, także pustym i osadzonym repo, nie zapisuje do repo żadnego obiektu (%s)",
+    async (objectFormat) => {
+      // Zapis obiektu przy każdym liczeniu sprawiał, że kilka okien „Changes” naraz pisało ten sam pusty blob, a na Windowsie
+      // drugi zapis kończył się „Permission denied” (#36).
+      const dir = join(mkdtempSync(join(tmpdir(), "trackwall-git-")), "repo");
+      gitIn(tmpdir(), "init", "-q", "-b", "main", `--object-format=${objectFormat}`, dir);
+      commitFiles(dir, { "README.md": "# repo\n" }, "pierwszy commit");
+      const base = gitIn(dir, "rev-parse", "HEAD").trim();
+      writeFileSync(join(dir, "nowy.md"), "x\n");
+      writeFileSync(join(dir, "pusty.md"), "");
+      gitIn(dir, "init", "-q", `--object-format=${objectFormat}`, "osadzone");
+      commitFiles(join(dir, "osadzone"), { "a.txt": "a\n" }, "osadzony commit");
+      const embeddedHead = gitIn(join(dir, "osadzone"), "rev-parse", "HEAD").trim();
+      makeRepo({}, "osadzone-bez-commitow", dir);
+      const objectsBefore = gitIn(dir, "count-objects", "-v");
 
-    const changes = await vcs.worktreeChanges(dir, base, 1_000_000);
+      const changes = await vcs.worktreeChanges(dir, base, 1_000_000);
 
-    expect(changes.files.map((f) => f.path)).toEqual(["nowy.md", "osadzone", "pusty.md"]);
-    expect(changes.patch).toContain("+x");
-    expect(gitIn(dir, "count-objects", "-v")).toBe(objectsBefore);
-  });
+      expect(changes.files.map((f) => f.path)).toEqual(["nowy.md", "osadzone", "pusty.md"]);
+      expect(changes.patch).toContain("+x");
+      expect(changes.patch).toContain(`+Subproject commit ${embeddedHead}`);
+      expect(gitIn(dir, "count-objects", "-v")).toBe(objectsBefore);
+    },
+  );
+
+  test.skipIf(process.platform !== "linux")(
+    "nowy plik z nazwą spoza UTF-8 jest w zmianach (Linux; Windows i macOS takich nazw nie mają)",
+    async () => {
+      const dir = makeRepo({ "README.md": "# repo\n" });
+      const base = gitIn(dir, "rev-parse", "HEAD").trim();
+      writeFileSync(Buffer.concat([Buffer.from(join(dir, "zly-")), Buffer.from([0xff])]), "x\n");
+
+      const changes = await vcs.worktreeChanges(dir, base, 1_000_000);
+
+      expect(changes.files).toHaveLength(1);
+      expect(changes.patch).toContain("+x");
+    },
+  );
 
   test("status repo bez commitów ma pusty HEAD, log jest pusty, a korzeń drzewa jest pusty", async () => {
     const dir = makeRepo();
