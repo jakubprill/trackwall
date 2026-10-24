@@ -46,6 +46,7 @@ const STATUS: Record<ErrorCode, number> = {
   stop_unconfirmed: 500,
   agent_unavailable: 409,
   unsaved_changes: 409,
+  service_unavailable: 409,
   internal: 500,
 };
 

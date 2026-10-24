@@ -28,6 +28,8 @@ import { DomainError } from "../infra/errors.ts";
 const README_MAX_CHARS = 32_000;
 /** Ile ostatnich commitów zwraca `get_repo`: tyle wystarcza, żeby agent wiedział, co się ostatnio działo. */
 const RECENT_COMMITS = 10;
+/** What a session may do only in its own repo with `start_service` and `stop_service` (ADR-45). */
+const SERVICE_ACTION = "start and stop only the service";
 
 export interface ToolContext {
   facade: Facade;
@@ -83,7 +85,7 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
           const parsed = tool.args.parse(args);
           // A destructive tool (it runs or stops repo code) logs its arguments before acting: until the `audit` table
           // exists, this line says who ran what (ADR-41). Their arguments are identifiers, never free text.
-          if (!tool.readOnly && tool.destructive) ctx.log(`${label}: ${JSON.stringify(parsed)}`);
+          if (!tool.readOnly && tool.destructive) ctx.log(`${label}: ${JSON.stringify(auditView(parsed, tool.auditArgs))}`);
           const result = tool.result.parse(await run(ctx.facade, parsed, { caller: ctx.caller, signal: extra.mcpReq.signal }));
           ctx.log(`${label}: ok in ${Date.now() - started} ms`);
           return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
@@ -196,6 +198,17 @@ const runs: ToolRuns = {
     run: await facade.mise.waitForEnd(repo, miseTask, timeoutSeconds * 1000, signal),
   }),
   listRunningMiseTasks: async (facade) => ({ miseTasks: facade.mise.running() }),
+  startService: async (facade, { repo, dependencies, timeoutSeconds }, { caller }) => {
+    // Only the root comes from the session; its dependencies come from the graph, so they may be other repos.
+    assertCallerRepo(facade, caller, repo, SERVICE_ACTION);
+    return { slice: await facade.services.start({ repo, dependencies, waitMs: timeoutSeconds * 1000 }) };
+  },
+  stopService: async (facade, { repo, dependencies }, { caller }) => {
+    assertCallerRepo(facade, caller, repo, SERVICE_ACTION);
+    return { services: await facade.services.stop({ repo, dependencies }) };
+  },
+  listServices: async (facade) => ({ services: facade.services.list() }),
+  callEndpoint: (facade, { timeoutSeconds, ...request }) => facade.services.call({ ...request, timeoutMs: timeoutSeconds * 1000 }),
 };
 
 /**
@@ -220,7 +233,16 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.stopMiseTask, runs.stopMiseTask),
   defineTool(mcpTools.waitForMiseTask, runs.waitForMiseTask),
   defineTool(mcpTools.listRunningMiseTasks, runs.listRunningMiseTasks),
+  defineTool(mcpTools.startService, runs.startService),
+  defineTool(mcpTools.stopService, runs.stopService),
+  defineTool(mcpTools.listServices, runs.listServices),
+  defineTool(mcpTools.callEndpoint, runs.callEndpoint),
 ];
+
+/** The arguments a destructive tool logs: only `keys` when the tool names them (the rest may be free text with secrets). */
+function auditView(args: Record<string, unknown>, keys: readonly string[] | undefined): Record<string, unknown> {
+  return keys ? Object.fromEntries(keys.map((k) => [k, args[k]])) : args;
+}
 
 /**
  * A Trackwall session starts and stops processes only in the repo it works in (§8, ADR-41), so a task session does
@@ -228,10 +250,10 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
  * the user's program, like a terminal, and reaches every repo. A guard for the agent, not a security boundary: a
  * session process can call `/mcp` without its session token (§8).
  */
-function assertCallerRepo(facade: Facade, caller: string | null, repo: string): void {
+function assertCallerRepo(facade: Facade, caller: string | null, repo: string, action = "run and stop only mise tasks"): void {
   if (caller === null) return;
   const own = facade.agents.session(caller).repo;
-  if (own !== repo) throw new DomainError("bad_request", `a session in ${own} can run and stop only mise tasks of ${own}, not of ${repo}`);
+  if (own !== repo) throw new DomainError("bad_request", `a session in ${own} can ${action} of ${own}, not of ${repo}`);
 }
 
 /** Sesja bez ostatnich linii ekranu zakończonej grupy: ekran jednej sesji nie trafia do innej (§8, ADR-36). */

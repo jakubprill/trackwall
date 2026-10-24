@@ -3,7 +3,8 @@
 // `tasks ls --json` drukuje taski albo błąd zaufania, `trust` zdejmuje `untrusted`. `run <task>` drukuje nazwę taska
 // i, gdy task jest w `exits`, kończy się od razu z tym kodem, a inaczej uruchamia drzewo procesów z `process-tree.ts`
 // (PID-y w `<repo>/pids`), które działa do zatrzymania. `install` kończy się kodem `installExit` (domyślnie 0).
-// `run` i `install` dopisują się do `<repo>/calls.log`, żeby test widział kolejność.
+// `run` i `install` dopisują się do `<repo>/calls.log`, żeby test widział kolejność. A task in `servers` runs
+// `fake-service.ts` with that config instead (the `services` tests, ADR-45).
 import { spawn } from "node:child_process";
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -14,6 +15,7 @@ const config = JSON.parse(readFileSync(configPath, "utf8")) as {
   untrusted?: boolean;
   exits?: Record<string, number>;
   installExit?: number;
+  servers?: Record<string, object>;
 };
 const args = process.argv.slice(2);
 const calls = join(process.cwd(), "calls.log");
@@ -36,6 +38,13 @@ if (args[0] === "tasks" && args[1] === "ls" && args[2] === "--json") {
   appendFileSync(calls, `run ${args[1]}\n`);
   console.log(`[${args[1]}] $ koniec`);
   process.exit(config.exits[args[1]]);
+} else if (args[0] === "run" && args[1] !== undefined && config.servers?.[args[1]] !== undefined) {
+  appendFileSync(calls, `run ${args[1]}\n`);
+  const service = spawn(process.execPath, [join(import.meta.dir, "fake-service.ts"), JSON.stringify(config.servers[args[1]])], {
+    stdio: "inherit",
+    windowsHide: true,
+  });
+  service.on("exit", (code) => process.exit(code ?? 1));
 } else if (args[0] === "run" && args[1] !== undefined) {
   appendFileSync(calls, `run ${args[1]}\n`);
   const pids = join(process.cwd(), "pids");

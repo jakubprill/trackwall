@@ -12,7 +12,7 @@ import { collectErrors } from "./log-errors.ts";
 import { LogFile, logFilePath, sourceParts } from "./log-file.ts";
 import { logLevel } from "./log-level.ts";
 import { RunOutput } from "./run-output.ts";
-import { secretValues } from "./secret-mask.ts";
+import { maskSecrets, secretValues } from "./secret-mask.ts";
 
 /**
  * Moduł `logs` (§4.2, ADR-28): linie wyjścia procesów jako rekordy z jednym globalnym `seq` dla wszystkich źródeł.
@@ -71,6 +71,11 @@ export class Logs {
   open(source: LogSource, runId: string, env: NodeJS.ProcessEnv): RunOutput {
     const log = this.sourceLog(source);
     return new RunOutput(secretValues(env), (stream, msg) => this.append(log, source, { runId, stream, msg }));
+  }
+
+  /** Text from a process (an HTTP response of a service, ADR-45) masked the same way as its log lines. */
+  mask(text: string, env: NodeJS.ProcessEnv): string {
+    return maskSecrets(text, secretValues(env));
   }
 
   /** Wyjście tylko do ostatnich linii stanu, zamaskowane tak samo, ale bez logu (ekran PTY sesji zadania). */
