@@ -1,10 +1,11 @@
-import { graphApi, miseApi, type SessionList, workspaceApi } from "@trackwall/protocol";
+import { graphApi, miseApi, type RunningMiseTask, type SessionList, workspaceApi } from "@trackwall/protocol";
 import { type HomeKey, parseHomeKey } from "@trackwall/scene/model";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import type { LiveFeed } from "@/lib/daemon-events";
 import { daemonAnswered, homeHasObject, homeModel } from "@/lib/home-model";
 import { listNeedsSettings, REPO_LIST_POLL_MS } from "@/lib/repo-status";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
@@ -16,7 +17,8 @@ import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
  * Widok „Home” (ADR-33, §5.5): pierwszy ekran. Po lewej kolejka „Needs you” (sesje, które czekają albo mają błąd,
  * i repo, które nie są czyste), w środku pulpit 3D w układzie „Orbit”, po prawej szczegóły wybranego obiektu.
  * Klik wybiera, dwuklik albo przycisk w szczegółach przechodzi do sesji lub repo. Dane to te same odpowiedzi daemona
- * co w innych widokach; sesje odpytuje `App`, bo ich liczba jest też na pasku widoków. Poza płótnem widok bierze ze sceny
+ * co w innych widokach; sesje i działające taski mise przychodzą na żywo z WebSocketu zdarzeń (ADR-36), a sesje
+ * pobiera `App`, bo ich liczba jest też na pasku widoków. Poza płótnem widok bierze ze sceny
  * tylko `@trackwall/scene/model` (klucze i typy migawki), żeby three.js i Pawn zostały w leniwie ładowanym kawałku.
  */
 
@@ -24,11 +26,12 @@ const HomeCanvas = lazy(() => import("./HomeCanvas.tsx").then((m) => ({ default:
 
 /** Graf liczy się z kart wszystkich repo, a zmienia się z commitami, więc rzadko. */
 const GRAPH_POLL_MS = 30_000;
-/** Działające taski mise to odczyt z pamięci daemona, bez uruchamiania mise. */
+/** Działające taski mise przychodzą na żywo z WebSocketu zdarzeń; odpytywane tylko bez jego połączenia. */
 const RUNNING_POLL_MS = 3000;
 
 export function HomeView({
   conn,
+  runningLive,
   sessions,
   onOpenSession,
   onOpenRepo,
@@ -36,6 +39,8 @@ export function HomeView({
   onOpenSettings,
 }: {
   conn: Connection;
+  /** Działające taski mise ze zdarzeń; `undefined` przez chwilę po zmianie połączenia, do tego czasu są odpytywane. */
+  runningLive: LiveFeed<RunningMiseTask[]> | undefined;
   sessions: RemoteHandle<SessionList>;
   onOpenSession: (id: string) => void;
   onOpenRepo: (id: string) => void;
@@ -52,7 +57,7 @@ export function HomeView({
   );
   const running = useRemote(
     useCallback(() => post(conn, miseApi.running, {}), [conn]),
-    { pollMs: RUNNING_POLL_MS },
+    { pollMs: RUNNING_POLL_MS, live: runningLive },
   );
   const [selected, setSelected] = useState<HomeKey | null>(null);
   const [hovered, setHovered] = useState<HomeKey | null>(null);

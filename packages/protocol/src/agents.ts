@@ -87,6 +87,16 @@ export const TaskChanges = WorkingTreeChanges.extend({
 });
 export type TaskChanges = z.infer<typeof TaskChanges>;
 
+/** Tyle plików mieści się w kontekście agenta razem z resztą wyniku; więcej to zwykle wynik buildu bez `.gitignore`. */
+export const TASK_SUMMARY_MAX_FILES = 200;
+
+/**
+ * Zmiany zadania bez diffu dla kontekstu agenta: pliki z liczbą linii (najwyżej `TASK_SUMMARY_MAX_FILES`;
+ * `filesTruncated`, gdy było więcej) i liczby commitów, bez treści zmian.
+ */
+export const TaskChangesSummary = TaskChanges.omit({ patch: true, truncated: true }).extend({ filesTruncated: z.boolean() });
+export type TaskChangesSummary = z.infer<typeof TaskChangesSummary>;
+
 function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
   return { path: `/api/agents/${action}`, request, data };
 }
@@ -115,16 +125,6 @@ export const agentsApi = {
    */
   removeTask: endpoint("remove-task", z.object({ task: TaskId, keepBranch: z.boolean(), discardChanges: z.boolean() }).strict(), Done),
 };
-
-/** Ścieżka WebSocketu terminala sesji: `/ws/pty/<sesja>` (§5.2). */
-export const PTY_SOCKET_PREFIX = "/ws/pty/";
-
-/**
- * Podprotokół WebSocketu terminala. Przeglądarka nie ustawi nagłówka `Authorization` przy WebSocket, więc token
- * daemona idzie jako drugi podprotokół (`bearer.<token>`), a nie w adresie, który trafia do logów i historii.
- */
-export const PTY_SUBPROTOCOL = "trackwall.pty";
-export const PTY_TOKEN_PREFIX = "bearer.";
 
 /**
  * Kody zamknięcia WebSocketu terminala z zakresu aplikacji (4000–4999), żeby okno terminala odróżniło koniec sesji
