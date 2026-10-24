@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { MCP_STDIO_COMMAND } from "../args.ts";
+import { MCP_STDIO_COMMAND } from "../infra/args.ts";
 import { defaultTrackwallHome } from "../infra/home.ts";
 import { selfCommand } from "../infra/self-command.ts";
 
