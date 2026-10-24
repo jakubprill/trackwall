@@ -1,8 +1,6 @@
 packages:
   - packages/*
   - apps/*
-  - spikes/*
 
 onlyBuiltDependencies:
   - esbuild
-  - node-pty
