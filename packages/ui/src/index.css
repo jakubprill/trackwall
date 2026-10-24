@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Klasy komponentów Streamdown (README, ADR-35); Tailwind nie skanuje node_modules sam. */
+@source "../node_modules/streamdown/dist/*.js";
 
 @custom-variant dark (&:is(.dark *));
 

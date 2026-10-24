@@ -212,11 +212,21 @@ describe("workspace", () => {
 
     const overview = await workspace.overview("api");
     expect(Object.keys(overview).sort()).toEqual(["commits", "readme"]);
-    expect(overview.readme).toEqual({ path: "README.md", text: "# Opis\n", truncated: false });
+    expect(overview.readme).toEqual({ path: "README.md", text: "# Opis\n", truncated: false, format: "markdown" });
     expect(overview.commits.map((c) => c.subject)).toEqual(["pierwszy commit"]);
     expect((await workspace.tree("api", "")).map((e) => e.path)).toEqual(["src", "README.md", "readme.txt"]);
     expect(await workspace.file("api", "src/a.ts")).toMatchObject({ kind: "text", text: "kod" });
     await expect(workspace.file("api", "src")).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  test("README bez rozszerzenia jest Markdownem, a README.txt, .rst i .adoc tekstem", async () => {
+    const { workspace, projects } = await workspaceWithProjectsDir();
+    makeRepo({ README: "# Opis" }, "bez", projects);
+    makeRepo({ "README.rst": "Opis\n====" }, "rst", projects);
+    makeRepo({ "readme.TXT": "Opis" }, "txt", projects);
+    expect((await workspace.overview("bez")).readme?.format).toBe("markdown");
+    expect((await workspace.overview("rst")).readme?.format).toBe("text");
+    expect((await workspace.overview("txt")).readme?.format).toBe("text");
   });
 
   test("przegląd repo bez commitów nie ma README ani commitów", async () => {
