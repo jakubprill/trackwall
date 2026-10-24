@@ -23,7 +23,7 @@ export function RepoChanges({ conn, repo, refreshKey }: { conn: Connection; repo
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <p className="text-muted-foreground text-xs">
-        {countLabel(files.length, { one: "file", other: "files" })} not in the latest commit. Commit or discard them in your editor; sync
+        {countLabel(files.length, { one: "file", other: "files" })} with uncommitted changes. Commit or discard them in your editor; sync
         never touches them.
       </p>
       <ChangesDiff changes={changes.data} />

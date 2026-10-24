@@ -91,6 +91,7 @@ _Unikaj_: status (w polskim tekście), sync (to osobna akcja)
 
 **Zmiany katalogu roboczego** (`WorkingTreeChanges`, akcja `changes`; w UI zakładka „Changes”; po angielsku *changes*):
 Pliki i diff katalogu roboczego (z nowymi plikami, bez ignorowanych) względem commita: repo względem HEAD w szczegółach repo (ADR-34), worktree zadania względem commita bazowego w zmianach zadania (`TaskChanges`, ADR-31). Tylko do odczytu.
+W liczbach katalogu roboczego „zmienione” (`changed`) to śledzone pliki, a „nowe” (`untracked`) nieśledzone wpisy; `RepoStatus.changes` to ich suma (`trackedChanges` liczy zmienione).
 _Unikaj_: diff (to tylko część), status
 
 **Przegląd repo** (`RepoOverview`):
@@ -211,7 +212,7 @@ Treść zadania dla agenta, wpisana w widoku Sessions; Copilot CLI dostaje ją j
 _Unikaj_: prompt (w polskim tekście)
 
 **Task mise** (po angielsku *mise task*):
-Nazwana komenda z `mise.toml` repo: `setup`, `dev`, `test`, `build`, `lint`, `health`. W kodzie zawsze z dopowiedzeniem (`miseTask`, `mise.run(...)`), nigdy gołe `task`. Taski zapisane w commicie (`DeclaredMiseTask` w `RepoCard.mise`, z `[tasks]` i katalogów tasków) liczy karta repo; repo bez nich ma tag `no-mise` (ADR-34). Jedyny wyjątek to argument `task` narzędzia MCP `run_task` (§5.3), gdzie kontekst jest jednoznaczny.
+Nazwana komenda z `mise.toml` repo: `setup`, `dev`, `test`, `build`, `lint`, `health`. W kodzie zawsze z dopowiedzeniem (`miseTask`, `mise.run(...)`), nigdy gołe `task`. Taski zapisane w commicie (`DeclaredMiseTask` w `RepoCard.mise`, typ `MiseSetup`: pliki konfiguracji mise i taski z `[tasks]` oraz katalogów tasków) liczy karta repo; repo bez nich ma tag `no-mise` (ADR-34). Jedyny wyjątek to argument `task` narzędzia MCP `run_task` (§5.3), gdzie kontekst jest jednoznaczny.
 
 **Uruchomienie** (`run`, `runId`, stan: `RunState`; po angielsku *run*):
 Jednorazowe wykonanie taska mise przez `run_task` albo z UI, z własną grupą procesów i logami. Stan `running`, `stopping` albo `exited` (kod wyjścia, sygnał, czy zatrzymał je użytkownik, ostatnie linie wyjścia), zawsze zaobserwowany. Nie jest zadaniem ani serwisem.

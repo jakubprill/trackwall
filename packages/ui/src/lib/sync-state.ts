@@ -88,10 +88,13 @@ function sentences(parts: (string | null | undefined)[]): string {
  * Wynik pod stanem repo na liście, także „aktualne”, bo bez niego nie widać, że synchronizacja doszła do repo. Wynik
  * z czasem przestaje być prawdą (nowe commity na zdalnym), więc podpowiedź mówi, kiedy synchronizacja się zaczęła.
  */
-export function listSyncBadge(
-  repo: SyncRepo | undefined,
-  syncedAgo: string,
-): { tone: StatusTone; label: string; message: string } | undefined {
+export interface SyncBadge {
+  tone: StatusTone;
+  label: string;
+  message: string;
+}
+
+export function listSyncBadge(repo: SyncRepo | undefined, syncedAgo: string): SyncBadge | undefined {
   if (!repo) return undefined;
   const message = syncMessage(repo);
   return { ...syncRepoTone(repo), message: message ? `${message} Synced ${syncedAgo}.` : `Synced ${syncedAgo}.` };

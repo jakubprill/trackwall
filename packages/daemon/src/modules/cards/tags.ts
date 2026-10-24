@@ -62,8 +62,8 @@ function cardTags(card: RepoCard, repo: TaggedRepo): [string, string][] {
 }
 
 /**
- * `no-mise`: repo bez tasków mise w commicie (ADR-34), więc ani komenda zbiorcza, ani zakładka „mise tasks” nie mają
- * czego w nim uruchomić. Tag negatywny, bo to repo trzeba znaleźć filtrem, żeby dopisać mu `mise.toml`.
+ * `no-mise`: repo bez tasków mise w commicie (ADR-34), więc ani kroki `setup` i `build` komendy zbiorczej, ani zakładka
+ * „mise tasks” nie mają czego w nim uruchomić. Tag negatywny, bo to repo trzeba znaleźć filtrem, żeby dopisać mu `mise.toml`.
  */
 function noMiseReason(card: RepoCard): string | undefined {
   if (card.mise.tasks.length > 0 || !card.mise.complete) return undefined;

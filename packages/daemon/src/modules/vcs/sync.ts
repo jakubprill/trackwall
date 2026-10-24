@@ -1,4 +1,11 @@
-import { countLabel, type SyncBranchOutcome, type SyncResult, type SyncSkipReason, type SyncWorkingTree } from "@trackwall/protocol";
+import {
+  countLabel,
+  type SyncBranchOutcome,
+  type SyncResult,
+  type SyncSkipReason,
+  type SyncWorkingTree,
+  trackedChanges,
+} from "@trackwall/protocol";
 import { type GitNetwork, git, knownDefaultBranch, revParse } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { parseStatus } from "./parse.ts";
@@ -120,7 +127,7 @@ async function checkedOutInWorktree(dir: string, localRef: string): Promise<bool
 async function workingTree(dir: string): Promise<SyncWorkingTree | null> {
   try {
     const status = parseStatus((await git(dir, ["status", "--porcelain=v2", "--branch", "-z"])).stdout.toString("utf8"));
-    return { branch: status.branch, changed: status.changes - status.untracked, untracked: status.untracked };
+    return { branch: status.branch, changed: trackedChanges(status), untracked: status.untracked };
   } catch {
     return null;
   }

@@ -57,6 +57,11 @@ export const RepoStatusOk = z.object({
 });
 export type RepoStatusOk = z.infer<typeof RepoStatusOk>;
 
+/** Zmienione śledzone pliki: `changes` bez nowych; jedno miejsce reguły dla stanu repo i wyniku synchronizacji. */
+export function trackedChanges(status: Pick<RepoStatusOk, "changes" | "untracked">): number {
+  return status.changes - status.untracked;
+}
+
 /** Stan repo zaobserwowany w gicie przy każdym zapytaniu; nigdy nie jest zapisywany. */
 export const RepoStatus = z.discriminatedUnion("kind", [
   RepoStatusOk,
