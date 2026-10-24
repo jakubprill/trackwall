@@ -22,7 +22,7 @@ import { AsciicastWriter, parseAsciicast } from "../src/modules/agents/asciicast
 import { findCopilot } from "../src/modules/agents/copilot-command.ts";
 import { runCopilotHook } from "../src/modules/agents/copilot-hook-command.ts";
 import type { CopilotHookRecord } from "../src/modules/agents/copilot-hook-record.ts";
-import { sessionKey } from "../src/modules/agents/copilot-keys.ts";
+import { type SessionKey, sessionKey } from "../src/modules/agents/copilot-keys.ts";
 import { writeCopilotPlugin } from "../src/modules/agents/copilot-plugin.ts";
 import { encodeMarker, replayCopilotRecording, type StatesLine } from "../src/modules/agents/copilot-recording.ts";
 import { CopilotSessionState } from "../src/modules/agents/copilot-session-state.ts";
@@ -72,9 +72,11 @@ async function record(argv: string[]): Promise<number> {
   process.stdin.setRawMode?.(true);
   process.stdin.on("data", (d: Buffer) => {
     terminal.write(d);
-    // Hooki, które już przyszły, idą do nagrania przed klawiszem, żeby odtwarzanie widziało tę samą kolejność.
+    const key = sessionKey(d.toString("utf8"));
+    if (!key) return;
+    // Hooki, które już przyszły, idą do nagrania przed klawiszem, tak jak w daemonie (`LiveSession.input`).
     pumpHooks();
-    recording.input(d.toString("utf8"));
+    recording.key(key);
   });
   process.stdout.on("resize", () => {
     const now = size();
@@ -151,9 +153,7 @@ class Recording {
     for (const change of this.#session.hook(r)) this.#report(change);
   }
 
-  input(data: string): void {
-    const key = sessionKey(data);
-    if (!key) return;
+  key(key: SessionKey): void {
     this.#clock = this.#cast.marker(encodeMarker({ kind: "key", key }));
     for (const change of this.#session.key(key)) this.#report(change);
   }

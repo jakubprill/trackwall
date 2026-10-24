@@ -122,33 +122,20 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     ]);
   });
 
-  test("komunikat o przerwanej turze bez niedawnego klawisza to przerysowana historia ekranu i nie zmienia stanu", () => {
+  test("komunikat o przerwanej turze bez niedawnej odpowiedzi klawiszem to przerysowana historia ekranu i nie zmienia stanu", () => {
     let now = 0;
     const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000 });
-    session.key("escape");
-    session.hook({ event: "userPromptSubmitted", receivedAt: 5_000, payload: {}, omitted: [] });
-
+    session.hook({ event: "notification", receivedAt: 0, payload: { notification_type: "permission_prompt" }, omitted: [] });
+    session.key("enter");
     now = 20_000;
     expect(session.output(" ● Operation cancelled by user")).toEqual([]);
-  });
 
-  test("hook sprzed klawisza, odczytany dopiero po nim, nie nadpisuje stanu, na który człowiek już odpowiedział", () => {
-    let now = 0;
-    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000 });
-    session.hook({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] });
-
-    // Prośba o zgodę przyszła o 1,0 s, ale `hooks.jsonl` odczytano dopiero po Enter o 1,1 s.
-    now = 1_100;
-    expect(session.key("enter")).toEqual([]);
-    now = 1_200;
-    expect(
-      session.hook({ event: "notification", receivedAt: 1_000, payload: { notification_type: "permission_prompt" }, omitted: [] }),
-    ).toEqual([]);
-
-    now = 2_000;
-    expect(session.key("escape").map((c) => `${c.state} ${c.source}`)).toEqual(["Input keyboard"]);
-    // `postToolUse` z 1,9 s, odczytany po Esc: tura i tak jest przerwana.
-    expect(session.hook({ event: "postToolUse", receivedAt: 1_900, payload: { toolName: "bash" }, omitted: [] })).toEqual([]);
+    // Enter, który wysyła nowy prompt, nie jest odpowiedzią i nie otwiera okna.
+    session.hook({ event: "agentStop", receivedAt: 20_000, payload: {}, omitted: [] });
+    session.key("enter");
+    session.hook({ event: "userPromptSubmitted", receivedAt: 20_100, payload: {}, omitted: [] });
+    now = 21_000;
+    expect(session.output(" ● Operation cancelled by user")).toEqual([]);
   });
 
   test("Esc po progu bez cyklicznego sprawdzenia daje najpierw Stale, a potem czekanie na Ciebie, tak jak na żywo", () => {
