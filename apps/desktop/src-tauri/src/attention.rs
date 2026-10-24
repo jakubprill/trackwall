@@ -1,7 +1,7 @@
 //! Copilot CLI sessions that are waiting for you (ADR-26) and task proposals waiting for a decision (ADR-39): the shell
 //! asks the daemon for the session list every few seconds and, when a session stops working and starts waiting or a new
 //! proposal arrives, draws the user's attention (taskbar flash, Dock bounce) and updates the tray tooltip and menu.
-//! Clicking a menu item shows the window with that session or proposal.
+//! Clicking a menu item shows the window for sessions (ADR-49) with that session or proposal.
 //!
 //! Pytanie idzie z powłoki, a nie z UI: schowane okno WebView może mieć wstrzymane timery, a tray ma działać także
 //! przy zamkniętym oknie. Czy sesja czeka na Ciebie, liczy daemon (`Session.needsAttention`), tak samo dla UI i traya.
@@ -9,6 +9,7 @@
 
 use crate::daemon;
 use crate::daemon_state::DaemonState;
+use crate::windows::{self, Windows};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -21,6 +22,7 @@ const POLL: Duration = Duration::from_secs(2);
 const FOCUS_EVENT: &str = "focus-session";
 /// Tray menu item ids; a session or proposal item is a prefix plus its id.
 pub const MENU_SHOW: &str = "show";
+pub const MENU_NEW_WINDOW: &str = "new-window";
 pub const MENU_QUIT: &str = "quit";
 const MENU_SESSION_PREFIX: &str = "session:";
 const MENU_PROPOSAL_PREFIX: &str = "proposal:";
@@ -157,6 +159,7 @@ pub fn build_menu(app: &AppHandle, waiting: &[Waiting], proposals: &[Proposal]) 
         menu.append(&PredefinedMenuItem::separator(app)?)?;
     }
     menu.append(&MenuItem::with_id(app, MENU_SHOW, "Show Trackwall", true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, MENU_NEW_WINDOW, "New window", true, None::<&str>)?)?;
     menu.append(&MenuItem::with_id(app, MENU_QUIT, "Quit (stops the daemon)", true, None::<&str>)?)?;
     Ok(menu)
 }
@@ -177,10 +180,12 @@ pub fn focus_from_menu(id: &str) -> Option<Focus<'_>> {
     id.strip_prefix(MENU_PROPOSAL_PREFIX).map(Focus::Proposal)
 }
 
-/// Shows the window and asks the UI to switch to the session or proposal.
-pub fn focus(app: &AppHandle, target: Focus<'_>, show: fn(&AppHandle)) {
-    show(app);
-    let _ = app.emit_to("main", FOCUS_EVENT, target);
+/// Shows the window for sessions (ADR-49: the last focused one showing Sessions) and asks its UI to switch to the
+/// session or proposal.
+pub fn focus(app: &AppHandle, target: Focus<'_>) {
+    let label = app.state::<Windows>().session_window();
+    windows::show(app, &label);
+    let _ = app.emit_to(label.as_str(), FOCUS_EVENT, target);
 }
 
 /// Wątek pytający daemon o sesje, dopóki działa powłoka.
@@ -194,7 +199,7 @@ pub fn watch(app: AppHandle, state: Arc<DaemonState>, tray_id: &'static str) {
             let Some(now) = daemon::sessions(&conn).ok().and_then(|body| parse_sessions(&body)) else { continue };
             let previous_states = last.as_ref().map_or(&no_states, |l| &l.states);
             if !newly_waiting(previous_states, &now.waiting).is_empty() || !new_proposals(last.as_ref(), &now.proposals).is_empty() {
-                if let Some(window) = app.get_webview_window("main") {
+                if let Some(window) = app.get_webview_window(&app.state::<Windows>().session_window()) {
                     let _ = window.request_user_attention(Some(UserAttentionType::Informational));
                 }
             }
