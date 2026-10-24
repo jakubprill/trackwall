@@ -119,6 +119,8 @@ const runs: ToolRuns = {
   whoCalls: (facade, { repo }) => facade.graph.whoCalls(repo),
   subgraphFor: (facade, { repo, depth }) => facade.graph.subgraph(repo, depth),
   findEndpoint: (facade, { query, method }) => facade.graph.findEndpoint(query, method),
+  searchCode: async (facade, { repos, tags, ...query }) =>
+    facade.workspace.searchCode(query, { repos, among: tags && (await reposWithTags(facade, tags)) }),
   listSessions: async (facade, { repo }) => {
     // Repo musi istnieć (`not_found` jak w get_repo): literówka w identyfikatorze nie może wyglądać jak „brak sesji”.
     if (repo !== undefined) await facade.workspace.repo(repo);
@@ -153,9 +155,15 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.whoCalls, runs.whoCalls),
   defineTool(mcpTools.subgraphFor, runs.subgraphFor),
   defineTool(mcpTools.findEndpoint, runs.findEndpoint),
+  defineTool(mcpTools.searchCode, runs.searchCode),
   defineTool(mcpTools.listSessions, runs.listSessions),
   defineTool(mcpTools.getSession, runs.getSession),
 ];
+
+/** Ids of repos with every one of the tags; tags come from repo cards (ADR-25), so the filter is built here, as in `list_repos`. */
+async function reposWithTags(facade: Facade, tags: readonly string[]): Promise<string[]> {
+  return (await facade.cards.tags()).filter((entry) => tags.every((tag) => tagNames(entry).includes(tag))).map((entry) => entry.repo);
+}
 
 /** Sesja bez ostatnich linii ekranu zakończonej grupy: ekran jednej sesji nie trafia do innej (§8, ADR-36). */
 function agentSession({ run, ...session }: Session): AgentSession {

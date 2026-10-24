@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import type { Commit, FileContent, RepoStatusOk, SyncResult, TreeEntry, WorkingTreeChanges } from "@trackwall/protocol";
 import { git } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
+import { grep } from "./grep.ts";
 import { KeyedQueue } from "./keyed-queue.ts";
 import { type GitObject, isBinary, LOG_FORMAT, parseBlobs, parseLog, parseObjects, parseStatus, parseTree } from "./parse.ts";
 import { pathKey } from "./path-key.ts";
@@ -56,6 +57,9 @@ export class Vcs {
   async sync(dir: string): Promise<SyncResult> {
     return this.syncing.run(await this.commonDir(dir), () => syncRepo(dir));
   }
+
+  /** Code search in a commit (ADR-40, `grep.ts`). */
+  readonly grep = grep;
 
   // Worktree zadań (ADR-31, `worktree.ts`, `worktree-changes.ts`). Odczyty idą wprost; zmiany rejestru worktree
   // i gałęzi po kolei w jednym repo.

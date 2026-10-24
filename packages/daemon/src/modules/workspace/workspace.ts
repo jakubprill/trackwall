@@ -15,6 +15,7 @@ import {
   type RepoStatus,
   type RepoStatusOk,
   type RepoTagRules,
+  type SearchCodeResult,
   type SyncResult,
   type SyncRun,
   sameHost,
@@ -25,6 +26,7 @@ import {
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
 import { CloneJobs } from "./clone-jobs.ts";
+import { type CodeSearchQuery, type CodeSearchVcs, searchCode } from "./code-search.ts";
 import { dirKey, findRepos, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
@@ -56,7 +58,7 @@ const STATUS_CONCURRENCY = 8;
 const SYNC_CONCURRENCY = 4;
 
 /** Czego `workspace` potrzebuje od `vcs`; podłączane w fasadzie (§4: moduły nie importują się nawzajem). */
-interface WorkspaceVcs {
+interface WorkspaceVcs extends CodeSearchVcs {
   status(dir: string): Promise<RepoStatusOk>;
   remote(dir: string): Promise<string | null>;
   sync(dir: string): Promise<SyncResult>;
@@ -207,6 +209,20 @@ export class Workspace {
   async changes(id: string): Promise<WorkingTreeChanges> {
     const entry = await this.entry(id);
     return this.inRepo(entry, () => this.deps.vcs.changes(entry.path, PATCH_MAX_BYTES));
+  }
+
+  /**
+   * Code search in the HEAD commit of the listed repos (ADR-40). `repos` narrows it to these ids, and an unknown one is
+   * `not_found`, so that a typo does not look like "nothing found"; `among` are repos chosen elsewhere (by tags from the
+   * cards), so unknown ones simply drop out.
+   */
+  async searchCode(query: CodeSearchQuery, scope: { repos?: readonly string[]; among?: readonly string[] }): Promise<SearchCodeResult> {
+    const { entries } = await this.entries();
+    const { repos, among } = scope;
+    const unknown = repos?.find((id) => !entries.some((e) => e.id === id));
+    if (unknown !== undefined) throw new DomainError("not_found", `no repo "${unknown}" in the projects folder`);
+    const chosen = entries.filter((e) => (repos?.includes(e.id) ?? true) && (among?.includes(e.id) ?? true));
+    return searchCode(chosen, this.deps.vcs, query);
   }
 
   /** Daemon nie wie, czy system obsłużył adres; wynik to tylko potwierdzenie przyjęcia. */
