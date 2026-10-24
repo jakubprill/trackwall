@@ -15,6 +15,6 @@ We are especially interested in:
 - secrets leaking into agent sessions, logs, the audit trail or error messages;
 - changing the daemon's configuration through an MCP tool.
 
-The threat model is described in `docs/architecture.md` §8 (in Polish).
+The threat model is described in `docs/architecture.md` §8.
 
 Trackwall is maintained by one person, so a reply may take a few days.
