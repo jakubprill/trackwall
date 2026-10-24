@@ -44,9 +44,9 @@ describe("karta repo Spring z fixture'ów sklepu", () => {
 
   test("orders-bff: klient Feign w Kotlinie z adresem w każdym profilu, WebClient z @Value i adres Zipkina z konfiguracji", () => {
     expect(summary(extractCard(snapshotOf(fixtureFiles("orders-bff"))))).toEqual([
+      "webclient PaymentsGateway app=null url=http://payments-service:8080/api [default] {POST /payments/{orderId}}",
       "feign OrdersClient app=orders-api url=http://localhost:8081 [default] {GET /api/orders/{id}, POST /api/orders}",
       "feign OrdersClient app=orders-api url=http://orders-api.shop.svc.cluster.local [prod] {GET /api/orders/{id}, POST /api/orders}",
-      "webclient PaymentsGateway app=null url=http://payments-service:8080/api [default] {POST /payments/{orderId}}",
       "config management.zipkin.tracing.endpoint app=null url=http://zipkin:9411/api/v2/spans [default] {}",
     ]);
   });
