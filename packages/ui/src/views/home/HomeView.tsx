@@ -8,6 +8,7 @@ import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { daemonAnswered, homeHasObject, homeModel } from "@/lib/home-model";
 import { listNeedsSettings, REPO_LIST_POLL_MS } from "@/lib/repo-status";
+import type { SessionSelection } from "@/lib/session-entries";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { HomeDetails } from "./HomeDetails.tsx";
 import { HomeHoverCard } from "./HomeHoverCard.tsx";
@@ -33,8 +34,7 @@ export function HomeView({
   conn,
   runningLive,
   sessions,
-  onOpenSession,
-  onOpenProposal,
+  onOpenInSessions,
   onOpenRepo,
   onOpenDaemon,
   onOpenSettings,
@@ -43,8 +43,8 @@ export function HomeView({
   /** Działające taski mise ze zdarzeń; `undefined` przez chwilę po zmianie połączenia, do tego czasu są odpytywane. */
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
   sessions: RemoteHandle<SessionList>;
-  onOpenSession: (id: string) => void;
-  onOpenProposal: (id: string) => void;
+  /** Przejście do widoku „Sessions” z sesją albo propozycją zadania. */
+  onOpenInSessions: (selection: SessionSelection) => void;
   onOpenRepo: (id: string) => void;
   onOpenDaemon: () => void;
   onOpenSettings: () => void;
@@ -98,11 +98,11 @@ export function HomeView({
   const open = useCallback(
     (key: HomeKey) => {
       const target = parseHomeKey(key);
-      if (target?.kind === "session") onOpenSession(target.id);
+      if (target?.kind === "session") onOpenInSessions({ kind: "session", id: target.id });
       if (target?.kind === "repo") onOpenRepo(target.id);
       if (target?.kind === "daemon") onOpenDaemon();
     },
-    [onOpenSession, onOpenRepo, onOpenDaemon],
+    [onOpenInSessions, onOpenRepo, onOpenDaemon],
   );
 
   const needsSettings = listNeedsSettings(repos.errorCode);
@@ -126,7 +126,7 @@ export function HomeView({
         selected={current}
         onSelect={setSelected}
         onOpen={open}
-        onOpenProposal={onOpenProposal}
+        onOpenProposal={(id) => onOpenInSessions({ kind: "proposal", id })}
       />
       <div className="relative min-h-0 min-w-0">
         {unavailable ? (

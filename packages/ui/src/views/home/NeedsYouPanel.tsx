@@ -5,8 +5,7 @@ import type { ReactNode } from "react";
 import { StatusLabel } from "@/components/StatusLabel";
 import { twoDigits } from "@/lib/format";
 import { HOME_SESSION_STATUS, homeRepoStatus } from "@/lib/home-model";
-import { PROPOSAL_STATUS } from "@/lib/session-entries";
-import { sessionStateLabel } from "@/lib/session-state";
+import { PROPOSAL_STATUS, sessionStateLabel } from "@/lib/session-state";
 import { cn } from "@/lib/utils";
 
 /**
@@ -63,18 +62,9 @@ export function NeedsYouPanel({
           </h2>
           <ul aria-label="Task proposals waiting for your decision" className="px-2">
             {proposals.map((p) => (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  onClick={() => onOpenProposal(p.id)}
-                  className="flex w-full flex-col items-start gap-1 rounded-md border border-transparent px-2 py-2 text-left transition-colors hover:bg-accent"
-                >
-                  <span className="w-full truncate text-sm font-medium">{`${p.repo} · ${p.title}`}</span>
-                  <span className="text-xs">
-                    <StatusLabel {...PROPOSAL_STATUS} />
-                  </span>
-                </button>
-              </li>
+              <QueueItem key={p.id} title={`${p.repo} · ${p.title}`} active={false} onClick={() => onOpenProposal(p.id)}>
+                <StatusLabel {...PROPOSAL_STATUS} />
+              </QueueItem>
             ))}
           </ul>
         </>
@@ -110,15 +100,36 @@ function Row({
   children: ReactNode;
 }) {
   return (
+    <QueueItem title={title} active={id === selected} onClick={() => onSelect(id)} onDoubleClick={() => onOpen(id)}>
+      {children}
+    </QueueItem>
+  );
+}
+
+/** Pozycja kolejki: tytuł i stan w jednej linii pod nim. */
+function QueueItem({
+  title,
+  active,
+  onClick,
+  onDoubleClick,
+  children,
+}: {
+  title: string;
+  active: boolean;
+  onClick: () => void;
+  onDoubleClick?: () => void;
+  children: ReactNode;
+}) {
+  return (
     <li>
       <button
         type="button"
-        aria-current={id === selected || undefined}
-        onClick={() => onSelect(id)}
-        onDoubleClick={() => onOpen(id)}
+        aria-current={active || undefined}
+        onClick={onClick}
+        onDoubleClick={onDoubleClick}
         className={cn(
           "flex w-full flex-col items-start gap-1 rounded-md border border-transparent px-2 py-2 text-left transition-colors hover:bg-accent",
-          id === selected && "bg-accent border-primary/25 hud-active-edge",
+          active && "bg-accent border-primary/25 hud-active-edge",
         )}
       >
         <span className="w-full truncate text-sm font-medium">{title}</span>

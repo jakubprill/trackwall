@@ -40,8 +40,8 @@ function delegated(id: string, createdAt: string, proposer: string): Task {
   return { ...task(id, createdAt), title: "Dodaj test", proposedBy: { session: proposer } };
 }
 
-/** Pozycje bez drzewa, w kolejności wyświetlania. */
-const sessionEntries = (list: Parameters<typeof sessionRows>[0]) => sessionRows(list).map((r) => r.entry);
+/** Pozycje z wierszy, w kolejności wyświetlania, bez głębokości. */
+const rowEntries = (list: Parameters<typeof sessionRows>[0]) => sessionRows(list).map((r) => r.entry);
 /** Wiersz jako „rodzaj identyfikator @głębokość”, żeby kształt drzewa było widać w jednej linii. */
 const shape = (list: Parameters<typeof sessionRows>[0]) => sessionRows(list).map((r) => `${r.entry.kind} ${entryId(r.entry)} @${r.depth}`);
 
@@ -58,7 +58,7 @@ describe("pozycje widoku Sesje", () => {
       proposals: [],
       worktreesDir: "/home/ja/.trackwall/worktrees",
     };
-    expect(sessionEntries(list).map((e) => (e.kind === "task" ? `zadanie ${e.task.id} ${e.session?.id}` : `sesja ${entryId(e)}`))).toEqual([
+    expect(rowEntries(list).map((e) => (e.kind === "task" ? `zadanie ${e.task.id} ${e.session?.id}` : `sesja ${entryId(e)}`))).toEqual([
       "zadanie t1 s3",
       "zadanie t2 undefined",
       "sesja s2",
@@ -66,7 +66,7 @@ describe("pozycje widoku Sesje", () => {
   });
 
   test("wybór sesji zadania (z traya albo „Następna czekająca”) wskazuje jej zadanie", () => {
-    const entries = sessionEntries({
+    const entries = rowEntries({
       sessions: [session("s1", "2026-10-23T12:00:00Z", "t1")],
       tasks: [task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
@@ -79,7 +79,7 @@ describe("pozycje widoku Sesje", () => {
   });
 
   test("wybór z pozycji listy wskazuje zadanie, a nie jego sesję", () => {
-    const [entry] = sessionEntries({
+    const [entry] = rowEntries({
       sessions: [session("s1", "2026-10-23T12:00:00Z", "t1")],
       tasks: [task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
@@ -90,7 +90,7 @@ describe("pozycje widoku Sesje", () => {
   });
 
   test("propozycje zadań są na górze, od najnowszej, przed sesjami i zadaniami", () => {
-    const entries = sessionEntries({
+    const entries = rowEntries({
       sessions: [session("s1", "2026-10-23T12:00:00Z")],
       tasks: [task("t1", "2026-10-23T13:00:00Z")],
       proposals: [proposal("p2", "2026-10-23T11:00:00Z"), proposal("p1", "2026-10-23T10:00:00Z")],
@@ -101,7 +101,7 @@ describe("pozycje widoku Sesje", () => {
   });
 
   test("wybrana propozycja, z której powstało zadanie, wybiera to zadanie, a nie pierwszą pozycję", () => {
-    const entries = sessionEntries({
+    const entries = rowEntries({
       sessions: [],
       tasks: [task("t0", "2026-10-23T14:00:00Z"), task("p1", "2026-10-23T13:00:00Z")],
       proposals: [],
@@ -160,6 +160,8 @@ describe("pozycje widoku Sesje", () => {
       worktreesDir: "/w",
     };
     expect(shape(list)).toEqual(["task t2 @0", "task t1 @1"]);
+    // t1 zlecił t2, ale t2 stoi już wyżej, więc t1 nie ma nikogo pod sobą i nie dostaje znacznika „main”.
+    expect(sessionRows(list).map((r) => r.children)).toEqual([1, 0]);
   });
 
   test("propozycja mówi, czy przyszła od sesji z listy, od zamkniętej sesji, czy od agenta spoza Trackwall", () => {

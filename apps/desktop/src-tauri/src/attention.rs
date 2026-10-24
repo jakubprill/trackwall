@@ -8,7 +8,7 @@
 
 use crate::daemon;
 use crate::daemon_state::DaemonState;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
@@ -16,9 +16,8 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::{AppHandle, Emitter, Manager, UserAttentionType};
 
 const POLL: Duration = Duration::from_secs(2);
-/// Zdarzenia dla UI z identyfikatorem sesji albo propozycji do pokazania (te same nazwy w `use-session-focus.ts`).
-const FOCUS_SESSION_EVENT: &str = "focus-session";
-const FOCUS_PROPOSAL_EVENT: &str = "focus-proposal";
+/// Zdarzenie dla UI z sesją albo propozycją do pokazania (`Focus`; ta sama nazwa i kształt w `use-session-focus.ts`).
+const FOCUS_EVENT: &str = "focus-session";
 /// Identyfikatory pozycji menu traya; pozycja sesji albo propozycji to prefiks i jej identyfikator.
 pub const MENU_SHOW: &str = "show";
 pub const MENU_QUIT: &str = "quit";
@@ -49,6 +48,9 @@ pub struct Snapshot {
     states: States,
     waiting: Vec<Waiting>,
     proposals: Vec<Proposal>,
+    /// Identyfikatory propozycji i zadań: zatwierdzana propozycja jest już zadaniem, a po nieudanym starcie wraca
+    /// jako propozycja z tym samym identyfikatorem, która nie jest nowa.
+    known: HashSet<String>,
 }
 
 /// Tylko te pola odpowiedzi `POST /api/agents/sessions`, których potrzebuje tray (`SessionList` w protocol).
@@ -60,7 +62,13 @@ struct Reply {
 #[derive(Deserialize)]
 struct SessionList {
     sessions: Vec<Session>,
+    tasks: Vec<TaskRef>,
     proposals: Vec<Proposal>,
+}
+
+#[derive(Deserialize)]
+struct TaskRef {
+    id: String,
 }
 
 #[derive(Deserialize)]
@@ -94,7 +102,8 @@ pub fn parse_sessions(body: &str) -> Option<Snapshot> {
         }
         states.insert(s.id, s.state.map(|c| c.state));
     }
-    Some(Snapshot { states, waiting, proposals: reply.data.proposals })
+    let known = reply.data.proposals.iter().map(|p| p.id.clone()).chain(reply.data.tasks.into_iter().map(|t| t.id)).collect();
+    Some(Snapshot { states, waiting, proposals: reply.data.proposals, known })
 }
 
 /// Sesje, które właśnie skończyły pracę i czekają: wcześniej `Working` albo `Stale`. Sesja po starcie czeka na pierwszy
@@ -103,11 +112,11 @@ pub fn newly_waiting(previous: &States, waiting: &[Waiting]) -> Vec<Waiting> {
     waiting.iter().filter(|w| matches!(previous.get(&w.id), Some(Some(state)) if state == "Working" || state == "Stale")).cloned().collect()
 }
 
-/// Propozycje, których nie było przy poprzednim pytaniu. Przy pierwszym (`None`, start powłoki albo daemona)
-/// żadna nie jest nowa, tak jak sesja, która czekała już przed startem.
-pub fn new_proposals<'a>(previous: Option<&HashSet<String>>, proposals: &'a [Proposal]) -> Vec<&'a Proposal> {
+/// Propozycje, których przy poprzednim pytaniu nie było ani jako propozycji, ani jako zadania. Przy pierwszym
+/// pytaniu od startu powłoki (`None`) żadna nie jest nowa, tak jak sesja, która czekała już przed startem.
+pub fn new_proposals<'a>(previous: Option<&Snapshot>, proposals: &'a [Proposal]) -> Vec<&'a Proposal> {
     let Some(previous) = previous else { return Vec::new() };
-    proposals.iter().filter(|p| !previous.contains(&p.id)).collect()
+    proposals.iter().filter(|p| !previous.known.contains(&p.id)).collect()
 }
 
 pub fn tooltip(waiting: &[Waiting], proposals: &[Proposal]) -> String {
@@ -150,8 +159,9 @@ pub fn build_menu(app: &AppHandle, waiting: &[Waiting], proposals: &[Proposal]) 
     Ok(menu)
 }
 
-/// Co pokazać po kliknięciu pozycji menu traya.
-#[derive(Debug, PartialEq, Eq)]
+/// Co pokazać po kliknięciu pozycji menu traya; dla UI `{"kind":"session"|"proposal","id":...}`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", content = "id", rename_all = "lowercase")]
 pub enum Focus<'a> {
     Session(&'a str),
     Proposal(&'a str),
@@ -168,38 +178,33 @@ pub fn focus_from_menu(id: &str) -> Option<Focus<'_>> {
 /// Pokazuje okno i prosi UI o przełączenie na sesję albo propozycję.
 pub fn focus(app: &AppHandle, target: Focus<'_>, show: fn(&AppHandle)) {
     show(app);
-    let _ = match target {
-        Focus::Session(id) => app.emit_to("main", FOCUS_SESSION_EVENT, id),
-        Focus::Proposal(id) => app.emit_to("main", FOCUS_PROPOSAL_EVENT, id),
-    };
+    let _ = app.emit_to("main", FOCUS_EVENT, target);
 }
 
 /// Wątek pytający daemon o sesje, dopóki działa powłoka.
 pub fn watch(app: AppHandle, state: Arc<DaemonState>, tray_id: &'static str) {
     std::thread::spawn(move || {
-        let mut previous = States::new();
-        let mut known: Option<HashSet<String>> = None;
-        let mut shown: (Vec<Waiting>, Vec<Proposal>) = (Vec::new(), Vec::new());
+        let no_states = States::new();
+        let mut last: Option<Snapshot> = None;
         loop {
             std::thread::sleep(POLL);
             let Some(conn) = state.ready() else { continue };
             let Some(now) = daemon::sessions(&conn).ok().and_then(|body| parse_sessions(&body)) else { continue };
-            if !newly_waiting(&previous, &now.waiting).is_empty() || !new_proposals(known.as_ref(), &now.proposals).is_empty() {
+            let previous_states = last.as_ref().map_or(&no_states, |l| &l.states);
+            if !newly_waiting(previous_states, &now.waiting).is_empty() || !new_proposals(last.as_ref(), &now.proposals).is_empty() {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.request_user_attention(Some(UserAttentionType::Informational));
                 }
             }
-            known = Some(now.proposals.iter().map(|p| p.id.clone()).collect());
-            if (&now.waiting, &now.proposals) != (&shown.0, &shown.1) {
+            if last.as_ref().is_none_or(|l| l.waiting != now.waiting || l.proposals != now.proposals) {
                 if let Some(tray) = app.tray_by_id(tray_id) {
                     let _ = tray.set_tooltip(Some(tooltip(&now.waiting, &now.proposals)));
                     if let Ok(menu) = build_menu(&app, &now.waiting, &now.proposals) {
                         let _ = tray.set_menu(Some(menu));
                     }
                 }
-                shown = (now.waiting, now.proposals);
             }
-            previous = now.states;
+            last = Some(now);
         }
     });
 }
@@ -209,7 +214,11 @@ mod tests {
     use super::*;
 
     fn body(sessions: &str, proposals: &str) -> String {
-        format!(r#"{{"ok":true,"data":{{"sessions":[{sessions}],"proposals":[{proposals}]}}}}"#)
+        body_with_tasks(sessions, "", proposals)
+    }
+
+    fn body_with_tasks(sessions: &str, tasks: &str, proposals: &str) -> String {
+        format!(r#"{{"ok":true,"data":{{"sessions":[{sessions}],"tasks":[{tasks}],"proposals":[{proposals}]}}}}"#)
     }
 
     fn session(id: &str, run: &str, state: Option<&str>) -> String {
@@ -260,10 +269,18 @@ mod tests {
 
     #[test]
     fn a_proposal_is_new_only_when_it_was_not_there_on_the_previous_poll() {
-        let now = [proposal("p1"), proposal("p2")];
-        let before: HashSet<String> = ["p1".to_owned()].into();
-        assert_eq!(new_proposals(Some(&before), &now), vec![&now[1]]);
-        assert_eq!(new_proposals(None, &now), Vec::<&Proposal>::new());
+        let before = parse_sessions(&body("", &proposal_json("p1"))).unwrap();
+        let now = parse_sessions(&body("", &[proposal_json("p1"), proposal_json("p2")].join(","))).unwrap();
+        assert_eq!(new_proposals(Some(&before), &now.proposals), vec![&proposal("p2")]);
+        assert_eq!(new_proposals(None, &now.proposals), Vec::<&Proposal>::new());
+    }
+
+    #[test]
+    fn a_proposal_back_after_a_failed_start_is_not_new() {
+        // W trakcie zatwierdzania propozycja jest już zadaniem; po nieudanym starcie wraca jako propozycja.
+        let approving = parse_sessions(&body_with_tasks("", r#"{"id":"p"}"#, "")).unwrap();
+        let back = parse_sessions(&body("", &proposal_json("p"))).unwrap();
+        assert_eq!(new_proposals(Some(&approving), &back.proposals), Vec::<&Proposal>::new());
     }
 
     #[test]
@@ -290,5 +307,6 @@ mod tests {
         assert_eq!(focus_from_menu("proposal:abc"), Some(Focus::Proposal("abc")));
         assert_eq!(focus_from_menu(MENU_SHOW), None);
         assert_eq!(menu_text("Fix A & B"), "Fix A && B");
+        assert_eq!(serde_json::to_string(&Focus::Proposal("abc")).unwrap(), r#"{"kind":"proposal","id":"abc"}"#);
     }
 }

@@ -24,14 +24,13 @@ import {
   entrySelection,
   entrySession,
   findEntry,
-  PROPOSAL_STATUS,
   type SessionEntry,
   type SessionRow,
   type SessionSelection,
   sessionRows,
   taskName,
 } from "@/lib/session-entries";
-import { isLive, nextWaiting, sessionStateLabel, waitingCount } from "@/lib/session-state";
+import { isLive, nextWaiting, PROPOSAL_STATUS, sessionStateLabel, waitingCount } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
 import { actionIsNewer, type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
@@ -228,7 +227,7 @@ function StartedListItem({
           <span className="truncate text-sm font-medium">{task?.repo ?? session?.repo}</span>
           {delegated > 0 && (
             <Badge
-              aria-label={`main session with ${countLabel(delegated, { one: "task", other: "tasks" })}`}
+              aria-label={`main session, ${countLabel(delegated, { one: "task or proposal", other: "tasks and proposals" })} under it`}
             >{`main · ${delegated}`}</Badge>
           )}
           {session?.needsAttention && <BellRing className="text-warning size-3.5 shrink-0" aria-label="waiting for you" />}

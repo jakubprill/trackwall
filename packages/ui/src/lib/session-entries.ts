@@ -73,10 +73,15 @@ export function sessionRows(list: SessionList): SessionRow[] {
     const id = entryId(entry);
     if (placed.has(id)) return;
     placed.add(id);
-    const below = children.get(id) ?? [];
-    rows.push({ entry, depth, children: below.length });
-    for (const child of below) place(child, depth + 1);
+    const row = { entry, depth, children: 0 };
+    rows.push(row);
+    for (const child of children.get(id) ?? []) {
+      if (placed.has(entryId(child))) continue;
+      row.children++;
+      place(child, depth + 1);
+    }
   };
+  // Po korzeniach jeszcze raz wszystkie pozycje: te z cyklu nie mają korzenia, więc stają na górnym poziomie.
   for (const entry of [...roots, ...entries]) place(entry, 0);
   return rows;
 }
@@ -116,9 +121,6 @@ export function findEntry(entries: readonly SessionEntry[], selection: SessionSe
 export function entrySession(entry: SessionEntry | undefined): Session | undefined {
   return entry?.kind === "proposal" ? undefined : entry?.session;
 }
-
-/** Stan propozycji zadania tam, gdzie ją widać (lista „Sessions”, „Needs you” na pulpicie): czeka na decyzję. */
-export const PROPOSAL_STATUS = { tone: "warning", label: "waiting for your decision" } as const;
 
 /** Nazwa zadania na liście i w panelu: tytuł z propozycji, a zadanie z formularza nie ma tytułu, więc polecenie. */
 export function taskName(task: Task): string {

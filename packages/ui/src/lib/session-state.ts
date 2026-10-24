@@ -18,6 +18,9 @@ export const STATE_LABELS = {
 } as const;
 
 /** Proces sesji jeszcze działa (także w trakcie zatrzymywania): pisze w swoim katalogu i trzyma jego pliki. */
+/** Stan propozycji zadania tam, gdzie ją widać (lista „Sessions”, „Needs you” na pulpicie): czeka na decyzję. */
+export const PROPOSAL_STATUS = { tone: "warning", label: "waiting for your decision" } as const;
+
 export function isLive(session: Session): boolean {
   return session.run.kind !== "exited";
 }

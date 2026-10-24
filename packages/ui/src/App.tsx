@@ -76,8 +76,7 @@ export function App() {
               conn={conn}
               runningLive={runningLive}
               sessions={sessions}
-              onOpenSession={(id) => openInSessions({ kind: "session", id })}
-              onOpenProposal={(id) => openInSessions({ kind: "proposal", id })}
+              onOpenInSessions={openInSessions}
               onOpenRepo={(id) => setView("repos", id)}
               onOpenDaemon={() => setView("daemon")}
               onOpenSettings={() => setView("settings")}
