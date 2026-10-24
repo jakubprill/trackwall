@@ -25,7 +25,7 @@ export const RepoPath = z
   .string()
   .max(4096)
   .refine((p) => p === "" || p.split("/").every((s) => s !== "" && s !== "." && s !== ".."), "repo path: no empty, '.' or '..' segments")
-  .refine((p) => [...p].every((c) => c >= " "), "a path in the repo cannot contain control characters");
+  .refine((p) => [...p].every((c) => c >= " "), "repo path: no control characters");
 export type RepoPath = z.infer<typeof RepoPath>;
 
 /** Pełny hash commita, SHA-1 albo SHA-256; tylko taki daemon podaje gitowi jako rewizję i wpisuje w nazwy plików. */

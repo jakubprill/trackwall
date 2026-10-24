@@ -5,6 +5,7 @@ import {
   evidenceLabel,
   type GraphEdge,
   type GraphNode,
+  pluralNoun,
   type RepoGraph,
 } from "@trackwall/protocol";
 import { X } from "lucide-react";
@@ -12,7 +13,6 @@ import type { ReactNode } from "react";
 import { Surface } from "@/components/Surface";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { pluralNoun } from "@/lib/format";
 import type { EdgePair } from "@/lib/graph-layout";
 
 /** Pewność krawędzi dla człowieka (ADR-29, ADR-30; reguły przy `EdgeConfidence`); `Record` wymusza wpis dla każdej. */

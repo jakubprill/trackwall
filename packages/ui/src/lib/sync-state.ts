@@ -1,5 +1,5 @@
 import type { SyncRepo, SyncRun, SyncSkipReason } from "@trackwall/protocol";
-import { countLabel } from "./format.ts";
+import { countLabel } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 
 /** Synchronizacja w UI (ADR-21): ton i krótki tekst wyniku repo oraz postęp całości; testy w `test/sync-state.test.ts`. */

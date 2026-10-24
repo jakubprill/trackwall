@@ -1,5 +1,7 @@
 /** Formatowanie dla widoków repo; czyste funkcje, testowane w `test/format.test.ts`. */
 
+import { countLabel } from "@trackwall/protocol";
+
 /** Przypis pod ucięty plik (README albo podgląd); daemon zwraca tylko początek dużych plików. */
 export const TRUNCATED_NOTE = "The file is longer; showing the beginning.";
 
@@ -28,16 +30,6 @@ export function breadcrumbs(path: string): { name: string; path: string }[] {
   if (path === "") return crumbs;
   const parts = path.split("/");
   return [...crumbs, ...parts.map((name, i) => ({ name, path: parts.slice(0, i + 1).join("/") }))];
-}
-
-/** Rzeczownik w angielskiej formie dla liczby: `one` dla 1, `other` dla 0 i 2+. Jedyne miejsce reguły liczby mnogiej w UI. */
-export function pluralNoun(n: number, forms: { one: string; other: string }): string {
-  return n === 1 ? forms.one : forms.other;
-}
-
-/** Liczba z rzeczownikiem: 1 change, 0 i 2+ changes. */
-export function countLabel(n: number, forms: { one: string; other: string }): string {
-  return `${n} ${pluralNoun(n, forms)}`;
 }
 
 /** Liczba zmian w katalogu roboczym jako tekst; `undefined`, gdy repo jest czyste. */

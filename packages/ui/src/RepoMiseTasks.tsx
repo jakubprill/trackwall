@@ -89,8 +89,8 @@ function Untrusted({ conn, repo, message, onTrusted }: { conn: Connection; repo:
   return (
     <div className="flex flex-col items-start gap-3">
       <p className="text-sm">
-        mise does not trust this repo's config, so it will not list its tasks. Trust it only if you know the repo: a mise config can run
-        programs.
+        mise does not trust this repo's config, so it will not list its mise tasks. Trust it only if you know the repo: a mise config can
+        run programs.
       </p>
       <p className="text-muted-foreground font-mono text-xs whitespace-pre-wrap break-all">{message}</p>
       <Button variant="outline" size="sm" onClick={trust.run} disabled={trust.pending}>

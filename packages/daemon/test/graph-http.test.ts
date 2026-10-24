@@ -205,6 +205,17 @@ describe("krawędzie http: dopasowanie celu", () => {
     expect(graph.edges.map((e) => [e.to, e.confidence])).toEqual([["orders-api", "high"]]);
   });
 
+  test("adres wspólny dla kilku profili wymienia je wszystkie w dowodzie", () => {
+    const graph = buildGraph(
+      [
+        repo("shop-bff", card([], [client({ app: "orders", url: "http://orders:8080", profiles: ["dev", "prod"] })])),
+        repo("orders-api", card([app("orders")], [])),
+      ],
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
+    );
+    expect(graph.edges[0]?.evidence[0]?.detail).toBe("address in config orders.url: orders, http://orders:8080 (profiles: dev, prod)");
+  });
+
   test("ta sama nazwa aplikacji w dwóch repo (klon, fork) daje krawędź do każdego z pewnością medium", () => {
     const graph = buildGraph(
       [

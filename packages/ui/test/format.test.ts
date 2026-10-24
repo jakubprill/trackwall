@@ -10,7 +10,7 @@ describe("format", () => {
     expect(relativeTime("2026-10-23T09:00:00+00:00", now)).toBe("3 h ago");
     expect(relativeTime("2026-10-22T10:00:00Z", now)).toBe("yesterday");
     expect(relativeTime("2026-10-18T12:00:00Z", now)).toBe("5 days ago");
-    expect(relativeTime("2026-03-10T12:00:00Z", now)).toBe("Mar 10, 2026");
+    expect(relativeTime("2026-03-10T12:00:00", now)).toBe("Mar 10, 2026");
   });
 
   test("liczba zmian z angielską liczbą mnogą, czyste repo bez etykiety", () => {

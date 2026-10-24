@@ -1,4 +1,4 @@
-import { BATCH_STEPS, type BatchRepo, type BatchRun, type BatchStep, type Repo } from "@trackwall/protocol";
+import { BATCH_STEPS, type BatchRepo, type BatchRun, type BatchStep, countLabel, type Repo } from "@trackwall/protocol";
 import { ListChecks, Play, Square } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Loading } from "@/components/Loading";
@@ -6,7 +6,6 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
 import { batchProgress, batchRunLabel, STEP_HINT, STEP_LABEL, stepLabel, stepMessage } from "@/lib/batch-state";
-import { countLabel } from "@/lib/format";
 import type { BatchRunHandle } from "@/lib/use-batch-run";
 
 /**
@@ -27,7 +26,7 @@ export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: read
         <h1 className="text-xl font-semibold tracking-tight">The same steps on many repos at once</h1>
         <p className="text-muted-foreground max-w-prose text-sm">
           Steps run one after another in each repo, three repos at a time. A failed step ends that repo; the others carry on. mise skips
-          tasks with <code>sources</code> and <code>outputs</code> when nothing changed, so a rerun is fast.
+          mise tasks with <code>sources</code> and <code>outputs</code> when nothing changed, so a rerun is fast.
         </p>
       </header>
       <Surface label="Steps" meta={`${steps.size}/${BATCH_STEPS.length}`}>

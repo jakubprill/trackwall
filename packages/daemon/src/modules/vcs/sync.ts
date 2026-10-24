@@ -1,4 +1,4 @@
-import type { SyncResult, SyncSkipReason } from "@trackwall/protocol";
+import { countLabel, type SyncResult, type SyncSkipReason } from "@trackwall/protocol";
 import { type GitNetwork, git, knownDefaultBranch, revParse } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { parseStatus } from "./parse.ts";
@@ -58,7 +58,7 @@ async function fastForward(dir: string, branch: string, remoteRef: string, netwo
   const { ahead, behind } = await divergence(dir, localRef, remoteRef);
   if (ahead > 0 && behind > 0)
     return skipped("diverged", `${branch} has diverged from the remote (${ahead} local, ${behind} remote); merge by hand`);
-  if (ahead > 0) return skipped("ahead", `${branch} has ${ahead} unpushed ${ahead === 1 ? "commit" : "commits"}`);
+  if (ahead > 0) return skipped("ahead", `${branch} has ${countLabel(ahead, { one: "unpushed commit", other: "unpushed commits" })}`);
   if (behind === 0) return { state: "up-to-date", branch };
 
   const status = parseStatus(

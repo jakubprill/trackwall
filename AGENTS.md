@@ -36,7 +36,7 @@ Pierwsza runda idzie na najwyższym poziomie (`/code-review max`), kolejne na di
 - **Decyzje trafiają do §12 jako ADR.** Nowy ADR ma numer, datę, jedno zdanie decyzji, uzasadnienie i to, co by ją odwróciło. Wynik spike'a albo doprecyzowanie dopisuje się do istniejącego ADR (tak jak wnioski ze spike'ów do ADR-1). Decyzji odwróconej się nie kasuje: nowy ADR, a stary dostaje dopisek „zastąpiona przez ADR-N”.
 - **Nowe pojęcie domenowe trafia do `CONTEXT.md`** razem z identyfikatorem w kodzie. Od tej chwili to jedno słowo obowiązuje w kodzie, UI, narzędziach MCP i dokumentacji.
 - Zmiana komend, wymaganych narzędzi albo układu repo aktualizuje `docs/development.md` (i sekcję „Komendy” poniżej, jeśli dotyczy Definition of done). Nowa albo zmieniona funkcja aktualizuje `docs/features.md`. Zmiana procesu wydania aktualizuje `docs/release.md`.
-- `README.md` jest po angielsku i celowo krótki (ADR-32): czym jest Trackwall i że to wczesna wersja. Nie dopisuj do niego opisu funkcji ani instrukcji.
+- `README.md` jest po angielsku i celowo krótki (ADR-32): czym jest Trackwall, że to wczesna wersja, gdzie są wydania i odnośnik do instrukcji instalacji. Nie dopisuj do niego opisu funkcji ani instrukcji.
 
 ## Język
 

@@ -1,6 +1,6 @@
 import type { GraphNode, RepoGraph } from "@trackwall/protocol";
+import { countLabel } from "@trackwall/protocol";
 import { useMemo } from "react";
-import { countLabel } from "@/lib/format";
 import { type EdgePair, edgePath, type GraphLayout, NODE_HEIGHT, NODE_WIDTH, type NodeBox, neighbourhood } from "@/lib/graph-layout";
 import { cn } from "@/lib/utils";
 

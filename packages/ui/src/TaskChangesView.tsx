@@ -1,4 +1,4 @@
-import { agentsApi, type ChangedFile, type TaskChanges } from "@trackwall/protocol";
+import { agentsApi, type ChangedFile, countLabel, type TaskChanges } from "@trackwall/protocol";
 import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { type DiffLineKind, diffLines } from "@/lib/diff-lines";
-import { countLabel } from "@/lib/format";
 import { useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
 

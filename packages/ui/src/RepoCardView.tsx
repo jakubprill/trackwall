@@ -7,6 +7,7 @@ import {
   type ProvidedApp,
   type ProvidedEndpoint,
   type ProvidedPackage,
+  pluralNoun,
   type RepoCard,
   type RepoCardResult,
   type ToolRequirement,
@@ -19,7 +20,6 @@ import { Badge } from "@/components/ui/badge";
 import { post } from "@/lib/api";
 import { HTTP_CLIENT_LABELS, MECHANISM_LABELS } from "@/lib/card";
 import type { Connection } from "@/lib/connection";
-import { pluralNoun } from "@/lib/format";
 import { useRemote } from "@/lib/use-remote";
 
 /**
