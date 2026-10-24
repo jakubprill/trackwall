@@ -24,7 +24,8 @@ const SESSION_LAYOUT_PARAM: &str = "sessionLayout";
 /// stays with the reveal after page load (ADR-11).
 pub const STATE_FLAGS: StateFlags = StateFlags::POSITION.union(StateFlags::SIZE).union(StateFlags::MAXIMIZED).union(StateFlags::FULLSCREEN);
 
-/// Which windows show Sessions and the order of focus, most recently focused last. `opening` makes opening windows
+/// What each window shows (which ones show Sessions, and for extra windows the list saved for the next start) and the
+/// order of focus, most recently focused last. `opening` makes opening windows
 /// one at a time, so two quick opens do not pick the same free label; it is separate from the registry, which the main
 /// thread locks on focus while `open` waits for the main thread to build the window.
 #[derive(Default)]
@@ -49,7 +50,7 @@ impl Registry {
 
     fn shows(&mut self, label: &str, shown: Shown) {
         self.showing_sessions.retain(|l| l != label);
-        if shown.view == SESSIONS_VIEW {
+        if shown.view() == SESSIONS_VIEW {
             self.showing_sessions.push(label.to_string());
         }
         if is_extra(label) {
@@ -60,6 +61,13 @@ impl Registry {
     /// The user closed an extra window, so the next start does not open it again.
     fn closed_by_user(&mut self, label: &str) {
         self.extra_shown.remove(label);
+    }
+
+    /// Windows from the last run that are about to open; they are in the saved list before they report.
+    fn restoring(&mut self, saved: &[SavedWindow]) {
+        for w in saved {
+            self.extra_shown.insert(w.label.clone(), w.shown.clone());
+        }
     }
 
     fn saved(&self) -> Vec<SavedWindow> {
@@ -101,8 +109,9 @@ impl Windows {
 /// The view id of Sessions in the UI (`App.tsx`).
 const SESSIONS_VIEW: &str = "sessions";
 
+/// A label `next_label` can give: the prefix and a number from 2, written without a sign or leading zero.
 fn is_extra(label: &str) -> bool {
-    label.strip_prefix(EXTRA_PREFIX).is_some_and(|n| n.parse::<u32>().is_ok_and(|n| n >= 2))
+    label.strip_prefix(EXTRA_PREFIX).is_some_and(|n| n.parse::<u32>().is_ok_and(|parsed| parsed >= 2 && parsed.to_string() == n))
 }
 
 /// The lowest free extra window label, so that a reopened window takes the place of the one closed before.
@@ -141,15 +150,24 @@ pub fn open(app: &AppHandle, view: Option<&str>) -> Result<(), String> {
 
 /// Opens the extra windows saved at the last run, each under its own label and with what it showed. Runs in the async
 /// runtime, because windows are not built on the main thread.
+///
+/// The saved list goes into the registry before the first window is built, so a report from one restored window or
+/// a closed one does not save a list without the others still loading; opening is held for the whole restore, so a
+/// "New window" meanwhile cannot take a saved label. A window that cannot be built leaves the list.
 pub fn restore(app: &AppHandle) {
     let Some(path) = saved_path(app) else { return };
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        for saved in saved_windows::load(&path, is_extra) {
-            let url = window_url(Some(&saved.shown.view), Some(&saved.shown.session_layout));
-            let opened = url.ok_or_else(|| "not an id".to_string()).and_then(|url| build(&app, Some(saved.label.clone()), url));
+        let windows = app.state::<Windows>();
+        let _one_at_a_time = lock(&windows.opening);
+        let saved = saved_windows::load(&path, is_extra);
+        windows.with(|r| r.restoring(&saved));
+        for w in saved {
+            let url = window_url(Some(w.shown.view()), Some(w.shown.session_layout()));
+            let opened = url.ok_or_else(|| "not an id".to_string()).and_then(|url| build_while_opening(&app, Some(w.label.clone()), url));
             if let Err(err) = opened {
-                eprintln!("[desktop] reopening {}: {err}", saved.label);
+                eprintln!("[desktop] reopening {}: {err}", w.label);
+                closed_by_user(&app, &w.label);
             }
         }
     });
@@ -163,10 +181,15 @@ pub fn restore(app: &AppHandle) {
 /// Must not run on the main thread: on Windows building a window there deadlocks (Tauri docs), so the tray and the
 /// restore call it from the async runtime and the UI through an async command.
 fn build(app: &AppHandle, label: Option<String>, url: String) -> Result<(), String> {
+    let windows = app.state::<Windows>();
+    let _one_at_a_time = lock(&windows.opening);
+    build_while_opening(app, label, url)
+}
+
+/// `build` for a caller that holds `Windows::opening`.
+fn build_while_opening(app: &AppHandle, label: Option<String>, url: String) -> Result<(), String> {
     let config = app.config().app.windows.iter().find(|w| w.label == MAIN).ok_or("missing window main from tauri.conf.json")?;
     let window = {
-        let windows = app.state::<Windows>();
-        let _one_at_a_time = lock(&windows.opening);
         let taken = || app.webview_windows().keys().cloned().collect::<Vec<_>>();
         let label = match label {
             Some(label) if taken().contains(&label) => return Err(format!("{label} is already open")),
@@ -246,11 +269,11 @@ mod tests {
     use super::*;
 
     fn sessions() -> Shown {
-        Shown { view: "sessions".into(), session_layout: "auto".into() }
+        Shown::new("sessions", "auto").expect("valid ids")
     }
 
     fn home() -> Shown {
-        Shown { view: "home".into(), session_layout: "1".into() }
+        Shown::new("home", "1").expect("valid ids")
     }
 
     #[test]
@@ -284,6 +307,8 @@ mod tests {
         assert!(!is_extra("main"));
         assert!(!is_extra("window-1"));
         assert!(!is_extra("window-x"));
+        assert!(!is_extra("window-02"));
+        assert!(!is_extra("window-+2"));
     }
 
     #[test]
@@ -310,7 +335,7 @@ mod tests {
         assert_eq!(window_url(Some("home&token=x"), None), None);
         assert_eq!(window_url(Some("../index"), None), None);
         assert_eq!(window_url(Some("Sessions"), None), None);
-        assert_eq!(window_url(Some(&"a".repeat(33)), None), None);
+        assert_eq!(window_url(Some(&"a".repeat(saved_windows::MAX_ID_LEN + 1)), None), None);
     }
 
     #[test]

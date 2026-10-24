@@ -14,10 +14,26 @@ const MAX_WINDOWS: usize = 16;
 /// What a window shows: its view and the layout of its Sessions view. Both are ids from the UI (`home`, `auto`…), a
 /// short lowercase word or number, and only such a word reaches a window's address.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", try_from = "RawShown")]
 pub struct Shown {
-    pub view: String,
-    pub session_layout: String,
+    view: String,
+    session_layout: String,
+}
+
+/// `Shown` as it is in the file, before its ids are checked.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawShown {
+    view: String,
+    session_layout: String,
+}
+
+impl TryFrom<RawShown> for Shown {
+    type Error = String;
+
+    fn try_from(raw: RawShown) -> Result<Shown, String> {
+        Shown::new(&raw.view, &raw.session_layout).ok_or_else(|| "not a view or session layout id".into())
+    }
 }
 
 /// An extra window to open at start.
@@ -27,7 +43,7 @@ pub struct SavedWindow {
     pub shown: Shown,
 }
 
-const MAX_ID_LEN: usize = 32;
+pub(crate) const MAX_ID_LEN: usize = 32;
 
 /// Whether a value from the UI or the file is an id that may go into a window's address.
 pub fn is_id(value: &str) -> bool {
@@ -39,16 +55,24 @@ impl Shown {
     pub fn new(view: &str, session_layout: &str) -> Option<Shown> {
         (is_id(view) && is_id(session_layout)).then(|| Shown { view: view.into(), session_layout: session_layout.into() })
     }
+
+    pub fn view(&self) -> &str {
+        &self.view
+    }
+
+    pub fn session_layout(&self) -> &str {
+        &self.session_layout
+    }
 }
 
-/// The windows from the file's text, keeping only entries whose label passes `is_label` and whose ids are valid;
-/// anything else in the file, or a file that is not JSON, gives no windows rather than an error at start.
+/// The windows from the file's text: each entry on its own, so one with an id that is not valid or a label that does
+/// not pass `is_label` is dropped, a repeated label counts once and the list is cut at `MAX_WINDOWS`; a file that is
+/// not a JSON list gives no windows rather than an error at start.
 pub fn parse(text: &str, is_label: impl Fn(&str) -> bool) -> Vec<SavedWindow> {
-    let Ok(windows) = serde_json::from_str::<Vec<SavedWindow>>(text) else { return Vec::new() };
+    let Ok(entries) = serde_json::from_str::<Vec<serde_json::Value>>(text) else { return Vec::new() };
     let mut valid: Vec<SavedWindow> = Vec::new();
-    for w in windows {
-        let ok = is_label(&w.label) && Shown::new(&w.shown.view, &w.shown.session_layout).is_some();
-        if ok && !valid.iter().any(|v| v.label == w.label) && valid.len() < MAX_WINDOWS {
+    for w in entries.into_iter().filter_map(|entry| serde_json::from_value::<SavedWindow>(entry).ok()) {
+        if is_label(&w.label) && !valid.iter().any(|v| v.label == w.label) && valid.len() < MAX_WINDOWS {
             valid.push(w);
         }
     }
@@ -80,7 +104,7 @@ mod tests {
     }
 
     fn saved(label: &str, view: &str, layout: &str) -> SavedWindow {
-        SavedWindow { label: label.into(), shown: Shown { view: view.into(), session_layout: layout.into() } }
+        SavedWindow { label: label.into(), shown: Shown::new(view, layout).expect("valid ids") }
     }
 
     #[test]
@@ -95,7 +119,8 @@ mod tests {
 
     #[test]
     fn a_missing_or_damaged_file_opens_no_windows() {
-        assert_eq!(load(Path::new("/nonexistent/trackwall/windows.json"), extra), vec![]);
+        let missing = std::env::temp_dir().join("trackwall-no-such-dir").join(FILE);
+        assert_eq!(load(&missing, extra), vec![]);
         assert_eq!(parse("{not json", extra), vec![]);
         assert_eq!(parse(r#"{"label":"window-2"}"#, extra), vec![]);
     }
@@ -112,15 +137,16 @@ mod tests {
     }
 
     #[test]
-    fn a_label_appears_once_and_the_list_is_cut_at_the_limit() {
+    fn a_repeated_label_keeps_its_first_entry() {
+        let text = serde_json::to_string(&[saved("window-2", "repos", "1"), saved("window-2", "home", "1")]).expect("json");
+        assert_eq!(parse(&text, extra), vec![saved("window-2", "repos", "1")]);
+    }
+
+    #[test]
+    fn a_damaged_file_cannot_open_more_than_the_limit_of_windows() {
         let many: Vec<SavedWindow> = (2..40).map(|n| saved(&format!("window-{n}"), "home", "1")).collect();
-        let mut text_windows = vec![saved("window-2", "repos", "1")];
-        text_windows.extend(many);
-        let text = serde_json::to_string(&text_windows).expect("json");
-        let parsed = parse(&text, extra);
-        assert_eq!(parsed.len(), MAX_WINDOWS);
-        assert_eq!(parsed[0], saved("window-2", "repos", "1"));
-        assert_eq!(parsed.iter().filter(|w| w.label == "window-2").count(), 1);
+        let text = serde_json::to_string(&many).expect("json");
+        assert_eq!(parse(&text, extra).len(), MAX_WINDOWS);
     }
 
     #[test]
