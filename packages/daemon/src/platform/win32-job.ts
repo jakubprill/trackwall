@@ -1,5 +1,5 @@
 /**
- * Job Object przez `bun:ffi`, bez natywnego addonu (spike `spikes/job-objects`, ADR-1). Ładowany tylko pod Bun
+ * Job Object przez `bun:ffi`, bez natywnego addonu (spike z etapu 1, ADR-1). Ładowany tylko pod Bun
  * na Windowsie. Układy struktur dla x64; ARM64 Windows ma ten sam układ.
  */
 import { dlopen, FFIType, type Pointer } from "bun:ffi";

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { breadcrumbs, changesLabel, formatBytes, relativeTime, twoDigits } from "../src/lib/format.ts";
+import { breadcrumbs, changesLabel, formatBytes, formatUptime, relativeTime, twoDigits } from "../src/lib/format.ts";
 
 describe("format", () => {
   const now = new Date("2026-10-23T12:00:00Z");
@@ -32,6 +32,12 @@ describe("format", () => {
       { name: "src", path: "src" },
       { name: "lib", path: "src/lib" },
     ]);
+  });
+
+  test("czas działania daemona w sekundach, minutach i godzinach", () => {
+    expect(formatUptime(5_000)).toBe("5 s");
+    expect(formatUptime(125_000)).toBe("2 min 5 s");
+    expect(formatUptime(3_725_000)).toBe("1 h 2 min");
   });
 
   test("rozmiar pliku w B, KB i MB", () => {

@@ -12,7 +12,7 @@ import { useConnection } from "@/lib/use-connection";
 import { useRemote } from "@/lib/use-remote";
 import { useSessionFocus } from "@/lib/use-session-focus";
 import { DaemonPanel } from "@/views/daemon/DaemonPanel";
-import { GraphView } from "@/views/overview/GraphView";
+import { GraphView } from "@/views/graph/GraphView";
 import { ReposView } from "@/views/repos/ReposView";
 import { SessionsView } from "@/views/sessions/SessionsView";
 import { SettingsView } from "@/views/settings/SettingsView";

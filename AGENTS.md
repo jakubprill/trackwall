@@ -40,7 +40,7 @@ Pierwsza runda idzie na najwyższym poziomie (`/code-review max`), kolejne na di
 
 ## Język
 
-- Produkt po angielsku (ADR-32): teksty UI, tray i okna powłoki desktopowej, komunikaty i logi daemona, komunikaty walidacji, opisy narzędzi i instrukcje MCP, komunikaty CLI, `README.md`, `SECURITY.md`, `README.txt` w portable buildzie i nowe notatki o zmianach w `docs/release-notes/`. Słowa interfejsu bierz z `CONTEXT.md`.
+- Produkt po angielsku (ADR-32): teksty UI, tray i okna powłoki desktopowej, komunikaty i logi daemona, komunikaty walidacji, opisy narzędzi i instrukcje MCP, komunikaty CLI, `README.md`, `SECURITY.md`, formularze zgłoszeń w `.github/ISSUE_TEMPLATE/`, `README.txt` w portable buildzie i nowe notatki o zmianach w `docs/release-notes/`. Słowa interfejsu bierz z `CONTEXT.md`.
 - Projekt po polsku: dokumentacja w `docs/`, ADR, ten plik, `CONTEXT.md`, komentarze, komunikaty commitów, tytuły i opisy PR, nazwy testów oraz skrypty narzędziowe dla osób rozwijających Trackwall (`scripts/` paczek).
 - Identyfikatory, kody błędów API (`error.code`), nazwy zdarzeń i narzędzi MCP po angielsku.
 
@@ -69,8 +69,8 @@ Repo ma zostać opublikowane jako open source (nagłówek `docs/architecture.md`
 ## Kod czytelny dla agentów i ludzi
 
 - **Nazwy mówią, czym rzecz jest w domenie**, tym samym słowem co `CONTEXT.md`, UI i narzędzia MCP. Jedno pojęcie, jedna nazwa.
-- **Granice modułów z §4 są twarde.** Moduł daemona nie importuje innego modułu bezpośrednio, tylko przez fasadę; nowa zależność między modułami wymaga zmiany tabeli w §4. UI, scena i CLI nie importują `@trackwall/daemon`; wspólny kod biorą tylko z `@trackwall/protocol`. Pliki infrastruktury daemona (`main.ts`, `infra/`, `platform/`) nie są modułami i nie trzymają stanu domenowego.
-- **Każdy plik ma swoje miejsce** (`docs/development.md`, „Układ repo”): w daemonie moduł w `src/modules/<moduł>/`, transport w `src/api/` albo `src/mcp/`, API systemu w `src/platform/`, reszta infrastruktury w `src/infra/`; w UI komponent jednego widoku w `src/views/<widok>/`, komponent kilku widoków w `src/components/`, logika bez Reacta i hooki w `src/lib/`. Nie zostawiaj plików luzem w korzeniu `src/`.
+- **Granice modułów z §4 są twarde.** Moduł daemona nie importuje innego modułu bezpośrednio, tylko przez fasadę; nowa zależność między modułami wymaga zmiany tabeli w §4. UI, scena i CLI nie importują `@trackwall/daemon`; wspólny kod biorą tylko z `@trackwall/protocol`. Pliki infrastruktury daemona (`main.ts`, `args.ts`, `infra/`, `platform/`) nie są modułami i nie trzymają stanu domenowego.
+- **Każdy plik ma swoje miejsce** (`docs/development.md`, „Układ repo”): w daemonie moduł w `src/modules/<moduł>/`, transport w `src/api/` albo `src/mcp/`, API systemu w `src/platform/`, reszta infrastruktury w `src/infra/`; w UI komponent jednego widoku w `src/views/<identyfikator widoku>/` (`repos`, `sessions`, `graph`, `daemon`, `settings`), komponent kilku widoków w `src/components/`, logika bez Reacta i hooki w `src/lib/`. W korzeniu `src/` leżą tylko punkty wejścia: w daemonie `main.ts`, `args.ts` i `facade.ts`, w UI `main.tsx`, `App.tsx` i `index.css`.
 - **Typy są kontraktem i pochodzą z kodu**: z wartości, ze schematów zod (`z.infer`). Bez `any`. Zamiast `!` jawne sprawdzenie i wyjątek z opisem. Asercja `as` to twierdzenie, którego kompilator nie sprawdzi: dane z zewnątrz (`JSON.parse`, odpowiedzi HTTP, pliki, argumenty CLI) nigdy nie są rzutowane, tylko parsowane schematem. Poza tym `as` tylko tam, gdzie typ z biblioteki jest szerszy niż to, co wiadomo w danym miejscu (`server.address() as AddressInfo`, błąd w `catch` jako `NodeJS.ErrnoException`), oraz w testach do budowania atrap.
 - **Małe funkcje i pliki o jednym celu.** Plik, który robi dwie rzeczy, staje się dwoma plikami.
 - **Jedno miejsce dla każdej reguły.** Zanim napiszesz helper, poszukaj istniejącego. Zduplikowana logika to błąd, który czeka, aż kopie się rozjadą.

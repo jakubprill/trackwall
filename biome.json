@@ -143,6 +143,10 @@
               "options": {
                 "patterns": [
                   {
+                    "group": ["bun", "bun:*"],
+                    "message": "Moduły Bun tylko w packages/daemon/src/platform (ADR-1)."
+                  },
+                  {
                     "group": [
                       "../*/**",
                       "!../../infra/errors.ts",
@@ -161,6 +165,30 @@
     },
     {
       "includes": ["packages/daemon/src/**", "!packages/daemon/src/modules/**", "!packages/daemon/src/facade.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["bun", "bun:*"],
+                    "message": "Moduły Bun tylko w packages/daemon/src/platform (ADR-1)."
+                  },
+                  {
+                    "group": ["**/modules/**"],
+                    "message": "Transporty i infrastruktura sięgają do modułów tylko przez fasadę (src/facade.ts, §4)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/daemon/src/platform/**"],
       "linter": {
         "rules": {
           "style": {
