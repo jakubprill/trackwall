@@ -33,8 +33,9 @@ function sessionOf(agents: Agents, task: string): string {
 describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (prawdziwy git i PTY, atrapa Copilot CLI)", () => {
   test("zadanie dostaje gałąź od gałęzi domyślnej w worktree poza repo, a Copilot CLI startuje w nim z poleceniem", async () => {
     const { dir, mainCommit } = cloneOnFeatureBranch();
-    // Ścieżka worktree dłuższa niż szerokość terminala: ConPTY na Windowsie łamie ją na ekranie.
-    const longHome = join(mkdtempSync(join(tmpdir(), "trackwall-agents-")), "katalog-stanu-o-bardzo-dlugiej-nazwie-".repeat(3));
+    // Wiersz ze ścieżką worktree dłuższy niż ekran (120 kolumn), więc ConPTY na Windowsie by go złamał; nie dłuższy,
+    // bo ponad 260 znaków git na Windowsie nie przyjmie katalogu `.git` worktree.
+    const longHome = join(mkdtempSync(join(tmpdir(), "trackwall-agents-")), "katalog-stanu-o-dlugiej-nazwie-na-ekranie");
     mkdirSync(longHome);
     const { agents, procs, home } = makeAgents({ sklep: dir }, longHome);
     cleanups.push(() => procs.stopAll());
@@ -56,7 +57,7 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
     const window = viewer(agents, session);
     await waitFor(agents, session, () => window.text().includes("--interactive="), "polecenie na ekranie");
     // Proces widzi katalog po rozwinięciu dowiązań (na macOS `/var` to `/private/var`).
-    expect(window.text()).toContain(`katalog ${realpathSync(task.worktree)}`);
+    expect(window.unwrappedText()).toContain(`Katalog:${realpathSync(task.worktree)}`);
     expect(window.text()).toContain("Argument: --interactive=Napraw logowanie w sklepie");
     expect(window.text()).toContain(`Argument: --session-id=${task.id}`);
     window.attachment.detach();
@@ -141,7 +142,7 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
     await waitFor(restarted.agents, session, () => window.text().includes("--resume="), "wznowienie na ekranie");
     expect(window.text()).toContain(`Argument: --resume=${task.id}`);
     // Proces widzi katalog po rozwinięciu dowiązań (na macOS `/var` to `/private/var`).
-    expect(window.text()).toContain(`katalog ${realpathSync(task.worktree)}`);
+    expect(window.unwrappedText()).toContain(`Katalog:${realpathSync(task.worktree)}`);
     expect(window.text()).not.toContain("--interactive=");
     window.attachment.detach();
 

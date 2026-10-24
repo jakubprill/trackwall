@@ -59,7 +59,13 @@ export async function waitFor(agents: Agents, id: string, check: (s: Session) =>
   }
 }
 
-/** Okno terminala na niby: obraz ekranu i wyjście jako tekst oraz to, czy daemon je zamknął. */
+/** Sekwencje CSI, którymi ConPTY przesuwa kursor i czyści linie między wypisanym tekstem. */
+const CONTROL_SEQUENCE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;?]*[ -/]*[@-~]`, "g");
+
+/**
+ * Okno terminala na niby: obraz ekranu i wyjście jako tekst oraz to, czy daemon je zamknął. `unwrappedText` to tekst
+ * bez końców linii i sekwencji CSI, do szukania tego, co program wypisał w kilku liniach.
+ */
 export function viewer(agents: Agents, id: string) {
   let screen = "";
   let closed = false;
@@ -76,5 +82,10 @@ export function viewer(agents: Agents, id: string) {
       closed = true;
     },
   );
-  return { attachment, text: () => screen, closed: () => closed };
+  return {
+    attachment,
+    text: () => screen,
+    unwrappedText: () => screen.replace(CONTROL_SEQUENCE, "").replace(/[\r\n]/g, ""),
+    closed: () => closed,
+  };
 }

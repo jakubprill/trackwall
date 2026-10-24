@@ -23,12 +23,12 @@ describe("vcs na prawdziwym gicie", () => {
   test("liczenia zmian z kilku okien naraz w świeżym repo kończą się wynikiem, choć każde dodaje nowy pusty plik do indeksu", async () => {
     // Każde liczenie zapisuje pusty blob (`add --intent-to-add`); na Windowsie dwa zapisy tego samego obiektu naraz
     // kończą się „Permission denied” (#36). Kilka rund, bo w świeżym repo tego obiektu jeszcze nie ma.
-    for (let round = 0; round < 5; round++) {
+    for (let round = 0; round < 8; round++) {
       const dir = makeRepo({ "README.md": "# repo\n" });
       const base = gitIn(dir, "rev-parse", "HEAD").trim();
       writeFileSync(join(dir, "nowy.md"), "x\n");
 
-      const reads = await Promise.all(Array.from({ length: 8 }, () => vcs.worktreeChanges(dir, base, 1_000_000)));
+      const reads = await Promise.all(Array.from({ length: 12 }, () => vcs.worktreeChanges(dir, base, 1_000_000)));
 
       for (const read of reads) expect(read.files.map((f) => f.path)).toEqual(["nowy.md"]);
     }

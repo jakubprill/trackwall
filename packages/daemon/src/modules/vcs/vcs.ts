@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import type { Commit, FileContent, RepoStatusOk, SyncResult, TreeEntry } from "@trackwall/protocol";
+import type { Commit, FileContent, RepoStatusOk, SyncResult, TaskChanges, TreeEntry } from "@trackwall/protocol";
 import { git } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { KeyedQueue } from "./keyed-queue.ts";
@@ -26,6 +26,8 @@ export class Vcs {
    */
   private readonly syncing = new KeyedQueue();
   private readonly worktreeOps = new KeyedQueue();
+  /** Zapisy do `.git/objects` przy liczeniu zmian (`worktree-changes.ts`), po wspólnym katalogu `.git`. */
+  private readonly objectWrites = new KeyedQueue();
 
   async status(dir: string): Promise<RepoStatusOk> {
     const { stdout } = await git(dir, ["status", "--porcelain=v2", "--branch", "-z"]);
@@ -49,10 +51,13 @@ export class Vcs {
   }
 
   // Worktree zadań (ADR-31, `worktree.ts`, `worktree-changes.ts`). Odczyty idą wprost; zmiany rejestru worktree
-  // i gałęzi po kolei w jednym repo.
+  // i gałęzi oraz zapisy obiektów przy liczeniu zmian po kolei w jednym repo.
   readonly defaultBase = defaultBase;
   readonly pendingWork = pendingWork;
-  readonly worktreeChanges = worktreeChanges;
+
+  worktreeChanges(dir: string, base: string, maxPatchBytes: number): Promise<TaskChanges> {
+    return worktreeChanges(dir, base, maxPatchBytes, async (job) => this.objectWrites.run(await this.commonDir(dir), job));
+  }
 
   addWorktree(repoDir: string, path: string, branch: string, commit: string): Promise<void> {
     return this.serialWorktreeOp(repoDir, () => addWorktree(repoDir, path, branch, commit));

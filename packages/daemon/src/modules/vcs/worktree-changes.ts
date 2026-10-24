@@ -13,13 +13,23 @@ import { commitCount, uncommittedCount } from "./worktree.ts";
  * Nowe pliki trafiają do indeksu tymczasowego (kopia indeksu worktree, żeby git nie liczył od nowa niezmienionych
  * plików) tylko jako zamiar dodania (`--intent-to-add`), więc indeks agenta zostaje nietknięty, a odpytywanie co
  * kilka sekund nie zapisuje do `.git/objects` nowej wersji każdego zmienionego pliku. Diff bez zewnętrznych programów
- * diff i `textconv` z konfiguracji repo.
+ * diff i `textconv` z konfiguracji repo. Zamiar dodania pustego pliku zapisuje do `.git/objects` pusty blob; na Windowsie
+ * dwa procesy zapisujące naraz ten sam obiekt kończą się „Permission denied” (#36), więc `add` idzie przez
+ * `serialObjectWrite`, który wołający kolejkuje po katalogu `.git` wspólnym dla repo i jego worktree.
  */
+
+/** Uruchamia `job` po kolei z innymi zapisami do obiektów tego samego repo. */
+export type SerialObjectWrite = <T>(job: () => Promise<T>) => Promise<T>;
 
 /** Duże worktree na Windowsie ze skanującym antywirusem potrafią liczyć `git status` kilkanaście sekund. */
 const CHANGES_TIMEOUT_MS = 60_000;
 
-export async function worktreeChanges(dir: string, base: string, maxPatchBytes: number): Promise<TaskChanges> {
+export async function worktreeChanges(
+  dir: string,
+  base: string,
+  maxPatchBytes: number,
+  serialObjectWrite: SerialObjectWrite,
+): Promise<TaskChanges> {
   const index = resolve(dir, (await git(dir, ["rev-parse", "--git-path", "index"])).stdout.toString("utf8").trim());
   const tmp = resolve(tmpdir(), `trackwall-index-${randomUUID()}`);
   try {
@@ -28,12 +38,14 @@ export async function worktreeChanges(dir: string, base: string, maxPatchBytes: 
     });
     // Z `--ignore-errors` git kończy się kodem 1, gdy któregoś pliku nie przeczyta (trzymany przez proces na Windowsie),
     // choć pozostałe dodał; diff bez tego jednego nowego pliku jest lepszy niż żaden. Każdy inny błąd jest błędem.
-    await git(dir, ["add", "--intent-to-add", "--all", "--ignore-errors", "--", "."], {
-      indexFile: tmp,
-      timeoutMs: CHANGES_TIMEOUT_MS,
-    }).catch((err: unknown) => {
-      if (!(err instanceof ExitCodeError && err.exitCode === 1)) throw err;
-    });
+    await serialObjectWrite(() =>
+      git(dir, ["add", "--intent-to-add", "--all", "--ignore-errors", "--", "."], {
+        indexFile: tmp,
+        timeoutMs: CHANGES_TIMEOUT_MS,
+      }).catch((err: unknown) => {
+        if (!(err instanceof ExitCodeError && err.exitCode === 1)) throw err;
+      }),
+    );
     const diff = (args: string[], maxBytes?: number) =>
       git(dir, ["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", ...args, base, "--"], {
         indexFile: tmp,

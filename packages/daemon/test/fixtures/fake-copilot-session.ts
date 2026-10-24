@@ -36,7 +36,14 @@ function fire(event: string, payload: Record<string, unknown>): void {
 /** Argumenty zadania (`--interactive=`, `--resume=`, `--session-id=`), które atrapa wypisuje, żeby test je zobaczył. */
 const taskArgs = process.argv.filter((a) => /^--(interactive|resume|session-id)=/.test(a));
 
-process.stdout.write(`\x1b]0;Atrapa Copilot\x07Witaj w atrapie, katalog ${process.cwd()}, MCP: ${mcpServers.join(", ")}\r\n`);
+process.stdout.write(`\x1b]0;Atrapa Copilot\x07Witaj w atrapie, MCP: ${mcpServers.join(", ")}\r\n`);
+// Katalog w liniach krótszych niż ekran: ConPTY na Windowsie łamie dłuższą linię po swojemu, a test skleja linie.
+process.stdout.write(
+  `Katalog:\r\n${process
+    .cwd()
+    .match(/.{1,60}/g)
+    ?.join("\r\n")}\r\n`,
+);
 for (const arg of taskArgs) process.stdout.write(`Argument: ${arg}\r\n`);
 process.stdout.write("> ");
 fire("sessionStart", { source: "new" });
