@@ -48,12 +48,28 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     expect(replayCopilotRecording(cast, { staleAfterMs: 60_000 })[1]?.at).toBe("1970-01-01T00:01:02.000Z");
   });
 
+  test("czas zmiany to pełna milisekunda zapisana w nagraniu, także gdy sekundy nie mają dokładnego zapisu binarnego", () => {
+    // 1.005 * 1000 to w liczbach zmiennoprzecinkowych 1004.9999999999999, a nagranie zapisało 1005 ms.
+    const cast = parseAsciicast('{"version": 2, "width": 80, "height": 24, "timestamp": 0}\n[1.005, "o", "\\u001b]9;4;3;0\\u0007"]\n');
+
+    expect(replayCopilotRecording(cast, { staleAfterMs: 60_000 })[0]?.at).toBe("1970-01-01T00:00:01.005Z");
+  });
+
   test("znacznik, który nie jest rekordem sesji, jest pomijany, a zła linia nagrania jest błędem z numerem", () => {
     const withManualMarker = parseAsciicast('{"version": 2, "width": 80, "height": 24, "timestamp": 0}\n[1.0, "m", "tu się zawiesza"]\n');
     expect(replayCopilotRecording(withManualMarker, { staleAfterMs: 60_000 })).toEqual([]);
 
     expect(() => parseAsciicast('{"version": 2, "width": 80, "height": 24, "timestamp": 0}\n[1.0, "x", "?"]\n')).toThrow("zła linia 2");
     expect(() => parseAsciicast('{"version": 2, "width": 80, "height": 24, "timestamp": 0}\n[1.0, "o", \n')).toThrow("zła linia 2");
+  });
+
+  test("koniec procesu po progu bez cyklicznego sprawdzenia daje najpierw Stale, tak jak odtwarzanie nagrania", () => {
+    let now = 0;
+    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000 });
+    session.output("\x1b]9;4;3;0\x07");
+
+    now = 61_100;
+    expect(session.exit(0).map((c) => `${c.state} ${c.at}`)).toEqual(["Stale 1970-01-01T00:01:00.000Z", "Done 1970-01-01T00:01:01.100Z"]);
   });
 
   test("wyjście po progu bez cyklicznego sprawdzenia daje Stale i powrót, tak jak odtwarzanie nagrania", () => {

@@ -92,8 +92,11 @@ _Unikaj_: status (w polskim tekście), sync (to osobna akcja)
 **Przegląd repo** (`RepoOverview`):
 README i ostatnie commity repo w jednej odpowiedzi; stan repo przychodzi z listy repo. Pliki przeglądane są osobno, zawsze z commita HEAD (ADR-14).
 
-**Worktree**:
-Osobny katalog roboczy gita dla zadania, w `<repo>/.worktrees/<zadanie>`. Usuwany dopiero po potwierdzonym zatrzymaniu procesów, które z niego korzystają.
+**Worktree** (worktree zadania, `Task.worktree`):
+Osobny katalog roboczy gita dla zadania, na gałęzi zadania, w `worktrees/<repo>/<gałąź bez prefiksu>` w katalogu stanu, poza folderem z projektami (ADR-31). Liczony z repo i gałęzi (`taskWorktree`), nie zapisywany w `tasks.json`. Usuwany tylko na prośbę użytkownika i tylko bez działającej sesji zadania; niezacommitowane zmiany przepadają dopiero po potwierdzeniu.
+
+**Commit bazowy** (`Task.base`):
+Commit gałęzi domyślnej, od którego wyszła gałąź zadania. Zmiany zadania (`TaskChanges`) to katalog roboczy worktree względem niego: commity zadania i niezacommitowane pliki razem.
 
 **Karta** (karta repo, `RepoCard`):
 Fakty o repo wyciągnięte deterministycznie z plików buildu, konfiguracji i kodu w commicie HEAD: pliki buildu, co repo udostępnia (`provides`), czego używa (`consumes`), wymagane narzędzia, mechanizmy i problemy, każdy fakt z dowodem. Zależy tylko od commita, więc liczy się raz na commit (ADR-25). LLM dopisze tylko opis i propozycje połączeń oznaczone `origin: 'llm'` (ADR-6). W UI zakładka „Karta” w szczegółach repo.
@@ -192,8 +195,16 @@ Grupa procesów z `runtime.json`, której daemon już nie nadzoruje (np. po awar
 ## Agenci
 
 **Zadanie** (`Task`, `TaskId`):
-Praca jednego agenta nad jednym repo: prompt, worktree, gałąź, sesja, budżet, dzierżawy i podsumowanie. W kodzie i API `task` znaczy zawsze zadanie.
+Praca jednego agenta nad jednym repo: polecenie, worktree, gałąź `trackwall/<skrót>` od gałęzi domyślnej i sesje; docelowo także budżet, dzierżawy i podsumowanie. Dziś (ADR-31) tworzy je widok Sesje, zapisuje `tasks.json`, a sesję zadania można zatrzymać i wznowić. Zadanie nie wskazuje sesji; to sesja ma `Session.task`. W kodzie i API `task` znaczy zawsze zadanie.
 _Unikaj_: job; „task” w polskim tekście (myli się z taskiem mise)
+
+**Zakończenie zadania** (`removeTask`, „Zakończ zadanie” w UI):
+Usunięcie worktree zadania, a do wyboru także jego gałęzi. Tylko bez działającej sesji; to, co by przepadło (niezacommitowane pliki, commity z odłączonego HEAD, katalog, którego git już nie zna, a z gałęzią także commity zadania), daemon wymienia w odmowie `unsaved_changes`, a przepada ono dopiero po potwierdzeniu. Pliki ignorowane przez gita przepadają zawsze.
+_Unikaj_: usunięcie zadania (zadanie znika z listy, ale gałąź może zostać)
+
+**Polecenie** (`Task.prompt`):
+Treść zadania dla agenta, wpisana w widoku Sesje; Copilot CLI dostaje ją jako pierwszą wiadomość sesji zadania (`--interactive`).
+_Unikaj_: prompt (w polskim tekście)
 
 **Task mise**:
 Nazwana komenda z `mise.toml` repo: `setup`, `dev`, `test`, `build`, `lint`, `health`. W kodzie zawsze z dopowiedzeniem (`miseTask`, `mise.run(...)`), nigdy gołe `task`. Jedyny wyjątek to argument `task` narzędzia MCP `run_task` (§5.3), gdzie kontekst jest jednoznaczny.
@@ -213,7 +224,7 @@ CLI agenta (dziś Copilot CLI) uruchomione przez użytkownika poza zadaniem, np.
 _Unikaj_: orkiestrator, główny agent
 
 **Sesja** (sesja zadania, `Session`, `SessionId`):
-CLI agenta działające w PTY należącym do daemona, w korzeniu repo, jako grupa procesów, z własnym katalogiem `sessions/<sesja>/` (wtyczka sesji, `hooks.jsonl`). Dziś sesja istnieje bez zadania: widok Sesje uruchamia ją w repo jednym kliknięciem (ADR-26); zadanie doda do niej prompt, worktree i budżet. Nagrywa ją tylko `copilot-record.ts`.
+CLI agenta działające w PTY należącym do daemona, w korzeniu repo albo w worktree zadania (`Session.task`), jako grupa procesów, z własnym katalogiem `sessions/<sesja>/` (wtyczka sesji, `hooks.jsonl`). Widok Sesje uruchamia ją w repo jednym kliknięciem (ADR-26) albo razem z zadaniem (ADR-31). Sesja żyje tylko do wyjścia daemona, zadanie dłużej. Nagrywa ją tylko `copilot-record.ts`.
 _Unikaj_: sesja POSIX (to pojęcie z grupy procesów), okno (to okno terminala w UI)
 
 **Czeka na Ciebie** (`Session.needsAttention`):

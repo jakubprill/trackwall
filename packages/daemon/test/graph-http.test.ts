@@ -286,7 +286,7 @@ describe("graf i find_endpoint na prawdziwym gicie", () => {
       file: new WorkspaceFile(join(home, "workspace.yaml")),
       vcs,
       hosting: fakeHosting().hosting,
-      openUrl: () => {},
+      openEditor: () => {},
     });
     await workspace.setProjectsDir(projects);
     for (const name of SHOP) makeRepo(fixtureFiles(name), name, projects);

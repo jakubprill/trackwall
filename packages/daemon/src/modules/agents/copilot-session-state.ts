@@ -25,8 +25,8 @@ export class CopilotSessionState {
   }
 
   /**
-   * Każde wejście najpierw sprawdza próg `Stale`. Odtwarzanie nie ma cyklicznego `tick`, więc dzięki temu daje tę
-   * samą kolejność zmian co sesja na żywo.
+   * Każde wejście i koniec procesu najpierw sprawdza próg `Stale`. Odtwarzanie nie ma cyklicznego `tick`,
+   * więc dzięki temu daje tę samą kolejność zmian co sesja na żywo.
    */
   output(data: string): TaskStateChange[] {
     const changes = [this.#tracker.tick(), this.#tracker.activity()];
@@ -47,7 +47,7 @@ export class CopilotSessionState {
     return this.#tracker.tick();
   }
 
-  exit(code: number): TaskStateChange | undefined {
-    return this.#tracker.exit(code);
+  exit(code: number): TaskStateChange[] {
+    return [this.#tracker.tick(), this.#tracker.exit(code)].filter((c) => c !== undefined);
   }
 }

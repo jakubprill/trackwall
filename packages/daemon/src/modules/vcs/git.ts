@@ -16,6 +16,12 @@ import { type RunOptions, type RunOutput, runProgram } from "./run.ts";
  */
 const NO_REPO_COMMANDS = ["-c", "core.fsmonitor=false", "-c", "log.showSignature=false"];
 
+/**
+ * Na Windowsie ścieżki ponad 260 znaków tylko z `core.longpaths`: worktree zadań leżą w katalogu stanu (ADR-31), więc
+ * ścieżki plików repo są w nich dłuższe niż w folderze z projektami. Klucz nie zmienia niczego poza Windowsem.
+ */
+const PLATFORM_CONFIG = process.platform === "win32" ? ["-c", "core.longpaths=true"] : [];
+
 /** Zwykłe wywołania kończą się w ułamku sekundy; limit chroni przed wiszącym gitem (blokada, dysk sieciowy). */
 const TIMEOUT_MS = 15_000;
 
@@ -41,6 +47,8 @@ type GitOptions = Pick<RunOptions, "maxBytes" | "stdin" | "okExitCodes"> & {
    * (`networkEnv`); `sshCommand` to `core.sshCommand` z konfiguracji repo i użytkownika.
    */
   network?: GitNetwork;
+  /** Indeks zamiast indeksu repo (`GIT_INDEX_FILE`): zmiany zadania liczone bez dotykania indeksu, którego używa agent. */
+  indexFile?: string;
 };
 
 /** `core.sshCommand` z konfiguracji repo i użytkownika dla komendy, która łączy się z serwerem. */
@@ -49,7 +57,7 @@ export type GitNetwork = { sshCommand: string | undefined };
 export async function git(repoDir: string, args: readonly string[], opts: GitOptions = {}): Promise<RunOutput> {
   const ceiling = await ceilingFor(repoDir);
   const { maxBytes, stdin, okExitCodes } = opts;
-  return runProgram("git", [...NO_REPO_COMMANDS, "-C", repoDir, ...args], {
+  return runProgram("git", [...NO_REPO_COMMANDS, ...PLATFORM_CONFIG, "-C", repoDir, ...args], {
     maxBytes,
     stdin,
     okExitCodes,
@@ -58,11 +66,39 @@ export async function git(repoDir: string, args: readonly string[], opts: GitOpt
     env: {
       ...gitEnv(),
       ...(opts.network && networkEnv(opts.network.sshCommand)),
+      ...(opts.indexFile && { GIT_INDEX_FILE: opts.indexFile }),
       GIT_CEILING_DIRECTORIES: ceiling,
       GIT_OPTIONAL_LOCKS: "0",
     },
     timeoutMs: opts.timeoutMs ?? TIMEOUT_MS,
   });
+}
+
+/** Pełny hash commita, na który wskazuje `ref`; `undefined`, gdy takiego commita nie ma. */
+export async function revParse(dir: string, ref: string): Promise<string | undefined> {
+  return git(dir, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]).then(
+    ({ stdout }) => stdout.toString("utf8").trim(),
+    () => undefined,
+  );
+}
+
+/** Pełna nazwa refu, na który wskazuje dowiązanie `ref` (np. `HEAD`); `undefined`, gdy to nie dowiązanie. */
+export async function symbolicRef(dir: string, ref: string): Promise<string | undefined> {
+  return git(dir, ["symbolic-ref", "--quiet", ref]).then(
+    ({ stdout }) => stdout.toString("utf8").trim() || undefined,
+    () => undefined,
+  );
+}
+
+/**
+ * Gałąź domyślna `remote` z `refs/remotes/<remote>/HEAD` (ustawia go `git clone`), bez pytania serwera; `undefined`,
+ * gdy go nie ma albo wskazuje gałąź zdalną, której już nie ma.
+ */
+export async function knownDefaultBranch(dir: string, remote: string): Promise<string | undefined> {
+  const prefix = `refs/remotes/${remote}/`;
+  const ref = await symbolicRef(dir, `${prefix}HEAD`);
+  if (!ref?.startsWith(prefix) || (await revParse(dir, ref)) === undefined) return undefined;
+  return ref.slice(prefix.length);
 }
 
 /**

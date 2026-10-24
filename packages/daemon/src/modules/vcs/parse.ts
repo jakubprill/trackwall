@@ -1,4 +1,4 @@
-import type { Commit, RepoStatusOk, TreeEntry } from "@trackwall/protocol";
+import type { ChangedFile, Commit, RepoStatusOk, TreeEntry } from "@trackwall/protocol";
 
 /**
  * Parsery wyjścia gita w formatach maszynowych (`-z`, `--porcelain=v2`), bez zależności od języka gita.
@@ -127,4 +127,31 @@ export function parseBlobs(out: Buffer, count: number): (Buffer | undefined)[] {
 /** Ta sama heurystyka co w gicie: NUL w pierwszych 8000 bajtach znaczy plik binarny. */
 export function isBinary(content: Buffer): boolean {
   return content.subarray(0, 8000).includes(0);
+}
+
+/**
+ * `diff --name-status -z` (`M\0ścieżka\0`) i `diff --numstat -z` (`dodane\tusunięte\tścieżka\0`, `-` dla pliku
+ * binarnego) bez wykrywania zmian nazw, więc każdy plik ma w obu jeden wpis.
+ */
+export function parseChangedFiles(nameStatus: string, numstat: string): ChangedFile[] {
+  const counts = parseNumstat(numstat);
+  const fields = nameStatus.split("\0");
+  const files: ChangedFile[] = [];
+  for (let i = 0; i + 1 < fields.length; i += 2) {
+    const status = fields[i] ?? "";
+    const path = fields[i + 1] ?? "";
+    const change = status === "A" ? "added" : status === "D" ? "deleted" : "modified";
+    files.push({ path, change, ...(counts.get(path) ?? { additions: null, deletions: null }) });
+  }
+  return files;
+}
+
+function parseNumstat(numstat: string): Map<string, Pick<ChangedFile, "additions" | "deletions">> {
+  const lineCount = (n: string) => (n === "-" ? null : Number(n));
+  const counts = new Map<string, Pick<ChangedFile, "additions" | "deletions">>();
+  for (const record of numstat.split("\0")) {
+    const m = /^(-|\d+)\t(-|\d+)\t(.*)$/s.exec(record);
+    if (m) counts.set(m[3] ?? "", { additions: lineCount(m[1] ?? "-"), deletions: lineCount(m[2] ?? "-") });
+  }
+  return counts;
 }

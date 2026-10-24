@@ -28,8 +28,8 @@ const Text = z.string().transform((t) => t.slice(0, MAX_TEXT_LENGTH));
 /**
  * Pola zapisywane w rekordzie; jedyna lista pól, które widzą detektory. Treść powiadomienia (`title`, `message`)
  * jest wyjątkiem: rodzaje powiadomień są udokumentowane tylko częściowo, więc bez treści nie da się poprawić
- * klasyfikacji. Może zawierać nazwę komendy, o którą agent prosi, dlatego jest przycinana, a nagranie przed
- * dodaniem do repo i tak trzeba zanonimizować (§8).
+ * klasyfikacji. Może zawierać komendę albo pełną ścieżkę, o które agent prosi, dlatego jest przycinana, a nagranie
+ * przed dodaniem do repo i tak trzeba zanonimizować (§8).
  */
 const CopilotHookPayload = z.object({
   sessionId: Text.optional(),

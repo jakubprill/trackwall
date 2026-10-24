@@ -31,6 +31,14 @@ export interface RemoteOptions<T> {
 }
 
 /**
+ * Akcja wykonana, gdy wysłano już `afterLoad` pytań (`sentLoads()`), jest nowsza od danych z pytania `loadNumber`:
+ * odpowiedź na pytanie wysłane przed nią (także takie, które było w drodze) jeszcze jej nie widzi.
+ */
+export function actionIsNewer(afterLoad: number, loadNumber: number | undefined): boolean {
+  return (loadNumber ?? 0) <= afterLoad;
+}
+
+/**
  * Dane z daemona dla jednego widoku. Nowe `load` (zmień je przez `useCallback`, gdy zmienia się pytanie) czyści
  * poprzednią odpowiedź; `reload`, `refreshKey` i odpytywanie zachowują ją do czasu nowej. Odpytywanie planuje
  * następne pytanie dopiero po odpowiedzi, więc wolny git nie piętrzy żądań, i czeka, gdy okno jest schowane.

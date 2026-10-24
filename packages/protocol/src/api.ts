@@ -18,6 +18,8 @@ export const ErrorCode = z.enum([
   "stop_unconfirmed",
   /** Nie da się uruchomić sesji agenta: brak Copilot CLI w `PATH` albo PTY w tym runtime (daemon pod Node, ADR-26). */
   "agent_unavailable",
+  /** Zakończenie zadania skasowałoby zmiany (niezacommitowane pliki albo commity), a wołający tego nie potwierdził. */
+  "unsaved_changes",
   "internal",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
@@ -52,6 +54,9 @@ export interface Endpoint<Req extends z.ZodType = z.ZodType, Data extends z.ZodT
   /** Schemat pola `data` w odpowiedzi `{ ok: true, data }`. */
   data: Data;
 }
+
+/** Wynik akcji, która nic nie zwraca (`data: null`). */
+export const Done = z.null();
 
 /** Koperta odpowiedzi bez znajomości `data`; klient sprawdza `data` schematem akcji w drugim kroku. */
 export const ApiEnvelope = apiResult(z.unknown());

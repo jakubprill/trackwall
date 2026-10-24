@@ -1,5 +1,5 @@
 import type { SyncResult, SyncSkipReason } from "@trackwall/protocol";
-import { type GitNetwork, git } from "./git.ts";
+import { type GitNetwork, git, knownDefaultBranch, revParse } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { parseStatus } from "./parse.ts";
 
@@ -37,15 +37,7 @@ export async function syncRepo(dir: string): Promise<SyncResult> {
  * stara wersja nadal istnieje, daemon nie wykryje bez pytania serwera przy każdej synchronizacji.
  */
 async function defaultBranch(dir: string, remote: string, network: GitNetwork): Promise<string | undefined> {
-  const prefix = `refs/remotes/${remote}/`;
-  const read = async () => {
-    const ref = await git(dir, ["symbolic-ref", "--quiet", `${prefix}HEAD`]).then(
-      ({ stdout }) => stdout.toString("utf8").trim(),
-      () => "",
-    );
-    const exists = ref.startsWith(prefix) && (await revParse(dir, ref)) !== undefined;
-    return exists ? ref.slice(prefix.length) : undefined;
-  };
+  const read = () => knownDefaultBranch(dir, remote);
   const known = await read();
   if (known !== undefined) return known;
   try {
@@ -89,13 +81,6 @@ async function fastForward(dir: string, branch: string, remoteRef: string, netwo
     await git(dir, ["fetch", "--quiet", "--no-recurse-submodules", "--no-write-fetch-head", ".", `${remoteRef}:${localRef}`]);
   }
   return { state: "updated", branch, commits: behind };
-}
-
-async function revParse(dir: string, ref: string): Promise<string | undefined> {
-  return git(dir, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]).then(
-    ({ stdout }) => stdout.toString("utf8").trim(),
-    () => undefined,
-  );
 }
 
 /** Ile commitów ma tylko lokalna gałąź (`ahead`), a ile tylko zdalna (`behind`). */

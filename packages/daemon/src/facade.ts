@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { vscodeUrl } from "./editor-url.ts";
 import { Agents, type AgentsDeps } from "./modules/agents/agents.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { CardCache } from "./modules/cards/card-cache.ts";
@@ -58,11 +59,12 @@ export interface FacadeOptions {
 
 export function createFacade(o: FacadeOptions): Facade {
   const vcs = new Vcs();
+  const openEditor = (dir: string) => o.openUrl(vscodeUrl(dir));
   const workspace = new Workspace({
     file: new WorkspaceFile(join(o.home, WORKSPACE_FILE)),
     vcs,
     hosting: new Hosting(HOSTING_CLIS),
-    openUrl: o.openUrl,
+    openEditor,
   });
   const logs = new Logs({ dir: join(o.home, LOGS_DIR), maxFileBytes: LOG_FILE_MAX_BYTES, log: o.log });
   const procs = new ProcessGroups({
@@ -80,11 +82,13 @@ export function createFacade(o: FacadeOptions): Facade {
   const agents = new Agents({
     procs,
     repos: workspace,
+    vcs,
     home: o.home,
     copilot: o.copilotCommand,
     env: o.userEnv,
     hookCommand: o.hookCommand,
     mcpStdioCommand: o.mcpStdioCommand,
+    openEditor,
     log: o.log,
   });
   const graph = new Graph({ cards, workspace });

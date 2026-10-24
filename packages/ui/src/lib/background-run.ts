@@ -1,3 +1,5 @@
+import { actionIsNewer } from "./use-remote.ts";
+
 /** Przebieg w tle w UI (ADR-21, ADR-27): czysta reguła dla `useBackgroundRun`; testy w `test/background-run.test.ts`. */
 
 /**
@@ -9,6 +11,6 @@ export function currentRun<R>(
   acted: { run: R | null; afterLoad: number } | undefined,
   remote: { data?: R | null; loadNumber?: number },
 ): R | null | undefined {
-  if (acted && (remote.loadNumber ?? 0) <= acted.afterLoad) return acted.run;
+  if (acted && actionIsNewer(acted.afterLoad, remote.loadNumber)) return acted.run;
   return remote.data;
 }

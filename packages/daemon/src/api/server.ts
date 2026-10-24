@@ -40,6 +40,7 @@ const STATUS: Record<ErrorCode, number> = {
   mise_unavailable: 409,
   stop_unconfirmed: 500,
   agent_unavailable: 409,
+  unsaved_changes: 409,
   internal: 500,
 };
 

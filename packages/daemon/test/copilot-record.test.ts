@@ -26,7 +26,7 @@ async function recordFakeSession(exitCode: number) {
 }
 
 describe("nagrywanie sesji Copilot CLI (prawdziwy PTY i procesy hooków)", () => {
-  test("hooki z wtyczki sesji dają stan, nagranie odtwarza te same zmiany, a treść sesji nie trafia do rekordów", async () => {
+  test("hooki z wtyczki sesji dają stan, nagranie odtwarza te same zmiany co do milisekundy, a treść sesji nie trafia do rekordów", async () => {
     const { out, code, stdout, stderr, states } = await recordFakeSession(0);
 
     expect(code).toBe(0);
@@ -43,7 +43,9 @@ describe("nagrywanie sesji Copilot CLI (prawdziwy PTY i procesy hooków)", () =>
     ]);
 
     const replayed = replayCopilotRecording(parseAsciicast(readFileSync(join(out, "session.cast"), "utf8")), { staleAfterMs: 60_000 });
-    expect(replayed.map((c) => `${c.state} ${c.source} ${c.reason}`)).toEqual(states.map((s) => `${s.state} ${s.source} ${s.reason}`));
+    expect(replayed.map((c) => `${c.at} ${c.state} ${c.source} ${c.reason}`)).toEqual(
+      states.map((s) => `${s.at} ${s.state} ${s.source} ${s.reason}`),
+    );
 
     const hooks = readFileSync(join(out, "hooks.jsonl"), "utf8");
     expect(hooks).not.toContain("tajny prompt");

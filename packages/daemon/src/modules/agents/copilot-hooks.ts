@@ -5,9 +5,9 @@ import type { StateSignal } from "./task-state-tracker.ts";
 /**
  * Detektor stanu Copilot CLI z rekordów hooków (§4.4, ADR-17), najpewniejsze źródło. Pewne z dokumentacji
  * Copilot CLI: nazwy zdarzeń, `sessionEnd.reason`, `agentStop.stopReason`. Niepewne: pola i rodzaje
- * `notification`, których dokumentacja nie wylicza (`permission_prompt` w typach `@github/copilot-sdk`, `elicitation_dialog` w tekstach Copilot CLI 1.0.103). Dlatego
- * powiadomienie jest klasyfikowane po znanym rodzaju (pewność `medium`), a bez rodzaju po słowach treści
- * (pewność `low`).
+ * `notification`, których dokumentacja nie wylicza (`permission_prompt` w typach `@github/copilot-sdk` i w sesji
+ * na macOS, `elicitation_dialog` w tekstach Copilot CLI 1.0.103). Dlatego powiadomienie jest klasyfikowane po znanym
+ * rodzaju (pewność `medium`), a bez rodzaju po słowach treści (pewność `low`).
  */
 
 export function stateFromHook(record: CopilotHookRecord): StateSignal | undefined {
