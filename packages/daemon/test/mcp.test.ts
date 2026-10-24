@@ -9,6 +9,7 @@ import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import {
   DaemonInfoResult,
+  FindEndpointResult,
   GetRepoResult,
   ListReposResult,
   LogTail,
@@ -75,10 +76,10 @@ beforeAll(async () => {
 afterAll(() => api.close());
 
 describe("serwer MCP przez Streamable HTTP", () => {
-  test("ogłasza tylko narzędzia do odczytu: list_repos, get_repo, get_repo_card, tail, who_calls i subgraph_for", async () => {
+  test("ogłasza tylko narzędzia do odczytu: list_repos, get_repo, get_repo_card, tail, who_calls, subgraph_for i find_endpoint", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name)).toEqual(["list_repos", "get_repo", "get_repo_card", "tail", "who_calls", "subgraph_for"]);
+    expect(tools.map((t) => t.name)).toEqual(["list_repos", "get_repo", "get_repo_card", "tail", "who_calls", "subgraph_for", "find_endpoint"]);
     // Każde narzędzie z kontraktu, który pokazuje UI, jest zarejestrowane w daemonie.
     expect(tools.map((t) => t.name)).toEqual(Object.values(mcpTools).map((t) => t.name));
     for (const tool of tools) expect(tool.annotations?.readOnlyHint).toBe(true);
@@ -131,7 +132,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const result = await client.callTool({ name: "get_repo_card", arguments: { repo: "orders-bff" } });
     const data = RepoCardResult.parse(result.structuredContent);
-    expect(data.card?.provides.map((p) => p.name)).toEqual(["com.example:orders-bff"]);
+    expect(data.card?.provides.map((p) => (p.kind === "package" ? p.name : p.kind))).toEqual(["com.example:orders-bff"]);
     expect(data.card?.mechanisms.map((m) => [m.id, m.evidence[0]?.path])).toEqual([["spring-boot", "pom.xml"]]);
     expect(data.tags.find((t) => t.name === "backend")?.reason).toBe("spring-boot w pom.xml:1");
     await client.close();
@@ -151,6 +152,16 @@ describe("serwer MCP przez Streamable HTTP", () => {
     expect(unknown.content).toEqual([{ type: "text", text: 'not_found: w folderze z projektami nie ma repo "nie-ma"' }]);
     const tooDeep = await client.callTool({ name: "subgraph_for", arguments: { repo: "orders-bff", depth: 9 } });
     expect(tooDeep.isError).toBe(true);
+    await client.close();
+  });
+
+  test("find_endpoint zwraca endpointy pasujące do zapytania, a puste zapytanie odrzuca jak każdy zły argument", async () => {
+    const client = await connectHttpClient(api.port, TOKEN);
+    const found = await client.callTool({ name: "find_endpoint", arguments: { query: "/api/orders/42", method: "GET" } });
+    // Repo z tego testu nie ma kontrolerów; endpointy i ich klientów na kilku repo sprawdza graph-http.test.ts.
+    expect(FindEndpointResult.parse(found.structuredContent)).toEqual({ query: "/api/orders/42", endpoints: [], truncated: false });
+    const empty = await client.callTool({ name: "find_endpoint", arguments: { query: "" } });
+    expect(empty.isError).toBe(true);
     await client.close();
   });
 

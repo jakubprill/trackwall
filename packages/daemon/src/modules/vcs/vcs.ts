@@ -120,6 +120,30 @@ export class Vcs {
   }
 
   /**
+   * Pliki commita pasujące do `globs` (pathspec gita, np. `*.java`), których treść pasuje do wyrażenia ERE `pattern`:
+   * `git grep` po obiektach commita, bez katalogu roboczego i bez `textconv`, więc repo nie uruchamia przy tym żadnego
+   * programu. `truncated`, gdy lista przekroczyła `maxBytes` i jest niepełna.
+   */
+  async grepFiles(
+    dir: string,
+    commit: string,
+    pattern: string,
+    globs: readonly string[],
+    maxBytes: number,
+  ): Promise<{ paths: string[]; truncated: boolean }> {
+    const args = ["grep", "-l", "-z", "-I", "-E", "--no-color", "--no-textconv", "-e", pattern, commit, "--", ...globs];
+    const { stdout, truncated } = await git(dir, args, { maxBytes, okExitCodes: [1] });
+    const prefix = `${commit}:`;
+    const paths = stdout
+      .toString("utf8")
+      .split("\0")
+      .filter((p) => p.startsWith(prefix))
+      .map((p) => p.slice(prefix.length));
+    // Ostatnia nazwa uciętego wyjścia może być niepełna.
+    return { paths: truncated ? paths.slice(0, -1) : paths, truncated };
+  }
+
+  /**
    * Istnienie, typ i rozmiar obiektów w jednym procesie (`cat-file --batch-check`); `undefined` dla brakującego,
    * także dla submodułu, którego commitu nie ma w tym repo. Specyfikacje idą liniami, stąd zakaz znaków
    * sterujących w `RepoPath`.

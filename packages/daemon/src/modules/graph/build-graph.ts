@@ -2,60 +2,54 @@ import type {
   ConsumedPackage,
   EdgeConfidence,
   EdgeEvidence,
-  GraphConfig,
-  GraphEdge,
   GraphNode,
   ManualEdge,
   ProvidedPackage,
-  RepoCard,
   RepoGraph,
-  RepoTag,
 } from "@trackwall/protocol";
+import type { GraphCardInput, GraphConfigInput } from "./graph-input.ts";
+import { EdgeSet, type Join, missingRepo, repoResolver } from "./graph-join.ts";
+import { addHttpEdges } from "./http-edges.ts";
+import { HttpIndex } from "./http-index.ts";
 
 /**
- * Złączenie kart repo w graf (§4.6, ADR-29): paczka, której repo używa, i repo, które ją buduje, dają krawędź z dowodami
- * z obu stron. Do tego aliasy paczek i ręczne krawędzie z `workspace.yaml`. Funkcja czysta: te same karty i ta sama
- * konfiguracja dają ten sam graf, więc daemon liczy go przy każdym pytaniu i nie trzyma.
+ * Złączenie kart repo w graf (§4.6, ADR-29, ADR-30): paczka, której repo używa, i repo, które ją buduje, oraz klient
+ * HTTP i repo z aplikacją albo endpointami, które woła, dają krawędź z dowodami z obu stron. Do tego aliasy paczek
+ * i aplikacji oraz ręczne krawędzie z `workspace.yaml`. Funkcja czysta: te same karty i ta sama konfiguracja dają ten
+ * sam graf.
  */
-
-/** Karta repo z listy, tak jak podaje ją moduł `cards` (`Cards.all`). */
-export type GraphCardInput =
-  | { kind: "ok"; repo: string; remote: string | null; card: RepoCard | null; tags: RepoTag[] }
-  | { kind: "unavailable"; repo: string; message: string };
-
-export interface GraphConfigInput {
-  config: GraphConfig;
-  /** Pełna ścieżka `workspace.yaml`: dowód aliasu i ręcznej krawędzi. */
-  file: string;
-  /** Klucze `workspace.yaml`, których nie dało się przeczytać (zły `graph` albo `repoTags`); trafiają do `configProblems`. */
-  problems: string[];
-}
 
 interface Provider {
   repo: string;
   pkg: ProvidedPackage;
 }
 
-/** Wspólne dla kroków złączenia: krawędzie, rozwiązywanie wskazań repo i błędy wpisów z `workspace.yaml`. */
-interface Join {
-  edges: EdgeSet;
-  resolve: (ref: string) => string[];
-  problems: string[];
-  /**
-   * Aliasy paczek jako `Map`: nazwa paczki pochodzi z repo, a obiekt z YAML-a dla nazwy `constructor` czy
-   * `toString` oddałby funkcję z prototypu.
-   */
-  aliases: Map<string, string>;
-  file: string;
+export function buildGraph(cards: readonly GraphCardInput[], input: GraphConfigInput): RepoGraph {
+  const join = joinOf(cards, input);
+  addPackageEdgesOf(join, cards);
+  addHttpEdges(join, httpIndex(cards, join));
+  checkAliases(join);
+  for (const [i, manual] of input.config.edges.entries()) addManualEdges(join, manual, i);
+  return { nodes: cards.map(graphNode), edges: join.edges.sorted(), configProblems: join.problems, configFile: input.file };
 }
 
-export function buildGraph(cards: readonly GraphCardInput[], { config, file, problems }: GraphConfigInput): RepoGraph {
+/** Wspólne kroki złączenia z wpisów `graph`; aliasy aplikacji bez wielkości liter, jak nazwy hostów. */
+export function joinOf(cards: readonly GraphCardInput[], { config, file, problems }: GraphConfigInput): Join {
+  const appAliases = new Map(Object.entries(config.apps).map(([name, ref]) => [name.toLowerCase(), ref]));
   const aliases = new Map(Object.entries(config.packages));
-  const join: Join = { edges: new EdgeSet(), resolve: repoResolver(cards), problems: [...problems], aliases, file };
+  return { edges: new EdgeSet(), resolve: repoResolver(cards), problems: [...problems], aliases, appAliases, file };
+}
+
+export function httpIndex(cards: readonly GraphCardInput[], join: Join): HttpIndex {
+  return new HttpIndex(cards, { apps: join.appAliases, resolve: join.resolve, file: join.file });
+}
+
+function addPackageEdgesOf(join: Join, cards: readonly GraphCardInput[]): void {
   const providers = providersByPackage(cards);
   for (const entry of cards) {
     if (entry.kind !== "ok" || entry.card === null) continue;
     for (const pkg of entry.card.consumes) {
+      if (pkg.kind !== "package") continue;
       const all = providers.get(packageKey(pkg)) ?? [];
       // Alias tylko dla paczki, której nie buduje żadne repo z listy, także to, które jej używa (moduły jednego buildu).
       if (all.length === 0) addAliasEdges(join, entry.repo, pkg);
@@ -63,9 +57,6 @@ export function buildGraph(cards: readonly GraphCardInput[], { config, file, pro
       if (found.length > 0) addPackageEdges(join, entry.repo, pkg, found);
     }
   }
-  checkAliases(join);
-  for (const [i, manual] of config.edges.entries()) addManualEdges(join, manual, i);
-  return { nodes: cards.map(graphNode), edges: join.edges.sorted(), configProblems: join.problems, configFile: file };
 }
 
 function addPackageEdges(join: Join, from: string, pkg: ConsumedPackage, found: Provider[]): void {
@@ -98,6 +89,9 @@ function checkAliases(join: Join): void {
   for (const [name, ref] of join.aliases) {
     if (join.resolve(ref).length === 0) join.problems.push(`graph.packages „${name}”: ${missingRepo(ref)}`);
   }
+  for (const [name, ref] of join.appAliases) {
+    if (join.resolve(ref).length === 0) join.problems.push(`graph.apps „${name}”: ${missingRepo(ref)}`);
+  }
 }
 
 function addManualEdges(join: Join, manual: ManualEdge, i: number): void {
@@ -116,12 +110,16 @@ function addManualEdges(join: Join, manual: ManualEdge, i: number): void {
 }
 
 function graphNode(entry: GraphCardInput): GraphNode {
-  if (entry.kind === "unavailable") return { repo: entry.repo, remote: null, tags: [], provides: null, problem: entry.message };
+  if (entry.kind === "unavailable")
+    return { repo: entry.repo, remote: null, tags: [], provides: null, apps: [], endpoints: null, problem: entry.message };
+  const provides = entry.card?.provides ?? [];
   return {
     repo: entry.repo,
     remote: entry.remote,
     tags: entry.tags.map((t) => t.name),
-    provides: new Set(entry.card?.provides.map(packageKey)).size,
+    provides: new Set(provides.flatMap((p) => (p.kind === "package" ? [packageKey(p)] : []))).size,
+    apps: [...new Set(provides.flatMap((p) => (p.kind === "app" ? [p.name] : [])))],
+    endpoints: provides.filter((p) => p.kind === "endpoint").length,
     problem: null,
   };
 }
@@ -136,6 +134,7 @@ function providersByPackage(cards: readonly GraphCardInput[]): Map<string, Provi
   for (const entry of cards) {
     if (entry.kind !== "ok" || entry.card === null) continue;
     for (const pkg of entry.card.provides) {
+      if (pkg.kind !== "package") continue;
       const key = packageKey(pkg);
       const list = providers.get(key) ?? [];
       // Ta sama paczka z dwóch plików buildu jednego repo (np. w trakcie przejścia z Mavena na Gradle) to jedno repo.
@@ -143,23 +142,6 @@ function providersByPackage(cards: readonly GraphCardInput[]): Map<string, Provi
     }
   }
   return providers;
-}
-
-/**
- * Wskazanie repo z `workspace.yaml` (`RepoRef`): identyfikator, a gdy takiego nie ma, adres repo zdalnego bez
- * wielkości liter (hosting tak go porównuje). Jeden adres może mieć kilka repo z listy (klon i worktree).
- */
-function repoResolver(cards: readonly GraphCardInput[]): (ref: string) => string[] {
-  const ids = new Set(cards.map((c) => c.repo));
-  return (ref) => {
-    if (ids.has(ref)) return [ref];
-    const wanted = ref.toLowerCase();
-    return cards.filter((c) => c.kind === "ok" && c.remote?.toLowerCase() === wanted).map((c) => c.repo);
-  };
-}
-
-function missingRepo(ref: string): string {
-  return `nie ma repo „${ref}” na liście repo (podaj identyfikator albo adres host/ścieżka)`;
 }
 
 function consumerEvidence(repo: string, pkg: ConsumedPackage): EdgeEvidence {
@@ -171,23 +153,3 @@ function providerEvidence({ repo, pkg }: Provider): EdgeEvidence {
   return { repo, ...pkg.evidence, detail: `buduje ${pkg.name}` };
 }
 
-/** Krawędzie bez powtórzeń: ta sama para repo, rodzaj i klucz to jedna krawędź (pierwsza wygrywa). */
-class EdgeSet {
-  private readonly edges = new Map<string, GraphEdge>();
-
-  add(edge: GraphEdge): void {
-    const id = [edge.from, edge.to, edge.kind, edge.key].join("\u0000");
-    if (!this.edges.has(id)) this.edges.set(id, edge);
-  }
-
-  sorted(): GraphEdge[] {
-    return [...this.edges.values()].sort(
-      (a, b) => compare(a.from, b.from) || compare(a.to, b.to) || compare(a.kind, b.kind) || compare(a.key, b.key),
-    );
-  }
-}
-
-/** Bez `localeCompare`: porządek nie może zależeć od danych ICU w Bun i Node (jak `byName` w `workspace`). */
-function compare(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}

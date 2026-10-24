@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { evidenceLabel } from "../src/cards.ts";
+import { evidenceLabel } from "../src/evidence.ts";
 
 describe("karta repo", () => {
   test("dowód z linią to ścieżka:linia, a bez linii sama ścieżka", () => {

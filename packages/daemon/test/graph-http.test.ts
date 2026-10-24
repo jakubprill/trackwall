@@ -1,0 +1,257 @@
+import { describe, expect, test } from "bun:test";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { ConsumedHttp, GraphConfig, ProvidedApp, ProvidedEndpoint, RepoCard } from "@trackwall/protocol";
+import { CardCache } from "../src/modules/cards/card-cache.ts";
+import { Cards } from "../src/modules/cards/cards.ts";
+import { extractCard } from "../src/modules/cards/extract-card.ts";
+import { buildGraph } from "../src/modules/graph/build-graph.ts";
+import { Graph } from "../src/modules/graph/graph.ts";
+import type { GraphCardInput } from "../src/modules/graph/graph-input.ts";
+import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { Workspace } from "../src/modules/workspace/workspace.ts";
+import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
+import { makeRepo } from "./support/git-repo.ts";
+import { fakeHosting } from "./support/hosting.ts";
+import { snapshotOf } from "./support/snapshot.ts";
+import { fixtureFiles } from "./support/spring-fixtures.ts";
+
+const CONFIG_FILE = "/home/ja/.trackwall/workspace.yaml";
+const NO_CONFIG: GraphConfig = { packages: {}, apps: {}, edges: [] };
+const SHOP = ["orders-api", "orders-bff", "payments", "legacy-reports", "shop-web"];
+
+/** Karty repo sklepu z fixture'ów (`test/fixtures/spring`), policzone bez gita. */
+function shopCards(): GraphCardInput[] {
+  return SHOP.map((repo) => ({ kind: "ok", repo, remote: null, card: extractCard(snapshotOf(fixtureFiles(repo))), tags: [] }));
+}
+
+function card(provides: RepoCard["provides"], consumes: RepoCard["consumes"]): RepoCard {
+  return { commit: "a".repeat(40), buildFiles: [], provides, consumes, tools: [], mechanisms: [], problems: [] };
+}
+
+function app(name: string, port: number | null = null): ProvidedApp {
+  return { kind: "app", name, port, module: "", evidence: { path: "src/main/resources/application.yml", line: 3 } };
+}
+
+function endpoint(path: string, method: ProvidedEndpoint["method"] = "GET"): ProvidedEndpoint {
+  return { kind: "endpoint", method, path, app: null, handler: "Api.handle", evidence: { path: "src/main/java/Api.java", line: 10 } };
+}
+
+function client(fields: Partial<ConsumedHttp>): ConsumedHttp {
+  return {
+    kind: "http",
+    via: "config",
+    name: "orders.url",
+    app: null,
+    url: null,
+    profiles: [],
+    urlSource: null,
+    calls: [],
+    evidence: { path: "src/main/resources/application.yml", line: 7 },
+    ...fields,
+  };
+}
+
+function repo(id: string, repoCard: RepoCard, remote: string | null = null): GraphCardInput {
+  return { kind: "ok", repo: id, remote, card: repoCard, tags: [] };
+}
+
+describe("krawędzie http na repo sklepu", () => {
+  test("Feign, WebClient, RestTemplate i adresy frontendu dają krawędzie z pewnością z tego, co je łączy", () => {
+    const graph = buildGraph(shopCards(), { config: NO_CONFIG, file: CONFIG_FILE, problems: [] });
+
+    expect(graph.edges.map((e) => [e.from, e.to, e.kind, e.key, e.confidence])).toEqual([
+      // Same ścieżki pasujące do endpointów jednego repo: adres bazowy jest poza konfiguracją.
+      ["legacy-reports", "orders-api", "http", "OrdersReport", "medium"],
+      // Nazwa aplikacji z @FeignClient i ścieżki obu wywołań zgadzają się z orders-api.
+      ["orders-bff", "orders-api", "http", "orders-api", "exact"],
+      // Host z adresu WebClient to spring.application.name, a /api z adresu i /payments/{orderId} to endpoint.
+      ["orders-bff", "payments", "http", "payments-service", "exact"],
+      // localhost:8090 z .env i proxy Vite to port aplikacji orders-bff.
+      ["shop-web", "orders-bff", "http", "localhost:8090", "medium"],
+    ]);
+    expect(graph.nodes.map((n) => [n.repo, n.apps, n.endpoints])).toEqual([
+      ["orders-api", ["orders-api"], 3],
+      ["orders-bff", ["orders-bff"], 0],
+      ["payments", ["payments-service"], 1],
+      ["legacy-reports", ["legacy-reports"], 0],
+      ["shop-web", [], 0],
+    ]);
+  });
+
+  test("krawędź klienta Feign ma dowody: adnotację, adres z każdego profilu, aplikację celu i pary wywołanie–endpoint", () => {
+    const graph = buildGraph(shopCards(), { config: NO_CONFIG, file: CONFIG_FILE, problems: [] });
+    const feign = graph.edges.find((e) => e.from === "orders-bff" && e.to === "orders-api");
+
+    expect(feign?.evidence).toEqual([
+      {
+        repo: "orders-bff",
+        path: "src/main/kotlin/com/example/bff/OrdersClient.kt",
+        line: 9,
+        detail: "klient Feign OrdersClient: orders-api, http://localhost:8081 (profile: default)",
+      },
+      { repo: "orders-bff", path: "src/main/resources/application.yml", line: 8, detail: "adres http://localhost:8081 (profile: default)" },
+      { repo: "orders-api", path: "src/main/resources/application.yml", line: 3, detail: "aplikacja orders-api na porcie 8081" },
+      { repo: "orders-bff", path: "src/main/kotlin/com/example/bff/OrdersClient.kt", line: 11, detail: "wywołuje GET /api/orders/{id}" },
+      {
+        repo: "orders-api",
+        path: "src/main/java/com/example/orders/api/OrdersController.java",
+        line: 19,
+        detail: "obsługuje GET /api/orders/{id} (OrdersController.get)",
+      },
+      { repo: "orders-bff", path: "src/main/kotlin/com/example/bff/OrdersClient.kt", line: 14, detail: "wywołuje POST /api/orders" },
+      {
+        repo: "orders-api",
+        path: "src/main/java/com/example/orders/api/OrdersController.java",
+        line: 27,
+        detail: "obsługuje POST /api/orders (OrdersController.create)",
+      },
+      {
+        repo: "orders-bff",
+        path: "src/main/kotlin/com/example/bff/OrdersClient.kt",
+        line: 9,
+        detail: "klient Feign OrdersClient: orders-api, http://orders-api.shop.svc.cluster.local (profile: prod)",
+      },
+      {
+        repo: "orders-bff",
+        path: "src/main/resources/application-prod.yml",
+        line: 3,
+        detail: "adres http://orders-api.shop.svc.cluster.local (profile: prod)",
+      },
+    ]);
+  });
+});
+
+describe("krawędzie http: dopasowanie celu", () => {
+  test("lb://nazwa w konfiguracji wskazuje aplikację po nazwie, a bez wywołań pewność jest high", () => {
+    const graph = buildGraph(
+      [
+        repo("gateway", card([], [client({ name: "spring.cloud.gateway.routes[0].uri", app: "orders", url: "lb://orders" })])),
+        repo("orders-api", card([app("orders")], [])),
+      ],
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
+    );
+    expect(graph.edges.map((e) => [e.from, e.to, e.key, e.confidence])).toEqual([["gateway", "orders-api", "orders", "high"]]);
+  });
+
+  test("ta sama nazwa aplikacji w dwóch repo (klon, fork) daje krawędź do każdego z pewnością medium", () => {
+    const graph = buildGraph(
+      [
+        repo("bff", card([], [client({ via: "feign", name: "OrdersClient", app: "orders" })])),
+        repo("orders-api", card([app("orders")], [])),
+        repo("orders-api-fork", card([app("orders")], [])),
+      ],
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
+    );
+    expect(graph.edges.map((e) => [e.to, e.confidence])).toEqual([
+      ["orders-api", "medium"],
+      ["orders-api-fork", "medium"],
+    ]);
+  });
+
+  test("host równy nazwie repo albo ostatniemu członowi adresu repo zdalnego daje krawędź medium", () => {
+    const graph = buildGraph(
+      [
+        repo("bff", card([], [client({ url: "http://orders-api.shop.svc:8080" }), client({ name: "billing.url", url: "https://billing/api" })])),
+        repo("orders-api", card([], [])),
+        repo("rozliczenia", card([], []), "gitlab.example.com/sklep/billing"),
+      ],
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
+    );
+    expect(graph.edges.map((e) => [e.to, e.key, e.confidence])).toEqual([
+      ["orders-api", "orders-api", "medium"],
+      ["rozliczenia", "billing", "medium"],
+    ]);
+  });
+
+  test("alias aplikacji z workspace.yaml wskazuje repo dla nazwy, której żadna karta nie ma, a zły alias trafia do configProblems", () => {
+    const graph = buildGraph(
+      [repo("bff", card([], [client({ url: "http://zamowienia.internal.example.com/api" })])), repo("orders-api", card([], []))],
+      {
+        config: { packages: {}, apps: { "Zamowienia.internal.example.com": "orders-api", inne: "nie-ma" }, edges: [] },
+        file: CONFIG_FILE,
+        problems: [],
+      },
+    );
+    expect(graph.edges.map((e) => [e.to, e.key, e.confidence, e.evidence[1]?.detail])).toEqual([
+      ["orders-api", "zamowienia.internal.example.com", "high", "graph.apps: zamowienia.internal.example.com → orders-api"],
+    ]);
+    expect(graph.configProblems).toEqual([
+      "graph.apps „inne”: nie ma repo „nie-ma” na liście repo (podaj identyfikator albo adres host/ścieżka)",
+    ]);
+  });
+
+  test("wywołania bez adresu pasujące do endpointów dwóch repo dają krawędzie low, a ścieżka bez stałego członu nie daje żadnej", () => {
+    const calls = (path: string) => [{ method: "GET" as const, path, evidence: { path: "src/main/java/Report.java", line: 20 } }];
+    const graph = buildGraph(
+      [
+        repo("reports", card([], [client({ via: "rest-template", name: "Report", calls: calls("/api/orders/{}") })])),
+        repo("raw", card([], [client({ via: "rest-template", name: "Raw", calls: calls("/{}") })])),
+        repo("orders-api", card([endpoint("/api/orders/{id}"), endpoint("/{id}")], [])),
+        repo("orders-legacy", card([endpoint("/api/orders/**")], [])),
+      ],
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
+    );
+    expect(graph.edges.map((e) => [e.from, e.to, e.confidence])).toEqual([
+      ["reports", "orders-api", "low"],
+      ["reports", "orders-legacy", "low"],
+    ]);
+  });
+
+  test("klient repo nigdy nie łączy repo z nim samym", () => {
+    const graph = buildGraph([repo("orders-api", card([app("orders-api", 8081)], [client({ url: "http://localhost:8081" })]))], {
+      config: NO_CONFIG,
+      file: CONFIG_FILE,
+      problems: [],
+    });
+    expect(graph.edges).toEqual([]);
+  });
+});
+
+describe("graf i find_endpoint na prawdziwym gicie", () => {
+  async function setup() {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
+    const projects = mkdtempSync(join(tmpdir(), "trackwall-projekty-"));
+    const vcs = new Vcs();
+    const workspace = new Workspace({ file: new WorkspaceFile(join(home, "workspace.yaml")), vcs, hosting: fakeHosting().hosting, openUrl: () => {} });
+    await workspace.setProjectsDir(projects);
+    for (const name of SHOP) makeRepo(fixtureFiles(name), name, projects);
+    const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(join(home, "cards"), () => {}) });
+    return { home, graph: new Graph({ cards, workspace }), workspace };
+  }
+
+  test("karty z commita czytają kontrolery i klientów wybranych wyszukiwaniem, bez kodu testów", async () => {
+    const { graph } = await setup();
+    const found = await graph.findEndpoint("/api/orders/42", "GET");
+
+    expect(found.truncated).toBe(false);
+    expect(found.endpoints.map((e) => [e.repo, e.method, e.path, e.handler, e.evidence.line])).toEqual([
+      ["orders-api", "GET", "/api/orders/{id}", "OrdersController.get", 19],
+    ]);
+    expect(found.endpoints[0]?.callers.map((c) => [c.repo, c.via, c.client, c.path, c.confidence])).toEqual([
+      ["legacy-reports", "rest-template", "OrdersReport", "/api/orders/{}", "medium"],
+      ["orders-bff", "feign", "OrdersClient", "/api/orders/{id}", "exact"],
+      ["orders-bff", "feign", "OrdersClient", "/api/orders/{id}", "exact"],
+    ]);
+    // Kontroler z src/test nie jest endpointem aplikacji.
+    expect((await graph.findEndpoint("test-only", undefined)).endpoints).toEqual([]);
+  });
+
+  test("find_endpoint szuka też po fragmencie ścieżki, handlera i nazwy aplikacji, bez wielkości liter", async () => {
+    const { graph } = await setup();
+    const paths = async (query: string) => (await graph.findEndpoint(query, undefined)).endpoints.map((e) => `${e.method} ${e.path}`);
+    expect(await paths("payments-SERVICE")).toEqual(["POST /api/payments/{orderId}"]);
+    expect(await paths("ordersController.cancel")).toEqual(["PUT /api/orders/{id}/cancel"]);
+    expect(await paths("/api/orders")).toEqual(["POST /api/orders", "GET /api/orders/{id}", "PUT /api/orders/{id}/cancel"]);
+  });
+
+  test("alias aplikacji z workspace.yaml działa od razu, bez nowego commita", async () => {
+    const { graph, workspace } = await setup();
+    const before = await graph.graph();
+    expect(before.edges.some((e) => e.from === "orders-bff" && e.key === "zipkin")).toBe(false);
+    writeFileSync(workspace.configFile(), `${await Bun.file(workspace.configFile()).text()}graph:\n  apps:\n    zipkin: payments\n`);
+    const after = await graph.graph();
+    expect(after.edges.filter((e) => e.key === "zipkin").map((e) => [e.from, e.to, e.confidence])).toEqual([["orders-bff", "payments", "high"]]);
+  });
+});

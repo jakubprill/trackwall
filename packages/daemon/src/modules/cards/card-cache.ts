@@ -15,7 +15,7 @@ import { writeFileAtomic } from "../../atomic-write.ts";
  * Wersja ekstraktorów zapisana z kartą. Zmiana tego, co ekstraktor wyciąga z tych samych plików, musi ją podbić,
  * bo inaczej stare karty z dysku zostaną przy starym wyniku.
  */
-const EXTRACTOR_VERSION = 1;
+const EXTRACTOR_VERSION = 2;
 /** Tyle plików kart zostaje na dysku; starsze (po czasie zapisu) są usuwane przy starcie daemona. */
 const MAX_FILES = 2000;
 /** Tyle kart trzyma pamięć daemona; starsze wypadają w kolejności dodania. */

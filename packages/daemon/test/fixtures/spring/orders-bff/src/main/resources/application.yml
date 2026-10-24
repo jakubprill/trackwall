@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: orders-bff
+server:
+  port: 8090
+clients:
+  orders:
+    url: ${ORDERS_URL:http://localhost:8081}
+  payments:
+    base-url: http://payments-service:8080/api
+management:
+  zipkin:
+    tracing:
+      endpoint: http://zipkin:9411/api/v2/spans

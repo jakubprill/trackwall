@@ -1,0 +1,5 @@
+spring:
+  application:
+    name: orders-api
+server:
+  port: ${PORT:8081}

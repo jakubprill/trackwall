@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { extractCard } from "../src/modules/cards/extract-card.ts";
+import { CARD_SOURCES, extractCard } from "../src/modules/cards/extract-card.ts";
 import { globMatcher } from "../src/modules/cards/glob.ts";
 import { extractGradle } from "../src/modules/cards/gradle.ts";
 import { extractMaven } from "../src/modules/cards/maven.ts";
 import { extractNpm } from "../src/modules/cards/npm.ts";
 import { readSnapshot } from "../src/modules/cards/read-snapshot.ts";
+import { buildGraph } from "../src/modules/graph/build-graph.ts";
 import { extractTools } from "../src/modules/cards/tools.ts";
 import { snapshotOf } from "./support/snapshot.ts";
 
@@ -87,9 +88,58 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
         truncated: false,
       }),
       readFiles: async () => new Map([["pom.xml", Buffer.from("<project/>")]]),
+      grepFiles: async () => ({ paths: [], truncated: false }),
     };
-    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), (path) => path.endsWith("pom.xml"));
+    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), (path) => path.endsWith("pom.xml"), CARD_SOURCES);
     expect(snapshot.text("pom.xml")).toBe("<project/>");
-    expect(snapshot.problems).toEqual([{ path: "api/pom.xml", message: "pliku nie przeczytano w limicie 33554432 B odczytu commita" }]);
+    expect(snapshot.problems).toEqual([{ path: "api/pom.xml", message: "pliku nie przeczytano w limicie 67108864 B odczytu commita" }]);
+  });
+
+  test("plik Javy z tysiącami zagnieżdżonych nawiasów, niezamkniętymi napisami i adnotacjami nie blokuje daemona", () => {
+    const java = [
+      "@RestController class Deep {",
+      `  @GetMapping(${"(".repeat(50_000)}"/x"${")".repeat(50_000)})`,
+      "  void x() {}",
+      `  @PostMapping(${"{".repeat(50_000)}`,
+      `  String s = "${"\\".repeat(50_000)}`,
+      `${"@GetMapping(\"/a\") ".repeat(20_000)}void many() {}`,
+      "}",
+    ].join("\n");
+    const started = performance.now();
+    extractCard(snapshotOf({ "src/main/java/a/Deep.java": java }));
+    expect(performance.now() - started).toBeLessThan(2000);
+  });
+
+  test("stałe, które sklejają się same ze sobą albo podwajają, nie zajmują pamięci", () => {
+    const constants = Array.from({ length: 30 }, (_, i) => `static final String C${i} = C${i + 1} + C${i + 1};`).join("\n");
+    const java = `@RestController class Api {\n${constants}\nstatic final String C30 = "${"x".repeat(1000)}";\nstatic final String L = L + "/a";\n@GetMapping(C0) void a() {}\n@GetMapping(L) void b() {}\n}`;
+    const started = performance.now();
+    const card = extractCard(snapshotOf({ "src/main/java/a/Api.java": java }));
+    expect(performance.now() - started).toBeLessThan(1000);
+    for (const p of card.provides) if (p.kind === "endpoint") expect(p.path.length).toBeLessThanOrEqual(4096);
+  });
+
+  test("${...} z application.yml, które mnożą się przy rozwiązywaniu albo tworzą cykl, nie blokują daemona", () => {
+    const yml = Array.from({ length: 30 }, (_, i) => `k${i}: "\${k${i + 1}}\${k${i + 1}}"`).join("\n");
+    const started = performance.now();
+    extractCard(
+      snapshotOf({
+        "src/main/resources/application.yml": `${yml}\nk30: http://x\na: \${b}\nb: \${a}\nserver:\n  port: \${k0}\n`,
+        "src/main/java/a/C.java": '@FeignClient(name = "c", url = "${k0}") interface C {}',
+      }),
+    );
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  test("graf z tysiącami endpointów i klientów bez adresu liczy się szybko", () => {
+    const endpoints = Array.from({ length: 3000 }, (_, i) => `  @GetMapping("/api/r${i % 50}/{id}/x${i}") void e${i}() {}`).join("\n");
+    const calls = Array.from({ length: 200 }, (_, i) => `  void c${i}() { rest.getForObject("/api/r${i % 50}/" + id + "/x${i}", String.class); }`).join("\n");
+    const api = extractCard(snapshotOf({ "src/main/java/a/Api.java": `@RestController class Api {\n${endpoints}\n}` }));
+    const client = extractCard(snapshotOf({ "src/main/java/a/Client.java": `class Client {\n  RestTemplate rest;\n${calls}\n}` }));
+    const cards = Array.from({ length: 30 }, (_, i) => ({ kind: "ok" as const, repo: `r${i}`, remote: null, card: i === 0 ? client : api, tags: [] }));
+    const started = performance.now();
+    const graph = buildGraph(cards, { config: { packages: {}, apps: {}, edges: [] }, file: "workspace.yaml", problems: [] });
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(graph.edges.filter((e) => e.from === "r0")).toHaveLength(29);
   });
 });

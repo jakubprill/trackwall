@@ -5,7 +5,8 @@ import { join } from "node:path";
 import type { ConsumedPackage, GraphConfig, ProvidedPackage, RepoCard } from "@trackwall/protocol";
 import { CardCache } from "../src/modules/cards/card-cache.ts";
 import { Cards } from "../src/modules/cards/cards.ts";
-import { buildGraph, type GraphCardInput } from "../src/modules/graph/build-graph.ts";
+import { buildGraph } from "../src/modules/graph/build-graph.ts";
+import type { GraphCardInput } from "../src/modules/graph/graph-input.ts";
 import { Graph } from "../src/modules/graph/graph.ts";
 import { subgraph } from "../src/modules/graph/subgraph.ts";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
@@ -15,7 +16,7 @@ import { gitIn, makeRepo } from "./support/git-repo.ts";
 import { fakeHosting } from "./support/hosting.ts";
 
 const CONFIG_FILE = "/home/ja/.trackwall/workspace.yaml";
-const NO_CONFIG: GraphConfig = { packages: {}, edges: [] };
+const NO_CONFIG: GraphConfig = { packages: {}, apps: {}, edges: [] };
 
 function provides(name: string, path = "pom.xml"): ProvidedPackage {
   return { kind: "package", ecosystem: "maven", name, version: "1.0.0", evidence: { path, line: 3 } };
@@ -114,8 +115,8 @@ describe("buildGraph: krawędzie z kart", () => {
       problems: [],
     });
     expect(graph.nodes).toEqual([
-      { repo: "pusty", remote: null, tags: [], provides: 0, problem: null },
-      { repo: "zepsuty", remote: null, tags: [], provides: null, problem: "fatal: not a git repository" },
+      { repo: "pusty", remote: null, tags: [], provides: 0, apps: [], endpoints: 0, problem: null },
+      { repo: "zepsuty", remote: null, tags: [], provides: null, apps: [], endpoints: null, problem: "fatal: not a git repository" },
     ]);
     expect(graph.edges).toEqual([]);
   });
@@ -129,7 +130,7 @@ describe("buildGraph: wpisy graph w workspace.yaml", () => {
         repo("orders-api", card([], []), "gitlab.example.com/sklep/orders-api"),
       ],
       {
-        config: { packages: { "com.example:orders-client": "gitlab.example.com/Sklep/orders-api" }, edges: [] },
+        config: { packages: { "com.example:orders-client": "gitlab.example.com/Sklep/orders-api" }, apps: {}, edges: [] },
         file: CONFIG_FILE,
         problems: [],
       },
@@ -161,14 +162,14 @@ describe("buildGraph: wpisy graph w workspace.yaml", () => {
         repo("core", card([provides("com.example:core")], [])),
         repo("inne", card([], [])),
       ],
-      { config: { packages: { "com.example:core": "inne" }, edges: [] }, file: CONFIG_FILE, problems: [] },
+      { config: { packages: { "com.example:core": "inne" }, apps: {}, edges: [] }, file: CONFIG_FILE, problems: [] },
     );
     expect(graph.edges.map((e) => [e.from, e.to, e.confidence])).toEqual([["app", "core", "exact"]]);
   });
 
   test("alias nie działa dla paczki, którą buduje samo repo, które jej używa", () => {
     const graph = buildGraph([repo("app", card([provides("com.example:x")], [consumes("com.example:x")])), repo("inne", card([], []))], {
-      config: { packages: { "com.example:x": "inne" }, edges: [] },
+      config: { packages: { "com.example:x": "inne" }, apps: {}, edges: [] },
       file: CONFIG_FILE,
       problems: [],
     });
@@ -177,7 +178,7 @@ describe("buildGraph: wpisy graph w workspace.yaml", () => {
 
   test("ręczna krawędź łączy repo po identyfikatorze z opisem jako kluczem", () => {
     const graph = buildGraph([repo("web", card([], [])), repo("orders-bff", card([], []))], {
-      config: { packages: {}, edges: [{ from: "web", to: "orders-bff", note: "HTTP /api/orders" }] },
+      config: { packages: {}, apps: {}, edges: [{ from: "web", to: "orders-bff", note: "HTTP /api/orders" }] },
       file: CONFIG_FILE,
       problems: [],
     });
@@ -195,7 +196,7 @@ describe("buildGraph: wpisy graph w workspace.yaml", () => {
 
   test("ręczna krawędź z repo do niego samego trafia do configProblems", () => {
     const graph = buildGraph([repo("web", card([], []), "gitlab.example.com/sklep/web")], {
-      config: { packages: {}, edges: [{ from: "web", to: "gitlab.example.com/sklep/web", note: "HTTP" }] },
+      config: { packages: {}, apps: {}, edges: [{ from: "web", to: "gitlab.example.com/sklep/web", note: "HTTP" }] },
       file: CONFIG_FILE,
       problems: [],
     });
@@ -205,7 +206,7 @@ describe("buildGraph: wpisy graph w workspace.yaml", () => {
 
   test("wpis z repo spoza listy trafia do configProblems i nie daje krawędzi", () => {
     const graph = buildGraph([repo("web", card([], []))], {
-      config: { packages: { "com.example:x": "nie-ma" }, edges: [{ from: "web", to: "nie-ma-tez", note: "HTTP" }] },
+      config: { packages: { "com.example:x": "nie-ma" }, apps: {}, edges: [{ from: "web", to: "nie-ma-tez", note: "HTTP" }] },
       file: CONFIG_FILE,
       problems: [],
     });
@@ -224,6 +225,7 @@ describe("subgraph", () => {
     {
       config: {
         packages: {},
+        apps: {},
         edges: [
           { from: "a", to: "b", note: "1" },
           { from: "b", to: "c", note: "2" },

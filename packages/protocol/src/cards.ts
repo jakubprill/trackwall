@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { Endpoint } from "./api.ts";
+import { Evidence } from "./evidence.ts";
+import { ConsumedHttp, ProvidedApp, ProvidedEndpoint } from "./http.ts";
 import { RepoId } from "./workspace.ts";
 
 /**
@@ -7,18 +9,6 @@ import { RepoId } from "./workspace.ts";
  * i konfiguracji w ostatnim commicie, oraz tagi repo policzone z karty i z reguł w `workspace.yaml`. Każda akcja to
  * `POST /api/cards/<akcja>`. Bez LLM: każde pole ma dowód (plik i linię).
  */
-
-/** Plik i linia w drzewie commita, z których wynika fakt; `line` `null`, gdy fakt dotyczy całego pliku. */
-export const Evidence = z.object({
-  path: z.string(),
-  line: z.number().int().positive().nullable(),
-});
-export type Evidence = z.infer<typeof Evidence>;
-
-/** Dowód jako `ścieżka:linia`, a bez linii sama ścieżka; jeden zapis w powodach tagów i w UI. */
-export function evidenceLabel(evidence: Evidence): string {
-  return evidence.line === null ? evidence.path : `${evidence.path}:${evidence.line}`;
-}
 
 /**
  * System budowania albo menedżer paczek, którego plik buildu jest w repo. `npm`, `pnpm`, `yarn` i `bun` rozróżnia
@@ -71,12 +61,12 @@ export const ConsumedPackage = ProvidedPackage.extend({
 });
 export type ConsumedPackage = z.infer<typeof ConsumedPackage>;
 
-/** Co repo udostępnia; dziś paczki, potem endpointy HTTP i topiki (§4.6). */
-export const Provided = z.discriminatedUnion("kind", [ProvidedPackage]);
+/** Co repo udostępnia: paczki, aplikacje Spring Boot i ich endpointy HTTP (ADR-30); potem topiki (§4.6). */
+export const Provided = z.discriminatedUnion("kind", [ProvidedPackage, ProvidedApp, ProvidedEndpoint]);
 export type Provided = z.infer<typeof Provided>;
 
-/** Czego repo używa; dziś paczki, potem wywołania HTTP, topiki i zmienne z adresami (§4.6). */
-export const Consumed = z.discriminatedUnion("kind", [ConsumedPackage]);
+/** Czego repo używa: paczki i klienci HTTP (ADR-30); potem topiki (§4.6). */
+export const Consumed = z.discriminatedUnion("kind", [ConsumedPackage, ConsumedHttp]);
 export type Consumed = z.infer<typeof Consumed>;
 
 /** Wersja narzędzia, której repo wymaga: z konfiguracji mise albo z pliku, który podaje ją po swojemu. */
@@ -144,9 +134,12 @@ export const RepoCard = z.object({
   /** Pełny hash commita, z którego czytano pliki. */
   commit: z.string(),
   buildFiles: z.array(BuildFile),
-  /** Paczki z repo, bez prywatnych paczek npm (`"private": true`), których nikt spoza repo nie zainstaluje. */
+  /**
+   * Paczki z repo (bez prywatnych paczek npm, `"private": true`, których nikt spoza repo nie zainstaluje), aplikacje
+   * Spring Boot i endpointy HTTP.
+   */
   provides: z.array(Provided),
-  /** Paczki spoza repo, każda raz (pierwsze wystąpienie); paczki z tego samego repo pominięte. */
+  /** Paczki spoza repo, każda raz (pierwsze wystąpienie; paczki z tego samego repo pominięte), i klienci HTTP. */
   consumes: z.array(Consumed),
   tools: z.array(ToolRequirement),
   mechanisms: z.array(Mechanism),
