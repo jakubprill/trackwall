@@ -1,4 +1,3 @@
-export { repoLabel, sessionLabel } from "./home-labels.ts";
 export {
   DAEMON_KEY,
   HOME_REPO_STATES,
@@ -10,8 +9,10 @@ export {
   type HomeRepoState,
   type HomeSession,
   type HomeSessionState,
+  type HomeTarget,
+  parseHomeKey,
   repoKey,
   sessionKey,
 } from "./home-model.ts";
-export { HomeScene, type HomeSceneOptions } from "./home-scene.ts";
+export { HomeScene, type HomeSceneOptions, type LabelTarget } from "./home-scene.ts";
 export type { ScenePalette } from "./palette.ts";

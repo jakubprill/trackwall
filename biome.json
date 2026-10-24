@@ -103,7 +103,7 @@
       }
     },
     {
-      "includes": ["packages/daemon/src/**", "packages/protocol/src/**"],
+      "includes": ["packages/daemon/src/**", "packages/protocol/src/**", "packages/scene/src/**"],
       "linter": {
         "rules": {
           "correctness": {
@@ -174,7 +174,7 @@
       }
     },
     {
-      "includes": ["packages/protocol/src/**", "packages/ui/src/**"],
+      "includes": ["packages/protocol/src/**", "packages/scene/src/**", "packages/ui/src/**"],
       "linter": {
         "rules": {
           "correctness": {

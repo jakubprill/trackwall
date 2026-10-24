@@ -12,7 +12,7 @@ import { cylinder, flatRing, type HomeVisual, light, outline, solid } from "./ki
 /** Wysokość słupa światła nad dronem. */
 const BEACON_HEIGHT = 2.6;
 
-export function sessionPod(session: HomeSession, palette: ScenePalette, motion: boolean): HomeVisual {
+export function sessionPod(session: HomeSession, palette: ScenePalette): HomeVisual {
   // Scena co klatkę przepisuje pozycję encji do obiektu, więc kołysze się wewnętrzna grupa, nie obiekt encji.
   const root = new Group();
   const group = new Group();
@@ -25,7 +25,6 @@ export function sessionPod(session: HomeSession, palette: ScenePalette, motion: 
   const ring = flatRing(0.29, 0.014, 6, light(color, 0.9));
   group.add(ring);
   const beacon = session.state === "attention" || session.state === "error" ? addBeacon(group, color) : null;
-  if (!motion) return { object: root };
   return {
     object: root,
     animate: (t) => {

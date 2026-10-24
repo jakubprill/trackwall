@@ -1,5 +1,5 @@
 import { Group, Mesh, PlaneGeometry } from "three";
-import type { HomeRepo } from "../home-model.ts";
+import type { HomeRepo, HomeRepoState } from "../home-model.ts";
 import { repoStateColor, type ScenePalette } from "../palette.ts";
 import type { RepoKind } from "../repo-kind.ts";
 import { box, cylinder, flatRing, type HomeVisual, light, outline, solid } from "./kit.ts";
@@ -15,21 +15,42 @@ const MAX_COUNT_BARS = 5;
 /** Przód modelu: +z w układzie modelu, scena obraca go do środka pierścienia. */
 const FRONT_Z = 0.345;
 
-type Part = (repo: HomeRepo, palette: ScenePalette, motion: boolean) => HomeVisual;
+/** Wszystko, od czego zależy wygląd repo; scena buduje model od nowa tylko przy zmianie tej wartości. */
+export interface RepoLook {
+  kind: RepoKind;
+  state: HomeRepoState;
+  bars: number;
+  hasMise: boolean;
+  taskRunning: boolean;
+}
 
-export function repoModel(repo: HomeRepo, kind: RepoKind, palette: ScenePalette, motion: boolean): HomeVisual {
+export function repoLook(repo: HomeRepo, kind: RepoKind): RepoLook {
+  const counted = repo.state === "changed" || repo.state === "behind";
+  return {
+    kind,
+    state: repo.state,
+    bars: counted ? Math.min(repo.count, MAX_COUNT_BARS) : 0,
+    hasMise: repo.hasMise,
+    taskRunning: repo.runningTask !== null,
+  };
+}
+
+type Part = (look: RepoLook, color: string, palette: ScenePalette) => HomeVisual;
+
+export function repoModel(look: RepoLook, palette: ScenePalette): HomeVisual {
   const group = new Group();
   const animations: Array<(elapsed: number) => void> = [];
   const add = (visual: HomeVisual) => {
     group.add(visual.object);
     if (visual.animate) animations.push(visual.animate);
   };
-  add(plate(repo, palette));
-  add(BODIES[kind](repo, palette, motion));
-  add(countBars(repo, palette));
-  if (!repo.hasMise) group.add(box([0.16, 0.02, 0.16], solid(palette.muted, 0.2), [-0.33, 0.09, -0.24]));
-  if (repo.runningTask) add(runningHalo(palette, motion));
-  if (animations.length === 0) return { object: group };
+  // Jeden kolor stanu dla paska, bryły i jej świateł: czyste repo jest spokojne, reszta mówi stanem.
+  const color = repoStateColor(look.state, palette);
+  add(plate(color, palette));
+  add(BODIES[look.kind](look, color, palette));
+  add(countBars(look, palette));
+  if (!look.hasMise) group.add(box([0.16, 0.02, 0.16], solid(palette.muted, 0.2), [-0.33, 0.09, -0.24]));
+  if (look.taskRunning) add(runningHalo(palette));
   return {
     object: group,
     animate: (t) => {
@@ -38,36 +59,29 @@ export function repoModel(repo: HomeRepo, kind: RepoKind, palette: ScenePalette,
   };
 }
 
-/** Kolor bryły: spokojny akcent dla czystego repo, inaczej kolor stanu. */
-function stateAccent(repo: HomeRepo, palette: ScenePalette): string {
-  return repo.state === "clean" ? palette.accent : repoStateColor(repo.state, palette);
-}
-
-function plate(repo: HomeRepo, palette: ScenePalette): HomeVisual {
+function plate(color: string, palette: ScenePalette): HomeVisual {
   const group = new Group();
   const base = box([0.9, 0.08, 0.68], solid(palette.plate), [0, 0.04, 0]);
-  group.add(base, outline(base, palette.accent, 0.25));
-  group.add(box([0.6, 0.035, 0.02], light(repoStateColor(repo.state, palette)), [0, 0.06, FRONT_Z]));
+  group.add(base, outline(base, palette.primary, 0.25));
+  group.add(box([0.6, 0.035, 0.02], light(color), [0, 0.06, FRONT_Z]));
   return { object: group };
 }
 
-function countBars(repo: HomeRepo, palette: ScenePalette): HomeVisual {
+function countBars(look: RepoLook, palette: ScenePalette): HomeVisual {
   const group = new Group();
-  const color = repo.state === "behind" ? palette.accent : palette.warning;
-  const bars = repo.state === "changed" || repo.state === "behind" ? Math.min(repo.count, MAX_COUNT_BARS) : 0;
-  for (let i = 0; i < bars; i++) {
+  const color = look.state === "behind" ? palette.primary : palette.warning;
+  for (let i = 0; i < look.bars; i++) {
     const height = 0.05 + i * 0.03;
     group.add(box([0.05, height, 0.05], light(color), [0.38, 0.12 + height / 2, 0.24 - i * 0.07]));
   }
   return { object: group };
 }
 
-function runningHalo(palette: ScenePalette, motion: boolean): HomeVisual {
+function runningHalo(palette: ScenePalette): HomeVisual {
   const group = new Group();
-  group.add(flatRing(0.58, 0.012, 48, light(palette.accent, 0.9), 0.05));
-  const spark = box([0.04, 0.04, 0.04], light(palette.accent), [0.58, 0.07, 0]);
+  group.add(flatRing(0.58, 0.012, 48, light(palette.primary, 0.9), 0.05));
+  const spark = box([0.04, 0.04, 0.04], light(palette.primary), [0.58, 0.07, 0]);
   group.add(spark);
-  if (!motion) return { object: group };
   return {
     object: group,
     animate: (t) => {
@@ -77,14 +91,14 @@ function runningHalo(palette: ScenePalette, motion: boolean): HomeVisual {
 }
 
 /** Wejście: ekran na stojaku, świecący kolorem stanu; niedostępne repo migocze. */
-const terminal: Part = (repo, palette, motion) => {
+const terminal: Part = (look, color, palette) => {
   const group = new Group();
   const tilt = -0.12;
   group.add(cylinder([0.03, 0.05], 0.22, 8, solid(palette.body), [0, 0.19, -0.05]));
   const frame = box([0.66, 0.42, 0.05], solid(palette.body), [0, 0.48, -0.05]);
   frame.rotation.x = tilt;
-  group.add(frame, outline(frame, palette.accent, 0.35));
-  const screen = new Mesh(new PlaneGeometry(0.58, 0.34), light(repo.state === "clean" ? palette.plate : stateAccent(repo, palette), 0.85));
+  group.add(frame, outline(frame, palette.primary, 0.35));
+  const screen = new Mesh(new PlaneGeometry(0.58, 0.34), light(color, 0.85));
   screen.position.set(0, 0.48, -0.022);
   screen.rotation.x = tilt;
   group.add(screen);
@@ -93,7 +107,7 @@ const terminal: Part = (repo, palette, motion) => {
     line.rotation.x = tilt;
     group.add(line);
   }
-  if (repo.state !== "unavailable" || !motion) return { object: group };
+  if (look.state !== "unavailable") return { object: group };
   return {
     object: group,
     animate: (t) => {
@@ -102,12 +116,11 @@ const terminal: Part = (repo, palette, motion) => {
   };
 };
 
-/** Druga warstwa: walec z anteną i pierścieniem w kolorze stanu. */
-const gateway: Part = (repo, palette, motion) => {
+/** Brama: walec z anteną i pierścieniem w kolorze stanu. */
+const gateway: Part = (_look, color, palette) => {
   const group = new Group();
-  const color = stateAccent(repo, palette);
   const hub = cylinder([0.22, 0.26], 0.34, 8, solid(palette.body), [0, 0.25, 0]);
-  group.add(hub, outline(hub, palette.accent, 0.35));
+  group.add(hub, outline(hub, palette.primary, 0.35));
   const ring = flatRing(0.3, 0.018, 32, light(color, 0.9), 0.3);
   group.add(ring);
   group.add(
@@ -116,7 +129,6 @@ const gateway: Part = (repo, palette, motion) => {
   );
   const tip = cylinder([0.03, 0.03], 0.03, 8, light(color, 0.9), [-0.13, 0.77, 0]);
   group.add(tip);
-  if (!motion) return { object: group };
   return {
     object: group,
     animate: (t) => {
@@ -126,20 +138,16 @@ const gateway: Part = (repo, palette, motion) => {
   };
 };
 
-/** Środek grafu: szafa z diodami; górna dioda to stan, druga mruga, gdy działa task mise. */
-const rack: Part = (repo, palette, motion) => {
+/** Serwis: szafa z diodami; górna dioda to stan, druga mruga, gdy działa task mise, dwie dolne są ozdobą. */
+const rack: Part = (look, color, palette) => {
   const group = new Group();
   const body = box([0.56, 0.62, 0.44], solid(palette.body), [0, 0.39, 0]);
-  group.add(body, outline(body, palette.accent, 0.35));
-  const leds = [0, 1, 2, 3].map((i) => {
-    const color = i === 0 ? stateAccent(repo, palette) : i === 1 && repo.runningTask ? palette.accent : palette.plate;
-    const led = box([0.4, 0.035, 0.01], light(color, 0.95), [0, 0.58 - i * 0.12, 0.226]);
-    group.add(led);
-    return led;
-  });
+  group.add(body, outline(body, palette.primary, 0.35));
+  const led = (row: number, ledColor: string) => box([0.4, 0.035, 0.01], light(ledColor, 0.95), [0, 0.58 - row * 0.12, 0.226]);
+  const busy = led(1, look.taskRunning ? palette.primary : palette.plate);
+  group.add(led(0, color), busy, led(2, palette.plate), led(3, palette.plate));
   group.add(box([0.5, 0.02, 0.38], solid(palette.plate), [0, 0.71, 0]));
-  const busy = leds[1];
-  if (!motion || !repo.runningTask || !busy) return { object: group };
+  if (!look.taskRunning) return { object: group };
   return {
     object: group,
     animate: (t) => {
@@ -148,15 +156,13 @@ const rack: Part = (repo, palette, motion) => {
   };
 };
 
-/** Biblioteki: przezroczysta skrzynka z obracającym się rdzeniem. */
-const crate: Part = (repo, palette, motion) => {
+/** Biblioteka: przezroczysta skrzynka z obracającym się rdzeniem. */
+const crate: Part = (_look, color, palette) => {
   const group = new Group();
-  const color = stateAccent(repo, palette);
   const shell = box([0.46, 0.46, 0.46], solid(palette.body, 0, 0.35), [0, 0.31, 0]);
-  group.add(shell, outline(shell, color, 0.7));
-  const core = box([0.18, 0.18, 0.18], light(repo.state === "clean" ? palette.idle : color), [0, 0.31, 0]);
+  group.add(shell, outline(shell, palette.primary, 0.5));
+  const core = box([0.18, 0.18, 0.18], light(color), [0, 0.31, 0]);
   group.add(core);
-  if (!motion) return { object: group };
   return {
     object: group,
     animate: (t) => {

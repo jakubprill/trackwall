@@ -20,7 +20,10 @@ import {
  * Każda funkcja zwraca nowy obiekt z własnym materiałem, bo stan (kolor, jasność) zmienia się per obiekt.
  */
 
-/** Obiekt, który scena rysuje dla encji, z opcjonalną animacją w czasie sceny (sekundy). */
+/**
+ * Obiekt, który scena rysuje dla encji, z opcjonalną animacją w czasie sceny (sekundy). Scena ustawia pozę z chwili 0
+ * zaraz po zbudowaniu modelu, a dalej animuje tylko przy włączonym ruchu, więc model nie dostaje flagi ruchu.
+ */
 export interface HomeVisual {
   object: Object3D;
   animate?: (elapsed: number) => void;
@@ -81,9 +84,13 @@ export function flatRing<M extends Material>(radius: number, tube: number, segme
   return mesh;
 }
 
-/** Krawędzie bryły jako cienkie linie: daje rysunek HUD bez cieniowania. */
+/**
+ * Krawędzie bryły jako cienkie linie: daje rysunek HUD bez cieniowania. Linii nie da się wskazać, bo three.js trafia
+ * w linię z odległości do 1 jednostki i obrys modelu przejmowałby kliknięcia sąsiada.
+ */
 export function outline(mesh: Mesh, color: string, opacity: number): LineSegments {
   const lines = new LineSegments(new EdgesGeometry(mesh.geometry), new LineBasicMaterial({ color, transparent: true, opacity }));
+  lines.raycast = () => {};
   lines.position.copy(mesh.position);
   lines.rotation.copy(mesh.rotation);
   return lines;

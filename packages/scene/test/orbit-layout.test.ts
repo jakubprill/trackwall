@@ -1,37 +1,43 @@
 import { describe, expect, test } from "bun:test";
+import type { HomeRepo } from "../src/home-model.ts";
 import { orbitLayout, REPO_RADIUS, SESSION_RADIUS } from "../src/orbit-layout.ts";
 
-const repo = (id: string, layer: number) => ({ id, layer, state: "clean" as const, count: 0, hasMise: true, runningTask: null });
+const repo = (id: string, layer: number | null): HomeRepo => ({ id, layer, state: "clean", count: 0, hasMise: true, runningTask: null });
 
 describe("układ Orbit", () => {
   test("repo leżą na zewnętrznym pierścieniu, a pierwsza warstwa jest z tyłu sceny", () => {
-    const layout = orbitLayout({ layers: ["Frontends", "Libraries"], repos: [repo("web", 0), repo("lib", 1)], sessions: [] });
+    const layout = orbitLayout({ layerCount: 2, repos: [repo("web", 0), repo("lib", 1)], sessions: [] });
 
     for (const at of layout.repos.values()) expect(Math.hypot(at.x, at.z)).toBeCloseTo(REPO_RADIUS);
     expect(layout.repos.get("web")?.angle).toBeCloseTo(-Math.PI / 2);
-    expect(layout.sectors.map((s) => s.label)).toEqual(["Frontends", "Libraries"]);
+    expect(layout.sectors).toHaveLength(2);
   });
 
   test("łuk warstwy jest proporcjonalny do liczby jej repo", () => {
-    const layout = orbitLayout({
-      layers: ["BFF", "Services"],
-      repos: [repo("bff", 0), repo("a", 1), repo("b", 1), repo("c", 1)],
-      sessions: [],
-    });
+    const layout = orbitLayout({ layerCount: 2, repos: [repo("bff", 0), repo("a", 1), repo("b", 1), repo("c", 1)], sessions: [] });
 
     const [bff, services] = layout.sectors;
     expect((services?.span ?? 0) / (bff?.span ?? 1)).toBeCloseTo(3);
   });
 
   test("pusta warstwa nie dostaje łuku", () => {
-    const layout = orbitLayout({ layers: ["Frontends", "BFF", "Libraries"], repos: [repo("web", 0), repo("lib", 2)], sessions: [] });
+    const layout = orbitLayout({ layerCount: 3, repos: [repo("web", 0), repo("lib", 2)], sessions: [] });
 
-    expect(layout.sectors.map((s) => s.label)).toEqual(["Frontends", "Libraries"]);
+    expect(layout.sectors).toHaveLength(2);
+  });
+
+  test("repo bez połączeń w grafie mają ostatni łuk, także gdy grafu jeszcze nie ma", () => {
+    const withGraph = orbitLayout({ layerCount: 1, repos: [repo("docs", null), repo("orders", 0)], sessions: [] });
+    const withoutGraph = orbitLayout({ layerCount: 0, repos: [repo("docs", null), repo("tools", null)], sessions: [] });
+
+    expect(withGraph.sectors).toHaveLength(2);
+    expect(withGraph.repos.get("orders")?.angle).toBeCloseTo(-Math.PI / 2);
+    expect(withoutGraph.repos.size).toBe(2);
   });
 
   test("sesje stoją na torze naprzeciw swojego repo, kilka sesji jednego repo obok siebie", () => {
     const layout = orbitLayout({
-      layers: ["Services"],
+      layerCount: 1,
       repos: [repo("orders", 0), repo("users", 0)],
       sessions: [
         { id: "s1", repo: "orders", state: "working" },
@@ -48,17 +54,23 @@ describe("układ Orbit", () => {
     expect(s3?.angle).toBeCloseTo(layout.repos.get("users")?.angle ?? Number.NaN);
   });
 
+  test("wiele sesji sąsiednich repo nie wchodzi sobie w drogę: sesje repo leżą w kolejności repo", () => {
+    const repos = Array.from({ length: 15 }, (_, i) => repo(`r${i}`, 0));
+    const sessions = repos.flatMap((r) => [1, 2, 3, 4].map((n) => ({ id: `${r.id}-${n}`, repo: r.id, state: "working" as const })));
+    const layout = orbitLayout({ layerCount: 1, repos, sessions });
+
+    const angles = sessions.map((s) => layout.sessions.get(s.id)?.angle ?? Number.NaN);
+    const gaps = angles.slice(1).map((angle, i) => angle - (angles[i] ?? Number.NaN));
+    expect(Math.min(...gaps)).toBeGreaterThan(0.02);
+  });
+
   test("sesja repo spoza modelu nie ma miejsca na torze", () => {
-    const layout = orbitLayout({
-      layers: ["Services"],
-      repos: [repo("orders", 0)],
-      sessions: [{ id: "s1", repo: "removed", state: "working" }],
-    });
+    const layout = orbitLayout({ layerCount: 1, repos: [repo("orders", 0)], sessions: [{ id: "s1", repo: "removed", state: "working" }] });
 
     expect(layout.sessions.has("s1")).toBe(false);
   });
 
-  test("repo z warstwą spoza listy warstw to błąd z nazwą repo", () => {
-    expect(() => orbitLayout({ layers: ["Services"], repos: [repo("orders", 1)], sessions: [] })).toThrow("orders");
+  test("repo z warstwą spoza liczby warstw to błąd z nazwą repo", () => {
+    expect(() => orbitLayout({ layerCount: 1, repos: [repo("orders", 1)], sessions: [] })).toThrow("orders");
   });
 });

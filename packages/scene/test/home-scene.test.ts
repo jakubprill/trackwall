@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { Label, Scale, Visual } from "@pawnjs/core";
+import { Label, Position, Scale, Visual } from "@pawnjs/core";
 import { createTestEngine, runFor } from "@pawnjs/core/testing";
-import { Mesh, type MeshBasicMaterial, TubeGeometry } from "three";
+import { Mesh, type MeshBasicMaterial } from "three";
 import { type HomeKey, type HomeModel, HomeScene, type ScenePalette } from "../src/index.ts";
 
 const PALETTE: ScenePalette = {
-  accent: "#3fd2e8",
+  primary: "#3fd2e8",
   warning: "#f0b44c",
   destructive: "#ef6a6a",
   muted: "#8399a5",
@@ -15,7 +15,7 @@ const PALETTE: ScenePalette = {
 };
 
 const MODEL: HomeModel = {
-  layers: ["Frontends", "Services", "Libraries"],
+  layerCount: 3,
   repos: [
     { id: "web-shop", layer: 0, state: "behind", count: 1, hasMise: true, runningTask: null },
     { id: "orders-api", layer: 1, state: "clean", count: 0, hasMise: true, runningTask: "dev" },
@@ -55,15 +55,16 @@ function pose(key: HomeKey, scene: HomeScene): string {
   return parts.map((n) => n.toFixed(4)).join(",");
 }
 
-/** Przezroczystość przewodów połączeń z grafu (grubszych niż przewody sesji, które nie mają podświetlenia). */
+/** Przezroczystość przewodów połączeń z grafu (obiekty o nazwie `link`; przewody sesji nazywają się `tether`). */
 function linkOpacities(): number[] {
   const found: number[] = [];
   engine.scene.traverse((o) => {
-    if (o instanceof Mesh && o.geometry instanceof TubeGeometry && o.geometry.parameters.path.getLength() > 5)
-      found.push((o.material as MeshBasicMaterial).opacity);
+    if (o instanceof Mesh && o.name === "link") found.push((o.material as MeshBasicMaterial).opacity);
   });
   return found.sort();
 }
+
+const positionOf = (key: HomeKey, scene: HomeScene) => scene.entity(key)?.get(Position);
 
 describe("scena pulpitu", () => {
   test("każde repo, sesja i daemon dostają encję z modelem do narysowania", () => {
@@ -134,6 +135,55 @@ describe("scena pulpitu", () => {
 
     expect(selected).toEqual(["session:s1"]);
     expect(opened).toEqual(["session:s1"]);
+    expect(scene.entity("session:s1")?.get(Scale)?.x).toBeCloseTo(1.12);
+  });
+
+  test("dodanie repo przesuwa pozostałe repo i ich sesje na nowe miejsca w układzie", () => {
+    const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
+    scene.apply({ ...MODEL, repos: MODEL.repos.filter((r) => r.id !== "payments-api") });
+    const at = positionOf("repo:orders-api", scene);
+    const before = { x: at?.x, z: at?.z };
+    const model = scene.entity("repo:orders-api")?.get(Visual);
+
+    scene.apply(MODEL);
+
+    const after = positionOf("repo:orders-api", scene);
+    expect({ x: after?.x, z: after?.z }).not.toEqual(before);
+    expect(scene.entity("repo:orders-api")?.get(Visual)).toBe(model);
+    expect(Math.atan2(positionOf("session:s1", scene)?.z ?? 0, positionOf("session:s1", scene)?.x ?? 0)).toBeCloseTo(
+      Math.atan2(positionOf("repo:orders-api", scene)?.z ?? 0, positionOf("repo:orders-api", scene)?.x ?? 0),
+    );
+  });
+
+  test("zmiana liczby zmian ponad liczbę słupków nie buduje modelu repo od nowa", () => {
+    const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
+    const withCount = (count: number): HomeModel => ({
+      ...MODEL,
+      repos: MODEL.repos.map((r) => (r.id === "payments-api" ? { ...r, count } : r)),
+    });
+    scene.apply(withCount(7));
+    const before = scene.entity("repo:payments-api")?.get(Visual);
+
+    scene.apply(withCount(9));
+
+    expect(scene.entity("repo:payments-api")?.get(Visual)).toBe(before);
+  });
+
+  test("wskazany obiekt, który zniknął z migawki, kończy wskazanie", () => {
+    const hovered: Array<HomeKey | null> = [];
+    const scene = new HomeScene(engine, { palette: PALETTE, motion: true, onHover: (k) => hovered.push(k) });
+    scene.apply(MODEL);
+    const session = scene.entity("session:s2");
+    if (!session) throw new Error("brak encji sesji s2");
+
+    engine.events.emit(session, "pointerenter", {});
+    scene.apply({ ...MODEL, sessions: MODEL.sessions.filter((s) => s.id !== "s2") });
+
+    expect(hovered).toEqual(["session:s2", null]);
+  });
+
+  test("kolor spoza zapisu #rrggbb, np. token oklch wprost z CSS, to błąd przy tworzeniu sceny", () => {
+    expect(() => new HomeScene(engine, { palette: { ...PALETTE, primary: "oklch(0.82 0.12 210)" }, motion: true })).toThrow("primary");
   });
 
   test("wybór sesji powiększa ją i rozjaśnia połączenia jej repo, a resztę przygasza", () => {
@@ -153,16 +203,34 @@ describe("scena pulpitu", () => {
     const scene = new HomeScene(engine, {
       palette: PALETTE,
       motion: true,
-      createLabel: (text, key) => {
-        labelled.push(`${key} ${text}`);
+      createLabel: (target) => {
+        labelled.push(target.key);
         return { style: {} } as unknown as HTMLElement;
       },
     });
 
     scene.apply(MODEL);
+    scene.apply(structuredClone(MODEL));
 
-    expect(labelled.sort()).toEqual(["repo:payments-api payments-api", "repo:web-shop web-shop", "session:s1 Needs you"]);
+    expect(labelled.sort()).toEqual(["repo:payments-api", "repo:web-shop", "session:s1"]);
     expect(scene.entity("repo:orders-api")?.has(Label)).toBe(false);
+  });
+
+  test("zamknięcie sceny zwalnia geometrie modeli także po zamknięciu silnika", () => {
+    const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
+    scene.apply(MODEL);
+    let geometries = 0;
+    let disposed = 0;
+    engine.scene.traverse((o) => {
+      if (!(o instanceof Mesh)) return;
+      geometries++;
+      o.geometry.addEventListener("dispose", () => disposed++);
+    });
+
+    engine.dispose();
+    scene.dispose();
+
+    expect(disposed).toBe(geometries);
   });
 
   test("bez ruchu scena stoi: klatki nie zmieniają modeli", () => {
