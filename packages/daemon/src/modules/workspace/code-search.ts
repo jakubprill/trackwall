@@ -1,5 +1,6 @@
 import {
   CODE_SEARCH_LINE_MAX_CHARS,
+  CODE_SEARCH_MAX_CHARS,
   type CodeLine,
   type CodeMatch,
   type CodeQuery,
@@ -43,27 +44,65 @@ export interface CodeSearchVcs {
 const SEARCH_CONCURRENCY = 4;
 /** Git output limit per repo: thousands of matches with context, yet bounded memory when the pattern matches everywhere. */
 const GREP_MAX_BYTES = 2 * 1024 * 1024;
+/**
+ * After this long no new repo is searched: an MCP client gives up on a tool call after a minute or two, and a
+ * pathological regular expression can keep git busy for its whole time limit in every repo.
+ */
+const CODE_SEARCH_BUDGET_MS = 60_000;
 
 type RepoOutcome =
-  | { kind: "ok"; searched: CodeSearchRepo; matches: CodeMatch[]; truncated: boolean }
+  | { kind: "ok"; searched: CodeSearchRepo; matches: CodeMatch[] }
   | { kind: "empty" }
+  | { kind: "skipped" }
   | { kind: "failed"; failure: CodeSearchFailure };
 
-export async function searchCode(entries: readonly RepoEntry[], vcs: CodeSearchVcs, query: CodeSearchQuery): Promise<SearchCodeResult> {
-  const outcomes = await mapLimit(entries, SEARCH_CONCURRENCY, (entry) => searchRepo(entry, vcs, query));
+export async function searchCode(
+  entries: readonly RepoEntry[],
+  vcs: CodeSearchVcs,
+  query: CodeSearchQuery,
+  budgetMs = CODE_SEARCH_BUDGET_MS,
+): Promise<SearchCodeResult> {
+  const deadline = Date.now() + budgetMs;
+  // Repos start in list order, so matches of finished repos come before any repo not started yet: once they reach
+  // the limit, the rest of the list cannot add a match to the result.
+  let found = 0;
+  const outcomes = await mapLimit(entries, SEARCH_CONCURRENCY, async (entry): Promise<RepoOutcome> => {
+    if (found >= query.limit) return { kind: "skipped" };
+    if (Date.now() >= deadline) {
+      return { kind: "failed", failure: { repo: entry.id, message: `not searched: the search took longer than ${budgetMs / 1000} s` } };
+    }
+    const outcome = await searchRepo(entry, vcs, query);
+    if (outcome.kind === "ok") found += outcome.matches.length;
+    return outcome;
+  });
+  return joinOutcomes(outcomes, query.limit);
+}
+
+/** Matches of all repos in list order, within `limit` and `CODE_SEARCH_MAX_CHARS`. */
+function joinOutcomes(outcomes: readonly RepoOutcome[], limit: number): SearchCodeResult {
   const result: SearchCodeResult = { matches: [], truncated: false, searched: [], failed: [] };
+  let chars = 0;
   for (const outcome of outcomes) {
     if (outcome.kind === "failed") result.failed.push(outcome.failure);
+    result.truncated ||= outcome.kind === "skipped";
     if (outcome.kind !== "ok") continue;
-    result.searched.push(outcome.searched);
-    result.matches.push(...outcome.matches);
-    result.truncated ||= outcome.truncated;
-  }
-  if (result.matches.length > query.limit) {
-    result.matches = result.matches.slice(0, query.limit);
-    result.truncated = true;
+    const searched = { ...outcome.searched };
+    for (const match of outcome.matches) {
+      chars += lineChars(match);
+      if (result.matches.length >= limit || chars > CODE_SEARCH_MAX_CHARS) {
+        searched.truncated = true;
+        break;
+      }
+      result.matches.push(match);
+    }
+    result.searched.push(searched);
+    result.truncated ||= searched.truncated;
   }
   return result;
+}
+
+function lineChars(match: CodeMatch): number {
+  return [match, ...match.before, ...match.after].reduce((sum, l) => sum + l.text.length, 0);
 }
 
 async function searchRepo(entry: RepoEntry, vcs: CodeSearchVcs, query: CodeSearchQuery): Promise<RepoOutcome> {
@@ -71,42 +110,41 @@ async function searchRepo(entry: RepoEntry, vcs: CodeSearchVcs, query: CodeSearc
     const commit = await vcs.headCommit(entry.path);
     if (commit === null) return { kind: "empty" };
     const { lines, truncated } = await vcs.grep(entry.path, commit, query, GREP_MAX_BYTES);
-    return { kind: "ok", searched: { repo: entry.id, commit }, matches: withContext(entry.id, lines, query.context), truncated };
+    // More than `limit` matches of one repo never reach the result, so they are not built at all.
+    const matches = withContext(entry.id, lines, query.context, query.limit + 1);
+    const cut = matches.length > query.limit;
+    return { kind: "ok", searched: { repo: entry.id, commit, truncated: truncated || cut }, matches: matches.slice(0, query.limit) };
   } catch (err) {
     return { kind: "failed", failure: { repo: entry.id, message: messageOf(err) } };
   }
 }
 
 /**
- * Matches with their context lines. Git merges overlapping context windows into one group, so lines are looked up by
- * number, not by position in the output; a neighbouring match can be context of another.
+ * At most `max` matches with their context lines. Git merges overlapping context windows into one group, so lines
+ * are looked up by number, not by position in the output; a neighbouring match can be context of another.
  */
-function withContext(repo: string, lines: readonly GrepLine[], context: number): CodeMatch[] {
+function withContext(repo: string, lines: readonly GrepLine[], context: number, max: number): CodeMatch[] {
   const byLine = new Map(lines.map((l) => [lineKey(l.path, l.line), l]));
-  const around = (path: string, from: number, step: 1 | -1): CodeLine[] => {
-    const found: CodeLine[] = [];
-    for (let n = from + step; Math.abs(n - from) <= context; n += step) {
-      const l = byLine.get(lineKey(path, n));
-      if (!l) break;
-      found.push({ line: l.line, text: clip(l.text) });
-    }
-    return step === -1 ? found.reverse() : found;
+  const lineAt = (path: string, n: number): CodeLine[] => {
+    const l = byLine.get(lineKey(path, n));
+    return l ? [{ line: l.line, text: clip(l.text) }] : [];
   };
-  return lines.flatMap((l) =>
-    l.column === null
-      ? []
-      : [
-          {
-            repo,
-            path: l.path,
-            line: l.line,
-            column: l.column,
-            text: clip(l.text),
-            before: around(l.path, l.line, -1),
-            after: around(l.path, l.line, 1),
-          },
-        ],
-  );
+  const range = (from: number, to: number) => Array.from({ length: Math.max(0, to - from + 1) }, (_, i) => from + i);
+  const matches: CodeMatch[] = [];
+  for (const l of lines) {
+    if (matches.length >= max) break;
+    if (l.column === null) continue;
+    matches.push({
+      repo,
+      path: l.path,
+      line: l.line,
+      column: l.column,
+      text: clip(l.text),
+      before: range(l.line - context, l.line - 1).flatMap((n) => lineAt(l.path, n)),
+      after: range(l.line + 1, l.line + context).flatMap((n) => lineAt(l.path, n)),
+    });
+  }
+  return matches;
 }
 
 function lineKey(path: string, line: number): string {

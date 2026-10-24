@@ -209,12 +209,13 @@ export const mcpTools = {
     name: "search_code",
     description:
       "Search code in many repos at once (git grep in each repo's latest commit, not in uncommitted changes): a fixed " +
-      "string by default, a POSIX extended regular expression with regex: true. Each match has repo, path, line, " +
+      "string by default, a POSIX extended regular expression with regex: true (use [0-9] and [[:space:]], not \\d " +
+      "or \\s). Each match has repo, path, line, " +
       `column, the line text (cut to ${CODE_SEARCH_LINE_MAX_CHARS} characters) and context lines before and after. ` +
       "Narrow with repos (ids), tags (every given tag) and paths (git pathspecs: *.java in any directory, src/, " +
       ":!*.test.ts to exclude). searched lists the repos with the commit searched; failed the repos git could not " +
-      "search, with the reason (e.g. an invalid regular expression). truncated: true when there were more matches " +
-      "than limit; narrow the query.",
+      "search, with the reason (e.g. an invalid regular expression or the time limit). truncated: true when not " +
+      "every match is in the result (also per repo in searched); narrow the query.",
     args: z
       .object({
         pattern: CodeQuery.shape.pattern.describe("text to find, or a regular expression with regex: true"),

@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import type { Commit, FileContent, RepoStatusOk, SyncResult, TreeEntry, WorkingTreeChanges } from "@trackwall/protocol";
 import { git } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
-import { grep } from "./grep.ts";
+import { grep, grepFiles } from "./grep.ts";
 import { KeyedQueue } from "./keyed-queue.ts";
 import { type GitObject, isBinary, LOG_FORMAT, parseBlobs, parseLog, parseObjects, parseStatus, parseTree } from "./parse.ts";
 import { pathKey } from "./path-key.ts";
@@ -58,7 +58,8 @@ export class Vcs {
     return this.syncing.run(await this.commonDir(dir), () => syncRepo(dir));
   }
 
-  /** Code search in a commit (ADR-40, `grep.ts`). */
+  // `git grep` po obiektach commita (`grep.ts`): pliki źródłowe dla kart (ADR-30) i wyszukiwanie kodu (ADR-40).
+  readonly grepFiles = grepFiles;
   readonly grep = grep;
 
   // Worktree zadań (ADR-31, `worktree.ts`, `worktree-changes.ts`). Odczyty idą wprost; zmiany rejestru worktree
@@ -152,30 +153,6 @@ export class Vcs {
       if (blob && path !== undefined) read.set(path, blob);
     });
     return read;
-  }
-
-  /**
-   * Pliki commita pasujące do `globs` (pathspec gita, np. `*.java`), których treść pasuje do wyrażenia ERE `pattern`:
-   * `git grep` po obiektach commita, bez katalogu roboczego i bez `textconv`, więc repo nie uruchamia przy tym żadnego
-   * programu. `truncated`, gdy lista przekroczyła `maxBytes` i jest niepełna.
-   */
-  async grepFiles(
-    dir: string,
-    commit: string,
-    pattern: string,
-    globs: readonly string[],
-    maxBytes: number,
-  ): Promise<{ paths: string[]; truncated: boolean }> {
-    const args = ["grep", "-l", "-z", "-I", "-E", "--no-color", "--no-textconv", "-e", pattern, commit, "--", ...globs];
-    const { stdout, truncated } = await git(dir, args, { maxBytes, okExitCodes: [1] });
-    const prefix = `${commit}:`;
-    const paths = stdout
-      .toString("utf8")
-      .split("\0")
-      .filter((p) => p.startsWith(prefix))
-      .map((p) => p.slice(prefix.length));
-    // Ostatnia nazwa uciętego wyjścia może być niepełna.
-    return { paths: truncated ? paths.slice(0, -1) : paths, truncated };
   }
 
   /**

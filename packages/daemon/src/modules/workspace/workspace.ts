@@ -212,17 +212,14 @@ export class Workspace {
   }
 
   /**
-   * Code search in the HEAD commit of the listed repos (ADR-40). `repos` narrows it to these ids, and an unknown one is
-   * `not_found`, so that a typo does not look like "nothing found"; `among` are repos chosen elsewhere (by tags from the
-   * cards), so unknown ones simply drop out.
+   * Code search in the HEAD commit of the listed repos (ADR-40), all of them or those in `ids`; an unknown id is
+   * `not_found`, so that a typo does not look like "nothing found".
    */
-  async searchCode(query: CodeSearchQuery, scope: { repos?: readonly string[]; among?: readonly string[] }): Promise<SearchCodeResult> {
+  async searchCode(query: CodeSearchQuery, ids?: readonly string[]): Promise<SearchCodeResult> {
     const { entries } = await this.entries();
-    const { repos, among } = scope;
-    const unknown = repos?.find((id) => !entries.some((e) => e.id === id));
-    if (unknown !== undefined) throw new DomainError("not_found", `no repo "${unknown}" in the projects folder`);
-    const chosen = entries.filter((e) => (repos?.includes(e.id) ?? true) && (among?.includes(e.id) ?? true));
-    return searchCode(chosen, this.deps.vcs, query);
+    const unknown = ids?.find((id) => !entries.some((e) => e.id === id));
+    if (unknown !== undefined) throw unknownRepo(unknown);
+    return searchCode(ids ? entries.filter((e) => ids.includes(e.id)) : entries, this.deps.vcs, query);
   }
 
   /** Daemon nie wie, czy system obsłużył adres; wynik to tylko potwierdzenie przyjęcia. */
@@ -263,7 +260,7 @@ export class Workspace {
 
   private async entry(id: string): Promise<RepoEntry> {
     const entry = (await this.entries()).entries.find((r) => r.id === id);
-    if (!entry) throw new DomainError("not_found", `no repo "${id}" in the projects folder`);
+    if (!entry) throw unknownRepo(id);
     return entry;
   }
 
@@ -308,6 +305,10 @@ export class Workspace {
       throw new DomainError("repo_unavailable", `${entry.id}: ${messageOf(err)}`);
     }
   }
+}
+
+function unknownRepo(id: string): DomainError {
+  return new DomainError("not_found", `no repo "${id}" in the projects folder`);
 }
 
 /** Katalog klonu: ostatni segment pełnej nazwy, jak przy `git clone` bez podanego katalogu. */

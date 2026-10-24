@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseGrep } from "../src/modules/vcs/grep.ts";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
-import type { CodeSearchQuery } from "../src/modules/workspace/code-search.ts";
+import { type CodeSearchQuery, searchCode } from "../src/modules/workspace/code-search.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
@@ -42,7 +42,7 @@ describe("code search", () => {
     const { workspace, orders } = await workspaceWithRepos();
     const head = gitIn(orders, "rev-parse", "HEAD").trim();
 
-    const result = await workspace.searchCode({ ...QUERY, pattern: "TODO" }, {});
+    const result = await workspace.searchCode({ ...QUERY, pattern: "TODO" });
 
     expect(result.matches.map((m) => [m.repo, m.path, m.line, m.column, m.text])).toEqual([
       ["orders", "src/main/java/Orders.java", 2, 6, "  // TODO: validation"],
@@ -51,8 +51,8 @@ describe("code search", () => {
     ]);
     // A repo without commits has nothing to search, so it is neither searched nor failed.
     expect(result.searched).toEqual([
-      { repo: "orders", commit: head },
-      { repo: "web", commit: gitIn(join(orders, "..", "web"), "rev-parse", "HEAD").trim() },
+      { repo: "orders", commit: head, truncated: false },
+      { repo: "web", commit: gitIn(join(orders, "..", "web"), "rev-parse", "HEAD").trim(), truncated: false },
     ]);
     expect(result).toMatchObject({ truncated: false, failed: [] });
   });
@@ -60,7 +60,7 @@ describe("code search", () => {
   test("ignoreCase, a regular expression and a pathspec with an exclusion narrow the matches", async () => {
     const { workspace } = await workspaceWithRepos();
     const found = async (query: Partial<typeof QUERY> & { pattern: string }) =>
-      (await workspace.searchCode({ ...QUERY, ...query }, {})).matches.map((m) => `${m.repo}:${m.path}:${m.line}`);
+      (await workspace.searchCode({ ...QUERY, ...query })).matches.map((m) => `${m.repo}:${m.path}:${m.line}`);
 
     expect(await found({ pattern: "todo", ignoreCase: true, paths: ["*.ts"] })).toEqual(["web:src/app.ts:1"]);
     expect(await found({ pattern: "void (place|cancel)\\(", regex: true })).toEqual([
@@ -75,7 +75,7 @@ describe("code search", () => {
   test("context is the lines before and after a match, and a neighbouring match is context of the other", async () => {
     const { workspace } = await workspaceWithRepos();
 
-    const { matches } = await workspace.searchCode({ ...QUERY, pattern: "void", context: 1 }, { repos: ["orders"] });
+    const { matches } = await workspace.searchCode({ ...QUERY, pattern: "void", context: 1 }, ["orders"]);
 
     expect(matches).toEqual([
       {
@@ -105,7 +105,7 @@ describe("code search", () => {
     writeFileSync(join(orders, "new.txt"), "TODO uncommitted\n");
     writeFileSync(join(orders, "windows.txt"), "changed without a commit\n");
 
-    const { matches } = await workspace.searchCode({ ...QUERY, pattern: "TODO" }, { repos: ["orders"] });
+    const { matches } = await workspace.searchCode({ ...QUERY, pattern: "TODO" }, ["orders"]);
 
     expect(matches.map((m) => m.path)).toEqual([
       "committed.txt",
@@ -119,23 +119,26 @@ describe("code search", () => {
     const { workspace, orders } = await workspaceWithRepos();
     commitFiles(orders, { "long.txt": `TODO ${"x".repeat(2000)}\n` }, "long line");
 
-    const limited = await workspace.searchCode({ ...QUERY, pattern: "TODO", limit: 2 }, {});
+    const limited = await workspace.searchCode({ ...QUERY, pattern: "TODO", limit: 2 });
     expect(limited.matches).toHaveLength(2);
     expect(limited.truncated).toBe(true);
+    expect(limited.searched.map((r) => [r.repo, r.truncated])).toEqual([
+      ["orders", true],
+      ["web", false],
+    ]);
 
-    const long = await workspace.searchCode({ ...QUERY, pattern: "TODO", paths: ["long.txt"] }, {});
+    const long = await workspace.searchCode({ ...QUERY, pattern: "TODO", paths: ["long.txt"] });
     expect(long.matches[0]?.text).toHaveLength(500);
   });
 
-  test("repos and among narrow the choice: an unknown repo in repos is not_found, one outside among simply drops out", async () => {
+  test("ids narrow the search to these repos, and an unknown id is not_found instead of no matches", async () => {
     const { workspace } = await workspaceWithRepos();
 
-    const among = await workspace.searchCode({ ...QUERY, pattern: "TODO", ignoreCase: true }, { among: ["web", "missing"] });
-    expect(among.searched.map((r) => r.repo)).toEqual(["web"]);
-    const both = await workspace.searchCode({ ...QUERY, pattern: "TODO" }, { repos: ["orders"], among: ["web"] });
-    expect(both.searched).toEqual([]);
+    const web = await workspace.searchCode({ ...QUERY, pattern: "TODO", ignoreCase: true }, ["web"]);
+    expect(web.searched.map((r) => r.repo)).toEqual(["web"]);
+    expect((await workspace.searchCode({ ...QUERY, pattern: "TODO" }, [])).searched).toEqual([]);
 
-    await expect(workspace.searchCode({ ...QUERY, pattern: "TODO" }, { repos: ["missing"] })).rejects.toMatchObject({
+    await expect(workspace.searchCode({ ...QUERY, pattern: "TODO" }, ["missing"])).rejects.toMatchObject({
       code: "not_found",
       message: 'no repo "missing" in the projects folder',
     });
@@ -144,7 +147,7 @@ describe("code search", () => {
   test("an invalid regex puts each repo in failed with git's message instead of failing the whole search", async () => {
     const { workspace } = await workspaceWithRepos();
 
-    const result = await workspace.searchCode({ ...QUERY, pattern: "(", regex: true }, {});
+    const result = await workspace.searchCode({ ...QUERY, pattern: "(", regex: true });
 
     expect(result.matches).toEqual([]);
     expect(result.searched).toEqual([]);
@@ -153,14 +156,66 @@ describe("code search", () => {
   });
 });
 
+/** Repos `r1`…`rN` for `searchCode` with a fake `vcs`: each has one match whose line holds `text`. */
+function fakeRepos(count: number, text = "TODO", delayMs = 0) {
+  const entries = Array.from({ length: count }, (_, i) => ({ id: `r${i + 1}`, path: `/repos/r${i + 1}` }));
+  const grepped: string[] = [];
+  const vcs = {
+    headCommit: async () => "c".repeat(40),
+    grep: async (dir: string) => {
+      grepped.push(dir);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      return { lines: [{ path: "a.txt", line: 1, column: 1, text }], truncated: false };
+    },
+  };
+  return { entries, vcs, grepped };
+}
+
+describe("searchCode limits", () => {
+  test("once finished repos reach the limit, later repos are not searched and the result is truncated", async () => {
+    const { entries, vcs, grepped } = fakeRepos(10);
+
+    const result = await searchCode(entries, vcs, { ...QUERY, pattern: "TODO", limit: 1 });
+
+    // Four repos start at once; after the first of them finishes, nothing else starts.
+    expect(grepped).toEqual(["/repos/r1", "/repos/r2", "/repos/r3", "/repos/r4"]);
+    expect(result.matches.map((m) => m.repo)).toEqual(["r1"]);
+    expect(result.truncated).toBe(true);
+  });
+
+  test("repos not started within the time budget go to failed with the reason", async () => {
+    const { entries, vcs } = fakeRepos(6, "TODO", 200);
+
+    const result = await searchCode(entries, vcs, { ...QUERY, pattern: "TODO" }, 100);
+
+    expect(result.searched.map((r) => r.repo)).toEqual(["r1", "r2", "r3", "r4"]);
+    expect(result.failed).toEqual([
+      { repo: "r5", message: "not searched: the search took longer than 0.1 s" },
+      { repo: "r6", message: "not searched: the search took longer than 0.1 s" },
+    ]);
+  });
+
+  test("line text in the result is capped at 100 000 characters in total", async () => {
+    const { entries, vcs } = fakeRepos(300, "x".repeat(500));
+
+    const result = await searchCode(entries, vcs, { ...QUERY, pattern: "x", limit: 500 });
+
+    expect(result.matches).toHaveLength(200);
+    expect(result.truncated).toBe(true);
+    expect(result.searched[200]?.truncated).toBe(true);
+  });
+});
+
 describe("parseGrep", () => {
-  test("tells a match from context by the number of fields and skips group separators and lines of another shape", () => {
+  test("tells a match from context by the column field, drops \\r and skips group separators and lines of another shape", () => {
     const commit = "a".repeat(40);
     const out = [
       `${commit}:src/a.ts\x001\x003\x00a foo`,
       `${commit}:src/a.ts\x002\x00b 12`,
       "--",
-      `${commit}:src/a.ts\x009\x001\x00foo`,
+      `${commit}:src/a.ts\x009\x001\x00foo\r`,
+      // A NUL past the start of a file that `-I` checks stays in the text.
+      `${commit}:src/b.ts\x004\x002\x00a\x00b`,
       // A path with a newline splits into two output lines; neither is a match.
       `${commit}:wei`,
       `rd.txt\x001\x001\x00foo`,
@@ -171,6 +226,7 @@ describe("parseGrep", () => {
       { path: "src/a.ts", line: 1, column: 3, text: "a foo" },
       { path: "src/a.ts", line: 2, column: null, text: "b 12" },
       { path: "src/a.ts", line: 9, column: 1, text: "foo" },
+      { path: "src/b.ts", line: 4, column: 2, text: "a\x00b" },
     ]);
   });
 });

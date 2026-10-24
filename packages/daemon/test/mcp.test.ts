@@ -202,7 +202,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
         },
       ],
       truncated: false,
-      searched: [{ repo: "orders-bff", commit: head }],
+      searched: [{ repo: "orders-bff", commit: head, truncated: false }],
       failed: [],
     });
     const searched = async (tags: string[]) => SearchCodeResult.parse(await search({ pattern: "x", tags })).searched.map((r) => r.repo);
@@ -210,6 +210,13 @@ describe("serwer MCP przez Streamable HTTP", () => {
     expect(await searched(["frontend"])).toEqual([]);
     const unknown = await client.callTool({ name: "search_code", arguments: { pattern: "x", repos: ["missing"] } });
     expect(unknown.content).toEqual([{ type: "text", text: 'not_found: no repo "missing" in the projects folder' }]);
+    // A repo outside the tags does not hide an unknown id, and an empty tag list is no filter.
+    const unknownTagged = await client.callTool({ name: "search_code", arguments: { pattern: "x", repos: ["missing"], tags: ["java"] } });
+    expect(unknownTagged.isError).toBe(true);
+    expect(await searched([])).toEqual(["orders-bff"]);
+    // A newline would make git search for every line of the pattern separately.
+    const multiline = await client.callTool({ name: "search_code", arguments: { pattern: "BFF\nsklepu" } });
+    expect(multiline.isError).toBe(true);
     await client.close();
   });
 

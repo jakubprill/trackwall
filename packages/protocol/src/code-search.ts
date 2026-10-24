@@ -12,6 +12,11 @@ export const CODE_SEARCH_MAX_MATCHES = 500;
 export const CODE_SEARCH_MAX_CONTEXT = 10;
 /** A match or context line longer than this (minified JS, generated JSON) is cut. */
 export const CODE_SEARCH_LINE_MAX_CHARS = 500;
+/**
+ * Most characters of line text (matches and context) in one result; the result goes to the agent twice (text and
+ * `structuredContent`), as with the README in `get_repo`.
+ */
+export const CODE_SEARCH_MAX_CHARS = 100_000;
 
 /** A git pathspec: `*.java` (in any directory), `src/`, `:!*.test.ts` (exclusion); no control characters. */
 export const CodePathspec = z
@@ -22,7 +27,12 @@ export const CodePathspec = z
 
 /** What to search for and where in one repo; the `search_code` tool adds the choice of repos and the match limit. */
 export const CodeQuery = z.object({
-  pattern: z.string().min(1).max(500),
+  /** One line: git would split a pattern with a newline into several, and one of them may match every line. */
+  pattern: z
+    .string()
+    .min(1)
+    .max(500)
+    .refine((p) => [...p].every((c) => c >= " " || c === "\t"), "pattern: one line, no control characters"),
   /** A POSIX extended regular expression (`git grep -E`) instead of a fixed string. */
   regex: z.boolean(),
   ignoreCase: z.boolean(),
@@ -54,7 +64,10 @@ export const CodeMatch = z.object({
 });
 export type CodeMatch = z.infer<typeof CodeMatch>;
 
-/** A repo that could not be searched (git refused, time limit); the other repos still have results. */
+/**
+ * A repo that could not be searched (git refused, e.g. an invalid regular expression, or time ran out); the other
+ * repos still have results.
+ */
 export const CodeSearchFailure = z.object({
   repo: RepoId,
   message: z.string(),
@@ -65,13 +78,18 @@ export const CodeSearchRepo = z.object({
   repo: RepoId,
   /** The commit searched; a repo without commits is not listed. */
   commit: CommitHash,
+  /** Not every match of this repo is in the result (the limit, or git's output was cut, e.g. by a huge minified line). */
+  truncated: z.boolean(),
 });
 export type CodeSearchRepo = z.infer<typeof CodeSearchRepo>;
 
 export const SearchCodeResult = z.object({
   /** Matches in the order of the repo list, then by path and line. */
   matches: z.array(CodeMatch),
-  /** There were more matches than the limit (or git's output in some repo was cut); narrow the query. */
+  /**
+   * Not every match is in the result: more than the limit or `CODE_SEARCH_MAX_CHARS`, a repo's git output was cut, or
+   * repos were not searched because the limit was already reached; narrow the query.
+   */
   truncated: z.boolean(),
   /** The repos searched, with the commit searched in each. */
   searched: z.array(CodeSearchRepo),
