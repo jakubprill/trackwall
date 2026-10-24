@@ -2,13 +2,16 @@ import { describe, expect, test } from "bun:test";
 import type { ConsumedHttp, ProvidedEndpoint, RepoCard } from "@trackwall/protocol";
 import { extractCard } from "../src/modules/cards/extract-card.ts";
 import { resolvePlaceholders } from "../src/modules/cards/placeholders.ts";
+import { loadSyntaxParsers } from "../src/modules/cards/syntax-tree.ts";
 import { snapshotOf } from "./support/snapshot.ts";
 import { fixtureFiles } from "./support/spring-fixtures.ts";
+
+const parsers = await loadSyntaxParsers();
 
 const POM = "<project><groupId>com.example</groupId><artifactId>app</artifactId></project>";
 
 function card(files: Record<string, string>): RepoCard {
-  return extractCard(snapshotOf({ "pom.xml": POM, ...files }));
+  return extractCard(snapshotOf({ "pom.xml": POM, ...files }), parsers);
 }
 
 function endpoints(c: RepoCard): string[] {
@@ -30,7 +33,7 @@ function summary(c: RepoCard): string[] {
 
 describe("karta repo Spring z fixture'ów sklepu", () => {
   test(`orders-api: aplikacja z portem z \${PORT:8081}, endpointy ze stałymi ścieżek, bez kodu z src/test i adnotacji w komentarzach`, () => {
-    const c = extractCard(snapshotOf(fixtureFiles("orders-api")));
+    const c = extractCard(snapshotOf(fixtureFiles("orders-api")), parsers);
     expect(c.provides.filter((p) => p.kind === "app")).toEqual([
       { kind: "app", name: "orders-api", port: 8081, module: "", evidence: { path: "src/main/resources/application.yml", line: 3 } },
     ]);
@@ -43,7 +46,7 @@ describe("karta repo Spring z fixture'ów sklepu", () => {
   });
 
   test("orders-bff: klient Feign w Kotlinie z adresem w każdym profilu, WebClient z @Value i adres Zipkina z konfiguracji", () => {
-    expect(summary(extractCard(snapshotOf(fixtureFiles("orders-bff"))))).toEqual([
+    expect(summary(extractCard(snapshotOf(fixtureFiles("orders-bff")), parsers))).toEqual([
       "webclient PaymentsGateway app=null url=http://payments-service:8080/api [default] {POST /payments/{orderId}}",
       "feign OrdersClient app=orders-api url=http://localhost:8081 [default] {GET /api/orders/{id}, POST /api/orders}",
       "feign OrdersClient app=orders-api url=http://orders-api.shop.svc.cluster.local [prod] {GET /api/orders/{id}, POST /api/orders}",
@@ -52,19 +55,19 @@ describe("karta repo Spring z fixture'ów sklepu", () => {
   });
 
   test("payments: application.properties z dokumentem #--- dla profilu prod i Gradle", () => {
-    const c = extractCard(snapshotOf(fixtureFiles("payments")));
+    const c = extractCard(snapshotOf(fixtureFiles("payments")), parsers);
     expect(c.provides.filter((p) => p.kind === "app").map((a) => [a.name, a.port])).toEqual([["payments-service", 8082]]);
     expect(endpoints(c)).toEqual(["POST /api/payments/{orderId} PaymentsController.pay:12"]);
   });
 
   test("legacy-reports: RestTemplate bez adresu bazowego daje wywołania ze zmienną w miejscu sklejanego argumentu", () => {
-    expect(summary(extractCard(snapshotOf(fixtureFiles("legacy-reports"))))).toEqual([
+    expect(summary(extractCard(snapshotOf(fixtureFiles("legacy-reports")), parsers))).toEqual([
       "rest-template OrdersReport app=null url=null [] {GET /api/orders/{}, PUT /api/orders/{}/cancel}",
     ]);
   });
 
   test("shop-web: adres API z .env i cel proxy Vite", () => {
-    expect(summary(extractCard(snapshotOf(fixtureFiles("shop-web"))))).toEqual([
+    expect(summary(extractCard(snapshotOf(fixtureFiles("shop-web")), parsers))).toEqual([
       "env VITE_API_URL app=null url=http://localhost:8090 [] {}",
       "proxy vite.config.mjs app=null url=http://localhost:8090 [] {}",
     ]);

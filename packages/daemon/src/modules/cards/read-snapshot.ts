@@ -1,5 +1,6 @@
 import type { CardProblem, TreeEntry } from "@trackwall/protocol";
 import { messageOf } from "../../infra/errors.ts";
+import { stemOf } from "./repo-path.ts";
 import type { RepoSnapshot } from "./snapshot.ts";
 
 /**
@@ -27,6 +28,12 @@ export interface SourceSelection {
   pattern: string;
   globs: readonly string[];
   accepts: (path: string) => boolean;
+  /**
+   * Nazwy typów, które plik źródłowy wymienia (ADR-38). Odczyt dociąga pliki źródłowe o tych nazwach (`OrderDto.java`,
+   * `OrderDto.kt`), w kolejnych rundach także nazwy z nich, bo DTO z kontraktu endpointu zwykle nie ma adnotacji,
+   * po której wyszukiwanie by go znalazło.
+   */
+  referencedTypes: (text: string) => Iterable<string>;
 }
 
 /** Katalogi z zależnościami skopiowanymi do repo: ich pliki nie są częścią repo ani dla buildów, ani dla mechanizmów. */
@@ -41,6 +48,10 @@ const MAX_SOURCE_FILES = 3000;
 /** Lista nazw z `git grep`: 3000 ścieżek po 300 znaków to niecały 1 MB. */
 const MAX_GREP_BYTES = 4 * 1024 * 1024;
 const MAX_READ_BYTES = 64 * 1024 * 1024;
+/** Rundy dociągania plików typów: kontroler → DTO → typ pola → typ pola zagnieżdżonego. */
+const RELATED_ROUNDS = 3;
+/** Plików dociągniętych po nazwach typów razem ze wszystkich rund. */
+const MAX_RELATED_FILES = 3000;
 
 export async function readSnapshot(
   vcs: SnapshotVcs,
@@ -61,11 +72,104 @@ export async function readSnapshot(
   if (wanted.length > MAX_FILES)
     problems.push({ path: "", message: `the repo has ${wanted.length} build files; the card reads the first ${MAX_FILES}` });
   const requested = [...wanted.slice(0, MAX_FILES), ...(await sourceFiles(vcs, dir, commit, files, sources, problems))];
-  const contents = await vcs.readFiles(dir, commit, requested, MAX_READ_BYTES);
-  for (const path of requested)
-    if (!contents.has(path)) problems.push({ path, message: `the file was not read within the ${MAX_READ_BYTES} B commit read limit` });
-  const texts = new Map([...contents].map(([path, content]) => [path, toText(content)]));
-  return { commit, paths: files.map((f) => f.path), text: (path) => texts.get(path), problems };
+  const reader = new BudgetedReader(vcs, dir, commit);
+  for (const path of await reader.read(requested))
+    problems.push({ path, message: `the file was not read within the ${MAX_READ_BYTES} B commit read limit` });
+  const typeFiles = await readTypeFiles(reader, files, sources, new Set(requested), problems);
+  return { commit, paths: files.map((f) => f.path), text: (path) => reader.texts.get(path), typeFiles, problems };
+}
+
+/** Odczyt plików commita w kolejnych porcjach ze wspólnym limitem `MAX_READ_BYTES`. */
+class BudgetedReader {
+  readonly texts = new Map<string, string>();
+  private bytes = 0;
+  private readonly vcs: SnapshotVcs;
+  private readonly dir: string;
+  private readonly commit: string;
+
+  constructor(vcs: SnapshotVcs, dir: string, commit: string) {
+    this.vcs = vcs;
+    this.dir = dir;
+    this.commit = commit;
+  }
+
+  /** Czyta `paths`, a pliki, które nie zmieściły się w limicie, zwraca; problem dla każdego z nich zapisuje wołający. */
+  async read(paths: readonly string[]): Promise<string[]> {
+    const left = MAX_READ_BYTES - this.bytes;
+    const contents =
+      paths.length === 0 || left <= 0 ? new Map<string, Buffer>() : await this.vcs.readFiles(this.dir, this.commit, paths, left);
+    const missed: string[] = [];
+    for (const path of paths) {
+      const content = contents.get(path);
+      if (content === undefined) {
+        missed.push(path);
+        continue;
+      }
+      this.bytes += content.length;
+      this.texts.set(path, toText(content));
+    }
+    return missed;
+  }
+}
+
+/**
+ * Pliki źródłowe o nazwach typów, które wymieniają już przeczytane pliki źródłowe, w `RELATED_ROUNDS` rundach; zwraca
+ * przeczytane. Nazwa pliku to jedyne, co odczyt wie o typie bez parsowania; typ z pliku o innej nazwie (kilka
+ * `data class` w jednym pliku Kotlina) zostaje bez pól, chyba że ten plik i tak był czytany. Pliki są zgadywane po
+ * nazwach, więc te, które nie zmieściły się w limitach, dają jeden problem, a nie problem na plik.
+ */
+async function readTypeFiles(
+  reader: BudgetedReader,
+  files: readonly TreeEntry[],
+  sources: SourceSelection,
+  requested: ReadonlySet<string>,
+  problems: CardProblem[],
+): Promise<Set<string>> {
+  // Plik z wyszukiwania, którego pierwszy odczyt nie zmieścił, nie wraca jako plik typu: ekstraktor Spring by go pominął.
+  const byType = sourcesByTypeName(files, sources, requested);
+  const typeFiles = new Set<string>();
+  let fresh = [...reader.texts.keys()].filter(sources.accepts);
+  const skipped = new Set<string>();
+  for (let round = 0; round < RELATED_ROUNDS && fresh.length > 0; round++) {
+    const next = [...referencedFiles(fresh, reader, byType, sources)].filter((p) => !skipped.has(p));
+    const batch = next.slice(0, MAX_RELATED_FILES - typeFiles.size);
+    for (const path of next.slice(batch.length)) skipped.add(path);
+    const missed = new Set(await reader.read(batch));
+    for (const path of missed) skipped.add(path);
+    fresh = batch.filter((p) => !missed.has(p));
+    for (const path of fresh) typeFiles.add(path);
+  }
+  if (skipped.size > 0)
+    problems.push({
+      path: "",
+      message: `${skipped.size} type files referenced from HTTP code were not read (at most ${MAX_RELATED_FILES} files within the ${MAX_READ_BYTES} B commit read limit); their DTOs are missing`,
+    });
+  return typeFiles;
+}
+
+/** Pliki źródłowe, które można przeczytać, po nazwie typu z nazwy pliku, bez `excluded`. */
+function sourcesByTypeName(files: readonly TreeEntry[], sources: SourceSelection, excluded: ReadonlySet<string>): Map<string, string[]> {
+  const byType = new Map<string, string[]>();
+  for (const f of files.filter((f) => sources.accepts(f.path) && isReadable(f) && !excluded.has(f.path))) {
+    const paths = byType.get(stemOf(f.path));
+    if (paths) paths.push(f.path);
+    else byType.set(stemOf(f.path), [f.path]);
+  }
+  return byType;
+}
+
+/** Jeszcze nieprzeczytane pliki typów, które wymieniają pliki `paths`. */
+function referencedFiles(
+  paths: readonly string[],
+  reader: BudgetedReader,
+  byType: Map<string, string[]>,
+  sources: SourceSelection,
+): Set<string> {
+  const found = new Set<string>();
+  for (const path of paths)
+    for (const name of sources.referencedTypes(reader.texts.get(path) ?? ""))
+      for (const candidate of byType.get(name) ?? []) if (!reader.texts.has(candidate)) found.add(candidate);
+  return found;
 }
 
 /**

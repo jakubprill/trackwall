@@ -205,7 +205,9 @@ export const mcpTools = {
     description:
       "Repo card built from the build files, config and code in the latest commit, every fact with evidence (file and " +
       "line). provides: packages (kind package: Maven group:artifact coordinates, npm names), Spring Boot apps (kind app: " +
-      "spring.application.name, port) and HTTP endpoints from controllers (kind endpoint: method, full path, handler). " +
+      "spring.application.name, port) and HTTP endpoints from controllers (kind endpoint: method, full path, handler, " +
+      "request body type and response type). dtos: the request and response types declared in the repo and the types " +
+      "of their fields (records, data classes, classes with fields, enums with values). " +
       "consumes: packages with scope and HTTP clients (kind http: Feign, @HttpExchange, WebClient, RestClient, " +
       "RestTemplate, addresses from application*.yml in every Spring profile, .env and the frontend proxy; with the app " +
       "name or address and the calls). Also required tool versions, detected mechanisms (Spring Boot, Feign, Kafka, " +
@@ -266,7 +268,7 @@ export const mcpTools = {
     description:
       "HTTP endpoints from Spring controllers in all repos matching the query: a path starting with / (also a concrete " +
       "one: /api/orders/42 finds /api/orders/{id}) or part of a path, handler name (Class.method) or app name. Each " +
-      "with repo, method, full path, file and line, plus callers: repos whose HTTP clients call it, with confidence " +
+      "with repo, method, full path, request and response types, file and line, plus callers: repos whose HTTP clients call it, with confidence " +
       `and evidence. At most ${MAX_FOUND_ENDPOINTS} results (truncated: true when there were more).`,
     args: z
       .object({

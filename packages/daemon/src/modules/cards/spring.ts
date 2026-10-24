@@ -8,6 +8,7 @@ import { type Extracted, emptyExtracted, type RepoSnapshot } from "./snapshot.ts
 import { isTestPath, ModuleConfig, moduleOf, readSpringConfigs } from "./spring-config.ts";
 import { springEndpoints } from "./spring-endpoints.ts";
 import type { SpringModule, TypeIndex } from "./spring-module.ts";
+import type { JvmLanguage } from "./syntax-tree.ts";
 
 /**
  * Ekstraktor Spring (§4.6, ADR-30): dla każdego modułu (katalog nad `src/main`) aplikacja z `spring.application.name`,
@@ -30,10 +31,14 @@ export const JVM_SOURCE_GLOBS = ["*.java", "*.kt"];
  * `src/`, jak `src/orders/src/main/java`), a bez `src/main/` tylko poza katalogami `src` (bez testów).
  */
 export function isJvmSource(path: string): boolean {
-  if (path.length > 1024 || !(path.endsWith(".java") || path.endsWith(".kt"))) return false;
-  if (isTestPath(path)) return false;
+  if (path.length > 1024 || jvmLanguageOf(path) === null || isTestPath(path)) return false;
   const segments = path.split("/");
   return segments.some((s, i) => s === "src" && segments[i + 1] === "main") || !segments.includes("src");
+}
+
+/** Język pliku źródłowego po rozszerzeniu; `null` dla innych plików. */
+export function jvmLanguageOf(path: string): JvmLanguage | null {
+  return path.endsWith(".java") ? "java" : path.endsWith(".kt") ? "kotlin" : null;
 }
 
 /** Fakty ekstraktora Spring. */
@@ -42,10 +47,13 @@ type SpringFacts = Extracted<ProvidedApp | ProvidedEndpoint, ConsumedHttp>;
 export function extractSpring(snapshot: RepoSnapshot): SpringFacts {
   const out: SpringFacts = emptyExtracted();
   const configs = readSpringConfigs(snapshot, out);
-  const files = snapshot.paths.filter(isJvmSource).flatMap((path) => {
-    const text = snapshot.text(path);
-    return text === undefined ? [] : [parseJavaFile(path, text)];
-  });
+  // Pliki typów dociągnięte dla kontraktów (ADR-38) nie zmieniają faktów HTTP: Spring czyta tylko pliki z wyszukiwania.
+  const files = snapshot.paths
+    .filter((p) => isJvmSource(p) && !snapshot.typeFiles.has(p))
+    .flatMap((path) => {
+      const text = snapshot.text(path);
+      return text === undefined ? [] : [parseJavaFile(path, text)];
+    });
   const constants = new ConstantTable(files);
   const types: TypeIndex = new Map();
   for (const file of files) for (const type of file.types) if (!types.has(type.name)) types.set(type.name, { type, path: file.path });

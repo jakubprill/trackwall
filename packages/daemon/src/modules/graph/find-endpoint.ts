@@ -30,6 +30,8 @@ export function findEndpoints(index: HttpIndex, query: string, method: HttpMetho
     method: endpoint.method,
     path: endpoint.path,
     handler: endpoint.handler,
+    request: endpoint.request,
+    response: endpoint.response,
     evidence: endpoint.evidence,
     callers: callers.get(endpoint) ?? [],
   }));

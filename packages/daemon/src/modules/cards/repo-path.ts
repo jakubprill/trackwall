@@ -13,6 +13,13 @@ export function baseName(path: string): string {
   return path.slice(path.lastIndexOf("/") + 1);
 }
 
+/** Nazwa pliku bez rozszerzenia (`src/main/java/a/OrderDto.java` → `OrderDto`). */
+export function stemOf(path: string): string {
+  const name = baseName(path);
+  const dot = name.lastIndexOf(".");
+  return dot < 0 ? name : name.slice(0, dot);
+}
+
 /**
  * Ścieżka `rel` względem katalogu `dir`, z rozwiązanymi `.` i `..`; `undefined`, gdy wychodzi poza repo albo jest
  * bezwzględna (moduł Maven poza repo nie jest częścią tego repo).
