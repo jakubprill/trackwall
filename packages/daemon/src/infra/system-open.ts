@@ -5,29 +5,39 @@ import { spawn } from "node:child_process";
  * whether anything handled it, so the callers only confirm that they asked.
  */
 
+type Command = { program: string; args: string[]; verbatim: boolean };
+
 /** Opens a URL in the default browser. */
 export function openBrowser(url: string): void {
-  const [cmd, args] =
-    process.platform === "win32"
-      ? ["rundll32", ["url.dll,FileProtocolHandler", url]]
-      : process.platform === "darwin"
-        ? ["open", [url]]
-        : ["xdg-open", [url]];
-  detached(cmd, args, "the browser");
+  run(browserCommand(process.platform, url), "the browser");
+}
+
+/** Opens a folder in Explorer, Finder or the Linux file manager (ADR-51). */
+export function openFolder(dir: string): void {
+  run(folderCommand(process.platform, dir), "the folder");
+}
+
+export function browserCommand(platform: NodeJS.Platform, url: string): Command {
+  if (platform === "win32") return { program: "rundll32", args: ["url.dll,FileProtocolHandler", url], verbatim: false };
+  return elsewhere(platform, url);
 }
 
 /**
- * Opens a folder in Explorer, Finder or the Linux file manager (ADR-51). The path is a full path from the daemon's own
- * configuration, so it never starts with `-` and cannot be read as an option.
+ * Explorer splits its command line at commas, so the path always goes in quotes, verbatim (a Windows path cannot
+ * contain `"`). The path is a full path from the daemon's own list of repos, so it never starts with `-`.
  */
-export function openFolder(dir: string): void {
-  const [cmd, args] =
-    process.platform === "win32" ? ["explorer.exe", [dir]] : process.platform === "darwin" ? ["open", [dir]] : ["xdg-open", [dir]];
-  detached(cmd, args, "the folder");
+export function folderCommand(platform: NodeJS.Platform, dir: string): Command {
+  if (platform === "win32") return { program: "explorer.exe", args: [`"${dir}"`], verbatim: true };
+  return elsewhere(platform, dir);
 }
 
-function detached(cmd: string, args: string[], what: string): void {
-  const child = spawn(cmd, args, { detached: true, stdio: "ignore", windowsHide: true });
+/** macOS and Linux open a URL and a folder with the same program. */
+function elsewhere(platform: NodeJS.Platform, target: string): Command {
+  return { program: platform === "darwin" ? "open" : "xdg-open", args: [target], verbatim: false };
+}
+
+function run({ program, args, verbatim }: Command, what: string): void {
+  const child = spawn(program, args, { detached: true, stdio: "ignore", windowsHide: true, windowsVerbatimArguments: verbatim });
   child.on("error", (err) => process.stderr.write(`[daemon] failed to open ${what}: ${err.message}\n`));
   child.unref();
 }

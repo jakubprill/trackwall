@@ -1,20 +1,25 @@
 /**
- * Files and folders dropped on the Tauri window (ADR-51). The shell hands the page full paths and a point; the page
- * sends a `FileDropEvent` to the element under that point, so the nearest target in the DOM wins: a session terminal
- * pastes the paths, and a drop that no target takes is a folder for the repo list.
+ * Files and folders dropped on the Tauri window (ADR-51). The shell hands the page full paths and a point; the drop
+ * target that holds the point (a session terminal) gets a `FileDropEvent` with the paths, and a drop outside every
+ * target is a folder for the repo list. The same rule picks the target that is highlighted while dragging.
  */
 
-/** Marks an element that takes dropped paths; the hovered one gets `data-drop-hover` for its highlight. */
+/** Marks an element that takes dropped paths. */
 export const FILE_DROP_TARGET = "data-file-drop";
+/** Set on the target under the pointer while dragging. */
 export const DROP_HOVER = "data-drop-hover";
+/** The highlight of the target under the pointer; Tailwind needs the attribute spelled out, the test pins it to `DROP_HOVER`. */
+export const DROP_HOVER_RING = "data-[drop-hover]:ring-primary data-[drop-hover]:ring-2 data-[drop-hover]:ring-inset";
+
+/** What was dropped, at least one full path. */
+export type DroppedPaths = readonly [string, ...string[]];
 
 export class FileDropEvent extends Event {
   static readonly type = "trackwall:file-drop";
   readonly paths: readonly string[];
 
   constructor(paths: readonly string[]) {
-    // Cancelable: the target that takes the paths calls `preventDefault`, so the page knows nobody else should.
-    super(FileDropEvent.type, { bubbles: true, cancelable: true });
+    super(FileDropEvent.type);
     this.paths = paths;
   }
 }
@@ -27,13 +32,4 @@ export function cssPoint(physical: { x: number; y: number }, devicePixelRatio: n
 /** The drop target at a point: the element marked with `FILE_DROP_TARGET` that holds it, if any. */
 export function dropTargetAt(doc: Pick<Document, "elementFromPoint">, point: { x: number; y: number }): Element | undefined {
   return doc.elementFromPoint(point.x, point.y)?.closest(`[${FILE_DROP_TARGET}]`) ?? undefined;
-}
-
-/**
- * Paths as typed into a session: separated by spaces and followed by one, so the user can keep typing, like a file
- * dropped on a system terminal. A path with a space or a quote goes in double quotes, with `"` escaped, because
- * the agent reads the line as words.
- */
-export function pastedPaths(paths: readonly string[]): string {
-  return `${paths.map((path) => (/[\s"']/.test(path) ? `"${path.replaceAll('"', '\\"')}"` : path)).join(" ")} `;
 }

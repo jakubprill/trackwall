@@ -82,6 +82,8 @@ export interface WorkspaceDeps {
   hosting: WorkspaceHosting;
   /** Otwiera katalog w VS Code (`vscode://` w systemie, składane w fasadzie). */
   openEditor: (dir: string) => void;
+  /** Opens a folder in Explorer, Finder or the Linux file manager (ADR-51). */
+  openFolder: (dir: string) => void;
 }
 
 export class Workspace {
@@ -237,6 +239,11 @@ export class Workspace {
   /** Daemon nie wie, czy system obsłużył adres; wynik to tylko potwierdzenie przyjęcia. */
   async openEditor(id: string): Promise<void> {
     this.deps.openEditor((await this.entry(id)).path);
+  }
+
+  /** Only a listed repo's folder is opened, never a path from the request (ADR-51). */
+  async openFolder(id: string): Promise<void> {
+    this.deps.openFolder((await this.entry(id)).path);
   }
 
   /** Korzeń repo po identyfikatorze, dla modułów, które uruchamiają w nim procesy (`mise`). */

@@ -24,25 +24,32 @@ export interface RepoEntry {
  * Asynchronicznie, bo wskazany folder może leżeć na uśpionym dysku.
  */
 export async function resolveProjectsDir(input: string): Promise<string> {
-  if (!isFullPath(input)) throw new DomainError("bad_request", `${NOT_FULL_PATH}, got "${input}"`);
-  const dir = resolve(input);
-  let isDir: boolean;
+  const { path, isDir } = await statFullPath(input, NOT_FULL_PATH);
+  if (!isDir) throw new DomainError("bad_request", `${path} is not a directory`);
+  return path;
+}
+
+/**
+ * A full path from the user that must exist (the projects folder, a dropped folder, ADR-51), resolved, with whether
+ * it is a directory; `notFull` says what the path is for when it is not a full path.
+ */
+export async function statFullPath(input: string, notFull: string): Promise<{ path: string; isDir: boolean }> {
+  if (!isFullPath(input)) throw new DomainError("bad_request", `${notFull}, got "${input}"`);
+  const path = resolve(input);
   try {
-    isDir = (await stat(dir)).isDirectory();
+    return { path, isDir: (await stat(path)).isDirectory() };
   } catch (err) {
     // Nie tylko ENOENT: ENOTDIR, EACCES i zbyt długa nazwa to też zła ścieżka od użytkownika, nie błąd daemona.
-    throw new DomainError("bad_request", `${dir} does not exist or cannot be opened (${errorCode(err)})`);
+    throw new DomainError("bad_request", `${path} does not exist or cannot be opened (${errorCode(err)})`);
   }
-  if (!isDir) throw new DomainError("bad_request", `${dir} is not a directory`);
-  return dir;
 }
 
 /**
  * Repo w folderze z projektami, posortowane po nazwie katalogu; identyfikator z nazwy, przy kolizji z przyrostkiem
  * w tej samej kolejności (nowy katalog, który sortuje się wcześniej, może więc przejąć identyfikator, ADR-18).
  */
-export async function findRepos(projectsDir: string): Promise<RepoEntry[]> {
-  const entries = (await listDir(projectsDir)).filter((entry) => !entry.name.startsWith("."));
+export async function findRepos(projectsDir: string, unreadable: Unreadable = projectsDirUnavailable): Promise<RepoEntry[]> {
+  const entries = (await listDir(projectsDir, unreadable)).filter((entry) => !entry.name.startsWith("."));
   const isRepo = await Promise.all(entries.map((entry) => isRepoDir(projectsDir, entry)));
   const taken = new Set<string>();
   return (
@@ -71,14 +78,20 @@ export async function takenNames(projectsDir: string): Promise<(name: string) =>
   return (name) => taken.has(dirKey(name));
 }
 
-async function listDir(dir: string): Promise<Dirent[]> {
+/** The error for a folder that cannot be read, with the path and the system error code. */
+type Unreadable = (dir: string, code: string) => DomainError;
+
+const projectsDirUnavailable: Unreadable = (dir, code) =>
+  new DomainError(
+    "projects_dir_unavailable",
+    `cannot open the projects folder ${dir} (${code}); check that it exists or change it in Settings`,
+  );
+
+async function listDir(dir: string, unreadable: Unreadable = projectsDirUnavailable): Promise<Dirent[]> {
   try {
     return await readdir(dir, { withFileTypes: true });
   } catch (err) {
-    throw new DomainError(
-      "projects_dir_unavailable",
-      `cannot open the projects folder ${dir} (${errorCode(err)}); check that it exists or change it in Settings`,
-    );
+    throw unreadable(dir, errorCode(err));
   }
 }
 
@@ -101,6 +114,6 @@ function byName(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-export function errorCode(err: unknown): string {
+function errorCode(err: unknown): string {
   return (err as NodeJS.ErrnoException).code ?? String(err);
 }

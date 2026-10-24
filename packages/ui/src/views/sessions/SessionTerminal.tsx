@@ -5,12 +5,14 @@ import { Terminal } from "@xterm/xterm";
 import { useEffect, useRef, useState } from "react";
 import type { Connection } from "@/lib/connection";
 import { daemonSocket } from "@/lib/daemon-socket";
-import { FILE_DROP_TARGET, FileDropEvent, pastedPaths } from "@/lib/file-drop";
+import { DROP_HOVER_RING, FILE_DROP_TARGET, FileDropEvent } from "@/lib/file-drop";
 import { oncePerFrame } from "@/lib/once-per-frame";
+import { pastedPaths } from "@/lib/pasted-paths";
 import { IS_MAC } from "@/lib/platform";
 import { copiesSelection } from "@/lib/terminal-copy";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { terminalTheme } from "@/lib/terminal-theme";
+import { cn } from "@/lib/utils";
 import { FocusReporter, terminalInFront } from "@/lib/window-focus";
 
 const RECONNECT_MS = 1000;
@@ -103,7 +105,6 @@ export function SessionTerminal({ conn, session, live, focused }: { conn: Connec
     });
     const takeDrop = (event: Event) => {
       if (!(event instanceof FileDropEvent)) return;
-      event.preventDefault();
       if (!isLive.current) return setNotice("The session has ended, so the dropped path was not pasted.");
       // `paste` goes through `onData`, and in bracketed paste mode the agent sees it as pasted text, not keys.
       terminal.paste(pastedPaths(event.paths));
@@ -154,11 +155,10 @@ export function SessionTerminal({ conn, session, live, focused }: { conn: Connec
           The session has ended; the terminal shows what was left on its screen.
         </p>
       )}
-      {/* `data-drop-hover` is `DROP_HOVER` from `file-drop.ts`: the frame under a dragged file. */}
       <div
         ref={frame}
         {...{ [FILE_DROP_TARGET]: "" }}
-        className="bg-background data-[drop-hover]:ring-primary relative min-h-0 flex-1 overflow-hidden data-[drop-hover]:ring-2 data-[drop-hover]:ring-inset"
+        className={cn("bg-background relative min-h-0 flex-1 overflow-hidden", DROP_HOVER_RING)}
       >
         <div ref={host} className="absolute inset-2 font-mono" />
       </div>

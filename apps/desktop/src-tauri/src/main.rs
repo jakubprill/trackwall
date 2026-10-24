@@ -58,7 +58,7 @@ fn main() {
     let app = builder
         .plugin(tauri_plugin_dialog::init())
         .manage(Arc::clone(&state))
-        .invoke_handler(tauri::generate_handler![daemon_connection, retry_daemon, folder_picker::pick_folder])
+        .invoke_handler(tauri::generate_handler![daemon_connection, retry_daemon, folder_picker::pick_projects_folder])
         .setup(move |app| {
             state.start();
             let window = app.get_webview_window("main").ok_or("missing window main from tauri.conf.json")?;

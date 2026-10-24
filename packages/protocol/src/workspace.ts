@@ -142,16 +142,19 @@ export const RemoteRepoList = z.object({
 export type RemoteRepoList = z.infer<typeof RemoteRepoList>;
 
 /**
- * What a folder dropped on the window means for the repo list (ADR-51): a repo already in the projects folder, a git
- * repo somewhere else, a folder with repos directly inside it, which can become the projects folder, a folder without
- * any, or a file. Repo counts use the same rule as the list (ADR-18): direct subfolders with `.git`.
+ * What a folder dropped on the window means for the repo list (ADR-51): a listed repo (or a folder inside one), the
+ * projects folder itself, a git repo somewhere else, a folder with repos directly inside it, which can become the
+ * projects folder, a hidden repo in the projects folder, a folder without any repos, or a file. Repo counts use the
+ * same rule as the list (ADR-18): direct subfolders with `.git`, without those starting with a dot.
  */
 export const DroppedFolder = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("listed-repo"), repo: RepoId }),
-  /** `parent` is the folder that holds the repo; `parentRepos` counts the repos in it, this one included. */
+  z.object({ kind: z.literal("projects-dir") }),
+  /** `parent` is the folder that holds the repo; `parentRepos` counts the repos in it. */
   z.object({ kind: z.literal("repo-elsewhere"), path: z.string(), parent: z.string(), parentRepos: z.number().int().nonnegative() }),
-  /** `current` when the folder already is the projects folder. */
-  z.object({ kind: z.literal("folder-with-repos"), path: z.string(), repos: z.number().int().positive(), current: z.boolean() }),
+  z.object({ kind: z.literal("folder-with-repos"), path: z.string(), repos: z.number().int().positive() }),
+  /** A repo directly in the projects folder whose name starts with a dot, which the list skips. */
+  z.object({ kind: z.literal("hidden-repo"), path: z.string() }),
   z.object({ kind: z.literal("no-repos"), path: z.string() }),
   z.object({ kind: z.literal("file"), path: z.string() }),
 ]);

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { TRUNCATED_NOTE } from "@/lib/format";
-import { fileManagerName } from "@/lib/platform";
+import { FILE_MANAGER } from "@/lib/platform";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { PlainReadme, ReadmeFallback } from "./ReadmeFallback.tsx";
 import { RepoCardView } from "./RepoCardView.tsx";
@@ -88,7 +88,7 @@ function RepoActions({ conn, repo }: { conn: Connection; repo: Repo }) {
     <div className="flex flex-col items-end gap-2">
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="outline" size="sm" onClick={() => open(workspaceApi.openFolder)}>
-          <FolderOpen /> Show in {fileManagerName(navigator.userAgent)}
+          <FolderOpen /> Show in {FILE_MANAGER}
         </Button>
         <Button variant="outline" size="sm" onClick={() => open(workspaceApi.openEditor)} disabled={repo.status.kind !== "ok"}>
           <Code /> Open in VS Code

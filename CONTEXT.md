@@ -62,7 +62,7 @@ Jeden katalog na dysku użytkownika, wskazany w `workspace.yaml` albo w ustawien
 _Unikaj_: katalog workspace, root, folder (bez dopowiedzenia)
 
 **Dropped folder** (`DroppedFolder`, action `dropped-folder`, UI `FolderDrop`; in Polish *upuszczony folder*):
-A folder or file dropped on the Trackwall window outside a session terminal, described by the daemon: a listed repo, a repo elsewhere, a folder with repos, a folder without repos or a file (ADR-51). It never adds a repo by itself; it can only lead to a new projects folder.
+A folder or file dropped on the Trackwall window outside a session terminal, described by the daemon: a listed repo (or a folder inside one), the projects folder, a repo elsewhere, a hidden repo, a folder with repos, a folder without repos or a file (ADR-51). It never adds a repo by itself; it can only lead to a new projects folder.
 _Avoid_: imported repo, added repo
 
 **Hosting repo** (`RepoHost`, w `workspace.yaml` `repoHosts`; po angielsku *repo host*):

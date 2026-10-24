@@ -4,11 +4,11 @@ import { dropOutcome, extraItemsNote } from "../src/lib/dropped-folder.ts";
 describe("dropped folder", () => {
   test("a listed repo and the current projects folder open Repos without asking", () => {
     expect(dropOutcome({ kind: "listed-repo", repo: "shop" })).toEqual({ kind: "open-repos", repo: "shop" });
-    expect(dropOutcome({ kind: "folder-with-repos", path: "/Users/me/Projects", repos: 3, current: true })).toEqual({ kind: "open-repos" });
+    expect(dropOutcome({ kind: "projects-dir" })).toEqual({ kind: "open-repos" });
   });
 
   test("another folder with repos is offered as the projects folder", () => {
-    expect(dropOutcome({ kind: "folder-with-repos", path: "/Users/me/Work", repos: 1, current: false })).toEqual({
+    expect(dropOutcome({ kind: "folder-with-repos", path: "/Users/me/Work", repos: 1 })).toEqual({
       kind: "prompt",
       message:
         "/Users/me/Work has 1 git repo directly inside it. Use it as the projects folder? The Repos view then lists its repos instead of the current ones.",
@@ -25,7 +25,11 @@ describe("dropped folder", () => {
     });
   });
 
-  test("a folder without repos and a file only say what they are", () => {
+  test("a folder without repos, a hidden repo and a file only say what they are", () => {
+    expect(dropOutcome({ kind: "hidden-repo", path: "/p/.scratch" })).toMatchObject({
+      kind: "prompt",
+      message: expect.stringContaining("starts with a dot"),
+    });
     expect(dropOutcome({ kind: "no-repos", path: "/tmp/notes" })).toEqual({
       kind: "prompt",
       message: "/tmp/notes is not a git repo and has no git repos directly inside it.",

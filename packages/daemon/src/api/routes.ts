@@ -40,7 +40,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     return null;
   }),
   route(workspaceApi.openFolder, async (f, b) => {
-    f.openFolder(await f.workspace.repoPath(b.repo));
+    await f.workspace.openFolder(b.repo);
     return null;
   }),
   route(workspaceApi.droppedFolder, (f, b) => f.workspace.droppedFolder(b.path)),

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window: only the app's own commands (daemon_connection, retry_daemon, pick_folder) and core events, no system plugin commands.",
+  "description": "Main window: only the app's own commands (daemon_connection, retry_daemon, pick_projects_folder) and core events, no system plugin commands.",
   "windows": ["main"],
   "permissions": ["core:default"]
 }

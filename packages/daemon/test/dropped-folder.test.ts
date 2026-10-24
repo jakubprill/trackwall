@@ -10,7 +10,13 @@ import { fakeHosting } from "./support/hosting.ts";
 
 function newWorkspace() {
   const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
-  return new Workspace({ file: new WorkspaceFile(file), vcs: new Vcs(), hosting: fakeHosting().hosting, openEditor: () => {} });
+  return new Workspace({
+    file: new WorkspaceFile(file),
+    vcs: new Vcs(),
+    hosting: fakeHosting().hosting,
+    openEditor: () => {},
+    openFolder: () => {},
+  });
 }
 
 /** A folder with a `.git` directory: enough for the repo list rule (ADR-18), without running git. */
@@ -44,7 +50,7 @@ describe("dropped folder", () => {
     expect(await workspace.droppedFolder(api)).toEqual({ kind: "repo-elsewhere", path: api, parent: elsewhere, parentRepos: 2 });
   });
 
-  test("a folder with repos directly inside it counts them and says whether it already is the projects folder", async () => {
+  test("a folder with repos directly inside it counts them, and the projects folder itself is the projects folder", async () => {
     const workspace = newWorkspace();
     const projects = tempDir("trackwall-projects-");
     fakeRepo(projects, "api");
@@ -53,8 +59,22 @@ describe("dropped folder", () => {
     fakeRepo(other, "a");
     fakeRepo(other, "b");
 
-    expect(await workspace.droppedFolder(other)).toEqual({ kind: "folder-with-repos", path: other, repos: 2, current: false });
-    expect(await workspace.droppedFolder(projects)).toEqual({ kind: "folder-with-repos", path: projects, repos: 1, current: true });
+    expect(await workspace.droppedFolder(other)).toEqual({ kind: "folder-with-repos", path: other, repos: 2 });
+    expect(await workspace.droppedFolder(projects)).toEqual({ kind: "projects-dir" });
+  });
+
+  test("a folder inside a listed repo is that repo, and a hidden repo in the projects folder is not offered its folder", async () => {
+    const workspace = newWorkspace();
+    const projects = tempDir("trackwall-projects-");
+    const shop = fakeRepo(projects, "shop");
+    mkdirSync(join(shop, "src"));
+    fakeRepo(projects, "shop-extra");
+    const hidden = fakeRepo(projects, ".scratch");
+    await workspace.setProjectsDir(projects);
+
+    expect(await workspace.droppedFolder(join(shop, "src"))).toEqual({ kind: "listed-repo", repo: "shop" });
+    expect(await workspace.droppedFolder(join(projects, "shop-extra"))).toEqual({ kind: "listed-repo", repo: "shop-extra" });
+    expect(await workspace.droppedFolder(hidden)).toEqual({ kind: "hidden-repo", path: hidden });
   });
 
   test("a folder whose repos are deeper than one level has no repos, and a file is a file", async () => {
@@ -82,11 +102,11 @@ describe("dropped folder", () => {
     const workspace = newWorkspace();
     const other = tempDir("trackwall-other-");
     fakeRepo(other, "a");
-    expect(await workspace.droppedFolder(other)).toMatchObject({ kind: "folder-with-repos", current: false });
+    expect(await workspace.droppedFolder(other)).toEqual({ kind: "folder-with-repos", path: other, repos: 1 });
 
     const projects = tempDir("trackwall-projects-");
     await workspace.setProjectsDir(projects);
     rmSync(projects, { recursive: true });
-    expect(await workspace.droppedFolder(other)).toMatchObject({ kind: "folder-with-repos", current: false });
+    expect(await workspace.droppedFolder(other)).toEqual({ kind: "folder-with-repos", path: other, repos: 1 });
   });
 });

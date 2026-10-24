@@ -1,3 +1,4 @@
+import { isTauri } from "@tauri-apps/api/core";
 import { workspaceApi } from "@trackwall/protocol";
 import { FolderOpen } from "lucide-react";
 import { type FormEvent, useCallback, useState } from "react";
@@ -8,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { canPickFolder, pickFolder } from "@/lib/folder-picker";
+import { pickFolder } from "@/lib/folder-picker";
 import { useRemote } from "@/lib/use-remote";
 import { RepoHostsForm } from "./RepoHostsForm.tsx";
 
@@ -105,17 +106,18 @@ function ProjectsDirForm({
     void save(path.trim());
   }
 
-  /** A folder chosen in the system picker is saved at once: choosing it already says what the user wants. */
+  /** Only the Tauri window has the system picker (ADR-51). A folder chosen in it is saved at once: choosing it already says what the user wants. */
   async function browse() {
     setError(undefined);
+    let picked: string | undefined;
     try {
-      const picked = await pickFolder(path.trim());
-      if (picked === undefined) return;
-      setPath(picked);
-      await save(picked);
+      picked = await pickFolder(path.trim());
     } catch (err) {
-      setError(errorMessage(err));
+      return setError(errorMessage(err));
     }
+    if (picked === undefined) return;
+    setPath(picked);
+    await save(picked);
   }
 
   return (
@@ -128,7 +130,7 @@ function ProjectsDirForm({
           aria-label="Full path to the projects folder"
           className="font-mono text-xs"
         />
-        {canPickFolder() && (
+        {isTauri() && (
           <Button type="button" variant="outline" size="sm" onClick={() => void browse()} disabled={busy}>
             <FolderOpen /> Choose…
           </Button>

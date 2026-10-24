@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { DaemonEvents } from "@/lib/daemon-events";
+import { DROP_HINT } from "@/lib/dropped-folder";
+import type { DroppedPaths } from "@/lib/file-drop";
 import { IS_MAC } from "@/lib/platform";
 import { entrySession, findEntry, type SessionSelection, sessionRows } from "@/lib/session-entries";
 import type { SessionLayout } from "@/lib/session-grid";
@@ -45,24 +47,27 @@ const SESSIONS_POLL_MS = { open: 1000, closed: 3000 };
 
 export function App() {
   // Repo otwarte z pulpitu należy do przejścia, nie do widoku: każde inne przejście do „Repos” zaczyna bez niego.
-  const [{ view, repo }, setNav] = useState<{ view: View; repo?: string }>({ view: "home" });
-  const setView = useCallback((next: View, openRepo?: string) => setNav({ view: next, repo: openRepo }), []);
+  // Repo otwarte z pulpitu należy do przejścia, nie do widoku: każde inne przejście do „Repos” zaczyna bez niego.
+  // `visit` grows with every opening of a repo, so that Repos is mounted again with it even when it is already open.
+  const [{ view, repo, visit }, setNav] = useState<{ view: View; repo?: string; visit: number }>({ view: "home", visit: 0 });
+  const setView = useCallback((next: View) => setNav((nav) => ({ view: next, visit: nav.visit })), []);
+  const openRepos = useCallback((openRepo?: string) => setNav((nav) => ({ view: "repos", repo: openRepo, visit: nav.visit + 1 })), []);
   const [session, setSession] = useState<SessionSelection>();
   const [sessionLayout, setSessionLayout] = useState<SessionLayout>("1");
-  // A folder dropped outside a session (ADR-51); `seq` mounts a new bar for every drop, also of the same folder.
-  const [dropped, setDropped] = useState<{ paths: readonly string[]; seq: number }>();
-  const dragging = useFileDrop((paths) => setDropped((last) => ({ paths, seq: (last?.seq ?? 0) + 1 })));
-  // Bumped when a drop opens Repos, so that the list is read again even when Repos is already open.
-  const [reposVisit, setReposVisit] = useState(0);
+  const { conn, epoch, error, retry } = useConnection();
+  // A folder dropped outside a session (ADR-51); `seq` mounts a new bar for every drop, also of the same folder. A drop
+  // without a daemon connection is ignored, rather than answered whenever the connection comes back.
+  const [dropped, setDropped] = useState<{ paths: DroppedPaths; seq: number }>();
+  const dragging = useFileDrop((paths) => {
+    if (conn) setDropped((last) => ({ paths, seq: (last?.seq ?? 0) + 1 }));
+  });
   const openReposFromDrop = useCallback(
     (openRepo?: string) => {
       setDropped(undefined);
-      setView("repos", openRepo);
-      setReposVisit((n) => n + 1);
+      openRepos(openRepo);
     },
-    [setView],
+    [openRepos],
   );
-  const { conn, epoch, error, retry } = useConnection();
   const events = useDaemonEvents(conn);
   const sessions = useSessions(conn, events, view === "sessions" || view === "home");
   const runningLive = useMemo(() => events?.feed("mise.running.changed"), [events]);
@@ -118,7 +123,7 @@ export function App() {
         {dragging && (
           // Over the page, not in its flow: a bar that pushes the page down would move the terminals under the pointer.
           <p className="bg-card text-muted-foreground pointer-events-none fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md border px-4 py-2 text-sm shadow-lg">
-            Drop a file on a session terminal to paste its path, or a folder anywhere else to add its repos.
+            {DROP_HINT}
           </p>
         )}
         <main className="hud-grid min-h-0 flex-1 overflow-y-auto">
@@ -134,14 +139,14 @@ export function App() {
               runningLive={runningLive}
               sessions={sessions}
               onOpenInSessions={openInSessions}
-              onOpenRepo={(id) => setView("repos", id)}
+              onOpenRepo={openRepos}
               onOpenDaemon={() => setView("daemon")}
               onOpenSettings={() => setView("settings")}
             />
           )}
           {conn && view === "repos" && (
             <ReposView
-              key={`${epoch}:${reposVisit}`}
+              key={`${epoch}:${visit}`}
               conn={conn}
               initialRepo={repo}
               onRetry={retry}
