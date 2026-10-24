@@ -47,8 +47,9 @@ _Unikaj_: komenda, akcja (to pojęcia z API i CLI)
 Proces, który CLI agenta uruchamia jako lokalny serwer MCP; przekazuje wiadomości ze stdin do serwera MCP działającego daemona, z portem i tokenem z `daemon.json`.
 _Unikaj_: proxy, cienki klient (bez dopowiedzenia)
 
-**Token zadania**:
-Osobny token dla sesji zadania; po nim daemon wie, które zadanie woła MCP, i ogranicza jego narzędzia (§8).
+**Token sesji** (`session-token` w katalogu sesji, nagłówek `x-trackwall-session-token`, `callerSession`):
+Losowy token każdej sesji Trackwall obok tokenu daemona, który jej most stdio wysyła do serwera MCP; po nim daemon wie, która sesja woła, i np. zapisuje podsumowanie tylko do jej zadania (ADR-39, §8). Agent spoza Trackwall go nie ma.
+_Unikaj_: token zadania (wcześniejszy plan; token ma każda sesja, także w korzeniu repo)
 
 ## Workspace i wiedza
 
@@ -200,7 +201,7 @@ Grupa procesów z `runtime.json`, której daemon już nie nadzoruje (np. po awar
 ## Agenci
 
 **Zadanie** (`Task`, `TaskId`; po angielsku *task*):
-Praca jednego agenta nad jednym repo: polecenie, worktree, gałąź `trackwall/<skrót>` od gałęzi domyślnej i sesje; docelowo także budżet, dzierżawy i podsumowanie. Dziś (ADR-31) tworzy je widok Sessions, zapisuje `tasks.json`, a sesję zadania można zatrzymać i wznowić. Zadanie nie wskazuje sesji; to sesja ma `Session.task`. W kodzie i API `task` znaczy zawsze zadanie.
+Praca jednego agenta nad jednym repo: polecenie, worktree, gałąź `trackwall/<skrót>` od gałęzi domyślnej, sesje i podsumowanie; docelowo także budżet i dzierżawy. Dziś (ADR-31) tworzy je widok Sessions z formularza albo z zatwierdzonej propozycji zadania (ADR-39), zapisuje `tasks.json`, a sesję zadania można zatrzymać i wznowić. Zadanie nie wskazuje sesji; to sesja ma `Session.task`. W kodzie i API `task` znaczy zawsze zadanie.
 _Unikaj_: job; „task” w polskim tekście (myli się z taskiem mise); w tekście po angielsku gołe *task* znaczy tylko zadanie, a task mise to zawsze *mise task*
 
 **Zakończenie zadania** (`removeTask`, „End task” w UI; po angielsku *End task*):
@@ -208,7 +209,19 @@ Usunięcie worktree zadania, a do wyboru także jego gałęzi. Tylko bez działa
 _Unikaj_: usunięcie zadania (zadanie znika z listy, ale gałąź może zostać)
 
 **Polecenie** (`Task.prompt`; po angielsku *prompt*):
-Treść zadania dla agenta, wpisana w widoku Sessions; Copilot CLI dostaje ją jako pierwszą wiadomość sesji zadania (`--interactive`).
+Treść zadania dla agenta, wpisana w widoku Sessions albo przyniesiona przez propozycję zadania (i poprawiona przez użytkownika przed startem); Copilot CLI dostaje ją jako pierwszą wiadomość sesji zadania (`--interactive`).
+
+**Tytuł zadania** (`Task.title`, `TaskTitle`; po angielsku *title*):
+Krótki opis zadania w jednej linii (do 80 znaków), który nadaje sesja proponująca zadanie, jak tytuł wątku; z niego powstaje skrót gałęzi. Zadanie z formularza nie ma tytułu (`null`), a UI pokazuje wtedy polecenie.
+_Unikaj_: tytuł okna (to `windowTitle` sesji)
+
+**Propozycja zadania** (`TaskProposal`, narzędzie MCP `propose_task`, akcje `approve-proposal` i `reject-proposal`; po angielsku *task proposal*):
+Zadanie, które sesja albo agent spoza Trackwall zgłosił przez MCP, a które czeka w widoku Sessions na decyzję użytkownika: „Start task” robi z niej zadanie z tym samym identyfikatorem, „Reject” ją odrzuca. Do tej chwili nic się nie uruchamia. Żyje tylko w pamięci daemona (ADR-39).
+_Unikaj_: zlecenie, prośba, wniosek
+
+**Sesja główna** (`proposedBy` zadania i propozycji; po angielsku *main session*):
+Sesja albo agent nadrzędny, który rozmawia z użytkownikiem i zleca pracę innym agentom propozycjami zadań, a potem czeka na ich sesje (`wait_for_session`) i czyta podsumowania, jak koordynator z wątkami w Claude (ADR-39). To rola, nie osobny rodzaj sesji: dziś to każda sesja Trackwall albo agent spoza Trackwall (`proposedBy.session: null`).
+_Unikaj_: orkiestrator, planner (ADR-9: rozbijanie celów robi człowiek)
 _Unikaj_: prompt (w polskim tekście)
 
 **Task mise** (po angielsku *mise task*):
@@ -225,7 +238,7 @@ _Unikaj_: autoryzacja, akceptacja
 Wszystko, co Trackwall wie o jednym CLI agenta: szablon komendy, konfiguracja MCP, wznowienie, detektory stanu. Jedyny adapter to Copilot CLI (ADR-8).
 
 **Agent nadrzędny**:
-CLI agenta (dziś Copilot CLI) uruchomione przez użytkownika poza zadaniem, np. w folderze z projektami, z dostępem do serwera MCP. W odróżnieniu od sesji zadania nie ma worktree, budżetu ani tokenu zadania. Pojęcie z dokumentacji i opisów narzędzi; w kodzie nie ma własnego identyfikatora, bo daemon niczego o nim nie trzyma.
+CLI agenta (dziś Copilot CLI) uruchomione przez użytkownika poza zadaniem, np. w folderze z projektami, z dostępem do serwera MCP. W odróżnieniu od sesji zadania nie ma worktree, budżetu ani tokenu sesji. Pojęcie z dokumentacji i opisów narzędzi; w kodzie nie ma własnego identyfikatora, bo daemon niczego o nim nie trzyma.
 _Unikaj_: orkiestrator, główny agent
 
 **Sesja** (sesja zadania, `Session`, `SessionId`; po angielsku *session*):
@@ -270,8 +283,8 @@ Wyjście sesji w formacie asciicast v2 ze znacznikami rekordów hooków, klawisz
 **Budżet**:
 Limit czasu i liczby commitów zadania; po przekroczeniu daemon kończy sesję.
 
-**Podsumowanie**:
-Blok, którym agent kończy zadanie; trafia do pola `summary` i do propozycji PR. Trackwall niczego sam nie scala (ADR-9).
+**Podsumowanie** (`Task.summary`, narzędzie MCP `report_result`; po angielsku *summary*):
+Wynik, który sesja zadania zgłasza narzędziem `report_result`: co zrobiła, co zostało, co sprawdzić. Trafia do pola `summary` zadania (z czasem zgłoszenia, w `tasks.json`), do widoku Sessions i do sesji głównej; kolejne zastępuje poprzednie (ADR-39). Docelowo także do propozycji PR. Trackwall niczego sam nie scala (ADR-9).
 
 ## Logi, zdarzenia i audyt
 
