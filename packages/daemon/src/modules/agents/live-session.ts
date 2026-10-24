@@ -89,12 +89,11 @@ export class LiveSession {
   input(data: string): void {
     if (this.#finished || !this.#terminal) return;
     this.#terminal.write(data);
+    // Input counts from the state after the hooks already in `hooks.jsonl`, not after the last read cycle: a key
+    // answers the prompt that is already there, and typing marks seen the end of a turn that has already been written.
+    this.#readHooks();
     const key = sessionKey(data);
-    if (key) {
-      // Klawisz liczy się ze stanu po hookach, które już przyszły, a nie po tych z ostatniego cyklu.
-      this.#readHooks();
-      this.#report(this.#state.key(key));
-    }
+    if (key) this.#report(this.#state.key(key));
     // After the key's own state change, so that the `Input` an Esc causes counts as seen.
     if (typedByUser(data)) this.#attention.typed();
   }

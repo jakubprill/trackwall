@@ -210,7 +210,7 @@ export const mcpTools = {
       "repo, start time, process state (run: running, stopping, exited with exit code; the screen is not shared), the " +
       "latest state change (state: Working, Input, Approval, Plan, Done, Error, Stale, with source and confidence; " +
       "null before the first signal), window title (what the agent is working on), needsAttention (running and " +
-      "waiting for you: approval, plan approval, or an ended turn the user has not seen yet) and task: the id of the task whose worktree it runs in, null in the repo root. A task " +
+      "waiting for the user: approval, plan approval, or an ended turn the user has not seen yet) and task: the id of the task whose worktree it runs in, null in the repo root. A task " +
       "is work in its own worktree on its own branch: prompt, branch, base branch and commit, worktree path. Sessions " +
       "end with Trackwall, tasks stay until the user ends them. The repo argument narrows both lists to one repo (not_found for an unknown repo). " +
       "The tool is read-only: only the user starts, answers and stops sessions.",

@@ -6,13 +6,13 @@ function manualTimers() {
   let now = 0;
   const pending = new Map<number, { at: number; run: () => void }>();
   let next = 0;
-  const timers: FocusTimers = {
+  const timers: FocusTimers<number> = {
     set: (run, ms) => {
       next++;
       pending.set(next, { at: now + ms, run });
       return next;
     },
-    clear: (timer) => pending.delete(timer as number),
+    clear: (timer) => pending.delete(timer),
   };
   const elapse = (ms: number) => {
     now += ms;
@@ -49,7 +49,7 @@ describe("session terminal window in front of the user (ADR-47)", () => {
     expect(sent).toEqual([true]);
   });
 
-  test("a window that leaves the front before the moment passes reports nothing, as when a tray click switches sessions", () => {
+  test("a window that leaves the front before the moment passes reports nothing", () => {
     const { timers, elapse } = manualTimers();
     const sent: boolean[] = [];
     let inFront = true;
@@ -61,11 +61,28 @@ describe("session terminal window in front of the user (ADR-47)", () => {
     reporter.connected();
 
     elapse(300);
+    inFront = false;
+    reporter.update();
+    elapse(SEEN_AFTER_MS);
+
+    expect(sent).toEqual([]);
+  });
+
+  test("a terminal that closes before the moment passes reports nothing, as when a tray click switches sessions", () => {
+    const { timers, elapse } = manualTimers();
+    const sent: boolean[] = [];
+    const reporter = new FocusReporter(
+      (f) => sent.push(f),
+      () => true,
+      timers,
+    );
+    reporter.connected();
+
+    elapse(300);
     reporter.dispose();
     elapse(SEEN_AFTER_MS);
 
     expect(sent).toEqual([]);
-    inFront = false;
   });
 
   test("a window that reported being in front reports leaving it", () => {

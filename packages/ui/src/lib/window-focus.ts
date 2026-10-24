@@ -11,19 +11,19 @@ export function windowInFront(doc: Pick<Document, "hasFocus" | "visibilityState"
   return doc.hasFocus() && doc.visibilityState === "visible";
 }
 
-export interface FocusTimers {
-  set(run: () => void, ms: number): unknown;
-  clear(timer: unknown): void;
+export interface FocusTimers<Timer> {
+  set(run: () => void, ms: number): Timer;
+  clear(timer: Timer): void;
 }
 
-export class FocusReporter {
+export class FocusReporter<Timer> {
   readonly #send: (focused: boolean) => void;
   readonly #inFront: () => boolean;
-  readonly #timers: FocusTimers;
-  #timer: unknown;
+  readonly #timers: FocusTimers<Timer>;
+  #timer: Timer | undefined;
   #reported = false;
 
-  constructor(send: (focused: boolean) => void, inFront: () => boolean, timers: FocusTimers) {
+  constructor(send: (focused: boolean) => void, inFront: () => boolean, timers: FocusTimers<Timer>) {
     this.#send = send;
     this.#inFront = inFront;
     this.#timers = timers;

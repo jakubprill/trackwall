@@ -46,7 +46,7 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
     const focus = new FocusReporter(
       (focused) => send({ type: "focus", focused }),
       () => windowInFront(document),
-      { set: (run, ms) => setTimeout(run, ms), clear: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>) },
+      { set: (run, ms) => setTimeout(run, ms), clear: (timer) => clearTimeout(timer) },
     );
     const sendFocus = () => focus.update();
 
