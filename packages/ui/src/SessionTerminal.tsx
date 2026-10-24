@@ -5,6 +5,7 @@ import { Terminal } from "@xterm/xterm";
 import { useEffect, useRef, useState } from "react";
 import type { Connection } from "@/lib/connection";
 import { ptySocket } from "@/lib/pty-socket";
+import { terminalResizer } from "@/lib/terminal-resizer";
 import { terminalTheme } from "@/lib/terminal-theme";
 
 const RECONNECT_MS = 1000;
@@ -15,12 +16,14 @@ const RECONNECT_MS = 1000;
  * pustego terminala. Klawisze i rozmiar okna idą do sesji; rozmiar PTY ustala ostatnie okno, które go zgłosiło.
  */
 export function SessionTerminal({ conn, session, live }: { conn: Connection; session: string; live: boolean }) {
+  const frame = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const [notice, setNotice] = useState<string>();
 
   useEffect(() => {
     const element = host.current;
-    if (!element) return;
+    const container = frame.current;
+    if (!element || !container) return;
     const terminal = new Terminal({
       theme: terminalTheme(document.documentElement),
       fontFamily: getComputedStyle(element).fontFamily,
@@ -71,15 +74,25 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
     connect();
 
     const input = terminal.onData((data) => send({ type: "input", data }));
-    const resize = new ResizeObserver(() => {
-      fit.fit();
-      sendSize();
+    const resizer = terminalResizer({
+      initial: { cols: terminal.cols, rows: terminal.rows },
+      measure: () => fit.proposeDimensions(),
+      apply: ({ cols, rows }) => {
+        terminal.resize(cols, rows);
+        sendSize();
+      },
+      schedule: (callback) => requestAnimationFrame(callback),
+      cancel: (handle) => cancelAnimationFrame(handle),
     });
-    resize.observe(element);
+    // Obserwowana jest ramka, której rozmiar wynika tylko z układu strony; terminal leży w niej absolutnie, więc jego
+    // wymiary nie zmieniają ramki ani nie wywołują pasków przewijania strony.
+    const resize = new ResizeObserver(() => resizer.request());
+    resize.observe(container);
 
     return () => {
       disposed = true;
       clearTimeout(timer);
+      resizer.dispose();
       resize.disconnect();
       input.dispose();
       socket?.close();
@@ -95,7 +108,9 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
           Sesja się zakończyła; terminal pokazuje to, co zostało na jej ekranie.
         </p>
       )}
-      <div ref={host} className="bg-background min-h-0 flex-1 p-2 font-mono" />
+      <div ref={frame} className="bg-background relative min-h-0 flex-1 overflow-hidden">
+        <div ref={host} className="absolute inset-0 p-2 font-mono" />
+      </div>
     </div>
   );
 }
