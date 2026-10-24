@@ -121,14 +121,12 @@ const runs: ToolRuns = {
   findEndpoint: (facade, { query, method }) => facade.graph.findEndpoint(query, method),
   searchCode: async (facade, { repos, tags = [], ...query }) => {
     if (tags.length === 0) return facade.workspace.searchCode(query, repos);
-    const all = await facade.cards.tags();
-    const tagged = new Set(all.filter((entry) => hasEveryTag(tagNames(entry), tags)).map((entry) => entry.repo));
-    // An id unknown to the cards stays, so that the workspace reports it as `not_found` instead of dropping it.
-    const known = new Set(all.map((entry) => entry.repo));
-    return facade.workspace.searchCode(
-      query,
-      (repos ?? [...known]).filter((id) => tagged.has(id) || !known.has(id)),
-    );
+    // Cards cover every repo of the projects folder, so an id unknown to them stays: the workspace reports it as
+    // `not_found` instead of it silently dropping out.
+    const cards = await facade.cards.tags();
+    const tagged = cards.filter((entry) => hasEveryTag(tagNames(entry), tags)).map((entry) => entry.repo);
+    const isUnknown = (id: string) => !cards.some((entry) => entry.repo === id);
+    return facade.workspace.searchCode(query, repos ? repos.filter((id) => tagged.includes(id) || isUnknown(id)) : tagged);
   },
   listSessions: async (facade, { repo }) => {
     // Repo musi istnieć (`not_found` jak w get_repo): literówka w identyfikatorze nie może wyglądać jak „brak sesji”.

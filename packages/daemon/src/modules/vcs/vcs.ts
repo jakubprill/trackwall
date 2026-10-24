@@ -58,7 +58,7 @@ export class Vcs {
     return this.syncing.run(await this.commonDir(dir), () => syncRepo(dir));
   }
 
-  // `git grep` po obiektach commita (`grep.ts`): pliki źródłowe dla kart (ADR-30) i wyszukiwanie kodu (ADR-40).
+  // `git grep` over a commit's objects (`grep.ts`): source files for cards (ADR-30) and code search (ADR-40).
   readonly grepFiles = grepFiles;
   readonly grep = grep;
 

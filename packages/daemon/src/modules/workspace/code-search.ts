@@ -45,7 +45,7 @@ const SEARCH_CONCURRENCY = 4;
 /** Git output limit per repo: thousands of matches with context, yet bounded memory when the pattern matches everywhere. */
 const GREP_MAX_BYTES = 2 * 1024 * 1024;
 /**
- * After this long no new repo is searched: an MCP client gives up on a tool call after a minute or two, and a
+ * After this long no new repo is searched (it goes to `skipped`): an MCP client gives up on a tool call after a minute or two, and a
  * pathological regular expression can keep git busy for its whole time limit in every repo.
  */
 const CODE_SEARCH_BUDGET_MS = 60_000;
@@ -53,7 +53,7 @@ const CODE_SEARCH_BUDGET_MS = 60_000;
 type RepoOutcome =
   | { kind: "ok"; searched: CodeSearchRepo; matches: CodeMatch[] }
   | { kind: "empty" }
-  | { kind: "skipped" }
+  | { kind: "skipped"; repo: string }
   | { kind: "failed"; failure: CodeSearchFailure };
 
 export async function searchCode(
@@ -67,10 +67,7 @@ export async function searchCode(
   // the limit, the rest of the list cannot add a match to the result.
   let found = 0;
   const outcomes = await mapLimit(entries, SEARCH_CONCURRENCY, async (entry): Promise<RepoOutcome> => {
-    if (found >= query.limit) return { kind: "skipped" };
-    if (Date.now() >= deadline) {
-      return { kind: "failed", failure: { repo: entry.id, message: `not searched: the search took longer than ${budgetMs / 1000} s` } };
-    }
+    if (found >= query.limit || Date.now() >= deadline) return { kind: "skipped", repo: entry.id };
     const outcome = await searchRepo(entry, vcs, query);
     if (outcome.kind === "ok") found += outcome.matches.length;
     return outcome;
@@ -80,10 +77,11 @@ export async function searchCode(
 
 /** Matches of all repos in list order, within `limit` and `CODE_SEARCH_MAX_CHARS`. */
 function joinOutcomes(outcomes: readonly RepoOutcome[], limit: number): SearchCodeResult {
-  const result: SearchCodeResult = { matches: [], truncated: false, searched: [], failed: [] };
+  const result: SearchCodeResult = { matches: [], truncated: false, searched: [], failed: [], skipped: [] };
   let chars = 0;
   for (const outcome of outcomes) {
     if (outcome.kind === "failed") result.failed.push(outcome.failure);
+    if (outcome.kind === "skipped") result.skipped.push(outcome.repo);
     result.truncated ||= outcome.kind === "skipped";
     if (outcome.kind !== "ok") continue;
     const searched = { ...outcome.searched };

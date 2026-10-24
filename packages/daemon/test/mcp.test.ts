@@ -79,7 +79,7 @@ beforeAll(async () => {
 afterAll(() => api.close());
 
 describe("serwer MCP przez Streamable HTTP", () => {
-  test("ogłasza tylko narzędzia do odczytu: repo, karta, log, graf, wyszukiwanie kodu i sesje", async () => {
+  test("announces only read-only tools: repos, card, log, graph, code search and sessions", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual([
@@ -204,6 +204,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
       truncated: false,
       searched: [{ repo: "orders-bff", commit: head, truncated: false }],
       failed: [],
+      skipped: [],
     });
     const searched = async (tags: string[]) => SearchCodeResult.parse(await search({ pattern: "x", tags })).searched.map((r) => r.repo);
     expect(await searched(["java", "bff"])).toEqual(["orders-bff"]);

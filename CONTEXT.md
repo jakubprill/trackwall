@@ -97,9 +97,9 @@ _Unikaj_: diff (to tylko część), status
 **Przegląd repo** (`RepoOverview`):
 README i ostatnie commity repo w jednej odpowiedzi; stan repo przychodzi z listy repo. Pliki przeglądane są osobno, zawsze z commita HEAD (ADR-14).
 
-**Wyszukiwanie kodu** (`searchCode`, narzędzie MCP `search_code`, wynik `SearchCodeResult`; po angielsku *code search*):
-Tekst albo wyrażenie regularne w plikach ostatniego commita wielu repo z folderu z projektami naraz, przez `git grep` (ADR-40); trafienie (`CodeMatch`, *match*) to repo, ścieżka, linia, kolumna i linie kontekstu. Niezacommitowanych zmian nie widzi, tak jak przeglądanie repo.
-_Unikaj_: grep (to narzędzie pod spodem), indeks (nie ma żadnego)
+**Code search** (`searchCode`, MCP tool `search_code`, result `SearchCodeResult`):
+A fixed string or a regular expression in the files of the latest commit of many repos of the projects folder at once, through `git grep` (ADR-40); a match (`CodeMatch`) is a repo, path, line, column and context lines. It does not see uncommitted changes, just like browsing a repo.
+_Avoid_: grep (the tool underneath), index (there is none)
 
 **Worktree** (worktree zadania, `Task.worktree`; po angielsku *worktree*):
 Osobny katalog roboczy gita dla zadania, na gałęzi zadania, w `worktrees/<repo>/<gałąź bez prefiksu>` w katalogu stanu, poza folderem z projektami (ADR-31). Liczony z repo i gałęzi (`taskWorktree`), nie zapisywany w `tasks.json`. Usuwany tylko na prośbę użytkownika i tylko bez działającej sesji zadania; niezacommitowane zmiany przepadają dopiero po potwierdzeniu.

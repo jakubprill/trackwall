@@ -214,8 +214,9 @@ export const mcpTools = {
       `column, the line text (cut to ${CODE_SEARCH_LINE_MAX_CHARS} characters) and context lines before and after. ` +
       "Narrow with repos (ids), tags (every given tag) and paths (git pathspecs: *.java in any directory, src/, " +
       ":!*.test.ts to exclude). searched lists the repos with the commit searched; failed the repos git could not " +
-      "search, with the reason (e.g. an invalid regular expression or the time limit). truncated: true when not " +
-      "every match is in the result (also per repo in searched); narrow the query.",
+      "search, with the reason (e.g. an invalid regular expression); skipped the repos not searched because the limit " +
+      "was already reached or time ran out. truncated: true when matches may be missing (also per repo in searched); " +
+      "narrow the query.",
     args: z
       .object({
         pattern: CodeQuery.shape.pattern.describe("text to find, or a regular expression with regex: true"),

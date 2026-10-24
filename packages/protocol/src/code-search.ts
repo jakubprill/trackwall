@@ -18,12 +18,17 @@ export const CODE_SEARCH_LINE_MAX_CHARS = 500;
  */
 export const CODE_SEARCH_MAX_CHARS = 100_000;
 
+/** Text without control characters (below space, and DEL); a tab only where `allowTab`. */
+function printable(text: string, allowTab: boolean): boolean {
+  return [...text].every((c) => (c >= " " && c !== "\x7f") || (allowTab && c === "\t"));
+}
+
 /** A git pathspec: `*.java` (in any directory), `src/`, `:!*.test.ts` (exclusion); no control characters. */
 export const CodePathspec = z
   .string()
   .min(1)
   .max(300)
-  .refine((p) => [...p].every((c) => c >= " "), "pathspec: no control characters");
+  .refine((p) => printable(p, false), "pathspec: no control characters");
 
 /** What to search for and where in one repo; the `search_code` tool adds the choice of repos and the match limit. */
 export const CodeQuery = z.object({
@@ -32,7 +37,7 @@ export const CodeQuery = z.object({
     .string()
     .min(1)
     .max(500)
-    .refine((p) => [...p].every((c) => c >= " " || c === "\t"), "pattern: one line, no control characters"),
+    .refine((p) => printable(p, true), "pattern: one line, no control characters except tab"),
   /** A POSIX extended regular expression (`git grep -E`) instead of a fixed string. */
   regex: z.boolean(),
   ignoreCase: z.boolean(),
@@ -64,10 +69,7 @@ export const CodeMatch = z.object({
 });
 export type CodeMatch = z.infer<typeof CodeMatch>;
 
-/**
- * A repo that could not be searched (git refused, e.g. an invalid regular expression, or time ran out); the other
- * repos still have results.
- */
+/** A repo git could not search (e.g. an invalid regular expression, git's time limit); the other repos still have results. */
 export const CodeSearchFailure = z.object({
   repo: RepoId,
   message: z.string(),
@@ -87,12 +89,14 @@ export const SearchCodeResult = z.object({
   /** Matches in the order of the repo list, then by path and line. */
   matches: z.array(CodeMatch),
   /**
-   * Not every match is in the result: more than the limit or `CODE_SEARCH_MAX_CHARS`, a repo's git output was cut, or
-   * repos were not searched because the limit was already reached; narrow the query.
+   * Not every match may be in the result: more than the limit or `CODE_SEARCH_MAX_CHARS`, a repo's git output was
+   * cut, or some repos were skipped; narrow the query.
    */
   truncated: z.boolean(),
   /** The repos searched, with the commit searched in each. */
   searched: z.array(CodeSearchRepo),
   failed: z.array(CodeSearchFailure),
+  /** Repos not searched because the limit was already reached or the search ran out of time (`truncated` is then true). */
+  skipped: z.array(RepoId),
 });
 export type SearchCodeResult = z.infer<typeof SearchCodeResult>;

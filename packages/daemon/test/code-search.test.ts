@@ -54,7 +54,7 @@ describe("code search", () => {
       { repo: "orders", commit: head, truncated: false },
       { repo: "web", commit: gitIn(join(orders, "..", "web"), "rev-parse", "HEAD").trim(), truncated: false },
     ]);
-    expect(result).toMatchObject({ truncated: false, failed: [] });
+    expect(result).toMatchObject({ truncated: false, failed: [], skipped: [] });
   });
 
   test("ignoreCase, a regular expression and a pathspec with an exclusion narrow the matches", async () => {
@@ -180,19 +180,17 @@ describe("searchCode limits", () => {
     // Four repos start at once; after the first of them finishes, nothing else starts.
     expect(grepped).toEqual(["/repos/r1", "/repos/r2", "/repos/r3", "/repos/r4"]);
     expect(result.matches.map((m) => m.repo)).toEqual(["r1"]);
+    expect(result.skipped).toEqual(["r5", "r6", "r7", "r8", "r9", "r10"]);
     expect(result.truncated).toBe(true);
   });
 
-  test("repos not started within the time budget go to failed with the reason", async () => {
+  test("repos not started within the time budget are skipped and the result is truncated", async () => {
     const { entries, vcs } = fakeRepos(6, "TODO", 200);
 
     const result = await searchCode(entries, vcs, { ...QUERY, pattern: "TODO" }, 100);
 
     expect(result.searched.map((r) => r.repo)).toEqual(["r1", "r2", "r3", "r4"]);
-    expect(result.failed).toEqual([
-      { repo: "r5", message: "not searched: the search took longer than 0.1 s" },
-      { repo: "r6", message: "not searched: the search took longer than 0.1 s" },
-    ]);
+    expect(result).toMatchObject({ skipped: ["r5", "r6"], failed: [], truncated: true });
   });
 
   test("line text in the result is capped at 100 000 characters in total", async () => {
