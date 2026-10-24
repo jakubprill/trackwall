@@ -17,6 +17,9 @@ export const STATE_LABELS = {
   Stale: "not responding",
 } as const;
 
+/** The status of a task proposal wherever it shows (the Sessions list, “Needs you” on the dashboard): waiting for a decision. */
+export const PROPOSAL_STATUS = { tone: "warning", label: "waiting for your decision" } as const;
+
 /** `Input` the user has already seen (ADR-47): the agent is idle and no longer waits for you. */
 export const IDLE_LABEL = "idle";
 

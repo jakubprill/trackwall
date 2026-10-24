@@ -8,7 +8,7 @@ import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { DaemonEvents } from "@/lib/daemon-events";
 import { IS_MAC } from "@/lib/platform";
-import { entrySession, findEntry, type SessionSelection, sessionEntries } from "@/lib/session-entries";
+import { entrySession, findEntry, type SessionSelection, sessionRows } from "@/lib/session-entries";
 import type { SessionLayout } from "@/lib/session-grid";
 import { sessionShortcut } from "@/lib/session-shortcut";
 import { attentionCount, nextWaitingShortcut } from "@/lib/session-state";
@@ -51,12 +51,12 @@ export function App() {
   const events = useDaemonEvents(conn);
   const sessions = useSessions(conn, events, view === "sessions" || view === "home");
   const runningLive = useMemo(() => events?.feed("mise.running.changed"), [events]);
-  const openSession = (id: string) => {
+  const openInSessions = (selection: SessionSelection) => {
     setView("sessions");
-    setSession({ kind: "session", id });
+    setSession(selection);
   };
-  // Skok do sesji z traya (ADR-26): powłoka pokazuje okno i podaje sesję, która czeka.
-  useSessionFocus(openSession);
+  // Jump from the tray (ADR-26, ADR-39): the shell shows the window and passes a waiting session or a task proposal.
+  useSessionFocus(openInSessions);
   // Alt+J from every view (ADR-48), after the selected session like the "Next waiting" button.
   useWindowShortcuts(
     (event) => {
@@ -65,9 +65,17 @@ export function App() {
     },
     () => {
       const inSessions = view === "sessions";
-      const selected = inSessions && sessions.data ? entrySession(findEntry(sessionEntries(sessions.data), session))?.id : undefined;
+      const selected =
+        inSessions && sessions.data
+          ? entrySession(
+              findEntry(
+                sessionRows(sessions.data).map((r) => r.entry),
+                session,
+              ),
+            )?.id
+          : undefined;
       const { open, taken } = nextWaitingShortcut(sessions.data?.sessions ?? [], selected, inSessions);
-      if (open) openSession(open.id);
+      if (open) openInSessions({ kind: "session", id: open.id });
       return taken;
     },
   );
@@ -95,7 +103,7 @@ export function App() {
               conn={conn}
               runningLive={runningLive}
               sessions={sessions}
-              onOpenSession={openSession}
+              onOpenInSessions={openInSessions}
               onOpenRepo={(id) => setView("repos", id)}
               onOpenDaemon={() => setView("daemon")}
               onOpenSettings={() => setView("settings")}
