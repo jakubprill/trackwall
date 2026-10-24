@@ -21,7 +21,7 @@ import type { SpringModule, TypeIndex } from "./spring-module.ts";
  * klienci HTTP i stałe ze ścieżką. Plik bez żadnego z nich nie daje ekstraktorowi faktów, więc nie warto go czytać.
  */
 export const JVM_SOURCE_PATTERN =
-  "@(RestController|Controller|RequestMapping|GetMapping|PostMapping|PutMapping|PatchMapping|DeleteMapping|FeignClient|HttpExchange|GetExchange|PostExchange|PutExchange|PatchExchange|DeleteExchange)|WebClient|RestClient|RestTemplate|(final|const val)[[:space:]].*=[[:space:]]*\"/";
+  '@(RestController|Controller|RequestMapping|GetMapping|PostMapping|PutMapping|PatchMapping|DeleteMapping|FeignClient|HttpExchange|GetExchange|PostExchange|PutExchange|PatchExchange|DeleteExchange)|WebClient|RestClient|RestTemplate|(final|const val)[[:space:]].*=[[:space:]]*"/';
 /** Rozszerzenia plików źródłowych, które czyta ekstraktor. */
 export const JVM_SOURCE_GLOBS = ["*.java", "*.kt"];
 
@@ -48,7 +48,7 @@ export function extractSpring(snapshot: RepoSnapshot): SpringFacts {
   for (const file of files) for (const type of file.types) if (!types.has(type.name)) types.set(type.name, { type, path: file.path });
   const dirs = [...new Set([...configs.keys(), ...files.map((f) => moduleOf(f.path))])].sort();
   for (const dir of dirs) {
-    const module = springModule(dir, configs.get(dir) ?? new ModuleConfig(dir, []), types);
+    const module = springModule(configs.get(dir) ?? new ModuleConfig(dir, []), types);
     const app = providedApp(module);
     if (app) out.provides.push(app);
     for (const file of files.filter((f) => moduleOf(f.path) === dir)) extractFile(file, module, constants, out);
@@ -63,7 +63,7 @@ function extractFile(file: JavaFile, module: SpringModule, constants: ConstantTa
   out.consumes.push(...declarativeClients(file, module, lookup), ...imperativeClients(file, module, lookup));
 }
 
-function springModule(dir: string, config: ModuleConfig, types: TypeIndex): SpringModule {
+function springModule(config: ModuleConfig, types: TypeIndex): SpringModule {
   const contextPath = config.value("server.servlet.context-path") ?? config.value("spring.webflux.base-path") ?? "";
   return { config, app: config.value("spring.application.name") || null, contextPath, types, usedKeys: new Set() };
 }

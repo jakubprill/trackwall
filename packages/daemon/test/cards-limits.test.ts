@@ -5,8 +5,8 @@ import { extractGradle } from "../src/modules/cards/gradle.ts";
 import { extractMaven } from "../src/modules/cards/maven.ts";
 import { extractNpm } from "../src/modules/cards/npm.ts";
 import { readSnapshot } from "../src/modules/cards/read-snapshot.ts";
-import { buildGraph } from "../src/modules/graph/build-graph.ts";
 import { extractTools } from "../src/modules/cards/tools.ts";
+import { buildGraph } from "../src/modules/graph/build-graph.ts";
 import { snapshotOf } from "./support/snapshot.ts";
 
 /**
@@ -102,7 +102,7 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
       "  void x() {}",
       `  @PostMapping(${"{".repeat(50_000)}`,
       `  String s = "${"\\".repeat(50_000)}`,
-      `${"@GetMapping(\"/a\") ".repeat(20_000)}void many() {}`,
+      `${'@GetMapping("/a") '.repeat(20_000)}void many() {}`,
       "}",
     ].join("\n");
     const started = performance.now();
@@ -119,13 +119,13 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     for (const p of card.provides) if (p.kind === "endpoint") expect(p.path.length).toBeLessThanOrEqual(4096);
   });
 
-  test("${...} z application.yml, które mnożą się przy rozwiązywaniu albo tworzą cykl, nie blokują daemona", () => {
+  test(`\${...} z application.yml, które mnożą się przy rozwiązywaniu albo tworzą cykl, nie blokują daemona`, () => {
     const yml = Array.from({ length: 30 }, (_, i) => `k${i}: "\${k${i + 1}}\${k${i + 1}}"`).join("\n");
     const started = performance.now();
     extractCard(
       snapshotOf({
         "src/main/resources/application.yml": `${yml}\nk30: http://x\na: \${b}\nb: \${a}\nserver:\n  port: \${k0}\n`,
-        "src/main/java/a/C.java": '@FeignClient(name = "c", url = "${k0}") interface C {}',
+        "src/main/java/a/C.java": `@FeignClient(name = "c", url = "\${k0}") interface C {}`,
       }),
     );
     expect(performance.now() - started).toBeLessThan(1000);
@@ -133,10 +133,19 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
 
   test("graf z tysiącami endpointów i klientów bez adresu liczy się szybko", () => {
     const endpoints = Array.from({ length: 3000 }, (_, i) => `  @GetMapping("/api/r${i % 50}/{id}/x${i}") void e${i}() {}`).join("\n");
-    const calls = Array.from({ length: 200 }, (_, i) => `  void c${i}() { rest.getForObject("/api/r${i % 50}/" + id + "/x${i}", String.class); }`).join("\n");
+    const calls = Array.from(
+      { length: 200 },
+      (_, i) => `  void c${i}() { rest.getForObject("/api/r${i % 50}/" + id + "/x${i}", String.class); }`,
+    ).join("\n");
     const api = extractCard(snapshotOf({ "src/main/java/a/Api.java": `@RestController class Api {\n${endpoints}\n}` }));
     const client = extractCard(snapshotOf({ "src/main/java/a/Client.java": `class Client {\n  RestTemplate rest;\n${calls}\n}` }));
-    const cards = Array.from({ length: 30 }, (_, i) => ({ kind: "ok" as const, repo: `r${i}`, remote: null, card: i === 0 ? client : api, tags: [] }));
+    const cards = Array.from({ length: 30 }, (_, i) => ({
+      kind: "ok" as const,
+      repo: `r${i}`,
+      remote: null,
+      card: i === 0 ? client : api,
+      tags: [],
+    }));
     const started = performance.now();
     const graph = buildGraph(cards, { config: { packages: {}, apps: {}, edges: [] }, file: "workspace.yaml", problems: [] });
     expect(performance.now() - started).toBeLessThan(2000);

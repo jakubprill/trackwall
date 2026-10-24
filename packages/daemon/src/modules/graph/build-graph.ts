@@ -1,12 +1,4 @@
-import type {
-  ConsumedPackage,
-  EdgeConfidence,
-  EdgeEvidence,
-  GraphNode,
-  ManualEdge,
-  ProvidedPackage,
-  RepoGraph,
-} from "@trackwall/protocol";
+import type { ConsumedPackage, EdgeConfidence, EdgeEvidence, GraphNode, ManualEdge, ProvidedPackage, RepoGraph } from "@trackwall/protocol";
 import type { GraphCardInput, GraphConfigInput } from "./graph-input.ts";
 import { EdgeSet, type Join, missingRepo, repoResolver } from "./graph-join.ts";
 import { addHttpEdges } from "./http-edges.ts";
@@ -48,15 +40,16 @@ function addPackageEdgesOf(join: Join, cards: readonly GraphCardInput[]): void {
   const providers = providersByPackage(cards);
   for (const entry of cards) {
     if (entry.kind !== "ok" || entry.card === null) continue;
-    for (const pkg of entry.card.consumes) {
-      if (pkg.kind !== "package") continue;
-      const all = providers.get(packageKey(pkg)) ?? [];
-      // Alias tylko dla paczki, której nie buduje żadne repo z listy, także to, które jej używa (moduły jednego buildu).
-      if (all.length === 0) addAliasEdges(join, entry.repo, pkg);
-      const found = all.filter((p) => p.repo !== entry.repo);
-      if (found.length > 0) addPackageEdges(join, entry.repo, pkg, found);
-    }
+    for (const pkg of entry.card.consumes) if (pkg.kind === "package") addPackageUse(join, providers, entry.repo, pkg);
   }
+}
+
+function addPackageUse(join: Join, providers: Map<string, Provider[]>, from: string, pkg: ConsumedPackage): void {
+  const all = providers.get(packageKey(pkg)) ?? [];
+  // Alias tylko dla paczki, której nie buduje żadne repo z listy, także to, które jej używa (moduły jednego buildu).
+  if (all.length === 0) addAliasEdges(join, from, pkg);
+  const found = all.filter((p) => p.repo !== from);
+  if (found.length > 0) addPackageEdges(join, from, pkg, found);
 }
 
 function addPackageEdges(join: Join, from: string, pkg: ConsumedPackage, found: Provider[]): void {
@@ -152,4 +145,3 @@ function consumerEvidence(repo: string, pkg: ConsumedPackage): EdgeEvidence {
 function providerEvidence({ repo, pkg }: Provider): EdgeEvidence {
   return { repo, ...pkg.evidence, detail: `buduje ${pkg.name}` };
 }
-

@@ -4,9 +4,9 @@ import { extractGradle, readsGradleFile } from "./gradle.ts";
 import { extractMaven, readsMavenFile } from "./maven.ts";
 import { detectMechanisms } from "./mechanisms.ts";
 import { extractNpm, readsNpmFile } from "./npm.ts";
+import type { SourceSelection } from "./read-snapshot.ts";
 import { dirOf } from "./repo-path.ts";
 import type { Extracted, RepoSnapshot } from "./snapshot.ts";
-import type { SourceSelection } from "./read-snapshot.ts";
 import { extractSpring, isJvmSource, JVM_SOURCE_GLOBS, JVM_SOURCE_PATTERN } from "./spring.ts";
 import { readsSpringConfigFile } from "./spring-config.ts";
 import { extractTools, readsToolFile } from "./tools.ts";
@@ -42,7 +42,11 @@ export function extractCard(snapshot: RepoSnapshot): RepoCard {
   const builds = BUILD_EXTRACTORS.map((e) => e.extract(snapshot));
   const buildDirs = builds.flatMap((b) => b.buildFiles.map((f) => dirOf(f.path)));
   // Ekstraktory buildu dają tylko paczki, a HTTP aplikacje, endpointy i klientów; karta trzyma je razem.
-  const all: Extracted<Provided, Consumed>[] = [...builds, extractTools(snapshot, buildDirs), ...HTTP_EXTRACTORS.map((e) => e.extract(snapshot))];
+  const all: Extracted<Provided, Consumed>[] = [
+    ...builds,
+    extractTools(snapshot, buildDirs),
+    ...HTTP_EXTRACTORS.map((e) => e.extract(snapshot)),
+  ];
   const consumes = unique(all.flatMap((e) => e.consumes));
   return {
     commit: snapshot.commit,
@@ -69,4 +73,3 @@ function unique(consumes: Consumed[]): Consumed[] {
     return true;
   });
 }
-

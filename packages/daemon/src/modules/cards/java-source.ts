@@ -76,12 +76,12 @@ class SourceParser {
 
   private step(): void {
     const t = this.tokens[this.i];
-    if (isPunct(t, "@") && !isIdent(this.tokens[this.i + 1], "interface")) return this.annotation();
-    if (isPunct(t, "{")) return this.open();
-    if (isPunct(t, "}")) return this.close();
-    if (isPunct(t, ";")) return this.boundary(this.i + 1);
-    if (this.atMember() && t?.kind === "ident") return this.memberIdent(t.text);
-    this.i++;
+    if (isPunct(t, "@") && !isIdent(this.tokens[this.i + 1], "interface")) this.annotation();
+    else if (isPunct(t, "{")) this.open();
+    else if (isPunct(t, "}")) this.close();
+    else if (isPunct(t, ";")) this.boundary(this.i + 1);
+    else if (this.atMember() && t?.kind === "ident") this.memberIdent(t.text);
+    else this.i++;
   }
 
   private atMember(): boolean {
@@ -136,12 +136,14 @@ class SourceParser {
 
   private memberIdent(text: string): void {
     const next = this.tokens[this.i + 1];
-    if (TYPE_KEYWORDS.has(text)) return this.typeDeclaration(text);
-    if (isPunct(next, "(") && !this.pendingType && this.currentType() && !NOT_METHODS.has(text)) return this.method(text);
-    if (isPunct(next, "=") && !this.pendingType) return this.constant(text);
-    if (this.pendingType && SUPERTYPE_MARKERS.has(this.previousText()) && text !== "extends" && text !== "implements")
-      this.pendingType.supertypes.push(text);
-    this.i++;
+    if (TYPE_KEYWORDS.has(text)) this.typeDeclaration(text);
+    else if (isPunct(next, "(") && !this.pendingType && this.currentType() && !NOT_METHODS.has(text)) this.method(text);
+    else if (isPunct(next, "=") && !this.pendingType) this.constant(text);
+    else {
+      if (this.pendingType && SUPERTYPE_MARKERS.has(this.previousText()) && text !== "extends" && text !== "implements")
+        this.pendingType.supertypes.push(text);
+      this.i++;
+    }
   }
 
   private previousText(): string {

@@ -97,7 +97,16 @@ export interface HttpUrl {
 
 /** Dłuższy tekst nie jest adresem z konfiguracji, a wyrażenie niżej i tak go nie dotknie. */
 const MAX_URL_LENGTH = 2048;
-const HTTP_URL = /^(https?|wss?|lb):\/\/([^/:?#\s]+)(?::(\d{1,5}))?([^?#\s]*)/i;
+const HTTP_URL = /^(https?|wss?|lb):\/\/(?:[^/?#@\s]*@)?([^/:?#@\s]+)(?::(\d{1,5}))?([^?#\s]*)/i;
+const USER_INFO = /^([a-z][a-z0-9+.-]{0,20}:\/\/)[^/?#@\s]*@/i;
+
+/**
+ * Adres bez użytkownika, hasła i zapytania (`http://ja:tajne@host/api?key=x` → `http://***@host/api`): adres z `.env`
+ * albo `application.yml` trafia na kartę, do UI i do agenta, a sekret nie może (§8).
+ */
+export function withoutCredentials(url: string): string {
+  return (url.split(/[?#]/)[0] ?? "").replace(USER_INFO, "$1***@");
+}
 
 /** Adres HTTP z tekstu; `undefined` dla innego tekstu i dla hosta z nierozwiniętym `${…}`. */
 export function parseHttpUrl(text: string): HttpUrl | undefined {
@@ -116,7 +125,10 @@ export function joinHttpPath(...parts: readonly string[]): string {
 
 /** Człony ścieżki po złożeniu (`/api//orders/` → `["api", "orders"]`), do porównań `httpSegmentsMatch`. */
 export function httpPathSegments(path: string): string[] {
-  return joinHttpPath(path).split("/").slice(1).filter((s) => s !== "");
+  return joinHttpPath(path)
+    .split("/")
+    .slice(1)
+    .filter((s) => s !== "");
 }
 
 /**

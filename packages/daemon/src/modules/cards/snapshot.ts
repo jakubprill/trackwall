@@ -1,4 +1,13 @@
-import type { BuildFile, CardProblem, Consumed, ConsumedPackage, Evidence, Provided, ProvidedPackage, ToolRequirement } from "@trackwall/protocol";
+import type {
+  BuildFile,
+  CardProblem,
+  Consumed,
+  ConsumedPackage,
+  Evidence,
+  Provided,
+  ProvidedPackage,
+  ToolRequirement,
+} from "@trackwall/protocol";
 
 /**
  * Commit widziany przez ekstraktory: lista plików i treść plików buildu i konfiguracji, przeczytana z gita jednym

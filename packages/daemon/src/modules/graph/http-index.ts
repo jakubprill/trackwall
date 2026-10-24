@@ -149,7 +149,14 @@ export class HttpIndex {
     const evidence: EdgeEvidence = { repo: null, path: this.file, line: null, detail: `graph.apps: ${name} → ${ref}` };
     return this.resolve(ref)
       .filter((repo) => repo !== from)
-      .map((repo) => ({ repo, basis: "alias", confidence: "high", key: name, evidence: [evidence], calls: this.match(repo, client, base) }));
+      .map((repo) => ({
+        repo,
+        basis: "alias",
+        confidence: "high",
+        key: name,
+        evidence: [evidence],
+        calls: this.match(repo, client, base),
+      }));
   }
 
   private byRepoName(from: string, label: string, client: ConsumedHttp, base: string): HttpTarget[] {
@@ -193,7 +200,9 @@ export class HttpIndex {
 
   /** Wywołania klienta z endpointem repo (aplikacji `app`, gdy podana), do którego pasują metodą i ścieżką. */
   private match(repo: string, client: ConsumedHttp, base: string, app?: string): MatchedCall[] {
-    const endpoints = (this.endpointsByRepo.get(repo) ?? []).filter((e) => app === undefined || e.endpoint.app === null || e.endpoint.app === app);
+    const endpoints = (this.endpointsByRepo.get(repo) ?? []).filter(
+      (e) => app === undefined || e.endpoint.app === null || e.endpoint.app === app,
+    );
     return client.calls.flatMap((call) => {
       const path = joinHttpPath(base, call.path);
       const segments = httpPathSegments(path);

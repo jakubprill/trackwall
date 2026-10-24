@@ -81,7 +81,10 @@ async function sourceFiles(
   const found = await vcs.grepFiles(dir, commit, sources.pattern, sources.globs, MAX_GREP_BYTES);
   const matched = found.paths.filter((p) => candidates.has(p));
   if (found.truncated || matched.length > MAX_SOURCE_FILES)
-    problems.push({ path: "", message: `repo ma więcej niż ${MAX_SOURCE_FILES} plików z kontrolerami lub klientami HTTP; karta czyta pierwsze` });
+    problems.push({
+      path: "",
+      message: `repo ma więcej niż ${MAX_SOURCE_FILES} plików z kontrolerami lub klientami HTTP; karta czyta pierwsze`,
+    });
   return matched.slice(0, MAX_SOURCE_FILES);
 }
 

@@ -1,4 +1,4 @@
-import { type HttpMethod, HttpMethod as HttpMethodSchema } from "@trackwall/protocol";
+import { type HttpMethod, HttpMethod as HttpMethodSchema, withoutCredentials } from "@trackwall/protocol";
 import { annotationArgs, enumNames, type Lookup, stringValues } from "./java-expr.ts";
 import type { JavaAnnotation, JavaType } from "./java-source.ts";
 import { DEFAULT_PROFILE, type ModuleConfig } from "./spring-config.ts";
@@ -80,15 +80,15 @@ export interface UrlVariant {
 
 /**
  * Tekst adresu w każdym profilu modułu: najpierw profil domyślny, potem każdy profil, który daje inną wartość.
- * Tekst bez `${…}` jest jeden i bez profili (adres w kodzie). Klucze, z których adres pochodzi, trafiają do
+ * Tekst bez `${…}` jest jeden i bez profili (adres w kodzie). Użytkownik i hasło z adresu są zamaskowane, a zapytanie pominięte (§8). Klucze, z których adres pochodzi, trafiają do
  * `usedKeys`.
  */
 export function urlVariants(module: SpringModule, text: string): UrlVariant[] {
   for (const key of placeholderKeys(text)) module.usedKeys.add(key);
-  if (!text.includes("${")) return [{ value: text, profiles: [], source: null }];
+  if (!text.includes("${")) return [{ value: withoutCredentials(text), profiles: [], source: null }];
   const variant = (profile: string): UrlVariant => {
     const { value, source } = module.config.resolve(text, profile);
-    return { value, profiles: [profile], source: source ? { path: source.path, line: source.line } : null };
+    return { value: withoutCredentials(value), profiles: [profile], source: source ? { path: source.path, line: source.line } : null };
   };
   const variants = [variant(DEFAULT_PROFILE)];
   for (const profile of module.config.profiles) {

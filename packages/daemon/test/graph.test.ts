@@ -6,8 +6,8 @@ import type { ConsumedPackage, GraphConfig, ProvidedPackage, RepoCard } from "@t
 import { CardCache } from "../src/modules/cards/card-cache.ts";
 import { Cards } from "../src/modules/cards/cards.ts";
 import { buildGraph } from "../src/modules/graph/build-graph.ts";
-import type { GraphCardInput } from "../src/modules/graph/graph-input.ts";
 import { Graph } from "../src/modules/graph/graph.ts";
+import type { GraphCardInput } from "../src/modules/graph/graph-input.ts";
 import { subgraph } from "../src/modules/graph/subgraph.ts";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";

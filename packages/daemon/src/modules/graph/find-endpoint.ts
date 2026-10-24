@@ -19,7 +19,9 @@ import type { HttpIndex } from "./http-index.ts";
 export function findEndpoints(index: HttpIndex, query: string, method: HttpMethod | undefined): FindEndpointResult {
   const wanted = query.trim();
   const found = index.endpoints
-    .filter(({ endpoint }) => (method === undefined || endpoint.method === null || endpoint.method === method) && matchesQuery(endpoint, wanted))
+    .filter(
+      ({ endpoint }) => (method === undefined || endpoint.method === null || endpoint.method === method) && matchesQuery(endpoint, wanted),
+    )
     .sort((a, b) => compare(a.repo, b.repo) || compare(a.endpoint.path, b.endpoint.path));
   const shown = found.slice(0, MAX_FOUND_ENDPOINTS);
   const callers = callersByEndpoint(index, new Set(shown.map((e) => e.endpoint)));

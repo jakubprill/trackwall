@@ -39,7 +39,8 @@ export class EdgeSet {
       this.edges.set(id, { ...edge, evidence: uniqueEvidence(edge.evidence) });
       return;
     }
-    const confidence = CONFIDENCE_ORDER.indexOf(edge.confidence) > CONFIDENCE_ORDER.indexOf(existing.confidence) ? edge.confidence : existing.confidence;
+    const confidence =
+      CONFIDENCE_ORDER.indexOf(edge.confidence) > CONFIDENCE_ORDER.indexOf(existing.confidence) ? edge.confidence : existing.confidence;
     this.edges.set(id, { ...existing, confidence, evidence: uniqueEvidence([...existing.evidence, ...edge.evidence]) });
   }
 

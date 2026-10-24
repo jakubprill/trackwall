@@ -103,7 +103,7 @@ describe("vcs na prawdziwym gicie", () => {
   test("grepFiles zwraca pliki z commita pasujące do wzorca w danych rozszerzeniach, a brak trafień to pusta lista, nie błąd", async () => {
     const dir = makeRepo({
       "src/main/java/a/Api.java": "@RestController class Api {}\n",
-      "src/main/kotlin/a/Client.kt": "@FeignClient(\"x\") interface Client\n",
+      "src/main/kotlin/a/Client.kt": '@FeignClient("x") interface Client\n',
       "docs/notes.md": "@RestController w dokumentacji\n",
       "src/main/java/a/Plain.java": "class Plain {}\n",
     });

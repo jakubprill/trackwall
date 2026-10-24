@@ -79,7 +79,15 @@ describe("serwer MCP przez Streamable HTTP", () => {
   test("ogłasza tylko narzędzia do odczytu: list_repos, get_repo, get_repo_card, tail, who_calls, subgraph_for i find_endpoint", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name)).toEqual(["list_repos", "get_repo", "get_repo_card", "tail", "who_calls", "subgraph_for", "find_endpoint"]);
+    expect(tools.map((t) => t.name)).toEqual([
+      "list_repos",
+      "get_repo",
+      "get_repo_card",
+      "tail",
+      "who_calls",
+      "subgraph_for",
+      "find_endpoint",
+    ]);
     // Każde narzędzie z kontraktu, który pokazuje UI, jest zarejestrowane w daemonie.
     expect(tools.map((t) => t.name)).toEqual(Object.values(mcpTools).map((t) => t.name));
     for (const tool of tools) expect(tool.annotations?.readOnlyHint).toBe(true);

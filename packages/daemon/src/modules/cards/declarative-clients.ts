@@ -77,7 +77,13 @@ function httpInterface(type: JavaType, file: JavaFile, module: SpringModule, loo
   }));
 }
 
-function methodCalls(type: JavaType, file: JavaFile, table: Readonly<Record<string, Mapping["methods"][number]>>, lookup: Lookup, prefix: string): HttpCall[] {
+function methodCalls(
+  type: JavaType,
+  file: JavaFile,
+  table: Readonly<Record<string, Mapping["methods"][number]>>,
+  lookup: Lookup,
+  prefix: string,
+): HttpCall[] {
   const calls: HttpCall[] = [];
   for (const method of type.methods) {
     const mapping = mappingOf(method.annotations, table, lookup);

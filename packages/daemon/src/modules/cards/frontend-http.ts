@@ -1,4 +1,4 @@
-import { type ConsumedHttp, type Evidence, parseHttpUrl } from "@trackwall/protocol";
+import { type ConsumedHttp, type Evidence, parseHttpUrl, withoutCredentials } from "@trackwall/protocol";
 import { z } from "zod";
 import { JSON_KEY } from "./npm.ts";
 import { baseName, dirOf, inDir } from "./repo-path.ts";
@@ -82,5 +82,5 @@ function packageProxy(snapshot: RepoSnapshot, path: string): ConsumedHttp[] {
 }
 
 function client(via: "env" | "proxy", name: string, url: string, evidence: Evidence): ConsumedHttp {
-  return { kind: "http", via, name, app: null, url, profiles: [], urlSource: evidence, calls: [], evidence };
+  return { kind: "http", via, name, app: null, url: withoutCredentials(url), profiles: [], urlSource: evidence, calls: [], evidence };
 }

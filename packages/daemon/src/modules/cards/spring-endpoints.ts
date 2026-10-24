@@ -14,7 +14,9 @@ import { type Mapping, mappingOf, REQUEST_MAPPINGS, type SpringModule } from "./
 const MAX_PER_METHOD = 20;
 
 export function springEndpoints(file: JavaFile, module: SpringModule, lookup: Lookup): ProvidedEndpoint[] {
-  return file.types.flatMap((type) => (annotationNamed(type.annotations, "RestController", "Controller") ? controller(type, file, module, lookup) : []));
+  return file.types.flatMap((type) =>
+    annotationNamed(type.annotations, "RestController", "Controller") ? controller(type, file, module, lookup) : [],
+  );
 }
 
 function controller(type: JavaType, file: JavaFile, module: SpringModule, lookup: Lookup): ProvidedEndpoint[] {
@@ -22,7 +24,9 @@ function controller(type: JavaType, file: JavaFile, module: SpringModule, lookup
     const parent = module.types.get(name);
     return parent?.type.keyword === "interface" ? [parent] : [];
   });
-  const prefix = mappingOf(type.annotations, REQUEST_MAPPINGS, lookup) ?? parents.map((p) => mappingOf(p.type.annotations, REQUEST_MAPPINGS, lookup)).find((m) => m);
+  const prefix =
+    mappingOf(type.annotations, REQUEST_MAPPINGS, lookup) ??
+    parents.map((p) => mappingOf(p.type.annotations, REQUEST_MAPPINGS, lookup)).find((m) => m);
   const own = type.methods.map((method) => ({ method, path: file.path, mapping: mappingOf(method.annotations, REQUEST_MAPPINGS, lookup) }));
   const mapped = new Set(own.filter((m) => m.mapping).map((m) => m.method.name));
   const inherited = parents.flatMap((p) =>

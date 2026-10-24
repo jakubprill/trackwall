@@ -1,4 +1,11 @@
-import { type FindEndpointResult, GraphConfig, type HttpMethod, type RepoGraph, type Subgraph, type WhoCallsResult } from "@trackwall/protocol";
+import {
+  type FindEndpointResult,
+  GraphConfig,
+  type HttpMethod,
+  type RepoGraph,
+  type Subgraph,
+  type WhoCallsResult,
+} from "@trackwall/protocol";
 import { configOrProblem, DomainError } from "../../errors.ts";
 import { buildGraph, httpIndex, joinOf } from "./build-graph.ts";
 import { findEndpoints } from "./find-endpoint.ts";

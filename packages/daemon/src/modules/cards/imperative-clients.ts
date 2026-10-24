@@ -1,4 +1,12 @@
-import { type ConsumedHttp, type HttpCall, type HttpClientVia, type HttpMethod, HttpMethod as HttpMethodSchema, parseHttpUrl } from "@trackwall/protocol";
+import {
+  type ConsumedHttp,
+  type HttpCall,
+  type HttpClientVia,
+  type HttpMethod,
+  HttpMethod as HttpMethodSchema,
+  joinHttpPath,
+  parseHttpUrl,
+} from "@trackwall/protocol";
 import { identChain, type Lookup, splitTopLevel, stringValues } from "./java-expr.ts";
 import type { JavaFile } from "./java-source.ts";
 import { closingIndex, isIdent, isPunct, type Token } from "./java-tokens.ts";
@@ -56,7 +64,17 @@ export function imperativeClients(file: JavaFile, module: SpringModule, lookup: 
     const line = base?.line ?? own[0]?.evidence.line ?? file.types[0]?.line ?? null;
     const evidence = { path: file.path, line };
     const variants = base ? urlVariants(module, base.text) : [{ value: "", profiles: [], source: null }];
-    return variants.map((v) => ({ kind: "http", via, name, app: appOf(v.value), url: v.value || null, profiles: v.profiles, urlSource: v.source, calls: own, evidence }));
+    return variants.map((v) => ({
+      kind: "http",
+      via,
+      name,
+      app: appOf(v.value),
+      url: v.value || null,
+      profiles: v.profiles,
+      urlSource: v.source,
+      calls: own,
+      evidence,
+    }));
   };
   const strip = (c: FoundCall): HttpCall => ({ method: c.method, path: c.path, evidence: c.evidence });
   if (bases.length <= 1) return bases.length === 0 && calls.length === 0 ? [] : client(bases[0], calls.map(strip));
@@ -131,8 +149,10 @@ function findCalls(ctx: ScanContext): FoundCall[] {
     const t = ctx.tokens[i + 1];
     if (!isPunct(ctx.tokens[i], ".") || t?.kind !== "ident" || !isPunct(ctx.tokens[i + 2], "(")) continue;
     const args = splitTopLevel(ctx.tokens.slice(i + 3, closingIndex(ctx.tokens, i + 2) - 1));
-    const call = t.text === "uri" ? fluentCall(ctx, i, args) : Object.hasOwn(TEMPLATE_METHODS, t.text) ? templateCall(ctx, t.text, args) : undefined;
-    if (call) calls.push({ ...call, evidence: { path: ctx.path, line: t.line } });
+    const call =
+      t.text === "uri" ? fluentCall(ctx, i, args) : Object.hasOwn(TEMPLATE_METHODS, t.text) ? templateCall(ctx, t.text, args) : undefined;
+    // Bez zapytania: `?apiKey=…` w adresie z kodu nie trafia na kartę.
+    if (call) calls.push({ ...call, path: joinHttpPath(call.path), evidence: { path: ctx.path, line: t.line } });
   }
   return calls;
 }

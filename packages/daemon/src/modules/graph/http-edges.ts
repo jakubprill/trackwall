@@ -38,7 +38,9 @@ export function addHttpEdges(join: Join, index: HttpIndex): void {
 function clientEvidence(repo: string, client: ConsumedHttp): EdgeEvidence[] {
   const target = [client.app, client.url].filter((t) => t !== null).join(", ");
   const profiles = client.profiles.length > 0 ? ` (profile: ${client.profiles.join(", ")})` : "";
-  const evidence: EdgeEvidence[] = [{ repo, ...client.evidence, detail: `${VIA_LABELS[client.via]} ${client.name}: ${target || "bez adresu"}${profiles}` }];
+  const evidence: EdgeEvidence[] = [
+    { repo, ...client.evidence, detail: `${VIA_LABELS[client.via]} ${client.name}: ${target || "bez adresu"}${profiles}` },
+  ];
   const source = client.urlSource;
   if (source && (source.path !== client.evidence.path || source.line !== client.evidence.line))
     evidence.push({ repo, ...source, detail: `adres ${client.url}${profiles}` });
@@ -48,7 +50,11 @@ function clientEvidence(repo: string, client: ConsumedHttp): EdgeEvidence[] {
 function callEvidence(from: string, target: HttpTarget): EdgeEvidence[] {
   return target.calls.slice(0, MAX_CALL_EVIDENCE).flatMap((m: MatchedCall) => [
     { repo: from, ...m.call.evidence, detail: `wywołuje ${methodLabel(m.call.method)} ${m.path}` },
-    { repo: target.repo, ...m.endpoint.evidence, detail: `obsługuje ${methodLabel(m.endpoint.method)} ${m.endpoint.path} (${m.endpoint.handler})` },
+    {
+      repo: target.repo,
+      ...m.endpoint.evidence,
+      detail: `obsługuje ${methodLabel(m.endpoint.method)} ${m.endpoint.path} (${m.endpoint.handler})`,
+    },
   ]);
 }
 

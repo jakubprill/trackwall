@@ -153,7 +153,10 @@ describe("krawędzie http: dopasowanie celu", () => {
   test("host równy nazwie repo albo ostatniemu członowi adresu repo zdalnego daje krawędź medium", () => {
     const graph = buildGraph(
       [
-        repo("bff", card([], [client({ url: "http://orders-api.shop.svc:8080" }), client({ name: "billing.url", url: "https://billing/api" })])),
+        repo(
+          "bff",
+          card([], [client({ url: "http://orders-api.shop.svc:8080" }), client({ name: "billing.url", url: "https://billing/api" })]),
+        ),
         repo("orders-api", card([], [])),
         repo("rozliczenia", card([], []), "gitlab.example.com/sklep/billing"),
       ],
@@ -214,7 +217,12 @@ describe("graf i find_endpoint na prawdziwym gicie", () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
     const projects = mkdtempSync(join(tmpdir(), "trackwall-projekty-"));
     const vcs = new Vcs();
-    const workspace = new Workspace({ file: new WorkspaceFile(join(home, "workspace.yaml")), vcs, hosting: fakeHosting().hosting, openUrl: () => {} });
+    const workspace = new Workspace({
+      file: new WorkspaceFile(join(home, "workspace.yaml")),
+      vcs,
+      hosting: fakeHosting().hosting,
+      openUrl: () => {},
+    });
     await workspace.setProjectsDir(projects);
     for (const name of SHOP) makeRepo(fixtureFiles(name), name, projects);
     const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(join(home, "cards"), () => {}) });
@@ -252,6 +260,8 @@ describe("graf i find_endpoint na prawdziwym gicie", () => {
     expect(before.edges.some((e) => e.from === "orders-bff" && e.key === "zipkin")).toBe(false);
     writeFileSync(workspace.configFile(), `${await Bun.file(workspace.configFile()).text()}graph:\n  apps:\n    zipkin: payments\n`);
     const after = await graph.graph();
-    expect(after.edges.filter((e) => e.key === "zipkin").map((e) => [e.from, e.to, e.confidence])).toEqual([["orders-bff", "payments", "high"]]);
+    expect(after.edges.filter((e) => e.key === "zipkin").map((e) => [e.from, e.to, e.confidence])).toEqual([
+      ["orders-bff", "payments", "high"],
+    ]);
   });
 });

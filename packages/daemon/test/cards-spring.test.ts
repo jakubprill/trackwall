@@ -12,7 +12,9 @@ function card(files: Record<string, string>): RepoCard {
 }
 
 function endpoints(c: RepoCard): string[] {
-  return c.provides.filter((p): p is ProvidedEndpoint => p.kind === "endpoint").map((e) => `${e.method ?? "*"} ${e.path} ${e.handler}:${e.evidence.line}`);
+  return c.provides
+    .filter((p): p is ProvidedEndpoint => p.kind === "endpoint")
+    .map((e) => `${e.method ?? "*"} ${e.path} ${e.handler}:${e.evidence.line}`);
 }
 
 function clients(c: RepoCard): ConsumedHttp[] {
@@ -27,7 +29,7 @@ function summary(c: RepoCard): string[] {
 }
 
 describe("karta repo Spring z fixture'ów sklepu", () => {
-  test("orders-api: aplikacja z portem z ${PORT:8081}, endpointy ze stałymi ścieżek, bez kodu z src/test i adnotacji w komentarzach", () => {
+  test(`orders-api: aplikacja z portem z \${PORT:8081}, endpointy ze stałymi ścieżek, bez kodu z src/test i adnotacji w komentarzach`, () => {
     const c = extractCard(snapshotOf(fixtureFiles("orders-api")));
     expect(c.provides.filter((p) => p.kind === "app")).toEqual([
       { kind: "app", name: "orders-api", port: 8081, module: "", evidence: { path: "src/main/resources/application.yml", line: 3 } },
@@ -75,7 +77,7 @@ describe("endpointy Spring", () => {
       "src/main/resources/application.properties": "spring.application.name=catalog\nserver.servlet.context-path=/catalog\n",
       "src/main/java/a/CatalogApi.java": [
         "package a;",
-        'public interface CatalogApi {',
+        "public interface CatalogApi {",
         '  @GetMapping(value = {"/items", "/items/"}, produces = "application/json")',
         "  List<Item> list();",
         '  @RequestMapping(path = "/items/{id}", method = {RequestMethod.DELETE, RequestMethod.PATCH})',
@@ -108,7 +110,8 @@ describe("endpointy Spring", () => {
 
   test("ścieżka ze stałej z innej klasy i sklejenia, a nieznana stała zostaje jako <Klasa.NAZWA>", () => {
     const c = card({
-      "src/main/java/a/Paths.java": 'final class Paths {\n  static final String ROOT = "/api";\n  static final String USERS = ROOT + "/users";\n}\n',
+      "src/main/java/a/Paths.java":
+        'final class Paths {\n  static final String ROOT = "/api";\n  static final String USERS = ROOT + "/users";\n}\n',
       "src/main/java/a/Users.java": [
         "@RestController",
         "class Users {",
@@ -144,7 +147,7 @@ describe("klienci HTTP Spring", () => {
         '  @GetMapping("/{sku}") Stock get(@PathVariable String sku);',
         "}",
       ].join("\n"),
-      "src/main/java/a/Direct.java": '@FeignClient(value = "direct", url = "${direct.url:http://localhost:7000}")\ninterface Direct {\n  @DeleteMapping("/x") void x();\n}\n',
+      "src/main/java/a/Direct.java": `@FeignClient(value = "direct", url = "\${direct.url:http://localhost:7000}")\ninterface Direct {\n  @DeleteMapping("/x") void x();\n}\n`,
     });
     expect(summary(c)).toEqual([
       "feign StockClient app=stock url=http://stock.internal:9000 [default] {GET /v2/stock/{sku}}",
@@ -156,10 +159,11 @@ describe("klienci HTTP Spring", () => {
   test("interfejs @HttpExchange i RestClient z adresem z konfiguracji", () => {
     const c = card({
       "src/main/resources/application.properties": "clients.users.base-url=http://users:8080\n",
-      "src/main/java/a/UsersApi.java": '@HttpExchange("/users")\ninterface UsersApi {\n  @GetExchange("/{id}") User get(@PathVariable long id);\n  @PostExchange void create(@RequestBody User u);\n}\n',
+      "src/main/java/a/UsersApi.java":
+        '@HttpExchange("/users")\ninterface UsersApi {\n  @GetExchange("/{id}") User get(@PathVariable long id);\n  @PostExchange void create(@RequestBody User u);\n}\n',
       "src/main/java/a/Users.java": [
         "class Users {",
-        '  @Value("${clients.users.base-url}") String base;',
+        `  @Value("\${clients.users.base-url}") String base;`,
         "  RestClient client = RestClient.builder().baseUrl(base).build();",
         '  User me() { return client.get().uri("/users/me").retrieve().body(User.class); }',
         "}",
@@ -187,7 +191,7 @@ describe("klienci HTTP Spring", () => {
       "src/main/java/a/Orders.java": [
         "class Orders {",
         "  WebClient client;",
-        '  Orders(@Value("${orders.base-url}") String url) { client = WebClient.create(url); }',
+        `  Orders(@Value("\${orders.base-url}") String url) { client = WebClient.create(url); }`,
         '  void load() { client.get().uri("/api/orders").retrieve(); }',
         "}",
       ].join("\n"),
@@ -199,16 +203,35 @@ describe("klienci HTTP Spring", () => {
   });
 });
 
-describe("rozwiązywanie ${...}", () => {
-  const values: Record<string, string> = { a: "${b}", b: "${a}", host: "orders", url: "http://${host}:${port:8080}/${missing}" };
+describe("sekrety w adresach", () => {
+  test("użytkownik, hasło i zapytanie z adresu w application.yml, .env i kodzie nie trafiają na kartę", () => {
+    const c = card({
+      "src/main/resources/application.yml": "orders:\n  url: http://svc:tajne1@orders:8080/api?token=tajne2\n",
+      "src/main/java/a/Rest.java":
+        'class Rest {\n  RestTemplate rest;\n  void x() { rest.getForObject("http://ja:tajne3@legacy/api/x?key=tajne4", String.class); }\n}\n',
+      "web/package.json": "{}",
+      "web/.env": "VITE_API=https://ja:tajne5@api.example.com/v1?k=tajne6\n",
+    });
+    const text = JSON.stringify(card({}).consumes) + JSON.stringify(c.consumes);
+    expect(text).not.toMatch(/tajne/);
+    expect(summary(c)).toEqual([
+      "rest-template Rest app=null url=http://***@legacy [] {GET /api/x}",
+      "config orders.url app=null url=http://***@orders:8080/api [default] {}",
+      "env VITE_API app=null url=https://***@api.example.com/v1 [] {}",
+    ]);
+  });
+});
+
+describe(`rozwiązywanie \${...}`, () => {
+  const values: Record<string, string> = { a: `\${b}`, b: `\${a}`, host: "orders", url: `http://\${host}:\${port:8080}/\${missing}` };
   const get = (key: string) => (key in values ? { value: values[key] ?? "", path: "application.yml", line: 1 } : undefined);
 
   test("wartość domyślna po dwukropku, zagnieżdżone klucze i nierozwiązany klucz zostaje tekstem", () => {
-    expect(resolvePlaceholders("${url}", get).value).toBe("http://orders:8080/${missing}");
-    expect(resolvePlaceholders("${nope:${host}}", get).value).toBe("orders");
+    expect(resolvePlaceholders(`\${url}`, get).value).toBe(`http://orders:8080/\${missing}`);
+    expect(resolvePlaceholders(`\${nope:\${host}}`, get).value).toBe("orders");
   });
 
   test("cykl między kluczami nie zapętla rozwiązywania", () => {
-    expect(resolvePlaceholders("${a}", get).value).toContain("${");
+    expect(resolvePlaceholders(`\${a}`, get).value).toContain(`\${`);
   });
 });

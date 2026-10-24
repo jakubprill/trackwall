@@ -1,4 +1,4 @@
-import { isMap, isScalar, isSeq, LineCounter, type Node, parseAllDocuments } from "yaml";
+import { isMap, isNode, isScalar, isSeq, LineCounter, type Node, type Pair, parseAllDocuments } from "yaml";
 import { messageOf } from "../../errors.ts";
 import { type PlaceholderSource, type Resolved, resolvePlaceholders } from "./placeholders.ts";
 import { baseName } from "./repo-path.ts";
@@ -166,21 +166,30 @@ interface FlattenContext {
 
 function flatten(node: Node, prefix: string, ctx: FlattenContext, depth: number): void {
   if (depth > MAX_YAML_DEPTH || ctx.entries.size >= MAX_ENTRIES) return;
-  if (isMap(node)) {
-    for (const pair of node.items) {
-      const key = isScalar(pair.key) ? String(pair.key.value) : undefined;
-      if (key === undefined || !pair.value) continue;
-      const child = key.startsWith("[") || prefix === "" ? `${prefix}${key}` : `${prefix}.${key}`;
-      const line = ctx.lineCounter.linePos(isScalar(pair.key) ? (pair.key.range?.[0] ?? 0) : 0).line;
-      if (isScalar(pair.value)) add(ctx, child, pair.value.value, line);
-      else if (isMap(pair.value) || isSeq(pair.value)) flatten(pair.value, child, ctx, depth + 1);
-    }
-  } else if (isSeq(node)) {
-    node.items.forEach((item, i) => {
-      if (isScalar(item)) add(ctx, `${prefix}[${i}]`, item.value, ctx.lineCounter.linePos(item.range?.[0] ?? 0).line);
-      else if (isMap(item) || isSeq(item)) flatten(item, `${prefix}[${i}]`, ctx, depth + 1);
-    });
+  if (isMap(node)) flattenMap(node.items, prefix, ctx, depth);
+  else if (isSeq(node)) flattenSeq(node.items, prefix, ctx, depth);
+}
+
+function flattenMap(items: readonly Pair[], prefix: string, ctx: FlattenContext, depth: number): void {
+  for (const pair of items) {
+    const key = isScalar(pair.key) ? String(pair.key.value) : undefined;
+    if (key === undefined || !isNode(pair.value)) continue;
+    const child = key.startsWith("[") || prefix === "" ? `${prefix}${key}` : `${prefix}.${key}`;
+    const line = ctx.lineCounter.linePos(isScalar(pair.key) ? (pair.key.range?.[0] ?? 0) : 0).line;
+    addValue(pair.value, child, line, ctx, depth);
   }
+}
+
+function flattenSeq(items: readonly unknown[], prefix: string, ctx: FlattenContext, depth: number): void {
+  items.forEach((item, i) => {
+    if (isNode(item)) addValue(item, `${prefix}[${i}]`, ctx.lineCounter.linePos(item.range?.[0] ?? 0).line, ctx, depth);
+  });
+}
+
+/** Wartość pod kluczem: skalar to wpis, mapa i lista idą głębiej. */
+function addValue(node: Node, key: string, line: number, ctx: FlattenContext, depth: number): void {
+  if (isScalar(node)) add(ctx, key, node.value, line);
+  else if (isMap(node) || isSeq(node)) flatten(node, key, ctx, depth + 1);
 }
 
 function add(ctx: FlattenContext, key: string, value: unknown, line: number): void {
