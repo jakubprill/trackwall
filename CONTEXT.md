@@ -232,7 +232,7 @@ A task that a session or an agent outside Trackwall submitted through MCP and th
 _Avoid_: order, request, application
 
 **Main session** (`proposedBy` of a task and a proposal):
-A session or supervising agent that talks to the user and commissions work to other agents with task proposals, then waits for their sessions (`wait_for_session`) and reads the summaries, like a coordinator with threads in Claude (ADR-39). It is a role, not a separate kind of session: today it is any Trackwall session or an agent outside Trackwall (`proposedBy.session: null`).
+A session or supervising agent that talks to the user and commissions work to other agents with task proposals, then waits for their sessions (`wait_for_session`) and reads the summaries, like a coordinator with threads in Claude (ADR-39). It is a role, not a separate kind of session: today it is any Trackwall session or an agent outside Trackwall (`proposedBy.session: null`). In the Sessions view its tasks and proposals sit indented under it, and it carries a “main” badge with their count.
 _Avoid_: orchestrator, planner (ADR-9: a human splits goals)
 
 **mise task**:
@@ -366,7 +366,7 @@ The dashboard's 3D scene on Pawn. It does not know the daemon API: it gets succe
 The first screen, the "Home" view (`HomeView`): the daemon state, sessions (especially those waiting for you), repos and the connections between them, in the "Orbit" layout (`orbitLayout`).
 
 **"Needs you" queue** (`NeedsYouPanel`):
-The left panel of the dashboard: sessions that are waiting for you or have an error, then repos that are not clean. The same objects have a label in the scene.
+The left panel of the dashboard: sessions that are waiting for you or have an error, then task proposals waiting for a decision (ADR-39), then repos that are not clean. Sessions and repos also have a label on the scene; proposals are not on the scene, and a click opens them in the Sessions view.
 
 **Dashboard snapshot** (`HomeModel`):
 What the dashboard shows, computed by the UI from the daemon's responses and given to the scene whole on every change.
