@@ -12,6 +12,7 @@ import {
   FindEndpointResult,
   GetRepoResult,
   ListReposResult,
+  LogErrors,
   LogTail,
   mcpTools,
   RepoCardResult,
@@ -86,6 +87,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
       "get_repo",
       "get_repo_card",
       "tail",
+      "get_errors",
       "who_calls",
       "subgraph_for",
       "find_endpoint",
@@ -255,6 +257,33 @@ describe("serwer MCP przez Streamable HTTP", () => {
       (await client.callTool({ name: "tail", arguments: { repo: "orders-bff", miseTask: "build", limit: 10 } })).structuredContent,
     );
     expect(empty.records).toEqual([]);
+    await client.close();
+  });
+
+  test("get_errors returns a masked error with its stack trace after the cursor, and an unknown repo is not_found", async () => {
+    const output = facade.logs.open({ kind: "mise-task", repo: "orders-bff", miseTask: "test" }, "r2", { DB_PASSWORD: "tajne-haslo-123" });
+    const client = await connectHttpClient(api.port, TOKEN);
+    const cursor = LogErrors.parse(
+      (await client.callTool({ name: "get_errors", arguments: { repo: "orders-bff" } })).structuredContent,
+    ).nextSeq;
+    output.push("stderr", Buffer.from("java.sql.SQLException: login failed for tajne-haslo-123\n\tat com.example.Db.connect(Db.java:7)\n"));
+
+    const result = await client.callTool({ name: "get_errors", arguments: { repo: "orders-bff", sinceSeq: cursor } });
+    expect(LogErrors.parse(result.structuredContent)).toMatchObject({
+      errors: [
+        {
+          source: { kind: "mise-task", repo: "orders-bff", miseTask: "test" },
+          exception: "java.sql.SQLException: login failed for ***",
+          lines: ["java.sql.SQLException: login failed for ***", "\tat com.example.Db.connect(Db.java:7)"],
+          count: 1,
+        },
+      ],
+      truncated: false,
+      dropped: false,
+    });
+
+    const missing = await client.callTool({ name: "get_errors", arguments: { repo: "nie-ma-takiego" } });
+    expect(missing.content).toEqual([{ type: "text", text: 'not_found: no repo "nie-ma-takiego" in the projects folder' }]);
     await client.close();
   });
 

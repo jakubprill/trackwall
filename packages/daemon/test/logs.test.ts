@@ -296,6 +296,14 @@ describe("poziom rekordu", () => {
     ["12:00 DEBUG o.h.SQL : select 1", "debug"],
     ["Tests run: 3, Failures: 0, Errors: 0", "info"],
     ["no error handler registered", "info"],
+    ["/repo/src/main/java/a/Orders.java:12: error: cannot find symbol", "error"],
+    ["src/app.ts(3,5): error TS2322: Type 'string' is not assignable to type 'number'.", "error"],
+    ["e: file:///repo/src/main/kotlin/App.kt:3:5 Unresolved reference: foo", "error"],
+    ["npm error code ELIFECYCLE", "error"],
+    ["[build] error: could not compile `app`", "error"],
+    ["/repo/src/A.java:7: warning: [deprecation] Date(int,int,int) in Date has been deprecated", "warn"],
+    ["npm warn deprecated inflight@1.0.6", "warn"],
+    ["[INFO] Building orders-bff 1.0.0", "info"],
   ])("%s → %s", (msg, level) => {
     expect(logLevel(msg)).toBe(level);
   });

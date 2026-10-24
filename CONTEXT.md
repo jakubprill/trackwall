@@ -306,6 +306,10 @@ Skąd pochodzi rekord. Dziś task mise repo (`{ kind: "mise-task", repo, miseTas
 Rekordy jednego źródła w kolejności `seq`: ostatnie (do 2000) w pamięci daemona, nowsze niż ostatnia rotacja w pliku JSONL `logs/<rodzaj>/<repo>/<task mise>.jsonl` w katalogu stanu (bieżący plik i jeden poprzedni, po 10 MB, ADR-28). Nie myl z logiem daemona (stderr procesu `trackwall-daemon`).
 _Unikaj_: konsola, terminal (to PTY sesji zadania)
 
+**Błąd z logu** (`LogError`, MCP tool `get_errors`; in English *error*):
+A record at `error` (or `warn`) level or an exception header together with the lines that belong to it (stack trace, `Caused by:`, a Spring or Gradle report), from one source, run and stream. The same error repeated in a source is one error with a count (`count`); `exception` is its cause (ADR-42).
+_Avoid_: exception (only one kind of error), problem (that is the repo card and the graph), incident
+
 **`seq`**:
 Globalny, rosnący numer rekordu dla wszystkich źródeł; każde działanie daemona zaczyna od chwili startu, więc numery się nie powtarzają. Kursor (`sinceSeq` w API i w narzędziach MCP) działa dla jednego źródła i dla całego workspace; `dropped` mówi, że część rekordów po kursorze przepadła.
 

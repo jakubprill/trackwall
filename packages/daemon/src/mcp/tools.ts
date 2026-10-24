@@ -138,6 +138,11 @@ const runs: ToolRuns = {
     await facade.workspace.repo(repo);
     return facade.logs.tail({ source: { kind: "mise-task", repo, miseTask }, sinceSeq, limit });
   },
+  getErrors: async (facade, { repo, ...query }) => {
+    // The repo must exist (`not_found` as in tail): a typo in the id must not look like "no errors".
+    if (repo !== undefined) await facade.workspace.repo(repo);
+    return facade.logs.errors({ repo, ...query });
+  },
   whoCalls: (facade, { repo }) => facade.graph.whoCalls(repo),
   subgraphFor: (facade, { repo, depth }) => facade.graph.subgraph(repo, depth),
   findEndpoint: (facade, { query, method }) => facade.graph.findEndpoint(query, method),
@@ -200,6 +205,7 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.getRepo, runs.getRepo),
   defineTool(mcpTools.getRepoCard, runs.getRepoCard),
   defineTool(mcpTools.tail, runs.tail),
+  defineTool(mcpTools.getErrors, runs.getErrors),
   defineTool(mcpTools.whoCalls, runs.whoCalls),
   defineTool(mcpTools.subgraphFor, runs.subgraphFor),
   defineTool(mcpTools.findEndpoint, runs.findEndpoint),

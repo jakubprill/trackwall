@@ -1,4 +1,14 @@
-import { LOG_BUFFER_RECORDS, type LogRecord, type LogSource, type LogStream, type LogTail, type LogTailRequest } from "@trackwall/protocol";
+import {
+  LOG_BUFFER_RECORDS,
+  type LogErrors,
+  type LogErrorsRequest,
+  type LogRecord,
+  type LogSource,
+  type LogStream,
+  type LogTail,
+  type LogTailRequest,
+} from "@trackwall/protocol";
+import { collectErrors } from "./log-errors.ts";
 import { LogFile, logFilePath, sourceParts } from "./log-file.ts";
 import { logLevel } from "./log-level.ts";
 import { RunOutput } from "./run-output.ts";
@@ -24,6 +34,8 @@ export interface LogsDeps {
 }
 
 interface SourceLog {
+  readonly source: LogSource;
+  readonly key: string;
   readonly records: LogRecord[];
   /** Suma długości `msg` rekordów w buforze. */
   chars: number;
@@ -73,14 +85,29 @@ export class Logs {
   tail({ source, sinceSeq, limit }: LogTailRequest): LogTail {
     const log = this.sources.get(sourceKey(source));
     const records = log?.records ?? [];
-    // Większy niż ostatni `seq`: z działania, którego zegar był do przodu.
-    const fromOtherRun = sinceSeq !== undefined && (sinceSeq < this.baseSeq || sinceSeq > this.seq);
+    const fromOtherRun = this.fromOtherRun(sinceSeq);
     if (sinceSeq === undefined || fromOtherRun) return { records: records.slice(-limit), nextSeq: this.seq, dropped: fromOtherRun };
     const start = records.findIndex((r) => r.seq > sinceSeq);
     const page = start === -1 ? [] : records.slice(start, start + limit);
     const last = page.at(-1);
     const more = start !== -1 && start + limit < records.length;
     return { records: page, nextSeq: more && last ? last.seq : this.seq, dropped: sinceSeq < (log?.evictedSeq ?? 0) };
+  }
+
+  /**
+   * Errors from the buffers of the sources matching `repo` and `miseTask` (ADR-42), most recent first. The cursor
+   * covers all sources at once because `seq` is global; a cursor from another daemon run gives errors as without one.
+   */
+  errors({ repo, miseTask, minLevel, sinceSeq, limit }: LogErrorsRequest): LogErrors {
+    const sources = [...this.sources.values()].filter(
+      ({ source }) =>
+        (repo === undefined || source.repo === repo) &&
+        (miseTask === undefined || (source.kind === "mise-task" && source.miseTask === miseTask)),
+    );
+    const fromOtherRun = this.fromOtherRun(sinceSeq);
+    const cursor = fromOtherRun ? undefined : sinceSeq;
+    const evicted = cursor !== undefined && sources.some((log) => cursor < log.evictedSeq);
+    return { ...collectErrors(sources, { minLevel, sinceSeq: cursor, limit }), nextSeq: this.seq, dropped: fromOtherRun || evicted };
   }
 
   /** Zapisuje bufory plików; wołane z opóźnieniem po nowych rekordach i przy wyjściu daemona. */
@@ -118,6 +145,11 @@ export class Logs {
     this.scheduleFlush();
   }
 
+  /** A cursor below the empty log's cursor, or above the last `seq` (the previous run's clock was ahead). */
+  private fromOtherRun(sinceSeq: number | undefined): boolean {
+    return sinceSeq !== undefined && (sinceSeq < this.baseSeq || sinceSeq > this.seq);
+  }
+
   private scheduleFlush(): void {
     if (this.flushTimer) return;
     this.flushTimer = setTimeout(() => this.flush(), FLUSH_DELAY_MS);
@@ -133,7 +165,7 @@ export class Logs {
       const file = new LogFile(path, this.deps.maxFileBytes, (err) =>
         this.deps.log(`rotating ${path}: ${String(err)}; the file grows past the limit until the next successful rotation`),
       );
-      log = { records: [], chars: 0, evictedSeq: 0, file, writeErrorReported: false, overflowReported: false };
+      log = { source, key, records: [], chars: 0, evictedSeq: 0, file, writeErrorReported: false, overflowReported: false };
       this.sources.set(key, log);
     }
     return log;
