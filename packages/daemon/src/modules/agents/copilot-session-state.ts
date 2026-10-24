@@ -1,12 +1,14 @@
 import type { TaskStateChange } from "@trackwall/protocol";
 import type { CopilotHookRecord } from "./copilot-hook-record.ts";
 import { stateFromHook } from "./copilot-hooks.ts";
+import { type SessionKey, stateFromKey } from "./copilot-keys.ts";
 import { stateFromOsc, windowTitleFromOsc } from "./copilot-osc.ts";
 import { OscParser } from "./osc-parser.ts";
 import { TaskStateTracker, type TaskStateTrackerOptions } from "./task-state-tracker.ts";
 
 /**
- * Stan jednej sesji Copilot CLI (§4.4): wyjście PTY i rekordy hooków wchodzą, zmiany stanu wychodzą.
+ * Stan jednej sesji Copilot CLI (§4.4): wyjście PTY, rekordy hooków i klawisze człowieka wchodzą, zmiany stanu
+ * wychodzą.
  * Ten sam obiekt liczy stan na żywo i przy odtwarzaniu nagrania, więc test na nagraniu sprawdza to, co działa
  * w sesji.
  */
@@ -40,6 +42,12 @@ export class CopilotSessionState {
 
   hook(record: CopilotHookRecord): TaskStateChange[] {
     const signal = stateFromHook(record);
+    return [this.#tracker.tick(), signal && this.#tracker.signal(signal)].filter((c) => c !== undefined);
+  }
+
+  /** Klawisz, który człowiek wysłał do terminala sesji (`sessionKey`). */
+  key(key: SessionKey): TaskStateChange[] {
+    const signal = stateFromKey(key, this.#tracker.current?.state);
     return [this.#tracker.tick(), signal && this.#tracker.signal(signal)].filter((c) => c !== undefined);
   }
 

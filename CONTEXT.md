@@ -238,7 +238,7 @@ Stan ekranu sesji, który daemon trzyma w emulatorze terminala bez okna i wysył
 _Unikaj_: zrzut ekranu (to obrazek), historia wyjścia
 
 **Stan zadania** (`TaskState`, zmiana: `TaskStateChange`; po angielsku *state*):
-`Working`, `Input`, `Approval`, `Plan`, `Done`, `Error` albo `Stale`, zawsze ze źródłem (`hook`, `osc`, `screen`, `timeout`, `exit`) i pewnością (§4.4).
+`Working`, `Input`, `Approval`, `Plan`, `Done`, `Error` albo `Stale`, zawsze ze źródłem (`hook`, `osc`, `screen`, `keyboard`, `timeout`, `exit`) i pewnością (§4.4).
 
 **Detektor stanu**:
 Reguła, która z hooków, sekwencji terminala albo wyglądu ekranu wnioskuje stan zadania.

@@ -1,4 +1,5 @@
 import type { RunState, Session, TaskState, TaskStateChange } from "@trackwall/protocol";
+import { sessionKey } from "./copilot-keys.ts";
 import { CopilotSessionState } from "./copilot-session-state.ts";
 import { HookTail } from "./hook-tail.ts";
 import { type ScreenViewer, TerminalScreen } from "./terminal-screen.ts";
@@ -68,8 +69,12 @@ export class LiveSession {
     this.#report(this.#state.output(this.#decoder.decode(bytes, { stream: true })));
   }
 
+  /** Wejście z okna terminala: do PTY, a klawisz odpowiedzi albo przerwania także do detektorów stanu. */
   input(data: string): void {
-    if (!this.#finished) this.#terminal?.write(data);
+    if (this.#finished || !this.#terminal) return;
+    this.#terminal.write(data);
+    const key = sessionKey(data);
+    if (key) this.#report(this.#state.key(key));
   }
 
   /** Rozmiar ustala ostatnie okno, które go zgłosiło; TUI dostaje go razem z PTY. */

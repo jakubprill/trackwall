@@ -25,6 +25,37 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     expect(changes[2]?.at).toBe("2026-10-23T12:00:04.000Z");
   });
 
+  test("odmowa zgody z tekstem dla agenta: Enter kończy czekanie na zgodę od razu, a nie dopiero przy następnym narzędziu", () => {
+    const changes = replayCopilotRecording(fixture("refused-approval-session.cast"), { staleAfterMs: 60_000 });
+
+    expect(summary(changes)).toEqual([
+      "Input hook medium hook sessionStart",
+      "Working hook high hook userPromptSubmitted",
+      "Approval hook high hook notification permission_prompt",
+      "Working keyboard medium key enter",
+      "Working hook high hook postToolUse",
+      "Input hook high hook agentStop",
+      "Done hook high hook sessionEnd user_exit",
+    ]);
+    expect(changes[3]?.at).toBe("2026-10-23T12:00:08.800Z");
+  });
+
+  test("Esc przy prośbie o zgodę przerywa turę bez hooka, więc sesja czeka na Ciebie zamiast prosić o zgodę do końca", () => {
+    const cast = parseAsciicast(
+      [
+        '{"version": 2, "width": 80, "height": 24, "timestamp": 0}',
+        '[1.0, "m", "{\\"kind\\":\\"hook\\",\\"record\\":{\\"event\\":\\"notification\\",\\"receivedAt\\":1000,\\"payload\\":{\\"notification_type\\":\\"permission_prompt\\"},\\"omitted\\":[]}}"]',
+        '[3.0, "m", "{\\"kind\\":\\"key\\",\\"key\\":\\"escape\\"}"]',
+        '[3.1, "o", "Operation cancelled by user\\r\\n> "]',
+      ].join("\n"),
+    );
+
+    expect(summary(replayCopilotRecording(cast, { staleAfterMs: 60_000 }))).toEqual([
+      "Approval hook high hook notification permission_prompt",
+      "Input keyboard medium key escape",
+    ]);
+  });
+
   test("sesja bez hooków: stan z paska postępu OSC 9;4, Stale po ciszy i kod wyjścia na końcu", () => {
     const cast = parseAsciicast(
       [
