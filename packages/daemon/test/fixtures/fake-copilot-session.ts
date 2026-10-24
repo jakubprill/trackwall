@@ -1,14 +1,14 @@
 /**
  * Interaktywna atrapa Copilot CLI dla testów sesji w daemonie: działa w PTY, czyta wtyczkę z `--plugin-dir`
  * i wywołuje jej hooki tak jak Copilot CLI (program z `exec` + `args`, payload JSON na stdin). Przebieg:
- * ekran powitalny (z nazwami serwerów MCP i plików instrukcji) i `sessionStart` (czeka na Ciebie), linia od użytkownika uruchamia turę z prośbą o zgodę
+ * ekran powitalny i `sessionStart` (czeka na Ciebie), linia od użytkownika uruchamia turę z prośbą o zgodę
  * (`notification` `permission_prompt`), `y` kończy turę (`agentStop`), a `/exit` kończy sesję (`sessionEnd`).
  * Tytuł okna i pasek postępu idą sekwencjami OSC, jak w Copilot CLI. Pierwsza tura uruchamia proces pomocnika
  * (jak narzędzie agenta) i wypisuje jego PID, żeby test sprawdził, że stop sesji kończy całą grupę. Pomocnik startuje
  * dopiero po wejściu od użytkownika, bo na Windowsie lider trafia do joba chwilę po starcie.
  */
 import { spawn, spawnSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { z } from "zod";
@@ -33,10 +33,10 @@ function fire(event: string, payload: Record<string, unknown>): void {
   }
 }
 
-/** Pliki instrukcji z katalogów `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` (po przecinku), jak w Copilot CLI; atrapa wypisuje ich nazwy. */
+/** Instruction files from the `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` directories (comma-separated), as in Copilot CLI; the fake prints their names. */
 const instructionFiles = (process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS ?? "")
   .split(",")
-  .filter((dir) => dir !== "")
+  .filter((dir) => dir !== "" && existsSync(dir))
   .flatMap((dir) => readdirSync(dir).filter((name) => name.endsWith(".instructions.md")));
 
 /** Argumenty zadania (`--interactive=`, `--resume=`, `--session-id=`), które atrapa wypisuje, żeby test je zobaczył. */

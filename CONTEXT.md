@@ -276,9 +276,9 @@ _Unikaj_: wejście (to cała treść z klawiatury), skrót
 Katalog z `plugin.json` i `hooks.json`, który daemon podaje Copilot CLI przez `--plugin-dir`, żeby hooki zgłaszały stan tylko tej jednej sesji (ADR-17).
 _Unikaj_: plugin (w polskim tekście), konfiguracja hooków
 
-**Instrukcje sesji** (`writeSessionInstructions`, plik `trackwall.instructions.md`; po angielsku *session instructions*):
-Plik instrukcji w katalogu sesji, który daemon podaje Copilot CLI przez `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`: rola sesji (w korzeniu repo albo w worktree zadania, z jego zasadami i `report_result` na końcu) i instrukcja MCP (`MCP_INSTRUCTIONS`), czyli kiedy po które narzędzie Trackwall sięgnąć (ADR-46). Nie zmienia repo ani `~/.copilot`.
-_Unikaj_: prompt systemowy (Copilot CLI składa go sam), instrukcje repo (to pliki w repo użytkownika)
+**Instrukcje sesji** (`writeSessionInstructions`, file `trackwall.instructions.md`; in English *session instructions*):
+The instruction file in the session directory that the daemon gives Copilot CLI through `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`: the session's role (a main session in the repo root, or a task session in its worktree with the task rules and `report_result` at the end) and the **MCP instruction** (`MCP_INSTRUCTIONS`, also the MCP server's `instructions`): when to reach for which Trackwall tool (ADR-46). It changes neither the repo nor `~/.copilot`.
+_Avoid_: system prompt (Copilot CLI builds it itself), repository instructions (those are files in the user's repo)
 
 **Rekord hooka** (`CopilotHookRecord`):
 Jedno wywołanie hooka z wtyczki sesji: zdarzenie, czas odebrania i tylko pola payloadu potrzebne do stanu, a o reszcie same nazwy (bez promptu, argumentów i wyników narzędzi). Linia `hooks.jsonl` i znacznik w nagraniu.

@@ -106,7 +106,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
     await client.close();
   });
 
-  test("instrukcja serwera mówi, kiedy sięgnąć po każde narzędzie, więc nowe narzędzie nie zostaje w niej pominięte", async () => {
+  test("the server instruction says when to use every tool, so a new tool cannot be left out of it", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const instructions = client.getInstructions() ?? "";
     expect(instructions).toBe(MCP_INSTRUCTIONS);

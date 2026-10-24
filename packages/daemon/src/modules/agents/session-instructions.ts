@@ -1,40 +1,49 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MCP_INSTRUCTIONS, mcpTools } from "@trackwall/protocol";
+import { envKey } from "./env-key.ts";
 
 /**
- * Instrukcje sesji (§4.4, ADR-46): plik `*.instructions.md` w katalogu sesji, który Copilot CLI wczytuje jako
- * instrukcję repo, bo daemon dopisuje ten katalog do `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` w środowisku sesji. Nie
- * zmienia plików repo użytkownika ani `~/.copilot`. Treść to rola sesji (sesja w korzeniu repo albo sesja zadania
- * w worktree) i wspólna instrukcja MCP (`MCP_INSTRUCTIONS`), której Copilot CLI z serwera MCP nie bierze.
+ * Session instructions (§4.4, ADR-46): an `*.instructions.md` file in the session directory that Copilot CLI loads as a
+ * repository instruction, because the daemon adds its directory to `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` in the session
+ * environment. It changes neither the user's repo nor `~/.copilot`. The content is the session's role (a main session
+ * in the repo root or a task session in a worktree) and the shared MCP instruction (`MCP_INSTRUCTIONS`), which Copilot
+ * CLI does not take from the MCP server.
  */
 
-/** Zmienna Copilot CLI 1.0.103 z katalogami instrukcji, oddzielonymi przecinkiem (sprawdzone `copilot instruction list`). */
+/** Copilot CLI 1.0.103 variable with instruction directories separated by commas (checked with `copilot instruction list`). */
 const INSTRUCTIONS_DIRS_ENV = "COPILOT_CUSTOM_INSTRUCTIONS_DIRS";
+const INSTRUCTIONS_DIR = "instructions";
 const INSTRUCTIONS_FILE = "trackwall.instructions.md";
 
-/** Kim jest sesja: w korzeniu repo (`task: null`) albo w worktree zadania. */
+/** Who the session is: a main session in the repo root (`task: null`) or a task session in the task's worktree. */
 export interface SessionRole {
   repo: string;
   task: string | null;
 }
 
 /**
- * Zapisuje plik instrukcji w `dir` i zwraca środowisko sesji z `dir` dopisanym do katalogów instrukcji użytkownika.
- * Katalogu z przecinkiem w ścieżce nie da się podać w tej zmiennej, więc sesja startuje wtedy bez instrukcji Trackwall
- * (dalej z narzędziami MCP), a nie z cudzym katalogiem z połowy ścieżki.
+ * Writes the instructions to `<sessionDir>/instructions/` and returns that directory, or `null` without writing
+ * anything when its path has a comma: the variable splits on commas, so Copilot CLI would read half of the path.
  */
-export function writeSessionInstructions(dir: string, role: SessionRole, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  if (dir.includes(",")) return env;
+export function writeSessionInstructions(sessionDir: string, role: SessionRole): string | null {
+  const dir = join(sessionDir, INSTRUCTIONS_DIR);
+  if (dir.includes(",")) return null;
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, INSTRUCTIONS_FILE), sessionInstructions(role));
-  const own = env[INSTRUCTIONS_DIRS_ENV];
-  return { ...env, [INSTRUCTIONS_DIRS_ENV]: own ? `${own},${dir}` : dir };
+  return dir;
+}
+
+/** The session environment with `dir` after the user's own instruction directories. */
+export function withInstructionsDir(env: NodeJS.ProcessEnv, dir: string): NodeJS.ProcessEnv {
+  const key = envKey(env, INSTRUCTIONS_DIRS_ENV);
+  const own = env[key];
+  return { ...env, [key]: own ? `${own},${dir}` : dir };
 }
 
 function sessionInstructions({ repo, task }: SessionRole): string {
   return [
-    // `applyTo: "**"`: instrukcja dla każdego pliku, czyli dla całej sesji, jak `.github/instructions` w repo.
+    // `applyTo: "**"`: the instruction applies to every file, i.e. to the whole session, like `.github/instructions` in a repo.
     "---",
     'applyTo: "**"',
     "---",
@@ -55,7 +64,7 @@ function sessionInstructions({ repo, task }: SessionRole): string {
 
 function repoRole(repo: string): string[] {
   return [
-    `You work in the root of the repo \`${repo}\` (its id in Trackwall tools): the user's own working copy.`,
+    `You are a main session in the root of the repo \`${repo}\` (its id in Trackwall tools): the user's own working copy.`,
     `- A larger piece of work, work in another repo or work that can run in parallel goes to another agent: propose it with ${mcpTools.proposeTask.name} and follow it with ${mcpTools.waitForSession.name}.`,
     `- ${mcpTools.reportResult.name} is only for task sessions; here you answer the user directly.`,
   ];

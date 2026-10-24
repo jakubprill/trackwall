@@ -1,10 +1,11 @@
 import { mcpTools } from "./mcp.ts";
 
 /**
- * Instrukcja dla agenta: jak pracować z Trackwall (ADR-46). Serwer MCP ogłasza ją w `initialize` (`instructions`),
- * a daemon dokłada ją do pliku instrukcji każdej sesji Copilot CLI, bo Copilot CLI bierze `instructions` tylko od
- * serwerów ze swojej listy dopuszczonych. Opisy narzędzi mówią, co narzędzie zwraca; tu jest kolejność i to, kiedy
- * po które sięgnąć. Nazwy narzędzi pochodzą z `mcpTools`, więc zmiana nazwy nie zostawi tu starej. Po angielsku (ADR-32).
+ * The MCP instruction: how an agent works with Trackwall (ADR-46). The MCP server announces it in `initialize`
+ * (`instructions`), and the daemon adds it to the session instructions of every Copilot CLI session, because Copilot
+ * CLI takes `instructions` only from servers on its own allowlist. Tool descriptions say what a tool returns; this says
+ * in which order and when to reach for which one. Tool names come from `mcpTools`, so a rename leaves no stale name
+ * here, and a test requires every tool to be mentioned.
  */
 
 const {
@@ -39,9 +40,11 @@ export const MCP_INSTRUCTIONS = [
     "Connections with low or medium confidence are hints: confirm them in the code. Name the affected repos in your result.",
   `- Diagnose a running service: ${tail.name} reads the log of a repo's mise task (${getRepo.name} lists them); pass nextSeq ` +
     "as sinceSeq to follow it.",
-  `- Hand work to another agent, e.g. a change in another repo: ${proposeTask.name} with a prompt that stands on its own. ` +
-    `The user approves it in Trackwall; ${waitForSession.name} with the task id tells you when it is approved, needs ` +
-    `someone or is done, and ${getSession.name} shows its changed files.`,
+  `- Hand work to another agent, e.g. a change in another repo: ${proposeTask.name} with a prompt that stands on its own; ` +
+    `the user approves, edits or rejects it in Trackwall. Then call ${waitForSession.name} with the task id: it returns ` +
+    "when the proposal is rejected or the task's session needs someone (finished its turn, asks for approval), goes " +
+    `stale or exits; when it times out (still pending, starting or working), call it again. ${getSession.name} shows ` +
+    "the task's changed files.",
   `- ${listSessions.name} shows the Copilot CLI sessions and tasks Trackwall runs (caller is your own session); a session ` +
     `that runs a task ends its work with ${reportResult.name}.`,
 ].join("\n");
