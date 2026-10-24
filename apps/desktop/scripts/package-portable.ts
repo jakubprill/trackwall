@@ -16,6 +16,7 @@
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { assertVersionsMatch, REPO, run, TAURI_DIR } from "./lib.ts";
+import { UPDATE_PACKAGES } from "./update-manifest.ts";
 
 const OUT = join(REPO, "out");
 const version = assertVersionsMatch();
@@ -51,7 +52,7 @@ if (process.platform === "win32") {
       "",
     ].join("\r\n"),
   );
-  const zip = join(OUT, `trackwall-${version}-windows-x64.zip`);
+  const zip = join(OUT, UPDATE_PACKAGES["windows-x86_64"](version));
   run(["tar", "-a", "-c", "-f", zip, "Trackwall"], join(OUT, "stage"));
   console.log(zip);
 } else if (process.platform === "darwin") {
@@ -60,11 +61,19 @@ if (process.platform === "win32") {
   const zip = join(OUT, `trackwall-${version}-macos-${process.arch}.zip`);
   run(["ditto", "-c", "-k", "--keepParent", app, zip], OUT);
   console.log(zip);
-  // The updater plugin unpacks a gzip tar and drops its top folder, so the bundle is the only entry at the top.
-  // Without `--no-mac-metadata` tar adds `._*` files with extended attributes, which would end up in the bundle.
-  const update = join(OUT, `trackwall-${version}-macos-${process.arch}.app.tar.gz`);
-  run(["tar", "--no-mac-metadata", "-czf", update, "-C", bundles, "Trackwall.app"], OUT);
-  console.log(update);
+  if (process.arch === "arm64") packUpdate(bundles, join(OUT, UPDATE_PACKAGES["darwin-aarch64"](version)));
 } else {
   throw new Error("portable build jest tylko dla Windows i macOS");
+}
+
+/**
+ * The macOS update package: the updater plugin unpacks a gzip tar and drops its top folder, so the bundle must be the
+ * only entry at the top. Without `--no-mac-metadata` tar adds `._*` files with extended attributes to the bundle.
+ */
+function packUpdate(bundles: string, update: string) {
+  run(["tar", "--no-mac-metadata", "-czf", update, "-C", bundles, "Trackwall.app"], OUT);
+  const entries = run(["tar", "-tzf", update], OUT, true).split("\n").filter(Boolean);
+  const stray = entries.filter((entry) => !entry.startsWith("Trackwall.app/") || entry.split("/").some((part) => part.startsWith("._")));
+  if (stray.length > 0) throw new Error(`${update} has entries outside Trackwall.app: ${stray.slice(0, 5).join(", ")}`);
+  console.log(update);
 }

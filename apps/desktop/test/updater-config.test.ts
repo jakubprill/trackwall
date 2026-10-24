@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { z } from "zod";
 import { parseFile, TAURI_DIR } from "../scripts/lib.ts";
+import { MANIFEST_FILE } from "../scripts/update-manifest.ts";
 
 /** The part of `tauri.conf.json` the updater reads (ADR-53). */
 const TauriConf = z.object({
@@ -19,8 +20,9 @@ test("the updater key is a minisign public key", () => {
   );
 });
 
-test("the updater reads latest.json of the latest release, which release.yml publishes", () => {
-  expect(updater.endpoints).toEqual(["https://github.com/jakubprill/trackwall/releases/latest/download/latest.json"]);
+test("the updater reads the manifest that release.yml publishes, from the latest release only", () => {
+  // `latest` skips pre-releases, so a pre-release reaches only a check pointed at it (TRACKWALL_UPDATE_ENDPOINT).
+  expect(updater.endpoints).toEqual([`https://github.com/jakubprill/trackwall/releases/latest/download/${MANIFEST_FILE}`]);
 });
 
 test("the updater refuses a package signed for another version than the manifest announces", () => {

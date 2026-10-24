@@ -1,62 +1,47 @@
 import { isTauri } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { errorMessage } from "./api.ts";
-import { checkUpdate, installUpdate, listenToUpdateProgress, type UpdateProgress } from "./updates.ts";
+import { type AppUpdate, checkUpdate, installUpdate, listenToUpdateProgress, nextUpdate } from "./updates.ts";
 
 /** The first check waits for the app to settle; then once in a while, because the app runs for days in the tray. */
 const FIRST_CHECK_MS = 10_000;
 const CHECK_EVERY_MS = 6 * 60 * 60 * 1000;
 
-type AppUpdate =
-  | { state: "idle" }
-  | { state: "checking" }
-  | { state: "latest"; currentVersion: string }
-  | { state: "available"; currentVersion: string; version: string }
-  | { state: "installing"; version: string; progress?: UpdateProgress }
-  /** `version` is set when the install failed, so that it can be tried again. */
-  | { state: "failed"; message: string; version?: string };
-
 export interface AppUpdateHandle {
   update: AppUpdate;
   check: () => void;
   install: (version: string) => void;
+  /** The version the user put off with "Later"; the strip comes back for a newer one or after a restart. */
+  dismissed?: string;
+  dismiss: (version: string) => void;
 }
 
 /**
- * Update state of the app (ADR-53), one per window: checks on its own and installs on request.
- * `undefined` outside the Tauri window, where there is no shell to update.
+ * Update state of the app (ADR-53), one per window: checks on its own and installs on request (`nextUpdate` has the
+ * rules). `undefined` outside the Tauri window, where there is no shell to update.
  */
 export function useAppUpdate(): AppUpdateHandle | undefined {
-  const [update, setUpdate] = useState<AppUpdate>({ state: "idle" });
+  const [update, dispatch] = useReducer(nextUpdate, { state: "idle" });
+  const [dismissed, dismiss] = useState<string>();
   const installing = useRef(false);
   const tauri = isTauri();
 
   const check = useCallback(() => {
-    if (installing.current) return;
-    setUpdate({ state: "checking" });
+    dispatch({ kind: "check-started" });
     checkUpdate().then(
-      (result) => {
-        if (installing.current) return;
-        setUpdate(
-          result.available
-            ? { state: "available", currentVersion: result.currentVersion, version: result.available }
-            : { state: "latest", currentVersion: result.currentVersion },
-        );
-      },
-      (err: unknown) => {
-        if (!installing.current) setUpdate({ state: "failed", message: errorMessage(err) });
-      },
+      (result) => dispatch({ kind: "checked", result }),
+      (err: unknown) => dispatch({ kind: "check-failed", message: errorMessage(err) }),
     );
   }, []);
 
+  // A second click before the next render would get the shell's "already being installed" as a failure of the first.
   const install = useCallback((version: string) => {
     if (installing.current) return;
     installing.current = true;
-    setUpdate({ state: "installing", version });
-    const stop = listenToUpdateProgress((progress) => setUpdate({ state: "installing", version, progress }));
-    // Success ends in a restart, so only a failure comes back here.
-    installUpdate()
-      .catch((err: unknown) => setUpdate({ state: "failed", message: errorMessage(err), version }))
+    dispatch({ kind: "install-started", version });
+    const stop = listenToUpdateProgress((progress) => dispatch({ kind: "progress", progress }));
+    installUpdate(version)
+      .catch((err: unknown) => dispatch({ kind: "install-failed", message: errorMessage(err) }))
       .finally(() => {
         stop();
         installing.current = false;
@@ -73,5 +58,5 @@ export function useAppUpdate(): AppUpdateHandle | undefined {
     };
   }, [tauri, check]);
 
-  return tauri ? { update, check, install } : undefined;
+  return tauri ? { update, check, install, dismissed, dismiss } : undefined;
 }

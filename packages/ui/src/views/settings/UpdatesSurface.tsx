@@ -1,7 +1,7 @@
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
-import { progressLabel, RESTART_WARNING } from "@/lib/updates";
+import { availableText, installingText } from "@/lib/updates";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 
 /** Updates from GitHub Releases (ADR-53). Without the Tauri window (`trackwall-daemon --ui`) the app is updated by hand. */
@@ -40,17 +40,16 @@ function UpdateStatus({ handle: { update, check, install } }: { handle: AppUpdat
     case "available":
       return (
         <>
-          <p className="text-sm">
-            Trackwall {update.version} is available (you have {update.currentVersion}). {RESTART_WARNING}
-          </p>
+          <p className="text-sm">{availableText(update)}</p>
           <Button size="sm" onClick={() => install(update.version)}>
             Update and restart
           </Button>
         </>
       );
     case "installing":
-      return <Loading text={`Installing Trackwall ${update.version}${update.progress ? `: ${progressLabel(update.progress)}` : "…"}`} />;
-    case "failed":
+      return <Loading text={installingText(update)} />;
+    case "check-failed":
+    case "install-failed":
       return (
         <>
           <p className="text-destructive text-sm whitespace-pre-wrap break-words">{update.message}</p>

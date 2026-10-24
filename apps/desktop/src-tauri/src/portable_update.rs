@@ -5,7 +5,9 @@
 //! Windows lets a running `.exe` be renamed but not overwritten or deleted. The new files are unpacked into
 //! `<app folder>/.update/new`, the current ones (the running `trackwall.exe` and `trackwall-daemon.exe` among them)
 //! move to `.update/old`, and the new ones move into the app folder, all by renames inside one folder, so nothing is
-//! copied over a file in use. A failed move puts back what has moved. The next start deletes `.update`.
+//! copied over a file in use. Only the files of a Trackwall build move; anything else in the folder stays where it is.
+//! A failed move puts back what has moved. The next start deletes `.update`, unless it holds the only copy of the
+//! previous files because putting them back failed too.
 //!
 //! The module has no Windows API and its tests run on every system; only Windows uses it.
 
@@ -16,14 +18,19 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 
-/// Working folder of an update inside the app folder; the update replaces everything else in the app folder.
+/// Working folder of an update inside the app folder.
 pub const UPDATE_DIR: &str = ".update";
 const NEW_DIR: &str = "new";
 const OLD_DIR: &str = "old";
+/// Written after a complete swap: from then on `.update/old` holds files nobody needs.
+const DONE_MARKER: &str = "done";
 /// The release zip holds one folder with this name (`scripts/package-portable.ts`).
 const PACKAGE_ROOT: &str = "Trackwall";
 /// Without these files a folder is not a Trackwall build: neither the one that runs nor the one in the package.
 const REQUIRED_FILES: [&str; 2] = ["trackwall.exe", "trackwall-daemon.exe"];
+/// Entries a portable build has ever shipped (`scripts/package-portable.ts`). The swap moves out only these and the
+/// entries of the new package, so a file of the user's next to `trackwall.exe` is never moved, let alone deleted.
+const BUILD_ENTRIES: [&str; 4] = ["trackwall.exe", "trackwall-daemon.exe", "ui", "README.txt"];
 /// The previous shell is still exiting when the new one starts and holds its exe until then.
 const CLEAN_UP_ATTEMPTS: u32 = 30;
 const CLEAN_UP_PAUSE: Duration = Duration::from_secs(1);
@@ -36,9 +43,7 @@ pub fn install(app_dir: &Path, package: &[u8]) -> Result<(), String> {
     let _lock = UPDATE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     check_build(app_dir).map_err(|missing| format!("{} is not a Trackwall folder: {missing} is missing.", app_dir.display()))?;
     let update = app_dir.join(UPDATE_DIR);
-    remove_dir_if_exists(&update).map_err(|e| {
-        format!("The files of the previous update in {} cannot be removed yet ({e}). Try again in a minute.", update.display())
-    })?;
+    remove_finished(&update)?;
     let new = update.join(NEW_DIR);
     let staged = fs::create_dir_all(&new)
         .map_err(|e| format!("{}: {e}", new.display()))
@@ -46,7 +51,11 @@ pub fn install(app_dir: &Path, package: &[u8]) -> Result<(), String> {
         .and_then(|()| check_build(&new).map_err(|missing| format!("The update package has no {missing}.")));
     let result = staged.map_err(SwapError::LeftAsItWas).and_then(|()| swap(app_dir, &new, &update.join(OLD_DIR)));
     match result {
-        Ok(()) => Ok(()),
+        // Without the marker the next start would keep `.update`, which is safe, just untidy.
+        Ok(()) => {
+            let _ = File::create(update.join(DONE_MARKER));
+            Ok(())
+        }
         // The app folder is as it was, so nothing in `.update` is still needed.
         Err(SwapError::LeftAsItWas(err)) => {
             let _ = remove_dir_if_exists(&update);
@@ -68,10 +77,10 @@ pub fn clean_up(app_dir: &Path) {
     for attempt in 1..=CLEAN_UP_ATTEMPTS {
         {
             let _lock = UPDATE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            match remove_dir_if_exists(&update) {
+            match remove_finished(&update) {
                 Ok(()) => return,
                 Err(e) if attempt == CLEAN_UP_ATTEMPTS => {
-                    eprintln!("[desktop] could not remove {}: {e}", update.display());
+                    eprintln!("[desktop] {e}");
                     return;
                 }
                 Err(_) => {}
@@ -79,6 +88,22 @@ pub fn clean_up(app_dir: &Path) {
         }
         std::thread::sleep(CLEAN_UP_PAUSE);
     }
+}
+
+/// Removes `.update` unless it holds the only copy of the previous files: a swap that neither finished
+/// (`done`) nor put everything back (an empty `old`).
+fn remove_finished(update: &Path) -> Result<(), String> {
+    let old = update.join(OLD_DIR);
+    let finished = update.join(DONE_MARKER).is_file() || entries(&old).map_or(true, |names| names.is_empty());
+    if !finished {
+        return Err(format!(
+            "A previous update could not put back the app files; they are in {}. Install the release by hand (docs/release.md).",
+            old.display()
+        ));
+    }
+    remove_dir_if_exists(update).map_err(|e| {
+        format!("The files of the previous update in {} cannot be removed yet ({e}). Try again in a minute.", update.display())
+    })
 }
 
 /// The app folder of the running build: the folder of the exe the process started from.
@@ -126,12 +151,16 @@ fn unpack(package: &[u8], into: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Moves everything in `app_dir` except `.update` to `old`, then everything in `new` to `app_dir`.
+/// Moves the build's entries in `app_dir` to `old`, then everything in `new` to `app_dir`.
 fn swap(app_dir: &Path, new: &Path, old: &Path) -> Result<(), SwapError> {
     let io_error = |e: io::Error| SwapError::LeftAsItWas(format!("{}: {e}", app_dir.display()));
     fs::create_dir(old).map_err(io_error)?;
-    let current: Vec<OsString> = entries(app_dir).map_err(io_error)?.into_iter().filter(|name| name != UPDATE_DIR).collect();
     let incoming = entries(new).map_err(io_error)?;
+    let current: Vec<OsString> = entries(app_dir)
+        .map_err(io_error)?
+        .into_iter()
+        .filter(|name| BUILD_ENTRIES.iter().any(|known| name == known) || incoming.contains(name))
+        .collect();
     let mut moved_out = Vec::new();
     let mut moved_in = Vec::new();
     let result = move_entries(&current, app_dir, old, &mut moved_out).and_then(|()| move_entries(&incoming, new, app_dir, &mut moved_in));
@@ -213,7 +242,7 @@ mod tests {
     ];
 
     #[test]
-    fn install_replaces_the_whole_app_folder_and_keeps_the_previous_files_in_update_old() {
+    fn install_replaces_the_build_in_the_app_folder_and_keeps_the_previous_files_in_update_old() {
         let app = installed_app("replace");
         install(&app, &package(&NEW_BUILD)).unwrap();
         assert_eq!(fs::read_to_string(app.join("trackwall.exe")).unwrap(), "shell 2");
@@ -222,8 +251,32 @@ mod tests {
         assert_eq!(fs::read_to_string(app.join("README.txt")).unwrap(), "readme 2");
         assert!(!app.join("ui").join("old-asset.js").exists(), "a file only the previous build had is gone");
         assert_eq!(fs::read_to_string(app.join(".update").join("old").join("trackwall.exe")).unwrap(), "shell 1");
+        assert!(app.join(".update").join("done").is_file());
         clean_up(&app);
         assert!(!app.join(".update").exists());
+        fs::remove_dir_all(app).unwrap();
+    }
+
+    #[test]
+    fn install_leaves_the_users_own_files_in_the_app_folder_where_they_are() {
+        let app = installed_app("own-files");
+        write(&app.join("notes.txt"), "the user's file");
+        install(&app, &package(&NEW_BUILD)).unwrap();
+        clean_up(&app);
+        assert_eq!(fs::read_to_string(app.join("notes.txt")).unwrap(), "the user's file");
+        assert_eq!(fs::read_to_string(app.join("trackwall.exe")).unwrap(), "shell 2");
+        fs::remove_dir_all(app).unwrap();
+    }
+
+    #[test]
+    fn previous_files_that_could_not_be_put_back_survive_the_next_start_and_block_the_next_install() {
+        let app = installed_app("not-restored");
+        // What a swap leaves when it could neither finish nor put the files back: files in `old`, no `done`.
+        write(&app.join(".update").join("old").join("trackwall.exe"), "shell 1");
+        clean_up_once(&app);
+        assert_eq!(fs::read_to_string(app.join(".update").join("old").join("trackwall.exe")).unwrap(), "shell 1");
+        let err = install(&app, &package(&NEW_BUILD)).unwrap_err();
+        assert!(err.starts_with("A previous update could not put back the app files"), "{err}");
         fs::remove_dir_all(app).unwrap();
     }
 
@@ -268,6 +321,11 @@ mod tests {
         assert!(err.starts_with("The update package is not a valid zip"), "{err}");
         assert_eq!(fs::read_to_string(app.join("trackwall.exe")).unwrap(), "shell 1");
         fs::remove_dir_all(app).unwrap();
+    }
+
+    /// `clean_up` retries for half a minute; one attempt is enough to see what it keeps.
+    fn clean_up_once(app: &Path) {
+        let _ = remove_finished(&app.join(UPDATE_DIR));
     }
 
     #[test]

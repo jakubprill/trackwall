@@ -111,11 +111,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      # Only the release note; the versions.test.ts test makes sure it exists for the tagged version.
+      # The whole repo: the release note and scripts/update-manifest.ts with tauri.conf.json.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          sparse-checkout: docs/release-notes
           persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
 
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
@@ -143,32 +146,14 @@ jobs:
           sha256sum "$win" "$mac" "$mac_update" > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
-      # The manifest the app's updater reads from releases/latest/download/latest.json (ADR-53). A pre-release is
-      # never "latest" on GitHub, so its manifest reaches nobody.
+      # The manifest the app's updater reads from releases/latest/download/latest.json (ADR-53); the script refuses a
+      # signature made with another key than the one in tauri.conf.json. A pre-release is never "latest" on GitHub,
+      # so its manifest reaches only a check pointed at it.
       - name: Update manifest
-        working-directory: dist
         env:
-          GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
-        run: |
-          version="${TAG#v}"
-          base="https://github.com/$GH_REPO/releases/download/$TAG"
-          win="trackwall-$version-windows-x64.zip"
-          mac_update="trackwall-$version-macos-arm64.app.tar.gz"
-          jq -n \
-            --arg version "$version" \
-            --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --arg win_url "$base/$win" --rawfile win_sig "$win.sig" \
-            --arg mac_url "$base/$mac_update" --rawfile mac_sig "$mac_update.sig" \
-            '{
-              version: $version,
-              pub_date: $date,
-              platforms: {
-                "windows-x86_64": {url: $win_url, signature: ($win_sig | gsub("\\s"; ""))},
-                "darwin-aarch64": {url: $mac_url, signature: ($mac_sig | gsub("\\s"; ""))}
-              }
-            }' > latest.json
-          cat latest.json
+          REPO: ${{ github.repository }}
+        run: bun apps/desktop/scripts/update-manifest.ts dist "$TAG" "$REPO"
 
       - name: GitHub Release
         env:
