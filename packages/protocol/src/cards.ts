@@ -85,7 +85,10 @@ export type ToolRequirement = z.infer<typeof ToolRequirement>;
 
 /** Task mise zapisany w commicie: wpis `[tasks]` konfiguracji mise w korzeniu repo albo plik w katalogu tasków mise. */
 export const DeclaredMiseTask = z.object({
-  /** Nazwa, pod którą `mise run` go zna; plik w podkatalogu daje nazwę z `:` (`mise-tasks/db/reset` to `db:reset`). */
+  /**
+   * Nazwa z konfiguracji albo ścieżka pliku w katalogu tasków z `:` (`mise-tasks/db/reset` to `db:reset`, `_default`
+   * to nazwa katalogu); rozszerzeń, które mise może pominąć, karta nie skraca.
+   */
   name: z.string(),
   evidence: Evidence,
 });
@@ -99,6 +102,8 @@ export type DeclaredMiseTask = z.infer<typeof DeclaredMiseTask>;
 export const MiseSetup = z.object({
   configFiles: z.array(z.string()),
   tasks: z.array(DeclaredMiseTask),
+  /** `false`, gdy któregoś pliku konfiguracji karta nie przeczytała (limity): wtedy nie wiadomo, czy repo ma taski. */
+  complete: z.boolean(),
 });
 export type MiseSetup = z.infer<typeof MiseSetup>;
 

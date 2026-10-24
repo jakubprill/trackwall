@@ -57,7 +57,7 @@ describe("synchronizacja w UI", () => {
       "main moved 1 commit forward to origin/main. The working directory is on funkcja, so files in the working directory did not change. Uncommitted files stay as they are: 2 changed.",
     );
     expect(syncMessage({ ...target, state: "up-to-date", ...ff, workingTree: { branch: "main", changed: 3, untracked: 1 } })).toBe(
-      "main already matches origin/main. Uncommitted files stay as they are: 3 changed, 1 new file.",
+      "main already matches origin/main. Uncommitted files stay as they are: 3 changed, 1 new.",
     );
     expect(syncMessage({ ...target, state: "up-to-date", ...ff, workingTree: { branch: null, changed: 0, untracked: 0 } })).toBe(
       "main already matches origin/main. The working directory has a detached HEAD; sync only moves main.",
@@ -71,20 +71,21 @@ describe("synchronizacja w UI", () => {
         workingTree: { branch: "main", changed: 1, untracked: 0 },
       }),
     ).toBe("main is checked out and has uncommitted changes. Uncommitted files stay as they are: 1 changed.");
+    expect(syncMessage({ ...target, state: "up-to-date", ...ff, workingTree: null })).toBe("main already matches origin/main.");
     expect(syncMessage({ ...target, state: "failed", message: "Permission denied (publickey)." })).toBe("Permission denied (publickey).");
   });
 
-  test("na liście repo każdy wynik ma krótki tekst i pełne zdanie, także aktualne repo", () => {
-    expect(listSyncBadge(undefined)).toBeUndefined();
-    expect(listSyncBadge({ ...target, state: "up-to-date", ...ff, workingTree: onMain })).toEqual({
+  test("na liście repo każdy wynik ma krótki tekst i pełne zdanie z czasem synchronizacji, także aktualne repo", () => {
+    expect(listSyncBadge(undefined, "5 min ago")).toBeUndefined();
+    expect(listSyncBadge({ ...target, state: "up-to-date", ...ff, workingTree: onMain }, "5 min ago")).toEqual({
       tone: "ok",
       label: "up to date",
-      message: "main already matches origin/main.",
+      message: "main already matches origin/main. Synced 5 min ago.",
     });
-    expect(listSyncBadge({ ...target, state: "failed", message: "Permission denied (publickey)." })).toEqual({
+    expect(listSyncBadge({ ...target, state: "failed", message: "Permission denied (publickey)." }, "just now")).toEqual({
       tone: "error",
       label: "sync failed",
-      message: "Permission denied (publickey).",
+      message: "Permission denied (publickey). Synced just now.",
     });
   });
 });

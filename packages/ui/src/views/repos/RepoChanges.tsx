@@ -10,8 +10,8 @@ import { useRemote } from "@/lib/use-remote";
 
 /**
  * Zakładka „Changes” repo (ADR-34): pliki i diff katalogu roboczego względem HEAD, z nowymi plikami, tylko do
- * przeczytania. Odpytywana tak często jak lista repo, bo to zmiany użytkownika, a nie agenta, i od nowa przy nowym
- * stanie repo z listy (`refreshKey`: HEAD i liczba zmian), więc nowy commit albo nowy plik widać od razu.
+ * przeczytania. Odpytywana tak często jak lista repo (następne pytanie po odpowiedzi, więc wolny git w dużym repo nie
+ * piętrzy pytań), bo to zmiany użytkownika, a nie agenta, i od nowa po nowym commicie (`refreshKey`: HEAD).
  */
 export function RepoChanges({ conn, repo, refreshKey }: { conn: Connection; repo: string; refreshKey: string }) {
   const load = useCallback(() => post(conn, workspaceApi.changes, { repo }), [conn, repo]);

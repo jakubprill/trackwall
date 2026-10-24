@@ -29,8 +29,8 @@ describe("format", () => {
     expect([workingTreeLabel(0, 0), workingTreeLabel(3, 0), workingTreeLabel(0, 1), workingTreeLabel(2, 5)]).toEqual([
       undefined,
       "3 changed",
-      "1 new file",
-      "2 changed, 5 new files",
+      "1 new",
+      "2 changed, 5 new",
     ]);
   });
 

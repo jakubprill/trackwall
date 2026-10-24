@@ -77,8 +77,8 @@ export const mcpTools = {
     name: LIST_REPOS,
     description:
       "Repos in the user's projects folder: id, path, remote address (host/path), branch, latest commit, number of " +
-      "local changes, ahead/behind, the result of the latest sync since Trackwall started (lastSync: null when there " +
-      "was none) and repo tags (e.g. java, frontend, bff, monorepo and tags from the user's rules). The tags argument " +
+      "local changes (untracked: how many of them are new), ahead/behind, the result of the latest sync since Trackwall started (lastSync: null when there " +
+      "was none) and repo tags (e.g. java, frontend, bff, monorepo, no-mise for a repo without mise tasks, and tags from the user's rules). The tags argument " +
       "narrows the list to repos with every given tag. Start with this tool; pass the id field to the other tools.",
     args: z
       .object({
@@ -104,7 +104,8 @@ export const mcpTools = {
       "consumes: packages with scope and HTTP clients (kind http: Feign, @HttpExchange, WebClient, RestClient, " +
       "RestTemplate, addresses from application*.yml in every Spring profile, .env and the frontend proxy; with the app " +
       "name or address and the calls). Also required tool versions, detected mechanisms (Spring Boot, Feign, Kafka, " +
-      "Eureka, Kubernetes…) and tags with reasons. card: null in a repo without commits.",
+      "Eureka, Kubernetes…), the mise config files and mise tasks declared in the commit (mise) and tags with reasons. " +
+      "card: null in a repo without commits.",
     args: z.object({ repo: RepoArg }).strict(),
     result: RepoCardResult,
   },

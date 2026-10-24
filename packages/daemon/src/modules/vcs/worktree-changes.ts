@@ -22,11 +22,11 @@ const CHANGES_TIMEOUT_MS = 60_000;
 
 /** Zmiany worktree zadania razem z liczbą commitów zadania i niezacommitowanych plików. */
 export async function worktreeChanges(dir: string, base: string, maxPatchBytes: number): Promise<TaskChanges> {
-  const [changes, commits, uncommitted] = await Promise.all([
-    workingTreeChanges(dir, base, maxPatchBytes),
-    commitCount(dir, base, "HEAD"),
-    uncommittedCount(dir),
-  ]);
+  // Do końca każdej: zakończenie zadania czeka na ten odczyt, zanim skasuje worktree, więc odrzucenie jednej części
+  // nie może zostawić gita, który nadal czyta katalog.
+  const work = [workingTreeChanges(dir, base, maxPatchBytes), commitCount(dir, base, "HEAD"), uncommittedCount(dir)] as const;
+  await Promise.allSettled(work);
+  const [changes, commits, uncommitted] = await Promise.all(work);
   return { ...changes, commits, uncommitted };
 }
 
@@ -59,7 +59,8 @@ export async function workingTreeChanges(dir: string, base: string, maxPatchByte
     return {
       files: parseChangedFiles(names.stdout.toString("utf8"), stats.stdout.toString("utf8")),
       patch: patch.stdout.toString("utf8"),
-      truncated: patch.truncated,
+      // Ucięta lista plików (dziesiątki tysięcy nowych plików bez `.gitignore`) też jest niepełnym wynikiem.
+      truncated: patch.truncated || names.truncated || stats.truncated,
     };
   } finally {
     // Pozostałość po gicie zabitym po limicie czasu; plik w katalogu tymczasowym nie jest wart przykrycia błędu.

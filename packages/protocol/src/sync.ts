@@ -42,21 +42,22 @@ export const SyncWorkingTree = z.object({
 });
 export type SyncWorkingTree = z.infer<typeof SyncWorkingTree>;
 
-/** Wynik synchronizacji jednego repo bez błędu: to, co zwraca `vcs`, a błąd gita jest u niego wyjątkiem. */
-export const SyncResult = z.discriminatedUnion("state", [
+/** Co synchronizacja zrobiła z gałęzią domyślną. */
+export const SyncBranchOutcome = z.discriminatedUnion("state", [
   /** Gałąź domyślna przesunięta do zdalnej (`remoteBranch`, np. `origin/main`) o `commits` commitów. */
-  z.object({
-    state: z.literal("updated"),
-    branch: z.string(),
-    remoteBranch: z.string(),
-    commits: z.number().int().positive(),
-    workingTree: SyncWorkingTree,
-  }),
+  z.object({ state: z.literal("updated"), branch: z.string(), remoteBranch: z.string(), commits: z.number().int().positive() }),
   /** Fetch się udał, a gałąź domyślna już była równa zdalnej. */
-  z.object({ state: z.literal("up-to-date"), branch: z.string(), remoteBranch: z.string(), workingTree: SyncWorkingTree }),
+  z.object({ state: z.literal("up-to-date"), branch: z.string(), remoteBranch: z.string() }),
   /** `message` to zdanie dla użytkownika, z nazwą gałęzi, gdy jest znana. */
-  z.object({ state: z.literal("skipped"), reason: SyncSkipReason, message: z.string(), workingTree: SyncWorkingTree }),
+  z.object({ state: z.literal("skipped"), reason: SyncSkipReason, message: z.string() }),
 ]);
+export type SyncBranchOutcome = z.infer<typeof SyncBranchOutcome>;
+
+/**
+ * Wynik synchronizacji jednego repo bez błędu: to, co zwraca `vcs`, a błąd gita jest u niego wyjątkiem. `workingTree`
+ * jest `null`, gdy `git status` po synchronizacji zawiódł: gałąź i tak już się przesunęła, więc to nie błąd repo.
+ */
+export const SyncResult = z.intersection(SyncBranchOutcome, z.object({ workingTree: SyncWorkingTree.nullable() }));
 export type SyncResult = z.infer<typeof SyncResult>;
 
 /** Wynik synchronizacji jednego repo, gdy już się skończyła. */

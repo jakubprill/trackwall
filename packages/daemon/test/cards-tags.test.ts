@@ -95,18 +95,22 @@ describe("konfiguracja mise i tag no-mise", () => {
       snapshotOf(
         {
           "mise.toml": '[tools]\nnode = "22"\n\n[tasks.build]\nrun = "pnpm build"\n\n[tasks."test:unit"]\nrun = "pnpm test"\n',
-          ".config/mise.toml": '[tasks]\nlint = "pnpm lint"\n',
+          ".config/mise.toml": '[tools]\nlint = "1"\n[tasks]\nlint = "pnpm lint"\n',
+          ".config/mise/conf.d/ci.toml": 'tasks.ci = "pnpm ci"\n',
         },
-        ["mise-tasks/dev", "mise-tasks/db/reset", "mise-tasks/.gitkeep", "src/mise-tasks/nie"],
+        ["mise-tasks/dev", "mise-tasks/db/reset", "mise-tasks/test/_default", "mise-tasks/.gitkeep", "src/mise-tasks/nie"],
       ),
     );
-    expect(mise.configFiles).toEqual(["mise.toml", ".config/mise.toml"]);
+    expect(mise.configFiles).toEqual(["mise.toml", ".config/mise.toml", ".config/mise/conf.d/ci.toml"]);
+    expect(mise.complete).toBe(true);
     expect(mise.tasks.map((t) => `${t.name} ${t.evidence.path}:${t.evidence.line}`)).toEqual([
       "build mise.toml:4",
       "test:unit mise.toml:7",
-      "lint .config/mise.toml:2",
+      "lint .config/mise.toml:4",
+      "ci .config/mise/conf.d/ci.toml:1",
       "dev mise-tasks/dev:null",
       "db:reset mise-tasks/db/reset:null",
+      "test mise-tasks/test/_default:null",
     ]);
   });
 
@@ -118,6 +122,8 @@ describe("konfiguracja mise i tag no-mise", () => {
     expect(noMise({ "mise.toml": "[tools\n" })).toBe("mise.toml declares no tasks");
     expect(noMise({ "mise.toml": '[tasks]\nbuild = "make"\n' })).toBeUndefined();
     expect(noMise({}, [".mise/tasks/build"])).toBeUndefined();
+    // Plik konfiguracji, którego karta nie przeczytała (limity), może mieć taski, więc tagu nie ma.
+    expect(noMise({}, ["mise.toml"])).toBeUndefined();
   });
 });
 

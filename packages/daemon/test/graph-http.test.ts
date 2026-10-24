@@ -33,7 +33,7 @@ function card(provides: RepoCard["provides"], consumes: RepoCard["consumes"]): R
     provides,
     consumes,
     tools: [],
-    mise: { configFiles: [], tasks: [] },
+    mise: { configFiles: [], tasks: [], complete: true },
     mechanisms: [],
     problems: [],
   };

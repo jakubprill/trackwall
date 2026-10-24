@@ -1,4 +1,4 @@
-import { countLabel, type SyncResult, type SyncSkipReason, type SyncWorkingTree } from "@trackwall/protocol";
+import { countLabel, type SyncBranchOutcome, type SyncResult, type SyncSkipReason, type SyncWorkingTree } from "@trackwall/protocol";
 import { type GitNetwork, git, knownDefaultBranch, revParse } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { parseStatus } from "./parse.ts";
@@ -20,15 +20,12 @@ const FETCH_TIMEOUT_MS = 5 * 60_000;
 /** Fast-forward wybranej gałęzi aktualizuje pliki w katalogu roboczym; duże repo z LFS pobiera przy tym obiekty. */
 const MERGE_TIMEOUT_MS = 5 * 60_000;
 
-/** Wynik bez katalogu roboczego, który `syncRepo` dokłada na końcu. */
-type BranchOutcome = { [S in SyncResult["state"]]: Omit<Extract<SyncResult, { state: S }>, "workingTree"> }[SyncResult["state"]];
-
 export async function syncRepo(dir: string): Promise<SyncResult> {
   const outcome = await syncDefaultBranch(dir);
   return { ...outcome, workingTree: await workingTree(dir) };
 }
 
-async function syncDefaultBranch(dir: string): Promise<BranchOutcome> {
+async function syncDefaultBranch(dir: string): Promise<SyncBranchOutcome> {
   const config = await readConfig(dir);
   const remote = mainRemote(config);
   if (!remote) return skipped("no-remote", "the repo has neither an origin remote nor a single other remote");
@@ -61,7 +58,7 @@ async function defaultBranch(dir: string, remote: string, network: GitNetwork): 
   return read();
 }
 
-async function fastForward(dir: string, branch: string, remote: string, network: GitNetwork): Promise<BranchOutcome> {
+async function fastForward(dir: string, branch: string, remote: string, network: GitNetwork): Promise<SyncBranchOutcome> {
   const localRef = `refs/heads/${branch}`;
   const remoteRef = `refs/remotes/${remote}/${branch}`;
   const remoteBranch = `${remote}/${branch}`;
@@ -115,12 +112,20 @@ async function checkedOutInWorktree(dir: string, localRef: string): Promise<bool
     .some((line) => line === `branch ${localRef}`);
 }
 
-/** Wybrana gałąź i niezacommitowane pliki po synchronizacji; nieśledzone osobno, bo nigdy jej nie blokują. */
-async function workingTree(dir: string): Promise<SyncWorkingTree> {
-  const status = parseStatus((await git(dir, ["status", "--porcelain=v2", "--branch", "-z"])).stdout.toString("utf8"));
-  return { branch: status.branch, changed: status.changes - status.untracked, untracked: status.untracked };
+/**
+ * Wybrana gałąź i niezacommitowane pliki po synchronizacji; nieśledzone osobno, bo nigdy jej nie blokują. Błąd to
+ * `null`, a nie wyjątek: po przesuniętej gałęzi (antywirus na Windowsie skanuje nowe pliki) `git status` potrafi
+ * przekroczyć limit, a synchronizacja i tak się udała.
+ */
+async function workingTree(dir: string): Promise<SyncWorkingTree | null> {
+  try {
+    const status = parseStatus((await git(dir, ["status", "--porcelain=v2", "--branch", "-z"])).stdout.toString("utf8"));
+    return { branch: status.branch, changed: status.changes - status.untracked, untracked: status.untracked };
+  } catch {
+    return null;
+  }
 }
 
-function skipped(reason: SyncSkipReason, message: string): BranchOutcome {
+function skipped(reason: SyncSkipReason, message: string): SyncBranchOutcome {
   return { state: "skipped", reason, message };
 }

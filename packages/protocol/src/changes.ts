@@ -20,8 +20,9 @@ export const PATCH_MAX_BYTES = 1024 * 1024;
 /** Katalog roboczy (z nowymi plikami, bez ignorowanych) względem commita. */
 export const WorkingTreeChanges = z.object({
   files: z.array(ChangedFile),
-  /** Zunifikowany diff, ucięty do `PATCH_MAX_BYTES` (`truncated`). */
+  /** Zunifikowany diff, ucięty do `PATCH_MAX_BYTES`. */
   patch: z.string(),
+  /** Diff albo lista plików są ucięte. */
   truncated: z.boolean(),
 });
 export type WorkingTreeChanges = z.infer<typeof WorkingTreeChanges>;

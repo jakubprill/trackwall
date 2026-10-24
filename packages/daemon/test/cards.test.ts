@@ -36,7 +36,7 @@ describe("cards", () => {
     expect(result.card?.commit).toBe(gitIn(repo, "rev-parse", "HEAD").trim());
     expect(result.card?.consumes.map((c) => c.name)).toEqual(["react"]);
     expect(result.card?.tools.map((t) => [t.tool, t.version])).toEqual([["node", "22"]]);
-    expect(result.card?.mise).toEqual({ configFiles: ["mise.toml"], tasks: [] });
+    expect(result.card?.mise).toEqual({ configFiles: ["mise.toml"], tasks: [], complete: true });
     expect(result.tags.map((t) => t.name)).toEqual(["frontend", "no-mise"]);
   });
 

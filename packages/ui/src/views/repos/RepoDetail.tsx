@@ -33,7 +33,6 @@ export function RepoDetail({ conn, repo }: { conn: Connection; repo: Repo }) {
   const available = status.kind === "ok";
   // Nowy commit (np. z terminala) zmienia HEAD w odpytywanej liście, a to pobiera przegląd i drzewo od nowa.
   const head = status.kind === "ok" ? (status.head?.hash ?? "") : "";
-  const changes = status.kind === "ok" ? status.changes : 0;
   const load = useCallback(() => post(conn, workspaceApi.overview, { repo: repo.id }), [conn, repo.id]);
   const overview = useRemote(available ? load : undefined, { refreshKey: head });
 
@@ -56,7 +55,7 @@ export function RepoDetail({ conn, repo }: { conn: Connection; repo: Repo }) {
           <TabBar tabs={TABS} active={tab} onSelect={setTab} />
           {tab === "readme" && <Loaded remote={overview}>{(o) => <Readme readme={o.readme} />}</Loaded>}
           {tab === "commits" && <Loaded remote={overview}>{(o) => <RepoCommits commits={o.commits} />}</Loaded>}
-          {tab === "changes" && <RepoChanges conn={conn} repo={repo.id} refreshKey={`${head}:${changes}`} />}
+          {tab === "changes" && <RepoChanges conn={conn} repo={repo.id} refreshKey={head} />}
           {tab === "card" && <RepoCardView conn={conn} repo={repo.id} head={head} />}
           {tab === "files" && <RepoFiles conn={conn} repo={repo.id} head={head} />}
           {tab === "mise" && <RepoMiseTasks conn={conn} repo={repo.id} />}

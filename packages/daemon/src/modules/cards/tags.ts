@@ -66,7 +66,7 @@ function cardTags(card: RepoCard, repo: TaggedRepo): [string, string][] {
  * czego w nim uruchomić. Tag negatywny, bo to repo trzeba znaleźć filtrem, żeby dopisać mu `mise.toml`.
  */
 function noMiseReason(card: RepoCard): string | undefined {
-  if (card.mise.tasks.length > 0) return undefined;
+  if (card.mise.tasks.length > 0 || !card.mise.complete) return undefined;
   const [config] = card.mise.configFiles;
   return config ? `${config} declares no tasks` : "no mise config in the repo root";
 }

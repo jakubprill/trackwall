@@ -47,15 +47,18 @@ export function syncMessage(repo: SyncRepo): string | undefined {
     case "updated":
       return sentences([
         `${repo.branch} moved ${countLabel(repo.commits, { one: "commit", other: "commits" })} forward to ${repo.remoteBranch}`,
-        repo.workingTree.branch === repo.branch
-          ? "Files in the working directory were updated"
-          : `${checkedOut(repo.workingTree)}, so files in the working directory did not change`,
+        repo.workingTree &&
+          (repo.workingTree.branch === repo.branch
+            ? "Files in the working directory were updated"
+            : `${checkedOut(repo.workingTree)}, so files in the working directory did not change`),
         localChanges(repo.workingTree),
       ]);
     case "up-to-date":
       return sentences([
         `${repo.branch} already matches ${repo.remoteBranch}`,
-        repo.workingTree.branch === repo.branch ? undefined : `${checkedOut(repo.workingTree)}; sync only moves ${repo.branch}`,
+        repo.workingTree && repo.workingTree.branch !== repo.branch
+          ? `${checkedOut(repo.workingTree)}; sync only moves ${repo.branch}`
+          : undefined,
         localChanges(repo.workingTree),
       ]);
     case "skipped":
@@ -67,22 +70,31 @@ function checkedOut(tree: SyncWorkingTree): string {
   return tree.branch === null ? "The working directory has a detached HEAD" : `The working directory is on ${tree.branch}`;
 }
 
-function localChanges(tree: SyncWorkingTree): string | undefined {
-  const label = workingTreeLabel(tree.changed, tree.untracked);
-  return label && `Uncommitted files stay as they are: ${label}`;
+/** Bez stanu katalogu roboczego (`git status` po synchronizacji zawiódł) nie ma czego dopowiedzieć. */
+function localChanges(tree: SyncWorkingTree | null): string | undefined {
+  const label = tree && workingTreeLabel(tree.changed, tree.untracked);
+  return label ? `Uncommitted files stay as they are: ${label}` : undefined;
 }
 
-function sentences(parts: (string | undefined)[]): string {
+/** Zdania z daemona (`message`) nie mają kropki na końcu, a komunikaty gita mają; stąd kropka tylko tam, gdzie jej brak. */
+function sentences(parts: (string | null | undefined)[]): string {
   return parts
-    .filter((p) => p !== undefined)
+    .filter((p) => typeof p === "string")
     .map((p) => (p.endsWith(".") ? p : `${p}.`))
     .join(" ");
 }
 
-/** Wynik pod stanem repo na liście, także „aktualne”, bo bez niego nie widać, że synchronizacja doszła do repo. */
-export function listSyncBadge(repo: SyncRepo | undefined): { tone: StatusTone; label: string; message: string | undefined } | undefined {
+/**
+ * Wynik pod stanem repo na liście, także „aktualne”, bo bez niego nie widać, że synchronizacja doszła do repo. Wynik
+ * z czasem przestaje być prawdą (nowe commity na zdalnym), więc podpowiedź mówi, kiedy synchronizacja się zaczęła.
+ */
+export function listSyncBadge(
+  repo: SyncRepo | undefined,
+  syncedAgo: string,
+): { tone: StatusTone; label: string; message: string } | undefined {
   if (!repo) return undefined;
-  return { ...syncRepoTone(repo), message: syncMessage(repo) };
+  const message = syncMessage(repo);
+  return { ...syncRepoTone(repo), message: message ? `${message} Synced ${syncedAgo}.` : `Synced ${syncedAgo}.` };
 }
 
 export interface SyncProgress {

@@ -3,8 +3,9 @@ import { Badge } from "@/components/ui/badge";
 import { type DiffLineKind, diffLines } from "@/lib/diff-lines";
 import { cn } from "@/lib/utils";
 
-/** Ponad tyle linii przeglądarka zaczyna się dławić, a resztę i tak lepiej czytać w VS Code. */
+/** Ponad tyle linii albo plików przeglądarka zaczyna się dławić, a resztę i tak lepiej czytać w VS Code. */
 const MAX_LINES = 4000;
+const MAX_FILES = 500;
 
 const CHANGE_LABELS = {
   added: { label: "added", variant: "success" },
@@ -27,10 +28,11 @@ const LINE_CLASSES: Record<DiffLineKind, string> = {
  */
 export function ChangesDiff({ changes }: { changes: WorkingTreeChanges }) {
   const { lines, more } = diffLines(changes.patch, MAX_LINES);
+  const files = changes.files.slice(0, MAX_FILES);
   return (
     <>
       <ul className="flex flex-col gap-1">
-        {changes.files.map((file) => (
+        {files.map((file) => (
           <li key={file.path} className="flex min-w-0 items-center gap-2 text-sm">
             <Badge variant={CHANGE_LABELS[file.change].variant}>{CHANGE_LABELS[file.change].label}</Badge>
             <span className="truncate font-mono text-xs">{file.path}</span>
@@ -40,6 +42,11 @@ export function ChangesDiff({ changes }: { changes: WorkingTreeChanges }) {
           </li>
         ))}
       </ul>
+      {files.length < changes.files.length && (
+        <p className="text-muted-foreground text-xs">
+          Showing the first {MAX_FILES} of {changes.files.length} files.
+        </p>
+      )}
       <pre className="bg-muted overflow-x-auto rounded-md border p-3 font-mono text-xs leading-5">
         {lines.map((line) => (
           <div key={line.offset} className={cn("px-1 whitespace-pre", LINE_CLASSES[line.kind])}>

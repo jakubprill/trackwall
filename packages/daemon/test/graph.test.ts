@@ -33,7 +33,7 @@ function card(p: ProvidedPackage[], c: ConsumedPackage[]): RepoCard {
     provides: p,
     consumes: c,
     tools: [],
-    mise: { configFiles: [], tasks: [] },
+    mise: { configFiles: [], tasks: [], complete: true },
     mechanisms: [],
     problems: [],
   };

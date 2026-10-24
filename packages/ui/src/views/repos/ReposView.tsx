@@ -7,7 +7,7 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { twoDigits } from "@/lib/format";
+import { relativeTime, twoDigits } from "@/lib/format";
 import { branchLabel, listNeedsSettings, REPO_LIST_POLL_MS, repoStatusTone } from "@/lib/repo-status";
 import { statusTextClass } from "@/lib/status-tone";
 import { listSyncBadge, syncedByPath } from "@/lib/sync-state";
@@ -97,6 +97,7 @@ export function ReposView({
               repo={repo}
               position={i + 1}
               syncResult={synced.get(repo.path)}
+              syncedAgo={sync.run ? relativeTime(sync.run.startedAt, new Date()) : ""}
               tags={filter.tags.get(repo.id) ?? []}
               active={panel === "repo" && repo.id === current?.id}
               onSelect={() => {
@@ -200,6 +201,7 @@ function RepoListItem({
   repo,
   position,
   syncResult,
+  syncedAgo,
   tags,
   active,
   onSelect,
@@ -207,13 +209,14 @@ function RepoListItem({
   repo: Repo;
   position: number;
   syncResult: SyncRepo | undefined;
+  syncedAgo: string;
   tags: RepoTag[];
   active: boolean;
   onSelect: () => void;
 }) {
   const { status } = repo;
   const state = repoStatusTone(status);
-  const badge = listSyncBadge(syncResult);
+  const badge = listSyncBadge(syncResult, syncedAgo);
   const noMise = tags.some((t) => t.name === NO_MISE_TAG);
   const otherTags = tags.filter((t) => t.name !== NO_MISE_TAG);
   return (

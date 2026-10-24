@@ -16,8 +16,8 @@ describe("stan repo w UI", () => {
     expect(statuses.map(repoStatusTone)).toEqual([
       { tone: "ok", label: "clean" },
       { tone: "warning", label: "3 changed" },
-      { tone: "warning", label: "3 changed, 1 new file" },
-      { tone: "warning", label: "2 new files" },
+      { tone: "warning", label: "3 changed, 1 new" },
+      { tone: "warning", label: "2 new" },
       { tone: "error", label: "unavailable" },
     ]);
   });

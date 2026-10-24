@@ -3,7 +3,7 @@ import { extractFrontendHttp, readsFrontendHttpFile } from "./frontend-http.ts";
 import { extractGradle, readsGradleFile } from "./gradle.ts";
 import { extractMaven, readsMavenFile } from "./maven.ts";
 import { detectMechanisms } from "./mechanisms.ts";
-import { extractMiseSetup } from "./mise-tasks.ts";
+import { extractMiseSetup, isMiseConfigFile } from "./mise-tasks.ts";
 import { extractNpm, readsNpmFile } from "./npm.ts";
 import type { SourceSelection } from "./read-snapshot.ts";
 import { dirOf } from "./repo-path.ts";
@@ -33,7 +33,7 @@ const HTTP_EXTRACTORS = [
 
 /** Czy któryś ekstraktor czyta plik `path`; tylko takie pliki (i wybrane pliki źródłowe) odczyt commita wyciąga z gita. */
 export function readsCardFile(path: string): boolean {
-  return readsToolFile(path) || [...BUILD_EXTRACTORS, ...HTTP_EXTRACTORS].some((e) => e.reads(path));
+  return readsToolFile(path) || isMiseConfigFile(path) || [...BUILD_EXTRACTORS, ...HTTP_EXTRACTORS].some((e) => e.reads(path));
 }
 
 /** Pliki źródłowe Javy i Kotlina, które czyta ekstraktor Spring: tylko z mapowaniami, klientami HTTP albo stałymi ścieżek. */
