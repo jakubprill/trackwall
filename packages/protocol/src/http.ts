@@ -40,9 +40,44 @@ export const ProvidedEndpoint = z.object({
   app: z.string().nullable(),
   /** `Klasa.metoda` kontrolera. */
   handler: z.string(),
+  /**
+   * Typ ciała żądania (parametr z `@RequestBody`) w zapisie typu (`CreateOrder`, `List<Line>`); `null` bez ciała albo
+   * gdy drzewo składni pliku nie powstało (ADR-38). Zapis typu to tekst z kodu bez adnotacji, ze spacją tylko przed
+   * słowem po słowie albo po `?` (`List<? extends Line>`); dłuższy niż 256 znaków przycięty z „…”.
+   */
+  request: z.string().nullable(),
+  /**
+   * Typ odpowiedzi: typ zwracany bez opakowań, które nie zmieniają treści (`ResponseEntity<T>`, `Mono<T>`,
+   * `Optional<T>`…), w zapisie typu jak `request`; `null` bez treści (`void`, `Unit`, `ResponseEntity<Void>`,
+   * `ResponseEntity<*>`, samo `ResponseEntity`), bez jawnego typu (funkcja Kotlina z wyrażeniem) albo bez drzewa
+   * składni (ADR-38).
+   */
+  response: z.string().nullable(),
   evidence: Evidence,
 });
 export type ProvidedEndpoint = z.infer<typeof ProvidedEndpoint>;
+
+/** Pole DTO: nazwa i typ w zapisie typu jak `ProvidedEndpoint.request` (`List<Line>`, `String?`). */
+export const DtoField = z.object({ name: z.string(), type: z.string() });
+export type DtoField = z.infer<typeof DtoField>;
+
+/**
+ * DTO (ADR-38): typ z repo, który jest ciałem żądania albo odpowiedzią endpointu HTTP, wprost albo przez pole innego
+ * DTO. Rekord ma pola z nagłówka, `data class` z konstruktora i z ciała, klasa pola instancji (bez `static`, także
+ * te, do których Lombok dopisuje akcesory), enum stałe; najwyżej 200 pól albo stałych.
+ * Typ bez pól albo stałych nie jest DTO.
+ */
+export const Dto = z.discriminatedUnion("kind", [
+  z.object({
+    /** Prosta nazwa typu; typ zagnieżdżony też tylko swoją nazwą (`Inner`, nie `Outer.Inner`). */
+    name: z.string(),
+    kind: z.enum(["record", "data-class", "class"]),
+    fields: z.array(DtoField),
+    evidence: Evidence,
+  }),
+  z.object({ name: z.string(), kind: z.literal("enum"), values: z.array(z.string()), evidence: Evidence }),
+]);
+export type Dto = z.infer<typeof Dto>;
 
 /**
  * Skąd jest klient HTTP: interfejs `@FeignClient`, interfejs `@HttpExchange` (Spring 6), wywołania `WebClient`,

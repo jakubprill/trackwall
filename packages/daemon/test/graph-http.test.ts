@@ -6,6 +6,7 @@ import type { ConsumedHttp, GraphConfig, ProvidedApp, ProvidedEndpoint, RepoCard
 import { CardCache } from "../src/modules/cards/card-cache.ts";
 import { Cards } from "../src/modules/cards/cards.ts";
 import { extractCard } from "../src/modules/cards/extract-card.ts";
+import { loadSyntaxParsers } from "../src/modules/cards/syntax-tree.ts";
 import { buildGraph } from "../src/modules/graph/build-graph.ts";
 import { Graph } from "../src/modules/graph/graph.ts";
 import type { GraphCardInput } from "../src/modules/graph/graph-input.ts";
@@ -17,13 +18,15 @@ import { fakeHosting } from "./support/hosting.ts";
 import { snapshotOf } from "./support/snapshot.ts";
 import { fixtureFiles } from "./support/spring-fixtures.ts";
 
+const parsers = await loadSyntaxParsers();
+
 const CONFIG_FILE = "/home/ja/.trackwall/workspace.yaml";
 const NO_CONFIG: GraphConfig = { packages: {}, apps: {}, edges: [] };
 const SHOP = ["orders-api", "orders-bff", "payments", "legacy-reports", "shop-web"];
 
 /** Karty repo sklepu z fixture'ów (`test/fixtures/spring`), policzone bez gita. */
 function shopCards(): GraphCardInput[] {
-  return SHOP.map((repo) => ({ kind: "ok", repo, remote: null, card: extractCard(snapshotOf(fixtureFiles(repo))), tags: [] }));
+  return SHOP.map((repo) => ({ kind: "ok", repo, remote: null, card: extractCard(snapshotOf(fixtureFiles(repo)), parsers), tags: [] }));
 }
 
 function card(provides: RepoCard["provides"], consumes: RepoCard["consumes"]): RepoCard {
@@ -32,6 +35,7 @@ function card(provides: RepoCard["provides"], consumes: RepoCard["consumes"]): R
     buildFiles: [],
     provides,
     consumes,
+    dtos: [],
     tools: [],
     mise: { configFiles: [], tasks: [], complete: true },
     mechanisms: [],
@@ -44,7 +48,16 @@ function app(name: string, port: number | null = null): ProvidedApp {
 }
 
 function endpoint(path: string, method: ProvidedEndpoint["method"] = "GET"): ProvidedEndpoint {
-  return { kind: "endpoint", method, path, app: null, handler: "Api.handle", evidence: { path: "src/main/java/Api.java", line: 10 } };
+  return {
+    kind: "endpoint",
+    method,
+    path,
+    app: null,
+    handler: "Api.handle",
+    request: null,
+    response: null,
+    evidence: { path: "src/main/java/Api.java", line: 10 },
+  };
 }
 
 function client(fields: Partial<ConsumedHttp>): ConsumedHttp {
@@ -317,18 +330,18 @@ describe("graf i find_endpoint na prawdziwym gicie", () => {
     await workspace.setProjectsDir(projects);
     for (const name of SHOP) makeRepo(fixtureFiles(name), name, projects);
     const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(join(home, "cards"), () => {}) });
-    return { home, projects, graph: new Graph({ cards, workspace }), workspace };
+    return { home, projects, cards, graph: new Graph({ cards, workspace }), workspace };
   }
 
   test(
-    "karty z commita czytają kontrolery i klientów wybranych wyszukiwaniem, bez kodu testów",
+    "karty z commita czytają kontrolery i klientów wybranych wyszukiwaniem, bez kodu testów, a DTO z plików o nazwach typów",
     async () => {
-      const { graph } = await setup();
+      const { graph, cards } = await setup();
       const found = await graph.findEndpoint("/api/orders/42", "GET");
 
       expect(found.truncated).toBe(false);
-      expect(found.endpoints.map((e) => [e.repo, e.method, e.path, e.handler, e.evidence.line])).toEqual([
-        ["orders-api", "GET", "/api/orders/{id}", "OrdersController.get", 19],
+      expect(found.endpoints.map((e) => [e.repo, e.method, e.path, e.handler, e.response, e.evidence.line])).toEqual([
+        ["orders-api", "GET", "/api/orders/{id}", "OrdersController.get", "OrderDto", 19],
       ]);
       expect(found.endpoints[0]?.callers.map((c) => [c.repo, c.via, c.client, c.path, c.confidence])).toEqual([
         ["legacy-reports", "rest-template", "OrdersReport", "/api/orders/{}", "medium"],
@@ -337,6 +350,8 @@ describe("graf i find_endpoint na prawdziwym gicie", () => {
       ]);
       // Kontroler z src/test nie jest endpointem aplikacji.
       expect((await graph.findEndpoint("test-only", undefined)).endpoints).toEqual([]);
+      // Pliki DTO nie mają adnotacji, więc odczyt dociąga je po nazwach typów z kontrolera.
+      expect((await cards.card("orders-api")).card?.dtos.map((d) => d.name)).toEqual(["OrderDto", "OrderLine", "OrderStatus"]);
     },
     REAL_GIT_TIMEOUT,
   );

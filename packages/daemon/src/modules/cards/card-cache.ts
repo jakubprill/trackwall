@@ -8,18 +8,25 @@ import { writeFileAtomic } from "../../infra/atomic-write.ts";
 /**
  * Pamięć podręczna kart po hashu commita (ADR-25): karta zależy tylko od drzewa commita i wersji ekstraktorów, więc
  * policzona raz nie zmienia się. W pamięci daemona i w plikach `<katalog stanu>/cards/<commit>.json`, żeby restart
- * daemona nie czytał od nowa setek repo. Plik z inną wersją ekstraktorów albo uszkodzony liczy się jak brak.
+ * daemona nie czytał od nowa setek repo. Plik z inną wersją ekstraktorów albo uszkodzony liczy się jak brak. Karta,
+ * której część zależała od czasu liczenia (ADR-38), zostaje tylko w pamięci, więc następny start daemona liczy ją od nowa.
  */
 
 /**
  * Wersja ekstraktorów zapisana z kartą. Zmiana tego, co ekstraktor wyciąga z tych samych plików, musi ją podbić,
  * bo inaczej stare karty z dysku zostaną przy starym wyniku.
  */
-const EXTRACTOR_VERSION = 3;
+const EXTRACTOR_VERSION = 4;
 /** Tyle plików kart zostaje na dysku; starsze (po czasie zapisu) są usuwane przy starcie daemona. */
 const MAX_FILES = 2000;
 /** Tyle kart trzyma pamięć daemona; starsze wypadają w kolejności dodania. */
 const MAX_IN_MEMORY = 1000;
+
+/** Policzona karta; `persist: false`, gdy wynik zależał od chwili liczenia i nie powinien przetrwać restartu. */
+export interface ComputedCard {
+  card: RepoCard;
+  persist: boolean;
+}
 
 const CacheFile = z.object({ extractorVersion: z.literal(EXTRACTOR_VERSION), card: RepoCard });
 
@@ -36,18 +43,19 @@ export class CardCache {
   }
 
   /**
-   * Karta commita z pamięci albo z dysku, a bez niej policzona przez `compute` i zapamiętana. Całe zadanie (odczyt
-   * dysku i liczenie) trafia do `computing` przed pierwszym `await`, więc równoczesne pytanie o ten sam commit
-   * dostaje to samo zadanie.
+   * Karta commita z pamięci albo z dysku, a bez niej policzona przez `compute` i zapamiętana (na dysku tylko z
+   * `persist`). Całe zadanie (odczyt dysku i liczenie) trafia do `computing` przed pierwszym `await`, więc równoczesne
+   * pytanie o ten sam commit dostaje to samo zadanie.
    */
-  getOrCompute(commit: string, compute: () => Promise<RepoCard>): Promise<RepoCard> {
+  getOrCompute(commit: string, compute: () => Promise<ComputedCard>): Promise<RepoCard> {
     const running = this.computing.get(commit);
     if (running) return running;
     const job = (async () => {
       const cached = await this.get(commit);
       if (cached) return cached;
-      const card = await compute();
-      this.set(card);
+      const { card, persist } = await compute();
+      this.remember(card);
+      if (persist) this.save(card);
       return card;
     })().finally(() => this.computing.delete(commit));
     this.computing.set(commit, job);
@@ -76,8 +84,7 @@ export class CardCache {
   }
 
   /** Nieudany zapis na dysk trafia do logu: karta w pamięci działa dalej, najwyżej restart policzy ją od nowa. */
-  private set(card: RepoCard): void {
-    this.remember(card);
+  private save(card: RepoCard): void {
     if (!CommitHash.safeParse(card.commit).success) return;
     try {
       mkdirSync(this.dir, { recursive: true });

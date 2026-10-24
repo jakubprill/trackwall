@@ -1,15 +1,17 @@
 /**
  * Test dymny skompilowanej binarki daemona: start, health, info z tokenem, `initialize` przez most MCP (`mcp-stdio`),
- * shutdown, sprzątnięty daemon.json.
+ * karta repo z kontraktem endpointu i DTO (parser tree-sitter osadzony w binarce, ADR-37, ADR-38), shutdown,
+ * sprzątnięty daemon.json.
  *
  *   bun scripts/smoke.ts <ścieżka do trackwall-daemon>
  *
  * Na Windowsie `.exe` jest dopisywane, gdy go brakuje, więc ta sama komenda działa na obu systemach.
  */
-import { existsSync, mkdtempSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { DaemonInfoResult, HealthResult, MCP_SERVER_NAME } from "@trackwall/protocol";
+import { apiResult, cardsApi, DaemonInfoResult, HealthResult, MCP_SERVER_NAME, workspaceApi } from "@trackwall/protocol";
 import { z } from "zod";
 import { daemonFilePath, readDaemonFile } from "../src/infra/discovery.ts";
 import { loopbackRequest } from "../src/infra/loopback.ts";
@@ -55,6 +57,52 @@ const firstLine = (await new Response(bridge.stdout).text()).split("\n")[0] ?? "
 const InitializeReply = z.object({ id: z.literal(1), result: z.object({ serverInfo: z.object({ name: z.literal(MCP_SERVER_NAME) }) }) });
 if (!InitializeReply.safeParse(JSON.parse(firstLine)).success) throw new Error(`mcp-stdio initialize: ${firstLine}`);
 console.log(`mcp-stdio (${info.data.mcpStdioCommand.join(" ")}): initialize OK`);
+
+// Karta repo z kontrolerem i DTO: tylko to sprawdza, że binarka ma u siebie parser i gramatyki (ADR-37).
+const projects = mkdtempSync(join(tmpdir(), "trackwall-smoke-projects-"));
+const repo = join(projects, "orders");
+const sources = join(repo, "src", "main", "java", "a");
+mkdirSync(sources, { recursive: true });
+writeFileSync(
+  join(sources, "Api.java"),
+  '@RestController class Api { @PostMapping("/orders") OrderDto create(@RequestBody OrderDto body) { return body; } }\n',
+);
+writeFileSync(join(sources, "OrderDto.java"), "public record OrderDto(String id, int quantity) {}\n");
+for (const args of [
+  ["init", "-q"],
+  ["add", "."],
+  // Bez podpisu i hooków z globalnej konfiguracji gita osoby, która uruchamia smoke.
+  [
+    "-c",
+    "user.name=smoke",
+    "-c",
+    "user.email=smoke@example.invalid",
+    "-c",
+    "commit.gpgsign=false",
+    "-c",
+    "core.hooksPath=",
+    "commit",
+    "-q",
+    "-m",
+    "smoke",
+  ],
+]) {
+  const git = spawnSync("git", args, { cwd: repo, encoding: "utf8" });
+  if (git.status !== 0) throw new Error(`git ${args.join(" ")}: ${git.stderr}`);
+}
+const post = async (path: string, body: unknown): Promise<unknown> =>
+  JSON.parse((await loopbackRequest(port, path, { method: "POST", token, body: JSON.stringify(body), timeoutMs: 15_000 })).body);
+const settings = apiResult(workspaceApi.setProjectsDir.data).parse(await post(workspaceApi.setProjectsDir.path, { path: projects }));
+const listed = apiResult(workspaceApi.list.data).parse(await post(workspaceApi.list.path, {}));
+// Folder z projektami ma tylko to repo; ścieżka z listy może mieć inny zapis (krótkie nazwy na Windowsie, /private na macOS).
+const orders = listed.ok && listed.data.repos.length === 1 ? listed.data.repos[0] : undefined;
+if (!settings.ok || !orders) throw new Error(`repo ${repo} nie jest jedynym na liście: ${JSON.stringify({ settings, listed })}`);
+const result = apiResult(cardsApi.card.data).parse(await post(cardsApi.card.path, { repo: orders.id }));
+const card = result.ok ? result.data.card : null;
+const endpoint = card?.provides.find((p) => p.kind === "endpoint");
+const contract = `${endpoint?.kind === "endpoint" ? `${endpoint.request} -> ${endpoint.response}` : "brak endpointu"}; DTO: ${card?.dtos.map((d) => d.name).join(", ")}`;
+if (contract !== "OrderDto -> OrderDto; DTO: OrderDto") throw new Error(`karta repo: ${contract}; ${JSON.stringify(result)}`);
+console.log(`karta repo: ${contract}`);
 
 await get("/api/daemon/shutdown", "POST");
 const code = await Promise.race([proc.exited, Bun.sleep(10_000).then(() => "timeout")]);

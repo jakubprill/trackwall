@@ -2,6 +2,7 @@ import {
   type ConsumedHttp,
   type ConsumedPackage,
   cardsApi,
+  type Dto,
   evidenceLabel,
   type Mechanism,
   type ProvidedApp,
@@ -81,6 +82,7 @@ function CardFacts({ card }: { card: RepoCard }) {
       <Tools tools={card.tools} />
       {apps.length > 0 && <Apps apps={apps} />}
       {(apps.length > 0 || endpoints.length > 0) && <Endpoints endpoints={endpoints} />}
+      {card.dtos.length > 0 && <Dtos dtos={card.dtos} />}
       {clients.length > 0 && <HttpClients clients={clients} />}
       <Packages label="Provides" packages={provided} empty="The repo does not build a package that another repo could use." />
       <Packages label="Uses" packages={consumed} empty="No dependencies in the build files." />
@@ -211,12 +213,45 @@ function Endpoints({ endpoints }: { endpoints: ProvidedEndpoint[] }) {
               <span className="min-w-0 flex-1 truncate font-mono text-xs" title={e.path}>
                 {e.path}
               </span>
+              {(e.request !== null || e.response !== null) && <Contract endpoint={e} />}
               <span className="text-muted-foreground max-w-48 truncate font-mono text-xs">{e.handler}</span>
               <Evidence label={evidenceLabel(e.evidence)} />
             </Row>
           ))}
         </ul>
       )}
+    </Surface>
+  );
+}
+
+/** Typ ciała żądania i odpowiedzi endpointu (ADR-38): `CreateOrder → OrderDto`, brak strony to `–`. */
+function Contract({ endpoint }: { endpoint: ProvidedEndpoint }) {
+  const label = `${endpoint.request ?? "–"} → ${endpoint.response ?? "–"}`;
+  return (
+    <span className="text-muted-foreground max-w-64 truncate font-mono text-xs" title={label}>
+      {label}
+    </span>
+  );
+}
+
+/** DTO z kontraktów endpointów (ADR-38): rodzaj, nazwa, pola z typami albo stałe enuma. */
+function Dtos({ dtos }: { dtos: Dto[] }) {
+  return (
+    <Surface label="DTOs" meta={dtos.length}>
+      <ul className="divide-y">
+        {dtos.map((d) => (
+          <li key={`${d.name} ${evidenceLabel(d.evidence)}`} className="flex min-w-0 flex-col gap-1 px-3 py-2">
+            <span className="flex min-w-0 items-center gap-3">
+              <Badge variant="secondary">{d.kind}</Badge>
+              <span className="min-w-0 flex-1 truncate font-mono text-xs">{d.name}</span>
+              <Evidence label={evidenceLabel(d.evidence)} />
+            </span>
+            <span className="text-muted-foreground min-w-0 font-mono text-xs break-words">
+              {d.kind === "enum" ? d.values.join(", ") : d.fields.map((f) => `${f.name}: ${f.type}`).join(", ")}
+            </span>
+          </li>
+        ))}
+      </ul>
     </Surface>
   );
 }

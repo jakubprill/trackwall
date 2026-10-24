@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Endpoint } from "./api.ts";
 import { Evidence } from "./evidence.ts";
-import { ConsumedHttp, ProvidedApp, ProvidedEndpoint } from "./http.ts";
+import { ConsumedHttp, Dto, ProvidedApp, ProvidedEndpoint } from "./http.ts";
 import { RepoId } from "./workspace.ts";
 
 /**
@@ -165,6 +165,8 @@ export const RepoCard = z.object({
   provides: z.array(Provided),
   /** Paczki spoza repo, każda raz (pierwsze wystąpienie; paczki z tego samego repo pominięte), i klienci HTTP. */
   consumes: z.array(Consumed),
+  /** DTO endpointów HTTP z repo, w kolejności odkrycia od endpointów (ADR-38). */
+  dtos: z.array(Dto),
   tools: z.array(ToolRequirement),
   mise: MiseSetup,
   mechanisms: z.array(Mechanism),
