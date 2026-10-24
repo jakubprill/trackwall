@@ -10,6 +10,7 @@ import { IS_MAC } from "@/lib/platform";
 import { copiesSelection } from "@/lib/terminal-copy";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { terminalTheme } from "@/lib/terminal-theme";
+import { FocusReporter, windowInFront } from "@/lib/window-focus";
 
 const RECONNECT_MS = 1000;
 
@@ -17,6 +18,7 @@ const RECONNECT_MS = 1000;
  * Okno terminala jednej sesji (§4.4, ADR-26): xterm.js podłączony WebSocketem do PTY w daemonie. Daemon najpierw
  * przysyła obraz ekranu, więc przełączenie sesji albo zerwane połączenie zaczyna od aktualnego ekranu, a nie od
  * pustego terminala. Klawisze i rozmiar okna idą do sesji; rozmiar PTY ustala ostatnie okno, które go zgłosiło.
+ * The window also tells the daemon whether it is in front of the user, which marks the session seen (ADR-47).
  */
 export function SessionTerminal({ conn, session, live }: { conn: Connection; session: string; live: boolean }) {
   const frame = useRef<HTMLDivElement>(null);
@@ -41,6 +43,12 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
       if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
     };
     const sendSize = () => send({ type: "resize", cols: terminal.cols, rows: terminal.rows });
+    const focus = new FocusReporter(
+      (focused) => send({ type: "focus", focused }),
+      () => windowInFront(document),
+      { set: (run, ms) => setTimeout(run, ms), clear: (timer) => clearTimeout(timer) },
+    );
+    const sendFocus = () => focus.update();
 
     const connect = () => {
       const { url, protocols } = daemonSocket(conn, ptySocket(session), window.location);
@@ -50,6 +58,7 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
       ws.onopen = () => {
         setNotice(undefined);
         sendSize();
+        focus.connected();
       };
       ws.onmessage = (event: MessageEvent<ArrayBuffer | string>) => {
         // Ramka tekstowa to obraz ekranu na start połączenia: zastępuje to, co okno pokazywało wcześniej.
@@ -90,12 +99,19 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
     // `padding` kontenera: FitAddon liczy miejsce z rozmiaru kontenera i nie odejmuje jego paddingu.
     const resize = new ResizeObserver(() => resizer.request());
     resize.observe(container);
+    window.addEventListener("focus", sendFocus);
+    window.addEventListener("blur", sendFocus);
+    document.addEventListener("visibilitychange", sendFocus);
 
     return () => {
       disposed = true;
       clearTimeout(timer);
       resizer.dispose();
       resize.disconnect();
+      window.removeEventListener("focus", sendFocus);
+      window.removeEventListener("blur", sendFocus);
+      document.removeEventListener("visibilitychange", sendFocus);
+      focus.dispose();
       input.dispose();
       socket?.close();
       terminal.dispose();

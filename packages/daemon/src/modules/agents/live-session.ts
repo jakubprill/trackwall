@@ -1,7 +1,8 @@
-import type { RunState, Session, TaskState, TaskStateChange } from "@trackwall/protocol";
+import type { RunState, Session, TaskStateChange } from "@trackwall/protocol";
 import { sessionKey } from "./copilot-keys.ts";
 import { CopilotSessionState } from "./copilot-session-state.ts";
 import { HookTail } from "./hook-tail.ts";
+import { SessionAttention } from "./session-attention.ts";
 import { type ScreenViewer, TerminalScreen } from "./terminal-screen.ts";
 
 /**
@@ -12,13 +13,27 @@ import { type ScreenViewer, TerminalScreen } from "./terminal-screen.ts";
 /** Ten sam próg co w prototypie (`copilot-record.ts`), żeby nagranie i daemon liczyły `Stale` tak samo. */
 export const STALE_AFTER_MS = 60_000;
 
-/** Stany, w których działająca sesja czeka na Ciebie (`Session.needsAttention`). */
-const WAITING_STATES: ReadonlySet<TaskState> = new Set(["Input", "Approval", "Plan"]);
-
 /** PTY procesu sesji: terminal lidera grupy z `procs` (`GroupTerminal`). */
 export interface SessionPty {
   write(data: string): void;
   resize(cols: number, rows: number): void;
+}
+
+/** One session terminal window (a viewer in the UI): keyboard input, size, focus and leaving. */
+export interface SessionWindow {
+  input(data: string): void;
+  resize(cols: number, rows: number): void;
+  /** The window came in front of the user (focused and visible) or left (ADR-47). */
+  focus(focused: boolean): void;
+  detach(): void;
+}
+
+/**
+ * Input the user typed, not an answer xterm.js sends by itself to a terminal query (colours, cursor position), which
+ * starts with ESC and also comes from a window in the background. Esc alone is a key; arrows do not count.
+ */
+function typedByUser(data: string): boolean {
+  return data === "\u001b" || !data.startsWith("\u001b");
 }
 
 export interface LiveSessionOptions {
@@ -48,6 +63,7 @@ export class LiveSession {
   readonly #decoder = new TextDecoder();
   #terminal: SessionPty | undefined;
   #last: TaskStateChange | null = null;
+  readonly #attention = new SessionAttention();
   #finished = false;
   readonly #closers = new Set<() => void>();
 
@@ -76,11 +92,13 @@ export class LiveSession {
   input(data: string): void {
     if (this.#finished || !this.#terminal) return;
     this.#terminal.write(data);
-    const key = sessionKey(data);
-    if (!key) return;
-    // Klawisz liczy się ze stanu po hookach, które już przyszły, a nie po tych z ostatniego cyklu.
+    // Input counts from the state after the hooks already in `hooks.jsonl`, not after the last read cycle: a key
+    // answers the prompt that is already there, and typing marks seen the end of a turn that has already been written.
     this.#readHooks();
-    this.#report(this.#state.key(key));
+    const key = sessionKey(data);
+    if (key) this.#report(this.#state.key(key));
+    // After the key's own state change, so that the `Input` an Esc causes counts as seen.
+    if (typedByUser(data)) this.#attention.typed();
   }
 
   /** Rozmiar ustala ostatnie okno, które go zgłosiło; TUI dostaje go razem z PTY. */
@@ -91,12 +109,19 @@ export class LiveSession {
   }
 
   /** `onClosed` dostaje widz, którego sesja znika (`dismiss`), żeby jego okno nie czekało na wyjście, które nie przyjdzie. */
-  attach(viewer: ScreenViewer, onSnapshot: (snapshot: string) => void, onClosed: () => void): () => void {
+  attach(viewer: ScreenViewer, onSnapshot: (snapshot: string) => void, onClosed: () => void): SessionWindow {
     const detach = this.#screen.attach(viewer, onSnapshot);
+    const attention = this.#attention.window();
     this.#closers.add(onClosed);
-    return () => {
-      this.#closers.delete(onClosed);
-      detach();
+    return {
+      input: (data) => this.input(data),
+      resize: (cols, rows) => this.resize(cols, rows),
+      focus: (focused) => attention.focus(focused),
+      detach: () => {
+        attention.close();
+        this.#closers.delete(onClosed);
+        detach();
+      },
     };
   }
 
@@ -127,7 +152,7 @@ export class LiveSession {
       run,
       state: this.#last,
       windowTitle: this.#state.windowTitle ?? null,
-      needsAttention: run.kind === "running" && this.#last !== null && WAITING_STATES.has(this.#last.state),
+      needsAttention: run.kind === "running" && this.#attention.waiting(this.#last?.state),
       task: this.task,
     };
   }
@@ -145,6 +170,10 @@ export class LiveSession {
   }
 
   #report(changes: readonly (TaskStateChange | undefined)[]): void {
-    for (const change of changes) if (change) this.#last = change;
+    for (const change of changes) {
+      if (!change) continue;
+      this.#attention.changed(this.#last?.state, change.state);
+      this.#last = change;
+    }
   }
 }

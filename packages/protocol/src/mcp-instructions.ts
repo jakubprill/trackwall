@@ -13,6 +13,8 @@ const {
   getRepo,
   getRepoCard,
   tail,
+  getErrors,
+  searchCode,
   whoCalls,
   subgraphFor,
   findEndpoint,
@@ -35,11 +37,14 @@ export const MCP_INSTRUCTIONS = [
   `- Understand a repo: ${getRepoCard.name} lists what it provides (packages, Spring Boot apps, HTTP endpoints, DTOs) and ` +
     "consumes (packages, HTTP clients), each fact with file and line. Start there instead of reading build files, then " +
     "open the files it points to.",
+  `- Find code across repos: ${searchCode.name} searches the latest commit of many repos at once (narrow with tags, ` +
+    "repos and paths); prefer it to cloning or walking directories one repo at a time.",
   `- Before you change an endpoint, a DTO, a package or a config address, check whom it affects: ${findEndpoint.name} ` +
     `shows who calls an endpoint, ${whoCalls.name} which repos depend on a repo, ${subgraphFor.name} its neighbourhood. ` +
     "Connections with low or medium confidence are hints: confirm them in the code. Name the affected repos in your result.",
-  `- Diagnose a running service: ${tail.name} reads the log of a repo's mise task (${getRepo.name} lists them); pass nextSeq ` +
-    "as sinceSeq to follow it.",
+  `- Diagnose a failure: ${getErrors.name} gives the errors from the logs of all mise tasks with their stack traces and ` +
+    `root cause; ${tail.name} reads the log of one mise task (${getRepo.name} lists them) around an error. In both, pass ` +
+    "nextSeq as sinceSeq to get only what is new.",
   `- Hand work to another agent, e.g. a change in another repo: ${proposeTask.name} with a prompt that stands on its own; ` +
     `the user approves, edits or rejects it in Trackwall. Then call ${waitForSession.name} with the task id: it returns ` +
     "when the proposal is rejected or the task's session needs someone (finished its turn, asks for approval, hit an error), goes " +

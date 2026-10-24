@@ -30,8 +30,11 @@ beforeAll(async () => {
 
 // Limit zamiast domyślnego braku: zawieszone sprzątanie na Windowsie ma być błędem tego pliku, a nie godziną joba.
 afterAll(async () => {
+  process.stderr.write("[dbg] afterAll start\n");
   for (const client of clients) await client.close();
+  process.stderr.write("[dbg] clients closed\n");
   await daemon.stop();
+  process.stderr.write("[dbg] daemon stopped\n");
 }, 30_000);
 
 /** Klient MCP tak, jak widzi go most stdio sesji: z tokenem z pliku w katalogu sesji. */
