@@ -18,9 +18,14 @@ const plugins = { mermaid: createMermaidPlugin({ config: { theme: "dark" } }) };
 /**
  * Własne wtyczki zamiast domyślnych Streamdown: sanityzacja ze schematem GitHuba z prefiksem `user-content-` dla `id`
  * i `name` (Streamdown go zdejmuje, a README mógłby wtedy nadpisać nazwane elementy okna) i bez `rehype-harden`,
- * który bez adresu bazowego zamienia linki i obrazy względne w „[blocked]”.
+ * który bez adresu bazowego zamienia linki i obrazy względne w „[blocked]”. `metastring` to opcje bloku kodu, które
+ * Streamdown przenosi z ogrodzenia (np. `startLine=10`).
  */
-const rehypePlugins: ComponentProps<typeof Streamdown>["rehypePlugins"] = [rehypeRaw, [rehypeSanitize, defaultSchema]];
+const schema = {
+  ...defaultSchema,
+  attributes: { ...defaultSchema.attributes, code: [...(defaultSchema.attributes?.code ?? []), "metastring"] },
+};
+const rehypePlugins: ComponentProps<typeof Streamdown>["rehypePlugins"] = [rehypeRaw, [rehypeSanitize, schema]];
 const controls = {
   code: { copy: true, download: false },
   table: { copy: true, download: false, fullscreen: true },

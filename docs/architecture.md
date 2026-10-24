@@ -84,7 +84,7 @@ trackwall/
 
 ## 4. Daemon: moduły i granice
 
-Daemon jest jednym procesem, ale wewnątrz jest podzielony na moduły z jawnie zadeklarowanym interfejsem. Każdy moduł wystawia klasę serwisu, a fasada (`Facade`) jest po prostu zbiorem tych serwisów przekazanym do trzech transportów (HTTP, MCP, zdarzenia). Moduł nie importuje innego modułu bezpośrednio, tylko przez fasadę, więc graf zależności między modułami jest widoczny w jednym pliku.
+Daemon jest jednym procesem, ale wewnątrz jest podzielony na moduły z jawnie zadeklarowanym interfejsem. Każdy moduł wystawia klasę serwisu, a fasada (`Facade`) jest zbiorem tych serwisów (i funkcji `openLink`, która otwiera w systemie link z README bez stanu i bez modułu, ADR-35) przekazanym do trzech transportów (HTTP, MCP, zdarzenia). Moduł nie importuje innego modułu bezpośrednio, tylko przez fasadę, więc graf zależności między modułami jest widoczny w jednym pliku.
 
 W kodzie: moduł to katalog `packages/daemon/src/modules/<moduł>/`, fasada to `packages/daemon/src/facade.ts`. Moduł, który potrzebuje innego, deklaruje u siebie interfejs z tym, czego używa (np. `WorkspaceVcs`), a `createFacade` podaje mu instancję tamtego modułu. Biome pilnuje obu stron: plik modułu nie importuje z sąsiedniego katalogu modułu (z zewnątrz tylko pliki infrastruktury `src/infra/errors.ts`, `src/infra/atomic-write.ts`, `src/infra/map-limit.ts` i katalog `src/platform/`, wymienione w `biome.json`, więc moduł jest płaskim katalogiem), a kod poza modułami (transporty, start) sięga do modułów tylko przez `facade.ts`.
 

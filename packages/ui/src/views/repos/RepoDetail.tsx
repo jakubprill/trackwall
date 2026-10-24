@@ -97,7 +97,7 @@ function Readme({ conn, readme }: { conn: Connection; readme: RepoOverview["read
   return (
     <Surface path={readme.path} note={readme.truncated ? TRUNCATED_NOTE : undefined}>
       {readme.format === "markdown" ? (
-        <ReadmeFallback text={readme.text}>
+        <ReadmeFallback key={readme.text} text={readme.text}>
           <Suspense fallback={<Loading />}>
             <ReadmeMarkdown conn={conn} text={readme.text} />
           </Suspense>
