@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Główne okno: tylko komendy aplikacji (daemon_connection, retry_daemon), żadnych wtyczek systemowych.",
+  "description": "Main window: only the app commands (daemon_connection, retry_daemon, take_jump, open_link), no system plugin permissions.",
   "windows": ["main"],
   "permissions": ["core:default"]
 }

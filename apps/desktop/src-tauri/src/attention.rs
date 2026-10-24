@@ -9,7 +9,7 @@
 
 use crate::daemon;
 use crate::daemon_state::DaemonState;
-use crate::focus::Focus;
+use crate::jump::Jump;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -161,11 +161,11 @@ pub fn build_menu(app: &AppHandle, waiting: &[Waiting], proposals: &[Proposal]) 
 }
 
 /// The session or proposal of a tray menu item; `None` for the fixed items.
-pub fn focus_from_menu(id: &str) -> Option<Focus> {
+pub fn jump_from_menu(id: &str) -> Option<Jump> {
     if let Some(session) = id.strip_prefix(MENU_SESSION_PREFIX) {
-        return Some(Focus::Session(session.to_owned()));
+        return Some(Jump::Session(session.to_owned()));
     }
-    id.strip_prefix(MENU_PROPOSAL_PREFIX).map(|proposal| Focus::Proposal(proposal.to_owned()))
+    id.strip_prefix(MENU_PROPOSAL_PREFIX).map(|proposal| Jump::Proposal(proposal.to_owned()))
 }
 
 /// Wątek pytający daemon o sesje, dopóki działa powłoka.
@@ -291,9 +291,9 @@ mod tests {
 
     #[test]
     fn menu_item_points_at_a_session_or_a_proposal() {
-        assert_eq!(focus_from_menu("session:abc"), Some(Focus::Session("abc".into())));
-        assert_eq!(focus_from_menu("proposal:abc"), Some(Focus::Proposal("abc".into())));
-        assert_eq!(focus_from_menu(MENU_SHOW), None);
+        assert_eq!(jump_from_menu("session:abc"), Some(Jump::Session("abc".into())));
+        assert_eq!(jump_from_menu("proposal:abc"), Some(Jump::Proposal("abc".into())));
+        assert_eq!(jump_from_menu(MENU_SHOW), None);
         assert_eq!(menu_text("Fix A & B"), "Fix A && B");
     }
 }

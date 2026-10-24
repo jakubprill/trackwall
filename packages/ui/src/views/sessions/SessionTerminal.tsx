@@ -8,6 +8,7 @@ import { daemonSocket } from "@/lib/daemon-socket";
 import { oncePerFrame } from "@/lib/once-per-frame";
 import { IS_MAC } from "@/lib/platform";
 import { copiesSelection } from "@/lib/terminal-copy";
+import { trackwallLinkProvider } from "@/lib/terminal-links";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { terminalTheme } from "@/lib/terminal-theme";
 import { FocusReporter, terminalInFront } from "@/lib/window-focus";
@@ -38,6 +39,7 @@ export function SessionTerminal({ conn, session, live, focused }: { conn: Connec
     const terminal = new Terminal(sessionTerminalOptions(terminalTheme(document.documentElement), getComputedStyle(element).fontFamily));
     const fit = new FitAddon();
     terminal.loadAddon(fit);
+    const links = terminal.registerLinkProvider(trackwallLinkProvider(terminal, IS_MAC));
     terminal.open(element);
     fit.fit();
     term.current = terminal;
@@ -121,6 +123,7 @@ export function SessionTerminal({ conn, session, live, focused }: { conn: Connec
       document.removeEventListener("visibilitychange", sendFocus);
       focus.dispose();
       input.dispose();
+      links.dispose();
       socket?.close();
       term.current = undefined;
       updateFocus.current = undefined;

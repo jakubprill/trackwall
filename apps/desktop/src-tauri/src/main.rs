@@ -6,7 +6,7 @@
 mod attention;
 mod daemon;
 mod daemon_state;
-mod focus;
+mod jump;
 mod link;
 mod window_effect;
 
@@ -51,18 +51,18 @@ fn main() {
     // Ponowne uruchomienie trackwall.exe pokazuje istniejące okno zamiast drugiej powłoki i drugiej ikony w trayu.
     // Tylko w wydaniu: identyfikator instancji jest wspólny, a `tauri dev` ma działać obok zainstalowanej aplikacji.
     // On Windows a `trackwall://` link starts a second trackwall.exe; the plugin's `deep-link` feature hands the link
-    // to the first instance before this callback (ADR-52).
+    // to the first instance before this callback (ADR-52), which shows the window both for a link and a plain start.
     #[cfg(not(debug_assertions))]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
         let state = Arc::clone(app.state::<Arc<DaemonState>>().inner());
         std::thread::spawn(move || state.restart_if_down());
-        show_main(app);
+        show_main_once_loaded(app);
     }));
     let app = builder
         .plugin(tauri_plugin_deep_link::init())
         .manage(Arc::clone(&state))
-        .manage(focus::PendingFocus::default())
-        .invoke_handler(tauri::generate_handler![daemon_connection, retry_daemon, focus::take_focus])
+        .manage(jump::PendingJump::default())
+        .invoke_handler(tauri::generate_handler![daemon_connection, retry_daemon, jump::take_jump, link::open_link])
         .setup(move |app| {
             state.start();
             let window = app.get_webview_window("main").ok_or("missing window main from tauri.conf.json")?;
@@ -70,7 +70,7 @@ fn main() {
             window_effect::reveal_fallback(app.handle(), show_main);
             build_tray(app.handle())?;
             attention::watch(app.handle().clone(), Arc::clone(&state), TRAY_ID);
-            link::listen(app.handle(), show_main);
+            link::listen(app.handle(), show_main_once_loaded);
             Ok(())
         })
         .on_page_load(|webview, payload| window_effect::on_page_load(webview, payload, show_main))
@@ -113,8 +113,9 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             attention::MENU_SHOW => show_main(app),
             attention::MENU_QUIT => quit_app(app),
             id => {
-                if let Some(target) = attention::focus_from_menu(id) {
-                    focus::request(app, target, show_main);
+                if let Some(target) = attention::jump_from_menu(id) {
+                    show_main(app);
+                    jump::request(app, target);
                 }
             }
         })
@@ -143,6 +144,14 @@ fn show_main(app: &AppHandle) {
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
+    }
+}
+
+/// A link or a second start while the page is still loading: the page shows the window itself once it has loaded
+/// (ADR-11), and showing it earlier would flash the opaque background.
+fn show_main_once_loaded(app: &AppHandle) {
+    if !window_effect::reveal_pending(app) {
+        show_main(app);
     }
 }
 

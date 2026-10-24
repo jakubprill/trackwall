@@ -6,9 +6,11 @@
  */
 export const TRACKWALL_LINK_SCHEME = "trackwall";
 
-/** What a link can point at, with the id it takes: `RepoId`, `SessionId` or `TaskId`. */
-export type TrackwallLinkKind = "repo" | "session" | "task";
+/** What a link can point at; the id is a `RepoId`, `SessionId` or `TaskId`. */
+export const TRACKWALL_LINK_KINDS = ["repo", "session", "task"] as const;
+export type TrackwallLinkKind = (typeof TRACKWALL_LINK_KINDS)[number];
 
+/** The id goes in as it is: ids have only URL-safe characters, and the MCP instruction passes placeholders like `<repo id>`. */
 export function trackwallLink(kind: TrackwallLinkKind, id: string): string {
   return `${TRACKWALL_LINK_SCHEME}://${kind}/${id}`;
 }

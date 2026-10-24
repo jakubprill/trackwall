@@ -14,7 +14,7 @@ import { sessionShortcut } from "@/lib/session-shortcut";
 import { attentionCount, nextWaitingShortcut } from "@/lib/session-state";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
-import { useFocusRequest } from "@/lib/use-focus-request";
+import { useJumpRequest } from "@/lib/use-jump-request";
 import { useRemote } from "@/lib/use-remote";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { DaemonPanel } from "@/views/daemon/DaemonPanel";
@@ -43,12 +43,10 @@ const SESSIONS_POLL_MS = { open: 1000, closed: 3000 };
 
 export function App() {
   // Repo otwarte z pulpitu należy do przejścia, nie do widoku: każde inne przejście do „Repos” zaczyna bez niego.
-  // Each opening of a repo gets a new `opened`, so a link to a repo while "Repos" is open shows it too.
-  const [{ view, repo, opened }, setNav] = useState<{ view: View; repo?: string; opened: number }>({ view: "home", opened: 0 });
-  const setView = useCallback(
-    (next: View, openRepo?: string) => setNav((nav) => ({ view: next, repo: openRepo, opened: openRepo ? nav.opened + 1 : nav.opened })),
-    [],
-  );
+  const [{ view, repo }, setNav] = useState<{ view: View; repo?: string }>({ view: "home" });
+  const setView = useCallback((next: View, openRepo?: string) => setNav({ view: next, repo: openRepo }), []);
+  // A jump to a repo while "Repos" is open must still select it, and `ReposView` takes the repo only when it mounts.
+  const [repoJumps, setRepoJumps] = useState(0);
   const [session, setSession] = useState<SessionSelection>();
   const [sessionLayout, setSessionLayout] = useState<SessionLayout>("1");
   const { conn, epoch, error, retry } = useConnection();
@@ -60,7 +58,11 @@ export function App() {
     setSession(selection);
   };
   // Jump from the tray (ADR-26, ADR-39) or from a `trackwall://` link (ADR-52): the shell shows the window first.
-  useFocusRequest((focus) => (focus.kind === "repo" ? setView("repos", focus.id) : openInSessions(focus)));
+  useJumpRequest((jump) => {
+    if (jump.kind !== "repo") return openInSessions(jump);
+    setView("repos", jump.id);
+    setRepoJumps((n) => n + 1);
+  });
   // Alt+J from every view (ADR-48), after the selected session like the "Next waiting" button.
   useWindowShortcuts(
     (event) => {
@@ -115,7 +117,7 @@ export function App() {
           )}
           {conn && view === "repos" && (
             <ReposView
-              key={`${epoch}:${opened}`}
+              key={`${epoch}:${repoJumps}`}
               conn={conn}
               initialRepo={repo}
               onRetry={retry}

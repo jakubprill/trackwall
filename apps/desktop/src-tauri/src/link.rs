@@ -2,22 +2,25 @@
 //! `trackwall://task/<task id>` (also a task proposal, which has the id of the task it becomes) show that thing in the
 //! window, so an agent or a notification can point the user at it.
 //!
-//! A link comes from anywhere (a web page, a chat, an agent's text), so it is untrusted: only the exact shape above
-//! with a valid id becomes a jump, and any other link only shows the window. A link never starts, stops or changes
-//! anything. macOS takes the scheme from `Info.plist` (`plugins.deep-link` in `tauri.conf.json`); Windows has no
-//! installer (portable zip), so a release build registers the scheme for the current user at every start, which also
-//! follows the folder when the user moves it.
+//! A link comes from anywhere (a web page, a chat, an agent's text), so it is untrusted. The shell checks the shape
+//! (scheme, kind, one id of safe characters, nothing else) and the UI checks the id against the protocol schemas
+//! (`RepoId`, `SessionId`, `TaskId`), which stay the only definition of an id. Anything else only shows the window. A
+//! link never starts, stops or changes anything. macOS takes the scheme from `Info.plist` (`plugins.deep-link` in
+//! `tauri.conf.json`); Windows has no installer (portable zip), so a release build registers the scheme for the current
+//! user at every start, which also follows the folder when the user moves it.
 
-use crate::focus::{self, Focus};
-use crate::window_effect;
+use crate::jump::{self, Jump};
 use tauri::{AppHandle, Url};
 use tauri_plugin_deep_link::DeepLinkExt;
 
 /// The scheme, also in `tauri.conf.json` and as `TRACKWALL_LINK_SCHEME` in protocol.
 const SCHEME: &str = "trackwall";
 
-/// The jump a link asks for; `None` for anything that is not exactly a Trackwall link with a valid id.
-pub fn parse(url: &Url) -> Option<Focus> {
+/// Longer than any id (a `RepoId` has at most 64 characters, a UUID 36).
+const MAX_ID: usize = 64;
+
+/// The jump a link asks for; `None` for anything that is not a Trackwall link of a known kind with one id.
+pub fn parse(url: &Url) -> Option<Jump> {
     if url.scheme() != SCHEME || url.query().is_some() || url.fragment().is_some() || url.port().is_some() {
         return None;
     }
@@ -26,26 +29,21 @@ pub fn parse(url: &Url) -> Option<Focus> {
     }
     let mut segments = url.path_segments()?.filter(|s| !s.is_empty());
     let (Some(id), None) = (segments.next(), segments.next()) else { return None };
-    match url.host_str()? {
-        "repo" if is_repo_id(id) => Some(Focus::Repo(id.to_owned())),
-        "session" if is_uuid(id) => Some(Focus::Session(id.to_ascii_lowercase())),
-        "task" if is_uuid(id) => Some(Focus::Task(id.to_ascii_lowercase())),
+    if id.len() > MAX_ID || !id.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-')) {
+        return None;
+    }
+    // The `url` crate keeps the host of a custom scheme as written; the kind is matched without case like the scheme.
+    let id = id.to_owned();
+    match url.host_str()?.to_ascii_lowercase().as_str() {
+        "repo" => Some(Jump::Repo(id)),
+        "session" => Some(Jump::Session(id.to_ascii_lowercase())),
+        "task" => Some(Jump::Task(id.to_ascii_lowercase())),
         _ => None,
     }
 }
 
-/// `RepoId` in protocol: lowercase letters, digits, '.', '_' and '-', starting with a letter or digit, at most 64.
-fn is_repo_id(id: &str) -> bool {
-    let first = id.bytes().next().is_some_and(|b| b.is_ascii_lowercase() || b.is_ascii_digit());
-    first && id.len() <= 64 && id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'.' | b'_' | b'-'))
-}
-
-/// A UUID in its text form (`SessionId` and `TaskId` in protocol).
-fn is_uuid(id: &str) -> bool {
-    id.len() == 36 && id.bytes().enumerate().all(|(i, b)| if matches!(i, 8 | 13 | 18 | 23) { b == b'-' } else { b.is_ascii_hexdigit() })
-}
-
-/// Opens the links that reach the app from now on, and the one that started it.
+/// Opens the links that reach the app from now on, and the one that started it. `show` shows the window unless the
+/// page is still loading (it then shows the window itself and takes the jump when it starts).
 pub fn listen(app: &AppHandle, show: fn(&AppHandle)) {
     let handle = app.clone();
     app.deep_link().on_open_url(move |event| open(&handle, event.urls(), show));
@@ -55,13 +53,20 @@ pub fn listen(app: &AppHandle, show: fn(&AppHandle)) {
     register(app);
 }
 
-/// The last link wins, like a newer tray jump replaces an older one. A link that starts the app comes before the page
-/// has loaded; the page then shows the window itself (ADR-11) and takes the jump when it starts.
+/// The last link wins, like a newer tray jump replaces an older one.
 fn open(app: &AppHandle, urls: Vec<Url>, show: fn(&AppHandle)) {
-    let show: fn(&AppHandle) = if window_effect::reveal_pending(app) { |_| {} } else { show };
-    match urls.last().and_then(parse) {
-        Some(target) => focus::request(app, target, show),
-        None => show(app),
+    show(app);
+    if let Some(target) = urls.last().and_then(parse) {
+        jump::request(app, target);
+    }
+}
+
+/// A link clicked inside the window, e.g. in a session terminal: the same check as a link from outside, without the
+/// round trip through the system. The window is already in front.
+#[tauri::command]
+pub fn open_link(app: AppHandle, url: String) {
+    if let Some(target) = Url::parse(&url).ok().as_ref().and_then(parse) {
+        jump::request(&app, target);
     }
 }
 
@@ -83,21 +88,28 @@ mod tests {
 
     const ID: &str = "0b7e3a52-5c1f-4c55-9a4e-2f1d7c3b9e10";
 
-    fn jump(link: &str) -> Option<Focus> {
+    fn jump(link: &str) -> Option<Jump> {
         parse(&Url::parse(link).expect("a URL"))
     }
 
     #[test]
     fn a_link_names_a_repo_a_session_or_a_task() {
-        assert_eq!(jump("trackwall://repo/orders-api"), Some(Focus::Repo("orders-api".into())));
-        assert_eq!(jump(&format!("trackwall://session/{ID}")), Some(Focus::Session(ID.into())));
-        assert_eq!(jump(&format!("trackwall://task/{ID}")), Some(Focus::Task(ID.into())));
+        assert_eq!(jump("trackwall://repo/orders-api"), Some(Jump::Repo("orders-api".into())));
+        assert_eq!(jump(&format!("trackwall://session/{ID}")), Some(Jump::Session(ID.into())));
+        assert_eq!(jump(&format!("trackwall://task/{ID}")), Some(Jump::Task(ID.into())));
     }
 
     #[test]
-    fn a_trailing_slash_and_an_uppercase_uuid_are_accepted() {
-        assert_eq!(jump("trackwall://repo/orders-api/"), Some(Focus::Repo("orders-api".into())));
-        assert_eq!(jump(&format!("trackwall://session/{}", ID.to_uppercase())), Some(Focus::Session(ID.into())));
+    fn a_trailing_slash_and_letter_case_in_the_kind_and_the_uuid_are_accepted() {
+        assert_eq!(jump("trackwall://repo/orders-api/"), Some(Jump::Repo("orders-api".into())));
+        assert_eq!(jump("TrackWall://Repo/orders-api"), Some(Jump::Repo("orders-api".into())));
+        assert_eq!(jump(&format!("trackwall://SESSION/{}", ID.to_uppercase())), Some(Jump::Session(ID.into())));
+    }
+
+    #[test]
+    fn the_ui_checks_the_id_against_the_protocol_schemas() {
+        // The shell checks only the characters; `Orders` is not a `RepoId`, and the UI drops the jump.
+        assert_eq!(jump("trackwall://repo/Orders"), Some(Jump::Repo("Orders".into())));
     }
 
     #[test]
@@ -106,15 +118,13 @@ mod tests {
             "https://repo/orders-api",
             "trackwall://repo",
             "trackwall://repo/",
-            "trackwall://repo/Orders",
-            "trackwall://repo/-orders",
             "trackwall://repo/a/b",
             "trackwall://repo/orders?run=1",
             "trackwall://repo/orders#x",
             "trackwall://user@repo/orders",
             "trackwall://repo:1/orders",
             "trackwall://repo/%2e%2e",
-            "trackwall://session/not-a-uuid",
+            "trackwall://repo/a%20b",
             "trackwall://proposal/0b7e3a52-5c1f-4c55-9a4e-2f1d7c3b9e10",
             "trackwall://settings/x",
             "trackwall:repo/orders",

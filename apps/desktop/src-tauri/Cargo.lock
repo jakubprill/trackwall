@@ -3980,6 +3980,7 @@ dependencies = [
 name = "trackwall-desktop"
 version = "0.2.0"
 dependencies = [
+ "rust-ini",
  "serde",
  "serde_json",
  "tauri",
