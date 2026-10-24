@@ -154,6 +154,13 @@ describe("kontrakty endpointów i DTO", () => {
     ]);
   });
 
+  test("karta bez parserów jest kompletna, dopóki nie próbuje parsować żadnego pliku", () => {
+    const parsersOfCard = withParseBudget(unavailableParsers("grammar missing"), 10_000);
+    expect(parsersOfCard.complete).toBe(true);
+    expect(parsersOfCard.read("java", "class A {}", () => 1)).toEqual({ kind: "unavailable", reason: "grammar missing" });
+    expect(parsersOfCard.complete).toBe(false);
+  });
+
   test("bez parserów karta powstaje bez kontraktów i DTO, z jednym problemem", () => {
     const c = extractCard(snapshotOf(fixtureFiles("orders-api")), unavailableParsers("grammar missing"));
     expect(contracts(c.provides)).toEqual(["GET /api/orders/{id} - -> -", "POST /api/orders - -> -", "PUT /api/orders/{id}/cancel - -> -"]);
@@ -299,7 +306,7 @@ describe("odczyt plików typów, które wymienia kod HTTP", () => {
       {
         path: "",
         message:
-          "2 type files referenced from endpoint contracts were not read (at most 3000 files within the 67108864 B commit read limit); their DTOs are missing",
+          "2 type files referenced from HTTP code were not read (at most 3000 files within the 67108864 B commit read limit); their DTOs are missing",
       },
     ]);
   });

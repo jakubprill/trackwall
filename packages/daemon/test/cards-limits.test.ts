@@ -200,13 +200,15 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     expect(performance.now() - started).toBeLessThan(1000);
   });
 
-  test("typ z setkami tysięcy argumentów (plik 400 KB) daje zapis typu w czasie liniowym", () => {
-    const java = `@RestController class Api { @GetMapping("/a") M<${"A,".repeat(200_000)}A> a() { return null; } }`;
+  test("typ odpowiedzi i pola DTO z dziesiątkami tysięcy argumentów dają przycięty zapis typu szybko", () => {
+    const args = "A,".repeat(40_000);
+    const java = `@RestController class Api { @GetMapping("/a") M<${args}A> a() { return null; } }\nclass M { N<${args}D> f; }\nclass D { int x; }`;
     const started = performance.now();
     const card = extractCard(snapshotOf({ "src/main/java/a/Api.java": java }), parsers);
-    expect(performance.now() - started).toBeLessThan(5000);
+    expect(performance.now() - started).toBeLessThan(2000);
     const endpoint = card.provides.find((p) => p.kind === "endpoint");
     expect(endpoint?.kind === "endpoint" ? endpoint.response?.length : 0).toBe(257);
+    expect(card.dtos.map((d) => (d.kind === "enum" ? d.name : `${d.name}: ${d.fields[0]?.type.length}`))).toEqual(["M: 257", "D: 3"]);
   });
 
   test("graf z tysiącami endpointów i klientów bez adresu liczy się szybko", () => {

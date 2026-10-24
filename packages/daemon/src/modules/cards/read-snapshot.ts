@@ -142,7 +142,7 @@ async function readTypeFiles(
   if (skipped.size > 0)
     problems.push({
       path: "",
-      message: `${skipped.size} type files referenced from endpoint contracts were not read (at most ${MAX_RELATED_FILES} files within the ${MAX_READ_BYTES} B commit read limit); their DTOs are missing`,
+      message: `${skipped.size} type files referenced from HTTP code were not read (at most ${MAX_RELATED_FILES} files within the ${MAX_READ_BYTES} B commit read limit); their DTOs are missing`,
     });
   return typeFiles;
 }

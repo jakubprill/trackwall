@@ -22,12 +22,14 @@ function kotlinType(node: Node): TypeDeclaration[] {
   const declared = { name: name.text, line: lineOf(name) };
   const modifiers = classModifiers(node);
   const enumBody = node.namedChildren.find((c) => c.type === "enum_class_body");
-  if (modifiers.includes("enum") || enumBody) return [{ ...declared, kind: "enum", values: enumEntries(enumBody) }];
+  if (modifiers.includes("enum") || enumBody) {
+    const values = enumEntries(enumBody);
+    return values.length > 0 ? [{ ...declared, kind: "enum", values }] : [];
+  }
   const data = modifiers.includes("data");
   const fields = [...constructorProperties(node, data), ...bodyProperties(node)];
-  if (data) return [{ ...declared, kind: "data-class", fields }];
-  // Klasa bez właściwości (serwis z zależnościami w konstruktorze, wyjątek) nie niesie danych, więc nie jest DTO.
-  return fields.length > 0 ? [{ ...declared, kind: "class", fields }] : [];
+  // Typ bez właściwości (serwis z zależnościami w konstruktorze, wyjątek) nie niesie danych, więc nie jest DTO.
+  return fields.length > 0 ? [{ ...declared, kind: data ? "data-class" : "class", fields }] : [];
 }
 
 function classModifiers(node: Node): string[] {

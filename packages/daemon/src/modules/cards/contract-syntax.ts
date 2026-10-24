@@ -57,6 +57,8 @@ export function typeText(node: Node): string {
   const parts: string[] = [];
   let wordEnded = false;
   for (const text of leafTexts(node)) {
+    // Brakujący token (`MISSING`) jest pusty i nie rozdziela słów.
+    if (text === "") continue;
     if (wordEnded && WORD_CHAR.test(text[0] ?? "")) parts.push(" ");
     parts.push(text);
     const last = text.at(-1) ?? "";

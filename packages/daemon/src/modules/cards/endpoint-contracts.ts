@@ -108,21 +108,27 @@ function reachableDtos(endpoints: readonly ProvidedEndpoint[], syntax: SyntaxOfF
     }
     const dto = toDto(found.type, found.path, problems);
     dtos.push(dto);
-    if (dto.kind !== "enum") for (const field of dto.fields) queue.push(...typeNames(field.type));
+    // Bez `push(...nazwy)`: typ pola z setkami tysięcy argumentów przekroczyłby limit argumentów wywołania pod Node.
+    for (const typeName of fieldTypeNames(dto)) queue.push(typeName);
   }
   return dtos;
+}
+
+/** Nazwy typów pól DTO; enum nie ma pól. */
+function fieldTypeNames(dto: Dto): string[] {
+  return dto.kind === "enum" ? [] : dto.fields.flatMap((f) => typeNames(f.type));
 }
 
 /** DTO z dowodem, z najwyżej `MAX_DTO_MEMBERS` polami albo stałymi. */
 function toDto(declared: TypeDeclaration, path: string, problems: CardProblem[]): Dto {
   const evidence = { path, line: declared.line };
-  const members = declared.kind === "enum" ? declared.values : declared.fields;
-  if (members.length > MAX_DTO_MEMBERS)
-    problems.push({
-      path,
-      message: `${declared.name} has more than ${MAX_DTO_MEMBERS} ${declared.kind === "enum" ? "constants" : "fields"}; the card lists the first ones`,
-    });
-  if (declared.kind === "enum") return { name: declared.name, kind: "enum", values: declared.values.slice(0, MAX_DTO_MEMBERS), evidence };
+  const tooMany = (members: string) =>
+    problems.push({ path, message: `${declared.name} has more than ${MAX_DTO_MEMBERS} ${members}; the card lists the first ones` });
+  if (declared.kind === "enum") {
+    if (declared.values.length > MAX_DTO_MEMBERS) tooMany("constants");
+    return { name: declared.name, kind: "enum", values: declared.values.slice(0, MAX_DTO_MEMBERS), evidence };
+  }
+  if (declared.fields.length > MAX_DTO_MEMBERS) tooMany("fields");
   return { name: declared.name, kind: declared.kind, fields: declared.fields.slice(0, MAX_DTO_MEMBERS), evidence };
 }
 

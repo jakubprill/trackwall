@@ -64,7 +64,8 @@ export type DtoField = z.infer<typeof DtoField>;
 /**
  * DTO (ADR-38): typ z repo, który jest ciałem żądania albo odpowiedzią endpointu HTTP, wprost albo przez pole innego
  * DTO. Rekord ma pola z nagłówka, `data class` z konstruktora i z ciała, klasa pola instancji (bez `static`, także
- * te, do których Lombok dopisuje akcesory), enum stałe (najwyżej 200 pól albo stałych). Typ bez pól nie jest DTO.
+ * te, do których Lombok dopisuje akcesory), enum stałe; najwyżej 200 pól albo stałych.
+ * Typ bez pól albo stałych nie jest DTO.
  */
 export const Dto = z.discriminatedUnion("kind", [
   z.object({
