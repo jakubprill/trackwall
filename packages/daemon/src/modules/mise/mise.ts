@@ -117,7 +117,6 @@ export class Mise {
    * the call) ends the wait but does not stop the task.
    */
   async waitForEnd(repo: string, miseTask: string, timeoutMs: number, signal: AbortSignal): Promise<RunState> {
-    await this.deps.repos.repoPath(repo);
     const groupOwner = owner(repo, miseTask);
     // `ended` first waits for a start in progress (e.g. the Run button clicked at the same moment), so the wait sees
     // the new run instead of the previous one or none; an ended group resolves at once, an absent one as `undefined`.
@@ -131,7 +130,7 @@ export class Mise {
     try {
       const end = await Promise.race([this.deps.procs.ended(groupOwner), gaveUp]);
       const run = end === "gave_up" ? this.deps.procs.state(groupOwner) : end;
-      if (!run) throw notRun(repo, miseTask);
+      if (!run) throw await this.notRun(repo, miseTask);
       return run;
     } finally {
       giveUp.removeEventListener("abort", stopWaiting);
@@ -139,10 +138,19 @@ export class Mise {
   }
 
   async stop(repo: string, miseTask: string): Promise<RunState> {
-    await this.deps.repos.repoPath(repo);
     const stopped = await this.deps.procs.stop(owner(repo, miseTask));
-    if (!stopped) throw notRun(repo, miseTask);
+    if (!stopped) throw await this.notRun(repo, miseTask);
     return stopped;
+  }
+
+  /**
+   * `not_found` for a task without a run: about the repo when it is not in the projects folder (a typo in the id),
+   * otherwise about the task. Checked only after the run lookup, so a task of a repo that was renamed or removed
+   * while it ran can still be stopped and waited for.
+   */
+  private async notRun(repo: string, miseTask: string): Promise<DomainError> {
+    await this.deps.repos.repoPath(repo);
+    return new DomainError("not_found", `mise task "${miseTask}" in ${repo} has not been run`);
   }
 
   /** `mise trust` bez ścieżki ufa konfiguracji w korzeniu repo, nie w katalogach nadrzędnych. */
@@ -237,10 +245,6 @@ export function parseTaskList(result: MiseCliResult): TaskList {
     .filter((t) => !t.hide && MiseTaskName.safeParse(t.name).success)
     .map((t) => ({ name: t.name, description: t.description ?? "" }));
   return { kind: "ok", tasks };
-}
-
-function notRun(repo: string, miseTask: string): DomainError {
-  return new DomainError("not_found", `mise task "${miseTask}" in ${repo} has not been run`);
 }
 
 /** Klucz właściciela grupy w `procs`; tylko budowany, nigdy rozbierany z powrotem. */
