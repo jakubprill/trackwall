@@ -211,7 +211,7 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
 
     await expect(agents.removeTask(task.id, false, false)).rejects.toMatchObject({
       code: "unsaved_changes",
-      message: `zakończenie skasowałoby: katalog ${task.worktree}, którego git już nie zna jako worktree (np. po przerwanym usuwaniu), z całą zawartością`,
+      message: `zakończenie skasowałoby: katalog ${task.worktree} z całą zawartością, bo git go nie zna jako worktree (przerwane usuwanie albo repo przeniesione lub usunięte)`,
     });
     expect(existsSync(task.worktree)).toBe(true);
     await agents.removeTask(task.id, false, true);
@@ -233,5 +233,30 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
     await agents.removeTask(task.id, false, true);
     expect(agents.sessions().tasks).toEqual([]);
     expect(existsSync(task.worktree)).toBe(false);
+  }, 60_000);
+  test("zakończenie czeka na trwające liczenia zmian z kilku okien, a nowe liczenie w jego trakcie odmawia", async () => {
+    const { dir } = cloneOnFeatureBranch();
+    const { agents, procs } = makeAgents({ sklep: dir });
+    cleanups.push(() => procs.stopAll());
+    const task = await agents.createTask("sklep", "dwa okna");
+    await agents.stop(sessionOf(agents, task.id));
+    writeFileSync(join(task.worktree, "nowy.md"), "x\n");
+
+    const reads = [agents.taskChanges(task.id), agents.taskChanges(task.id)];
+    const removal = agents.removeTask(task.id, false, true);
+    expect(() => agents.taskChanges(task.id)).toThrow("zadanie jest właśnie kończone");
+    for (const read of await Promise.all(reads)) expect(read.files.map((f) => f.path)).toEqual(["nowy.md"]);
+    await removal;
+    expect(existsSync(task.worktree)).toBe(false);
+  }, 60_000);
+
+  test("uszkodzony indeks worktree to błąd zmian zadania, a nie diff bez nowych plików", async () => {
+    const { dir } = cloneOnFeatureBranch();
+    const { agents, procs } = makeAgents({ sklep: dir });
+    cleanups.push(() => procs.stopAll());
+    const task = await agents.createTask("sklep", "zepsuty indeks");
+    writeFileSync(gitIn(task.worktree, "rev-parse", "--path-format=absolute", "--git-path", "index").trim(), "to nie jest indeks");
+
+    await expect(agents.taskChanges(task.id)).rejects.toMatchObject({ code: "repo_unavailable" });
   }, 60_000);
 });

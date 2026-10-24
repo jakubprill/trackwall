@@ -48,11 +48,13 @@ export async function addWorktree(repoDir: string, path: string, branch: string,
  * albo użytkownik potwierdził utratę. Git zdejmuje rejestrację worktree przed kasowaniem plików, więc usunięcie
  * przerwane przez plik trzymany przez inny proces (Windows) zostawia katalog, który nie jest już worktree; taki
  * katalog, tak jak każdy niezarejestrowany (`pendingWork` go zgłasza), kasujemy sami, a rejestrację po katalogu
- * usuniętym ręcznie czyści `prune`.
+ * usuniętym ręcznie czyści `prune`. Bez repo (przeniesione, odłączony dysk) zostaje samo skasowanie katalogu, a
+ * rejestrację w przeniesionym repo czyści jego `prune`.
  * `path` musi leżeć w katalogu worktree daemona, bo jest kasowany bez pytania gita.
  */
 export async function removeWorktree(repoDir: string, path: string): Promise<void> {
-  if (existsSync(path) && (await isRegistered(repoDir, path))) {
+  const repo = existsSync(repoDir);
+  if (repo && existsSync(path) && (await isRegistered(repoDir, path))) {
     try {
       await git(repoDir, ["worktree", "remove", "--force", path], { timeoutMs: CHECKOUT_TIMEOUT_MS });
     } catch (err) {
@@ -60,7 +62,7 @@ export async function removeWorktree(repoDir: string, path: string): Promise<voi
     }
   }
   await rm(path, { recursive: true, force: true, maxRetries: 3 });
-  await git(repoDir, ["worktree", "prune"]);
+  if (repo) await git(repoDir, ["worktree", "prune"]);
 }
 
 /** Czy `path` jest worktree repo według `git worktree list`. */
@@ -75,9 +77,9 @@ async function isRegistered(repoDir: string, path: string): Promise<boolean> {
   return false;
 }
 
-/** Usuwa gałąź niezależnie od tego, czy jest scalona; gałęzi, której już nie ma, nie ma czego usuwać. */
+/** Usuwa gałąź niezależnie od tego, czy jest scalona; gałęzi, której już nie ma (także bez repo), nie ma czego usuwać. */
 export async function deleteBranch(repoDir: string, branch: string): Promise<void> {
-  if ((await revParse(repoDir, `refs/heads/${branch}`)) === undefined) return;
+  if (!existsSync(repoDir) || (await revParse(repoDir, `refs/heads/${branch}`)) === undefined) return;
   await git(repoDir, ["branch", "--quiet", "-D", branch]);
 }
 
@@ -99,15 +101,16 @@ export interface PendingWork {
   branchCommits: number;
   /**
    * Katalog worktree jest na dysku, ale git go nie zna (przerwane usuwanie, `worktree prune`, repo sklonowane od
-   * nowa), więc nie da się policzyć, co w nim jest; usunięcie skasuje go w całości.
+   * nowa albo repo, którego już nie ma), więc nie da się policzyć, co w nim jest; usunięcie skasuje go w całości.
    */
   unregisteredDir: boolean;
 }
 
 /** Worktree usunięty ręcznie nie ma czego stracić; gałąź usunięta ręcznie też nie. */
 export async function pendingWork(work: WorktreeBranch): Promise<PendingWork> {
-  const branchRef = `refs/heads/${work.branch}`;
   const onDisk = existsSync(work.worktree);
+  if (!existsSync(work.repoDir)) return { uncommitted: 0, strayCommits: 0, branchCommits: 0, unregisteredDir: onDisk };
+  const branchRef = `refs/heads/${work.branch}`;
   const registered = onDisk && (await isRegistered(work.repoDir, work.worktree));
   const [uncommitted, strayCommits, branchCommits] = await Promise.all([
     registered ? uncommittedCount(work.worktree) : 0,

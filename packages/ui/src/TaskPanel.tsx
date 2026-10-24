@@ -35,6 +35,7 @@ export function TaskPanel({
   const liveSession = session && isLive(session) ? session : undefined;
   const [tab, setTab] = useState<TaskTab>("terminal");
   const [removing, setRemoving] = useState(false);
+  const confirmingRemoval = removing && !liveSession;
   const resume = useAction(
     () => post(conn, agentsApi.resumeTask, { task: task.id }),
     () => {
@@ -91,7 +92,7 @@ export function TaskPanel({
           </>
         )}
       </header>
-      {removing && !liveSession && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
+      {confirmingRemoval && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
       <div className="px-4">
         <TabBar tabs={tabs} active={shown} onSelect={setTab} />
       </div>
@@ -100,7 +101,7 @@ export function TaskPanel({
       )}
       {shown === "changes" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <TaskChangesView conn={conn} task={task.id} paused={removing && !liveSession} />
+          <TaskChangesView conn={conn} task={task.id} paused={confirmingRemoval} />
         </div>
       )}
     </>

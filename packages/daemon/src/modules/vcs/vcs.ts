@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Commit, FileContent, RepoStatusOk, SyncResult, TreeEntry } from "@trackwall/protocol";
 import { git } from "./git.ts";
@@ -70,6 +71,8 @@ export class Vcs {
    * synchronizacji, bo fetch trwa minutami, a nie zmienia rejestru worktree ani gałęzi zadań.
    */
   private async serialWorktreeOp(repoDir: string, job: () => Promise<void>): Promise<void> {
+    // Repo, którego już nie ma, nie ma blokad do pilnowania (ani `.git`, z którego wziąć klucz).
+    if (!existsSync(repoDir)) return job();
     return this.worktreeOps.run(await this.commonDir(repoDir), job);
   }
 
