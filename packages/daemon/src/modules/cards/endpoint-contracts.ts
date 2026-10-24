@@ -24,8 +24,8 @@ export interface Contracts {
 
 /** Najwięcej DTO na karcie; więcej to wygenerowany model, a nie kontrakt pisany ręcznie. */
 const MAX_DTOS = 500;
-/** Najwięcej pól jednego DTO na karcie. */
-const MAX_DTO_FIELDS = 200;
+/** Najwięcej pól albo stałych enuma jednego DTO na karcie. */
+const MAX_DTO_MEMBERS = 200;
 /** Najdłuższy zapis typu na karcie; dłuższy jest przycinany, żeby jeden plik z repo nie rozdął karty i kontekstu agenta. */
 const MAX_TYPE_LENGTH = 256;
 /** Opakowania, które nie zmieniają treści odpowiedzi: odpowiedzią jest ich argument. */
@@ -46,29 +46,29 @@ const NO_CONTENT = new Set(["void", "Void", "Unit", "?", "*"]);
 export function extractContracts(snapshot: RepoSnapshot, provides: readonly Provided[], parsers: SyntaxParsers): Contracts {
   const problems: CardProblem[] = [];
   const syntax = new SyntaxOfFiles(snapshot, parsers, problems);
-  const clip = new TypeClipper(problems);
-  const withContracts = provides.map((p) => (p.kind === "endpoint" ? withContract(p, syntax, clip) : p));
+  const withContracts = provides.map((p) => (p.kind === "endpoint" ? withContract(p, syntax) : p));
   const dtos = reachableDtos(
     withContracts.filter((p) => p.kind === "endpoint"),
     syntax,
-    clip,
     problems,
   );
-  return { provides: withContracts, dtos, problems };
-}
-
-function withContract(endpoint: ProvidedEndpoint, syntax: SyntaxOfFiles, clip: TypeClipper): ProvidedEndpoint {
-  const methods = syntax.of(endpoint.evidence.path)?.methods ?? [];
-  const contract = methodAt(methods, endpoint.evidence.line) ?? methods.find((m) => m.name === simpleName(endpoint.handler));
-  const request = contract?.request ?? null;
-  const response = contract ? responseType(contract.returns) : null;
-  return { ...endpoint, request: request === null ? null : clip.type(request), response: response === null ? null : clip.type(response) };
+  // Przycięcie dopiero po odkryciu DTO: nazwa ucięta w połowie wskazałaby inny typ.
+  return clipTypes({ provides: withContracts, dtos, problems });
 }
 
 /**
- * Metoda, w której leży linia mapowania endpointu; z zagnieżdżonych (metoda klasy lokalnej) najwęższa. Bez linii albo
- * bez metody w tej linii wołający szuka po nazwie z handlera.
+ * Kontrakt z metody o nazwie z handlera, w której leży linia mapowania endpointu (w pliku bywa kilka klas
+ * i przeciążeń); bez linii albo bez takiej metody pierwsza metoda o tej nazwie (interfejs API, który kontroler
+ * implementuje, ma metodę o tej samej nazwie).
  */
+function withContract(endpoint: ProvidedEndpoint, syntax: SyntaxOfFiles): ProvidedEndpoint {
+  const name = simpleName(endpoint.handler);
+  const methods = (syntax.of(endpoint.evidence.path)?.methods ?? []).filter((m) => m.name === name);
+  const contract = methodAt(methods, endpoint.evidence.line) ?? methods[0];
+  return { ...endpoint, request: contract?.request ?? null, response: contract ? responseType(contract.returns) : null };
+}
+
+/** Metoda, w której leży linia; z zagnieżdżonych (metoda klasy lokalnej) najwęższa. */
 function methodAt(methods: readonly MethodContract[], line: number | null): MethodContract | undefined {
   if (line === null) return undefined;
   let found: MethodContract | undefined;
@@ -92,7 +92,7 @@ export function responseType(returns: string | null): string | null {
 }
 
 /** DTO osiągalne z typów żądań i odpowiedzi endpointów przez typy pól, w kolejności odkrycia. */
-function reachableDtos(endpoints: readonly ProvidedEndpoint[], syntax: SyntaxOfFiles, clip: TypeClipper, problems: CardProblem[]): Dto[] {
+function reachableDtos(endpoints: readonly ProvidedEndpoint[], syntax: SyntaxOfFiles, problems: CardProblem[]): Dto[] {
   const queue = endpoints.flatMap((e) => [e.request, e.response]).flatMap((t) => (t === null ? [] : typeNames(t)));
   const seen = new Set<string>();
   const dtos: Dto[] = [];
@@ -106,20 +106,24 @@ function reachableDtos(endpoints: readonly ProvidedEndpoint[], syntax: SyntaxOfF
       problems.push({ path: "", message: `the repo has more than ${MAX_DTOS} DTOs; the card lists the first ones` });
       break;
     }
-    const dto = toDto(found.type, found.path, clip, problems);
+    const dto = toDto(found.type, found.path, problems);
     dtos.push(dto);
     if (dto.kind !== "enum") for (const field of dto.fields) queue.push(...typeNames(field.type));
   }
   return dtos;
 }
 
-function toDto(declared: TypeDeclaration, path: string, clip: TypeClipper, problems: CardProblem[]): Dto {
+/** DTO z dowodem, z najwyżej `MAX_DTO_MEMBERS` polami albo stałymi. */
+function toDto(declared: TypeDeclaration, path: string, problems: CardProblem[]): Dto {
   const evidence = { path, line: declared.line };
-  if (declared.kind === "enum") return { name: declared.name, kind: "enum", values: declared.values, evidence };
-  if (declared.fields.length > MAX_DTO_FIELDS)
-    problems.push({ path, message: `${declared.name} has more than ${MAX_DTO_FIELDS} fields; the card lists the first ones` });
-  const fields: DtoField[] = declared.fields.slice(0, MAX_DTO_FIELDS).map((f) => ({ name: f.name, type: clip.type(f.type) }));
-  return { name: declared.name, kind: declared.kind, fields, evidence };
+  const members = declared.kind === "enum" ? declared.values : declared.fields;
+  if (members.length > MAX_DTO_MEMBERS)
+    problems.push({
+      path,
+      message: `${declared.name} has more than ${MAX_DTO_MEMBERS} ${declared.kind === "enum" ? "constants" : "fields"}; the card lists the first ones`,
+    });
+  if (declared.kind === "enum") return { name: declared.name, kind: "enum", values: declared.values.slice(0, MAX_DTO_MEMBERS), evidence };
+  return { name: declared.name, kind: declared.kind, fields: declared.fields.slice(0, MAX_DTO_MEMBERS), evidence };
 }
 
 /**
@@ -130,23 +134,23 @@ function typeNames(type: string): string[] {
   return (type.match(/[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*/g) ?? []).map(simpleName).filter(isTypeName);
 }
 
-/** Przycina zapisy typów do `MAX_TYPE_LENGTH` z jednym problemem na kartę. */
-class TypeClipper {
-  private readonly problems: CardProblem[];
-  private reported = false;
-
-  constructor(problems: CardProblem[]) {
-    this.problems = problems;
-  }
-
-  type(text: string): string {
-    if (text.length <= MAX_TYPE_LENGTH) return text;
-    if (!this.reported) {
-      this.reported = true;
-      this.problems.push({ path: "", message: `some types are longer than ${MAX_TYPE_LENGTH} characters; the card shows their beginning` });
-    }
-    return `${text.slice(0, MAX_TYPE_LENGTH)}…`;
-  }
+/** Zapisy typów na karcie przycięte do `MAX_TYPE_LENGTH` znaków (z „…”), z jednym problemem na kartę. */
+function clipTypes({ provides, dtos, problems }: Contracts): Contracts {
+  let clippedAny = false;
+  const clip = (type: string): string => {
+    if (type.length <= MAX_TYPE_LENGTH) return type;
+    clippedAny = true;
+    return `${type.slice(0, MAX_TYPE_LENGTH)}…`;
+  };
+  const clipOrNull = (type: string | null) => (type === null ? null : clip(type));
+  const clippedProvides = provides.map((p) =>
+    p.kind === "endpoint" ? { ...p, request: clipOrNull(p.request), response: clipOrNull(p.response) } : p,
+  );
+  const clippedDtos = dtos.map((d) =>
+    d.kind === "enum" ? d : { ...d, fields: d.fields.map((f): DtoField => ({ name: f.name, type: clip(f.type) })) },
+  );
+  const clipProblem = { path: "", message: `some types are longer than ${MAX_TYPE_LENGTH} characters; the card shows their beginning` };
+  return { provides: clippedProvides, dtos: clippedDtos, problems: clippedAny ? [...problems, clipProblem] : problems };
 }
 
 /** Drzewa składni plików karty, każde liczone raz; problemy parsowania trafiają do `problems` karty. */

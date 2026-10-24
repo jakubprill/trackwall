@@ -77,6 +77,9 @@ describe("cards", () => {
     expect(await cache.getOrCompute(commit, async () => ({ card, persist: false }))).toEqual(card);
     expect(await cache.getOrCompute(commit, () => Promise.reject(new Error("karta jest w pamięci")))).toEqual(card);
     expect(existsSync(join(cardsDir, `${commit}.json`))).toBe(false);
+    const restarted = new CardCache(cardsDir, () => {});
+    const recomputed = { ...card, problems: [{ path: "", message: "policzona od nowa" }] };
+    expect(await restarted.getOrCompute(commit, async () => ({ card: recomputed, persist: true }))).toEqual(recomputed);
   });
 
   test("równoczesne pytania o kartę tego samego commita (lista tagów i karta naraz) czytają gita raz", async () => {

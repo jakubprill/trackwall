@@ -17,11 +17,11 @@ function javaType(node: Node): TypeDeclaration[] {
   const name = node.childForFieldName("name");
   if (!name) return [];
   const declared = { name: name.text, line: lineOf(name) };
-  if (node.type === "record_declaration") return [{ ...declared, kind: "record", fields: parameters(node) }];
   if (node.type === "enum_declaration") return [{ ...declared, kind: "enum", values: enumConstants(node) }];
-  const fields = instanceFields(node);
-  // Klasa bez pól (serwis, wyjątek, kontroler) nie niesie danych, więc nie jest DTO.
-  return fields.length > 0 ? [{ ...declared, kind: "class", fields }] : [];
+  const record = node.type === "record_declaration";
+  const fields = record ? parameters(node) : instanceFields(node);
+  // Typ bez pól (serwis, wyjątek, kontroler, pusty rekord) nie niesie danych, więc nie jest DTO.
+  return fields.length > 0 ? [{ ...declared, kind: record ? "record" : "class", fields }] : [];
 }
 
 function parameters(record: Node): DtoField[] {

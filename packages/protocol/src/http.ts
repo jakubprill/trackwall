@@ -43,7 +43,7 @@ export const ProvidedEndpoint = z.object({
   /**
    * Typ ciała żądania (parametr z `@RequestBody`) w zapisie typu (`CreateOrder`, `List<Line>`); `null` bez ciała albo
    * gdy drzewo składni pliku nie powstało (ADR-38). Zapis typu to tekst z kodu bez adnotacji, ze spacją tylko przed
-   * słowem po słowie albo po `?` (`List<? extends Line>`), najwyżej 256 znaków.
+   * słowem po słowie albo po `?` (`List<? extends Line>`); dłuższy niż 256 znaków przycięty z „…”.
    */
   request: z.string().nullable(),
   /**
@@ -63,8 +63,8 @@ export type DtoField = z.infer<typeof DtoField>;
 
 /**
  * DTO (ADR-38): typ z repo, który jest ciałem żądania albo odpowiedzią endpointu HTTP, wprost albo przez pole innego
- * DTO. Rekord i `data class` mają pola z konstruktora, klasa pola instancji (bez `static`, także te, do których
- * Lombok dopisuje akcesory; klasa bez pól nie jest DTO), enum stałe.
+ * DTO. Rekord ma pola z nagłówka, `data class` z konstruktora i z ciała, klasa pola instancji (bez `static`, także
+ * te, do których Lombok dopisuje akcesory), enum stałe (najwyżej 200 pól albo stałych). Typ bez pól nie jest DTO.
  */
 export const Dto = z.discriminatedUnion("kind", [
   z.object({

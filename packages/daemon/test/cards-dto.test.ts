@@ -212,6 +212,25 @@ describe("kontrakty endpointów i DTO", () => {
     expect(dtos(c)).toEqual(["class OrderDto(a: int, b: int[]) src/main/java/a/Api.java:4"]);
   });
 
+  test("enum z ponad 200 stałymi jest przycięty, a pusty rekord nie jest DTO", () => {
+    const constants = Array.from({ length: 201 }, (_, i) => `C${i}`).join(", ");
+    const c = card({
+      "src/main/java/a/Api.java": `@RestController class Api { @GetMapping("/a") Many a(@RequestBody Empty body) { return null; } }\nenum Many { ${constants} }\nrecord Empty() {}`,
+    });
+    expect(c.dtos.map((d) => (d.kind === "enum" ? `${d.name}: ${d.values.length}` : d.name))).toEqual(["Many: 200"]);
+    expect(c.problems).toEqual([
+      { path: "src/main/java/a/Api.java", message: "Many has more than 200 constants; the card lists the first ones" },
+    ]);
+  });
+
+  test("dwa mapowania w jednej linii mają kontrakty swoich metod", () => {
+    const c = card({
+      "src/main/java/a/Api.java":
+        '@RestController class Api { @GetMapping("/a") public A a() { return null; } @PostMapping("/b") public B b(@RequestBody X x) { return null; } }',
+    });
+    expect(contracts(c.provides)).toEqual(["GET /a - -> A", "POST /b X -> B"]);
+  });
+
   test("DTO z ponad 200 polami i typy dłuższe niż 256 znaków są przycięte, z problemem", () => {
     const fields = Array.from({ length: 201 }, (_, i) => `String f${i};`).join(" ");
     const long = `Map<${"A".repeat(300)},String>`;
@@ -223,8 +242,8 @@ describe("kontrakty endpointów i DTO", () => {
     const wide = c.dtos[0];
     expect(wide?.kind === "class" ? wide.fields.length : 0).toBe(200);
     expect(c.problems).toEqual([
-      { path: "", message: "some types are longer than 256 characters; the card shows their beginning" },
       { path: "src/main/java/a/Api.java", message: "Wide has more than 200 fields; the card lists the first ones" },
+      { path: "", message: "some types are longer than 256 characters; the card shows their beginning" },
     ]);
   });
 });
@@ -280,7 +299,7 @@ describe("odczyt plików typów, które wymienia kod HTTP", () => {
       {
         path: "",
         message:
-          "2 type files referenced from HTTP code were not read (at most 3000 files within the 67108864 B commit read limit); their DTOs are missing",
+          "2 type files referenced from endpoint contracts were not read (at most 3000 files within the 67108864 B commit read limit); their DTOs are missing",
       },
     ]);
   });
@@ -294,5 +313,29 @@ describe("odczyt plików typów, które wymienia kod HTTP", () => {
     const c = extractCard(snapshot, parsers);
     expect(contracts(c.provides)).toEqual(["GET /a - -> OrderDto"]);
     expect(dtos(c)).toEqual(["class OrderDto(id: String) src/main/java/a/OrderDto.java:1"]);
+  });
+
+  test("plik z wyszukiwania, którego nie zmieścił limit odczytu, nie wraca jako plik typu", async () => {
+    const source = (path: string) => ({ name: path.split("/").pop() ?? path, path, kind: "file" as const, size: 10 });
+    const paths = ["src/main/java/a/OrdersController.java", "src/main/java/a/OrdersApi.java"];
+    let reads = 0;
+    const vcs = {
+      commitFiles: async () => ({ files: paths.map(source), truncated: false }),
+      // Pierwszy odczyt mieści tylko kontroler; kolejne oddałyby wszystko.
+      readFiles: async (_dir: string, _commit: string, wanted: readonly string[]) => {
+        const first = reads++ === 0;
+        const texts = new Map([
+          ["src/main/java/a/OrdersController.java", "@RestController class OrdersController implements OrdersApi {}"],
+        ]);
+        if (!first) texts.set("src/main/java/a/OrdersApi.java", "interface OrdersApi {}");
+        return new Map(wanted.flatMap((p) => (texts.has(p) ? [[p, Buffer.from(texts.get(p) ?? "")]] : [])));
+      },
+      grepFiles: async () => ({ paths, truncated: false }),
+    };
+    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES);
+    expect([...snapshot.typeFiles]).toEqual([]);
+    expect(snapshot.problems).toEqual([
+      { path: "src/main/java/a/OrdersApi.java", message: "the file was not read within the 67108864 B commit read limit" },
+    ]);
   });
 });

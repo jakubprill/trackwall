@@ -8,6 +8,7 @@ import { type Extracted, emptyExtracted, type RepoSnapshot } from "./snapshot.ts
 import { isTestPath, ModuleConfig, moduleOf, readSpringConfigs } from "./spring-config.ts";
 import { springEndpoints } from "./spring-endpoints.ts";
 import type { SpringModule, TypeIndex } from "./spring-module.ts";
+import type { JvmLanguage } from "./syntax-tree.ts";
 
 /**
  * Ekstraktor Spring (§4.6, ADR-30): dla każdego modułu (katalog nad `src/main`) aplikacja z `spring.application.name`,
@@ -36,7 +37,7 @@ export function isJvmSource(path: string): boolean {
 }
 
 /** Język pliku źródłowego po rozszerzeniu; `null` dla innych plików. */
-export function jvmLanguageOf(path: string): "java" | "kotlin" | null {
+export function jvmLanguageOf(path: string): JvmLanguage | null {
   return path.endsWith(".java") ? "java" : path.endsWith(".kt") ? "kotlin" : null;
 }
 

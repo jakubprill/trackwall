@@ -75,7 +75,7 @@ export async function readSnapshot(
   const reader = new BudgetedReader(vcs, dir, commit);
   for (const path of await reader.read(requested))
     problems.push({ path, message: `the file was not read within the ${MAX_READ_BYTES} B commit read limit` });
-  const typeFiles = await readTypeFiles(reader, files, sources, problems);
+  const typeFiles = await readTypeFiles(reader, files, sources, new Set(requested), problems);
   return { commit, paths: files.map((f) => f.path), text: (path) => reader.texts.get(path), typeFiles, problems };
 }
 
@@ -122,9 +122,11 @@ async function readTypeFiles(
   reader: BudgetedReader,
   files: readonly TreeEntry[],
   sources: SourceSelection,
+  requested: ReadonlySet<string>,
   problems: CardProblem[],
 ): Promise<Set<string>> {
-  const byType = sourcesByTypeName(files, sources);
+  // Plik z wyszukiwania, którego pierwszy odczyt nie zmieścił, nie wraca jako plik typu: ekstraktor Spring by go pominął.
+  const byType = sourcesByTypeName(files, sources, requested);
   const typeFiles = new Set<string>();
   let fresh = [...reader.texts.keys()].filter(sources.accepts);
   const skipped = new Set<string>();
@@ -140,15 +142,15 @@ async function readTypeFiles(
   if (skipped.size > 0)
     problems.push({
       path: "",
-      message: `${skipped.size} type files referenced from HTTP code were not read (at most ${MAX_RELATED_FILES} files within the ${MAX_READ_BYTES} B commit read limit); their DTOs are missing`,
+      message: `${skipped.size} type files referenced from endpoint contracts were not read (at most ${MAX_RELATED_FILES} files within the ${MAX_READ_BYTES} B commit read limit); their DTOs are missing`,
     });
   return typeFiles;
 }
 
-/** Pliki źródłowe, które można przeczytać, po nazwie typu z nazwy pliku. */
-function sourcesByTypeName(files: readonly TreeEntry[], sources: SourceSelection): Map<string, string[]> {
+/** Pliki źródłowe, które można przeczytać, po nazwie typu z nazwy pliku, bez `excluded`. */
+function sourcesByTypeName(files: readonly TreeEntry[], sources: SourceSelection, excluded: ReadonlySet<string>): Map<string, string[]> {
   const byType = new Map<string, string[]>();
-  for (const f of files.filter((f) => sources.accepts(f.path) && isReadable(f))) {
+  for (const f of files.filter((f) => sources.accepts(f.path) && isReadable(f) && !excluded.has(f.path))) {
     const paths = byType.get(stemOf(f.path));
     if (paths) paths.push(f.path);
     else byType.set(stemOf(f.path), [f.path]);

@@ -45,26 +45,35 @@ export function simpleName(name: string): string {
 
 /** Węzły adnotacji obu gramatyk: w zapisie typu (`List<@Valid Line>`) nie są częścią typu. */
 const ANNOTATIONS = new Set(["annotation", "marker_annotation"]);
-/** Słowo przed liściem albo `?` wildcardu Javy (`? extends Line`). */
-const WORD_END = /[\w$?]$/;
-const WORD_START = /^[\w$]/;
+const WORD_CHAR = /[\w$]/;
 
 /**
- * Zapis typu z węzła: tekst liści bez adnotacji i komentarzy, ze spacją tylko przed słowem po słowie albo `?`
- * (`List<? extends Line>`, `Map<String,Line>`), więc ten sam typ ma ten sam zapis niezależnie od formatowania kodu.
+ * Zapis typu z węzła: tekst liści bez adnotacji i komentarzy, ze spacją tylko przed słowem po słowie albo po `?`
+ * wildcardu Javy (`List<? extends Line>`, `Map<String,Line>`), więc ten sam typ ma ten sam zapis niezależnie od
+ * formatowania kodu. Jedno przejście po liściach (typ z repo może mieć setki tysięcy argumentów), stos zamiast
+ * rekurencji, bo typ może być zagnieżdżony głębiej, niż sięga stos wywołań.
  */
 export function typeText(node: Node): string {
-  let text = "";
-  // Stos zamiast rekurencji: typ z repo może być zagnieżdżony głębiej, niż sięga stos wywołań.
+  const parts: string[] = [];
+  let wordEnded = false;
+  for (const text of leafTexts(node)) {
+    if (wordEnded && WORD_CHAR.test(text[0] ?? "")) parts.push(" ");
+    parts.push(text);
+    const last = text.at(-1) ?? "";
+    wordEnded = last === "?" || WORD_CHAR.test(last);
+  }
+  return parts.join("");
+}
+
+/** Tekst liści węzła w kolejności w kodzie, bez adnotacji i komentarzy. */
+function* leafTexts(node: Node): Generator<string> {
   const stack = [node];
   for (let n = stack.pop(); n !== undefined; n = stack.pop()) {
     if (ANNOTATIONS.has(n.type) || n.type.includes("comment")) continue;
-    if (n.childCount > 0) {
-      stack.push(...n.children.toReversed());
-      continue;
+    if (n.childCount === 0) yield n.text;
+    for (let i = n.childCount - 1; i >= 0; i--) {
+      const child = n.child(i);
+      if (child) stack.push(child);
     }
-    if (WORD_END.test(text) && WORD_START.test(n.text)) text += " ";
-    text += n.text;
   }
-  return text;
 }

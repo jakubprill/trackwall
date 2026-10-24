@@ -44,9 +44,8 @@ export class CardCache {
 
   /**
    * Karta commita z pamięci albo z dysku, a bez niej policzona przez `compute` i zapamiętana (na dysku tylko z
-   * `persist`). Całe zadanie (odczyt
-   * dysku i liczenie) trafia do `computing` przed pierwszym `await`, więc równoczesne pytanie o ten sam commit
-   * dostaje to samo zadanie.
+   * `persist`). Całe zadanie (odczyt dysku i liczenie) trafia do `computing` przed pierwszym `await`, więc równoczesne
+   * pytanie o ten sam commit dostaje to samo zadanie.
    */
   getOrCompute(commit: string, compute: () => Promise<ComputedCard>): Promise<RepoCard> {
     const running = this.computing.get(commit);

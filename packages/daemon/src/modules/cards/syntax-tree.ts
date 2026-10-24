@@ -6,7 +6,7 @@ import { type JvmGrammars, loadJvmGrammars } from "../../platform/tree-sitter.ts
  * (`java-tokens.ts`): typy parametrów i pól, rekordy, `data class`. Parser działa w WASM w procesie daemona, bez
  * kompilacji repo i bez natywnego addonu. Kod niepoprawny składniowo daje drzewo z węzłami `ERROR`, nie wyjątek.
  */
-type JvmLanguage = "java" | "kotlin";
+export type JvmLanguage = "java" | "kotlin";
 
 /**
  * Najdłuższe parsowanie jednego pliku. Parser działa synchronicznie w wątku daemona, a gramatyka Kotlina na
@@ -44,24 +44,24 @@ export interface CardParsers extends SyntaxParsers {
 /** Łączny czas parsowania jednej karty (§8): limit na plik nie wystarcza, gdy złośliwych plików jest wiele. */
 export const CARD_PARSE_BUDGET_MS = 10_000;
 
-let loading: Promise<SyntaxParsers> | undefined;
-
 /**
- * Parsery obu języków, raz na proces: obiekty `Parser` żyją w pamięci WASM, której nie sprząta GC, a odczyty są
- * synchroniczne, więc wszystkie karty dzielą jedną parę. Ładowanie gramatyk to jedyna asynchroniczna część, więc
- * ekstraktory zostają synchroniczne; nieudane ładowanie następne wywołanie ponawia.
+ * Parsery po gramatykach, które `loadJvmGrammars` ładuje raz na proces (tam też jest ponawianie po błędzie): obiekty
+ * `Parser` żyją w pamięci WASM, której nie sprząta GC, a odczyty są synchroniczne, więc wszystkie karty dzielą jedną parę.
  */
-export function loadSyntaxParsers(): Promise<SyntaxParsers> {
-  loading ??= loadJvmGrammars().then(syntaxParsers, (err: unknown) => {
-    loading = undefined;
-    throw err;
-  });
-  return loading;
+const parsersOf = new WeakMap<JvmGrammars, SyntaxParsers>();
+
+/** Parsery obu języków; ładowanie gramatyk to jedyna asynchroniczna część, więc ekstraktory zostają synchroniczne. */
+export async function loadSyntaxParsers(): Promise<SyntaxParsers> {
+  const grammars = await loadJvmGrammars();
+  const parsers = parsersOf.get(grammars) ?? syntaxParsers(grammars);
+  parsersOf.set(grammars, parsers);
+  return parsers;
 }
 
 /**
  * Parsery karty z łącznym budżetem czasu: odczyt po wyczerpaniu `budgetMs` nie parsuje i daje `over-budget`. Sprawdzenie
- * jest przed parsowaniem, więc karta może przekroczyć budżet najwyżej o `PARSE_TIME_LIMIT_MS` ostatniego pliku.
+ * jest przed odczytem, więc karta może przekroczyć budżet o czas ostatniego pliku (parsowanie najwyżej
+ * `PARSE_TIME_LIMIT_MS` i odczyt drzewa, liniowy w jego rozmiarze).
  */
 export function withParseBudget(parsers: SyntaxParsers, budgetMs: number): CardParsers {
   let spentMs = 0;
@@ -84,9 +84,12 @@ export function withParseBudget(parsers: SyntaxParsers, budgetMs: number): CardP
   };
 }
 
-/** Parsery karty, gdy gramatyk nie udało się załadować: każdy odczyt daje `unavailable` z powodem. */
-export function unavailableParsers(reason: string): CardParsers {
-  return { complete: false, read: () => ({ kind: "unavailable", reason }) };
+/**
+ * Parsery, gdy gramatyk nie udało się załadować: każdy odczyt daje `unavailable` z powodem. Karta bez plików Javy
+ * i Kotlina nie czyta nic, więc w `withParseBudget` zostaje kompletna.
+ */
+export function unavailableParsers(reason: string): SyntaxParsers {
+  return { read: () => ({ kind: "unavailable", reason }) };
 }
 
 function syntaxParsers(grammars: JvmGrammars): SyntaxParsers {
