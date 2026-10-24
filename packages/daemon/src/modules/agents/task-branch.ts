@@ -7,10 +7,16 @@
 import { join } from "node:path";
 import { z } from "zod";
 
+/** Bez znaków specjalnych wyrażeń regularnych, bo trafia do `TaskBranch` dosłownie. */
 export const TASK_BRANCH_PREFIX = "trackwall/";
 
-/** Gałąź zadania; w `tasks.json` tylko taka, bo daemon usuwa ją z `branch -D`, a plik można zmienić ręcznie. */
-export const TaskBranch = z.string().regex(/^trackwall\/[a-z0-9][a-z0-9-]*$/, "gałąź zadania: trackwall/ i [a-z0-9-]");
+/**
+ * Gałąź zadania; w `tasks.json` tylko taka, bo daemon usuwa ją z `branch -D` i robi z niej katalog worktree, a plik
+ * można zmienić ręcznie. Znaki to te, które daje `taskSlug`.
+ */
+export const TaskBranch = z
+  .string()
+  .regex(new RegExp(`^${TASK_BRANCH_PREFIX}[a-z0-9][a-z0-9-]*$`), `gałąź zadania: ${TASK_BRANCH_PREFIX} i [a-z0-9-]`);
 /** Krótko: katalog worktree leży w katalogu stanu, a Windows ma limit 260 znaków na całą ścieżkę pliku w repo. */
 const SLUG_MAX = 32;
 const ID_CHARS = 6;

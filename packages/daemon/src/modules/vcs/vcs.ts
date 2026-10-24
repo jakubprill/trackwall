@@ -1,10 +1,10 @@
-import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Commit, FileContent, RepoStatusOk, SyncResult, TreeEntry } from "@trackwall/protocol";
 import { git } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { KeyedQueue } from "./keyed-queue.ts";
 import { type GitObject, isBinary, LOG_FORMAT, parseBlobs, parseLog, parseObjects, parseStatus, parseTree } from "./parse.ts";
+import { pathKey } from "./path-key.ts";
 import { remoteAddress } from "./remote.ts";
 import { syncRepo } from "./sync.ts";
 import { addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
@@ -47,7 +47,8 @@ export class Vcs {
     return this.syncing.run(await this.commonDir(dir), () => syncRepo(dir));
   }
 
-  /** Gałąź domyślna i jej commit, bez łączenia z serwerem (ADR-31). */
+  // Worktree zadań (ADR-31, `worktree.ts`, `worktree-changes.ts`). Odczyty idą wprost; zmiany rejestru worktree
+  // i gałęzi po kolei w jednym repo.
   readonly defaultBase = defaultBase;
   readonly pendingWork = pendingWork;
   readonly worktreeChanges = worktreeChanges;
@@ -72,12 +73,11 @@ export class Vcs {
     return this.worktreeOps.run(await this.commonDir(repoDir), job);
   }
 
-  /** Katalog `.git` wspólny dla repo i jego worktree, po rozwinięciu dowiązań; klucz bez wielkości liter jak dyski Windowsa i macOS. */
+  /** Katalog `.git` wspólny dla repo i jego worktree jako klucz kolejki (`pathKey`). */
   private async commonDir(dir: string): Promise<string> {
     const { stdout } = await git(dir, ["rev-parse", "--git-common-dir"]);
     // Ścieżka bywa względna do katalogu repo (`.git`), stąd `resolve`.
-    const path = resolve(dir, stdout.toString("utf8").trim());
-    return (await realpath(path).catch(() => path)).toLowerCase();
+    return pathKey(resolve(dir, stdout.toString("utf8").trim()));
   }
 
   /** Ostatnie commity od HEAD; pusto w repo bez commitów (`--ignore-missing` pomija nieistniejący HEAD). */

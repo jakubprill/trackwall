@@ -2,7 +2,7 @@ import { z } from "zod";
 import { Done, type Endpoint } from "./api.ts";
 import { RunState } from "./procs.ts";
 import { TaskStateChange } from "./task-state.ts";
-import { RepoId } from "./workspace.ts";
+import { CommitHash, RepoId } from "./workspace.ts";
 
 /**
  * Kontrakt modułu `agents` (§4.4, ADR-26): sesje Copilot CLI w PTY należącym do daemona, kilka naraz. Każda akcja
@@ -53,7 +53,7 @@ export const Task = z.object({
   /** Gałąź, od której zadanie wyszło (domyślna repo); `null`, gdy repo nie miało gałęzi domyślnej ani wybranej. */
   baseBranch: z.string().nullable(),
   /** Commit bazowy: zmiany zadania to różnica między nim a katalogiem roboczym worktree. */
-  base: z.string(),
+  base: CommitHash,
   /** Pełna ścieżka worktree w katalogu stanu (`worktrees/<repo>/<gałąź bez prefiksu>`). */
   worktree: z.string(),
   /** ISO 8601. */

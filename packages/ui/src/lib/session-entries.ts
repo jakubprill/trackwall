@@ -20,8 +20,9 @@ export function sessionEntries({ sessions, tasks }: SessionList): SessionEntry[]
   return entries.sort((a, b) => entryTime(b).localeCompare(entryTime(a)));
 }
 
+/** `SessionList.sessions` idzie od najnowszej. */
 function latestSession(sessions: readonly Session[], task: string): Session | undefined {
-  return sessions.filter((s) => s.task === task).sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+  return sessions.find((s) => s.task === task);
 }
 
 function entryTime(entry: SessionEntry): string {

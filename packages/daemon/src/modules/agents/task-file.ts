@@ -9,12 +9,11 @@ import { TaskBranch } from "./task-branch.ts";
  * `tasks.json` w katalogu stanu (ADR-31): zadania przeżywają restart daemona, bo ich worktree i gałęzie zostają
  * na dysku, dopóki użytkownik ich nie zakończy. Sesja zadania żyje tylko w pamięci, a worktree wynika z repo i gałęzi
  * (`taskWorktree`), więc żadne z nich nie jest zapisywane. Plik można zmienić ręcznie, a jego pola trafiają do gita
- * (`branch -D`, `diff <commit bazowy>`), więc schemat dopuszcza tylko gałąź zadania i pełny hash commita.
+ * (`branch -D`, `diff <commit bazowy>`), więc schemat dopuszcza tylko gałąź zadania i pełny hash commita (`CommitHash` w `Task`).
  */
 
 export const StoredTask = Task.omit({ worktree: true }).extend({
   branch: TaskBranch,
-  base: z.string().regex(/^[0-9a-f]{40}([0-9a-f]{24})?$/, "commit bazowy: pełny hash"),
   /** Korzeń repo z folderu z projektami, z którego wyszło zadanie: tam git trzyma rejestr worktree i gałąź. */
   repoDir: z.string().refine(isAbsolute, "korzeń repo: pełna ścieżka"),
 });

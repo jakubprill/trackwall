@@ -32,7 +32,7 @@ export function TaskPanel({
   onChanged: () => void;
   onRemoved: () => void;
 }) {
-  const live = session !== undefined && isLive(session);
+  const liveSession = session && isLive(session) ? session : undefined;
   const [tab, setTab] = useState<TaskTab>("terminal");
   const [removing, setRemoving] = useState(false);
   const resume = useAction(
@@ -78,8 +78,8 @@ export function TaskPanel({
         <Button variant="outline" size="sm" onClick={openEditor.run} disabled={openEditor.pending}>
           <Code /> VS Code
         </Button>
-        {session && live ? (
-          <StopButton conn={conn} session={session} onStopped={onChanged} />
+        {liveSession ? (
+          <StopButton conn={conn} session={liveSession} onStopped={onChanged} />
         ) : (
           <>
             <Button variant="outline" size="sm" onClick={resume.run} disabled={resume.pending || removing}>
@@ -91,14 +91,16 @@ export function TaskPanel({
           </>
         )}
       </header>
-      {removing && !live && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
+      {removing && !liveSession && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
       <div className="px-4">
         <TabBar tabs={tabs} active={shown} onSelect={setTab} />
       </div>
-      {shown === "terminal" && session && <SessionTerminal key={session.id} conn={conn} session={session.id} live={live} />}
+      {shown === "terminal" && session && (
+        <SessionTerminal key={session.id} conn={conn} session={session.id} live={liveSession !== undefined} />
+      )}
       {shown === "changes" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <TaskChangesView conn={conn} task={task.id} paused={removing} />
+          <TaskChangesView conn={conn} task={task.id} paused={removing && !liveSession} />
         </div>
       )}
     </>

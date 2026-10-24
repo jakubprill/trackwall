@@ -46,7 +46,7 @@ export function TaskRemoval({
       {refusal ? (
         <>
           <p className="text-warning text-sm">
-            Uwaga: {refusal.message}. Zacommituj je w VS Code albo usuń mimo to; tego nie da się cofnąć.
+            Uwaga: {refusal.message}. Jeśli to ma zostać, anuluj i zajmij się tym w VS Code; usunięcia mimo to nie da się cofnąć.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button variant="destructive" size="sm" disabled={remove.pending} onClick={() => remove.run(refusal.keepBranch, true)}>

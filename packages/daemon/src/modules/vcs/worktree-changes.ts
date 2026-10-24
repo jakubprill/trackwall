@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import type { TaskChanges } from "@trackwall/protocol";
 import { git } from "./git.ts";
 import { parseChangedFiles } from "./parse.ts";
+import { ExitCodeError } from "./run.ts";
 import { commitCount, uncommittedCount } from "./worktree.ts";
 
 /**
@@ -25,12 +26,14 @@ export async function worktreeChanges(dir: string, base: string, maxPatchBytes: 
     await copyFile(index, tmp).catch((err: NodeJS.ErrnoException) => {
       if (err.code !== "ENOENT") throw err;
     });
-    // Git kończy się kodem 1, gdy któregoś pliku nie przeczyta (trzymany przez proces na Windowsie), choć pozostałe
-    // dodał; diff bez tego jednego nowego pliku jest lepszy niż żaden.
+    // Z `--ignore-errors` git kończy się kodem 1, gdy któregoś pliku nie przeczyta (trzymany przez proces na Windowsie),
+    // choć pozostałe dodał; diff bez tego jednego nowego pliku jest lepszy niż żaden. Każdy inny błąd jest błędem.
     await git(dir, ["add", "--intent-to-add", "--all", "--ignore-errors", "--", "."], {
       indexFile: tmp,
       timeoutMs: CHANGES_TIMEOUT_MS,
-    }).catch(() => {});
+    }).catch((err: unknown) => {
+      if (!(err instanceof ExitCodeError && err.exitCode === 1)) throw err;
+    });
     const diff = (args: string[], maxBytes?: number) =>
       git(dir, ["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", ...args, base, "--"], {
         indexFile: tmp,

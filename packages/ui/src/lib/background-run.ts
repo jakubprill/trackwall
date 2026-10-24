@@ -9,6 +9,14 @@ export function currentRun<R>(
   acted: { run: R | null; afterLoad: number } | undefined,
   remote: { data?: R | null; loadNumber?: number },
 ): R | null | undefined {
-  if (acted && (remote.loadNumber ?? 0) <= acted.afterLoad) return acted.run;
+  if (acted && actionIsNewer(acted.afterLoad, remote.loadNumber)) return acted.run;
   return remote.data;
+}
+
+/**
+ * Akcja wykonana, gdy wysłano już `afterLoad` pytań, jest nowsza od danych z pytania `loadNumber`: odpowiedź na
+ * pytanie wysłane przed nią (także takie, które było w drodze) jeszcze jej nie widzi.
+ */
+export function actionIsNewer(afterLoad: number, loadNumber: number | undefined): boolean {
+  return (loadNumber ?? 0) <= afterLoad;
 }

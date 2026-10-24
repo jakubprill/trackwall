@@ -180,7 +180,7 @@ Praca jednego agenta nad jednym repo: polecenie, worktree, gałąź `trackwall/<
 _Unikaj_: job; „task” w polskim tekście (myli się z taskiem mise)
 
 **Zakończenie zadania** (`removeTask`, „Zakończ zadanie” w UI):
-Usunięcie worktree zadania, a do wyboru także jego gałęzi. Tylko bez działającej sesji; to, co by przepadło (niezacommitowane pliki, commity z odłączonego HEAD, a z gałęzią także commity zadania), daemon wymienia w odmowie `unsaved_changes`, a przepada ono dopiero po potwierdzeniu. Pliki ignorowane przez gita przepadają zawsze.
+Usunięcie worktree zadania, a do wyboru także jego gałęzi. Tylko bez działającej sesji; to, co by przepadło (niezacommitowane pliki, commity z odłączonego HEAD, katalog, którego git już nie zna, a z gałęzią także commity zadania), daemon wymienia w odmowie `unsaved_changes`, a przepada ono dopiero po potwierdzeniu. Pliki ignorowane przez gita przepadają zawsze.
 _Unikaj_: usunięcie zadania (zadanie znika z listy, ale gałąź może zostać)
 
 **Polecenie** (`Task.prompt`):

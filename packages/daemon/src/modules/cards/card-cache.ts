@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { RepoCard } from "@trackwall/protocol";
+import { CommitHash, RepoCard } from "@trackwall/protocol";
 import { z } from "zod";
 import { writeFileAtomic } from "../../atomic-write.ts";
 
@@ -20,8 +20,6 @@ const EXTRACTOR_VERSION = 1;
 const MAX_FILES = 2000;
 /** Tyle kart trzyma pamięć daemona; starsze wypadają w kolejności dodania. */
 const MAX_IN_MEMORY = 1000;
-/** Hash commita SHA-1 albo SHA-256; nic innego nie trafia do nazwy pliku. */
-const COMMIT = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
 
 const CacheFile = z.object({ extractorVersion: z.literal(EXTRACTOR_VERSION), card: RepoCard });
 
@@ -59,7 +57,8 @@ export class CardCache {
   private async get(commit: string): Promise<RepoCard | undefined> {
     const cached = this.memory.get(commit);
     if (cached) return cached;
-    if (!COMMIT.test(commit)) return undefined;
+    // Tylko pełny hash trafia do nazwy pliku.
+    if (!CommitHash.safeParse(commit).success) return undefined;
     let text: string;
     try {
       text = await readFile(this.file(commit), "utf8");
@@ -79,7 +78,7 @@ export class CardCache {
   /** Nieudany zapis na dysk trafia do logu: karta w pamięci działa dalej, najwyżej restart policzy ją od nowa. */
   private set(card: RepoCard): void {
     this.remember(card);
-    if (!COMMIT.test(card.commit)) return;
+    if (!CommitHash.safeParse(card.commit).success) return;
     try {
       mkdirSync(this.dir, { recursive: true });
       writeFileAtomic(this.file(card.commit), JSON.stringify({ extractorVersion: EXTRACTOR_VERSION, card }));

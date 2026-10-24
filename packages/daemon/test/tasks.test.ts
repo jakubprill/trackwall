@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agents } from "../src/modules/agents/agents.ts";
+import { TASK_BRANCH_PREFIX } from "../src/modules/agents/task-branch.ts";
 import { makeAgents, viewer, waitFor } from "./support/agents.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 
@@ -101,7 +102,7 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
     expect(gitIn(dir, "worktree", "list")).not.toContain(task.worktree);
   }, 60_000);
 
-  test("usunięcie zadania razem z gałęzią kasuje commity zadania tylko po potwierdzeniu", async () => {
+  test("zakończenie zadania razem z gałęzią kasuje commity zadania tylko po potwierdzeniu", async () => {
     const { dir } = cloneOnFeatureBranch();
     const { agents, procs } = makeAgents({ sklep: dir });
     cleanups.push(() => procs.stopAll());
@@ -199,22 +200,27 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
     expect(existsSync(task.worktree)).toBe(false);
   }, 60_000);
 
-  test("zakończenie po przerwanym usuwaniu (worktree już niezarejestrowany, pliki zostały) kasuje resztę katalogu", async () => {
+  test("katalog worktree, którego git już nie zna (np. po przerwanym usuwaniu), znika dopiero po potwierdzeniu", async () => {
     const { dir } = cloneOnFeatureBranch();
     const { agents, procs } = makeAgents({ sklep: dir });
     cleanups.push(() => procs.stopAll());
     const task = await agents.createTask("sklep", "przerwane usuwanie");
     await agents.stop(sessionOf(agents, task.id));
     // Tak zostawia worktree `git worktree remove`, któremu Windows nie pozwolił skasować trzymanego pliku.
-    rmSync(join(dir, ".git", "worktrees", task.branch.slice("trackwall/".length)), { recursive: true });
+    rmSync(join(dir, ".git", "worktrees", task.branch.slice(TASK_BRANCH_PREFIX.length)), { recursive: true });
 
-    await agents.removeTask(task.id, false, false);
+    await expect(agents.removeTask(task.id, false, false)).rejects.toMatchObject({
+      code: "unsaved_changes",
+      message: `zakończenie skasowałoby: katalog ${task.worktree}, którego git już nie zna jako worktree (np. po przerwanym usuwaniu), z całą zawartością`,
+    });
+    expect(existsSync(task.worktree)).toBe(true);
+    await agents.removeTask(task.id, false, true);
     expect(existsSync(task.worktree)).toBe(false);
     expect(gitIn(dir, "branch", "--list", task.branch).trim()).toBe("");
     expect(agents.sessions().tasks).toEqual([]);
   }, 60_000);
 
-  test("zadanie, którego repo zniknęło, kończy się tylko po potwierdzeniu i zostawia worktree na dysku", async () => {
+  test("zadanie, którego repo zniknęło, kończy się razem z katalogiem worktree tylko po potwierdzeniu", async () => {
     const { dir } = cloneOnFeatureBranch();
     const { agents, procs } = makeAgents({ sklep: dir });
     cleanups.push(() => procs.stopAll());
@@ -223,8 +229,9 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
     renameSync(dir, `${dir}-przeniesione`);
 
     await expect(agents.removeTask(task.id, false, false)).rejects.toMatchObject({ code: "unsaved_changes" });
+    expect(existsSync(task.worktree)).toBe(true);
     await agents.removeTask(task.id, false, true);
     expect(agents.sessions().tasks).toEqual([]);
-    expect(existsSync(task.worktree)).toBe(true);
+    expect(existsSync(task.worktree)).toBe(false);
   }, 60_000);
 });

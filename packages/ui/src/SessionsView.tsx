@@ -7,6 +7,7 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
+import { actionIsNewer } from "@/lib/background-run";
 import type { Connection } from "@/lib/connection";
 import { relativeTime, twoDigits } from "@/lib/format";
 import { entryId, entrySelection, findEntry, type SessionEntry, type SessionSelection, sessionEntries } from "@/lib/session-entries";
@@ -36,9 +37,8 @@ export function SessionsView({
 }) {
   const list = sessions.data?.sessions ?? [];
   // Zakończone zadanie znika od razu, a nie po odświeżeniu listy, żeby panel nie pokazał go znowu bez worktree.
-  // Pytanie wysłane jeszcze przed zakończeniem może je zwrócić, więc liczy się dopiero odpowiedź na późniejsze.
   const [removed, setRemoved] = useState<{ task: string; sentLoads: number }>();
-  const hidden = removed && (sessions.loadNumber ?? 0) <= removed.sentLoads ? removed.task : undefined;
+  const hidden = removed && actionIsNewer(removed.sentLoads, sessions.loadNumber) ? removed.task : undefined;
   const entries = sessions.data ? sessionEntries(sessions.data).filter((e) => e.kind !== "task" || e.task.id !== hidden) : [];
   const current = findEntry(entries, selected);
   const show = (id: string) => onSelect({ kind: "session", id });

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { Session, Task, TaskChanges } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../errors.ts";
@@ -15,6 +16,9 @@ import type { StoredTask, TaskFile } from "./task-file.ts";
 
 /** Diff zadania w UI: więcej i tak nikt nie przewija. */
 const PATCH_MAX_BYTES = 1024 * 1024;
+
+// Typy niżej powtarzają kształt typów z `vcs` (`WorktreeBase`, `WorktreeBranch`, `PendingWork`) zamiast je
+// importować, bo moduł nie importuje sąsiedniego modułu (§4); zgodność sprawdza kompilator w fasadzie.
 
 /** Skąd zadanie wychodzi: gałąź domyślna (`null` przy odłączonym HEAD) i commit bazowy. */
 interface TaskBase {
@@ -35,6 +39,7 @@ interface TaskPendingWork {
   uncommitted: number;
   strayCommits: number;
   branchCommits: number;
+  unregisteredDir: boolean;
 }
 
 /** Czego zadania potrzebują od `vcs` (worktree i gałęzie, ADR-31); podłączane w fasadzie. */
@@ -77,8 +82,10 @@ export class AgentTasks {
   #tasks: KnownTask[];
   /** Zadania, na których trwa akcja (start, wznowienie, zakończenie); druga naraz to `bad_request`. */
   readonly #busy = new Set<string>();
-  /** Trwające liczenie zmian zadania: zakończenie czeka, aż git przestanie czytać worktree, zanim go skasuje. */
-  readonly #reading = new Map<string, Promise<unknown>>();
+  /** Zadania w trakcie zakończenia: liczenie zmian odmawia, bo worktree zaraz zniknie. */
+  readonly #removing = new Set<string>();
+  /** Trwające liczenia zmian zadania (kilka okien naraz): zakończenie czeka, aż git przestanie czytać worktree. */
+  readonly #reading = new Map<string, Set<Promise<unknown>>>();
 
   constructor(deps: AgentTasksDeps) {
     this.#deps = deps;
@@ -106,7 +113,15 @@ export class AgentTasks {
     });
     return this.#exclusive(id, async () => {
       mkdirSync(dirname(task.worktree), { recursive: true });
-      await asRepoUnavailable(repo, this.#deps.vcs.addWorktree(repoDir, task.worktree, task.branch, task.base));
+      await asRepoUnavailable(repo, this.#deps.vcs.addWorktree(repoDir, task.worktree, task.branch, task.base)).catch(
+        async (err: unknown) => {
+          // Przerwany `worktree add` (np. limit czasu przy LFS) może zostawić gałąź i katalog, których lista nie pokaże.
+          await this.#discard(task, false).catch((e: unknown) =>
+            this.#deps.log(`sprzątanie po nieudanym worktree ${task.worktree}: ${messageOf(e)}`),
+          );
+          throw err;
+        },
+      );
       // Zapis przed startem sesji: worktree już jest na dysku i nie może zniknąć z listy, gdy daemon padnie.
       this.#save([task, ...this.#tasks]);
       try {
@@ -136,14 +151,16 @@ export class AgentTasks {
   }
 
   changes(id: string): Promise<TaskChanges> {
+    if (this.#removing.has(id)) throw new DomainError("bad_request", "zadanie jest właśnie kończone");
     const task = this.#existingWorktree(id);
-    if (this.#busy.has(id)) throw new DomainError("bad_request", "na tym zadaniu trwa inna akcja");
     const reading = asRepoUnavailable(task.branch, this.#deps.vcs.worktreeChanges(task.worktree, task.base, PATCH_MAX_BYTES));
-    this.#reading.set(id, reading);
+    const reads = this.#reading.get(id) ?? new Set();
+    this.#reading.set(id, reads.add(reading));
     void reading
       .catch(() => {})
       .finally(() => {
-        if (this.#reading.get(id) === reading) this.#reading.delete(id);
+        reads.delete(reading);
+        if (reads.size === 0 && this.#reading.get(id) === reads) this.#reading.delete(id);
       });
     return reading;
   }
@@ -161,15 +178,17 @@ export class AgentTasks {
     const task = this.#get(id);
     return this.#exclusive(id, async () => {
       this.#refuseRunning(task, "zakończeniem");
-      await this.#reading.get(id)?.catch(() => {});
-      if (existsSync(task.repoDir)) {
-        if (!discardChanges) await this.#refuseLoss(task, keepBranch);
-        await this.#discard(task, keepBranch);
-      } else {
-        // Bez repo nie ma gita, który usunąłby worktree i gałąź ani policzył zmiany: zadanie znika z listy, pliki zostają.
-        if (!discardChanges && existsSync(task.worktree))
-          throw new DomainError("unsaved_changes", `repo ${task.repoDir} nie istnieje, więc nie da się sprawdzić zmian w ${task.worktree}`);
-        this.#deps.log(`zadanie ${id}: repo ${task.repoDir} nie istnieje, zadanie znika tylko z listy (worktree ${task.worktree})`);
+      this.#removing.add(id);
+      try {
+        await Promise.allSettled(this.#reading.get(id) ?? []);
+        if (existsSync(task.repoDir)) {
+          if (!discardChanges) await this.#refuseLoss(task, keepBranch);
+          await this.#discard(task, keepBranch);
+        } else {
+          await this.#discardWithoutRepo(task, discardChanges);
+        }
+      } finally {
+        this.#removing.delete(id);
       }
       this.#closeSessions(task);
       this.#save(this.#tasks.filter((t) => t.id !== id));
@@ -179,11 +198,28 @@ export class AgentTasks {
   async #refuseLoss(task: KnownTask, keepBranch: boolean): Promise<void> {
     const pending = await asRepoUnavailable(task.branch, this.#deps.vcs.pendingWork(task));
     const lost = [
+      pending.unregisteredDir &&
+        `katalog ${task.worktree}, którego git już nie zna jako worktree (np. po przerwanym usuwaniu), z całą zawartością`,
       pending.uncommitted > 0 && `niezacommitowane zmiany w worktree (${pending.uncommitted})`,
       pending.strayCommits > 0 && `commity poza gałęzią, z odłączonego HEAD (${pending.strayCommits})`,
       !keepBranch && pending.branchCommits > 0 && `commity na gałęzi ${task.branch} (${pending.branchCommits})`,
     ].filter((s) => s !== false);
     if (lost.length > 0) throw new DomainError("unsaved_changes", `zakończenie skasowałoby: ${lost.join(", ")}`);
+  }
+
+  /**
+   * Bez repo (przeniesione, odłączony dysk) nie ma gita, który policzyłby zmiany albo usunął gałąź: katalog worktree
+   * znika tylko po potwierdzeniu, a rejestrację w przeniesionym repo czyści jego `git worktree prune`. Katalog leży
+   * w katalogu worktree daemona, bo jest liczony z repo i gałęzi.
+   */
+  async #discardWithoutRepo(task: KnownTask, discardChanges: boolean): Promise<void> {
+    if (!existsSync(task.worktree)) return;
+    if (!discardChanges)
+      throw new DomainError(
+        "unsaved_changes",
+        `zakończenie skasowałoby katalog ${task.worktree} z całą zawartością, a repo ${task.repoDir} nie istnieje, więc nie da się sprawdzić, co w nim jest`,
+      );
+    await rm(task.worktree, { recursive: true, force: true, maxRetries: 3 });
   }
 
   /** Worktree (z niezacommitowanymi i ignorowanymi plikami) i, bez `keepBranch`, gałąź. */

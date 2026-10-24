@@ -31,6 +31,9 @@ export const RepoPath = z
   .refine((p) => [...p].every((c) => c >= " "), "ścieżka w repo nie może zawierać znaków sterujących");
 export type RepoPath = z.infer<typeof RepoPath>;
 
+/** Pełny hash commita, SHA-1 albo SHA-256; tylko taki daemon podaje gitowi jako rewizję i wpisuje w nazwy plików. */
+export const CommitHash = z.string().regex(/^[0-9a-f]{40}([0-9a-f]{24})?$/, "pełny hash commita");
+
 export const Commit = z.object({
   hash: z.string(),
   subject: z.string(),
@@ -130,7 +133,6 @@ function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string,
 }
 
 const RepoRequest = z.object({ repo: RepoId }).strict();
-/** Akcja bez wyniku poza potwierdzeniem. */
 
 export const workspaceApi = {
   list: endpoint("list", z.object({}).strict(), RepoList),
