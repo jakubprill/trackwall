@@ -39,7 +39,7 @@ Sekret z `~/.trackwall/daemon.json`, którym UI, `ws`, powłoka i most stdio uwi
 **Serwer MCP** (`/mcp`, `createMcpEndpoint`; po angielsku *MCP server*):
 Część daemona, przez którą agenci czytają jego stan narzędziami MCP; ten sam port i token co API (§5.3, ADR-24).
 
-**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`, `list_sessions`; po angielsku *MCP tool*):
+**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`, `list_sessions`, `start_service`, `call_endpoint`; po angielsku *MCP tool*):
 Jedno wywołanie serwera MCP z nazwą po angielsku, wejściem i wynikiem opisanym schematem z `packages/protocol/src/mcp.ts`; mapowanie na fasadę, bez własnej logiki domenowej.
 _Unikaj_: komenda, akcja (to pojęcia z API i CLI)
 
@@ -182,11 +182,15 @@ _Unikaj_: dashboard (to scena 3D), przegląd repo (to README i commity jednego r
 ## Procesy i serwisy
 
 **Serwis** (`Service`, `ServiceId`; po angielsku *service*):
-Repo plus jego task mise `dev`, port i sonda zdrowia. Jedno repo może mieć kilka serwisów.
+Repo plus jego task mise `dev` (`SERVICE_MISE_TASK`), port i gotowość. Today one per repo, run from the repo root (ADR-45); docelowo jedno repo może mieć kilka serwisów.
 _Unikaj_: aplikacja, mikroserwis (gdy chodzi o byt w Trackwall)
 
-**Stan serwisu**:
-`stopped`, `starting`, `healthy`, `unhealthy`, `stopping` albo `crashed`; zawsze zaobserwowany, nigdy założony.
+**Stan serwisu** (`ServiceState`):
+`stopped`, `starting`, `healthy`, `unhealthy`, `stopping` albo `crashed`; zawsze zaobserwowany, nigdy założony. In the UI `healthy` reads "ready on port N" and `unhealthy` "not answering".
+
+**Slice** (`ServiceSlice`, member `SliceMember`; in English *slice*):
+A service with every service it calls at runtime (graph edges `http` and `manual`), started together by `start_service`, dependencies first in waves (ADR-45). A member is `pending`, `started`, `running` (it was already running) or `skipped` with the reason.
+_Avoid_: stack, environment (for the set of services)
 
 **Grupa procesów** (`ProcessGroup`; po angielsku *process group*):
 Proces-lider i wszyscy jego potomkowie, zatrzymywani razem: Job Object na Windowsie, nowa sesja POSIX (`setsid`) z zabijaniem po `-pgid` na macOS.
@@ -195,8 +199,8 @@ _Unikaj_: drzewo procesów (gdy chodzi o jednostkę zarządzaną)
 **Właściciel grupy** (`owner`):
 Klucz, pod którym `procs` trzyma grupę procesów i jej ostatni stan; nadaje go moduł, który ją uruchomił (dziś task mise w repo). Jeden właściciel ma najwyżej jedną grupę, która nie jest potwierdzona jako pusta.
 
-**Sonda** (health):
-Task mise `health` uruchamiany cyklicznie; jego wynik decyduje o `healthy` / `unhealthy`.
+**Sonda** (health; *probe*):
+A TCP connection to the service's port on loopback (`probePort`), with the port from its log or `server.port` on its card; it decides `healthy` / `unhealthy` (ADR-45). The planned mise task `health` is not used.
 
 **Dzierżawa** (`Lease`):
 Informacja, która gałąź albo worktree zajmuje serwis na jego porcie. Domyślnie repo główne; zadanie może ją przejąć i oddać.

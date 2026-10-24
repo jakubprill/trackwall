@@ -24,6 +24,7 @@ describe("the port and the start from a service log line", () => {
     "Connecting to 127.0.0.1:5432",
     "Tomcat initialized with port 8080 (http)",
     "Tomcat started on port 99999 (http)",
+    "Kafka consumer started, connected on localhost:9092",
   ])("%s gives no port", (line) => {
     expect(portFromLine(line)).toBeNull();
   });
@@ -35,7 +36,7 @@ describe("the port and the start from a service log line", () => {
 });
 
 function edge(from: string, to: string, kind: GraphEdge["kind"] = "http", confidence: GraphEdge["confidence"] = "high"): GraphEdge {
-  return { from, to, kind, key: `${to}-app`, confidence, evidence: [{ repo: from, file: "a.yml", line: 1, note: "calls" }] };
+  return { from, to, kind, key: `${to}-app`, confidence, evidence: [{ repo: from, path: "a.yml", line: 1, detail: "calls" }] };
 }
 
 describe("the slice of a service", () => {

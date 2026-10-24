@@ -1,7 +1,9 @@
 /**
  * What a service log says about readiness (§4.3, ADR-45): the port its web server opened and whether a Spring Boot
- * app reported it has started. The port from the log wins over `server.port` on the card, because a profile, an
+ * app reported it has started. The first port a run logs wins over `server.port` on the card, because a profile, an
  * environment variable or `--server.port` in the mise task can change it and the card reads only the default profile.
+ * The patterns name a server that listens, not a client that connects ("started … on localhost:9092" of a Kafka
+ * consumer is not a port of the service).
  */
 
 /**

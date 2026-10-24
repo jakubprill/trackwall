@@ -62,7 +62,7 @@ function http(from: string, to: string): GraphEdge {
     kind: "http",
     key: `${to}-app`,
     confidence: "high",
-    evidence: [{ repo: from, file: "a.yml", line: 1, note: "calls" }],
+    evidence: [{ repo: from, path: "a.yml", line: 1, detail: "calls" }],
   };
 }
 
