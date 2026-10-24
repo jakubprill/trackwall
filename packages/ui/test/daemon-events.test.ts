@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { SessionList } from "@trackwall/protocol";
 import { DaemonEvents, type EventSocket } from "../src/lib/daemon-events.ts";
 
-const LIST: SessionList = { sessions: [], tasks: [], worktreesDir: "/stan/worktrees" };
+const LIST: SessionList = { sessions: [], tasks: [], proposals: [], worktreesDir: "/stan/worktrees" };
 
 /** Atrapa WebSocketu przeglądarki: test sam otwiera, przysyła ramki i zamyka połączenie. */
 function fakeSockets() {

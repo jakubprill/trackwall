@@ -1,5 +1,5 @@
-import { agentsApi, type Session, type SessionList, type Task, workspaceApi } from "@trackwall/protocol";
-import { BellRing, GitBranch, Play, Plus, Square, X } from "lucide-react";
+import { agentsApi, type Session, type SessionList, type Task, type TaskProposal, workspaceApi } from "@trackwall/protocol";
+import { BellRing, GitBranch, Lightbulb, Play, Plus, Square, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
@@ -14,13 +14,15 @@ import { isLive, nextWaiting, sessionStateLabel, waitingCount } from "@/lib/sess
 import { useAction } from "@/lib/use-action";
 import { actionIsNewer, type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
+import { ProposalPanel } from "./ProposalPanel.tsx";
 import { SessionTerminal } from "./SessionTerminal.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
 
 /**
  * Widok „Sesje” (§4.4, ADR-26, ADR-31): kilka sesji Copilot CLI naraz, każda w repo z folderu z projektami albo
- * w worktree zadania. Po lewej lista sesji i zadań ze stanem i skokiem do następnej sesji, która czeka na Ciebie;
- * po prawej terminal wybranej sesji, a przy zadaniu także jego zmiany. Listę odpytuje `App`, bo liczba czekających
+ * w worktree zadania. Po lewej lista sesji i zadań ze stanem i skokiem do następnej sesji, która czeka na Ciebie,
+ * a nad nimi propozycje zadań od agentów (ADR-39); po prawej terminal wybranej sesji, przy zadaniu także jego zmiany,
+ * a przy propozycji jej polecenie do zatwierdzenia. Listę odpytuje `App`, bo liczba czekających
  * sesji jest też na pasku widoków.
  */
 export function SessionsView({
@@ -97,12 +99,29 @@ export function SessionsView({
             onCancel={entries.length > 0 ? () => onSelect(undefined) : undefined}
           />
         )}
+        {current?.kind === "proposal" && (
+          <ProposalPanel
+            key={current.proposal.id}
+            conn={conn}
+            proposal={current.proposal}
+            sessions={list}
+            onApproved={(task) => {
+              onSelect({ kind: "task", id: task.id });
+              sessions.reload();
+            }}
+            onRejected={() => {
+              onSelect(undefined);
+              sessions.reload();
+            }}
+          />
+        )}
         {current?.kind === "task" && (
           <TaskPanel
             key={current.task.id}
             conn={conn}
             task={current.task}
             session={current.session}
+            sessions={list}
             onChanged={sessions.reload}
             onRemoved={() => {
               setRemoved({ task: current.task.id, afterLoad: sessions.sentLoads() });
@@ -136,6 +155,8 @@ function SessionListItem({
   active: boolean;
   onSelect: () => void;
 }) {
+  if (entry.kind === "proposal")
+    return <ProposalListItem proposal={entry.proposal} position={position} active={active} onSelect={onSelect} />;
   const { session } = entry;
   const task = entry.kind === "task" ? entry.task : undefined;
   return (
@@ -162,12 +183,52 @@ function SessionListItem({
   );
 }
 
-/** Polecenie zadania w jednej linii, z ikoną gałęzi, żeby zadanie odróżniało się od sesji w korzeniu repo. */
+/** Propozycja zadania na liście: czeka na Twoją decyzję, więc ma ton ostrzeżenia jak sesja, która czeka. */
+function ProposalListItem({
+  proposal,
+  position,
+  active,
+  onSelect,
+}: {
+  proposal: TaskProposal;
+  position: number;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-current={active || undefined}
+      className={cn(
+        "flex w-full items-start gap-3 rounded-md border border-transparent px-2 py-2 text-left transition-colors hover:bg-accent",
+        active && "bg-accent border-primary/25 hud-active-edge",
+      )}
+    >
+      <span className="text-muted-foreground text-2xs w-5 shrink-0 pt-0.5 text-right font-mono">{twoDigits(position)}</span>
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-sm font-medium">{proposal.repo}</span>
+          <Lightbulb className="text-warning size-3.5 shrink-0" aria-label="task proposal" />
+        </span>
+        <span className="text-muted-foreground truncate text-xs">{proposal.title}</span>
+        <span className="text-xs">
+          <StatusLabel tone="warning" label="waiting for your decision" />
+        </span>
+      </span>
+    </button>
+  );
+}
+
+/**
+ * Tytuł zadania z propozycji albo polecenie w jednej linii, z ikoną gałęzi, żeby zadanie odróżniało się od sesji
+ * w korzeniu repo.
+ */
 function TaskLine({ task }: { task: Task }) {
   return (
     <span className="text-muted-foreground flex min-w-0 items-center gap-1 text-xs" title={task.branch}>
       <GitBranch className="size-3 shrink-0" aria-label="task in a worktree" />
-      <span className="truncate">{task.prompt}</span>
+      <span className="truncate">{task.title ?? task.prompt}</span>
     </span>
   );
 }

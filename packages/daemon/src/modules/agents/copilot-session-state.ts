@@ -18,18 +18,25 @@ const CANCEL_AFTER_ANSWER_MS = 10_000;
  * wychodzą. Ten sam obiekt liczy stan na żywo i przy odtwarzaniu nagrania, więc test na nagraniu sprawdza to,
  * co działa w sesji.
  */
+export interface CopilotSessionStateOptions extends TaskStateTrackerOptions {
+  /** Sesja startuje z poleceniem (`--interactive`): `sessionStart` znaczy pracę, a nie czekanie na Ciebie. */
+  promptOnStart?: boolean;
+}
+
 export class CopilotSessionState {
   readonly #osc = new OscParser();
   readonly #screen = new CopilotScreen();
   readonly #tracker: TaskStateTracker;
   readonly #now: () => number;
+  readonly #promptOnStart: boolean;
   #windowTitle: string | undefined;
   /** Czas ostatniego klawisza sesji, który zmienił stan (odpowiedź na prośbę albo przerwanie). */
   #lastAnswerAt = Number.NEGATIVE_INFINITY;
 
-  constructor(o: TaskStateTrackerOptions) {
+  constructor(o: CopilotSessionStateOptions) {
     this.#tracker = new TaskStateTracker(o);
     this.#now = o.now;
+    this.#promptOnStart = o.promptOnStart ?? false;
   }
 
   /** Ostatni tytuł okna ustawiony przez Copilot CLI: nad czym agent pracuje. */
@@ -54,7 +61,7 @@ export class CopilotSessionState {
   }
 
   hook(record: CopilotHookRecord): TaskStateChange[] {
-    const signal = stateFromHook(record);
+    const signal = stateFromHook(record, this.#promptOnStart);
     return [this.#tracker.tick(), signal && this.#tracker.signal(signal)].filter((c) => c !== undefined);
   }
 

@@ -3,6 +3,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import {
   PATCH_MAX_BYTES,
+  type ProposedBy,
   type Session,
   TASK_SUMMARY_MAX_FILES,
   type Task,
@@ -57,8 +58,8 @@ export interface TasksVcs {
 
 /** Sesje Copilot CLI z `Agents`, w których działają zadania. */
 interface TaskSessions {
-  /** Copilot CLI w worktree zadania z argumentami zadania (polecenie albo wznowienie). */
-  launch(spec: { repo: string; cwd: string; task: string; args: readonly string[] }): Promise<Session>;
+  /** Copilot CLI w worktree zadania z argumentami zadania (polecenie, wtedy `promptOnStart`, albo wznowienie). */
+  launch(spec: { repo: string; cwd: string; task: string; args: readonly string[]; promptOnStart: boolean }): Promise<Session>;
   /** Sesje zadania od najnowszej. */
   of(task: string): Session[];
   /** Usuwa zakończoną sesję z listy. */
@@ -74,6 +75,13 @@ export interface AgentTasksDeps {
   worktreesDir: string;
   openEditor: (dir: string) => void;
   log: (msg: string) => void;
+}
+
+/** Zadanie z zatwierdzonej propozycji (ADR-39): jej identyfikator, tytuł i to, kto ją zgłosił. */
+export interface TaskOrigin {
+  id: string;
+  title: string;
+  proposedBy: ProposedBy;
 }
 
 /** Zadanie z pliku z worktree, który z niego wynika. */
@@ -99,29 +107,36 @@ export class AgentTasks {
     return this.#tasks.map(view);
   }
 
-  /** Worktree na nowej gałęzi od gałęzi domyślnej i Copilot CLI w nim z poleceniem jako pierwszą wiadomością. */
-  async create(repo: string, prompt: string): Promise<Task> {
+  /**
+   * Worktree na nowej gałęzi od gałęzi domyślnej i Copilot CLI w nim z poleceniem jako pierwszą wiadomością; z `origin`
+   * zadanie dostaje identyfikator, tytuł i pochodzenie zatwierdzonej propozycji.
+   */
+  async create(repo: string, prompt: string, origin?: TaskOrigin): Promise<Task> {
     const repoDir = await this.#deps.repos.repoPath(repo);
     const base = await asRepoUnavailable(repo, this.#deps.vcs.defaultBase(repoDir));
-    const id = randomUUID();
+    const id = origin?.id ?? randomUUID();
     const task = this.#known({
       id,
       repo,
       repoDir,
       prompt,
-      branch: `${TASK_BRANCH_PREFIX}${taskSlug(prompt, id)}`,
+      branch: `${TASK_BRANCH_PREFIX}${taskSlug(origin?.title ?? prompt, id)}`,
       baseBranch: base.branch,
       base: base.commit,
       createdAt: new Date().toISOString(),
+      title: origin?.title ?? null,
+      proposedBy: origin?.proposedBy ?? null,
+      summary: null,
     });
     return this.#exclusive(id, async () => {
+      if (this.#tasks.some((t) => t.id === id)) throw new DomainError("bad_request", `task ${id} already exists`);
       mkdirSync(dirname(task.worktree), { recursive: true });
       await asRepoUnavailable(repo, this.#deps.vcs.addWorktree(repoDir, task.worktree, task.branch, task.base));
       // Zapis przed startem sesji: worktree już jest na dysku i nie może zniknąć z listy, gdy daemon padnie.
       this.#save([task, ...this.#tasks]);
       try {
         // `=` zamiast osobnego argumentu, żeby polecenie zaczynające się od `-` nie było opcją Copilot CLI.
-        await this.#launch(task, [`--session-id=${id}`, `--interactive=${prompt}`]);
+        await this.#launch(task, [`--session-id=${id}`, `--interactive=${prompt}`], true);
       } catch (err) {
         // Nieudane sprzątanie zostawia zadanie na liście, żeby użytkownik mógł je zakończyć sam.
         await this.#whileRemoving(id, () => this.#discard(task, false)).then(
@@ -140,7 +155,7 @@ export class AgentTasks {
     return this.#exclusive(id, async () => {
       this.#refuseRunning(task, "resuming");
       this.#closeSessions(task);
-      await this.#launch(task, [`--resume=${id}`]);
+      await this.#launch(task, [`--resume=${id}`], false);
       return view(task);
     });
   }
@@ -148,6 +163,24 @@ export class AgentTasks {
   /** Zadanie po identyfikatorze (`not_found`, gdy go nie ma). */
   task(id: string): Task {
     return view(this.#get(id));
+  }
+
+  /** Zadanie po identyfikatorze albo `undefined`, gdy go nie ma (czekanie na propozycję, która jeszcze nie jest zadaniem). */
+  find(id: string): Task | undefined {
+    const task = this.#tasks.find((t) => t.id === id);
+    return task && view(task);
+  }
+
+  /** Trwa akcja na zadaniu (start, wznowienie, zakończenie), np. sesja nowego zadania jeszcze się uruchamia. */
+  busy(id: string): boolean {
+    return this.#busy.has(id);
+  }
+
+  /** Podsumowanie od sesji zadania (`report_result`, ADR-39); kolejne zastępuje poprzednie i przeżywa restart daemona. */
+  setSummary(id: string, text: string): Task {
+    const summarized = { ...this.#get(id), summary: { text, reportedAt: new Date().toISOString() } };
+    this.#save(this.#tasks.map((t) => (t.id === id ? summarized : t)));
+    return view(summarized);
   }
 
   changes(id: string): Promise<TaskChanges> {
@@ -229,8 +262,8 @@ export class AgentTasks {
     if (!keepBranch) await asRepoUnavailable(task.branch, this.#deps.vcs.deleteBranch(task.repoDir, task.branch));
   }
 
-  async #launch(task: KnownTask, args: readonly string[]): Promise<void> {
-    await this.#deps.sessions.launch({ repo: task.repo, cwd: task.worktree, task: task.id, args });
+  async #launch(task: KnownTask, args: readonly string[], promptOnStart: boolean): Promise<void> {
+    await this.#deps.sessions.launch({ repo: task.repo, cwd: task.worktree, task: task.id, args, promptOnStart });
   }
 
   /** Działająca sesja pisze w worktree i trzyma jego pliki (na Windowsie blokuje usunięcie), więc najpierw stop. */

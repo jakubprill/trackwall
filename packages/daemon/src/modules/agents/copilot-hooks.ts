@@ -7,12 +7,18 @@ import type { StateSignal } from "./task-state-tracker.ts";
  * Copilot CLI: nazwy zdarzeń, `sessionEnd.reason`, `agentStop.stopReason`. Niepewne: pola i rodzaje
  * `notification`, których dokumentacja nie wylicza. Dlatego powiadomienie jest klasyfikowane po znanym rodzaju,
  * a bez rodzaju po słowach treści (pewność `low`).
+ *
+ * `promptOnStart`: sesja zadania startuje z poleceniem jako pierwszą wiadomością (`--interactive`, ADR-31), więc
+ * `sessionStart` nie znaczy czekania na Ciebie, tylko początek pracy nad poleceniem. Bez tego sesja zadania przez
+ * chwilę między `sessionStart` a `userPromptSubmitted` czekałaby na Ciebie, a `wait_for_session` (ADR-39) kończyłby
+ * czekanie, zanim agent zacznie.
  */
 
-export function stateFromHook(record: CopilotHookRecord): StateSignal | undefined {
+export function stateFromHook(record: CopilotHookRecord, promptOnStart = false): StateSignal | undefined {
   const reason = `hook ${record.event}`;
   switch (record.event) {
     case "sessionStart":
+      if (promptOnStart) return { state: "Working", source: "hook", confidence: "medium", reason: `${reason} with a prompt` };
       return { state: "Input", source: "hook", confidence: "medium", reason };
     case "userPromptSubmitted":
     case "postToolUse":

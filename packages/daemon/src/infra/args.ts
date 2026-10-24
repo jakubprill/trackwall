@@ -12,8 +12,9 @@ export interface DaemonArgs {
 }
 
 export const USAGE = `trackwall-daemon [options]
-trackwall-daemon mcp-stdio [--home <dir>]
-                   stdio bridge to the MCP server of the running daemon (for Copilot CLI)
+trackwall-daemon mcp-stdio [--home <dir>] [--session-token-file <file>]
+                   stdio bridge to the MCP server of the running daemon (for Copilot CLI);
+                   a Trackwall session passes the file with its session token
 trackwall-daemon copilot-hook <event> <hooks.jsonl>
                    hook of the Copilot CLI session plugin (run by Copilot CLI, not by a person)
 
@@ -73,22 +74,34 @@ function toInt(value: string | undefined, name: string): number {
 
 /** Podkomenda `trackwall-daemon`, która uruchamia most stdio do `/mcp` (§5.3). */
 export const MCP_STDIO_COMMAND = "mcp-stdio";
+/**
+ * Opcja mostu stdio z plikiem tokenu sesji (ADR-39): podaje ją daemon w konfiguracji MCP każdej swojej sesji, żeby
+ * serwer MCP wiedział, która sesja woła. Ścieżka zamiast samego tokenu, bo argumenty procesu widzą inni użytkownicy systemu.
+ */
+const SESSION_TOKEN_FILE = "session-token-file";
+export const SESSION_TOKEN_FILE_OPTION = `--${SESSION_TOKEN_FILE}`;
 /** Podkomenda `trackwall-daemon`, którą Copilot CLI uruchamia jako hook wtyczki sesji (ADR-17, ADR-26). */
 export const COPILOT_HOOK_COMMAND = "copilot-hook";
 
 /**
- * Wiersz poleceń: daemon, most stdio (`mcp-stdio [--home <dir>]`), który ma do ustawienia tylko katalog stanu, albo
+ * Wiersz poleceń: daemon, most stdio (`mcp-stdio [--home <dir>] [--session-token-file <plik>]`), który ma do ustawienia
+ * tylko katalog stanu i token sesji, albo
  * hook wtyczki sesji (`copilot-hook <zdarzenie> <hooks.jsonl>`).
  */
 export type CommandLine =
   | { command: "daemon"; args: DaemonArgs }
-  | { command: typeof MCP_STDIO_COMMAND; home?: string }
+  | { command: typeof MCP_STDIO_COMMAND; home?: string; sessionTokenFile?: string }
   | { command: typeof COPILOT_HOOK_COMMAND; event?: string; hooksFile?: string };
 
 /** Hook nie sprawdza argumentów: zły argument to tylko brak rekordu, a hook nie może zatrzymać agenta błędem. */
 export function parseCommandLine(argv: string[]): CommandLine {
   if (argv[0] === COPILOT_HOOK_COMMAND) return { command: COPILOT_HOOK_COMMAND, event: argv[1], hooksFile: argv[2] };
   if (argv[0] !== MCP_STDIO_COMMAND) return { command: "daemon", args: parseDaemonArgs(argv) };
-  const { values } = parseArgs({ args: argv.slice(1), options: { home: { type: "string" } }, strict: true, allowPositionals: false });
-  return { command: MCP_STDIO_COMMAND, home: values.home };
+  const { values } = parseArgs({
+    args: argv.slice(1),
+    options: { home: { type: "string" }, [SESSION_TOKEN_FILE]: { type: "string" } },
+    strict: true,
+    allowPositionals: false,
+  });
+  return { command: MCP_STDIO_COMMAND, home: values.home, sessionTokenFile: values[SESSION_TOKEN_FILE] };
 }

@@ -129,7 +129,12 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
 
     const restarted = makeAgents({ sklep: dir }, first.home);
     cleanups.push(() => restarted.procs.stopAll());
-    expect(restarted.agents.sessions()).toEqual({ sessions: [], tasks: [task], worktreesDir: join(first.home, "worktrees") });
+    expect(restarted.agents.sessions()).toEqual({
+      sessions: [],
+      tasks: [task],
+      proposals: [],
+      worktreesDir: join(first.home, "worktrees"),
+    });
 
     expect(await restarted.agents.resumeTask(task.id)).toEqual(task);
     await expect(restarted.agents.resumeTask(task.id)).rejects.toThrow("has a running session");
@@ -260,5 +265,23 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
     writeFileSync(gitIn(task.worktree, "rev-parse", "--path-format=absolute", "--git-path", "index").trim(), "to nie jest indeks");
 
     await expect(agents.taskChanges(task.id)).rejects.toMatchObject({ code: "repo_unavailable" });
+  }, 60_000);
+  test("propozycja, której zadania nie da się utworzyć, zostaje do ponownej próby, a zatwierdzona znika z listy", async () => {
+    const { dir } = cloneOnFeatureBranch();
+    const moved = `${dir}-przeniesione`;
+    const { agents, procs } = makeAgents({ sklep: dir });
+    cleanups.push(() => procs.stopAll());
+    const proposal = await agents.propose(null, { repo: "sklep", title: "Dodaj wylogowanie", prompt: "dodaj wylogowanie" });
+
+    renameSync(dir, moved);
+    await expect(agents.approveProposal(proposal.id, proposal.prompt)).rejects.toMatchObject({ code: "repo_unavailable" });
+    expect(agents.sessions().proposals).toEqual([proposal]);
+    expect(agents.sessions().tasks).toEqual([]);
+
+    renameSync(moved, dir);
+    const task = await agents.approveProposal(proposal.id, proposal.prompt);
+    expect(task).toMatchObject({ id: proposal.id, title: "Dodaj wylogowanie", proposedBy: { session: null } });
+    expect(agents.sessions().proposals).toEqual([]);
+    await expect(agents.approveProposal(proposal.id, proposal.prompt)).rejects.toMatchObject({ code: "not_found" });
   }, 60_000);
 });

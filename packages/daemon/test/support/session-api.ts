@@ -58,5 +58,5 @@ export async function startSessionApi(token: string) {
     facade.agents.close();
     await api.close();
   };
-  return { api, facade, post, stop };
+  return { api, facade, home, post, stop };
 }

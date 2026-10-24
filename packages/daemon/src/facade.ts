@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { SESSION_TOKEN_FILE_OPTION } from "./infra/args.ts";
 import { vscodeUrl } from "./infra/editor-url.ts";
 import { Agents, type AgentsDeps } from "./modules/agents/agents.ts";
 import { Batch } from "./modules/batch/batch.ts";
@@ -55,7 +56,7 @@ export interface FacadeOptions {
   copilotCommand: readonly string[];
   /** Program hooka wtyczki sesji (`trackwall-daemon copilot-hook …` w daemonie). */
   hookCommand: AgentsDeps["hookCommand"];
-  /** Most stdio do serwera MCP tego daemona (`mcpStdioCommand`), który dostaje każda sesja Copilot CLI. */
+  /** Most stdio do serwera MCP tego daemona (`mcpStdioCommand`), który dostaje każda sesja Copilot CLI z plikiem swojego tokenu sesji. */
   mcpStdioCommand: readonly string[];
   /** Środowisko procesów uruchamianych dla użytkownika (`userEnv`). */
   userEnv: () => Promise<NodeJS.ProcessEnv>;
@@ -92,7 +93,7 @@ export function createFacade(o: FacadeOptions): Facade {
     copilot: o.copilotCommand,
     env: o.userEnv,
     hookCommand: o.hookCommand,
-    mcpStdioCommand: o.mcpStdioCommand,
+    sessionMcpCommand: (tokenFile) => [...o.mcpStdioCommand, SESSION_TOKEN_FILE_OPTION, tokenFile],
     openEditor,
     log: o.log,
   });

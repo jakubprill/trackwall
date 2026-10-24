@@ -3,7 +3,7 @@ import { DaemonEvent, type RunningMiseTask, type SessionList } from "@trackwall/
 import { EventHub } from "../src/api/event-hub.ts";
 import type { Facade } from "../src/facade.ts";
 
-const EMPTY: SessionList = { sessions: [], tasks: [], worktreesDir: "/stan/worktrees" };
+const EMPTY: SessionList = { sessions: [], tasks: [], proposals: [], worktreesDir: "/stan/worktrees" };
 const RUNNING: RunningMiseTask = {
   repo: "sklep",
   miseTask: "dev",

@@ -152,7 +152,7 @@ try {
   process.exit(EXIT_USAGE);
 }
 if (commandLine.command === MCP_STDIO_COMMAND) {
-  runMcpStdio(trackwallHome(commandLine.home));
+  runMcpStdio(trackwallHome(commandLine.home), commandLine.sessionTokenFile);
 } else if (commandLine.command === COPILOT_HOOK_COMMAND) {
   runHook(commandLine.event, commandLine.hooksFile);
 } else if (commandLine.args.help) {
@@ -170,9 +170,9 @@ if (commandLine.command === MCP_STDIO_COMMAND) {
  * Most stdio do serwera MCP działającego daemona. stdout należy do protokołu MCP, więc komunikaty mostu idą tylko na
  * stderr; proces kończy się sam po opróżnieniu stdout (`process.exit` ucięłoby odpowiedzi czekające w buforze rury).
  */
-function runMcpStdio(home: string): void {
+function runMcpStdio(home: string, sessionTokenFile: string | undefined): void {
   const log = (msg: string) => process.stderr.write(`[mcp-stdio] ${msg}\n`);
-  runStdioBridge({ home, input: process.stdin, output: process.stdout, log }).catch((err: unknown) => {
+  runStdioBridge({ home, sessionTokenFile, input: process.stdin, output: process.stdout, log }).catch((err: unknown) => {
     log(String(err));
     process.exitCode = 1;
   });

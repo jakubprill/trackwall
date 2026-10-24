@@ -13,6 +13,9 @@ const stored = {
   baseBranch: "main",
   base: "a".repeat(40),
   createdAt: "2026-10-23T22:00:00.000Z",
+  title: "Napraw logowanie",
+  proposedBy: { session: "9b1e7d2a-0000-4000-8000-000000000000" },
+  summary: { text: "Poprawione, test dodany.", reportedAt: "2026-10-24T10:00:00.000Z" },
 };
 
 describe("tasks.json", () => {
@@ -22,6 +25,14 @@ describe("tasks.json", () => {
     expect(file.read()).toEqual([]);
     file.write([stored]);
     expect(file.read()).toEqual([stored]);
+  });
+
+  test("zadanie zapisane przed propozycjami zadań wraca bez tytułu, pochodzenia i podsumowania", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
+    const { title: _, proposedBy: __, summary: ___, ...old } = stored;
+    writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
+
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, title: null, proposedBy: null, summary: null }]);
   });
 
   test.each([

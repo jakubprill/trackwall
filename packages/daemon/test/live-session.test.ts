@@ -21,6 +21,7 @@ describe("sesja Copilot CLI w daemonie", () => {
       cols: 80,
       rows: 24,
       hooksFile,
+      promptOnStart: false,
       run: () => ({ kind: "running", runId: "r1", startedAt: "2026-10-24T12:00:00.000Z", pid: 1 }),
     });
     sessions.push(session);

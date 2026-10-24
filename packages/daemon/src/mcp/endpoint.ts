@@ -1,18 +1,25 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
-import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
+import { type ApiResult, MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
 import { readBody } from "../api/body.ts";
 import { TOOL_REGISTRATIONS, type ToolContext } from "./tools.ts";
 
 /**
- * Serwer MCP daemona w transporcie Streamable HTTP (§5.3, ADR-24), bez sesji: każde żądanie dostaje świeży
- * `McpServer` z tymi samymi narzędziami, bo narzędzia tylko czytają fasadę i nie ma czego trzymać między żądaniami.
- * SDK obsługuje i rewizję 2026-07-28, i starsze klienty z `initialize` (bezstanowo). Host, Origin i token sprawdza
- * wcześniej `handle()` w `api/server.ts`, jak dla każdej trasy (AGENTS.md, Bezpieczeństwo).
+ * Serwer MCP daemona w transporcie Streamable HTTP (§5.3, ADR-24), bez sesji MCP: każde żądanie dostaje świeży
+ * `McpServer` z tymi samymi narzędziami, bo stan trzyma fasada, a nie serwer. SDK obsługuje i rewizję 2026-07-28,
+ * i starsze klienty z `initialize` (bezstanowo). Host, Origin i token daemona sprawdza wcześniej `handle()`
+ * w `api/server.ts`, jak dla każdej trasy (AGENTS.md, Bezpieczeństwo); tu tylko token sesji (ADR-39), po którym
+ * narzędzia wiedzą, która sesja Trackwall woła.
  */
 
 /** Ścieżka serwera MCP: ten sam port, ochrona `Host`/`Origin` i token co API (§5.2). */
 export const MCP_PATH = "/mcp";
+
+/**
+ * Nagłówek z tokenem sesji, który dokłada most stdio sesji Trackwall (`--session-token-file`, ADR-39). Bez niego woła
+ * agent spoza Trackwall; z nieznanym tokenem (sesja zamknięta) żądanie jest odrzucane, żeby sesja nie wyglądała na obcą.
+ */
+export const SESSION_TOKEN_HEADER = "x-trackwall-session-token";
 
 /** Żądania MCP to małe obiekty JSON-RPC; `initialize` z możliwościami klienta mieści się z dużym zapasem. */
 const MAX_REQUEST_BYTES = 256 * 1024;
@@ -20,7 +27,10 @@ const MAX_REQUEST_BYTES = 256 * 1024;
 const INSTRUCTIONS =
   `Trackwall knows the repos in the user's projects folder. Start with ${mcpTools.listRepos.name}; ` +
   `${mcpTools.getRepo.name} gives the details of one repo (README, recent commits, mise tasks). ` +
-  `${mcpTools.listSessions.name} shows the Copilot CLI sessions running in Trackwall and their state. The tools are read-only.`;
+  `${mcpTools.listSessions.name} shows the Copilot CLI sessions running in Trackwall and their state. ` +
+  `To hand work to another agent, ${mcpTools.proposeTask.name} proposes a task that the user approves in Trackwall, ` +
+  `and ${mcpTools.waitForSession.name} waits for it; a task session reports its result with ${mcpTools.reportResult.name}. ` +
+  "No tool changes repos, configuration or processes.";
 
 export interface McpEndpoint {
   handle: (req: IncomingMessage, res: ServerResponse) => Promise<void>;
@@ -29,24 +39,40 @@ export interface McpEndpoint {
 
 export function createMcpEndpoint(o: ToolContext & { version: string }): McpEndpoint {
   const handler = createMcpHandler(
-    () => {
+    // Sesja, która woła, przychodzi z `handle` jako `authInfo.clientId`: to jedyna droga SDK od żądania do fabryki serwera.
+    ({ authInfo }) => {
       const server = new McpServer({ name: MCP_SERVER_NAME, version: o.version }, { instructions: INSTRUCTIONS });
-      for (const register of TOOL_REGISTRATIONS) register(server, o);
+      const caller = authInfo?.clientId ?? null;
+      for (const register of TOOL_REGISTRATIONS) register(server, { ...o, caller });
       return server;
     },
     { onerror: (err) => o.log(`request rejected: ${err.message}`), maxRequestBodySize: MAX_REQUEST_BYTES },
   );
   return {
     handle: async (req, res) => {
+      const token = req.headers[SESSION_TOKEN_HEADER];
+      const caller = typeof token === "string" ? o.facade.agents.callerSession(token) : undefined;
+      if (token !== undefined && caller === undefined) return rejectSessionToken(res);
       // Rozłączony klient przerywa żądanie także w SDK (`request.signal`), nie tylko strumień odpowiedzi.
       const aborted = new AbortController();
       res.once("close", () => {
         if (!res.writableFinished) aborted.abort();
       });
-      await send(res, await handler.fetch(await toWebRequest(req, aborted.signal)));
+      const authInfo = caller === undefined ? undefined : { token: SESSION_TOKEN_HEADER, clientId: caller, scopes: [] };
+      await send(res, await handler.fetch(await toWebRequest(req, aborted.signal), { authInfo }));
     },
     close: () => handler.close(),
   };
+}
+
+/** Odmowa w kopercie API, którą most stdio pokazuje agentowi jako „Trackwall rejected the request”. */
+function rejectSessionToken(res: ServerResponse): void {
+  const body: ApiResult<never> = {
+    ok: false,
+    error: { code: "unauthorized", message: "unknown session token: this Trackwall session has ended" },
+  };
+  res.writeHead(401, { "content-type": "application/json" });
+  res.end(JSON.stringify(body));
 }
 
 /** `IncomingMessage` jako `Request` ze standardu Fetch, którego oczekuje SDK; adres zawsze z loopbacku. */

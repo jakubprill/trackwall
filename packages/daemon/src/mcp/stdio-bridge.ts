@@ -1,18 +1,23 @@
+import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import type { Readable, Writable } from "node:stream";
 import { z } from "zod";
 import { readDaemonFile } from "../infra/discovery.ts";
 import { type LoopbackResponse, loopbackRequest } from "../infra/loopback.ts";
-import { MCP_PATH } from "./endpoint.ts";
+import { MCP_PATH, SESSION_TOKEN_HEADER } from "./endpoint.ts";
 
 /**
  * Most stdio (`trackwall-daemon mcp-stdio`, §5.3, ADR-24): CLI agenta uruchamia go jako lokalny serwer MCP, a most
  * przekazuje każdą wiadomość JSON-RPC ze stdin do `/mcp` działającego daemona i odpowiedzi na stdout. Port i token
  * czyta z `daemon.json` przy każdej wiadomości, więc restart daemona nie wymaga zmiany konfiguracji agenta, a token
- * nie trafia do niej wcale. Sam niczego nie wie o narzędziach i nie uruchamia daemona.
+ * nie trafia do niej wcale. W sesji Trackwall dokłada też token sesji z pliku od daemona (ADR-39), żeby serwer MCP
+ * wiedział, która sesja woła. Sam niczego nie wie o narzędziach i nie uruchamia daemona.
  */
 
-/** Najdłuższe narzędzie czeka na gita i mise (po 15 s); zapas na wolny dysk sieciowy z folderem z projektami. */
+/**
+ * Najdłuższe narzędzia czekają na gita i mise (po 15 s) albo na sesję (`wait_for_session`, do 55 s); zapas na wolny
+ * dysk sieciowy z folderem z projektami.
+ */
 const REQUEST_TIMEOUT_MS = 120_000;
 /** Kod JSON-RPC dla błędu po stronie serwera (zakres -32000…-32099 jest dla implementacji). */
 const DAEMON_UNAVAILABLE = -32000;
@@ -39,6 +44,8 @@ const ApiErrorBody = z.object({ error: z.object({ message: z.string() }) });
 export interface StdioBridgeOptions {
   /** Katalog stanu daemona z `daemon.json`. */
   home: string;
+  /** Plik z tokenem sesji Trackwall (`--session-token-file`); brak u agenta spoza Trackwall. */
+  sessionTokenFile?: string;
   input: Readable;
   output: Writable;
   log: (msg: string) => void;
@@ -75,7 +82,7 @@ async function forward(line: string, o: StdioBridgeOptions, session: Session, wr
     return write(errorResponse(id, METHOD_NOT_FOUND, `the Trackwall stdio bridge does not support ${DISCOVER_METHOD}; use initialize`));
   }
   try {
-    const replies = (await postToDaemon(line, o.home, session)).map((reply) => withRequestId(reply, id));
+    const replies = (await postToDaemon(line, o, session)).map((reply) => withRequestId(reply, id));
     if (method === "initialize") rememberProtocolVersion(replies, session);
     for (const reply of replies) write(reply);
     // Strumień zerwany w trakcie (np. wyjście daemona) zostawiłby żądanie bez odpowiedzi do limitu czasu klienta.
@@ -121,9 +128,10 @@ function rememberProtocolVersion(replies: unknown[], session: Session): void {
 class DaemonUnavailable extends Error {}
 
 /** Wiadomości JSON-RPC, którymi daemon odpowiedział na `line` (żadnej na powiadomienie). */
-async function postToDaemon(line: string, home: string, session: Session): Promise<unknown[]> {
-  const daemon = readDaemonFile(home);
-  if (!daemon) throw new DaemonUnavailable(`Trackwall is not running: no daemon.json in ${home}. Start the Trackwall app.`);
+async function postToDaemon(line: string, o: StdioBridgeOptions, session: Session): Promise<unknown[]> {
+  const daemon = readDaemonFile(o.home);
+  if (!daemon) throw new DaemonUnavailable(`Trackwall is not running: no daemon.json in ${o.home}. Start the Trackwall app.`);
+  const sessionToken = o.sessionTokenFile === undefined ? undefined : readSessionToken(o.sessionTokenFile);
   let res: LoopbackResponse;
   try {
     res = await loopbackRequest(daemon.port, MCP_PATH, {
@@ -135,6 +143,7 @@ async function postToDaemon(line: string, home: string, session: Session): Promi
         "content-type": "application/json",
         accept: "application/json, text/event-stream",
         ...(session.protocolVersion && { "mcp-protocol-version": session.protocolVersion }),
+        ...(sessionToken !== undefined && { [SESSION_TOKEN_HEADER]: sessionToken }),
       },
     });
   } catch (err) {
@@ -149,6 +158,18 @@ async function postToDaemon(line: string, home: string, session: Session): Promi
     );
   }
   return messages;
+}
+
+/**
+ * Token sesji przy każdej wiadomości, jak `daemon.json`: plik leży w katalogu sesji, który daemon usuwa razem z nią.
+ * Bez pliku most nie wysyła żądania anonimowo, bo sesja wyglądałaby wtedy na agenta spoza Trackwall.
+ */
+function readSessionToken(file: string): string {
+  try {
+    return readFileSync(file, "utf8").trim();
+  } catch (err) {
+    throw new DaemonUnavailable(`cannot read the Trackwall session token from ${file} (${String(err)}); this session has ended`);
+  }
 }
 
 /** Treść pól `data:` każdego zdarzenia strumienia SSE jako JSON; zdarzenia bez danych (keepalive) są pomijane. */

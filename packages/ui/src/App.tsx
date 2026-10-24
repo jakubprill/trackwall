@@ -8,7 +8,7 @@ import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { DaemonEvents } from "@/lib/daemon-events";
 import type { SessionSelection } from "@/lib/session-entries";
-import { waitingCount } from "@/lib/session-state";
+import { attentionCount } from "@/lib/session-state";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
 import { useRemote } from "@/lib/use-remote";
@@ -54,7 +54,7 @@ export function App() {
   useSessionFocus(openSession);
   return (
     <div className="flex h-screen">
-      <ActivityBar views={VIEWS} active={view} onSelect={setView} badges={{ sessions: waitingCount(sessions.data?.sessions ?? []) }} />
+      <ActivityBar views={VIEWS} active={view} onSelect={setView} badges={{ sessions: attentionCount(sessions.data) }} />
       <div className="flex min-w-0 flex-1 flex-col">
         {error && (
           <div className="bg-destructive/10 flex items-center gap-3 border-b px-4 py-2">

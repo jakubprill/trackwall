@@ -1,0 +1,163 @@
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import type { Client } from "@modelcontextprotocol/client";
+import {
+  agentsApi,
+  GetSessionResult,
+  ListSessionsResult,
+  ProposeTaskResult,
+  ReportResultResult,
+  WaitForSessionResult,
+} from "@trackwall/protocol";
+import { loopbackRequest } from "../src/infra/loopback.ts";
+import { MCP_PATH, SESSION_TOKEN_HEADER } from "../src/mcp/endpoint.ts";
+import { connectHttpClient } from "./support/mcp-client.ts";
+import { startSessionApi } from "./support/session-api.ts";
+
+const TOKEN = "c".repeat(43);
+let daemon: Awaited<ReturnType<typeof startSessionApi>>;
+/** Agent spoza Trackwall: tylko token daemona, bez tokenu sesji. */
+let outside: Client;
+const clients: Client[] = [];
+
+beforeAll(async () => {
+  daemon = await startSessionApi(TOKEN);
+  outside = await connectHttpClient(daemon.api.port, TOKEN);
+  clients.push(outside);
+});
+
+afterAll(async () => {
+  for (const client of clients) await client.close();
+  await daemon.stop();
+});
+
+/** Klient MCP tak, jak widzi go most stdio sesji: z tokenem z pliku w katalogu sesji. */
+async function clientOfSession(session: string): Promise<Client> {
+  const token = readFileSync(join(daemon.home, "sessions", session, "session-token"), "utf8");
+  const client = await connectHttpClient(daemon.api.port, TOKEN, undefined, { [SESSION_TOKEN_HEADER]: token });
+  clients.push(client);
+  return client;
+}
+
+async function call(client: Client, name: string, args: Record<string, unknown>) {
+  return client.callTool({ name, arguments: args });
+}
+
+describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (prawdziwy PTY i git, atrapa Copilot CLI)", () => {
+  test("propozycja agenta spoza Trackwall czeka na decyzję, a po odrzuceniu czekanie kończy się od razu", async () => {
+    const proposed = ProposeTaskResult.parse(
+      (await call(outside, "propose_task", { repo: "sklep", title: "Dodaj README", prompt: "Opisz uruchomienie w README" }))
+        .structuredContent,
+    ).proposal;
+    expect(proposed).toMatchObject({
+      repo: "sklep",
+      title: "Dodaj README",
+      prompt: "Opisz uruchomienie w README",
+      proposedBy: { session: null },
+    });
+    expect(daemon.facade.agents.sessions().proposals).toEqual([proposed]);
+
+    const pending = WaitForSessionResult.parse(
+      (await call(outside, "wait_for_session", { task: proposed.id, timeoutSeconds: 1 })).structuredContent,
+    );
+    expect(pending).toEqual({ status: "proposal_pending", proposal: proposed, task: null, session: null });
+
+    await daemon.post(agentsApi.rejectProposal, { proposal: proposed.id });
+    expect(daemon.facade.agents.sessions().proposals).toEqual([]);
+    const started = Date.now();
+    const rejected = WaitForSessionResult.parse(
+      (await call(outside, "wait_for_session", { task: proposed.id, timeoutSeconds: 30 })).structuredContent,
+    );
+    expect(rejected.status).toBe("proposal_rejected");
+    expect(Date.now() - started).toBeLessThan(5000);
+  }, 30_000);
+
+  test("sesja proponuje zadanie, użytkownik je zatwierdza z poprawionym poleceniem, a sesja zadania zgłasza podsumowanie", async () => {
+    const main = await daemon.facade.agents.start("sklep");
+    const mainClient = await clientOfSession(main.id);
+    const listed = ListSessionsResult.parse((await call(mainClient, "list_sessions", {})).structuredContent);
+    expect(listed.caller).toBe(main.id);
+
+    const { proposal } = ProposeTaskResult.parse(
+      (await call(mainClient, "propose_task", { repo: "sklep", title: "Napraw logowanie", prompt: "napraw logowanie" })).structuredContent,
+    );
+    expect(proposal.proposedBy).toEqual({ session: main.id });
+
+    const task = await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: "napraw logowanie i dodaj test" });
+    expect(task).toMatchObject({
+      id: proposal.id,
+      title: "Napraw logowanie",
+      prompt: "napraw logowanie i dodaj test",
+      proposedBy: { session: main.id },
+      summary: null,
+    });
+    expect(task.branch).toMatch(/^trackwall\/napraw-logowanie-[0-9a-f]{6}$/);
+    expect(daemon.facade.agents.sessions().proposals).toEqual([]);
+
+    // Sesja zadania startuje z poleceniem, więc czeka się na jej pracę, a nie wraca od razu z „czeka na Ciebie”.
+    const working = WaitForSessionResult.parse(
+      (await call(mainClient, "wait_for_session", { task: task.id, timeoutSeconds: 2 })).structuredContent,
+    );
+    expect(working).toMatchObject({ status: "working", task: { id: task.id }, session: { task: task.id } });
+    const taskSession = working.session?.id ?? "";
+
+    const reported = ReportResultResult.parse(
+      (await call(await clientOfSession(taskSession), "report_result", { summary: "Logowanie naprawione, test w login.test.ts." }))
+        .structuredContent,
+    );
+    expect(reported.task.summary).toEqual({ text: "Logowanie naprawione, test w login.test.ts.", reportedAt: expect.any(String) });
+    const detail = GetSessionResult.parse((await call(mainClient, "get_session", { session: taskSession })).structuredContent);
+    expect(detail.task?.summary?.text).toBe("Logowanie naprawione, test w login.test.ts.");
+
+    await daemon.facade.agents.stop(taskSession);
+    const exited = WaitForSessionResult.parse(
+      (await call(mainClient, "wait_for_session", { session: taskSession, timeoutSeconds: 10 })).structuredContent,
+    );
+    expect(exited).toMatchObject({ status: "exited", session: { id: taskSession, run: { kind: "exited" } } });
+    expect(exited.session?.run).not.toHaveProperty("lastLines");
+  }, 60_000);
+
+  test("report_result działa tylko w sesji zadania: agent spoza Trackwall i sesja w korzeniu repo dostają bad_request", async () => {
+    const root = await daemon.facade.agents.start("sklep");
+    for (const client of [outside, await clientOfSession(root.id)]) {
+      const result = await call(client, "report_result", { summary: "gotowe" });
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual([
+        { type: "text", text: "bad_request: only a session that runs a task in Trackwall can report a result" },
+      ]);
+    }
+  }, 30_000);
+
+  test("sesja nie może czekać na samą siebie, a czekanie na nieznane zadanie to not_found", async () => {
+    const session = await daemon.facade.agents.start("sklep");
+    const own = await call(await clientOfSession(session.id), "wait_for_session", { session: session.id, timeoutSeconds: 1 });
+    expect(own.content).toEqual([{ type: "text", text: "bad_request: a session cannot wait for itself" }]);
+
+    const unknown = await call(outside, "wait_for_session", { task: "00000000-0000-4000-8000-000000000000", timeoutSeconds: 1 });
+    expect(unknown.content).toEqual([{ type: "text", text: "not_found: no task or task proposal 00000000-0000-4000-8000-000000000000" }]);
+
+    const both = await call(outside, "wait_for_session", { session: session.id, task: session.id });
+    expect(both.isError).toBe(true);
+  }, 30_000);
+
+  test("propozycja w nieznanym repo to not_found, a zatwierdzenie propozycji, której już nie ma, też", async () => {
+    const result = await call(outside, "propose_task", { repo: "skelp", title: "x", prompt: "y" });
+    expect(JSON.stringify(result.content)).toContain('"text":"not_found:');
+    await expect(daemon.post(agentsApi.approveProposal, { proposal: "00000000-0000-4000-8000-000000000000", prompt: "y" })).rejects.toThrow(
+      "no task proposal",
+    );
+  });
+
+  test("żądanie z nieznanym tokenem sesji daemon odrzuca, zamiast traktować sesję jak agenta spoza Trackwall", async () => {
+    const res = await loopbackRequest(daemon.api.port, MCP_PATH, {
+      method: "POST",
+      token: TOKEN,
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+      timeoutMs: 5000,
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", [SESSION_TOKEN_HEADER]: "nieznany" },
+    });
+    expect(res.status).toBe(401);
+    expect(JSON.parse(res.body)).toMatchObject({ ok: false, error: { code: "unauthorized" } });
+  });
+});
