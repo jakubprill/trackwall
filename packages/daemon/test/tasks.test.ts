@@ -199,6 +199,8 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
     expect(await agents.taskSharedFiles(first.id)).toEqual([{ task: second.id, files: ["src/login.ts"] }]);
     expect(await agents.taskSharedFiles(third.id)).toEqual([]);
 
+    // On Windows the running session keeps its worktree's files open, so it stops first.
+    await agents.stop(sessionOf(agents, second.id));
     rmSync(second.worktree, { recursive: true, force: true });
     expect(await agents.taskSharedFiles(first.id)).toEqual([]);
     // The task's own changes are not a warning: without its worktree the call fails as `task-changes` does.
