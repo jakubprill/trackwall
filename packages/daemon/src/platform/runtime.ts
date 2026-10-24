@@ -12,7 +12,12 @@ export interface RuntimeInfo {
  * (`/$bunfs/root/…`, na Windowsie `B:\~BUN\root\…`), który `node:fs` w Bun też widzi, więc `existsSync` tego nie rozstrzyga.
  */
 export function isCompiledBinary(): boolean {
-  return /[\\/]\$bunfs[\\/]|~BUN[\\/]/.test(process.argv[1] ?? "");
+  return isInBinary(process.argv[1] ?? "");
+}
+
+/** Czy ścieżka wskazuje plik osadzony w binarce z `bun build --compile` (wirtualny system plików Bun). */
+export function isInBinary(path: string): boolean {
+  return /[\\/]\$bunfs[\\/]|~BUN[\\/]/.test(path);
 }
 
 export function runtimeInfo(): RuntimeInfo {
