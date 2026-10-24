@@ -11,9 +11,9 @@ import type { ILinkProvider, Terminal } from "@xterm/xterm";
  */
 const OPEN_LINK_COMMAND = "open_link";
 
-/** Candidates only: the shell decides what a link means. The id ends on a letter or digit, so a full stop or comma
- * after a link in a sentence is not part of it. */
-const LINK = new RegExp(`${TRACKWALL_LINK_SCHEME}://[A-Za-z]+/[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?/?`, "g");
+/** Candidates only: the shell decides what a link means. The id does not end on a full stop, so the one ending a
+ * sentence is not part of it (a `RepoId` may end on `_` or `-`, which no sentence does). */
+const LINK = new RegExp(`${TRACKWALL_LINK_SCHEME}://[A-Za-z]+/[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9_-])?/?`, "g");
 
 /**
  * The links in one terminal row, with the index of their first character. When the row `continues` on the next one

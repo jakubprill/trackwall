@@ -10,6 +10,7 @@
 //! user at every start, which also follows the folder when the user moves it.
 
 use crate::jump::{self, Jump};
+use crate::windows;
 use tauri::{AppHandle, Url};
 use tauri_plugin_deep_link::DeepLinkExt;
 
@@ -42,22 +43,21 @@ pub fn parse(url: &Url) -> Option<Jump> {
     }
 }
 
-/// Opens the links that reach the app from now on, and the one that started it. `show` shows the main window for a
-/// link that is not a jump, unless its page is still loading.
-pub fn listen(app: &AppHandle, show: fn(&AppHandle)) {
+/// Opens the links that reach the app from now on, and the one that started it.
+pub fn listen(app: &AppHandle) {
     let handle = app.clone();
-    app.deep_link().on_open_url(move |event| open(&handle, event.urls(), show));
+    app.deep_link().on_open_url(move |event| open(&handle, event.urls()));
     if let Ok(Some(urls)) = app.deep_link().get_current() {
-        open(app, urls, show);
+        open(app, urls);
     }
     register(app);
 }
 
-/// The last link wins, like a newer tray jump replaces an older one.
-fn open(app: &AppHandle, urls: Vec<Url>, show: fn(&AppHandle)) {
+/// The last link wins, like a newer tray jump replaces an older one. A link that is not a jump shows the main window.
+fn open(app: &AppHandle, urls: Vec<Url>) {
     match urls.last().and_then(parse) {
         Some(target) => jump::request(app, target),
-        None => show(app),
+        None => windows::show_once_loaded(app, windows::MAIN),
     }
 }
 

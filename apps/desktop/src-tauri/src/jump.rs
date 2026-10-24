@@ -8,7 +8,6 @@
 //! here starts, stops or changes anything (§8, ADR-52).
 
 use crate::lock::lock;
-use crate::window_effect::WindowEffects;
 use crate::windows::{self, Windows};
 use serde::Serialize;
 use std::sync::Mutex;
@@ -44,6 +43,14 @@ impl PendingJump {
         }
         None
     }
+
+    /// Drops a jump meant for a window that has closed.
+    pub fn forget(&self, window: &str) {
+        let mut pending = lock(&self.0);
+        if pending.as_ref().is_some_and(|(label, _)| label == window) {
+            *pending = None;
+        }
+    }
 }
 
 /// Shows the target's window and asks its UI to switch to the target. A window whose page is still loading is not
@@ -53,9 +60,7 @@ pub fn request(app: &AppHandle, target: Jump) {
         Jump::Repo(_) => windows::MAIN.to_owned(),
         Jump::Session(_) | Jump::Task(_) | Jump::Proposal(_) => app.state::<Windows>().session_window(),
     };
-    if !app.state::<WindowEffects>().reveal_pending(&label) {
-        windows::show(app, &label);
-    }
+    windows::show_once_loaded(app, &label);
     app.state::<PendingJump>().put(&label, target);
     let _ = app.emit_to(label.as_str(), JUMP_EVENT, ());
 }
@@ -85,6 +90,15 @@ mod tests {
         pending.put("window-2", Jump::Session("a".into()));
         assert_eq!(pending.take("main"), None);
         assert_eq!(pending.take("window-2"), Some(Jump::Session("a".into())));
+    }
+
+    #[test]
+    fn a_jump_for_a_closed_window_is_dropped_and_others_are_kept() {
+        let pending = PendingJump::default();
+        pending.put("window-2", Jump::Session("a".into()));
+        pending.forget("window-3");
+        pending.forget("window-2");
+        assert_eq!(pending.take("window-2"), None);
     }
 
     #[test]

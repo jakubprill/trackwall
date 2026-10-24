@@ -73,7 +73,7 @@ fn main() {
         let state = Arc::clone(app.state::<Arc<DaemonState>>().inner());
         std::thread::spawn(move || state.restart_if_down());
         if !link::in_args(&args) {
-            show_main_once_loaded(app);
+            windows::show_once_loaded(app, windows::MAIN);
         }
     }));
     let app = builder
@@ -97,7 +97,7 @@ fn main() {
             app.state::<WindowEffects>().apply(&window);
             build_tray(app.handle())?;
             attention::watch(app.handle().clone(), Arc::clone(&state), TRAY_ID);
-            link::listen(app.handle(), show_main_once_loaded);
+            link::listen(app.handle());
             Ok(())
         })
         .on_page_load(window_effect::on_page_load)
@@ -175,14 +175,6 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 
 fn show_main(app: &AppHandle) {
     windows::show(app, windows::MAIN);
-}
-
-/// A link or a second start while the page is still loading: the page shows the window itself once it has loaded
-/// (ADR-11), and showing it earlier would flash the opaque background.
-fn show_main_once_loaded(app: &AppHandle) {
-    if !app.state::<WindowEffects>().reveal_pending(windows::MAIN) {
-        show_main(app);
-    }
 }
 
 /// „Quit” z traya: zatrzymanie daemona w tle, żeby pętla zdarzeń działała, a pojedyncza instancja

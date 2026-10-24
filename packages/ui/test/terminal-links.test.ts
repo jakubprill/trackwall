@@ -11,9 +11,14 @@ test("a trackwall link in an agent's answer is found with the index of its first
 });
 
 test("a full stop, comma or bracket after a link is not part of its id", () => {
-  for (const end of [".", ",", ")", "-"]) {
+  for (const end of [".", ",", ")"]) {
     expect(findTrackwallLinks(`See trackwall://repo/orders-api${end}`, false).map((l) => l.text)).toEqual(["trackwall://repo/orders-api"]);
   }
+});
+
+test("a repo id that ends on an underscore or a hyphen is kept whole", () => {
+  expect(findTrackwallLinks("See trackwall://repo/build_.", false).map((l) => l.text)).toEqual(["trackwall://repo/build_"]);
+  expect(findTrackwallLinks("See trackwall://repo/build-", false).map((l) => l.text)).toEqual(["trackwall://repo/build-"]);
 });
 
 test("a link cut off at the end of a wrapped row is left out, a link that ends the last row is kept", () => {
