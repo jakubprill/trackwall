@@ -2,18 +2,22 @@ import { describe, expect, test } from "bun:test";
 import type { RepoStatus } from "@trackwall/protocol";
 import { branchLabel, listNeedsSettings, repoStatusTone } from "../src/lib/repo-status.ts";
 
-const ok = { kind: "ok", branch: "main", head: null, upstream: null } as const;
+const ok = { kind: "ok", branch: "main", head: null, upstream: null, untracked: 0 } as const;
 
 describe("stan repo w UI", () => {
-  test("czyste repo ma ton ok, repo ze zmianami ton warning z liczbą zmian, niedostępne ton error", () => {
+  test("czyste repo ma ton ok, repo ze zmianami ton warning ze zmienionymi i nowymi plikami osobno, niedostępne ton error", () => {
     const statuses: RepoStatus[] = [
       { ...ok, changes: 0 },
       { ...ok, changes: 3 },
+      { ...ok, changes: 4, untracked: 1 },
+      { ...ok, changes: 2, untracked: 2 },
       { kind: "unavailable", message: "brak katalogu" },
     ];
     expect(statuses.map(repoStatusTone)).toEqual([
       { tone: "ok", label: "clean" },
-      { tone: "warning", label: "3 changes" },
+      { tone: "warning", label: "3 changed" },
+      { tone: "warning", label: "3 changed, 1 new file" },
+      { tone: "warning", label: "2 new files" },
       { tone: "error", label: "unavailable" },
     ]);
   });

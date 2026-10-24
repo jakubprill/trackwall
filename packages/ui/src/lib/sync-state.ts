@@ -1,4 +1,5 @@
-import { countLabel, type SyncRepo, type SyncRun, type SyncSkipReason } from "@trackwall/protocol";
+import { countLabel, type SyncRepo, type SyncRun, type SyncSkipReason, type SyncWorkingTree } from "@trackwall/protocol";
+import { workingTreeLabel } from "./format.ts";
 import type { StatusTone } from "./repo-status.ts";
 
 /** Synchronizacja w UI (ADR-21): ton i krótki tekst wyniku repo oraz postęp całości; testy w `test/sync-state.test.ts`. */
@@ -31,17 +32,56 @@ export function syncRepoTone(repo: SyncRepo): { tone: StatusTone; label: string 
   }
 }
 
-/** Zdanie z daemona dla pominiętego albo nieudanego repo; reszta wyników mieści się w krótkim tekście. */
+/**
+ * Pełne zdania o wyniku repo (ADR-34): co stało się z gałęzią domyślną, czy zmieniło to pliki w katalogu roboczym
+ * (nie, gdy wybrana jest inna gałąź) i że lokalne zmiany zostały nietknięte. Bez tego „aktualne” repo z czterema
+ * zmienionymi plikami wygląda jak synchronizacja, która nic nie zrobiła. Trwające repo nie ma jeszcze czego powiedzieć.
+ */
 export function syncMessage(repo: SyncRepo): string | undefined {
-  return repo.state === "skipped" || repo.state === "failed" ? repo.message : undefined;
+  switch (repo.state) {
+    case "waiting":
+    case "running":
+      return undefined;
+    case "failed":
+      return repo.message;
+    case "updated":
+      return sentences([
+        `${repo.branch} moved ${countLabel(repo.commits, { one: "commit", other: "commits" })} forward to ${repo.remoteBranch}`,
+        repo.workingTree.branch === repo.branch
+          ? "Files in the working directory were updated"
+          : `${checkedOut(repo.workingTree)}, so files in the working directory did not change`,
+        localChanges(repo.workingTree),
+      ]);
+    case "up-to-date":
+      return sentences([
+        `${repo.branch} already matches ${repo.remoteBranch}`,
+        repo.workingTree.branch === repo.branch ? undefined : `${checkedOut(repo.workingTree)}; sync only moves ${repo.branch}`,
+        localChanges(repo.workingTree),
+      ]);
+    case "skipped":
+      return sentences([repo.message, localChanges(repo.workingTree)]);
+  }
 }
 
-/**
- * Wynik pod stanem repo na liście, chyba że repo było już aktualne: wtedy nie ma o czym mówić, a stary napis
- * „aktualne” byłby z czasem nieprawdą.
- */
+function checkedOut(tree: SyncWorkingTree): string {
+  return tree.branch === null ? "The working directory has a detached HEAD" : `The working directory is on ${tree.branch}`;
+}
+
+function localChanges(tree: SyncWorkingTree): string | undefined {
+  const label = workingTreeLabel(tree.changed, tree.untracked);
+  return label && `Uncommitted files stay as they are: ${label}`;
+}
+
+function sentences(parts: (string | undefined)[]): string {
+  return parts
+    .filter((p) => p !== undefined)
+    .map((p) => (p.endsWith(".") ? p : `${p}.`))
+    .join(" ");
+}
+
+/** Wynik pod stanem repo na liście, także „aktualne”, bo bez niego nie widać, że synchronizacja doszła do repo. */
 export function listSyncBadge(repo: SyncRepo | undefined): { tone: StatusTone; label: string; message: string | undefined } | undefined {
-  if (!repo || repo.state === "up-to-date") return undefined;
+  if (!repo) return undefined;
   return { ...syncRepoTone(repo), message: syncMessage(repo) };
 }
 
@@ -50,6 +90,7 @@ export interface SyncProgress {
   done: number;
   total: number;
   updated: number;
+  upToDate: number;
   skipped: number;
   failed: number;
 }
@@ -61,6 +102,7 @@ export function syncProgress(run: SyncRun): SyncProgress {
     done: run.repos.length - pending,
     total: run.repos.length,
     updated: count("updated"),
+    upToDate: count("up-to-date"),
     skipped: count("skipped"),
     failed: count("failed"),
   };

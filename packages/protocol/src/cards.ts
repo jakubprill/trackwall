@@ -83,6 +83,25 @@ export const ToolRequirement = z.object({
 });
 export type ToolRequirement = z.infer<typeof ToolRequirement>;
 
+/** Task mise zapisany w commicie: wpis `[tasks]` konfiguracji mise w korzeniu repo albo plik w katalogu tasków mise. */
+export const DeclaredMiseTask = z.object({
+  /** Nazwa, pod którą `mise run` go zna; plik w podkatalogu daje nazwę z `:` (`mise-tasks/db/reset` to `db:reset`). */
+  name: z.string(),
+  evidence: Evidence,
+});
+export type DeclaredMiseTask = z.infer<typeof DeclaredMiseTask>;
+
+/**
+ * Konfiguracja mise repo z commita (ADR-34): pliki konfiguracji mise w korzeniu i zapisane taski. Bez tasków repo nie ma
+ * na czym uruchomić komendy zbiorczej ani taska z UI, więc dostaje tag `no-mise`. Taski z konfiguracji globalnej
+ * użytkownika i z plików w `task_config.includes` nie są tu liczone; pełną listę daje `mise tasks ls` (§4.7).
+ */
+export const MiseSetup = z.object({
+  configFiles: z.array(z.string()),
+  tasks: z.array(DeclaredMiseTask),
+});
+export type MiseSetup = z.infer<typeof MiseSetup>;
+
 /**
  * Mechanizm wykryty w repo: framework, sposób komunikacji albo wdrożenia. Spis, bez oceny: mówi, że repo go używa,
  * a dowody mówią skąd to wiadomo.
@@ -142,6 +161,7 @@ export const RepoCard = z.object({
   /** Paczki spoza repo, każda raz (pierwsze wystąpienie; paczki z tego samego repo pominięte), i klienci HTTP. */
   consumes: z.array(Consumed),
   tools: z.array(ToolRequirement),
+  mise: MiseSetup,
   mechanisms: z.array(Mechanism),
   problems: z.array(CardProblem),
 });
@@ -154,6 +174,9 @@ export const TagName = z
   .max(40)
   .regex(/^[a-z0-9][a-z0-9-]*$/, "tag name: lowercase letters, digits and '-', not starting with '-'");
 export type TagName = z.infer<typeof TagName>;
+
+/** Tag repo bez tasków mise w commicie (ADR-34); UI wyróżnia go na liście repo, bo w takim repo nie ma czego uruchomić. */
+export const NO_MISE_TAG = "no-mise";
 
 /** Tag repo z powodem, dla którego repo go dostało (zdanie dla człowieka, np. „zależność react w package.json”). */
 export const RepoTag = z.object({ name: TagName, reason: z.string() });

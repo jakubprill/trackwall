@@ -1,5 +1,5 @@
 import type { RepoStatus, RepoStatusOk } from "@trackwall/protocol";
-import { changesLabel } from "./format.ts";
+import { workingTreeLabel } from "./format.ts";
 
 /** Ton stanu w UI; kolor do tonu dobiera `lib/status-tone.ts`, a tokeny są w `index.css` (ADR-16). */
 export type StatusTone = "ok" | "warning" | "error";
@@ -10,7 +10,7 @@ export type StatusTone = "ok" | "warning" | "error";
  */
 export function repoStatusTone(status: RepoStatus): { tone: StatusTone; label: string } {
   if (status.kind !== "ok") return { tone: "error", label: "unavailable" };
-  const changes = changesLabel(status.changes);
+  const changes = workingTreeLabel(status.changes - status.untracked, status.untracked);
   return changes ? { tone: "warning", label: changes } : { tone: "ok", label: "clean" };
 }
 

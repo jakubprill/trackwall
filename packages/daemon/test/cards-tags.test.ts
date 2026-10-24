@@ -36,6 +36,7 @@ describe("tagi repo", () => {
       "backend: spring-boot in pom.xml:2",
       "bff: “bff” in the name orders-bff",
       "java: build file pom.xml",
+      "no-mise: no mise config in the repo root",
     ]);
   });
 
@@ -50,6 +51,7 @@ describe("tagi repo", () => {
     expect(tagsOf(card, "shop")).toEqual([
       "frontend: react in apps/web/package.json:1",
       "monorepo: package.json lists 2 modules or packages",
+      "no-mise: no mise config in the repo root",
       "typescript: typescript dependency in package.json:1",
     ]);
   });
@@ -61,6 +63,7 @@ describe("tagi repo", () => {
     expect(tagsOf(lib, "common-model")).toEqual([
       "java: build file pom.xml",
       "library: provides com.example:common-model and has no app framework or deployment files",
+      "no-mise: no mise config in the repo root",
     ]);
 
     const split = extractCard(
@@ -70,19 +73,51 @@ describe("tagi repo", () => {
   });
 
   test("bff tylko jako osobne słowo, nie fragment innego", () => {
-    const card = extractCard(snapshotOf({}));
+    const card = extractCard(snapshotOf({ "mise.toml": '[tasks.build]\nrun = "make"\n' }));
     expect(tagsOf(card, "bffcore")).toEqual([]);
     expect(tagsOf(card, "web_bff")).toEqual(["bff: “bff” in the name web_bff"]);
   });
 
   test("reguły repoTags z workspace.yaml pasują do identyfikatora albo adresu repo zdalnego, bez wielkości liter", () => {
     const rules = { "core-api": ["*-core"], payments: ["gitlab.example.com/Payments/**"] };
-    const card = extractCard(snapshotOf({}));
+    const card = extractCard(snapshotOf({ "mise.toml": '[tasks.build]\nrun = "make"\n' }));
     expect(tagsOf(card, "billing-core", "gitlab.example.com/payments/billing", rules)).toEqual([
       "core-api: repoTags rule in workspace.yaml: *-core",
       "payments: repoTags rule in workspace.yaml: gitlab.example.com/Payments/**",
     ]);
     expect(repoTags(null, { id: "web", remote: null }, rules)).toEqual([]);
+  });
+});
+
+describe("konfiguracja mise i tag no-mise", () => {
+  test("taski z [tasks] w konfiguracji mise i pliki w katalogach tasków, każdy z dowodem", () => {
+    const { mise } = extractCard(
+      snapshotOf(
+        {
+          "mise.toml": '[tools]\nnode = "22"\n\n[tasks.build]\nrun = "pnpm build"\n\n[tasks."test:unit"]\nrun = "pnpm test"\n',
+          ".config/mise.toml": '[tasks]\nlint = "pnpm lint"\n',
+        },
+        ["mise-tasks/dev", "mise-tasks/db/reset", "mise-tasks/.gitkeep", "src/mise-tasks/nie"],
+      ),
+    );
+    expect(mise.configFiles).toEqual(["mise.toml", ".config/mise.toml"]);
+    expect(mise.tasks.map((t) => `${t.name} ${t.evidence.path}:${t.evidence.line}`)).toEqual([
+      "build mise.toml:4",
+      "test:unit mise.toml:7",
+      "lint .config/mise.toml:2",
+      "dev mise-tasks/dev:null",
+      "db:reset mise-tasks/db/reset:null",
+    ]);
+  });
+
+  test("repo bez konfiguracji mise i repo z mise.toml bez tasków dostają no-mise z powodem, a z taskiem nie", () => {
+    const noMise = (files: Record<string, string>, paths: string[] = []) =>
+      repoTags(extractCard(snapshotOf(files, paths)), { id: "app", remote: null }, {}).find((t) => t.name === "no-mise")?.reason;
+    expect(noMise({})).toBe("no mise config in the repo root");
+    expect(noMise({ "mise.toml": '[tools]\njava = "21"\n' })).toBe("mise.toml declares no tasks");
+    expect(noMise({ "mise.toml": "[tools\n" })).toBe("mise.toml declares no tasks");
+    expect(noMise({ "mise.toml": '[tasks]\nbuild = "make"\n' })).toBeUndefined();
+    expect(noMise({}, [".mise/tasks/build"])).toBeUndefined();
   });
 });
 

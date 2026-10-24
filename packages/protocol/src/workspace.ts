@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Done, type Endpoint } from "./api.ts";
+import { WorkingTreeChanges } from "./changes.ts";
 import { CloneJob, CloneRequest, HostRepos, RepoHosts } from "./repo-hosts.ts";
 import { SyncRun } from "./sync.ts";
 
@@ -49,6 +50,8 @@ export const RepoStatusOk = z.object({
   head: Commit.nullable(),
   /** Liczba zmienionych i nieśledzonych plików w katalogu roboczym. */
   changes: z.number().int().nonnegative(),
+  /** Z `changes` te nieśledzone: nowe pliki, których git jeszcze nie zna. */
+  untracked: z.number().int().nonnegative(),
   /** Gałąź śledzona z licznikami; `null`, gdy gałąź jej nie ma albo zniknęła na zdalnym. */
   upstream: z.object({ name: z.string(), ahead: z.number().int(), behind: z.number().int() }).nullable(),
 });
@@ -143,6 +146,11 @@ export const workspaceApi = {
     z.object({ repo: RepoId, path: RepoPath.refine((p) => p !== "", "the file path cannot be empty") }).strict(),
     FileContent,
   ),
+  /**
+   * Zmiany katalogu roboczego względem HEAD (ADR-34): pliki i diff, z nowymi plikami, bez ignorowanych. Indeks
+   * użytkownika zostaje nietknięty. W repo bez commitów względem pustego drzewa.
+   */
+  changes: endpoint("changes", RepoRequest, WorkingTreeChanges),
   /** Otwiera `vscode://` w systemie; daemon nie wie, czy coś obsłużyło adres. */
   openEditor: endpoint("open-editor", RepoRequest, Done),
   /**

@@ -1,4 +1,4 @@
-import { type Repo, type RepoList, type RepoTag, type SyncRepo, workspaceApi } from "@trackwall/protocol";
+import { NO_MISE_TAG, type Repo, type RepoList, type RepoTag, type SyncRepo, workspaceApi } from "@trackwall/protocol";
 import { FolderOpen, Plus, RefreshCw } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -9,6 +9,7 @@ import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { twoDigits } from "@/lib/format";
 import { branchLabel, listNeedsSettings, REPO_LIST_POLL_MS, repoStatusTone } from "@/lib/repo-status";
+import { statusTextClass } from "@/lib/status-tone";
 import { listSyncBadge, syncedByPath } from "@/lib/sync-state";
 import { type BatchRunHandle, useBatchRun } from "@/lib/use-batch-run";
 import { useRemote } from "@/lib/use-remote";
@@ -193,7 +194,7 @@ function ChangeProjectsDir({ onClick }: { onClick: () => void }) {
 /**
  * Wiersz listy w stylu HUD (ADR-16): numer pozycji, nazwa, gałąź oraz kropka i tekst stanu; aktywny ma świecącą kreskę z lewej.
  * Numer to tylko pozycja na liście, nie identyfikator repo. Pod stanem stoi wynik ostatniej synchronizacji (`listSyncBadge`)
- * i tagi repo (powody w podpowiedzi).
+ * i tagi repo (powody w podpowiedzi); tag `no-mise` jest napisem ostrzeżenia, bo w takim repo nie ma czego uruchomić (ADR-34).
  */
 function RepoListItem({
   repo,
@@ -213,6 +214,8 @@ function RepoListItem({
   const { status } = repo;
   const state = repoStatusTone(status);
   const badge = listSyncBadge(syncResult);
+  const noMise = tags.some((t) => t.name === NO_MISE_TAG);
+  const otherTags = tags.filter((t) => t.name !== NO_MISE_TAG);
   return (
     <button
       type="button"
@@ -237,7 +240,8 @@ function RepoListItem({
         )}
         {tags.length > 0 && (
           <span className="text-muted-foreground text-2xs truncate font-mono" title={tags.map((t) => `#${t.name}: ${t.reason}`).join("\n")}>
-            {tags.map((t) => `#${t.name}`).join(" ")}
+            {noMise && <span className={statusTextClass("warning")}>no mise tasks </span>}
+            {otherTags.map((t) => `#${t.name}`).join(" ")}
           </span>
         )}
       </span>

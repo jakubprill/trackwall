@@ -78,7 +78,7 @@ Adres głównego remote (`origin` albo jedynego remote w gicie, `mainRemote`) ja
 _Unikaj_: URL repo (URL ma protokół i bywa z tokenem), remote bez dopowiedzenia (to nazwa w gicie, np. `origin`)
 
 **Synchronizacja** (`SyncRun`, wynik repo `SyncRepo`; po angielsku *sync*):
-Fetch każdego repo z folderu z projektami i fast-forward jego gałęzi domyślnej, w tle, z wynikiem per repo: przesunięte, aktualne, pominięte z powodem (`SyncSkipReason`) albo błąd. Nigdy nie scala ani nie nadpisuje lokalnych zmian (ADR-21). Trzymana tylko w pamięci daemona.
+Fetch każdego repo z folderu z projektami i fast-forward jego gałęzi domyślnej, w tle, z wynikiem per repo: przesunięte, aktualne, pominięte z powodem (`SyncSkipReason`) albo błąd; bez błędu także ze stanem katalogu roboczego po synchronizacji (`SyncWorkingTree`, ADR-34). Nigdy nie scala ani nie nadpisuje lokalnych zmian (ADR-21). Trzymana tylko w pamięci daemona.
 _Unikaj_: pull, aktualizacja (bez dopowiedzenia)
 
 **Komenda zbiorcza** (`BatchRun`, krok `BatchStep`, wynik repo `BatchRepo`; po angielsku *Batch command*):
@@ -86,8 +86,12 @@ Wybrane kroki na wybranych repo jednym przyciskiem: synchronizacja (`sync`), nar
 _Unikaj_: batch (w polskim tekście), operacja zbiorcza, workflow
 
 **Stan repo** (`RepoStatus`; po angielsku *repo status*):
-Gałąź, ostatni commit, liczba zmian w katalogu roboczym i ahead/behind względem gałęzi śledzonej, odczytane z gita przy każdym zapytaniu (`ok`), albo `unavailable` z komunikatem, gdy git go nie czyta (repo, którego katalog zniknął, znika z listy). Nigdy nie jest zapisywany.
+Gałąź, ostatni commit, liczba zmian w katalogu roboczym (z nich osobno nowe nieśledzone pliki, `untracked`) i ahead/behind względem gałęzi śledzonej, odczytane z gita przy każdym zapytaniu (`ok`), albo `unavailable` z komunikatem, gdy git go nie czyta (repo, którego katalog zniknął, znika z listy). Nigdy nie jest zapisywany.
 _Unikaj_: status (w polskim tekście), sync (to osobna akcja)
+
+**Zmiany katalogu roboczego** (`WorkingTreeChanges`, akcja `changes`; w UI zakładka „Changes”; po angielsku *changes*):
+Pliki i diff katalogu roboczego (z nowymi plikami, bez ignorowanych) względem commita: repo względem HEAD w szczegółach repo (ADR-34), worktree zadania względem commita bazowego w zmianach zadania (`TaskChanges`, ADR-31). Tylko do odczytu.
+_Unikaj_: diff (to tylko część), status
 
 **Przegląd repo** (`RepoOverview`):
 README i ostatnie commity repo w jednej odpowiedzi; stan repo przychodzi z listy repo. Pliki przeglądane są osobno, zawsze z commita HEAD (ADR-14).
@@ -134,7 +138,7 @@ Technologia rozpoznana w repo po paczce albo pliku (Spring Boot, Feign, Kafka, H
 Czysta funkcja na migawce commita (`RepoSnapshot`) w `modules/cards/` (`maven.ts`, `gradle.ts`, `npm.ts`, `tools.ts`, `mechanisms.ts`, `spring.ts`, `frontend-http.ts`), która zwraca fakty z pozycją w pliku. Niczego nie wykonuje.
 
 **Tag repo** (`RepoTag`; po angielsku *tag*):
-Krótka nazwa grupy repo (`java`, `frontend`, `bff`, `monorepo`…) z powodem, liczona z karty, identyfikatora i adresu repo zdalnego albo z reguły tagów. Tagi są ortogonalne: filtr z kilkoma tagami pokazuje repo, które mają wszystkie.
+Krótka nazwa grupy repo (`java`, `frontend`, `bff`, `monorepo`, `no-mise`…) z powodem, liczona z karty, identyfikatora i adresu repo zdalnego albo z reguły tagów. Tagi są ortogonalne: filtr z kilkoma tagami pokazuje repo, które mają wszystkie.
 _Unikaj_: etykieta, kategoria
 
 **Reguła tagów** (`repoTags` w `workspace.yaml`, `RepoTagRules`):
@@ -207,7 +211,7 @@ Treść zadania dla agenta, wpisana w widoku Sessions; Copilot CLI dostaje ją j
 _Unikaj_: prompt (w polskim tekście)
 
 **Task mise** (po angielsku *mise task*):
-Nazwana komenda z `mise.toml` repo: `setup`, `dev`, `test`, `build`, `lint`, `health`. W kodzie zawsze z dopowiedzeniem (`miseTask`, `mise.run(...)`), nigdy gołe `task`. Jedyny wyjątek to argument `task` narzędzia MCP `run_task` (§5.3), gdzie kontekst jest jednoznaczny.
+Nazwana komenda z `mise.toml` repo: `setup`, `dev`, `test`, `build`, `lint`, `health`. W kodzie zawsze z dopowiedzeniem (`miseTask`, `mise.run(...)`), nigdy gołe `task`. Taski zapisane w commicie (`DeclaredMiseTask` w `RepoCard.mise`, z `[tasks]` i katalogów tasków) liczy karta repo; repo bez nich ma tag `no-mise` (ADR-34). Jedyny wyjątek to argument `task` narzędzia MCP `run_task` (§5.3), gdzie kontekst jest jednoznaczny.
 
 **Uruchomienie** (`run`, `runId`, stan: `RunState`; po angielsku *run*):
 Jednorazowe wykonanie taska mise przez `run_task` albo z UI, z własną grupą procesów i logami. Stan `running`, `stopping` albo `exited` (kod wyjścia, sygnał, czy zatrzymał je użytkownik, ostatnie linie wyjścia), zawsze zaobserwowany. Nie jest zadaniem ani serwisem.

@@ -11,6 +11,7 @@ import type { Connection } from "@/lib/connection";
 import { TRUNCATED_NOTE } from "@/lib/format";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { RepoCardView } from "./RepoCardView.tsx";
+import { RepoChanges } from "./RepoChanges.tsx";
 import { RepoCommits } from "./RepoCommits.tsx";
 import { RepoFiles } from "./RepoFiles.tsx";
 import { RepoMiseTasks } from "./RepoMiseTasks.tsx";
@@ -21,6 +22,7 @@ const TABS = [
   { id: "card", label: "Card" },
   { id: "files", label: "Files" },
   { id: "commits", label: "Commits" },
+  { id: "changes", label: "Changes" },
   { id: "mise", label: "mise tasks" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
@@ -31,6 +33,7 @@ export function RepoDetail({ conn, repo }: { conn: Connection; repo: Repo }) {
   const available = status.kind === "ok";
   // Nowy commit (np. z terminala) zmienia HEAD w odpytywanej liście, a to pobiera przegląd i drzewo od nowa.
   const head = status.kind === "ok" ? (status.head?.hash ?? "") : "";
+  const changes = status.kind === "ok" ? status.changes : 0;
   const load = useCallback(() => post(conn, workspaceApi.overview, { repo: repo.id }), [conn, repo.id]);
   const overview = useRemote(available ? load : undefined, { refreshKey: head });
 
@@ -49,10 +52,11 @@ export function RepoDetail({ conn, repo }: { conn: Connection; repo: Repo }) {
         <p className="text-destructive text-sm whitespace-pre-wrap">The repo is unavailable: {status.message}</p>
       ) : (
         <>
-          <RepoStats status={status} />
+          <RepoStats status={status} onShowChanges={() => setTab("changes")} />
           <TabBar tabs={TABS} active={tab} onSelect={setTab} />
           {tab === "readme" && <Loaded remote={overview}>{(o) => <Readme readme={o.readme} />}</Loaded>}
           {tab === "commits" && <Loaded remote={overview}>{(o) => <RepoCommits commits={o.commits} />}</Loaded>}
+          {tab === "changes" && <RepoChanges conn={conn} repo={repo.id} refreshKey={`${head}:${changes}`} />}
           {tab === "card" && <RepoCardView conn={conn} repo={repo.id} head={head} />}
           {tab === "files" && <RepoFiles conn={conn} repo={repo.id} head={head} />}
           {tab === "mise" && <RepoMiseTasks conn={conn} repo={repo.id} />}

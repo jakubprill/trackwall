@@ -5,8 +5,11 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { relativeTime } from "@/lib/format";
 import { branchLabel, repoStatusTone } from "@/lib/repo-status";
 
-/** Kafelki stanu w nagłówku repo: gałąź, gałąź śledzona, katalog roboczy i ostatni commit (§4.5). */
-export function RepoStats({ status }: { status: RepoStatusOk }) {
+/**
+ * Kafelki stanu w nagłówku repo: gałąź, gałąź śledzona, katalog roboczy i ostatni commit (§4.5). Zmiany w katalogu
+ * roboczym prowadzą do zakładki „Changes” (ADR-34), żeby sama liczba nie była ślepą uliczką.
+ */
+export function RepoStats({ status, onShowChanges }: { status: RepoStatusOk; onShowChanges: () => void }) {
   const state = repoStatusTone(status);
   return (
     <dl className="grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-2">
@@ -33,7 +36,13 @@ export function RepoStats({ status }: { status: RepoStatusOk }) {
         )}
       </Stat>
       <Stat label="Working tree">
-        <StatusLabel tone={state.tone} label={state.label} />
+        {status.changes > 0 ? (
+          <button type="button" className="hover:underline" onClick={onShowChanges} title="Show the changes">
+            <StatusLabel tone={state.tone} label={state.label} />
+          </button>
+        ) : (
+          <StatusLabel tone={state.tone} label={state.label} />
+        )}
       </Stat>
       <Stat label="Latest commit">
         {status.head ? (

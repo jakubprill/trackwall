@@ -1,4 +1,12 @@
-import { type Evidence, evidenceLabel, type MechanismId, type RepoCard, type RepoTag, type RepoTagRules } from "@trackwall/protocol";
+import {
+  type Evidence,
+  evidenceLabel,
+  type MechanismId,
+  NO_MISE_TAG,
+  type RepoCard,
+  type RepoTag,
+  type RepoTagRules,
+} from "@trackwall/protocol";
 import { globMatcher } from "./glob.ts";
 import { dirOf } from "./repo-path.ts";
 
@@ -48,7 +56,19 @@ function cardTags(card: RepoCard, repo: TaggedRepo): [string, string][] {
     tags.push(["library", `provides ${packages[0]?.name} and has no app framework or deployment files`]);
   const monorepo = monorepoReason(card);
   if (monorepo) tags.push(["monorepo", monorepo]);
+  const noMise = noMiseReason(card);
+  if (noMise) tags.push([NO_MISE_TAG, noMise]);
   return tags;
+}
+
+/**
+ * `no-mise`: repo bez tasków mise w commicie (ADR-34), więc ani komenda zbiorcza, ani zakładka „mise tasks” nie mają
+ * czego w nim uruchomić. Tag negatywny, bo to repo trzeba znaleźć filtrem, żeby dopisać mu `mise.toml`.
+ */
+function noMiseReason(card: RepoCard): string | undefined {
+  if (card.mise.tasks.length > 0) return undefined;
+  const [config] = card.mise.configFiles;
+  return config ? `${config} declares no tasks` : "no mise config in the repo root";
 }
 
 function bffName(card: RepoCard, repo: TaggedRepo): string | undefined {

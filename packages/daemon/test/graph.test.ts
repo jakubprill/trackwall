@@ -27,7 +27,16 @@ function consumes(name: string, scope = "compile"): ConsumedPackage {
 }
 
 function card(p: ProvidedPackage[], c: ConsumedPackage[]): RepoCard {
-  return { commit: "a".repeat(40), buildFiles: [], provides: p, consumes: c, tools: [], mechanisms: [], problems: [] };
+  return {
+    commit: "a".repeat(40),
+    buildFiles: [],
+    provides: p,
+    consumes: c,
+    tools: [],
+    mise: { configFiles: [], tasks: [] },
+    mechanisms: [],
+    problems: [],
+  };
 }
 
 function repo(id: string, repoCard: RepoCard | null, remote: string | null = null): GraphCardInput {
@@ -335,8 +344,8 @@ describe("Graph na kartach z prawdziwego gita", () => {
 
     expect(result.edges.map((e) => e.key)).toEqual(["com.example:core-lib"]);
     expect(result.nodes.map((n) => n.tags)).toEqual([
-      ["java", "library"],
-      ["java", "library"],
+      ["java", "library", "no-mise"],
+      ["java", "library", "no-mise"],
     ]);
     expect(result.configProblems).toHaveLength(1);
     expect(result.configProblems[0]).toContain("repoTags");

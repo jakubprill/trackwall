@@ -27,7 +27,16 @@ function shopCards(): GraphCardInput[] {
 }
 
 function card(provides: RepoCard["provides"], consumes: RepoCard["consumes"]): RepoCard {
-  return { commit: "a".repeat(40), buildFiles: [], provides, consumes, tools: [], mechanisms: [], problems: [] };
+  return {
+    commit: "a".repeat(40),
+    buildFiles: [],
+    provides,
+    consumes,
+    tools: [],
+    mise: { configFiles: [], tasks: [] },
+    mechanisms: [],
+    problems: [],
+  };
 }
 
 function app(name: string, port: number | null = null): ProvidedApp {

@@ -36,7 +36,8 @@ describe("cards", () => {
     expect(result.card?.commit).toBe(gitIn(repo, "rev-parse", "HEAD").trim());
     expect(result.card?.consumes.map((c) => c.name)).toEqual(["react"]);
     expect(result.card?.tools.map((t) => [t.tool, t.version])).toEqual([["node", "22"]]);
-    expect(result.tags.map((t) => t.name)).toEqual(["frontend"]);
+    expect(result.card?.mise).toEqual({ configFiles: ["mise.toml"], tasks: [] });
+    expect(result.tags.map((t) => t.name)).toEqual(["frontend", "no-mise"]);
   });
 
   test("karta jest liczona raz na commit i zapisana na dysku, a nowy commit daje nową kartę", async () => {
@@ -92,7 +93,7 @@ describe("cards", () => {
     const tags = await cards.tags();
 
     expect(tags.map((t) => (t.kind === "ok" ? [t.repo, t.tags.map((x) => x.name)] : [t.repo, t.kind]))).toEqual([
-      ["lib", ["java", "library"]],
+      ["lib", ["java", "library", "no-mise"]],
       ["zepsute", "unavailable"],
     ]);
   });

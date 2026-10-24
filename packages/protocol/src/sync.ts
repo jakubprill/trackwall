@@ -27,14 +27,35 @@ export const SyncSkipReason = z.enum([
 ]);
 export type SyncSkipReason = z.infer<typeof SyncSkipReason>;
 
+/**
+ * Katalog roboczy repo po synchronizacji, żeby wynik mówił, co zostało u użytkownika: wybrana gałąź (gałąź domyślna
+ * przesuwa się także wtedy, gdy wybrana jest inna, a wtedy pliki się nie zmieniają) i niezacommitowane pliki, których
+ * synchronizacja nigdy nie rusza.
+ */
+export const SyncWorkingTree = z.object({
+  /** `null` przy odłączonym HEAD. */
+  branch: z.string().nullable(),
+  /** Zmienione, dodane i usunięte pliki, które git śledzi. */
+  changed: z.number().int().nonnegative(),
+  /** Nowe pliki, których git jeszcze nie śledzi. */
+  untracked: z.number().int().nonnegative(),
+});
+export type SyncWorkingTree = z.infer<typeof SyncWorkingTree>;
+
 /** Wynik synchronizacji jednego repo bez błędu: to, co zwraca `vcs`, a błąd gita jest u niego wyjątkiem. */
 export const SyncResult = z.discriminatedUnion("state", [
-  /** Gałąź domyślna przesunięta do zdalnej o `commits` commitów. */
-  z.object({ state: z.literal("updated"), branch: z.string(), commits: z.number().int().positive() }),
+  /** Gałąź domyślna przesunięta do zdalnej (`remoteBranch`, np. `origin/main`) o `commits` commitów. */
+  z.object({
+    state: z.literal("updated"),
+    branch: z.string(),
+    remoteBranch: z.string(),
+    commits: z.number().int().positive(),
+    workingTree: SyncWorkingTree,
+  }),
   /** Fetch się udał, a gałąź domyślna już była równa zdalnej. */
-  z.object({ state: z.literal("up-to-date"), branch: z.string() }),
+  z.object({ state: z.literal("up-to-date"), branch: z.string(), remoteBranch: z.string(), workingTree: SyncWorkingTree }),
   /** `message` to zdanie dla użytkownika, z nazwą gałęzi, gdy jest znana. */
-  z.object({ state: z.literal("skipped"), reason: SyncSkipReason, message: z.string() }),
+  z.object({ state: z.literal("skipped"), reason: SyncSkipReason, message: z.string(), workingTree: SyncWorkingTree }),
 ]);
 export type SyncResult = z.infer<typeof SyncResult>;
 
