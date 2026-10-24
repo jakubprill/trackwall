@@ -1,44 +1,65 @@
-import { readFile } from "node:fs/promises";
-import { Language, type Node, Parser } from "web-tree-sitter";
-import { grammarFiles } from "../../platform/syntax-grammars.ts";
+import { type Language, Node, Parser } from "web-tree-sitter";
+import { type JvmGrammars, loadJvmGrammars } from "../../platform/tree-sitter.ts";
 
 /**
  * Drzewa składni Javy i Kotlina z tree-sitter (§4.6, ADR-37) dla ekstraktorów, którym nie wystarczają tokeny
  * (`java-tokens.ts`): typy parametrów i pól, rekordy, `data class`. Parser działa w WASM w procesie daemona, bez
  * kompilacji repo i bez natywnego addonu. Kod niepoprawny składniowo daje drzewo z węzłami `ERROR`, nie wyjątek.
  */
-export type JvmLanguage = "java" | "kotlin";
-
-let parsers: Promise<Record<JvmLanguage, Parser>> | undefined;
+type JvmLanguage = "java" | "kotlin";
 
 /**
- * Daje `read` korzeń drzewa pliku i zwraca jego wynik. Drzewo żyje w pamięci WASM, której nie sprząta GC, więc jest
- * zwalniane zaraz po `read`: węzły nie mogą z niego wyjść, tylko wartości z nich odczytane.
+ * Najdłuższe parsowanie jednego pliku. Parser działa synchronicznie w wątku daemona, a gramatyka Kotlina na
+ * złośliwym wejściu rośnie w czasie szybciej niż liniowo (plik 96 KB to kilka sekund), więc plik z repo (§8)
+ * nie może zatrzymać API dłużej niż na tyle.
  */
-export async function readSyntaxTree<T>(language: JvmLanguage, text: string, read: (root: Node) => T): Promise<T> {
-  const parser = (await loadParsers())[language];
-  const tree = parser.parse(text);
-  if (!tree) throw new Error(`tree-sitter nie zwrócił drzewa pliku (${language})`);
-  try {
-    return read(tree.rootNode);
-  } finally {
-    tree.delete();
-  }
+export const PARSE_TIME_LIMIT_MS = 1000;
+
+export interface SyntaxParsers {
+  /**
+   * Daje `read` korzeń drzewa pliku i zwraca jego wynik albo `null`, gdy parsowanie przekroczyło
+   * `PARSE_TIME_LIMIT_MS`. Drzewo żyje w pamięci WASM, której nie sprząta GC, i jest zwalniane zaraz po `read`,
+   * więc `read` jest synchroniczne i nie zwraca węzła, tylko odczytane z niego wartości.
+   */
+  read<T>(language: JvmLanguage, text: string, read: (root: Node) => T): T | null;
 }
 
-function loadParsers(): Promise<Record<JvmLanguage, Parser>> {
-  parsers ??= createParsers();
-  return parsers;
+/** Parsery obu języków; ładowanie gramatyk to jedyna asynchroniczna część, więc ekstraktory zostają synchroniczne. */
+export async function loadSyntaxParsers(): Promise<SyntaxParsers> {
+  return syntaxParsers(await loadJvmGrammars());
 }
 
-async function createParsers(): Promise<Record<JvmLanguage, Parser>> {
-  const files = await grammarFiles();
-  // Runtime dostaje bajty zamiast ścieżki, bo sam szukałby pliku obok swojego skryptu, którego w binarce nie ma.
-  await Parser.init({ wasmBinary: await readFile(files.runtime) });
-  const parserFor = async (path: string) => {
-    const parser = new Parser();
-    parser.setLanguage(await Language.load(new Uint8Array(await readFile(path))));
-    return parser;
+function syntaxParsers(grammars: JvmGrammars): SyntaxParsers {
+  const parsers = { java: parserFor(grammars.java), kotlin: parserFor(grammars.kotlin) };
+  return {
+    read(language, text, read) {
+      const parser = parsers[language];
+      const deadline = performance.now() + PARSE_TIME_LIMIT_MS;
+      const tree = parser.parse(text, null, { progressCallback: () => performance.now() > deadline });
+      if (!tree) {
+        // Bez `reset` następne `parse` wznowiłoby przerwany plik.
+        parser.reset();
+        return null;
+      }
+      try {
+        return checkedResult(read(tree.rootNode));
+      } finally {
+        tree.delete();
+      }
+    },
   };
-  return { java: await parserFor(files.java), kotlin: await parserFor(files.kotlin) };
+}
+
+function parserFor(language: Language): Parser {
+  const parser = new Parser();
+  parser.setLanguage(language);
+  return parser;
+}
+
+/** Węzeł albo obietnica sięgnęłyby do drzewa po `delete`, a WASM oddałby wtedy cudze dane zamiast błędu. */
+function checkedResult<T>(result: T): T {
+  if (result instanceof Node || result instanceof Promise) {
+    throw new Error("syntax tree reader must return plain values, not a tree node or a promise");
+  }
+  return result;
 }

@@ -3,21 +3,20 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readSyntaxTree } from "../src/modules/cards/syntax-tree.ts";
+import { loadSyntaxParsers, PARSE_TIME_LIMIT_MS } from "../src/modules/cards/syntax-tree.ts";
 import { RUNTIMES } from "./support/runtimes.ts";
 
 const root = join(import.meta.dir, "..");
 const probe = join("test", "fixtures", "syntax-tree-probe.ts");
-/** Wynik sondy z parsera; `embedded` zależy od tego, jak sonda została uruchomiona. */
-const PARSED = { java: ["id: String", "lines: List<Line>"], kotlin: ["val id: String", "val total: BigDecimal"] };
+const parsers = await loadSyntaxParsers();
 
 describe("drzewa składni Javy i Kotlina", () => {
-  test("rekord Javy daje pola DTO z typami, także generycznymi", async () => {
+  test("rekord Javy daje pola DTO z typami, także generycznymi", () => {
     const source = [
       "@JsonInclude(NON_NULL)",
       'public record OrderDto(String id, List<Line> lines, @JsonProperty("total") BigDecimal sum) {}',
     ].join("\n");
-    const fields = await readSyntaxTree("java", source, (root) =>
+    const fields = parsers.read("java", source, (root) =>
       root.descendantsOfType("formal_parameter").map((p) => [p.childForFieldName("name")?.text, p.childForFieldName("type")?.text]),
     );
     expect(fields).toEqual([
@@ -27,27 +26,42 @@ describe("drzewa składni Javy i Kotlina", () => {
     ]);
   });
 
-  test("data class Kotlina daje parametry konstruktora", async () => {
-    const parameters = await readSyntaxTree("kotlin", "data class OrderDto(val id: String, val lines: List<Line> = emptyList())", (root) =>
+  test("data class Kotlina daje parametry konstruktora", () => {
+    const parameters = parsers.read("kotlin", "data class OrderDto(val id: String, val lines: List<Line> = emptyList())", (root) =>
       root.descendantsOfType("class_parameter").map((p) => p.text),
     );
     expect(parameters).toEqual(["val id: String", "val lines: List<Line> = emptyList()"]);
   });
 
-  test("kod niepoprawny składniowo daje drzewo z błędem zamiast wyjątku, a reszta pliku jest czytelna", async () => {
-    const source = "class A { void broken( { }\nrecord B(int x) {}";
-    const result = await readSyntaxTree("java", source, (root) => ({
+  test("kod niepoprawny składniowo daje drzewo z błędem zamiast wyjątku, a reszta pliku jest czytelna", () => {
+    const result = parsers.read("java", "class A { void broken( { }\nrecord B(int x) {}", (root) => ({
       hasError: root.hasError,
       records: root.descendantsOfType("record_declaration").map((r) => r.childForFieldName("name")?.text),
     }));
     expect(result).toEqual({ hasError: true, records: ["B"] });
   });
 
+  test("plik, którego parsowanie trwa ponad limit, daje null, a następny plik parsuje się poprawnie", () => {
+    const started = performance.now();
+    expect(parsers.read("kotlin", "fun f() = a<".repeat(20_000), (root) => root.type)).toBeNull();
+    expect(performance.now() - started).toBeLessThan(PARSE_TIME_LIMIT_MS * 3);
+    expect(parsers.read("kotlin", "data class A(val x: Int)", (root) => root.hasError)).toBe(false);
+  });
+
+  test("odczyt, który zwraca węzeł albo obietnicę, jest błędem, bo drzewo jest już zwolnione", () => {
+    expect(() => parsers.read("java", "class A {}", (root) => root.firstChild)).toThrow("plain values");
+    expect(() => parsers.read("java", "class A {}", async (root) => root.type)).toThrow("plain values");
+  });
+
+  const javaRecord = ["java", "record R(int x) {}"];
+  const javaTree =
+    "(program (record_declaration name: (identifier) parameters: (formal_parameters (formal_parameter type: (integral_type) name: (identifier))) body: (class_body)))";
+
   for (const [name, argv] of RUNTIMES) {
-    test(`gramatyki ładują się pod ${name}`, () => {
-      const run = spawnSync(argv[0] ?? "", [...argv.slice(1), probe], { cwd: root, encoding: "utf8" });
+    test(`gramatyki ładują się pod ${name} z node_modules`, () => {
+      const run = spawnSync(argv[0] ?? "", [...argv.slice(1), probe, ...javaRecord], { cwd: root, encoding: "utf8" });
       expect(run.stderr).toBe("");
-      expect(JSON.parse(run.stdout)).toEqual({ ...PARSED, embedded: false });
+      expect(JSON.parse(run.stdout)).toEqual({ tree: javaTree, embedded: false });
     });
   }
 
@@ -58,11 +72,17 @@ describe("drzewa składni Javy i Kotlina", () => {
       try {
         const bin = join(dir, process.platform === "win32" ? "probe.exe" : "probe");
         // Bun, który uruchomił testy, a nie pierwszy z PATH.
-        const build = spawnSync(process.execPath, ["build", "--compile", probe, "--outfile", bin], { cwd: root, encoding: "utf8" });
+        const build = spawnSync(process.execPath, ["build", "--compile", "--minify", probe, "--outfile", bin], {
+          cwd: root,
+          encoding: "utf8",
+        });
         expect(build.status).toBe(0);
-        const run = spawnSync(bin, [], { cwd: dir, encoding: "utf8" });
+        const run = spawnSync(bin, ["kotlin", "data class A(val x: Int)"], { cwd: dir, encoding: "utf8" });
         expect(run.stderr).toBe("");
-        expect(JSON.parse(run.stdout)).toEqual({ ...PARSED, embedded: true });
+        expect(JSON.parse(run.stdout)).toEqual({
+          tree: "(source_file (class_declaration (modifiers (class_modifier)) name: (identifier) (primary_constructor (class_parameters (class_parameter (identifier) (user_type (identifier)))))))",
+          embedded: true,
+        });
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
