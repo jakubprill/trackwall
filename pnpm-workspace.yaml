@@ -4,3 +4,12 @@ packages:
 
 onlyBuiltDependencies:
   - esbuild
+
+# Gramatyki tree-sitter (ADR-37) daemon bierze jako pliki WASM; ich natywnych addonów nie budujemy.
+ignoredBuiltDependencies:
+  - "@tree-sitter-grammars/tree-sitter-kotlin"
+  - tree-sitter-java
+
+overrides:
+  # Paczka gramatyki Kotlina ma narzędzie autora w `dependencies` zamiast w `devDependencies`.
+  "@tree-sitter-grammars/tree-sitter-kotlin>npm-check-updates": "-"
