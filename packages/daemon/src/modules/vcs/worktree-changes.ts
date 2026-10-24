@@ -57,7 +57,8 @@ export async function workingTreeChanges(dir: string, base: string, maxPatchByte
     await Promise.allSettled(work);
     const [names, stats, patch] = await Promise.all(work);
     return {
-      files: parseChangedFiles(names.stdout.toString("utf8"), stats.stdout.toString("utf8")),
+      // Ostatni wpis uciętej listy może mieć niepełną ścieżkę.
+      files: parseChangedFiles(names.stdout.toString("utf8"), stats.stdout.toString("utf8")).slice(0, names.truncated ? -1 : undefined),
       patch: patch.stdout.toString("utf8"),
       // Ucięta lista plików (dziesiątki tysięcy nowych plików bez `.gitignore`) też jest niepełnym wynikiem.
       truncated: patch.truncated || names.truncated || stats.truncated,

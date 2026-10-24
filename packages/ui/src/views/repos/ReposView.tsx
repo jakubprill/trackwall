@@ -51,6 +51,7 @@ export function ReposView({
   const repos = filter.repos;
   const current = repos.find((r) => r.id === selected) ?? repos[0];
   const canSync = Boolean(list.data?.projectsDir) && !needsSettings;
+  const syncedAgo = sync.run && relativeTime(sync.run.startedAt, new Date());
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[var(--spacing-sidebar)_1fr]">
@@ -96,7 +97,7 @@ export function ReposView({
               key={repo.id}
               repo={repo}
               position={i + 1}
-              syncBadge={sync.run ? listSyncBadge(synced.get(repo.path), relativeTime(sync.run.startedAt, new Date())) : undefined}
+              syncBadge={syncedAgo ? listSyncBadge(synced.get(repo.path), syncedAgo) : undefined}
               tags={filter.tags.get(repo.id) ?? []}
               active={panel === "repo" && repo.id === current?.id}
               onSelect={() => {

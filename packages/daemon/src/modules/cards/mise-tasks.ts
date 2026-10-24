@@ -1,6 +1,7 @@
-import type { DeclaredMiseTask, MiseSetup } from "@trackwall/protocol";
+import type { CardProblem, DeclaredMiseTask, MiseSetup } from "@trackwall/protocol";
 import { parse as parseToml } from "smol-toml";
 import { z } from "zod";
+import { messageOf } from "../../infra/errors.ts";
 import { baseName, dirOf } from "./repo-path.ts";
 import { keyLines, type RepoSnapshot } from "./snapshot.ts";
 import { MISE_CONFIG_FILES, TOML_KEY } from "./tools.ts";
@@ -28,22 +29,38 @@ export function isMiseConfigFile(path: string): boolean {
   return ROOT_CONFIG_FILES.includes(path) || (CONF_D_DIRS.includes(dirOf(path)) && path.endsWith(".toml"));
 }
 
-export function extractMiseSetup(snapshot: RepoSnapshot): MiseSetup {
-  const configFiles = snapshot.paths.filter(isMiseConfigFile);
+/**
+ * Pliki konfiguracji w kolejności z `ROOT_CONFIG_FILES`, potem `conf.d`, więc powód tagu `no-mise` wskazuje `mise.toml`,
+ * a nie przypadkowy plik z listy gita. Wynik jest niepełny (`complete: false`), gdy któregoś pliku nie przeczytano albo
+ * lista plików commita jest ucięta (problem odczytu bez ścieżki): wtedy nie wiadomo, czy repo ma taski.
+ */
+export function extractMiseSetup(snapshot: RepoSnapshot): { mise: MiseSetup; problems: CardProblem[] } {
+  const configFiles = snapshot.paths.filter(isMiseConfigFile).sort((a, b) => configRank(a) - configRank(b));
+  const problems: CardProblem[] = [];
   const read = configFiles.flatMap((path) => {
     const text = snapshot.text(path);
     return text === undefined ? [] : [{ path, text }];
   });
-  const tasks = [...read.flatMap((f) => tomlTasks(f.path, f.text)), ...fileTasks(snapshot.paths)];
-  return { configFiles, tasks, complete: read.length === configFiles.length };
+  const tasks = [...read.flatMap((f) => tomlTasks(f.path, f.text, problems)), ...fileTasks(snapshot.paths)];
+  const complete = read.length === configFiles.length && !snapshot.problems.some((p) => p.path === "");
+  return { mise: { configFiles, tasks, complete }, problems };
 }
 
-/** Klucze `[tasks]`; plik, który nie jest poprawnym TOML-em, nie daje tasków, a problem karty zgłasza już `tools.ts`. */
-function tomlTasks(path: string, text: string): DeclaredMiseTask[] {
+function configRank(path: string): number {
+  const rank = ROOT_CONFIG_FILES.indexOf(path);
+  return rank < 0 ? ROOT_CONFIG_FILES.length : rank;
+}
+
+/**
+ * Klucze `[tasks]`; plik, który nie jest poprawnym TOML-em, nie daje tasków. Problem karty zgłasza się tu tylko dla
+ * plików, których nie czyta `tools.ts`, żeby ten sam zły plik nie był na karcie dwa razy.
+ */
+function tomlTasks(path: string, text: string, problems: CardProblem[]): DeclaredMiseTask[] {
   let parsed: unknown;
   try {
     parsed = parseToml(text);
-  } catch {
+  } catch (err) {
+    if (!MISE_CONFIG_FILES.includes(path)) problems.push({ path, message: messageOf(err) });
     return [];
   }
   const config = MiseTasksConfig.safeParse(parsed);

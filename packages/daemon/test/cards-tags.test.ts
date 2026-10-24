@@ -125,6 +125,19 @@ describe("konfiguracja mise i tag no-mise", () => {
     // Plik konfiguracji, którego karta nie przeczytała (limity), może mieć taski, więc tagu nie ma.
     expect(noMise({}, ["mise.toml"])).toBeUndefined();
   });
+
+  test("powód no-mise wskazuje mise.toml przed innymi plikami, a zły plik z conf.d jest problemem karty", () => {
+    const card = extractCard(
+      snapshotOf({
+        ".config/mise.toml": '[tools]\nnode = "22"\n',
+        "mise.toml": '[tools]\njava = "21"\n',
+        "mise/conf.d/zly.toml": "[tasks\n",
+      }),
+    );
+    expect(card.mise.configFiles).toEqual(["mise.toml", ".config/mise.toml", "mise/conf.d/zly.toml"]);
+    expect(repoTags(card, { id: "app", remote: null }, {}).find((t) => t.name === "no-mise")?.reason).toBe("mise.toml declares no tasks");
+    expect(card.problems.map((p) => p.path)).toEqual(["mise/conf.d/zly.toml"]);
+  });
 });
 
 describe("glob", () => {

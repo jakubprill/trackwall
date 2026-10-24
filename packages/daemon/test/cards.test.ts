@@ -85,6 +85,16 @@ describe("cards", () => {
     });
   });
 
+  test("taski mise z conf.d i katalogu tasków w commicie zdejmują tag no-mise", async () => {
+    const { projects, cards } = await setup();
+    makeRepo({ ".config/mise/conf.d/ci.toml": 'tasks.ci = "make ci"\n', "mise-tasks/dev": "#!/bin/sh\n" }, "web", projects);
+
+    const result = await cards.card("web");
+
+    expect(result.card?.mise.tasks.map((t) => t.name)).toEqual(["ci", "dev"]);
+    expect(result.tags.map((t) => t.name)).not.toContain("no-mise");
+  });
+
   test("tagi każdego repo z listy; repo, którego git nie czyta, ma powód zamiast tagów", async () => {
     const { projects, cards } = await setup();
     makeRepo({ "pom.xml": "<project><groupId>g</groupId><artifactId>lib</artifactId></project>" }, "lib", projects);

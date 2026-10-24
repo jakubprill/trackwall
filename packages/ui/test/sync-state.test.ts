@@ -73,10 +73,12 @@ describe("synchronizacja w UI", () => {
     ).toBe("main is checked out and has uncommitted changes. Uncommitted files stay as they are: 1 changed.");
     expect(syncMessage({ ...target, state: "up-to-date", ...ff, workingTree: null })).toBe("main already matches origin/main.");
     expect(syncMessage({ ...target, state: "failed", message: "Permission denied (publickey)." })).toBe("Permission denied (publickey).");
+    expect(syncMessage({ ...target, state: "failed", message: "Could not resolve host: host" })).toBe("Could not resolve host: host.");
   });
 
   test("na liście repo każdy wynik ma krótki tekst i pełne zdanie z czasem synchronizacji, także aktualne repo", () => {
     expect(listSyncBadge(undefined, "5 min ago")).toBeUndefined();
+    expect(listSyncBadge({ ...target, state: "waiting" }, "just now")).toEqual({ tone: "warning", label: "waiting", message: undefined });
     expect(listSyncBadge({ ...target, state: "up-to-date", ...ff, workingTree: onMain }, "5 min ago")).toEqual({
       tone: "ok",
       label: "up to date",

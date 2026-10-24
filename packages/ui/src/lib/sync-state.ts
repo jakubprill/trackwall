@@ -43,7 +43,7 @@ export function syncMessage(repo: SyncRepo): string | undefined {
     case "running":
       return undefined;
     case "failed":
-      return repo.message;
+      return sentences([repo.message]);
     case "updated":
       return sentences([
         `${repo.branch} moved ${countLabel(repo.commits, { one: "commit", other: "commits" })} forward to ${repo.remoteBranch}`,
@@ -84,20 +84,22 @@ function sentences(parts: (string | null | undefined)[]): string {
     .join(" ");
 }
 
-/**
- * Wynik pod stanem repo na liście, także „aktualne”, bo bez niego nie widać, że synchronizacja doszła do repo. Wynik
- * z czasem przestaje być prawdą (nowe commity na zdalnym), więc podpowiedź mówi, kiedy synchronizacja się zaczęła.
- */
 export interface SyncBadge {
   tone: StatusTone;
   label: string;
-  message: string;
+  /** Zdanie do podpowiedzi; trwające repo go nie ma. */
+  message: string | undefined;
 }
 
+/**
+ * Wynik pod stanem repo na liście, także „aktualne”, bo bez niego nie widać, że synchronizacja doszła do repo. Wynik
+ * z czasem przestaje być prawdą (nowe commity na zdalnym), więc podpowiedź skończonego repo mówi, kiedy synchronizacja
+ * się zaczęła.
+ */
 export function listSyncBadge(repo: SyncRepo | undefined, syncedAgo: string): SyncBadge | undefined {
   if (!repo) return undefined;
   const message = syncMessage(repo);
-  return { ...syncRepoTone(repo), message: message ? `${message} Synced ${syncedAgo}.` : `Synced ${syncedAgo}.` };
+  return { ...syncRepoTone(repo), message: message && `${message} Synced ${syncedAgo}.` };
 }
 
 export interface SyncProgress {

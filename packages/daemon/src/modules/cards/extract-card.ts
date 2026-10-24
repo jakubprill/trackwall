@@ -40,6 +40,7 @@ export function readsCardFile(path: string): boolean {
 export const CARD_SOURCES: SourceSelection = { pattern: JVM_SOURCE_PATTERN, globs: JVM_SOURCE_GLOBS, accepts: isJvmSource };
 
 export function extractCard(snapshot: RepoSnapshot): RepoCard {
+  const mise = extractMiseSetup(snapshot);
   const builds = BUILD_EXTRACTORS.map((e) => e.extract(snapshot));
   const buildDirs = builds.flatMap((b) => b.buildFiles.map((f) => dirOf(f.path)));
   // Ekstraktory buildu dają tylko paczki, a HTTP aplikacje, endpointy i klientów; karta trzyma je razem.
@@ -55,12 +56,12 @@ export function extractCard(snapshot: RepoSnapshot): RepoCard {
     provides: all.flatMap((e) => e.provides),
     consumes,
     tools: all.flatMap((e) => e.tools),
-    mise: extractMiseSetup(snapshot),
+    mise: mise.mise,
     mechanisms: detectMechanisms(
       consumes.filter((c) => c.kind === "package"),
       snapshot.paths,
     ),
-    problems: [...snapshot.problems, ...all.flatMap((e) => e.problems)],
+    problems: [...snapshot.problems, ...all.flatMap((e) => e.problems), ...mise.problems],
   };
 }
 

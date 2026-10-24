@@ -55,7 +55,7 @@ export function ChangesDiff({ changes }: { changes: WorkingTreeChanges }) {
         ))}
       </pre>
       {(changes.truncated || more) && (
-        <p className="text-muted-foreground text-xs">The diff is longer; showing the beginning. See all of it in VS Code.</p>
+        <p className="text-muted-foreground text-xs">The changes are longer; showing the beginning. See all of them in VS Code.</p>
       )}
     </>
   );
