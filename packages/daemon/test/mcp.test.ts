@@ -14,6 +14,7 @@ import {
   ListReposResult,
   LogErrors,
   LogTail,
+  MCP_INSTRUCTIONS,
   mcpTools,
   RepoCardResult,
   SearchCodeResult,
@@ -111,6 +112,15 @@ describe("serwer MCP przez Streamable HTTP", () => {
     // can kill a process the user started from the UI.
     expect(tools.filter((t) => t.annotations?.destructiveHint !== false).map((t) => t.name)).toEqual(["run_mise_task", "stop_mise_task"]);
     expect(client.getServerVersion()).toMatchObject({ name: "trackwall", version: "9.9.9" });
+    await client.close();
+  });
+
+  test("the server instruction says when to use every tool, so a new tool cannot be left out of it", async () => {
+    const client = await connectHttpClient(api.port, TOKEN);
+    const instructions = client.getInstructions() ?? "";
+    expect(instructions).toBe(MCP_INSTRUCTIONS);
+    const missing = Object.values(mcpTools).filter((t) => !new RegExp(`\\b${t.name}\\b`).test(instructions));
+    expect(missing.map((t) => t.name)).toEqual([]);
     await client.close();
   });
 
