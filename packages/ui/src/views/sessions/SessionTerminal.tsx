@@ -10,7 +10,7 @@ import { IS_MAC } from "@/lib/platform";
 import { copiesSelection } from "@/lib/terminal-copy";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { terminalTheme } from "@/lib/terminal-theme";
-import { FocusReporter, windowInFront } from "@/lib/window-focus";
+import { FocusReporter, terminalInFront } from "@/lib/window-focus";
 
 const RECONNECT_MS = 1000;
 
@@ -51,9 +51,9 @@ export function SessionTerminal({ conn, session, live, focused }: { conn: Connec
     };
     const sendSize = () => send({ type: "resize", cols: terminal.cols, rows: terminal.rows });
     const focus = new FocusReporter(
-      (focused) => send({ type: "focus", focused }),
-      () => takesFocus.current && windowInFront(document),
-      { set: (run, ms) => setTimeout(run, ms), clear: (timer) => clearTimeout(timer) },
+      (inFront) => send({ type: "focus", focused: inFront }),
+      () => terminalInFront(takesFocus.current, document),
+      { set: (run, ms) => setTimeout(run, ms), clear: (focusTimer) => clearTimeout(focusTimer) },
     );
     const sendFocus = () => focus.update();
     updateFocus.current = sendFocus;

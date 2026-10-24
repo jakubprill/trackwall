@@ -27,13 +27,19 @@ export function sessionShortcut(press: KeyPress, isMac: boolean): SessionShortcu
 
 /** The label of a shortcut, `⌥1` on macOS and `Alt+1` elsewhere; a position past the last one has none. */
 export function sessionShortcutLabel(shortcut: SessionShortcut, isMac: boolean): string | undefined {
-  if (shortcut.kind === "position" && (shortcut.position < 1 || shortcut.position > SHORTCUT_POSITIONS)) return undefined;
-  const key = shortcut.kind === "position" ? String(shortcut.position) : "J";
+  const key = shortcutKey(shortcut);
+  if (key === undefined) return undefined;
   return isMac ? `⌥${key}` : `Alt+${key}`;
 }
 
 /** The `aria-keyshortcuts` value: WAI-ARIA names Option `Alt` on macOS too. */
 export function ariaSessionShortcut(shortcut: SessionShortcut): string | undefined {
-  if (shortcut.kind === "next-waiting") return "Alt+J";
-  return shortcut.position >= 1 && shortcut.position <= SHORTCUT_POSITIONS ? `Alt+${shortcut.position}` : undefined;
+  const key = shortcutKey(shortcut);
+  return key === undefined ? undefined : `Alt+${key}`;
+}
+
+/** The key after the modifier; a position past the last one has no shortcut. */
+function shortcutKey(shortcut: SessionShortcut): string | undefined {
+  if (shortcut.kind === "next-waiting") return "J";
+  return shortcut.position >= 1 && shortcut.position <= SHORTCUT_POSITIONS ? String(shortcut.position) : undefined;
 }
