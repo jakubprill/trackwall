@@ -15,13 +15,15 @@ type JvmLanguage = "java" | "kotlin";
  */
 export const PARSE_TIME_LIMIT_MS = 1000;
 
+/** Wynik odczytu drzewa; `timeout`, gdy parsowanie pliku przekroczyło `PARSE_TIME_LIMIT_MS` i drzewa nie ma. */
+type SyntaxRead<T> = { kind: "parsed"; value: T } | { kind: "timeout" };
+
 export interface SyntaxParsers {
   /**
-   * Daje `read` korzeń drzewa pliku i zwraca jego wynik albo `null`, gdy parsowanie przekroczyło
-   * `PARSE_TIME_LIMIT_MS`. Drzewo żyje w pamięci WASM, której nie sprząta GC, i jest zwalniane zaraz po `read`,
-   * więc `read` jest synchroniczne i nie zwraca węzła, tylko odczytane z niego wartości.
+   * Daje `read` korzeń drzewa pliku i zwraca jego wynik. Drzewo żyje w pamięci WASM, której nie sprząta GC, i jest
+   * zwalniane zaraz po `read`, więc `read` jest synchroniczne i zwraca wartości odczytane z węzłów, nie węzły.
    */
-  read<T>(language: JvmLanguage, text: string, read: (root: Node) => T): T | null;
+  read<T>(language: JvmLanguage, text: string, read: (root: Node) => T): SyntaxRead<T>;
 }
 
 /** Parsery obu języków; ładowanie gramatyk to jedyna asynchroniczna część, więc ekstraktory zostają synchroniczne. */
@@ -39,10 +41,10 @@ function syntaxParsers(grammars: JvmGrammars): SyntaxParsers {
       if (!tree) {
         // Bez `reset` następne `parse` wznowiłoby przerwany plik.
         parser.reset();
-        return null;
+        return { kind: "timeout" };
       }
       try {
-        return checkedResult(read(tree.rootNode));
+        return { kind: "parsed", value: checkedResult(read(tree.rootNode)) };
       } finally {
         tree.delete();
       }
@@ -56,7 +58,10 @@ function parserFor(language: Language): Parser {
   return parser;
 }
 
-/** Węzeł albo obietnica sięgnęłyby do drzewa po `delete`, a WASM oddałby wtedy cudze dane zamiast błędu. */
+/**
+ * Węzeł albo obietnica sięgnęłyby do drzewa po `delete`, a WASM oddałby wtedy cudze dane zamiast błędu. Sprawdzany
+ * jest tylko sam wynik: węzeł w tablicy albo w polu obiektu (`root.children`) przechodzi, więc tego pilnuje przegląd.
+ */
 function checkedResult<T>(result: T): T {
   if (result instanceof Node || result instanceof Promise) {
     throw new Error("syntax tree reader must return plain values, not a tree node or a promise");

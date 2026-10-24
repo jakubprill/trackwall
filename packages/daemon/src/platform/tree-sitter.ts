@@ -17,8 +17,6 @@ export interface GrammarFiles {
 export interface JvmGrammars {
   java: Language;
   kotlin: Language;
-  /** Pliki, z których przyszły; pozwala sprawdzić, że binarka ma je u siebie (`isInBinary`). */
-  files: GrammarFiles;
 }
 
 // `Parser.init` podmienia moduł WASM całej biblioteki, więc może się wykonać raz na proces; nieudane ładowanie
@@ -33,12 +31,17 @@ export function loadJvmGrammars(): Promise<JvmGrammars> {
   return loading;
 }
 
+/** Pliki WASM bieżącego runtime'u: w binarce osadzone (`isInBinary`), poza nią z `node_modules`. */
+export async function grammarFiles(): Promise<GrammarFiles> {
+  return runtimeInfo().name === "bun" ? (await import("./bun-grammar-files.ts")).bunGrammarFiles : nodeGrammarFiles();
+}
+
 async function load(): Promise<JvmGrammars> {
-  const files = runtimeInfo().name === "bun" ? (await import("./bun-grammar-files.ts")).bunGrammarFiles : nodeGrammarFiles();
+  const files = await grammarFiles();
   // Runtime dostaje bajty zamiast ścieżki, bo sam szukałby pliku obok swojego skryptu, którego w binarce nie ma.
   await Parser.init({ wasmBinary: await readFile(files.runtime) });
   const language = async (path: string) => Language.load(new Uint8Array(await readFile(path)));
-  return { java: await language(files.java), kotlin: await language(files.kotlin), files };
+  return { java: await language(files.java), kotlin: await language(files.kotlin) };
 }
 
 function nodeGrammarFiles(): GrammarFiles {

@@ -19,18 +19,21 @@ describe("drzewa składni Javy i Kotlina", () => {
     const fields = parsers.read("java", source, (root) =>
       root.descendantsOfType("formal_parameter").map((p) => [p.childForFieldName("name")?.text, p.childForFieldName("type")?.text]),
     );
-    expect(fields).toEqual([
-      ["id", "String"],
-      ["lines", "List<Line>"],
-      ["sum", "BigDecimal"],
-    ]);
+    expect(fields).toEqual({
+      kind: "parsed",
+      value: [
+        ["id", "String"],
+        ["lines", "List<Line>"],
+        ["sum", "BigDecimal"],
+      ],
+    });
   });
 
   test("data class Kotlina daje parametry konstruktora", () => {
     const parameters = parsers.read("kotlin", "data class OrderDto(val id: String, val lines: List<Line> = emptyList())", (root) =>
       root.descendantsOfType("class_parameter").map((p) => p.text),
     );
-    expect(parameters).toEqual(["val id: String", "val lines: List<Line> = emptyList()"]);
+    expect(parameters).toEqual({ kind: "parsed", value: ["val id: String", "val lines: List<Line> = emptyList()"] });
   });
 
   test("kod niepoprawny składniowo daje drzewo z błędem zamiast wyjątku, a reszta pliku jest czytelna", () => {
@@ -38,14 +41,14 @@ describe("drzewa składni Javy i Kotlina", () => {
       hasError: root.hasError,
       records: root.descendantsOfType("record_declaration").map((r) => r.childForFieldName("name")?.text),
     }));
-    expect(result).toEqual({ hasError: true, records: ["B"] });
+    expect(result).toEqual({ kind: "parsed", value: { hasError: true, records: ["B"] } });
   });
 
-  test("plik, którego parsowanie trwa ponad limit, daje null, a następny plik parsuje się poprawnie", () => {
+  test("plik, którego parsowanie trwa ponad limit, nie ma drzewa, a następny plik parsuje się poprawnie", () => {
     const started = performance.now();
-    expect(parsers.read("kotlin", "fun f() = a<".repeat(20_000), (root) => root.type)).toBeNull();
+    expect(parsers.read("kotlin", "fun f() = a<".repeat(20_000), (root) => root.type)).toEqual({ kind: "timeout" });
     expect(performance.now() - started).toBeLessThan(PARSE_TIME_LIMIT_MS * 3);
-    expect(parsers.read("kotlin", "data class A(val x: Int)", (root) => root.hasError)).toBe(false);
+    expect(parsers.read("kotlin", "data class A(val x: Int)", (root) => root.hasError)).toEqual({ kind: "parsed", value: false });
   });
 
   test("odczyt, który zwraca węzeł albo obietnicę, jest błędem, bo drzewo jest już zwolnione", () => {
@@ -76,7 +79,7 @@ describe("drzewa składni Javy i Kotlina", () => {
           cwd: root,
           encoding: "utf8",
         });
-        expect(build.status).toBe(0);
+        expect({ status: build.status, stderr: build.stderr }).toEqual({ status: 0, stderr: expect.any(String) });
         const run = spawnSync(bin, ["kotlin", "data class A(val x: Int)"], { cwd: dir, encoding: "utf8" });
         expect(run.stderr).toBe("");
         expect(JSON.parse(run.stdout)).toEqual({
