@@ -311,55 +311,71 @@ describe("graf i find_endpoint na prawdziwym gicie", () => {
     return { home, projects, graph: new Graph({ cards, workspace }), workspace };
   }
 
-  test("karty z commita czytają kontrolery i klientów wybranych wyszukiwaniem, bez kodu testów", async () => {
-    const { graph } = await setup();
-    const found = await graph.findEndpoint("/api/orders/42", "GET");
+  test(
+    "karty z commita czytają kontrolery i klientów wybranych wyszukiwaniem, bez kodu testów",
+    async () => {
+      const { graph } = await setup();
+      const found = await graph.findEndpoint("/api/orders/42", "GET");
 
-    expect(found.truncated).toBe(false);
-    expect(found.endpoints.map((e) => [e.repo, e.method, e.path, e.handler, e.evidence.line])).toEqual([
-      ["orders-api", "GET", "/api/orders/{id}", "OrdersController.get", 19],
-    ]);
-    expect(found.endpoints[0]?.callers.map((c) => [c.repo, c.via, c.client, c.path, c.confidence])).toEqual([
-      ["legacy-reports", "rest-template", "OrdersReport", "/api/orders/{}", "medium"],
-      ["orders-bff", "feign", "OrdersClient", "/api/orders/{id}", "exact"],
-      ["orders-bff", "feign", "OrdersClient", "/api/orders/{id}", "exact"],
-    ]);
-    // Kontroler z src/test nie jest endpointem aplikacji.
-    expect((await graph.findEndpoint("test-only", undefined)).endpoints).toEqual([]);
-  }, REAL_GIT_TIMEOUT);
+      expect(found.truncated).toBe(false);
+      expect(found.endpoints.map((e) => [e.repo, e.method, e.path, e.handler, e.evidence.line])).toEqual([
+        ["orders-api", "GET", "/api/orders/{id}", "OrdersController.get", 19],
+      ]);
+      expect(found.endpoints[0]?.callers.map((c) => [c.repo, c.via, c.client, c.path, c.confidence])).toEqual([
+        ["legacy-reports", "rest-template", "OrdersReport", "/api/orders/{}", "medium"],
+        ["orders-bff", "feign", "OrdersClient", "/api/orders/{id}", "exact"],
+        ["orders-bff", "feign", "OrdersClient", "/api/orders/{id}", "exact"],
+      ]);
+      // Kontroler z src/test nie jest endpointem aplikacji.
+      expect((await graph.findEndpoint("test-only", undefined)).endpoints).toEqual([]);
+    },
+    REAL_GIT_TIMEOUT,
+  );
 
-  test("find_endpoint szuka też po fragmencie ścieżki, handlera i nazwy aplikacji, bez wielkości liter", async () => {
-    const { graph } = await setup();
-    const paths = async (query: string) => (await graph.findEndpoint(query, undefined)).endpoints.map((e) => `${e.method} ${e.path}`);
-    expect(await paths("payments-SERVICE")).toEqual(["POST /api/payments/{orderId}"]);
-    expect(await paths("ordersController.cancel")).toEqual(["PUT /api/orders/{id}/cancel"]);
-    expect(await paths("/api/orders")).toEqual(["POST /api/orders", "GET /api/orders/{id}", "PUT /api/orders/{id}/cancel"]);
-  }, REAL_GIT_TIMEOUT);
+  test(
+    "find_endpoint szuka też po fragmencie ścieżki, handlera i nazwy aplikacji, bez wielkości liter",
+    async () => {
+      const { graph } = await setup();
+      const paths = async (query: string) => (await graph.findEndpoint(query, undefined)).endpoints.map((e) => `${e.method} ${e.path}`);
+      expect(await paths("payments-SERVICE")).toEqual(["POST /api/payments/{orderId}"]);
+      expect(await paths("ordersController.cancel")).toEqual(["PUT /api/orders/{id}/cancel"]);
+      expect(await paths("/api/orders")).toEqual(["POST /api/orders", "GET /api/orders/{id}", "PUT /api/orders/{id}/cancel"]);
+    },
+    REAL_GIT_TIMEOUT,
+  );
 
-  test("nowy commit w repo zmienia graf przy następnym pytaniu", async () => {
-    const { graph, projects } = await setup();
-    expect((await graph.graph()).edges.some((e) => e.from === "orders-api")).toBe(false);
-    commitFiles(
-      join(projects, "orders-api"),
-      {
-        "src/main/java/com/example/orders/api/PaymentsCheck.java":
-          '@FeignClient(name = "payments-service")\ninterface PaymentsCheck {\n  @PostMapping("/api/payments/{id}") void pay();\n}\n',
-      },
-      "Dodaj klienta płatności",
-    );
-    expect((await graph.graph()).edges.filter((e) => e.from === "orders-api").map((e) => [e.to, e.key, e.confidence])).toEqual([
-      ["payments", "payments-service", "exact"],
-    ]);
-  }, REAL_GIT_TIMEOUT);
+  test(
+    "nowy commit w repo zmienia graf przy następnym pytaniu",
+    async () => {
+      const { graph, projects } = await setup();
+      expect((await graph.graph()).edges.some((e) => e.from === "orders-api")).toBe(false);
+      commitFiles(
+        join(projects, "orders-api"),
+        {
+          "src/main/java/com/example/orders/api/PaymentsCheck.java":
+            '@FeignClient(name = "payments-service")\ninterface PaymentsCheck {\n  @PostMapping("/api/payments/{id}") void pay();\n}\n',
+        },
+        "Dodaj klienta płatności",
+      );
+      expect((await graph.graph()).edges.filter((e) => e.from === "orders-api").map((e) => [e.to, e.key, e.confidence])).toEqual([
+        ["payments", "payments-service", "exact"],
+      ]);
+    },
+    REAL_GIT_TIMEOUT,
+  );
 
-  test("alias aplikacji z workspace.yaml działa od razu, bez nowego commita", async () => {
-    const { graph, workspace } = await setup();
-    const before = await graph.graph();
-    expect(before.edges.some((e) => e.from === "orders-bff" && e.key === "zipkin")).toBe(false);
-    writeFileSync(workspace.configFile(), `${await Bun.file(workspace.configFile()).text()}graph:\n  apps:\n    zipkin: payments\n`);
-    const after = await graph.graph();
-    expect(after.edges.filter((e) => e.key === "zipkin").map((e) => [e.from, e.to, e.confidence])).toEqual([
-      ["orders-bff", "payments", "high"],
-    ]);
-  }, REAL_GIT_TIMEOUT);
+  test(
+    "alias aplikacji z workspace.yaml działa od razu, bez nowego commita",
+    async () => {
+      const { graph, workspace } = await setup();
+      const before = await graph.graph();
+      expect(before.edges.some((e) => e.from === "orders-bff" && e.key === "zipkin")).toBe(false);
+      writeFileSync(workspace.configFile(), `${await Bun.file(workspace.configFile()).text()}graph:\n  apps:\n    zipkin: payments\n`);
+      const after = await graph.graph();
+      expect(after.edges.filter((e) => e.key === "zipkin").map((e) => [e.from, e.to, e.confidence])).toEqual([
+        ["orders-bff", "payments", "high"],
+      ]);
+    },
+    REAL_GIT_TIMEOUT,
+  );
 });
