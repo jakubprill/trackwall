@@ -138,7 +138,7 @@ function clean(pattern: string): string {
 }
 
 /** Klucz JSON w cudzysłowie, za nim `:`; w jednej linii może być ich wiele (zminifikowany `package.json`). */
-const JSON_KEY = /"([^"\\]*)"\s*:/g;
+export const JSON_KEY = /"([^"\\]*)"\s*:/g;
 
 function keyEvidence(m: Manifest, key: string): Evidence {
   return { path: m.path, line: m.keys.get(key) ?? null };

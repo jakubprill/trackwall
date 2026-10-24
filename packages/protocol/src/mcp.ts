@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { RepoCardResult, TagName } from "./cards.ts";
-import { MAX_SUBGRAPH_DEPTH, Subgraph, WhoCallsResult } from "./graph.ts";
+import { FindEndpointResult, MAX_FOUND_ENDPOINTS, MAX_SUBGRAPH_DEPTH, Subgraph, WhoCallsResult } from "./graph.ts";
+import { HttpMethod } from "./http.ts";
 import { LOG_BUFFER_RECORDS, LOG_TAIL_MAX, LogTail } from "./logs.ts";
 import { MiseTaskName, MiseTasks } from "./mise.ts";
 import { SyncRepo } from "./sync.ts";
@@ -96,11 +97,13 @@ export const mcpTools = {
   getRepoCard: {
     name: "get_repo_card",
     description:
-      "Karta repo z plików buildu i konfiguracji w ostatnim commicie, każdy fakt z dowodem (plik i linia): paczki, " +
-      "które repo udostępnia (współrzędne Maven grupa:artefakt, nazwy npm), paczki, których używa (z zakresem), " +
-      "wymagane wersje narzędzi (mise, .nvmrc, wersja Javy), wykryte mechanizmy (Spring Boot, Feign, WebClient, " +
-      "OpenAPI, Kafka, Eureka, Config Server, Kubernetes, Helm, Docker, frameworki frontendu) i tagi z powodami. " +
-      "Paczka udostępniana przez jedno repo i używana przez inne to połączenie między nimi. card: null w repo bez commitów.",
+      "Karta repo z plików buildu, konfiguracji i kodu w ostatnim commicie, każdy fakt z dowodem (plik i linia). " +
+      "provides: paczki (kind package: współrzędne Maven grupa:artefakt, nazwy npm), aplikacje Spring Boot (kind app: " +
+      "spring.application.name, port) i endpointy HTTP z kontrolerów (kind endpoint: metoda, pełna ścieżka, handler). " +
+      "consumes: paczki z zakresem i klienci HTTP (kind http: Feign, @HttpExchange, WebClient, RestClient, RestTemplate, " +
+      "adresy z application*.yml w każdym profilu Spring, .env i proxy frontendu; z nazwą aplikacji albo adresem i " +
+      "wywołaniami). Do tego wymagane wersje narzędzi, wykryte mechanizmy (Spring Boot, Feign, Kafka, Eureka, " +
+      "Kubernetes…) i tagi z powodami. card: null w repo bez commitów.",
     args: z.object({ repo: RepoArg }).strict(),
     result: RepoCardResult,
   },
@@ -126,8 +129,10 @@ export const mcpTools = {
     name: "who_calls",
     description:
       "Kto używa danego repo: krawędzie grafu połączeń skierowane do tego repo, każda z rodzajem (package: repo " +
-      "używa paczki zbudowanej w tym repo; manual: połączenie wpisane przez użytkownika), kluczem (nazwa paczki albo " +
-      "opis), pewnością i dowodami (repo, plik, linia). Przed zmianą API albo paczki repo sprawdź, kogo dotknie.",
+      "używa paczki zbudowanej w tym repo; http: klient HTTP repo woła aplikację albo endpointy tego repo; manual: " +
+      "połączenie wpisane przez użytkownika), kluczem (nazwa paczki, nazwa aplikacji albo adres, opis), pewnością " +
+      "(exact, high, medium, low) i dowodami (repo, plik, linia; dla http także pary wywołanie–endpoint). Przed zmianą " +
+      "API albo paczki repo sprawdź, kogo dotknie; kto woła konkretny endpoint, podaje find_endpoint.",
     args: z.object({ repo: RepoArg }).strict(),
     result: WhoCallsResult,
   },
@@ -135,7 +140,8 @@ export const mcpTools = {
     name: "subgraph_for",
     description:
       "Fragment grafu połączeń wokół repo: repo w odległości do depth krawędzi w obie strony (kogo używa i kto " +
-      "używa jego) i krawędzie między nimi, z dowodami. Węzeł ma tagi i problem, gdy karty repo nie da się policzyć.",
+      "używa jego) i krawędzie między nimi (paczki, HTTP, ręczne), z dowodami. Węzeł ma tagi, nazwy aplikacji Spring " +
+      "Boot, liczbę endpointów i problem, gdy karty repo nie da się policzyć.",
     args: z
       .object({
         repo: RepoArg,
@@ -143,5 +149,20 @@ export const mcpTools = {
       })
       .strict(),
     result: Subgraph,
+  },
+  findEndpoint: {
+    name: "find_endpoint",
+    description:
+      "Endpointy HTTP z kontrolerów Spring we wszystkich repo pasujące do zapytania: ścieżka od / (także konkretna, " +
+      "/api/orders/42 znajdzie /api/orders/{id}) albo fragment ścieżki, nazwy handlera (Klasa.metoda) lub nazwy " +
+      "aplikacji. Każdy z repo, metodą, pełną ścieżką, plikiem i linią oraz callers: repo, których klienci HTTP go " +
+      `wołają, z pewnością i dowodem. Najwyżej ${MAX_FOUND_ENDPOINTS} wyników (truncated: true, gdy było więcej).`,
+    args: z
+      .object({
+        query: z.string().min(1).max(300).describe("ścieżka albo fragment, np. /api/orders/{id}, orders, OrdersController"),
+        method: HttpMethod.optional().describe("tylko endpointy tej metody HTTP (i bez metody)"),
+      })
+      .strict(),
+    result: FindEndpointResult,
   },
 } satisfies Record<string, McpTool>;

@@ -32,10 +32,11 @@ export function repoTags(card: RepoCard | null, repo: TaggedRepo, rules: RepoTag
 
 function cardTags(card: RepoCard, repo: TaggedRepo): [string, string][] {
   const tags: [string, string][] = [];
+  const packages = card.provides.filter((p) => p.kind === "package");
   const mechanism = (ids: MechanismId[]) => card.mechanisms.find((m) => ids.includes(m.id));
   const jvm = card.buildFiles.find((f) => f.tool === "maven" || f.tool === "gradle");
   if (jvm) tags.push(["java", `plik buildu ${jvm.path}`]);
-  const typescript = card.consumes.find((c) => c.ecosystem === "npm" && c.name === "typescript");
+  const typescript = card.consumes.find((c) => c.kind === "package" && c.ecosystem === "npm" && c.name === "typescript");
   if (typescript) tags.push(["typescript", `zależność typescript w ${where(typescript.evidence)}`]);
   const frontend = mechanism(FRONTEND);
   if (frontend) tags.push(["frontend", `${frontend.id} w ${where(frontend.evidence[0])}`]);
@@ -43,15 +44,15 @@ function cardTags(card: RepoCard, repo: TaggedRepo): [string, string][] {
   if (backend) tags.push(["backend", `${backend.id} w ${where(backend.evidence[0])}`]);
   const bff = bffName(card, repo);
   if (bff) tags.push(["bff", `„bff” w nazwie ${bff}`]);
-  if (card.provides.length > 0 && !frontend && !backend && !mechanism(DEPLOYMENT))
-    tags.push(["library", `udostępnia ${card.provides[0]?.name} i nie ma frameworka aplikacji ani plików wdrożenia`]);
+  if (packages.length > 0 && !frontend && !backend && !mechanism(DEPLOYMENT))
+    tags.push(["library", `udostępnia ${packages[0]?.name} i nie ma frameworka aplikacji ani plików wdrożenia`]);
   const monorepo = monorepoReason(card);
   if (monorepo) tags.push(["monorepo", monorepo]);
   return tags;
 }
 
 function bffName(card: RepoCard, repo: TaggedRepo): string | undefined {
-  const names = [repo.id, repo.remote ?? "", ...card.provides.map((p) => p.name)];
+  const names = [repo.id, repo.remote ?? "", ...card.provides.flatMap((p) => (p.kind === "package" || p.kind === "app" ? [p.name] : []))];
   return names.find((name) => BFF_WORD.test(name));
 }
 

@@ -25,6 +25,8 @@ export interface RunOptions {
   maxBytes?: number;
   /** Wejście dla komend czytających z stdin (`cat-file --batch-check`). */
   stdin?: string;
+  /** Kody wyjścia poza 0, które są wynikiem, a nie błędem (`git grep`: 1, gdy nic nie pasuje). */
+  okExitCodes?: readonly number[];
 }
 
 /** Program zakończył się kodem innym niż 0; `exitCode` dla wołającego, dla którego jakiś kod nie jest porażką. */
@@ -77,7 +79,8 @@ export function runProgram(command: string, args: readonly string[], opts: RunOp
       finish(() => reject(new Error(message)));
     });
     child.on("close", (code, signal) => {
-      if (code === 0) return finish(() => resolve({ stdout: Buffer.concat(out), truncated: false }));
+      if (code === 0 || (code !== null && opts.okExitCodes?.includes(code)))
+        return finish(() => resolve({ stdout: Buffer.concat(out), truncated: false }));
       const reason = signal ? `przerwany sygnałem ${signal}` : `zakończył się kodem ${code}`;
       const message = stderr.toString("utf8").trim() || `${opts.label} ${reason}`;
       finish(() => reject(code === null ? new Error(message) : new ExitCodeError(message, code)));

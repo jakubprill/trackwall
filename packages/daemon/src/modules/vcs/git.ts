@@ -39,7 +39,7 @@ const REPO_SELECTING_ENV = [
   "GIT_PREFIX",
 ];
 
-type GitOptions = Pick<RunOptions, "maxBytes" | "stdin"> & {
+type GitOptions = Pick<RunOptions, "maxBytes" | "stdin" | "okExitCodes"> & {
   /** Limit dłuższy niż `TIMEOUT_MS` dla komend, które pobierają dane albo zmieniają katalog roboczy. */
   timeoutMs?: number;
   /**
@@ -56,10 +56,11 @@ export type GitNetwork = { sshCommand: string | undefined };
 
 export async function git(repoDir: string, args: readonly string[], opts: GitOptions = {}): Promise<RunOutput> {
   const ceiling = await ceilingFor(repoDir);
-  const { maxBytes, stdin } = opts;
+  const { maxBytes, stdin, okExitCodes } = opts;
   return runProgram("git", [...NO_REPO_COMMANDS, ...PLATFORM_CONFIG, "-C", repoDir, ...args], {
     maxBytes,
     stdin,
+    okExitCodes,
     label: `git ${args[0]}`,
     // Odczyt stanu nie może zakładać `index.lock`: daemon pyta cyklicznie, a użytkownik w tym czasie commituje.
     env: {
