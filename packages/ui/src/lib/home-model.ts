@@ -12,7 +12,7 @@ import type { CallErrorCode } from "./api.ts";
 import { changesLabel } from "./format.ts";
 import { layoutGraph } from "./graph-layout.ts";
 import type { StatusTone } from "./repo-status.ts";
-import { IDLE_LABEL, STATE_LABELS, sessionStateLabel } from "./session-state.ts";
+import { IDLE_LABEL, isIdle, STATE_LABELS, sessionStateLabel } from "./session-state.ts";
 
 /**
  * Migawka pulpitu (ADR-33, §5.5) z odpowiedzi daemona, którymi żyją też inne widoki: lista repo, sesje, graf
@@ -110,7 +110,7 @@ export function homeSessionState(session: Session): HomeSessionState {
   if (session.needsAttention) return "attention";
   const { tone } = sessionStateLabel(session);
   if (session.run.kind === "exited") return tone === "error" ? "error" : "done";
-  if (session.state?.state === "Input") return "idle";
+  if (isIdle(session)) return "idle";
   return session.state?.state === "Error" ? "error" : "working";
 }
 

@@ -19,11 +19,21 @@ export interface SessionPty {
   resize(cols: number, rows: number): void;
 }
 
-/** One session terminal window attached to the session's screen. */
+/** One session terminal window (a viewer in the UI): keyboard input, size, focus and leaving. */
 export interface SessionWindow {
+  input(data: string): void;
+  resize(cols: number, rows: number): void;
   /** The window came in front of the user (focused and visible) or left (ADR-47). */
   focus(focused: boolean): void;
   detach(): void;
+}
+
+/**
+ * Input the user typed, not an answer xterm.js sends by itself to a terminal query (colours, cursor position), which
+ * starts with ESC and also comes from a window in the background. Esc alone is a key; arrows do not count.
+ */
+function typedByUser(data: string): boolean {
+  return data === "\u001b" || !data.startsWith("\u001b");
 }
 
 export interface LiveSessionOptions {
@@ -79,12 +89,14 @@ export class LiveSession {
   input(data: string): void {
     if (this.#finished || !this.#terminal) return;
     this.#terminal.write(data);
-    this.#attention.typed();
     const key = sessionKey(data);
-    if (!key) return;
-    // Klawisz liczy się ze stanu po hookach, które już przyszły, a nie po tych z ostatniego cyklu.
-    this.#readHooks();
-    this.#report(this.#state.key(key));
+    if (key) {
+      // Klawisz liczy się ze stanu po hookach, które już przyszły, a nie po tych z ostatniego cyklu.
+      this.#readHooks();
+      this.#report(this.#state.key(key));
+    }
+    // After the key's own state change, so that the `Input` an Esc causes counts as seen.
+    if (typedByUser(data)) this.#attention.typed();
   }
 
   /** Rozmiar ustala ostatnie okno, które go zgłosiło; TUI dostaje go razem z PTY. */
@@ -97,12 +109,14 @@ export class LiveSession {
   /** `onClosed` dostaje widz, którego sesja znika (`dismiss`), żeby jego okno nie czekało na wyjście, które nie przyjdzie. */
   attach(viewer: ScreenViewer, onSnapshot: (snapshot: string) => void, onClosed: () => void): SessionWindow {
     const detach = this.#screen.attach(viewer, onSnapshot);
+    const attention = this.#attention.window();
     this.#closers.add(onClosed);
-    const focusKey = {};
     return {
-      focus: (focused) => this.#attention.focus(focusKey, focused),
+      input: (data) => this.input(data),
+      resize: (cols, rows) => this.resize(cols, rows),
+      focus: (focused) => attention.focus(focused),
       detach: () => {
-        this.#attention.focus(focusKey, false);
+        attention.close();
         this.#closers.delete(onClosed);
         detach();
       },
@@ -136,7 +150,7 @@ export class LiveSession {
       run,
       state: this.#last,
       windowTitle: this.#state.windowTitle ?? null,
-      needsAttention: run.kind === "running" && this.#attention.waiting,
+      needsAttention: run.kind === "running" && this.#attention.waiting(this.#last?.state),
       task: this.task,
     };
   }
@@ -156,8 +170,8 @@ export class LiveSession {
   #report(changes: readonly (TaskStateChange | undefined)[]): void {
     for (const change of changes) {
       if (!change) continue;
+      this.#attention.changed(this.#last?.state, change.state);
       this.#last = change;
-      this.#attention.state(change.state);
     }
   }
 }

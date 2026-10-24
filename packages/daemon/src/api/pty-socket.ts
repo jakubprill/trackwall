@@ -49,12 +49,17 @@ function serve(ws: WebSocket, session: string, facade: Facade): void {
   }
   ws.on("message", (data: RawData, isBinary: boolean) => {
     if (isBinary) return;
-    const message = PtyClientMessage.safeParse(parseJson(data));
-    if (!message.success) return;
-    const m = message.data;
-    if (m.type === "input") attachment.input(m.data);
-    else if (m.type === "resize") attachment.resize(m.cols, m.rows);
-    else attachment.focus(m.focused);
+    const parsed = PtyClientMessage.safeParse(parseJson(data));
+    if (!parsed.success) return;
+    const message = parsed.data;
+    switch (message.type) {
+      case "input":
+        return attachment.input(message.data);
+      case "resize":
+        return attachment.resize(message.cols, message.rows);
+      case "focus":
+        return attachment.focus(message.focused);
+    }
   });
   ws.on("close", () => attachment.detach());
   ws.on("error", () => attachment.detach());

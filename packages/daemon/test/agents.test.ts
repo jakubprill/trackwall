@@ -59,7 +59,8 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
     window.attachment.input("\u001b");
     const stopped = await waitFor(agents, started.id, (s) => s.state?.source === "keyboard", "stan z klawisza");
     expect(stopped.state).toMatchObject({ state: "Input", confidence: "medium", reason: "key escape" });
-    expect(stopped.needsAttention).toBe(true);
+    // The Esc the user typed means they see the session, so it is idle, not waiting for you (ADR-47).
+    expect(stopped.needsAttention).toBe(false);
     window.attachment.detach();
     await agents.stop(started.id);
   }, 60_000);

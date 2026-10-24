@@ -6,37 +6,49 @@ import type { TaskState } from "@trackwall/protocol";
  * a question) waits only until the user has seen it: a session terminal window in front of the user (focused and
  * visible) or a key typed into the session marks it seen. A window that is in front of the user when the state
  * changes sees the new state at once. Only a change to another state makes the session unseen again, so a stronger
- * source confirming `Input` (a hook after a key) does not bring back a state the user has already seen.
+ * source confirming `Input` (a hook after a key) does not bring back a state the user has already seen. The state
+ * itself lives with the session; this class only remembers whether the user has seen it.
  */
 
 const WAITS_FOR_ANSWER: ReadonlySet<TaskState> = new Set(["Approval", "Plan"]);
 
+/** One session terminal window as attention sees it. */
+export interface AttentionWindow {
+  /** The window came in front of the user (focused and visible) or left. */
+  focus(focused: boolean): void;
+  /** The window is gone; it no longer counts as in front of the user. */
+  close(): void;
+}
+
 export class SessionAttention {
-  /** Windows of the session that are in front of the user; each attached window has its own key. */
-  readonly #focused = new Set<object>();
-  #state: TaskState | undefined;
+  readonly #focused = new Set<AttentionWindow>();
   #seen = false;
 
-  get waiting(): boolean {
-    if (this.#state === undefined) return false;
-    return WAITS_FOR_ANSWER.has(this.#state) || (this.#state === "Input" && !this.#seen);
+  waiting(state: TaskState | undefined): boolean {
+    if (state === undefined) return false;
+    return WAITS_FOR_ANSWER.has(state) || (state === "Input" && !this.#seen);
   }
 
-  /** The session's state, after every change the detectors report. */
-  state(state: TaskState): void {
-    if (state === this.#state) return;
-    this.#state = state;
-    this.#seen = this.#focused.size > 0;
+  /** The session's state changed from `previous` to `next`; reported after every change of the detectors. */
+  changed(previous: TaskState | undefined, next: TaskState): void {
+    if (previous !== next) this.#seen = this.#focused.size > 0;
   }
 
-  /** A session terminal window came in front of the user or left. */
-  focus(window: object, focused: boolean): void {
-    if (!focused) {
-      this.#focused.delete(window);
-      return;
-    }
-    this.#focused.add(window);
-    this.#seen = true;
+  window(): AttentionWindow {
+    const window: AttentionWindow = {
+      focus: (focused) => {
+        if (!focused) {
+          this.#focused.delete(window);
+          return;
+        }
+        this.#focused.add(window);
+        this.#seen = true;
+      },
+      close: () => {
+        this.#focused.delete(window);
+      },
+    };
+    return window;
   }
 
   /** The user typed into the session: nobody types into a session without looking at it. */

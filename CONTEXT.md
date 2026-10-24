@@ -243,8 +243,11 @@ _Unikaj_: sesja POSIX (to pojęcie z grupy procesów), okno (to okno terminala w
 A running session in `Approval` or `Plan`, or in `Input` the user has not seen yet (ADR-47): the agent will not move on without a human, and the human does not know yet. The daemon computes it; the UI (the counter on the activity bar, "Next waiting") and the tray (the "Waiting: <repo>" menu, the flashing window) only read the field.
 
 **Seen** (`SessionAttention.focus`, `typed`; the `focus` frame of `PtyClientMessage`):
-The user has seen the session's current `Input`: a session terminal window was focused and visible, or the user typed into the session, after the state began. Seen `Input` is shown as **idle**.
+The user has seen the session's current `Input`: a session terminal window was focused and visible, or the user typed into the session, after the state began.
 _Avoid_: read, acknowledged
+
+**Idle** (`isIdle`, `IDLE_LABEL`, dashboard state `idle`):
+A running session in `Input` the user has already seen (ADR-47): the agent waits for the next prompt, but no longer waits for you. Shown as "idle" in Sessions and in calm grey on the dashboard.
 
 **Okno terminala** (`SessionTerminal`; po angielsku *session terminal*):
 xterm.js w widoku Sessions podłączony WebSocketem `/ws/pty/<sesja>` do PTY sesji. Kilka okien może pokazywać tę samą sesję; rozmiar PTY ustala ostatnie, które go zgłosiło.

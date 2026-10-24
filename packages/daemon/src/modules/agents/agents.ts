@@ -80,12 +80,6 @@ export interface AgentsDeps {
   log: (msg: string) => void;
 }
 
-/** Widz terminala sesji (okno w UI): wyjście, obraz ekranu na start i wejście z klawiatury. */
-export interface SessionAttachment extends SessionWindow {
-  input(data: string): void;
-  resize(cols: number, rows: number): void;
-}
-
 export class Agents {
   readonly #deps: AgentsDeps;
   readonly #sessions = new Map<string, LiveSession>();
@@ -206,10 +200,8 @@ export class Agents {
   }
 
   /** Okno terminala sesji: najpierw obraz ekranu, potem wyjście na bieżąco, a `onClosed`, gdy sesja zniknie. */
-  attach(id: string, viewer: ScreenViewer, onSnapshot: (snapshot: string) => void, onClosed: () => void): SessionAttachment {
-    const session = this.#get(id);
-    const sessionWindow = session.attach(viewer, onSnapshot, onClosed);
-    return { ...sessionWindow, input: (data) => session.input(data), resize: (cols, rows) => session.resize(cols, rows) };
+  attach(id: string, viewer: ScreenViewer, onSnapshot: (snapshot: string) => void, onClosed: () => void): SessionWindow {
+    return this.#get(id).attach(viewer, onSnapshot, onClosed);
   }
 
   /** Start daemona: pliki sesji z poprzedniego działania (sesje nie przeżywają daemona). */

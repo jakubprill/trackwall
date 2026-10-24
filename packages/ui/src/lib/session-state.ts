@@ -20,6 +20,14 @@ export const STATE_LABELS = {
 /** `Input` the user has already seen (ADR-47): the agent is idle and no longer waits for you. */
 export const IDLE_LABEL = "idle";
 
+/**
+ * The agent is idle: the session runs in `Input` the user has already seen, so it no longer waits for you (ADR-47).
+ * Whether the user has seen it is decided by the daemon in `needsAttention`.
+ */
+export function isIdle(session: Session): boolean {
+  return session.run.kind === "running" && session.state?.state === "Input" && !session.needsAttention;
+}
+
 /** Proces sesji jeszcze działa (także w trakcie zatrzymywania): pisze w swoim katalogu i trzyma jego pliki. */
 export function isLive(session: Session): boolean {
   return session.run.kind !== "exited";
@@ -35,12 +43,10 @@ export function sessionStateLabel(session: Session): { tone?: StatusTone; label:
       : { label: "finished" };
   }
   if (!state) return { label: "state unknown" };
-  return runningStateLabel(state, session.needsAttention);
+  return runningStateLabel(state, session.needsAttention, isIdle(session));
 }
 
-function runningStateLabel(state: TaskStateChange, needsAttention: boolean): { tone?: StatusTone; label: string } {
-  // `Input` that does not wait for you is one the user has already seen.
-  const idle = state.state === "Input" && !needsAttention;
+function runningStateLabel(state: TaskStateChange, needsAttention: boolean, idle: boolean): { tone?: StatusTone; label: string } {
   const label = idle ? IDLE_LABEL : STATE_LABELS[state.state];
   const likely = state.confidence === "medium" || state.confidence === "low" ? `probably ${label}` : label;
   if (needsAttention) return { tone: "warning", label: likely };

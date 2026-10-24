@@ -10,6 +10,7 @@ import { IS_MAC } from "@/lib/platform";
 import { copiesSelection } from "@/lib/terminal-copy";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { terminalTheme } from "@/lib/terminal-theme";
+import { FocusReporter, windowInFront } from "@/lib/window-focus";
 
 const RECONNECT_MS = 1000;
 
@@ -42,8 +43,12 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
       if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
     };
     const sendSize = () => send({ type: "resize", cols: terminal.cols, rows: terminal.rows });
-    // The daemon counts a session the user has seen (ADR-47): only a window that is focused and visible marks it.
-    const sendFocus = () => send({ type: "focus", focused: document.hasFocus() && document.visibilityState === "visible" });
+    const focus = new FocusReporter(
+      (focused) => send({ type: "focus", focused }),
+      () => windowInFront(document),
+      { set: (run, ms) => setTimeout(run, ms), clear: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>) },
+    );
+    const sendFocus = () => focus.update();
 
     const connect = () => {
       const { url, protocols } = daemonSocket(conn, ptySocket(session), window.location);
@@ -53,7 +58,7 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
       ws.onopen = () => {
         setNotice(undefined);
         sendSize();
-        sendFocus();
+        focus.connected();
       };
       ws.onmessage = (event: MessageEvent<ArrayBuffer | string>) => {
         // Ramka tekstowa to obraz ekranu na start połączenia: zastępuje to, co okno pokazywało wcześniej.
@@ -106,6 +111,7 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
       window.removeEventListener("focus", sendFocus);
       window.removeEventListener("blur", sendFocus);
       document.removeEventListener("visibilitychange", sendFocus);
+      focus.dispose();
       input.dispose();
       socket?.close();
       terminal.dispose();

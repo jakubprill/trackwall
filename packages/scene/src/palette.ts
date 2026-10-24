@@ -37,10 +37,14 @@ export function repoStateColor(state: HomeRepoState, palette: ScenePalette): str
   return palette.idle;
 }
 
+const SESSION_STATE_COLORS: Record<HomeSessionState, keyof ScenePalette> = {
+  working: "primary",
+  attention: "warning",
+  idle: "idle",
+  error: "destructive",
+  done: "muted",
+};
+
 export function sessionStateColor(state: HomeSessionState, palette: ScenePalette): string {
-  if (state === "attention") return palette.warning;
-  if (state === "error") return palette.destructive;
-  if (state === "working") return palette.primary;
-  if (state === "idle") return palette.idle;
-  return palette.muted;
+  return palette[SESSION_STATE_COLORS[state]];
 }
