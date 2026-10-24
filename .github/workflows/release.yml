@@ -15,7 +15,7 @@ permissions: {}
 
 # The same versions as in mise.toml; apps/desktop/test/toolchain.test.ts guards this.
 env:
-  BUN_VERSION: "1.4.2"
+  BUN_VERSION: "1.4.4"
   NODE_VERSION: "22"
   RUST_VERSION: "1.90"
 

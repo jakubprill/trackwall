@@ -11,7 +11,6 @@ import type { TerminalPlatform, TerminalProcess, TerminalSpec } from "./terminal
  */
 const DRAIN_MS = 500;
 
-const DBG = (...a: unknown[]) => process.stderr.write(`[pty-dbg ${performance.now().toFixed(0)}] ${a.join(" ")}\n`);
 function spawn(spec: TerminalSpec): TerminalProcess {
   let ended: () => void = () => {};
   const streamEnded = new Promise<void>((resolve) => {
@@ -20,33 +19,19 @@ function spawn(spec: TerminalSpec): TerminalProcess {
   const proc = Bun.spawn([...spec.command], {
     cwd: spec.cwd,
     env: spec.env,
-    terminal: {
-      cols: spec.cols,
-      rows: spec.rows,
-      data: (_terminal, bytes) => {
-        if (terminal?.closed) DBG("data after close", proc.pid, bytes.length);
-        spec.onData(bytes);
-      },
-      exit: () => {
-        DBG("terminal exit cb", proc.pid, "closed", terminal?.closed);
-        ended();
-      },
-    },
+    terminal: { cols: spec.cols, rows: spec.rows, data: (_terminal, bytes) => spec.onData(bytes), exit: () => ended() },
   });
   const terminal = proc.terminal;
   if (!terminal) {
     proc.kill("SIGKILL");
     throw new Error("Bun.spawn did not provide a PTY; this Bun version does not support `terminal` on this system");
   }
-  DBG("spawn", proc.pid, spec.command.join(" ").slice(-60));
   const close = () => {
-    DBG("close", proc.pid, "closed", terminal.closed, "exited", proc.exitCode, proc.signalCode);
     if (!terminal.closed) terminal.close();
   };
   // Terminal zamyka się dopiero po końcu lidera i jego wyjścia: inaczej każda sesja zostawiałaby otwarty PTY
   // (deskryptor na POSIX, pseudokonsolę z procesem conhost na Windowsie) do wyjścia daemona.
   const exited = proc.exited.then(async (code) => {
-    DBG("proc exited", proc.pid, code);
     await Promise.race([streamEnded, Bun.sleep(DRAIN_MS)]);
     close();
     const signal = proc.signalCode;
@@ -63,10 +48,7 @@ function spawn(spec: TerminalSpec): TerminalProcess {
     },
     closeInput: close,
     hasExited: () => proc.exitCode !== null || proc.signalCode !== null,
-    kill: () => {
-      DBG("kill", proc.pid);
-      proc.kill("SIGKILL");
-    },
+    kill: () => proc.kill("SIGKILL"),
   };
 }
 

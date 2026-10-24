@@ -66,6 +66,20 @@ export function nextWaiting(sessions: readonly Session[], current: string | unde
   return after ?? waiting[0];
 }
 
+/**
+ * Alt+J (ADR-48): the session to open, after the selected one, and whether the shortcut takes the key. In Sessions it
+ * always does, so that the key never reaches a terminal; elsewhere only when a session is waiting, so that ⌥J still
+ * types in a text field.
+ */
+export function nextWaitingShortcut(
+  sessions: readonly Session[],
+  selected: string | undefined,
+  inSessionsView: boolean,
+): { open: Session | undefined; taken: boolean } {
+  const open = nextWaiting(sessions, selected);
+  return { open, taken: open !== undefined || inSessionsView };
+}
+
 export function waitingCount(sessions: readonly Session[]): number {
   return sessions.filter((s) => s.needsAttention).length;
 }

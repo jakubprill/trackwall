@@ -11,6 +11,11 @@ export function windowInFront(doc: Pick<Document, "hasFocus" | "visibilityState"
   return doc.hasFocus() && doc.visibilityState === "visible";
 }
 
+/** A session terminal is in front when the window is and, in the session grid (ADR-48), its tile is the selected one. */
+export function terminalInFront(selected: boolean, doc: Pick<Document, "hasFocus" | "visibilityState">): boolean {
+  return selected && windowInFront(doc);
+}
+
 export interface FocusTimers<Timer> {
   set(run: () => void, ms: number): Timer;
   clear(timer: Timer): void;
