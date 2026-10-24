@@ -87,6 +87,7 @@ The repo is meant to be published as open source (header of `docs/architecture.m
   - the test `apps/desktop/test/toolchain.test.ts`: the same tool versions in `mise.toml` and the workflows;
   - the test `apps/desktop/test/layout.test.ts`: the contents of the `src/` root of the daemon and the UI, and the view folders;
   - the test `apps/desktop/test/biome-config.test.ts`: the ban on `bun` imports and the global `Bun` applies everywhere in the daemon outside `platform/` (Biome does not merge override options, so the ban is repeated in several places);
+  - Biome's `noRestrictedGlobals` and the test `apps/desktop/test/ui-dialogs.test.ts`: no `alert` or `confirm` in the UI, which the Tauri dialog plugin replaces (ADR-51);
   - the test `packages/ui/test/design-tokens.test.ts`: UI components without raw colours or arbitrary appearance values, only tokens from `index.css` (ADR-16);
   - daemon compatibility with Node (ADR-1): `erasableSyntaxOnly` in the `tsconfig.json` of the daemon and `protocol`, `useImportExtensions` in Biome for their `src` (also in `packages/scene/src`), the ban on Bun APIs in the daemon outside `platform/`, and daemon process tests under Bun and under Node.
 

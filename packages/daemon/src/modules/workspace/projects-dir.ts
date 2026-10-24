@@ -48,7 +48,7 @@ export async function statFullPath(input: string, notFull: string): Promise<{ pa
  * Repo w folderze z projektami, posortowane po nazwie katalogu; identyfikator z nazwy, przy kolizji z przyrostkiem
  * w tej samej kolejności (nowy katalog, który sortuje się wcześniej, może więc przejąć identyfikator, ADR-18).
  */
-export async function findRepos(projectsDir: string, unreadable: Unreadable = projectsDirUnavailable): Promise<RepoEntry[]> {
+export async function findRepos(projectsDir: string, unreadable: Unreadable): Promise<RepoEntry[]> {
   const entries = (await listDir(projectsDir, unreadable)).filter((entry) => !entry.name.startsWith("."));
   const isRepo = await Promise.all(entries.map((entry) => isRepoDir(projectsDir, entry)));
   const taken = new Set<string>();
@@ -74,20 +74,20 @@ export function dirKey(name: string): string {
 
 /** Czy w folderze z projektami jest już coś (także plik albo ukryty katalog) o tej nazwie; klon nie może tam trafić. */
 export async function takenNames(projectsDir: string): Promise<(name: string) => boolean> {
-  const taken = new Set((await listDir(projectsDir)).map((entry) => dirKey(entry.name)));
+  const taken = new Set((await listDir(projectsDir, projectsDirUnavailable)).map((entry) => dirKey(entry.name)));
   return (name) => taken.has(dirKey(name));
 }
 
 /** The error for a folder that cannot be read, with the path and the system error code. */
-type Unreadable = (dir: string, code: string) => DomainError;
+export type Unreadable = (dir: string, code: string) => DomainError;
 
-const projectsDirUnavailable: Unreadable = (dir, code) =>
+export const projectsDirUnavailable: Unreadable = (dir, code) =>
   new DomainError(
     "projects_dir_unavailable",
     `cannot open the projects folder ${dir} (${code}); check that it exists or change it in Settings`,
   );
 
-async function listDir(dir: string, unreadable: Unreadable = projectsDirUnavailable): Promise<Dirent[]> {
+async function listDir(dir: string, unreadable: Unreadable): Promise<Dirent[]> {
   try {
     return await readdir(dir, { withFileTypes: true });
   } catch (err) {

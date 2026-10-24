@@ -29,7 +29,7 @@ import { mapLimit } from "../../infra/map-limit.ts";
 import { CloneJobs } from "./clone-jobs.ts";
 import { type CodeSearchQuery, type CodeSearchVcs, searchCode } from "./code-search.ts";
 import { describeDroppedFolder } from "./dropped-folder.ts";
-import { dirKey, findRepos, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
+import { dirKey, findRepos, projectsDirUnavailable, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
 
@@ -115,9 +115,7 @@ export class Workspace {
    */
   async droppedFolder(path: string): Promise<DroppedFolder> {
     const projectsDir = configOrProblem(() => this.deps.file.projectsDir(), null).value;
-    // Read only when needed: a dropped file or the projects folder itself does not wait for a scan of a slow disk.
-    const listed = async () => (projectsDir === null ? [] : await findRepos(projectsDir).catch(unlessProjectsDirUnavailable));
-    return describeDroppedFolder(path, projectsDir, listed);
+    return describeDroppedFolder(path, projectsDir);
   }
 
   repoHosts(): RepoHost[] {
@@ -275,7 +273,7 @@ export class Workspace {
   /** Bez ustawionego folderu z projektami nie ma repo. */
   private async entries(): Promise<{ projectsDir: string | null; entries: RepoEntry[] }> {
     const projectsDir = this.deps.file.projectsDir();
-    return { projectsDir, entries: projectsDir === null ? [] : await findRepos(projectsDir) };
+    return { projectsDir, entries: projectsDir === null ? [] : await findRepos(projectsDir, projectsDirUnavailable) };
   }
 
   private async entry(id: string): Promise<RepoEntry> {
@@ -325,12 +323,6 @@ export class Workspace {
       throw new DomainError("repo_unavailable", `${entry.id}: ${messageOf(err)}`);
     }
   }
-}
-
-/** A projects folder that is gone has no listed repos; any other error goes on. */
-function unlessProjectsDirUnavailable(err: unknown): RepoEntry[] {
-  if (err instanceof DomainError && err.code === "projects_dir_unavailable") return [];
-  throw err;
 }
 
 function unknownRepo(id: string): DomainError {

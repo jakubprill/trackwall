@@ -37,3 +37,26 @@ export function cssPoint(point: { x: number; y: number }, windows: boolean, devi
 export function dropTargetAt(doc: Pick<Document, "elementFromPoint">, point: { x: number; y: number }): Element | undefined {
   return doc.elementFromPoint(point.x, point.y)?.closest(`[${FILE_DROP_TARGET}]`) ?? undefined;
 }
+
+/** What the shell reports while dragging over the window (Tauri's `DragDropEvent`, without the point). */
+export type DragPayload =
+  | { type: "enter"; paths: readonly string[] }
+  | { type: "over" }
+  | { type: "drop"; paths: readonly string[] }
+  | { type: "leave" };
+
+/**
+ * One step of a drag over the window: whether it still carries files and what to do now. A drag of text, a link or an
+ * image carries no paths, so it shows neither the hint nor a highlight and its drop does nothing.
+ */
+export function dragStep(
+  carriesFiles: boolean,
+  payload: DragPayload,
+): { carriesFiles: boolean; action: { kind: "stop" } | { kind: "hover" } | { kind: "drop"; paths: DroppedPaths } } {
+  const files = payload.type === "enter" ? payload.paths.length > 0 : carriesFiles;
+  if (payload.type === "leave" || !files) return { carriesFiles: false, action: { kind: "stop" } };
+  if (payload.type !== "drop") return { carriesFiles: true, action: { kind: "hover" } };
+  const [first, ...rest] = payload.paths;
+  if (first === undefined) return { carriesFiles: false, action: { kind: "stop" } };
+  return { carriesFiles: false, action: { kind: "drop", paths: [first, ...rest] } };
+}

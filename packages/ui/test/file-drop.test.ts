@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { cssPoint, DROP_HOVER, DROP_HOVER_RING, dropTargetAt, FILE_DROP_TARGET } from "../src/lib/file-drop.ts";
+import { cssPoint, DROP_HOVER, DROP_HOVER_RING, dragStep, dropTargetAt, FILE_DROP_TARGET } from "../src/lib/file-drop.ts";
 
 describe("file drop", () => {
   test("the drop point is divided by the device pixel ratio only on Windows, where WebView2 gives physical pixels", () => {
@@ -22,5 +22,26 @@ describe("file drop", () => {
 
   test("the highlight classes name the attribute set on the hovered target", () => {
     for (const cls of DROP_HOVER_RING.split(" ")) expect(cls.startsWith(`data-[${DROP_HOVER.slice("data-".length)}]:`)).toBe(true);
+  });
+
+  test("a drag with files hovers and then delivers its paths on drop", () => {
+    const enter = dragStep(false, { type: "enter", paths: ["/a.txt", "/b.txt"] });
+    expect(enter).toEqual({ carriesFiles: true, action: { kind: "hover" } });
+    expect(dragStep(enter.carriesFiles, { type: "over" })).toEqual({ carriesFiles: true, action: { kind: "hover" } });
+    expect(dragStep(true, { type: "drop", paths: ["/a.txt", "/b.txt"] })).toEqual({
+      carriesFiles: false,
+      action: { kind: "drop", paths: ["/a.txt", "/b.txt"] },
+    });
+  });
+
+  test("a drag without files (text, a link, an image) never hovers and its drop does nothing", () => {
+    const enter = dragStep(false, { type: "enter", paths: [] });
+    expect(enter).toEqual({ carriesFiles: false, action: { kind: "stop" } });
+    expect(dragStep(enter.carriesFiles, { type: "over" }).action).toEqual({ kind: "stop" });
+    expect(dragStep(enter.carriesFiles, { type: "drop", paths: [] }).action).toEqual({ kind: "stop" });
+  });
+
+  test("leaving the window stops the drag", () => {
+    expect(dragStep(true, { type: "leave" })).toEqual({ carriesFiles: false, action: { kind: "stop" } });
   });
 });

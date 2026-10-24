@@ -41,7 +41,7 @@ export function dropOutcome(folder: DroppedFolder): DropOutcome {
     case "hidden-repo":
       return {
         kind: "prompt",
-        message: `${folder.path} is a git repo, but its name starts with a dot, and the Repos view skips such folders. Rename it to list it.`,
+        message: `${folder.path} is a git repo, but its name starts with a dot, and Trackwall skips such folders; rename it and drop it again.`,
       };
     case "no-repos":
       return { kind: "prompt", message: `${folder.path} is not a git repo and has no git repos directly inside it.` };

@@ -119,7 +119,7 @@ export function App() {
             onDismiss={() => setDropped(undefined)}
           />
         )}
-        {dragging && (
+        {dragging && conn && (
           // Over the page, not in its flow: a bar that pushes the page down would move the terminals under the pointer.
           <p className="bg-card text-muted-foreground pointer-events-none fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md border px-4 py-2 text-sm shadow-lg">
             {DROP_HINT}
