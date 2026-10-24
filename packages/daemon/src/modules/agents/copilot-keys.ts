@@ -38,8 +38,8 @@ export function sessionKey(data: string): SessionKey | undefined {
 export function stateFromKey(key: SessionKey, current: TaskState | undefined): KeyboardSignal | undefined {
   if (!current) return undefined;
   const reason = `key ${key}`;
-  // Enter może też wybrać „No, and tell Copilot…”, po którym Copilot czeka na tekst; to krótka chwila,
-  // w której i tak piszesz, więc pewność tylko `medium`.
+  // Enter albo cyfra może też wybrać „No, and tell Copilot…”, po którym Copilot czeka na tekst, a cyfra
+  // spoza listy opcji nie robi nic; to rzadkie chwile, więc pewność tylko `medium`.
   if (ANSWERS.has(key))
     return WAITING_FOR_ANSWER.has(current) ? { state: "Working", source: "keyboard", confidence: "medium", reason } : undefined;
   if (STOPPED_BY_ESCAPE.has(current)) return { state: "Input", source: "keyboard", confidence: "medium", reason };
