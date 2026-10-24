@@ -96,7 +96,7 @@ export class LiveSession {
     const run = this.#run();
     if (run?.kind !== "exited") return true;
     // Zatrzymanie przez użytkownika to zamierzony koniec, nie błąd sesji, choć proces kończy się sygnałem.
-    this.#report([this.#state.exit(run.stoppedByUser ? 0 : (run.exitCode ?? 1))]);
+    this.#report(this.#state.exit(run.stoppedByUser ? 0 : (run.exitCode ?? 1)));
     this.#finished = true;
     this.#hooks.close();
     return false;

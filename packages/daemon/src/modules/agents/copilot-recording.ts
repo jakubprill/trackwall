@@ -1,6 +1,6 @@
 import { TaskStateChange } from "@trackwall/protocol";
 import { z } from "zod";
-import type { Asciicast } from "./asciicast.ts";
+import { type Asciicast, eventTimeMs } from "./asciicast.ts";
 import { CopilotHookRecord } from "./copilot-hook-record.ts";
 import { CopilotSessionState } from "./copilot-session-state.ts";
 import { jsonOf } from "./json.ts";
@@ -38,18 +38,17 @@ export interface ReplayOptions {
 
 /** Zmiany stanu w kolejności, w jakiej pojawiły się na żywo; czas liczony od nagłówka nagrania. */
 export function replayCopilotRecording(cast: Asciicast, o: ReplayOptions): TaskStateChange[] {
-  const startedAt = cast.header.timestamp * 1000;
-  let now = startedAt;
+  let now = eventTimeMs(cast.header, 0);
   const session = new CopilotSessionState({ now: () => now, staleAfterMs: o.staleAfterMs });
   const changes: (TaskStateChange | undefined)[] = [];
   for (const [seconds, code, data] of cast.events) {
-    now = startedAt + seconds * 1000;
+    now = eventTimeMs(cast.header, seconds);
     changes.push(session.tick());
     if (code === "o") changes.push(...session.output(data));
     if (code !== "m") continue;
     const marker = decodeMarker(data);
     if (marker?.kind === "hook") changes.push(...session.hook(marker.record));
-    if (marker?.kind === "exit") changes.push(session.exit(marker.code));
+    if (marker?.kind === "exit") changes.push(...session.exit(marker.code));
   }
   return changes.filter((c) => c !== undefined);
 }
