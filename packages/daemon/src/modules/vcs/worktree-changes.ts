@@ -3,6 +3,7 @@ import { copyFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import type { TaskChanges } from "@trackwall/protocol";
+import { mapLimit } from "../../infra/map-limit.ts";
 import { git, revParse } from "./git.ts";
 import { parseChangedFiles, parseNulTerminated } from "./parse.ts";
 import { commitCount, uncommittedCount } from "./worktree.ts";
@@ -24,6 +25,9 @@ const EMPTY_BLOB = new Map([
 
 const NUL = Buffer.from([0]);
 const SLASH = "/".charCodeAt(0);
+
+/** Osadzone repo to po jednym `git rev-parse`; procesy na Windowsie są drogie w starcie i skanowane przez antywirus. */
+const SUBMODULE_CONCURRENCY = 4;
 
 /** Duże worktree na Windowsie ze skanującym antywirusem potrafią liczyć `git status` kilkanaście sekund. */
 const CHANGES_TIMEOUT_MS = 60_000;
@@ -80,23 +84,24 @@ async function addUntracked(dir: string, index: string, emptyBlob: string): Prom
     indexFile: index,
     timeoutMs: CHANGES_TIMEOUT_MS,
   });
-  const entries = await Promise.all(parseNulTerminated(listed.stdout).map((path) => indexEntry(dir, path, emptyBlob)));
-  const input = Buffer.concat(entries.filter((entry) => entry !== undefined));
+  const paths = parseNulTerminated(listed.stdout);
+  const fileHeader = Buffer.from(`100644 ${emptyBlob}\t`);
+  const files = paths.filter((path) => path.at(-1) !== SLASH).map((path) => Buffer.concat([fileHeader, path, NUL]));
+  const repos = paths.filter((path) => path.at(-1) === SLASH).map((path) => path.subarray(0, -1));
+  const submodules = await mapLimit(repos, SUBMODULE_CONCURRENCY, (repo) => submoduleEntry(dir, repo, emptyBlob.length));
+  const input = Buffer.concat([...files, ...submodules.filter((entry) => entry !== undefined)]);
   if (input.length > 0)
     await git(dir, ["update-index", "-z", "--index-info"], { indexFile: index, stdin: input, timeoutMs: CHANGES_TIMEOUT_MS });
   return listed.truncated;
 }
 
 /**
- * Wpis `--index-info` dla nowej ścieżki. Katalog z własnym repo (`ls-files` podaje go z `/` na końcu) to submoduł
- * z HEAD tamtego repo, jak w `git add`; repo bez commitów albo w innym formacie obiektów `git add` pomija, więc tu też
- * odpada.
+ * Katalog z własnym repo (`ls-files` podaje go z `/` na końcu) to wpis submodułu z HEAD tamtego repo, jak przy
+ * `git add`. Repo bez commitów albo z hashem innej długości niż w repo zadania (inny format obiektów, SHA-1 w SHA-256)
+ * odpada, tak jak pomijało je wcześniej `git add --ignore-errors`: jeden zły wpis odrzuciłby cały `update-index`.
  */
-async function indexEntry(dir: string, path: Buffer, emptyBlob: string): Promise<Buffer | undefined> {
-  if (path.at(-1) !== SLASH) return Buffer.concat([Buffer.from(`100644 ${emptyBlob}\t`), path, NUL]);
-  const repo = path.subarray(0, -1);
+async function submoduleEntry(dir: string, repo: Buffer, oidLength: number): Promise<Buffer | undefined> {
   const head = await revParse(resolve(dir, repo.toString("utf8")), "HEAD");
-  // Repo w innym formacie obiektów (SHA-1 w SHA-256) nie może być submodułem, a jeden zły wpis psułby cały indeks.
-  if (head === undefined || head.length !== emptyBlob.length) return undefined;
+  if (head === undefined || head.length !== oidLength) return undefined;
   return Buffer.concat([Buffer.from(`160000 ${head}\t`), repo, NUL]);
 }
