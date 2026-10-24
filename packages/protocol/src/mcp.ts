@@ -172,7 +172,8 @@ export const mcpTools = {
       "Spring Boot APPLICATION FAILED TO START report and the Gradle FAILURE report. Each error has its source (repo, mise " +
       "task), run (runId), exception (the root cause: the last Caused by or the first exception header; null without one), " +
       "lines (from each stack trace the first frames, the rest replaced by a line '… N frames omitted'; omittedLines counts what is left out), seq and time. " +
-      "The same error repeated in one source (same first line and exception, numbers ignored) is one entry with count and firstTs. " +
+      "The same error repeated in one source (same exception and first frame, or same lines; ids, numbers and thread names ignored, file " +
+      "locations not) is one entry with count and firstTs. An error still being written when you call is returned with the lines it had then. " +
       `Only the latest records are kept (at most ${LOG_BUFFER_RECORDS} per mise task, since Trackwall started). Pass nextSeq as sinceSeq ` +
       "to get only errors that started after the previous call; dropped: true as in tail. To read the log of a mise task from an error on, " +
       "call tail with sinceSeq one less than the error's seq.",

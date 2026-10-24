@@ -117,7 +117,8 @@ const runs: ToolRuns = {
     return facade.logs.tail({ source: { kind: "mise-task", repo, miseTask }, sinceSeq, limit });
   },
   getErrors: async (facade, { repo, ...query }) => {
-    // The repo must exist (`not_found` as in tail): a typo in the id must not look like "no errors".
+    // The repo must exist (`not_found` as in tail): a typo in its id must not look like "no errors". A mise task
+    // without output has no log yet, so an unknown task name gives no errors, as an empty log in tail.
     if (repo !== undefined) await facade.workspace.repo(repo);
     return facade.logs.errors({ repo, ...query });
   },

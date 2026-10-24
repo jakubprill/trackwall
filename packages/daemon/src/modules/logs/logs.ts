@@ -35,7 +35,6 @@ export interface LogsDeps {
 
 interface SourceLog {
   readonly source: LogSource;
-  readonly key: string;
   readonly records: LogRecord[];
   /** Suma długości `msg` rekordów w buforze. */
   chars: number;
@@ -99,11 +98,13 @@ export class Logs {
    * covers all sources at once because `seq` is global; a cursor from another daemon run gives errors as without one.
    */
   errors({ repo, miseTask, minLevel, sinceSeq, limit }: LogErrorsRequest): LogErrors {
-    const sources = [...this.sources.values()].filter(
-      ({ source }) =>
-        (repo === undefined || source.repo === repo) &&
-        (miseTask === undefined || (source.kind === "mise-task" && source.miseTask === miseTask)),
-    );
+    const sources = [...this.sources]
+      .map(([key, log]) => ({ key, ...log }))
+      .filter(
+        ({ source }) =>
+          (repo === undefined || source.repo === repo) &&
+          (miseTask === undefined || (source.kind === "mise-task" && source.miseTask === miseTask)),
+      );
     const fromOtherRun = this.fromOtherRun(sinceSeq);
     const cursor = fromOtherRun ? undefined : sinceSeq;
     const evicted = cursor !== undefined && sources.some((log) => cursor < log.evictedSeq);
@@ -165,7 +166,7 @@ export class Logs {
       const file = new LogFile(path, this.deps.maxFileBytes, (err) =>
         this.deps.log(`rotating ${path}: ${String(err)}; the file grows past the limit until the next successful rotation`),
       );
-      log = { source, key, records: [], chars: 0, evictedSeq: 0, file, writeErrorReported: false, overflowReported: false };
+      log = { source, records: [], chars: 0, evictedSeq: 0, file, writeErrorReported: false, overflowReported: false };
       this.sources.set(key, log);
     }
     return log;
