@@ -16,6 +16,7 @@ import { findCopilot } from "./copilot-command.ts";
 import type { CopilotHookEvent } from "./copilot-hook-record.ts";
 import { type HookCommand, writeCopilotPlugin } from "./copilot-plugin.ts";
 import { LiveSession, type SessionPty } from "./live-session.ts";
+import { writeSessionInstructions } from "./session-instructions.ts";
 import { SessionTokens } from "./session-tokens.ts";
 import { sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
 import { TaskFile } from "./task-file.ts";
@@ -42,6 +43,8 @@ const TICK_MS = 200;
 const MCP_CONFIG_FILE = "mcp-config.json";
 /** Token sesji w katalogu sesji, który most stdio sesji czyta i wysyła do serwera MCP (ADR-39). */
 const SESSION_TOKEN_FILENAME = "session-token";
+/** Katalog instrukcji sesji w katalogu sesji (ADR-46). */
+const INSTRUCTIONS_DIR = "instructions";
 const TASKS_FILE = "tasks.json";
 const WORKTREES_DIR = "worktrees";
 
@@ -250,8 +253,10 @@ export class Agents {
     const dir = this.#sessionDir(id);
     const token = this.#tokens.issue(id);
     let session: LiveSession;
+    let sessionEnv: NodeJS.ProcessEnv;
     try {
       session = this.#prepare({ id, repo, task, dir, token, promptOnStart });
+      sessionEnv = writeSessionInstructions(join(dir, INSTRUCTIONS_DIR), { repo, task }, env);
     } catch (err) {
       this.#tokens.revoke(id);
       rmSync(dir, { recursive: true, force: true });
@@ -270,7 +275,7 @@ export class Agents {
           ...args,
         ],
         cwd,
-        env,
+        env: sessionEnv,
         cols: INITIAL_COLS,
         rows: INITIAL_ROWS,
         onData: (bytes) => session.output(bytes),

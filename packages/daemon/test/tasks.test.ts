@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agents } from "../src/modules/agents/agents.ts";
@@ -60,6 +60,10 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
     expect(window.unwrappedText()).toContain(`Katalog:${realpathSync(task.worktree)}`);
     expect(window.text()).toContain("Argument: --interactive=Napraw logowanie w sklepie");
     expect(window.text()).toContain(`Argument: --session-id=${task.id}`);
+    expect(window.text()).toContain("Instrukcje: trackwall.instructions.md");
+    const instructions = readFileSync(join(home, "sessions", session, "instructions", "trackwall.instructions.md"), "utf8");
+    expect(instructions).toContain(`You run the task \`${task.id}\` in the repo \`sklep\``);
+    expect(instructions).toContain("call report_result");
     window.attachment.detach();
   }, 60_000);
 

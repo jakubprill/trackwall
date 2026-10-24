@@ -13,6 +13,7 @@ import {
   GetRepoResult,
   ListReposResult,
   LogTail,
+  MCP_INSTRUCTIONS,
   mcpTools,
   RepoCardResult,
   Subgraph,
@@ -102,6 +103,15 @@ describe("serwer MCP przez Streamable HTTP", () => {
     // Zapisują tylko tekst dla człowieka, więc klient MCP nie musi ich traktować jak niszczących.
     expect(tools.filter((t) => t.annotations?.destructiveHint !== false)).toEqual([]);
     expect(client.getServerVersion()).toMatchObject({ name: "trackwall", version: "9.9.9" });
+    await client.close();
+  });
+
+  test("instrukcja serwera mówi, kiedy sięgnąć po każde narzędzie, więc nowe narzędzie nie zostaje w niej pominięte", async () => {
+    const client = await connectHttpClient(api.port, TOKEN);
+    const instructions = client.getInstructions() ?? "";
+    expect(instructions).toBe(MCP_INSTRUCTIONS);
+    const missing = Object.values(mcpTools).filter((t) => !new RegExp(`\\b${t.name}\\b`).test(instructions));
+    expect(missing.map((t) => t.name)).toEqual([]);
     await client.close();
   });
 

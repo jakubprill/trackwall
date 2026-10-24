@@ -10,6 +10,7 @@ export * from "./graph.ts";
 export * from "./http.ts";
 export * from "./logs.ts";
 export * from "./mcp.ts";
+export * from "./mcp-instructions.ts";
 export * from "./mise.ts";
 export * from "./plural.ts";
 export * from "./procs.ts";
