@@ -34,7 +34,7 @@ describe("łączenie sygnałów stanu zadania", () => {
     const tracker = new TaskStateTracker({ now: () => 0, staleAfterMs: 60_000 });
     tracker.signal({ state: "Approval", source: "hook", confidence: "high", reason: "hook notification permission_prompt" });
 
-    expect(tracker.signal({ state: "Working", source: "keyboard", confidence: "medium", reason: "key enter" })).toMatchObject({
+    expect(tracker.keyboard({ state: "Working", source: "keyboard", confidence: "medium", reason: "key enter" })).toMatchObject({
       state: "Working",
       source: "keyboard",
     });

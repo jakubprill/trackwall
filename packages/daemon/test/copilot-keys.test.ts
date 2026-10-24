@@ -9,6 +9,8 @@ describe("klawisze w terminalu sesji Copilot CLI", () => {
     expect(sessionKey("y\r")).toBeUndefined();
     expect(sessionKey("\u001b[B")).toBeUndefined();
     expect(sessionKey("\u001b[200~ls\r\u001b[201~")).toBeUndefined();
+    expect(sessionKey("constructor")).toBeUndefined();
+    expect(sessionKey("__proto__")).toBeUndefined();
   });
 
   test("Enter przy prośbie o zgodę albo o zatwierdzenie planu to praca z pewnością medium", () => {
@@ -16,10 +18,11 @@ describe("klawisze w terminalu sesji Copilot CLI", () => {
     expect(stateFromKey("enter", "Plan")).toMatchObject({ state: "Working" });
   });
 
-  test("Esc i Ctrl+C w trakcie pracy albo przy prośbie o zgodę przerywają turę, więc sesja czeka na Ciebie", () => {
+  test("Esc i Ctrl+C w trakcie pracy, także zawieszonej, albo przy prośbie o zgodę przerywają turę, więc sesja czeka na Ciebie", () => {
     expect(stateFromKey("escape", "Approval")).toEqual({ state: "Input", source: "keyboard", confidence: "medium", reason: "key escape" });
     expect(stateFromKey("escape", "Working")).toMatchObject({ state: "Input" });
     expect(stateFromKey("interrupt", "Working")).toMatchObject({ state: "Input", reason: "key interrupt" });
+    expect(stateFromKey("escape", "Stale")).toMatchObject({ state: "Input" });
   });
 
   test("Enter przy wpisywaniu promptu albo komendy nie zmienia stanu, bo turę zgłasza hook, a komenda w rodzaju /model nie ma hooka", () => {

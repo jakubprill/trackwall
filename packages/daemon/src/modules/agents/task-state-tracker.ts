@@ -16,8 +16,10 @@ import type { TaskStateChange, TaskStateSource } from "@trackwall/protocol";
  *   chyba że detektor zgłosił już koniec sesji (`endsSession`), bo mówi więcej niż kod.
  */
 
-/** Źródła sygnałów detektorów; `timeout` i `exit` ustala sam tracker. */
-type DetectorSource = Exclude<TaskStateSource, "timeout" | "exit">;
+const DETECTOR_RANK = { screen: 1, osc: 2, hook: 3 } as const satisfies Partial<Record<TaskStateSource, number>>;
+
+/** Źródła sygnałów detektorów obserwujących sesję; `keyboard`, `timeout` i `exit` mają własne metody. */
+type DetectorSource = keyof typeof DETECTOR_RANK;
 
 export type StateSignal = Omit<TaskStateChange, "at" | "source"> & {
   source: DetectorSource;
@@ -25,9 +27,10 @@ export type StateSignal = Omit<TaskStateChange, "at" | "source"> & {
   endsSession?: true;
 };
 
-type TrackedState = Omit<TaskStateChange, "at">;
+/** Klawisz człowieka w terminalu sesji (`copilot-keys.ts`). */
+export type KeyboardSignal = Omit<TaskStateChange, "at" | "source"> & { source: "keyboard" };
 
-const DETECTOR_RANK: Record<Exclude<DetectorSource, "keyboard">, number> = { screen: 1, osc: 2, hook: 3 };
+type TrackedState = Omit<TaskStateChange, "at">;
 
 export interface TaskStateTrackerOptions {
   now: () => number;
@@ -57,14 +60,18 @@ export class TaskStateTracker {
 
   /** Sygnał detektora; zwraca zmianę, gdy stan, źródło albo pewność są inne niż dotąd. */
   signal({ endsSession, ...s }: StateSignal): TaskStateChange | undefined {
-    if (this.#exited) return undefined;
-    if (s.source !== "keyboard") {
-      const rank = DETECTOR_RANK[s.source];
-      const endsWork = this.#current?.state === "Working" && s.state !== "Working";
-      if (rank < this.#bestRank && !endsWork) return undefined;
-      this.#bestRank = Math.max(this.#bestRank, rank);
-    }
+    const rank = DETECTOR_RANK[s.source];
+    const endsWork = this.#current?.state === "Working" && s.state !== "Working";
+    if (this.#exited || (rank < this.#bestRank && !endsWork)) return undefined;
+    this.#bestRank = Math.max(this.#bestRank, rank);
     this.#sessionEnded ||= endsSession === true;
+    this.#lastActivity = this.#now();
+    return this.#set(s, this.#lastActivity);
+  }
+
+  /** Klawisz człowieka: bez rangi źródeł, bo mówi o tym, czego hooki nie zgłaszają. */
+  keyboard(s: KeyboardSignal): TaskStateChange | undefined {
+    if (this.#exited) return undefined;
     this.#lastActivity = this.#now();
     return this.#set(s, this.#lastActivity);
   }

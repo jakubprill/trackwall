@@ -47,8 +47,10 @@ export class CopilotSessionState {
 
   /** Klawisz, który człowiek wysłał do terminala sesji (`sessionKey`). */
   key(key: SessionKey): TaskStateChange[] {
+    // Najpierw próg `Stale`: na żywo cykliczny `tick` mógł go już ustawić, a klawisz liczy się ze stanu po nim.
+    const stale = this.#tracker.tick();
     const signal = stateFromKey(key, this.#tracker.current?.state);
-    return [this.#tracker.tick(), signal && this.#tracker.signal(signal)].filter((c) => c !== undefined);
+    return [stale, signal && this.#tracker.keyboard(signal)].filter((c) => c !== undefined);
   }
 
   tick(): TaskStateChange | undefined {

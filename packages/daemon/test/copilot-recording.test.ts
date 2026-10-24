@@ -107,6 +107,18 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     expect(session.exit(0).map((c) => `${c.state} ${c.at}`)).toEqual(["Stale 1970-01-01T00:01:00.000Z", "Done 1970-01-01T00:01:01.100Z"]);
   });
 
+  test("Esc po progu bez cyklicznego sprawdzenia daje najpierw Stale, a potem czekanie na Ciebie, tak jak na żywo", () => {
+    let now = 0;
+    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000 });
+    session.output("\x1b]9;4;3;0\x07");
+
+    now = 61_100;
+    expect(session.key("escape").map((c) => `${c.state} ${c.source} ${c.at}`)).toEqual([
+      "Stale timeout 1970-01-01T00:01:00.000Z",
+      "Input keyboard 1970-01-01T00:01:01.100Z",
+    ]);
+  });
+
   test("wyjście po progu bez cyklicznego sprawdzenia daje Stale i powrót, tak jak odtwarzanie nagrania", () => {
     let now = 0;
     const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000 });

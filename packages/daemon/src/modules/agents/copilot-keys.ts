@@ -1,6 +1,6 @@
 import type { TaskState } from "@trackwall/protocol";
 import { z } from "zod";
-import type { StateSignal } from "./task-state-tracker.ts";
+import type { KeyboardSignal } from "./task-state-tracker.ts";
 
 /**
  * Detektor stanu Copilot CLI z klawiszy, które człowiek wysyła do terminala sesji (§4.4, ADR-17). Copilot CLI
@@ -17,14 +17,18 @@ const KEYS: Record<string, SessionKey> = { "\r": "enter", "\u001b": "escape", "\
 
 /** Stany, w których Copilot CLI pokazuje okno z wyborem, a Enter zatwierdza wybraną odpowiedź. */
 const ANSWERED_BY_ENTER: ReadonlySet<TaskState> = new Set(["Approval", "Plan"]);
-/** Stany, które Esc i Ctrl+C przerywają: Copilot CLI kończy wtedy turę bez hooka `agentStop`. */
-const STOPPED_BY_ESCAPE: ReadonlySet<TaskState> = new Set(["Working", "Approval", "Plan"]);
+/**
+ * Stany, które Esc i Ctrl+C przerywają: Copilot CLI kończy wtedy turę bez hooka `agentStop`. `Stale` to `Working`
+ * bez wyjścia, więc przerwanie zawieszonej pracy też kończy turę.
+ */
+const STOPPED_BY_ESCAPE: ReadonlySet<TaskState> = new Set(["Working", "Stale", "Approval", "Plan"]);
 
 export function sessionKey(data: string): SessionKey | undefined {
-  return KEYS[data];
+  // `hasOwn`, bo wklejony tekst w rodzaju „constructor” trafiłby w prototyp obiektu.
+  return Object.hasOwn(KEYS, data) ? KEYS[data] : undefined;
 }
 
-export function stateFromKey(key: SessionKey, current: TaskState | undefined): StateSignal | undefined {
+export function stateFromKey(key: SessionKey, current: TaskState | undefined): KeyboardSignal | undefined {
   if (!current) return undefined;
   const reason = `key ${key}`;
   // Enter może też wybrać „No, and tell Copilot…”, po którym Copilot czeka na tekst; to krótka chwila,
