@@ -7,6 +7,8 @@ import type { TaskStateChange, TaskStateSource } from "@trackwall/protocol";
  *   już stanu, bo hook wie więcej. Dopóki hook milczy (np. nie działa na danym systemie), stan idzie ze słabszych.
  *   Wyjątek: słabsze źródło może zakończyć `Working`. Gdy hook końca tury nie przyjdzie (zgubiony, przekroczony
  *   czas hooka, przerwana tura), sesja nie wisi w `Working`, a potem w `Stale`, choć czeka na człowieka.
+ * - Klawisz człowieka (`keyboard`) przechodzi zawsze, bo mówi o tym, czego hooki nie zgłaszają: odpowiedzi na prośbę
+ *   o zgodę i przerwaniu tury. Detektor klawiszy sam wybiera, w jakim stanie klawisz coś znaczy (`copilot-keys.ts`).
  * - `Stale` tylko z `Working`: brak wyjścia i sygnałów przez próg. Czekanie na człowieka nie jest zawieszeniem.
  *   Czas i powód `Stale` zależą tylko od ostatniej aktywności i progu, nie od tego, jak często woła się `tick`,
  *   więc na żywo i przy odtwarzaniu nagrania wychodzi to samo. Każde wyjście po `Stale` wraca do stanu sprzed niego.
@@ -14,8 +16,10 @@ import type { TaskStateChange, TaskStateSource } from "@trackwall/protocol";
  *   chyba że detektor zgłosił już koniec sesji (`endsSession`), bo mówi więcej niż kod.
  */
 
-/** Źródła sygnałów detektorów; `timeout` i `exit` ustala sam tracker. */
-type DetectorSource = Exclude<TaskStateSource, "timeout" | "exit">;
+const DETECTOR_RANK = { screen: 1, osc: 2, hook: 3 } as const satisfies Partial<Record<TaskStateSource, number>>;
+
+/** Źródła sygnałów detektorów obserwujących sesję; `keyboard`, `timeout` i `exit` mają własne metody. */
+type DetectorSource = keyof typeof DETECTOR_RANK;
 
 export type StateSignal = Omit<TaskStateChange, "at" | "source"> & {
   source: DetectorSource;
@@ -23,9 +27,10 @@ export type StateSignal = Omit<TaskStateChange, "at" | "source"> & {
   endsSession?: true;
 };
 
-type TrackedState = Omit<TaskStateChange, "at">;
+/** Klawisz człowieka w terminalu sesji (`copilot-keys.ts`). */
+export type KeyboardSignal = Omit<TaskStateChange, "at" | "source"> & { source: "keyboard" };
 
-const DETECTOR_RANK: Record<DetectorSource, number> = { screen: 1, osc: 2, hook: 3 };
+type TrackedState = Omit<TaskStateChange, "at">;
 
 export interface TaskStateTrackerOptions {
   now: () => number;
@@ -60,6 +65,13 @@ export class TaskStateTracker {
     if (this.#exited || (rank < this.#bestRank && !endsWork)) return undefined;
     this.#bestRank = Math.max(this.#bestRank, rank);
     this.#sessionEnded ||= endsSession === true;
+    this.#lastActivity = this.#now();
+    return this.#set(s, this.#lastActivity);
+  }
+
+  /** Klawisz człowieka: bez rangi źródeł, bo mówi o tym, czego hooki nie zgłaszają. */
+  keyboard(s: KeyboardSignal): TaskStateChange | undefined {
+    if (this.#exited) return undefined;
     this.#lastActivity = this.#now();
     return this.#set(s, this.#lastActivity);
   }
