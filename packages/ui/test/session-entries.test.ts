@@ -31,10 +31,11 @@ function task(id: string, createdAt: string): Task {
 describe("pozycje widoku Sesje", () => {
   test("zadanie to jedna pozycja z ostatnią sesją, a kolejność idzie od ostatnio uruchomionej", () => {
     const list = {
+      // Od najnowszej, jak w `SessionList`.
       sessions: [
-        session("s1", "2026-10-23T10:00:00Z", "t1"),
         session("s3", "2026-10-23T12:00:00Z", "t1"),
         session("s2", "2026-10-23T11:00:00Z"),
+        session("s1", "2026-10-23T10:00:00Z", "t1"),
       ],
       tasks: [task("t2", "2026-10-23T11:30:00Z"), task("t1", "2026-10-23T09:00:00Z")],
       worktreesDir: "/home/ja/.trackwall/worktrees",
