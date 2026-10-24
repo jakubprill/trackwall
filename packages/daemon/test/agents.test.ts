@@ -46,6 +46,24 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
     window.attachment.detach();
   }, 60_000);
 
+  test("Esc przy prośbie o zgodę kończy czekanie na zgodę, choć Copilot CLI nie wysyła wtedy hooka", async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
+    const { agents, procs } = makeAgents({ sklep: repoDir });
+    cleanups.push(() => procs.stopAll());
+    const started = await agents.start("sklep");
+    const window = viewer(agents, started.id);
+    await waitFor(agents, started.id, () => window.text().includes("Witaj"), "ekran powitalny");
+    window.attachment.input("napraw test\r");
+    await waitFor(agents, started.id, (s) => s.state?.state === "Approval", "prośba o zgodę");
+
+    window.attachment.input("\u001b");
+    const stopped = await waitFor(agents, started.id, (s) => s.state?.source === "keyboard", "stan z klawisza");
+    expect(stopped.state).toMatchObject({ state: "Input", confidence: "medium", reason: "key escape" });
+    expect(stopped.needsAttention).toBe(true);
+    window.attachment.detach();
+    await agents.stop(started.id);
+  }, 60_000);
+
   test("okno podłączone później dostaje obraz ekranu z tym, co sesja już wypisała", async () => {
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
     const { agents, procs } = makeAgents({ sklep: repoDir });

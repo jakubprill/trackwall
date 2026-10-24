@@ -7,7 +7,12 @@ const running = { kind: "running", runId: "r", startedAt: "2026-10-24T10:00:00Z"
 function repo(id: string, status: Partial<{ changes: number; behind: number; unavailable: boolean }> = {}): Repo {
   if (status.unavailable) return { id, path: `/p/${id}`, remote: null, status: { kind: "unavailable", message: "git nie czyta repo" } };
   const upstream = status.behind === undefined ? null : { name: "origin/main", ahead: 0, behind: status.behind };
-  return { id, path: `/p/${id}`, remote: null, status: { kind: "ok", branch: "main", head: null, changes: status.changes ?? 0, upstream } };
+  return {
+    id,
+    path: `/p/${id}`,
+    remote: null,
+    status: { kind: "ok", branch: "main", head: null, changes: status.changes ?? 0, untracked: 0, upstream },
+  };
 }
 
 function session(id: string, repoId: string, over: Partial<Session> = {}): Session {

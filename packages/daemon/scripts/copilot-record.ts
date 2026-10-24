@@ -7,7 +7,7 @@
  *   bun packages/daemon/scripts/copilot-record.ts record [--out <katalog>] [--copilot <program>] [-- <argumenty copilot>]
  *   bun packages/daemon/scripts/copilot-record.ts replay <session.cast>
  *
- * `record` zapisuje w katalogu: `session.cast` (wyjście i znaczniki hooków), `states.jsonl` (zmiany stanu),
+ * `record` zapisuje w katalogu: `session.cast` (wyjście i znaczniki hooków oraz rodzaju klawisza), `states.jsonl` (zmiany stanu),
  * `hooks.jsonl` (rekordy hooków) i `plugin/` (wtyczka sesji). Na końcu drukuje listę zmian stanu.
  * `replay` liczy stan jeszcze raz z nagrania, np. po zmianie reguł. Trzecia komenda, `hook`, jest wywoływana
  * przez Copilot CLI z wtyczki sesji, nie przez człowieka.
@@ -22,6 +22,7 @@ import { AsciicastWriter, parseAsciicast } from "../src/modules/agents/asciicast
 import { findCopilot } from "../src/modules/agents/copilot-command.ts";
 import { runCopilotHook } from "../src/modules/agents/copilot-hook-command.ts";
 import type { CopilotHookRecord } from "../src/modules/agents/copilot-hook-record.ts";
+import { type SessionKey, sessionKey } from "../src/modules/agents/copilot-keys.ts";
 import { writeCopilotPlugin } from "../src/modules/agents/copilot-plugin.ts";
 import { encodeMarker, replayCopilotRecording, type StatesLine } from "../src/modules/agents/copilot-recording.ts";
 import { CopilotSessionState } from "../src/modules/agents/copilot-session-state.ts";
@@ -69,7 +70,14 @@ async function record(argv: string[]): Promise<number> {
   if (!terminal) throw new Error("Bun.spawn nie dał PTY; ta wersja Bun nie obsługuje `terminal` na tym systemie");
 
   process.stdin.setRawMode?.(true);
-  process.stdin.on("data", (d: Buffer) => terminal.write(d));
+  process.stdin.on("data", (d: Buffer) => {
+    terminal.write(d);
+    const key = sessionKey(d.toString("utf8"));
+    if (!key) return;
+    // Hooki, które już przyszły, idą do nagrania przed klawiszem, tak jak w daemonie (`LiveSession.input`).
+    pumpHooks();
+    recording.key(key);
+  });
   process.stdout.on("resize", () => {
     const now = size();
     terminal.resize(now.cols, now.rows);
@@ -113,7 +121,8 @@ async function hook(argv: string[]): Promise<void> {
 
 /**
  * Pliki jednej nagrywanej sesji i stan liczony na bieżąco: wyjście trafia do terminala, nagrania i detektorów,
- * rekord hooka do nagrania jako znacznik i do detektorów, każda zmiana stanu do `states.jsonl`.
+ * rekord hooka i rodzaj klawisza (bez treści wejścia) do nagrania jako znacznik i do detektorów, każda zmiana stanu
+ * do `states.jsonl`.
  */
 class Recording {
   readonly changes: TaskStateChange[] = [];
@@ -142,6 +151,11 @@ class Recording {
   hook(r: CopilotHookRecord): void {
     this.#clock = this.#cast.marker(encodeMarker({ kind: "hook", record: r }));
     for (const change of this.#session.hook(r)) this.#report(change);
+  }
+
+  key(key: SessionKey): void {
+    this.#clock = this.#cast.marker(encodeMarker({ kind: "key", key }));
+    for (const change of this.#session.key(key)) this.#report(change);
   }
 
   resize(cols: number, rows: number): void {
@@ -184,7 +198,7 @@ function copilotCommand(program: string | undefined, args: string[]): string[] {
 function printChanges(changes: TaskStateChange[]): void {
   console.error("\nZmiany stanu (czas, stan, źródło, pewność, powód):");
   for (const c of changes) {
-    console.error(`  ${c.at.slice(11, 23)}  ${c.state.padEnd(8)}  ${c.source.padEnd(7)}  ${c.confidence.padEnd(6)}  ${c.reason}`);
+    console.error(`  ${c.at.slice(11, 23)}  ${c.state.padEnd(8)}  ${c.source.padEnd(8)}  ${c.confidence.padEnd(6)}  ${c.reason}`);
   }
 }
 

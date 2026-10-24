@@ -1,11 +1,12 @@
 import type { RunState, Session, TaskState, TaskStateChange } from "@trackwall/protocol";
+import { sessionKey } from "./copilot-keys.ts";
 import { CopilotSessionState } from "./copilot-session-state.ts";
 import { HookTail } from "./hook-tail.ts";
 import { type ScreenViewer, TerminalScreen } from "./terminal-screen.ts";
 
 /**
- * Jedna działająca (albo zakończona) sesja Copilot CLI w daemonie (§4.4): ekran dla okien terminala, stan z hooków
- * i OSC oraz terminal do pisania. Proces i jego grupę trzyma moduł `procs`; sesja tylko obserwuje jego stan.
+ * Jedna działająca (albo zakończona) sesja Copilot CLI w daemonie (§4.4): ekran dla okien terminala, stan z hooków,
+ * OSC i klawiszy sesji oraz terminal do pisania. Proces i jego grupę trzyma moduł `procs`; sesja tylko obserwuje jego stan.
  */
 
 /** Ten sam próg co w prototypie (`copilot-record.ts`), żeby nagranie i daemon liczyły `Stale` tak samo. */
@@ -68,8 +69,15 @@ export class LiveSession {
     this.#report(this.#state.output(this.#decoder.decode(bytes, { stream: true })));
   }
 
+  /** Wejście z okna terminala: do PTY, a klawisz odpowiedzi albo przerwania także do detektorów stanu. */
   input(data: string): void {
-    if (!this.#finished) this.#terminal?.write(data);
+    if (this.#finished || !this.#terminal) return;
+    this.#terminal.write(data);
+    const key = sessionKey(data);
+    if (!key) return;
+    // Klawisz liczy się ze stanu po hookach, które już przyszły, a nie po tych z ostatniego cyklu.
+    this.#readHooks();
+    this.#report(this.#state.key(key));
   }
 
   /** Rozmiar ustala ostatnie okno, które go zgłosiło; TUI dostaje go razem z PTY. */
@@ -95,7 +103,7 @@ export class LiveSession {
    */
   tick(): boolean {
     if (this.#finished) return false;
-    for (const record of this.#hooks.read()) this.#report(this.#state.hook(record));
+    this.#readHooks();
     this.#report([this.#state.tick()]);
     const run = this.#run();
     if (run?.kind !== "exited") return true;
@@ -127,6 +135,10 @@ export class LiveSession {
     for (const close of this.#closers) close();
     this.#closers.clear();
     this.#screen.dispose();
+  }
+
+  #readHooks(): void {
+    for (const record of this.#hooks.read()) this.#report(this.#state.hook(record));
   }
 
   #report(changes: readonly (TaskStateChange | undefined)[]): void {

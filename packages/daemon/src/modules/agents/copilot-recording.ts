@@ -2,11 +2,12 @@ import { TaskStateChange } from "@trackwall/protocol";
 import { z } from "zod";
 import { type Asciicast, eventTimeMs } from "./asciicast.ts";
 import { CopilotHookRecord } from "./copilot-hook-record.ts";
+import { SessionKey } from "./copilot-keys.ts";
 import { CopilotSessionState } from "./copilot-session-state.ts";
 import { jsonOf } from "./json.ts";
 
 /**
- * Nagranie sesji Copilot CLI (§4.4, §10): znaczniki (`m`) z rekordami hooków i kodem wyjścia, linie
+ * Nagranie sesji Copilot CLI (§4.4, §10): znaczniki (`m`) z rekordami hooków, rodzajem klawisza i kodem wyjścia, linie
  * `states.jsonl` i odtwarzanie wykrywania stanu z nagrania. Samo nagranie wystarcza, żeby policzyć stan jeszcze raz
  * po zmianie reguł. Znacznik hooka ma czas odczytu `hooks.jsonl` (do ~200 ms po hooku), więc przy odtwarzaniu
  * hook trafia między wyjście w tej samej kolejności co na żywo.
@@ -14,6 +15,7 @@ import { jsonOf } from "./json.ts";
 
 const SessionMarker = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("hook"), record: CopilotHookRecord }),
+  z.object({ kind: z.literal("key"), key: SessionKey }),
   z.object({ kind: z.literal("exit"), code: z.number().int() }),
 ]);
 type SessionMarker = z.infer<typeof SessionMarker>;
@@ -48,6 +50,7 @@ export function replayCopilotRecording(cast: Asciicast, o: ReplayOptions): TaskS
     if (code !== "m") continue;
     const marker = decodeMarker(data);
     if (marker?.kind === "hook") changes.push(...session.hook(marker.record));
+    if (marker?.kind === "key") changes.push(...session.key(marker.key));
     if (marker?.kind === "exit") changes.push(...session.exit(marker.code));
   }
   return changes.filter((c) => c !== undefined);

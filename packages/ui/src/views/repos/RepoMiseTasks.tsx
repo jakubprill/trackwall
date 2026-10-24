@@ -49,7 +49,9 @@ function TaskPanel({ conn, repo, tasks, onChange }: { conn: Connection; repo: st
   );
   if (tasks.kind === "ok") {
     return tasks.tasks.length === 0 ? (
-      <p className="text-muted-foreground text-sm">This repo has no mise tasks.</p>
+      <p className="text-muted-foreground text-sm">
+        This repo has no mise tasks. Add them under [tasks] in mise.toml in the repo root to run setup, dev or build from here.
+      </p>
     ) : (
       rows(tasks.tasks, "mise tasks")
     );
