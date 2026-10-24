@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
-import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
+import { MCP_INSTRUCTIONS, MCP_SERVER_NAME } from "@trackwall/protocol";
 import { readBody } from "../api/body.ts";
 import { TOOL_REGISTRATIONS, type ToolContext } from "./tools.ts";
 
@@ -24,15 +24,6 @@ export const SESSION_TOKEN_HEADER = "x-trackwall-session-token";
 /** Żądania MCP to małe obiekty JSON-RPC; `initialize` z możliwościami klienta mieści się z dużym zapasem. */
 const MAX_REQUEST_BYTES = 256 * 1024;
 
-const INSTRUCTIONS =
-  `Trackwall knows the repos in the user's projects folder. Start with ${mcpTools.listRepos.name}; ` +
-  `${mcpTools.getRepo.name} gives the details of one repo (README, recent commits, mise tasks); ` +
-  `${mcpTools.searchCode.name} searches code in all repos at once. ` +
-  `${mcpTools.listSessions.name} shows the Copilot CLI sessions running in Trackwall and their state. ` +
-  `To hand work to another agent, ${mcpTools.proposeTask.name} proposes a task that the user approves in Trackwall, ` +
-  `and ${mcpTools.waitForSession.name} waits for it; a task session reports its result with ${mcpTools.reportResult.name}. ` +
-  "No tool changes repos, configuration or processes.";
-
 export interface McpEndpoint {
   /** Żądanie z tokenem daemona od sesji `caller` (`null`: agent spoza Trackwall), już rozpoznanej po tokenie sesji. */
   handle: (req: IncomingMessage, res: ServerResponse, caller: string | null) => Promise<void>;
@@ -43,7 +34,7 @@ export function createMcpEndpoint(o: ToolContext & { version: string }): McpEndp
   const handler = createMcpHandler(
     // Sesja, która woła, przychodzi z `handle` jako `authInfo.clientId`: to jedyna droga SDK od żądania do fabryki serwera.
     ({ authInfo }) => {
-      const server = new McpServer({ name: MCP_SERVER_NAME, version: o.version }, { instructions: INSTRUCTIONS });
+      const server = new McpServer({ name: MCP_SERVER_NAME, version: o.version }, { instructions: MCP_INSTRUCTIONS });
       const caller = authInfo?.clientId ?? null;
       for (const register of TOOL_REGISTRATIONS) register(server, { ...o, caller });
       return server;
