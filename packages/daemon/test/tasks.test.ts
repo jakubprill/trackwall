@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agents } from "../src/modules/agents/agents.ts";
@@ -33,7 +33,10 @@ function sessionOf(agents: Agents, task: string): string {
 describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (prawdziwy git i PTY, atrapa Copilot CLI)", () => {
   test("zadanie dostaje gałąź od gałęzi domyślnej w worktree poza repo, a Copilot CLI startuje w nim z poleceniem", async () => {
     const { dir, mainCommit } = cloneOnFeatureBranch();
-    const { agents, procs, home } = makeAgents({ sklep: dir });
+    // Ścieżka worktree dłuższa niż szerokość terminala: ConPTY na Windowsie łamie ją na ekranie.
+    const longHome = join(mkdtempSync(join(tmpdir(), "trackwall-agents-")), "katalog-stanu-o-bardzo-dlugiej-nazwie-".repeat(3));
+    mkdirSync(longHome);
+    const { agents, procs, home } = makeAgents({ sklep: dir }, longHome);
     cleanups.push(() => procs.stopAll());
 
     const task = await agents.createTask("sklep", "Napraw logowanie w sklepie");
