@@ -46,6 +46,7 @@ if (process.platform === "win32") {
       "",
       "trackwall.exe registers trackwall:// links for your user at every start (HKCU\\Software\\Classes\\trackwall).",
       "After deleting the folder, remove that registry key to forget them.",
+      "",
       "Daemon startup log: %USERPROFILE%\\.trackwall\\logs\\daemon-start.log",
       "",
     ].join("\r\n"),
