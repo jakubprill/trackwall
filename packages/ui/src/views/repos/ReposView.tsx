@@ -27,8 +27,19 @@ const POLL_MS = 10_000;
 /** Co pokazuje prawa strona: wybrane repo, wyszukiwarkę repo do sklonowania, synchronizację albo komendę zbiorczą. */
 type Panel = "repo" | "clone" | "sync" | "batch";
 
-export function ReposView({ conn, onRetry, onOpenSettings }: { conn: Connection; onRetry: () => void; onOpenSettings: () => void }) {
-  const [selected, setSelected] = useState<string>();
+export function ReposView({
+  conn,
+  initialRepo,
+  onRetry,
+  onOpenSettings,
+}: {
+  conn: Connection;
+  /** Repo wybrane na starcie, np. otwarte z pulpitu w widoku „Home”. */
+  initialRepo?: string;
+  onRetry: () => void;
+  onOpenSettings: () => void;
+}) {
+  const [selected, setSelected] = useState(initialRepo);
   const [panel, setPanel] = useState<Panel>("repo");
   const load = useCallback(() => post(conn, workspaceApi.list, {}), [conn]);
   const list = useRemote(load, { pollMs: POLL_MS });

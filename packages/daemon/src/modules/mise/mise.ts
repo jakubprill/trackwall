@@ -1,4 +1,4 @@
-import { type LogSource, type MiseTask, MiseTaskName, type MiseTasks, type RunState } from "@trackwall/protocol";
+import { type LogSource, type MiseTask, MiseTaskName, type MiseTasks, type RunningMiseTask, type RunState } from "@trackwall/protocol";
 import { z } from "zod";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { type MiseCliResult, runMiseCli } from "./mise-cli.ts";
@@ -57,6 +57,18 @@ export class Mise {
     if (listed.kind !== "ok") return { ...listed, running: this.liveOutside(repo, []) };
     const tasks: MiseTask[] = listed.tasks.map((t) => ({ ...t, run: this.deps.procs.state(owner(repo, t.name)) ?? null }));
     return { kind: "ok", tasks: [...tasks, ...this.liveOutside(repo, tasks)] };
+  }
+
+  /** Działające taski wszystkich repo uruchomione w tym działaniu daemona; stan z `procs`, bez pytania mise. */
+  running(): RunningMiseTask[] {
+    const running: RunningMiseTask[] = [];
+    for (const [repo, names] of this.started) {
+      for (const miseTask of names) {
+        const run = this.deps.procs.state(owner(repo, miseTask));
+        if (run && run.kind !== "exited") running.push({ repo, miseTask, run });
+      }
+    }
+    return running;
   }
 
   /**

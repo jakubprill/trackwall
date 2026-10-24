@@ -137,6 +137,23 @@ describe("mise", () => {
     TIMEOUT,
   );
 
+  test(
+    "działające taski wszystkich repo są na liście bez pytania mise, a zatrzymany z niej znika",
+    async () => {
+      const { mise, repoDir } = setup({ tasks: [DEV] });
+      expect(mise.running()).toEqual([]);
+      const started = await mise.start("web", "dev");
+      // Konfiguracja, której mise nie czyta: lista działających i tak jest pełna, bo nie pyta mise.
+      writeConfig(repoDir, { tasks: [DEV], untrusted: true });
+
+      expect(mise.running()).toEqual([{ repo: "web", miseTask: "dev", run: started }]);
+
+      await mise.stop("web", "dev");
+      expect(mise.running()).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
   test("stop taska, który nie był uruchamiany, to not_found", async () => {
     const { mise } = setup({ tasks: [DEV] });
     await expect(mise.stop("web", "dev")).rejects.toMatchObject({ code: "not_found" });

@@ -12,7 +12,7 @@ export interface ScenePalette {
   warning: string;
   /** `--destructive`: błąd, repo niedostępne. */
   destructive: string;
-  /** `--muted-foreground`: zakończone, brak mise. */
+  /** `--muted-foreground`: zakończone sesje, napisy na ekranach. */
   muted: string;
   /** `--secondary` bez przezroczystości: spokojny stan, czyste repo. */
   idle: string;
