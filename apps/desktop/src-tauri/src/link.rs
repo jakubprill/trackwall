@@ -42,8 +42,8 @@ pub fn parse(url: &Url) -> Option<Jump> {
     }
 }
 
-/// Opens the links that reach the app from now on, and the one that started it. `show` shows the window unless the
-/// page is still loading (it then shows the window itself and takes the jump when it starts).
+/// Opens the links that reach the app from now on, and the one that started it. `show` shows the main window for a
+/// link that is not a jump, unless its page is still loading.
 pub fn listen(app: &AppHandle, show: fn(&AppHandle)) {
     let handle = app.clone();
     app.deep_link().on_open_url(move |event| open(&handle, event.urls(), show));
@@ -55,14 +55,21 @@ pub fn listen(app: &AppHandle, show: fn(&AppHandle)) {
 
 /// The last link wins, like a newer tray jump replaces an older one.
 fn open(app: &AppHandle, urls: Vec<Url>, show: fn(&AppHandle)) {
-    show(app);
-    if let Some(target) = urls.last().and_then(parse) {
-        jump::request(app, target);
+    match urls.last().and_then(parse) {
+        Some(target) => jump::request(app, target),
+        None => show(app),
     }
 }
 
-/// A link clicked inside the window, e.g. in a session terminal: the same check as a link from outside, without the
-/// round trip through the system. The window is already in front.
+/// Whether a second start carries a link (the deep-link plugin's rule: one argument, a URL with the scheme). The link
+/// then shows its own window, and the second start must not bring the main window over it.
+#[cfg_attr(debug_assertions, allow(dead_code))] // the single instance is release-only (`main.rs`)
+pub fn in_args(args: &[String]) -> bool {
+    matches!(args, [_, arg] if Url::parse(arg).is_ok_and(|url| url.scheme() == SCHEME))
+}
+
+/// A link clicked inside a window, e.g. in a session terminal: the same check as a link from outside, without the
+/// round trip through the system.
 #[tauri::command]
 pub fn open_link(app: AppHandle, url: String) {
     if let Some(target) = Url::parse(&url).ok().as_ref().and_then(parse) {
@@ -110,6 +117,15 @@ mod tests {
     fn the_ui_checks_the_id_against_the_protocol_schemas() {
         // The shell checks only the characters; `Orders` is not a `RepoId`, and the UI drops the jump.
         assert_eq!(jump("trackwall://repo/Orders"), Some(Jump::Repo("Orders".into())));
+    }
+
+    #[test]
+    fn a_second_start_carries_a_link_only_as_its_one_argument() {
+        let args = |list: &[&str]| list.iter().map(|a| a.to_string()).collect::<Vec<_>>();
+        assert!(in_args(&args(&["trackwall.exe", "trackwall://repo/orders"])));
+        assert!(!in_args(&args(&["trackwall.exe"])));
+        assert!(!in_args(&args(&["trackwall.exe", "trackwall://repo/orders", "--x"])));
+        assert!(!in_args(&args(&["trackwall.exe", "--help"])));
     }
 
     #[test]

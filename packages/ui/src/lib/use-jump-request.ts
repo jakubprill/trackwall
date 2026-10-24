@@ -1,5 +1,5 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { RepoId, SessionId, TaskId } from "@trackwall/protocol";
 import { useEffect, useRef } from "react";
 import { z } from "zod";
@@ -36,7 +36,8 @@ export function useJumpRequest(onJump: (jump: Jump) => void): void {
         },
         (err: unknown) => console.error("[jump] could not take the jump from the shell", err),
       );
-    const unlisten = listen(JUMP_EVENT, () => void take());
+    // This window's own listener: a global `listen` also gets events the shell sends to another window (ADR-49).
+    const unlisten = getCurrentWebviewWindow().listen(JUMP_EVENT, () => void take());
     // After the listener is in place, so a jump sent in between is not lost; one sent before is taken here.
     void unlisten.then(take, take);
     return () => {

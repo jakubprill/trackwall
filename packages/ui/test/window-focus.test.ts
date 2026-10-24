@@ -25,7 +25,7 @@ function manualTimers() {
   return { timers, elapse };
 }
 
-describe("session terminal window in front of the user (ADR-47)", () => {
+describe("session terminal in front of the user (ADR-47)", () => {
   test("only a focused and visible document is in front of the user", () => {
     expect(windowInFront({ hasFocus: () => true, visibilityState: "visible" })).toBe(true);
     expect(windowInFront({ hasFocus: () => false, visibilityState: "visible" })).toBe(false);

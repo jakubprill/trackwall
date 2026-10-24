@@ -3,12 +3,16 @@
 //! the `take_jump` command, both on the signal and when it starts. A link that started the app arrives before the
 //! page listens for events, so a jump sent only as an event payload would be lost.
 //!
-//! A jump only switches the view: nothing here starts, stops or changes anything (§8, ADR-52). Showing the window is
-//! the caller's choice, because a link that arrives while the page is still loading must not show it early (ADR-11).
+//! A jump to a session, task or proposal goes to the window for sessions (ADR-49: the last focused one showing
+//! Sessions), a jump to a repo to the main window. Only that window takes it. A jump only switches the view: nothing
+//! here starts, stops or changes anything (§8, ADR-52).
 
+use crate::lock::lock;
+use crate::window_effect::WindowEffects;
+use crate::windows::{self, Windows};
 use serde::Serialize;
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
 /// Signal for the UI that a jump is waiting (`use-jump-request.ts` has the same name).
 const JUMP_EVENT: &str = "jump-requested";
@@ -23,30 +27,43 @@ pub enum Jump {
     Proposal(String),
 }
 
-/// The jump the UI has not taken yet. A newer jump replaces an older one: the user wants to see the last thing clicked.
+/// The jump the UI has not taken yet, with the label of the window that is to take it. A newer jump replaces an older
+/// one: the user wants to see the last thing clicked.
 #[derive(Default)]
-pub struct PendingJump(Mutex<Option<Jump>>);
+pub struct PendingJump(Mutex<Option<(String, Jump)>>);
 
 impl PendingJump {
-    fn put(&self, jump: Jump) {
-        *self.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(jump);
+    fn put(&self, window: &str, jump: Jump) {
+        *lock(&self.0) = Some((window.to_owned(), jump));
     }
 
-    fn take(&self) -> Option<Jump> {
-        self.0.lock().unwrap_or_else(|e| e.into_inner()).take()
+    fn take(&self, window: &str) -> Option<Jump> {
+        let mut pending = lock(&self.0);
+        if pending.as_ref().is_some_and(|(label, _)| label == window) {
+            return pending.take().map(|(_, jump)| jump);
+        }
+        None
     }
 }
 
-/// Asks the UI to switch to the target.
+/// Shows the target's window and asks its UI to switch to the target. A window whose page is still loading is not
+/// shown yet: its page shows it once loaded (ADR-11) and takes the jump when it starts.
 pub fn request(app: &AppHandle, target: Jump) {
-    app.state::<PendingJump>().put(target);
-    let _ = app.emit_to("main", JUMP_EVENT, ());
+    let label = match target {
+        Jump::Repo(_) => windows::MAIN.to_owned(),
+        Jump::Session(_) | Jump::Task(_) | Jump::Proposal(_) => app.state::<Windows>().session_window(),
+    };
+    if !app.state::<WindowEffects>().reveal_pending(&label) {
+        windows::show(app, &label);
+    }
+    app.state::<PendingJump>().put(&label, target);
+    let _ = app.emit_to(label.as_str(), JUMP_EVENT, ());
 }
 
-/// The waiting jump for the UI, at most once.
+/// The jump waiting for the calling window, at most once.
 #[tauri::command]
-pub fn take_jump(pending: tauri::State<'_, PendingJump>) -> Option<Jump> {
-    pending.take()
+pub fn take_jump(window: WebviewWindow, pending: tauri::State<'_, PendingJump>) -> Option<Jump> {
+    pending.take(window.label())
 }
 
 #[cfg(test)]
@@ -56,10 +73,18 @@ mod tests {
     #[test]
     fn a_jump_is_taken_once_and_a_newer_one_replaces_an_older_one() {
         let pending = PendingJump::default();
-        pending.put(Jump::Session("a".into()));
-        pending.put(Jump::Repo("orders".into()));
-        assert_eq!(pending.take(), Some(Jump::Repo("orders".into())));
-        assert_eq!(pending.take(), None);
+        pending.put("main", Jump::Session("a".into()));
+        pending.put("main", Jump::Repo("orders".into()));
+        assert_eq!(pending.take("main"), Some(Jump::Repo("orders".into())));
+        assert_eq!(pending.take("main"), None);
+    }
+
+    #[test]
+    fn only_the_target_window_takes_the_jump() {
+        let pending = PendingJump::default();
+        pending.put("window-2", Jump::Session("a".into()));
+        assert_eq!(pending.take("main"), None);
+        assert_eq!(pending.take("window-2"), Some(Jump::Session("a".into())));
     }
 
     #[test]
