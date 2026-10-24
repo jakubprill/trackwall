@@ -1,4 +1,12 @@
-import { type EdgeConfidence, type EdgeEvidence, evidenceLabel, type GraphEdge, type GraphNode, type RepoGraph } from "@trackwall/protocol";
+import {
+  type EdgeConfidence,
+  type EdgeEvidence,
+  type EdgeKind,
+  evidenceLabel,
+  type GraphEdge,
+  type GraphNode,
+  type RepoGraph,
+} from "@trackwall/protocol";
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Surface } from "@/components/Surface";
@@ -6,16 +14,23 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { EdgePair } from "@/lib/graph-layout";
 
-/** Pewność krawędzi dla człowieka (ADR-29); `Record` wymusza wpis dla każdej z kontraktu. */
+/** Pewność krawędzi dla człowieka (ADR-29, ADR-30; reguły przy `EdgeConfidence`); `Record` wymusza wpis dla każdej. */
 const CONFIDENCE_LABELS: Record<EdgeConfidence, string> = {
   exact: "pewne",
-  high: "z aliasu",
-  medium: "kilka źródeł",
+  high: "prawie pewne",
+  medium: "prawdopodobne",
+  low: "możliwe",
+};
+
+const EDGE_KIND_LABELS: Record<EdgeKind, string> = {
+  package: "paczka",
+  http: "HTTP",
+  manual: "ręczne",
 };
 
 /**
  * Panel szczegółów wybranego repo w widoku „Przegląd”: kogo repo używa i kto używa jego, każda krawędź z kluczem
- * (paczka albo opis ręcznej krawędzi) i dowodami. Repo po drugiej stronie krawędzi wybiera się kliknięciem.
+ * (paczka, aplikacja albo adres HTTP, opis ręcznej krawędzi) i dowodami. Repo po drugiej stronie krawędzi wybiera się kliknięciem.
  */
 export function GraphNodePanel({
   node,
@@ -44,6 +59,7 @@ export function GraphNodePanel({
         </Button>
       </header>
       {node.problem !== null && <p className="text-warning text-sm break-words">Karty nie da się policzyć: {node.problem}</p>}
+      {node.apps.length > 0 && <p className="text-muted-foreground truncate font-mono text-xs">aplikacja {node.apps.join(", ")}</p>}
       {node.tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {node.tags.map((t) => (
@@ -51,10 +67,11 @@ export function GraphNodePanel({
           ))}
         </div>
       )}
-      <dl className="grid grid-cols-3 gap-2">
+      <dl className="grid grid-cols-2 gap-2">
         <Stat label="Używa" value={uses.length} />
         <Stat label="Używają go" value={usedBy.length} />
         <Stat label="Paczki" value={node.provides ?? "–"} />
+        <Stat label="Endpointy" value={node.endpoints ?? "–"} />
       </dl>
       <Section label="Używa" empty="Repo nie ma połączeń do innych repo z listy.">
         {uses.map((pair) => (
@@ -82,8 +99,8 @@ export function GraphSummaryPanel({ graph, pairs }: { graph: RepoGraph; pairs: r
         <Stat label="Bez karty" value={withProblems} />
       </dl>
       <p className="text-muted-foreground text-sm">
-        Linia prowadzi od repo, które używa, do repo, którego paczkę bierze jako zależność. Wybierz repo, żeby zobaczyć połączenia i dowody
-        (plik i linię).
+        Linia prowadzi od repo, które używa, do repo, którego paczkę bierze jako zależność albo którego aplikację woła przez HTTP. Wybierz
+        repo, żeby zobaczyć połączenia, ich pewność i dowody (plik i linię).
       </p>
       {graph.configProblems.length > 0 && (
         <Section label="Błędy we wpisach graph" empty="">
@@ -96,7 +113,8 @@ export function GraphSummaryPanel({ graph, pairs }: { graph: RepoGraph; pairs: r
       )}
       <div className="flex flex-col gap-1">
         <p className="text-muted-foreground text-sm">
-          Połączenia, których karty nie widzą, i paczki budowane poza plikami buildu dopiszesz pod kluczem graph w pliku:
+          Połączenia, których karty nie widzą, paczki budowane poza plikami buildu i adresy aplikacji (graph.apps) dopiszesz pod kluczem
+          graph w pliku:
         </p>
         <p className="font-mono text-xs break-all">{graph.configFile}</p>
       </div>
@@ -114,7 +132,7 @@ function PairItem({ repo, edges, onSelect }: { repo: string; edges: GraphEdge[];
         {edges.map((edge) => (
           <li key={`${edge.kind}:${edge.key}`} className="flex min-w-0 flex-col">
             <span className="flex min-w-0 items-center gap-2">
-              <Badge variant={edge.kind === "manual" ? "outline" : "secondary"}>{edge.kind === "manual" ? "ręczne" : "paczka"}</Badge>
+              <Badge variant={edge.kind === "manual" ? "outline" : "secondary"}>{EDGE_KIND_LABELS[edge.kind]}</Badge>
               <span className="min-w-0 truncate font-mono text-xs" title={edge.key}>
                 {edge.key}
               </span>

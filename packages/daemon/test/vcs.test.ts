@@ -100,6 +100,21 @@ describe("vcs na prawdziwym gicie", () => {
     }
   });
 
+  test("grepFiles zwraca pliki z commita pasujące do wzorca w danych rozszerzeniach, a brak trafień to pusta lista, nie błąd", async () => {
+    const dir = makeRepo({
+      "src/main/java/a/Api.java": "@RestController class Api {}\n",
+      "src/main/kotlin/a/Client.kt": '@FeignClient("x") interface Client\n',
+      "docs/notes.md": "@RestController w dokumentacji\n",
+      "src/main/java/a/Plain.java": "class Plain {}\n",
+    });
+    writeFileSync(join(dir, "src", "main", "java", "a", "Plain.java"), "@RestController class Plain {}\n");
+    const head = (await vcs.status(dir)).head?.hash ?? "";
+
+    const found = await vcs.grepFiles(dir, head, "@(RestController|FeignClient)", ["*.java", "*.kt"], 1024 * 1024);
+    expect(found).toEqual({ paths: ["src/main/java/a/Api.java", "src/main/kotlin/a/Client.kt"], truncated: false });
+    expect(await vcs.grepFiles(dir, head, "@HttpExchange", ["*.java"], 1024 * 1024)).toEqual({ paths: [], truncated: false });
+  });
+
   test("brak katalogu repo to błąd gita z komunikatem, a nie wyjątek uruchomienia", async () => {
     await expect(vcs.status(join(makeRepo(), "..", "nie-istnieje"))).rejects.toThrow(/nie-istnieje/);
   });

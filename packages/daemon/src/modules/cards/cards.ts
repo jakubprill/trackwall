@@ -2,12 +2,12 @@ import type { RepoCard, RepoCardResult, RepoTag, RepoTagRules, RepoTags } from "
 import { configOrProblem, DomainError, messageOf } from "../../errors.ts";
 import { mapLimit } from "../../map-limit.ts";
 import type { CardCache } from "./card-cache.ts";
-import { extractCard, readsCardFile } from "./extract-card.ts";
+import { CARD_SOURCES, extractCard, readsCardFile } from "./extract-card.ts";
 import { readSnapshot, type SnapshotVcs } from "./read-snapshot.ts";
 import { repoTags } from "./tags.ts";
 
 /**
- * Moduł `cards` (§4, §4.6, ADR-25): karta repo z plików buildu i konfiguracji w commicie HEAD, liczona raz na commit
+ * Moduł `cards` (§4, §4.6, ADR-25, ADR-30): karta repo z plików buildu, konfiguracji i kodu HTTP w commicie HEAD, liczona raz na commit
  * (`CardCache`), i tagi repo z karty oraz z reguł w `workspace.yaml`. Bez LLM: każde pole ma dowód. Graf z kart
  * liczy moduł `graph` z `all()` (ADR-29).
  */
@@ -102,6 +102,8 @@ export class Cards {
   private async cardOf(dir: string): Promise<RepoCard | null> {
     const commit = await this.deps.vcs.headCommit(dir);
     if (commit === null) return null;
-    return this.deps.cache.getOrCompute(commit, async () => extractCard(await readSnapshot(this.deps.vcs, dir, commit, readsCardFile)));
+    return this.deps.cache.getOrCompute(commit, async () =>
+      extractCard(await readSnapshot(this.deps.vcs, dir, commit, readsCardFile, CARD_SOURCES)),
+    );
   }
 }

@@ -39,7 +39,7 @@ Sekret z `~/.trackwall/daemon.json`, którym UI, `ws`, powłoka i most stdio uwi
 **Serwer MCP** (`/mcp`, `createMcpEndpoint`):
 Część daemona, przez którą agenci czytają jego stan narzędziami MCP; ten sam port i token co API (§5.3, ADR-24).
 
-**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`, `tail`, `who_calls`):
+**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`):
 Jedno wywołanie serwera MCP z nazwą po angielsku, wejściem i wynikiem opisanym schematem z `packages/protocol/src/mcp.ts`; mapowanie na fasadę, bez własnej logiki domenowej.
 _Unikaj_: komenda, akcja (to pojęcia z API i CLI)
 
@@ -99,7 +99,7 @@ Osobny katalog roboczy gita dla zadania, na gałęzi zadania, w `worktrees/<repo
 Commit gałęzi domyślnej, od którego wyszła gałąź zadania. Zmiany zadania (`TaskChanges`) to katalog roboczy worktree względem niego: commity zadania i niezacommitowane pliki razem.
 
 **Karta** (karta repo, `RepoCard`):
-Fakty o repo wyciągnięte deterministycznie z plików buildu i konfiguracji w commicie HEAD: pliki buildu, co repo udostępnia (`provides`), czego używa (`consumes`), wymagane narzędzia, mechanizmy i problemy, każdy fakt z dowodem. Zależy tylko od commita, więc liczy się raz na commit (ADR-25). LLM dopisze tylko opis i propozycje połączeń oznaczone `origin: 'llm'` (ADR-6). W UI zakładka „Karta” w szczegółach repo.
+Fakty o repo wyciągnięte deterministycznie z plików buildu, konfiguracji i kodu w commicie HEAD: pliki buildu, co repo udostępnia (`provides`), czego używa (`consumes`), wymagane narzędzia, mechanizmy i problemy, każdy fakt z dowodem. Zależy tylko od commita, więc liczy się raz na commit (ADR-25). LLM dopisze tylko opis i propozycje połączeń oznaczone `origin: 'llm'` (ADR-6). W UI zakładka „Karta” w szczegółach repo.
 _Unikaj_: profil, metadane; „karta repo” dla całego panelu szczegółów repo
 
 **Plik buildu** (`BuildFile`):
@@ -108,6 +108,22 @@ _Unikaj_: profil, metadane; „karta repo” dla całego panelu szczegółów re
 **Paczka** (`ProvidedPackage`, `ConsumedPackage`):
 Artefakt Maven (`grupa:artefakt`), wtyczka Gradle albo paczka npm, którą repo udostępnia albo której używa. Paczki z tego samego repo nie są używanymi.
 
+**Aplikacja** (`ProvidedApp`, na karcie `kind: "app"`):
+Aplikacja Spring Boot z karty repo: `spring.application.name` modułu i port z `server.port`. Po jej nazwie klient Feign, `lb://nazwa` albo host adresu wskazuje repo (ADR-30). Nie jest serwisem: serwis to proces, który Trackwall uruchamia.
+_Unikaj_: serwis, mikroserwis (dla faktu z karty)
+
+**Endpoint HTTP** (`ProvidedEndpoint`, na karcie `kind: "endpoint"`):
+Metoda i pełna ścieżka (ścieżka kontekstu, prefiks kontrolera, ścieżka metody) z kontrolera Spring, z handlerem `Klasa.metoda`. Metoda `null` to każda metoda (`@RequestMapping` bez `method`).
+
+**Klient HTTP** (`ConsumedHttp`, na karcie `kind: "http"`, rodzaj `HttpClientVia`):
+Miejsce, z którego repo woła HTTP: interfejs Feign albo `@HttpExchange`, klasa z `WebClient`, `RestClient` albo `RestTemplate`, adres z konfiguracji Spring, `.env` albo proxy frontendu. Ma nazwę aplikacji celu albo adres, profile, w których ten adres obowiązuje, i wywołania. Adres na karcie nie ma użytkownika, hasła, zapytania ani członów ścieżki wyglądających na token.
+
+**Wywołanie** (`HttpCall`):
+Metoda i ścieżka, które klient HTTP woła, z linią w kodzie. Część ścieżki znana dopiero w czasie działania to `{}`.
+
+**Profil** (profil Spring, `ConsumedHttp.profiles`):
+Nazwa z `application-<profil>.yml` albo `spring.config.activate.on-profile`; `default` to konfiguracja bez profilu. Klient z adresem z konfiguracji ma osobny wpis na każdy profil, w którym adres jest inny.
+
 **Wymagane narzędzie** (`ToolRequirement`):
 Narzędzie i wersja z konfiguracji mise albo `.tool-versions` (źródło `mise`) lub z pliku, który podaje wersję po swojemu (`.nvmrc`, wrapper Maven, `engines.node`; źródło `hint`).
 
@@ -115,7 +131,7 @@ Narzędzie i wersja z konfiguracji mise albo `.tool-versions` (źródło `mise`)
 Technologia rozpoznana w repo po paczce albo pliku (Spring Boot, Feign, Kafka, Helm…), ze spisem dowodów. Spis, nie wniosek: mechanizm nie mówi, z kim repo się łączy.
 
 **Ekstraktor**:
-Czysta funkcja na migawce commita (`RepoSnapshot`) w `modules/cards/` (`maven.ts`, `gradle.ts`, `npm.ts`, `tools.ts`, `mechanisms.ts`), która zwraca fakty z pozycją w pliku. Niczego nie wykonuje.
+Czysta funkcja na migawce commita (`RepoSnapshot`) w `modules/cards/` (`maven.ts`, `gradle.ts`, `npm.ts`, `tools.ts`, `mechanisms.ts`, `spring.ts`, `frontend-http.ts`), która zwraca fakty z pozycją w pliku. Niczego nie wykonuje.
 
 **Tag repo** (`RepoTag`):
 Krótka nazwa grupy repo (`java`, `frontend`, `bff`, `monorepo`…) z powodem, liczona z karty, identyfikatora i adresu repo zdalnego albo z reguły tagów. Tagi są ortogonalne: filtr z kilkoma tagami pokazuje repo, które mają wszystkie.
@@ -125,14 +141,17 @@ _Unikaj_: etykieta, kategoria
 Tag i wzorce identyfikatora albo adresu repo zdalnego, które go nadają (`core-api: ["*-core"]`). Dla grup, których nie widać w plikach, np. zespołów.
 
 **Graf** (graf połączeń, `RepoGraph`, moduł `graph`):
-Repo z folderu z projektami jako węzły (`GraphNode`) i krawędzie między nimi, liczone przy każdym pytaniu z kart i z wpisów `graph` w `workspace.yaml`. Dziś węzłem jest repo; serwisy (kilka na repo) przyjdą z modułem `services`.
+Repo z folderu z projektami jako węzły (`GraphNode`) i krawędzie między nimi, liczone z kart i z wpisów `graph` w `workspace.yaml` od nowa, gdy zmieni się commit któregoś repo albo konfiguracja. Dziś węzłem jest repo; serwisy (kilka na repo) przyjdą z modułem `services`.
 _Unikaj_: mapa, diagram zależności
 
 **Krawędź** (`GraphEdge`):
-Połączenie od repo, które używa, do repo używanego, z rodzajem (`EdgeKind`: `package` z kart, `manual` z `workspace.yaml`; potem `http`, `topic`), kluczem (nazwa paczki albo opis), pewnością i dowodami. Jedna para repo może mieć kilka krawędzi; widok „Przegląd” rysuje je jedną linią.
+Połączenie od repo, które używa, do repo używanego, z rodzajem (`EdgeKind`: `package` i `http` z kart, `manual` z `workspace.yaml`; potem `topic`), kluczem (nazwa paczki, nazwa aplikacji, host albo `localhost:<port>`, opis), pewnością i dowodami. Jedna para repo może mieć kilka krawędzi; widok „Przegląd” rysuje je jedną linią.
 
 **Alias paczki** (`graph.packages` w `workspace.yaml`):
 Nazwa paczki i repo, które ją dostarcza, gdy karta tego repo jej nie pokazuje (paczka budowana poza plikami buildu, inna nazwa w repozytorium artefaktów). Działa tylko dla paczki, której nie buduje żadne repo z listy.
+
+**Alias aplikacji** (`graph.apps` w `workspace.yaml`):
+Nazwa aplikacji albo host adresu (bez wielkości liter) i repo, które je obsługuje, gdy żadna karta nie ma tej nazwy (adres bramki, nazwa w DNS inna niż `spring.application.name`).
 
 **Ręczna krawędź** (`ManualEdge`, `graph.edges` w `workspace.yaml`):
 Połączenie wpisane przez użytkownika (`from`, `to`, `note`), np. wywołanie HTTP, którego karty jeszcze nie widzą. Repo wskazuje się identyfikatorem albo adresem repo zdalnego (`RepoRef`).
@@ -141,7 +160,7 @@ Połączenie wpisane przez użytkownika (`from`, `to`, `note`), np. wywołanie H
 Plik i linia, z których wynika fakt na karcie lub krawędź w grafie; dowód krawędzi ma też repo (albo `null` dla `workspace.yaml`) i zdanie, co w tym miejscu jest.
 
 **Pewność** (`confidence`, w grafie `EdgeConfidence`):
-`exact`, `high`, `medium` albo `low`. Krawędź z paczki budowanej przez jedno repo i ręczna krawędź są `exact`, z aliasu paczki `high`, z paczki budowanej przez kilka repo `medium`. Przy `low` daemon niczego nie robi automatycznie.
+`exact`, `high`, `medium` albo `low`. Krawędź z paczki budowanej przez jedno repo i ręczna krawędź są `exact`, z aliasu paczki `high`, z paczki budowanej przez kilka repo `medium`. Krawędź HTTP: `exact`, gdy nazwa aplikacji wskazuje jedno repo, a każde wywołanie ma w nim endpoint, `high` za samą nazwę aplikacji albo alias aplikacji, `medium` za host równy nazwie repo, port na `localhost` albo ścieżki pasujące do jednego repo, `low` za ścieżki pasujące do kilku repo (ADR-30). W UI: pewne, prawie pewne, prawdopodobne, możliwe. Przy `low` daemon niczego nie robi automatycznie.
 
 **Przegląd** (widok „Przegląd”, `GraphView`, identyfikator widoku `graph`):
 Widok z grafem połączeń na całą szerokość i panelem szczegółów wybranego repo (kogo używa, kto używa jego, dowody).

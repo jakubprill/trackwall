@@ -1,0 +1,3 @@
+clients:
+  orders:
+    url: http://orders-api.shop.svc.cluster.local

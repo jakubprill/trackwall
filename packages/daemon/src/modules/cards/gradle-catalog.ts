@@ -1,7 +1,7 @@
 import { parse as parseToml } from "smol-toml";
 import { z } from "zod";
 import { messageOf } from "../../errors.ts";
-import type { Extracted, RepoSnapshot } from "./snapshot.ts";
+import type { ProblemSink, RepoSnapshot } from "./snapshot.ts";
 
 /**
  * Katalog wersji Gradle (`gradle/libs.versions.toml`, §4.6): aliasy bibliotek i wtyczek, do których skrypty odwołują
@@ -43,7 +43,7 @@ type VersionCatalog = z.infer<typeof VersionCatalog>;
  * Katalog wersji Gradle: biblioteki (`module = "g:a"`, `group` + `name` albo `"g:a:v"`) i wtyczki (`id` albo
  * `"id:wersja"`), z wersją wprost albo z `version.ref` do `[versions]`.
  */
-export function readCatalog(snapshot: RepoSnapshot, path: string, out: Extracted): Catalog {
+export function readCatalog(snapshot: RepoSnapshot, path: string, out: ProblemSink): Catalog {
   const catalog: Catalog = { libraries: new Map(), plugins: new Map() };
   const text = snapshot.text(path);
   if (text === undefined) return catalog;

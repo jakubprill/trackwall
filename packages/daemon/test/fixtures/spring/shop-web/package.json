@@ -1,0 +1,7 @@
+{
+  "name": "shop-web",
+  "private": true,
+  "dependencies": {
+    "react": "19.1.0"
+  }
+}

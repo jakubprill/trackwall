@@ -1,4 +1,13 @@
-import type { BuildFile, CardProblem, ConsumedPackage, Evidence, ProvidedPackage, ToolRequirement } from "@trackwall/protocol";
+import type {
+  BuildFile,
+  CardProblem,
+  Consumed,
+  ConsumedPackage,
+  Evidence,
+  Provided,
+  ProvidedPackage,
+  ToolRequirement,
+} from "@trackwall/protocol";
 
 /**
  * Commit widziany przez ekstraktory: lista plików i treść plików buildu i konfiguracji, przeczytana z gita jednym
@@ -15,16 +24,19 @@ export interface RepoSnapshot {
   problems: readonly CardProblem[];
 }
 
-/** Co ekstraktor wnosi do karty. */
-export interface Extracted {
+/** Co ekstraktor wnosi do karty; ekstraktory buildu dają paczki, ekstraktory HTTP aplikacje, endpointy i klientów. */
+export interface Extracted<P extends Provided = ProvidedPackage, C extends Consumed = ConsumedPackage> {
   buildFiles: BuildFile[];
-  provides: ProvidedPackage[];
-  consumes: ConsumedPackage[];
+  provides: P[];
+  consumes: C[];
   tools: ToolRequirement[];
   problems: CardProblem[];
 }
 
-export function emptyExtracted(): Extracted {
+/** Miejsce na problemy karty dla odczytu, który nie daje innych faktów (katalog wersji, konfiguracja Spring). */
+export type ProblemSink = Pick<Extracted, "problems">;
+
+export function emptyExtracted<P extends Provided = ProvidedPackage, C extends Consumed = ConsumedPackage>(): Extracted<P, C> {
   return { buildFiles: [], provides: [], consumes: [], tools: [], problems: [] };
 }
 

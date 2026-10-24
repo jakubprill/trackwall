@@ -1,4 +1,4 @@
-import type { Consumed, Mechanism, MechanismEvidence, MechanismId } from "@trackwall/protocol";
+import type { ConsumedPackage, Mechanism, MechanismEvidence, MechanismId } from "@trackwall/protocol";
 import { baseName } from "./repo-path.ts";
 
 /**
@@ -63,14 +63,14 @@ const MAX_PATH_LENGTH = 1024;
 /** Tyle dowodów na mechanizm wystarcza, żeby sprawdzić go w repo; resztę widać w zależnościach karty. */
 const MAX_EVIDENCE = 3;
 
-export function detectMechanisms(consumes: readonly Consumed[], paths: readonly string[]): Mechanism[] {
+export function detectMechanisms(consumes: readonly ConsumedPackage[], paths: readonly string[]): Mechanism[] {
   return RULES.flatMap((rule) => {
     const evidence = [...packageEvidence(rule, consumes), ...fileEvidence(rule, paths)].slice(0, MAX_EVIDENCE);
     return evidence.length > 0 ? [{ id: rule.id, evidence }] : [];
   });
 }
 
-function packageEvidence(rule: Rule, consumes: readonly Consumed[]): MechanismEvidence[] {
+function packageEvidence(rule: Rule, consumes: readonly ConsumedPackage[]): MechanismEvidence[] {
   const pattern = rule.packages;
   if (!pattern) return [];
   return consumes
