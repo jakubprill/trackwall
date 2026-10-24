@@ -15,9 +15,10 @@ import { DomainError } from "../infra/errors.ts";
 
 /**
  * Narzędzia MCP daemona (§5.3, ADR-24): każde to cienkie mapowanie na fasadę, więc agent widzi ten sam stan co UI
- * (§1.1). Żadne nie zmienia konfiguracji, repo ani procesów (§8), więc sesji nie uruchamia, nie odpowiada w niej
- * i jej nie zatrzymuje. Zapisują tylko `propose_task` (propozycja, którą zadaniem robi dopiero użytkownik w UI)
- * i `report_result` (podsumowanie własnego zadania sesji), ADR-39.
+ * (§1.1). Żadne nie zmienia konfiguracji ani repo (§8) i żadne nie uruchamia sesji, nie odpowiada w niej ani jej nie
+ * zatrzymuje. Zapisują tylko `propose_task` (propozycja, którą zadaniem robi dopiero użytkownik w UI) i `report_result`
+ * (podsumowanie własnego zadania sesji), ADR-39; procesy uruchamiają i zatrzymują tylko `run_mise_task`
+ * i `stop_mise_task`: task mise z aktualnej listy zaufanej konfiguracji repo, jak przycisk w UI (ADR-41).
  */
 
 /**
@@ -30,7 +31,10 @@ const RECENT_COMMITS = 10;
 
 export interface ToolContext {
   facade: Facade;
-  /** Linia logu daemona o wywołaniu (narzędzie, czas, wynik), bez argumentów; tabela `audit` przyjdzie z SQLite. */
+  /**
+   * Linia logu daemona o wywołaniu (narzędzie, czas, wynik), bez argumentów poza narzędziami niszczącymi (ADR-41);
+   * tabela `audit` przyjdzie z SQLite.
+   */
   log: (msg: string) => void;
 }
 
@@ -69,15 +73,18 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
         description: tool.description,
         inputSchema,
         outputSchema,
-        annotations: { readOnlyHint: tool.readOnly, destructiveHint: false, openWorldHint: false },
+        annotations: { readOnlyHint: tool.readOnly, destructiveHint: !tool.readOnly && tool.destructive, openWorldHint: false },
       },
       async (args, extra) => {
         const started = Date.now();
         // Wołająca sesja w logu, bo propozycja i podsumowanie zapisują coś w jej imieniu; tabela `audit` przyjdzie z SQLite.
         const label = ctx.caller === null ? tool.name : `${tool.name} (session ${ctx.caller})`;
         try {
-          const call = { caller: ctx.caller, signal: extra.mcpReq.signal };
-          const result = tool.result.parse(await run(ctx.facade, tool.args.parse(args), call));
+          const parsed = tool.args.parse(args);
+          // A destructive tool (it runs or stops repo code) logs its arguments before acting: until the `audit` table
+          // exists, this line says who ran what (ADR-41). Their arguments are identifiers, never free text.
+          if (!tool.readOnly && tool.destructive) ctx.log(`${label}: ${JSON.stringify(parsed)}`);
+          const result = tool.result.parse(await run(ctx.facade, parsed, { caller: ctx.caller, signal: extra.mcpReq.signal }));
           ctx.log(`${label}: ok in ${Date.now() - started} ms`);
           return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
         } catch (err) {
@@ -187,6 +194,18 @@ const runs: ToolRuns = {
     const outcome = await facade.agents.waitFor(caller, target, timeoutSeconds * 1000, signal);
     return { ...outcome, session: outcome.session && agentSession(outcome.session) };
   },
+  runMiseTask: async (facade, { repo, miseTask }, { caller }) => {
+    assertCallerRepo(facade, caller, repo);
+    return { run: await facade.mise.start(repo, miseTask) };
+  },
+  stopMiseTask: async (facade, { repo, miseTask }, { caller }) => {
+    assertCallerRepo(facade, caller, repo);
+    return { run: await facade.mise.stop(repo, miseTask) };
+  },
+  waitForMiseTask: async (facade, { repo, miseTask, timeoutSeconds }, { signal }) => ({
+    run: await facade.mise.waitForEnd(repo, miseTask, timeoutSeconds * 1000, signal),
+  }),
+  listRunningMiseTasks: async (facade) => ({ miseTasks: facade.mise.running() }),
 };
 
 /**
@@ -208,11 +227,27 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.proposeTask, runs.proposeTask),
   defineTool(mcpTools.reportResult, runs.reportResult),
   defineTool(mcpTools.waitForSession, runs.waitForSession),
+  defineTool(mcpTools.runMiseTask, runs.runMiseTask),
+  defineTool(mcpTools.stopMiseTask, runs.stopMiseTask),
+  defineTool(mcpTools.waitForMiseTask, runs.waitForMiseTask),
+  defineTool(mcpTools.listRunningMiseTasks, runs.listRunningMiseTasks),
 ];
 
 /** Tag filter of `list_repos` and `search_code`: the repo has every wanted tag. */
 function hasEveryTag(tags: readonly string[], wanted: readonly string[]): boolean {
   return wanted.every((tag) => tags.includes(tag));
+}
+
+/**
+ * A Trackwall session starts and stops processes only in the repo it works in (§8, ADR-41), so a task session does
+ * not reach other repos in the projects folder through its own bridge. An agent outside Trackwall (`caller: null`) is
+ * the user's program, like a terminal, and reaches every repo. A guard for the agent, not a security boundary: a
+ * session process can call `/mcp` without its session token (§8).
+ */
+function assertCallerRepo(facade: Facade, caller: string | null, repo: string): void {
+  if (caller === null) return;
+  const own = facade.agents.session(caller).repo;
+  if (own !== repo) throw new DomainError("bad_request", `a session in ${own} can run and stop only mise tasks of ${own}, not of ${repo}`);
 }
 
 /** Sesja bez ostatnich linii ekranu zakończonej grupy: ekran jednej sesji nie trafia do innej (§8, ADR-36). */
