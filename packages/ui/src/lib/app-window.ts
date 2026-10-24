@@ -22,16 +22,24 @@ export function canOpenWindows(): boolean {
 
 /** Opens a new window with the view; on another monitor it is the window that was there last time. */
 export function openWindow(view: string): Promise<void> {
-  return invoke("open_window", { view });
+  return canOpenWindows() ? invoke("open_window", { view }) : Promise.reject(new Error("Only the desktop app opens windows."));
 }
 
 /** Tells the shell whether this window shows the Sessions view; does nothing outside the shell. */
 export function reportShowsSessions(shows: boolean): Promise<void> {
-  return isTauri() ? invoke("window_shows_sessions", { shows }) : Promise.resolve();
+  return canOpenWindows() ? invoke("window_shows_sessions", { shows }) : Promise.resolve();
 }
 
-/** The native context menu of a view icon on the activity bar. */
+/**
+ * The native context menu of a view icon on the activity bar. One menu per window, reused for every right click,
+ * because each `Menu.new` stays in the window's resources until it closes; the item has a generated id, because menu
+ * item ids are shared by all windows of the app.
+ */
+let viewMenu: Promise<Menu> | undefined;
+let openFromMenu: (() => void) | undefined;
+
 export async function showViewMenu(openInNewWindow: () => void): Promise<void> {
-  const menu = await Menu.new({ items: [{ id: "open-in-new-window", text: "Open in new window", action: openInNewWindow }] });
-  await menu.popup();
+  openFromMenu = openInNewWindow;
+  viewMenu ??= Menu.new({ items: [{ text: "Open in new window", action: () => openFromMenu?.() }] });
+  await (await viewMenu).popup();
 }

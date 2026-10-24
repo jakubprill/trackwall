@@ -2,10 +2,10 @@ import { agentsApi } from "@trackwall/protocol";
 import { Activity, FolderGit2, Network, Orbit, Settings, SquareTerminal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
+import { ErrorBanner } from "@/components/ErrorBanner";
 import { Loading } from "@/components/Loading";
-import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
-import { canOpenWindows, openWindow, reportShowsSessions, viewFromLocation } from "@/lib/app-window";
+import { canOpenWindows, openWindow, reportShowsSessions, showViewMenu, viewFromLocation } from "@/lib/app-window";
 import type { Connection } from "@/lib/connection";
 import type { DaemonEvents } from "@/lib/daemon-events";
 import { IS_MAC } from "@/lib/platform";
@@ -107,25 +107,17 @@ export function App() {
         active={view}
         onSelect={setView}
         onOpenInNewWindow={openInNewWindow}
+        onViewContextMenu={
+          openInNewWindow &&
+          ((id: View) => {
+            showViewMenu(() => openInNewWindow(id)).catch((err: unknown) => setWindowError(`Could not show the menu: ${String(err)}`));
+          })
+        }
         badges={{ sessions: attentionCount(sessions.data) }}
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        {error && (
-          <div className="bg-destructive/10 flex items-center gap-3 border-b px-4 py-2">
-            <p className="text-destructive min-w-0 flex-1 text-sm whitespace-pre-wrap">{error}</p>
-            <Button variant="outline" size="sm" onClick={retry}>
-              Try again
-            </Button>
-          </div>
-        )}
-        {windowError && (
-          <div className="bg-destructive/10 flex items-center gap-3 border-b px-4 py-2">
-            <p className="text-destructive min-w-0 flex-1 text-sm whitespace-pre-wrap">{windowError}</p>
-            <Button variant="outline" size="sm" onClick={() => setWindowError(undefined)}>
-              Dismiss
-            </Button>
-          </div>
-        )}
+        {error && <ErrorBanner message={error} action={{ label: "Try again", onClick: retry }} />}
+        {windowError && <ErrorBanner message={windowError} action={{ label: "Dismiss", onClick: () => setWindowError(undefined) }} />}
         <main className="hud-grid min-h-0 flex-1 overflow-y-auto">
           {!conn && !error && (
             <div className="p-6">

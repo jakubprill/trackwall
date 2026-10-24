@@ -9,16 +9,16 @@ Proces `trackwall-daemon`, który trzyma cały stan i całą logikę. Jedyne źr
 _Unikaj_: backend, serwer (bez dopowiedzenia)
 
 **Powłoka** (`apps/desktop`):
-Aplikacja Tauri: okno, tray, uruchamianie i nadzór daemona jako sidecara, sprawdzenie WebView2. Nie zawiera logiki domenowej.
+Aplikacja Tauri: okna, tray, uruchamianie i nadzór daemona jako sidecara, sprawdzenie WebView2. Nie zawiera logiki domenowej.
 _Unikaj_: aplikacja (gdy chodzi tylko o Tauri)
 
 **Widok** (`View`; po angielsku *view*):
 Ekran aplikacji w UI (Home, Repos, Sessions, Overview, Daemon, Settings), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
 _Unikaj_: zakładka (dla całego ekranu)
 
-**Window** (`windows.rs` in the shell; label `main` or `window-<n>`; *window*):
+**Window** (`windows.rs` in the shell; label `main` or `window-<n>`):
 A desktop shell window with the whole UI and its own view (ADR-49). The main window comes from `tauri.conf.json` and hides to the tray; an extra window is opened with “Open in new window” and closes for real.
-_Avoid_: screen (that is a monitor), tab (that is `TabBar`)
+_Avoid_: screen (that is a monitor), tab (that is `TabBar`), terminal window (that is a session terminal)
 
 **Zakładka** (`TabBar`; po angielsku *tab*):
 Przełącznik części treści wewnątrz widoku, np. README, Files, Commits i mise tasks w widoku Repos.
@@ -274,8 +274,9 @@ _Avoid_: read, acknowledged
 **Idle** (`isIdle`, `IDLE_LABEL`, dashboard state `idle`):
 A running session in `Input` the user has already seen (ADR-47): the agent waits for the next prompt, but no longer waits for you. Shown as "idle" in Sessions and in calm grey on the dashboard.
 
-**Okno terminala** (`SessionTerminal`; po angielsku *session terminal*):
-xterm.js w widoku Sessions podłączony WebSocketem `/ws/pty/<sesja>` do PTY sesji. Kilka okien może pokazywać tę samą sesję; rozmiar PTY ustala ostatnie, które go zgłosiło.
+**Session terminal** (`SessionTerminal`):
+xterm.js in the Sessions view, connected over the WebSocket `/ws/pty/<session>` to the session's PTY. Several session terminals, also in different windows, can show the same session; the PTY takes the size of the last one that reported it, and a window that comes to the front reports the size of its terminals again (ADR-49).
+_Avoid_: terminal window (a window is the app window)
 
 **Session layout** (`SessionLayout`):
 How the right side of the Sessions view shows entries (ADR-48): `1` is the selected entry alone with its full panel (tabs, Stop, Resume), `2` and `4` a grid page of that many entries, `auto` a grid of the whole list, up to nine per page.

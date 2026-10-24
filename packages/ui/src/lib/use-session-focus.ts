@@ -1,5 +1,5 @@
 import { isTauri } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { SessionId, TaskId } from "@trackwall/protocol";
 import { useEffect, useRef } from "react";
 import { z } from "zod";
@@ -21,7 +21,9 @@ export function useSessionFocus(onFocus: (selection: SessionSelection) => void):
   handler.current = onFocus;
   useEffect(() => {
     if (!isTauri()) return;
-    const unlisten = listen<unknown>(FOCUS_EVENT, (event) => {
+    // This window's own listener: a global `listen` also gets events the shell sends to another window (ADR-49),
+    // and every window would switch to the session.
+    const unlisten = getCurrentWebviewWindow().listen<unknown>(FOCUS_EVENT, (event) => {
       const focus = Focus.safeParse(event.payload);
       if (focus.success) handler.current(focus.data);
     });

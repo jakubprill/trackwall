@@ -14,16 +14,42 @@ export function matchesShortcut(press: KeyPress, shortcut: ViewShortcut, isMac: 
 }
 
 /**
- * The view shortcut with Shift opens the view in a new window (ADR-49): Ctrl+Shift+2 (⌘⇧2) opens Repos. Settings has no
- * such shortcut where the comma needs Shift, because then Shift changes the character.
+ * A view's key with Ctrl+Shift opens the view in a new window (ADR-49): Ctrl+Shift+2 opens Repos. On macOS it is ⌥⌘,
+ * because ⌘⇧3 and ⌘⇧4 are the system's screenshot shortcuts and never reach the app. Settings has no such shortcut:
+ * Shift and Option change the comma on most layouts.
  */
 export function matchesNewWindowShortcut(press: KeyPress, shortcut: ViewShortcut, isMac: boolean): boolean {
-  return withModifier(press, isMac, true) && matchesKey(press, shortcut);
+  if (shortcut === ",") return false;
+  const modifiers = isMac
+    ? press.metaKey && press.altKey && !press.ctrlKey && !press.shiftKey
+    : press.ctrlKey && press.shiftKey && !press.altKey && !press.metaKey;
+  return modifiers && matchesKey(press, shortcut);
 }
 
 /** Ctrl+Shift+N (⌘⇧N) opens the current view in a new window; the letter by character, like in every layout's menus. */
-export function isNewWindowShortcut(press: KeyPress, isMac: boolean): boolean {
+function isNewWindowShortcut(press: KeyPress, isMac: boolean): boolean {
   return withModifier(press, isMac, true) && press.key.toLowerCase() === "n";
+}
+
+/** What a key press does on the activity bar: switch this window's view or open a view in a new window. */
+export type ViewKeyAction<Id extends string> = { kind: "select" | "new-window"; id: Id };
+
+/**
+ * The action of a key press; new-window shortcuts only where windows can be opened, and not for a held key, whose
+ * autorepeat would open a window per repeat.
+ */
+export function viewKeyAction<Id extends string>(
+  press: KeyPress & Pick<KeyboardEvent, "repeat">,
+  views: readonly { id: Id; shortcut: ViewShortcut }[],
+  active: Id,
+  { isMac, newWindows }: { isMac: boolean; newWindows: boolean },
+): ViewKeyAction<Id> | undefined {
+  const view = views.find((v) => matchesShortcut(press, v.shortcut, isMac));
+  if (view) return { kind: "select", id: view.id };
+  if (!newWindows || press.repeat) return undefined;
+  if (isNewWindowShortcut(press, isMac)) return { kind: "new-window", id: active };
+  const inNewWindow = views.find((v) => matchesNewWindowShortcut(press, v.shortcut, isMac));
+  return inNewWindow && { kind: "new-window", id: inNewWindow.id };
 }
 
 function withModifier(press: KeyPress, isMac: boolean, shift: boolean): boolean {

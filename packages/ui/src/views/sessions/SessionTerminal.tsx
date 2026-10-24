@@ -17,9 +17,9 @@ const RECONNECT_MS = 1000;
 /**
  * The terminal window of one session (§4.4, ADR-26): xterm.js connected over a WebSocket to the PTY in the daemon. The
  * daemon sends the screen image first, so switching sessions or a dropped connection starts from the current screen,
- * not an empty terminal. Keys and the window size go to the session; the PTY takes the size of the last window that
- * reported one, and a window that comes to the front reports its size again, so with the session open in two windows
- * (ADR-49) the one you work in sets it. The window also tells the daemon whether it is in front of the user, which marks the session seen
+ * not an empty terminal. Keys and the terminal size go to the session; the PTY takes the size of the last session
+ * terminal that reported one, and a window that comes to the front reports its terminals' sizes again, so with the
+ * session open in two windows (ADR-49) the one you work in sets it. The window also tells the daemon whether it is in front of the user, which marks the session seen
  * (ADR-47). In the grid (ADR-48) several terminals are open at once; only the `focused` one takes the keyboard and
  * counts as in front, so a waiting session in another tile keeps waiting until the user selects it.
  */

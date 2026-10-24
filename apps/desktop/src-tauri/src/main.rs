@@ -1,4 +1,4 @@
-//! Powłoka desktopowa Trackwall: okna, tray i nadzór daemona. Cała logika żyje w daemonie (§2, §5.4).
+//! The Trackwall desktop shell: windows, tray and daemon supervision. All logic lives in the daemon (§2, §5.4).
 
 // Bez okna konsoli w wydaniu na Windowsie.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -13,7 +13,7 @@ use daemon::Connection;
 use daemon_state::DaemonState;
 use std::sync::Arc;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, RunEvent, WebviewWindow, Window, WindowEvent};
+use tauri::{AppHandle, Manager, RunEvent, Window, WindowEvent};
 use tauri_plugin_window_state::StateFlags;
 use window_effect::WindowEffects;
 use windows::Windows;
@@ -40,7 +40,7 @@ async fn retry_daemon(state: tauri::State<'_, Arc<DaemonState>>) -> Result<Conne
 /// Opens an extra window with `view` (ADR-49). Async, because building a window on the main thread deadlocks on Windows.
 #[tauri::command]
 async fn open_window(app: AppHandle, view: String) -> Result<(), String> {
-    open_extra_window(&app, &view)
+    windows::open(&app, Some(&view))
 }
 
 /// The window shows the Sessions view or stopped showing it; the tray sends sessions to such a window.
@@ -51,9 +51,8 @@ fn window_shows_sessions(window: Window, windows: tauri::State<'_, Windows>, sho
 
 /// What `tauri-plugin-window-state` keeps per window: where it was and how big, not whether it was visible, which
 /// stays with the reveal after page load (ADR-11).
-fn window_state_flags() -> StateFlags {
-    StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED | StateFlags::FULLSCREEN
-}
+const WINDOW_STATE_FLAGS: StateFlags =
+    StateFlags::POSITION.union(StateFlags::SIZE).union(StateFlags::MAXIMIZED).union(StateFlags::FULLSCREEN);
 
 fn main() {
     #[cfg(windows)]
@@ -77,7 +76,7 @@ fn main() {
         show_main(app);
     }));
     let app = builder
-        .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(window_state_flags()).build())
+        .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(WINDOW_STATE_FLAGS).build())
         .manage(Arc::clone(&state))
         .manage(WindowEffects::default())
         .manage(Windows::default())
@@ -85,24 +84,21 @@ fn main() {
         .setup(move |app| {
             state.start();
             let window = app.get_webview_window(windows::MAIN).ok_or("missing window main from tauri.conf.json")?;
-            app.state::<WindowEffects>().apply(&window);
-            window_effect::reveal_fallback(app.handle(), windows::MAIN, show_window);
+            let applied = app.state::<WindowEffects>().apply(&window);
+            window_effect::reveal_fallback(app.handle(), windows::MAIN, applied);
             build_tray(app.handle())?;
             attention::watch(app.handle().clone(), Arc::clone(&state), TRAY_ID);
             Ok(())
         })
-        .on_page_load(|webview, payload| window_effect::on_page_load(webview, payload, show_window))
+        .on_page_load(window_effect::on_page_load)
         .on_window_event(|window, event| match event {
-            // Zamknięcie głównego okna chowa je do traya; daemon i serwisy działają dalej. An extra window closes.
+            // Closing the main window hides it to the tray; the daemon and services keep running. An extra window closes.
             WindowEvent::CloseRequested { api, .. } if window.label() == windows::MAIN => {
                 api.prevent_close();
                 let _ = window.hide();
             }
             WindowEvent::Focused(true) => window.state::<Windows>().focused(window.label()),
-            WindowEvent::Destroyed => {
-                window.state::<Windows>().closed(window.label());
-                window.state::<WindowEffects>().forget(window.label());
-            }
+            WindowEvent::Destroyed => windows::closed(window.app_handle(), window.label()),
             _ => {}
         })
         .build(tauri::generate_context!())
@@ -139,7 +135,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 // Not on the main thread, where the menu event runs: building a window there deadlocks on Windows.
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
-                    if let Err(err) = open_extra_window(&app, windows::NEW_WINDOW_VIEW) {
+                    if let Err(err) = windows::open(&app, None) {
                         eprintln!("[desktop] opening a window: {err}");
                     }
                 });
@@ -147,7 +143,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             attention::MENU_QUIT => quit_app(app),
             id => {
                 if let Some(target) = attention::focus_from_menu(id) {
-                    attention::focus(app, target, show_window);
+                    attention::focus(app, target);
                 }
             }
         })
@@ -168,25 +164,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 }
 
 fn show_main(app: &AppHandle) {
-    show_window(app, windows::MAIN);
-}
-
-/// Shows a window; one shown before its page has loaded does not pop up again after loading.
-fn show_window(app: &AppHandle, label: &str) {
-    if let Some(effects) = app.try_state::<WindowEffects>() {
-        effects.mark_revealed(label);
-    }
-    windows::show(app, label);
-}
-
-/// An extra window gets the same background effect and reveal after page load as the main window.
-fn open_extra_window(app: &AppHandle, view: &str) -> Result<(), String> {
-    let window: WebviewWindow = windows::open(app, view)?;
-    let label = window.label().to_string();
-    let effects_app = app.clone();
-    app.run_on_main_thread(move || effects_app.state::<WindowEffects>().apply(&window)).map_err(|e| e.to_string())?;
-    window_effect::reveal_fallback(app, &label, show_window);
-    Ok(())
+    windows::show(app, windows::MAIN);
 }
 
 /// „Quit” z traya: zatrzymanie daemona w tle, żeby pętla zdarzeń działała, a pojedyncza instancja

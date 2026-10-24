@@ -1,7 +1,7 @@
 //! Copilot CLI sessions that are waiting for you (ADR-26) and task proposals waiting for a decision (ADR-39): the shell
 //! asks the daemon for the session list every few seconds and, when a session stops working and starts waiting or a new
 //! proposal arrives, draws the user's attention (taskbar flash, Dock bounce) and updates the tray tooltip and menu.
-//! Clicking a menu item shows the window with that session or proposal.
+//! Clicking a menu item shows the window for sessions (ADR-49) with that session or proposal.
 //!
 //! Pytanie idzie z powłoki, a nie z UI: schowane okno WebView może mieć wstrzymane timery, a tray ma działać także
 //! przy zamkniętym oknie. Czy sesja czeka na Ciebie, liczy daemon (`Session.needsAttention`), tak samo dla UI i traya.
@@ -9,7 +9,7 @@
 
 use crate::daemon;
 use crate::daemon_state::DaemonState;
-use crate::windows::Windows;
+use crate::windows::{self, Windows};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -182,9 +182,9 @@ pub fn focus_from_menu(id: &str) -> Option<Focus<'_>> {
 
 /// Shows the window for sessions (ADR-49: the last focused one showing Sessions) and asks its UI to switch to the
 /// session or proposal.
-pub fn focus(app: &AppHandle, target: Focus<'_>, show: fn(&AppHandle, &str)) {
+pub fn focus(app: &AppHandle, target: Focus<'_>) {
     let label = app.state::<Windows>().session_window();
-    show(app, &label);
+    windows::show(app, &label);
     let _ = app.emit_to(label.as_str(), FOCUS_EVENT, target);
 }
 
