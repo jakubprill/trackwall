@@ -5,6 +5,7 @@ import { Terminal } from "@xterm/xterm";
 import { useEffect, useRef, useState } from "react";
 import type { Connection } from "@/lib/connection";
 import { oncePerFrame } from "@/lib/once-per-frame";
+import { IS_MAC } from "@/lib/platform";
 import { ptySocket } from "@/lib/pty-socket";
 import { copiesSelection } from "@/lib/terminal-copy";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
@@ -69,12 +70,13 @@ export function SessionTerminal({ conn, session, live }: { conn: Connection; ses
     connect();
 
     const input = terminal.onData((data) => send({ type: "input", data }));
-    const mac = navigator.userAgent.includes("Mac");
     terminal.attachCustomKeyEventHandler((event) => {
-      if (!copiesSelection(event, { mac, hasSelection: terminal.hasSelection() })) return true;
+      if (!copiesSelection(event, { mac: IS_MAC, hasSelection: terminal.hasSelection() })) return true;
+      // Bez tego przeglądarka wykona też własny skrót: Ctrl+Shift+C otwiera inspektor w Chrome i WebView2 w trybie dev.
+      event.preventDefault();
       navigator.clipboard.writeText(terminal.getSelection()).then(
         () => terminal.clearSelection(),
-        () => setNotice("Nie udało się skopiować zaznaczenia do schowka."),
+        () => setNotice("Nie udało się skopiować zaznaczenia do schowka; zaznacz tekst jeszcze raz."),
       );
       return false;
     });

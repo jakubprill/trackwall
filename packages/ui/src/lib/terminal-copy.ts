@@ -4,16 +4,9 @@
  * Terminal: Ctrl+C z zaznaczonym tekstem i Ctrl+Shift+C kopiują zaznaczenie, a Ctrl+C bez zaznaczenia idzie do sesji.
  * Na macOS kopiuje Cmd+C, które xterm.js przepuszcza do przeglądarki, a Ctrl+C zostaje przerwaniem.
  */
-export interface KeyPress {
-  type: string;
-  key: string;
-  ctrlKey: boolean;
-  shiftKey: boolean;
-  altKey: boolean;
-  metaKey: boolean;
-}
+type CopyKey = Pick<KeyboardEvent, "type" | "key" | "ctrlKey" | "altKey" | "metaKey">;
 
-export function copiesSelection(e: KeyPress, o: { mac: boolean; hasSelection: boolean }): boolean {
-  if (o.mac || !o.hasSelection || e.type !== "keydown") return false;
-  return e.ctrlKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === "c";
+export function copiesSelection(key: CopyKey, { mac, hasSelection }: { mac: boolean; hasSelection: boolean }): boolean {
+  if (mac || !hasSelection || key.type !== "keydown") return false;
+  return key.ctrlKey && !key.altKey && !key.metaKey && key.key.toLowerCase() === "c";
 }

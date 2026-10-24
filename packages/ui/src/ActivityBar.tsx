@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { useEffect } from "react";
+import { IS_MAC } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { ariaShortcut, matchesShortcut, shortcutLabel, type ViewShortcut } from "@/lib/view-shortcut";
 
@@ -11,9 +12,6 @@ export type ActivityView<Id extends string> = {
   /** Widoki pracy są u góry paska, a ustawienia i stan aplikacji przy dolnej krawędzi, jak w VS Code. */
   placement: "top" | "bottom";
 };
-
-/** WKWebView i Safari podają `Macintosh` w user agencie, WebView2 na Windowsie nie. */
-const IS_MAC = navigator.userAgent.includes("Mac");
 
 /**
  * Pasek widoków przy lewej krawędzi okna (activity bar z VS Code): ikona na widok, nazwa i skrót w podpowiedzi,
