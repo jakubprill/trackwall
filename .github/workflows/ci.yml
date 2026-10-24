@@ -1,38 +1,38 @@
 name: CI
 
-# Repo jest publiczne, więc standardowe runnery nie mają limitu minut (ADR-22). Każdy PR i push na main:
-# - lint, rustfmt, typecheck i testy na Linuksie oraz audyt zależności;
-# - testy na Windowsie i macOS;
-# - build daemona i Tauri portable na Windowsie i macOS (clippy, cargo test, smoke test sidecara);
-# - zbiorczy job `CI ok`, jedyny check do wymagania w ochronie gałęzi main.
-# Joby idą równolegle: czas przebiegu to najdłuższy job (build na Windowsie), nie suma.
-# Bez paths-ignore: wymagany check musi raportować przy każdym PR, a docs/release-notes sprawdzają testy.
-# Ręczne uruchomienie zostaje dla gałęzi bez PR. Wydania buduje release.yml niezależnie od tego pliku.
+# The repo is public, so standard runners have no minute limit (ADR-22). Every PR and push to main runs:
+# - lint, rustfmt, typecheck and tests on Linux, plus the dependency audit;
+# - tests on Windows and macOS;
+# - the daemon build and the Tauri portable build on Windows and macOS (clippy, cargo test, sidecar smoke test);
+# - the aggregate `CI ok` job, the only check to require in main branch protection.
+# Jobs run in parallel: a run takes as long as the longest job (the Windows build), not the sum.
+# No paths-ignore: the required check must report on every PR, and tests check docs/release-notes.
+# Manual runs remain for branches without a PR. release.yml builds releases independently of this file.
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
 
-# Nowy push na gałąź PR przerywa jej poprzedni przebieg, bo następny obejmuje te same zmiany. Na main
-# każdy commit ma własną grupę, więc push kolejnego commita go nie przerywa (tylko ręczny przebieg tego samego): wspólna grupa trzyma tylko jeden czekający
-# przebieg i kasuje go, gdy przyjdzie kolejny, a wtedy nie wiadomo, który commit zepsuł main.
+# A new push to a PR branch cancels its previous run, because the next one covers the same changes. On main
+# every commit has its own group, so pushing the next commit does not cancel it (only a manual run of the same commit does): a shared group keeps only one pending
+# run and drops it when another arrives, and then nobody knows which commit broke main.
 concurrency:
   group: ci-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
   cancel-in-progress: true
 
-# Domyślnie żadnych uprawnień; każdy job dostaje tylko to, czego potrzebuje.
+# No permissions by default; every job gets only what it needs.
 permissions: {}
 
-# Te same wersje co w mise.toml; pilnuje tego apps/desktop/test/toolchain.test.ts.
+# The same versions as in mise.toml; apps/desktop/test/toolchain.test.ts guards this.
 env:
   BUN_VERSION: "1.4.2"
   NODE_VERSION: "22"
   RUST_VERSION: "1.90"
 
-# Akcje przypięte do SHA (komentarz to wersja): przesunięty tag akcji nie podmieni kodu, który tu działa.
-# Aktualizuje je Dependabot (.github/dependabot.yml). Node, pnpm i Bun instaluje .github/actions/setup
-# (poza audytem, który potrzebuje tylko pnpm i Node).
+# Actions pinned to a SHA (the comment is the version): a moved action tag cannot swap the code that runs here.
+# Dependabot updates them (.github/dependabot.yml). .github/actions/setup installs Node, pnpm and Bun
+# (except in the audit, which needs only pnpm and Node).
 jobs:
   check:
     name: lint, typecheck, test (ubuntu-latest)
@@ -48,21 +48,21 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           bun-version: ${{ env.BUN_VERSION }}
-      # rustfmt nie potrzebuje bibliotek systemowych Tauri, więc formatowanie Rust dostaje werdykt w szybkim jobie na Linuksie.
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # gałąź stable; wersję Rust daje RUST_VERSION
+      # rustfmt does not need the Tauri system libraries, so Rust formatting gets its verdict in the fast Linux job.
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch; RUST_VERSION sets the Rust version
         with:
           toolchain: ${{ env.RUST_VERSION }}
           components: rustfmt
-      - name: cargo fmt (powłoka Tauri)
+      - name: cargo fmt (Tauri shell)
         run: cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
 
-  # Podatność bez poprawionej wersji blokowałaby każdy PR, więc trafia do auditConfig
-  # w pnpm-workspace.yaml (pnpm audit --ignore) z komentarzem dlaczego, a audyt zostaje w `CI ok`.
+  # A vulnerability without a fixed version would block every PR, so it goes into auditConfig
+  # in pnpm-workspace.yaml (pnpm audit --ignore) with a comment on why, and the audit stays in `CI ok`.
   audit:
-    name: znane podatności zależności
+    name: known dependency vulnerabilities
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -71,12 +71,12 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
-      # Bez pnpm install i Bun: pnpm audit czyta tylko lockfile.
+      # No pnpm install and no Bun: pnpm audit reads only the lockfile.
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
-          # setup-node v5 sam włącza cache pnpm z packageManager; bez install store nie istnieje i zapis cache kończy job błędem.
+          # setup-node v5 enables the pnpm cache from packageManager by itself; without install the store does not exist and saving the cache fails the job.
           package-manager-cache: false
       - run: pnpm audit --audit-level high
 
@@ -100,7 +100,7 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
       - run: pnpm test
 
-  # Build to najdłuższy krok przebiegu, więc ma własny job obok `test`, a nie po nim.
+  # The build is the longest step of a run, so it has its own job next to `test`, not after it.
   desktop:
     name: build, portable (${{ matrix.os }})
     strategy:
@@ -119,24 +119,24 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           bun-version: ${{ env.BUN_VERSION }}
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # gałąź stable; wersję Rust daje RUST_VERSION
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch; RUST_VERSION sets the Rust version
         with:
           toolchain: ${{ env.RUST_VERSION }}
           components: clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: apps/desktop/src-tauri
-          # Ten sam klucz co w release.yml (bez niego klucz zawiera nazwę joba), żeby wydanie trafiało w cache z main.
+          # The same key as in release.yml (without it the key contains the job name), so that a release hits the cache from main.
           shared-key: desktop
-          # Cache zapisuje tylko main; przebiegi PR go czytają, zamiast trzymać własne kopie w limicie 10 GB.
+          # Only main saves the cache; PR runs read it instead of keeping their own copies within the 10 GB limit.
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: pnpm build:desktop
-      # Po buildzie, bo tauri-build wymaga binarki sidecara, którą tworzy build:desktop.
-      - name: cargo clippy (powłoka Tauri)
+      # After the build, because tauri-build needs the sidecar binary that build:desktop creates.
+      - name: cargo clippy (Tauri shell)
         run: cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
-      - name: cargo test (powłoka Tauri)
+      - name: cargo test (Tauri shell)
         run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
-      - name: smoke test sidecara z buildu
+      - name: smoke test of the built sidecar
         run: bun packages/daemon/scripts/smoke.ts apps/desktop/src-tauri/target/release/trackwall-daemon
       - run: pnpm portable
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
@@ -145,9 +145,9 @@ jobs:
           path: out/*.zip
           if-no-files-found: error
 
-  # Check do wymagania w ochronie main (ustawia ją właściciel repo): nazwy jobów macierzy mogą się zmieniać, a ta nie.
-  # `always()`, bo pominięty wymagany check GitHub liczy jako zaliczony; tu pominięty albo
-  # przerwany job zależny daje czerwony wynik.
+  # The check to require in main protection (the repo owner sets it up): matrix job names may change, this one does not.
+  # `always()`, because GitHub counts a skipped required check as passed; here a skipped or
+  # cancelled dependency gives a red result.
   ci-ok:
     name: CI ok
     needs: [check, audit, test, desktop]
@@ -155,7 +155,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Wszystkie joby zielone
+      - name: All jobs green
         env:
           RESULTS: ${{ toJSON(needs) }}
         run: |

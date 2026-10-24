@@ -1,16 +1,16 @@
-# Fixture'y Spring dla kart i grafu (ADR-30)
+# Spring fixtures for cards and the graph (ADR-30)
 
-Pięć zmyślonych repo sklepu, na których testy sprawdzają ekstraktory HTTP, kontrakty endpointów z DTO (ADR-38) i
-krawędzie `http`:
+Five made-up shop repos on which the tests check the HTTP extractors, endpoint contracts with DTOs (ADR-38) and
+`http` edges:
 
-- `orders-api`: aplikacja `orders-api` (port 8081) z kontrolerem zamówień; ścieżki ze stałych `ApiPaths`; DTO
-  `OrderDto` (rekord) z polami typów `OrderLine` (klasa Lomboka z polem `static`) i `OrderStatus` (enum).
-- `orders-bff`: klient Feign do `orders-api` z adresem z konfiguracji (inny w profilu `prod`) i `WebClient` do
-  `payments-service` z adresem z `@Value`.
-- `payments`: aplikacja `payments-service` w `application.properties` z dokumentem profilu `#---` i DTO `Payment`
-  (`data class`).
-- `legacy-reports`: `RestTemplate` z adresem bazowym spoza konfiguracji (graf łączy go po samych ścieżkach).
-- `shop-web`: frontend z `VITE_API_URL` i proxy Vite do `orders-bff` na `localhost:8090`.
+- `orders-api`: the `orders-api` app (port 8081) with an orders controller; paths from `ApiPaths` constants; the DTO
+  `OrderDto` (a record) with fields of types `OrderLine` (a Lombok class with a `static` field) and `OrderStatus` (an enum).
+- `orders-bff`: a Feign client to `orders-api` with an address from configuration (different in the `prod` profile) and a
+  `WebClient` to `payments-service` with an address from `@Value`.
+- `payments`: the `payments-service` app in `application.properties` with a `#---` profile document and the DTO `Payment`
+  (a `data class`).
+- `legacy-reports`: a `RestTemplate` with a base address from outside the configuration (the graph links it by paths alone).
+- `shop-web`: a frontend with `VITE_API_URL` and a Vite proxy to `orders-bff` on `localhost:8090`.
 
-To dane, nie kod Trackwall: knip ich nie sprawdza (`ignore` w `knip.json`), bo `vite.config.mjs` frontendu nie ma
-importera.
+This is data, not Trackwall code: knip does not check it (`ignore` in `knip.json`), because the frontend's `vite.config.mjs`
+has no importer.
