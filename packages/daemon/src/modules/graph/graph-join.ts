@@ -89,5 +89,5 @@ export function repoResolver(cards: readonly GraphCardInput[]): (ref: string) =>
 }
 
 export function missingRepo(ref: string): string {
-  return `nie ma repo „${ref}” na liście repo (podaj identyfikator albo adres host/ścieżka)`;
+  return `no repo “${ref}” in the repo list (give its id or host/path address)`;
 }

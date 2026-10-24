@@ -5,35 +5,35 @@ import type { StatusTone } from "./repo-status.ts";
 /** Komenda zbiorcza w UI (ADR-27): nazwy kroków, stan kroku w jednej linii i postęp; testy w `test/batch-state.test.ts`. */
 
 export const STEP_LABEL: Record<BatchStep, string> = {
-  sync: "Synchronizacja",
-  tools: "Narzędzia",
-  setup: "Zależności",
+  sync: "Sync",
+  tools: "Tools",
+  setup: "Dependencies",
   build: "Build",
 };
 
 /** Co krok robi w repo; komendę składa daemon (§1.2), UI tylko ją opisuje. */
 export const STEP_HINT: Record<BatchStep, string> = {
-  sync: "fetch i fast-forward gałęzi domyślnej",
-  tools: "mise install: JDK, Node i reszta z konfiguracji mise repo",
-  setup: "task mise setup, jeśli repo go ma",
-  build: "task mise build, jeśli repo go ma",
+  sync: "fetch and fast-forward the default branch",
+  tools: "mise install: JDK, Node and everything else from the repo's mise config",
+  setup: "mise task setup, if the repo has one",
+  build: "mise task build, if the repo has one",
 };
 
 /** Ton ma to, co trwa albo wymaga uwagi; pominięty i przerwany krok są zwykłym tekstem, jak zatrzymany task mise. */
 export function stepLabel(step: BatchStepResult): { tone?: StatusTone; label: string } {
   switch (step.state) {
     case "waiting":
-      return { label: "czeka" };
+      return { label: "waiting" };
     case "running":
-      return { tone: "warning", label: "trwa…" };
+      return { tone: "warning", label: "running…" };
     case "done":
-      return { tone: "ok", label: step.detail ?? "gotowe" };
+      return { tone: "ok", label: step.detail ?? "done" };
     case "skipped":
-      return { label: "pominięty" };
+      return { label: "skipped" };
     case "failed":
-      return { tone: "error", label: "błąd" };
+      return { tone: "error", label: "failed" };
     case "cancelled":
-      return { label: "przerwany" };
+      return { label: "cancelled" };
   }
 }
 
@@ -65,6 +65,6 @@ export function batchProgress(run: BatchRun): BatchProgress {
 
 /** Nagłówek wyników: czy komenda trwa, czy się skończyła, i czy użytkownik ją przerwał. */
 export function batchRunLabel(run: BatchRun, now: Date): string {
-  if (run.finishedAt === null) return run.cancelled ? "Przerywanie" : "Trwa";
-  return `${run.cancelled ? "Przerwana" : "Zakończona"} ${relativeTime(run.finishedAt, now)}`;
+  if (run.finishedAt === null) return run.cancelled ? "Cancelling" : "Running";
+  return `${run.cancelled ? "Cancelled" : "Finished"} ${relativeTime(run.finishedAt, now)}`;
 }

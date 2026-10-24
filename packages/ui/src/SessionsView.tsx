@@ -48,23 +48,25 @@ export function SessionsView({
     <div className="grid h-full min-h-0 grid-cols-[var(--spacing-sidebar)_1fr]">
       <aside className="bg-card flex min-h-0 flex-col border-r">
         <div className="flex items-center justify-between px-4 pt-3 pb-2">
-          <h2 className="hud-label">Sesje {sessions.data && <span className="text-primary">{`// ${twoDigits(entries.length)}`}</span>}</h2>
-          <Button variant="ghost" size="icon" onClick={() => onSelect({ kind: "new" })} aria-label="Nowe zadanie albo sesja Copilot CLI">
+          <h2 className="hud-label">
+            Sessions {sessions.data && <span className="text-primary">{`// ${twoDigits(entries.length)}`}</span>}
+          </h2>
+          <Button variant="ghost" size="icon" onClick={() => onSelect({ kind: "new" })} aria-label="New task or Copilot CLI session">
             <Plus />
           </Button>
         </div>
         {next && (
           <div className="px-4 pb-3">
             <Button variant="outline" size="sm" className="w-full" onClick={() => show(next.id)}>
-              <BellRing /> {waiting === 1 ? "Sesja czeka na Ciebie" : `Następna czekająca (${waiting})`}
+              <BellRing /> {waiting === 1 ? "A session is waiting for you" : `Next waiting (${waiting})`}
             </Button>
           </div>
         )}
-        <nav aria-label="Lista sesji" className="flex-1 overflow-y-auto px-2 pb-4">
+        <nav aria-label="Session list" className="flex-1 overflow-y-auto px-2 pb-4">
           {sessions.error && <ErrorWithRetry message={sessions.error} onRetry={sessions.reload} />}
           {sessions.data && entries.length === 0 && (
             <p className="text-muted-foreground px-2 text-sm">
-              Nie ma jeszcze sesji. Daj agentowi zadanie albo uruchom Copilot CLI w repo z folderu z projektami.
+              No sessions yet. Give the agent a task or start Copilot CLI in a repo from your projects folder.
             </p>
           )}
           {entries.map((entry, i) => (
@@ -150,10 +152,10 @@ function SessionListItem({
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate text-sm font-medium">{task?.repo ?? session?.repo}</span>
-          {session?.needsAttention && <BellRing className="text-warning size-3.5 shrink-0" aria-label="czeka na Ciebie" />}
+          {session?.needsAttention && <BellRing className="text-warning size-3.5 shrink-0" aria-label="waiting for you" />}
         </span>
         {task && <TaskLine task={task} />}
-        <span className="text-muted-foreground text-xs">{session ? <StatusLabel {...sessionStateLabel(session)} /> : "bez sesji"}</span>
+        <span className="text-muted-foreground text-xs">{session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}</span>
         {session?.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
       </span>
     </button>
@@ -164,7 +166,7 @@ function SessionListItem({
 function TaskLine({ task }: { task: Task }) {
   return (
     <span className="text-muted-foreground flex min-w-0 items-center gap-1 text-xs" title={task.branch}>
-      <GitBranch className="size-3 shrink-0" aria-label="zadanie w worktree" />
+      <GitBranch className="size-3 shrink-0" aria-label="task in a worktree" />
       <span className="truncate">{task.prompt}</span>
     </span>
   );
@@ -208,11 +210,11 @@ function SessionPanel({
         {action.error && <span className="text-destructive max-w-xs truncate text-xs">{action.error}</span>}
         {live ? (
           <Button variant="outline" size="sm" onClick={stop.run} disabled={stop.pending || session.run.kind === "stopping"}>
-            <Square /> Zatrzymaj
+            <Square /> Stop
           </Button>
         ) : (
           <Button variant="outline" size="sm" onClick={dismiss.run} disabled={dismiss.pending}>
-            <X /> Zamknij
+            <X /> Close
           </Button>
         )}
       </header>
@@ -254,20 +256,20 @@ function NewSession({
 
   return (
     <div className="flex max-w-3xl flex-col gap-4 p-6">
-      <h3 className="hud-label">Nowe zadanie dla agenta</h3>
+      <h3 className="hud-label">New task for the agent</h3>
       <p className="text-muted-foreground max-w-prose text-sm">
-        Trackwall tworzy w wybranym repo nową gałąź od gałęzi domyślnej w osobnym worktree i uruchamia w nim Copilot CLI z Twoim poleceniem,
-        więc kilka zadań w jednym repo nie wchodzi sobie w drogę. Sesja działa w terminalu należącym do daemona, także po zamknięciu okna, a
-        zakładka „Zmiany” pokazuje, co agent zmienia.
+        Trackwall creates a new branch from the default branch of the chosen repo in a separate worktree and starts Copilot CLI there with
+        your prompt, so several tasks in one repo stay out of each other's way. The session runs in a terminal owned by the daemon, also
+        after you close the window, and the Changes tab shows what the agent changes.
       </p>
       {repos.error && <ErrorWithRetry message={repos.error} onRetry={repos.reload} />}
       {repos.data && repos.data.repos.length === 0 && (
-        <p className="text-muted-foreground text-sm">W folderze z projektami nie ma repo. Ustaw folder albo sklonuj repo w widoku Repo.</p>
+        <p className="text-muted-foreground text-sm">The projects folder has no repos. Set the folder or clone a repo in Repos.</p>
       )}
       {repos.data && repos.data.repos.length > 0 && (
         <>
           <select
-            aria-label="Repo zadania albo sesji"
+            aria-label="Repo for the task or session"
             value={chosen}
             onChange={(e) => setRepo(e.target.value)}
             className="border-input bg-card h-9 w-fit min-w-48 rounded-md border px-3 text-sm"
@@ -279,8 +281,8 @@ function NewSession({
             ))}
           </select>
           <Textarea
-            aria-label="Polecenie dla agenta"
-            placeholder="Co agent ma zrobić, np. „Dodaj walidację adresu e-mail w formularzu rejestracji i test”"
+            aria-label="Prompt for the agent"
+            placeholder="What the agent should do, e.g. “Add email validation to the sign-up form, with a test”"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             maxLength={8000}
@@ -289,22 +291,22 @@ function NewSession({
           {chosen && (
             <div className="flex flex-wrap items-center gap-2">
               <Button onClick={() => createTask.run(chosen)} disabled={pending || prompt.trim() === ""}>
-                <GitBranch /> Utwórz zadanie
+                <GitBranch /> Create task
               </Button>
               <Button variant="outline" onClick={() => start.run(chosen)} disabled={pending}>
-                <Play /> Sesja w repo bez zadania
+                <Play /> Session in the repo, no task
               </Button>
               {onCancel && (
                 <Button variant="ghost" onClick={onCancel}>
-                  Anuluj
+                  Cancel
                 </Button>
               )}
             </div>
           )}
           <p className="text-muted-foreground max-w-prose text-xs">
-            Copilot CLI pyta o zaufanie w każdym nowym folderze, więc też w każdym worktree. Żeby nie pytał przy każdym zadaniu, dopisz{" "}
-            <span className="text-foreground font-mono">{worktreesDir}</span> do <span className="font-mono">trustedFolders</span> w{" "}
-            <span className="font-mono">~/.copilot/config.json</span>; zaufanie obejmuje podkatalogi.
+            Copilot CLI asks you to trust every new folder, including every worktree. To skip that prompt for each task, add{" "}
+            <span className="text-foreground font-mono">{worktreesDir}</span> to <span className="font-mono">trustedFolders</span> in{" "}
+            <span className="font-mono">~/.copilot/config.json</span>; trust covers subfolders.
           </p>
         </>
       )}

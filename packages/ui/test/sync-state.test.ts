@@ -17,14 +17,14 @@ describe("synchronizacja w UI", () => {
       { ...target, state: "failed", message: "Permission denied (publickey)." },
     ];
     expect(repos.map(syncRepoTone)).toEqual([
-      { tone: "warning", label: "czeka" },
-      { tone: "warning", label: "synchronizuję…" },
+      { tone: "warning", label: "waiting" },
+      { tone: "warning", label: "syncing…" },
       { tone: "ok", label: "+1 commit" },
-      { tone: "ok", label: "+3 commity" },
-      { tone: "ok", label: "+12 commitów" },
-      { tone: "ok", label: "aktualne" },
-      { tone: "warning", label: "pominięte: zmiany lokalne" },
-      { tone: "error", label: "błąd synchronizacji" },
+      { tone: "ok", label: "+3 commits" },
+      { tone: "ok", label: "+12 commits" },
+      { tone: "ok", label: "up to date" },
+      { tone: "warning", label: "skipped: local changes" },
+      { tone: "error", label: "sync failed" },
     ]);
   });
 
@@ -49,12 +49,12 @@ describe("synchronizacja w UI", () => {
     expect(listSyncBadge({ ...target, state: "up-to-date", branch: "main" })).toBeUndefined();
     expect(listSyncBadge({ ...target, state: "failed", message: "Permission denied (publickey)." })).toEqual({
       tone: "error",
-      label: "błąd synchronizacji",
+      label: "sync failed",
       message: "Permission denied (publickey).",
     });
     expect(listSyncBadge({ ...target, state: "updated", branch: "main", commits: 2 })).toEqual({
       tone: "ok",
-      label: "+2 commity",
+      label: "+2 commits",
       message: undefined,
     });
   });

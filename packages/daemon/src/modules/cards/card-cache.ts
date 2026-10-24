@@ -83,7 +83,7 @@ export class CardCache {
       mkdirSync(this.dir, { recursive: true });
       writeFileAtomic(this.file(card.commit), JSON.stringify({ extractorVersion: EXTRACTOR_VERSION, card }));
     } catch (err) {
-      this.log(`nie udało się zapisać karty ${card.commit}: ${String(err)}`);
+      this.log(`failed to save card ${card.commit}: ${String(err)}`);
     }
   }
 

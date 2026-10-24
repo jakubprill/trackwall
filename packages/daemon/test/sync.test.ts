@@ -118,7 +118,8 @@ describe("synchronizacja wszystkich repo", () => {
       const run = await workspace.sync().then(() => finished(workspace));
 
       expect(run.repos.map((r) => (r.state === "skipped" ? r.reason : r.state))).toEqual(["dirty", "diverged", "ahead"]);
-      expect(run.repos[0]).toMatchObject({ message: "main jest wybrana i ma niezacommitowane zmiany" });
+      expect(run.repos[0]).toMatchObject({ message: "main is checked out and has uncommitted changes" });
+      expect(run.repos[2]).toMatchObject({ message: "main has 1 unpushed commit" });
       expect([dirty, diverged, ahead].map((r) => head(r.clone))).toEqual(before);
     },
     GIT_HEAVY_MS,

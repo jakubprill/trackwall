@@ -142,7 +142,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
     const data = RepoCardResult.parse(result.structuredContent);
     expect(data.card?.provides.map((p) => (p.kind === "package" ? p.name : p.kind))).toEqual(["com.example:orders-bff"]);
     expect(data.card?.mechanisms.map((m) => [m.id, m.evidence[0]?.path])).toEqual([["spring-boot", "pom.xml"]]);
-    expect(data.tags.find((t) => t.name === "backend")?.reason).toBe("spring-boot w pom.xml:1");
+    expect(data.tags.find((t) => t.name === "backend")?.reason).toBe("spring-boot in pom.xml:1");
     await client.close();
   });
 
@@ -157,7 +157,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
     ]);
     const unknown = await client.callTool({ name: "who_calls", arguments: { repo: "nie-ma" } });
     expect(unknown.isError).toBe(true);
-    expect(unknown.content).toEqual([{ type: "text", text: 'not_found: w folderze z projektami nie ma repo "nie-ma"' }]);
+    expect(unknown.content).toEqual([{ type: "text", text: 'not_found: no repo "nie-ma" in the projects folder' }]);
     const tooDeep = await client.callTool({ name: "subgraph_for", arguments: { repo: "orders-bff", depth: 9 } });
     expect(tooDeep.isError).toBe(true);
     await client.close();
@@ -196,7 +196,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const result = await client.callTool({ name: "get_repo", arguments: { repo: "nie-ma-takiego" } });
     expect(result.isError).toBe(true);
-    expect(result.content).toEqual([{ type: "text", text: 'not_found: w folderze z projektami nie ma repo "nie-ma-takiego"' }]);
+    expect(result.content).toEqual([{ type: "text", text: 'not_found: no repo "nie-ma-takiego" in the projects folder' }]);
     await client.close();
   });
 
@@ -205,7 +205,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
     const result = await client.callTool({ name: "get_repo", arguments: { repo: "../etc" } });
     expect(result.isError).toBe(true);
     // Odrzuca schemat w SDK, zanim identyfikator dotrze do workspace (tam byłoby `not_found`).
-    expect(JSON.stringify(result.content)).toContain("identyfikator repo");
+    expect(JSON.stringify(result.content)).toContain("repo id");
     expect(JSON.stringify(result.content)).not.toContain("not_found");
     await client.close();
   });
@@ -234,7 +234,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const missing = await client.callTool({ name: "tail", arguments: { repo: "nie-ma-takiego", miseTask: "dev", limit: 10 } });
     expect(missing.isError).toBe(true);
-    expect(missing.content).toEqual([{ type: "text", text: 'not_found: w folderze z projektami nie ma repo "nie-ma-takiego"' }]);
+    expect(missing.content).toEqual([{ type: "text", text: 'not_found: no repo "nie-ma-takiego" in the projects folder' }]);
 
     const empty = LogTail.parse(
       (await client.callTool({ name: "tail", arguments: { repo: "orders-bff", miseTask: "build", limit: 10 } })).structuredContent,
@@ -315,7 +315,7 @@ describe("most stdio", () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-mcp-nodaemon-"));
     const [reply] = await throughBridge(home, [INITIALIZE]);
     expect(reply).toMatchObject({ jsonrpc: "2.0", id: 1, error: { code: -32000 } });
-    expect(JSON.stringify(reply)).toContain("Uruchom aplikację Trackwall");
+    expect(JSON.stringify(reply)).toContain("Start the Trackwall app");
   });
 
   test("z nieaktualnym tokenem w daemon.json zgłasza odrzucenie przez daemon", async () => {
@@ -324,17 +324,17 @@ describe("most stdio", () => {
     const [reply] = await throughBridge(home, [INITIALIZE]);
     expect(reply).toMatchObject({
       id: 1,
-      error: { code: -32000, message: "Trackwall odrzucił żądanie (HTTP 401): missing or invalid token" },
+      error: { code: -32000, message: "Trackwall rejected the request (HTTP 401): missing or invalid token" },
     });
   });
 
   test("linia, która nie jest JSON-em, dostaje błąd parsowania, a JSON spoza JSON-RPC błąd żądania", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-mcp-garbage-"));
     expect(await throughBridge(home, ["to nie json"])).toEqual([
-      { jsonrpc: "2.0", id: null, error: { code: -32700, message: "wiadomość nie jest poprawnym JSON-em" } },
+      { jsonrpc: "2.0", id: null, error: { code: -32700, message: "the message is not valid JSON" } },
     ]);
     expect(await throughBridge(home, ["42"])).toEqual([
-      { jsonrpc: "2.0", id: null, error: { code: -32600, message: "wiadomość nie jest obiektem JSON-RPC" } },
+      { jsonrpc: "2.0", id: null, error: { code: -32600, message: "the message is not a JSON-RPC object" } },
     ]);
   });
 
@@ -369,7 +369,7 @@ describe("most stdio", () => {
       const { port } = silent.address() as AddressInfo;
       writeDaemonFile(home, { pid: process.pid, port, token: TOKEN, startedAt: "2026-10-23T00:00:00Z", version: "9.9.9" });
       expect(await throughBridge(home, [INITIALIZE])).toEqual([
-        { jsonrpc: "2.0", id: 1, error: { code: -32000, message: "Trackwall nie odpowiedział na żądanie" } },
+        { jsonrpc: "2.0", id: 1, error: { code: -32000, message: "Trackwall did not answer the request" } },
       ]);
     } finally {
       silent.close();

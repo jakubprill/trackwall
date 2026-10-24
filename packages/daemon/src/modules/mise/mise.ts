@@ -74,7 +74,7 @@ export class Mise {
 
   async start(repo: string, miseTask: string): Promise<RunState> {
     const dir = await this.deps.repos.repoPath(repo);
-    if (!(await this.hasTask(dir, miseTask))) throw new DomainError("not_found", `repo ${repo} nie ma taska mise "${miseTask}"`);
+    if (!(await this.hasTask(dir, miseTask))) throw new DomainError("not_found", `repo ${repo} has no mise task "${miseTask}"`);
     const run = await this.launch(owner(repo, miseTask), dir, ["run", miseTask], repo, taskLogSource(repo, miseTask));
     this.remember(repo, miseTask);
     return run;
@@ -103,7 +103,7 @@ export class Mise {
 
   async stop(repo: string, miseTask: string): Promise<RunState> {
     const stopped = await this.deps.procs.stop(owner(repo, miseTask));
-    if (!stopped) throw new DomainError("not_found", `task mise "${miseTask}" w ${repo} nie był uruchamiany`);
+    if (!stopped) throw new DomainError("not_found", `mise task "${miseTask}" in ${repo} has not been run`);
     return stopped;
   }
 
@@ -166,7 +166,7 @@ export class Mise {
     if (signal.aborted) stop();
     try {
       const end = await Promise.race([this.deps.procs.ended(groupOwner), stopFailed]);
-      if (!end) throw new Error(`grupa ${groupOwner} zniknęła przed końcem`);
+      if (!end) throw new Error(`group ${groupOwner} disappeared before it ended`);
       return end;
     } finally {
       signal.removeEventListener("abort", stop);
@@ -191,10 +191,10 @@ export function parseTaskList(result: MiseCliResult): TaskList {
   try {
     json = JSON.parse(result.stdout);
   } catch {
-    return { kind: "error", message: "mise tasks ls --json zwrócił coś, co nie jest JSON-em" };
+    return { kind: "error", message: "mise tasks ls --json returned something that is not JSON" };
   }
   const parsed = ListedTasks.safeParse(json);
-  if (!parsed.success) return { kind: "error", message: `nieoczekiwany format mise tasks ls --json: ${z.prettifyError(parsed.error)}` };
+  if (!parsed.success) return { kind: "error", message: `unexpected mise tasks ls --json format: ${z.prettifyError(parsed.error)}` };
   const tasks = parsed.data
     .filter((t) => !t.hide && MiseTaskName.safeParse(t.name).success)
     .map((t) => ({ name: t.name, description: t.description ?? "" }));
@@ -222,5 +222,5 @@ function failure(stderr: string, code: number | null): string {
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter((l) => l !== "" && !/^mise WARN/.test(l));
-  return lines.join("\n") || `mise zakończył się kodem ${code}`;
+  return lines.join("\n") || `mise exited with code ${code}`;
 }

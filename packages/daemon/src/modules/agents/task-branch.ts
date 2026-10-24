@@ -16,7 +16,7 @@ export const TASK_BRANCH_PREFIX = "trackwall/";
  */
 export const TaskBranch = z
   .string()
-  .regex(new RegExp(`^${TASK_BRANCH_PREFIX}[a-z0-9][a-z0-9-]*$`), `gałąź zadania: ${TASK_BRANCH_PREFIX} i [a-z0-9-]`);
+  .regex(new RegExp(`^${TASK_BRANCH_PREFIX}[a-z0-9][a-z0-9-]*$`), `task branch: ${TASK_BRANCH_PREFIX} and [a-z0-9-]`);
 /** Krótko: katalog worktree leży w katalogu stanu, a Windows ma limit 260 znaków na całą ścieżkę pliku w repo. */
 const SLUG_MAX = 32;
 const ID_CHARS = 6;
@@ -42,7 +42,7 @@ export function taskSlug(prompt: string, taskId: string): string {
   // Pierwsze słowo dłuższe niż limit ucina się zamiast znikać.
   if (slug === "" && words[0]) slug = words[0].slice(0, SLUG_MAX);
   const suffix = taskId.replaceAll("-", "").slice(0, ID_CHARS);
-  return slug === "" ? `zadanie-${suffix}` : `${slug}-${suffix}`;
+  return slug === "" ? `task-${suffix}` : `${slug}-${suffix}`;
 }
 
 /**

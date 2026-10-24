@@ -5,7 +5,7 @@
  *     Trackwall/trackwall.exe          okno + tray (wymaga WebView2)
  *     Trackwall/trackwall-daemon.exe   daemon (sidecar)
  *     Trackwall/ui/                    UI dla trybu bez okna: trackwall-daemon.exe --ui
- *     Trackwall/CZYTAJ.txt
+ *     Trackwall/README.txt
  *   macOS:   trackwall-<wersja>-macos-<arch>.zip z Trackwall.app
  *
  * Bez instalatora i bez zapisu poza katalogiem użytkownika: archiwum rozpakowuje się gdziekolwiek.
@@ -33,17 +33,17 @@ if (process.platform === "win32") {
   cpSync(need(join(release, "trackwall-daemon.exe")), join(stage, "trackwall-daemon.exe"));
   cpSync(need(join(REPO, "packages", "ui", "dist")), join(stage, "ui"), { recursive: true });
   writeFileSync(
-    join(stage, "CZYTAJ.txt"),
+    join(stage, "README.txt"),
     [
       `Trackwall ${version} (portable)`,
       "",
-      "Uruchom trackwall.exe. Instalacja nie jest potrzebna, stan trafia do %USERPROFILE%\\.trackwall.",
+      "Run trackwall.exe. No installation needed; state goes to %USERPROFILE%\\.trackwall.",
       "",
-      "Brak WebView2 albo okno się nie otwiera: uruchom trackwall-daemon.exe --ui,",
-      "Trackwall otworzy się w domyślnej przeglądarce.",
+      "No WebView2, or the window does not open: run trackwall-daemon.exe --ui,",
+      "and Trackwall opens in your default browser.",
       "",
-      "Daemon działa po zamknięciu okna (ikona w zasobniku). Pełne wyjście: ikona w zasobniku > Wyjdź.",
-      "Log startu daemona: %USERPROFILE%\\.trackwall\\logs\\daemon-start.log",
+      "The daemon keeps running after you close the window (tray icon). To quit fully: tray icon > Quit.",
+      "Daemon startup log: %USERPROFILE%\\.trackwall\\logs\\daemon-start.log",
       "",
     ].join("\r\n"),
   );

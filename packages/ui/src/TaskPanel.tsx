@@ -52,9 +52,9 @@ export function TaskPanel({
   const tabs = session
     ? ([
         { id: "terminal", label: "Terminal" },
-        { id: "changes", label: "Zmiany" },
+        { id: "changes", label: "Changes" },
       ] as const)
-    : ([{ id: "changes", label: "Zmiany" }] as const);
+    : ([{ id: "changes", label: "Changes" }] as const);
 
   return (
     <>
@@ -63,11 +63,11 @@ export function TaskPanel({
           <span className="flex min-w-0 items-center gap-3">
             <span className="truncate text-sm font-medium">{task.repo}</span>
             <span className="text-muted-foreground flex min-w-0 items-center gap-1 font-mono text-xs">
-              <GitBranch className="size-3 shrink-0" aria-label="gałąź" />
+              <GitBranch className="size-3 shrink-0" aria-label="branch" />
               <span className="truncate">{task.branch}</span>
             </span>
             <span className="text-muted-foreground shrink-0 text-xs">
-              {session ? <StatusLabel {...sessionStateLabel(session)} /> : "bez sesji"}
+              {session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}
             </span>
             <span className="text-muted-foreground shrink-0 text-xs">{relativeTime(session?.startedAt ?? task.createdAt, new Date())}</span>
           </span>
@@ -84,10 +84,10 @@ export function TaskPanel({
         ) : (
           <>
             <Button variant="outline" size="sm" onClick={resume.run} disabled={resume.pending || removing}>
-              <Play /> Wznów
+              <Play /> Resume
             </Button>
             <Button variant="outline" size="sm" onClick={() => setRemoving(true)} disabled={removing}>
-              <Trash2 /> Zakończ zadanie
+              <Trash2 /> End task
             </Button>
           </>
         )}
@@ -115,7 +115,7 @@ function StopButton({ conn, session, onStopped }: { conn: Connection; session: S
     <>
       {stop.error && <span className="text-destructive max-w-xs truncate text-xs">{stop.error}</span>}
       <Button variant="outline" size="sm" onClick={stop.run} disabled={stop.pending || session.run.kind === "stopping"}>
-        <Square /> Zatrzymaj
+        <Square /> Stop
       </Button>
     </>
   );

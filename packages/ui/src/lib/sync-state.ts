@@ -1,34 +1,33 @@
-import type { SyncRepo, SyncRun, SyncSkipReason } from "@trackwall/protocol";
-import { countLabel } from "./format.ts";
+import { countLabel, type SyncRepo, type SyncRun, type SyncSkipReason } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 
 /** Synchronizacja w UI (ADR-21): ton i krótki tekst wyniku repo oraz postęp całości; testy w `test/sync-state.test.ts`. */
 
 /** Krótko, bo stoi w wierszu listy repo; pełne zdanie z daemona jest w panelu synchronizacji. */
 const SKIP_LABEL: Record<SyncSkipReason, string> = {
-  "no-remote": "bez remote",
-  "no-default-branch": "brak gałęzi domyślnej",
-  "no-local-branch": "brak gałęzi lokalnej",
-  dirty: "zmiany lokalne",
-  diverged: "rozjechana gałąź",
-  ahead: "niewypchnięte commity",
-  "checked-out-elsewhere": "w innym worktree",
+  "no-remote": "no remote",
+  "no-default-branch": "no default branch",
+  "no-local-branch": "no local branch",
+  dirty: "local changes",
+  diverged: "diverged branch",
+  ahead: "unpushed commits",
+  "checked-out-elsewhere": "in another worktree",
 };
 
 export function syncRepoTone(repo: SyncRepo): { tone: StatusTone; label: string } {
   switch (repo.state) {
     case "waiting":
-      return { tone: "warning", label: "czeka" };
+      return { tone: "warning", label: "waiting" };
     case "running":
-      return { tone: "warning", label: "synchronizuję…" };
+      return { tone: "warning", label: "syncing…" };
     case "updated":
-      return { tone: "ok", label: `+${countLabel(repo.commits, { one: "commit", few: "commity", many: "commitów" })}` };
+      return { tone: "ok", label: `+${countLabel(repo.commits, { one: "commit", other: "commits" })}` };
     case "up-to-date":
-      return { tone: "ok", label: "aktualne" };
+      return { tone: "ok", label: "up to date" };
     case "skipped":
-      return { tone: "warning", label: `pominięte: ${SKIP_LABEL[repo.reason]}` };
+      return { tone: "warning", label: `skipped: ${SKIP_LABEL[repo.reason]}` };
     case "failed":
-      return { tone: "error", label: "błąd synchronizacji" };
+      return { tone: "error", label: "sync failed" };
   }
 }
 

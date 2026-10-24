@@ -18,8 +18,8 @@ export const MCP_PATH = "/mcp";
 const MAX_REQUEST_BYTES = 256 * 1024;
 
 const INSTRUCTIONS =
-  `Trackwall zna repo z folderu z projektami użytkownika. Zacznij od ${mcpTools.listRepos.name}; szczegóły jednego ` +
-  `repo (README, ostatnie commity, taski mise) daje ${mcpTools.getRepo.name}. Narzędzia tylko czytają.`;
+  `Trackwall knows the repos in the user's projects folder. Start with ${mcpTools.listRepos.name}; ` +
+  `${mcpTools.getRepo.name} gives the details of one repo (README, recent commits, mise tasks). The tools are read-only.`;
 
 export interface McpEndpoint {
   handle: (req: IncomingMessage, res: ServerResponse) => Promise<void>;
@@ -33,7 +33,7 @@ export function createMcpEndpoint(o: ToolContext & { version: string }): McpEndp
       for (const register of TOOL_REGISTRATIONS) register(server, o);
       return server;
     },
-    { onerror: (err) => o.log(`żądanie odrzucone: ${err.message}`), maxRequestBodySize: MAX_REQUEST_BYTES },
+    { onerror: (err) => o.log(`request rejected: ${err.message}`), maxRequestBodySize: MAX_REQUEST_BYTES },
   );
   return {
     handle: async (req, res) => {

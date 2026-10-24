@@ -38,8 +38,8 @@ export function GraphView({ conn }: { conn: Connection }) {
     <div className="grid h-full min-h-0 grid-cols-[1fr_24rem]">
       <section className="flex min-h-0 min-w-0 flex-col">
         <header className="flex items-center justify-between px-4 pt-3 pb-2">
-          <h2 className="hud-label">Przegląd {data && <span className="text-primary">{`// ${twoDigits(data.nodes.length)}`}</span>}</h2>
-          <Button variant="ghost" size="icon" onClick={graph.reload} aria-label="Odśwież graf">
+          <h2 className="hud-label">Overview {data && <span className="text-primary">{`// ${twoDigits(data.nodes.length)}`}</span>}</h2>
+          <Button variant="ghost" size="icon" onClick={graph.reload} aria-label="Refresh graph">
             <RefreshCw />
           </Button>
         </header>
@@ -50,7 +50,7 @@ export function GraphView({ conn }: { conn: Connection }) {
         )}
         {!data && !graph.error && (
           <div className="px-4">
-            <Loading text="Liczenie grafu z kart repo…" />
+            <Loading text="Building the graph from repo cards…" />
           </div>
         )}
         {data && layout && <GraphCanvas graph={data} layout={layout} selected={node?.repo} onSelect={setSelected} />}

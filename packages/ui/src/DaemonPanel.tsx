@@ -26,15 +26,15 @@ export function DaemonPanel({ conn, onRetry }: { conn: Connection; onRetry: () =
         meta={
           <span className="flex items-center gap-2">
             <StatusBadge info={info} />
-            <Button variant="ghost" size="icon" className="size-6" onClick={info.reload} aria-label="Odśwież">
+            <Button variant="ghost" size="icon" className="size-6" onClick={info.reload} aria-label="Refresh">
               <RefreshCw />
             </Button>
           </span>
         }
       >
         <div className="flex flex-col gap-4 p-4">
-          <p className="text-muted-foreground text-sm">Proces, który trzyma cały stan Trackwalla.</p>
-          {!info.data && !info.error && <Loading text="Łączenie z daemonem…" />}
+          <p className="text-muted-foreground text-sm">The process that holds all of Trackwall's state.</p>
+          {!info.data && !info.error && <Loading text="Connecting to the daemon…" />}
           {info.error && (
             <ErrorWithRetry
               message={info.error}
@@ -53,20 +53,20 @@ export function DaemonPanel({ conn, onRetry }: { conn: Connection; onRetry: () =
 }
 
 function StatusBadge({ info }: { info: Remote<DaemonInfo> }) {
-  if (info.error) return <Badge variant="destructive">błąd</Badge>;
-  if (info.data) return <Badge variant="success">połączony</Badge>;
-  return <Badge variant="secondary">łączenie</Badge>;
+  if (info.error) return <Badge variant="destructive">error</Badge>;
+  if (info.data) return <Badge variant="success">connected</Badge>;
+  return <Badge variant="secondary">connecting</Badge>;
 }
 
 function InfoTable({ info }: { info: DaemonInfo }) {
   const rows: [string, string][] = [
-    ["Wersja", info.version],
+    ["Version", info.version],
     ["PID", String(info.pid)],
     ["Runtime", `${info.runtime.name} ${info.runtime.version}`],
-    ["Platforma", `${info.platform} / ${info.arch}`],
-    ["Uruchomiony przez", info.launchedBy === "desktop" ? "aplikację desktopową" : "ręcznie"],
-    ["Działa od", formatUptime(info.uptimeMs)],
-    ["Katalog stanu", info.home],
+    ["Platform", `${info.platform} / ${info.arch}`],
+    ["Launched", info.launchedBy === "desktop" ? "by the desktop app" : "manually"],
+    ["Uptime", formatUptime(info.uptimeMs)],
+    ["State directory", info.home],
   ];
   return (
     <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">

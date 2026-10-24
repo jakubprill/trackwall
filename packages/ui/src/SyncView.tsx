@@ -19,25 +19,25 @@ export function SyncView({ sync, canSync }: { sync: SyncRunHandle; canSync: bool
     <div className="flex flex-col gap-4 p-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-1">
-          <span className="hud-label">Synchronizacja</span>
-          <h1 className="text-xl font-semibold tracking-tight">Wszystkie repo z folderu</h1>
+          <span className="hud-label">Sync</span>
+          <h1 className="text-xl font-semibold tracking-tight">All repos in the folder</h1>
           <p className="text-muted-foreground max-w-prose text-sm">
-            Fetch każdego repo i przesunięcie gałęzi domyślnej do zdalnej, jeśli to czysty fast-forward. Repo ze zmianami w gałęzi
-            domyślnej, z rozjechaną albo niewypchniętą gałęzią zostaje nietknięte.
+            Fetches every repo and moves the default branch to the remote one when that is a clean fast-forward. A repo with changes on the
+            default branch, or with a diverged or unpushed branch, is left untouched.
           </p>
         </div>
         <SyncButton sync={sync} canSync={canSync} />
       </header>
       {sync.error && <p className="text-destructive text-sm whitespace-pre-wrap break-words">{sync.error}</p>}
       {run === undefined && !sync.error && <Loading />}
-      {run === null && <p className="text-muted-foreground text-sm">Od startu daemona nie było synchronizacji tego folderu.</p>}
+      {run === null && <p className="text-muted-foreground text-sm">This folder has not been synced since the daemon started.</p>}
       {run && progress && (
         <Surface
-          label={run.finishedAt === null ? "Trwa" : `Zakończona ${relativeTime(run.finishedAt, new Date())}`}
+          label={run.finishedAt === null ? "Running" : `Finished ${relativeTime(run.finishedAt, new Date())}`}
           meta={`${progress.done}/${progress.total}`}
           note={summary(progress)}
         >
-          {run.repos.length === 0 && <p className="text-muted-foreground p-3 text-sm">W folderze z projektami nie było repo.</p>}
+          {run.repos.length === 0 && <p className="text-muted-foreground p-3 text-sm">The projects folder had no repos.</p>}
           <ul className="divide-y">
             {run.repos.map((repo) => (
               <SyncRow key={repo.path} repo={repo} />
@@ -56,7 +56,7 @@ export function SyncBar({ sync, onShow }: { sync: SyncRunHandle; onShow: () => v
       <SyncButton sync={sync} canSync onStart={onShow} />
       {sync.run && (
         <Button variant="ghost" size="sm" onClick={onShow}>
-          Wyniki
+          Results
         </Button>
       )}
     </div>
@@ -75,14 +75,14 @@ function SyncButton({ sync, canSync, onStart }: { sync: SyncRunHandle; canSync: 
         onStart?.();
       }}
     >
-      <FolderSync /> {progress ? `Synchronizuję ${progress.done}/${progress.total}` : "Synchronizuj wszystko"}
+      <FolderSync /> {progress ? `Syncing ${progress.done}/${progress.total}` : "Sync all"}
     </Button>
   );
 }
 
 function summary(p: SyncProgress): string | undefined {
   if (p.updated + p.skipped + p.failed === 0) return undefined;
-  return `Przesunięte: ${p.updated} · pominięte: ${p.skipped} · błędy: ${p.failed}`;
+  return `Updated: ${p.updated} · skipped: ${p.skipped} · failed: ${p.failed}`;
 }
 
 function SyncRow({ repo }: { repo: SyncRepo }) {

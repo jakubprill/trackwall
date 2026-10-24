@@ -61,7 +61,10 @@ export function runProgram(command: string, args: readonly string[], opts: RunOp
         child.kill();
       }
     };
-    const timer = setTimeout(() => finish(() => reject(new Error(`${opts.label} nie skończył w ${opts.timeoutMs} ms`))), opts.timeoutMs);
+    const timer = setTimeout(
+      () => finish(() => reject(new Error(`${opts.label} did not finish within ${opts.timeoutMs} ms`))),
+      opts.timeoutMs,
+    );
 
     child.stdout.on("data", (chunk: Buffer) => {
       const room = maxBytes - size;
@@ -74,14 +77,13 @@ export function runProgram(command: string, args: readonly string[], opts: RunOp
       if (stderr.length > STDERR_TAIL_BYTES) stderr = stderr.subarray(stderr.length - STDERR_TAIL_BYTES);
     });
     child.on("error", (e: NodeJS.ErrnoException) => {
-      const message =
-        e.code === "ENOENT" ? `nie znaleziono programu ${command} w PATH` : `nie udało się uruchomić ${command}: ${e.message}`;
+      const message = e.code === "ENOENT" ? `program ${command} not found in PATH` : `failed to start ${command}: ${e.message}`;
       finish(() => reject(new Error(message)));
     });
     child.on("close", (code, signal) => {
       if (code === 0 || (code !== null && opts.okExitCodes?.includes(code)))
         return finish(() => resolve({ stdout: Buffer.concat(out), truncated: false }));
-      const reason = signal ? `przerwany sygnałem ${signal}` : `zakończył się kodem ${code}`;
+      const reason = signal ? `killed by signal ${signal}` : `exited with code ${code}`;
       const message = stderr.toString("utf8").trim() || `${opts.label} ${reason}`;
       finish(() => reject(code === null ? new Error(message) : new ExitCodeError(message, code)));
     });

@@ -24,7 +24,7 @@ function spawn(spec: TerminalSpec): TerminalProcess {
   const terminal = proc.terminal;
   if (!terminal) {
     proc.kill("SIGKILL");
-    throw new Error("Bun.spawn nie dał PTY; ta wersja Bun nie obsługuje `terminal` na tym systemie");
+    throw new Error("Bun.spawn did not provide a PTY; this Bun version does not support `terminal` on this system");
   }
   const close = () => {
     if (!terminal.closed) terminal.close();

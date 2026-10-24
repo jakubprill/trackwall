@@ -52,8 +52,8 @@ describe("buildGraph: krawędzie z kart", () => {
         key: "com.example:orders-client",
         confidence: "exact",
         evidence: [
-          { repo: "orders-bff", path: "pom.xml", line: 12, detail: "używa com.example:orders-client 1.0.0 (compile)" },
-          { repo: "orders-api", path: "client/pom.xml", line: 3, detail: "buduje com.example:orders-client" },
+          { repo: "orders-bff", path: "pom.xml", line: 12, detail: "uses com.example:orders-client 1.0.0 (compile)" },
+          { repo: "orders-api", path: "client/pom.xml", line: 3, detail: "builds com.example:orders-client" },
         ],
       },
     ]);
@@ -143,7 +143,7 @@ describe("buildGraph: wpisy graph w workspace.yaml", () => {
         key: "com.example:orders-client",
         confidence: "high",
         evidence: [
-          { repo: "orders-bff", path: "pom.xml", line: 12, detail: "używa com.example:orders-client 1.0.0 (compile)" },
+          { repo: "orders-bff", path: "pom.xml", line: 12, detail: "uses com.example:orders-client 1.0.0 (compile)" },
           {
             repo: null,
             path: CONFIG_FILE,
@@ -201,7 +201,7 @@ describe("buildGraph: wpisy graph w workspace.yaml", () => {
       problems: [],
     });
     expect(graph.edges).toEqual([]);
-    expect(graph.configProblems).toEqual(["graph.edges[0]: from i to wskazują to samo repo (web)"]);
+    expect(graph.configProblems).toEqual(["graph.edges[0]: from and to point to the same repo (web)"]);
   });
 
   test("wpis z repo spoza listy trafia do configProblems i nie daje krawędzi", () => {
@@ -212,8 +212,8 @@ describe("buildGraph: wpisy graph w workspace.yaml", () => {
     });
     expect(graph.edges).toEqual([]);
     expect(graph.configProblems).toEqual([
-      "graph.packages „com.example:x”: nie ma repo „nie-ma” na liście repo (podaj identyfikator albo adres host/ścieżka)",
-      "graph.edges[0].to: nie ma repo „nie-ma-tez” na liście repo (podaj identyfikator albo adres host/ścieżka)",
+      "graph.packages “com.example:x”: no repo “nie-ma” in the repo list (give its id or host/path address)",
+      "graph.edges[0].to: no repo “nie-ma-tez” in the repo list (give its id or host/path address)",
     ]);
   });
 });

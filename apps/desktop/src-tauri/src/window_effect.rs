@@ -78,7 +78,7 @@ fn first_applied<W, E: Display>(window: &W, candidates: &[(WindowEffect, Apply<W
     for (effect, apply) in candidates {
         match apply(window) {
             Ok(()) => return Some(*effect),
-            Err(err) => eprintln!("[desktop] efekt okna {effect:?} niedostępny: {err}"),
+            Err(err) => eprintln!("[desktop] window effect {effect:?} unavailable: {err}"),
         }
     }
     None
@@ -145,7 +145,7 @@ pub fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>, reveal: fn
         webview.eval_with_callback(ui_script(effect), move |_| after.state::<AppliedEffect>().reveal_once(&after, reveal))
     };
     if let Err(err) = result {
-        eprintln!("[desktop] przekazanie efektu okna do UI: {err}");
+        eprintln!("[desktop] passing the window effect to the UI: {err}");
         applied.reveal_once(&app, reveal);
     }
 }

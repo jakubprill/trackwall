@@ -38,9 +38,9 @@ export function CloneView({ conn, onCloned, onOpenSettings }: { conn: Connection
   return (
     <div className="flex flex-col gap-4 p-6">
       <header className="flex flex-col gap-1">
-        <span className="hud-label">Dodaj repo</span>
-        <h1 className="text-xl font-semibold tracking-tight">Sklonuj z GitLab albo GitHub</h1>
-        {remote.data?.projectsDir && <p className="text-muted-foreground font-mono text-xs break-all">do {remote.data.projectsDir}</p>}
+        <span className="hud-label">Add repo</span>
+        <h1 className="text-xl font-semibold tracking-tight">Clone from GitLab or GitHub</h1>
+        {remote.data?.projectsDir && <p className="text-muted-foreground font-mono text-xs break-all">into {remote.data.projectsDir}</p>}
       </header>
       <div className="relative flex items-center">
         <Search className="text-muted-foreground pointer-events-none absolute left-3 size-4" />
@@ -48,19 +48,19 @@ export function CloneView({ conn, onCloned, onOpenSettings }: { conn: Connection
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Szukaj po nazwie repo albo grupie"
-          aria-label="Szukaj repo w hostingach"
+          placeholder="Search by repo or group name"
+          aria-label="Search repos on hosts"
           className="pl-9"
         />
       </div>
       {remote.error && <ErrorWithRetry message={remote.error} onRetry={remote.reload} />}
-      {!remote.data && !remote.error && <Loading text="Pytam hostingi…" />}
+      {!remote.data && !remote.error && <Loading text="Asking the hosts…" />}
       {remote.data?.projectsDir === null && (
-        <NeedsSettings text="Najpierw wskaż folder z projektami: tam trafią sklonowane repo." onOpenSettings={onOpenSettings} />
+        <NeedsSettings text="Choose the projects folder first: cloned repos go there." onOpenSettings={onOpenSettings} />
       )}
       {hosts?.length === 0 && (
         <NeedsSettings
-          text="Dodaj w ustawieniach hosting GitLab (adres Twojej instancji) albo GitHub, a tu pojawi się wyszukiwarka jego repo."
+          text="Add a GitLab host (your instance address) or GitHub in Settings, and you can search its repos here."
           onOpenSettings={onOpenSettings}
         />
       )}
@@ -98,7 +98,7 @@ function NeedsSettings({ text, onOpenSettings }: { text: string; onOpenSettings:
     <div className="flex flex-col items-start gap-2">
       <p className="text-muted-foreground text-sm">{text}</p>
       <Button variant="outline" size="sm" onClick={onOpenSettings}>
-        Otwórz ustawienia
+        Open settings
       </Button>
     </div>
   );
@@ -125,7 +125,7 @@ function HostSection({
         <div className="flex flex-col gap-2 p-3 text-sm">
           <p className="text-destructive whitespace-pre-wrap break-words">{listing.message}</p>
           <p className="text-muted-foreground">
-            Trackwall pyta hosting przez zalogowany program w systemie. Zaloguj się w terminalu:{" "}
+            Trackwall asks the host through the CLI you are signed in to. Sign in from a terminal:{" "}
             <span className="text-foreground font-mono text-xs">{loginCommand(host)}</span>
           </p>
         </div>
@@ -135,9 +135,9 @@ function HostSection({
     <Surface
       label={label}
       meta={String(listing.repos.length)}
-      note={listing.truncated ? "Hosting ma więcej repo, niż Trackwall pobiera; jeśli czegoś brakuje, zawęź wyszukiwanie." : undefined}
+      note={listing.truncated ? "The host has more repos than Trackwall fetches; if something is missing, narrow the search." : undefined}
     >
-      {listing.repos.length === 0 && <p className="text-muted-foreground p-3 text-sm">Nic nie pasuje.</p>}
+      {listing.repos.length === 0 && <p className="text-muted-foreground p-3 text-sm">No matches.</p>}
       <ul className="divide-y">
         {listing.repos.map((repo) => (
           <RemoteRepoRow
@@ -205,12 +205,12 @@ function RemoteRepoRow({
 }
 
 function CloneAction({ state, disabled, onClone }: { state: CloneState; disabled: boolean; onClone: () => void }) {
-  if (state.kind === "running") return <StatusLabel tone="warning" label="Klonuję…" />;
-  if (state.kind === "done") return <StatusLabel tone="ok" label="Sklonowane" />;
-  if (state.kind === "in-projects-dir") return <span className="text-muted-foreground">Już w folderze</span>;
+  if (state.kind === "running") return <StatusLabel tone="warning" label="Cloning…" />;
+  if (state.kind === "done") return <StatusLabel tone="ok" label="Cloned" />;
+  if (state.kind === "in-projects-dir") return <span className="text-muted-foreground">Already in the folder</span>;
   return (
     <Button variant="outline" size="sm" disabled={disabled} onClick={onClone}>
-      <Download /> {state.kind === "failed" ? "Spróbuj ponownie" : "Sklonuj"}
+      <Download /> {state.kind === "failed" ? "Try again" : "Clone"}
     </Button>
   );
 }

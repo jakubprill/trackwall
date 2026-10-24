@@ -49,12 +49,12 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
         const started = Date.now();
         try {
           const result = tool.result.parse(await run(ctx.facade, tool.args.parse(args)));
-          ctx.log(`${tool.name}: ok w ${Date.now() - started} ms`);
+          ctx.log(`${tool.name}: ok in ${Date.now() - started} ms`);
           return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
         } catch (err) {
-          ctx.log(`${tool.name}: błąd w ${Date.now() - started} ms: ${String(err)}`);
+          ctx.log(`${tool.name}: error in ${Date.now() - started} ms: ${String(err)}`);
           // Błąd zgłoszony świadomie przez moduł idzie do agenta z kodem i treścią, jak w API (§5.2); inny bez szczegółów.
-          const text = err instanceof DomainError ? `${err.code}: ${err.message}` : "internal: wewnętrzny błąd daemona";
+          const text = err instanceof DomainError ? `${err.code}: ${err.message}` : "internal: daemon error";
           return { content: [{ type: "text", text }], isError: true };
         }
       },

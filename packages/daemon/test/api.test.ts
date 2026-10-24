@@ -197,7 +197,7 @@ describe("api workspace", () => {
     expect(res.status).toBe(400);
     expect(JSON.parse(res.body)).toMatchObject({
       ok: false,
-      error: { code: "bad_request", message: expect.stringContaining("nie istnieje") },
+      error: { code: "bad_request", message: expect.stringContaining("does not exist") },
     });
   });
 
@@ -211,7 +211,7 @@ describe("api workspace", () => {
   test("ciało większe niż 64 KB jest odrzucane przed parsowaniem", async () => {
     const res = await post(workspaceApi.list.path, JSON.stringify({ zbyt: "x".repeat(70_000) }));
     expect(res.status).toBe(400);
-    expect(JSON.parse(res.body)).toMatchObject({ error: { code: "bad_request", message: expect.stringContaining("większe niż") } });
+    expect(JSON.parse(res.body)).toMatchObject({ error: { code: "bad_request", message: expect.stringContaining("larger than") } });
   });
 
   test("nieznane repo to 404, a GET na trasie POST nie istnieje", async () => {
@@ -223,7 +223,7 @@ describe("api workspace", () => {
   test("komenda zbiorcza bez repo albo z nieznanym krokiem to 400, a z nieznanym repo 404, i żadna nie startuje", async () => {
     const noRepos = await post(batchApi.start.path, JSON.stringify({ repos: [], steps: ["build"] }));
     expect(noRepos.status).toBe(400);
-    expect(JSON.parse(noRepos.body)).toMatchObject({ error: { message: expect.stringContaining("co najmniej jedno repo") } });
+    expect(JSON.parse(noRepos.body)).toMatchObject({ error: { message: expect.stringContaining("at least one repo") } });
     expect((await post(batchApi.start.path, JSON.stringify({ repos: ["sklep"], steps: ["deploy"] }))).status).toBe(400);
     expect((await post(batchApi.start.path, JSON.stringify({ repos: ["nie-ma"], steps: ["build"] }))).status).toBe(404);
 

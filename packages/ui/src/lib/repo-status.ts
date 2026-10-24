@@ -9,11 +9,11 @@ export type StatusTone = "ok" | "warning" | "error";
  * „niedostępne = błąd, zmiany w katalogu roboczym = ostrzeżenie, czysto = ok” dla listy i nagłówka repo.
  */
 export function repoStatusTone(status: RepoStatus): { tone: StatusTone; label: string } {
-  if (status.kind !== "ok") return { tone: "error", label: "niedostępne" };
+  if (status.kind !== "ok") return { tone: "error", label: "unavailable" };
   const changes = changesLabel(status.changes);
-  return changes ? { tone: "warning", label: changes } : { tone: "ok", label: "czysto" };
+  return changes ? { tone: "warning", label: changes } : { tone: "ok", label: "clean" };
 }
 
 export function branchLabel(status: RepoStatusOk): string {
-  return status.branch ?? "odłączony HEAD";
+  return status.branch ?? "detached HEAD";
 }

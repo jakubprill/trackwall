@@ -18,10 +18,10 @@ import { TabBar } from "./TabBar.tsx";
 
 const TABS = [
   { id: "readme", label: "README" },
-  { id: "card", label: "Karta" },
-  { id: "files", label: "Pliki" },
-  { id: "commits", label: "Commity" },
-  { id: "mise", label: "Taski mise" },
+  { id: "card", label: "Card" },
+  { id: "files", label: "Files" },
+  { id: "commits", label: "Commits" },
+  { id: "mise", label: "mise tasks" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 
@@ -46,7 +46,7 @@ export function RepoDetail({ conn, repo }: { conn: Connection; repo: Repo }) {
         <OpenEditor conn={conn} repo={repo} />
       </header>
       {status.kind === "unavailable" ? (
-        <p className="text-destructive text-sm whitespace-pre-wrap">Repo jest niedostępne: {status.message}</p>
+        <p className="text-destructive text-sm whitespace-pre-wrap">The repo is unavailable: {status.message}</p>
       ) : (
         <>
           <RepoStats status={status} />
@@ -78,7 +78,7 @@ function OpenEditor({ conn, repo }: { conn: Connection; repo: Repo }) {
   return (
     <div className="flex flex-col items-end gap-2">
       <Button variant="outline" size="sm" onClick={open} disabled={repo.status.kind !== "ok"}>
-        <Code /> Otwórz w VS Code
+        <Code /> Open in VS Code
       </Button>
       {error && <p className="text-destructive text-xs">{error}</p>}
     </div>
@@ -86,7 +86,7 @@ function OpenEditor({ conn, repo }: { conn: Connection; repo: Repo }) {
 }
 
 function Readme({ readme }: { readme: RepoOverview["readme"] }) {
-  if (!readme) return <p className="text-muted-foreground text-sm">To repo nie ma pliku README w ostatnim commicie.</p>;
+  if (!readme) return <p className="text-muted-foreground text-sm">This repo has no README in the latest commit.</p>;
   return (
     <Surface path={readme.path} note={readme.truncated ? TRUNCATED_NOTE : undefined}>
       <pre className="overflow-x-auto p-4 text-sm leading-relaxed whitespace-pre-wrap break-words">{readme.text}</pre>

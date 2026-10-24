@@ -112,7 +112,7 @@ async function ceilingFor(repoDir: string): Promise<string> {
   const root = await realpath(repoDir).catch(() => resolvePath(repoDir));
   const ceiling = dirname(root);
   // Zmienna jest listą ścieżek; ścieżka z separatorem rozpadłaby się na kawałki i ochrona zniknęłaby po cichu.
-  if (ceiling.includes(delimiter)) throw new Error(`ścieżka ${ceiling} zawiera znak "${delimiter}", którego git nie obsłuży`);
+  if (ceiling.includes(delimiter)) throw new Error(`path ${ceiling} contains the character "${delimiter}", which git cannot handle`);
   return ceiling;
 }
 

@@ -149,7 +149,7 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   try {
     return JSON.parse(text);
   } catch {
-    throw new DomainError("bad_request", "ciało żądania nie jest poprawnym JSON-em");
+    throw new DomainError("bad_request", "request body is not valid JSON");
   }
 }
 

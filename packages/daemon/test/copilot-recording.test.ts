@@ -39,10 +39,10 @@ describe("stan sesji Copilot CLI z nagrania", () => {
 
     expect(summary(replayCopilotRecording(cast, { staleAfterMs: 60_000 }))).toEqual([
       "Working osc high osc 9;4;3",
-      "Stale timeout medium brak wyjścia przez 60 s",
+      "Stale timeout medium no output for 60 s",
       "Working osc high osc 9;4;3",
       "Input osc low osc 9;4;0",
-      "Done exit exact kod wyjścia 0",
+      "Done exit exact exit code 0",
     ]);
     // Stale ma czas progu (62 s), a nie następnego wyjścia (70 s), tak jak na żywo.
     expect(replayCopilotRecording(cast, { staleAfterMs: 60_000 })[1]?.at).toBe("1970-01-01T00:01:02.000Z");
@@ -59,8 +59,12 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     const withManualMarker = parseAsciicast('{"version": 2, "width": 80, "height": 24, "timestamp": 0}\n[1.0, "m", "tu się zawiesza"]\n');
     expect(replayCopilotRecording(withManualMarker, { staleAfterMs: 60_000 })).toEqual([]);
 
-    expect(() => parseAsciicast('{"version": 2, "width": 80, "height": 24, "timestamp": 0}\n[1.0, "x", "?"]\n')).toThrow("zła linia 2");
-    expect(() => parseAsciicast('{"version": 2, "width": 80, "height": 24, "timestamp": 0}\n[1.0, "o", \n')).toThrow("zła linia 2");
+    expect(() => parseAsciicast('{"version": 2, "width": 80, "height": 24, "timestamp": 0}\n[1.0, "x", "?"]\n')).toThrow(
+      "bad recording line 2",
+    );
+    expect(() => parseAsciicast('{"version": 2, "width": 80, "height": 24, "timestamp": 0}\n[1.0, "o", \n')).toThrow(
+      "bad recording line 2",
+    );
   });
 
   test("koniec procesu po progu bez cyklicznego sprawdzenia daje najpierw Stale, tak jak odtwarzanie nagrania", () => {

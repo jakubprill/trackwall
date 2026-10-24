@@ -26,7 +26,7 @@ const HOOK_TIMEOUT_SEC = 5;
 
 export function writeCopilotPlugin(dir: string, command: (event: CopilotHookEvent) => HookCommand): void {
   mkdirSync(dir, { recursive: true });
-  const manifest = { name: COPILOT_PLUGIN_NAME, version: "0.0.0", description: "Trackwall: stan sesji zadania" };
+  const manifest = { name: COPILOT_PLUGIN_NAME, version: "0.0.0", description: "Trackwall: task session state" };
   const hooks = Object.fromEntries(
     COPILOT_HOOK_EVENTS.map((event) => [event, [{ type: "command", ...command(event), timeoutSec: HOOK_TIMEOUT_SEC }]]),
   );

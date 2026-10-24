@@ -80,7 +80,7 @@ describe("cards", () => {
     expect(await cards.card("nowe")).toEqual({
       repo: "nowe",
       card: null,
-      tags: [{ name: "sandbox", reason: "reguła repoTags w workspace.yaml: now*" }],
+      tags: [{ name: "sandbox", reason: "repoTags rule in workspace.yaml: now*" }],
     });
   });
 

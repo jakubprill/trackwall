@@ -93,7 +93,7 @@ export class WorkspaceFile {
     }
     const doc = parseDocument(text);
     if (doc.errors.length > 0) throw this.invalid(doc.errors.map((e) => e.message).join("; "));
-    if (doc.contents !== null && !isMap(doc.contents)) throw this.invalid("plik musi być mapą kluczy, np. `projectsDir: <ścieżka>`");
+    if (doc.contents !== null && !isMap(doc.contents)) throw this.invalid("the file must be a map of keys, e.g. `projectsDir: <path>`");
     return doc;
   }
 
@@ -103,6 +103,6 @@ export class WorkspaceFile {
   }
 
   private invalid(details: string): DomainError {
-    return new DomainError("invalid_config", `${this.path} jest niepoprawny: ${details}`);
+    return new DomainError("invalid_config", `${this.path} is invalid: ${details}`);
   }
 }

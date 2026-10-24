@@ -16,13 +16,13 @@ const TOOL_NAMES = Object.values(mcpTools)
 export function ConnectCopilot({ info }: { info: DaemonInfo }) {
   const command = copilotMcpAddCommand(info.mcpStdioCommand, info.platform);
   return (
-    <Surface label="Copilot CLI" note="Narzędzia tylko czytają. Trackwall musi działać, kiedy startuje Copilot CLI.">
+    <Surface label="Copilot CLI" note="The tools are read-only. Trackwall must be running when Copilot CLI starts.">
       <div className="flex flex-col gap-3 p-4 text-sm">
         <p className="text-muted-foreground">
-          Daje agentowi mapę repo z folderu z projektami ({TOOL_NAMES}). Uruchom raz w terminalu, potem zrestartuj Copilot CLI:
+          Gives the agent a map of the repos in your projects folder ({TOOL_NAMES}). Run this once in a terminal, then restart Copilot CLI:
         </p>
         <CopyableCode text={command} />
-        <p className="text-muted-foreground">Albo dopisz wpis do {copilotMcpConfigPath(info.platform)}:</p>
+        <p className="text-muted-foreground">Or add this entry to {copilotMcpConfigPath(info.platform)}:</p>
         <CopyableCode text={copilotMcpConfig(info.mcpStdioCommand)} />
       </div>
     </Surface>
@@ -45,8 +45,8 @@ function CopyableCode({ text }: { text: string }) {
         size="icon"
         className="size-6"
         onClick={copy}
-        aria-label={copied ? "Skopiowano" : "Kopiuj"}
-        title={copied ? "Skopiowano" : "Kopiuj"}
+        aria-label={copied ? "Copied" : "Copy"}
+        title={copied ? "Copied" : "Copy"}
       >
         {copied ? <Check /> : <Copy />}
       </Button>

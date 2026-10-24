@@ -90,16 +90,16 @@ function serve(ws: WebSocket, session: string, facade: Facade): void {
     attachment = facade.agents.attach(
       session,
       (bytes) => {
-        if (ws.bufferedAmount > MAX_BUFFERED_BYTES) ws.close(PTY_CLOSE_SLOW, "okno nie nadąża za wyjściem");
+        if (ws.bufferedAmount > MAX_BUFFERED_BYTES) ws.close(PTY_CLOSE_SLOW, "the window cannot keep up with the output");
         else ws.send(bytes, { binary: true });
       },
       (snapshot) => ws.send(snapshot),
-      () => ws.close(PTY_CLOSE_NOT_FOUND, "sesja zamknięta"),
+      () => ws.close(PTY_CLOSE_NOT_FOUND, "session closed"),
     );
   } catch (err) {
     // Wyjątek w obsłudze `upgrade` zakończyłby daemon, więc każdy błąd kończy tylko to połączenie.
     const notFound = err instanceof DomainError && err.code === "not_found";
-    ws.close(notFound ? PTY_CLOSE_NOT_FOUND : PTY_CLOSE_INTERNAL, notFound ? "nie ma takiej sesji" : "błąd daemona");
+    ws.close(notFound ? PTY_CLOSE_NOT_FOUND : PTY_CLOSE_INTERNAL, notFound ? "no such session" : "daemon error");
     return;
   }
   ws.on("message", (data: RawData, isBinary: boolean) => {
