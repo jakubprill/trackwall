@@ -52,15 +52,18 @@ export async function readSnapshot(
   const problems: CardProblem[] = [];
   const listed = await vcs.commitFiles(dir, commit, MAX_LIST_BYTES);
   if (listed.truncated)
-    problems.push({ path: "", message: `lista plików commita jest dłuższa niż ${MAX_LIST_BYTES} B; karta opisuje tylko jej początek` });
+    problems.push({
+      path: "",
+      message: `the commit's file list is longer than ${MAX_LIST_BYTES} B; the card describes only its beginning`,
+    });
   const files = listed.files.filter((f) => !f.path.split("/").some((segment) => SKIPPED_DIRS.has(segment)));
   const wanted = files.filter((f) => reads(f.path) && isReadable(f)).map((f) => f.path);
   if (wanted.length > MAX_FILES)
-    problems.push({ path: "", message: `repo ma ${wanted.length} plików buildu; karta czyta pierwsze ${MAX_FILES}` });
+    problems.push({ path: "", message: `the repo has ${wanted.length} build files; the card reads the first ${MAX_FILES}` });
   const requested = [...wanted.slice(0, MAX_FILES), ...(await sourceFiles(vcs, dir, commit, files, sources, problems))];
   const contents = await vcs.readFiles(dir, commit, requested, MAX_READ_BYTES);
   for (const path of requested)
-    if (!contents.has(path)) problems.push({ path, message: `pliku nie przeczytano w limicie ${MAX_READ_BYTES} B odczytu commita` });
+    if (!contents.has(path)) problems.push({ path, message: `the file was not read within the ${MAX_READ_BYTES} B commit read limit` });
   const texts = new Map([...contents].map(([path, content]) => [path, toText(content)]));
   return { commit, paths: files.map((f) => f.path), text: (path) => texts.get(path), problems };
 }
@@ -84,14 +87,14 @@ async function sourceFiles(
     found = await vcs.grepFiles(dir, commit, sources.pattern, sources.globs, MAX_GREP_BYTES);
   } catch (err) {
     // Błąd wyszukiwania (np. limit czasu w ogromnym repo) zabiera tylko fakty z kodu, nie karta z plików buildu.
-    problems.push({ path: "", message: `wyszukiwanie plików z kontrolerami i klientami HTTP nie powiodło się: ${messageOf(err)}` });
+    problems.push({ path: "", message: `searching for files with controllers and HTTP clients failed: ${messageOf(err)}` });
     return [];
   }
   const matched = found.paths.filter((p) => candidates.has(p));
   if (found.truncated || matched.length > MAX_SOURCE_FILES)
     problems.push({
       path: "",
-      message: `repo ma więcej niż ${MAX_SOURCE_FILES} plików z kontrolerami lub klientami HTTP; karta czyta pierwsze`,
+      message: `the repo has more than ${MAX_SOURCE_FILES} files with controllers or HTTP clients; the card reads the first ones`,
     });
   return matched.slice(0, MAX_SOURCE_FILES);
 }

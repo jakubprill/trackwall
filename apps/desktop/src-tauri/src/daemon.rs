@@ -57,7 +57,7 @@ pub fn trackwall_home() -> Result<PathBuf, String> {
     std::env::var_os(var)
         .filter(|v| !v.is_empty())
         .map(|h| PathBuf::from(h).join(HOME_DIR_NAME))
-        .ok_or_else(|| format!("nie znaleziono katalogu domowego (brak {var})"))
+        .ok_or_else(|| format!("home directory not found ({var} is not set)"))
 }
 
 /// Działający daemon tej samej wersji opisany przez `daemon.json`.
@@ -91,8 +91,8 @@ pub fn ensure_daemon(home: &Path, cancel: &AtomicBool) -> Result<Connection, Str
             Some(v) if v == VERSION => return Ok(Connection::from(&existing)),
             Some(v) => {
                 return Err(format!(
-                    "Działa daemon Trackwall w wersji {v} (pid {}), a ta aplikacja to {VERSION}. \
-                     Zakończ stary daemon i kliknij „Spróbuj ponownie”.",
+                    "Trackwall daemon {v} is running (pid {}), but this app is {VERSION}. \
+                     Stop the old daemon and click “Try again”.",
                     existing.pid
                 ))
             }
@@ -100,7 +100,7 @@ pub fn ensure_daemon(home: &Path, cancel: &AtomicBool) -> Result<Connection, Str
         }
     }
     if cancel.load(Ordering::SeqCst) {
-        return Err("Start daemona przerwany.".into());
+        return Err("Daemon start cancelled.".into());
     }
     let log_path = home.join("logs").join("daemon-start.log");
     let mut child = spawn_sidecar(home, &log_path)?;
@@ -113,7 +113,7 @@ pub fn ensure_daemon(home: &Path, cancel: &AtomicBool) -> Result<Connection, Str
                     return Ok(conn);
                 }
             }
-            return Err(format!("Daemon zakończył się przy starcie ({status}).\n\n{}", log_tail(&log_path)));
+            return Err(format!("The daemon exited during startup ({status}).\n\n{}", log_tail(&log_path)));
         }
         if let Some(f) = read_daemon_file(home).filter(|f| f.pid == child.id()) {
             if health(f.port).as_deref() == Some(VERSION) {
@@ -125,7 +125,7 @@ pub fn ensure_daemon(home: &Path, cancel: &AtomicBool) -> Result<Connection, Str
         if cancel.load(Ordering::SeqCst) {
             let _ = child.kill();
             let _ = child.wait();
-            return Err("Start daemona przerwany.".into());
+            return Err("Daemon start cancelled.".into());
         }
         if Instant::now() > deadline {
             // Nie zostawiamy procesu, którego nikt nie zna: bez tego daemon mógłby wstać chwilę później,
@@ -133,7 +133,7 @@ pub fn ensure_daemon(home: &Path, cancel: &AtomicBool) -> Result<Connection, Str
             let _ = child.kill();
             let _ = child.wait();
             return Err(format!(
-                "Daemon nie odpowiedział w ciągu {} s i został zatrzymany. Kliknij „Spróbuj ponownie”.\n\n{}",
+                "The daemon did not respond within {} s and was stopped. Click “Try again”.\n\n{}",
                 START_TIMEOUT.as_secs(),
                 log_tail(&log_path)
             ));
@@ -146,7 +146,7 @@ pub fn ensure_daemon(home: &Path, cancel: &AtomicBool) -> Result<Connection, Str
 pub fn shutdown(conn: &Connection) -> Result<(), String> {
     let (status, body) = http(conn.port, "POST", "/api/daemon/shutdown", Some(&conn.token))?;
     if status != 200 {
-        return Err(format!("shutdown zwrócił {status}: {body}"));
+        return Err(format!("shutdown returned {status}: {body}"));
     }
     let deadline = Instant::now() + STOP_TIMEOUT;
     while Instant::now() < deadline {
@@ -155,14 +155,14 @@ pub fn shutdown(conn: &Connection) -> Result<(), String> {
         }
         std::thread::sleep(Duration::from_millis(100));
     }
-    Err(format!("daemon nadal odpowiada po {} s", STOP_TIMEOUT.as_secs()))
+    Err(format!("daemon still responds after {} s", STOP_TIMEOUT.as_secs()))
 }
 
 /// Treść odpowiedzi `POST /api/agents/sessions` (lista sesji Copilot CLI, ADR-26).
 pub fn sessions(conn: &Connection) -> Result<String, String> {
     let (status, body) = http(conn.port, "POST", "/api/agents/sessions", Some(&conn.token))?;
     if status != 200 {
-        return Err(format!("lista sesji zwróciła {status}"));
+        return Err(format!("session list returned {status}"));
     }
     Ok(body)
 }
@@ -170,12 +170,12 @@ pub fn sessions(conn: &Connection) -> Result<String, String> {
 /// Ścieżka sidecara: obok `trackwall.exe` (portable zip) albo w `Contents/MacOS` (bundle .app).
 fn sidecar_path() -> Result<PathBuf, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let dir = exe.parent().ok_or("brak katalogu aplikacji")?;
+    let dir = exe.parent().ok_or("app directory not found")?;
     let path = dir.join(format!("trackwall-daemon{}", std::env::consts::EXE_SUFFIX));
     if path.is_file() {
         Ok(path)
     } else {
-        Err(format!("Nie znaleziono {} obok aplikacji. Rozpakuj całe archiwum do jednego katalogu.", path.display()))
+        Err(format!("{} not found next to the app. Extract the whole archive into one folder.", path.display()))
     }
 }
 
@@ -208,7 +208,7 @@ fn spawn_sidecar(home: &Path, log_path: &Path) -> Result<Child, String> {
         // Własna grupa procesów: daemon ma przeżyć zamknięcie okna i terminala.
         cmd.process_group(0);
     }
-    cmd.spawn().map_err(|e| format!("Nie udało się uruchomić {}: {e}", exe.display()))
+    cmd.spawn().map_err(|e| format!("Failed to start {}: {e}", exe.display()))
 }
 
 fn log_tail(path: &Path) -> String {
@@ -216,9 +216,9 @@ fn log_tail(path: &Path) -> String {
         Ok(text) => {
             let lines: Vec<&str> = text.lines().collect();
             let tail = lines[lines.len().saturating_sub(20)..].join("\n");
-            format!("Log startu ({}):\n{tail}", path.display())
+            format!("Startup log ({}):\n{tail}", path.display())
         }
-        Err(_) => format!("Brak logu startu w {}.", path.display()),
+        Err(_) => format!("No startup log in {}.", path.display()),
     }
 }
 
@@ -237,10 +237,10 @@ fn http(port: u16, method: &str, path: &str, token: Option<&str>) -> Result<(u16
 }
 
 fn parse_response(raw: &[u8]) -> Result<(u16, String), String> {
-    let split = raw.windows(4).position(|w| w == b"\r\n\r\n").ok_or("niepełna odpowiedź HTTP")?;
+    let split = raw.windows(4).position(|w| w == b"\r\n\r\n").ok_or("incomplete HTTP response")?;
     let head = String::from_utf8_lossy(&raw[..split]);
     let body = &raw[split + 4..];
-    let status = head.split_whitespace().nth(1).and_then(|s| s.parse::<u16>().ok()).ok_or("brak kodu statusu")?;
+    let status = head.split_whitespace().nth(1).and_then(|s| s.parse::<u16>().ok()).ok_or("missing status code")?;
     let chunked = head.lines().any(|l| {
         let l = l.to_ascii_lowercase();
         l.starts_with("transfer-encoding:") && l.contains("chunked")
@@ -253,15 +253,15 @@ fn parse_response(raw: &[u8]) -> Result<(u16, String), String> {
 fn dechunk(mut body: &[u8]) -> Result<Vec<u8>, String> {
     let mut out = Vec::new();
     loop {
-        let eol = body.windows(2).position(|w| w == b"\r\n").ok_or("uszkodzony chunk")?;
+        let eol = body.windows(2).position(|w| w == b"\r\n").ok_or("malformed chunk")?;
         let size_line = String::from_utf8_lossy(&body[..eol]);
         let size = usize::from_str_radix(size_line.split(';').next().unwrap_or("").trim(), 16).map_err(|e| e.to_string())?;
         let rest = &body[eol + 2..];
         if size == 0 {
             return Ok(out);
         }
-        out.extend_from_slice(rest.get(..size).ok_or("chunk krótszy niż deklarowany")?);
-        body = rest.get(size + 2..).ok_or("brak CRLF po chunku")?;
+        out.extend_from_slice(rest.get(..size).ok_or("chunk shorter than declared")?);
+        body = rest.get(size + 2..).ok_or("missing CRLF after chunk")?;
     }
 }
 

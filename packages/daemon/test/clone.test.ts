@@ -97,7 +97,7 @@ describe("klonowanie z hostingu do folderu z projektami", () => {
     expect((await workspace.list()).repos.map((r) => r.id)).toEqual(["orders-bff"]);
     await expect(workspace.clone(GITLAB, "sklep/zamowienia/orders-bff")).rejects.toMatchObject({
       code: "bad_request",
-      message: "w folderze z projektami jest już orders-bff",
+      message: "the projects folder already has orders-bff",
     });
   });
 
@@ -115,7 +115,7 @@ describe("klonowanie z hostingu do folderu z projektami", () => {
 
     await expect(workspace.clone(GITLAB, "magazyn/API")).rejects.toMatchObject({
       code: "bad_request",
-      message: `do ${join(projects, "API")} trwa już klonowanie sklep/api`,
+      message: `sklep/api is already being cloned into ${join(projects, "API")}`,
     });
     await finished(workspace, "sklep/api");
   });
@@ -152,7 +152,7 @@ describe("klonowanie z hostingu do folderu z projektami", () => {
     bare.setRepoHosts([GITLAB]);
     await expect(bare.clone(GITLAB, "sklep/api")).rejects.toMatchObject({
       code: "bad_request",
-      message: "najpierw ustaw folder z projektami",
+      message: "set the projects folder first",
     });
   });
 

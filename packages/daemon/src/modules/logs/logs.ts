@@ -93,7 +93,7 @@ export class Logs {
         log.writeErrorReported = false;
         log.overflowReported = false;
       } catch (err) {
-        if (!log.writeErrorReported) this.deps.log(`zapis ${log.file.path}: ${String(err)}; spróbuję ponownie`);
+        if (!log.writeErrorReported) this.deps.log(`writing ${log.file.path}: ${String(err)}; will retry`);
         log.writeErrorReported = true;
       }
     }
@@ -113,7 +113,7 @@ export class Logs {
     }
     if (!log.file.append(JSON.stringify({ ...record, source })) && !log.overflowReported) {
       log.overflowReported = true;
-      this.deps.log(`zapis ${log.file.path} nie nadąża; rekordy nie trafiają do pliku do następnego udanego zapisu`);
+      this.deps.log(`writing ${log.file.path} cannot keep up; records are not written to the file until the next successful write`);
     }
     this.scheduleFlush();
   }
@@ -131,7 +131,7 @@ export class Logs {
     if (!log) {
       const path = logFilePath(this.deps.dir, source);
       const file = new LogFile(path, this.deps.maxFileBytes, (err) =>
-        this.deps.log(`rotacja ${path}: ${String(err)}; plik rośnie ponad limit do następnej udanej rotacji`),
+        this.deps.log(`rotating ${path}: ${String(err)}; the file grows past the limit until the next successful rotation`),
       );
       log = { records: [], chars: 0, evictedSeq: 0, file, writeErrorReported: false, overflowReported: false };
       this.sources.set(key, log);

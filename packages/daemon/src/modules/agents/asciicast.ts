@@ -28,7 +28,7 @@ export interface Asciicast {
 
 export function parseAsciicast(text: string): Asciicast {
   const [first, ...rest] = text.split("\n").filter((line) => line.trim() !== "");
-  if (first === undefined) throw new Error("puste nagranie asciicast");
+  if (first === undefined) throw new Error("empty asciicast recording");
   return { header: parseLine(HeaderLine, first, 1), events: rest.map((line, i) => parseLine(EventLine, line, i + 2)) };
 }
 
@@ -46,7 +46,7 @@ const EventLine = jsonOf(AsciicastEvent);
 
 function parseLine<T extends z.ZodType>(schema: T, line: string, number: number): z.infer<T> {
   const parsed = schema.safeParse(line);
-  if (!parsed.success) throw new Error(`zła linia ${number} nagrania: ${z.prettifyError(parsed.error)}`);
+  if (!parsed.success) throw new Error(`bad recording line ${number}: ${z.prettifyError(parsed.error)}`);
   return parsed.data;
 }
 

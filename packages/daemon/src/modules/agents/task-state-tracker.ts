@@ -79,7 +79,7 @@ export class TaskStateTracker {
     if (this.#now() < staleAt) return undefined;
     const { at: _, ...working } = current;
     this.#beforeStale = working;
-    const reason = `brak wyjścia przez ${this.#staleAfterMs / 1000} s`;
+    const reason = `no output for ${this.#staleAfterMs / 1000} s`;
     return this.#set({ state: "Stale", source: "timeout", confidence: "medium", reason }, staleAt);
   }
 
@@ -89,7 +89,7 @@ export class TaskStateTracker {
     this.#exited = true;
     if (this.#sessionEnded) return undefined;
     const state = code === 0 ? "Done" : "Error";
-    return this.#set({ state, source: "exit", confidence: "exact", reason: `kod wyjścia ${code}` }, this.#now());
+    return this.#set({ state, source: "exit", confidence: "exact", reason: `exit code ${code}` }, this.#now());
   }
 
   #set(s: TrackedState, at: number): TaskStateChange | undefined {

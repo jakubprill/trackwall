@@ -123,17 +123,17 @@ export class Workspace {
    */
   async clone(host: RepoHost, fullName: string): Promise<CloneJob> {
     if (!this.deps.file.repoHosts().some((h) => sameHost(h, host)))
-      throw new DomainError("bad_request", `hostingu ${host.kind} ${host.host} nie ma w ustawieniach`);
+      throw new DomainError("bad_request", `host ${host.kind} ${host.host} is not in the settings`);
     const projectsDir = this.deps.file.projectsDir();
-    if (projectsDir === null) throw new DomainError("bad_request", "najpierw ustaw folder z projektami");
+    if (projectsDir === null) throw new DomainError("bad_request", "set the projects folder first");
     const dir = cloneDir(fullName);
     const taken = await takenNames(projectsDir);
     // Od tego miejsca bez `await`, żeby dwa równoczesne żądania nie przeszły obu sprawdzeń.
     const path = join(projectsDir, dir);
     const running = this.clones.runningInto(path);
     if (running && sameHost(running.host, host) && running.fullName === fullName) return running;
-    if (running) throw new DomainError("bad_request", `do ${path} trwa już klonowanie ${running.fullName}`);
-    if (taken(dir)) throw new DomainError("bad_request", `w folderze z projektami jest już ${dir}`);
+    if (running) throw new DomainError("bad_request", `${running.fullName} is already being cloned into ${path}`);
+    if (taken(dir)) throw new DomainError("bad_request", `the projects folder already has ${dir}`);
     return this.clones.start({ host, fullName, path }, () => this.deps.hosting.clone(host, fullName, path));
   }
 
@@ -150,7 +150,7 @@ export class Workspace {
    */
   async sync(): Promise<SyncRun> {
     const { projectsDir, entries } = await this.entries();
-    if (projectsDir === null) throw new DomainError("bad_request", "najpierw ustaw folder z projektami");
+    if (projectsDir === null) throw new DomainError("bad_request", "set the projects folder first");
     const targets = entries.filter((entry) => !this.clones.runningInto(entry.path));
     return this.syncs.startOrJoin(dirKey(projectsDir), targets, SYNC_CONCURRENCY, (entry) => this.deps.vcs.sync(entry.path));
   }
@@ -161,7 +161,7 @@ export class Workspace {
    */
   async syncRepo(id: string): Promise<SyncResult> {
     const entry = await this.entry(id);
-    if (this.clones.runningInto(entry.path)) throw new DomainError("bad_request", `${id}: trwa klonowanie tego repo`);
+    if (this.clones.runningInto(entry.path)) throw new DomainError("bad_request", `${id}: this repo is being cloned`);
     return this.deps.vcs.sync(entry.path);
   }
 
@@ -187,14 +187,14 @@ export class Workspace {
   async tree(id: string, path: string): Promise<TreeEntry[]> {
     const entry = await this.entry(id);
     const entries = await this.inRepo(entry, () => this.deps.vcs.tree(entry.path, path));
-    if (!entries) throw new DomainError("not_found", `w ${id} nie ma katalogu "${path}" w ostatnim commicie`);
+    if (!entries) throw new DomainError("not_found", `${id} has no directory "${path}" in the latest commit`);
     return entries;
   }
 
   async file(id: string, path: string): Promise<FileContent> {
     const entry = await this.entry(id);
     const content = await this.inRepo(entry, () => this.deps.vcs.file(entry.path, path, PREVIEW_MAX_BYTES));
-    if (!content) throw new DomainError("not_found", `w ${id} nie ma pliku "${path}" w ostatnim commicie`);
+    if (!content) throw new DomainError("not_found", `${id} has no file "${path}" in the latest commit`);
     return content;
   }
 
@@ -236,7 +236,7 @@ export class Workspace {
 
   private async entry(id: string): Promise<RepoEntry> {
     const entry = (await this.entries()).entries.find((r) => r.id === id);
-    if (!entry) throw new DomainError("not_found", `w folderze z projektami nie ma repo "${id}"`);
+    if (!entry) throw new DomainError("not_found", `no repo "${id}" in the projects folder`);
     return entry;
   }
 
@@ -284,6 +284,6 @@ export class Workspace {
 /** Katalog klonu: ostatni segment pełnej nazwy, jak przy `git clone` bez podanego katalogu. */
 function cloneDir(fullName: string): string {
   const dir = fullName.split("/").at(-1);
-  if (!dir) throw new Error(`pełna nazwa repo bez nazwy: "${fullName}"`);
+  if (!dir) throw new Error(`full repo name without a name: "${fullName}"`);
   return dir;
 }

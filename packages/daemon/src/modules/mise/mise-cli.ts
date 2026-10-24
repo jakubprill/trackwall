@@ -26,7 +26,7 @@ export function runMiseCli(
   env: NodeJS.ProcessEnv,
 ): Promise<MiseCliResult> {
   const [program, ...pre] = command;
-  if (program === undefined) throw new Error("pusta komenda mise");
+  if (program === undefined) throw new Error("empty mise command");
   return new Promise((resolve) => {
     const child = spawn(program, [...pre, ...args], { cwd, env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     const out: Buffer[] = [];
@@ -35,7 +35,7 @@ export function runMiseCli(
     const timer = setTimeout(() => {
       child.stdout.destroy();
       child.kill();
-      resolve({ kind: "failed", message: `mise ${args[0]} nie skończył w ${TIMEOUT_MS / 1000} s` });
+      resolve({ kind: "failed", message: `mise ${args[0]} did not finish within ${TIMEOUT_MS / 1000} s` });
     }, TIMEOUT_MS);
     child.stdout.on("data", (chunk: Buffer) => {
       size += chunk.length;
@@ -44,7 +44,7 @@ export function runMiseCli(
       clearTimeout(timer);
       child.stdout.destroy();
       child.kill();
-      resolve({ kind: "failed", message: `mise ${args[0]}: wyjście większe niż ${MAX_STDOUT_BYTES} B` });
+      resolve({ kind: "failed", message: `mise ${args[0]}: output larger than ${MAX_STDOUT_BYTES} B` });
     });
     child.stderr.on("data", (chunk: Buffer) => err.push(chunk));
     child.on("error", (e: NodeJS.ErrnoException) => {

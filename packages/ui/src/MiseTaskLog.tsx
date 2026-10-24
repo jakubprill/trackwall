@@ -32,8 +32,8 @@ export function MiseTaskLog({ conn, repo, miseTask }: { conn: Connection; repo: 
     <div className="flex flex-col gap-1">
       {log.data?.dropped && (
         <p className="text-muted-foreground text-xs">
-          Część linii przepadła: daemon trzyma w pamięci tylko ostatnie (najwyżej {LOG_BUFFER_RECORDS}) linie taska i nie pamięta ich po
-          restarcie. Starsze linie są w pliku logu w katalogu stanu (logs/).
+          Some lines were dropped: the daemon keeps only the last (at most {LOG_BUFFER_RECORDS}) lines of a task in memory and forgets them
+          on restart. Older lines are in the log file in the state directory (logs/).
         </p>
       )}
       <div ref={box} onScroll={onScroll} className="bg-muted max-h-96 overflow-auto rounded-md border px-2 py-1 font-mono text-xs">
@@ -41,7 +41,7 @@ export function MiseTaskLog({ conn, repo, miseTask }: { conn: Connection; repo: 
           <LogLines records={records} />
         ) : (
           <p className="text-muted-foreground py-1">
-            {records ? "Brak linii w logu: task nic jeszcze nie wypisał w tym działaniu daemona." : "Wczytywanie logu…"}
+            {records ? "No log lines: the task has not printed anything since the daemon started." : "Loading the log…"}
           </p>
         )}
       </div>
@@ -54,7 +54,7 @@ export function MiseTaskLog({ conn, repo, miseTask }: { conn: Connection; repo: 
 const LogLines = memo(function LogLines({ records }: { records: LogRecord[] }) {
   return records.map((record, i) => (
     <div key={record.seq}>
-      {startsRun(records, i) && <div className="text-muted-foreground my-1 border-t pt-1">następne uruchomienie</div>}
+      {startsRun(records, i) && <div className="text-muted-foreground my-1 border-t pt-1">next run</div>}
       <div className={cn("flex gap-2 whitespace-pre-wrap break-all", logLevelClass(record.level))}>
         <span className="text-muted-foreground w-3 shrink-0 select-none" title={record.stream}>
           {record.stream === "stderr" ? "!" : ""}

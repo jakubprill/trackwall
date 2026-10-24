@@ -21,12 +21,12 @@ const MERGE_TIMEOUT_MS = 5 * 60_000;
 export async function syncRepo(dir: string): Promise<SyncResult> {
   const config = await readConfig(dir);
   const remote = mainRemote(config);
-  if (!remote) return skipped("no-remote", "repo nie ma remote origin ani jedynego innego remote");
+  if (!remote) return skipped("no-remote", "the repo has neither an origin remote nor a single other remote");
   const network = { sshCommand: config.sshCommand };
   await git(dir, ["fetch", "--quiet", "--", remote.name], { timeoutMs: FETCH_TIMEOUT_MS, network });
   const branch = await defaultBranch(dir, remote.name, network);
   if (branch === undefined)
-    return skipped("no-default-branch", `${remote.name} nie wskazuje gałęzi domyślnej (git remote set-head ${remote.name} --auto)`);
+    return skipped("no-default-branch", `${remote.name} does not point to a default branch (git remote set-head ${remote.name} --auto)`);
   return fastForward(dir, branch, `refs/remotes/${remote.name}/${branch}`, network);
 }
 
@@ -54,18 +54,18 @@ async function defaultBranch(dir: string, remote: string, network: GitNetwork): 
 async function fastForward(dir: string, branch: string, remoteRef: string, network: GitNetwork): Promise<SyncResult> {
   const localRef = `refs/heads/${branch}`;
   if ((await revParse(dir, localRef)) === undefined)
-    return skipped("no-local-branch", `gałęzi ${branch} nie ma lokalnie; pobrano tylko zmiany`);
+    return skipped("no-local-branch", `branch ${branch} does not exist locally; only fetched the changes`);
   const { ahead, behind } = await divergence(dir, localRef, remoteRef);
   if (ahead > 0 && behind > 0)
-    return skipped("diverged", `${branch} rozjechała się ze zdalną (${ahead} lokalnych, ${behind} zdalnych); scal ręcznie`);
-  if (ahead > 0) return skipped("ahead", `${branch} ma ${ahead} niewypchniętych commitów`);
+    return skipped("diverged", `${branch} has diverged from the remote (${ahead} local, ${behind} remote); merge by hand`);
+  if (ahead > 0) return skipped("ahead", `${branch} has ${ahead} unpushed ${ahead === 1 ? "commit" : "commits"}`);
   if (behind === 0) return { state: "up-to-date", branch };
 
   const status = parseStatus(
     (await git(dir, ["status", "--porcelain=v2", "--branch", "-z", "--untracked-files=no"])).stdout.toString("utf8"),
   );
   if (status.branch === branch) {
-    if (status.changes > 0) return skipped("dirty", `${branch} jest wybrana i ma niezacommitowane zmiany`);
+    if (status.changes > 0) return skipped("dirty", `${branch} is checked out and has uncommitted changes`);
     // Przesunięcie wybranej gałęzi musi też zaktualizować katalog roboczy; `--ff-only` odmówi, zamiast nadpisać
     // nieśledzony plik, który leży na drodze. Filtr LFS może przy tym pobierać obiekty, stąd środowisko sieciowe.
     await git(dir, ["merge", "--ff-only", "--quiet", remoteRef], {
@@ -74,7 +74,7 @@ async function fastForward(dir: string, branch: string, remoteRef: string, netwo
     });
   } else {
     if (await checkedOutInWorktree(dir, localRef))
-      return skipped("checked-out-elsewhere", `${branch} jest wybrana w innym worktree tego repo`);
+      return skipped("checked-out-elsewhere", `${branch} is checked out in another worktree of this repo`);
     // Fetch z bieżącego repo bez `+` przyjmuje tylko fast-forward i odmawia, gdy gałąź jest w użyciu w którymś
     // worktree także bez bycia wybraną (rebase albo bisect w toku), czego nie widać w `worktree list`. Bez
     // submodułów (`submodule.recurse` użytkownika pobierałby je drugi raz z sieci) i bez nadpisania `FETCH_HEAD`.
@@ -87,7 +87,7 @@ async function fastForward(dir: string, branch: string, remoteRef: string, netwo
 async function divergence(dir: string, localRef: string, remoteRef: string): Promise<{ ahead: number; behind: number }> {
   const { stdout } = await git(dir, ["rev-list", "--left-right", "--count", `${localRef}...${remoteRef}`]);
   const m = /^(\d+)\s+(\d+)/.exec(stdout.toString("utf8").trim());
-  if (!m) throw new Error(`nieoczekiwany wynik git rev-list: ${stdout.toString("utf8").trim()}`);
+  if (!m) throw new Error(`unexpected git rev-list output: ${stdout.toString("utf8").trim()}`);
   return { ahead: Number(m[1]), behind: Number(m[2]) };
 }
 

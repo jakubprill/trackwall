@@ -15,7 +15,7 @@ import { TaskBranch } from "./task-branch.ts";
 export const StoredTask = Task.omit({ worktree: true }).extend({
   branch: TaskBranch,
   /** Korzeń repo z folderu z projektami, z którego wyszło zadanie: tam git trzyma rejestr worktree i gałąź. */
-  repoDir: z.string().refine(isAbsolute, "korzeń repo: pełna ścieżka"),
+  repoDir: z.string().refine(isAbsolute, "repo root: full path"),
 });
 export type StoredTask = z.infer<typeof StoredTask>;
 
@@ -43,7 +43,7 @@ export class TaskFile {
     if (typeof parsed !== "string") return parsed;
     const aside = `${this.#path}.broken-${Date.now()}`;
     renameSync(this.#path, aside);
-    this.#log(`${this.#path}: ${parsed}; plik przeniesiony do ${aside}, worktree zadań zostały na dysku`);
+    this.#log(`${this.#path}: ${parsed}; file moved to ${aside}, task worktrees were left on disk`);
     return [];
   }
 
@@ -58,7 +58,7 @@ function parse(text: string): StoredTask[] | string {
   try {
     json = JSON.parse(text);
   } catch {
-    return "to nie jest JSON";
+    return "not JSON";
   }
   const parsed = TaskFileSchema.safeParse(json);
   return parsed.success ? parsed.data.tasks : z.prettifyError(parsed.error);

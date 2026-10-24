@@ -121,7 +121,7 @@ export function readSpringConfigs(snapshot: RepoSnapshot, out: ProblemSink): Map
       if (config.skippedProfiles > 0)
         out.problems.push({
           path: module,
-          message: `moduł ma ${config.skippedProfiles} profili ponad ${MAX_PROFILES}; karta pomija je (po nazwie)`,
+          message: `profiles over the limit of ${MAX_PROFILES} in the module: ${config.skippedProfiles}; the card skips them (by name)`,
         });
       return [module, config];
     }),

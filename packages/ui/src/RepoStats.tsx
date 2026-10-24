@@ -10,14 +10,14 @@ export function RepoStats({ status }: { status: RepoStatusOk }) {
   const state = repoStatusTone(status);
   return (
     <dl className="grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-2">
-      <Stat label="Gałąź">
+      <Stat label="Branch">
         <span className="font-mono" title={branchLabel(status)}>
           {branchLabel(status)}
         </span>
       </Stat>
-      <Stat label="Gałąź śledzona">
+      <Stat label="Upstream">
         {status.upstream ? (
-          <span className="flex items-center gap-2 font-mono" title={`względem ${status.upstream.name}`}>
+          <span className="flex items-center gap-2 font-mono" title={`compared with ${status.upstream.name}`}>
             <span className="flex items-center gap-0.5">
               <ArrowUp className="text-muted-foreground size-3.5" />
               {status.upstream.ahead}
@@ -29,13 +29,13 @@ export function RepoStats({ status }: { status: RepoStatusOk }) {
             <span className="text-muted-foreground min-w-0 truncate text-xs">{status.upstream.name}</span>
           </span>
         ) : (
-          <span className="text-muted-foreground">brak</span>
+          <span className="text-muted-foreground">none</span>
         )}
       </Stat>
-      <Stat label="Katalog roboczy">
+      <Stat label="Working tree">
         <StatusLabel tone={state.tone} label={state.label} />
       </Stat>
-      <Stat label="Ostatni commit">
+      <Stat label="Latest commit">
         {status.head ? (
           <span className="flex min-w-0 flex-col">
             <span className="truncate" title={status.head.subject}>
@@ -46,7 +46,7 @@ export function RepoStats({ status }: { status: RepoStatusOk }) {
             </span>
           </span>
         ) : (
-          <span className="text-muted-foreground">brak commitów</span>
+          <span className="text-muted-foreground">no commits</span>
         )}
       </Stat>
     </dl>

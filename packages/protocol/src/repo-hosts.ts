@@ -19,7 +19,9 @@ export const HostName = z
   .max(253)
   .transform((h) => h.toLowerCase())
   .pipe(
-    z.string().regex(new RegExp(`^${LABEL}(?:\\.${LABEL})*(?::\\d{1,5})?$`), "nazwa hosta bez https:// i ścieżki, np. gitlab.example.com"),
+    z
+      .string()
+      .regex(new RegExp(`^${LABEL}(?:\\.${LABEL})*(?::\\d{1,5})?$`), "host name without https:// and path, e.g. gitlab.example.com"),
   );
 
 export const RepoHost = z.object({ kind: RepoHostKind, host: HostName }).strict();
@@ -43,7 +45,7 @@ export const RepoHosts = z
   .max(20)
   .refine(
     (hosts) => hosts.every((h, i) => hosts.findIndex((other) => sameHost(h, other)) === i),
-    "ten sam hosting jest na liście dwa razy",
+    "the same host appears twice in the list",
   );
 
 /** Segment ścieżki repo w hostingu: znaki, które dopuszczają GitHub i GitLab, bez `.` i `-` na początku. */
@@ -56,7 +58,7 @@ const SEGMENT = "[A-Za-z0-9_][A-Za-z0-9._-]*";
 export const RemoteRepoName = z
   .string()
   .max(512)
-  .regex(new RegExp(`^${SEGMENT}(?:/${SEGMENT})+$`), "pełna nazwa repo, np. właściciel/repo albo grupa/podgrupa/repo");
+  .regex(new RegExp(`^${SEGMENT}(?:/${SEGMENT})+$`), "full repo name, e.g. owner/repo or group/subgroup/repo");
 export type RemoteRepoName = z.infer<typeof RemoteRepoName>;
 
 /** Repo dostępne w hostingu dla zalogowanego użytkownika `gh` albo `glab`, tak jak podał je hosting. */

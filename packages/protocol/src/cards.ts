@@ -152,7 +152,7 @@ export const TagName = z
   .string()
   .min(1)
   .max(40)
-  .regex(/^[a-z0-9][a-z0-9-]*$/, "nazwa tagu: małe litery, cyfry i '-', bez '-' na początku");
+  .regex(/^[a-z0-9][a-z0-9-]*$/, "tag name: lowercase letters, digits and '-', not starting with '-'");
 export type TagName = z.infer<typeof TagName>;
 
 /** Tag repo z powodem, dla którego repo go dostało (zdanie dla człowieka, np. „zależność react w package.json”). */

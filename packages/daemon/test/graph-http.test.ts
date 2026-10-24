@@ -89,35 +89,40 @@ describe("krawędzie http na repo sklepu", () => {
         repo: "orders-bff",
         path: "src/main/kotlin/com/example/bff/OrdersClient.kt",
         line: 9,
-        detail: "klient Feign OrdersClient: orders-api, http://localhost:8081 (profile: default)",
+        detail: "Feign client OrdersClient: orders-api, http://localhost:8081 (profile: default)",
       },
-      { repo: "orders-bff", path: "src/main/resources/application.yml", line: 8, detail: "adres http://localhost:8081 (profile: default)" },
-      { repo: "orders-api", path: "src/main/resources/application.yml", line: 3, detail: "aplikacja orders-api na porcie 8081" },
-      { repo: "orders-bff", path: "src/main/kotlin/com/example/bff/OrdersClient.kt", line: 11, detail: "wywołuje GET /api/orders/{id}" },
+      {
+        repo: "orders-bff",
+        path: "src/main/resources/application.yml",
+        line: 8,
+        detail: "address http://localhost:8081 (profile: default)",
+      },
+      { repo: "orders-api", path: "src/main/resources/application.yml", line: 3, detail: "app orders-api on port 8081" },
+      { repo: "orders-bff", path: "src/main/kotlin/com/example/bff/OrdersClient.kt", line: 11, detail: "calls GET /api/orders/{id}" },
       {
         repo: "orders-api",
         path: "src/main/java/com/example/orders/api/OrdersController.java",
         line: 19,
-        detail: "obsługuje GET /api/orders/{id} (OrdersController.get)",
+        detail: "handles GET /api/orders/{id} (OrdersController.get)",
       },
-      { repo: "orders-bff", path: "src/main/kotlin/com/example/bff/OrdersClient.kt", line: 14, detail: "wywołuje POST /api/orders" },
+      { repo: "orders-bff", path: "src/main/kotlin/com/example/bff/OrdersClient.kt", line: 14, detail: "calls POST /api/orders" },
       {
         repo: "orders-api",
         path: "src/main/java/com/example/orders/api/OrdersController.java",
         line: 27,
-        detail: "obsługuje POST /api/orders (OrdersController.create)",
+        detail: "handles POST /api/orders (OrdersController.create)",
       },
       {
         repo: "orders-bff",
         path: "src/main/kotlin/com/example/bff/OrdersClient.kt",
         line: 9,
-        detail: "klient Feign OrdersClient: orders-api, http://orders-api.shop.svc.cluster.local (profile: prod)",
+        detail: "Feign client OrdersClient: orders-api, http://orders-api.shop.svc.cluster.local (profile: prod)",
       },
       {
         repo: "orders-bff",
         path: "src/main/resources/application-prod.yml",
         line: 3,
-        detail: "adres http://orders-api.shop.svc.cluster.local (profile: prod)",
+        detail: "address http://orders-api.shop.svc.cluster.local (profile: prod)",
       },
     ]);
   });
@@ -136,9 +141,9 @@ describe("krawędzie http: dopasowanie celu", () => {
     );
     const [edge] = graph.edges;
     expect(edge?.confidence).toBe("high");
-    expect(edge?.evidence.filter((e) => e.detail.startsWith("obsługuje")).map((e) => e.detail)).toEqual([
-      "obsługuje GET /orders/{id} (Api.handle)",
-      "obsługuje GET /orders/special (Api.handle)",
+    expect(edge?.evidence.filter((e) => e.detail.startsWith("handles")).map((e) => e.detail)).toEqual([
+      "handles GET /orders/{id} (Api.handle)",
+      "handles GET /orders/special (Api.handle)",
     ]);
   });
 
@@ -152,7 +157,7 @@ describe("krawędzie http: dopasowanie celu", () => {
       ],
       { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
     );
-    expect(graph.edges.map((e) => [e.to, e.confidence, e.evidence.filter((v) => v.detail.startsWith("obsługuje")).length])).toEqual([
+    expect(graph.edges.map((e) => [e.to, e.confidence, e.evidence.filter((v) => v.detail.startsWith("handles")).length])).toEqual([
       ["orders-api", "medium", 2],
     ]);
   });
@@ -245,9 +250,7 @@ describe("krawędzie http: dopasowanie celu", () => {
     expect(graph.edges.map((e) => [e.to, e.key, e.confidence, e.evidence[1]?.detail])).toEqual([
       ["orders-api", "zamowienia.internal.example.com", "high", "graph.apps: zamowienia.internal.example.com → orders-api"],
     ]);
-    expect(graph.configProblems).toEqual([
-      "graph.apps „inne”: nie ma repo „nie-ma” na liście repo (podaj identyfikator albo adres host/ścieżka)",
-    ]);
+    expect(graph.configProblems).toEqual(["graph.apps “inne”: no repo “nie-ma” in the repo list (give its id or host/path address)"]);
   });
 
   test("wywołania bez adresu pasujące do endpointów dwóch repo dają krawędzie low, a ścieżka bez stałego członu nie daje żadnej", () => {

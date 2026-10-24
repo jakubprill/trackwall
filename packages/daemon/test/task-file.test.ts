@@ -38,6 +38,6 @@ describe("tasks.json", () => {
     expect(file.read()).toEqual([]);
     expect(existsSync(join(home, "tasks.json"))).toBe(false);
     expect(readdirSync(home).filter((name) => name.startsWith("tasks.json.broken-"))).toHaveLength(1);
-    expect(logged[0]).toContain("plik przeniesiony");
+    expect(logged[0]).toContain("file moved");
   });
 });

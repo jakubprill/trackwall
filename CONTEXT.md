@@ -1,6 +1,6 @@
 # Słownik Trackwall
 
-Pojęcia, które łatwo pomylić. Kod, UI, narzędzia MCP i dokumentacja używają tych słów i tylko tych: w prozie polskiego słowa, w kodzie identyfikatora podanego przy haśle. Szczegóły są w `docs/architecture.md`; tu jest tylko to, co trzeba wiedzieć, żeby nazwać rzecz poprawnie. Nowe pojęcie dopisuje się w tym samym PR, w którym się pojawia.
+Pojęcia, które łatwo pomylić. Kod, UI, narzędzia MCP i dokumentacja używają tych słów i tylko tych: w polskiej prozie polskiego słowa, w UI, komunikatach daemona i opisach narzędzi MCP słowa angielskiego (*kursywą* przy haśle, ADR-32), w kodzie identyfikatora podanego przy haśle. Szczegóły są w `docs/architecture.md`; tu jest tylko to, co trzeba wiedzieć, żeby nazwać rzecz poprawnie. Nowe pojęcie dopisuje się w tym samym PR, w którym się pojawia.
 
 ## Aplikacja
 
@@ -12,12 +12,12 @@ _Unikaj_: backend, serwer (bez dopowiedzenia)
 Aplikacja Tauri: okno, tray, uruchamianie i nadzór daemona jako sidecara, sprawdzenie WebView2. Nie zawiera logiki domenowej.
 _Unikaj_: aplikacja (gdy chodzi tylko o Tauri)
 
-**Widok** (`View`):
-Ekran aplikacji w UI (Repo, Sesje, Przegląd, Daemon, Ustawienia), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
+**Widok** (`View`; po angielsku *view*):
+Ekran aplikacji w UI (Repos, Sessions, Overview, Daemon, Settings), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
 _Unikaj_: zakładka (dla całego ekranu)
 
-**Zakładka** (`TabBar`):
-Przełącznik części treści wewnątrz widoku, np. README, Pliki, Commity i Taski mise w widoku Repo.
+**Zakładka** (`TabBar`; po angielsku *tab*):
+Przełącznik części treści wewnątrz widoku, np. README, Files, Commits i mise tasks w widoku Repos.
 
 **Fasada** (`Facade`):
 Zbiór interfejsów modułów daemona przekazywany do transportów (HTTP, MCP, zdarzenia). Moduły rozmawiają ze sobą tylko przez nią.
@@ -36,10 +36,10 @@ Cienki klient CLI daemona przez HTTP na loopbacku. Nie ma nic wspólnego z WebSo
 **Token daemona**:
 Sekret z `~/.trackwall/daemon.json`, którym UI, `ws`, powłoka i most stdio uwierzytelniają się w API i serwerze MCP.
 
-**Serwer MCP** (`/mcp`, `createMcpEndpoint`):
+**Serwer MCP** (`/mcp`, `createMcpEndpoint`; po angielsku *MCP server*):
 Część daemona, przez którą agenci czytają jego stan narzędziami MCP; ten sam port i token co API (§5.3, ADR-24).
 
-**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`):
+**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`; po angielsku *MCP tool*):
 Jedno wywołanie serwera MCP z nazwą po angielsku, wejściem i wynikiem opisanym schematem z `packages/protocol/src/mcp.ts`; mapowanie na fasadę, bez własnej logiki domenowej.
 _Unikaj_: komenda, akcja (to pojęcia z API i CLI)
 
@@ -56,96 +56,96 @@ Osobny token dla sesji zadania; po nim daemon wie, które zadanie woła MCP, i o
 Zbiór repo użytkownika (repo z folderu z projektami) i jego konfiguracja w `workspace.yaml`, poza repozytorium Trackwall. Tu żyje wszystko, co firmowe.
 _Unikaj_: projekt
 
-**Folder z projektami** (`projectsDir`):
+**Folder z projektami** (`projectsDir`; po angielsku *projects folder*):
 Jeden katalog na dysku użytkownika, wskazany w `workspace.yaml` albo w ustawieniach. Każdy jego bezpośredni podkatalog z `.git` to repo z workspace (ADR-18); repo dodaje się, klonując je do tego folderu.
 _Unikaj_: katalog workspace, root, folder (bez dopowiedzenia)
 
-**Hosting repo** (`RepoHost`, w `workspace.yaml` `repoHosts`):
+**Hosting repo** (`RepoHost`, w `workspace.yaml` `repoHosts`; po angielsku *repo host*):
 GitLab albo GitHub z nazwą hosta (`gitlab.example.com`), z którego Trackwall wyszukuje repo i klonuje je do folderu z projektami przez zalogowane `glab` albo `gh` (ADR-19).
 _Unikaj_: remote (to nazwa repo zdalnego w gicie, np. `origin`), serwer, źródło (to pojęcie z logów)
 
-**Repo zdalne** (`RemoteRepo`, pełna nazwa `fullName`):
+**Repo zdalne** (`RemoteRepo`, pełna nazwa `fullName`; po angielsku *remote repo*):
 Repo w hostingu dostępne dla użytkownika, np. `grupa/podgrupa/projekt`. Ostatni segment pełnej nazwy to katalog klonu.
 
-**Klonowanie** (`CloneJob`):
+**Klonowanie** (`CloneJob`; po angielsku *clone*):
 Klon jednego repo zdalnego do folderu z projektami, w tle: `running`, `done` albo `failed` z komunikatem. Trzymane tylko w pamięci daemona.
 
-**Repo** (`Repo`, `RepoId`):
+**Repo** (`Repo`, `RepoId`; po angielsku *repo*):
 Jedno repozytorium z workspace, identyfikowane slugiem z nazwy jego katalogu.
 
 **Adres repo zdalnego** (`Repo.remote`):
 Adres głównego remote (`origin` albo jedynego remote w gicie, `mainRemote`) jako `host/ścieżka`, np. `gitlab.example.com/sklep/api`, bez protokołu i użytkownika. Identyfikuje repo niezależnie od nazwy katalogu (ADR-21).
 _Unikaj_: URL repo (URL ma protokół i bywa z tokenem), remote bez dopowiedzenia (to nazwa w gicie, np. `origin`)
 
-**Synchronizacja** (`SyncRun`, wynik repo `SyncRepo`):
+**Synchronizacja** (`SyncRun`, wynik repo `SyncRepo`; po angielsku *sync*):
 Fetch każdego repo z folderu z projektami i fast-forward jego gałęzi domyślnej, w tle, z wynikiem per repo: przesunięte, aktualne, pominięte z powodem (`SyncSkipReason`) albo błąd. Nigdy nie scala ani nie nadpisuje lokalnych zmian (ADR-21). Trzymana tylko w pamięci daemona.
 _Unikaj_: pull, aktualizacja (bez dopowiedzenia)
 
-**Komenda zbiorcza** (`BatchRun`, krok `BatchStep`, wynik repo `BatchRepo`):
+**Komenda zbiorcza** (`BatchRun`, krok `BatchStep`, wynik repo `BatchRepo`; po angielsku *Batch command*):
 Wybrane kroki na wybranych repo jednym przyciskiem: synchronizacja (`sync`), narzędzia z konfiguracji mise repo (`tools`, `mise install`), zależności (`setup`, task mise `setup`) i build (`build`, task mise `build`), w repo zawsze w tej kolejności, kilka repo naraz, z wynikiem każdego kroku w każdym repo (ADR-27). Błąd kroku kończy repo, pozostałe idą dalej. Trzymana tylko w pamięci daemona.
 _Unikaj_: batch (w polskim tekście), operacja zbiorcza, workflow
 
-**Stan repo** (`RepoStatus`):
+**Stan repo** (`RepoStatus`; po angielsku *repo status*):
 Gałąź, ostatni commit, liczba zmian w katalogu roboczym i ahead/behind względem gałęzi śledzonej, odczytane z gita przy każdym zapytaniu (`ok`), albo `unavailable` z komunikatem, gdy git go nie czyta (repo, którego katalog zniknął, znika z listy). Nigdy nie jest zapisywany.
 _Unikaj_: status (w polskim tekście), sync (to osobna akcja)
 
 **Przegląd repo** (`RepoOverview`):
 README i ostatnie commity repo w jednej odpowiedzi; stan repo przychodzi z listy repo. Pliki przeglądane są osobno, zawsze z commita HEAD (ADR-14).
 
-**Worktree** (worktree zadania, `Task.worktree`):
+**Worktree** (worktree zadania, `Task.worktree`; po angielsku *worktree*):
 Osobny katalog roboczy gita dla zadania, na gałęzi zadania, w `worktrees/<repo>/<gałąź bez prefiksu>` w katalogu stanu, poza folderem z projektami (ADR-31). Liczony z repo i gałęzi (`taskWorktree`), nie zapisywany w `tasks.json`. Usuwany tylko na prośbę użytkownika i tylko bez działającej sesji zadania; niezacommitowane zmiany przepadają dopiero po potwierdzeniu.
 
-**Commit bazowy** (`Task.base`):
+**Commit bazowy** (`Task.base`; po angielsku *base commit*):
 Commit gałęzi domyślnej, od którego wyszła gałąź zadania. Zmiany zadania (`TaskChanges`) to katalog roboczy worktree względem niego: commity zadania i niezacommitowane pliki razem.
 
-**Karta** (karta repo, `RepoCard`):
-Fakty o repo wyciągnięte deterministycznie z plików buildu, konfiguracji i kodu w commicie HEAD: pliki buildu, co repo udostępnia (`provides`), czego używa (`consumes`), wymagane narzędzia, mechanizmy i problemy, każdy fakt z dowodem. Zależy tylko od commita, więc liczy się raz na commit (ADR-25). LLM dopisze tylko opis i propozycje połączeń oznaczone `origin: 'llm'` (ADR-6). W UI zakładka „Karta” w szczegółach repo.
+**Karta** (karta repo, `RepoCard`; po angielsku *Card*):
+Fakty o repo wyciągnięte deterministycznie z plików buildu, konfiguracji i kodu w commicie HEAD: pliki buildu, co repo udostępnia (`provides`), czego używa (`consumes`), wymagane narzędzia, mechanizmy i problemy, każdy fakt z dowodem. Zależy tylko od commita, więc liczy się raz na commit (ADR-25). LLM dopisze tylko opis i propozycje połączeń oznaczone `origin: 'llm'` (ADR-6). W UI zakładka „Card” w szczegółach repo.
 _Unikaj_: profil, metadane; „karta repo” dla całego panelu szczegółów repo
 
-**Plik buildu** (`BuildFile`):
+**Plik buildu** (`BuildFile`; po angielsku *build file*):
 `pom.xml`, `build.gradle(.kts)` albo `package.json`, który należy do buildu repo: korzeń (bez pliku tego samego rodzaju wyżej) albo moduł lub paczka workspace, którą wymienia inny plik buildu (`memberOf`).
 
-**Paczka** (`ProvidedPackage`, `ConsumedPackage`):
+**Paczka** (`ProvidedPackage`, `ConsumedPackage`; po angielsku *package*):
 Artefakt Maven (`grupa:artefakt`), wtyczka Gradle albo paczka npm, którą repo udostępnia albo której używa. Paczki z tego samego repo nie są używanymi.
 
-**Aplikacja** (`ProvidedApp`, na karcie `kind: "app"`):
+**Aplikacja** (`ProvidedApp`, na karcie `kind: "app"`; po angielsku *app*):
 Aplikacja Spring Boot z karty repo: `spring.application.name` modułu i port z `server.port`. Po jej nazwie klient Feign, `lb://nazwa` albo host adresu wskazuje repo (ADR-30). Nie jest serwisem: serwis to proces, który Trackwall uruchamia.
 _Unikaj_: serwis, mikroserwis (dla faktu z karty)
 
-**Endpoint HTTP** (`ProvidedEndpoint`, na karcie `kind: "endpoint"`):
+**Endpoint HTTP** (`ProvidedEndpoint`, na karcie `kind: "endpoint"`; po angielsku *HTTP endpoint*):
 Metoda i pełna ścieżka (ścieżka kontekstu, prefiks kontrolera, ścieżka metody) z kontrolera Spring, z handlerem `Klasa.metoda`. Metoda `null` to każda metoda (`@RequestMapping` bez `method`).
 
-**Klient HTTP** (`ConsumedHttp`, na karcie `kind: "http"`, rodzaj `HttpClientVia`):
+**Klient HTTP** (`ConsumedHttp`, na karcie `kind: "http"`, rodzaj `HttpClientVia`; po angielsku *HTTP client*):
 Miejsce, z którego repo woła HTTP: interfejs Feign albo `@HttpExchange`, klasa z `WebClient`, `RestClient` albo `RestTemplate`, adres z konfiguracji Spring, `.env` albo proxy frontendu. Ma nazwę aplikacji celu albo adres, profile, w których ten adres obowiązuje, i wywołania. Adres na karcie nie ma użytkownika, hasła, zapytania ani członów ścieżki wyglądających na token.
 
-**Wywołanie** (`HttpCall`):
+**Wywołanie** (`HttpCall`; po angielsku *call*):
 Metoda i ścieżka, które klient HTTP woła, z linią w kodzie. Część ścieżki znana dopiero w czasie działania to `{}`.
 
-**Profil** (profil Spring, `ConsumedHttp.profiles`):
+**Profil** (profil Spring, `ConsumedHttp.profiles`; po angielsku *profile*):
 Nazwa z `application-<profil>.yml` albo `spring.config.activate.on-profile`; `default` to konfiguracja bez profilu. Klient z adresem z konfiguracji ma osobny wpis na każdy profil, w którym adres jest inny.
 
-**Wymagane narzędzie** (`ToolRequirement`):
+**Wymagane narzędzie** (`ToolRequirement`; po angielsku *required tool*):
 Narzędzie i wersja z konfiguracji mise albo `.tool-versions` (źródło `mise`) lub z pliku, który podaje wersję po swojemu (`.nvmrc`, wrapper Maven, `engines.node`; źródło `hint`).
 
-**Mechanizm** (`Mechanism`, `MechanismId`):
+**Mechanizm** (`Mechanism`, `MechanismId`; po angielsku *mechanism*):
 Technologia rozpoznana w repo po paczce albo pliku (Spring Boot, Feign, Kafka, Helm…), ze spisem dowodów. Spis, nie wniosek: mechanizm nie mówi, z kim repo się łączy.
 
 **Ekstraktor**:
 Czysta funkcja na migawce commita (`RepoSnapshot`) w `modules/cards/` (`maven.ts`, `gradle.ts`, `npm.ts`, `tools.ts`, `mechanisms.ts`, `spring.ts`, `frontend-http.ts`), która zwraca fakty z pozycją w pliku. Niczego nie wykonuje.
 
-**Tag repo** (`RepoTag`):
+**Tag repo** (`RepoTag`; po angielsku *tag*):
 Krótka nazwa grupy repo (`java`, `frontend`, `bff`, `monorepo`…) z powodem, liczona z karty, identyfikatora i adresu repo zdalnego albo z reguły tagów. Tagi są ortogonalne: filtr z kilkoma tagami pokazuje repo, które mają wszystkie.
 _Unikaj_: etykieta, kategoria
 
 **Reguła tagów** (`repoTags` w `workspace.yaml`, `RepoTagRules`):
 Tag i wzorce identyfikatora albo adresu repo zdalnego, które go nadają (`core-api: ["*-core"]`). Dla grup, których nie widać w plikach, np. zespołów.
 
-**Graf** (graf połączeń, `RepoGraph`, moduł `graph`):
+**Graf** (graf połączeń, `RepoGraph`, moduł `graph`; po angielsku *connection graph*):
 Repo z folderu z projektami jako węzły (`GraphNode`) i krawędzie między nimi, liczone z kart i z wpisów `graph` w `workspace.yaml` od nowa, gdy zmieni się commit któregoś repo albo konfiguracja. Dziś węzłem jest repo; serwisy (kilka na repo) przyjdą z modułem `services`.
 _Unikaj_: mapa, diagram zależności
 
-**Krawędź** (`GraphEdge`):
-Połączenie od repo, które używa, do repo używanego, z rodzajem (`EdgeKind`: `package` i `http` z kart, `manual` z `workspace.yaml`; potem `topic`), kluczem (nazwa paczki, nazwa aplikacji, host albo `localhost:<port>`, opis), pewnością i dowodami. Jedna para repo może mieć kilka krawędzi; widok „Przegląd” rysuje je jedną linią.
+**Krawędź** (`GraphEdge`; po angielsku *connection*):
+Połączenie od repo, które używa, do repo używanego, z rodzajem (`EdgeKind`: `package` i `http` z kart, `manual` z `workspace.yaml`; potem `topic`), kluczem (nazwa paczki, nazwa aplikacji, host albo `localhost:<port>`, opis), pewnością i dowodami. Jedna para repo może mieć kilka krawędzi; widok „Overview” rysuje je jedną linią.
 
 **Alias paczki** (`graph.packages` w `workspace.yaml`):
 Nazwa paczki i repo, które ją dostarcza, gdy karta tego repo jej nie pokazuje (paczka budowana poza plikami buildu, inna nazwa w repozytorium artefaktów). Działa tylko dla paczki, której nie buduje żadne repo z listy.
@@ -156,19 +156,19 @@ Nazwa aplikacji albo host adresu (bez wielkości liter) i repo, które je obsłu
 **Ręczna krawędź** (`ManualEdge`, `graph.edges` w `workspace.yaml`):
 Połączenie wpisane przez użytkownika (`from`, `to`, `note`), np. wywołanie HTTP, którego karty jeszcze nie widzą. Repo wskazuje się identyfikatorem albo adresem repo zdalnego (`RepoRef`).
 
-**Dowód** (`Evidence`, w grafie `EdgeEvidence`):
+**Dowód** (`Evidence`, w grafie `EdgeEvidence`; po angielsku *evidence*):
 Plik i linia, z których wynika fakt na karcie lub krawędź w grafie; dowód krawędzi ma też repo (albo `null` dla `workspace.yaml`) i zdanie, co w tym miejscu jest.
 
-**Pewność** (`confidence`, w grafie `EdgeConfidence`):
+**Pewność** (`confidence`, w grafie `EdgeConfidence`; po angielsku *confidence*):
 `exact`, `high`, `medium` albo `low`. Krawędź z paczki budowanej przez jedno repo i ręczna krawędź są `exact`, z aliasu paczki `high`, z paczki budowanej przez kilka repo `medium`. Krawędź HTTP: `exact`, gdy nazwa aplikacji wskazuje jedno repo, a każde wywołanie ma w nim endpoint, `high` za samą nazwę aplikacji albo alias aplikacji, `medium` za host równy nazwie repo, port na `localhost` albo ścieżki pasujące do jednego repo, `low` za ścieżki pasujące do kilku repo (ADR-30). W UI: pewne, prawie pewne, prawdopodobne, możliwe. Przy `low` daemon niczego nie robi automatycznie.
 
-**Przegląd** (widok „Przegląd”, `GraphView`, identyfikator widoku `graph`):
+**Przegląd** (widok „Overview”, `GraphView`, identyfikator widoku `graph`; po angielsku *Overview*):
 Widok z grafem połączeń na całą szerokość i panelem szczegółów wybranego repo (kogo używa, kto używa jego, dowody).
 _Unikaj_: dashboard (to scena 3D), przegląd repo (to README i commity jednego repo, `RepoOverview`)
 
 ## Procesy i serwisy
 
-**Serwis** (`Service`, `ServiceId`):
+**Serwis** (`Service`, `ServiceId`; po angielsku *service*):
 Repo plus jego task mise `dev`, port i sonda zdrowia. Jedno repo może mieć kilka serwisów.
 _Unikaj_: aplikacja, mikroserwis (gdy chodzi o byt w Trackwall)
 
@@ -194,25 +194,25 @@ Grupa procesów z `runtime.json`, której daemon już nie nadzoruje (np. po awar
 
 ## Agenci
 
-**Zadanie** (`Task`, `TaskId`):
+**Zadanie** (`Task`, `TaskId`; po angielsku *task*):
 Praca jednego agenta nad jednym repo: polecenie, worktree, gałąź `trackwall/<skrót>` od gałęzi domyślnej i sesje; docelowo także budżet, dzierżawy i podsumowanie. Dziś (ADR-31) tworzy je widok Sesje, zapisuje `tasks.json`, a sesję zadania można zatrzymać i wznowić. Zadanie nie wskazuje sesji; to sesja ma `Session.task`. W kodzie i API `task` znaczy zawsze zadanie.
 _Unikaj_: job; „task” w polskim tekście (myli się z taskiem mise)
 
-**Zakończenie zadania** (`removeTask`, „Zakończ zadanie” w UI):
+**Zakończenie zadania** (`removeTask`, „End task” w UI; po angielsku *End task*):
 Usunięcie worktree zadania, a do wyboru także jego gałęzi. Tylko bez działającej sesji; to, co by przepadło (niezacommitowane pliki, commity z odłączonego HEAD, katalog, którego git już nie zna, a z gałęzią także commity zadania), daemon wymienia w odmowie `unsaved_changes`, a przepada ono dopiero po potwierdzeniu. Pliki ignorowane przez gita przepadają zawsze.
 _Unikaj_: usunięcie zadania (zadanie znika z listy, ale gałąź może zostać)
 
-**Polecenie** (`Task.prompt`):
+**Polecenie** (`Task.prompt`; po angielsku *prompt*):
 Treść zadania dla agenta, wpisana w widoku Sesje; Copilot CLI dostaje ją jako pierwszą wiadomość sesji zadania (`--interactive`).
 _Unikaj_: prompt (w polskim tekście)
 
-**Task mise**:
+**Task mise** (po angielsku *mise task*):
 Nazwana komenda z `mise.toml` repo: `setup`, `dev`, `test`, `build`, `lint`, `health`. W kodzie zawsze z dopowiedzeniem (`miseTask`, `mise.run(...)`), nigdy gołe `task`. Jedyny wyjątek to argument `task` narzędzia MCP `run_task` (§5.3), gdzie kontekst jest jednoznaczny.
 
-**Uruchomienie** (`run`, `runId`, stan: `RunState`):
+**Uruchomienie** (`run`, `runId`, stan: `RunState`; po angielsku *run*):
 Jednorazowe wykonanie taska mise przez `run_task` albo z UI, z własną grupą procesów i logami. Stan `running`, `stopping` albo `exited` (kod wyjścia, sygnał, czy zatrzymał je użytkownik, ostatnie linie wyjścia), zawsze zaobserwowany. Nie jest zadaniem ani serwisem.
 
-**Zaufanie mise** (`mise trust`, akcja `trust`):
+**Zaufanie mise** (`mise trust`, akcja `trust`; po angielsku *trust*):
 Zgoda użytkownika, żeby mise czytał konfigurację repo, która może uruchamiać programy (`[env]`, szablony, hooki). Bez niej mise nie poda listy tasków (`untrusted`). Daje się tylko w UI.
 _Unikaj_: autoryzacja, akceptacja
 
@@ -223,12 +223,12 @@ Wszystko, co Trackwall wie o jednym CLI agenta: szablon komendy, konfiguracja MC
 CLI agenta (dziś Copilot CLI) uruchomione przez użytkownika poza zadaniem, np. w folderze z projektami, z dostępem do serwera MCP. W odróżnieniu od sesji zadania nie ma worktree, budżetu ani tokenu zadania. Pojęcie z dokumentacji i opisów narzędzi; w kodzie nie ma własnego identyfikatora, bo daemon niczego o nim nie trzyma.
 _Unikaj_: orkiestrator, główny agent
 
-**Sesja** (sesja zadania, `Session`, `SessionId`):
+**Sesja** (sesja zadania, `Session`, `SessionId`; po angielsku *session*):
 CLI agenta działające w PTY należącym do daemona, w korzeniu repo albo w worktree zadania (`Session.task`), jako grupa procesów, z własnym katalogiem `sessions/<sesja>/` (wtyczka sesji, `hooks.jsonl`). Widok Sesje uruchamia ją w repo jednym kliknięciem (ADR-26) albo razem z zadaniem (ADR-31). Sesja żyje tylko do wyjścia daemona, zadanie dłużej. Nagrywa ją tylko `copilot-record.ts`.
 _Unikaj_: sesja POSIX (to pojęcie z grupy procesów), okno (to okno terminala w UI)
 
-**Czeka na Ciebie** (`Session.needsAttention`):
-Działająca sesja w stanie `Input`, `Approval` albo `Plan`: agent nie ruszy dalej bez człowieka. Liczy to daemon, a UI (licznik na pasku widoków, „Następna czekająca”) i tray (menu „Czeka: <repo>”, miganie okna) tylko czytają pole.
+**Czeka na Ciebie** (`Session.needsAttention`; po angielsku *waiting for you*):
+Działająca sesja w stanie `Input`, `Approval` albo `Plan`: agent nie ruszy dalej bez człowieka. Liczy to daemon, a UI (licznik na pasku widoków, „Next waiting”) i tray (menu „Waiting: <repo>”, miganie okna) tylko czytają pole.
 
 **Okno terminala** (`SessionTerminal`):
 xterm.js w widoku Sesje podłączony WebSocketem `/ws/pty/<sesja>` do PTY sesji. Kilka okien może pokazywać tę samą sesję; rozmiar PTY ustala ostatnie, które go zgłosiło.
@@ -237,7 +237,7 @@ xterm.js w widoku Sesje podłączony WebSocketem `/ws/pty/<sesja>` do PTY sesji.
 Stan ekranu sesji, który daemon trzyma w emulatorze terminala bez okna i wysyła oknu terminala przy podłączeniu, zanim pójdzie dalsze wyjście.
 _Unikaj_: zrzut ekranu (to obrazek), historia wyjścia
 
-**Stan zadania** (`TaskState`, zmiana: `TaskStateChange`):
+**Stan zadania** (`TaskState`, zmiana: `TaskStateChange`; po angielsku *session state*):
 `Working`, `Input`, `Approval`, `Plan`, `Done`, `Error` albo `Stale`, zawsze ze źródłem (`hook`, `osc`, `screen`, `timeout`, `exit`) i pewnością (§4.4).
 
 **Detektor stanu**:
@@ -273,7 +273,7 @@ _Unikaj_: wpis, event
 **Źródło** (`LogSource`):
 Skąd pochodzi rekord. Dziś task mise repo (`{ kind: "mise-task", repo, miseTask }`); serwis, zadanie i sam daemon dojdą jako kolejne rodzaje. Źródło ma rekordy wszystkich swoich uruchomień.
 
-**Log** (log taska mise, `logs/tail` i narzędzie MCP `tail`, w UI przycisk „Log”):
+**Log** (log taska mise, `logs/tail` i narzędzie MCP `tail`, w UI przycisk „Log”; po angielsku *log*):
 Rekordy jednego źródła w kolejności `seq`: ostatnie (do 2000) w pamięci daemona, nowsze niż ostatnia rotacja w pliku JSONL `logs/<rodzaj>/<repo>/<task mise>.jsonl` w katalogu stanu (bieżący plik i jeden poprzedni, po 10 MB, ADR-28). Nie myl z logiem daemona (stderr procesu `trackwall-daemon`).
 _Unikaj_: konsola, terminal (to PTY sesji zadania)
 
@@ -298,7 +298,7 @@ Zapis każdego wywołania narzędzia MCP: klient, narzędzie, argumenty, czas, s
 **Repo sekretów**:
 Repozytorium z manifestami k8s `Secret`, po jednej gałęzi `origin/<repo>` na repo z workspace (ADR-10). Klonowane poza workspace.
 
-**Sekret**:
+**Sekret** (po angielsku *secret*):
 Klucz z `data` albo `stringData` manifestu, wstrzykiwany jako zmienna środowiskowa o tej samej nazwie. Sesja zadania widzi tylko, czy jest ustawiony.
 
 ## Scena 3D

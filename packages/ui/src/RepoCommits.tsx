@@ -3,10 +3,10 @@ import { Surface } from "@/components/Surface";
 import { relativeTime } from "@/lib/format";
 
 export function RepoCommits({ commits }: { commits: Commit[] }) {
-  if (commits.length === 0) return <p className="text-muted-foreground text-sm">Brak commitów.</p>;
+  if (commits.length === 0) return <p className="text-muted-foreground text-sm">No commits.</p>;
   const now = new Date();
   return (
-    <Surface label="Ostatnie commity" meta={commits.length}>
+    <Surface label="Recent commits" meta={commits.length}>
       <ol className="divide-y">
         {commits.map((c) => (
           <li key={c.hash} className="flex items-baseline gap-3 px-3 py-2 text-sm">

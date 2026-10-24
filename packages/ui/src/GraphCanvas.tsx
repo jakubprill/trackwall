@@ -29,15 +29,15 @@ export function GraphCanvas({
   for (const p of layout.pairs) incoming.set(p.to, (incoming.get(p.to) ?? 0) + 1);
 
   if (graph.nodes.length === 0) {
-    return <Hint>Folder z projektami nie ma jeszcze repo. Ustaw go w widoku „Ustawienia” albo sklonuj repo w widoku „Repo”.</Hint>;
+    return <Hint>The projects folder has no repos yet. Set it in Settings or clone a repo in Repos.</Hint>;
   }
 
   return (
     <div className="min-h-0 flex-1 overflow-auto">
       {layout.pairs.length === 0 && (
         <Hint>
-          Nie znaleziono połączeń: żadne repo nie używa paczki zbudowanej w innym. Połączenia, których karty nie widzą, dopiszesz w
-          workspace.yaml (klucz graph).
+          No connections found: no repo uses a package built in another. Add connections the cards cannot see in workspace.yaml (the graph
+          key).
         </Hint>
       )}
       {layout.pairs.length > 0 && (
@@ -69,7 +69,7 @@ export function GraphCanvas({
       )}
       {layout.isolated.length > 0 && (
         <div className="px-4 pt-2 pb-4">
-          <h3 className="hud-label pb-2">Bez połączeń</h3>
+          <h3 className="hud-label pb-2">No connections</h3>
           <ul className="flex flex-wrap gap-2">
             {layout.isolated.map((repo) => (
               <li key={repo}>
@@ -162,7 +162,7 @@ function NodeCard({
       <span className="truncate font-mono text-sm">{node.repo}</span>
       <span className="text-muted-foreground flex min-w-0 items-center gap-2 font-mono text-2xs">
         {usedBy > 0 && (
-          <span className="text-primary shrink-0" title={`Używa go ${usedBy} repo`}>
+          <span className="text-primary shrink-0" title={`Used by ${usedBy} ${usedBy === 1 ? "repo" : "repos"}`}>
             {`← ${usedBy}`}
           </span>
         )}

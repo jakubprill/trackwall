@@ -17,11 +17,10 @@ export function SettingsView({ conn, onRetry, onSaved }: { conn: Connection; onR
 
   return (
     <div className="flex w-full max-w-xl flex-col gap-4">
-      <Surface label="Folder z projektami">
+      <Surface label="Projects folder">
         <div className="flex flex-col gap-4 p-4">
           <p className="text-muted-foreground text-sm">
-            Trackwall pokazuje w widoku „Repo” każde repo gita, które leży bezpośrednio w tym folderze. Repo sklonowane do niego pojawi się
-            na liście samo.
+            Repos shows every git repo directly inside this folder. A repo cloned into it appears in the list on its own.
           </p>
           {settings.error && (
             <ErrorWithRetry
@@ -55,11 +54,11 @@ function RepoHostsSurface({ conn }: { conn: Connection }) {
   const load = useCallback(() => post(conn, workspaceApi.repoHosts, {}), [conn]);
   const hosts = useRemote(load);
   return (
-    <Surface label="Hostingi repo">
+    <Surface label="Repo hosts">
       <div className="flex flex-col gap-4 p-4">
         <p className="text-muted-foreground text-sm">
-          Z tych hostingów widok „Repo” wyszukuje repo i klonuje je jednym kliknięciem do folderu z projektami. Trackwall pyta je przez
-          programy glab (GitLab) i gh (GitHub) zalogowane w systemie, więc nie przechowuje tokenu.
+          Repos searches these hosts and clones a repo into your projects folder in one click. Trackwall asks them through the glab (GitLab)
+          and gh (GitHub) CLIs you are signed in to, so it never stores a token.
         </p>
         {hosts.error && <ErrorWithRetry message={hosts.error} onRetry={hosts.reload} />}
         {!hosts.data && !hosts.error && <Loading />}
@@ -106,22 +105,22 @@ function ProjectsDirForm({
         <Input
           value={path}
           onChange={(e) => setPath(e.target.value)}
-          placeholder="C:\Users\ja\Projects albo /Users/ja/Projects"
-          aria-label="Pełna ścieżka do folderu z projektami"
+          placeholder="C:\Users\me\Projects or /Users/me/Projects"
+          aria-label="Full path to the projects folder"
           className="font-mono text-xs"
         />
         <Button type="submit" size="sm" disabled={busy || path.trim() === ""}>
-          Zapisz
+          Save
         </Button>
       </div>
       {error && <p className="text-destructive text-xs break-words">{error}</p>}
       <p className="text-muted-foreground text-xs break-all">
         {configFile ? (
           <>
-            Zapisane jako <span className="font-mono">projectsDir</span> w <span className="font-mono">{configFile}</span>
+            Saved as <span className="font-mono">projectsDir</span> in <span className="font-mono">{configFile}</span>
           </>
         ) : (
-          "Błąd składni YAML trzeba poprawić w pliku z komunikatu powyżej; zapis tutaj poprawi tylko zły projectsDir."
+          "Fix the YAML syntax error in the file named above; saving here only fixes a bad projectsDir."
         )}
       </p>
     </form>

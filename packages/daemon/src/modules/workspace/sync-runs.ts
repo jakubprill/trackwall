@@ -25,7 +25,7 @@ export class SyncRuns {
   startOrJoin(key: string, entries: readonly RepoEntry[], limit: number, sync: (entry: RepoEntry) => Promise<SyncResult>): SyncRun {
     const running = [...this.runs].find(([, run]) => run.finishedAt === null);
     if (running?.[0] === key) return snapshot(running[1]);
-    if (running) throw new DomainError("bad_request", "trwa synchronizacja poprzedniego folderu z projektami");
+    if (running) throw new DomainError("bad_request", "a sync of the previous projects folder is running");
     return snapshot(this.start(key, entries, limit, sync));
   }
 

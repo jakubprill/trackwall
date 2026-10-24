@@ -122,7 +122,7 @@ export class AgentTasks {
         // Nieudane sprzątanie zostawia zadanie na liście, żeby użytkownik mógł je zakończyć sam.
         await this.#whileRemoving(id, () => this.#discard(task, false)).then(
           () => this.#save(this.#tasks.filter((t) => t.id !== id)),
-          (e: unknown) => this.#deps.log(`sprzątanie zadania ${id}: ${messageOf(e)}`),
+          (e: unknown) => this.#deps.log(`cleaning up task ${id}: ${messageOf(e)}`),
         );
         throw err;
       }
@@ -134,7 +134,7 @@ export class AgentTasks {
   resume(id: string): Promise<Task> {
     const task = this.#get(id);
     return this.#exclusive(id, async () => {
-      this.#refuseRunning(task, "wznowieniem");
+      this.#refuseRunning(task, "resuming");
       this.#closeSessions(task);
       await this.#launch(task, [`--resume=${id}`]);
       return view(task);
@@ -142,7 +142,7 @@ export class AgentTasks {
   }
 
   changes(id: string): Promise<TaskChanges> {
-    if (this.#removing.has(id)) throw new DomainError("bad_request", "zadanie jest właśnie kończone");
+    if (this.#removing.has(id)) throw new DomainError("bad_request", "the task is being ended");
     const task = this.#existingWorktree(id);
     const reading = asRepoUnavailable(task.branch, this.#deps.vcs.worktreeChanges(task.worktree, task.base, PATCH_MAX_BYTES));
     const reads = this.#reading.get(id) ?? new Set();
@@ -168,7 +168,7 @@ export class AgentTasks {
   remove(id: string, keepBranch: boolean, discardChanges: boolean): Promise<void> {
     const task = this.#get(id);
     return this.#exclusive(id, async () => {
-      this.#refuseRunning(task, "zakończeniem");
+      this.#refuseRunning(task, "ending it");
       await this.#whileRemoving(id, async () => {
         if (!discardChanges) await this.#refuseLoss(task, keepBranch);
         await this.#discard(task, keepBranch);
@@ -193,12 +193,12 @@ export class AgentTasks {
     const pending = await asRepoUnavailable(task.branch, this.#deps.vcs.pendingWork(task));
     const lost = [
       pending.unregisteredDir &&
-        `katalog ${task.worktree} z całą zawartością, bo git go nie zna jako worktree (przerwane usuwanie albo repo przeniesione lub usunięte)`,
-      pending.uncommitted > 0 && `niezacommitowane zmiany w worktree (${pending.uncommitted})`,
-      pending.strayCommits > 0 && `commity poza gałęzią, z odłączonego HEAD (${pending.strayCommits})`,
-      !keepBranch && pending.branchCommits > 0 && `commity na gałęzi ${task.branch} (${pending.branchCommits})`,
+        `directory ${task.worktree} with all its contents, because git does not know it as a worktree (interrupted removal, or the repo was moved or deleted)`,
+      pending.uncommitted > 0 && `uncommitted changes in the worktree (${pending.uncommitted})`,
+      pending.strayCommits > 0 && `commits outside the branch, from a detached HEAD (${pending.strayCommits})`,
+      !keepBranch && pending.branchCommits > 0 && `commits on branch ${task.branch} (${pending.branchCommits})`,
     ].filter((s) => s !== false);
-    if (lost.length > 0) throw new DomainError("unsaved_changes", `zakończenie skasowałoby: ${lost.join(", ")}`);
+    if (lost.length > 0) throw new DomainError("unsaved_changes", `ending the task would delete: ${lost.join(", ")}`);
   }
 
   /** Worktree (z niezacommitowanymi i ignorowanymi plikami) i, bez `keepBranch`, gałąź. */
@@ -214,7 +214,7 @@ export class AgentTasks {
   /** Działająca sesja pisze w worktree i trzyma jego pliki (na Windowsie blokuje usunięcie), więc najpierw stop. */
   #refuseRunning(task: KnownTask, action: string): void {
     if (this.#deps.sessions.of(task.id).some((s) => s.run.kind !== "exited"))
-      throw new DomainError("bad_request", `zadanie ${task.branch} ma działającą sesję; zatrzymaj ją przed ${action}`);
+      throw new DomainError("bad_request", `task ${task.branch} has a running session; stop it before ${action}`);
   }
 
   /** Zakończone sesje zadania znikają z listy. */
@@ -223,7 +223,7 @@ export class AgentTasks {
   }
 
   async #exclusive<T>(id: string, run: () => Promise<T>): Promise<T> {
-    if (this.#busy.has(id)) throw new DomainError("bad_request", "na tym zadaniu trwa już inna akcja");
+    if (this.#busy.has(id)) throw new DomainError("bad_request", "another action is already running on this task");
     this.#busy.add(id);
     try {
       return await run();
@@ -234,13 +234,14 @@ export class AgentTasks {
 
   #existingWorktree(id: string): KnownTask {
     const task = this.#get(id);
-    if (!existsSync(task.worktree)) throw new DomainError("not_found", `worktree zadania ${task.branch} nie istnieje (${task.worktree})`);
+    if (!existsSync(task.worktree))
+      throw new DomainError("not_found", `the worktree of task ${task.branch} does not exist (${task.worktree})`);
     return task;
   }
 
   #get(id: string): KnownTask {
     const task = this.#tasks.find((t) => t.id === id);
-    if (!task) throw new DomainError("not_found", `nie ma zadania ${id}`);
+    if (!task) throw new DomainError("not_found", `no task ${id}`);
     return task;
   }
 

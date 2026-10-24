@@ -22,7 +22,7 @@ Workflow sprawdza, że tag wskazuje commit z `main` i zgadza się z wersją w `t
 
 | Plik | Zawartość |
 |---|---|
-| `trackwall-<wersja>-windows-x64.zip` | folder `Trackwall` z `trackwall.exe`, `trackwall-daemon.exe`, `ui/`, `CZYTAJ.txt` |
+| `trackwall-<wersja>-windows-x64.zip` | folder `Trackwall` z `trackwall.exe`, `trackwall-daemon.exe`, `ui/`, `README.txt` |
 | `trackwall-<wersja>-macos-arm64.zip` | `Trackwall.app` (Apple Silicon) |
 | `SHA256SUMS.txt` | sumy SHA-256 obu archiwów |
 

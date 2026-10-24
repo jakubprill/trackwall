@@ -71,7 +71,7 @@ describe("mise", () => {
 
     expect(await mise.tasks("web")).toEqual({
       kind: "not_installed",
-      message: "nie znaleziono programu trackwall-nie-ma-mise w PATH",
+      message: "program trackwall-nie-ma-mise not found in PATH",
       running: [],
     });
     await expect(mise.start("web", "dev")).rejects.toMatchObject({ code: "mise_unavailable" });

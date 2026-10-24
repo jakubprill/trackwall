@@ -19,11 +19,11 @@ import { SettingsView } from "./SettingsView.tsx";
 
 /** Kolejność i skróty paska widoków; następne widoki pracy dostają kolejne cyfry. */
 const VIEWS = [
-  { id: "repos", label: "Repo", icon: FolderGit2, shortcut: "1", placement: "top" },
-  { id: "sessions", label: "Sesje", icon: SquareTerminal, shortcut: "2", placement: "top" },
-  { id: "graph", label: "Przegląd", icon: Network, shortcut: "3", placement: "top" },
+  { id: "repos", label: "Repos", icon: FolderGit2, shortcut: "1", placement: "top" },
+  { id: "sessions", label: "Sessions", icon: SquareTerminal, shortcut: "2", placement: "top" },
+  { id: "graph", label: "Overview", icon: Network, shortcut: "3", placement: "top" },
   { id: "daemon", label: "Daemon", icon: Activity, shortcut: "9", placement: "bottom" },
-  { id: "settings", label: "Ustawienia", icon: Settings, shortcut: ",", placement: "bottom" },
+  { id: "settings", label: "Settings", icon: Settings, shortcut: ",", placement: "bottom" },
 ] as const satisfies readonly ActivityView<string>[];
 type View = (typeof VIEWS)[number]["id"];
 
@@ -48,14 +48,14 @@ export function App() {
           <div className="bg-destructive/10 flex items-center gap-3 border-b px-4 py-2">
             <p className="text-destructive min-w-0 flex-1 text-sm whitespace-pre-wrap">{error}</p>
             <Button variant="outline" size="sm" onClick={retry}>
-              Spróbuj ponownie
+              Try again
             </Button>
           </div>
         )}
         <main className="hud-grid min-h-0 flex-1 overflow-y-auto">
           {!conn && !error && (
             <div className="p-6">
-              <Loading text="Łączenie z daemonem…" />
+              <Loading text="Connecting to the daemon…" />
             </div>
           )}
           {conn && view === "repos" && <ReposView key={epoch} conn={conn} onRetry={retry} onOpenSettings={() => setView("settings")} />}

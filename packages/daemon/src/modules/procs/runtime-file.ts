@@ -41,7 +41,7 @@ export class RuntimeFile {
     try {
       json = JSON.parse(text);
     } catch {
-      throw new Error(`${this.path}: to nie jest JSON`);
+      throw new Error(`${this.path}: not JSON`);
     }
     const parsed = RuntimeFileSchema.safeParse(json);
     if (!parsed.success) throw new Error(`${this.path}: ${z.prettifyError(parsed.error)}`);

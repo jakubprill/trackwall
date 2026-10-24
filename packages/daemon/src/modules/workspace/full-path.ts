@@ -10,4 +10,4 @@ export function isFullPath(p: string, paths: PlatformPath = path): boolean {
 }
 
 export const NOT_FULL_PATH =
-  "folder z projektami musi być pełną ścieżką: na Windowsie z literą dysku (C:\\...) albo \\\\serwer\\udział, bez `~` i bez ścieżki względnej";
+  "the projects folder must be a full path: on Windows with a drive letter (C:\\...) or \\\\server\\share, without `~` and not relative";

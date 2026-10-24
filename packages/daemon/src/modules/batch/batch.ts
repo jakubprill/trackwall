@@ -71,7 +71,7 @@ export class Batch {
   /** Zaczyna komendę w tle i od razu ją zwraca; nieznane repo odrzuca całe żądanie, zanim cokolwiek ruszy. */
   async start(request: BatchRequest): Promise<BatchRun> {
     if (this.starting || this.last?.run.finishedAt === null)
-      throw new DomainError("bad_request", "trwa komenda zbiorcza; poczekaj na jej koniec albo ją przerwij");
+      throw new DomainError("bad_request", "a batch command is running; wait for it to finish or cancel it");
     this.starting = true;
     try {
       const targets = await Promise.all(request.repos.map(async (repo) => ({ repo, path: await this.deps.workspace.repoPath(repo) })));
@@ -83,13 +83,13 @@ export class Batch {
         repos: targets.map((target) => ({ ...target, steps: steps.map((step) => ({ step, state: "waiting" })) })),
       };
       const groups = await groupBySameDir(run.repos);
-      if (this.closed) throw new DomainError("bad_request", "daemon się zatrzymuje");
+      if (this.closed) throw new DomainError("bad_request", "the daemon is stopping");
       const abort = new AbortController();
       this.last = { run, abort };
       void mapLimit(groups, BATCH_CONCURRENCY, async (repos) => {
         for (const repo of repos) await this.runRepo(repo, abort.signal);
       })
-        .catch((err: unknown) => this.deps.log(`komenda zbiorcza: ${messageOf(err)}`))
+        .catch((err: unknown) => this.deps.log(`batch command: ${messageOf(err)}`))
         .finally(() => {
           run.finishedAt = new Date().toISOString();
         });
@@ -134,7 +134,7 @@ export class Batch {
       repo.steps[i] = { step, state: "running" };
       const outcome = await this.runStep(repo, step, signal);
       repo.steps[i] = { step, ...outcome };
-      if (outcome.state === "failed") stopped = { state: "skipped", message: `pominięty po błędzie kroku ${step}` };
+      if (outcome.state === "failed") stopped = { state: "skipped", message: `skipped after step ${step} failed` };
       if (outcome.state === "cancelled") stopped = outcome;
     }
   }
@@ -144,7 +144,7 @@ export class Batch {
       // Identyfikator z nazwy katalogu może przejść na inny katalog w trakcie komendy (ADR-18); krok idzie tylko
       // w repo, które użytkownik widzi w wynikach.
       if ((await this.deps.workspace.repoPath(repo)) !== path)
-        return { state: "failed", message: `${repo} wskazuje teraz inny katalog niż ${path}`, lastLines: [] };
+        return { state: "failed", message: `${repo} now points to a different directory than ${path}`, lastLines: [] };
       switch (step) {
         case "sync":
           return syncOutcome(await this.deps.workspace.syncRepo(repo));
@@ -153,7 +153,7 @@ export class Batch {
         case "setup":
         case "build": {
           const run = await this.deps.mise.runToEnd(repo, MISE_TASK[step], signal);
-          return run ? runOutcome(run) : { state: "skipped", message: `repo nie ma taska mise ${MISE_TASK[step]}` };
+          return run ? runOutcome(run) : { state: "skipped", message: `the repo has no mise task ${MISE_TASK[step]}` };
         }
       }
     } catch (err) {

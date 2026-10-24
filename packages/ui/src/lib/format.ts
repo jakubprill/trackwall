@@ -1,19 +1,19 @@
 /** Formatowanie dla widoków repo; czyste funkcje, testowane w `test/format.test.ts`. */
 
 /** Przypis pod ucięty plik (README albo podgląd); daemon zwraca tylko początek dużych plików. */
-export const TRUNCATED_NOTE = "Plik jest dłuższy; pokazano początek.";
+export const TRUNCATED_NOTE = "The file is longer; showing the beginning.";
 
 export function relativeTime(iso: string, now: Date): string {
   const seconds = Math.round((now.getTime() - new Date(iso).getTime()) / 1000);
   if (Number.isNaN(seconds)) return iso;
-  if (seconds < 60) return "przed chwilą";
+  if (seconds < 60) return "just now";
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min temu`;
+  if (minutes < 60) return `${minutes} min ago`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} h temu`;
+  if (hours < 24) return `${hours} h ago`;
   const days = Math.floor(hours / 24);
-  if (days < 30) return days === 1 ? "wczoraj" : `${days} dni temu`;
-  return new Date(iso).toLocaleDateString("pl-PL");
+  if (days < 30) return days === 1 ? "yesterday" : `${days} days ago`;
+  return new Date(iso).toLocaleDateString("en-US");
 }
 
 export function formatBytes(bytes: number): string {
@@ -30,17 +30,14 @@ export function breadcrumbs(path: string): { name: string; path: string }[] {
   return [...crumbs, ...parts.map((name, i) => ({ name, path: parts.slice(0, i + 1).join("/") }))];
 }
 
-/** Liczba z rzeczownikiem w polskiej formie: 1 zmiana, 2–4 zmiany (bez 12–14), pozostałe zmian. */
-export function countLabel(n: number, forms: { one: string; few: string; many: string }): string {
-  if (n === 1) return `1 ${forms.one}`;
-  const lastDigit = n % 10;
-  const teen = n % 100 >= 12 && n % 100 <= 14;
-  return `${n} ${lastDigit >= 2 && lastDigit <= 4 && !teen ? forms.few : forms.many}`;
+/** Liczba z rzeczownikiem w angielskiej formie: 1 change, 0 i 2+ changes. */
+export function countLabel(n: number, forms: { one: string; other: string }): string {
+  return `${n} ${n === 1 ? forms.one : forms.other}`;
 }
 
 /** Liczba zmian w katalogu roboczym jako tekst; `undefined`, gdy repo jest czyste. */
 export function changesLabel(changes: number): string | undefined {
-  return changes === 0 ? undefined : countLabel(changes, { one: "zmiana", few: "zmiany", many: "zmian" });
+  return changes === 0 ? undefined : countLabel(changes, { one: "change", other: "changes" });
 }
 
 /** Liczba z co najmniej dwiema cyframi, jak numery na liście repo: 1 daje „01”, 12 daje „12”. */

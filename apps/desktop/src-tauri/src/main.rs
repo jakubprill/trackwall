@@ -37,9 +37,9 @@ fn main() {
     #[cfg(windows)]
     if let Err(err) = tauri::webview_version() {
         windows_alert(&format!(
-            "Trackwall potrzebuje Microsoft Edge WebView2 Runtime, którego nie znaleziono ({err}).\n\n\
-             Zainstaluj go ze strony https://developer.microsoft.com/microsoft-edge/webview2/ \
-             albo uruchom trackwall-daemon.exe --ui, żeby otworzyć Trackwall w przeglądarce."
+            "Trackwall needs the Microsoft Edge WebView2 Runtime, which was not found ({err}).\n\n\
+             Install it from https://developer.microsoft.com/microsoft-edge/webview2/ \
+             or run trackwall-daemon.exe --ui to open Trackwall in your browser."
         ));
         std::process::exit(1);
     }
@@ -59,7 +59,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![daemon_connection, retry_daemon])
         .setup(move |app| {
             state.start();
-            let window = app.get_webview_window("main").ok_or("brak okna main z tauri.conf.json")?;
+            let window = app.get_webview_window("main").ok_or("missing window main from tauri.conf.json")?;
             app.manage(window_effect::apply(&window));
             window_effect::reveal_fallback(app.handle(), show_main);
             build_tray(app.handle())?;
@@ -75,7 +75,7 @@ fn main() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("nie udało się zbudować aplikacji Tauri");
+        .expect("failed to build the Tauri app");
 
     app.run(|handle, event| match event {
         // macOS: kliknięcie w ikonę w Docku po schowaniu okna.

@@ -35,17 +35,17 @@ function cardTags(card: RepoCard, repo: TaggedRepo): [string, string][] {
   const packages = card.provides.filter((p) => p.kind === "package");
   const mechanism = (ids: MechanismId[]) => card.mechanisms.find((m) => ids.includes(m.id));
   const jvm = card.buildFiles.find((f) => f.tool === "maven" || f.tool === "gradle");
-  if (jvm) tags.push(["java", `plik buildu ${jvm.path}`]);
+  if (jvm) tags.push(["java", `build file ${jvm.path}`]);
   const typescript = card.consumes.find((c) => c.kind === "package" && c.ecosystem === "npm" && c.name === "typescript");
-  if (typescript) tags.push(["typescript", `zależność typescript w ${where(typescript.evidence)}`]);
+  if (typescript) tags.push(["typescript", `typescript dependency in ${where(typescript.evidence)}`]);
   const frontend = mechanism(FRONTEND);
-  if (frontend) tags.push(["frontend", `${frontend.id} w ${where(frontend.evidence[0])}`]);
+  if (frontend) tags.push(["frontend", `${frontend.id} in ${where(frontend.evidence[0])}`]);
   const backend = mechanism(BACKEND);
-  if (backend) tags.push(["backend", `${backend.id} w ${where(backend.evidence[0])}`]);
+  if (backend) tags.push(["backend", `${backend.id} in ${where(backend.evidence[0])}`]);
   const bff = bffName(card, repo);
-  if (bff) tags.push(["bff", `„bff” w nazwie ${bff}`]);
+  if (bff) tags.push(["bff", `“bff” in the name ${bff}`]);
   if (packages.length > 0 && !frontend && !backend && !mechanism(DEPLOYMENT))
-    tags.push(["library", `udostępnia ${packages[0]?.name} i nie ma frameworka aplikacji ani plików wdrożenia`]);
+    tags.push(["library", `provides ${packages[0]?.name} and has no app framework or deployment files`]);
   const monorepo = monorepoReason(card);
   if (monorepo) tags.push(["monorepo", monorepo]);
   return tags;
@@ -64,9 +64,9 @@ function monorepoReason(card: RepoCard): string | undefined {
   const members = new Map<string, number>();
   for (const f of card.buildFiles) if (f.memberOf) members.set(f.memberOf, (members.get(f.memberOf) ?? 0) + 1);
   const aggregator = [...members].find(([, count]) => count >= 2);
-  if (aggregator) return `${aggregator[0]} wymienia ${aggregator[1]} moduły lub paczki`;
+  if (aggregator) return `${aggregator[0]} lists ${aggregator[1]} modules or packages`;
   const rootDirs = new Set(card.buildFiles.filter((f) => !f.memberOf).map((f) => dirOf(f.path)));
-  if (rootDirs.size >= 2) return `osobne buildy w katalogach ${[...rootDirs].map((d) => d || ".").join(", ")}`;
+  if (rootDirs.size >= 2) return `separate builds in directories ${[...rootDirs].map((d) => d || ".").join(", ")}`;
   return undefined;
 }
 
@@ -78,7 +78,7 @@ function ruleTags(repo: TaggedRepo, rules: RepoTagRules): [string, string][] {
       const match = globMatcher(p, { ignoreCase: true });
       return match(repo.id) || (repo.remote !== null && match(repo.remote));
     });
-    if (pattern) tags.push([name, `reguła repoTags w workspace.yaml: ${pattern}`]);
+    if (pattern) tags.push([name, `repoTags rule in workspace.yaml: ${pattern}`]);
   }
   return tags;
 }

@@ -272,6 +272,6 @@ function matches(call: HttpCall, segments: readonly string[], e: IndexedEndpoint
 }
 
 function appEvidence(repo: string, app: ProvidedApp): EdgeEvidence {
-  const port = app.port === null ? "" : ` na porcie ${app.port}`;
-  return { repo, ...app.evidence, detail: `aplikacja ${app.name}${port}` };
+  const port = app.port === null ? "" : ` on port ${app.port}`;
+  return { repo, ...app.evidence, detail: `app ${app.name}${port}` };
 }

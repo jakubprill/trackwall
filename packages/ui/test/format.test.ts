@@ -4,23 +4,23 @@ import { breadcrumbs, changesLabel, formatBytes, relativeTime, twoDigits } from 
 describe("format", () => {
   const now = new Date("2026-10-23T12:00:00Z");
 
-  test("czas względny po polsku, starsze daty jako data", () => {
-    expect(relativeTime("2026-10-23T11:59:30Z", now)).toBe("przed chwilą");
-    expect(relativeTime("2026-10-23T11:15:00Z", now)).toBe("45 min temu");
-    expect(relativeTime("2026-10-23T09:00:00+00:00", now)).toBe("3 h temu");
-    expect(relativeTime("2026-10-22T10:00:00Z", now)).toBe("wczoraj");
-    expect(relativeTime("2026-10-18T12:00:00Z", now)).toBe("5 dni temu");
+  test("czas względny po angielsku, starsze daty jako data", () => {
+    expect(relativeTime("2026-10-23T11:59:30Z", now)).toBe("just now");
+    expect(relativeTime("2026-10-23T11:15:00Z", now)).toBe("45 min ago");
+    expect(relativeTime("2026-10-23T09:00:00+00:00", now)).toBe("3 h ago");
+    expect(relativeTime("2026-10-22T10:00:00Z", now)).toBe("yesterday");
+    expect(relativeTime("2026-10-18T12:00:00Z", now)).toBe("5 days ago");
   });
 
-  test("liczba zmian z polską odmianą, czyste repo bez etykiety", () => {
+  test("liczba zmian z angielską liczbą mnogą, czyste repo bez etykiety", () => {
     expect([0, 1, 2, 5, 12, 22, 25].map(changesLabel)).toEqual([
       undefined,
-      "1 zmiana",
-      "2 zmiany",
-      "5 zmian",
-      "12 zmian",
-      "22 zmiany",
-      "25 zmian",
+      "1 change",
+      "2 changes",
+      "5 changes",
+      "12 changes",
+      "22 changes",
+      "25 changes",
     ]);
   });
 

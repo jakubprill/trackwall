@@ -41,7 +41,7 @@ describe.each(RUNTIMES)("proces daemona pod %s", (name, runtime) => {
 
       const second = Bun.spawn([...runtime, MAIN], { env, stdout: "ignore", stderr: "pipe" });
       expect(await second.exited).toBe(0);
-      expect(await new Response(second.stderr).text()).toContain("już działa");
+      expect(await new Response(second.stderr).text()).toContain("is already running");
 
       const info = DaemonInfoResult.parse(JSON.parse((await loopbackRequest(file.port, "/api/daemon/info", { token: file.token })).body));
       expect(info.ok && info.data.launchedBy).toBe("manual");

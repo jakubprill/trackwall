@@ -2,7 +2,6 @@
 import { arch, platform } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { z } from "zod";
 import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
 import { COPILOT_HOOK_COMMAND, type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./args.ts";
@@ -37,7 +36,7 @@ async function main(args: DaemonArgs): Promise<void> {
   async function shutdown(reason: string): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
-    log(`zatrzymywanie (${reason})`);
+    log(`stopping (${reason})`);
     stopWatching();
     // Grupy procesów przed zamknięciem API: UI widzi „stopping”, a nie zerwane połączenie w trakcie zatrzymywania.
     // Komenda zbiorcza najpierw, żeby kolejne repo nie próbowały startować w trakcie zatrzymywania.
@@ -67,7 +66,7 @@ async function main(args: DaemonArgs): Promise<void> {
     });
     facade.agents.sweepLeftovers();
     // Pod blokadą startu: drugi daemon nie może w tym czasie uruchomić grupy, którą ten wziąłby za sierotę.
-    await facade.procs.sweepOrphans().catch((err: unknown) => log(`sprzątanie sierot z runtime.json: ${String(err)}`));
+    await facade.procs.sweepOrphans().catch((err: unknown) => log(`cleaning up orphans from runtime.json: ${String(err)}`));
     api = await startApi(
       {
         token,
@@ -99,26 +98,26 @@ async function main(args: DaemonArgs): Promise<void> {
 
   if (started.kind === "existing") {
     if (started.version !== VERSION) {
-      log(`działa daemon w innej wersji (${started.version}, pid ${started.file.pid}); zatrzymaj go przed startem ${VERSION}`);
+      log(`a daemon of another version is running (${started.version}, pid ${started.file.pid}); stop it before starting ${VERSION}`);
       process.exit(EXIT_OTHER_VERSION_RUNNING);
     }
-    log(`daemon ${VERSION} już działa (pid ${started.file.pid}, port ${started.file.port})`);
+    log(`daemon ${VERSION} is already running (pid ${started.file.pid}, port ${started.file.port})`);
     if (args.ui) openBrowser(uiUrl(started.file.port, started.file.token));
     return;
   }
 
   const { self } = started;
-  stopWatching = watchDaemonFile(home, self, (other) => void shutdown(`daemon.json wskazuje na pid ${other.pid}`));
+  stopWatching = watchDaemonFile(home, self, (other) => void shutdown(`daemon.json points to pid ${other.pid}`));
   const signals: NodeJS.Signals[] = process.platform === "win32" ? ["SIGINT", "SIGBREAK", "SIGHUP"] : ["SIGINT", "SIGTERM", "SIGHUP"];
   for (const signal of signals) {
     process.on(signal, () => void shutdown(signal));
   }
 
-  log(`trackwall-daemon ${VERSION} na http://127.0.0.1:${self.port} (pid ${process.pid}, ${runtimeInfo().name}, stan w ${home})`);
-  if (!uiDir) log("brak zbudowanego UI: API działa, strona nie będzie serwowana (zbuduj packages/ui albo podaj --ui-dir)");
+  log(`trackwall-daemon ${VERSION} at http://127.0.0.1:${self.port} (pid ${process.pid}, ${runtimeInfo().name}, state in ${home})`);
+  if (!uiDir) log("no built UI: the API works, but no page will be served (build packages/ui or pass --ui-dir)");
   if (args.ui) {
     if (uiDir) openBrowser(uiUrl(self.port, self.token));
-    else log("--ui pominięte, bo nie ma UI do pokazania");
+    else log("--ui ignored because there is no UI to show");
   }
 }
 
@@ -143,9 +142,6 @@ function log(msg: string): void {
   process.stderr.write(`[daemon] ${msg}\n`);
 }
 
-// Komunikaty walidacji zod trafiają do UI (`bad_request`, `invalid_config`), więc po polsku jak reszta tekstów.
-z.config(z.locales.pl());
-
 let commandLine: CommandLine;
 try {
   commandLine = parseCommandLine(process.argv.slice(2));
@@ -163,7 +159,7 @@ if (commandLine.command === MCP_STDIO_COMMAND) {
   process.stdout.write(`${VERSION}\n`);
 } else {
   main(commandLine.args).catch((err: unknown) => {
-    process.stderr.write(`[daemon] błąd startu: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
+    process.stderr.write(`[daemon] startup error: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
     process.exit(1);
   });
 }

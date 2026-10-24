@@ -14,7 +14,7 @@ export const RepoId = z
   .string()
   .min(1)
   .max(64)
-  .regex(/^[a-z0-9][a-z0-9._-]*$/, "identyfikator repo: małe litery, cyfry, '.', '_' i '-'");
+  .regex(/^[a-z0-9][a-z0-9._-]*$/, "repo id: lowercase letters, digits, '.', '_' and '-'");
 export type RepoId = z.infer<typeof RepoId>;
 
 /**
@@ -26,13 +26,13 @@ export const RepoPath = z
   .max(4096)
   .refine(
     (p) => p === "" || p.split("/").every((s) => s !== "" && s !== "." && s !== ".."),
-    "ścieżka w repo: segmenty bez '.', '..' i pustych",
+    "path in the repo: segments without '.', '..' and empty ones",
   )
-  .refine((p) => [...p].every((c) => c >= " "), "ścieżka w repo nie może zawierać znaków sterujących");
+  .refine((p) => [...p].every((c) => c >= " "), "a path in the repo cannot contain control characters");
 export type RepoPath = z.infer<typeof RepoPath>;
 
 /** Pełny hash commita, SHA-1 albo SHA-256; tylko taki daemon podaje gitowi jako rewizję i wpisuje w nazwy plików. */
-export const CommitHash = z.string().regex(/^[0-9a-f]{40}([0-9a-f]{24})?$/, "pełny hash commita");
+export const CommitHash = z.string().regex(/^[0-9a-f]{40}([0-9a-f]{24})?$/, "full commit hash");
 
 export const Commit = z.object({
   hash: z.string(),
@@ -143,7 +143,7 @@ export const workspaceApi = {
   tree: endpoint("tree", z.object({ repo: RepoId, path: RepoPath }).strict(), z.array(TreeEntry)),
   file: endpoint(
     "file",
-    z.object({ repo: RepoId, path: RepoPath.refine((p) => p !== "", "ścieżka pliku nie może być pusta") }).strict(),
+    z.object({ repo: RepoId, path: RepoPath.refine((p) => p !== "", "the file path cannot be empty") }).strict(),
     FileContent,
   ),
   /** Otwiera `vscode://` w systemie; daemon nie wie, czy coś obsłużyło adres. */

@@ -36,7 +36,7 @@
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
     "externalBin": ["binaries/trackwall-daemon"],
     "category": "DeveloperTool",
-    "shortDescription": "Wiele repo i wiele agentów CLI w jednym miejscu",
+    "shortDescription": "Many repos and many CLI agents in one place",
     "macOS": {
       "minimumSystemVersion": "13.0"
     }

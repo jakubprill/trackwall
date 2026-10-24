@@ -8,7 +8,7 @@ export function ErrorWithRetry({ message, onRetry, children }: { message: string
       <p className="text-destructive text-sm whitespace-pre-wrap break-words">{message}</p>
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" onClick={onRetry}>
-          Spróbuj ponownie
+          Try again
         </Button>
         {children}
       </div>
