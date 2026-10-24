@@ -7,12 +7,16 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { DaemonEvents } from "@/lib/daemon-events";
-import type { SessionSelection } from "@/lib/session-entries";
-import { attentionCount } from "@/lib/session-state";
+import { IS_MAC } from "@/lib/platform";
+import { entrySession, findEntry, type SessionSelection, sessionRows } from "@/lib/session-entries";
+import type { SessionLayout } from "@/lib/session-grid";
+import { sessionShortcut } from "@/lib/session-shortcut";
+import { attentionCount, nextWaitingShortcut } from "@/lib/session-state";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
 import { useRemote } from "@/lib/use-remote";
 import { useSessionFocus } from "@/lib/use-session-focus";
+import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { DaemonPanel } from "@/views/daemon/DaemonPanel";
 import { GraphView } from "@/views/graph/GraphView";
 import { HomeView } from "@/views/home/HomeView";
@@ -42,6 +46,7 @@ export function App() {
   const [{ view, repo }, setNav] = useState<{ view: View; repo?: string }>({ view: "home" });
   const setView = useCallback((next: View, openRepo?: string) => setNav({ view: next, repo: openRepo }), []);
   const [session, setSession] = useState<SessionSelection>();
+  const [sessionLayout, setSessionLayout] = useState<SessionLayout>("1");
   const { conn, epoch, error, retry } = useConnection();
   const events = useDaemonEvents(conn);
   const sessions = useSessions(conn, events, view === "sessions" || view === "home");
@@ -52,6 +57,28 @@ export function App() {
   };
   // Jump from the tray (ADR-26, ADR-39): the shell shows the window and passes a waiting session or a task proposal.
   useSessionFocus(openInSessions);
+  // Alt+J from every view (ADR-48), after the selected session like the "Next waiting" button.
+  useWindowShortcuts(
+    (event) => {
+      const shortcut = sessionShortcut(event, IS_MAC);
+      return shortcut?.kind === "next-waiting" ? shortcut : undefined;
+    },
+    () => {
+      const inSessions = view === "sessions";
+      const selected =
+        inSessions && sessions.data
+          ? entrySession(
+              findEntry(
+                sessionRows(sessions.data).map((r) => r.entry),
+                session,
+              ),
+            )?.id
+          : undefined;
+      const { open, taken } = nextWaitingShortcut(sessions.data?.sessions ?? [], selected, inSessions);
+      if (open) openInSessions({ kind: "session", id: open.id });
+      return taken;
+    },
+  );
   return (
     <div className="flex h-screen">
       <ActivityBar views={VIEWS} active={view} onSelect={setView} badges={{ sessions: attentionCount(sessions.data) }} />
@@ -86,7 +113,15 @@ export function App() {
             <ReposView key={epoch} conn={conn} initialRepo={repo} onRetry={retry} onOpenSettings={() => setView("settings")} />
           )}
           {conn && view === "sessions" && (
-            <SessionsView key={epoch} conn={conn} sessions={sessions} selected={session} onSelect={setSession} />
+            <SessionsView
+              key={epoch}
+              conn={conn}
+              sessions={sessions}
+              selected={session}
+              onSelect={setSession}
+              layout={sessionLayout}
+              onLayout={setSessionLayout}
+            />
           )}
           {conn && view === "graph" && <GraphView key={epoch} conn={conn} />}
           {conn && view === "daemon" && (

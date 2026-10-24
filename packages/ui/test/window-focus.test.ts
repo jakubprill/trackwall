@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { FocusReporter, type FocusTimers, SEEN_AFTER_MS, windowInFront } from "../src/lib/window-focus.ts";
+import { FocusReporter, type FocusTimers, SEEN_AFTER_MS, terminalInFront, windowInFront } from "../src/lib/window-focus.ts";
 
 /** Timers run by hand: `elapse` runs the timers that would have fired. */
 function manualTimers() {
@@ -118,5 +118,14 @@ describe("session terminal window in front of the user (ADR-47)", () => {
     elapse(SEEN_AFTER_MS);
 
     expect(sent).toEqual([true, true]);
+  });
+});
+
+describe("terminal in the session grid", () => {
+  test("only the selected tile counts as in front, so a waiting session in another tile is not marked seen", () => {
+    const front = { hasFocus: () => true, visibilityState: "visible" } as const;
+    expect(terminalInFront(true, front)).toBe(true);
+    expect(terminalInFront(false, front)).toBe(false);
+    expect(terminalInFront(true, { hasFocus: () => false, visibilityState: "visible" })).toBe(false);
   });
 });

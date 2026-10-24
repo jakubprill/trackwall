@@ -1,7 +1,7 @@
 # Wersje narzędzi dla samego projektu Trackwall (nie dla repo z workspace użytkownika).
 [tools]
 node = "22"
-bun = "1.4.2"
+bun = "1.4.4"
 pnpm = "10.28.0"
 rust = "1.90"
 
