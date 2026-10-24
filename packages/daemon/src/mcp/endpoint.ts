@@ -19,7 +19,8 @@ const MAX_REQUEST_BYTES = 256 * 1024;
 
 const INSTRUCTIONS =
   `Trackwall knows the repos in the user's projects folder. Start with ${mcpTools.listRepos.name}; ` +
-  `${mcpTools.getRepo.name} gives the details of one repo (README, recent commits, mise tasks). ` +
+  `${mcpTools.getRepo.name} gives the details of one repo (README, recent commits, mise tasks); ` +
+  `${mcpTools.searchCode.name} searches code in all repos at once. ` +
   `${mcpTools.listSessions.name} shows the Copilot CLI sessions running in Trackwall and their state. The tools are read-only.`;
 
 export interface McpEndpoint {

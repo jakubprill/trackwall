@@ -85,7 +85,7 @@ const runs: ToolRuns = {
     const [list, tagList] = await Promise.all([facade.workspace.list(), tags]);
     const run = facade.workspace.syncRun();
     const repos = list.repos.map((repo) => agentRepo(repo, run, tagNames(tagList.find((t) => t.repo === repo.id))));
-    return { projectsDir: list.projectsDir, repos: repos.filter((repo) => wanted.every((tag) => repo.tags.includes(tag))) };
+    return { projectsDir: list.projectsDir, repos: repos.filter((repo) => hasEveryTag(repo.tags, wanted)) };
   },
   getRepo: async (facade, { repo: id }) => {
     const [repo, overview, miseTasks, tags] = await Promise.all([
@@ -119,6 +119,15 @@ const runs: ToolRuns = {
   whoCalls: (facade, { repo }) => facade.graph.whoCalls(repo),
   subgraphFor: (facade, { repo, depth }) => facade.graph.subgraph(repo, depth),
   findEndpoint: (facade, { query, method }) => facade.graph.findEndpoint(query, method),
+  searchCode: async (facade, { repos, tags = [], ...query }) => {
+    if (tags.length === 0) return facade.workspace.searchCode(query, repos);
+    // Cards cover every repo of the projects folder, so an id unknown to them stays: the workspace reports it as
+    // `not_found` instead of it silently dropping out.
+    const cards = await facade.cards.tags();
+    const tagged = cards.filter((entry) => hasEveryTag(tagNames(entry), tags)).map((entry) => entry.repo);
+    const isUnknown = (id: string) => !cards.some((entry) => entry.repo === id);
+    return facade.workspace.searchCode(query, repos ? repos.filter((id) => tagged.includes(id) || isUnknown(id)) : tagged);
+  },
   listSessions: async (facade, { repo }) => {
     // Repo musi istnieć (`not_found` jak w get_repo): literówka w identyfikatorze nie może wyglądać jak „brak sesji”.
     if (repo !== undefined) await facade.workspace.repo(repo);
@@ -153,9 +162,15 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.whoCalls, runs.whoCalls),
   defineTool(mcpTools.subgraphFor, runs.subgraphFor),
   defineTool(mcpTools.findEndpoint, runs.findEndpoint),
+  defineTool(mcpTools.searchCode, runs.searchCode),
   defineTool(mcpTools.listSessions, runs.listSessions),
   defineTool(mcpTools.getSession, runs.getSession),
 ];
+
+/** Tag filter of `list_repos` and `search_code`: the repo has every wanted tag. */
+function hasEveryTag(tags: readonly string[], wanted: readonly string[]): boolean {
+  return wanted.every((tag) => tags.includes(tag));
+}
 
 /** Sesja bez ostatnich linii ekranu zakończonej grupy: ekran jednej sesji nie trafia do innej (§8, ADR-36). */
 function agentSession({ run, ...session }: Session): AgentSession {

@@ -15,6 +15,7 @@ import {
   type RepoStatus,
   type RepoStatusOk,
   type RepoTagRules,
+  type SearchCodeResult,
   type SyncResult,
   type SyncRun,
   sameHost,
@@ -25,6 +26,7 @@ import {
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
 import { CloneJobs } from "./clone-jobs.ts";
+import { type CodeSearchQuery, type CodeSearchVcs, searchCode } from "./code-search.ts";
 import { dirKey, findRepos, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
@@ -56,7 +58,7 @@ const STATUS_CONCURRENCY = 8;
 const SYNC_CONCURRENCY = 4;
 
 /** Czego `workspace` potrzebuje od `vcs`; podłączane w fasadzie (§4: moduły nie importują się nawzajem). */
-interface WorkspaceVcs {
+interface WorkspaceVcs extends CodeSearchVcs {
   status(dir: string): Promise<RepoStatusOk>;
   remote(dir: string): Promise<string | null>;
   sync(dir: string): Promise<SyncResult>;
@@ -209,6 +211,17 @@ export class Workspace {
     return this.inRepo(entry, () => this.deps.vcs.changes(entry.path, PATCH_MAX_BYTES));
   }
 
+  /**
+   * Code search in the HEAD commit of the listed repos (ADR-40), all of them or those in `ids`; an unknown id is
+   * `not_found`, so that a typo does not look like "nothing found".
+   */
+  async searchCode(query: CodeSearchQuery, ids?: readonly string[]): Promise<SearchCodeResult> {
+    const { entries } = await this.entries();
+    const unknown = ids?.find((id) => !entries.some((e) => e.id === id));
+    if (unknown !== undefined) throw unknownRepo(unknown);
+    return searchCode(ids ? entries.filter((e) => ids.includes(e.id)) : entries, this.deps.vcs, query);
+  }
+
   /** Daemon nie wie, czy system obsłużył adres; wynik to tylko potwierdzenie przyjęcia. */
   async openEditor(id: string): Promise<void> {
     this.deps.openEditor((await this.entry(id)).path);
@@ -247,7 +260,7 @@ export class Workspace {
 
   private async entry(id: string): Promise<RepoEntry> {
     const entry = (await this.entries()).entries.find((r) => r.id === id);
-    if (!entry) throw new DomainError("not_found", `no repo "${id}" in the projects folder`);
+    if (!entry) throw unknownRepo(id);
     return entry;
   }
 
@@ -292,6 +305,10 @@ export class Workspace {
       throw new DomainError("repo_unavailable", `${entry.id}: ${messageOf(err)}`);
     }
   }
+}
+
+function unknownRepo(id: string): DomainError {
+  return new DomainError("not_found", `no repo "${id}" in the projects folder`);
 }
 
 /** Katalog klonu: ostatni segment pełnej nazwy, jak przy `git clone` bez podanego katalogu. */
