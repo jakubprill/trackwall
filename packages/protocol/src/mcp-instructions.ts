@@ -42,7 +42,7 @@ export const MCP_INSTRUCTIONS = [
     "as sinceSeq to follow it.",
   `- Hand work to another agent, e.g. a change in another repo: ${proposeTask.name} with a prompt that stands on its own; ` +
     `the user approves, edits or rejects it in Trackwall. Then call ${waitForSession.name} with the task id: it returns ` +
-    "when the proposal is rejected or the task's session needs someone (finished its turn, asks for approval), goes " +
+    "when the proposal is rejected or the task's session needs someone (finished its turn, asks for approval, hit an error), goes " +
     `stale or exits; when it times out (still pending, starting or working), call it again. ${getSession.name} shows ` +
     "the task's changed files.",
   `- ${listSessions.name} shows the Copilot CLI sessions and tasks Trackwall runs (caller is your own session); a session ` +

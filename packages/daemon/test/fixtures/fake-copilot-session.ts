@@ -43,7 +43,7 @@ const instructionFiles = (process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS ?? "")
 const taskArgs = process.argv.filter((a) => /^--(interactive|resume|session-id)=/.test(a));
 
 process.stdout.write(`\x1b]0;Atrapa Copilot\x07Witaj w atrapie, MCP: ${mcpServers.join(", ")}\r\n`);
-process.stdout.write(`Instrukcje: ${instructionFiles.join(", ")}\r\n`);
+process.stdout.write(`Instructions: ${instructionFiles.join(", ")}\r\n`);
 /** Połowa ekranu sesji (`INITIAL_COLS` w `agents.ts`, 120 kolumn). */
 const CWD_LINE_CHARS = 60;
 // Katalog w liniach krótszych niż ekran: ConPTY na Windowsie łamie dłuższą linię po swojemu, a test skleja linie.

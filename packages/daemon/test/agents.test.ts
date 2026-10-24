@@ -30,7 +30,7 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
     expect(window.unwrappedText()).toContain(repoDir);
     expect(window.text()).toContain("MCP: trackwall");
     // Session instructions with the session's role come from the session directory, not from the repo (ADR-46).
-    expect(window.text()).toContain("Instrukcje: trackwall.instructions.md");
+    expect(window.text()).toContain("Instructions: trackwall.instructions.md");
     const instructions = readFileSync(join(home, "sessions", started.id, "instructions", "trackwall.instructions.md"), "utf8");
     expect(instructions).toContain("You are a main session in the root of the repo `sklep`");
     expect(readdirSync(repoDir)).toEqual([]);
