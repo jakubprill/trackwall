@@ -54,6 +54,7 @@ export class RunOutput {
   }
 }
 
-function shorten(line: string, max: number): string {
+/** The line cut to `max` characters, with `…` when it was longer. */
+export function shorten(line: string, max: number): string {
   return line.length > max ? `${line.slice(0, max)}…` : line;
 }
