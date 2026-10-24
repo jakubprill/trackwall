@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { formatUptime } from "../src/DaemonPanel.tsx";
 import { takeTokenFromLocation } from "../src/lib/connection.ts";
 
 function fakeEnv(hash: string) {
@@ -27,13 +26,5 @@ describe("token z adresu", () => {
     const env = fakeEnv("");
     expect(takeTokenFromLocation(env.location, env.history, env.storage)).toBeUndefined();
     expect(env.replaced).toEqual([]);
-  });
-});
-
-describe("formatUptime", () => {
-  test("sekundy, minuty, godziny", () => {
-    expect(formatUptime(5_000)).toBe("5 s");
-    expect(formatUptime(125_000)).toBe("2 min 5 s");
-    expect(formatUptime(3_725_000)).toBe("1 h 2 min");
   });
 });

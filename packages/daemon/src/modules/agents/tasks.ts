@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Session, Task, TaskChanges } from "@trackwall/protocol";
-import { DomainError, messageOf } from "../../errors.ts";
+import { DomainError, messageOf } from "../../infra/errors.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
 

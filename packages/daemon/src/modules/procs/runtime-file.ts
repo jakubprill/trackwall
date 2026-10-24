@@ -1,6 +1,6 @@
 import { readFileSync, renameSync } from "node:fs";
 import { z } from "zod";
-import { writeFileAtomic } from "../../atomic-write.ts";
+import { writeFileAtomic } from "../../infra/atomic-write.ts";
 
 /**
  * `runtime.json` (§4.1): rejestr żywych grup procesów, żeby następny start daemona mógł posprzątać sieroty po

@@ -1,5 +1,5 @@
 import { isMap, isNode, isScalar, isSeq, LineCounter, type Node, type Pair, parseAllDocuments } from "yaml";
-import { messageOf } from "../../errors.ts";
+import { messageOf } from "../../infra/errors.ts";
 import { type PlaceholderSource, type Resolved, resolvePlaceholders } from "./placeholders.ts";
 import { baseName } from "./repo-path.ts";
 import type { ProblemSink, RepoSnapshot } from "./snapshot.ts";

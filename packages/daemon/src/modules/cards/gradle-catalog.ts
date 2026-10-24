@@ -1,6 +1,6 @@
 import { parse as parseToml } from "smol-toml";
 import { z } from "zod";
-import { messageOf } from "../../errors.ts";
+import { messageOf } from "../../infra/errors.ts";
 import type { ProblemSink, RepoSnapshot } from "./snapshot.ts";
 
 /**

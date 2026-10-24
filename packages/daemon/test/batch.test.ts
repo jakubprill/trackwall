@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkS
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BatchRun, SyncResult } from "@trackwall/protocol";
-import { DomainError } from "../src/errors.ts";
+import { DomainError } from "../src/infra/errors.ts";
 import { Batch } from "../src/modules/batch/batch.ts";
 import { Logs } from "../src/modules/logs/logs.ts";
 import { Mise } from "../src/modules/mise/mise.ts";

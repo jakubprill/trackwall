@@ -1,5 +1,5 @@
 import type { IncomingMessage } from "node:http";
-import { DomainError } from "../errors.ts";
+import { DomainError } from "../infra/errors.ts";
 
 /**
  * Całe ciało żądania, najwyżej `maxBytes`: większe jest odrzucane, zanim trafi do pamięci w całości.

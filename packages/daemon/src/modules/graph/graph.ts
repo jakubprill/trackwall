@@ -6,7 +6,7 @@ import {
   type Subgraph,
   type WhoCallsResult,
 } from "@trackwall/protocol";
-import { configOrProblem, DomainError } from "../../errors.ts";
+import { configOrProblem, DomainError } from "../../infra/errors.ts";
 import { buildGraphWithIndex } from "./build-graph.ts";
 import { findEndpoints } from "./find-endpoint.ts";
 import type { GraphCardInput, GraphConfigInput } from "./graph-input.ts";

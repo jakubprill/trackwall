@@ -20,8 +20,8 @@ import {
   type TreeEntry,
   type WorkspaceSettings,
 } from "@trackwall/protocol";
-import { DomainError, messageOf } from "../../errors.ts";
-import { mapLimit } from "../../map-limit.ts";
+import { DomainError, messageOf } from "../../infra/errors.ts";
+import { mapLimit } from "../../infra/map-limit.ts";
 import { CloneJobs } from "./clone-jobs.ts";
 import { dirKey, findRepos, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";

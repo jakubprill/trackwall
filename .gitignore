@@ -8,9 +8,8 @@ apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
 apps/desktop/src-tauri/binaries/
 
-# wyniki buildów i spike'ów
+# wyniki buildów
 out/
-spikes/*/results/
 
 # stan daemona z `pnpm dev` (`.pitwall-dev/` z checkoutów sprzed zmiany nazwy, ADR-12)
 .trackwall-dev/

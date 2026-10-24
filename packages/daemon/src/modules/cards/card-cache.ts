@@ -3,7 +3,7 @@ import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { CommitHash, RepoCard } from "@trackwall/protocol";
 import { z } from "zod";
-import { writeFileAtomic } from "../../atomic-write.ts";
+import { writeFileAtomic } from "../../infra/atomic-write.ts";
 
 /**
  * Pamięć podręczna kart po hashu commita (ADR-25): karta zależy tylko od drzewa commita i wersji ekstraktorów, więc

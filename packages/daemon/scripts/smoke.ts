@@ -11,8 +11,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DaemonInfoResult, HealthResult, MCP_SERVER_NAME } from "@trackwall/protocol";
 import { z } from "zod";
-import { daemonFilePath, readDaemonFile } from "../src/discovery.ts";
-import { loopbackRequest } from "../src/loopback.ts";
+import { daemonFilePath, readDaemonFile } from "../src/infra/discovery.ts";
+import { loopbackRequest } from "../src/infra/loopback.ts";
 
 const arg = Bun.argv[2];
 if (!arg) throw new Error("użycie: bun scripts/smoke.ts <ścieżka do trackwall-daemon>");

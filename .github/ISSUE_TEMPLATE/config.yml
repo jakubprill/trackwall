@@ -1,4 +1,4 @@
 contact_links:
-  - name: Zgłoś podatność
+  - name: Report a vulnerability
     url: https://github.com/jakubprill/trackwall/security/advisories/new
-    about: Podatności zgłaszaj prywatnie (SECURITY.md), nie w publicznym issue.
+    about: Report vulnerabilities privately (see SECURITY.md), not in a public issue.

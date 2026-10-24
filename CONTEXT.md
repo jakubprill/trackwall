@@ -27,7 +27,7 @@ Wydzielona część daemona z §4 architektury (`procs`, `logs`, `workspace`…)
 _Unikaj_: serwis (to byt z workspace, patrz niżej), paczka
 
 **Paczka**:
-Pakiet pnpm z `pnpm-workspace.yaml` (`@trackwall/daemon`, `@trackwall/protocol`, spike'i…).
+Pakiet pnpm z `pnpm-workspace.yaml` (`@trackwall/daemon`, `@trackwall/protocol`, `@trackwall/ui`, `@trackwall/desktop`).
 _Unikaj_: workspace (to osobne pojęcie, patrz niżej)
 
 **`ws`**:

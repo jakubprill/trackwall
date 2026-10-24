@@ -3,8 +3,8 @@ import { dirname } from "node:path";
 import { GraphConfig, type RepoHost, RepoHosts, RepoTagRules } from "@trackwall/protocol";
 import { type Document, isMap, parseDocument } from "yaml";
 import { z } from "zod";
-import { writeFileAtomic } from "../../atomic-write.ts";
-import { DomainError } from "../../errors.ts";
+import { writeFileAtomic } from "../../infra/atomic-write.ts";
+import { DomainError } from "../../infra/errors.ts";
 import { isFullPath, NOT_FULL_PATH } from "./full-path.ts";
 
 /**

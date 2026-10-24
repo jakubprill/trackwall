@@ -1,7 +1,7 @@
 import { agentsApi, batchApi, cardsApi, type Endpoint, graphApi, logsApi, miseApi, workspaceApi } from "@trackwall/protocol";
 import { z } from "zod";
-import { DomainError } from "../errors.ts";
 import type { Facade } from "../facade.ts";
+import { DomainError } from "../infra/errors.ts";
 
 /**
  * Trasy `POST /api/<moduł>/<akcja>` (§5.2) wszystkich modułów w jednej mapie. Ścieżkę i schematy bierze

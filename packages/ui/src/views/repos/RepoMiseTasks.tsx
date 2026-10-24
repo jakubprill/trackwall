@@ -12,7 +12,7 @@ import { relativeTime } from "@/lib/format";
 import { isLive, runStateLabel, showsLastLines } from "@/lib/run-state";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
-import { MiseTaskLog } from "@/MiseTaskLog";
+import { MiseTaskLog } from "./MiseTaskLog.tsx";
 
 /**
  * Odpytywanie: często, gdy coś działa (użytkownik czeka na wynik startu albo stopu), rzadko, gdy nic nie działa,

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { copilotMcpServers, type RunState, type Session, type SessionList, type Task, type TaskChanges } from "@trackwall/protocol";
-import { DomainError, SpawnFailure } from "../../errors.ts";
+import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { findCopilot } from "./copilot-command.ts";
 import type { CopilotHookEvent } from "./copilot-hook-record.ts";
 import { type HookCommand, writeCopilotPlugin } from "./copilot-plugin.ts";

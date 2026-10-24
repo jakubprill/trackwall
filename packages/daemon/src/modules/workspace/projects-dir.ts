@@ -2,7 +2,7 @@ import type { Dirent } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { RepoId } from "@trackwall/protocol";
-import { DomainError } from "../../errors.ts";
+import { DomainError } from "../../infra/errors.ts";
 import { isFullPath, NOT_FULL_PATH } from "./full-path.ts";
 import { repoIdFor } from "./repo-id.ts";
 

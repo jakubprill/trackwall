@@ -1,8 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { type AgentRepo, type McpTool, mcpTools, type Repo, type RepoTags, type SyncRun } from "@trackwall/protocol";
 import type { z } from "zod";
-import { DomainError } from "../errors.ts";
 import type { Facade } from "../facade.ts";
+import { DomainError } from "../infra/errors.ts";
 
 /**
  * Narzędzia MCP daemona (§5.3, ADR-24): każde to cienkie mapowanie na fasadę, więc agent widzi ten sam stan co UI

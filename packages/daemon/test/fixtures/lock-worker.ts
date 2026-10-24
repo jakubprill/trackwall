@@ -1,7 +1,7 @@
 // Proces testowy: wchodzi do sekcji krytycznej i zapisuje znaczniki wejścia i wyjścia do wspólnego pliku.
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
-import { withStartLock } from "../../src/discovery.ts";
+import { withStartLock } from "../../src/infra/discovery.ts";
 
 const home = process.argv[2] as string;
 await withStartLock(home, async () => {

@@ -1,7 +1,6 @@
 import { DaemonInfo } from "@trackwall/protocol";
 import { RefreshCw } from "lucide-react";
 import { useCallback } from "react";
-import { ConnectCopilot } from "@/ConnectCopilot";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
@@ -9,7 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { call } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { formatUptime } from "@/lib/format";
 import { type Remote, useRemote } from "@/lib/use-remote";
+import { ConnectCopilot } from "./ConnectCopilot.tsx";
 
 const POLL_MS = 5000;
 
@@ -78,11 +79,4 @@ function InfoTable({ info }: { info: DaemonInfo }) {
       ))}
     </dl>
   );
-}
-
-export function formatUptime(ms: number): string {
-  const s = Math.floor(ms / 1000);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  return h > 0 ? `${h} h ${m} min` : m > 0 ? `${m} min ${s % 60} s` : `${s} s`;
 }

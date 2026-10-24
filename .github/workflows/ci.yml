@@ -2,7 +2,7 @@ name: CI
 
 # Repo jest publiczne, więc standardowe runnery nie mają limitu minut (ADR-22). Każdy PR i push na main:
 # - lint, rustfmt, typecheck i testy na Linuksie oraz audyt zależności;
-# - testy i spike'i na Windowsie i macOS;
+# - testy na Windowsie i macOS;
 # - build daemona i Tauri portable na Windowsie i macOS (clippy, cargo test, smoke test sidecara);
 # - zbiorczy job `CI ok`, jedyny check do wymagania w ochronie gałęzi main.
 # Joby idą równolegle: czas przebiegu to najdłuższy job (build na Windowsie), nie suma.
@@ -81,7 +81,7 @@ jobs:
       - run: pnpm audit --audit-level high
 
   test:
-    name: test, spike'i (${{ matrix.os }})
+    name: test (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -95,29 +95,10 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
-        id: setup
         with:
           node-version: ${{ env.NODE_VERSION }}
           bun-version: ${{ env.BUN_VERSION }}
       - run: pnpm test
-      # Wynikiem spike'a jest tabela w podsumowaniu joba; czerwony spike nie blokuje przebiegu.
-      # Limit czasu na kroku, bo zawieszony spike (PTY, grupy procesów) przerwałby cały job.
-      # Spike'i nie zależą od testów, więc idą także po ich błędzie, ale nie bez zależności.
-      - name: "spike: Job Objects / grupy procesów"
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
-        continue-on-error: true
-        timeout-minutes: 5
-        run: pnpm --filter @trackwall/spike-job-objects spike
-      - name: "spike: PTY (ConPTY na Windowsie)"
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
-        continue-on-error: true
-        timeout-minutes: 5
-        run: pnpm --filter @trackwall/spike-conpty spike
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
-        with:
-          name: spikes-${{ runner.os }}
-          path: spikes/*/results/*.json
 
   # Build to najdłuższy krok przebiegu, więc ma własny job obok `test`, a nie po nim.
   desktop:

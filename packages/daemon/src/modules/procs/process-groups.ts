@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import type { LogSource, LogStream, RunState } from "@trackwall/protocol";
-import { DomainError, SpawnFailure, spawnFailure } from "../../errors.ts";
+import { DomainError, SpawnFailure, spawnFailure } from "../../infra/errors.ts";
 import { type GroupControl, type GroupLeader, type GroupPlatform, waitUntil } from "../../platform/process-group.ts";
 import type { TerminalPlatform, TerminalProcess } from "../../platform/terminal.ts";
 import type { RuntimeFile, RuntimeGroup } from "./runtime-file.ts";

@@ -4,18 +4,18 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
-import { COPILOT_HOOK_COMMAND, type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./args.ts";
-import { newToken, probeRunningDaemon, removeDaemonFile, watchDaemonFile, withStartLock, writeDaemonFile } from "./discovery.ts";
 import { createFacade, type Facade, runCopilotHook } from "./facade.ts";
-import { trackwallHome } from "./home.ts";
+import { COPILOT_HOOK_COMMAND, type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./infra/args.ts";
+import { newToken, probeRunningDaemon, removeDaemonFile, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
+import { trackwallHome } from "./infra/home.ts";
+import { openBrowser } from "./infra/open-browser.ts";
+import { selfCommand } from "./infra/self-command.ts";
+import { userEnv } from "./infra/user-env.ts";
+import { VERSION } from "./infra/version.ts";
 import { createMcpEndpoint } from "./mcp/endpoint.ts";
 import { runStdioBridge } from "./mcp/stdio-bridge.ts";
 import { mcpStdioCommand } from "./mcp/stdio-command.ts";
-import { openBrowser } from "./open-browser.ts";
 import { runtimeInfo } from "./platform/runtime.ts";
-import { selfCommand } from "./self-command.ts";
-import { userEnv } from "./user-env.ts";
-import { VERSION } from "./version.ts";
 
 /** Kody wyjścia czytane przez Tauri. */
 const EXIT_USAGE = 2;

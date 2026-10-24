@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseCommandLine, parseDaemonArgs } from "../src/args.ts";
+import { parseCommandLine, parseDaemonArgs } from "../src/infra/args.ts";
 
 describe("argumenty", () => {
   test("domyślne", () => {

@@ -10,8 +10,8 @@ import {
   watchDaemonFile,
   withStartLock,
   writeDaemonFile,
-} from "../src/discovery.ts";
-import { trackwallHome } from "../src/home.ts";
+} from "../src/infra/discovery.ts";
+import { trackwallHome } from "../src/infra/home.ts";
 
 describe("discovery", () => {
   const file = { pid: 4242, port: 4321, token: newToken(), startedAt: "2026-10-23T00:00:00Z", version: "0.1.0" };

@@ -1,5 +1,5 @@
 import type { CloneJob, RepoHost } from "@trackwall/protocol";
-import { messageOf } from "../../errors.ts";
+import { messageOf } from "../../infra/errors.ts";
 import { dirKey } from "./projects-dir.ts";
 
 /**
