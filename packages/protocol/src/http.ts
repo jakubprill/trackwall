@@ -12,8 +12,8 @@ export type HttpMethod = z.infer<typeof HttpMethod>;
 
 /**
  * Aplikacja Spring Boot w repo: moduł z `spring.application.name` w `src/main/resources/application*` albo
- * `bootstrap*`. Pod tą nazwą wołają ją klienci przez discovery (Feign `name`, `lb://nazwa`, nazwa serwisu
- * Kubernetes).
+ * `bootstrap*`. Pod tą nazwą wołają ją klienci przez discovery (Feign `name`, `lb://nazwa`, nazwa w DNS
+ * klastra Kubernetes).
  */
 export const ProvidedApp = z.object({
   kind: z.literal("app"),
@@ -33,7 +33,7 @@ export const ProvidedEndpoint = z.object({
   method: HttpMethod.nullable(),
   /**
    * Pełna ścieżka: ścieżka kontekstu aplikacji (`server.servlet.context-path`), prefiks klasy i ścieżka metody, ze
-   * zmiennymi jak w kodzie (`/api/orders/{id}`). Stała, której nie da się odczytać, zostaje jako `<NAZWA>`.
+   * zmiennymi jak w kodzie (`/api/orders/{id}`). Stała, której nie da się odczytać, zostaje jako `<Klasa.NAZWA>`.
    */
   path: z.string(),
   /** Nazwa aplikacji modułu, w którym leży kontroler; `null`, gdy moduł jej nie podaje. */
@@ -117,6 +117,12 @@ export function parseHttpUrl(text: string): HttpUrl | undefined {
   return { scheme: scheme.toLowerCase(), host: host.toLowerCase(), port: port ? Number(port) : null, path: path ?? "" };
 }
 
+/** Nazwa aplikacji z adresu `lb://nazwa` (load balancer Spring Cloud); `null` dla innego adresu. */
+export function lbAppName(url: string): string | null {
+  const parsed = parseHttpUrl(url);
+  return parsed?.scheme === "lb" ? parsed.host : null;
+}
+
 /** Ścieżki sklejone w jedną, z jednym `/` między częściami i bez zapytania: `/api` + `orders/` + `/{id}` → `/api/orders/{id}`. */
 export function joinHttpPath(...parts: readonly string[]): string {
   const segments = parts.flatMap((p) => (p.split("?")[0] ?? "").split("/")).filter((s) => s !== "");
@@ -133,7 +139,7 @@ export function httpPathSegments(path: string): string[] {
 
 /**
  * Czy ścieżka wywołania pasuje do ścieżki endpointu: człon po członie, zmienna (`{id}`, `{}`, `*`) z każdej strony
- * pasuje do dowolnego członu, `**` w endpoincie do reszty ścieżki, a nieodczytana stała (`<NAZWA>`) tylko do tej samej.
+ * pasuje do dowolnego członu, `**` w endpoincie do reszty ścieżki, a nieodczytana stała (`<Klasa.NAZWA>`) tylko do tej samej.
  */
 export function httpPathMatches(call: string, endpoint: string): boolean {
   return httpSegmentsMatch(httpPathSegments(call), httpPathSegments(endpoint));

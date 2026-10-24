@@ -9,7 +9,8 @@ import { RepoId } from "./workspace.ts";
  * Kontrakt modułu `graph` (§4.6, ADR-29, ADR-30): graf połączeń między repo z folderu z projektami. Krawędź to złączenie
  * paczki, której repo używa, z repo, które ją buduje, klienta HTTP z aplikacją albo endpointem innego repo (karty repo,
  * ADR-25), albo wpis użytkownika w `workspace.yaml`.
- * Każda krawędź ma dowody, a graf jest liczony przy każdym pytaniu z kart, więc nie ma własnego stanu.
+ * Każda krawędź ma dowody, a graf jest liczony z kart od nowa, gdy zmieni się commit któregoś repo albo konfiguracja,
+ * więc nie ma trwałego stanu.
  */
 
 /**
@@ -38,7 +39,7 @@ export type ManualEdge = z.infer<typeof ManualEdge>;
  * dostarcza, gdy karta tego repo jej nie pokazuje (paczka budowana poza plikami buildu, inna nazwa w repozytorium
  * artefaktów). `apps`: alias aplikacji, czyli nazwa aplikacji albo host z adresu klienta HTTP (`orders`,
  * `orders.internal.example.com`) i repo, które ją wystawia, gdy żadna karta nie ma aplikacji o tej nazwie (nazwa
- * serwisu Kubernetes inna niż `spring.application.name`, bramka). `edges`: ręczne krawędzie.
+ * w DNS klastra inna niż `spring.application.name`, bramka). `edges`: ręczne krawędzie.
  */
 export const GraphConfig = z
   .object({
@@ -68,8 +69,8 @@ export type EdgeKind = z.infer<typeof EdgeKind>;
 
 /**
  * Pewność krawędzi. Paczka: `exact`, gdy buduje ją dokładnie jedno repo; `high` z aliasu paczki; `medium`, gdy
- * buduje ją kilka repo z listy (np. dwa klony jednego repo). HTTP (ADR-30): `exact`, gdy nazwa aplikacji i ścieżki
- * wywołań zgadzają się z jednym repo; `high` za samą nazwę aplikacji albo z aliasu aplikacji; `medium` za host równy
+ * buduje ją kilka repo z listy (np. dwa klony jednego repo). HTTP (ADR-30): `exact`, gdy nazwa aplikacji wskazuje
+ * jedno repo, a każde wywołanie ma w nim endpoint; `high` za samą nazwę aplikacji albo z aliasu aplikacji; `medium` za host równy
  * nazwie repo, port aplikacji na `localhost`, ścieżki pasujące do endpointów jednego repo albo nazwę w kilku repo;
  * `low` za ścieżki pasujące do endpointów kilku repo. Ręczna krawędź `exact`.
  */

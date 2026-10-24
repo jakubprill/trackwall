@@ -17,23 +17,26 @@ interface Provider {
 }
 
 export function buildGraph(cards: readonly GraphCardInput[], input: GraphConfigInput): RepoGraph {
+  return buildGraphWithIndex(cards, input).graph;
+}
+
+/** Graf i indeks HTTP, z którego powstały jego krawędzie `http`; `find_endpoint` pyta ten sam indeks. */
+export function buildGraphWithIndex(cards: readonly GraphCardInput[], input: GraphConfigInput): { graph: RepoGraph; http: HttpIndex } {
   const join = joinOf(cards, input);
+  const http = new HttpIndex(cards, join);
   addPackageEdgesOf(join, cards);
-  addHttpEdges(join, httpIndex(cards, join));
+  addHttpEdges(join, http);
   checkAliases(join);
   for (const [i, manual] of input.config.edges.entries()) addManualEdges(join, manual, i);
-  return { nodes: cards.map(graphNode), edges: join.edges.sorted(), configProblems: join.problems, configFile: input.file };
+  const graph = { nodes: cards.map(graphNode), edges: join.edges.sorted(), configProblems: join.problems, configFile: input.file };
+  return { graph, http };
 }
 
 /** Wspólne kroki złączenia z wpisów `graph`; aliasy aplikacji bez wielkości liter, jak nazwy hostów. */
-export function joinOf(cards: readonly GraphCardInput[], { config, file, problems }: GraphConfigInput): Join {
+function joinOf(cards: readonly GraphCardInput[], { config, file, problems }: GraphConfigInput): Join {
   const appAliases = new Map(Object.entries(config.apps).map(([name, ref]) => [name.toLowerCase(), ref]));
   const aliases = new Map(Object.entries(config.packages));
   return { edges: new EdgeSet(), resolve: repoResolver(cards), problems: [...problems], aliases, appAliases, file };
-}
-
-export function httpIndex(cards: readonly GraphCardInput[], join: Join): HttpIndex {
-  return new HttpIndex(cards, { apps: join.appAliases, resolve: join.resolve, file: join.file });
 }
 
 function addPackageEdgesOf(join: Join, cards: readonly GraphCardInput[]): void {

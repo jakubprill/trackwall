@@ -70,11 +70,6 @@ export class ModuleConfig {
     const entry = this.entry(key);
     return entry && this.resolve(entry.value).value;
   }
-
-  /** Profile w kolejności: `default`, potem pozostałe. */
-  allProfiles(): string[] {
-    return [DEFAULT_PROFILE, ...this.profiles];
-  }
 }
 
 function merge(docs: readonly ConfigDoc[]): Map<string, ConfigEntry> {

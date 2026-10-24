@@ -106,22 +106,47 @@ function isIdentPart(c: string): boolean {
   return isIdentStart(c) || (c >= "0" && c <= "9");
 }
 
-/** Indeks tokenu za nawiasem zamykającym ten, który otwiera token `open`; koniec listy, gdy nawias się nie zamyka. */
+/**
+ * Indeks tokenu za nawiasem zamykającym ten, który otwiera token `open`; dla nawiasu, który się nie zamyka, `open + 1`
+ * (pusta zawartość), żeby kod niedomkniętego pliku nie ciągnął się do jego końca. Pary liczy się raz na listę tokenów
+ * (`matchingBrackets`), bo ekstraktory pytają o tysiące nawiasów jednego pliku, a plik jest z repo (§8).
+ */
 export function closingIndex(tokens: readonly Token[], open: number): number {
-  const opener = tokens[open];
-  const closer = opener?.kind === "punct" ? CLOSERS[opener.text] : undefined;
-  if (opener?.kind !== "punct" || closer === undefined) return open + 1;
-  let depth = 0;
-  for (let i = open; i < tokens.length; i++) {
-    const t = tokens[i];
-    if (t?.kind !== "punct") continue;
-    if (t.text === opener.text) depth++;
-    else if (t.text === closer && --depth === 0) return i + 1;
+  let pairs = PAIRS.get(tokens);
+  if (!pairs) {
+    pairs = matchingBrackets(tokens);
+    PAIRS.set(tokens, pairs);
   }
-  return tokens.length;
+  return pairs.get(open) ?? open + 1;
 }
 
-const CLOSERS: Record<string, string> = { "(": ")", "{": "}", "[": "]" };
+/** Pary nawiasów listy tokenów policzone raz, osobno dla każdego rodzaju nawiasu. */
+const PAIRS = new WeakMap<readonly Token[], Map<number, number>>();
+
+function matchingBrackets(tokens: readonly Token[]): Map<number, number> {
+  const pairs = new Map<number, number>();
+  const open = new Map<string, number[]>([
+    ["(", []],
+    ["{", []],
+    ["[", []],
+  ]);
+  tokens.forEach((t, i) => {
+    if (t.kind !== "punct") return;
+    const opener = OPENERS.get(t.text);
+    if (opener === undefined) open.get(t.text)?.push(i);
+    else {
+      const start = open.get(opener)?.pop();
+      if (start !== undefined) pairs.set(start, i + 1);
+    }
+  });
+  return pairs;
+}
+
+const OPENERS = new Map([
+  [")", "("],
+  ["}", "{"],
+  ["]", "["],
+]);
 
 export function isPunct(token: Token | undefined, text: string): boolean {
   return token?.kind === "punct" && token.text === text;

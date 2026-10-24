@@ -2,7 +2,7 @@ import { type ConsumedHttp, type HttpCall, joinHttpPath, parseHttpUrl } from "@t
 import { annotationArgs, type Lookup, stringValues } from "./java-expr.ts";
 import { annotationNamed, type JavaFile, type JavaType } from "./java-source.ts";
 import { normalizeKey } from "./spring-config.ts";
-import { EXCHANGE_MAPPINGS, type Mapping, mappingOf, REQUEST_MAPPINGS, type SpringModule, urlVariants } from "./spring-module.ts";
+import { EXCHANGE_MAPPINGS, httpClients, type Mapping, mappingOf, REQUEST_MAPPINGS, type SpringModule } from "./spring-module.ts";
 
 /**
  * Klienci HTTP z interfejsów (§4.6, ADR-30): `@FeignClient` (nazwa aplikacji z `name`/`value`, adres z `url` albo
@@ -13,8 +13,6 @@ import { EXCHANGE_MAPPINGS, type Mapping, mappingOf, REQUEST_MAPPINGS, type Spri
 
 /** Klucze adresu klienta Feign w konfiguracji: Spring Cloud OpenFeign 4 i starsze `feign.client`. */
 const FEIGN_URL_KEYS = ["spring.cloud.openfeign.client.config.{}.url", "feign.client.config.{}.url"];
-/** Ile wywołań jednego klienta zapisać na karcie: więcej to wygenerowany klient, a dowód z kilku i tak wystarcza. */
-const MAX_CALLS = 200;
 
 export function declarativeClients(file: JavaFile, module: SpringModule, lookup: Lookup): ConsumedHttp[] {
   return file.types.flatMap((type) => {
@@ -34,18 +32,7 @@ function feignClient(type: JavaType, file: JavaFile, module: SpringModule, looku
   const prefix = joinHttpPath(first("path") ?? "", mappingOf(type.annotations, REQUEST_MAPPINGS, lookup)?.paths[0] ?? "");
   const calls = methodCalls(type, file, REQUEST_MAPPINGS, lookup, prefix);
   const evidence = { path: file.path, line: annotation?.line ?? type.line };
-  if (!urlText) return [{ kind: "http", via: "feign", name: type.name, app, url: null, profiles: [], urlSource: null, calls, evidence }];
-  return urlVariants(module, urlText).map((v) => ({
-    kind: "http",
-    via: "feign",
-    name: type.name,
-    app,
-    url: v.value || null,
-    profiles: v.profiles,
-    urlSource: v.source,
-    calls,
-    evidence,
-  }));
+  return httpClients(module, urlText, { via: "feign", name: type.name, app, calls, evidence });
 }
 
 /** `${…}` klucza adresu klienta Feign w konfiguracji, gdy któryś profil go ma; `undefined` bez wpisu. */
@@ -63,18 +50,7 @@ function httpInterface(type: JavaType, file: JavaFile, module: SpringModule, loo
   const calls = methodCalls(type, file, EXCHANGE_MAPPINGS, lookup, absolute ? "" : base);
   if (calls.length === 0) return [];
   const evidence = { path: file.path, line: classLevel?.line ?? type.line };
-  const variants = absolute ? urlVariants(module, base) : [{ value: "", profiles: [], source: null }];
-  return variants.map((v) => ({
-    kind: "http",
-    via: "http-interface",
-    name: type.name,
-    app: null,
-    url: v.value || null,
-    profiles: v.profiles,
-    urlSource: v.source,
-    calls,
-    evidence,
-  }));
+  return httpClients(module, absolute ? base : undefined, { via: "http-interface", name: type.name, app: null, calls, evidence });
 }
 
 function methodCalls(
@@ -92,5 +68,5 @@ function methodCalls(
       for (const httpMethod of mapping.methods)
         calls.push({ method: httpMethod, path: joinHttpPath(prefix, path), evidence: { path: file.path, line: mapping.line } });
   }
-  return calls.slice(0, MAX_CALLS);
+  return calls;
 }

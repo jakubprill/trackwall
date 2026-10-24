@@ -7,10 +7,10 @@ import {
   joinHttpPath,
   parseHttpUrl,
 } from "@trackwall/protocol";
-import { identChain, type Lookup, splitTopLevel, stringValues } from "./java-expr.ts";
+import { identChain, type Lookup, splitConcat, splitTopLevel, stringValues } from "./java-expr.ts";
 import type { JavaFile } from "./java-source.ts";
 import { closingIndex, isIdent, isPunct, type Token } from "./java-tokens.ts";
-import { type SpringModule, urlVariants } from "./spring-module.ts";
+import { httpClients, type SpringModule } from "./spring-module.ts";
 
 /**
  * Klienci HTTP z kodu (§4.6, ADR-30): wywołania `WebClient`, `RestClient` i `RestTemplate` w jednym pliku i ich adres
@@ -45,7 +45,6 @@ const TEMPLATE_METHODS: Record<string, HttpMethod | null> = {
 const BASE_METHODS = new Set(["baseUrl", "rootUri", "create"]);
 /** Ile tokenów wstecz szukać metody HTTP w łańcuchu przed `.uri(…)`. */
 const MAX_CHAIN = 60;
-const MAX_CALLS = 200;
 
 interface FoundCall extends HttpCall {
   /** Adres bazowy sklejony z wywołaniem (`baseUrl + "/orders"`, `"http://…/orders"`); `undefined`, gdy go nie ma. */
@@ -55,40 +54,33 @@ interface FoundCall extends HttpCall {
 export function imperativeClients(file: JavaFile, module: SpringModule, lookup: Lookup): ConsumedHttp[] {
   const via = CLIENT_TYPES.find(([name]) => file.tokens.some((t) => isIdent(t, name)))?.[1];
   if (via === undefined) return [];
-  const values = valueFields(file.tokens);
-  const ctx: ScanContext = { tokens: file.tokens, lookup, values, path: file.path };
-  const calls = findCalls(ctx).slice(0, MAX_CALLS);
-  const bases = unique([...findBases(ctx), ...calls.flatMap((c) => (c.base ? [{ text: c.base, line: c.evidence.line ?? 0 }] : []))]);
+  const ctx: ScanContext = { tokens: file.tokens, lookup, values: valueFields(file.tokens), path: file.path };
+  const calls = findCalls(ctx);
+  // Wywołania po adresie bazowym; adres ustawiony tylko w budowniczym (`baseUrl(…)`) bez wywołań to klient bez wywołań.
+  const byBase = new Map<string | undefined, { line: number | null; calls: HttpCall[] }>();
+  for (const base of findBases(ctx)) if (!byBase.has(base.text)) byBase.set(base.text, { line: base.line, calls: [] });
+  for (const { base, ...call } of calls) {
+    const group = byBase.get(base) ?? { line: call.evidence.line, calls: [] };
+    group.calls.push(call);
+    byBase.set(base, group);
+  }
+  // Wywołania bez własnego adresu idą do jedynego adresu bazowego klasy.
+  const unassigned = byBase.get(undefined);
+  const [only, ...others] = [...byBase.keys()].filter((k) => k !== undefined);
+  if (unassigned && only !== undefined && others.length === 0) {
+    byBase.get(only)?.calls.push(...unassigned.calls);
+    byBase.delete(undefined);
+  }
   const name = file.types[0]?.name ?? file.path;
-  const client = (base: { text: string; line: number } | undefined, own: HttpCall[]): ConsumedHttp[] => {
-    const line = base?.line ?? own[0]?.evidence.line ?? file.types[0]?.line ?? null;
-    const evidence = { path: file.path, line };
-    const variants = base ? urlVariants(module, base.text) : [{ value: "", profiles: [], source: null }];
-    return variants.map((v) => ({
-      kind: "http",
+  return [...byBase].flatMap(([base, group]) =>
+    httpClients(module, base, {
       via,
       name,
-      app: appOf(v.value),
-      url: v.value || null,
-      profiles: v.profiles,
-      urlSource: v.source,
-      calls: own,
-      evidence,
-    }));
-  };
-  const strip = (c: FoundCall): HttpCall => ({ method: c.method, path: c.path, evidence: c.evidence });
-  if (bases.length <= 1) return bases.length === 0 && calls.length === 0 ? [] : client(bases[0], calls.map(strip));
-  const unassigned = calls.filter((c) => c.base === undefined).map(strip);
-  return [
-    ...bases.flatMap((b) => client(b, calls.filter((c) => c.base === b.text).map(strip))),
-    ...(unassigned.length > 0 ? client(undefined, unassigned) : []),
-  ];
-}
-
-/** Nazwa aplikacji z adresu `lb://nazwa` (load balancer Spring Cloud). */
-export function appOf(url: string): string | null {
-  const parsed = parseHttpUrl(url);
-  return parsed?.scheme === "lb" ? parsed.host : null;
+      app: null,
+      calls: group.calls,
+      evidence: { path: file.path, line: group.line ?? file.types[0]?.line ?? null },
+    }),
+  );
 }
 
 interface ScanContext {
@@ -226,23 +218,4 @@ function splitUrl(text: string, base: string | undefined): { path: string; base:
     return end > 0 && text[end + 1] === "/" ? { path: text.slice(end + 1), base: text.slice(0, end + 1) } : undefined;
   }
   return undefined;
-}
-
-/** Składniki sklejania `+` poza nawiasami. */
-function splitConcat(expr: readonly Token[]): Token[][] {
-  const parts: Token[][] = [[]];
-  for (let i = 0; i < expr.length; i++) {
-    const t = expr[i];
-    if (isPunct(t, "(") || isPunct(t, "[") || isPunct(t, "{")) {
-      const end = closingIndex(expr, i);
-      parts.at(-1)?.push(...expr.slice(i, end));
-      i = end - 1;
-    } else if (isPunct(t, "+")) parts.push([]);
-    else if (t) parts.at(-1)?.push(t);
-  }
-  return parts.filter((p) => p.length > 0);
-}
-
-function unique<T extends { text: string }>(items: T[]): T[] {
-  return items.filter((item, i) => items.findIndex((other) => other.text === item.text) === i);
 }

@@ -1,11 +1,11 @@
-import { type HttpMethod, HttpMethod as HttpMethodSchema, withoutCredentials } from "@trackwall/protocol";
+import { type ConsumedHttp, type HttpMethod, HttpMethod as HttpMethodSchema, lbAppName, withoutCredentials } from "@trackwall/protocol";
 import { annotationArgs, enumNames, type Lookup, stringValues } from "./java-expr.ts";
 import type { JavaAnnotation, JavaType } from "./java-source.ts";
 import { DEFAULT_PROFILE, type ModuleConfig } from "./spring-config.ts";
 
 /**
  * Wspólne dla ekstraktorów Spring (§4.6, ADR-30): moduł z konfiguracją, odczyt mapowań (`@*Mapping`,
- * `@*Exchange`) i rozwijanie adresu w każdym profilu.
+ * `@*Exchange`), rozwijanie adresu w każdym profilu i klient HTTP z adresu.
  */
 
 /** Moduł Spring: konfiguracja, nazwa aplikacji, ścieżka kontekstu i typy z całego repo po prostej nazwie. */
@@ -16,9 +16,10 @@ export interface SpringModule {
   contextPath: string;
   /** Typy Javy i Kotlina z czytanych plików repo po prostej nazwie (interfejs z mapowaniami, który kontroler implementuje). */
   types: TypeIndex;
-  /** Klucze konfiguracji (znormalizowane), z których kod wziął adres: nie są już osobnym klientem z konfiguracji. */
-  usedKeys: Set<string>;
 }
+
+/** Ile wywołań jednego klienta zapisać na karcie: więcej to wygenerowany klient, a dowód z kilku i tak wystarcza. */
+const MAX_CLIENT_CALLS = 200;
 
 /** Typ z pliku po prostej nazwie; pierwszy w kolejności plików wygrywa. */
 export type TypeIndex = Map<string, { type: JavaType; path: string }>;
@@ -80,16 +81,16 @@ export interface UrlVariant {
 
 /**
  * Tekst adresu w każdym profilu modułu: najpierw profil domyślny, potem każdy profil, który daje inną wartość.
- * Tekst bez `${…}` jest jeden i bez profili (adres w kodzie). Użytkownik i hasło z adresu są zamaskowane, a zapytanie pominięte (§8). Klucze, z których adres pochodzi, trafiają do
- * `usedKeys`.
+ * Tekst bez `${…}` jest jeden i bez profili (adres w kodzie). Użytkownik i hasło z adresu są zamaskowane, a zapytanie
+ * pominięte (§8).
  */
 export function urlVariants(module: SpringModule, text: string): UrlVariant[] {
-  for (const key of placeholderKeys(text)) module.usedKeys.add(key);
   if (!text.includes("${")) return [{ value: withoutCredentials(text), profiles: [], source: null }];
   const variant = (profile: string): UrlVariant => {
     const { value, source } = module.config.resolve(text, profile);
     return { value: withoutCredentials(value), profiles: [profile], source: source ? { path: source.path, line: source.line } : null };
   };
+  // Profil z tą samą wartością co `default` jej nie zmienia, więc nie jest wymieniany.
   const variants = [variant(DEFAULT_PROFILE)];
   for (const profile of module.config.profiles) {
     const next = variant(profile);
@@ -101,7 +102,24 @@ export function urlVariants(module: SpringModule, text: string): UrlVariant[] {
   return variants;
 }
 
-/** Klucze z `${klucz}` i `${klucz:domyślna}` na najwyższym poziomie tekstu, znormalizowane jak w konfiguracji. */
-function placeholderKeys(text: string): string[] {
-  return [...text.matchAll(/\$\{([^:}$]{1,300})/g)].map((m) => (m[1] ?? "").toLowerCase().replace(/[-_]/g, ""));
+/** Co klient HTTP ma niezależnie od adresu; `app: null` bierze nazwę aplikacji z adresu `lb://`. */
+export type ClientBase = Pick<ConsumedHttp, "via" | "name" | "app" | "calls" | "evidence">;
+
+/** Klient HTTP z adresem w jednym profilu. */
+export function clientAt(base: ClientBase, variant: UrlVariant): ConsumedHttp {
+  return {
+    kind: "http",
+    ...base,
+    app: base.app ?? lbAppName(variant.value),
+    url: variant.value || null,
+    profiles: variant.profiles,
+    urlSource: variant.source,
+    calls: base.calls.slice(0, MAX_CLIENT_CALLS),
+  };
+}
+
+/** Klient HTTP w każdym profilu, w którym adres jest inny; bez adresu jeden klient z `url: null`. */
+export function httpClients(module: SpringModule, urlText: string | undefined, base: ClientBase): ConsumedHttp[] {
+  const variants = urlText ? urlVariants(module, urlText) : [{ value: "", profiles: [], source: null }];
+  return variants.map((v) => clientAt(base, v));
 }

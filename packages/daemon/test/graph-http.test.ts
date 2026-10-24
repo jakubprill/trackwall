@@ -12,7 +12,7 @@ import type { GraphCardInput } from "../src/modules/graph/graph-input.ts";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
-import { makeRepo } from "./support/git-repo.ts";
+import { commitFiles, makeRepo } from "./support/git-repo.ts";
 import { fakeHosting } from "./support/hosting.ts";
 import { snapshotOf } from "./support/snapshot.ts";
 import { fixtureFiles } from "./support/spring-fixtures.ts";
@@ -124,6 +124,24 @@ describe("krawędzie http na repo sklepu", () => {
 });
 
 describe("krawędzie http: dopasowanie celu", () => {
+  test("nazwa aplikacji daje exact tylko wtedy, gdy każde wywołanie ma endpoint w repo celu, a wywołanie pasujące do dwóch endpointów jest dowodem obu", () => {
+    const calls = (...paths: string[]) =>
+      paths.map((path, i) => ({ method: "GET" as const, path, evidence: { path: "src/main/java/C.java", line: 10 + i } }));
+    const graph = buildGraph(
+      [
+        repo("bff", card([], [client({ via: "feign", name: "OrdersClient", app: "orders", calls: calls("/orders/special", "/nie-ma") })])),
+        repo("orders-api", card([app("orders"), endpoint("/orders/{id}"), endpoint("/orders/special")], [])),
+      ],
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
+    );
+    const [edge] = graph.edges;
+    expect(edge?.confidence).toBe("high");
+    expect(edge?.evidence.filter((e) => e.detail.startsWith("obsługuje")).map((e) => e.detail)).toEqual([
+      "obsługuje GET /orders/{id} (Api.handle)",
+      "obsługuje GET /orders/special (Api.handle)",
+    ]);
+  });
+
   test("lb://nazwa w konfiguracji wskazuje aplikację po nazwie, a bez wywołań pewność jest high", () => {
     const graph = buildGraph(
       [
@@ -226,7 +244,7 @@ describe("graf i find_endpoint na prawdziwym gicie", () => {
     await workspace.setProjectsDir(projects);
     for (const name of SHOP) makeRepo(fixtureFiles(name), name, projects);
     const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(join(home, "cards"), () => {}) });
-    return { home, graph: new Graph({ cards, workspace }), workspace };
+    return { home, projects, graph: new Graph({ cards, workspace }), workspace };
   }
 
   test("karty z commita czytają kontrolery i klientów wybranych wyszukiwaniem, bez kodu testów", async () => {
@@ -252,6 +270,22 @@ describe("graf i find_endpoint na prawdziwym gicie", () => {
     expect(await paths("payments-SERVICE")).toEqual(["POST /api/payments/{orderId}"]);
     expect(await paths("ordersController.cancel")).toEqual(["PUT /api/orders/{id}/cancel"]);
     expect(await paths("/api/orders")).toEqual(["POST /api/orders", "GET /api/orders/{id}", "PUT /api/orders/{id}/cancel"]);
+  });
+
+  test("nowy commit w repo zmienia graf przy następnym pytaniu", async () => {
+    const { graph, projects } = await setup();
+    expect((await graph.graph()).edges.some((e) => e.from === "orders-api")).toBe(false);
+    commitFiles(
+      join(projects, "orders-api"),
+      {
+        "src/main/java/com/example/orders/api/PaymentsCheck.java":
+          '@FeignClient(name = "payments-service")\ninterface PaymentsCheck {\n  @PostMapping("/api/payments/{id}") void pay();\n}\n',
+      },
+      "Dodaj klienta płatności",
+    );
+    expect((await graph.graph()).edges.filter((e) => e.from === "orders-api").map((e) => [e.to, e.key, e.confidence])).toEqual([
+      ["payments", "payments-service", "exact"],
+    ]);
   });
 
   test("alias aplikacji z workspace.yaml działa od razu, bez nowego commita", async () => {

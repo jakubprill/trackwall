@@ -157,7 +157,7 @@ Połączenie wpisane przez użytkownika (`from`, `to`, `note`), np. wywołanie H
 Plik i linia, z których wynika fakt na karcie lub krawędź w grafie; dowód krawędzi ma też repo (albo `null` dla `workspace.yaml`) i zdanie, co w tym miejscu jest.
 
 **Pewność** (`confidence`, w grafie `EdgeConfidence`):
-`exact`, `high`, `medium` albo `low`. Krawędź z paczki budowanej przez jedno repo i ręczna krawędź są `exact`, z aliasu paczki `high`, z paczki budowanej przez kilka repo `medium`. Krawędź HTTP: `exact`, gdy nazwa aplikacji i ścieżki wywołań zgadzają się z jednym repo, `high` za samą nazwę aplikacji albo alias aplikacji, `medium` za host równy nazwie repo, port na `localhost` albo ścieżki pasujące do jednego repo, `low` za ścieżki pasujące do kilku repo (ADR-30). W UI: pewne, prawie pewne, prawdopodobne, możliwe. Przy `low` daemon niczego nie robi automatycznie.
+`exact`, `high`, `medium` albo `low`. Krawędź z paczki budowanej przez jedno repo i ręczna krawędź są `exact`, z aliasu paczki `high`, z paczki budowanej przez kilka repo `medium`. Krawędź HTTP: `exact`, gdy nazwa aplikacji wskazuje jedno repo, a każde wywołanie ma w nim endpoint, `high` za samą nazwę aplikacji albo alias aplikacji, `medium` za host równy nazwie repo, port na `localhost` albo ścieżki pasujące do jednego repo, `low` za ścieżki pasujące do kilku repo (ADR-30). W UI: pewne, prawie pewne, prawdopodobne, możliwe. Przy `low` daemon niczego nie robi automatycznie.
 
 **Przegląd** (widok „Przegląd”, `GraphView`, identyfikator widoku `graph`):
 Widok z grafem połączeń na całą szerokość i panelem szczegółów wybranego repo (kogo używa, kto używa jego, dowody).

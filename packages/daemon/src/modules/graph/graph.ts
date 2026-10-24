@@ -7,9 +7,10 @@ import {
   type WhoCallsResult,
 } from "@trackwall/protocol";
 import { configOrProblem, DomainError } from "../../errors.ts";
-import { buildGraph, httpIndex, joinOf } from "./build-graph.ts";
+import { buildGraphWithIndex } from "./build-graph.ts";
 import { findEndpoints } from "./find-endpoint.ts";
 import type { GraphCardInput, GraphConfigInput } from "./graph-input.ts";
+import type { HttpIndex } from "./http-index.ts";
 import { subgraph } from "./subgraph.ts";
 
 /**
@@ -40,25 +41,26 @@ export class Graph {
    * Ostatni policzony graf z kluczem wejścia (ADR-30): krawędzie HTTP porównują wywołania z endpointami wszystkich
    * repo, więc te same commity i ta sama konfiguracja nie liczą grafu drugi raz (UI odpytuje go co 30 s).
    */
-  private last: { key: string; graph: RepoGraph } | undefined;
+  private last: { key: string; graph: RepoGraph; http: HttpIndex } | undefined;
 
   constructor(deps: GraphDeps) {
     this.deps = deps;
   }
 
   async graph(): Promise<RepoGraph> {
-    const { cards, input } = await this.inputs();
-    const key = graphKey(cards, input);
-    if (this.last?.key === key) return this.last.graph;
-    const graph = buildGraph(cards, input);
-    this.last = { key, graph };
-    return graph;
+    return (await this.current()).graph;
   }
 
   /** Endpointy HTTP z kart wszystkich repo pasujące do zapytania, z repo, które je wołają (ADR-30). */
   async findEndpoint(query: string, method: HttpMethod | undefined): Promise<FindEndpointResult> {
+    return findEndpoints((await this.current()).http, query, method);
+  }
+
+  private async current(): Promise<{ graph: RepoGraph; http: HttpIndex }> {
     const { cards, input } = await this.inputs();
-    return findEndpoints(httpIndex(cards, joinOf(cards, input)), query, method);
+    const key = graphKey(cards, input);
+    if (this.last?.key !== key) this.last = { key, ...buildGraphWithIndex(cards, input) };
+    return this.last;
   }
 
   private async inputs(): Promise<{ cards: GraphCardInput[]; input: GraphConfigInput }> {

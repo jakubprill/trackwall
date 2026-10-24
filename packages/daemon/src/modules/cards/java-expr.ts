@@ -78,7 +78,7 @@ function arrayElements(expr: readonly Token[]): Token[][] | undefined {
 /** Sklejanie `+` napisów i stałych; `undefined`, gdy któryś składnik nie jest napisem ani nazwą. */
 function concatValue(expr: readonly Token[], lookup: Lookup, depth: number): string | undefined {
   let value = "";
-  for (const operand of splitOn(expr, "+")) {
+  for (const operand of splitConcat(expr)) {
     const part = operandValue(operand, lookup, depth);
     if (part === undefined) return undefined;
     value += part;
@@ -111,6 +111,11 @@ export function identChain(tokens: readonly Token[]): string[] | undefined {
 /** Części listy rozdzielone przecinkiem poza nawiasami. */
 export function splitTopLevel(tokens: readonly Token[]): Token[][] {
   return splitOn(tokens, ",");
+}
+
+/** Składniki sklejania `+` poza nawiasami. */
+export function splitConcat(tokens: readonly Token[]): Token[][] {
+  return splitOn(tokens, "+");
 }
 
 function splitOn(tokens: readonly Token[], separator: string): Token[][] {

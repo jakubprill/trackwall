@@ -63,6 +63,13 @@ function uniqueEvidence(evidence: readonly EdgeEvidence[]): EdgeEvidence[] {
     .slice(0, MAX_EVIDENCE);
 }
 
+/** Dopisuje wartość do listy pod kluczem, bez kopiowania listy. */
+export function push<K, V>(map: Map<K, V[]>, key: K, value: V): void {
+  const list = map.get(key);
+  if (list) list.push(value);
+  else map.set(key, [value]);
+}
+
 /** Bez `localeCompare`: porządek nie może zależeć od danych ICU w Bun i Node (jak `byName` w `workspace`). */
 export function compare(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;

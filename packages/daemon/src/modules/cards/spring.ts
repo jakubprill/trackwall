@@ -3,7 +3,7 @@ import { configClients } from "./config-clients.ts";
 import { declarativeClients } from "./declarative-clients.ts";
 import { imperativeClients } from "./imperative-clients.ts";
 import { ConstantTable } from "./java-expr.ts";
-import { type JavaFile, parseJavaFile } from "./java-source.ts";
+import { parseJavaFile } from "./java-source.ts";
 import { type Extracted, emptyExtracted, type RepoSnapshot } from "./snapshot.ts";
 import { ModuleConfig, moduleOf, readSpringConfigs } from "./spring-config.ts";
 import { springEndpoints } from "./spring-endpoints.ts";
@@ -51,21 +51,20 @@ export function extractSpring(snapshot: RepoSnapshot): SpringFacts {
     const module = springModule(configs.get(dir) ?? new ModuleConfig(dir, []), types);
     const app = providedApp(module);
     if (app) out.provides.push(app);
-    for (const file of files.filter((f) => moduleOf(f.path) === dir)) extractFile(file, module, constants, out);
-    out.consumes.push(...configClients(module));
+    const codeClients: ConsumedHttp[] = [];
+    for (const file of files.filter((f) => moduleOf(f.path) === dir)) {
+      const lookup = constants.lookupIn(file);
+      out.provides.push(...springEndpoints(file, module, lookup));
+      codeClients.push(...declarativeClients(file, module, lookup), ...imperativeClients(file, module, lookup));
+    }
+    out.consumes.push(...codeClients, ...configClients(module, codeClients));
   }
   return out;
 }
 
-function extractFile(file: JavaFile, module: SpringModule, constants: ConstantTable, out: SpringFacts): void {
-  const lookup = constants.lookupIn(file);
-  out.provides.push(...springEndpoints(file, module, lookup));
-  out.consumes.push(...declarativeClients(file, module, lookup), ...imperativeClients(file, module, lookup));
-}
-
 function springModule(config: ModuleConfig, types: TypeIndex): SpringModule {
   const contextPath = config.value("server.servlet.context-path") ?? config.value("spring.webflux.base-path") ?? "";
-  return { config, app: config.value("spring.application.name") || null, contextPath, types, usedKeys: new Set() };
+  return { config, app: config.value("spring.application.name") || null, contextPath, types };
 }
 
 function providedApp(module: SpringModule): ProvidedApp | undefined {

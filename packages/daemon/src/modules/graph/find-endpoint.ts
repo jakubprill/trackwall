@@ -3,11 +3,12 @@ import {
   type FindEndpointResult,
   type FoundEndpoint,
   type HttpMethod,
+  httpMethodMatches,
   httpPathMatches,
   MAX_FOUND_ENDPOINTS,
   type ProvidedEndpoint,
 } from "@trackwall/protocol";
-import { compare } from "./graph-join.ts";
+import { compare, push } from "./graph-join.ts";
 import type { HttpIndex } from "./http-index.ts";
 
 /**
@@ -19,9 +20,7 @@ import type { HttpIndex } from "./http-index.ts";
 export function findEndpoints(index: HttpIndex, query: string, method: HttpMethod | undefined): FindEndpointResult {
   const wanted = query.trim();
   const found = index.endpoints
-    .filter(
-      ({ endpoint }) => (method === undefined || endpoint.method === null || endpoint.method === method) && matchesQuery(endpoint, wanted),
-    )
+    .filter(({ endpoint }) => httpMethodMatches(method ?? null, endpoint.method) && matchesQuery(endpoint, wanted))
     .sort((a, b) => compare(a.repo, b.repo) || compare(a.endpoint.path, b.endpoint.path));
   const shown = found.slice(0, MAX_FOUND_ENDPOINTS);
   const callers = callersByEndpoint(index, new Set(shown.map((e) => e.endpoint)));
@@ -60,7 +59,7 @@ function callersByEndpoint(index: HttpIndex, wanted: ReadonlySet<ProvidedEndpoin
           confidence: target.confidence,
           evidence: m.call.evidence,
         };
-        callers.set(m.endpoint, [...(callers.get(m.endpoint) ?? []), caller]);
+        push(callers, m.endpoint, caller);
       }
   return callers;
 }

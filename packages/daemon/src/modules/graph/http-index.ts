@@ -13,6 +13,7 @@ import {
   parseHttpUrl,
 } from "@trackwall/protocol";
 import type { GraphCardInput } from "./graph-input.ts";
+import { type Join, push } from "./graph-join.ts";
 
 /**
  * Dopasowanie klientów HTTP z kart do aplikacji i endpointów innych repo (§4.6, ADR-30), wspólne dla krawędzi `http`
@@ -78,10 +79,10 @@ export class HttpIndex {
   private readonly resolve: (ref: string) => string[];
   private readonly file: string;
 
-  constructor(cards: readonly GraphCardInput[], aliases: { apps: Map<string, string>; resolve: (ref: string) => string[]; file: string }) {
-    this.appAliases = aliases.apps;
-    this.resolve = aliases.resolve;
-    this.file = aliases.file;
+  constructor(cards: readonly GraphCardInput[], join: Pick<Join, "appAliases" | "resolve" | "file">) {
+    this.appAliases = join.appAliases;
+    this.resolve = join.resolve;
+    this.file = join.file;
     for (const entry of cards) if (entry.kind === "ok") this.addRepo(entry);
   }
 
@@ -138,7 +139,9 @@ export class HttpIndex {
     const repos = new Set(apps.map((a) => a.repo));
     return apps.map(({ repo, app }) => {
       const calls = this.match(repo, client, base, app.name);
-      const confidence = repos.size > 1 ? "medium" : calls.length > 0 ? "exact" : "high";
+      // `exact` dopiero, gdy każde wywołanie ma endpoint w tym repo: sama nazwa aplikacji to `high`.
+      const everyCall = client.calls.length > 0 && client.calls.every((call) => calls.some((m) => m.call === call));
+      const confidence = repos.size > 1 ? "medium" : everyCall ? "exact" : "high";
       return { repo, basis: "app", confidence, key: app.name, evidence: [appEvidence(repo, app)], calls };
     });
   }
@@ -182,8 +185,7 @@ export class HttpIndex {
   private byPath(from: string, client: ConsumedHttp, base: string): HttpTarget[] {
     const byRepo = new Map<string, MatchedCall[]>();
     for (const call of client.calls) {
-      const path = joinHttpPath(base, call.path);
-      const segments = httpPathSegments(path);
+      const { path, segments } = callPath(base, call);
       // Ścieżka bez stałego członu (`/`, `/{id}`) pasowałaby do połowy endpointów, więc sama nie wskazuje repo.
       if (!segments.some(isLiteral)) continue;
       const candidates = [...(this.endpointsByLength.get(segments.length) ?? []), ...this.tailEndpoints];
@@ -198,18 +200,25 @@ export class HttpIndex {
     return [...byRepo].map(([repo, calls]) => ({ repo, basis: "path", confidence, key: client.name, evidence: [], calls }));
   }
 
-  /** Wywołania klienta z endpointem repo (aplikacji `app`, gdy podana), do którego pasują metodą i ścieżką. */
+  /**
+   * Wywołania klienta z każdym endpointem repo (aplikacji `app`, gdy podana), do którego pasują metodą i ścieżką:
+   * `/orders/{id}` i `/orders/special` pasują do `/orders/special` oba, a `find_endpoint` pyta o każdy z osobna.
+   */
   private match(repo: string, client: ConsumedHttp, base: string, app?: string): MatchedCall[] {
     const endpoints = (this.endpointsByRepo.get(repo) ?? []).filter(
       (e) => app === undefined || e.endpoint.app === null || e.endpoint.app === app,
     );
     return client.calls.flatMap((call) => {
-      const path = joinHttpPath(base, call.path);
-      const segments = httpPathSegments(path);
-      const found = endpoints.find((e) => matches(call, segments, e));
-      return found ? [{ call, path, endpoint: found.endpoint }] : [];
+      const { path, segments } = callPath(base, call);
+      return endpoints.filter((e) => matches(call, segments, e)).map((e) => ({ call, path, endpoint: e.endpoint }));
     });
   }
+}
+
+/** Pełna ścieżka wywołania (ścieżka z adresu klienta i ścieżka wywołania) i jej człony. */
+function callPath(base: string, call: HttpCall): { path: string; segments: string[] } {
+  const path = joinHttpPath(base, call.path);
+  return { path, segments: httpPathSegments(path) };
 }
 
 function isLiteral(segment: string): boolean {
@@ -223,10 +232,4 @@ function matches(call: HttpCall, segments: readonly string[], e: IndexedEndpoint
 function appEvidence(repo: string, app: ProvidedApp): EdgeEvidence {
   const port = app.port === null ? "" : ` na porcie ${app.port}`;
   return { repo, ...app.evidence, detail: `aplikacja ${app.name}${port}` };
-}
-
-function push<K, V>(map: Map<K, V[]>, key: K, value: V): void {
-  const list = map.get(key);
-  if (list) list.push(value);
-  else map.set(key, [value]);
 }
