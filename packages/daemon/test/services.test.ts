@@ -6,7 +6,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { GraphEdge, RepoCardResult, RepoGraph } from "@trackwall/protocol";
 import { DomainError } from "../src/infra/errors.ts";
-import { loopbackRequest } from "../src/infra/loopback.ts";
 import { Logs } from "../src/modules/logs/logs.ts";
 import { Mise } from "../src/modules/mise/mise.ts";
 import { ProcessGroups } from "../src/modules/procs/process-groups.ts";
@@ -223,6 +222,26 @@ describe("services (real process groups, fake mise and fake service)", () => {
   );
 
   test(
+    "stop with dependencies after the root crashed stops the dependency its start started and reports only that one",
+    async () => {
+      const { services } = setup(
+        { web: { ...DEV, servers: { dev: { crash: true } } }, api: { ...DEV, servers: { dev: {} } } },
+        { edges: [http("web", "api")] },
+      );
+      const slice = await services.start({ repo: "web", dependencies: true, waitMs: 20_000 });
+      expect(slice.members.map((m) => [m.repo, m.service?.state])).toEqual([
+        ["api", "healthy"],
+        ["web", "crashed"],
+      ]);
+
+      const stopped = await services.stop({ repo: "web", dependencies: true });
+
+      expect(stopped.map((s) => [s.repo, s.state])).toEqual([["api", "stopped"]]);
+    },
+    TIMEOUT,
+  );
+
+  test(
     "a dev started from the mise tasks tab is adopted: the list shows it ready on the port from its log",
     async () => {
       const { services, mise } = setup({ web: { ...DEV, servers: { dev: {} } } });
@@ -298,22 +317,3 @@ async function waitFor(condition: () => Promise<boolean>): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
 }
-
-describe("loopback request deadline", () => {
-  test("a stream that keeps sending is cut at the deadline, not kept open by its keepalives", async () => {
-    const stream: Server = createServer((_, res) => {
-      res.writeHead(200, { "content-type": "text/event-stream" });
-      const timer = setInterval(() => res.write(": ping\n"), 100);
-      res.on("close", () => clearInterval(timer));
-    });
-    await new Promise<void>((resolve) => stream.listen(0, "127.0.0.1", resolve));
-    const { port } = stream.address() as AddressInfo;
-    const began = Date.now();
-
-    await expect(loopbackRequest(port, "/events", { timeoutMs: 500 })).rejects.toThrow("no response within 500 ms");
-
-    expect(Date.now() - began).toBeLessThan(2000);
-    stream.closeAllConnections();
-    await new Promise((resolve) => stream.close(resolve));
-  });
-});

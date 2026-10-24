@@ -2,7 +2,6 @@ import {
   type CallEndpointRequest,
   type CallEndpointResult,
   hasService,
-  LOG_ERRORS_MAX,
   type LogErrors,
   type LogErrorsRequest,
   type LogSource,
@@ -23,7 +22,7 @@ import {
 import { DomainError } from "../../infra/errors.ts";
 import { callEndpoint } from "./endpoint-call.ts";
 import { probePort } from "./port-probe.ts";
-import { ServiceWatch } from "./service-watch.ts";
+import { ServiceWatch, type WatchedRun } from "./service-watch.ts";
 import { planSlice, type SlicePlan } from "./slice-plan.ts";
 
 /**
@@ -118,6 +117,8 @@ export class Services {
     // No `await` between the lookup and the registration: two starts at once share one slice.
     let slice = this.slices.get(repo);
     if (slice?.status !== "running" || slice.dependencies !== dependencies) {
+      // A running start with the other `dependencies` would otherwise go on out of reach of a stop.
+      if (slice?.status === "running") slice.status = "cancelled";
       slice = this.bringUp(repo, dependencies);
       this.slices.set(repo, slice);
     }
@@ -134,9 +135,9 @@ export class Services {
    */
   async stop({ repo, dependencies }: StopServiceRequest): Promise<Service[]> {
     const slice = this.slices.get(repo);
-    const inProgress = slice?.status === "running";
-    if (!inProgress && !this.liveRun(repo)) throw new DomainError("not_found", `the service of ${repo} is not running`);
-    if (slice && inProgress) slice.status = "cancelled";
+    // A root that crashed or was skipped may still have dependencies its start started.
+    if (!slice && !this.liveRun(repo)) throw new DomainError("not_found", `the service of ${repo} has not been started`);
+    if (slice?.status === "running") slice.status = "cancelled";
     const members = slice ? [...slice.members.keys()] : [repo];
     await Promise.all(members.map((r) => this.starting.get(r)));
     const repos = [repo, ...(dependencies && slice ? this.ownDependencies(slice) : [])];
@@ -186,6 +187,9 @@ export class Services {
       })
       .finally(() => {
         if (slice.status === "running") slice.status = "done";
+        for (const [repo, member] of slice.members) {
+          if (member.outcome === "pending") slice.members.set(repo, skipped("not started: the start was cancelled by a stop or failed"));
+        }
       });
     // A refused plan reaches the caller through `planned`; `done` only ends the slice.
     slice.done.catch(() => {});
@@ -218,8 +222,8 @@ export class Services {
     const cardPorts = await this.cardPorts(repo);
     for (const port of cardPorts) if (await probePort(port)) return skipped(this.portTaken(port));
     const cursor = this.logCursor(repo);
-    // Right before the start: a stop that came meanwhile wins, and nothing starts after it.
-    if (slice.status === "cancelled") return skipped("the start was cancelled by a stop");
+    // Right before the start: a stop that came meanwhile wins, unless another running slice still needs the service.
+    if (slice.status === "cancelled" && !this.wanted(repo)) return skipped("the start was cancelled by a stop");
     try {
       this.watch({ repo, run: await this.deps.mise.start(repo, SERVICE_MISE_TASK), cardPorts, cursor });
       return { outcome: "started", problem: null };
@@ -256,7 +260,7 @@ export class Services {
   }
 
   /** The watch of a run, made once; it replaces the watch of an older run of the same service. */
-  private watch(watched: { repo: string; run: RunState; cardPorts: readonly number[]; cursor: number }): ServiceWatch {
+  private watch(watched: WatchedRun): ServiceWatch {
     const { repo, run } = watched;
     const current = this.watches.get(repo);
     if (current?.runId === run.runId) return current;
@@ -299,11 +303,16 @@ export class Services {
     return this.deps.logs.tail({ source: devSource(repo), limit: 1 }).nextSeq;
   }
 
-  /** Members the slice started that no other live slice uses. */
+  /** Whether a slice that is still starting includes `repo`. */
+  private wanted(repo: string): boolean {
+    return [...this.slices.values()].some((s) => s.status === "running" && s.members.has(repo));
+  }
+
+  /** Members the slice started that no other slice uses: one still starting or one whose root runs. */
   private ownDependencies(slice: SliceRun): string[] {
     const usedElsewhere = new Set(
       [...this.slices.values()]
-        .filter((s) => s !== slice && this.liveRun(s.root))
+        .filter((s) => s !== slice && (s.status === "running" || this.liveRun(s.root)))
         .flatMap((s) => [...s.members].filter(([, m]) => m.outcome !== "skipped").map(([r]) => r)),
     );
     return [...slice.members].filter(([r, m]) => r !== slice.root && m.outcome === "started" && !usedElsewhere.has(r)).map(([r]) => r);
@@ -319,11 +328,11 @@ export class Services {
     return { repo: slice.root, members, settled };
   }
 
-  /** Errors of the member's current run: all buffered ones are read, because other runs of the source come first. */
+  /** Errors of the member's current run. Newest first, so they lead; the filter drops those of an earlier run. */
   private memberErrors(service: Service) {
     if (service.state !== "crashed" && service.state !== "unhealthy") return [];
-    const { errors } = this.deps.logs.errors({ repo: service.repo, miseTask: SERVICE_MISE_TASK, minLevel: "error", limit: LOG_ERRORS_MAX });
-    return errors.filter((e) => e.runId === service.run.runId).slice(0, MEMBER_ERRORS);
+    const { errors } = this.deps.logs.errors({ repo: service.repo, miseTask: SERVICE_MISE_TASK, minLevel: "error", limit: MEMBER_ERRORS });
+    return errors.filter((e) => e.runId === service.run.runId);
   }
 }
 

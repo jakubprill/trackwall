@@ -92,6 +92,8 @@ export class ServiceWatch {
 
   /** Checks now instead of at the next tick (right after a stop, before an endpoint call); joins a check in flight. */
   async refresh(): Promise<Service> {
+    // A check in flight may have read the run before the change the caller waits for (a stop), so one more follows.
+    await this.inFlight;
     await this.check();
     return this.view();
   }
@@ -119,15 +121,24 @@ export class ServiceWatch {
   }
 
   private async observe(): Promise<void> {
-    const run = this.deps.run();
-    if (!run || run.runId !== this.runId) return this.dispose();
-    this.lastRun = run;
-    if (run.kind === "exited") return this.end(run);
-    if (run.kind === "stopping") return this.set("stopping", null);
+    if (!this.follow()) return;
     this.readLog();
     const outcome = await this.probe();
-    // The run may have ended during the probe; its end is the state then, not a port that answered just before.
-    if (this.deps.run()?.kind === "running") this.apply(outcome);
+    // The run may have changed during the probe; then its new state wins over a port that answered just before.
+    if (this.follow()) this.apply(outcome);
+  }
+
+  /** Takes the current run: `true` while it is running, otherwise its end, `stopping` or a replaced run is applied. */
+  private follow(): boolean {
+    const run = this.deps.run();
+    if (this.ended || !run || run.runId !== this.runId) {
+      this.dispose();
+      return false;
+    }
+    this.lastRun = run;
+    if (run.kind === "exited") this.end(run);
+    else if (run.kind === "stopping") this.set("stopping", null);
+    return run.kind === "running";
   }
 
   private end(run: Extract<RunState, { kind: "exited" }>): void {

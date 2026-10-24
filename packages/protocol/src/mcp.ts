@@ -457,7 +457,7 @@ export const mcpTools = {
     name: RUN_MISE_TASK,
     readOnly: false,
     destructive: true,
-    auditArgs: ["repo", "miseTask"],
+    auditArgs: ["repo", "miseTask"] as const,
     description:
       "Run a repo's mise task (mise run <task>) in the repo root in the user's projects folder, not in a task worktree, " +
       `the same as the Run button in Trackwall. Only tasks listed by ${GET_REPO} (miseTasks) can run; a task that is ` +
@@ -473,7 +473,7 @@ export const mcpTools = {
     name: "stop_mise_task",
     readOnly: false,
     destructive: true,
-    auditArgs: ["repo", "miseTask"],
+    auditArgs: ["repo", "miseTask"] as const,
     description:
       "Stop a running mise task of a repo, also one the user started in Trackwall: a gentle stop, then the whole " +
       "process group is killed. Returns after Trackwall has confirmed that no process of the group is alive " +
@@ -507,7 +507,7 @@ export const mcpTools = {
     name: START_SERVICE,
     readOnly: false,
     destructive: true,
-    auditArgs: ["repo", "dependencies"],
+    auditArgs: ["repo", "dependencies"] as const,
     description:
       `Start a repo's service (its mise task ${SERVICE_MISE_TASK}, in the repo root) together with the services it calls, ` +
       "found in the connection graph (http and manual connections, not packages, not low confidence), dependencies " +
@@ -534,7 +534,7 @@ export const mcpTools = {
     name: "stop_service",
     readOnly: false,
     destructive: true,
-    auditArgs: ["repo", "dependencies"],
+    auditArgs: ["repo", "dependencies"] as const,
     description:
       "Stop a repo's service (its whole process group) and, with dependencies: true, the services the latest " +
       `${START_SERVICE} of this repo started (not those that were already running or that another started slice uses). ` +
@@ -562,7 +562,7 @@ export const mcpTools = {
     readOnly: false,
     destructive: true,
     // The path (a query), headers and body may carry a secret.
-    auditArgs: ["repo", "method"],
+    auditArgs: ["repo", "method"] as const,
     description:
       `Send an HTTP request to a running (healthy) service started by Trackwall, on its port on this computer ` +
       "(the path from the repo card's endpoints, find_endpoint or the code). Returns the status, response headers and " +

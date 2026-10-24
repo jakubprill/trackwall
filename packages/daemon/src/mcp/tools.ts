@@ -28,7 +28,10 @@ import { DomainError } from "../infra/errors.ts";
 const README_MAX_CHARS = 32_000;
 /** Ile ostatnich commitów zwraca `get_repo`: tyle wystarcza, żeby agent wiedział, co się ostatnio działo. */
 const RECENT_COMMITS = 10;
-/** What a session may do only in its own repo, in the `bad_request` message of `assertCallerRepo` (ADR-41, ADR-45). */
+/**
+ * What a session may do only in its own repo, as the `bad_request` message of `assertCallerRepo` puts it: mise tasks
+ * (ADR-41) and the service (ADR-45).
+ */
 const MISE_TASK_ACTION = "run and stop only mise tasks";
 const SERVICE_ACTION = "start and stop only the service";
 
