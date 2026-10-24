@@ -15,6 +15,7 @@ import {
   LogTail,
   mcpTools,
   RepoCardResult,
+  SearchCodeResult,
   Subgraph,
   WhoCallsResult,
   workspaceApi,
@@ -78,7 +79,7 @@ beforeAll(async () => {
 afterAll(() => api.close());
 
 describe("serwer MCP przez Streamable HTTP", () => {
-  test("ogłasza tylko narzędzia do odczytu: repo, karta, log, graf i sesje", async () => {
+  test("announces only read-only tools: repos, card, log, graph, code search and sessions", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual([
@@ -89,6 +90,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
       "who_calls",
       "subgraph_for",
       "find_endpoint",
+      "search_code",
       "list_sessions",
       "get_session",
     ]);
@@ -174,6 +176,48 @@ describe("serwer MCP przez Streamable HTTP", () => {
     expect(FindEndpointResult.parse(found.structuredContent)).toEqual({ query: "/api/orders/42", endpoints: [], truncated: false });
     const empty = await client.callTool({ name: "find_endpoint", arguments: { query: "" } });
     expect(empty.isError).toBe(true);
+    await client.close();
+  });
+
+  test("search_code returns matches with context, with tags only from repos with every one of them, and an unknown repo is not_found", async () => {
+    const client = await connectHttpClient(api.port, TOKEN);
+    const search = async (args: Record<string, unknown>) =>
+      (await client.callTool({ name: "search_code", arguments: args })).structuredContent;
+    const head = gitIn(orders, "rev-parse", "HEAD").trim();
+
+    // By default a fixed string, case-sensitive, with two context lines.
+    expect(SearchCodeResult.parse(await search({ pattern: "BFF" }))).toEqual({
+      matches: [
+        {
+          repo: "orders-bff",
+          path: "README.md",
+          line: 3,
+          column: 1,
+          text: "BFF sklepu.",
+          before: [
+            { line: 1, text: "# Zamówienia" },
+            { line: 2, text: "" },
+          ],
+          after: [],
+        },
+      ],
+      truncated: false,
+      searched: [{ repo: "orders-bff", commit: head, truncated: false }],
+      failed: [],
+      skipped: [],
+    });
+    const searched = async (tags: string[]) => SearchCodeResult.parse(await search({ pattern: "x", tags })).searched.map((r) => r.repo);
+    expect(await searched(["java", "bff"])).toEqual(["orders-bff"]);
+    expect(await searched(["frontend"])).toEqual([]);
+    const unknown = await client.callTool({ name: "search_code", arguments: { pattern: "x", repos: ["missing"] } });
+    expect(unknown.content).toEqual([{ type: "text", text: 'not_found: no repo "missing" in the projects folder' }]);
+    // A repo outside the tags does not hide an unknown id, and an empty tag list is no filter.
+    const unknownTagged = await client.callTool({ name: "search_code", arguments: { pattern: "x", repos: ["missing"], tags: ["java"] } });
+    expect(unknownTagged.isError).toBe(true);
+    expect(await searched([])).toEqual(["orders-bff"]);
+    // A newline would make git search for every line of the pattern separately.
+    const multiline = await client.callTool({ name: "search_code", arguments: { pattern: "BFF\nsklepu" } });
+    expect(multiline.isError).toBe(true);
     await client.close();
   });
 
