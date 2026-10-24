@@ -242,6 +242,67 @@ describe("services (real process groups, fake mise and fake service)", () => {
   );
 
   test(
+    "stop with dependencies after a start without them also stops the dependencies the earlier start started",
+    async () => {
+      const server = { ...DEV, servers: { dev: {} } };
+      const { services } = setup({ web: server, api: server }, { edges: [http("web", "api")] });
+      await services.start({ repo: "web", dependencies: true, waitMs: 20_000 });
+      await services.stop({ repo: "web", dependencies: false });
+      await services.start({ repo: "web", dependencies: false, waitMs: 20_000 });
+
+      const stopped = await services.stop({ repo: "web", dependencies: true });
+
+      expect(stopped.map((s) => [s.repo, s.state])).toEqual([
+        ["web", "stopped"],
+        ["api", "stopped"],
+      ]);
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a start with the other dependencies value while a start is in progress is bad_request",
+    async () => {
+      const { services } = setup(
+        { web: { ...DEV, servers: { dev: {} } }, api: { ...DEV, servers: { dev: { delayMs: 1000 } } } },
+        { edges: [http("web", "api")] },
+      );
+      await services.start({ repo: "web", dependencies: true, waitMs: 100 });
+
+      await expect(services.start({ repo: "web", dependencies: false, waitMs: 100 })).rejects.toThrow(
+        "a start of web with dependencies is in progress: wait for it or stop it first",
+      );
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a stop of one slice leaves a dependency that another slice still starting needs",
+    async () => {
+      const { services } = setup(
+        {
+          web: { ...DEV, servers: { dev: {} } },
+          shop: { ...DEV, servers: { dev: {} } },
+          api: { ...DEV, servers: { dev: { delayMs: 1000 } } },
+        },
+        { edges: [http("web", "api"), http("shop", "api")] },
+      );
+      await services.start({ repo: "shop", dependencies: true, waitMs: 100 });
+      await services.start({ repo: "web", dependencies: true, waitMs: 100 });
+
+      const stopped = await services.stop({ repo: "web", dependencies: true });
+
+      expect(stopped).toEqual([]);
+      const shop = await services.start({ repo: "shop", dependencies: true, waitMs: 20_000 });
+      expect(shop.members.map((m) => [m.repo, m.service?.state])).toEqual([
+        ["api", "healthy"],
+        ["shop", "healthy"],
+      ]);
+    },
+    TIMEOUT,
+  );
+
+  test(
     "a dev started from the mise tasks tab is adopted: the list shows it ready on the port from its log",
     async () => {
       const { services, mise } = setup({ web: { ...DEV, servers: { dev: {} } } });

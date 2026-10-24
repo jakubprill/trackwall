@@ -84,6 +84,8 @@ interface SliceRun {
   planned: Promise<SlicePlan>;
   plan: SlicePlan | undefined;
   members: Map<string, Member>;
+  /** Members an earlier start of the same root `started` that this one does not include: a stop with dependencies stops them too. */
+  inherited: readonly string[];
   done: Promise<void>;
 }
 
@@ -116,10 +118,13 @@ export class Services {
     if (problem) throw new DomainError(problem.code, problem.message);
     // No `await` between the lookup and the registration: two starts at once share one slice.
     let slice = this.slices.get(repo);
-    if (slice?.status !== "running" || slice.dependencies !== dependencies) {
-      // A running start with the other `dependencies` would otherwise go on out of reach of a stop.
-      if (slice?.status === "running") slice.status = "cancelled";
-      slice = this.bringUp(repo, dependencies);
+    if (slice?.status === "running" && slice.dependencies !== dependencies) {
+      // Replacing it would start the repo before the dependencies of the other plan, or leave them out of a stop's reach.
+      const other = dependencies ? "without" : "with";
+      throw new DomainError("bad_request", `a start of ${repo} ${other} dependencies is in progress: wait for it or stop it first`);
+    }
+    if (slice?.status !== "running") {
+      slice = this.bringUp(repo, dependencies, slice);
       this.slices.set(repo, slice);
     }
     await slice.planned;
@@ -129,7 +134,7 @@ export class Services {
   }
 
   /**
-   * Stops the service of `repo` and, with `dependencies`, the services its latest start started, except the ones
+   * Stops the service of `repo` and, with `dependencies`, the services its starts started, except the ones
    * another running slice uses. A start in progress is cancelled first: no member starts after that, and members whose
    * start was already under way are stopped once they run. Returns the stopped services.
    */
@@ -165,7 +170,7 @@ export class Services {
     return { ...result, errors };
   }
 
-  private bringUp(root: string, dependencies: boolean): SliceRun {
+  private bringUp(root: string, dependencies: boolean, previous: SliceRun | undefined): SliceRun {
     const edges = dependencies ? this.deps.graph.graph().then((g) => g.edges) : Promise.resolve([]);
     const slice: SliceRun = {
       root,
@@ -174,6 +179,7 @@ export class Services {
       planned: edges.then((e) => planSlice(e, root)),
       plan: undefined,
       members: new Map(),
+      inherited: previous ? this.startedDependencies(previous) : [],
       done: Promise.resolve(),
     };
     slice.done = slice.planned
@@ -308,14 +314,20 @@ export class Services {
     return [...this.slices.values()].some((s) => s.status === "running" && s.members.has(repo));
   }
 
-  /** Members the slice started that no other slice uses: one still starting or one whose root runs. */
+  /** Dependencies the slice (or an earlier start of its root) started that no other slice uses: one still starting or one whose root runs. */
   private ownDependencies(slice: SliceRun): string[] {
     const usedElsewhere = new Set(
       [...this.slices.values()]
         .filter((s) => s !== slice && (s.status === "running" || this.liveRun(s.root)))
         .flatMap((s) => [...s.members].filter(([, m]) => m.outcome !== "skipped").map(([r]) => r)),
     );
-    return [...slice.members].filter(([r, m]) => r !== slice.root && m.outcome === "started" && !usedElsewhere.has(r)).map(([r]) => r);
+    return this.startedDependencies(slice).filter((r) => !usedElsewhere.has(r));
+  }
+
+  /** Dependencies the slice and the earlier starts of its root `started`. */
+  private startedDependencies(slice: SliceRun): string[] {
+    const started = [...slice.members].filter(([r, m]) => r !== slice.root && m.outcome === "started").map(([r]) => r);
+    return [...new Set([...started, ...slice.inherited])];
   }
 
   private sliceView(slice: SliceRun): ServiceSlice {
