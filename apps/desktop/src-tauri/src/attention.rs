@@ -10,29 +10,42 @@
 
 use crate::daemon;
 use crate::daemon_state::DaemonState;
-use crate::notification::{self, Notice};
-use serde::{Deserialize, Serialize};
+use crate::main_window::{self, Focus};
+use crate::notification;
+use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-use tauri::{AppHandle, Emitter, Manager, UserAttentionType};
+use tauri::{AppHandle, Manager, UserAttentionType};
 
 const POLL: Duration = Duration::from_secs(2);
-/// Event for the UI with the session or proposal to show (`Focus`; same name and shape in `use-session-focus.ts`).
-const FOCUS_EVENT: &str = "focus-session";
 /// Tray menu item ids; a session or proposal item is a prefix plus its id.
 pub const MENU_SHOW: &str = "show";
 pub const MENU_QUIT: &str = "quit";
 const MENU_SESSION_PREFIX: &str = "session:";
 const MENU_PROPOSAL_PREFIX: &str = "proposal:";
 
-/// A session that is waiting for you, with its state from `TaskState` (`None` without a signal).
+/// A session that is waiting for you, with its state (`None` without a signal).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Waiting {
     pub id: String,
     pub repo: String,
-    pub state: Option<String>,
+    pub state: Option<TaskState>,
+}
+
+/// `TaskState` from protocol; a state this shell does not know yet reads as `Unknown` instead of failing the reply.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub enum TaskState {
+    Working,
+    Input,
+    Approval,
+    Plan,
+    Done,
+    Error,
+    Stale,
+    #[serde(other)]
+    Unknown,
 }
 
 /// A task proposal waiting for a decision (`TaskProposal` in protocol, only the fields the tray needs).
@@ -43,8 +56,8 @@ pub struct Proposal {
     pub title: String,
 }
 
-/// Stan sesji z ostatniego pytania: identyfikator i stan z `TaskState` (albo `None` bez sygnału).
-type States = HashMap<String, Option<String>>;
+/// Stan sesji z ostatniego pytania: identyfikator i stan (albo `None` bez sygnału).
+type States = HashMap<String, Option<TaskState>>;
 
 /// The daemon's reply translated into what the tray shows.
 #[derive(Debug)]
@@ -92,7 +105,7 @@ struct Run {
 
 #[derive(Deserialize)]
 struct StateChange {
-    state: String,
+    state: TaskState,
 }
 
 /// Sessions and proposals from the daemon's reply: the state of every running session, the waiting ones, and proposals.
@@ -103,7 +116,7 @@ pub fn parse_sessions(body: &str) -> Option<Snapshot> {
     for s in reply.data.sessions.into_iter().filter(|s| s.run.kind == "running") {
         let state = s.state.map(|c| c.state);
         if s.needs_attention {
-            waiting.push(Waiting { id: s.id.clone(), repo: s.repo, state: state.clone() });
+            waiting.push(Waiting { id: s.id.clone(), repo: s.repo, state });
         }
         states.insert(s.id, state);
     }
@@ -115,7 +128,7 @@ pub fn parse_sessions(body: &str) -> Option<Snapshot> {
 /// prompt while the user looks at it anyway, and a turn that ends in a window the user is looking at never waits (the
 /// daemon marks it seen, ADR-47), so the window flashes only for unseen ends of turns.
 pub fn newly_waiting(previous: &States, waiting: &[Waiting]) -> Vec<Waiting> {
-    waiting.iter().filter(|w| matches!(previous.get(&w.id), Some(Some(state)) if state == "Working" || state == "Stale")).cloned().collect()
+    waiting.iter().filter(|w| matches!(previous.get(&w.id), Some(Some(TaskState::Working | TaskState::Stale)))).cloned().collect()
 }
 
 /// Proposals that were neither a proposal nor a task at the previous poll. At the first poll after the shell starts
@@ -165,17 +178,6 @@ pub fn build_menu(app: &AppHandle, waiting: &[Waiting], proposals: &[Proposal]) 
     Ok(menu)
 }
 
-/// What to show after a tray menu item, a notification or the tray panel is clicked, or the global shortcut is pressed;
-/// for the UI `{"kind":"session"|"proposal","id":...}` or `{"kind":"next-waiting"}`, where the UI picks the session
-/// after the selected one like Alt+J (ADR-48, ADR-50).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", content = "id", rename_all = "kebab-case")]
-pub enum Focus {
-    Session(String),
-    Proposal(String),
-    NextWaiting,
-}
-
 /// The session or proposal of a tray menu item; `None` for the fixed items.
 pub fn focus_from_menu(id: &str) -> Option<Focus> {
     if let Some(session) = id.strip_prefix(MENU_SESSION_PREFIX) {
@@ -184,42 +186,50 @@ pub fn focus_from_menu(id: &str) -> Option<Focus> {
     id.strip_prefix(MENU_PROPOSAL_PREFIX).map(|proposal| Focus::Proposal(proposal.to_owned()))
 }
 
-/// Shows the window and asks the UI to switch to the session or proposal.
-pub fn focus(app: &AppHandle, target: Focus, show: fn(&AppHandle)) {
-    show(app);
-    let _ = app.emit_to("main", FOCUS_EVENT, target);
+/// What deserves the user's attention since the previous poll.
+#[derive(Debug, PartialEq, Eq)]
+pub struct News {
+    /// Sessions that just started waiting (`newly_waiting`).
+    pub sessions: Vec<Waiting>,
+    /// Proposals that are new (`new_proposals`).
+    pub proposals: Vec<Proposal>,
 }
 
-/// What deserves the user's attention since the previous poll: sessions that just started waiting, then new proposals.
-pub fn news(previous: Option<&Snapshot>, now: &Snapshot) -> Vec<Notice> {
-    let no_states = States::new();
-    let previous_states = previous.map_or(&no_states, |p| &p.states);
-    let sessions = newly_waiting(previous_states, &now.waiting).into_iter().map(|w| notification::session_notice(&w));
-    sessions.chain(new_proposals(previous, &now.proposals).into_iter().map(notification::proposal_notice)).collect()
+impl News {
+    pub fn between(previous: Option<&Snapshot>, now: &Snapshot) -> News {
+        let no_states = States::new();
+        let previous_states = previous.map_or(&no_states, |p| &p.states);
+        News {
+            sessions: newly_waiting(previous_states, &now.waiting),
+            proposals: new_proposals(previous, &now.proposals).into_iter().cloned().collect(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.sessions.is_empty() && self.proposals.is_empty()
+    }
 }
 
 fn any_window_focused(app: &AppHandle) -> bool {
     app.webview_windows().values().any(|w| w.is_focused().unwrap_or(false))
 }
 
-/// Wątek pytający daemon o sesje, dopóki działa powłoka. `show` is `show_main` from `main.rs`.
-pub fn watch(app: AppHandle, state: Arc<DaemonState>, tray_id: &'static str, show: fn(&AppHandle)) {
+/// The thread that asks the daemon for sessions while the shell runs.
+pub fn watch(app: AppHandle, state: Arc<DaemonState>, tray_id: &'static str) {
     std::thread::spawn(move || {
         let mut last: Option<Snapshot> = None;
         loop {
             std::thread::sleep(POLL);
             let Some(conn) = state.ready() else { continue };
             let Some(now) = daemon::sessions(&conn).ok().and_then(|body| parse_sessions(&body)) else { continue };
-            let news = news(last.as_ref(), &now);
+            let news = News::between(last.as_ref(), &now);
             if !news.is_empty() {
-                if let Some(window) = app.get_webview_window("main") {
+                if let Some(window) = app.get_webview_window(main_window::LABEL) {
                     let _ = window.request_user_attention(Some(UserAttentionType::Informational));
                 }
                 // The user looking at Trackwall sees the badges; a notification on top of that would only be noise.
                 if !any_window_focused(&app) {
-                    for notice in news {
-                        notification::show(&app, notice, show);
-                    }
+                    notification::show_news(&app, &news);
                 }
             }
             if last.as_ref().is_none_or(|l| l.waiting != now.waiting || l.proposals != now.proposals) {
@@ -265,8 +275,8 @@ mod tests {
         Proposal { id: id.into(), repo: format!("repo-{id}"), title: format!("Fix {id}") }
     }
 
-    fn waiting(id: &str, state: &str) -> Waiting {
-        Waiting { id: id.into(), repo: format!("repo-{id}"), state: Some(state.into()) }
+    fn waiting(id: &str, state: TaskState) -> Waiting {
+        Waiting { id: id.into(), repo: format!("repo-{id}"), state: Some(state) }
     }
 
     #[test]
@@ -278,7 +288,7 @@ mod tests {
             session("d", "running", None),
         ];
         let now = parse_sessions(&body(&list.join(","), &proposal_json("p"))).expect("a valid reply");
-        assert_eq!(now.waiting, vec![waiting("b", "Approval")]);
+        assert_eq!(now.waiting, vec![waiting("b", TaskState::Approval)]);
         assert_eq!(now.proposals, vec![proposal("p")]);
         assert_eq!(now.states.len(), 3);
         assert_eq!(now.states["d"], None);
@@ -290,7 +300,7 @@ mod tests {
             parse_sessions(&body(&[session("a", "running", Some("Working")), session("b", "running", None)].join(","), "")).unwrap();
         let now =
             parse_sessions(&body(&[session("a", "running", Some("Input")), session("b", "running", Some("Input"))].join(","), "")).unwrap();
-        assert_eq!(newly_waiting(&before.states, &now.waiting), vec![waiting("a", "Input")]);
+        assert_eq!(newly_waiting(&before.states, &now.waiting), vec![waiting("a", TaskState::Input)]);
         assert_eq!(newly_waiting(&States::new(), &now.waiting), vec![]);
     }
 
@@ -311,6 +321,12 @@ mod tests {
     }
 
     #[test]
+    fn a_state_the_shell_does_not_know_does_not_break_the_reply() {
+        let now = parse_sessions(&body(&session("a", "running", Some("Thinking")), "")).expect("a valid reply");
+        assert_eq!(now.states["a"], Some(TaskState::Unknown));
+    }
+
+    #[test]
     fn error_response_is_not_a_list() {
         assert!(parse_sessions(r#"{"ok":false,"error":{"code":"internal","message":"x"}}"#).is_none());
     }
@@ -318,11 +334,14 @@ mod tests {
     #[test]
     fn tooltip_names_the_only_waiting_item_or_counts_them() {
         assert_eq!(tooltip(&[], &[]), "Trackwall");
-        assert_eq!(tooltip(&[waiting("a", "Input")], &[]), "Trackwall: a session in repo-a is waiting for you");
+        assert_eq!(tooltip(&[waiting("a", TaskState::Input)], &[]), "Trackwall: a session in repo-a is waiting for you");
         assert_eq!(tooltip(&[], &[proposal("p")]), "Trackwall: a task proposal for repo-p is waiting for your decision");
-        assert_eq!(tooltip(&[waiting("a", "Input"), waiting("b", "Input")], &[]), "Trackwall: 2 sessions are waiting for you");
         assert_eq!(
-            tooltip(&[waiting("a", "Input")], &[proposal("p"), proposal("q")]),
+            tooltip(&[waiting("a", TaskState::Input), waiting("b", TaskState::Input)], &[]),
+            "Trackwall: 2 sessions are waiting for you"
+        );
+        assert_eq!(
+            tooltip(&[waiting("a", TaskState::Input)], &[proposal("p"), proposal("q")]),
             "Trackwall: 1 session and 2 task proposals are waiting for you"
         );
         assert_eq!(tooltip(&[], &[proposal("p"), proposal("q")]), "Trackwall: 2 task proposals are waiting for you");
@@ -337,20 +356,15 @@ mod tests {
     }
 
     #[test]
-    fn focus_reaches_the_ui_in_the_shape_of_use_session_focus() {
-        assert_eq!(serde_json::to_string(&Focus::Proposal("abc".into())).unwrap(), r#"{"kind":"proposal","id":"abc"}"#);
-        assert_eq!(serde_json::to_string(&Focus::NextWaiting).unwrap(), r#"{"kind":"next-waiting"}"#);
-        assert_eq!(serde_json::from_str::<Focus>(r#"{"kind":"session","id":"s"}"#).unwrap(), Focus::Session("s".into()));
-    }
-
-    #[test]
     fn news_are_the_sessions_that_started_waiting_and_the_new_proposals() {
         let before = parse_sessions(&body(&session("a", "running", Some("Working")), &proposal_json("p1"))).unwrap();
         let now = parse_sessions(&body(&session("a", "running", Some("Approval")), &[proposal_json("p1"), proposal_json("p2")].join(",")))
             .unwrap();
-        let targets: Vec<Focus> = news(Some(&before), &now).into_iter().map(|n| n.target).collect();
-        assert_eq!(targets, vec![Focus::Session("a".into()), Focus::Proposal("p2".into())]);
-        assert_eq!(news(Some(&now), &now), vec![]);
-        assert_eq!(news(None, &now), vec![]);
+        assert_eq!(
+            News::between(Some(&before), &now),
+            News { sessions: vec![waiting("a", TaskState::Approval)], proposals: vec![proposal("p2")] }
+        );
+        assert!(News::between(Some(&now), &now).is_empty());
+        assert!(News::between(None, &now).is_empty());
     }
 }

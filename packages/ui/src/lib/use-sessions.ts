@@ -6,8 +6,8 @@ import type { DaemonEvents } from "./daemon-events.ts";
 import { useRemote } from "./use-remote.ts";
 
 /**
- * Lista sesji przychodzi na żywo z WebSocketu zdarzeń (ADR-36). Bez połączenia zdarzeń jest odpytywana, częściej,
- * gdy jest na ekranie (`open`: „Home” albo „Sessions” w oknie, zawsze w panelu przy trayu).
+ * The session list comes live from the event WebSocket (ADR-36). Without that connection it is polled, more often while
+ * it is on screen (`open`: "Home" or "Sessions" in the main window, always in the tray panel).
  */
 const SESSIONS_POLL_MS = { open: 1000, closed: 3000 };
 

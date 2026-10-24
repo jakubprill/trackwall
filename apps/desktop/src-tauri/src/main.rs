@@ -7,8 +7,11 @@ mod attention;
 mod daemon;
 mod daemon_state;
 mod global_shortcut;
+mod main_window;
 mod notification;
 mod tray_panel;
+#[cfg(windows)]
+mod win_text;
 mod window_effect;
 
 use daemon::Connection;
@@ -40,11 +43,11 @@ async fn retry_daemon(state: tauri::State<'_, Arc<DaemonState>>) -> Result<Conne
 /// A click in the tray panel: hides the panel and shows the main window with the entry, or without one for
 /// "Open Trackwall".
 #[tauri::command]
-fn open_from_tray_panel(app: AppHandle, target: Option<attention::Focus>) {
+fn open_from_tray_panel(app: AppHandle, target: Option<main_window::Focus>) {
     tray_panel::hide(&app);
     match target {
-        Some(target) => attention::focus(&app, target, show_main),
-        None => show_main(&app),
+        Some(target) => main_window::focus(&app, target),
+        None => main_window::show(&app),
     }
 }
 
@@ -67,7 +70,7 @@ fn main() {
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
         let state = Arc::clone(app.state::<Arc<DaemonState>>().inner());
         std::thread::spawn(move || state.restart_if_down());
-        show_main(app);
+        main_window::show(app);
     }));
     let app = builder
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -76,28 +79,30 @@ fn main() {
         .invoke_handler(tauri::generate_handler![daemon_connection, retry_daemon, open_from_tray_panel])
         .setup(move |app| {
             state.start();
-            let window = app.get_webview_window("main").ok_or("missing window main from tauri.conf.json")?;
+            let window = app.get_webview_window(main_window::LABEL).ok_or("missing window main from tauri.conf.json")?;
             app.manage(window_effect::apply(&window));
-            window_effect::reveal_fallback(app.handle(), show_main);
+            window_effect::reveal_fallback(app.handle(), main_window::show);
             build_tray(app.handle())?;
             notification::init(app.handle());
-            global_shortcut::register(app.handle(), show_main);
-            attention::watch(app.handle().clone(), Arc::clone(&state), TRAY_ID, show_main);
+            global_shortcut::register(app.handle());
+            attention::watch(app.handle().clone(), Arc::clone(&state), TRAY_ID);
             Ok(())
         })
         .on_page_load(|webview, payload| {
             // The tray panel paints its own opaque background and is shown by `tray_panel`, not by the window effect.
-            if webview.label() == "main" {
-                window_effect::on_page_load(webview, payload, show_main);
+            if webview.label() == main_window::LABEL {
+                window_effect::on_page_load(webview, payload, main_window::show);
             }
         })
-        .on_window_event(|window, event| {
+        .on_window_event(|window, event| match window.label() {
+            tray_panel::LABEL => tray_panel::on_window_event(window, event),
             // Zamknięcie okna chowa je do traya; daemon i serwisy działają dalej.
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+            _ => {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
-            tray_panel::on_window_event(window, event);
         })
         .build(tauri::generate_context!())
         .expect("failed to build the Tauri app");
@@ -105,7 +110,7 @@ fn main() {
     app.run(|handle, event| match event {
         // macOS: kliknięcie w ikonę w Docku po schowaniu okna.
         #[cfg(target_os = "macos")]
-        RunEvent::Reopen { .. } => show_main(handle),
+        RunEvent::Reopen { .. } => main_window::show(handle),
         RunEvent::ExitRequested { code: None, api, .. } => {
             // Ostatnie okno schowane to nie powód do wyjścia.
             api.prevent_exit();
@@ -128,22 +133,25 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
-            attention::MENU_SHOW => show_main(app),
+            attention::MENU_SHOW => main_window::show(app),
             attention::MENU_QUIT => quit_app(app),
             id => {
                 if let Some(target) = attention::focus_from_menu(id) {
-                    attention::focus(app, target, show_main);
+                    main_window::focus(app, target);
                 }
             }
         })
         .on_tray_icon_event(|tray, event| match event {
-            TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, rect, .. } => {
-                tray_panel::toggle(tray.app_handle(), rect);
+            TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Down, .. } => {
+                tray_panel::press(tray.app_handle());
             }
-            // Windows only: a double click opens the main window, as it did before the panel.
+            TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, rect, .. } => {
+                tray_panel::release(tray.app_handle(), rect);
+            }
+            // Windows only: a double click opens the main window, as a click did before the panel.
             TrayIconEvent::DoubleClick { button: MouseButton::Left, .. } => {
                 tray_panel::hide(tray.app_handle());
-                show_main(tray.app_handle());
+                main_window::show(tray.app_handle());
             }
             _ => {}
         });
@@ -156,18 +164,6 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     }
     tray.build(app)?;
     Ok(())
-}
-
-fn show_main(app: &AppHandle) {
-    // Okno pokazane z traya przed końcem ładowania strony nie wyskoczy drugi raz po załadowaniu.
-    if let Some(applied) = app.try_state::<window_effect::AppliedEffect>() {
-        applied.mark_revealed();
-    }
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
 }
 
 /// „Quit” z traya: zatrzymanie daemona w tle, żeby pętla zdarzeń działała, a pojedyncza instancja
@@ -192,8 +188,8 @@ fn hide_shell(app: &AppHandle) {
 
 #[cfg(windows)]
 fn windows_alert(text: &str) {
+    use win_text::wide;
     use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
-    let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
     let (text, title) = (wide(text), wide("Trackwall"));
     // SAFETY: oba bufory są zakończone zerem i żyją do końca wywołania.
     unsafe { MessageBoxW(std::ptr::null_mut(), text.as_ptr(), title.as_ptr(), MB_OK | MB_ICONERROR) };

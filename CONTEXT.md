@@ -283,7 +283,7 @@ Several session terminals side by side in the Sessions view, one tile per list e
 _Avoid_: split, dashboard (that is Home)
 
 **Session shortcut** (`SessionShortcut`; Alt+1…9, Alt+J):
-Alt (⌥ on macOS) + digit selects the entry at that position in the Sessions list; Alt+J opens the next session that is waiting for you, also from other views. A shortcut never reaches the session terminal. Ctrl+Alt+J (⌃⌥J) is the global shortcut that does what Alt+J does from any app (ADR-50).
+Alt (⌥ on macOS) + digit selects the entry at that position in the Sessions list; Alt+J opens the next session that is waiting for you, also from other views. A shortcut never reaches the session terminal. Win+Alt+J (⌃⌥J on macOS) is the global shortcut that does what Alt+J does from any app (ADR-50).
 
 **Tray panel** (`TrayPanel`, window `tray-panel`):
 The small window next to the tray icon, opened by a left click on it, with the task proposals and the sessions waiting for you (ADR-50). A click opens the entry in the main window.

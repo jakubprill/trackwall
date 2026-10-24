@@ -8,11 +8,12 @@
  *     Trackwall/README.txt
  *   macOS:   trackwall-<wersja>-macos-<arch>.zip z Trackwall.app
  *
- * Bez instalatora i bez zapisu poza katalogiem użytkownika: archiwum rozpakowuje się gdziekolwiek.
+ * No installer: the archive unpacks anywhere. Outside the user's folders Trackwall writes only the notification
+ * registration in HKCU on Windows (ADR-50), which README.txt mentions.
  */
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { assertVersionsMatch, REPO, run, TAURI_DIR } from "./lib.ts";
+import { assertVersionsMatch, REPO, run, TAURI_DIR, tauriIdentifier } from "./lib.ts";
 
 const OUT = join(REPO, "out");
 const version = assertVersionsMatch();
@@ -44,6 +45,10 @@ if (process.platform === "win32") {
       "",
       "The daemon keeps running after you close the window (tray icon). To quit fully: tray icon > Quit.",
       "Daemon startup log: %USERPROFILE%\\.trackwall\\logs\\daemon-start.log",
+      "",
+      "For its notifications Trackwall registers itself under",
+      `HKEY_CURRENT_USER\\Software\\Classes\\AppUserModelId\\${tauriIdentifier()}.`,
+      "Delete that key after removing Trackwall if you want no trace of it.",
       "",
     ].join("\r\n"),
   );

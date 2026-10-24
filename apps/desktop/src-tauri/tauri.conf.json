@@ -24,6 +24,19 @@
         "transparent": true,
         "visible": false,
         "theme": "Dark"
+      },
+      {
+        "label": "tray-panel",
+        "url": "index.html#tray-panel",
+        "title": "Trackwall",
+        "width": 340,
+        "height": 420,
+        "resizable": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "theme": "Dark"
       }
     ],
     "security": {

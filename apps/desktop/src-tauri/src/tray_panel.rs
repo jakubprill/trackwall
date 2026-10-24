@@ -1,34 +1,42 @@
 //! The tray panel (ADR-50): a small window next to the tray icon with the sessions waiting for you and the task
-//! proposals, opened by a left click on the icon. Its page is the UI with `#tray-panel` (`views/tray-panel` in
-//! `packages/ui`), which reads the daemon like the main window; clicking an entry hides the panel and opens the entry
-//! in the main window (`open_from_tray_panel` in `main.rs`). The panel hides when it loses the focus. It is created on
-//! the first click and kept hidden after, so that later clicks show it without loading the page again.
-//! Described in §5.4 of docs/architecture.md.
+//! proposals, opened by a left click on the icon. The window is `tray-panel` from `tauri.conf.json`, created hidden at
+//! start, so its page (the UI with `#tray-panel`, `views/tray-panel` in `packages/ui`) is loaded before the first click.
+//! Clicking an entry hides the panel and opens the entry in the main window (`open_from_tray_panel` in `main.rs`).
+//! The panel hides when it loses the focus. Described in §5.4 of docs/architecture.md.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Manager, PhysicalPosition, Rect, Theme, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent};
+use tauri::{AppHandle, Manager, Rect, WebviewWindow, Window, WindowEvent};
 
-/// Window label; `capabilities/default.json` lists it next to `main`.
+/// Window label from `tauri.conf.json`; `capabilities/default.json` lists it next to `main`.
 pub const LABEL: &str = "tray-panel";
-/// The fragment `packages/ui/src/main.tsx` renders the panel for (`TRAY_PANEL_HASH`).
-const PAGE: &str = "index.html#tray-panel";
-const WIDTH: f64 = 340.0;
-const HEIGHT: f64 = 420.0;
-/// Space between the icon and the panel, in physical pixels.
+/// Space between the icon and the panel.
 const GAP: f64 = 8.0;
-/// A click on the icon while the panel is open first takes the focus from the panel, which hides it; that same click
-/// must not open the panel again.
-const REOPEN_GUARD: Duration = Duration::from_millis(300);
+/// A press on the icon while the panel is open takes the focus from the panel, which hides it, and a double click
+/// hides it too; the release that follows must not open the panel again.
+const REOPEN_GUARD: Duration = Duration::from_millis(400);
 
 #[derive(Default)]
 pub struct PanelState {
     hidden_at: Mutex<Option<Instant>>,
-    building: AtomicBool,
+    /// The press on the icon found the panel open (or just closed by that press): its release only closes.
+    closing_press: AtomicBool,
 }
 
-/// A rectangle in physical pixels.
+impl PanelState {
+    fn recently_hidden(&self) -> bool {
+        self.hidden_at.lock().is_ok_and(|at| at.is_some_and(|at| at.elapsed() < REOPEN_GUARD))
+    }
+
+    fn mark_hidden(&self) {
+        if let Ok(mut at) = self.hidden_at.lock() {
+            *at = Some(Instant::now());
+        }
+    }
+}
+
+/// A rectangle, in physical pixels on Windows and in points on macOS.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Area {
     pub x: f64,
@@ -40,80 +48,57 @@ pub struct Area {
 /// Where the panel's top left corner goes: centred on the icon, above it when the icon is in the lower half of the
 /// work area (the Windows taskbar at the bottom), below it otherwise (the macOS menu bar), and always inside the work
 /// area, so that a taskbar on the side or an icon in a corner does not push the panel off the screen.
-pub fn panel_position(icon: Area, panel: (f64, f64), work: Area) -> (f64, f64) {
+pub fn panel_position(icon: Area, panel: (f64, f64), work: Area, gap: f64) -> (f64, f64) {
     let (width, height) = panel;
     let x = icon.x + icon.width / 2.0 - width / 2.0;
     let below = icon.y + icon.height / 2.0 < work.y + work.height / 2.0;
-    let y = if below { icon.y + icon.height + GAP } else { icon.y - height - GAP };
+    let y = if below { icon.y + icon.height + gap } else { icon.y - height - gap };
     // `min` then `max` instead of `clamp`, which panics when the panel is larger than the work area.
     (x.min(work.x + work.width - width).max(work.x), y.min(work.y + work.height - height).max(work.y))
 }
 
-/// Left click on the tray icon: shows the panel next to the icon, or hides it when it is open.
-pub fn toggle(app: &AppHandle, icon: Rect) {
+/// Left button pressed on the tray icon.
+pub fn press(app: &AppHandle) {
     let state = app.state::<PanelState>();
-    if let Some(panel) = app.get_webview_window(LABEL) {
-        if panel.is_visible().unwrap_or(false) {
-            hide(app);
-        } else if !state.hidden_at.lock().is_ok_and(|at| at.is_some_and(|at| at.elapsed() < REOPEN_GUARD)) {
-            show_at(&panel, icon);
+    let open = app.get_webview_window(LABEL).is_some_and(|p| p.is_visible().unwrap_or(false));
+    state.closing_press.store(open || state.recently_hidden(), Ordering::SeqCst);
+}
+
+/// Left button released on the tray icon: shows the panel next to the icon, or closes it when it was open.
+pub fn release(app: &AppHandle, icon: Rect) {
+    let Some(panel) = app.get_webview_window(LABEL) else { return };
+    let state = app.state::<PanelState>();
+    if panel.is_visible().unwrap_or(false) {
+        hide(app);
+    } else if !state.closing_press.swap(false, Ordering::SeqCst) && !state.recently_hidden() {
+        if let Err(err) = place(&panel, icon) {
+            eprintln!("[desktop] placing the tray panel: {err}");
         }
-        return;
+        let _ = panel.show();
+        let _ = panel.set_focus();
     }
-    if state.building.swap(true, Ordering::SeqCst) {
-        return;
-    }
-    // Building a window on the main thread from an event handler can deadlock on Windows (wry#583).
-    let app = app.clone();
-    std::thread::spawn(move || {
-        match build(&app) {
-            Ok(panel) => show_at(&panel, icon),
-            Err(err) => eprintln!("[desktop] opening the tray panel: {err}"),
-        }
-        app.state::<PanelState>().building.store(false, Ordering::SeqCst);
-    });
 }
 
 pub fn hide(app: &AppHandle) {
     if let Some(panel) = app.get_webview_window(LABEL) {
+        app.state::<PanelState>().mark_hidden();
         let _ = panel.hide();
     }
 }
 
-/// Window events of the panel: losing the focus hides it.
+/// Window events of the panel: losing the focus or closing (Alt+F4) hides it.
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
-    if window.label() != LABEL {
-        return;
+    match event {
+        WindowEvent::Focused(false) => {}
+        WindowEvent::CloseRequested { api, .. } => api.prevent_close(),
+        _ => return,
     }
-    if let WindowEvent::Focused(false) = event {
-        if let Ok(mut at) = window.state::<PanelState>().hidden_at.lock() {
-            *at = Some(Instant::now());
-        }
-        let _ = window.hide();
-    }
+    window.state::<PanelState>().mark_hidden();
+    let _ = window.hide();
 }
 
-fn build(app: &AppHandle) -> tauri::Result<WebviewWindow> {
-    WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App(PAGE.into()))
-        .title("Trackwall")
-        .inner_size(WIDTH, HEIGHT)
-        .resizable(false)
-        .decorations(false)
-        .always_on_top(true)
-        .skip_taskbar(true)
-        .theme(Some(Theme::Dark))
-        .visible(false)
-        .build()
-}
-
-fn show_at(panel: &WebviewWindow, icon: Rect) {
-    if let Err(err) = place(panel, icon) {
-        eprintln!("[desktop] placing the tray panel: {err}");
-    }
-    let _ = panel.show();
-    let _ = panel.set_focus();
-}
-
+/// Windows (and Linux) report the icon and the monitors in one physical coordinate space across monitors.
+#[cfg(not(target_os = "macos"))]
 fn place(panel: &WebviewWindow, icon: Rect) -> tauri::Result<()> {
     // The tray reports the icon in physical pixels already (as the positioner plugin also assumes).
     let (at, size) = (icon.position.to_physical::<f64>(1.0), icon.size.to_physical::<f64>(1.0));
@@ -129,8 +114,42 @@ fn place(panel: &WebviewWindow, icon: Rect) -> tauri::Result<()> {
             width: f64::from(work.size.width),
             height: f64::from(work.size.height),
         },
+        GAP * monitor.scale_factor(),
     );
-    panel.set_position(PhysicalPosition::new(x, y))
+    panel.set_position(tauri::PhysicalPosition::new(x, y))
+}
+
+/// macOS lays screens out in points, and reports the icon and each monitor in physical pixels of its own scale factor
+/// (points times that factor), which do not add up across a Retina and a standard display. So the panel is placed in
+/// points: the monitor is the one whose bounds in points hold the icon in that monitor's scale.
+#[cfg(target_os = "macos")]
+fn place(panel: &WebviewWindow, icon: Rect) -> tauri::Result<()> {
+    let (at, size) = (icon.position.to_physical::<f64>(1.0), icon.size.to_physical::<f64>(1.0));
+    let in_points = |x: f64, y: f64, width: f64, height: f64, scale: f64| Area {
+        x: x / scale,
+        y: y / scale,
+        width: width / scale,
+        height: height / scale,
+    };
+    let monitors = panel.available_monitors()?;
+    let found = monitors.iter().find_map(|m| {
+        let scale = m.scale_factor();
+        let bounds =
+            in_points(f64::from(m.position().x), f64::from(m.position().y), f64::from(m.size().width), f64::from(m.size().height), scale);
+        let icon = in_points(at.x, at.y, size.width, size.height, scale);
+        let inside = icon.x >= bounds.x && icon.x < bounds.x + bounds.width && icon.y >= bounds.y && icon.y < bounds.y + bounds.height;
+        inside.then_some((m, icon, scale))
+    });
+    let Some((monitor, icon, scale)) = found else { return Ok(()) };
+    let work = monitor.work_area();
+    let outer = panel.outer_size()?.to_logical::<f64>(panel.scale_factor()?);
+    let (x, y) = panel_position(
+        icon,
+        (outer.width, outer.height),
+        in_points(f64::from(work.position.x), f64::from(work.position.y), f64::from(work.size.width), f64::from(work.size.height), scale),
+        GAP,
+    );
+    panel.set_position(tauri::LogicalPosition::new(x, y))
 }
 
 #[cfg(test)]
@@ -143,33 +162,33 @@ mod tests {
     #[test]
     fn above_an_icon_in_the_taskbar_at_the_bottom() {
         let icon = Area { x: 1700.0, y: 1044.0, width: 24.0, height: 32.0 };
-        assert_eq!(panel_position(icon, PANEL, SCREEN), (1542.0, 616.0));
+        assert_eq!(panel_position(icon, PANEL, SCREEN, 8.0), (1542.0, 616.0));
     }
 
     #[test]
     fn below_an_icon_in_the_menu_bar_at_the_top() {
         let work = Area { x: 0.0, y: 25.0, width: 1512.0, height: 957.0 };
         let icon = Area { x: 1300.0, y: 0.0, width: 30.0, height: 24.0 };
-        assert_eq!(panel_position(icon, PANEL, work), (1145.0, 32.0));
+        assert_eq!(panel_position(icon, PANEL, work, 8.0), (1145.0, 32.0));
     }
 
     #[test]
     fn stays_on_the_screen_next_to_an_icon_in_the_corner() {
         let icon = Area { x: 1900.0, y: 1044.0, width: 20.0, height: 32.0 };
-        assert_eq!(panel_position(icon, PANEL, SCREEN), (1580.0, 616.0));
+        assert_eq!(panel_position(icon, PANEL, SCREEN, 8.0), (1580.0, 616.0));
     }
 
     #[test]
     fn stays_on_a_second_monitor_left_of_the_main_one() {
         let work = Area { x: -2560.0, y: 0.0, width: 2560.0, height: 1400.0 };
         let icon = Area { x: -2560.0, y: 1404.0, width: 24.0, height: 32.0 };
-        assert_eq!(panel_position(icon, PANEL, work), (-2560.0, 976.0));
+        assert_eq!(panel_position(icon, PANEL, work, 8.0), (-2560.0, 976.0));
     }
 
     #[test]
     fn a_panel_larger_than_the_work_area_starts_at_its_corner() {
         let work = Area { x: 0.0, y: 0.0, width: 300.0, height: 300.0 };
         let icon = Area { x: 280.0, y: 290.0, width: 20.0, height: 20.0 };
-        assert_eq!(panel_position(icon, PANEL, work), (0.0, 0.0));
+        assert_eq!(panel_position(icon, PANEL, work, 8.0), (0.0, 0.0));
     }
 }

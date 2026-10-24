@@ -123,7 +123,7 @@ fn ui_script(effect: WindowEffect) -> String {
 }
 
 /// Po każdym załadowaniu strony ustawia atrybut, a przy pierwszym pokazuje okno, ale dopiero gdy skrypt
-/// się wykonał (`eval` jest asynchroniczny). `reveal` to `show_main` z `main.rs`.
+/// się wykonał (`eval` jest asynchroniczny). `reveal` to `main_window::show`.
 pub fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>, reveal: fn(&AppHandle)) {
     if payload.event() != PageLoadEvent::Finished {
         return;

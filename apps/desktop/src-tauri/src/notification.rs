@@ -5,36 +5,42 @@
 //! toasts under an AppUserModelID that an installer registered, which the portable build does not have. So the shell
 //! talks to the system directly: on Windows a toast with an activation handler under the app's own AppUserModelID,
 //! which the shell registers in HKCU at start (the documented way for unpackaged apps, no Start menu shortcut); on macOS
-//! an `NSUserNotification` from mac-notification-sys, with one thread per notification waiting for its click. Elsewhere
+//! an `NSUserNotification` from mac-notification-sys, with a thread per notification waiting for its click. Elsewhere
 //! (Linux, only built in CI) nothing is shown. Described in §5.4 of docs/architecture.md.
 
-use crate::attention::{self, Focus, Proposal, Waiting};
+use crate::attention::{News, Proposal, TaskState, Waiting};
+use crate::main_window::{self, Focus};
 use tauri::AppHandle;
 
 /// What one notification says and what clicking it opens.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Notice {
-    pub title: String,
-    pub body: String,
-    pub target: Focus,
+struct Notice {
+    title: String,
+    body: String,
+    target: Focus,
 }
 
-/// A session that started waiting; the words match the session state labels in the UI (`STATE_LABELS`).
-pub fn session_notice(waiting: &Waiting) -> Notice {
-    let body = match waiting.state.as_deref() {
-        Some("Approval") => "Copilot CLI is asking for approval",
-        Some("Plan") => "Copilot CLI is waiting for plan approval",
+/// A session that started waiting; the words are the session state labels of the UI (`STATE_LABELS`, a test in
+/// `apps/desktop/test/shell-events.test.ts` keeps them the same).
+fn session_notice(waiting: &Waiting) -> Notice {
+    let body = match waiting.state {
+        Some(TaskState::Approval) => "Copilot CLI is asking for approval",
+        Some(TaskState::Plan) => "Copilot CLI is waiting for plan approval",
         _ => "Copilot CLI is waiting for you",
     };
     Notice { title: format!("Session in {}", waiting.repo), body: body.to_owned(), target: Focus::Session(waiting.id.clone()) }
 }
 
-pub fn proposal_notice(proposal: &Proposal) -> Notice {
+fn proposal_notice(proposal: &Proposal) -> Notice {
     Notice {
         title: format!("Task proposal for {}", proposal.repo),
         body: proposal.title.clone(),
         target: Focus::Proposal(proposal.id.clone()),
     }
+}
+
+fn notices(news: &News) -> Vec<Notice> {
+    news.sessions.iter().map(session_notice).chain(news.proposals.iter().map(proposal_notice)).collect()
 }
 
 /// The name notifications are shown under: the app identifier, with a suffix in a debug build so that `tauri dev`
@@ -55,47 +61,66 @@ pub fn init(app: &AppHandle) {
     }
 }
 
-/// Shows the notice; a click shows the window with its target. `show` is `show_main` from `main.rs`.
-pub fn show(app: &AppHandle, notice: Notice, show: fn(&AppHandle)) {
-    let clicked = {
-        let app = app.clone();
-        let target = notice.target.clone();
-        move || attention::focus(&app, target.clone(), show)
-    };
-    if let Err(err) = platform::show(&app_id(app), &notice, clicked) {
-        eprintln!("[desktop] showing a system notification: {err}");
+/// One notification for each session that started waiting and each new proposal.
+pub fn show_news(app: &AppHandle, news: &News) {
+    let app_id = app_id(app);
+    for notice in notices(news) {
+        let clicked = {
+            let app = app.clone();
+            let target = notice.target.clone();
+            move || main_window::focus(&app, target.clone())
+        };
+        if let Err(err) = platform::show(&app_id, &notice, clicked) {
+            eprintln!("[desktop] showing a system notification: {err}");
+        }
     }
 }
 
 #[cfg(windows)]
 mod platform {
     use super::Notice;
+    use crate::daemon;
+    use crate::win_text::wide;
     use tauri_winrt_notification::Toast;
     use windows_sys::Win32::System::Registry::{RegSetKeyValueW, HKEY_CURRENT_USER, REG_SZ};
 
     /// The name Windows shows above the app's toasts and in its notification settings.
     const DISPLAY_NAME: &str = if cfg!(debug_assertions) { "Trackwall (dev)" } else { "Trackwall" };
+    /// The icon next to that name: Windows reads it from a file, and the portable build has no loose image files.
+    const ICON: &[u8] = include_bytes!("../icons/128x128.png");
+    const ICON_FILE: &str = "notification-icon.png";
 
-    fn wide(s: &str) -> Vec<u16> {
-        s.encode_utf16().chain(std::iter::once(0)).collect()
+    pub(super) fn key(app_id: &str) -> String {
+        format!(r"Software\Classes\AppUserModelId\{app_id}")
     }
 
-    /// Registers the AppUserModelID under `HKCU\Software\Classes\AppUserModelId`, where Windows looks up the name
-    /// a toast of an unpackaged app is shown under. Without it Windows drops the app's toasts.
+    /// Registers the AppUserModelID under `HKCU\Software\Classes\AppUserModelId`, where Windows looks up the name and
+    /// icon a toast of an unpackaged app is shown with. Without it Windows drops the app's toasts.
     pub fn init(app_id: &str) -> Result<(), String> {
-        let key = wide(&format!(r"Software\Classes\AppUserModelId\{app_id}"));
-        let (value, data) = (wide("DisplayName"), wide(DISPLAY_NAME));
+        let key = key(app_id);
+        set_string(&key, "DisplayName", DISPLAY_NAME)?;
+        // The icon only decorates the toast: without it Windows shows a generic one.
+        let icon = daemon::trackwall_home().map(|home| home.join(ICON_FILE));
+        match icon.and_then(|path| std::fs::write(&path, ICON).map(|()| path).map_err(|e| e.to_string())) {
+            Ok(path) => set_string(&key, "IconUri", &path.to_string_lossy())?,
+            Err(err) => eprintln!("[desktop] writing the notification icon: {err}"),
+        }
+        Ok(())
+    }
+
+    pub(super) fn set_string(key: &str, name: &str, value: &str) -> Result<(), String> {
+        let (key, name, data) = (wide(key), wide(name), wide(value));
         let bytes = u32::try_from(data.len() * 2).map_err(|e| e.to_string())?;
         // SAFETY: the strings end with a zero and live until the call returns; `bytes` is the size of `data` in bytes.
-        let status = unsafe { RegSetKeyValueW(HKEY_CURRENT_USER, key.as_ptr(), value.as_ptr(), REG_SZ, data.as_ptr().cast(), bytes) };
+        let status = unsafe { RegSetKeyValueW(HKEY_CURRENT_USER, key.as_ptr(), name.as_ptr(), REG_SZ, data.as_ptr().cast(), bytes) };
         if status == 0 {
             Ok(())
         } else {
-            Err(format!("registering the AppUserModelID failed with code {status}"))
+            Err(format!("writing {value:?} to the registry failed with code {status}"))
         }
     }
 
-    /// The activation handler runs while the toast is on the screen or in the notification centre and Trackwall runs.
+    /// The activation handler runs when the toast is clicked while it is on the screen and Trackwall runs.
     pub fn show(app_id: &str, notice: &Notice, clicked: impl Fn() + Send + 'static) -> Result<(), String> {
         Toast::new(app_id)
             .title(&notice.title)
@@ -113,6 +138,13 @@ mod platform {
 mod platform {
     use super::Notice;
     use mac_notification_sys::{Notification, NotificationResponse};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// Each notification that waits for a click holds a thread (and in the library a timer on the main thread) until it
+    /// is clicked, closed or cleared from the Notification Centre; past this many the next ones are shown without a click
+    /// action, so that a day of uncleared notifications does not pile up threads.
+    const MAX_WAITING_FOR_CLICK: usize = 8;
+    static WAITING_FOR_CLICK: AtomicUsize = AtomicUsize::new(0);
 
     /// A bundled app posts under its own bundle identifier. A debug build runs outside a bundle and keeps the
     /// library's default, so its notifications show under another app's name.
@@ -126,10 +158,19 @@ mod platform {
     /// `send` with `wait_for_click` blocks until the notification is clicked, closed or cleared, so it gets a thread.
     pub fn show(_app_id: &str, notice: &Notice, clicked: impl Fn() + Send + 'static) -> Result<(), String> {
         let Notice { title, body, .. } = notice.clone();
-        std::thread::spawn(move || match Notification::new().title(&title).message(&body).wait_for_click(true).send() {
-            Ok(NotificationResponse::Click) => clicked(),
-            Ok(_) => {}
-            Err(err) => eprintln!("[desktop] showing a system notification: {err}"),
+        let wait = WAITING_FOR_CLICK.fetch_add(1, Ordering::SeqCst) < MAX_WAITING_FOR_CLICK;
+        if !wait {
+            WAITING_FOR_CLICK.fetch_sub(1, Ordering::SeqCst);
+        }
+        std::thread::spawn(move || {
+            match Notification::new().title(&title).message(&body).wait_for_click(wait).send() {
+                Ok(NotificationResponse::Click) => clicked(),
+                Ok(_) => {}
+                Err(err) => eprintln!("[desktop] showing a system notification: {err}"),
+            }
+            if wait {
+                WAITING_FOR_CLICK.fetch_sub(1, Ordering::SeqCst);
+            }
         });
         Ok(())
     }
@@ -152,22 +193,22 @@ mod platform {
 mod tests {
     use super::*;
 
-    fn waiting(state: Option<&str>) -> Waiting {
-        Waiting { id: "s1".into(), repo: "orders-api".into(), state: state.map(Into::into) }
+    fn waiting(state: Option<TaskState>) -> Waiting {
+        Waiting { id: "s1".into(), repo: "orders-api".into(), state }
     }
 
     #[test]
     fn a_session_notice_names_the_repo_and_what_the_session_waits_for() {
         assert_eq!(
-            session_notice(&waiting(Some("Approval"))),
+            session_notice(&waiting(Some(TaskState::Approval))),
             Notice {
                 title: "Session in orders-api".into(),
                 body: "Copilot CLI is asking for approval".into(),
                 target: Focus::Session("s1".into()),
             }
         );
-        assert_eq!(session_notice(&waiting(Some("Plan"))).body, "Copilot CLI is waiting for plan approval");
-        assert_eq!(session_notice(&waiting(Some("Input"))).body, "Copilot CLI is waiting for you");
+        assert_eq!(session_notice(&waiting(Some(TaskState::Plan))).body, "Copilot CLI is waiting for plan approval");
+        assert_eq!(session_notice(&waiting(Some(TaskState::Input))).body, "Copilot CLI is waiting for you");
     }
 
     #[test]
@@ -181,5 +222,45 @@ mod tests {
                 target: Focus::Proposal("p1".into()),
             }
         );
+    }
+
+    #[test]
+    fn news_become_one_notice_each_sessions_first() {
+        let news = News {
+            sessions: vec![waiting(Some(TaskState::Input))],
+            proposals: vec![Proposal { id: "p1".into(), repo: "billing".into(), title: "t".into() }],
+        };
+        let targets: Vec<Focus> = notices(&news).into_iter().map(|n| n.target).collect();
+        assert_eq!(targets, vec![Focus::Session("s1".into()), Focus::Proposal("p1".into())]);
+    }
+
+    /// Runs on `windows-latest` in CI: the registry value toasts depend on lands where Windows looks for it.
+    #[cfg(windows)]
+    #[test]
+    fn registering_the_app_id_writes_its_display_name_under_hkcu() {
+        use crate::win_text::wide;
+        use windows_sys::Win32::System::Registry::{RegDeleteTreeW, RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_SZ};
+        let key = platform::key("dev.trackwall.test-registration");
+        platform::set_string(&key, "DisplayName", "Trackwall test").expect("registry write");
+        let (key_w, name_w) = (wide(&key), wide("DisplayName"));
+        let mut buffer = [0u16; 64];
+        let mut size = u32::try_from(std::mem::size_of_val(&buffer)).unwrap();
+        // SAFETY: the strings end with a zero; `buffer` and `size` describe a writable buffer of `size` bytes.
+        let status = unsafe {
+            RegGetValueW(
+                HKEY_CURRENT_USER,
+                key_w.as_ptr(),
+                name_w.as_ptr(),
+                RRF_RT_REG_SZ,
+                std::ptr::null_mut(),
+                buffer.as_mut_ptr().cast(),
+                &mut size,
+            )
+        };
+        // SAFETY: as above.
+        unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, key_w.as_ptr()) };
+        assert_eq!(status, 0);
+        let len = buffer.iter().position(|&c| c == 0).unwrap_or(buffer.len());
+        assert_eq!(String::from_utf16_lossy(&buffer[..len]), "Trackwall test");
     }
 }
