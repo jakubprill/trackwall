@@ -92,6 +92,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
       "get_repo_card",
       "tail",
       "get_errors",
+      "get_test_results",
       "who_calls",
       "subgraph_for",
       "find_endpoint",

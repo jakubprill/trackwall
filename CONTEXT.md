@@ -114,6 +114,10 @@ _Avoid_: diff (that is only a part), status
 **Repo overview** (`RepoOverview`):
 The README and the latest commits of a repo in one response; the repo status comes from the repo list. Files are browsed separately, always from the HEAD commit (ADR-14).
 
+**Test results** (`TestResults`, module `test-results`, MCP tool `get_test_results`; a **test report** is one JUnit XML file, `TestReport`; a failed test is a `TestFailure`):
+The outcome of the latest test runs in a repo root or a task's worktree, read from the JUnit XML reports the build tools left on disk (ADR-60): counts of tests, failures (an assertion did not hold), errors (the test threw) and skipped, and each failed test with its message and stack trace. Trackwall runs no tests for it.
+_Avoid_: test run (that is the mise task that wrote the reports), coverage
+
 **Code search** (`searchCode`, MCP tool `search_code`, result `SearchCodeResult`):
 A fixed string or a regular expression in the files of the latest commit of many repos of the projects folder at once, through `git grep` (ADR-40); a match (`CodeMatch`) is a repo, path, line, column and context lines. It does not see uncommitted changes, just like browsing a repo.
 _Avoid_: grep (the tool underneath), index (there is none)

@@ -44,4 +44,5 @@ The agent builds and tests its changes by running the repo's mise tasks in the t
 - Trusting a mise configuration covers the commands it defines, not the code they run: tests and build scripts the agent changed run as written. Review the changes as you would before merging.
 - Copilot CLI asks to trust every new folder. To stop it asking for every task, add the `worktrees` folder (the new task form shows its full path) to `trustedFolders` in `~/.copilot/config.json`.
 - Trackwall tells a task's agent to stay in its worktree, commit on its branch and not push unless your prompt asks for it. This is an instruction to the agent, not a lock: the branch is yours to push.
+- After running the tests in its worktree, the agent reads which tests failed and why from the reports your build tools write there, instead of scrolling the build log.
 - An agent can also propose a task for you to start: see [Main session and task proposals](/features/main-session).

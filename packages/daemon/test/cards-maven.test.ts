@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { parseXml } from "../src/infra/xml.ts";
 import { extractMaven } from "../src/modules/cards/maven.ts";
-import { parseXml } from "../src/modules/cards/xml.ts";
 import { snapshotOf } from "./support/snapshot.ts";
 
 const PARENT_POM = `<?xml version="1.0" encoding="UTF-8"?>

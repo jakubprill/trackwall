@@ -16,6 +16,7 @@ const {
   getRepoCard,
   tail,
   getErrors,
+  getTestResults,
   searchCode,
   whoCalls,
   subgraphFor,
@@ -60,6 +61,7 @@ export const MCP_INSTRUCTIONS = [
   `- Build, test or run a service: ${runMiseTask.name} runs a mise task listed by ${getRepo.name} in the repo root, ` +
     "or with task in that task's worktree, which has the task's changes (a task session passes its own task); " +
     `${waitForMiseTask.name} waits for its exit code and ${tail.name} gives its output, with the same task; ` +
+    `${getTestResults.name} then tells which tests failed and why, from the build's JUnit reports (pass the run's startedAt as since); ` +
     `${listRunningMiseTasks.name} shows what already runs. Stop long-running tasks with ${stopMiseTask.name} when ` +
     "you no longer need them.",
   `- Try a change against the running system: ${startService.name} starts a repo's service (its mise task dev) with ` +
