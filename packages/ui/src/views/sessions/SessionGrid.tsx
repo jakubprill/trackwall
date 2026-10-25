@@ -9,13 +9,15 @@ import { type GridPage, gridShape } from "@/lib/session-grid";
 import { sessionShortcutLabel } from "@/lib/session-shortcut";
 import { isLive, sessionStateLabel } from "@/lib/session-state";
 import { cn } from "@/lib/utils";
+import { SessionCloseButton, SessionCloseConfirmation, useSessionClose } from "./SessionClose.tsx";
 import { SessionTerminal } from "./SessionTerminal.tsx";
 import { TaskLine } from "./TaskLine.tsx";
 
 /**
  * A page of the Sessions list as a grid of terminals (ADR-48). The selected tile has the accent ring and the keyboard,
  * a session that is waiting for you has the warning frame (also when selected). Clicking a tile or into its terminal
- * selects it; a task without a session and a task proposal (ADR-39) have no terminal, so their tile only leads to the full panel. Tiles appear once
+ * selects it; a task without a session and a task proposal (ADR-39) have no terminal, so their tile only leads to the full panel.
+ * A tile with a session also closes it (`useSessionClose`). Tiles appear once
  * the area is measured, so that no terminal reports a size to its session from a layout that is about to change.
  */
 export function SessionGrid({
@@ -24,12 +26,14 @@ export function SessionGrid({
   selected,
   onSelect,
   onOpenAlone,
+  onSessionClosed,
 }: {
   conn: Connection;
   page: GridPage<SessionEntry>;
   selected: string;
   onSelect: (entry: SessionEntry) => void;
   onOpenAlone: (entry: SessionEntry) => void;
+  onSessionClosed: (entry: SessionEntry) => void;
 }) {
   const area = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ width: number; height: number }>();
@@ -60,6 +64,7 @@ export function SessionGrid({
             selected={entryId(entry) === selected}
             onSelect={() => onSelect(entry)}
             onOpenAlone={() => onOpenAlone(entry)}
+            onSessionClosed={() => onSessionClosed(entry)}
           />
         ))}
     </div>
@@ -73,6 +78,7 @@ function SessionTile({
   selected,
   onSelect,
   onOpenAlone,
+  onSessionClosed,
 }: {
   conn: Connection;
   entry: SessionEntry;
@@ -80,8 +86,10 @@ function SessionTile({
   selected: boolean;
   onSelect: () => void;
   onOpenAlone: () => void;
+  onSessionClosed: () => void;
 }) {
   const session = entrySession(entry);
+  const close = useSessionClose(conn, session, onSessionClosed);
   const tile = useRef<HTMLDivElement>(null);
   // A selected tile without a terminal takes the keyboard itself, so that keys stop going to the terminal selected before.
   useEffect(() => {
@@ -116,7 +124,9 @@ function SessionTile({
         <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={onOpenAlone} aria-label="Open alone">
           <Maximize2 />
         </Button>
+        {session && <SessionCloseButton close={close} />}
       </header>
+      <SessionCloseConfirmation close={close} />
       {session ? (
         <SessionTerminal conn={conn} session={session.id} live={isLive(session)} focused={selected} />
       ) : (

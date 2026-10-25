@@ -295,7 +295,7 @@ xterm.js in the Sessions view, connected over the WebSocket `/ws/pty/<session>` 
 _Avoid_: terminal window (a window is the app window)
 
 **Session layout** (`SessionLayout`):
-How the right side of the Sessions view shows entries (ADR-48): `1` is the selected entry alone with its full panel (tabs, Stop, Resume), `2` and `4` a grid page of that many entries, `auto` a grid of the whole list, up to nine per page.
+How the right side of the Sessions view shows entries (ADR-48): `1` is the selected entry alone with its full panel (tabs, Stop, Resume), `2` and `4` a grid page of that many entries, `auto` a grid of the whole list, up to nine per page. A tile, like a list row, has an X that closes its session.
 In the Sessions view the switch is labelled just "Layout".
 _Avoid_: view (that is a screen of the app), mode
 

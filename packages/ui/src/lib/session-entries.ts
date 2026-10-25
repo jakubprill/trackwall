@@ -117,6 +117,16 @@ export function findEntry(entries: readonly SessionEntry[], selection: SessionSe
   return found ?? entries[0];
 }
 
+/**
+ * The entry to select after `id` leaves the list: the next one, or the previous one when it was last, so the selection
+ * stays where the user was (also on the same grid page). `undefined` when nothing else is left or `id` is not listed.
+ */
+export function entryAfterRemoval(entries: readonly SessionEntry[], id: string): SessionEntry | undefined {
+  const at = entries.findIndex((entry) => entryId(entry) === id);
+  if (at === -1) return undefined;
+  return entries[at + 1] ?? entries[at - 1];
+}
+
 /** Sesja pozycji: sesja w korzeniu repo albo ostatnia sesja zadania; propozycja jeszcze nie ma sesji, a brak pozycji też. */
 export function entrySession(entry: SessionEntry | undefined): Session | undefined {
   return entry?.kind === "proposal" ? undefined : entry?.session;

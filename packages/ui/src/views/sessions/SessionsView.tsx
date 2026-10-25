@@ -21,6 +21,7 @@ import type { Connection } from "@/lib/connection";
 import { relativeTime, twoDigits } from "@/lib/format";
 import { IS_MAC } from "@/lib/platform";
 import {
+  entryAfterRemoval,
   entryId,
   entrySelection,
   entrySession,
@@ -38,6 +39,7 @@ import { actionIsNewer, type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { cn } from "@/lib/utils";
 import { ProposalPanel } from "./ProposalPanel.tsx";
+import { SessionCloseButton, SessionCloseConfirmation, useSessionClose } from "./SessionClose.tsx";
 import { SessionGrid } from "./SessionGrid.tsx";
 import { SessionTerminal } from "./SessionTerminal.tsx";
 import { TaskLine } from "./TaskLine.tsx";
@@ -78,6 +80,14 @@ export function SessionsView({
   const show = (id: string) => onSelect({ kind: "session", id });
   const next = nextWaiting(list, entrySession(current)?.id);
   const waiting = waitingCount(list);
+  // A closed session in a repo root leaves the list, so the selection moves to its neighbour; a task stays listed.
+  const sessionClosed = (entry: SessionEntry) => {
+    if (entry.kind === "session" && current && entryId(current) === entryId(entry)) {
+      const neighbour = entryAfterRemoval(entries, entryId(entry));
+      onSelect(neighbour ? entrySelection(neighbour) : undefined);
+    }
+    sessions.reload();
+  };
   // Taken also with no entry at that position, so that the key never reaches a session terminal by accident.
   useWindowShortcuts(
     (event) => {
@@ -126,10 +136,12 @@ export function SessionsView({
           {rows.map((row, i) => (
             <SessionListItem
               key={entryId(row.entry)}
+              conn={conn}
               row={row}
               position={i + 1}
               active={current !== undefined && entryId(row.entry) === entryId(current)}
               onSelect={() => onSelect(entrySelection(row.entry))}
+              onSessionClosed={() => sessionClosed(row.entry)}
             />
           ))}
         </nav>
@@ -162,6 +174,7 @@ export function SessionsView({
             sessions={list}
             tasks={tasks}
             onChanged={sessions.reload}
+            onSessionClosed={sessionClosed}
             onTaskRemoved={(task) => {
               setRemoved({ task, afterLoad: sessions.sentLoads() });
               onSelect(undefined);
@@ -192,15 +205,19 @@ const INDENT = ["", "ml-4", "ml-8", "ml-12"] as const;
  * A session or task that delegated work has a “main” badge with the number of entries under it.
  */
 function SessionListItem({
+  conn,
   row,
   position,
   active,
   onSelect,
+  onSessionClosed,
 }: {
+  conn: Connection;
   row: SessionRow;
   position: number;
   active: boolean;
   onSelect: () => void;
+  onSessionClosed: () => void;
 }) {
   const { entry, depth } = row;
   return (
@@ -208,55 +225,81 @@ function SessionListItem({
       {entry.kind === "proposal" ? (
         <ProposalListItem proposal={entry.proposal} position={position} active={active} onSelect={onSelect} />
       ) : (
-        <StartedListItem entry={entry} delegated={row.children} position={position} active={active} onSelect={onSelect} />
+        <StartedListItem
+          conn={conn}
+          entry={entry}
+          delegated={row.children}
+          position={position}
+          active={active}
+          onSelect={onSelect}
+          onSessionClosed={onSessionClosed}
+        />
       )}
     </div>
   );
 }
 
+/** A session or task row; the X that closes its session shows on hover, on keyboard focus and on the selected row. */
 function StartedListItem({
+  conn,
   entry,
   delegated,
   position,
   active,
   onSelect,
+  onSessionClosed,
 }: {
+  conn: Connection;
   entry: Exclude<SessionEntry, { kind: "proposal" }>;
   /** Tasks and proposals directly under this entry. */
   delegated: number;
   position: number;
   active: boolean;
   onSelect: () => void;
+  onSessionClosed: () => void;
 }) {
   const { session } = entry;
   const task = entry.kind === "task" ? entry.task : undefined;
+  const close = useSessionClose(conn, session, onSessionClosed);
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-current={active || undefined}
-      aria-keyshortcuts={ariaSessionShortcut({ kind: "position", position })}
-      className={cn(
-        "flex w-full items-start gap-3 rounded-md border border-transparent px-2 py-2 text-left transition-colors hover:bg-accent",
-        active && "bg-accent border-primary/25 hud-active-edge",
-      )}
-    >
-      <PositionLabel position={position} />
-      <span className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-sm font-medium">{task?.repo ?? session?.repo}</span>
-          {delegated > 0 && (
-            <Badge
-              aria-label={`main session, ${countLabel(delegated, { one: "task or proposal", other: "tasks and proposals" })} under it`}
-            >{`main · ${delegated}`}</Badge>
-          )}
-          {session?.needsAttention && <BellRing className="text-warning size-3.5 shrink-0" aria-label="waiting for you" />}
+    <div className="group relative">
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-current={active || undefined}
+        aria-keyshortcuts={ariaSessionShortcut({ kind: "position", position })}
+        className={cn(
+          "flex w-full items-start gap-3 rounded-md border border-transparent py-2 pr-8 pl-2 text-left transition-colors hover:bg-accent",
+          active && "bg-accent border-primary/25 hud-active-edge",
+        )}
+      >
+        <PositionLabel position={position} />
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-sm font-medium">{task?.repo ?? session?.repo}</span>
+            {delegated > 0 && (
+              <Badge
+                aria-label={`main session, ${countLabel(delegated, { one: "task or proposal", other: "tasks and proposals" })} under it`}
+              >{`main · ${delegated}`}</Badge>
+            )}
+            {session?.needsAttention && <BellRing className="text-warning size-3.5 shrink-0" aria-label="waiting for you" />}
+          </span>
+          {task && <TaskLine task={task} />}
+          <span className="text-muted-foreground text-xs">{session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}</span>
+          {session?.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
         </span>
-        {task && <TaskLine task={task} />}
-        <span className="text-muted-foreground text-xs">{session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}</span>
-        {session?.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
-      </span>
-    </button>
+      </button>
+      {session && (
+        <SessionCloseButton
+          close={close}
+          className={cn(
+            "absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+            (active || close.confirming) && "opacity-100",
+          )}
+        />
+      )}
+      <SessionCloseConfirmation close={close} />
+    </div>
   );
 }
 
@@ -320,6 +363,7 @@ function SelectedEntry({
   sessions,
   tasks,
   onChanged,
+  onSessionClosed,
   onTaskRemoved,
 }: {
   conn: Connection;
@@ -332,6 +376,7 @@ function SelectedEntry({
   /** The tasks on the list, for the task panel's shared-files warning. */
   tasks: readonly Task[];
   onChanged: () => void;
+  onSessionClosed: (entry: SessionEntry) => void;
   onTaskRemoved: (task: string) => void;
 }) {
   if (layout === "1")
@@ -371,6 +416,7 @@ function SelectedEntry({
           onSelect(entrySelection(entry));
           onLayout("1");
         }}
+        onSessionClosed={onSessionClosed}
       />
     </>
   );

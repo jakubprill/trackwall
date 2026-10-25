@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Session, Task, TaskProposal } from "@trackwall/protocol";
-import { entryId, entrySelection, findEntry, proposerLabel, sessionRows } from "../src/lib/session-entries.ts";
+import { entryAfterRemoval, entryId, entrySelection, findEntry, proposerLabel, sessionRows } from "../src/lib/session-entries.ts";
 import { attentionCount } from "../src/lib/session-state.ts";
 
 function session(id: string, startedAt: string, task: string | null = null): Session {
@@ -63,6 +63,20 @@ describe("pozycje widoku Sesje", () => {
       "zadanie t2 undefined",
       "sesja s2",
     ]);
+  });
+
+  test("after closing an entry the next one is selected, and the previous one after closing the last", () => {
+    const entries = rowEntries({
+      sessions: [session("s1", "2026-10-23T12:00:00Z"), session("s2", "2026-10-23T11:00:00Z"), session("s3", "2026-10-23T10:00:00Z")],
+      tasks: [],
+      proposals: [],
+      worktreesDir: "/home/ja/.trackwall/worktrees",
+    });
+    expect(entries.map(entryId)).toEqual(["s1", "s2", "s3"]);
+    expect(entryAfterRemoval(entries, "s2")).toBe(entries[2]);
+    expect(entryAfterRemoval(entries, "s3")).toBe(entries[1]);
+    expect(entryAfterRemoval(entries, "unknown")).toBeUndefined();
+    expect(entryAfterRemoval(entries.slice(0, 1), "s1")).toBeUndefined();
   });
 
   test("wybór sesji zadania (z traya albo „Następna czekająca”) wskazuje jej zadanie", () => {
