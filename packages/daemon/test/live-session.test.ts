@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import { appendFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -184,5 +184,47 @@ describe("a prompt the daemon types into a session (a review, ADR-62)", () => {
     endTurn(session, hooksFile);
 
     expect(written).toEqual(["\u001b", "read the review"]);
+  });
+
+  test("waits for a question dialog right after the start, which the state alone does not show", () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    for (const record of [
+      { event: "sessionStart", receivedAt: 0, payload: { source: "resume" }, omitted: [] },
+      { event: "notification", receivedAt: 0, payload: { notification_type: "elicitation_dialog" }, omitted: [] },
+    ])
+      appendFileSync(hooksFile, `${JSON.stringify(record)}\n`);
+
+    expect(session.typePrompt("read the review")).toBe("queued");
+    expect(written).toEqual([]);
+  });
+
+  test("waits while the user is typing a message of their own", () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    endTurn(session, hooksFile);
+    session.input("also check the");
+
+    expect(session.typePrompt("read the review")).toBe("queued");
+    expect(written).toEqual(["also check the"]);
+  });
+
+  test("is typed again when the session has not taken it after 5 s", () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    endTurn(session, hooksFile);
+    session.typePrompt("read the review");
+
+    setSystemTime(new Date(Date.now() + 6000));
+    try {
+      expect(session.typePrompt("read the review")).toBe("typed");
+    } finally {
+      setSystemTime();
+    }
+
+    expect(written).toEqual(["read the review", "read the review"]);
   });
 });

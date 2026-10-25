@@ -48,8 +48,8 @@ Every task also gets a port of its own, shown in the task's header. Every mise t
 ## Good to know
 
 - Worktrees live in `~/.trackwall/worktrees/<repo>/`.
-- Comments you have not sent yet stay while you switch between "Terminal" and "Changes", but not when you open another task. While a comment form is open, "Changes" stops refreshing, so the line does not move under it. A review holds up to 20 comments of up to 2000 characters. Sent comments the agent has not read yet are lost if Trackwall restarts; send them again.
-- Trackwall asks the agent to read the review by typing one line into its terminal. If you are typing in that terminal at the same moment, the two mix: wait for the agent to start on the review before you type.
+- Comments you have not sent yet stay while you switch between "Terminal" and "Changes", but not when you open another task. While a comment form is open, "Changes" stops refreshing, so the line does not move under it. A review holds up to 15 comments of up to 2000 characters, and up to 60 comments can wait for the agent to read them; beyond that Trackwall asks you to wait. Sent comments the agent has not read yet are lost if Trackwall restarts; send them again.
+- Trackwall asks the agent to read the review by typing one line into its terminal, but only while the agent waits for your message. If you have just typed in the terminal, or stopped the agent with Esc, the review waits until the agent's next turn ends.
 - `.worktreeinclude` can stay untracked; Claude Code reads the same file. At most 100 files and 10 MB are copied, and only regular files, not links; the task panel names every file left out and why. Files are copied once, when the task is created: a change in the repo later does not reach the worktree.
 - The copied files often hold secrets. The task's agent can read them, as it could read them in the repo, and they are removed with the worktree when the task ends.
 - Task ports are 41000 to 41999. A task keeps its port until it ends; Trackwall does not check that no other program uses it, and a service that finds its port taken says so.

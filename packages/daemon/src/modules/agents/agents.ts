@@ -240,11 +240,11 @@ export class Agents {
    * to read it, now or once it waits for input; without one, the session the user resumes is asked.
    */
   sendReview(id: string, comments: readonly ReviewComment[]): SendReviewResult {
+    // Only to refuse an unknown or ended task (`not_found`).
     this.#tasks.task(id);
-    if (this.#tasks.busy(id)) throw new DomainError("bad_request", "the task is starting or being ended; send the review afterwards");
     const unread = this.#reviews.add(id, comments);
-    const running = this.#views().find((s) => s.task === id && s.run.kind === "running");
-    const delivery = running && this.#askToReadReview(this.#get(running.id));
+    const running = [...this.#sessions.values()].find((s) => s.task === id && this.#fresh(s)?.run.kind === "running");
+    const delivery = running && this.#askToReadReview(running);
     return { unread, delivery: delivery ?? "on_resume" };
   }
 

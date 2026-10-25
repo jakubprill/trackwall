@@ -1,5 +1,5 @@
 import type { RunState, Session, TaskStateChange } from "@trackwall/protocol";
-import { atPromptBox } from "./copilot-hooks.ts";
+import { opensPromptBox } from "./copilot-hooks.ts";
 import { sessionKey } from "./copilot-keys.ts";
 import { CopilotSessionState } from "./copilot-session-state.ts";
 import { HookTail } from "./hook-tail.ts";
@@ -20,6 +20,11 @@ export const STALE_AFTER_MS = 60_000;
  * one pasted string, in which a carriage return is text and does not submit.
  */
 const SUBMIT_DELAY_MS = 100;
+/**
+ * A typed prompt the session has not taken by then (still in `Input`) counts as lost, for example when the TUI read the
+ * text and Enter as one paste, and the next `typePrompt` types it again.
+ */
+const RETYPE_AFTER_MS = 5000;
 
 /** The PTY of the session process: the terminal of the group leader from `procs` (`GroupTerminal`). */
 export interface SessionPty {
@@ -79,7 +84,9 @@ export class LiveSession {
    * The daemon's prompt (`typePrompt`): queued until the session waits in its input box, then typed until the session
    * leaves `Input`, that is until Copilot CLI has taken it.
    */
-  #prompt: { text: string; typed: boolean } | undefined;
+  #prompt: { text: string; typedAt: number | null } | undefined;
+  /** The last hook record left Copilot CLI in its input box, and the user has not typed since (`opensPromptBox`). */
+  #inPromptBox = false;
   #submitTimer: NodeJS.Timeout | undefined;
 
   constructor(o: LiveSessionOptions) {
@@ -107,6 +114,7 @@ export class LiveSession {
   input(data: string): void {
     if (this.#finished || !this.#terminal) return;
     this.#terminal.write(data);
+    if (typedByUser(data)) this.#inPromptBox = false;
     // Input counts from the state after the hooks already in `hooks.jsonl`, not after the last read cycle: a key
     // answers the prompt that is already there, and typing marks seen the end of a turn that has already been written.
     this.#readHooks();
@@ -117,16 +125,19 @@ export class LiveSession {
   }
 
   /**
-   * A prompt the daemon types on the user's behalf (ADR-62): at once while the session waits in its input box after a
-   * hook (`atPromptBox`), otherwise as soon as it does again. Never in the middle of a turn, in an approval or a question
-   * dialog, or right after the user's Esc, where the text would land in an answer. One prompt at a time: while one is
-   * queued or typed and not yet taken, another changes nothing, since the prompt asks to read everything unread.
+   * A prompt the daemon types on the user's behalf (ADR-62): at once while the session waits in its input box
+   * (`opensPromptBox`), otherwise as soon as it does again. Never in the middle of a turn, in an approval or a question
+   * dialog, after the user's Esc or into text the user is typing. One prompt at a time: while one is queued or typed
+   * and not yet taken, another changes nothing, since the prompt asks to read everything unread; one not taken within
+   * `RETYPE_AFTER_MS` is typed again.
    */
   typePrompt(text: string): "typed" | "queued" {
     this.#readHooks();
-    this.#prompt ??= { text, typed: false };
+    const typedAt = this.#prompt?.typedAt;
+    if (typedAt != null && Date.now() - typedAt > RETYPE_AFTER_MS) this.#prompt = undefined;
+    this.#prompt ??= { text, typedAt: null };
     this.#typePrompt();
-    return this.#prompt?.typed ? "typed" : "queued";
+    return this.#prompt?.typedAt != null ? "typed" : "queued";
   }
 
   /** The size is set by the last terminal that reported it; the TUI gets it together with the PTY. */
@@ -196,7 +207,10 @@ export class LiveSession {
   }
 
   #readHooks(): void {
-    for (const record of this.#hooks.read()) this.#report(this.#state.hook(record));
+    for (const record of this.#hooks.read()) {
+      this.#inPromptBox = opensPromptBox(record);
+      this.#report(this.#state.hook(record));
+    }
   }
 
   #report(changes: readonly (TaskStateChange | undefined)[]): void {
@@ -213,13 +227,14 @@ export class LiveSession {
     const terminal = this.#terminal;
     const prompt = this.#prompt;
     if (!prompt || this.#finished || !terminal) return;
-    if (prompt.typed) {
+    if (prompt.typedAt !== null) {
       // Copilot CLI took the prompt: the turn it started is the session's, and the next prompt is a new one.
       if (this.#last?.state !== "Input") this.#prompt = undefined;
       return;
     }
-    if (!this.#last || !atPromptBox(this.#last)) return;
-    prompt.typed = true;
+    // `Input` too, since a task's first `sessionStart` starts the turn of its prompt.
+    if (!this.#inPromptBox || this.#last?.state !== "Input") return;
+    prompt.typedAt = Date.now();
     terminal.write(prompt.text);
     this.#submitTimer = setTimeout(() => {
       if (!this.#finished) terminal.write("\r");

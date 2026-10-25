@@ -14,7 +14,7 @@ import { z } from "zod";
  */
 export const REVIEW_COMMENT_MAX = 2000;
 /** Comments in one review: more lines than this is a rewrite, not a review. */
-export const REVIEW_COMMENTS_MAX = 20;
+export const REVIEW_COMMENTS_MAX = 15;
 /** The commented line's text kept with the comment, so that the agent finds the line after the file has changed. */
 export const REVIEW_LINE_CODE_MAX = 300;
 /**
@@ -33,7 +33,7 @@ export type ReviewSide = z.infer<typeof ReviewSide>;
 export const ReviewComment = z
   .object({
     /** Relative to the repo root, as in `ChangedFile.path`. */
-    path: z.string().min(1).max(500),
+    path: z.string().min(1).max(1000),
     side: ReviewSide,
     line: z.number().int().positive(),
     /** The line as the diff showed it, without the `+`/`-` marker. */
@@ -44,8 +44,9 @@ export const ReviewComment = z
 export type ReviewComment = z.infer<typeof ReviewComment>;
 
 /**
- * When the agent gets a review: `typed`, the prompt went into the session's terminal at once (it was waiting for input);
- * `queued`, the session is busy (working, asking for approval), and the prompt goes in when it waits for input again;
+ * When the agent gets a review: `typed`, the prompt went into the session's input box (now, or a moment ago for an
+ * earlier review the session has not taken yet); `queued`, the session is not in its input box (working, asking for
+ * approval or a question, interrupted with Esc, the user typing), and the prompt goes in when it next ends a turn;
  * `on_resume`, the task has no running session, and the prompt goes to the session the user resumes.
  */
 export const ReviewDelivery = z.enum(["typed", "queued", "on_resume"]);
