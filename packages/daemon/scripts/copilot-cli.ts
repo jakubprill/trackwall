@@ -41,8 +41,13 @@ export async function copilotCli(): Promise<string> {
   const partial = `${binary}.partial`;
   writeFileSync(partial, file);
   chmodSync(partial, 0o755);
-  const version = spawnSync(partial, ["--version"], { encoding: "utf8" }).stdout;
-  if (!version.includes(` ${COPILOT_CLI_VERSION}.`)) throw new Error(`${name} says it is "${version.trim()}", not ${COPILOT_CLI_VERSION}`);
+  const check = spawnSync(partial, ["--version"], { encoding: "utf8" });
+  if (check.error) throw new Error(`${name}: the downloaded binary does not start (${check.error.message})`);
+  if (!check.stdout.includes(` ${COPILOT_CLI_VERSION}.`)) {
+    throw new Error(
+      `${name} says it is "${check.stdout.trim()}" (exit ${check.status}, ${check.stderr.trim()}), not ${COPILOT_CLI_VERSION}`,
+    );
+  }
   rmSync(binary, { force: true });
   renameSync(partial, binary);
   return binary;

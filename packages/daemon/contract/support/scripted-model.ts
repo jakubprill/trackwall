@@ -7,6 +7,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { z } from "zod";
+import { jsonOf } from "../../src/modules/agents/json.ts";
 
 /** The model's answer to one request: text that ends the turn, or a call of one tool. */
 type ModelReply = { text: string } | { tool: string; arguments: Record<string, unknown> };
@@ -89,14 +90,6 @@ function answer(res: ServerResponse, reply: ModelReply, callId: string): void {
 /** The model name Copilot CLI sends (`COPILOT_MODEL`); outside its catalog, so it uses default token limits. */
 export const SCRIPTED_MODEL = "trackwall-scripted-model";
 
-function parseJson(body: string): unknown {
-  try {
-    return JSON.parse(body);
-  } catch {
-    return undefined;
-  }
-}
-
 export async function startScriptedModel() {
   const queue: QueuedReply[] = [];
   const requests: ModelRequest[] = [];
@@ -106,6 +99,10 @@ export async function startScriptedModel() {
   /** A request the test did not plan for: the test fails on `problems`, and Copilot CLI shows a model error. */
   function refuse(res: ServerResponse, problem: string): void {
     problems.push(problem);
+    if (res.headersSent) {
+      res.end();
+      return;
+    }
     res.writeHead(500, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: { message: `scripted model: ${problem}` } }));
   }
@@ -114,7 +111,7 @@ export async function startScriptedModel() {
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(Buffer.from(chunk));
     if (req.method !== "POST" || !req.url?.endsWith("/chat/completions")) return refuse(res, `${req.method} ${req.url}`);
-    const parsed = Request.safeParse(parseJson(Buffer.concat(chunks).toString("utf8")));
+    const parsed = jsonOf(Request).safeParse(Buffer.concat(chunks).toString("utf8"));
     if (!parsed.success) return refuse(res, `a request it cannot read: ${parsed.error.message}`);
     if (parsed.data.stream !== true) return refuse(res, "a request without streaming");
     const request = summarize(parsed.data);

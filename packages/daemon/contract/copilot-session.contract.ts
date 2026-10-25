@@ -104,20 +104,17 @@ describe("a session of the real Copilot CLI", () => {
     windowOf(id).attachment.input("create a file\r");
     const approval = await waitFor(agents, id, (s) => s.state?.state === "Approval" && s.dialog !== null, "approval dialog", SESSION_MS);
     expect(approval.state).toMatchObject({ source: "hook", confidence: "high", reason: "hook notification permission_prompt" });
-    // The dialog as the tray panel and Home show it (ADR-66), read from the real Copilot CLI's screen.
-    expect(approval.dialog).toMatchObject({
-      kind: "approval",
-      question: "Do you want to run this command?",
-      options: [
-        { key: "1", label: "Yes" },
-        { key: "2", label: expect.stringContaining("don't ask again") },
-      ],
-    });
-    expect(approval.dialog?.kind === "approval" && approval.dialog.detail.join(" ")).toContain("made-by-agent.txt");
+    // The dialog as the tray panel and Home show it (ADR-66), read from the real Copilot CLI's screen. Only "Yes" is
+    // checked among the options: for a PowerShell command on Windows the dialog came with "Yes" alone.
+    const { dialog } = approval;
+    if (dialog?.kind !== "approval") throw new Error(`no approval dialog: ${JSON.stringify(dialog)}`);
+    expect(dialog).toMatchObject({ title: "Create a file", question: "Do you want to run this command?" });
+    expect(dialog.detail.join(" ")).toContain("made-by-agent.txt");
+    expect(dialog.options[0]).toEqual({ key: "1", label: "Yes" });
     expect(existsSync(join(repoDir, "made-by-agent.txt"))).toBe(false);
 
     model.reply({ text: "Created the file." });
-    agents.answerDialog(id, approval.dialog?.id ?? "", "1");
+    agents.answerDialog(id, dialog.id, "1");
     await endOfTurn(id);
     expect(existsSync(join(repoDir, "made-by-agent.txt"))).toBe(true);
     const records = hookRecords(daemon.home, id);

@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { copilotCli } from "../../scripts/copilot-cli.ts";
 import { sessionHooksFile } from "../../src/modules/agents/agents.ts";
 import { CopilotHookRecord } from "../../src/modules/agents/copilot-hook-record.ts";
+import { jsonOf } from "../../src/modules/agents/json.ts";
 import { ONE_REPO, startSessionApi } from "../../test/support/session-api.ts";
 import { SCRIPTED_MODEL, type ScriptedModel } from "./scripted-model.ts";
 
@@ -57,5 +58,5 @@ export function hookRecords(home: string, id: string): CopilotHookRecord[] {
   return readFileSync(sessionHooksFile(home, id), "utf8")
     .split("\n")
     .filter((line) => line !== "")
-    .map((line) => CopilotHookRecord.parse(JSON.parse(line)));
+    .map((line) => jsonOf(CopilotHookRecord).parse(line));
 }
