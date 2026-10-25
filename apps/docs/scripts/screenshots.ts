@@ -143,6 +143,8 @@ try {
     for (const [name, show] of Object.entries(SHOTS)) {
       const page = await browser.newPage({ viewport: VIEWPORT, colorScheme: "dark" });
       await page.goto(url);
+      // The supervisor's panel is folded to its strip, so the view gets the width; the supervisor has a page of its own.
+      await page.getByRole("button", { name: "Fold the supervisor panel" }).click();
       await settle(page, 2500);
       await show(page);
       await shot(page, name);
