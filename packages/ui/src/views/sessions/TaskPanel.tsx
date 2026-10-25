@@ -12,6 +12,7 @@ import { relativeTime } from "@/lib/format";
 import { proposerLabel, taskName } from "@/lib/session-entries";
 import { isLive, sessionStateLabel } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
+import { useTaskReview } from "@/lib/use-task-review";
 import { SharedFiles } from "./SharedFiles.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
 import { TaskIncludedFiles } from "./TaskIncludedFiles.tsx";
@@ -27,7 +28,8 @@ type TaskTab = "terminal" | "changes";
  * sits above the tabs. A task without a running session can be resumed or ended; the worktree always opens in VS Code.
  * The warnings about files another task also changes (ADR-44) and about a changed mise config of the worktree (ADR-59)
  * sit above the summary, and the mise tasks the agent runs in the worktree below it. The header shows the task port, and
- * the files copied from the repo root into the worktree come first (ADR-61).
+ * the files copied from the repo root into the worktree come first (ADR-61). The review comments written in the
+ * "Changes" tab live here, so that switching tabs keeps them (ADR-62).
  */
 export function TaskPanel({
   conn,
@@ -56,6 +58,7 @@ export function TaskPanel({
   const liveSession = session && isLive(session) ? session : undefined;
   const [tab, setTab] = useState<TaskTab>("terminal");
   const [removing, setRemoving] = useState(false);
+  const review = useTaskReview(conn, task.id);
   const confirmingRemoval = removing && !liveSession;
   const resume = useAction(
     () => post(conn, agentsApi.resumeTask, { task: task.id }),
@@ -134,7 +137,7 @@ export function TaskPanel({
       )}
       {shown === "changes" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <TaskChangesView conn={conn} task={task.id} paused={confirmingRemoval} />
+          <TaskChangesView conn={conn} task={task.id} paused={confirmingRemoval} review={review} />
         </div>
       )}
     </>

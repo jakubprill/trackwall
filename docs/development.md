@@ -51,6 +51,7 @@ A daemon on a made-up shop of twenty repos, with sessions in every state, task p
 pnpm --filter @trackwall/ui build
 pnpm --filter @trackwall/daemon demo <empty state directory>   # prints the address of the UI
 pnpm --filter @trackwall/docs screenshots                      # the pictures in apps/docs/public/screenshots, from the same demo
+pnpm --filter @trackwall/docs screenshots task-review          # only the named pictures
 ```
 
 The screenshots need Chromium for Playwright once: `pnpm --filter @trackwall/docs exec playwright install chromium`.

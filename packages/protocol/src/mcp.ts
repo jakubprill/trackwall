@@ -27,6 +27,7 @@ import { HttpMethod } from "./http.ts";
 import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErrors, LogTail } from "./logs.ts";
 import { MiseTaskName, MiseTasks, RunningMiseTask } from "./mise.ts";
 import { RunState } from "./procs.ts";
+import { ReviewComment } from "./review.ts";
 import { CallEndpointRequest, CallEndpointResult, MAX_SLICE_REPOS, SERVICE_MISE_TASK, Service, ServiceSlice } from "./services.ts";
 import { SyncRepo } from "./sync.ts";
 import { TEST_RESULTS_MAX_FAILURES, TestResults } from "./test-results.ts";
@@ -37,8 +38,8 @@ import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
  * every tool in one `McpTool` object, like `Endpoint` for the API. The daemon announces `tools/list` from them and checks
  * arguments and `structuredContent` with them, and tests, the UI and clients take names from them and parse responses.
  * The tools read; those with `readOnly: false` submit a task proposal or summary (ADR-39; a task starts only after
- * approval in the UI) or run and stop mise tasks from a repo's trusted config (ADR-41). Tool names, fields and
- * descriptions are in English (ADR-32).
+ * approval in the UI), mark the user's review comments read (ADR-62) or run and stop mise tasks from a repo's trusted
+ * config (ADR-41). Tool names, fields and descriptions are in English (ADR-32).
  */
 
 /** The MCP server name in `initialize` and in the Copilot CLI config (`copilot mcp add trackwall …`). */
@@ -127,6 +128,10 @@ export type ProposeTaskResult = z.infer<typeof ProposeTaskResult>;
 
 export const ReportResultResult = z.object({ task: Task });
 export type ReportResultResult = z.infer<typeof ReportResultResult>;
+
+/** The review comments the user sent that the session had not read yet, oldest first (ADR-62); empty when there are none. */
+export const GetReviewCommentsResult = z.object({ comments: z.array(ReviewComment) });
+export type GetReviewCommentsResult = z.infer<typeof GetReviewCommentsResult>;
 
 /**
  * What the wait found (`wait_for_session`, ADR-39). Waiting lasts only in `proposal_pending`, `starting` and `working`,
@@ -234,6 +239,7 @@ const GET_SESSION = "get_session";
 const GET_TASK_CHANGES = "get_task_changes";
 const PROPOSE_TASK = "propose_task";
 const REPORT_RESULT = "report_result";
+const GET_REVIEW_COMMENTS = "get_review_comments";
 const WAIT_FOR_SESSION = "wait_for_session";
 const RUN_MISE_TASK = "run_mise_task";
 const WAIT_FOR_MISE_TASK = "wait_for_mise_task";
@@ -542,6 +548,20 @@ export const mcpTools = {
       .object({ summary: visibleText(TaskSummaryText).describe(`the result in a few sentences, up to ${TASK_SUMMARY_MAX} characters`) })
       .strict(),
     result: ReportResultResult,
+  },
+  getReviewComments: {
+    name: GET_REVIEW_COMMENTS,
+    readOnly: false,
+    destructive: false,
+    description:
+      "Read the review comments the user wrote on lines of your task's changes in Trackwall and has not given you yet. " +
+      "Only for a session that runs a task in Trackwall; Trackwall asks you to call it when the user sends a review. Each " +
+      "comment has the file (path, relative to the repo root), the line number (side new: in your worktree's file; side " +
+      "old: a removed line, in the file at the task's base commit), the line's code and the user's text. The comments " +
+      "count as read once returned, so a second call returns only newer ones. Address every comment (change the code, " +
+      `or say why not), commit on the task branch and call ${REPORT_RESULT} again.`,
+    args: z.object({}).strict(),
+    result: GetReviewCommentsResult,
   },
   waitForSession: {
     name: WAIT_FOR_SESSION,

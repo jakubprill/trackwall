@@ -5,7 +5,11 @@ import {
   type AgentTaskChanges,
   copilotMcpServers,
   isSupervisor,
+  MCP_SERVER_NAME,
+  mcpTools,
+  type ReviewComment,
   type RunState,
+  type SendReviewResult,
   type Session,
   type SessionList,
   type Task,
@@ -25,6 +29,7 @@ import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
 import { TaskFile } from "./task-file.ts";
 import { TaskProposals } from "./task-proposals.ts";
+import { TaskReviews } from "./task-reviews.ts";
 import { AgentTasks, type TasksVcs } from "./tasks.ts";
 import type { ScreenViewer } from "./terminal-screen.ts";
 
@@ -52,6 +57,13 @@ const MCP_CONFIG_FILE = "mcp-config.json";
 /** The session token in the session directory, which the session's stdio bridge reads and sends to the MCP server (ADR-39). */
 const SESSION_TOKEN_FILENAME = "session-token";
 const TASKS_FILE = "tasks.json";
+/**
+ * What the daemon types into a task's session when the user sends a review (ADR-62): fixed text on one line, without
+ * anything the Copilot CLI input box treats specially; the user's comments come from the tool.
+ */
+const REVIEW_PROMPT =
+  `The user sent a review of your changes in Trackwall: call ${mcpTools.getReviewComments.name} ` +
+  `(the ${MCP_SERVER_NAME} MCP server) and address every comment.`;
 const WORKTREES_DIR = "worktrees";
 
 /** What `agents` needs from `procs`; wired in the facade. */
@@ -119,6 +131,7 @@ export class Agents {
   readonly #tokens = new SessionTokens();
   readonly #tasks: AgentTasks;
   readonly #proposals = new TaskProposals();
+  readonly #reviews = new TaskReviews();
   readonly #worktreesDir: string;
   /** The supervisor start under way, so that two requests at once start one supervisor, not two (ADR-58). */
   #supervisorStart: Promise<Session> | undefined;
@@ -222,6 +235,32 @@ export class Agents {
     return this.#tasks.setSummary(task, text);
   }
 
+  /**
+   * The user's review of a task's changes (ADR-62): queued for the task's agent, and the task's running session is asked
+   * to read it, now or once it waits for input; without one, the session the user resumes is asked.
+   */
+  sendReview(id: string, comments: readonly ReviewComment[]): SendReviewResult {
+    // Only to refuse an unknown or ended task (`not_found`).
+    this.#tasks.task(id);
+    const unread = this.#reviews.add(id, comments);
+    const running = [...this.#sessions.values()].find((s) => s.task === id && this.#fresh(s)?.run.kind === "running");
+    const delivery = running && this.#askToReadReview(running);
+    return { unread, delivery: delivery ?? "on_resume" };
+  }
+
+  /** The prompt that asks a task's session to read its unread review comments, when it has any. */
+  #askToReadReview(session: LiveSession): "typed" | "queued" | undefined {
+    if (session.task === null || this.#reviews.unread(session.task) === 0) return undefined;
+    return session.typePrompt(REVIEW_PROMPT);
+  }
+
+  /** The unread review comments of session `caller`'s own task (`get_review_comments`), which now count as read. */
+  takeReviewComments(caller: string | null): ReviewComment[] {
+    const task = caller === null ? null : this.session(caller).task;
+    if (task === null) throw new DomainError("bad_request", "only a session that runs a task in Trackwall has review comments");
+    return this.#reviews.take(task);
+  }
+
   /** Waits until a session or task needs someone, at most `timeoutMs`; a session cannot wait for itself. */
   waitFor(caller: string | null, target: WaitTarget, timeoutMs: number, signal: AbortSignal): Promise<WaitOutcome> {
     const first = this.#waitOutcome(target);
@@ -313,8 +352,9 @@ export class Agents {
     return this.#tasks.trustedWorktree(id, repo);
   }
 
-  removeTask(id: string, keepBranch: boolean, discardChanges: boolean): Promise<void> {
-    return this.#tasks.remove(id, keepBranch, discardChanges);
+  async removeTask(id: string, keepBranch: boolean, discardChanges: boolean): Promise<void> {
+    await this.#tasks.remove(id, keepBranch, discardChanges);
+    this.#reviews.take(id);
   }
 
   /**
@@ -364,6 +404,8 @@ export class Agents {
       throw domainError(repo, err);
     }
     this.#sessions.set(id, session);
+    // A review sent while the task had no running session (ADR-62).
+    this.#askToReadReview(session);
     this.#startTicking();
     return this.#view(session);
   }

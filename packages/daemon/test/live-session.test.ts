@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import { appendFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -125,3 +125,138 @@ function endTurn(session: LiveSession, hooksFile: string): void {
   appendFileSync(hooksFile, `${JSON.stringify({ event: "agentStop", receivedAt: 0, payload: {}, omitted: [] })}\n`);
   session.tick();
 }
+
+describe("a prompt the daemon types into a session (a review, ADR-62)", () => {
+  test("goes in only once the session waits for input, with Enter written separately after the text", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+
+    expect(session.typePrompt("read the review")).toBe("queued");
+    expect(written).toEqual([]);
+
+    endTurn(session, hooksFile);
+    expect(written).toEqual(["read the review"]);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(written).toEqual(["read the review", "\r"]);
+  });
+
+  test("goes in at once while the session waits for input, and does not mark the end of the turn seen", () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    endTurn(session, hooksFile);
+
+    expect(session.typePrompt("read the review")).toBe("typed");
+
+    expect(written).toEqual(["read the review"]);
+    expect(session.view()?.needsAttention).toBe(true);
+  });
+
+  test("is typed once: a second prompt before Copilot CLI takes the first changes nothing", () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    endTurn(session, hooksFile);
+
+    expect(session.typePrompt("read the review")).toBe("typed");
+    expect(session.typePrompt("read the review")).toBe("typed");
+
+    expect(written).toEqual(["read the review"]);
+  });
+
+  test("waits after an Esc and for a question dialog, which leave the session in Input but not in its input box", () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+    session.input("\u001b");
+    expect(session.typePrompt("read the review")).toBe("queued");
+    appendFileSync(
+      hooksFile,
+      `${JSON.stringify({ event: "notification", receivedAt: 0, payload: { notification_type: "elicitation_dialog" }, omitted: [] })}\n`,
+    );
+    session.tick();
+    expect(written).toEqual(["\u001b"]);
+
+    endTurn(session, hooksFile);
+
+    expect(written).toEqual(["\u001b", "read the review"]);
+  });
+
+  test("waits for a question dialog right after the start, which the state alone does not show", () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    for (const record of [
+      { event: "sessionStart", receivedAt: 0, payload: { source: "resume" }, omitted: [] },
+      { event: "notification", receivedAt: 0, payload: { notification_type: "elicitation_dialog" }, omitted: [] },
+    ])
+      appendFileSync(hooksFile, `${JSON.stringify(record)}\n`);
+
+    expect(session.typePrompt("read the review")).toBe("queued");
+    expect(written).toEqual([]);
+  });
+
+  test("waits while the user is typing a message of their own", () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    endTurn(session, hooksFile);
+    session.input("also check the");
+
+    expect(session.typePrompt("read the review")).toBe("queued");
+    expect(written).toEqual(["also check the"]);
+  });
+
+  test("is typed again when the session has not taken it after 5 s", () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    endTurn(session, hooksFile);
+    session.typePrompt("read the review");
+
+    setSystemTime(new Date(Date.now() + 6000));
+    try {
+      expect(session.typePrompt("read the review")).toBe("typed");
+    } finally {
+      setSystemTime();
+    }
+
+    expect(written).toEqual(["read the review", "read the review"]);
+  });
+
+  test("a background shell finishing does not take the session out of its input box", () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    endTurn(session, hooksFile);
+    appendFileSync(
+      hooksFile,
+      `${JSON.stringify({ event: "notification", receivedAt: 0, payload: { notification_type: "shell_completed" }, omitted: [] })}\n`,
+    );
+
+    expect(session.typePrompt("read the review")).toBe("typed");
+    expect(written).toEqual(["read the review"]);
+  });
+
+  test("waits for text the user typed during the turn and has not sent, and for a turn that started again in the same read", () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+    session.input("next, rename foo");
+    session.typePrompt("read the review");
+    endTurn(session, hooksFile);
+    expect(written).toEqual(["next, rename foo"]);
+
+    for (const event of ["userPromptSubmitted", "agentStop", "userPromptSubmitted"])
+      appendFileSync(hooksFile, `${JSON.stringify({ event, receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+
+    expect(written).toEqual(["next, rename foo"]);
+  });
+});

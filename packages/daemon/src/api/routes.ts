@@ -74,6 +74,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.createTask, (f, b) => f.agents.createTask(b.repo, b.prompt)),
   route(agentsApi.resumeTask, (f, b) => f.agents.resumeTask(b.task)),
   route(agentsApi.taskChanges, (f, b) => f.agents.taskChanges(b.task)),
+  route(agentsApi.sendReview, (f, b) => f.agents.sendReview(b.task, b.comments)),
   route(agentsApi.taskSharedFiles, async (f, b) => ({ shared: await f.agents.taskSharedFiles(b.task) })),
   route(agentsApi.taskMiseConfig, (f, b) => f.agents.taskMiseConfig(b.task)),
   route(agentsApi.trustTaskMiseConfig, (f, b) => f.agents.trustTaskMiseConfig(b.task, b.digest)),

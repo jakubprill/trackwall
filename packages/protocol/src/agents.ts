@@ -2,6 +2,7 @@ import { z } from "zod";
 import { Done, type Endpoint } from "./api.ts";
 import { WorkingTreeChanges } from "./changes.ts";
 import { RunState } from "./procs.ts";
+import { REVIEW_COMMENTS_MAX, ReviewComment, SendReviewResult } from "./review.ts";
 import { TaskStateChange } from "./task-state.ts";
 import { CommitHash, RepoId } from "./workspace.ts";
 
@@ -300,6 +301,15 @@ export const agentsApi = {
   /** A new session for a task that has no running session: Copilot CLI resumes the task's conversation (`--resume`). */
   resumeTask: endpoint("resume-task", TaskRequest, Task),
   taskChanges: endpoint("task-changes", TaskRequest, TaskChanges),
+  /**
+   * Sends review comments on the task's changes to its session (ADR-62): the agent reads them with
+   * `get_review_comments`. Only from the UI; the result says when the agent gets them.
+   */
+  sendReview: endpoint(
+    "send-review",
+    TaskRequest.extend({ comments: z.array(ReviewComment).min(1).max(REVIEW_COMMENTS_MAX) }),
+    SendReviewResult,
+  ),
   /** Other tasks of the same repo that change the same files (ADR-44); tasks whose changes cannot be read are left out. */
   taskSharedFiles: endpoint("task-shared-files", TaskRequest, SharedFilesList),
   openTaskEditor: endpoint("open-task-editor", TaskRequest, Done),

@@ -11,17 +11,21 @@ Give an agent a task on its own branch and worktree, and review its changes befo
 
 ## What you get
 
-- A task for an agent in two fields: a repo and a prompt.
+- A task for an agent in two fields, a repo and a prompt, that survives a restart of Trackwall, ready to resume.
 - A fresh branch and a separate working copy for every task, so several agents can work in one repo at once and your own working copy stays untouched.
 - The task's changes live: files, diff and commits against the default branch, with a warning when two tasks in one repo change the same files.
+- Comments on the lines of that diff, sent to the agent as one review, so it fixes what you pointed at without you retyping file names and lines into its terminal.
 - A worktree ready to run: the task's builds and tests run there, where you can watch and stop them, with your local config files (`.env`, a local profile) copied in and a port of its own, so the agent can also start the service it changed next to yours.
-- Tasks that survive a restart of Trackwall, ready to resume.
 
 ## How it works
 
 Press "+" in "Sessions", pick a repo and write the prompt. Trackwall creates a branch named after the task's title or prompt (`trackwall/<slug>`) from the repo's default branch, in a separate git worktree, and starts Copilot CLI there with your prompt as the first message. The task shows on the list like a session, with the same states.
 
 The "Changes" tab follows the worktree live: the files and diff against the default branch, the task's commits and what the agent has not committed yet. "VS Code" opens the worktree in your editor. When the agent finishes, it leaves a summary above the task's tabs.
+
+To ask for changes, hover a line of the diff in "Changes" and press the comment icon in front of it. Write what the agent should change and press "Add comment" (or Ctrl+Enter, ⌘+Enter on a Mac). Add as many comments as you like, on added, unchanged or removed lines; they gather in a list above the diff, where you can remove one before sending. "Send N comments to the agent" sends them all as one review. If the agent is waiting for you, it gets the review at once; if it is in the middle of something, or asks for your approval, it gets it as soon as it waits for you again; and if the task has no session, it gets it when you press "Resume". The line under the list says which of these happened. The agent reads every comment with its file, line and the code on that line, makes the changes, commits and reports again.
+
+![Two review comments waiting to be sent, and a third being written under its line](/screenshots/task-review.png)
 
 When another task in the same repo changes some of the same files, a warning above the tabs names that task and lists the shared files, with "Open that task". Trackwall only warns; both tasks carry on.
 
@@ -38,11 +42,14 @@ Every task also gets a port of its own, shown in the task's header. Every mise t
 1. Open "Sessions" and press "+".
 2. Pick a repo, write the prompt and start the task.
 3. Watch the agent in the terminal and its work in "Changes".
-4. Review the changes in VS Code, then push the branch yourself or end the task.
+4. Comment on the lines you want changed and press "Send N comments to the agent"; repeat until you are happy.
+5. Review the changes in VS Code, then push the branch yourself or end the task.
 
 ## Good to know
 
 - Worktrees live in `~/.trackwall/worktrees/<repo>/`.
+- Comments you have not sent yet stay while you switch between "Terminal" and "Changes", but not when you open another task. While a comment form is open, "Changes" stops refreshing, so the line does not move under it. A review holds up to 15 comments of up to 2000 characters, and up to 60 comments can wait for the agent to read them; beyond that Trackwall asks you to wait. Sent comments the agent has not read yet are lost if Trackwall restarts; send them again.
+- Trackwall asks the agent to read the review by typing one line into its terminal, but only while the agent waits for your message. If you have typed something there that you have not sent yet, the review waits until you send it; if you stopped the agent with Esc, it waits until the agent's next turn ends.
 - `.worktreeinclude` can stay untracked; Claude Code reads the same file. At most 100 files and 10 MB are copied, and only regular files, not links; the task panel names every file left out and why. Files are copied once, when the task is created: a change in the repo later does not reach the worktree.
 - The copied files often hold secrets. The task's agent can read them, as it could read them in the repo, and they are removed with the worktree when the task ends.
 - Task ports are 41000 to 41999. A task keeps its port until it ends; Trackwall does not check that no other program uses it, and a service that finds its port taken says so.

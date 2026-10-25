@@ -1,6 +1,7 @@
 import type { ChangedFile, WorkingTreeChanges } from "@trackwall/protocol";
+import { Fragment, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
-import { type DiffLineKind, diffLines } from "@/lib/diff-lines";
+import { type DiffAnchor, type DiffLine, type DiffLineKind, diffLines } from "@/lib/diff-lines";
 import { cn } from "@/lib/utils";
 
 /** Beyond this many lines or files the browser starts to choke, and the rest is better read in VS Code anyway. */
@@ -23,10 +24,19 @@ const LINE_CLASSES: Record<DiffLineKind, string> = {
 };
 
 /**
+ * What a view adds to the lines of a change (the lines with an anchor): a task's review comments (ADR-62) put a button
+ * in front of every such line and the comment form under it.
+ */
+export interface LineAnnotations {
+  gutter: (anchor: DiffAnchor) => ReactNode;
+  below: (anchor: DiffAnchor, line: DiffLine) => ReactNode;
+}
+
+/**
  * Files and diff of the working directory against a commit: a task's changes (ADR-31) and a repo's "Changes" tab (ADR-34).
  * An empty set of files stays with the caller, because each view says something different about it.
  */
-export function ChangesDiff({ changes }: { changes: WorkingTreeChanges }) {
+export function ChangesDiff({ changes, annotations }: { changes: WorkingTreeChanges; annotations?: LineAnnotations }) {
   const { lines, more } = diffLines(changes.patch, MAX_LINES);
   const files = changes.files.slice(0, MAX_FILES);
   return (
@@ -49,9 +59,13 @@ export function ChangesDiff({ changes }: { changes: WorkingTreeChanges }) {
       )}
       <pre className="bg-muted overflow-x-auto rounded-md border p-3 font-mono text-xs leading-5">
         {lines.map((line) => (
-          <div key={line.offset} className={cn("px-1 whitespace-pre", LINE_CLASSES[line.kind])}>
-            {line.text || " "}
-          </div>
+          <Fragment key={line.offset}>
+            <div className={cn("px-1 whitespace-pre", annotations && "group flex", LINE_CLASSES[line.kind])}>
+              {annotations && <span className="w-5 shrink-0">{line.anchor && annotations.gutter(line.anchor)}</span>}
+              {line.text || " "}
+            </div>
+            {annotations && line.anchor && annotations.below(line.anchor, line)}
+          </Fragment>
         ))}
       </pre>
       {(changes.truncated || more) && (
