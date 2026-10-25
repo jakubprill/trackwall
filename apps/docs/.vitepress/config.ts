@@ -4,7 +4,8 @@ import llmstxt, { copyOrDownloadAsMarkdownButtons } from "vitepress-plugin-llms"
 import { FEATURE_LIST_PAGE, SIDEBAR } from "./sidebar.ts";
 
 const REPO_URL = "https://github.com/jakubprill/trackwall";
-// GitHub Pages serves a project site under /<repo>/; `pnpm dev` uses the same path.
+// GitHub Pages serves a project site under /<repo>/; `pnpm dev` uses the same path. Agents get the full address
+// (`TRACKWALL_DOCS_URL` in `protocol`), and a protocol test keeps the two equal.
 const BASE = "/trackwall/";
 // The template for feature pages is for writers, not a page of the site.
 const TEMPLATE = "TEMPLATE.md";
