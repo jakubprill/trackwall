@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 /**
- * Hostingi repo (§4.5, ADR-19): GitHub albo GitLab, z których Trackwall listuje dostępne repo i klonuje wybrane
- * do folderu z projektami. Adres hostingu żyje tylko w `workspace.yaml` użytkownika (ADR-7).
+ * Repo hosts (§4.5, ADR-19): GitHub or GitLab, from which Trackwall lists the available repos and clones the chosen ones
+ * into the projects folder. The repo host's address lives only in the user's `workspace.yaml` (ADR-7).
  */
 
 export const RepoHostKind = z.enum(["github", "gitlab"]);
@@ -11,8 +11,8 @@ export type RepoHostKind = z.infer<typeof RepoHostKind>;
 const LABEL = "[a-z0-9](?:[a-z0-9-]*[a-z0-9])?";
 
 /**
- * Nazwa hosta, opcjonalnie z portem, bez schematu i ścieżki (`gitlab.example.com`, `git.local:8443`). Małe litery,
- * bo tak porównuje je daemon i tak zapisuje je `gh` i `glab`.
+ * A host name, optionally with a port, without scheme and path (`gitlab.example.com`, `git.local:8443`). Lowercase,
+ * because that is how the daemon compares them and how `gh` and `glab` store them.
  */
 export const HostName = z
   .string()
@@ -27,19 +27,19 @@ export const HostName = z
 export const RepoHost = z.object({ kind: RepoHostKind, host: HostName }).strict();
 export type RepoHost = z.infer<typeof RepoHost>;
 
-/** Program, przez który daemon pyta hosting i klonuje z niego (ADR-19); użytkownik loguje się nim sam. */
+/** The program through which the daemon queries a repo host and clones from it (ADR-19); the user signs in with it themselves. */
 export const HOST_CLI: Record<RepoHostKind, "gh" | "glab"> = { github: "gh", gitlab: "glab" };
 
 export function sameHost(a: RepoHost, b: RepoHost): boolean {
   return a.kind === b.kind && a.host === b.host;
 }
 
-/** Klucz hostingu, np. `gitlab:gitlab.example.com`: do map i kluczy list w UI. */
+/** The repo host key, for example `gitlab:gitlab.example.com`: for maps and list keys in the UI. */
 export function hostKey(host: RepoHost): string {
   return `${host.kind}:${host.host}`;
 }
 
-/** Lista hostingów z `workspace.yaml` i ustawień: bez powtórzeń, bo każdy hosting to jedna sekcja wyników. */
+/** The list of repo hosts from `workspace.yaml` and settings: without repeats, because each repo host is one section of results. */
 export const RepoHosts = z
   .array(RepoHost)
   .max(20)
@@ -48,12 +48,12 @@ export const RepoHosts = z
     "the same host appears twice in the list",
   );
 
-/** Segment ścieżki repo w hostingu: znaki, które dopuszczają GitHub i GitLab, bez `.` i `-` na początku. */
+/** A segment of a repo path on a repo host: characters GitHub and GitLab allow, without `.` and `-` at the start. */
 const SEGMENT = "[A-Za-z0-9_][A-Za-z0-9._-]*";
 
 /**
- * Pełna nazwa repo w hostingu: `właściciel/repo` w GitHub, `grupa/podgrupa/projekt` w GitLab. Ostatni segment to
- * nazwa katalogu klonu. Bez `-` na początku segmentu, więc nazwa nie zostanie wzięta za opcję `gh` ani `glab`.
+ * The full name of a repo on a repo host: `owner/repo` on GitHub, `group/subgroup/project` on GitLab. The last segment is
+ * the clone's directory name. No `-` at the start of a segment, so the name is not taken for a `gh` or `glab` option.
  */
 export const RemoteRepoName = z
   .string()
@@ -61,21 +61,21 @@ export const RemoteRepoName = z
   .regex(new RegExp(`^${SEGMENT}(?:/${SEGMENT})+$`), "full repo name, e.g. owner/repo or group/subgroup/repo");
 export type RemoteRepoName = z.infer<typeof RemoteRepoName>;
 
-/** Repo dostępne w hostingu dla zalogowanego użytkownika `gh` albo `glab`, tak jak podał je hosting. */
+/** A repo available on a repo host to the signed-in `gh` or `glab` user, as the repo host gave it. */
 export const HostedRepo = z.object({
   fullName: RemoteRepoName,
   description: z.string().nullable(),
   webUrl: z.string(),
-  /** ISO 8601, ostatnia zmiana w hostingu; `null`, gdy hosting jej nie podał. */
+  /** ISO 8601, the last change on the repo host; `null` when the repo host did not give it. */
   updatedAt: z.string().nullable(),
 });
 export type HostedRepo = z.infer<typeof HostedRepo>;
 
-/** Repo z hostingu z tym, co daemon wie o folderze z projektami. */
+/** A repo from a repo host with what the daemon knows about the projects folder. */
 export const RemoteRepo = HostedRepo.extend({
-  /** Katalog, do którego trafi klon: ostatni segment `fullName`. */
+  /** The directory the clone goes to: the last segment of `fullName`. */
   dir: z.string(),
-  /** W folderze z projektami jest już coś o nazwie `dir` (porównanie bez wielkości liter), więc klon się nie uda. */
+  /** The projects folder already has something named `dir` (compared case-insensitively), so the clone would fail. */
   inProjectsDir: z.boolean(),
 });
 export type RemoteRepo = z.infer<typeof RemoteRepo>;
@@ -85,12 +85,12 @@ export const HostRepos = z.object({
   listing: z.discriminatedUnion("kind", [
     z.object({
       kind: z.literal("ok"),
-      /** Bez zarchiwizowanych, w kolejności z hostingu: GitHub po nazwie, GitLab od ostatnio zmienianych. */
+      /** Without archived ones, in the repo host's order: GitHub by name, GitLab most recently changed first. */
       repos: z.array(RemoteRepo),
-      /** Hosting ma więcej repo, niż Trackwall pobiera (§4.5), więc wyników może brakować; pomaga zawężenie wyszukiwania. */
+      /** The repo host has more repos than Trackwall fetches (§4.5), so results may be missing; narrowing the search helps. */
       truncated: z.boolean(),
     }),
-    /** `gh` albo `glab` nie odpowiedział: brak programu, brak logowania, brak sieci; szczegóły w `message`. */
+    /** `gh` or `glab` did not answer: the program is missing, not signed in, no network; details in `message`. */
     z.object({ kind: z.literal("unavailable"), message: z.string() }),
   ]),
 });
@@ -99,14 +99,14 @@ export type HostRepos = z.infer<typeof HostRepos>;
 const CloneTarget = z.object({
   host: RepoHost,
   fullName: RemoteRepoName,
-  /** Pełna ścieżka katalogu klonu. */
+  /** The full path of the clone's directory. */
   path: z.string(),
 });
 
-/** Klonowanie jednego repo do folderu z projektami; trzymane w pamięci daemona do jego restartu. */
+/** Cloning one repo into the projects folder; kept in the daemon's memory until it restarts. */
 export const CloneJob = z.discriminatedUnion("state", [
   CloneTarget.extend({ state: z.enum(["running", "done"]) }),
-  /** `message` to komunikat `gh` albo `glab`. */
+  /** `message` is the message from `gh` or `glab`. */
   CloneTarget.extend({ state: z.literal("failed"), message: z.string() }),
 ]);
 export type CloneJob = z.infer<typeof CloneJob>;

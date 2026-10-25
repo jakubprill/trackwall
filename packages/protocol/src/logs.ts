@@ -5,13 +5,13 @@ import { MiseTaskName } from "./mise.ts";
 import { RepoId } from "./workspace.ts";
 
 /**
- * Kontrakt modułu `logs` (§4.2, ADR-28): rekordy wyjścia procesów z globalnym numerem `seq` i odczyt od kursora.
- * Każda akcja to `POST /api/logs/<akcja>`. Rekord jest już zamaskowany i bez sekwencji ANSI.
+ * Contract of the `logs` module (§4.2, ADR-28): records of process output with a global `seq` number, read from a cursor.
+ * Every action is `POST /api/logs/<action>`. A record is already masked and without ANSI sequences.
  */
 
-/** Ile rekordów daemon trzyma w pamięci na źródło; starsze są tylko w pliku JSONL. */
+/** How many records the daemon keeps in memory per source; older ones are only in the JSONL file. */
 export const LOG_BUFFER_RECORDS = 2000;
-/** Najwięcej rekordów w jednej odpowiedzi `tail`. */
+/** The most records in one `tail` response. */
 export const LOG_TAIL_MAX = 1000;
 
 /**
@@ -38,29 +38,29 @@ export type LogStream = z.infer<typeof LogStream>;
 
 export const LogRecord = z.object({
   /**
-   * Globalny numer rekordu, rosnący dla wszystkich źródeł. Każde działanie daemona zaczyna od chwili startu
-   * w milisekundach razy 1000, więc numery kolejnych działań się nie powtarzają (§4.2).
+   * The global record number, rising across all sources. Every daemon run starts from its start time in milliseconds
+   * times 1000, so the numbers of successive runs do not repeat (§4.2).
    */
   seq: z.number().int().positive(),
-  /** ISO 8601, chwila odebrania linii przez daemon. */
+  /** ISO 8601, when the daemon received the line. */
   ts: z.string(),
-  /** Uruchomienie (`RunState.runId`), z którego pochodzi linia; źródło ma rekordy wielu uruchomień. */
+  /** The run (`RunState.runId`) the line comes from; a source has records of many runs. */
   runId: z.string(),
   stream: LogStream,
-  /** Z treści linii (słowa `ERROR`, `WARN`…), nie ze strumienia: wiele narzędzi pisze zwykły postęp na stderr. */
+  /** From the line's text (the words `ERROR`, `WARN`…), not from the stream: many tools write ordinary progress to stderr. */
   level: LogLevel,
   msg: z.string(),
 });
 export type LogRecord = z.infer<typeof LogRecord>;
 
 export const LogTail = z.object({
-  /** Od najstarszego do najnowszego. */
+  /** From oldest to newest. */
   records: z.array(LogRecord),
-  /** Kursor do następnego pytania (`sinceSeq`). */
+  /** Cursor for the next request (`sinceSeq`). */
   nextSeq: z.number().int().nonnegative(),
   /**
-   * Część rekordów po kursorze przepadła: wypadły z bufora albo kursor pochodzi z innego działania daemona (wtedy
-   * odpowiedź to ostatnie rekordy, jak bez kursora). Klient zaczyna wtedy od tego, co dostał, zamiast doklejać.
+   * Some records after the cursor are lost: they fell out of the buffer, or the cursor comes from another daemon run (then
+   * the response is the latest records, as without a cursor). The client then starts from what it got instead of appending.
    */
   dropped: z.boolean(),
 });
@@ -69,7 +69,7 @@ export type LogTail = z.infer<typeof LogTail>;
 export const LogTailRequest = z
   .object({
     source: LogSource,
-    /** Rekordy z `seq` większym niż kursor, od najstarszego; bez kursora ostatnie `limit` rekordów źródła. */
+    /** Records with `seq` greater than the cursor, oldest first; without a cursor the last `limit` records of the source. */
     sinceSeq: z.number().int().nonnegative().optional(),
     limit: z.number().int().min(1).max(LOG_TAIL_MAX),
   })
