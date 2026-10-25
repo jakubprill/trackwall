@@ -37,10 +37,11 @@ const HUNK_START = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
 const C_ESCAPES: Record<string, number> = { a: 7, b: 8, t: 9, n: 10, v: 11, f: 12, r: 13, '"': 34, "\\": 92 };
 
 /**
- * A file name from `--- a/<path>` or `+++ b/<path>` without its `a/` or `b/`; `null` for `/dev/null`. Git puts a name
- * with special characters in quotes with C escapes, non-ASCII bytes as octal.
+ * A file name from `--- a/<path>` or `+++ b/<path>` without its `a/` or `b/`; `null` for `/dev/null`. Git ends a name
+ * with a space in a tab, and puts a name with special characters in quotes with C escapes, non-ASCII bytes as octal.
  */
-function headerPath(name: string): string | null {
+function headerPath(header: string): string | null {
+  const name = header.endsWith("\t") ? header.slice(0, -1) : header;
   if (name === "/dev/null") return null;
   const unquoted = name.startsWith('"') && name.endsWith('"') ? unquote(name.slice(1, -1)) : name;
   return unquoted.replace(/^[ab]\//, "");

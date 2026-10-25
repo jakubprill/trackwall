@@ -11,15 +11,14 @@ import { cn } from "@/lib/utils";
 
 /**
  * Review comments on the lines of a task's changes (ADR-62): a button in front of every line of a change opens a form
- * under it, and a line with a draft comment keeps its mark. The drafts go to the agent from the review bar.
+ * under it, and a line with a draft comment keeps its mark. The drafts go to the agent from the review bar. While a form
+ * is open the diff does not refresh (`TaskChangesView`), so the form stays under the line it was opened on.
  */
 export function reviewAnnotations(review: TaskReview): LineAnnotations {
   const commented = new Set(review.drafts.map((d) => anchorKey(d.comment)));
   return {
-    gutter: (line) =>
-      line.anchor && <CommentButton anchor={line.anchor} commented={commented.has(anchorKey(line.anchor))} review={review} />,
-    below: (line) =>
-      line.anchor && review.editing === anchorKey(line.anchor) && <CommentForm anchor={line.anchor} line={line} review={review} />,
+    gutter: (anchor) => <CommentButton anchor={anchor} commented={commented.has(anchorKey(anchor))} review={review} />,
+    below: (anchor, line) => review.editing === anchorKey(anchor) && <CommentForm anchor={anchor} line={line} review={review} />,
   };
 }
 

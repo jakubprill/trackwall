@@ -104,6 +104,28 @@ describe("a Copilot CLI session in the daemon", () => {
 });
 
 /** A running session with an empty `hooks.jsonl`; the hook records are the input of each test. */
+function runningSession(): { session: LiveSession; hooksFile: string } {
+  const hooksFile = join(mkdtempSync(join(tmpdir(), "trackwall-session-")), "hooks.jsonl");
+  writeFileSync(hooksFile, "");
+  const session = new LiveSession({
+    id: "s2",
+    repo: "shop",
+    task: null,
+    cols: 80,
+    rows: 24,
+    hooksFile,
+    promptOnStart: false,
+    run: () => ({ kind: "running", runId: "r2", startedAt: "2026-10-24T12:00:00.000Z", pid: 1 }),
+  });
+  sessions.push(session);
+  return { session, hooksFile };
+}
+
+function endTurn(session: LiveSession, hooksFile: string): void {
+  appendFileSync(hooksFile, `${JSON.stringify({ event: "agentStop", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+  session.tick();
+}
+
 describe("a prompt the daemon types into a session (a review, ADR-62)", () => {
   test("goes in only once the session waits for input, with Enter written separately after the text", async () => {
     const { session, hooksFile } = runningSession();
@@ -131,26 +153,36 @@ describe("a prompt the daemon types into a session (a review, ADR-62)", () => {
     expect(written).toEqual(["read the review"]);
     expect(session.view()?.needsAttention).toBe(true);
   });
-});
 
-function runningSession(): { session: LiveSession; hooksFile: string } {
-  const hooksFile = join(mkdtempSync(join(tmpdir(), "trackwall-session-")), "hooks.jsonl");
-  writeFileSync(hooksFile, "");
-  const session = new LiveSession({
-    id: "s2",
-    repo: "shop",
-    task: null,
-    cols: 80,
-    rows: 24,
-    hooksFile,
-    promptOnStart: false,
-    run: () => ({ kind: "running", runId: "r2", startedAt: "2026-10-24T12:00:00.000Z", pid: 1 }),
+  test("is typed once: a second prompt before Copilot CLI takes the first changes nothing", () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    endTurn(session, hooksFile);
+
+    expect(session.typePrompt("read the review")).toBe("typed");
+    expect(session.typePrompt("read the review")).toBe("typed");
+
+    expect(written).toEqual(["read the review"]);
   });
-  sessions.push(session);
-  return { session, hooksFile };
-}
 
-function endTurn(session: LiveSession, hooksFile: string): void {
-  appendFileSync(hooksFile, `${JSON.stringify({ event: "agentStop", receivedAt: 0, payload: {}, omitted: [] })}\n`);
-  session.tick();
-}
+  test("waits after an Esc and for a question dialog, which leave the session in Input but not in its input box", () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+    session.input("\u001b");
+    expect(session.typePrompt("read the review")).toBe("queued");
+    appendFileSync(
+      hooksFile,
+      `${JSON.stringify({ event: "notification", receivedAt: 0, payload: { notification_type: "elicitation_dialog" }, omitted: [] })}\n`,
+    );
+    session.tick();
+    expect(written).toEqual(["\u001b"]);
+
+    endTurn(session, hooksFile);
+
+    expect(written).toEqual(["\u001b", "read the review"]);
+  });
+});

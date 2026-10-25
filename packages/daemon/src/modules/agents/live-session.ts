@@ -1,4 +1,5 @@
 import type { RunState, Session, TaskStateChange } from "@trackwall/protocol";
+import { atPromptBox } from "./copilot-hooks.ts";
 import { sessionKey } from "./copilot-keys.ts";
 import { CopilotSessionState } from "./copilot-session-state.ts";
 import { HookTail } from "./hook-tail.ts";
@@ -74,8 +75,11 @@ export class LiveSession {
   readonly #attention = new SessionAttention();
   #finished = false;
   readonly #closers = new Set<() => void>();
-  /** A daemon prompt waiting for the session to wait for input (`typePrompt`). */
-  #queuedPrompt: string | undefined;
+  /**
+   * The daemon's prompt (`typePrompt`): queued until the session waits in its input box, then typed until the session
+   * leaves `Input`, that is until Copilot CLI has taken it.
+   */
+  #prompt: { text: string; typed: boolean } | undefined;
   #submitTimer: NodeJS.Timeout | undefined;
 
   constructor(o: LiveSessionOptions) {
@@ -113,15 +117,16 @@ export class LiveSession {
   }
 
   /**
-   * A prompt the daemon types on the user's behalf (ADR-62): at once while the session waits for input, otherwise as
-   * soon as it does again; a later prompt replaces a queued one. Never while the agent works or asks for approval, when
-   * the text would land in the middle of a turn and Enter would answer the prompt on screen.
+   * A prompt the daemon types on the user's behalf (ADR-62): at once while the session waits in its input box after a
+   * hook (`atPromptBox`), otherwise as soon as it does again. Never in the middle of a turn, in an approval or a question
+   * dialog, or right after the user's Esc, where the text would land in an answer. One prompt at a time: while one is
+   * queued or typed and not yet taken, another changes nothing, since the prompt asks to read everything unread.
    */
   typePrompt(text: string): "typed" | "queued" {
     this.#readHooks();
-    this.#queuedPrompt = text;
-    this.#typeQueuedPrompt();
-    return this.#queuedPrompt === undefined ? "typed" : "queued";
+    this.#prompt ??= { text, typed: false };
+    this.#typePrompt();
+    return this.#prompt?.typed ? "typed" : "queued";
   }
 
   /** The size is set by the last terminal that reported it; the TUI gets it together with the PTY. */
@@ -200,16 +205,22 @@ export class LiveSession {
       this.#attention.changed(this.#last?.state, change.state);
       this.#last = change;
     }
-    this.#typeQueuedPrompt();
+    this.#typePrompt();
   }
 
-  /** The queued prompt goes into the PTY once the session waits for input; Enter follows after `SUBMIT_DELAY_MS`. */
-  #typeQueuedPrompt(): void {
+  /** The queued prompt goes into the PTY in the input box; Enter follows after `SUBMIT_DELAY_MS`. */
+  #typePrompt(): void {
     const terminal = this.#terminal;
-    const text = this.#queuedPrompt;
-    if (text === undefined || this.#finished || !terminal || this.#last?.state !== "Input") return;
-    this.#queuedPrompt = undefined;
-    terminal.write(text);
+    const prompt = this.#prompt;
+    if (!prompt || this.#finished || !terminal) return;
+    if (prompt.typed) {
+      // Copilot CLI took the prompt: the turn it started is the session's, and the next prompt is a new one.
+      if (this.#last?.state !== "Input") this.#prompt = undefined;
+      return;
+    }
+    if (!this.#last || !atPromptBox(this.#last)) return;
+    prompt.typed = true;
+    terminal.write(prompt.text);
     this.#submitTimer = setTimeout(() => {
       if (!this.#finished) terminal.write("\r");
     }, SUBMIT_DELAY_MS);

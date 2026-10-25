@@ -48,7 +48,7 @@ Every task also gets a port of its own, shown in the task's header. Every mise t
 ## Good to know
 
 - Worktrees live in `~/.trackwall/worktrees/<repo>/`.
-- Comments you have not sent yet stay while you switch between "Terminal" and "Changes", but not when you open another task. A review holds up to 50 comments. Sent comments the agent has not read yet are lost if Trackwall restarts; send them again.
+- Comments you have not sent yet stay while you switch between "Terminal" and "Changes", but not when you open another task. While a comment form is open, "Changes" stops refreshing, so the line does not move under it. A review holds up to 20 comments of up to 2000 characters. Sent comments the agent has not read yet are lost if Trackwall restarts; send them again.
 - Trackwall asks the agent to read the review by typing one line into its terminal. If you are typing in that terminal at the same moment, the two mix: wait for the agent to start on the review before you type.
 - `.worktreeinclude` can stay untracked; Claude Code reads the same file. At most 100 files and 10 MB are copied, and only regular files, not links; the task panel names every file left out and why. Files are copied once, when the task is created: a change in the repo later does not reach the worktree.
 - The copied files often hold secrets. The task's agent can read them, as it could read them in the repo, and they are removed with the worktree when the task ends.

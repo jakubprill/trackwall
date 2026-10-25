@@ -1,4 +1,4 @@
-import type { TaskState } from "@trackwall/protocol";
+import type { TaskState, TaskStateChange } from "@trackwall/protocol";
 import type { CopilotHookRecord } from "./copilot-hook-record.ts";
 import type { StateSignal } from "./task-state-tracker.ts";
 
@@ -9,8 +9,23 @@ import type { StateSignal } from "./task-state-tracker.ts";
  * without a kind by words of its content (confidence `low`).
  */
 
+/** The hooks after which Copilot CLI's input box waits for a new message: the start of the session and the end of a turn. */
+const AT_PROMPT_EVENTS = ["sessionStart", "agentStop"] as const;
+
+/**
+ * The session waits in its input box, by a hook rather than a question dialog (`elicitation_dialog`), a guess from
+ * the screen or an Esc: only then can the daemon type a prompt for the user (ADR-62).
+ */
+export function atPromptBox(change: Pick<TaskStateChange, "state" | "reason">): boolean {
+  return change.state === "Input" && AT_PROMPT_EVENTS.some((event) => change.reason === hookReason(event));
+}
+
+function hookReason(event: CopilotHookRecord["event"]): string {
+  return `hook ${event}`;
+}
+
 export function stateFromHook(record: CopilotHookRecord): StateSignal | undefined {
-  const reason = `hook ${record.event}`;
+  const reason = hookReason(record.event);
   switch (record.event) {
     case "sessionStart":
       return { state: "Input", source: "hook", confidence: "medium", reason };

@@ -12,8 +12,9 @@ describe("review comments on a task's changes", () => {
     });
   });
 
-  test("a very long line is cut to the 500 characters the daemon keeps", () => {
-    expect(lineComment({ path: "a.min.js", side: "new", line: 1 }, `+${"x".repeat(600)}`, "minified?").code).toHaveLength(500);
+  test("a very long line is cut to the 300 characters the daemon keeps, but not inside an emoji", () => {
+    expect(lineComment({ path: "a.min.js", side: "new", line: 1 }, `+${"x".repeat(600)}`, "minified?").code).toHaveLength(300);
+    expect(lineComment({ path: "a.ts", side: "new", line: 1 }, `+${"x".repeat(299)}😀`, "emoji").code).toBe("x".repeat(299));
   });
 
   test("the same line number on the old and the new side are different places", () => {

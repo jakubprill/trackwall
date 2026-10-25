@@ -241,9 +241,17 @@ export class Agents {
    */
   sendReview(id: string, comments: readonly ReviewComment[]): SendReviewResult {
     this.#tasks.task(id);
+    if (this.#tasks.busy(id)) throw new DomainError("bad_request", "the task is starting or being ended; send the review afterwards");
     const unread = this.#reviews.add(id, comments);
-    const session = [...this.#sessions.values()].find((s) => s.task === id && this.#deps.procs.state(owner(s.id))?.kind === "running");
-    return { unread, delivery: session ? session.typePrompt(REVIEW_PROMPT) : "on_resume" };
+    const running = this.#views().find((s) => s.task === id && s.run.kind === "running");
+    const delivery = running && this.#askToReadReview(this.#get(running.id));
+    return { unread, delivery: delivery ?? "on_resume" };
+  }
+
+  /** The prompt that asks a task's session to read its unread review comments, when it has any. */
+  #askToReadReview(session: LiveSession): "typed" | "queued" | undefined {
+    if (session.task === null || this.#reviews.unread(session.task) === 0) return undefined;
+    return session.typePrompt(REVIEW_PROMPT);
   }
 
   /** The unread review comments of session `caller`'s own task (`get_review_comments`), which now count as read. */
@@ -346,7 +354,7 @@ export class Agents {
 
   async removeTask(id: string, keepBranch: boolean, discardChanges: boolean): Promise<void> {
     await this.#tasks.remove(id, keepBranch, discardChanges);
-    this.#reviews.forget(id);
+    this.#reviews.take(id);
   }
 
   /**
@@ -397,7 +405,7 @@ export class Agents {
     }
     this.#sessions.set(id, session);
     // A review sent while the task had no running session (ADR-62).
-    if (task !== null && this.#reviews.unread(task) > 0) session.typePrompt(REVIEW_PROMPT);
+    this.#askToReadReview(session);
     this.#startTicking();
     return this.#view(session);
   }

@@ -1,7 +1,7 @@
 import type { ChangedFile, WorkingTreeChanges } from "@trackwall/protocol";
 import { Fragment, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
-import { type DiffLine, type DiffLineKind, diffLines } from "@/lib/diff-lines";
+import { type DiffAnchor, type DiffLine, type DiffLineKind, diffLines } from "@/lib/diff-lines";
 import { cn } from "@/lib/utils";
 
 /** Beyond this many lines or files the browser starts to choke, and the rest is better read in VS Code anyway. */
@@ -24,12 +24,12 @@ const LINE_CLASSES: Record<DiffLineKind, string> = {
 };
 
 /**
- * What a view adds to the diff lines: a task's review comments (ADR-62) put a button in front of every line of a change
- * and the comment form under it. Both get only lines with an anchor.
+ * What a view adds to the lines of a change (the lines with an anchor): a task's review comments (ADR-62) put a button
+ * in front of every such line and the comment form under it.
  */
 export interface LineAnnotations {
-  gutter: (line: DiffLine) => ReactNode;
-  below: (line: DiffLine) => ReactNode;
+  gutter: (anchor: DiffAnchor) => ReactNode;
+  below: (anchor: DiffAnchor, line: DiffLine) => ReactNode;
 }
 
 /**
@@ -58,21 +58,15 @@ export function ChangesDiff({ changes, annotations }: { changes: WorkingTreeChan
         </p>
       )}
       <pre className="bg-muted overflow-x-auto rounded-md border p-3 font-mono text-xs leading-5">
-        {lines.map((line) =>
-          annotations ? (
-            <Fragment key={line.offset}>
-              <div className={cn("group flex px-1 whitespace-pre", LINE_CLASSES[line.kind])}>
-                <span className="w-5 shrink-0">{line.anchor && annotations.gutter(line)}</span>
-                {line.text || " "}
-              </div>
-              {line.anchor && annotations.below(line)}
-            </Fragment>
-          ) : (
-            <div key={line.offset} className={cn("px-1 whitespace-pre", LINE_CLASSES[line.kind])}>
+        {lines.map((line) => (
+          <Fragment key={line.offset}>
+            <div className={cn("px-1 whitespace-pre", annotations && "group flex", LINE_CLASSES[line.kind])}>
+              {annotations && <span className="w-5 shrink-0">{line.anchor && annotations.gutter(line.anchor)}</span>}
               {line.text || " "}
             </div>
-          ),
-        )}
+            {annotations && line.anchor && annotations.below(line.anchor, line)}
+          </Fragment>
+        ))}
       </pre>
       {(changes.truncated || more) && (
         <p className="text-muted-foreground text-xs">The changes are longer; showing the beginning. See all of them in VS Code.</p>

@@ -17,9 +17,13 @@ export function anchorKey(anchor: DiffAnchor): string {
   return `${anchor.side}:${anchor.line}:${anchor.path}`;
 }
 
-/** A comment on a diff line: the line's text without its `+`/`-`/space marker, cut to what the contract keeps. */
+/**
+ * A comment on a diff line: the line's text without its `+`/`-`/space marker, cut to what the contract keeps, never
+ * between the two halves of a character outside the BMP.
+ */
 export function lineComment(anchor: DiffAnchor, diffText: string, text: string): ReviewComment {
-  return { ...anchor, code: diffText.slice(1, REVIEW_LINE_CODE_MAX + 1), text: text.trim() };
+  const code = diffText.slice(1, REVIEW_LINE_CODE_MAX + 1);
+  return { ...anchor, code: /[\uD800-\uDBFF]$/.test(code) ? code.slice(0, -1) : code, text: text.trim() };
 }
 
 /** What the user is told after sending: when the agent gets the review. */

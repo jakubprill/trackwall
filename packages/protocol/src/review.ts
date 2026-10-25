@@ -8,12 +8,20 @@ import { z } from "zod";
  * (`@` opens the file picker, a line break submits).
  */
 
-/** One comment fits a few paragraphs; a longer note is a new task rather than a review. */
-export const REVIEW_COMMENT_MAX = 4000;
+/**
+ * The sizes keep a whole review of ASCII text inside the daemon's 64 KiB request body. One comment fits a few
+ * paragraphs; a longer note is a new task rather than a review.
+ */
+export const REVIEW_COMMENT_MAX = 2000;
 /** Comments in one review: more lines than this is a rewrite, not a review. */
-export const REVIEW_COMMENTS_MAX = 50;
+export const REVIEW_COMMENTS_MAX = 20;
 /** The commented line's text kept with the comment, so that the agent finds the line after the file has changed. */
-export const REVIEW_LINE_CODE_MAX = 500;
+export const REVIEW_LINE_CODE_MAX = 300;
+/**
+ * Unread comments of one task, over several reviews: a review beyond it is refused, so `get_review_comments` stays a
+ * size an agent's context takes.
+ */
+export const REVIEW_UNREAD_MAX = 60;
 
 /**
  * Which file a comment's line number counts in: `new` for an added or unchanged line, numbered in the worktree's
@@ -25,7 +33,7 @@ export type ReviewSide = z.infer<typeof ReviewSide>;
 export const ReviewComment = z
   .object({
     /** Relative to the repo root, as in `ChangedFile.path`. */
-    path: z.string().min(1).max(1000),
+    path: z.string().min(1).max(500),
     side: ReviewSide,
     line: z.number().int().positive(),
     /** The line as the diff showed it, without the `+`/`-` marker. */

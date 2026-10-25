@@ -68,4 +68,9 @@ describe("task diff lines", () => {
     ];
     expect(diffLines(patch.join("\n"), 100).lines.at(-1)?.anchor).toEqual({ path: 'café "q".ts', side: "new", line: 1 });
   });
+
+  test("a file name with a space loses the tab git ends it with", () => {
+    const patch = ["diff --git a/my file.ts b/my file.ts", "--- a/my file.ts\t", "+++ b/my file.ts\t", "@@ -1 +1 @@", "-a", "+b"];
+    expect(diffLines(patch.join("\n"), 100).lines.at(-1)?.anchor).toEqual({ path: "my file.ts", side: "new", line: 1 });
+  });
 });

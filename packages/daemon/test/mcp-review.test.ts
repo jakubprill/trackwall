@@ -101,8 +101,9 @@ describe.skipIf(process.versions.bun === undefined)("a review from the Changes t
     expect(await reviewComments(await clientOfSession(resumed))).toEqual([LOGIN_COMMENT, README_COMMENT]);
 
     // The session now waits for input after its turn, so the next review goes in at once.
+    await waitFor(daemon.facade.agents, resumed, (s) => s.state?.state === "Approval", "the review turn's approval request");
     window.attachment.input("y\r");
-    await waitFor(daemon.facade.agents, resumed, (s) => s.state?.state === "Input", "the end of the turn");
+    await waitFor(daemon.facade.agents, resumed, (s) => s.state?.reason === "hook agentStop", "the end of the turn");
     expect(await daemon.post(agentsApi.sendReview, { task: task.id, comments: [LOGIN_COMMENT] })).toEqual({ delivery: "typed", unread: 1 });
     window.attachment.input("y\r");
     window.attachment.detach();
