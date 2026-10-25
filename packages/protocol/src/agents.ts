@@ -40,6 +40,16 @@ export const TASK_PORT_ENV = ["SERVER_PORT", "PORT"] as const;
 export const WORKTREE_INCLUDE_FILE = ".worktreeinclude";
 
 /**
+ * Files from `WORKTREE_INCLUDE_FILE` copied from the repo root into a task's worktree when the task was created, as
+ * paths relative to the root with `/` (ADR-61), and in `problems` what was not copied and why, one sentence each.
+ */
+export const IncludedFiles = z.object({ files: z.array(z.string()), problems: z.array(z.string()) });
+export type IncludedFiles = z.infer<typeof IncludedFiles>;
+
+/** A root without `WORKTREE_INCLUDE_FILE`, and a task saved before ADR-61. */
+export const NO_INCLUDED_FILES: IncludedFiles = { files: [], problems: [] };
+
+/**
  * The task prompt. It goes to Copilot CLI as one argument (`--interactive=<prompt>`), and the Windows command line holds
  * 32,767 characters together with the rest of the command.
  */
@@ -145,11 +155,7 @@ export const Task = z.object({
   summary: z.object({ text: z.string(), reportedAt: z.string() }).nullable(),
   /** The task port (ADR-61): `TASK_PORT_ENV` in every mise task run in the worktree, and the port of the task's service. */
   port: TaskPort,
-  /**
-   * Files from `WORKTREE_INCLUDE_FILE` copied from the repo root into the worktree when the task was created, as paths
-   * relative to the root with `/` (ADR-61), and in `problems` what was not copied and why.
-   */
-  included: z.object({ files: z.array(z.string()), problems: z.array(z.string()) }),
+  included: IncludedFiles,
 });
 export type Task = z.infer<typeof Task>;
 

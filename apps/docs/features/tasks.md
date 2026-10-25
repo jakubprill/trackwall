@@ -27,7 +27,7 @@ When another task in the same repo changes some of the same files, a warning abo
 
 The agent builds and tests its changes by running the repo's mise tasks in the task's worktree. While one runs, it shows above the task's tabs with "Log" and "Stop". Trackwall runs them only with the mise configuration you have agreed to: the one the worktree started with. If the agent changes a mise file (`mise.toml`, `.tool-versions`, a file task), a warning above the tabs lists the changed files, each of which you can open to read, and no mise task runs in the worktree until you have read them and press "Trust this config". If the agent changes them again while the warning is open, it says so and shows the new version only when you ask, so you always trust what you read.
 
-A new worktree has only the files git tracks, so local config that is ignored by git is missing there. List those files in a `.worktreeinclude` file in the repo, with the same patterns as `.gitignore` (for example `.env` and `src/main/resources/application-local.yml`), and Trackwall copies them from the repo into every new task's worktree. Only files git ignores are copied, so the list never overwrites a file of the repo. The task panel lists the files it copied and anything it left out.
+A new worktree has only the files git tracks, so local config that is ignored by git is missing there. List those files in a `.worktreeinclude` file in the repo, with the same patterns as `.gitignore` (for example `.env` and `src/main/resources/application-local.yml`), and Trackwall copies them from the repo into every new task's worktree. Only files git ignores are copied, so the list never overwrites a file of the repo, and the agent does not commit them by accident. The task panel lists the files it copied and anything it left out.
 
 Every task also gets a port of its own, shown in the task's header. Every mise task that runs in the worktree gets it in `SERVER_PORT` and `PORT`, so the agent can start the repo's [service](/features/services) from the worktree without taking the port of the one you run from the repo.
 
@@ -43,7 +43,7 @@ Every task also gets a port of its own, shown in the task's header. Every mise t
 ## Good to know
 
 - Worktrees live in `~/.trackwall/worktrees/<repo>/`.
-- `.worktreeinclude` can stay untracked; Claude Code reads the same file. At most 100 files and 10 MB are copied, and only regular files, not links. Files are copied once, when the task is created: a change in the repo later does not reach the worktree.
+- `.worktreeinclude` can stay untracked; Claude Code reads the same file. At most 100 files and 10 MB are copied, and only regular files, not links; the task panel names every file left out and why. Files are copied once, when the task is created: a change in the repo later does not reach the worktree.
 - The copied files often hold secrets. The task's agent can read them, as it could read them in the repo, and they are removed with the worktree when the task ends.
 - Task ports are 41000 to 41999. A task keeps its port until it ends; Trackwall does not check that no other program uses it, and a service that finds its port taken says so.
 - A task created with an older version of Trackwall asks you to trust its mise configuration once before its first mise task.

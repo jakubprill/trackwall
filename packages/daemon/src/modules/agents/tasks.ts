@@ -3,6 +3,8 @@ import { dirname } from "node:path";
 import {
   type AgentTaskChanges,
   type ChangedFile,
+  type IncludedFiles,
+  NO_INCLUDED_FILES,
   PATCH_MAX_BYTES,
   type ProposedBy,
   type Session,
@@ -18,7 +20,7 @@ import { mapLimit } from "../../infra/map-limit.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
 import { type MiseSnapshot, miseConfigChanges, miseConfigDigest, readMiseConfig, reviewMiseConfig } from "./task-mise-config.ts";
-import { freeTaskPort } from "./task-port.ts";
+import { freeTaskPort, withTaskPorts } from "./task-port.ts";
 
 /**
  * Agent tasks (§4.4, ADR-31): a prompt for Copilot CLI in its own worktree on a new branch from the repo's default
@@ -46,12 +48,6 @@ interface TaskWork {
   base: string;
 }
 
-/** Ignored files copied from the repo root into a new worktree (`IncludedFiles` in `vcs`, ADR-61). */
-interface TaskIncludedFiles {
-  files: string[];
-  problems: string[];
-}
-
 /** What would be lost when ending a task (`PendingWork` in `vcs`). */
 interface TaskPendingWork {
   uncommitted: number;
@@ -64,7 +60,7 @@ interface TaskPendingWork {
 export interface TasksVcs {
   defaultBase(dir: string): Promise<TaskBase>;
   addWorktree(repoDir: string, path: string, branch: string, commit: string): Promise<void>;
-  copyIncludedFiles(repoDir: string, worktree: string): Promise<TaskIncludedFiles>;
+  copyIncludedFiles(repoDir: string, worktree: string): Promise<IncludedFiles>;
   removeWorktree(repoDir: string, path: string): Promise<void>;
   deleteBranch(repoDir: string, branch: string): Promise<void>;
   pendingWork(work: TaskWork): Promise<TaskPendingWork>;
@@ -102,7 +98,7 @@ export interface TaskOrigin {
 }
 
 /** A task from the file with the worktree that follows from it, and its port (one given when it was read, if it had none). */
-type KnownTask = Omit<StoredTask, "port"> & TaskWork & { port: number };
+type KnownTask = StoredTask & TaskWork & { port: number };
 
 /**
  * Other tasks read at once for shared files: each read is several git commands, and a task panel asks every few
@@ -126,14 +122,9 @@ export class AgentTasks {
   constructor(deps: AgentTasksDeps) {
     this.#deps = deps;
     const stored = deps.file.read();
-    const taken = stored.flatMap((t) => (t.port === null ? [] : [t.port]));
-    this.#tasks = stored.map((task) => {
-      // A task saved before ADR-61 gets the lowest free port once, and keeps it from then on.
-      const port = task.port ?? freeTaskPort(taken);
-      taken.push(port);
-      return this.#known({ ...task, port });
-    });
-    if (stored.some((t) => t.port === null)) this.#save(this.#tasks);
+    const ported = withTaskPorts(stored);
+    this.#tasks = ported.map((task) => this.#known(task));
+    if (ported.some((task, i) => task.port !== stored[i]?.port)) this.#save(this.#tasks);
   }
 
   list(): Task[] {
@@ -161,7 +152,7 @@ export class AgentTasks {
       summary: null,
       trustedMiseConfig: null,
       port: freeTaskPort([...this.#tasks.map((t) => t.port), ...this.#creatingPorts]),
-      included: { files: [], problems: [] },
+      included: NO_INCLUDED_FILES,
     });
     this.#creatingPorts.add(task.port);
     return this.#exclusive(id, async () => {
@@ -382,7 +373,7 @@ export class AgentTasks {
   }
 
   /** A failure to copy does not stop the task: the agent can still work, and the panel shows what is missing. */
-  async #copyIncludedFiles(task: KnownTask): Promise<TaskIncludedFiles> {
+  async #copyIncludedFiles(task: KnownTask): Promise<IncludedFiles> {
     try {
       return await this.#deps.vcs.copyIncludedFiles(task.repoDir, task.worktree);
     } catch (err) {
@@ -439,7 +430,7 @@ export class AgentTasks {
     return task;
   }
 
-  #known(task: Omit<StoredTask, "port"> & { port: number }): KnownTask {
+  #known(task: StoredTask & { port: number }): KnownTask {
     return { ...task, worktree: taskWorktree(this.#deps.worktreesDir, task.repo, task.branch) };
   }
 

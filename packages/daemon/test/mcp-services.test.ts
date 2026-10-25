@@ -100,4 +100,32 @@ describe.skipIf(process.versions.bun === undefined)("services from a Trackwall s
     },
     TIMEOUT,
   );
+
+  test(
+    "a task session starts the service from its own worktree on the task port, calls it, and cannot start another task's",
+    async () => {
+      const own = await daemon.facade.agents.createTask("warehouse", "check the orders endpoint");
+      const other = await daemon.facade.agents.createTask("warehouse", "another task");
+      const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === own.id);
+      if (!session) throw new Error("the task has no session");
+      const token = readFileSync(join(daemon.home, "sessions", session.id, "session-token"), "utf8");
+      const client = await connectHttpClient(daemon.api.port, TOKEN, undefined, { [SESSION_TOKEN_HEADER]: token });
+      clients.push(client);
+
+      const { slice } = StartServiceResult.parse(
+        (await call(client, "start_service", { repo: "warehouse", task: own.id, timeoutSeconds: 30 })).structuredContent,
+      );
+      expect(slice.members).toMatchObject([{ repo: "warehouse", task: own.id, service: { state: "healthy", port: own.port } }]);
+      const called = CallEndpointResult.parse(
+        (await call(client, "call_endpoint", { repo: "warehouse", task: own.id, path: "/" })).structuredContent,
+      );
+      expect(JSON.parse(called.response?.body ?? "")).toMatchObject({ cwd: own.worktree, port: String(own.port) });
+
+      expect(errorText(await call(client, "start_service", { repo: "warehouse", task: other.id }))).toBe(
+        `bad_request: a session of task ${own.id} can start and stop only the service of its own worktree, not of that of task ${other.id}`,
+      );
+      await call(client, "stop_service", { repo: "warehouse", task: own.id });
+    },
+    TIMEOUT,
+  );
 });

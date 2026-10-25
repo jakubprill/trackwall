@@ -26,10 +26,10 @@ export const ServiceState = z.enum(["starting", "healthy", "unhealthy", "stoppin
 export type ServiceState = z.infer<typeof ServiceState>;
 
 /**
- * Where the port comes from: `server.port` on the repo card (for a task's service, the task port it was given,
- * ADR-61) or a line of the service log (`Tomcat started on port 8081`).
+ * Where the port comes from: `server.port` on the repo card, the task port a task's service was given (ADR-61), or a
+ * line of the service log (`Tomcat started on port 8081`).
  */
-export const ServicePortSource = z.enum(["card", "log"]);
+export const ServicePortSource = z.enum(["card", "task", "log"]);
 export type ServicePortSource = z.infer<typeof ServicePortSource>;
 
 /** The task whose worktree a service runs from (ADR-61); `null` for the repo root. */

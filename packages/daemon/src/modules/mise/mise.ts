@@ -1,9 +1,11 @@
 import { delimiter } from "node:path";
 import {
   type LogSource,
+  type MiseTarget,
   type MiseTask,
   MiseTaskName,
   type MiseTasks,
+  miseTargetKey,
   miseTaskLogSource,
   type RunningMiseTask,
   type RunState,
@@ -69,12 +71,6 @@ const UNTRUSTED = /not trusted/i;
 /** mise setting with directories whose configs it trusts, separated like `PATH` (`list_by_os_path_separator`). */
 const TRUSTED_PATHS_ENV = "MISE_TRUSTED_CONFIG_PATHS";
 
-/** Where a mise task runs: the repo root (`task: null`) or the worktree of a task of that repo (ADR-59). */
-export interface MiseTarget {
-  repo: string;
-  task: string | null;
-}
-
 /** The directory and environment of a run. */
 interface RunPlace {
   dir: string;
@@ -84,7 +80,7 @@ interface RunPlace {
 export class Mise {
   private readonly deps: MiseDeps;
   /**
-   * mise tasks started in this daemon run, per target (`targetKey`): the list shows them even after they left the
+   * mise tasks started in this daemon run, per target (`miseTargetKey`): the list shows them even after they left the
    * config, and `running` reports them without asking mise.
    */
   private readonly started = new Map<string, MiseTarget & { names: Set<string> }>();
@@ -122,7 +118,7 @@ export class Mise {
 
   /** mise tasks the daemon started in `target` whose group has not ended yet (also while stopping). */
   private liveRuns(target: MiseTarget): { name: string; run: RunState }[] {
-    return [...(this.started.get(targetKey(target))?.names ?? [])].flatMap((name) => {
+    return [...(this.started.get(miseTargetKey(target))?.names ?? [])].flatMap((name) => {
       const run = this.deps.procs.state(owner(target, name));
       return run && run.kind !== "exited" ? [{ name, run }] : [];
     });
@@ -246,7 +242,7 @@ export class Mise {
 
   /** A mise task started in this daemon run: the list shows it so it can be stopped, even when it vanishes from the config. */
   private remember(target: MiseTarget, miseTask: string): void {
-    const key = targetKey(target);
+    const key = miseTargetKey(target);
     const started = this.started.get(key) ?? { ...target, names: new Set<string>() };
     started.names.add(miseTask);
     this.started.set(key, started);
@@ -337,10 +333,6 @@ export function parseTaskList(result: MiseCliResult): TaskList {
  */
 function owner(target: MiseTarget, miseTask: string): string {
   return target.task === null ? `mise:${target.repo}:${miseTask}` : `task-mise:${target.task}:${target.repo}:${miseTask}`;
-}
-
-function targetKey(target: MiseTarget): string {
-  return target.task === null ? `repo:${target.repo}` : `task:${target.task}:${target.repo}`;
 }
 
 /** The target in a message: the repo, or the task worktree in it. */

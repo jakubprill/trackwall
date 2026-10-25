@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { MCP_INSTRUCTIONS, mcpTools } from "@trackwall/protocol";
+import { MCP_INSTRUCTIONS, mcpTools, TASK_PORT_ENV } from "@trackwall/protocol";
 import { envKey } from "../../infra/env-key.ts";
 
 /**
@@ -97,7 +97,7 @@ function taskRole(repo: string, task: string): string[] {
     `You run the task \`${task}\` in the repo \`${repo}\` (its id in Trackwall tools), in the task's own git worktree on its own branch. The user reviews the task's changes in Trackwall.`,
     "- Work only in this worktree: the repo root and other worktrees belong to the user and to other agents.",
     `- Build and test your changes with ${mcpTools.runMiseTask.name} and task \`${task}\`: it runs the repo's mise tasks in this worktree (without task, in the repo root, which does not have your changes). ${mcpTools.waitForMiseTask.name}, ${mcpTools.tail.name} and ${mcpTools.getErrors.name} take the same task. If the mise config of this worktree changed, the user has to trust it in Trackwall first.`,
-    `- Run your changes with ${mcpTools.startService.name} and task \`${task}\`: the repo's service starts from this worktree on the task's own port (mise tasks here get it as SERVER_PORT and PORT), next to the one from the repo root; ${mcpTools.callEndpoint.name} and ${mcpTools.stopService.name} take the same task.`,
+    `- Run your changes with ${mcpTools.startService.name} and task \`${task}\`: the repo's service starts from this worktree on the task's own port (mise tasks here get it as ${TASK_PORT_ENV.join(" and ")}), next to the one from the repo root; ${mcpTools.callEndpoint.name} and ${mcpTools.stopService.name} take the same task.`,
     "- Commit your changes on the task branch. Do not switch branches, push, merge or open pull requests unless the task asks for it.",
     `- Work that belongs to another repo is not yours: propose it with ${mcpTools.proposeTask.name} and say so in your result.`,
     `- When you are done, or stuck and need the user, call ${mcpTools.reportResult.name}: what you did, what is left and what to check. Call it again if the result changes.`,

@@ -262,6 +262,12 @@ export class Agents {
     return this.#tasks.task(id);
   }
 
+  /** The task port of a task of `repo` (ADR-61); `null` when there is no such task in that repo, or the user ended it. */
+  taskPort(repo: string, id: string): number | null {
+    const task = this.#tasks.find(id);
+    return task?.repo === repo ? task.port : null;
+  }
+
   taskChanges(id: string): Promise<TaskChanges> {
     return this.#tasks.changes(id);
   }

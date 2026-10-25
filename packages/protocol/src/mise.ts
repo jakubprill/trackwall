@@ -21,6 +21,18 @@ export const MiseTaskName = z
   .refine((n) => [...n].every((c) => c >= " "), "mise task name: no control characters");
 export type MiseTaskName = z.infer<typeof MiseTaskName>;
 
+/**
+ * Where a mise task runs: the repo root (`task: null`) or the worktree of a task of that repo (ADR-59); a service runs
+ * as its mise task `dev` in the same places (ADR-61).
+ */
+export const MiseTarget = z.object({ repo: RepoId, task: TaskId.nullable() });
+export type MiseTarget = z.infer<typeof MiseTarget>;
+
+/** One key per target: a task's prefix differs from a repo's, so no repo id gives the key of a task's worktree. */
+export function miseTargetKey({ repo, task }: MiseTarget): string {
+  return task === null ? `repo:${repo}` : `task:${task}:${repo}`;
+}
+
 export const MiseTask = z.object({
   name: MiseTaskName,
   description: z.string(),

@@ -44,6 +44,6 @@ An agent working on a [task](/features/tasks) can start the service from the tas
 - Dependencies come from HTTP calls in the graph, including connections you added by hand, not from shared packages.
 - A `dev` mise task started with its own "Run" button also shows in the panel as the service.
 - The "Service" panel shows the service started from the repo; a service started from a task's worktree shows only in that task.
-- A service from a task's worktree gets the task's port in `SERVER_PORT` and `PORT`. Spring Boot and most Node servers listen on it without changes; a service that reads its port from elsewhere would take the repo's port and be refused as taken.
+- A service from a task's worktree gets the task's port in `SERVER_PORT` and `PORT`. Spring Boot and most Node servers listen on it without changes; a service that sets its port elsewhere, also in the repo's mise configuration, takes that port instead and cannot run next to the one from the repo.
 - An agent in a session starts and stops only the service of its own repo, and a task's agent only the one of its own worktree, but either may call any running service.
 - `call_endpoint` works only on this computer, returns at most 32 KB of the body and replaces secrets from the environment with `***`.

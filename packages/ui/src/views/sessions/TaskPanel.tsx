@@ -1,4 +1,4 @@
-import { agentsApi, type RunningMiseTask, type Session, type Task } from "@trackwall/protocol";
+import { agentsApi, type RunningMiseTask, type Session, TASK_PORT_ENV, type Task } from "@trackwall/protocol";
 import { Code, GitBranch, Play, Plug, Square, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { SessionTerminal } from "@/components/SessionTerminal";
@@ -89,7 +89,7 @@ export function TaskPanel({
             </span>
             <span
               className="text-muted-foreground flex shrink-0 items-center gap-1 font-mono text-xs"
-              title="task port: SERVER_PORT and PORT of its mise tasks"
+              title={`task port: ${TASK_PORT_ENV.join(" and ")} of its mise tasks`}
             >
               <Plug className="size-3" aria-label="task port" />
               {task.port}

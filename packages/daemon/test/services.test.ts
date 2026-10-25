@@ -74,10 +74,10 @@ function setup(
       return { repo, card: { provides }, tags: [] } as unknown as RepoCardResult;
     },
   };
-  const taskPort = (id: string) => taskOf(id).port;
+  const taskPort = (repo: string, id: string) => (tasks[id]?.repo === repo ? taskOf(id).port : null);
   const services = new Services({ mise, logs, graph, cards, taskPort, env, intervalMs: 100, startupMs: 1500, settleMs: 300 });
   cleanups.push(() => procs.stopAll());
-  return { services, procs, mise };
+  return { services, procs, mise, tasks };
 }
 
 const cleanups: (() => Promise<unknown>)[] = [];
@@ -484,6 +484,31 @@ describe("services from a task worktree (ADR-61)", () => {
         outcome: "skipped",
         problem: `port ${port} (the task port) is already in use by a program Trackwall did not start`,
       });
+    },
+    TIMEOUT,
+  );
+
+  test("a task that is not in the repo is refused before anything starts", async () => {
+    const { services } = setup({ web: DEV, api: DEV }, { tasks: { [TASK]: { repo: "api", port: 41000, config: TASK_DEV } } });
+
+    const start = services.start({ repo: "web", task: TASK, dependencies: false, waitMs: 1000 });
+
+    await expect(start).rejects.toMatchObject({ code: "not_found", message: `there is no task ${TASK} in web` });
+    expect(await services.list()).toEqual([]);
+  });
+
+  test(
+    "the list keeps a running service of an ended task and forgets it once it has stopped",
+    async () => {
+      const port = await freePort();
+      const { services, tasks } = setup({ web: DEV }, { tasks: { [TASK]: { repo: "web", port, config: TASK_DEV } } });
+      await services.start({ repo: "web", task: TASK, dependencies: false, waitMs: 20_000 });
+
+      delete tasks[TASK];
+
+      expect((await services.list()).map((s) => [s.task, s.state])).toEqual([[TASK, "healthy"]]);
+      await services.stop({ repo: "web", task: TASK, dependencies: false });
+      expect(await services.list()).toEqual([]);
     },
     TIMEOUT,
   );

@@ -6,6 +6,7 @@ import {
   AgentTaskChanges,
   Session,
   SessionId,
+  TASK_PORT_ENV,
   TASK_PROMPT_MAX,
   TASK_SUMMARY_MAX,
   TASK_SUMMARY_MAX_FILES,
@@ -625,14 +626,15 @@ export const mcpTools = {
       `Start a repo's service (its mise task ${SERVICE_MISE_TASK}, in the repo root) together with the services it calls, ` +
       "found in the connection graph (http and manual connections, not packages, not low confidence), dependencies " +
       "first: a repo starts once the repos it calls are up. A service is ready (healthy) when its port accepts a " +
-      "connection: the port from its log (e.g. 'Tomcat started on port 8081') or server.port on its card. Waits up " +
+      "connection: the port from its log (e.g. 'Tomcat started on port 8081') or server.port on its card (with task, the " +
+      "task port). Waits up " +
       "to timeoutSeconds and returns the slice: each repo with calledBy (why it is in the slice), outcome (pending, " +
       "started, running: it was already running, skipped with problem: no mise task dev, mise config not trusted, " +
       "port taken by another process), service (state starting, healthy, unhealthy, crashed, stopped; port; run with " +
       "runId; reason) and, for crashed and unhealthy, errors from its log. settled: false means some are still " +
       "starting: call again with the same arguments to keep waiting (running services are not restarted; a crashed " +
       `one starts again, e.g. after you fixed it). At most ${MAX_SLICE_REPOS} repos. With task, the service runs from ` +
-      "that task's worktree, so it runs the task's changes, on the task port (SERVER_PORT and PORT are set to it), next " +
+      `that task's worktree, so it runs the task's changes, on the task port (${TASK_PORT_ENV.join(" and ")} are set to it), next ` +
       "to the same service from the repo root; its dependencies still run from their repo roots, and the services that " +
       "call it keep calling the one from the repo root. A session in Trackwall can start only its own repo (dependencies " +
       "come from the graph), a task session only from its own task's worktree or the repo root, and the supervisor none. " +
@@ -673,7 +675,7 @@ export const mcpTools = {
     description:
       `Services Trackwall started or watched since it started (with ${START_SERVICE}, the UI, or the mise task ` +
       `${SERVICE_MISE_TASK} run from the UI): repo, task (the task whose worktree it runs from, null for the repo root), state (starting, healthy, unhealthy, stopping, stopped, crashed), ` +
-      "port and where it comes from (log or card), run (runId, pid or exit code) and reason. Cheap: it does not ask mise.",
+      "port and where it comes from (log, card or task: the task port), run (runId, pid or exit code) and reason. Cheap: it does not ask mise.",
     args: z.object({}).strict(),
     result: ListServicesResult,
   },
@@ -684,13 +686,13 @@ export const mcpTools = {
     // The path (a query), headers and body may carry a secret.
     auditArgs: ["repo", "task", "method"] as const,
     description:
-      `Send an HTTP request to a running (healthy) service started by Trackwall, on its port on this computer (with task, ` +
-      "the service from that task's worktree) " +
+      "Send an HTTP request to a running (healthy) service started by Trackwall, on its port on this computer " +
       "(the path from the repo card's endpoints, find_endpoint or the code). Returns the status, response headers and " +
       "body (text, cut at 32 KB, secrets from the service environment masked), or failure (connection refused, " +
       "timeout), the duration and errors: error blocks that started in the logs of all services during the call and " +
       "half a second after it, with stack traces (as get_errors). Use it to check a change end to end: start_service, " +
-      "call, read errors, fix, call again. Requests can change data in the services and their databases.",
+      "call, read errors, fix, call again. With task, the request goes to the service from that task's worktree. " +
+      "Requests can change data in the services and their databases.",
     args: z
       .object({
         repo: RepoArg,

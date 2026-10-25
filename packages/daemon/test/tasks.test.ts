@@ -478,6 +478,24 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     expect((await agents.taskChanges(task.id)).files).toEqual([]);
   }, 60_000);
 
+  test("an included file the base commit tracks or does not ignore stays out of a new task's worktree", async () => {
+    const dir = makeRepo({ ".gitignore": "", "config/application-local.yml": "db.password: committed\n" }, "shop");
+    // Only the root ignores them, with an uncommitted .gitignore; the worktree has the base commit's.
+    gitIn(dir, "rm", "-q", "--cached", "config/application-local.yml");
+    writeFileSync(join(dir, ".gitignore"), ".env\n*-local.yml\n");
+    writeFileSync(join(dir, "config", "application-local.yml"), "db.password: local\n");
+    writeFileSync(join(dir, ".env"), "API_TOKEN=local\n");
+    writeFileSync(join(dir, ".worktreeinclude"), ".env\n**/*-local.yml\n");
+    const { agents, procs } = makeAgents({ shop: dir });
+    cleanups.push(() => procs.stopAll());
+
+    const task = await agents.createTask("shop", "fix the login");
+
+    expect(task.included).toEqual({ files: [], problems: [] });
+    expect(readFileSync(join(task.worktree, "config", "application-local.yml"), "utf8")).toBe("db.password: committed\n");
+    expect(existsSync(join(task.worktree, ".env"))).toBe(false);
+  }, 60_000);
+
   test("a repo root without .worktreeinclude copies nothing into a new task's worktree", async () => {
     const { dir } = cloneOnFeatureBranch();
     writeFileSync(join(dir, ".env"), "API_TOKEN=local\n");

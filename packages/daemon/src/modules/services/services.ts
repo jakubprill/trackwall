@@ -7,7 +7,9 @@ import {
   type LogSource,
   type LogTail,
   type LogTailRequest,
+  type MiseTarget,
   type MiseTasks,
+  miseTargetKey,
   miseTaskLogSource,
   type RepoCardResult,
   type RepoGraph,
@@ -39,18 +41,12 @@ import { planSlice, type SlicePlan } from "./slice-plan.ts";
  * change. Services are keyed by that target, never by the repo alone.
  */
 
-/** Where a service runs: the repo root (`task: null`) or the worktree of a task of that repo (ADR-61). */
-interface ServiceTarget {
-  repo: string;
-  task: string | null;
-}
-
 /** What `services` needs from `mise`: the task `dev` started from the current list, as the button in the UI does. */
 interface ServicesMise {
   tasks(repo: string): Promise<MiseTasks>;
-  start(target: ServiceTarget, miseTask: string): Promise<RunState>;
-  stop(target: ServiceTarget, miseTask: string): Promise<RunState>;
-  run(target: ServiceTarget, miseTask: string): RunState | undefined;
+  start(target: MiseTarget, miseTask: string): Promise<RunState>;
+  stop(target: MiseTarget, miseTask: string): Promise<RunState>;
+  run(target: MiseTarget, miseTask: string): RunState | undefined;
   running(): RunningMiseTask[];
 }
 
@@ -67,8 +63,11 @@ export interface ServicesDeps {
   logs: ServicesLogs;
   graph: { graph(): Promise<RepoGraph> };
   cards: { card(repo: string): Promise<RepoCardResult> };
-  /** The port of a task (`agents`, ADR-61), which `mise` gives every run in its worktree. */
-  taskPort: (task: string) => number;
+  /**
+   * The port of a task of `repo` (`agents`, ADR-61), which `mise` gives every run in its worktree; `null` when there
+   * is no such task in that repo (never was, or the user ended it).
+   */
+  taskPort: (repo: string, task: string) => number | null;
   /** Environment of the processes started for the user; its secret values are masked in responses. */
   env: () => Promise<NodeJS.ProcessEnv>;
   /** How often a watch checks a running service (500 ms in the daemon). */
@@ -91,24 +90,24 @@ type Member = Pick<SliceMember, "outcome" | "problem">;
  * no member starts after that) and a later start makes a new one.
  */
 interface SliceRun {
-  root: ServiceTarget;
+  root: MiseTarget;
   dependencies: boolean;
   status: "running" | "cancelled" | "done";
   /** The plan, once the graph has been read; a refused plan (too many repos) rejects. */
   planned: Promise<SlicePlan>;
   plan: SlicePlan | undefined;
-  /** By `targetKey`, in start order. */
-  members: Map<string, Member & { target: ServiceTarget }>;
+  /** By `miseTargetKey`, in start order. */
+  members: Map<string, Member & { target: MiseTarget }>;
   /** Members an earlier start of the same root `started` that this one does not include: a stop with dependencies stops them too. */
-  inherited: readonly ServiceTarget[];
+  inherited: readonly MiseTarget[];
   done: Promise<void>;
 }
 
 export class Services {
   private readonly deps: ServicesDeps;
-  /** The watch of the latest run of each service, by `targetKey`, in the order of the first start. */
+  /** The watch of the latest run of each service, by `miseTargetKey`, in the order of the first start. */
   private readonly watches = new Map<string, ServiceWatch>();
-  /** The latest start of each root, by `targetKey`; `stop` with dependencies stops what it started. */
+  /** The latest start of each root, by `miseTargetKey`; `stop` with dependencies stops what it started. */
   private readonly slices = new Map<string, SliceRun>();
   /** Starts in progress per service, so two slices that share a dependency start it once and a stop can wait for them. */
   private readonly starting = new Map<string, Promise<Member>>();
@@ -117,9 +116,13 @@ export class Services {
     this.deps = deps;
   }
 
-  /** Watched services, with a `dev` started elsewhere (the mise tasks tab, `run_mise_task`) adopted first. */
+  /**
+   * Watched services, with a `dev` started elsewhere (the mise tasks tab, `run_mise_task`) adopted first. The services
+   * of a task the user ended are forgotten once they no longer run, so the list does not grow with every task.
+   */
   async list(): Promise<Service[]> {
-    for (const run of this.deps.mise.running()) if (run.miseTask === SERVICE_MISE_TASK) await this.adopt(run);
+    for (const { repo, task, miseTask } of this.deps.mise.running()) if (miseTask === SERVICE_MISE_TASK) await this.adopt({ repo, task });
+    for (const [key, watch] of this.watches) if (this.forgettable(watch.target)) this.forget(key);
     return [...this.watches.values()].map((w) => w.view());
   }
 
@@ -127,14 +130,15 @@ export class Services {
    * Starts the service of `repo` (and with `dependencies` its slice) and waits up to `waitMs` for the slice to settle;
    * the start goes on in the background. A service that already runs is not started again, so calling again waits
    * further; a crashed one starts again. A repo without the mise task `dev` is `not_found`, before anything starts.
-   * With `task`, the service runs from that task's worktree (ADR-61) and its dependencies from their repo roots.
+   * With `task`, the service runs from that task's worktree (ADR-61) and its dependencies from their repo roots; a
+   * task that is not in `repo` is `not_found` before anything starts.
    */
   async start({ repo, task, dependencies, waitMs }: StartServiceRequest): Promise<ServiceSlice> {
-    const root: ServiceTarget = { repo, task };
-    const problem = await this.serviceProblem(repo);
+    const root: MiseTarget = { repo, task };
+    const problem = await this.serviceProblem(root);
     if (problem) throw new DomainError(problem.code, problem.message);
     // No `await` between the lookup and the registration: two starts at once share one slice.
-    let slice = this.slices.get(targetKey(root));
+    let slice = this.slices.get(miseTargetKey(root));
     if (slice?.status === "running" && slice.dependencies !== dependencies) {
       // Replacing it would start the repo before the dependencies of the other plan, or leave them out of a stop's reach.
       const other = dependencies ? "without" : "with";
@@ -142,7 +146,7 @@ export class Services {
     }
     if (slice?.status !== "running") {
       slice = this.bringUp(root, dependencies, slice);
-      this.slices.set(targetKey(root), slice);
+      this.slices.set(miseTargetKey(root), slice);
     }
     await slice.planned;
     const waited = new Promise<void>((resolve) => setTimeout(resolve, waitMs).unref());
@@ -156,12 +160,12 @@ export class Services {
    * start was already under way are stopped once they run. Returns the stopped services.
    */
   async stop({ repo, task, dependencies }: StopServiceRequest): Promise<Service[]> {
-    const root: ServiceTarget = { repo, task };
-    const slice = this.slices.get(targetKey(root));
+    const root: MiseTarget = { repo, task };
+    const slice = this.slices.get(miseTargetKey(root));
     // A root that crashed or was skipped may still have dependencies its start started.
     if (!slice && !this.liveRun(root)) throw new DomainError("not_found", `the service of ${where(root)} has not been started`);
     if (slice?.status === "running") slice.status = "cancelled";
-    const members = slice ? [...slice.members.keys()] : [targetKey(root)];
+    const members = slice ? [...slice.members.keys()] : [miseTargetKey(root)];
     await Promise.all(members.map((key) => this.starting.get(key)));
     const targets = [root, ...(dependencies && slice ? this.ownDependencies(slice) : [])];
     const stopped = await Promise.all(targets.map((t) => this.stopOne(t)));
@@ -174,8 +178,8 @@ export class Services {
    * from just before the request until `settleMs` after the response.
    */
   async call(request: CallEndpointRequest): Promise<CallEndpointResult> {
-    const target: ServiceTarget = { repo: request.repo, task: request.task };
-    const watch = (await this.adopt(target)) ?? this.watches.get(targetKey(target));
+    const target: MiseTarget = { repo: request.repo, task: request.task };
+    const watch = (await this.adopt(target)) ?? this.watches.get(miseTargetKey(target));
     const view = watch && (await watch.refresh());
     const address = watch?.reachable();
     if (!view || !address) {
@@ -195,7 +199,7 @@ export class Services {
     return { ...result, errors };
   }
 
-  private bringUp(root: ServiceTarget, dependencies: boolean, previous: SliceRun | undefined): SliceRun {
+  private bringUp(root: MiseTarget, dependencies: boolean, previous: SliceRun | undefined): SliceRun {
     const edges = dependencies ? this.deps.graph.graph().then((g) => g.edges) : Promise.resolve([]);
     const slice: SliceRun = {
       root,
@@ -211,7 +215,7 @@ export class Services {
       .then(async (plan) => {
         slice.plan = plan;
         const waves = plan.waves.map((wave) => wave.map((repo) => memberTarget(slice, repo)));
-        for (const target of waves.flat()) slice.members.set(targetKey(target), { target, outcome: "pending", problem: null });
+        for (const target of waves.flat()) slice.members.set(miseTargetKey(target), { target, outcome: "pending", problem: null });
         for (const wave of waves) {
           if (slice.status !== "running") return;
           await Promise.all(wave.map((t) => this.ensure(slice, t)));
@@ -230,8 +234,8 @@ export class Services {
   }
 
   /** Brings one member up and resolves once it has settled; its outcome is set as soon as it is known. */
-  private async ensure(slice: SliceRun, target: ServiceTarget): Promise<void> {
-    const key = targetKey(target);
+  private async ensure(slice: SliceRun, target: MiseTarget): Promise<void> {
+    const key = miseTargetKey(target);
     const running = await this.adopt(target);
     if (running) {
       slice.members.set(key, { target, outcome: "running", problem: null });
@@ -250,8 +254,8 @@ export class Services {
    * Starts one service. Checks mise again even for the root: dependency waves can take minutes, and the config may
    * have changed meanwhile.
    */
-  private async startOne(slice: SliceRun, target: ServiceTarget): Promise<Member> {
-    const problem = await this.serviceProblem(target.repo);
+  private async startOne(slice: SliceRun, target: MiseTarget): Promise<Member> {
+    const problem = await this.serviceProblem(target);
     if (problem) return skipped(problem.message);
     const ports = await this.expectedPorts(target);
     for (const port of ports) if (await probePort(port)) return skipped(this.portTaken(target, port));
@@ -259,7 +263,7 @@ export class Services {
     // Right before the start: a stop that came meanwhile wins, unless another running slice still needs the service.
     if (slice.status === "cancelled" && !this.wanted(target)) return skipped("the start was cancelled by a stop");
     try {
-      this.watch({ target, run: await this.deps.mise.start(target, SERVICE_MISE_TASK), cardPorts: ports, cursor });
+      this.watch({ target, run: await this.deps.mise.start(target, SERVICE_MISE_TASK), expectedPorts: ports, cursor });
       return { outcome: "started", problem: null };
     } catch (err) {
       if (!(err instanceof DomainError)) throw err;
@@ -267,7 +271,7 @@ export class Services {
     }
   }
 
-  private async stopOne(target: ServiceTarget): Promise<Service | null> {
+  private async stopOne(target: MiseTarget): Promise<Service | null> {
     const watch = await this.adopt(target);
     if (!watch) return null;
     await this.deps.mise.stop(target, SERVICE_MISE_TASK);
@@ -275,7 +279,7 @@ export class Services {
   }
 
   /** Why a port that answers before the start is not this service's. */
-  private portTaken(target: ServiceTarget, port: number): string {
+  private portTaken(target: MiseTarget, port: number): string {
     const what = target.task === null ? "server.port on the card" : "the task port";
     const holder = [...this.watches.values()].find((w) => w.view().port === port && this.liveRun(w.target));
     if (holder) return `port ${port} (${what}) is used by the service of ${where(holder.target)}`;
@@ -286,19 +290,19 @@ export class Services {
    * The watch of the service's live run, also for a `dev` started elsewhere, which gets a watch here reading its log
    * from the oldest buffered record; `undefined` when the task does not run.
    */
-  private async adopt(target: ServiceTarget): Promise<ServiceWatch | undefined> {
+  private async adopt(target: MiseTarget): Promise<ServiceWatch | undefined> {
     const run = this.liveRun(target);
     if (!run) return undefined;
-    const current = this.watches.get(targetKey(target));
+    const current = this.watches.get(miseTargetKey(target));
     if (current?.runId === run.runId) return current;
-    const cardPorts = await this.expectedPorts(target);
-    return this.watch({ target, run, cardPorts, cursor: this.deps.logs.runStartCursor() });
+    const expectedPorts = await this.expectedPorts(target);
+    return this.watch({ target, run, expectedPorts, cursor: this.deps.logs.runStartCursor() });
   }
 
   /** The watch of a run, made once; it replaces the watch of an older run of the same service. */
   private watch(watched: WatchedRun): ServiceWatch {
     const { target, run } = watched;
-    const key = targetKey(target);
+    const key = miseTargetKey(target);
     const current = this.watches.get(key);
     if (current?.runId === run.runId) return current;
     current?.dispose();
@@ -315,13 +319,32 @@ export class Services {
   }
 
   /** The run of the service's task `dev` while its process group is alive (also while it is being stopped). */
-  private liveRun(target: ServiceTarget): RunState | undefined {
+  private liveRun(target: MiseTarget): RunState | undefined {
     const run = this.deps.mise.run(target, SERVICE_MISE_TASK);
     return run && run.kind !== "exited" ? run : undefined;
   }
 
-  /** Why `repo` has no service: mise did not list its tasks (`mise_unavailable`) or there is no task `dev` (`not_found`). */
-  private async serviceProblem(repo: string): Promise<{ code: "mise_unavailable" | "not_found"; message: string } | null> {
+  /** The service of a task the user ended (ADR-61) once it neither runs nor starts: nothing can start it again. */
+  private forgettable(target: MiseTarget): boolean {
+    if (target.task === null || this.liveRun(target) || this.starting.has(miseTargetKey(target)) || this.wanted(target)) return false;
+    return this.deps.taskPort(target.repo, target.task) === null;
+  }
+
+  private forget(key: string): void {
+    this.watches.get(key)?.dispose();
+    this.watches.delete(key);
+    this.slices.delete(key);
+  }
+
+  /**
+   * Why `target` has no service: there is no such task in the repo (`not_found`), mise did not list the repo's tasks
+   * (`mise_unavailable`) or there is no task `dev` (`not_found`). A task's worktree is checked against the repo root's
+   * list, as the code the task started from; `mise` refuses a start in a worktree whose `dev` the task removed.
+   */
+  private async serviceProblem(target: MiseTarget): Promise<{ code: "mise_unavailable" | "not_found"; message: string } | null> {
+    const { repo, task } = target;
+    if (task !== null && this.deps.taskPort(repo, task) === null)
+      return { code: "not_found", message: `there is no task ${task} in ${repo}` };
     const tasks = await this.deps.mise.tasks(repo);
     if (tasks.kind !== "ok") return { code: "mise_unavailable", message: `${repo}: ${tasks.message}` };
     if (hasService(tasks.tasks)) return null;
@@ -332,38 +355,41 @@ export class Services {
    * The ports the service is expected on until its log names one: the task port for a task's service (ADR-61),
    * otherwise `server.port` of the Spring Boot apps on the card (none when the card cannot be built).
    */
-  private async expectedPorts(target: ServiceTarget): Promise<number[]> {
-    if (target.task !== null) return [this.deps.taskPort(target.task)];
+  private async expectedPorts(target: MiseTarget): Promise<number[]> {
+    if (target.task !== null) {
+      const port = this.deps.taskPort(target.repo, target.task);
+      return port === null ? [] : [port];
+    }
     const result = await this.deps.cards.card(target.repo).catch(() => null);
     const ports = (result?.card?.provides ?? []).flatMap((p) => (p.kind === "app" && p.port ? [p.port] : []));
     return [...new Set(ports)];
   }
 
   /** The log cursor right now: every record after it is newer than this moment, in every source. */
-  private logCursor(target: ServiceTarget): number {
+  private logCursor(target: MiseTarget): number {
     return this.deps.logs.tail({ source: devSource(target), limit: 1 }).nextSeq;
   }
 
   /** Whether a slice that is still starting includes `target`. */
-  private wanted(target: ServiceTarget): boolean {
-    return [...this.slices.values()].some((s) => s.status === "running" && s.members.has(targetKey(target)));
+  private wanted(target: MiseTarget): boolean {
+    return [...this.slices.values()].some((s) => s.status === "running" && s.members.has(miseTargetKey(target)));
   }
 
   /** Dependencies the slice (or an earlier start of its root) started that no other slice uses: one still starting or one whose root runs. */
-  private ownDependencies(slice: SliceRun): ServiceTarget[] {
+  private ownDependencies(slice: SliceRun): MiseTarget[] {
     const usedElsewhere = new Set(
       [...this.slices.values()]
         .filter((s) => s !== slice && (s.status === "running" || this.liveRun(s.root)))
         .flatMap((s) => [...s.members].filter(([, m]) => m.outcome !== "skipped").map(([key]) => key)),
     );
-    return this.startedDependencies(slice).filter((t) => !usedElsewhere.has(targetKey(t)));
+    return this.startedDependencies(slice).filter((t) => !usedElsewhere.has(miseTargetKey(t)));
   }
 
   /** Dependencies the slice and the earlier starts of its root `started`. */
-  private startedDependencies(slice: SliceRun): ServiceTarget[] {
-    const rootKey = targetKey(slice.root);
+  private startedDependencies(slice: SliceRun): MiseTarget[] {
+    const rootKey = miseTargetKey(slice.root);
     const started = [...slice.members].filter(([key, m]) => key !== rootKey && m.outcome === "started").map(([, m]) => m.target);
-    const unique = new Map([...started, ...slice.inherited].map((t) => [targetKey(t), t]));
+    const unique = new Map([...started, ...slice.inherited].map((t) => [miseTargetKey(t), t]));
     return [...unique.values()];
   }
 
@@ -395,21 +421,16 @@ function skipped(problem: string): Member {
   return { outcome: "skipped", problem };
 }
 
-function devSource({ repo, task }: ServiceTarget): LogSource {
+function devSource({ repo, task }: MiseTarget): LogSource {
   return miseTaskLogSource(repo, task, SERVICE_MISE_TASK);
 }
 
 /** The slice's own repo runs where the slice was asked for; every dependency from its repo root. */
-function memberTarget(slice: SliceRun, repo: string): ServiceTarget {
+function memberTarget(slice: SliceRun, repo: string): MiseTarget {
   return repo === slice.root.repo ? slice.root : { repo, task: null };
 }
 
-/** One key per place a service runs; a task's prefix differs from a repo's, as in `mise`. */
-function targetKey({ repo, task }: ServiceTarget): string {
-  return task === null ? `repo:${repo}` : `task:${task}:${repo}`;
-}
-
 /** The service's place in a message: the repo, or the task worktree in it. */
-function where({ repo, task }: ServiceTarget): string {
+function where({ repo, task }: MiseTarget): string {
   return task === null ? repo : `task ${task} in ${repo}`;
 }
