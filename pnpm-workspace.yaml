@@ -13,3 +13,5 @@ ignoredBuiltDependencies:
 overrides:
   # The Kotlin grammar package has its author tool in `dependencies` instead of `devDependencies`.
   "@tree-sitter-grammars/tree-sitter-kotlin>npm-check-updates": "-"
+  # VitePress 1.6 asks for Vite 5, whose dev server has known vulnerabilities fixed only in 6.4.4+ (ADR-56).
+  "vitepress>vite": "6.4.5"

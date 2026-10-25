@@ -1,0 +1,62 @@
+name: Documentation site
+
+# Publishes apps/docs on GitHub Pages (ADR-56) after a push to main that changes the site or this file.
+# ci.yml builds the same site on every PR, so a broken page is caught before the merge.
+# GitHub Pages must be on, with Source: GitHub Actions (a repo setting the owner makes).
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/docs/**
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+# One deployment at a time; a newer push replaces a queued run, but never cancels a deployment in progress.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+# No permissions by default; every job gets only what it needs.
+permissions: {}
+
+# The same versions as in mise.toml; apps/desktop/test/toolchain.test.ts guards this.
+env:
+  BUN_VERSION: "1.4.4"
+  NODE_VERSION: "22"
+
+jobs:
+  build:
+    name: build the site
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          # "Last updated" on every page comes from git history.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: pnpm --filter @trackwall/docs build
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: apps/docs/dist
+
+  deploy:
+    name: publish on GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

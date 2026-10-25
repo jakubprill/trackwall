@@ -14,3 +14,6 @@ out/
 # stan daemona z `pnpm dev` (`.pitwall-dev/` z checkoutów sprzed zmiany nazwy, ADR-12)
 .trackwall-dev/
 .pitwall-dev/
+
+# VitePress cache of apps/docs
+apps/docs/.vitepress/cache/

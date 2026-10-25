@@ -1,7 +1,7 @@
 name: CI
 
 # The repo is public, so standard runners have no minute limit (ADR-22). Every PR and push to main runs:
-# - lint, rustfmt, typecheck and tests on Linux, plus the dependency audit;
+# - lint, rustfmt, typecheck, tests and the documentation site build on Linux, plus the dependency audit;
 # - tests on Windows and macOS;
 # - the daemon build and the Tauri portable build on Windows and macOS (clippy, cargo test, sidecar smoke test);
 # - the aggregate `CI ok` job, the only check to require in main branch protection.
@@ -58,6 +58,9 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      # A broken page or link between pages fails the build (links to GitHub are not checked); pages.yml publishes the same build from main (ADR-56).
+      - name: Documentation site
+        run: pnpm --filter @trackwall/docs build
 
   # A vulnerability without a fixed version would block every PR, so it goes into auditConfig
   # in pnpm-workspace.yaml (pnpm audit --ignore) with a comment on why, and the audit stays in `CI ok`.
