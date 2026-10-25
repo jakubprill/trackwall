@@ -7,22 +7,22 @@ import { keyLines, type RepoSnapshot } from "./snapshot.ts";
 import { MISE_CONFIG_FILES, TOML_KEY } from "./tools.ts";
 
 /**
- * Konfiguracja mise repo z drzewa commita (§4.6, ADR-34): które pliki konfiguracji mise leżą w repo i jakie taski
- * zapisano w ich `[tasks]` oraz w katalogach tasków plikowych. Bez `mise tasks ls`, z tych samych powodów co narzędzia
- * w `tools.ts` (ADR-25): commit zamiast katalogu roboczego i bez zaufania mise. Plik konfiguracji parsuje się tu drugi
- * raz (pierwszy dla `[tools]`), bo to kilka małych plików na commit, a karta liczy się raz.
+ * The repo's mise configuration from the commit tree (§4.6, ADR-34): which mise config files are in the repo and which
+ * tasks are defined in their `[tasks]` and in file task directories. No `mise tasks ls`, for the same reasons as the
+ * tools in `tools.ts` (ADR-25): the commit instead of the working directory, and no mise trust. A config file is parsed
+ * here a second time (the first for `[tools]`), because it is a few small files per commit, and a card is computed once.
  */
 
-/** Pliki konfiguracji z korzenia (te z `tools.ts` i `.config/mise/mise.toml`) i katalogi `conf.d` z dowolnym `*.toml`. */
+/** Config files from the root (those from `tools.ts` and `.config/mise/mise.toml`) and `conf.d` directories with any `*.toml`. */
 const ROOT_CONFIG_FILES = [...MISE_CONFIG_FILES, ".config/mise/mise.toml"];
 const CONF_D_DIRS = ["mise/conf.d", ".mise/conf.d", ".config/mise/conf.d"];
-/** Katalogi tasków plikowych, które mise czyta domyślnie w korzeniu repo. */
+/** File task directories mise reads by default in the repo root. */
 const FILE_TASK_DIRS = ["mise-tasks", ".mise-tasks", "mise/tasks", ".mise/tasks", ".config/mise/tasks"];
-/** Nagłówek tabeli taska (`[tasks.build]`, `[tasks."test:unit"]`); klasy bez spacji, więc bez cofania na długiej linii. */
+/** A task's table header (`[tasks.build]`, `[tasks."test:unit"]`); classes without spaces, so no backtracking on a long line. */
 const TASK_HEADER = /^\s*\[tasks\.(?:"([^"]*)"|'([^']*)'|([^"'\s\]]+))\s*\]/g;
 const TASKS_TABLE = /^\s*\[tasks\]\s*$/;
 const ANY_TABLE = /^\s*\[/;
-/** Tylko klucze `[tasks]`; zły wpis w innej tabeli to sprawa `tools.ts`. */
+/** Only the `[tasks]` keys; a bad entry in another table is a matter for `tools.ts`. */
 const MiseTasksConfig = z.object({ tasks: z.record(z.string(), z.unknown()).catch({}) });
 
 export function isMiseConfigFile(path: string): boolean {
@@ -30,9 +30,9 @@ export function isMiseConfigFile(path: string): boolean {
 }
 
 /**
- * Pliki konfiguracji w kolejności z `ROOT_CONFIG_FILES`, potem `conf.d`, więc powód tagu `no-mise` wskazuje `mise.toml`,
- * a nie przypadkowy plik z listy gita. Wynik jest niepełny (`complete: false`), gdy któregoś pliku nie przeczytano albo
- * lista plików commita jest ucięta (problem odczytu bez ścieżki): wtedy nie wiadomo, czy repo ma taski.
+ * Config files in the order of `ROOT_CONFIG_FILES`, then `conf.d`, so the reason for the `no-mise` tag points to
+ * `mise.toml`, not a random file from git's list. The result is incomplete (`complete: false`) when some file was not read
+ * or the commit's file list is cut (a read problem without a path): then it is unknown whether the repo has tasks.
  */
 export function extractMiseSetup(snapshot: RepoSnapshot): { mise: MiseSetup; problems: CardProblem[] } {
   const configFiles = snapshot.paths.filter(isMiseConfigFile).sort((a, b) => configRank(a) - configRank(b));
@@ -52,8 +52,8 @@ function configRank(path: string): number {
 }
 
 /**
- * Klucze `[tasks]`; plik, który nie jest poprawnym TOML-em, nie daje tasków. Problem karty zgłasza się tu tylko dla
- * plików, których nie czyta `tools.ts`, żeby ten sam zły plik nie był na karcie dwa razy.
+ * The `[tasks]` keys; a file that is not valid TOML gives no tasks. A card problem is reported here only for files
+ * `tools.ts` does not read, so that the same bad file is not on the card twice.
  */
 function tomlTasks(path: string, text: string, problems: CardProblem[]): DeclaredMiseTask[] {
   let parsed: unknown;
@@ -74,7 +74,7 @@ function tomlTasks(path: string, text: string, problems: CardProblem[]): Declare
   }));
 }
 
-/** Linie kluczy wewnątrz tabeli `[tasks]` (`build = "make"`), żeby klucz o tej samej nazwie w `[tools]` nie był dowodem. */
+/** Lines of keys inside the `[tasks]` table (`build = "make"`), so that a key with the same name in `[tools]` is not evidence. */
 function tasksTableLines(text: string): Map<string, number> {
   const lines = text.split("\n");
   const start = lines.findIndex((line) => TASKS_TABLE.test(line));
@@ -84,7 +84,7 @@ function tasksTableLines(text: string): Map<string, number> {
   return new Map([...keyLines(table, TOML_KEY)].map(([name, line]) => [name, line + start + 1]));
 }
 
-/** Pliki w katalogach tasków; ukryte pliki (`.gitkeep`) to nie taski, a `_default` to task o nazwie katalogu. */
+/** Files in task directories; hidden files (`.gitkeep`) are not tasks, and `_default` is the task named after its directory. */
 function fileTasks(paths: readonly string[]): DeclaredMiseTask[] {
   return FILE_TASK_DIRS.flatMap((dir) =>
     paths

@@ -11,12 +11,12 @@ import { globMatcher } from "./glob.ts";
 import { dirOf } from "./repo-path.ts";
 
 /**
- * Tagi repo (ADR-25): automatyczne z karty, każdy z powodem, oraz z reguł `repoTags` w `workspace.yaml`. Tagi
- * automatyczne są ortogonalne (język, rola, budowa repo), więc „BFF w Javie” to filtr `java` + `bff`, a nazwy
- * zespołów i grup firmy przychodzą tylko z reguł użytkownika (ADR-7).
+ * Repo tags (ADR-25): automatic ones from the card, each with a reason, and ones from the `repoTags` rules in
+ * `workspace.yaml`. Automatic tags are orthogonal (language, role, repo structure), so "BFF in Java" is the filter
+ * `java` + `bff`, and the names of a company's teams and groups come only from the user's rules (ADR-7).
  */
 
-/** Repo, któremu liczymy tagi: identyfikator i adres repo zdalnego do reguł i rozpoznania `bff` z nazwy. */
+/** The repo we compute tags for: the identifier and the remote address, for the rules and for recognising `bff` in the name. */
 export interface TaggedRepo {
   id: string;
   remote: string | null;
@@ -25,7 +25,7 @@ export interface TaggedRepo {
 const FRONTEND: MechanismId[] = ["react", "angular", "vue", "svelte"];
 const BACKEND: MechanismId[] = ["spring-boot", "express", "nestjs"];
 const DEPLOYMENT: MechanismId[] = ["docker", "helm", "kubernetes"];
-/** `bff` jako osobne słowo nazwy (`orders-bff`, `bff_web`), nie fragment innego słowa. */
+/** `bff` as a separate word of the name (`orders-bff`, `bff_web`), not part of another word. */
 const BFF_WORD = /(^|[^a-z0-9])bff([^a-z0-9]|$)/i;
 
 export function repoTags(card: RepoCard | null, repo: TaggedRepo, rules: RepoTagRules): RepoTag[] {
@@ -62,8 +62,9 @@ function cardTags(card: RepoCard, repo: TaggedRepo): [string, string][] {
 }
 
 /**
- * `no-mise`: repo bez tasków mise w commicie (ADR-34), więc ani kroki `setup` i `build` komendy zbiorczej, ani zakładka
- * „mise tasks” nie mają czego w nim uruchomić. Tag negatywny, bo to repo trzeba znaleźć filtrem, żeby dopisać mu `mise.toml`.
+ * `no-mise`: a repo without mise tasks in the commit (ADR-34), so neither the `setup` and `build` steps of the batch
+ * command nor the "mise tasks" tab have anything to run in it. A negative tag, because such a repo has to be found with
+ * a filter to give it a `mise.toml`.
  */
 function noMiseReason(card: RepoCard): string | undefined {
   if (card.mise.tasks.length > 0 || !card.mise.complete) return undefined;
@@ -77,8 +78,8 @@ function bffName(card: RepoCard, repo: TaggedRepo): string | undefined {
 }
 
 /**
- * Monorepo: plik buildu wymienia co najmniej dwa moduły albo paczki workspace, albo repo ma co najmniej dwa
- * niezależne buildy w różnych katalogach (np. `backend/pom.xml` i `frontend/package.json`).
+ * Monorepo: a build file lists at least two modules or workspace packages, or the repo has at least two independent
+ * builds in different directories (e.g. `backend/pom.xml` and `frontend/package.json`).
  */
 function monorepoReason(card: RepoCard): string | undefined {
   const members = new Map<string, number>();
@@ -90,7 +91,7 @@ function monorepoReason(card: RepoCard): string | undefined {
   return undefined;
 }
 
-/** Tagi z reguł `repoTags`: wzorzec pasujący do identyfikatora albo adresu repo zdalnego, bez wielkości liter. */
+/** Tags from the `repoTags` rules: a pattern matching the identifier or the remote address, ignoring case. */
 function ruleTags(repo: TaggedRepo, rules: RepoTagRules): [string, string][] {
   const tags: [string, string][] = [];
   for (const [name, patterns] of Object.entries(rules)) {

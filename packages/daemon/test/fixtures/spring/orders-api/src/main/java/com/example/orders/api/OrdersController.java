@@ -3,7 +3,7 @@ package com.example.orders.api;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Zamówienia. Stary endpoint jest wyłączony:
+ * Orders. The old endpoint is disabled:
  * @GetMapping("/legacy")
  */
 @RestController
@@ -29,7 +29,7 @@ public class OrdersController {
         return service.create(order);
     }
 
-    // @DeleteMapping("/{id}") — usuwanie wraca w następnym wydaniu
+    // @DeleteMapping("/{id}") — deleting comes back in the next release
     @RequestMapping(value = "/{id}/cancel", method = RequestMethod.PUT)
     public void cancel(@PathVariable String id) {
         service.cancel(id);

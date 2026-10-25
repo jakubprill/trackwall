@@ -2,20 +2,20 @@ import { type ConsumedHttp, parseHttpUrl } from "@trackwall/protocol";
 import type { ProblemSink } from "./snapshot.ts";
 import { clientAt, type SpringModule, urlVariants } from "./spring-module.ts";
 
-/** Najwięcej klientów z konfiguracji jednego modułu: aplikacja ma ich kilkadziesiąt, a plik jest z repo (§8). */
+/** At most this many clients from the configuration of one module: an app has a few dozen, and the file comes from the repo (§8). */
 const MAX_CONFIG_CLIENTS = 500;
 
 /**
- * Klienci HTTP z samej konfiguracji Spring (§4.6, ADR-30): klucz, którego wartość w którymś profilu jest adresem
- * HTTP albo `lb://nazwa` (`orders.url`, `spring.cloud.gateway.routes[0].uri`, `eureka.client.service-url.defaultZone`),
- * a którego wpisu nie wskazuje już adres klienta z kodu (`codeClients`, `usedBy`). Wywołań nie ma, bo konfiguracja
- * ich nie zna.
+ * HTTP clients from Spring configuration alone (§4.6, ADR-30): a key whose value in some profile is an HTTP address or
+ * `lb://name` (`orders.url`, `spring.cloud.gateway.routes[0].uri`, `eureka.client.service-url.defaultZone`), and whose
+ * entry is not already pointed to by the address of a client from code (`codeClients`, `usedBy`). There are no calls,
+ * because the configuration does not know them.
  */
 export function configClients(module: SpringModule, codeClients: readonly ConsumedHttp[], out: ProblemSink): ConsumedHttp[] {
   const used = codeUrlsByEntry(codeClients);
   const clients: ConsumedHttp[] = [];
   for (const key of module.config.keys()) {
-    // Rozwijanie w każdym profilu tylko dla klucza, którego wartość w którymś wygląda na adres albo ma `${…}`.
+    // Expanding in every profile only for a key whose value in one of them looks like an address or has `${…}`.
     if (!module.config.rawValues(key).some((v) => v.includes("${") || parseHttpUrl(v))) continue;
     for (const variant of urlVariants(module, `\${${key}}`)) {
       const name = variant.source && module.config.entry(key, variant.profiles[0])?.key;
@@ -33,7 +33,7 @@ export function configClients(module: SpringModule, codeClients: readonly Consum
   return clients;
 }
 
-/** Adresy klientów z kodu po wpisie konfiguracji (plik i linia), z którego je rozwinięto. */
+/** Addresses of clients from code by the configuration entry (file and line) they were expanded from. */
 function codeUrlsByEntry(codeClients: readonly ConsumedHttp[]): Map<string, string[]> {
   const byEntry = new Map<string, string[]>();
   for (const client of codeClients) {
@@ -45,8 +45,9 @@ function codeUrlsByEntry(codeClients: readonly ConsumedHttp[]): Map<string, stri
 }
 
 /**
- * Wpis jest już adresem klienta z kodu, gdy klient z tej linii ma adres zaczynający się od jego wartości (kod dokleja
- * ścieżkę: `${orders.url}/v1`). Sama linia nie wystarcza, bo mapa YAML `{a: …, b: …}` ma kilka wpisów w jednej linii.
+ * An entry is already a code client's address when the client from that line has an address that starts with its value
+ * (the code appends a path: `${orders.url}/v1`). The line alone is not enough, because a YAML map `{a: …, b: …}` has
+ * several entries on one line.
  */
 function usedBy(used: ReadonlyMap<string, readonly string[]>, source: { path: string; line: number }, value: string): boolean {
   return used.get(entryId(source))?.some((url) => url.startsWith(value)) ?? false;

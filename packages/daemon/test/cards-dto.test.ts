@@ -26,8 +26,8 @@ function dtos(c: RepoCard): string[] {
   });
 }
 
-describe("kontrakty endpointów i DTO", () => {
-  test("orders-api: typy żądań i odpowiedzi oraz DTO z rekordu, klasy z Lombokiem i enuma, bez pól static", () => {
+describe("endpoint contracts and DTOs", () => {
+  test("orders-api: request and response types and DTOs from a record, a Lombok class and an enum, without static fields", () => {
     const c = card(fixtureFiles("orders-api"));
     expect(contracts(c.provides)).toEqual([
       "GET /api/orders/{id} - -> OrderDto",
@@ -48,7 +48,7 @@ describe("kontrakty endpointów i DTO", () => {
     ]);
   });
 
-  test("kontroler Kotlina: @RequestBody z argumentami, suspend, ResponseEntity i funkcja bez jawnego typu", () => {
+  test("a Kotlin controller: @RequestBody with arguments, suspend, ResponseEntity and a function without an explicit type", () => {
     const c = card({
       "src/main/kotlin/a/OrdersController.kt": [
         "@RestController",
@@ -78,7 +78,7 @@ describe("kontrakty endpointów i DTO", () => {
     ]);
   });
 
-  test("metoda z interfejsu API, który kontroler implementuje, ma kontrakt z pliku interfejsu", () => {
+  test("a method from an API interface the controller implements has the contract from the interface file", () => {
     const c = card({
       "src/main/java/a/OrdersApi.java": [
         '@RequestMapping("/orders")',
@@ -91,7 +91,7 @@ describe("kontrakty endpointów i DTO", () => {
     expect(contracts(c.provides)).toEqual(["POST /orders Flux<CreateOrder> -> List<OrderDto>"]);
   });
 
-  test("odpowiedź bez opakowań, które nie zmieniają treści, i bez treści dla void, Unit i ResponseEntity<Void>", () => {
+  test("the response without wrappers that do not change the content, and no content for void, Unit and ResponseEntity<Void>", () => {
     expect(responseType("ResponseEntity<OrderDto>")).toBe("OrderDto");
     expect(responseType("ResponseEntity<OrderDto>?")).toBe("OrderDto");
     expect(responseType("Mono<ResponseEntity<Map<String,OrderDto>>>")).toBe("Map<String,OrderDto>");
@@ -107,7 +107,7 @@ describe("kontrakty endpointów i DTO", () => {
     expect(responseType(null)).toBeNull();
   });
 
-  test("DTO zagnieżdżone w kontrolerze i typ o nazwie innej niż plik są na karcie; typ spoza repo nie", () => {
+  test("a DTO nested in the controller and a type named differently from its file are on the card; a type from outside the repo is not", () => {
     const c = card({
       "src/main/java/a/Api.java": [
         "@RestController class Api {",
@@ -123,7 +123,7 @@ describe("kontrakty endpointów i DTO", () => {
     ]);
   });
 
-  test("plik, którego parsowanie przekracza limit, jest problemem karty, a endpoint zostaje bez typów", () => {
+  test("a file whose parsing exceeds the limit is a card problem, and the endpoint stays without types", () => {
     const c = card({
       "src/main/kotlin/a/Api.kt": `@RestController\nclass Api {\n    @GetMapping("/a")\n    fun a(): OrderDto = TODO()\n}\n${"fun f() = a<".repeat(20_000)}`,
     });
@@ -136,7 +136,7 @@ describe("kontrakty endpointów i DTO", () => {
     ]);
   });
 
-  test("po przekroczeniu łącznego czasu parsowania karty pliki zostają bez kontraktów, z jednym problemem", () => {
+  test("after the card's total parse time is exceeded the files stay without contracts, with one problem", () => {
     const snapshot = snapshotOf({
       "src/main/java/a/A.java": '@RestController class A { @GetMapping("/a") public Dto a() { return null; } }',
       "src/main/java/a/B.java": '@RestController class B { @GetMapping("/b") public Dto b() { return null; } }',
@@ -154,14 +154,14 @@ describe("kontrakty endpointów i DTO", () => {
     ]);
   });
 
-  test("karta bez parserów jest kompletna, dopóki nie próbuje parsować żadnego pliku", () => {
+  test("a card without parsers is complete as long as it does not try to parse any file", () => {
     const parsersOfCard = withParseBudget(unavailableParsers("grammar missing"), 10_000);
     expect(parsersOfCard.complete).toBe(true);
     expect(parsersOfCard.read("java", "class A {}", () => 1)).toEqual({ kind: "unavailable", reason: "grammar missing" });
     expect(parsersOfCard.complete).toBe(false);
   });
 
-  test("bez parserów karta powstaje bez kontraktów i DTO, z jednym problemem", () => {
+  test("without parsers the card is built without contracts and DTOs, with one problem", () => {
     const c = extractCard(snapshotOf(fixtureFiles("orders-api")), unavailableParsers("grammar missing"));
     expect(contracts(c.provides)).toEqual(["GET /api/orders/{id} - -> -", "POST /api/orders - -> -", "PUT /api/orders/{id}/cancel - -> -"]);
     expect(c.dtos).toEqual([]);
@@ -174,7 +174,7 @@ describe("kontrakty endpointów i DTO", () => {
     ]);
   });
 
-  test("kontrakt to metoda, w której leży mapowanie, a nie pierwsza metoda o tej nazwie w pliku", () => {
+  test("the contract is the method containing the mapping, not the first method with that name in the file", () => {
     const c = card({
       "src/main/java/a/Api.java": [
         "@RestController class Api {",
@@ -190,7 +190,7 @@ describe("kontrakty endpointów i DTO", () => {
     expect(contracts(c.provides)).toEqual(["POST /a OrderIn -> OrderDto", "POST /b OtherIn -> OrderDto", "GET /c - -> PaymentDto"]);
   });
 
-  test("typ kwalifikowany wskazuje DTO swoim ostatnim członem, a klasa bez pól (serwis) nie jest DTO", () => {
+  test("a qualified type points to a DTO by its last part, and a class without fields (a service) is not a DTO", () => {
     const c = card({
       "src/main/kotlin/a/Api.kt": [
         "@RestController",
@@ -206,7 +206,7 @@ describe("kontrakty endpointów i DTO", () => {
     expect(dtos(c)).toEqual(["data-class Summary(name: String) src/main/kotlin/a/Api.kt:5"]);
   });
 
-  test("zapis typu jest bez adnotacji, ze spacją tylko między słowami, z wymiarami tablicy przy nazwie pola", () => {
+  test("the type notation has no annotations, a space only between words, and array dimensions at the field name", () => {
     const c = card({
       "src/main/java/a/Api.java": [
         "@RestController class Api {",
@@ -219,7 +219,7 @@ describe("kontrakty endpointów i DTO", () => {
     expect(dtos(c)).toEqual(["class OrderDto(a: int, b: int[]) src/main/java/a/Api.java:4"]);
   });
 
-  test("enum z ponad 200 stałymi jest przycięty, a pusty rekord nie jest DTO", () => {
+  test("an enum with over 200 constants is cut, and an empty record is not a DTO", () => {
     const constants = Array.from({ length: 201 }, (_, i) => `C${i}`).join(", ");
     const c = card({
       "src/main/java/a/Api.java": `@RestController class Api { @GetMapping("/a") Many a(@RequestBody Empty body) { return null; } }\nenum Many { ${constants} }\nrecord Empty() {}`,
@@ -230,7 +230,7 @@ describe("kontrakty endpointów i DTO", () => {
     ]);
   });
 
-  test("dwa mapowania w jednej linii mają kontrakty swoich metod", () => {
+  test("two mappings on one line have the contracts of their own methods", () => {
     const c = card({
       "src/main/java/a/Api.java":
         '@RestController class Api { @GetMapping("/a") public A a() { return null; } @PostMapping("/b") public B b(@RequestBody X x) { return null; } }',
@@ -238,7 +238,7 @@ describe("kontrakty endpointów i DTO", () => {
     expect(contracts(c.provides)).toEqual(["GET /a - -> A", "POST /b X -> B"]);
   });
 
-  test("DTO z ponad 200 polami i typy dłuższe niż 256 znaków są przycięte, z problemem", () => {
+  test("a DTO with over 200 fields and types longer than 256 characters are cut, with a problem", () => {
     const fields = Array.from({ length: 201 }, (_, i) => `String f${i};`).join(" ");
     const long = `Map<${"A".repeat(300)},String>`;
     const c = card({
@@ -255,8 +255,8 @@ describe("kontrakty endpointów i DTO", () => {
   });
 });
 
-describe("odczyt plików typów, które wymienia kod HTTP", () => {
-  test("odczyt dociąga pliki o nazwach typów z kontrolera i z nich, najwyżej trzy rundy, bez plików testów", async () => {
+describe("reading the type files the HTTP code mentions", () => {
+  test("the read fetches files named after types from the controller and from them, at most three rounds, without test files", async () => {
     const source = (path: string) => ({ name: path.split("/").pop() ?? path, path, kind: "file" as const, size: 10 });
     const texts: Record<string, string> = {
       "src/main/java/a/Api.java": "@RestController class Api { @GetMapping OrderDto get() { return null; } }",
@@ -287,12 +287,12 @@ describe("odczyt plików typów, które wymienia kod HTTP", () => {
     expect(snapshot.problems).toEqual([]);
   });
 
-  test("pliki typów, które nie zmieściły się w limicie odczytu, dają jeden problem zamiast problemu na plik", async () => {
+  test("type files that did not fit in the read limit give one problem instead of a problem per file", async () => {
     const source = (path: string) => ({ name: path.split("/").pop() ?? path, path, kind: "file" as const, size: 10 });
     const paths = ["src/main/java/a/Api.java", "src/main/java/a/OrderDto.java", "src/main/java/a/Line.java"];
     const vcs = {
       commitFiles: async () => ({ files: paths.map(source), truncated: false }),
-      // Limit bajtów wyczerpany po pierwszym pliku: kolejne odczyty nie dają nic.
+      // The byte limit is used up after the first file: further reads give nothing.
       readFiles: async (_dir: string, _commit: string, wanted: readonly string[]) =>
         new Map(
           wanted.includes("src/main/java/a/Api.java")
@@ -311,7 +311,7 @@ describe("odczyt plików typów, które wymienia kod HTTP", () => {
     ]);
   });
 
-  test("plik typu dociągnięty dla kontraktów nie daje faktów HTTP, nawet gdy wygląda jak kontroler", () => {
+  test("a type file fetched for contracts gives no HTTP facts, even when it looks like a controller", () => {
     const files = {
       "src/main/java/a/Api.java": '@RestController class Api { @GetMapping("/a") OrderDto a() { return null; } }',
       "src/main/java/a/OrderDto.java": '@RestController class OrderDto { String id; @GetMapping("/b") void b() {} }',
@@ -322,13 +322,13 @@ describe("odczyt plików typów, które wymienia kod HTTP", () => {
     expect(dtos(c)).toEqual(["class OrderDto(id: String) src/main/java/a/OrderDto.java:1"]);
   });
 
-  test("plik z wyszukiwania, którego nie zmieścił limit odczytu, nie wraca jako plik typu", async () => {
+  test("a file from the search that did not fit in the read limit does not come back as a type file", async () => {
     const source = (path: string) => ({ name: path.split("/").pop() ?? path, path, kind: "file" as const, size: 10 });
     const paths = ["src/main/java/a/OrdersController.java", "src/main/java/a/OrdersApi.java"];
     let reads = 0;
     const vcs = {
       commitFiles: async () => ({ files: paths.map(source), truncated: false }),
-      // Pierwszy odczyt mieści tylko kontroler; kolejne oddałyby wszystko.
+      // The first read fits only the controller; the next ones would return everything.
       readFiles: async (_dir: string, _commit: string, wanted: readonly string[]) => {
         const first = reads++ === 0;
         const texts = new Map([

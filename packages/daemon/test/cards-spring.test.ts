@@ -31,8 +31,8 @@ function summary(c: RepoCard): string[] {
   });
 }
 
-describe("karta repo Spring z fixture'ów sklepu", () => {
-  test(`orders-api: aplikacja z portem z \${PORT:8081}, endpointy ze stałymi ścieżek, bez kodu z src/test i adnotacji w komentarzach`, () => {
+describe("Spring repo card from the shop fixtures", () => {
+  test(`orders-api: the app with the port from \${PORT:8081}, endpoints with path constants, without code from src/test and annotations in comments`, () => {
     const c = extractCard(snapshotOf(fixtureFiles("orders-api")), parsers);
     expect(c.provides.filter((p) => p.kind === "app")).toEqual([
       { kind: "app", name: "orders-api", port: 8081, module: "", evidence: { path: "src/main/resources/application.yml", line: 3 } },
@@ -45,7 +45,7 @@ describe("karta repo Spring z fixture'ów sklepu", () => {
     expect(c.problems).toEqual([]);
   });
 
-  test("orders-bff: klient Feign w Kotlinie z adresem w każdym profilu, WebClient z @Value i adres Zipkina z konfiguracji", () => {
+  test("orders-bff: a Feign client in Kotlin with an address in every profile, WebClient with @Value and the Zipkin address from the configuration", () => {
     expect(summary(extractCard(snapshotOf(fixtureFiles("orders-bff")), parsers))).toEqual([
       "webclient PaymentsGateway app=null url=http://payments-service:8080/api [default] {POST /payments/{orderId}}",
       "feign OrdersClient app=orders-api url=http://localhost:8081 [default] {GET /api/orders/{id}, POST /api/orders}",
@@ -54,19 +54,19 @@ describe("karta repo Spring z fixture'ów sklepu", () => {
     ]);
   });
 
-  test("payments: application.properties z dokumentem #--- dla profilu prod i Gradle", () => {
+  test("payments: application.properties with a #--- document for the prod profile, and Gradle", () => {
     const c = extractCard(snapshotOf(fixtureFiles("payments")), parsers);
     expect(c.provides.filter((p) => p.kind === "app").map((a) => [a.name, a.port])).toEqual([["payments-service", 8082]]);
     expect(endpoints(c)).toEqual(["POST /api/payments/{orderId} PaymentsController.pay:12"]);
   });
 
-  test("legacy-reports: RestTemplate bez adresu bazowego daje wywołania ze zmienną w miejscu sklejanego argumentu", () => {
+  test("legacy-reports: RestTemplate without a base address gives calls with a variable in place of the concatenated argument", () => {
     expect(summary(extractCard(snapshotOf(fixtureFiles("legacy-reports")), parsers))).toEqual([
       "rest-template OrdersReport app=null url=null [] {GET /api/orders/{}, PUT /api/orders/{}/cancel}",
     ]);
   });
 
-  test("shop-web: adres API z .env i cel proxy Vite", () => {
+  test("shop-web: the API address from .env and the Vite proxy target", () => {
     expect(summary(extractCard(snapshotOf(fixtureFiles("shop-web")), parsers))).toEqual([
       "env VITE_API_URL app=null url=http://localhost:8090 [] {}",
       "proxy vite.config.mjs app=null url=http://localhost:8090 [] {}",
@@ -75,7 +75,7 @@ describe("karta repo Spring z fixture'ów sklepu", () => {
 });
 
 describe("endpointy Spring", () => {
-  test("interfejs API-first: adnotacje mapowań z interfejsu, ścieżka kontrolera i server.servlet.context-path; /items i /items/ to jeden endpoint", () => {
+  test("an API-first interface: mapping annotations from the interface, the controller path and server.servlet.context-path; /items and /items/ are one endpoint", () => {
     const c = card({
       "src/main/resources/application.properties": "spring.application.name=catalog\nserver.servlet.context-path=/catalog\n",
       "src/main/java/a/CatalogApi.java": [
@@ -103,7 +103,7 @@ describe("endpointy Spring", () => {
     ]);
   });
 
-  test("konstruktor główny Kotlina z klientem Feign nie daje kontrolerowi endpointów klienta", () => {
+  test("a Kotlin primary constructor with a Feign client does not give the controller the client's endpoints", () => {
     const c = card({
       "src/main/kotlin/a/PaymentsClient.kt":
         '@FeignClient(name = "payments")\ninterface PaymentsClient {\n  @GetMapping("/payments/{id}") fun get(@PathVariable id: String): String\n}\n',
@@ -119,7 +119,7 @@ describe("endpointy Spring", () => {
     expect(endpoints(c)).toEqual(["POST /bff/checkout CheckoutController.checkout:4"]);
   });
 
-  test("moduł w katalogu src/ ma endpointy z src/main, a kod testów z src/test nie", () => {
+  test("a module in the src/ directory has endpoints from src/main, and test code from src/test does not", () => {
     const c = card({
       "src/orders/src/main/resources/application.yml": "spring:\n  application:\n    name: orders\n",
       "src/orders/src/main/java/a/Api.java": '@RestController\nclass Api {\n  @GetMapping("/orders") String list() { return ""; }\n}\n',
@@ -130,7 +130,7 @@ describe("endpointy Spring", () => {
     ).toEqual(["app orders src/orders", "endpoint /orders"]);
   });
 
-  test("projekt przykładowy w zasobach testów (src/test/resources/…/src/main) to kod testów, także jego konfiguracja", () => {
+  test("a sample project in test resources (src/test/resources/…/src/main) is test code, its configuration too", () => {
     const c = card({
       "src/main/java/a/Api.java": '@RestController\nclass Api {\n  @GetMapping("/orders") String list() { return ""; }\n}\n',
       "src/test/resources/demo/src/main/java/a/Demo.java":
@@ -142,7 +142,7 @@ describe("endpointy Spring", () => {
     expect(summary(c)).toEqual([]);
   });
 
-  test("klasa generyczna Kotlina: parametry konstruktora głównego za <T> nie są nadtypami", () => {
+  test("a generic Kotlin class: primary constructor parameters after <T> are not supertypes", () => {
     const c = card({
       "src/main/kotlin/a/Base.kt": '@RequestMapping("/base")\ninterface Base {\n  @GetMapping("/x") fun x(): String\n}\n',
       "src/main/kotlin/a/Api.kt": "@RestController\nclass Api<T : Any>(private val base: Base) {\n}\n",
@@ -150,7 +150,7 @@ describe("endpointy Spring", () => {
     expect(endpoints(c)).toEqual([]);
   });
 
-  test("@RequestMapping bez metody to endpoint dla każdej metody, a klasa bez @Controller nie ma endpointów", () => {
+  test("@RequestMapping without a method is an endpoint for every method, and a class without @Controller has no endpoints", () => {
     const c = card({
       "src/main/java/a/Any.java": '@Controller\nclass Any {\n  @RequestMapping("/any")\n  String any() { return ""; }\n}\n',
       "src/main/java/a/NotAController.java": 'class NotAController {\n  @GetMapping("/nope")\n  String nope() { return ""; }\n}\n',
@@ -158,7 +158,7 @@ describe("endpointy Spring", () => {
     expect(endpoints(c)).toEqual(["* /any Any.any:3"]);
   });
 
-  test("ścieżka ze stałej z innej klasy i sklejenia, a nieznana stała zostaje jako <Klasa.NAZWA>", () => {
+  test("a path from a constant in another class and a concatenation, and an unknown constant stays as <Class.NAME>", () => {
     const c = card({
       "src/main/java/a/Paths.java":
         'final class Paths {\n  static final String ROOT = "/api";\n  static final String USERS = ROOT + "/users";\n}\n',
@@ -177,7 +177,7 @@ describe("endpointy Spring", () => {
 });
 
 describe("klienci HTTP Spring", () => {
-  test("Feign z url z adnotacji, adres z spring.cloud.openfeign.client.config i path; lb:// daje nazwę aplikacji", () => {
+  test("Feign with url from the annotation, the address from spring.cloud.openfeign.client.config and path; lb:// gives the app name", () => {
     const c = card({
       "src/main/resources/application.yml": [
         "spring:",
@@ -206,7 +206,7 @@ describe("klienci HTTP Spring", () => {
     ]);
   });
 
-  test("wywołanie z długim ciałem żądania zachowuje adres i metodę, a moduł z ponad 32 profilami ma problem karty", () => {
+  test("a call with a long request body keeps the address and method, and a module with over 32 profiles has a card problem", () => {
     const body = Array.from({ length: 100 }, (_, i) => `"k${i}", ${i}`).join(", ");
     const profiles = Array.from(
       { length: 33 },
@@ -220,7 +220,7 @@ describe("klienci HTTP Spring", () => {
     expect(c.problems).toEqual([{ path: "", message: "profiles skipped over the limit of 32 in this module: 1 (the last ones by name)" }]);
   });
 
-  test("plik profilu (application-prod.yml) nadpisuje dokument on-profile z application.yml, jak w Spring Boot", () => {
+  test("a profile file (application-prod.yml) overrides an on-profile document from application.yml, as in Spring Boot", () => {
     const c = card({
       "src/main/resources/application.yml":
         "orders:\n  url: http://localhost:8081\n---\nspring:\n  config:\n    activate:\n      on-profile: prod\norders:\n  url: http://old-prod\n",
@@ -232,7 +232,7 @@ describe("klienci HTTP Spring", () => {
     ]);
   });
 
-  test("interfejs @HttpExchange i RestClient z adresem z konfiguracji", () => {
+  test("an @HttpExchange interface and RestClient with an address from the configuration", () => {
     const c = card({
       "src/main/resources/application.properties": "clients.users.base-url=http://users:8080\n",
       "src/main/java/a/UsersApi.java":
@@ -251,7 +251,7 @@ describe("klienci HTTP Spring", () => {
     ]);
   });
 
-  test("klucz z @Value wiązany na luzie (baseUrl = base-url), profil z spring.config.activate.on-profile w tym samym pliku, a klucz klienta nie jest osobnym adresem z konfiguracji", () => {
+  test("a key from @Value bound loosely (baseUrl = base-url), a profile from spring.config.activate.on-profile in the same file, and the client's key is not a separate address from the configuration", () => {
     const c = card({
       "src/main/resources/application.yml": [
         "orders:",
@@ -278,7 +278,7 @@ describe("klienci HTTP Spring", () => {
     ]);
   });
 
-  test("dwa adresy w jednej linii YAML ({a: …, b: …}): adres klienta z kodu (z doklejoną ścieżką) nie ukrywa drugiego adresu z konfiguracji", () => {
+  test("two addresses on one YAML line ({a: …, b: …}): the address of a client from code (with an appended path) does not hide the other address from the configuration", () => {
     const c = card({
       "src/main/resources/application.yml": "clients: {orders: http://orders, users: http://users}\n",
       "src/main/java/a/Orders.java": [
@@ -296,8 +296,8 @@ describe("klienci HTTP Spring", () => {
   });
 });
 
-describe("sekrety w adresach", () => {
-  test("użytkownik, hasło i zapytanie z adresu w application.yml, .env i kodzie nie trafiają na kartę", () => {
+describe("secrets in addresses", () => {
+  test("the user, password and query of an address in application.yml, .env and code do not reach the card", () => {
     const c = card({
       "src/main/resources/application.yml": "orders:\n  url: http://svc:tajne1@orders:8080/api?token=tajne2\n",
       "src/main/java/a/Rest.java":
@@ -315,16 +315,16 @@ describe("sekrety w adresach", () => {
   });
 });
 
-describe(`rozwiązywanie \${...}`, () => {
+describe(`resolving \${...}`, () => {
   const values: Record<string, string> = { a: `\${b}`, b: `\${a}`, host: "orders", url: `http://\${host}:\${port:8080}/\${missing}` };
   const get = (key: string) => (key in values ? { value: values[key] ?? "", path: "application.yml", line: 1 } : undefined);
 
-  test("wartość domyślna po dwukropku, zagnieżdżone klucze i nierozwiązany klucz zostaje tekstem", () => {
+  test("a default value after the colon, nested keys, and an unresolved key stays as text", () => {
     expect(resolvePlaceholders(`\${url}`, get).value).toBe(`http://orders:8080/\${missing}`);
     expect(resolvePlaceholders(`\${nope:\${host}}`, get).value).toBe("orders");
   });
 
-  test("cykl między kluczami nie zapętla rozwiązywania", () => {
+  test("a cycle between keys does not loop the resolving", () => {
     expect(resolvePlaceholders(`\${a}`, get).value).toContain(`\${`);
   });
 });

@@ -46,7 +46,7 @@ junit = "org.junit.jupiter:junit-jupiter:5.10.2"
 spring-boot = { id = "org.springframework.boot", version.ref = "boot" }
 `;
 
-describe("ekstraktor Gradle", () => {
+describe("Gradle extractor", () => {
   const snapshot = snapshotOf({
     "settings.gradle.kts": SETTINGS,
     "build.gradle.kts": ROOT_BUILD,
@@ -55,7 +55,7 @@ describe("ekstraktor Gradle", () => {
     "gradle/libs.versions.toml": CATALOG,
   });
 
-  test("projekty z include udostępniają grupę z projektu głównego i swoją nazwę", () => {
+  test("projects from include provide the group from the root project and their own name", () => {
     const out = extractGradle(snapshot);
     expect(out.provides.map((p) => [p.name, p.version])).toEqual([
       ["com.example.catalog:catalog", "2.0.0"],
@@ -69,7 +69,7 @@ describe("ekstraktor Gradle", () => {
     ]);
   });
 
-  test("zależności wprost, z platform() i z katalogu wersji; wtyczki z id i aliasu; projekty z repo i komentarze pominięte", () => {
+  test("dependencies given directly, from platform() and from the version catalog; plugins from id and alias; projects from the repo and comments skipped", () => {
     const out = extractGradle(snapshot);
     expect(out.consumes.map((c) => [c.ecosystem, c.name, c.version, c.scope, c.evidence.path, c.evidence.line])).toEqual([
       ["gradle-plugin", "org.springframework.boot", "3.3.0", "plugin", "build.gradle.kts", 2],
@@ -81,13 +81,13 @@ describe("ekstraktor Gradle", () => {
     ]);
   });
 
-  test("wersja Javy z toolchaina to podpowiedź narzędzia", () => {
+  test("the Java version from the toolchain is a tool hint", () => {
     expect(extractGradle(snapshot).tools).toEqual([
       { tool: "java", version: "21", source: "hint", evidence: { path: "catalog-app/build.gradle.kts", line: 5 } },
     ]);
   });
 
-  test("Groovy bez settings: jeden projekt bez nazwy, więc bez współrzędnych, ale z wtyczką z bloku w jednej linii i zależnościami", () => {
+  test("Groovy without settings: one project without a name, so without coordinates, but with a plugin from a one-line block and dependencies", () => {
     const out = extractGradle(
       snapshotOf({
         "build.gradle":
@@ -99,16 +99,16 @@ describe("ekstraktor Gradle", () => {
     expect(out.tools.map((t) => [t.tool, t.version])).toEqual([["java", "8"]]);
   });
 
-  test("/* w napisie (wzorzec ścieżki) nie zaczyna komentarza i nie wyłącza reszty pliku", () => {
+  test("/* in a string (a path pattern) does not start a comment and does not disable the rest of the file", () => {
     const out = extractGradle(
       snapshotOf({
-        "build.gradle": "jar { exclude 'META-INF/*.SF' }\ndependencies {\n  implementation 'com.example:lib:1.0' // */ w komentarzu\n}\n",
+        "build.gradle": "jar { exclude 'META-INF/*.SF' }\ndependencies {\n  implementation 'com.example:lib:1.0' // */ in a comment\n}\n",
       }),
     );
     expect(out.consumes.map((c) => [c.name, c.evidence.line])).toEqual([["com.example:lib", 3]]);
   });
 
-  test("include w settings rozpisany na wiele linii wymienia wszystkie projekty", () => {
+  test("an include in settings spread over several lines lists all projects", () => {
     const out = extractGradle(
       snapshotOf({
         "settings.gradle.kts": 'rootProject.name = "shop"\ninclude(\n    ":app",\n    ":core",\n)\n',
@@ -138,7 +138,7 @@ describe("ekstraktor Gradle", () => {
     expect(out.tools.map((t) => t.version)).toEqual(["8"]);
   });
 
-  test("nawias w napisie nie przedłuża include na następne linie", () => {
+  test("a bracket in a string does not extend include to the next lines", () => {
     const out = extractGradle(
       snapshotOf({
         "settings.gradle.kts": 'include("app(")\nval y = "core"\n',
@@ -150,12 +150,12 @@ describe("ekstraktor Gradle", () => {
     expect(out.buildFiles.map((f) => f.path)).toEqual(["build.gradle.kts", "app(/build.gradle.kts"]);
   });
 
-  test("surowy napis Kotlin z ukośnikiem wstecznym kończy się na potrójnym cudzysłowie", () => {
+  test("a raw Kotlin string with a backslash ends at the triple quote", () => {
     const out = extractGradle(snapshotOf({ "build.gradle.kts": 'val dir = """C:\\"""\n// implementation("com.example:wylaczona:1.0")\n' }));
     expect(out.consumes).toEqual([]);
   });
 
-  test("version.ref do nazwy z prototypu obiektu (constructor) to brak wersji, nie funkcja", () => {
+  test("version.ref to a name from the object prototype (constructor) is no version, not a function", () => {
     const out = extractGradle(
       snapshotOf({
         "build.gradle.kts": "dependencies {\n    implementation(libs.lib)\n}\n",

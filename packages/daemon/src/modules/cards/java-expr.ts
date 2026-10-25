@@ -2,19 +2,19 @@ import type { JavaFile } from "./java-source.ts";
 import { closingIndex, isIdent, isPunct, type Token } from "./java-tokens.ts";
 
 /**
- * Wartości z wyrażeń w adnotacjach i stałych (§4.6, ADR-30): napis, sklejanie `+` napisów i stałych tekstowych
- * (`ApiPaths.ORDERS + "/{id}"`), tablica (`{…}`, `[…]`, `arrayOf(…)`) i nazwy z enumów (`RequestMethod.GET`).
- * Stała, której nie ma w czytanych plikach, zostaje jako `<Klasa.NAZWA>` (tak, jak ją zapisano), żeby było widać, skąd ścieżka pochodzi.
+ * Values from expressions in annotations and constants (§4.6, ADR-30): a string, `+` concatenation of strings and text
+ * constants (`ApiPaths.ORDERS + "/{id}"`), an array (`{…}`, `[…]`, `arrayOf(…)`) and enum names (`RequestMethod.GET`).
+ * A constant that is not in the files read stays as `<Class.NAME>` (as it was written), so it is visible where the path comes from.
  */
 
-/** Ile stałych w głąb liczyć (stała z innej stałej) i najdłuższa wartość: wyrażenia są z repo (§8). */
+/** How many constants deep to resolve (a constant from another constant) and the longest value: expressions come from the repo (§8). */
 const MAX_DEPTH = 8;
 const MAX_LENGTH = 2048;
 
-/** Stałe tekstowe wszystkich czytanych plików repo: w pliku po nazwie, w repo po `Typ.NAZWA`. */
+/** Text constants of all repo files read: in a file by name, in the repo by `Type.NAME`. */
 export class ConstantTable {
   private readonly qualified = new Map<string, Token[]>();
-  /** Nazwa bez typu z innego pliku tylko wtedy, gdy w repo jest jedna (Kotlin `const val` poza typem). */
+  /** A name without a type from another file only when the repo has just one (Kotlin `const val` outside a type). */
   private readonly unqualified = new Map<string, Token[] | null>();
 
   constructor(files: readonly JavaFile[]) {
@@ -25,7 +25,7 @@ export class ConstantTable {
       }
   }
 
-  /** Wyszukiwanie stałych z punktu widzenia pliku `file`. */
+  /** Constant lookup from the point of view of file `file`. */
   lookupIn(file: JavaFile): Lookup {
     return (chain) => {
       if (chain.length === 1) {
@@ -39,7 +39,7 @@ export class ConstantTable {
 
 export type Lookup = (chain: readonly string[]) => Token[] | undefined;
 
-/** Argumenty adnotacji po nazwie; argument bez nazwy to `value`. */
+/** Annotation arguments by name; an argument without a name is `value`. */
 export function annotationArgs(args: readonly Token[] | null): Map<string, Token[]> {
   const out = new Map<string, Token[]>();
   if (args === null) return out;
@@ -51,14 +51,14 @@ export function annotationArgs(args: readonly Token[] | null): Map<string, Token
   return out;
 }
 
-/** Napisy z wyrażenia: jeden dla sklejania, kilka dla tablicy; puste, gdy wyrażenie nie jest tekstem. */
+/** Strings from an expression: one for a concatenation, several for an array; empty when the expression is not text. */
 export function stringValues(expr: readonly Token[] | undefined, lookup: Lookup): string[] {
   if (expr === undefined || expr.length === 0) return [];
   const elements = arrayElements(expr) ?? [expr];
   return elements.map((e) => concatValue(e, lookup, 0)).filter((v) => v !== undefined);
 }
 
-/** Ostatnie człony identyfikatorów w wyrażeniu (`RequestMethod.GET`, `{GET, POST}`), np. do metod HTTP. */
+/** The last parts of the identifiers in an expression (`RequestMethod.GET`, `{GET, POST}`), e.g. for HTTP methods. */
 export function enumNames(expr: readonly Token[] | undefined): string[] {
   if (expr === undefined) return [];
   const names: string[] = [];
@@ -67,7 +67,7 @@ export function enumNames(expr: readonly Token[] | undefined): string[] {
   return names;
 }
 
-/** Elementy tablicy `{a, b}`, `[a, b]` albo `arrayOf(a, b)`; `undefined`, gdy wyrażenie nie jest tablicą. */
+/** The elements of an array `{a, b}`, `[a, b]` or `arrayOf(a, b)`; `undefined` when the expression is not an array. */
 function arrayElements(expr: readonly Token[]): Token[][] | undefined {
   const first = expr[0];
   const start = isIdent(first, "arrayOf") && isPunct(expr[1], "(") ? 1 : isPunct(first, "{") || isPunct(first, "[") ? 0 : -1;
@@ -75,7 +75,7 @@ function arrayElements(expr: readonly Token[]): Token[][] | undefined {
   return splitTopLevel(expr.slice(start + 1, -1));
 }
 
-/** Sklejanie `+` napisów i stałych; `undefined`, gdy któryś składnik nie jest napisem ani nazwą. */
+/** A `+` concatenation of strings and constants; `undefined` when some part is neither a string nor a name. */
 function concatValue(expr: readonly Token[], lookup: Lookup, depth: number): string | undefined {
   let value = "";
   for (const operand of splitConcat(expr)) {
@@ -97,7 +97,7 @@ function operandValue(operand: readonly Token[], lookup: Lookup, depth: number):
   return value ?? `<${chain.join(".")}>`;
 }
 
-/** `A.B.C` jako `["A", "B", "C"]`; `undefined` dla innego wyrażenia. */
+/** `A.B.C` as `["A", "B", "C"]`; `undefined` for another expression. */
 export function identChain(tokens: readonly Token[]): string[] | undefined {
   const chain: string[] = [];
   for (const [i, t] of tokens.entries()) {
@@ -108,12 +108,12 @@ export function identChain(tokens: readonly Token[]): string[] | undefined {
   return chain.length > 0 && tokens.length % 2 === 1 ? chain : undefined;
 }
 
-/** Części listy rozdzielone przecinkiem poza nawiasami. */
+/** The parts of a list separated by commas outside brackets. */
 export function splitTopLevel(tokens: readonly Token[]): Token[][] {
   return splitOn(tokens, ",");
 }
 
-/** Składniki sklejania `+` poza nawiasami. */
+/** The parts of a `+` concatenation outside brackets. */
 export function splitConcat(tokens: readonly Token[]): Token[][] {
   return splitOn(tokens, "+");
 }

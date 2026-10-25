@@ -6,13 +6,13 @@ import { baseName, inDir } from "./repo-path.ts";
 import { type Extracted, emptyExtracted, keyLines, type RepoSnapshot } from "./snapshot.ts";
 
 /**
- * Wymagane narzędzia z drzewa commita (§4.6, ADR-25): `[tools]` z konfiguracji mise w korzeniu repo i `.tool-versions`
- * (źródło `mise`), a do tego wersje z plików, które podają je po swojemu (źródło `hint`): `.nvmrc`, `.node-version`,
- * `.java-version`, `.sdkmanrc` oraz wrappery Maven i Gradle. Nie pyta `mise ls`: to czytałoby katalog roboczy
- * i konfigurację globalną zamiast commita, wymagało zaufania i zainstalowanego mise.
+ * Required tools from the commit tree (§4.6, ADR-25): `[tools]` from the mise configuration in the repo root and
+ * `.tool-versions` (source `mise`), plus versions from files that give them their own way (source `hint`): `.nvmrc`,
+ * `.node-version`, `.java-version`, `.sdkmanrc` and the Maven and Gradle wrappers. It does not ask `mise ls`: that would
+ * read the working directory and the global configuration instead of the commit, and would need trust and an installed mise.
  */
 
-/** Pliki konfiguracji mise w korzeniu repo, w kolejności, w której mise je czyta (ostatni wygrywa, więc odwrotnie). */
+/** mise config files in the repo root, in the order mise reads them (the last one wins, so reversed). */
 export const MISE_CONFIG_FILES = [
   "mise.toml",
   ".mise.toml",
@@ -22,7 +22,7 @@ export const MISE_CONFIG_FILES = [
   ".config/mise/config.toml",
 ];
 const TOOL_VERSIONS = ".tool-versions";
-/** Plik z jedną wersją narzędzia w katalogu buildu. */
+/** A file with one tool version in a build directory. */
 const SINGLE_VERSION_FILES: [string, string][] = [
   [".nvmrc", "node"],
   [".node-version", "node"],
@@ -30,32 +30,32 @@ const SINGLE_VERSION_FILES: [string, string][] = [
 ];
 const SDKMANRC = ".sdkmanrc";
 /**
- * Wrapper, narzędzie i nazwa pliku dystrybucji z adresu w `distributionUrl` (`apache-maven-3.9.6-bin.zip`,
- * `gradle-8.7-bin.zip`). Wyrażenie dostaje tylko nazwę pliku i jest zakotwiczone z obu stron, bo plik jest z repo.
+ * The wrapper, the tool and the distribution file name from the address in `distributionUrl` (`apache-maven-3.9.6-bin.zip`,
+ * `gradle-8.7-bin.zip`). The expression gets only the file name and is anchored at both ends, because the file comes from the repo.
  */
 const WRAPPERS: [string, string, RegExp][] = [
   [".mvn/wrapper/maven-wrapper.properties", "maven", /^apache-maven-(.+)-bin\.zip$/],
   ["gradle/wrapper/gradle-wrapper.properties", "gradle", /^gradle-(.+)-(?:bin|all)\.zip$/],
 ];
-/** Klucz tabeli TOML na początku linii (`node =`, `"npm:prettier" =`, `"ubi:cli/cli[exe=gh]" =`). */
+/** A TOML table key at the start of a line (`node =`, `"npm:prettier" =`, `"ubi:cli/cli[exe=gh]" =`). */
 export const TOML_KEY = /^\s*(?:"([^"]*)"|'([^']*)'|([^"'\s=]+))\s*=/g;
 
-/** Nazwy plików z podpowiedziami, czytanych w korzeniu i w katalogach buildów. */
+/** Names of hint files, read in the root and in build directories. */
 const HINT_FILE_NAMES = new Set([SDKMANRC, ...SINGLE_VERSION_FILES.map(([name]) => name), ...WRAPPERS.map(([path]) => baseName(path))]);
 
-/** Pliki, które ten ekstraktor czyta, do wyboru plików z commita: konfiguracja mise tylko w korzeniu repo. */
+/** The files this extractor reads, for choosing files from the commit: mise configuration only in the repo root. */
 export function readsToolFile(path: string): boolean {
   return MISE_CONFIG_FILES.includes(path) || path === TOOL_VERSIONS || HINT_FILE_NAMES.has(baseName(path));
 }
 
-/** Wersja narzędzia w `[tools]` mise: napis, lista albo tabela z `version` (i opcjami, których karta nie potrzebuje). */
+/** A tool version in mise's `[tools]`: a string, a list or a table with `version` (and options the card does not need). */
 const MiseVersion = z.union([z.string(), z.object({ version: z.string() })]);
-/** `[tools]` z konfiguracji mise; wpis w nieznanej postaci jest pomijany bez utraty reszty. */
+/** `[tools]` from the mise configuration; an entry in an unknown form is skipped without losing the rest. */
 const MiseConfig = z.object({
   tools: z.record(z.string(), z.union([MiseVersion, z.array(MiseVersion)]).catch([])).catch({}),
 });
 
-/** Narzędzia z mise w korzeniu repo i podpowiedzi z korzenia oraz katalogów buildów (`buildDirs`). */
+/** Tools from mise in the repo root and hints from the root and the build directories (`buildDirs`). */
 export function extractTools(snapshot: RepoSnapshot, buildDirs: readonly string[]): Extracted {
   const out = emptyExtracted();
   for (const path of MISE_CONFIG_FILES) {
@@ -73,7 +73,7 @@ export function extractTools(snapshot: RepoSnapshot, buildDirs: readonly string[
   return out;
 }
 
-/** `[tools]` z mise: wersja, lista wersji albo tabela z `version`. */
+/** `[tools]` from mise: a version, a list of versions or a table with `version`. */
 function miseTools(path: string, text: string): ToolRequirement[] {
   const parsed = MiseConfig.safeParse(parseToml(text));
   if (!parsed.success) return [];
@@ -88,7 +88,7 @@ function miseTools(path: string, text: string): ToolRequirement[] {
   );
 }
 
-/** `.tool-versions`: `narzędzie wersja [wersja…]`, `#` zaczyna komentarz. */
+/** `.tool-versions`: `tool version [version…]`, `#` starts a comment. */
 function toolVersionsFile(path: string, text: string): ToolRequirement[] {
   return text.split("\n").flatMap((raw, i) => {
     const [tool, ...versions] = (raw.split("#")[0] ?? "").trim().split(/\s+/);
@@ -118,7 +118,7 @@ function hints(snapshot: RepoSnapshot, dir: string): ToolRequirement[] {
   return found;
 }
 
-/** Wersja z nazwy pliku w `distributionUrl=…` właściwości wrappera i linia tego wpisu. */
+/** The version from the file name in the wrapper properties' `distributionUrl=…` and the line of that entry. */
 function wrapperVersion(text: string, pattern: RegExp): { version: string; line: number } | undefined {
   const lines = text.split("\n");
   for (const [i, raw] of lines.entries()) {

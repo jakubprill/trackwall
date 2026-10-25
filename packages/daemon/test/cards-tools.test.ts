@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { extractTools, readsToolFile } from "../src/modules/cards/tools.ts";
 import { snapshotOf } from "./support/snapshot.ts";
 
-describe("wymagane narzędzia", () => {
-  test("narzędzia z mise i .tool-versions w korzeniu oraz podpowiedzi z katalogów buildów i wrappera", () => {
+describe("required tools", () => {
+  test("tools from mise and .tool-versions in the root, and hints from build directories and the wrapper", () => {
     const { tools, problems } = extractTools(
       snapshotOf({
         "mise.toml":
@@ -28,16 +28,16 @@ describe("wymagane narzędzia", () => {
     ]);
   });
 
-  test("zły mise.toml to problem karty", () => {
+  test("a bad mise.toml is a card problem", () => {
     expect(extractTools(snapshotOf({ "mise.toml": "[tools\n" }), []).problems.map((p) => p.path)).toEqual(["mise.toml"]);
   });
 
-  test("wpis [tools] w nieznanej postaci jest pomijany bez utraty reszty", () => {
+  test("a [tools] entry in an unknown form is skipped without losing the rest", () => {
     const { tools } = extractTools(snapshotOf({ "mise.toml": '[tools]\nnode = 22\njava = "21"\n' }), []);
     expect(tools.map((t) => [t.tool, t.version])).toEqual([["java", "21"]]);
   });
 
-  test("konfiguracja mise czytana tylko z korzenia repo, podpowiedzi z każdego katalogu", () => {
+  test("mise configuration read only from the repo root, hints from every directory", () => {
     expect(
       ["mise.toml", "mise/config.toml", ".config/mise/config.toml", "web/.nvmrc", "api/.mvn/wrapper/maven-wrapper.properties"].every(
         readsToolFile,

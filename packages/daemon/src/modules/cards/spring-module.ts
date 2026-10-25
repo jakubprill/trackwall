@@ -4,34 +4,34 @@ import type { JavaAnnotation, JavaType } from "./java-source.ts";
 import { DEFAULT_PROFILE, type ModuleConfig } from "./spring-config.ts";
 
 /**
- * Wspólne dla ekstraktorów Spring (§4.6, ADR-30): moduł z konfiguracją, odczyt mapowań (`@*Mapping`,
- * `@*Exchange`), rozwijanie adresu w każdym profilu i klient HTTP z adresu.
+ * Shared by the Spring extractors (§4.6, ADR-30): the module with its configuration, reading mappings (`@*Mapping`,
+ * `@*Exchange`), expanding an address in every profile and an HTTP client from an address.
  */
 
-/** Moduł Spring: konfiguracja, nazwa aplikacji, ścieżka kontekstu i typy z całego repo po prostej nazwie. */
+/** A Spring module: configuration, app name, context path and types from the whole repo by simple name. */
 export interface SpringModule {
   config: ModuleConfig;
   app: string | null;
-  /** Ścieżka kontekstu aplikacji (`server.servlet.context-path`, `spring.webflux.base-path`); `""` bez niej. */
+  /** The app's context path (`server.servlet.context-path`, `spring.webflux.base-path`); `""` without one. */
   contextPath: string;
-  /** Typy Javy i Kotlina z czytanych plików repo po prostej nazwie (interfejs z mapowaniami, który kontroler implementuje). */
+  /** Java and Kotlin types from the repo files read, by simple name (an interface with mappings that a controller implements). */
   types: TypeIndex;
 }
 
-/** Ile wywołań jednego klienta zapisać na karcie: więcej to wygenerowany klient, a dowód z kilku i tak wystarcza. */
+/** How many calls of one client to record on the card: more is a generated client, and evidence from a few is enough anyway. */
 const MAX_CLIENT_CALLS = 200;
 
-/** Typ z pliku po prostej nazwie; pierwszy w kolejności plików wygrywa. */
+/** A type from a file by simple name; the first in file order wins. */
 export type TypeIndex = Map<string, { type: JavaType; path: string }>;
 
-/** Mapowanie z adnotacji: metody HTTP (`null`: każda) i ścieżki (`""`: bez ścieżki). */
+/** A mapping from an annotation: HTTP methods (`null`: any) and paths (`""`: no path). */
 export interface Mapping {
   methods: (HttpMethod | null)[];
   paths: string[];
   line: number;
 }
 
-/** Adnotacje mapowań Spring MVC i WebFlux z metodą, którą przesądzają (`null`: z atrybutu `method`). */
+/** Spring MVC and WebFlux mapping annotations with the method they decide (`null`: from the `method` attribute). */
 export const REQUEST_MAPPINGS: Readonly<Record<string, HttpMethod | null>> = {
   RequestMapping: null,
   GetMapping: "GET",
@@ -41,7 +41,7 @@ export const REQUEST_MAPPINGS: Readonly<Record<string, HttpMethod | null>> = {
   DeleteMapping: "DELETE",
 };
 
-/** Adnotacje interfejsów HTTP Spring 6 (`@HttpExchange`). */
+/** Spring 6 HTTP interface annotations (`@HttpExchange`). */
 export const EXCHANGE_MAPPINGS: Readonly<Record<string, HttpMethod | null>> = {
   HttpExchange: null,
   GetExchange: "GET",
@@ -51,7 +51,7 @@ export const EXCHANGE_MAPPINGS: Readonly<Record<string, HttpMethod | null>> = {
   DeleteExchange: "DELETE",
 };
 
-/** Mapowanie z pierwszej adnotacji z tabeli `table`; `undefined` bez takiej adnotacji. */
+/** The mapping from the first annotation from table `table`; `undefined` without such an annotation. */
 export function mappingOf(
   annotations: readonly JavaAnnotation[],
   table: Readonly<Record<string, HttpMethod | null>>,
@@ -72,7 +72,7 @@ export function mappingOf(
   };
 }
 
-/** Adres w jednym profilu: wartość po rozwinięciu `${…}`, profile, w których ją ma, i wpis, z którego pochodzi. */
+/** An address in one profile: the value after expanding `${…}`, the profiles that have it, and the entry it comes from. */
 export interface UrlVariant {
   value: string;
   profiles: string[];
@@ -80,9 +80,9 @@ export interface UrlVariant {
 }
 
 /**
- * Tekst adresu w każdym profilu modułu: najpierw profil domyślny, potem każdy profil, który daje inną wartość.
- * Tekst bez `${…}` jest jeden i bez profili (adres w kodzie). Użytkownik i hasło z adresu są zamaskowane, a zapytanie
- * pominięte (§8).
+ * The address text in every profile of the module: first the default profile, then every profile that gives another
+ * value. Text without `${…}` is one, without profiles (an address in code). The user and password in the address are
+ * masked, and the query is left out (§8).
  */
 export function urlVariants(module: SpringModule, text: string): UrlVariant[] {
   if (!text.includes("${")) return [{ value: withoutCredentials(text), profiles: [], source: null }];
@@ -90,7 +90,7 @@ export function urlVariants(module: SpringModule, text: string): UrlVariant[] {
     const { value, source } = module.config.resolve(text, profile);
     return { value: withoutCredentials(value), profiles: [profile], source: source ? { path: source.path, line: source.line } : null };
   };
-  // Profil z tą samą wartością co `default` jej nie zmienia, więc nie jest wymieniany.
+  // A profile with the same value as `default` does not change it, so it is not listed.
   const variants = [variant(DEFAULT_PROFILE)];
   for (const profile of module.config.profiles) {
     const next = variant(profile);
@@ -102,10 +102,10 @@ export function urlVariants(module: SpringModule, text: string): UrlVariant[] {
   return variants;
 }
 
-/** Co klient HTTP ma niezależnie od adresu; `app: null` bierze nazwę aplikacji z adresu `lb://`. */
+/** What an HTTP client has regardless of the address; `app: null` takes the app name from an `lb://` address. */
 export type ClientBase = Pick<ConsumedHttp, "via" | "name" | "app" | "calls" | "evidence">;
 
-/** Klient HTTP z adresem w jednym profilu. */
+/** An HTTP client with its address in one profile. */
 export function clientAt(base: ClientBase, variant: UrlVariant): ConsumedHttp {
   return {
     kind: "http",
@@ -118,7 +118,7 @@ export function clientAt(base: ClientBase, variant: UrlVariant): ConsumedHttp {
   };
 }
 
-/** Klient HTTP w każdym profilu, w którym adres jest inny; bez adresu jeden klient z `url: null`. */
+/** An HTTP client in every profile where the address differs; without an address one client with `url: null`. */
 export function httpClients(module: SpringModule, urlText: string | undefined, base: ClientBase): ConsumedHttp[] {
   const variants = urlText ? urlVariants(module, urlText) : [{ value: "", profiles: [], source: null }];
   return variants.map((v) => clientAt(base, v));

@@ -2,7 +2,7 @@ package com.example.orders.api;
 
 import org.springframework.web.bind.annotation.*;
 
-/** Kontroler tylko do testów: nie jest częścią aplikacji. */
+/** A controller for tests only: not part of the app. */
 @RestController
 class FakeController {
     @GetMapping("/test-only")

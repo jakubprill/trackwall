@@ -2,9 +2,9 @@ import type { ConsumedPackage, Mechanism, MechanismEvidence, MechanismId } from 
 import { baseName } from "./repo-path.ts";
 
 /**
- * Spis mechanizmów (§4.6, ADR-25): framework, komunikacja i wdrożenie rozpoznane po paczkach, których repo używa,
- * i po nazwach plików. Reguły są ogólne (Spring, npm, Kubernetes); nic firmowego (ADR-7). Paczka pasuje po
- * `<ekosystem>:<nazwa>`, plik po ścieżce w repo.
+ * The list of mechanisms (§4.6, ADR-25): framework, communication and deployment recognised by the packages the repo
+ * uses and by file names. The rules are general (Spring, npm, Kubernetes); nothing company-specific (ADR-7). A package
+ * matches by `<ecosystem>:<name>`, a file by its path in the repo.
  */
 
 interface Rule {
@@ -56,11 +56,11 @@ const RULES: Rule[] = [
 ];
 
 /**
- * Dłuższa ścieżka nie jest plikiem wdrożenia ani specyfikacją; wyrażenia z `files` jej nie widzą, bo ścieżka jest
- * z repo, a `(k8s|kubernetes)/.+` na ścieżce z tysiącami powtórzeń `k8s/` cofa się kwadratowo.
+ * A longer path is neither a deployment file nor a specification; the expressions from `files` do not see it, because the
+ * path comes from the repo, and `(k8s|kubernetes)/.+` on a path with thousands of repetitions of `k8s/` backtracks quadratically.
  */
 const MAX_PATH_LENGTH = 1024;
-/** Tyle dowodów na mechanizm wystarcza, żeby sprawdzić go w repo; resztę widać w zależnościach karty. */
+/** This much evidence for a mechanism is enough to check it in the repo; the rest is visible in the card's dependencies. */
 const MAX_EVIDENCE = 3;
 
 export function detectMechanisms(consumes: readonly ConsumedPackage[], paths: readonly string[]): Mechanism[] {

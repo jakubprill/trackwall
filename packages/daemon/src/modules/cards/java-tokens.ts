@@ -1,8 +1,8 @@
 /**
- * Tokeny kodu Javy i Kotlina dla ekstraktorów HTTP (§4.6, ADR-30): identyfikatory, napisy z wartością po ucieczkach
- * i pojedyncze znaki interpunkcji, każdy z numerem linii, bez komentarzy i białych znaków. Jedno przejście po tekście
- * bez wyrażeń regularnych na całym pliku, bo plik jest z repo (niezaufany, §8). Kod niepoprawny składniowo daje
- * tokeny bez błędu: ekstraktory biorą z nich tylko to, co rozpoznają.
+ * Java and Kotlin code tokens for the HTTP extractors (§4.6, ADR-30): identifiers, strings with their value after escapes
+ * and single punctuation characters, each with its line number, without comments and whitespace. One pass over the text
+ * without regular expressions on the whole file, because the file comes from the repo (untrusted, §8). Syntactically
+ * invalid code gives tokens without an error: the extractors take from them only what they recognise.
  */
 
 export type Token =
@@ -10,7 +10,7 @@ export type Token =
   | { kind: "string"; value: string; line: number }
   | { kind: "punct"; text: string; line: number };
 
-/** Ucieczki w napisach Javy i Kotlina; `\$` to dolar w napisie Kotlina (bez szablonu). */
+/** Escapes in Java and Kotlin strings; `\$` is a dollar sign in a Kotlin string (no template). */
 const ESCAPES: Record<string, string> = { n: "\n", t: "\t", r: "\r", b: "\b", f: "\f", "0": "\0" };
 
 export function tokenize(text: string): Token[] {
@@ -18,8 +18,8 @@ export function tokenize(text: string): Token[] {
 }
 
 /**
- * Nazwy typów, które plik może wymieniać w kontrakcie endpointu (ADR-38): identyfikatory od wielkiej litery. To nadzbiór
- * (są wśród nich adnotacje i serwisy), bo odczyt commita dociąga po nich pliki, zanim powstanie drzewo składni.
+ * Type names a file may mention in an endpoint contract (ADR-38): identifiers starting with a capital letter. A superset
+ * (annotations and services are among them), because reading the commit fetches files by them before a syntax tree exists.
  */
 export function referencedTypeNames(text: string): Set<string> {
   const names = new Set<string>();
@@ -27,7 +27,7 @@ export function referencedTypeNames(text: string): Set<string> {
   return names;
 }
 
-/** Czy identyfikator wygląda na nazwę typu: zaczyna się wielką literą, jak każą konwencje Javy i Kotlina. */
+/** Whether an identifier looks like a type name: it starts with a capital letter, as the Java and Kotlin conventions require. */
 export function isTypeName(name: string): boolean {
   const first = name[0] ?? "";
   return first !== first.toLowerCase();
@@ -66,7 +66,7 @@ class Tokenizer {
     }
   }
 
-  /** Pomija do `end` (włącznie, gdy `inclusive`), licząc linie. */
+  /** Skips to `end` (inclusive when `inclusive`), counting lines. */
   private skipTo(end: string, inclusive: boolean): void {
     const found = this.src.indexOf(end, this.pos + 2);
     const stop = found < 0 ? this.src.length : inclusive ? found + end.length : found;
@@ -74,7 +74,7 @@ class Tokenizer {
     this.pos = stop;
   }
 
-  /** Napis w potrójnym cudzysłowie (blok tekstu Javy, surowy napis Kotlina): bez ucieczek, przez wiele linii. */
+  /** A triple-quoted string (a Java text block, a raw Kotlin string): no escapes, across many lines. */
   private textBlock(): void {
     const line = this.line;
     const start = this.pos + 3;
@@ -85,7 +85,7 @@ class Tokenizer {
     this.pos = end < 0 ? stop : stop + 3;
   }
 
-  /** Napis albo znak do cudzysłowu zamykającego; koniec linii też go kończy (niezamknięty napis w złym kodzie). */
+  /** A string or character up to the closing quote; the end of the line also ends it (an unclosed string in bad code). */
   private string(quote: string): void {
     let value = "";
     let i = this.pos + 1;
@@ -117,15 +117,19 @@ function isIdentStart(c: string): boolean {
   return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || c === "_" || c === "$" || c >= "\u0080";
 }
 
-/** Cyfry są częścią identyfikatora, a liczba to identyfikator od cyfry: ekstraktorom wystarcza, że nie jest napisem. */
+/**
+ * Digits are part of an identifier, and a number is an identifier starting with a digit: the extractors only need it
+ * not to be a string.
+ */
 function isIdentPart(c: string): boolean {
   return isIdentStart(c) || (c >= "0" && c <= "9");
 }
 
 /**
- * Indeks tokenu za nawiasem zamykającym ten, który otwiera token `open`; dla nawiasu, który się nie zamyka, `open + 1`
- * (pusta zawartość), żeby kod niedomkniętego pliku nie ciągnął się do jego końca. Pary liczy się raz na listę tokenów
- * (`matchingBrackets`), bo ekstraktory pytają o tysiące nawiasów jednego pliku, a plik jest z repo (§8).
+ * The index of the token after the bracket that closes the one opened by token `open`; for a bracket that never closes
+ * `open + 1` (empty content), so that the code of an unfinished file does not stretch to its end. Pairs are computed once
+ * per token list (`matchingBrackets`), because the extractors ask about thousands of brackets in one file, and the file
+ * comes from the repo (§8).
  */
 export function closingIndex(tokens: readonly Token[], open: number): number {
   let pairs = PAIRS.get(tokens);
@@ -136,7 +140,7 @@ export function closingIndex(tokens: readonly Token[], open: number): number {
   return pairs.get(open) ?? open + 1;
 }
 
-/** Pary nawiasów listy tokenów policzone raz, osobno dla każdego rodzaju nawiasu. */
+/** Bracket pairs of a token list computed once, separately for each kind of bracket. */
 const PAIRS = new WeakMap<readonly Token[], Map<number, number>>();
 
 function matchingBrackets(tokens: readonly Token[]): Map<number, number> {

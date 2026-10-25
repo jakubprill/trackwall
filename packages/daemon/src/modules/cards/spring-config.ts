@@ -5,50 +5,50 @@ import { baseName } from "./repo-path.ts";
 import type { ProblemSink, RepoSnapshot } from "./snapshot.ts";
 
 /**
- * Konfiguracja Spring modułu (§4.6, ADR-30): `application*` i `bootstrap*` (`.yml`, `.yaml`, `.properties`)
- * z `src/main/resources`, z profilami z nazwy pliku (`application-prod.yml`) i z dokumentów aktywowanych
- * `spring.config.activate.on-profile` (dawniej `spring.profiles`). Widok profilu to konfiguracja bez profilu
- * nadpisana dokumentami profilu, a klucze porównuje się jak w Spring Boot (bez wielkości liter, `-` i `_`).
+ * A module's Spring configuration (§4.6, ADR-30): `application*` and `bootstrap*` (`.yml`, `.yaml`, `.properties`)
+ * from `src/main/resources`, with profiles from the file name (`application-prod.yml`) and from documents activated by
+ * `spring.config.activate.on-profile` (formerly `spring.profiles`). A profile's view is the configuration without a
+ * profile overridden by the profile's documents, and keys are compared as in Spring Boot (ignoring case, `-` and `_`).
  */
 
-/** Profil Spring konfiguracji bez profilu; tak nazywa go sam Spring. */
+/** The Spring profile of configuration without a profile; that is what Spring itself calls it. */
 export const DEFAULT_PROFILE = "default";
-/** Plik konfiguracji Spring w zasobach modułu: rodzaj, profil z nazwy i rozszerzenie. */
+/** A Spring configuration file in a module's resources: kind, profile from the name and extension. */
 const CONFIG_FILE = /(?:^|\/)src\/main\/resources\/(application|bootstrap)(?:-([^/]+?))?\.(ya?ml|properties)$/;
-/** Ile wpisów czytać z jednego pliku i jak głęboko w YAML: więcej to nie konfiguracja aplikacji (§8). */
+/** How many entries to read from one file and how deep in YAML: more is not app configuration (§8). */
 const MAX_ENTRIES = 20_000;
 const MAX_YAML_DEPTH = 64;
-/** Ile profili modułu brać pod uwagę: każdy to osobny widok konfiguracji, a aplikacja ma ich kilka. */
+/** How many profiles of a module to consider: each is a separate configuration view, and an app has a few. */
 const MAX_PROFILES = 32;
 
-/** Pliki, które ten odczyt czyta, do wyboru plików z commita. */
+/** The files this read reads, for choosing files from the commit. */
 export function readsSpringConfigFile(path: string): boolean {
   return path.length <= 1024 && CONFIG_FILE.test(path) && !isTestPath(path);
 }
 
-/** Ścieżka pod `src/test`, także projekt przykładowy w zasobach testów (`src/test/resources/demo/src/main/…`). */
+/** A path under `src/test`, also a sample project in test resources (`src/test/resources/demo/src/main/…`). */
 export function isTestPath(path: string): boolean {
   const segments = path.split("/");
   return segments.some((s, i) => s === "src" && segments[i + 1] === "test");
 }
 
 export interface ConfigEntry extends PlaceholderSource {
-  /** Klucz tak, jak stoi w pliku (`orders.base-url`). */
+  /** The key as it stands in the file (`orders.base-url`). */
   key: string;
 }
 
 interface ConfigDoc {
-  /** Profile, w których dokument działa; `null`: konfiguracja bez profilu. */
+  /** The profiles the document applies to; `null`: configuration without a profile. */
   profiles: string[] | null;
   entries: Map<string, ConfigEntry>;
 }
 
-/** Konfiguracja jednego modułu: widok każdego profilu i rozwijanie `${…}` w nim. */
+/** The configuration of one module: the view of every profile and expanding `${…}` in it. */
 export class ModuleConfig {
   readonly module: string;
-  /** Profile wymienione w plikach, bez `default`, po nazwie. */
+  /** The profiles named in the files, without `default`, by name. */
   readonly profiles: string[];
-  /** Ile profili ponad `MAX_PROFILES` pominięto. */
+  /** How many profiles beyond `MAX_PROFILES` were skipped. */
   readonly skippedProfiles: number;
   private readonly views = new Map<string, Map<string, ConfigEntry>>();
 
@@ -62,17 +62,17 @@ export class ModuleConfig {
     for (const p of this.profiles) this.views.set(p, merge([...base, ...docs.filter((d) => d.profiles?.includes(p))]));
   }
 
-  /** Wpis klucza w widoku profilu (bez rozwijania). */
+  /** The key's entry in the profile's view (without expanding). */
   entry(key: string, profile: string = DEFAULT_PROFILE): ConfigEntry | undefined {
     return this.views.get(profile)?.get(normalizeKey(key));
   }
 
-  /** Klucze (znormalizowane) wszystkich widoków. */
+  /** The (normalised) keys of all views. */
   keys(): Set<string> {
     return new Set([...this.views.values()].flatMap((v) => [...v.keys()]));
   }
 
-  /** Wartości klucza bez rozwijania we wszystkich widokach. */
+  /** The key's values without expanding in all views. */
   rawValues(key: string): string[] {
     const normalized = normalizeKey(key);
     return [...this.views.values()].flatMap((v) => {
@@ -81,12 +81,12 @@ export class ModuleConfig {
     });
   }
 
-  /** Tekst z rozwiniętymi `${…}` w widoku profilu. */
+  /** The text with `${…}` expanded in the profile's view. */
   resolve(text: string, profile: string = DEFAULT_PROFILE): Resolved {
     return resolvePlaceholders(text, (key) => this.entry(key, profile));
   }
 
-  /** Rozwinięta wartość klucza w profilu domyślnym; `undefined` bez wpisu. */
+  /** The key's expanded value in the default profile; `undefined` without an entry. */
   value(key: string): string | undefined {
     const entry = this.entry(key);
     return entry && this.resolve(entry.value).value;
@@ -99,12 +99,12 @@ function merge(docs: readonly ConfigDoc[]): Map<string, ConfigEntry> {
   return view;
 }
 
-/** Klucz w postaci, w której Spring Boot go porównuje: `orders.baseUrl`, `orders.base-url` i `ORDERS.BASE_URL` to jedno. */
+/** A key in the form Spring Boot compares it in: `orders.baseUrl`, `orders.base-url` and `ORDERS.BASE_URL` are one. */
 export function normalizeKey(key: string): string {
   return key.toLowerCase().replace(/[-_]/g, "");
 }
 
-/** Konfiguracja każdego modułu z plikami Spring; moduł to katalog nad `src/main/resources`. */
+/** The configuration of every module with Spring files; a module is the directory above `src/main/resources`. */
 export function readSpringConfigs(snapshot: RepoSnapshot, out: ProblemSink): Map<string, ModuleConfig> {
   const byModule = new Map<string, ConfigDoc[]>();
   for (const path of [...snapshot.paths.filter(readsSpringConfigFile)].sort(byLoadOrder)) {
@@ -128,15 +128,15 @@ export function readSpringConfigs(snapshot: RepoSnapshot, out: ProblemSink): Map
   );
 }
 
-/** Katalog modułu dla pliku pod `src/main/…`; `""`, gdy plik leży w `src/main` korzenia albo poza nim. */
+/** The module directory for a file under `src/main/…`; `""` when the file lies in the root's `src/main` or outside it. */
 export function moduleOf(path: string): string {
   const at = path.startsWith("src/main/") ? 0 : path.indexOf("/src/main/");
   return at <= 0 ? "" : path.slice(0, at);
 }
 
 /**
- * Kolejność, w której Spring czyta pliki: każdy `bootstrap*` przed każdym `application*`, w nich plik profilu
- * (`application-prod.yml`) po pliku bez profilu, także po jego dokumentach `on-profile`, a YAML przed `.properties`.
+ * The order in which Spring reads files: every `bootstrap*` before every `application*`, within them a profile file
+ * (`application-prod.yml`) after the file without a profile, also after its `on-profile` documents, and YAML before `.properties`.
  */
 function byLoadOrder(a: string, b: string): number {
   return rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0);
@@ -163,9 +163,9 @@ function readConfigFile(path: string, text: string, out: ProblemSink): ConfigDoc
 }
 
 /**
- * Profile dokumentu z `spring.config.activate.on-profile` albo `spring.profiles`: `null` bez wpisu, nazwy z listy
- * (`prod, staging`, `prod | staging`), a `undefined` dla wyrażenia z samym zaprzeczeniem (`!dev`), którego karta
- * nie przypisze do nazwanego profilu.
+ * A document's profiles from `spring.config.activate.on-profile` or `spring.profiles`: `null` without an entry, names
+ * from a list (`prod, staging`, `prod | staging`), and `undefined` for an expression with only a negation (`!dev`), which
+ * the card does not assign to a named profile.
  */
 function activationProfiles(entries: Map<string, ConfigEntry>): string[] | null | undefined {
   const entry = entries.get(normalizeKey("spring.config.activate.on-profile")) ?? entries.get(normalizeKey("spring.profiles"));
@@ -174,10 +174,10 @@ function activationProfiles(entries: Map<string, ConfigEntry>): string[] | null 
   return names.length > 0 ? names : undefined;
 }
 
-/** Dokumenty YAML (`---`) jako płaskie wpisy `a.b[0].c` z linią klucza. Aliasy (`*kotwica`) są pomijane (§8). */
+/** YAML documents (`---`) as flat `a.b[0].c` entries with the key's line. Aliases (`*anchor`) are skipped (§8). */
 function readYaml(path: string, text: string): Map<string, ConfigEntry>[] {
   const lineCounter = new LineCounter();
-  // Bez sprawdzania powtórzonych kluczy: biblioteka porównuje każdy klucz mapy z każdym, a plik jest z repo (§8).
+  // No check for repeated keys: the library compares every map key with every other, and the file comes from the repo (§8).
   const docs = parseAllDocuments(text, { lineCounter, uniqueKeys: false });
   const budget = { left: MAX_ENTRIES };
   if (!Array.isArray(docs)) return [];
@@ -194,7 +194,7 @@ interface FlattenContext {
   path: string;
   lineCounter: LineCounter;
   entries: Map<string, ConfigEntry>;
-  /** Ile wpisów zostało do limitu pliku (wszystkie dokumenty razem). */
+  /** How many entries are left until the file's limit (all documents together). */
   budget: { left: number };
 }
 
@@ -221,7 +221,7 @@ function flattenSeq(items: readonly unknown[], prefix: string, ctx: FlattenConte
   });
 }
 
-/** Wartość pod kluczem: skalar to wpis, mapa i lista idą głębiej. */
+/** The value under a key: a scalar is an entry, a map and a list go deeper. */
 function addValue(node: Node, key: string, line: number, ctx: FlattenContext, depth: number): void {
   if (isScalar(node)) add(ctx, key, node.value, line);
   else if (isMap(node) || isSeq(node)) flatten(node, key, ctx, depth + 1);
@@ -235,8 +235,8 @@ function add(ctx: FlattenContext, key: string, value: unknown, line: number): vo
 }
 
 /**
- * Plik `.properties`: `klucz=wartość`, `klucz: wartość` albo `klucz wartość`, `#` i `!` zaczynają komentarz, `\` na
- * końcu linii ją kontynuuje, a `#---` (albo `!---`) oddziela dokumenty jak `---` w YAML.
+ * A `.properties` file: `key=value`, `key: value` or `key value`, `#` and `!` start a comment, `\` at the end of a line
+ * continues it, and `#---` (or `!---`) separates documents like `---` in YAML.
  */
 function readProperties(path: string, text: string): Map<string, ConfigEntry>[] {
   const docs = [new Map<string, ConfigEntry>()];
@@ -244,7 +244,7 @@ function readProperties(path: string, text: string): Map<string, ConfigEntry>[] 
   let read = 0;
   for (let i = 0; i < lines.length; i++) {
     const start = i;
-    // Części linii z kontynuacją składane tablicą: sklejanie napisu w pętli byłoby kwadratowe na złośliwym pliku.
+    // The parts of a continued line are joined through an array: concatenating a string in a loop would be quadratic on a malicious file.
     const parts = [(lines[i] ?? "").trimStart()];
     while ((parts.at(-1) ?? "").endsWith("\\") && i + 1 < lines.length) {
       parts[parts.length - 1] = (parts.at(-1) ?? "").slice(0, -1);

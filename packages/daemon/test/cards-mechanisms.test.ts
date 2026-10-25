@@ -26,8 +26,8 @@ const SPRING_BFF_POM = `<project>
 </project>
 `;
 
-describe("spis mechanizmów", () => {
-  test("mechanizmy z zależności i nazw plików, z dowodami", () => {
+describe("list of mechanisms", () => {
+  test("mechanisms from dependencies and file names, with evidence", () => {
     const card = extractCard(
       snapshotOf({ "pom.xml": SPRING_BFF_POM }, ["Dockerfile", "deploy/k8s/deployment.yaml", "chart/Chart.yaml", "api/openapi.yaml"]),
       parsers,
