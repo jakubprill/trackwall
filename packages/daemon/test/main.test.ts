@@ -2,9 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DaemonInfoResult } from "@trackwall/protocol";
+import { apiResult, CardWarmupProgress, DaemonInfoResult } from "@trackwall/protocol";
 import { readDaemonFile } from "../src/infra/discovery.ts";
 import { loopbackRequest } from "../src/infra/loopback.ts";
+import { makeRepo } from "./support/git-repo.ts";
 import { RUNTIMES } from "./support/runtimes.ts";
 
 const MAIN = join(import.meta.dir, "..", "src", "main.ts");
@@ -98,6 +99,33 @@ describe.each(RUNTIMES)("daemon process under %s", (name, runtime) => {
       const info = DaemonInfoResult.parse(JSON.parse((await loopbackRequest(file.port, "/api/daemon/info", { token: file.token })).body));
       expect(info.ok && info.data.runtime.name).toBe(name);
       expect((await loopbackRequest(file.port, "/")).body).toContain("<title>trackwall-test</title>");
+      await loopbackRequest(file.port, "/api/daemon/shutdown", { method: "POST", token: file.token });
+      expect(await daemon.exited).toBe(0);
+    } finally {
+      daemon.kill();
+    }
+  }, 20_000);
+
+  test("after the start the daemon computes the cards of the repos in the projects folder by itself", async () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-warmup-"));
+    const projects = mkdtempSync(join(tmpdir(), "trackwall-warmup-projects-"));
+    makeRepo({ "package.json": JSON.stringify({ name: "web", private: true }) }, "web", projects);
+    writeFileSync(join(home, "workspace.yaml"), `projectsDir: ${JSON.stringify(projects)}\n`);
+    const daemon = Bun.spawn([...runtime, MAIN], { env: { ...process.env, TRACKWALL_HOME: home }, stdout: "ignore", stderr: "inherit" });
+    try {
+      const file = await waitFor(() => readDaemonFile(home), daemon);
+      const warmup = async () => {
+        const res = await loopbackRequest(file.port, "/api/cards/warmup", { method: "POST", token: file.token });
+        const result = apiResult(CardWarmupProgress).parse(JSON.parse(res.body));
+        if (!result.ok) throw new Error(result.error.message);
+        return result.data;
+      };
+      let progress = await warmup();
+      for (const until = Date.now() + 10_000; Date.now() < until && (progress.running || progress.done === 0); ) {
+        await Bun.sleep(50);
+        progress = await warmup();
+      }
+      expect(progress).toEqual({ running: false, done: 1, total: 1 });
       await loopbackRequest(file.port, "/api/daemon/shutdown", { method: "POST", token: file.token });
       expect(await daemon.exited).toBe(0);
     } finally {

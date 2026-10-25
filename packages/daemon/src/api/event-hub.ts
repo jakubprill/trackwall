@@ -16,6 +16,8 @@ const CHECK_MS = 200;
 const TOPICS: { [T in DaemonEventType]: (facade: Facade) => DaemonEventOf<T> } = {
   "sessions.changed": (facade) => ({ type: "sessions.changed", payload: facade.agents.sessions() }),
   "mise.running.changed": (facade) => ({ type: "mise.running.changed", payload: facade.mise.running() }),
+  "repos.changed": (facade) => ({ type: "repos.changed", payload: facade.repoWatch.state() }),
+  "cards.warmup.changed": (facade) => ({ type: "cards.warmup.changed", payload: facade.cards.warmupProgress() }),
 };
 
 export interface EventListener {

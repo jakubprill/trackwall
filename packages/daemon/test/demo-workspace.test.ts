@@ -30,7 +30,7 @@ test(
       openFolder: () => {},
     });
     await workspace.setProjectsDir(projects);
-    const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(join(home, "cards"), () => {}) });
+    const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(join(home, "cards"), () => {}), log: () => {} });
 
     const { nodes, edges } = await new Graph({ cards, workspace }).graph();
 

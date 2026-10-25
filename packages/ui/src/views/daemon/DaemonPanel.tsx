@@ -1,4 +1,4 @@
-import { DaemonInfo } from "@trackwall/protocol";
+import { type CardWarmupProgress, DaemonInfo } from "@trackwall/protocol";
 import { RefreshCw } from "lucide-react";
 import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -7,16 +7,28 @@ import { Surface } from "@/components/Surface";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { call } from "@/lib/api";
+import { warmupLabel } from "@/lib/card-warmup";
 import type { Connection } from "@/lib/connection";
+import type { LiveFeed } from "@/lib/daemon-events";
 import { formatUptime } from "@/lib/format";
+import { useCardWarmup } from "@/lib/use-card-warmup";
 import { type Remote, useRemote } from "@/lib/use-remote";
 import { ConnectCopilot } from "./ConnectCopilot.tsx";
 
 const POLL_MS = 5000;
 
-export function DaemonPanel({ conn, onRetry }: { conn: Connection; onRetry: () => void }) {
+export function DaemonPanel({
+  conn,
+  warmupLive,
+  onRetry,
+}: {
+  conn: Connection;
+  warmupLive: LiveFeed<CardWarmupProgress> | undefined;
+  onRetry: () => void;
+}) {
   const load = useCallback(() => call(conn, "/api/daemon/info", DaemonInfo), [conn]);
   const info = useRemote(load, { pollMs: POLL_MS });
+  const warmup = useCardWarmup(conn, warmupLive).data;
   /** Data only from the last successful response; after an error the panel shows the error instead of stale values. */
   const ready = info.error ? undefined : info.data;
 
@@ -45,7 +57,7 @@ export function DaemonPanel({ conn, onRetry }: { conn: Connection; onRetry: () =
               }}
             />
           )}
-          {ready && <InfoTable info={ready} />}
+          {ready && <InfoTable info={ready} warmup={warmup} />}
         </div>
       </Surface>
       {ready && <ConnectCopilot info={ready} />}
@@ -59,7 +71,7 @@ function StatusBadge({ info }: { info: Remote<DaemonInfo> }) {
   return <Badge variant="secondary">connecting</Badge>;
 }
 
-function InfoTable({ info }: { info: DaemonInfo }) {
+function InfoTable({ info, warmup }: { info: DaemonInfo; warmup: CardWarmupProgress | undefined }) {
   const rows: [string, string][] = [
     ["Version", info.version],
     ["PID", String(info.pid)],
@@ -69,6 +81,7 @@ function InfoTable({ info }: { info: DaemonInfo }) {
     ["Uptime", formatUptime(info.uptimeMs)],
     ["State directory", info.home],
   ];
+  if (warmup) rows.push(["Repo cards", warmupLabel(warmup)]);
   return (
     <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
       {rows.map(([k, v]) => (

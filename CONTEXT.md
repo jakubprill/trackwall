@@ -110,6 +110,10 @@ _Avoid_: bulk operation, workflow
 The branch, the last commit, the number of changes in the working directory (of which, separately, new untracked files, `untracked`) and ahead/behind against the tracking branch, read from git on every request (`ok`), or `unavailable` with a message when git does not read it (a repo whose directory disappeared drops off the list). It is never stored.
 _Avoid_: state (that is a task state or a service state), sync (that is a separate action)
 
+**Repo watch** (`RepoWatch`, snapshot `RepoWatchState`, topic `repos.changed`):
+The daemon's comparison, every second, of the set of repos in the projects folder and of the HEAD and refs of each, read from the files of its git directory (ADR-63). A commit, checkout, pull, fetch or a new or removed repo bumps the revision; uncommitted changes do not. The UI fetches the list, tags and the graph again after every new revision.
+_Avoid_: file watcher (the daemon does not use file system notifications), working directory watch (the working directory is not watched)
+
 **Changes** (working directory changes, `WorkingTreeChanges`, the `changes` action; the "Changes" tab in the UI):
 The files and diff of the working directory (with new files, without ignored ones) against a commit: a repo against HEAD in the repo details (ADR-34), a task's worktree against the base commit in the task changes (`TaskChanges`, ADR-31). Read-only. An agent gets a task's changes without the diff in `get_session` (`TaskChangesSummary`) and with it, narrowed to paths, in `get_task_changes` (`AgentTaskChanges`).
 In working directory counts "changed" (`changed`) are tracked files, and "new" (`untracked`) untracked entries; `RepoStatus.changes` is their sum (`trackedChanges` counts the changed ones).
@@ -145,6 +149,10 @@ The mise files of a task's worktree (config files, `.tool-versions`, file tasks)
 **Card** (repo card, `RepoCard`):
 Facts about a repo extracted deterministically from build files, configuration and code in the HEAD commit: build files, what the repo provides (`provides`), what it uses (`consumes`), required tools, mechanisms and problems, every fact with evidence. It depends only on the commit, so it is computed once per commit (ADR-25). An LLM will add only a description and connection proposals marked `origin: 'llm'` (ADR-6). In the UI, the "Card" tab in the repo details.
 _Avoid_: profile, metadata; "repo card" for the whole repo details panel
+
+**Card warm-up** (`CardWarmup`, progress `CardWarmupProgress`, `cards/warmup`, topic `cards.warmup.changed`; UI "Repo cards"):
+Computing the cards of new and changed repos in the background, two at once, after the daemon's start and for new repos and repos whose HEAD moved, as the repo watch sees them (ADR-63), so that the graph and MCP take them from the cache. A request never waits for it.
+_Avoid_: indexing, scan, prefetch
 
 **Build file** (`BuildFile`):
 A `pom.xml`, `build.gradle(.kts)` or `package.json` that belongs to the repo's build: a root (without a file of the same kind above it) or a module or workspace package that another build file lists (`memberOf`).
@@ -407,7 +415,7 @@ _Avoid_: exception (only one kind of error), problem (that is the repo card and 
 **`seq`**:
 A global, increasing record number for all sources; every daemon run starts from the moment of its start, so numbers do not repeat. The cursor (`sinceSeq` in the API and in MCP tools) works for one source and for the whole workspace; `dropped` says that some records after the cursor were lost.
 
-**Event** (`DaemonEvent`, `sessions.changed`, `mise.running.changed`):
+**Event** (`DaemonEvent`, `sessions.changed`, `mise.running.changed`, `repos.changed`, `cards.warmup.changed`):
 A daemon message on the `/ws` WebSocket (ADR-36) with the whole snapshot of one topic, without a number. The daemon sends them after connection (a snapshot of every topic) and on every change of a snapshot.
 _Avoid_: record (that is the log), notification (that is OSC or a hook)
 

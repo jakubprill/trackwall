@@ -14,11 +14,8 @@ export function repoStatusTone(status: RepoStatus): { tone: StatusTone; label: s
   return changes ? { tone: "warning", label: changes } : { tone: "ok", label: "clean" };
 }
 
-/**
- * The repo list and the repos' states come from the projects folder and from git on every request (§4.5): `git status`
- * in every repo, so "Repos" and "Home" poll it rarely and equally often.
- */
-export const REPO_LIST_POLL_MS = 10_000;
+/** The "Changes" tab of one repo: the user's uncommitted work, which no event reports. */
+export const WORKING_TREE_POLL_MS = 10_000;
 
 /**
  * The repo list does not exist until the projects folder is fixed in the settings: it disappeared or is wrong in

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { type CallErrorCode, errorCode, errorMessage } from "./api.ts";
 import type { LiveFeed } from "./daemon-events.ts";
 import { LoadOrder } from "./load-order.ts";
+import { RefreshGate } from "./refresh-gate.ts";
 
 /** The last data and the last error separately: a refresh error does not take away a view that already shows something. */
 export interface Remote<T> {
@@ -29,7 +30,11 @@ export interface RemoteOptions<T> {
    * request at the new pace at once.
    */
   pollMs?: number | ((data: T | undefined) => number);
-  /** A change of the value fetches the data anew, keeping the previous data until the response (for example the repo's HEAD hash). */
+  /**
+   * A change of the value fetches the data anew, keeping the previous data until the response (for example the repo's HEAD
+   * hash). Changes during a request, or while the window is hidden, make one fetch after the response or when the window
+   * shows, so a key that changes faster than the daemon answers does not cancel every response.
+   */
   refreshKey?: string;
   /**
    * The same data live from the events WebSocket (§5.2, ADR-36), stable between renders (`useMemo`): every snapshot
@@ -64,6 +69,10 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
   liveRef.current = live;
   const dataRef = useRef<T | undefined>(undefined);
   const order = useRef(new LoadOrder()).current;
+  // The key of this render, read when a request is sent: a request sent after a key change already covers it.
+  const refreshKeyRef = useRef(refreshKey);
+  refreshKeyRef.current = refreshKey;
+  const [gate] = useState(() => new RefreshGate(refreshKey));
   const show = useCallback(
     (data: T, loadNumber: number) => {
       if (!order.show(loadNumber)) return;
@@ -73,7 +82,7 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
     [order],
   );
 
-  // `generation` and `refreshKey` are not read in the effect: their change is a request to fetch again.
+  // `generation` is not read in the effect: its change is a request to fetch again.
   useEffect(() => {
     if (!load) return;
     const changed = previousLoad.current !== load;
@@ -90,6 +99,7 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
       setState({});
     }
     const loadNumber = order.next();
+    gate.sent(refreshKeyRef.current);
     load()
       .then(
         (data) => {
@@ -101,13 +111,27 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
         },
       )
       .finally(() => {
-        if (current && pollRef.current !== undefined) timer = setTimeout(next, interval());
+        if (!current) return;
+        if (gate.answered(document.hidden)) setGeneration((g) => g + 1);
+        else if (pollRef.current !== undefined) timer = setTimeout(next, interval());
       });
     return () => {
       current = false;
       clearTimeout(timer);
     };
-  }, [load, generation, refreshKey, show, order]);
+  }, [load, generation, show, order, gate]);
+
+  useEffect(() => {
+    if (gate.keyChanged(refreshKey, document.hidden)) setGeneration((g) => g + 1);
+  }, [refreshKey, gate]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden && gate.shown()) setGeneration((g) => g + 1);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [gate]);
 
   // A snapshot counts like a response to a request sent when it arrived. A snapshot read in the daemon just before an
   // action and received after it counts as newer than the action; the next one (at most 200 ms later) corrects it.

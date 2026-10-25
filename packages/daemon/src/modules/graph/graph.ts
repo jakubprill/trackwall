@@ -39,7 +39,7 @@ export class Graph {
   private readonly deps: GraphDeps;
   /**
    * The last computed graph with its input key (ADR-30): HTTP edges compare calls with the endpoints of all
-   * repos, so the same commits and the same configuration do not compute the graph a second time (the UI polls it every 30 s).
+   * repos, so the same commits and the same configuration do not compute the graph a second time (the UI asks for it after every repo change and as a safety net, ADR-63).
    */
   private last: { key: string; graph: RepoGraph; http: HttpIndex } | undefined;
 

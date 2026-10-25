@@ -1,26 +1,39 @@
-import { graphApi } from "@trackwall/protocol";
+import { type CardWarmupProgress, graphApi } from "@trackwall/protocol";
 import { RefreshCw } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
+import { graphLoadingText } from "@/lib/card-warmup";
 import type { Connection } from "@/lib/connection";
+import type { LiveFeed } from "@/lib/daemon-events";
 import { twoDigits } from "@/lib/format";
 import { layoutGraph } from "@/lib/graph-layout";
+import { GRAPH_PACE } from "@/lib/repo-watch";
+import { useCardWarmup } from "@/lib/use-card-warmup";
 import { useRemote } from "@/lib/use-remote";
+import type { RepoWatchHandle } from "@/lib/use-repo-watch";
 import { GraphCanvas } from "./GraphCanvas.tsx";
 import { GraphNodePanel, GraphSummaryPanel } from "./GraphNodePanel.tsx";
 
 /**
  * The "Overview" view (§4.6, ADR-29): the graph of connections between repos at full width and the details panel of the
- * selected repo on the right. The daemon computes the graph from the repo cards, so a new commit in a repo changes it at the next poll.
+ * selected repo on the right. The daemon computes the graph from the repo cards, so a new commit in a repo changes it as soon as
+ * the repo watch reports it (ADR-63). While the first graph is computed, the view shows how far the card warm-up is.
  */
-const POLL_MS = 30_000;
-
-export function GraphView({ conn }: { conn: Connection }) {
+export function GraphView({
+  conn,
+  warmupLive,
+  repoWatch,
+}: {
+  conn: Connection;
+  warmupLive: LiveFeed<CardWarmupProgress> | undefined;
+  repoWatch: RepoWatchHandle;
+}) {
   const load = useCallback(() => post(conn, graphApi.graph, {}), [conn]);
-  const graph = useRemote(load, { pollMs: POLL_MS });
+  const graph = useRemote(load, repoWatch.options(GRAPH_PACE));
+  const warmup = useCardWarmup(conn, warmupLive).data;
   const [selected, setSelected] = useState<string>();
   const data = graph.data;
   const layout = useMemo(
@@ -50,7 +63,7 @@ export function GraphView({ conn }: { conn: Connection }) {
         )}
         {!data && !graph.error && (
           <div className="px-4">
-            <Loading text="Building the graph from repo cards…" />
+            <Loading text={graphLoadingText(warmup)} />
           </div>
         )}
         {data && layout && <GraphCanvas graph={data} layout={layout} selected={node?.repo} onSelect={setSelected} />}

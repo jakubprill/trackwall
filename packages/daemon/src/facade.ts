@@ -13,6 +13,7 @@ import { Services } from "./modules/services/services.ts";
 import { TestReports } from "./modules/test-results/test-reports.ts";
 import { HOSTING_CLIS, Hosting } from "./modules/vcs/hosting.ts";
 import { Vcs } from "./modules/vcs/vcs.ts";
+import { RepoWatch } from "./modules/workspace/repo-watch.ts";
 import { Workspace } from "./modules/workspace/workspace.ts";
 import { WorkspaceFile } from "./modules/workspace/workspace-file.ts";
 import { groupPlatform } from "./platform/group-platform.ts";
@@ -24,6 +25,8 @@ import { terminalPlatform } from "./platform/terminal.ts";
  */
 export interface Facade {
   workspace: Workspace;
+  /** HEAD and refs of the repos in the projects folder, compared every second (ADR-63); `main.ts` starts it. */
+  repoWatch: RepoWatch;
   cards: Cards;
   graph: Graph;
   mise: Mise;
@@ -94,7 +97,9 @@ export function createFacade(o: FacadeOptions): Facade {
   });
   const cache = new CardCache(join(o.home, CARDS_DIR), o.log);
   cache.prune().catch((err: unknown) => o.log(`failed to clean up cards: ${String(err)}`));
-  const cards = new Cards({ vcs, repos: workspace, cache });
+  const cards = new Cards({ vcs, repos: workspace, cache, log: o.log });
+  // A new repo or one whose HEAD moved gets its card in the background, so the next graph does not wait for it (ADR-63).
+  const repoWatch = new RepoWatch({ repos: workspace, vcs, onHeadMoved: (repos) => cards.warmUp(repos), log: o.log });
   const agents = new Agents({
     procs,
     repos: workspace,
@@ -114,5 +119,5 @@ export function createFacade(o: FacadeOptions): Facade {
   const taskPort = (repo: string, task: string) => agents.taskOfRepo(task, repo).port;
   const services = new Services({ mise, logs, graph, cards, taskPort, env: o.userEnv, ...SERVICE_TIMING });
   const testReports = new TestReports({ repos: workspace, tasks: agents, logs, env: o.userEnv });
-  return { workspace, cards, graph, mise, procs, logs, batch, agents, services, testReports, openLink: o.openUrl };
+  return { workspace, repoWatch, cards, graph, mise, procs, logs, batch, agents, services, testReports, openLink: o.openUrl };
 }

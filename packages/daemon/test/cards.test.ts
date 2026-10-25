@@ -19,7 +19,7 @@ async function setup(vcs: Vcs = new Vcs()) {
   const workspace = new Workspace({ file, vcs, hosting: fakeHosting().hosting, openEditor: () => {}, openFolder: () => {} });
   await workspace.setProjectsDir(projects);
   const cardsDir = join(home, "cards");
-  const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(cardsDir, () => {}) });
+  const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(cardsDir, () => {}), log: () => {} });
   return { home, projects, cardsDir, cards, workspace };
 }
 
@@ -50,7 +50,7 @@ describe("cards", () => {
     // A new instance (a daemon restart) with a git that cannot read files: the card must come from disk.
     const blind = new Vcs();
     blind.commitFiles = () => Promise.reject(new Error("should not read files"));
-    const restarted = new Cards({ vcs: blind, repos: workspace, cache: new CardCache(cardsDir, () => {}) });
+    const restarted = new Cards({ vcs: blind, repos: workspace, cache: new CardCache(cardsDir, () => {}), log: () => {} });
     expect((await restarted.card("web")).card).toEqual(first.card);
 
     commitFiles(repo, { "package.json": JSON.stringify({ name: "web", dependencies: { "@angular/core": "20" } }) }, "angular");

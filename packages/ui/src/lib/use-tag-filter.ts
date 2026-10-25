@@ -3,13 +3,9 @@ import { useCallback, useMemo, useState } from "react";
 import { post } from "./api.ts";
 import type { Connection } from "./connection.ts";
 import { hasAllTags, tagCounts, tagsByRepo, toggleTag } from "./repo-tags.ts";
+import { REPO_TAGS_PACE } from "./repo-watch.ts";
 import { useRemote } from "./use-remote.ts";
-
-/**
- * Tags depend on the repo's commits (the card) and on the rules in `workspace.yaml`: a new HEAD in the list fetches them
- * at once, and a manual change of the rules shows up after this time at the latest.
- */
-const TAGS_POLL_MS = 60_000;
+import type { RepoWatchHandle } from "./use-repo-watch.ts";
 
 export interface TagFilterHandle {
   tags: Map<string, RepoTag[]>;
@@ -21,12 +17,16 @@ export interface TagFilterHandle {
   clear: () => void;
 }
 
-/** The tags of the repos in the list (ADR-25) and the filter by them; fetched anew when the set of repos or any HEAD changes. */
-export function useTagFilter(conn: Connection, all: readonly Repo[]): TagFilterHandle {
+/**
+ * The tags of the repos in the list (ADR-25) and the filter by them. Tags depend on the repos' commits (the card) and on
+ * the rules in `workspace.yaml`: they are fetched anew when the set of repos or any HEAD in the list changes, and a hand
+ * change of the rules shows up after the poll interval at the latest (`REPO_TAGS_PACE`).
+ */
+export function useTagFilter(conn: Connection, all: readonly Repo[], repoWatch: RepoWatchHandle): TagFilterHandle {
   const [selected, setSelected] = useState<string[]>([]);
   const heads = all.map((r) => `${r.id}@${r.status.kind === "ok" ? (r.status.head?.hash ?? "") : ""}`).join(",");
   const load = useCallback(() => post(conn, cardsApi.tags, {}), [conn]);
-  const remote = useRemote(load, { pollMs: TAGS_POLL_MS, refreshKey: heads });
+  const remote = useRemote(load, { ...repoWatch.options(REPO_TAGS_PACE), refreshKey: heads });
   const tags = useMemo(() => tagsByRepo(remote.data), [remote.data]);
   return {
     tags,

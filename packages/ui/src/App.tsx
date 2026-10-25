@@ -23,6 +23,7 @@ import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
 import { useFileDrop } from "@/lib/use-file-drop";
 import { useJumpRequest } from "@/lib/use-jump-request";
+import { useRepoWatch } from "@/lib/use-repo-watch";
 import { useSessionTree } from "@/lib/use-session-tree";
 import { useSessions } from "@/lib/use-sessions";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
@@ -111,6 +112,8 @@ export function App() {
   }, []);
   const sessions = useSessions(conn, events, view === "sessions" || view === "home" || supervisorPinned);
   const runningLive = useMemo(() => events?.feed("mise.running.changed"), [events]);
+  const repoWatch = useRepoWatch(useMemo(() => events?.feed("repos.changed"), [events]));
+  const warmupLive = useMemo(() => events?.feed("cards.warmup.changed"), [events]);
   const tree = useSessionTree(sessions);
   const { rows } = tree;
   const supervisor = useMemo(() => supervisorSummary(sessions.data, rows), [sessions.data, rows]);
@@ -198,6 +201,7 @@ export function App() {
                 key={epoch}
                 conn={conn}
                 runningLive={runningLive}
+                repoWatch={repoWatch}
                 sessions={sessions}
                 onOpenInSessions={openInSessions}
                 onOpenRepo={openRepos}
@@ -210,6 +214,7 @@ export function App() {
                 key={`${epoch}:${visit}`}
                 conn={conn}
                 initialRepo={repo}
+                repoWatch={repoWatch}
                 onRetry={retry}
                 onOpenSettings={() => setView("settings")}
               />
@@ -229,10 +234,10 @@ export function App() {
                 onLayout={setSessionLayout}
               />
             )}
-            {conn && view === "graph" && <GraphView key={epoch} conn={conn} />}
+            {conn && view === "graph" && <GraphView key={epoch} conn={conn} warmupLive={warmupLive} repoWatch={repoWatch} />}
             {conn && view === "daemon" && (
               <div className="flex justify-center p-6">
-                <DaemonPanel key={epoch} conn={conn} onRetry={retry} />
+                <DaemonPanel key={epoch} conn={conn} warmupLive={warmupLive} onRetry={retry} />
               </div>
             )}
             {conn && view === "settings" && (

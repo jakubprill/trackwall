@@ -53,6 +53,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.syncRun, (f) => f.workspace.syncRun()),
   route(cardsApi.card, (f, b) => f.cards.card(b.repo)),
   route(cardsApi.tags, (f) => f.cards.tags()),
+  route(cardsApi.warmup, (f) => f.cards.warmupProgress()),
   route(graphApi.graph, (f) => f.graph.graph()),
   route(miseApi.tasks, (f, b) => f.mise.tasks(b.repo)),
   route(miseApi.running, (f) => f.mise.running()),

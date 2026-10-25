@@ -1,7 +1,8 @@
-import type { RepoCard, RepoCardResult, RepoTag, RepoTagRules, RepoTags } from "@trackwall/protocol";
+import type { CardWarmupProgress, RepoCard, RepoCardResult, RepoTag, RepoTagRules, RepoTags } from "@trackwall/protocol";
 import { configOrProblem, DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
 import type { CardCache } from "./card-cache.ts";
+import { CardWarmup, type WarmupRepo } from "./card-warmup.ts";
 import { CARD_SOURCES, extractCard, readsCardFile } from "./extract-card.ts";
 import { readSnapshot, type SnapshotVcs } from "./read-snapshot.ts";
 import { CARD_PARSE_BUDGET_MS, loadSyntaxParsers, type SyntaxParsers, unavailableParsers, withParseBudget } from "./syntax-tree.ts";
@@ -40,6 +41,7 @@ export interface CardsDeps {
   vcs: CardsVcs;
   repos: CardsRepos;
   cache: CardCache;
+  log: (msg: string) => void;
 }
 
 /**
@@ -50,9 +52,26 @@ const TAGS_CONCURRENCY = 4;
 
 export class Cards {
   private readonly deps: CardsDeps;
+  private readonly warmup: CardWarmup;
 
   constructor(deps: CardsDeps) {
     this.deps = deps;
+    this.warmup = new CardWarmup({ warm: (repo) => this.cardOf(repo.path), log: deps.log });
+  }
+
+  /** Computes the cards of these repos in the background (ADR-63), before the ones already waiting. */
+  warmUp(repos: readonly WarmupRepo[]): void {
+    this.warmup.add(repos);
+  }
+
+  /** At daemon stop: the warm-up starts no further card. */
+  close(): void {
+    this.warmup.close();
+  }
+
+  /** The progress of the card warm-up (`cards/warmup`, the `cards.warmup.changed` topic). */
+  warmupProgress(): CardWarmupProgress {
+    return this.warmup.progress();
   }
 
   async card(id: string): Promise<RepoCardResult> {
