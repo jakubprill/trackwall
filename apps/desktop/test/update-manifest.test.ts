@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { keyId, updateManifest } from "../scripts/update-manifest.ts";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { TAURI_DIR } from "../scripts/lib.ts";
+import { keyId, PORTABLE_ENTRIES, updateManifest } from "../scripts/update-manifest.ts";
 
 // A throwaway key pair made for this test with `tauri signer generate`; its private key is not kept anywhere.
 const PUBKEY =
@@ -59,4 +62,11 @@ describe("update manifest", () => {
   test("refuses text that is not a minisign key or signature", () => {
     expect(() => keyId(Buffer.from("not minisign").toString("base64"), "public key")).toThrow("the public key is not in minisign format");
   });
+});
+
+test("the shell's Windows update moves out every entry the portable build ships", () => {
+  const source = readFileSync(join(TAURI_DIR, "src", "portable_update.rs"), "utf8");
+  const shell = /const BUILD_ENTRIES: \[&str; \d+\] = \[([^\]]*)\];/.exec(source)?.[1] ?? "";
+  const names = [...shell.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  expect(names).toEqual(expect.arrayContaining(PORTABLE_ENTRIES));
 });

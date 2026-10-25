@@ -104,14 +104,15 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  publish:
+  # Checks the files and writes SHA256SUMS.txt and latest.json without write access: it runs `pnpm install` for the
+  # script, and only the publish job below may change the repo.
+  manifest:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: write
+      contents: read
     steps:
-      # The whole repo: the release note and scripts/update-manifest.ts with tauri.conf.json.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
@@ -154,6 +155,35 @@ jobs:
           TAG: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
         run: bun apps/desktop/scripts/update-manifest.ts dist "$TAG" "$REPO"
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: trackwall-manifest
+          path: |
+            dist/SHA256SUMS.txt
+            dist/latest.json
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: manifest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      # Only the release note; the versions.test.ts test makes sure it exists for the tagged version.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          sparse-checkout: docs/release-notes
+          persist-credentials: false
+
+      # The packages and signatures of both builds and the manifest job's two files.
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          pattern: trackwall-*
+          path: dist
+          merge-multiple: true
 
       - name: GitHub Release
         env:

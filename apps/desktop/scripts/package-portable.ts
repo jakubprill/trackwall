@@ -13,10 +13,10 @@
  *
  * Bez instalatora i bez zapisu poza katalogiem użytkownika: archiwum rozpakowuje się gdziekolwiek.
  */
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { assertVersionsMatch, REPO, run, TAURI_DIR } from "./lib.ts";
-import { UPDATE_PACKAGES } from "./update-manifest.ts";
+import { PORTABLE_ENTRIES, UPDATE_PACKAGES } from "./update-manifest.ts";
 
 const OUT = join(REPO, "out");
 const version = assertVersionsMatch();
@@ -52,6 +52,10 @@ if (process.platform === "win32") {
       "",
     ].join("\r\n"),
   );
+  const staged = readdirSync(stage).sort();
+  if (staged.join() !== [...PORTABLE_ENTRIES].sort().join()) {
+    throw new Error(`the build has ${staged.join(", ")}; update PORTABLE_ENTRIES and BUILD_ENTRIES (ADR-53)`);
+  }
   const zip = join(OUT, UPDATE_PACKAGES["windows-x86_64"](version));
   run(["tar", "-a", "-c", "-f", zip, "Trackwall"], join(OUT, "stage"));
   console.log(zip);

@@ -38,7 +38,8 @@ const CLEAN_UP_PAUSE: Duration = Duration::from_secs(1);
 /// Installing and cleaning up both work in `.update`; one at a time.
 static UPDATE_LOCK: Mutex<()> = Mutex::new(());
 
-/// Replaces the contents of `app_dir` with the package. The running app keeps running from the moved files.
+/// Replaces the build's files in `app_dir` with the package's; other files stay. The running app keeps running from
+/// the moved files.
 pub fn install(app_dir: &Path, package: &[u8]) -> Result<(), String> {
     let _lock = UPDATE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     check_build(app_dir).map_err(|missing| format!("{} is not a Trackwall folder: {missing} is missing.", app_dir.display()))?;
@@ -51,9 +52,11 @@ pub fn install(app_dir: &Path, package: &[u8]) -> Result<(), String> {
         .and_then(|()| check_build(&new).map_err(|missing| format!("The update package has no {missing}.")));
     let result = staged.map_err(SwapError::LeftAsItWas).and_then(|()| swap(app_dir, &new, &update.join(OLD_DIR)));
     match result {
-        // Without the marker the next start would keep `.update`, which is safe, just untidy.
+        // The empty `new` says the same, so a missing marker only costs a second signal.
         Ok(()) => {
-            let _ = File::create(update.join(DONE_MARKER));
+            if let Err(e) = File::create(update.join(DONE_MARKER)) {
+                eprintln!("[desktop] the update is in place, but {} could not be written: {e}", update.join(DONE_MARKER).display());
+            }
             Ok(())
         }
         // The app folder is as it was, so nothing in `.update` is still needed.
@@ -90,18 +93,19 @@ pub fn clean_up(app_dir: &Path) {
     }
 }
 
-/// Removes `.update` unless it holds the only copy of the previous files: a swap that neither finished
-/// (`done`) nor put everything back (an empty `old`).
+/// Removes `.update` unless it holds the only copy of the previous files: a swap that neither finished nor put
+/// everything back. Finished means the `done` marker, or an empty `new` (every new entry moved in, which happens only
+/// when nothing failed); put back means an empty `old`.
 fn remove_finished(update: &Path) -> Result<(), String> {
-    let old = update.join(OLD_DIR);
-    let finished = update.join(DONE_MARKER).is_file() || entries(&old).map_or(true, |names| names.is_empty());
+    let (old, new) = (update.join(OLD_DIR), update.join(NEW_DIR));
+    let empty = |dir: &Path| entries(dir).is_ok_and(|names| names.is_empty());
+    let finished = update.join(DONE_MARKER).is_file() || empty(&new) || !old.exists() || empty(&old);
     if !finished {
-        return Err(format!(
-            "A previous update could not put back the app files; they are in {}. Install the release by hand (docs/release.md).",
-            old.display()
-        ));
+        return Err(format!("A previous update could not put back the app files. {}", not_restored_advice(&old)));
     }
-    remove_dir_if_exists(update).map_err(|e| {
+    // `old` first: it holds the previous exe, locked until that process exits, and a removal that stops there must
+    // leave the marker for the next attempt.
+    remove_dir_if_exists(&old).and_then(|()| remove_dir_if_exists(update)).map_err(|e| {
         format!("The files of the previous update in {} cannot be removed yet ({e}). Try again in a minute.", update.display())
     })
 }
@@ -169,11 +173,19 @@ fn swap(app_dir: &Path, new: &Path, old: &Path) -> Result<(), SwapError> {
     match move_back(&moved_in, app_dir, new).and_then(|()| move_back(&moved_out, old, app_dir)) {
         Ok(()) => Err(SwapError::LeftAsItWas(format!("The update could not replace the app files ({err}). The app was left as it was."))),
         Err(restore) => Err(SwapError::NotRestored(format!(
-            "The update could not replace the app files ({err}) nor put them back ({restore}). \
-             The previous files are in {}; download the release again.",
-            old.display()
+            "The update could not replace the app files ({err}) nor put them back ({restore}). {}",
+            not_restored_advice(old)
         ))),
     }
+}
+
+/// What to do when `old` holds the only copy of the previous build; docs/release.md says the same.
+fn not_restored_advice(old: &Path) -> String {
+    format!(
+        "The previous files are in {}: quit Trackwall, move them back into the app folder or install the release by hand \
+         (docs/release.md), then delete the {UPDATE_DIR} folder.",
+        old.display()
+    )
 }
 
 fn entries(dir: &Path) -> io::Result<Vec<OsString>> {
@@ -271,8 +283,9 @@ mod tests {
     #[test]
     fn previous_files_that_could_not_be_put_back_survive_the_next_start_and_block_the_next_install() {
         let app = installed_app("not-restored");
-        // What a swap leaves when it could neither finish nor put the files back: files in `old`, no `done`.
+        // What a swap leaves when it could neither finish nor put the files back: files in `old` and `new`, no `done`.
         write(&app.join(".update").join("old").join("trackwall.exe"), "shell 1");
+        write(&app.join(".update").join("new").join("trackwall-daemon.exe"), "daemon 2");
         clean_up_once(&app);
         assert_eq!(fs::read_to_string(app.join(".update").join("old").join("trackwall.exe")).unwrap(), "shell 1");
         let err = install(&app, &package(&NEW_BUILD)).unwrap_err();
@@ -320,6 +333,16 @@ mod tests {
         let err = install(&app, b"not a zip").unwrap_err();
         assert!(err.starts_with("The update package is not a valid zip"), "{err}");
         assert_eq!(fs::read_to_string(app.join("trackwall.exe")).unwrap(), "shell 1");
+        fs::remove_dir_all(app).unwrap();
+    }
+
+    #[test]
+    fn a_finished_swap_is_cleaned_up_even_without_the_done_marker() {
+        let app = installed_app("no-marker");
+        install(&app, &package(&NEW_BUILD)).unwrap();
+        fs::remove_file(app.join(".update").join("done")).unwrap();
+        clean_up_once(&app);
+        assert!(!app.join(".update").exists());
         fs::remove_dir_all(app).unwrap();
     }
 

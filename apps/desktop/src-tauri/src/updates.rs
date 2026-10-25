@@ -18,7 +18,8 @@ const ENDPOINT_ENV: &str = "TRACKWALL_UPDATE_ENDPOINT";
 /// Event for the UI with the download progress (`Progress`; same name and shape in `packages/ui/src/lib/updates.ts`).
 const PROGRESS_EVENT: &str = "update-progress";
 /// Without limits a stalled proxy would leave the UI checking or installing forever. The download has no limit on its
-/// total time, only on silence, because a slow line is not a stalled one.
+/// total time, only on silence, because a slow line is not a stalled one (the builder's `timeout` would apply to the
+/// download too, so `check_update` takes it off the update it found).
 const CHECK_TIMEOUT: Duration = Duration::from_secs(30);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const READ_TIMEOUT: Duration = Duration::from_secs(30);
@@ -82,7 +83,10 @@ pub async fn check_update(app: AppHandle, updates: State<'_, Updates>) -> Result
     let mut phase = updates.lock();
     // An install that started while this check was on the way keeps its update.
     if !matches!(*phase, Phase::Installing) {
-        *phase = update.map_or(Phase::NothingFound, |u| Phase::Found(Box::new(u)));
+        *phase = update.map_or(Phase::NothingFound, |mut u| {
+            u.timeout = None;
+            Phase::Found(Box::new(u))
+        });
     }
     Ok(check)
 }
