@@ -21,3 +21,15 @@ export async function stopDaemon(home: string, facade: Facade | undefined, api: 
   // Last: the final lines of the stopped groups, also those after the leader's `exit`, reach the log files.
   facade?.logs.flush();
 }
+
+/**
+ * A stop that runs once, however many signals, `POST /api/daemon/shutdown` requests and failures ask for it, and then
+ * ends the process with the exit code of the first one.
+ */
+export function shutdownOnce(stop: (reason: string) => Promise<void>): (reason: string, exitCode?: number) => Promise<void> {
+  let stopping: Promise<void> | undefined;
+  return (reason, exitCode = 0) => {
+    stopping ??= stop(reason).then(() => process.exit(exitCode));
+    return stopping;
+  };
+}

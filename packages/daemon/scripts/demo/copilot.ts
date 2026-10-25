@@ -2,7 +2,7 @@
 // for the repo it starts in and reports its state through the session plugin's hooks, as Copilot CLI does, so a
 // session lands in "working", "waiting for you" or "asking for approval". It never calls a model or changes a file.
 import { basename } from "node:path";
-import { pluginHooks } from "../../test/fixtures/plugin-hooks.ts";
+import { pluginHooks } from "../../test/support/plugin-hooks.ts";
 import { TURNS, type Turn } from "./turns.ts";
 
 const fire = pluginHooks(process.argv, "demo");

@@ -10,7 +10,7 @@ import { COPILOT_HOOK_COMMAND, type CommandLine, type DaemonArgs, MCP_STDIO_COMM
 import { newToken, probeRunningDaemon, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
 import { trackwallHome } from "./infra/home.ts";
 import { selfCommand } from "./infra/self-command.ts";
-import { SHUTDOWN_SIGNALS, stopDaemon } from "./infra/shutdown.ts";
+import { SHUTDOWN_SIGNALS, shutdownOnce, stopDaemon } from "./infra/shutdown.ts";
 import { openBrowser, openFolder } from "./infra/system-open.ts";
 import { userEnv } from "./infra/user-env.ts";
 import { VERSION } from "./infra/version.ts";
@@ -33,16 +33,11 @@ async function main(args: DaemonArgs): Promise<void> {
   let api: ApiServer | undefined;
   let facade: Facade | undefined;
   let stopWatching = () => {};
-  let shuttingDown = false;
-
-  async function shutdown(reason: string): Promise<void> {
-    if (shuttingDown) return;
-    shuttingDown = true;
+  const shutdown = shutdownOnce(async (reason) => {
     log(`stopping (${reason})`);
     stopWatching();
     await stopDaemon(home, facade, api);
-    process.exit(0);
-  }
+  });
 
   const started = await withStartLock(home, async () => {
     const running = await probeRunningDaemon(home);

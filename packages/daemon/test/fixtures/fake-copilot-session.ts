@@ -11,7 +11,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { z } from "zod";
-import { pluginHooks } from "./plugin-hooks.ts";
+import { pluginHooks } from "../support/plugin-hooks.ts";
 
 const fire = pluginHooks(process.argv, "s1");
 

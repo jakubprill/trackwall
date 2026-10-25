@@ -18,7 +18,7 @@ import { createFacade } from "../src/facade.ts";
 import { COPILOT_HOOK_COMMAND } from "../src/infra/args.ts";
 import { newToken, writeDaemonFile } from "../src/infra/discovery.ts";
 import { selfCommand } from "../src/infra/self-command.ts";
-import { SHUTDOWN_SIGNALS, stopDaemon } from "../src/infra/shutdown.ts";
+import { SHUTDOWN_SIGNALS, shutdownOnce, stopDaemon } from "../src/infra/shutdown.ts";
 import { userEnv } from "../src/infra/user-env.ts";
 import { createMcpEndpoint } from "../src/mcp/endpoint.ts";
 import { mcpStdioCommand, sessionMcpStdioCommand } from "../src/mcp/stdio-command.ts";
@@ -53,6 +53,10 @@ const facade = createFacade({
   userEnv,
   log,
 });
+const stop = shutdownOnce(async (reason) => {
+  log(`stopping (${reason})`);
+  await stopDaemon(home, facade, api);
+});
 const token = newToken();
 const startedAt = new Date().toISOString();
 const api = await startApi({
@@ -71,7 +75,7 @@ const api = await startApi({
     home,
     mcpStdioCommand: mcpStdioCommand(home),
   }),
-  onShutdown: () => void stop(),
+  onShutdown: () => void stop("POST /api/daemon/shutdown"),
   facade,
   mcp: createMcpEndpoint({ facade, version: VERSION, log: (msg) => log(`[mcp] ${msg}`) }),
   events: new EventHub({ facade, log: (msg) => log(`[events] ${msg}`) }),
@@ -113,26 +117,17 @@ async function setTheScene(): Promise<void> {
   const slice = await facade.services.start({ repo: "admin-bff", dependencies: true, waitMs: 20_000 });
   const down = slice.members
     .filter((member) => member.service?.state !== "healthy")
-    .map((member) => `${member.repo}: ${member.problem ?? member.service?.state}`);
+    .map((member) => `${member.repo}: ${member.problem ?? member.service?.state ?? member.outcome}`);
   if (down.length > 0) throw new Error(`services did not come up (another demo still running?): ${down.join(", ")}`);
   await facade.mise.start("orders-api", "build");
 }
 
-let stopping = false;
-async function stop(): Promise<void> {
-  if (stopping) return;
-  stopping = true;
-  await stopDaemon(home, facade, api);
-  process.exit(0);
-}
-for (const signal of SHUTDOWN_SIGNALS) process.on(signal, () => void stop());
+for (const signal of SHUTDOWN_SIGNALS) process.on(signal, () => void stop(signal));
 
 try {
   await setTheScene();
 } catch (err) {
-  log(`the scene did not come up: ${err instanceof Error ? err.message : String(err)}`);
-  await stopDaemon(home, facade, api);
-  process.exit(1);
+  await stop(`the scene did not come up: ${err instanceof Error ? err.message : String(err)}`, 1);
 }
 // Written once the scene is set, so whoever waits for daemon.json finds the demo ready.
 writeDaemonFile(home, { pid: process.pid, port: api.port, token, startedAt, version: VERSION });

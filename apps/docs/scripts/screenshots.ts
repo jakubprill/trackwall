@@ -7,6 +7,7 @@
 // It needs Chromium for Playwright (`pnpm --filter @trackwall/docs exec playwright install chromium`) and `mise` on
 // PATH for the services. The images go to `apps/docs/public/screenshots/`.
 import { type ChildProcess, spawn } from "node:child_process";
+import { once } from "node:events";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
@@ -43,7 +44,7 @@ async function demoReady(demo: ChildProcess): Promise<DaemonFile> {
  */
 async function stopDemo(demo: ChildProcess, daemon: DaemonFile | undefined): Promise<void> {
   if (demo.exitCode !== null) return;
-  const exited = new Promise((resolve) => demo.once("exit", resolve));
+  const exited = once(demo, "exit", { signal: AbortSignal.timeout(DEMO_STOP_MS) });
   if (daemon === undefined) demo.kill();
   else {
     const origin = `http://127.0.0.1:${daemon.port}`;
@@ -53,8 +54,7 @@ async function stopDemo(demo: ChildProcess, daemon: DaemonFile | undefined): Pro
     req.on("error", () => demo.kill());
     req.end("{}");
   }
-  const timeout = new Promise((resolve) => setTimeout(resolve, DEMO_STOP_MS).unref());
-  if ((await Promise.race([exited.then(() => true), timeout.then(() => false)])) === false) demo.kill("SIGKILL");
+  await exited.catch(() => demo.kill("SIGKILL"));
 }
 
 /** Lets the view load and animate before the picture. */
