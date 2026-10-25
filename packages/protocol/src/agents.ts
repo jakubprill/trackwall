@@ -46,8 +46,10 @@ export const WORKTREE_INCLUDE_FILE = ".worktreeinclude";
 export const IncludedFiles = z.object({ files: z.array(z.string()), problems: z.array(z.string()) });
 export type IncludedFiles = z.infer<typeof IncludedFiles>;
 
-/** A root without `WORKTREE_INCLUDE_FILE`, and a task saved before ADR-61. */
-export const NO_INCLUDED_FILES: IncludedFiles = { files: [], problems: [] };
+/** A root without `WORKTREE_INCLUDE_FILE`, and a task saved before ADR-61; a new object each time, as tasks own theirs. */
+export function noIncludedFiles(): IncludedFiles {
+  return { files: [], problems: [] };
+}
 
 /**
  * The task prompt. It goes to Copilot CLI as one argument (`--interactive=<prompt>`), and the Windows command line holds

@@ -262,10 +262,14 @@ export class Agents {
     return this.#tasks.task(id);
   }
 
-  /** The task port of a task of `repo` (ADR-61); `null` when there is no such task in that repo, or the user ended it. */
-  taskPort(repo: string, id: string): number | null {
-    const task = this.#tasks.find(id);
-    return task?.repo === repo ? task.port : null;
+  /**
+   * A task named next to a repo, which must belong to it: `not_found` for an unknown or ended task, `bad_request` for a
+   * task of another repo. Without `repo`, any task.
+   */
+  taskOfRepo(id: string, repo: string | undefined): Task {
+    const task = this.#tasks.task(id);
+    if (repo !== undefined && task.repo !== repo) throw new DomainError("bad_request", `task ${id} is in ${task.repo}, not in ${repo}`);
+    return task;
   }
 
   taskChanges(id: string): Promise<TaskChanges> {

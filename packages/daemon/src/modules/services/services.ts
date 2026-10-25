@@ -64,10 +64,10 @@ export interface ServicesDeps {
   graph: { graph(): Promise<RepoGraph> };
   cards: { card(repo: string): Promise<RepoCardResult> };
   /**
-   * The port of a task of `repo` (`agents`, ADR-61), which `mise` gives every run in its worktree; `null` when there
-   * is no such task in that repo (never was, or the user ended it).
+   * The port of a task of `repo` (`agents`, ADR-61), which `mise` gives every run in its worktree; a `DomainError`
+   * for a task that is not in that repo (never was, or the user ended it).
    */
-  taskPort: (repo: string, task: string) => number | null;
+  taskPort: (repo: string, task: string) => number;
   /** Environment of the processes started for the user; its secret values are masked in responses. */
   env: () => Promise<NodeJS.ProcessEnv>;
   /** How often a watch checks a running service (500 ms in the daemon). */
@@ -122,7 +122,8 @@ export class Services {
    */
   async list(): Promise<Service[]> {
     for (const { repo, task, miseTask } of this.deps.mise.running()) if (miseTask === SERVICE_MISE_TASK) await this.adopt({ repo, task });
-    for (const [key, watch] of this.watches) if (this.forgettable(watch.target)) this.forget(key);
+    const targets = [...this.watches.values()].map((w) => w.target).concat([...this.slices.values()].map((s) => s.root));
+    for (const target of targets) if (this.forgettable(target)) this.forget(miseTargetKey(target));
     return [...this.watches.values()].map((w) => w.view());
   }
 
@@ -135,7 +136,8 @@ export class Services {
    */
   async start({ repo, task, dependencies, waitMs }: StartServiceRequest): Promise<ServiceSlice> {
     const root: MiseTarget = { repo, task };
-    const problem = await this.serviceProblem(root);
+    if (task !== null) this.deps.taskPort(repo, task);
+    const problem = await this.serviceProblem(repo);
     if (problem) throw new DomainError(problem.code, problem.message);
     // No `await` between the lookup and the registration: two starts at once share one slice.
     let slice = this.slices.get(miseTargetKey(root));
@@ -255,7 +257,8 @@ export class Services {
    * have changed meanwhile.
    */
   private async startOne(slice: SliceRun, target: MiseTarget): Promise<Member> {
-    const problem = await this.serviceProblem(target);
+    if (target.task !== null && this.knownTaskPort(target.repo, target.task) === null) return skipped(`task ${target.task} has ended`);
+    const problem = await this.serviceProblem(target.repo);
     if (problem) return skipped(problem.message);
     const ports = await this.expectedPorts(target);
     for (const port of ports) if (await probePort(port)) return skipped(this.portTaken(target, port));
@@ -327,7 +330,17 @@ export class Services {
   /** The service of a task the user ended (ADR-61) once it neither runs nor starts: nothing can start it again. */
   private forgettable(target: MiseTarget): boolean {
     if (target.task === null || this.liveRun(target) || this.starting.has(miseTargetKey(target)) || this.wanted(target)) return false;
-    return this.deps.taskPort(target.repo, target.task) === null;
+    return this.knownTaskPort(target.repo, target.task) === null;
+  }
+
+  /** The port of a task of `repo`, `null` once the task has ended. */
+  private knownTaskPort(repo: string, task: string): number | null {
+    try {
+      return this.deps.taskPort(repo, task);
+    } catch (err) {
+      if (err instanceof DomainError) return null;
+      throw err;
+    }
   }
 
   private forget(key: string): void {
@@ -337,14 +350,11 @@ export class Services {
   }
 
   /**
-   * Why `target` has no service: there is no such task in the repo (`not_found`), mise did not list the repo's tasks
-   * (`mise_unavailable`) or there is no task `dev` (`not_found`). A task's worktree is checked against the repo root's
-   * list, as the code the task started from; `mise` refuses a start in a worktree whose `dev` the task removed.
+   * Why `repo` has no service: mise did not list its tasks (`mise_unavailable`) or there is no task `dev` (`not_found`).
+   * A task's service is checked against the repo root's list too, as the code the task started from; `mise` refuses a
+   * start in a worktree whose `dev` the task removed.
    */
-  private async serviceProblem(target: MiseTarget): Promise<{ code: "mise_unavailable" | "not_found"; message: string } | null> {
-    const { repo, task } = target;
-    if (task !== null && this.deps.taskPort(repo, task) === null)
-      return { code: "not_found", message: `there is no task ${task} in ${repo}` };
+  private async serviceProblem(repo: string): Promise<{ code: "mise_unavailable" | "not_found"; message: string } | null> {
     const tasks = await this.deps.mise.tasks(repo);
     if (tasks.kind !== "ok") return { code: "mise_unavailable", message: `${repo}: ${tasks.message}` };
     if (hasService(tasks.tasks)) return null;
@@ -357,7 +367,7 @@ export class Services {
    */
   private async expectedPorts(target: MiseTarget): Promise<number[]> {
     if (target.task !== null) {
-      const port = this.deps.taskPort(target.repo, target.task);
+      const port = this.knownTaskPort(target.repo, target.task);
       return port === null ? [] : [port];
     }
     const result = await this.deps.cards.card(target.repo).catch(() => null);

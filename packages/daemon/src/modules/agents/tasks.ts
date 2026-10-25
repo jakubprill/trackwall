@@ -4,7 +4,7 @@ import {
   type AgentTaskChanges,
   type ChangedFile,
   type IncludedFiles,
-  NO_INCLUDED_FILES,
+  noIncludedFiles,
   PATCH_MAX_BYTES,
   type ProposedBy,
   type Session,
@@ -152,7 +152,7 @@ export class AgentTasks {
       summary: null,
       trustedMiseConfig: null,
       port: freeTaskPort([...this.#tasks.map((t) => t.port), ...this.#creatingPorts]),
-      included: NO_INCLUDED_FILES,
+      included: noIncludedFiles(),
     });
     this.#creatingPorts.add(task.port);
     return this.#exclusive(id, async () => {

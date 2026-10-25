@@ -1,6 +1,6 @@
 import { readFileSync, renameSync } from "node:fs";
 import { isAbsolute } from "node:path";
-import { NO_INCLUDED_FILES, Task } from "@trackwall/protocol";
+import { noIncludedFiles, Task } from "@trackwall/protocol";
 import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
 import { TaskBranch } from "./task-branch.ts";
@@ -22,7 +22,7 @@ export const StoredTask = Task.omit({ worktree: true }).extend({
   summary: Task.shape.summary.default(null),
   /** `null` in a task saved by an older version: `AgentTasks` gives it a free port when it reads the file. */
   port: Task.shape.port.nullable().default(null),
-  included: Task.shape.included.default(NO_INCLUDED_FILES),
+  included: Task.shape.included.default(noIncludedFiles),
   /**
    * The worktree's mise config the user trusted (ADR-59): path to SHA-256, taken when the worktree was created and
    * replaced when the user trusts a changed one. `null` in a task saved by an older version, whose config then needs

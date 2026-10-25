@@ -3,6 +3,7 @@ import {
   type AgentRepo,
   type AgentSession,
   type McpTool,
+  type MiseTarget,
   mcpTools,
   miseTaskLogSource,
   type Repo,
@@ -292,13 +293,7 @@ function assertCallerRepo(facade: Facade, caller: string | null, repo: string, a
  * session the repo root or its own task's worktree, so it does not run another agent's worktree. An agent outside
  * Trackwall reaches every repo and task. A guard for the agent, not a security boundary, as in `assertCallerRepo`.
  */
-function callerTarget(
-  facade: Facade,
-  caller: string | null,
-  repo: string,
-  task: string | undefined,
-  action: string,
-): { repo: string; task: string | null } {
+function callerTarget(facade: Facade, caller: string | null, repo: string, task: string | undefined, action: string): MiseTarget {
   assertCallerRepo(facade, caller, repo, action);
   const own = caller === null ? null : facade.agents.session(caller).task;
   if (task !== undefined && own !== null && task !== own)
@@ -307,7 +302,7 @@ function callerTarget(
 }
 
 /** The repo root, or the worktree of a task of that repo (`bad_request` for a task of another repo, ADR-59). */
-function miseTarget(facade: Facade, repo: string, task: string | undefined): { repo: string; task: string | null } {
+function miseTarget(facade: Facade, repo: string, task: string | undefined): MiseTarget {
   if (task === undefined) return { repo, task: null };
   assertTaskOfRepo(facade, task, repo);
   return { repo, task };
@@ -315,8 +310,7 @@ function miseTarget(facade: Facade, repo: string, task: string | undefined): { r
 
 /** A task named next to a repo belongs to it (`not_found` for an unknown or ended task, `bad_request` for another repo's). */
 function assertTaskOfRepo(facade: Facade, task: string, repo: string | undefined): void {
-  const own = facade.agents.task(task).repo;
-  if (repo !== undefined && own !== repo) throw new DomainError("bad_request", `task ${task} is in ${own}, not in ${repo}`);
+  facade.agents.taskOfRepo(task, repo);
 }
 
 /** A session without the last screen lines of an ended group: one session's screen does not reach another (§8, ADR-36). */

@@ -1,5 +1,16 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
@@ -491,10 +502,55 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
 
     const task = await agents.createTask("shop", "fix the login");
 
-    expect(task.included).toEqual({ files: [], problems: [] });
+    expect(task.included).toEqual({
+      files: [],
+      problems: [
+        ".env: the task's base commit tracks it or does not ignore it",
+        "config/application-local.yml: the task's base commit tracks it or does not ignore it",
+      ],
+    });
     expect(readFileSync(join(task.worktree, "config", "application-local.yml"), "utf8")).toBe("db.password: committed\n");
     expect(existsSync(join(task.worktree, ".env"))).toBe(false);
   }, 60_000);
+
+  test("an included file larger than what is left of 10 MB is left out with the reason, and the files after it are copied", async () => {
+    const dir = makeRepo({ ".gitignore": "*.db\n*.yml\n" }, "shop");
+    writeFileSync(join(dir, "app.db"), Buffer.alloc(11 * 1024 * 1024));
+    writeFileSync(join(dir, "local.yml"), "db.password: local\n");
+    writeFileSync(join(dir, ".worktreeinclude"), "*.db\n*.yml\n");
+    const { agents, procs } = makeAgents({ shop: dir });
+    cleanups.push(() => procs.stopAll());
+
+    const task = await agents.createTask("shop", "fix the login");
+
+    expect(task.included).toEqual({ files: ["local.yml"], problems: ["app.db: the files together would be more than 10 MB"] });
+  }, 60_000);
+
+  // Git on Windows checks out a link as a text file by default (no `core.symlinks`).
+  test.skipIf(process.platform === "win32")(
+    "an included file whose directory the base commit has as a link is not copied through it",
+    async () => {
+      const outside = mkdtempSync(join(tmpdir(), "trackwall-outside-"));
+      const dir = makeRepo({ ".gitignore": "*-local.yml\n" }, "shop");
+      symlinkSync(outside, join(dir, "config"));
+      gitIn(dir, "add", "config");
+      gitIn(dir, "commit", "-q", "-m", "config as a link");
+      gitIn(dir, "checkout", "-q", "-b", "feature");
+      gitIn(dir, "rm", "-q", "config");
+      mkdirSync(join(dir, "config", "sub"), { recursive: true });
+      writeFileSync(join(dir, "config", "sub", "app-local.yml"), "db.password: local\n");
+      writeFileSync(join(dir, ".worktreeinclude"), "**/*-local.yml\n");
+      const { agents, procs } = makeAgents({ shop: dir });
+      cleanups.push(() => procs.stopAll());
+
+      const task = await agents.createTask("shop", "fix the login");
+
+      expect(task.included.files).toEqual([]);
+      expect(task.included.problems).toEqual([expect.stringMatching(/^config\/sub\/app-local\.yml: .*beyond a symbolic link/)]);
+      expect(readdirSync(outside)).toEqual([]);
+    },
+    60_000,
+  );
 
   test("a repo root without .worktreeinclude copies nothing into a new task's worktree", async () => {
     const { dir } = cloneOnFeatureBranch();

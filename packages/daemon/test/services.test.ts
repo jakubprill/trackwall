@@ -74,7 +74,10 @@ function setup(
       return { repo, card: { provides }, tags: [] } as unknown as RepoCardResult;
     },
   };
-  const taskPort = (repo: string, id: string) => (tasks[id]?.repo === repo ? taskOf(id).port : null);
+  const taskPort = (repo: string, id: string) => {
+    if (taskOf(id).repo !== repo) throw new DomainError("bad_request", `task ${id} is in ${taskOf(id).repo}, not in ${repo}`);
+    return taskOf(id).port;
+  };
   const services = new Services({ mise, logs, graph, cards, taskPort, env, intervalMs: 100, startupMs: 1500, settleMs: 300 });
   cleanups.push(() => procs.stopAll());
   return { services, procs, mise, tasks };
@@ -493,7 +496,7 @@ describe("services from a task worktree (ADR-61)", () => {
 
     const start = services.start({ repo: "web", task: TASK, dependencies: false, waitMs: 1000 });
 
-    await expect(start).rejects.toMatchObject({ code: "not_found", message: `there is no task ${TASK} in web` });
+    await expect(start).rejects.toMatchObject({ code: "bad_request", message: `task ${TASK} is in api, not in web` });
     expect(await services.list()).toEqual([]);
   });
 
