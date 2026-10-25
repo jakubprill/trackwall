@@ -10,8 +10,8 @@ In this file "agent" means an agent writing Trackwall code. An agent that Trackw
 
 A change is done when it meets every point, not when it compiles:
 
-1. **It works and has a test** at the cheapest level that proves it: a test in the package's `test/` directory (`bun test`), a test with a real child process for `procs` and `logs`, `cargo test` for the Tauri shell. A bug fix starts with a test that fails without it.
-2. **It works on Windows and macOS.** System-dependent code has a test that CI runs in the `windows-latest` + `macos-latest` matrix. CI checks Linux, Windows and macOS on every PR (ADR-22); a PR is ready when the `CI ok` check on its last commit is green. Whatever CI cannot check (WebView2, SmartScreen, a real Windows machine outside CI) goes into the PR as "to check manually".
+1. **It works and has a test** at the cheapest level that proves it: a test in the package's `test/` directory (`bun test`), a test with a real child process for `procs` and `logs`, `cargo test` for the Tauri shell. A bug fix starts with a test that fails without it. **Whatever the daemon relies on from Copilot CLI** (a hook event or payload field, a flag or environment variable, a screen pattern such as the approval window, how it loads MCP servers and instructions) **has a contract test** in `packages/daemon/contract/` that runs the real Copilot CLI against a scripted model (`pnpm test:contract`, ADR-67), and the fake Copilot CLI of `test/` gets the same behaviour in the same PR. A feature test with the fake alone proves only that the daemon agrees with the fake.
+2. **It works on Windows and macOS.** System-dependent code has a test that CI runs in the `windows-latest` + `macos-latest` matrix. CI checks Linux, Windows and macOS on every PR (ADR-22); a PR is ready when the `CI ok` check on its last commit is green. Whatever CI cannot check (WebView2, SmartScreen, a real Windows machine outside CI, a real model) goes into the PR as "to check manually", each item with the reason it cannot be automated; "with a real Copilot CLI session" is not such a reason when a contract test can show it.
 3. **Locally,** `pnpm lint`, `pnpm typecheck` and `pnpm test` pass, and when the change touches `apps/desktop`, the daemon build or packaging, so do the steps of the `desktop` job in `.github/workflows/ci.yml`, and when it touches `apps/docs`, the documentation site build (section "Commands"). CI confirms, it does not hunt for bugs.
 4. **Documentation describes the new behaviour in the same PR** (section "Documentation").
 5. **Nothing company-specific** in code, tests, fixtures, documentation or commits (section "Nothing company-specific in the repo").
@@ -103,6 +103,7 @@ The full description of how to run things is in `docs/development.md`. For the D
 pnpm lint              # Biome (format, lint, import order; pnpm format fixes them) and knip
 pnpm typecheck
 pnpm test              # bun test in every package
+pnpm test:contract     # the daemon with the real Copilot CLI against a scripted model (ADR-67); CI runs it on every PR, run it locally when the change touches sessions, tasks, hooks or MCP
 
 # when the change touches apps/desktop, the daemon build or packaging (the `desktop` job in CI; cargo fmt also in `check`):
 cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check

@@ -6,8 +6,12 @@ import type { z } from "zod";
 import { EventHub } from "../../src/api/event-hub.ts";
 import { startApi } from "../../src/api/server.ts";
 import { createFacade } from "../../src/facade.ts";
+import { COPILOT_HOOK_COMMAND } from "../../src/infra/args.ts";
+import { writeDaemonFile } from "../../src/infra/discovery.ts";
 import { loopbackRequest } from "../../src/infra/loopback.ts";
+import { selfCommand } from "../../src/infra/self-command.ts";
 import { createMcpEndpoint } from "../../src/mcp/endpoint.ts";
+import { sessionMcpStdioCommand } from "../../src/mcp/stdio-command.ts";
 import { makeRepo } from "./git-repo.ts";
 
 const fakeCopilot = join(import.meta.dir, "..", "fixtures", "fake-copilot-session.ts");
@@ -20,6 +24,17 @@ interface SessionApiOptions {
   miseCommand: readonly string[];
   /** Daemon log lines (the MCP audit lines among them); dropped without it. */
   log?: (msg: string) => void;
+  /** The real Copilot CLI instead of the fake (the contract tests, ADR-67). */
+  copilot?: RealCopilot;
+}
+
+/**
+ * The real Copilot CLI: its program and the environment of its sessions, made for the test's directories. With it the
+ * daemon gets the hook and MCP commands of `main.ts` and a `daemon.json`, so the session's MCP stdio bridge reaches this API.
+ */
+interface RealCopilot {
+  command: readonly string[];
+  env: (dirs: { home: string; projects: string }) => NodeJS.ProcessEnv;
 }
 
 const ONE_REPO: SessionApiOptions = { repos: { shop: { "README.md": "# shop\n" } }, miseCommand: ["mise"] };
@@ -33,16 +48,21 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
   for (const [name, files] of Object.entries(options.repos)) makeRepo(files, name, projects);
   const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
   writeFileSync(join(home, "workspace.yaml"), `projectsDir: ${JSON.stringify(projects)}\n`);
+  const { copilot } = options;
   const facade = createFacade({
     home,
     openUrl: () => {},
     openFolder: () => {},
     miseCommand: options.miseCommand,
-    copilotCommand: [process.execPath, fakeCopilot],
+    copilotCommand: copilot?.command ?? [process.execPath, fakeCopilot],
     version: "0.0.0-test",
-    hookCommand: (event, hooksFile) => ({ exec: process.execPath, args: ["--no-env-file", daemonMain, "copilot-hook", event, hooksFile] }),
-    sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
-    userEnv: async () => process.env,
+    hookCommand: copilot
+      ? (event, hooksFile) => selfCommand([COPILOT_HOOK_COMMAND, event, hooksFile])
+      : (event, hooksFile) => ({ exec: process.execPath, args: ["--no-env-file", daemonMain, "copilot-hook", event, hooksFile] }),
+    sessionMcpCommand: copilot
+      ? (tokenFile) => sessionMcpStdioCommand(home, tokenFile)
+      : (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
+    userEnv: async () => (copilot ? copilot.env({ home, projects }) : process.env),
     log: options.log ?? (() => {}),
   });
   const api = await startApi({
@@ -56,6 +76,8 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
     mcp: createMcpEndpoint({ facade, version: "test", log: options.log ?? (() => {}) }),
     events: new EventHub({ facade, log: () => {} }),
   });
+  if (copilot)
+    writeDaemonFile(home, { pid: process.pid, port: api.port, token, startedAt: new Date().toISOString(), version: "0.0.0-test" });
   /** An API action with the token; the result checked by the action's schema. */
   async function post<Req extends z.ZodType, Data extends z.ZodType>(
     endpoint: Endpoint<Req, Data>,
