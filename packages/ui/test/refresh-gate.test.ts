@@ -43,4 +43,12 @@ describe("refreshing data on a new key", () => {
     expect(gate.answered(true)).toBe(false);
     expect(gate.shown()).toBe(true);
   });
+
+  test("a key that changes and comes back during a request makes no extra fetch", () => {
+    const gate = new RefreshGate("a");
+    gate.sent("a");
+    gate.keyChanged("b", false);
+    gate.keyChanged("a", false);
+    expect(gate.answered(false)).toBe(false);
+  });
 });

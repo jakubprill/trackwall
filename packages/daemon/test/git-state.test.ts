@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, renameSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
@@ -74,5 +74,21 @@ describe("git state from the files of the git directory", () => {
     expect(await stateOf(vcs, dir)).toBeNull();
     writeFileSync(join(dir, ".git"), "gitdir: ../nowhere\n");
     expect(await stateOf(vcs, dir)).toBeNull();
+  });
+
+  test("with the reftable ref backend a change of the ref tables counts as HEAD moving", async () => {
+    const vcs = new Vcs();
+    const repo = mkdtempSync(join(tmpdir(), "trackwall-reftable-"));
+    mkdirSync(join(repo, ".git", "reftable"), { recursive: true });
+    mkdirSync(join(repo, ".git", "refs", "heads"), { recursive: true });
+    // What git writes for reftable: a HEAD stub and the list of tables, rewritten by every ref update.
+    writeFileSync(join(repo, ".git", "HEAD"), "ref: refs/heads/.invalid\n");
+    writeFileSync(join(repo, ".git", "reftable", "tables.list"), "0x000000000001-0x000000000001-aaaa.ref\n");
+    const before = await stateOf(vcs, repo);
+
+    writeFileSync(join(repo, ".git", "reftable", "tables.list.lock"), "0x000000000001-0x000000000002-bbbb.ref\n");
+    renameSync(join(repo, ".git", "reftable", "tables.list.lock"), join(repo, ".git", "reftable", "tables.list"));
+
+    expect((await stateOf(vcs, repo))?.head).not.toBe(before?.head);
   });
 });

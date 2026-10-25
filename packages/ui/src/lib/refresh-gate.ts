@@ -22,7 +22,11 @@ export class RefreshGate {
 
   /** The key changed; `true` when a fetch should start now. */
   keyChanged(key: string | undefined, hidden: boolean): boolean {
-    if (key === this.#sentKey) return false;
+    // Back to the key of the last request: what it brings (or brought) is current again.
+    if (key === this.#sentKey) {
+      this.#stale = false;
+      return false;
+    }
     if (this.#busy || hidden) {
       this.#stale = true;
       return false;

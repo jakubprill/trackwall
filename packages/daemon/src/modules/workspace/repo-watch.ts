@@ -44,8 +44,6 @@ export class RepoWatch {
   #checking: Promise<void> | undefined;
   /** The last error of a comparison, so that a missing folder does not write to the log every second. */
   #failure: string | undefined;
-  /** A comparison failed before the first one succeeded: the UI saw no repos then, so the first success is a change. */
-  #failedFirst = false;
 
   constructor(deps: RepoWatchDeps) {
     this.#deps = deps;
@@ -73,7 +71,8 @@ export class RepoWatch {
   check(): Promise<void> {
     this.#checking ??= this.#compare()
       .catch((err: unknown) => {
-        if (this.#states === undefined) this.#failedFirst = true;
+        // Failed before any success: the UI saw no repos, so the first success is compared with none and is a change.
+        this.#states ??= new Map();
         throw err;
       })
       .finally(() => {
@@ -118,7 +117,7 @@ export class RepoWatch {
       if (state !== null && before?.head !== state.head) moved.push({ entry, usedMs: state.usedMs });
     }
     this.#states = current;
-    if ((previous || this.#failedFirst) && differs(previous ?? new Map(), current)) this.#revision++;
+    if (previous && differs(previous, current)) this.#revision++;
     if (moved.length === 0) return;
     moved.sort((a, b) => b.usedMs - a.usedMs);
     this.#deps.onHeadMoved(moved.map(({ entry }) => entry));

@@ -13,7 +13,7 @@ import { mapLimit } from "../../infra/map-limit.ts";
  */
 
 export interface GitState {
-  /** Equal for two reads when HEAD (the file and the file of its branch) did not change in between. */
+  /** Equal for two reads when HEAD (the file, the file of its branch, with reftable the ref tables) did not change in between. */
   head: string;
   /** Equal for two reads when no other ref changed in between (as far as the file system shows). */
   refs: string;
@@ -70,23 +70,27 @@ async function readRepo(repo: string, cache: RepoCache, previousDirs: ReadonlyMa
   const dirs = await gitDirs(repo);
   if (!dirs) return null;
   const headFile = join(dirs.gitDir, "HEAD");
-  const head = await stat(headFile).catch((err: unknown) => {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw err;
-  });
+  const head = await statIfExists(headFile);
   if (!head) return null;
   const ref = await headRef(headFile, fileKey(head), cache);
-  const [branch, packed, reftable, log, refs] = await Promise.all([
-    ref === null ? undefined : stat(join(dirs.commonDir, ...ref.split("/"))).catch(() => undefined),
-    stat(join(dirs.commonDir, "packed-refs")).catch(() => undefined),
-    stat(join(dirs.commonDir, "reftable", "tables.list")).catch(() => undefined),
+  const [branch, packed, reftable, worktreeReftable, log, refs] = await Promise.all([
+    ref === null ? undefined : statIfExists(join(dirs.commonDir, ...ref.split("/"))),
+    statIfExists(join(dirs.commonDir, "packed-refs")),
+    statIfExists(join(dirs.commonDir, "reftable", "tables.list")),
+    // A worktree's own refs, HEAD among them, have a reftable of their own.
+    dirs.gitDir === dirs.commonDir ? undefined : statIfExists(join(dirs.gitDir, "reftable", "tables.list")),
     stat(join(dirs.gitDir, "logs", "HEAD")).catch(() => undefined),
     refsKeys(join(dirs.commonDir, "refs"), "", previousDirs, cache.refsDirs),
   ]);
   return {
     // The checked-out branch's own file: a commit renames a new file over it, which a coarse directory time may not show.
     // With reftable every ref, the branch too, lives in `tables.list`, so any ref change there counts as HEAD moving.
-    head: [`HEAD ${fileKey(head)}`, `${ref ?? "detached"} ${optionalKey(branch)}`, `reftable ${optionalKey(reftable)}`].join("\n"),
+    head: [
+      `HEAD ${fileKey(head)}`,
+      `${ref ?? "detached"} ${optionalKey(branch)}`,
+      `reftable ${optionalKey(reftable)}`,
+      `worktree reftable ${optionalKey(worktreeReftable)}`,
+    ].join("\n"),
     // `packed-refs` can also hold the checked-out branch; a change there is reported as a ref change only.
     refs: [`packed-refs ${optionalKey(packed)}`, ...refs].join("\n"),
     usedMs: (log ?? head).mtimeMs,
@@ -131,6 +135,24 @@ async function refsKeys(
   return [`refs${path} ${info.mtimeMs}`, ...nested.flat()];
 }
 
+/**
+ * `undefined` for a file that is not there; any other error (a sharing violation while git renames over the file, an
+ * antivirus, a network timeout) throws, so the repo counts as not readable this time instead of as changed.
+ */
+async function statIfExists(path: string): Promise<Stats | undefined> {
+  try {
+    return await stat(path);
+  } catch (err) {
+    if (isMissing(err)) return undefined;
+    throw err;
+  }
+}
+
+function isMissing(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException).code;
+  return code === "ENOENT" || code === "ENOTDIR";
+}
+
 /** Size and file identity next to the time: a rename over the file gives a new identity even within one timestamp tick. */
 function fileKey(info: Stats): string {
   return `${info.mtimeMs}:${info.size}:${info.ino}`;
@@ -146,14 +168,23 @@ function optionalKey(info: Stats | undefined): string {
  */
 async function gitDirs(repo: string): Promise<{ gitDir: string; commonDir: string } | null> {
   const dotGit = join(repo, ".git");
-  const info = await stat(dotGit).catch(() => undefined);
+  const info = await statIfExists(dotGit);
   if (!info) return null;
   if (info.isDirectory()) return { gitDir: dotGit, commonDir: dotGit };
-  const pointer = /^gitdir:\s*(.+?)\s*$/m.exec(await readFile(dotGit, "utf8").catch(() => ""));
+  const pointer = /^gitdir:\s*(.+?)\s*$/m.exec(await readFile(dotGit, "utf8"));
   if (!pointer?.[1]) return null;
   const gitDir = relativeTo(repo, pointer[1]);
-  const common = (await readFile(join(gitDir, "commondir"), "utf8").catch(() => "")).trim();
+  const common = (await readIfExists(join(gitDir, "commondir"))).trim();
   return { gitDir, commonDir: common ? relativeTo(gitDir, common) : gitDir };
+}
+
+async function readIfExists(path: string): Promise<string> {
+  try {
+    return await readFile(path, "utf8");
+  } catch (err) {
+    if (isMissing(err)) return "";
+    throw err;
+  }
 }
 
 function relativeTo(base: string, path: string): string {

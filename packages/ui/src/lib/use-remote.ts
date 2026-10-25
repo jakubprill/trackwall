@@ -72,7 +72,7 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
   // The key of this render, read when a request is sent: a request sent after a key change already covers it.
   const refreshKeyRef = useRef(refreshKey);
   refreshKeyRef.current = refreshKey;
-  const gate = useRef(new RefreshGate(refreshKey)).current;
+  const [gate] = useState(() => new RefreshGate(refreshKey));
   const show = useCallback(
     (data: T, loadNumber: number) => {
       if (!order.show(loadNumber)) return;
