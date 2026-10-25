@@ -1,6 +1,6 @@
 import { agentsApi, countLabel, type Session, type SessionList, TASK_PROMPT_MAX, type Task, workspaceApi } from "@trackwall/protocol";
 import { BellRing, GitBranch, Lightbulb, Play, Plus, Square, X } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -16,15 +16,18 @@ import {
   entrySelection,
   findEntry,
   nextWaiting,
+  type ProposalsEntry,
+  proposalsName,
   type SessionEntry,
   type SessionRow,
   type SessionSelection,
   type StartedEntry,
+  selectedProposal,
   sessionRows,
 } from "@/lib/session-entries";
 import { gridPage, SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
 import { ariaSessionShortcut, SHORTCUT_POSITIONS, sessionShortcut, sessionShortcutLabel } from "@/lib/session-shortcut";
-import { attentionCount, isLive, PROPOSAL_STATUS, proposalsName, sessionStateLabel } from "@/lib/session-state";
+import { attentionCount, isLive, PROPOSAL_STATUS, sessionStateLabel } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
 import { actionIsNewer, type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
@@ -36,11 +39,11 @@ import { TaskLine } from "./TaskLine.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
 
 /**
- * Widok „Sesje” (§4.4, ADR-26, ADR-31): kilka sesji Copilot CLI naraz, każda w repo z folderu z projektami albo
- * w worktree zadania. Po lewej lista sesji i zadań ze stanem i skokiem do następnej pozycji, która czeka na Ciebie,
- * a nad nimi propozycje zadań od agentów (ADR-39), jedna pozycja na sesję, która je zgłosiła (ADR-55); po prawej
- * terminal wybranej sesji, przy zadaniu także jego zmiany, a przy propozycjach ich polecenia do zatwierdzenia. Listę
- * odpytuje `App`, bo liczba czekających sesji i propozycji jest też na pasku widoków.
+ * The Sessions view (§4.4, ADR-26, ADR-31): several Copilot CLI sessions at once, each in a repo from the projects
+ * folder or in a task's worktree. On the left the list of sessions and tasks with their state and a jump to the next
+ * entry waiting for you, and above them the task proposals from agents (ADR-39), one entry per session that proposed
+ * them (ADR-55); on the right the selected session's terminal, for a task also its changes, and for proposals their
+ * prompts to decide on. `App` polls the list, since the count of waiting sessions and proposals is on the view bar too.
  *
  * Since ADR-48 the right side shows the selected entry alone or a page of the list as a grid of terminals, and
  * Alt + digit selects an entry by its position; `App` keeps the layout across views and owns Alt+J.
@@ -68,6 +71,10 @@ export function SessionsView({
   const entries = rows.map((r) => r.entry);
   const current = findEntry(entries, selected);
   const next = nextWaiting(entries, current);
+  // A decision on proposals ends after a while; it reads the selection of that moment, not of the render that began it.
+  const latestSelection = useRef(selected);
+  latestSelection.current = selected;
+  const currentSelection = useCallback(() => latestSelection.current, []);
   const waiting = attentionCount(sessions.data);
   // Taken also with no entry at that position, so that the key never reaches a session terminal by accident.
   useWindowShortcuts(
@@ -147,7 +154,8 @@ export function SessionsView({
             conn={conn}
             entries={entries}
             current={current}
-            focus={selected?.kind === "proposal" ? selected.id : undefined}
+            focus={selectedProposal(selected)}
+            currentSelection={currentSelection}
             layout={layout}
             onLayout={onLayout}
             onSelect={onSelect}
@@ -273,7 +281,7 @@ function ProposalsListItem({
   active,
   onSelect,
 }: {
-  entry: Extract<SessionEntry, { kind: "proposals" }>;
+  entry: ProposalsEntry;
   position: number;
   active: boolean;
   onSelect: () => void;
@@ -315,6 +323,7 @@ function SelectedEntry({
   entries,
   current,
   focus,
+  currentSelection,
   layout,
   onLayout,
   onSelect,
@@ -328,6 +337,7 @@ function SelectedEntry({
   current: SessionEntry;
   /** The selected task proposal, to open first among the proposals of its session. */
   focus: string | undefined;
+  currentSelection: () => SessionSelection;
   layout: SessionLayout;
   onLayout: (layout: SessionLayout) => void;
   onSelect: (selection: SessionSelection) => void;
@@ -345,6 +355,7 @@ function SelectedEntry({
           conn={conn}
           entry={current}
           focus={focus}
+          currentSelection={currentSelection}
           sessions={sessions}
           tasks={tasks}
           onSelect={onSelect}
@@ -375,8 +386,10 @@ function SelectedEntry({
           onSelect(entrySelection(entry));
           onLayout("1");
         }}
+        tasks={tasks}
         onChanged={onChanged}
-        onDecided={onSelect}
+        onNavigate={onSelect}
+        currentSelection={currentSelection}
       />
     </>
   );
@@ -387,6 +400,7 @@ function EntryPanel({
   conn,
   entry,
   focus,
+  currentSelection,
   sessions,
   tasks,
   onSelect,
@@ -396,6 +410,7 @@ function EntryPanel({
   conn: Connection;
   entry: SessionEntry;
   focus: string | undefined;
+  currentSelection: () => SessionSelection;
   sessions: readonly Session[];
   /** The tasks on the list, for the task panel's shared-files warning and the same-repo hint of proposals. */
   tasks: readonly Task[];
@@ -408,13 +423,13 @@ function EntryPanel({
       <ProposalInbox
         key={entryId(entry)}
         conn={conn}
-        proposer={entry.proposer}
-        proposals={entry.proposals}
+        group={entry}
         focus={focus}
         sessions={sessions}
         tasks={tasks}
         onChanged={onChanged}
-        onDecided={onSelect}
+        onSelect={onSelect}
+        currentSelection={currentSelection}
       />
     );
   if (entry.kind === "task")

@@ -216,12 +216,19 @@ export const agentsApi = {
    */
   approveProposal: endpoint("approve-proposal", ProposalRequest.extend({ prompt: TaskPrompt }), Task),
   /**
-   * Odrzucenie propozycji: znika z listy, a sesja, która na nią czeka, dostaje `proposal_rejected` z powodem od
-   * użytkownika, jeśli go podał (ADR-55); pusty powód to brak powodu.
+   * Rejects a proposal: it leaves the list, and a session waiting on it gets `proposal_rejected` with the user's reason
+   * when they gave one (ADR-55); an empty reason is no reason.
    */
   rejectProposal: endpoint(
     "reject-proposal",
-    ProposalRequest.extend({ reason: z.string().trim().max(REJECTION_REASON_MAX).optional() }),
+    ProposalRequest.extend({
+      reason: z
+        .string()
+        .trim()
+        .max(REJECTION_REASON_MAX)
+        .optional()
+        .transform((reason) => (reason === "" ? undefined : reason)),
+    }),
     Done,
   ),
 };

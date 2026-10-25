@@ -6,6 +6,7 @@ import { QueueItem } from "@/components/QueueItem";
 import { StatusLabel } from "@/components/StatusLabel";
 import { twoDigits } from "@/lib/format";
 import { HOME_SESSION_STATUS, homeRepoStatus } from "@/lib/home-model";
+import { proposalName } from "@/lib/session-entries";
 import { PROPOSAL_STATUS, sessionStateLabel, sessionTitle } from "@/lib/session-state";
 
 /**
@@ -62,7 +63,7 @@ export function NeedsYouPanel({
           </h2>
           <ul aria-label="Task proposals waiting for your decision" className="px-2">
             {proposals.map((p) => (
-              <QueueItem key={p.id} title={`${p.repo} · ${p.title}`} active={false} onClick={() => onOpenProposal(p.id)}>
+              <QueueItem key={p.id} title={proposalName(p)} active={false} onClick={() => onOpenProposal(p.id)}>
                 <StatusLabel {...PROPOSAL_STATUS} />
               </QueueItem>
             ))}

@@ -1,4 +1,4 @@
-import type { ProposedBy, Session, SessionList, Task, TaskProposal } from "@trackwall/protocol";
+import { countLabel, type ProposedBy, type Session, type SessionList, type Task, type TaskProposal } from "@trackwall/protocol";
 
 /**
  * Pozycje listy w widoku „Sesje” (§4.4, ADR-31): sesja w korzeniu repo albo zadanie z ostatnią sesją, jeśli ma ją
@@ -11,26 +11,38 @@ import type { ProposedBy, Session, SessionList, Task, TaskProposal } from "@trac
  * and the user reviews them together. `proposer` is the session that proposed them, `null` for an agent outside Trackwall.
  */
 export type SessionEntry =
-  | { kind: "proposals"; proposer: string | null; proposals: readonly TaskProposal[] }
+  | ProposalsEntry
   | { kind: "session"; session: Session }
   | { kind: "task"; task: Task; session: Session | undefined };
 
-/** A session or task: an entry that has started (or had a session), as opposed to proposals. */
-export type StartedEntry = Exclude<SessionEntry, { kind: "proposals" }>;
+/** The waiting task proposals of one proposer; never empty, since a group exists only for a proposal. */
+export interface ProposalsEntry {
+  kind: "proposals";
+  proposer: string | null;
+  proposals: readonly [TaskProposal, ...TaskProposal[]];
+}
 
-/** Co pokazuje prawa część widoku: formularz nowej sesji, wybraną pozycję, a bez wyboru pierwszą pozycję. */
+/** A session or task: an entry that has started (or had a session), as opposed to proposals. */
+export type StartedEntry = Exclude<SessionEntry, ProposalsEntry>;
+
+/**
+ * What the right side of the view shows: the new session form, the selected entry, and without a selection the first
+ * entry. A single proposal (from the tray, a notification or a link) selects its group and opens there; `proposals`
+ * selects a group by its proposer, which stays selected while its proposals turn into tasks one by one.
+ */
 export type SessionSelection =
   | { kind: "new" }
   | { kind: "session"; id: string }
   | { kind: "task"; id: string }
   | { kind: "proposal"; id: string }
+  | { kind: "proposals"; proposer: string | null }
   | undefined;
 
 /**
  * Order on one level of the tree (`sessionRows`).
- * Najpierw propozycje zadań, bo czekają na decyzję, grupami według sesji, która je zgłosiła, od najnowszej grupy;
- * potem od ostatnio uruchomionej: sesja po starcie, zadanie po starcie swojej ostatniej sesji, a bez sesji po
- * utworzeniu. Propozycji, z której jest już zadanie, daemon nie zwraca, więc ten sam identyfikator jest na liście raz.
+ * Task proposals first, since they wait for a decision, grouped by the session that proposed them, newest group
+ * first; then most recently started: a session by its start, a task by the start of its latest session, and without
+ * one by its creation. The daemon does not return a proposal that is already a task, so an id is on the list once.
  */
 function sessionEntries({ sessions, tasks, proposals }: SessionList): SessionEntry[] {
   const started: StartedEntry[] = [
@@ -44,10 +56,14 @@ function sessionEntries({ sessions, tasks, proposals }: SessionList): SessionEnt
  * Proposals grouped by the session that proposed them, in the daemon's order (newest first), so a group is where its
  * newest proposal is. Inside a group the oldest comes first: that is the order the main session wrote its plan in.
  */
-function proposalGroups(proposals: readonly TaskProposal[]): SessionEntry[] {
-  const groups = new Map<string | null, TaskProposal[]>();
-  for (const proposal of proposals) groups.set(proposal.proposedBy.session, [proposal, ...(groups.get(proposal.proposedBy.session) ?? [])]);
-  return [...groups].map(([proposer, list]) => ({ kind: "proposals" as const, proposer, proposals: list }));
+function proposalGroups(proposals: readonly TaskProposal[]): ProposalsEntry[] {
+  const groups = new Map<string | null, ProposalsEntry>();
+  for (const proposal of proposals) {
+    const proposer = proposal.proposedBy.session;
+    const group = groups.get(proposer);
+    groups.set(proposer, { kind: "proposals", proposer, proposals: group ? [proposal, ...group.proposals] : [proposal] });
+  }
+  return [...groups.values()];
 }
 
 /**
@@ -92,7 +108,8 @@ export function sessionRows(list: SessionList): SessionRow[] {
     rows.push(row);
     for (const child of children.get(id) ?? []) {
       if (placed.has(entryId(child))) continue;
-      row.children++;
+      // The "main" badge counts work, so a group counts each of its proposals.
+      row.children += child.kind === "proposals" ? child.proposals.length : 1;
       place(child, depth + 1);
     }
   };
@@ -119,21 +136,29 @@ function entryTime(entry: StartedEntry): string {
 }
 
 /**
- * Pozycja dla wyboru, a bez wyboru albo dla nieznanego pierwsza; sesja zadania (np. z traya albo „Następna czekająca”)
- * wybiera jej zadanie, propozycja grupę, w której czeka, a zatwierdzona propozycja zadanie z tym samym identyfikatorem.
+ * The entry for a selection, and the first entry without one or for an unknown one. A task session (from the tray or
+ * "Next waiting") selects its task; a proposal selects the group it waits in, and once approved the task with its id,
+ * and a task id finds a proposal too, since a `trackwall://task/` link may point at one.
  */
 export function findEntry(entries: readonly SessionEntry[], selection: SessionSelection): SessionEntry | undefined {
   if (selection?.kind === "new") return undefined;
   if (!selection) return entries[0];
-  const found = entries.find((entry) => {
-    if (selection.kind === "session") return entrySession(entry)?.id === selection.id;
-    if (entry.kind === "task") return entry.task.id === selection.id;
-    return selection.kind === "proposal" && entry.kind === "proposals" && entry.proposals.some((p) => p.id === selection.id);
-  });
-  return found ?? entries[0];
+  return entries.find((entry) => selects(selection, entry)) ?? entries[0];
 }
 
-/** Sesja pozycji: sesja w korzeniu repo albo ostatnia sesja zadania; propozycje jeszcze nie mają sesji, a brak pozycji też. */
+function selects(selection: Exclude<SessionSelection, undefined | { kind: "new" }>, entry: SessionEntry): boolean {
+  if (selection.kind === "session") return entrySession(entry)?.id === selection.id;
+  if (selection.kind === "proposals") return entry.kind === "proposals" && entry.proposer === selection.proposer;
+  if (entry.kind === "task") return entry.task.id === selection.id;
+  return entry.kind === "proposals" && entry.proposals.some((p) => p.id === selection.id);
+}
+
+/** The proposal a selection points at, to open first in its group; `undefined` for any other selection. */
+export function selectedProposal(selection: SessionSelection): string | undefined {
+  return selection?.kind === "proposal" || selection?.kind === "task" ? selection.id : undefined;
+}
+
+/** The session of an entry: a session in a repo root or a task's latest session; proposals have none yet. */
 export function entrySession(entry: SessionEntry | undefined): Session | undefined {
   return entry?.kind === "proposals" ? undefined : entry?.session;
 }
@@ -144,8 +169,8 @@ function entryWaits(entry: SessionEntry): boolean {
 }
 
 /**
- * Następna pozycja, która czeka na Ciebie (propozycje i sesje, ADR-55), po bieżącej, w kolejności listy i w kółko;
- * `undefined`, gdy żadna nie czeka. Bieżąca pozycja jest wybierana dopiero wtedy, gdy czeka tylko ona.
+ * The next entry that waits for you (proposals and sessions, ADR-55) after the current one, in list order and round;
+ * `undefined` when none waits. The current entry is chosen only when it is the only one waiting.
  */
 export function nextWaiting(entries: readonly SessionEntry[], current: SessionEntry | undefined): SessionEntry | undefined {
   const at = current ? entries.findIndex((e) => entryId(e) === entryId(current)) : -1;
@@ -153,25 +178,52 @@ export function nextWaiting(entries: readonly SessionEntry[], current: SessionEn
   return waiting.find((e) => entries.indexOf(e) > at) ?? waiting[0];
 }
 
+/**
+ * Alt+J (ADR-48): the entry to open, after the selected one, and whether the shortcut takes the key. In Sessions it
+ * always does, so that the key never reaches a terminal; elsewhere only when something is waiting, so that ⌥J still
+ * types in a text field.
+ */
+export function nextWaitingShortcut(
+  entries: readonly SessionEntry[],
+  selected: SessionEntry | undefined,
+  inSessionsView: boolean,
+): { open: SessionEntry | undefined; taken: boolean } {
+  const open = nextWaiting(entries, selected);
+  return { open, taken: open !== undefined || inSessionsView };
+}
+
 /** Nazwa zadania na liście i w panelu: tytuł z propozycji, a zadanie z formularza nie ma tytułu, więc polecenie. */
 export function taskName(task: Task): string {
   return task.title ?? task.prompt;
 }
 
-/** Wybór, który wskazuje tę pozycję; grupę propozycji wskazuje jej pierwsza propozycja. */
+/** The selection that points at this entry; a group of proposals by its proposer. */
 export function entrySelection(entry: SessionEntry): SessionSelection {
-  if (entry.kind === "proposals") {
-    const [first] = entry.proposals;
-    if (!first) throw new Error("a group of task proposals is never empty");
-    return { kind: "proposal", id: first.id };
-  }
+  if (entry.kind === "proposals") return { kind: "proposals", proposer: entry.proposer };
   return { kind: entry.kind, id: entryId(entry) };
 }
 
-/** Identyfikator pozycji (klucz Reacta i porównanie z wybraną); grupa propozycji ma go po sesji, która je zgłosiła. */
+/** The id of an entry (React key and comparison with the selected one); a group of proposals has it by its proposer. */
 export function entryId(entry: SessionEntry): string {
-  if (entry.kind === "proposals") return `proposals:${entry.proposer ?? "outside"}`;
+  if (entry.kind === "proposals") return proposalsEntryId(entry.proposer);
   return entry.kind === "task" ? entry.task.id : entry.session.id;
+}
+
+/** The id of the group of proposals from this proposer; `null`, an agent outside Trackwall, gets a word no session id is. */
+function proposalsEntryId(proposer: string | null): string {
+  return `proposals:${proposer ?? "outside"}`;
+}
+
+/** A proposal's name wherever it is listed: its repo and title. */
+export function proposalName(proposal: TaskProposal): string {
+  return `${proposal.repo} · ${proposal.title}`;
+}
+
+/** The name of a group of proposals (ADR-55): the proposal's name for one, a count for more. */
+export function proposalsName(proposals: ProposalsEntry["proposals"]): string {
+  return proposals.length === 1
+    ? proposalName(proposals[0])
+    : countLabel(proposals.length, { one: "task proposal", other: "task proposals" });
 }
 
 /**

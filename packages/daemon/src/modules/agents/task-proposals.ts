@@ -6,7 +6,8 @@ import { DomainError } from "../../infra/errors.ts";
  * Propozycje zadań (ADR-39): zadania zgłoszone narzędziem MCP `propose_task`, które czekają na decyzję użytkownika
  * w widoku Sessions. Tylko w pamięci daemona, jak sesje, które je zgłaszają: po restarcie sesja proponująca i tak
  * nie żyje, więc nikt nie czeka na odpowiedź. Odrzucone znikają z listy, ale ich identyfikatory zostają, żeby sesja,
- * która na propozycję czeka, dostała `proposal_rejected` zamiast `not_found`, razem z powodem od użytkownika (ADR-55).
+ * która na propozycję czeka, dostała `proposal_rejected` zamiast `not_found`.
+ * Since ADR-55 a rejection also keeps the user's reason for that session.
  */
 
 /** Tyle propozycji może czekać naraz: sesja w pętli nie zasypie listy, a człowiek i tak nie przejrzy więcej. */

@@ -1,6 +1,6 @@
-import type { Task, TaskProposal } from "@trackwall/protocol";
+import type { Task } from "@trackwall/protocol";
 import { errorMessage } from "./api.ts";
-import type { SessionSelection } from "./session-entries.ts";
+import type { ProposalsEntry, SessionSelection } from "./session-entries.ts";
 
 /**
  * Decisions on the task proposals of one main session (ADR-55): starting several at once and where the Sessions view
@@ -39,15 +39,18 @@ export async function startProposals(
  * goes through the plan without looking for it; when none is left, the first task that has just started, and after
  * rejecting the last one the session that proposed them (it waits for the answer), or the first entry without it.
  */
-export function selectionAfterDecision(
-  proposals: readonly TaskProposal[],
-  decided: ReadonlySet<string>,
-  proposer: string | null,
-  started: readonly Task[],
-): SessionSelection {
-  const next = proposals.find((p) => !decided.has(p.id));
+export function selectionAfterDecision(group: ProposalsEntry, decided: ReadonlySet<string>, started: readonly Task[]): SessionSelection {
+  const next = group.proposals.find((p) => !decided.has(p.id));
   if (next) return { kind: "proposal", id: next.id };
   const [first] = started;
   if (first) return { kind: "task", id: first.id };
-  return proposer === null ? undefined : { kind: "session", id: proposer };
+  return group.proposer === null ? undefined : { kind: "session", id: group.proposer };
+}
+
+/**
+ * Whether the view still shows this group, so that a decision that ends late (a batch of starts takes a while) moves
+ * the view on only when the user has not gone elsewhere meanwhile. A decision selects its group first (`proposals`).
+ */
+export function showsGroup(selection: SessionSelection, group: ProposalsEntry): boolean {
+  return selection?.kind === "proposals" && selection.proposer === group.proposer;
 }

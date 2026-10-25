@@ -8,10 +8,10 @@ import { inDesktopShell, openWindow, reportShown, START_PARAMS, showViewMenu, st
 import { DROP_HINT } from "@/lib/dropped-folder";
 import type { DroppedPaths } from "@/lib/file-drop";
 import { IS_MAC } from "@/lib/platform";
-import { entrySelection, findEntry, type SessionSelection, sessionRows } from "@/lib/session-entries";
+import { entrySelection, findEntry, nextWaitingShortcut, type SessionSelection, sessionRows } from "@/lib/session-entries";
 import { SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
 import { sessionShortcut } from "@/lib/session-shortcut";
-import { attentionCount, nextWaitingShortcut } from "@/lib/session-state";
+import { attentionCount } from "@/lib/session-state";
 import { useAppMenu } from "@/lib/use-app-menu";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";

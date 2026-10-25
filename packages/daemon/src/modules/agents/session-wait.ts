@@ -23,6 +23,11 @@ export interface WaitOutcome {
   rejectionReason: string | null;
 }
 
+/** An outcome with what it is about; whatever it does not name is `null`. */
+export function outcome(status: WaitStatus, parts: Partial<Omit<WaitOutcome, "status">> = {}): WaitOutcome {
+  return { status, proposal: null, task: null, session: null, rejectionReason: null, ...parts };
+}
+
 /**
  * Stan sesji dla czekającego; zatrzymywana sesja wciąż pracuje, dopóki jej grupa nie skończy. Błąd (`Error` z hooka
  * `errorOccurred`) też wymaga kogoś: nie wiadomo, czy Copilot CLI wyśle po nim koniec tury, a bez tego czekanie

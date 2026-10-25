@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Task, TaskProposal } from "@trackwall/protocol";
-import { selectionAfterDecision, startProposals } from "../src/lib/proposal-decisions.ts";
+import { selectionAfterDecision, showsGroup, startProposals } from "../src/lib/proposal-decisions.ts";
+import type { ProposalsEntry } from "../src/lib/session-entries.ts";
 
 function proposal(id: string): TaskProposal {
   return {
@@ -51,22 +52,26 @@ describe("starting several task proposals", () => {
 });
 
 describe("where the Sessions view goes after a decision", () => {
-  const proposals = [proposal("p1"), proposal("p2"), proposal("p3")];
+  const group: ProposalsEntry = { kind: "proposals", proposer: "main", proposals: [proposal("p1"), proposal("p2"), proposal("p3")] };
 
   test("to the next proposal of the same session that still waits", () => {
-    expect(selectionAfterDecision(proposals, new Set(["p1"]), "main", [task("p1")])).toEqual({ kind: "proposal", id: "p2" });
-    expect(selectionAfterDecision(proposals, new Set(["p2"]), "main", [])).toEqual({ kind: "proposal", id: "p1" });
+    expect(selectionAfterDecision(group, new Set(["p1"]), [task("p1")])).toEqual({ kind: "proposal", id: "p2" });
+    expect(selectionAfterDecision(group, new Set(["p2"]), [])).toEqual({ kind: "proposal", id: "p1" });
   });
 
   test("when none is left, to the first task that has just started", () => {
-    expect(selectionAfterDecision(proposals, new Set(["p1", "p2", "p3"]), "main", [task("p2"), task("p3")])).toEqual({
-      kind: "task",
-      id: "p2",
-    });
+    expect(selectionAfterDecision(group, new Set(["p1", "p2", "p3"]), [task("p2"), task("p3")])).toEqual({ kind: "task", id: "p2" });
   });
 
   test("after rejecting the last one, to the session that proposed them, which waits for the answer", () => {
-    expect(selectionAfterDecision([proposal("p1")], new Set(["p1"]), "main", [])).toEqual({ kind: "session", id: "main" });
-    expect(selectionAfterDecision([proposal("p1")], new Set(["p1"]), null, [])).toBeUndefined();
+    const one: ProposalsEntry = { kind: "proposals", proposer: "main", proposals: [proposal("p1")] };
+    expect(selectionAfterDecision(one, new Set(["p1"]), [])).toEqual({ kind: "session", id: "main" });
+    expect(selectionAfterDecision({ ...one, proposer: null }, new Set(["p1"]), [])).toBeUndefined();
+  });
+
+  test("only while the group is still selected, so a late result does not take the user elsewhere", () => {
+    expect(showsGroup({ kind: "proposals", proposer: "main" }, group)).toBe(true);
+    expect(showsGroup({ kind: "proposals", proposer: null }, group)).toBe(false);
+    expect(showsGroup({ kind: "task", id: "t9" }, group)).toBe(false);
   });
 });

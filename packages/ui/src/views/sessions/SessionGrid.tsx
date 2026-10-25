@@ -1,13 +1,14 @@
+import type { Task } from "@trackwall/protocol";
 import { Maximize2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
 import { IS_MAC } from "@/lib/platform";
-import { entryId, entrySession, type SessionEntry, type SessionSelection } from "@/lib/session-entries";
+import { entryId, entrySession, proposalsName, type SessionEntry, type SessionSelection } from "@/lib/session-entries";
 import { type GridPage, gridShape } from "@/lib/session-grid";
 import { sessionShortcutLabel } from "@/lib/session-shortcut";
-import { isLive, PROPOSAL_STATUS, proposalsName, sessionStateLabel } from "@/lib/session-state";
+import { isLive, PROPOSAL_STATUS, sessionStateLabel } from "@/lib/session-state";
 import { cn } from "@/lib/utils";
 import { ProposalTile } from "./ProposalTile.tsx";
 import { SessionTerminal } from "./SessionTerminal.tsx";
@@ -26,17 +27,21 @@ export function SessionGrid({
   selected,
   onSelect,
   onOpenAlone,
+  tasks,
   onChanged,
-  onDecided,
+  onNavigate,
+  currentSelection,
 }: {
   conn: Connection;
   page: GridPage<SessionEntry>;
   selected: string;
   onSelect: (entry: SessionEntry) => void;
   onOpenAlone: (entry: SessionEntry) => void;
-  /** After a decision on a proposal: reload the list, and where to go next. */
+  /** For a proposals tile: the tasks for the same-repo hint, the list reload and the selection after a decision. */
+  tasks: readonly Task[];
   onChanged: () => void;
-  onDecided: (selection: SessionSelection) => void;
+  onNavigate: (selection: SessionSelection) => void;
+  currentSelection: () => SessionSelection;
 }) {
   const area = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ width: number; height: number }>();
@@ -67,8 +72,10 @@ export function SessionGrid({
             selected={entryId(entry) === selected}
             onSelect={() => onSelect(entry)}
             onOpenAlone={() => onOpenAlone(entry)}
+            tasks={tasks}
             onChanged={onChanged}
-            onDecided={onDecided}
+            onNavigate={onNavigate}
+            currentSelection={currentSelection}
           />
         ))}
     </div>
@@ -82,8 +89,10 @@ function SessionTile({
   selected,
   onSelect,
   onOpenAlone,
+  tasks,
   onChanged,
-  onDecided,
+  onNavigate,
+  currentSelection,
 }: {
   conn: Connection;
   entry: SessionEntry;
@@ -91,8 +100,10 @@ function SessionTile({
   selected: boolean;
   onSelect: () => void;
   onOpenAlone: () => void;
+  tasks: readonly Task[];
   onChanged: () => void;
-  onDecided: (selection: SessionSelection) => void;
+  onNavigate: (selection: SessionSelection) => void;
+  currentSelection: () => SessionSelection;
 }) {
   const session = entrySession(entry);
   const tile = useRef<HTMLDivElement>(null);
@@ -132,7 +143,14 @@ function SessionTile({
       </header>
       {session && <SessionTerminal conn={conn} session={session.id} live={isLive(session)} focused={selected} />}
       {entry.kind === "proposals" && (
-        <ProposalTile conn={conn} proposer={entry.proposer} proposals={entry.proposals} onChanged={onChanged} onDecided={onDecided} />
+        <ProposalTile
+          conn={conn}
+          group={entry}
+          tasks={tasks}
+          onChanged={onChanged}
+          onSelect={onNavigate}
+          currentSelection={currentSelection}
+        />
       )}
       {entry.kind === "task" && !session && (
         <div className="text-muted-foreground flex flex-1 items-center justify-center p-4 text-center text-xs">

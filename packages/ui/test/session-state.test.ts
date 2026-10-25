@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Session } from "@trackwall/protocol";
-import { entryId, nextWaiting, type SessionEntry } from "../src/lib/session-entries.ts";
-import { nextWaitingShortcut, sessionStateLabel } from "../src/lib/session-state.ts";
+import { entryId, nextWaiting, nextWaitingShortcut, type SessionEntry } from "../src/lib/session-entries.ts";
+import { sessionStateLabel } from "../src/lib/session-state.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-23T10:00:00Z", pid: 10 } as const;
 

@@ -120,8 +120,11 @@ describe("pozycje widoku Sesje", () => {
     ]);
     const group = entries[3];
     if (!group) throw new Error("no group");
-    expect(entrySelection(group)).toEqual({ kind: "proposal", id: "p1" });
+    expect(entrySelection(group)).toEqual({ kind: "proposals", proposer: "s1" });
+    expect(findEntry(entries, { kind: "proposals", proposer: "s1" })).toBe(group);
     expect(findEntry(entries, { kind: "proposal", id: "p2" })).toBe(group);
+    // A trackwall://task/ link to a proposal.
+    expect(findEntry(entries, { kind: "task", id: "p2" })).toBe(group);
   });
 
   test("wybrana propozycja, z której powstało zadanie, wybiera to zadanie, a nie pierwszą pozycję", () => {
@@ -154,6 +157,16 @@ describe("pozycje widoku Sesje", () => {
     };
     expect(shape(list)).toEqual(["session s2 @0", "session s1 @0", "proposals proposals:s1 @1", "task t1 @1", "task t2 @0"]);
     expect(sessionRows(list).find((r) => entryId(r.entry) === "s1")?.children).toBe(2);
+  });
+
+  test("the main badge counts every proposal of the group under it", () => {
+    const list = {
+      sessions: [session("s1", "2026-10-23T10:00:00Z")],
+      tasks: [delegated("t1", "2026-10-23T11:00:00Z", "s1")],
+      proposals: [proposal("p2", "2026-10-23T11:40:00Z", "s1"), proposal("p1", "2026-10-23T11:30:00Z", "s1")],
+      worktreesDir: "/w",
+    };
+    expect(sessionRows(list).find((r) => entryId(r.entry) === "s1")?.children).toBe(3);
   });
 
   test("a task delegated by the session of another task sits under that task, also when it is not its latest session", () => {
