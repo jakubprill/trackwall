@@ -107,7 +107,7 @@ The branch, the last commit, the number of changes in the working directory (of 
 _Avoid_: state (that is a task state or a service state), sync (that is a separate action)
 
 **Changes** (working directory changes, `WorkingTreeChanges`, the `changes` action; the "Changes" tab in the UI):
-The files and diff of the working directory (with new files, without ignored ones) against a commit: a repo against HEAD in the repo details (ADR-34), a task's worktree against the base commit in the task changes (`TaskChanges`, ADR-31). Read-only.
+The files and diff of the working directory (with new files, without ignored ones) against a commit: a repo against HEAD in the repo details (ADR-34), a task's worktree against the base commit in the task changes (`TaskChanges`, ADR-31). Read-only. An agent gets a task's changes without the diff in `get_session` (`TaskChangesSummary`) and with it, narrowed to paths, in `get_task_changes` (`AgentTaskChanges`).
 In working directory counts "changed" (`changed`) are tracked files, and "new" (`untracked`) untracked entries; `RepoStatus.changes` is their sum (`trackedChanges` counts the changed ones).
 _Avoid_: diff (that is only a part), status
 

@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import {
+  type AgentTaskChanges,
   type ChangedFile,
   PATCH_MAX_BYTES,
   type ProposedBy,
@@ -9,7 +10,6 @@ import {
   type Task,
   type TaskChanges,
   type TaskChangesSummary,
-  type TaskDiff,
   type TaskMiseConfig,
   type TaskSharedFiles,
 } from "@trackwall/protocol";
@@ -99,7 +99,6 @@ type KnownTask = StoredTask & TaskWork;
  * seconds, so a repo with many tasks must not start dozens of git processes at a time (slow on Windows).
  */
 const SHARED_FILES_CONCURRENCY = 3;
-const NEWLINE = 0x0a;
 
 export class AgentTasks {
   readonly #deps: AgentTasksDeps;
@@ -212,17 +211,12 @@ export class AgentTasks {
   }
 
   /**
-   * The diff for an agent (MCP tool `get_task_diff`), so a session that handed out the task can review it: only under
-   * `paths` (git pathspecs; none is the whole worktree), with the patch cut at the last whole line within `maxBytes`.
+   * The changes with their diff for an agent (MCP tool `get_task_changes`), so a session that handed out the task can
+   * review it: only under `paths` (git pathspecs; none is the whole worktree), with the diff cut within `maxPatchBytes`.
    */
-  async diff(id: string, paths: readonly string[], maxBytes: number): Promise<TaskDiff> {
-    // One byte over the limit tells a patch of exactly `maxBytes` from a cut one.
-    const { files, patch, commits, uncommitted } = await this.#readChanges(id, maxBytes + 1, paths);
-    const bytes = Buffer.from(patch);
-    const patchTruncated = bytes.length > maxBytes;
-    // A newline byte is never inside a UTF-8 sequence, so cutting after one leaves whole lines and whole characters.
-    const kept = patchTruncated ? bytes.subarray(0, bytes.lastIndexOf(NEWLINE, maxBytes - 1) + 1).toString("utf8") : patch;
-    return { ...summaryFiles(files), commits, uncommitted, patch: kept, patchTruncated };
+  async agentChanges(id: string, paths: readonly string[], maxPatchBytes: number): Promise<AgentTaskChanges> {
+    const { files, ...rest } = await this.#readChanges(id, maxPatchBytes, paths);
+    return { ...rest, ...summaryFiles(files) };
   }
 
   /**

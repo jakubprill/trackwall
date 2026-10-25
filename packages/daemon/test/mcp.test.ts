@@ -98,7 +98,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
       "search_code",
       "list_sessions",
       "get_session",
-      "get_task_diff",
+      "get_task_changes",
       "propose_task",
       "report_result",
       "wait_for_session",

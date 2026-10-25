@@ -27,6 +27,7 @@ const EMPTY_BLOB = new Map([
 
 const NUL = Buffer.from([0]);
 const SLASH = "/".charCodeAt(0);
+const NEWLINE = "\n".charCodeAt(0);
 
 /** Osadzone repo to po jednym `git rev-parse`; procesy na Windowsie są drogie w starcie i skanowane przez antywirus. */
 const SUBMODULE_CONCURRENCY = 4;
@@ -39,8 +40,9 @@ const NO_PATCH: RunOutput = { stdout: Buffer.alloc(0), truncated: false };
 
 /**
  * Zmiany worktree zadania razem z liczbą commitów zadania i niezacommitowanych plików. `maxPatchBytes` 0 pomija diff:
- * git nie liczy treści zmian, a `patch` jest pusty. `paths` (git pathspecs) narrows the files and the diff; the commit
- * and uncommitted counts stay those of the whole worktree.
+ * git nie liczy treści zmian, a `patch` jest pusty.
+ *
+ * `paths` (git pathspecs) narrows the files and the diff; the commit and uncommitted counts stay those of the whole worktree.
  */
 export async function worktreeChanges(
   dir: string,
@@ -72,7 +74,7 @@ async function copyIndex(index: string, copy: string): Promise<void> {
   }
 }
 
-/** Katalog roboczy `dir` względem `base` (commit albo drzewo), only under `paths` (git pathspecs; none is the whole tree). */
+/** The working directory `dir` against `base` (a commit or a tree), only under `paths` (git pathspecs; none is the whole tree). */
 export async function workingTreeChanges(
   dir: string,
   base: string,
@@ -105,7 +107,7 @@ export async function workingTreeChanges(
     return {
       // Ostatni wpis uciętej listy może mieć niepełną ścieżkę.
       files: parseChangedFiles(names.stdout.toString("utf8"), stats.stdout.toString("utf8")).slice(0, names.truncated ? -1 : undefined),
-      patch: patch.stdout.toString("utf8"),
+      patch: wholeLines(patch).toString("utf8"),
       // Ucięta lista plików (dziesiątki tysięcy nowych plików bez `.gitignore`) też jest niepełnym wynikiem.
       truncated: patch.truncated || names.truncated || stats.truncated || untrackedTruncated,
     };
@@ -113,6 +115,14 @@ export async function workingTreeChanges(
     // Pozostałość po gicie zabitym po limicie czasu; plik w katalogu tymczasowym nie jest wart przykrycia błędu.
     await Promise.all([tmp, `${tmp}.lock`].map((file) => rm(file, { force: true }).catch(() => {})));
   }
+}
+
+/**
+ * A cut diff up to its last whole line: a newline byte is never inside a UTF-8 sequence, so the text has no half
+ * character and no half line for a reader (the "Changes" tab, an agent) to take for the real content.
+ */
+function wholeLines({ stdout, truncated }: RunOutput): Buffer {
+  return truncated ? stdout.subarray(0, stdout.lastIndexOf(NEWLINE) + 1) : stdout;
 }
 
 /**
