@@ -19,6 +19,8 @@ export interface WaitOutcome {
   proposal: TaskProposal | null;
   task: Task | null;
   session: Session | null;
+  /** The user's reason for `proposal_rejected` (ADR-55); `null` otherwise and when they gave none. */
+  rejectionReason: string | null;
 }
 
 /**

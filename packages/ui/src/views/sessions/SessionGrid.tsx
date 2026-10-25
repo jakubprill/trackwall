@@ -4,18 +4,20 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
 import { IS_MAC } from "@/lib/platform";
-import { entryId, entrySession, type SessionEntry } from "@/lib/session-entries";
+import { entryId, entrySession, type SessionEntry, type SessionSelection } from "@/lib/session-entries";
 import { type GridPage, gridShape } from "@/lib/session-grid";
 import { sessionShortcutLabel } from "@/lib/session-shortcut";
-import { isLive, sessionStateLabel } from "@/lib/session-state";
+import { isLive, PROPOSAL_STATUS, proposalsName, sessionStateLabel } from "@/lib/session-state";
 import { cn } from "@/lib/utils";
+import { ProposalTile } from "./ProposalTile.tsx";
 import { SessionTerminal } from "./SessionTerminal.tsx";
 import { TaskLine } from "./TaskLine.tsx";
 
 /**
  * A page of the Sessions list as a grid of terminals (ADR-48). The selected tile has the accent ring and the keyboard,
  * a session that is waiting for you has the warning frame (also when selected). Clicking a tile or into its terminal
- * selects it; a task without a session and a task proposal (ADR-39) have no terminal, so their tile only leads to the full panel. Tiles appear once
+ * selects it; a task without a session has no terminal, so its tile only leads to the full panel, and task proposals
+ * (ADR-39) show their prompts with “Start task” and “Reject…” (ADR-55). Tiles appear once
  * the area is measured, so that no terminal reports a size to its session from a layout that is about to change.
  */
 export function SessionGrid({
@@ -24,12 +26,17 @@ export function SessionGrid({
   selected,
   onSelect,
   onOpenAlone,
+  onChanged,
+  onDecided,
 }: {
   conn: Connection;
   page: GridPage<SessionEntry>;
   selected: string;
   onSelect: (entry: SessionEntry) => void;
   onOpenAlone: (entry: SessionEntry) => void;
+  /** After a decision on a proposal: reload the list, and where to go next. */
+  onChanged: () => void;
+  onDecided: (selection: SessionSelection) => void;
 }) {
   const area = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ width: number; height: number }>();
@@ -60,6 +67,8 @@ export function SessionGrid({
             selected={entryId(entry) === selected}
             onSelect={() => onSelect(entry)}
             onOpenAlone={() => onOpenAlone(entry)}
+            onChanged={onChanged}
+            onDecided={onDecided}
           />
         ))}
     </div>
@@ -73,6 +82,8 @@ function SessionTile({
   selected,
   onSelect,
   onOpenAlone,
+  onChanged,
+  onDecided,
 }: {
   conn: Connection;
   entry: SessionEntry;
@@ -80,6 +91,8 @@ function SessionTile({
   selected: boolean;
   onSelect: () => void;
   onOpenAlone: () => void;
+  onChanged: () => void;
+  onDecided: (selection: SessionSelection) => void;
 }) {
   const session = entrySession(entry);
   const tile = useRef<HTMLDivElement>(null);
@@ -117,13 +130,13 @@ function SessionTile({
           <Maximize2 />
         </Button>
       </header>
-      {session ? (
-        <SessionTerminal conn={conn} session={session.id} live={isLive(session)} focused={selected} />
-      ) : (
+      {session && <SessionTerminal conn={conn} session={session.id} live={isLive(session)} focused={selected} />}
+      {entry.kind === "proposals" && (
+        <ProposalTile conn={conn} proposer={entry.proposer} proposals={entry.proposals} onChanged={onChanged} onDecided={onDecided} />
+      )}
+      {entry.kind === "task" && !session && (
         <div className="text-muted-foreground flex flex-1 items-center justify-center p-4 text-center text-xs">
-          {entry.kind === "proposal"
-            ? "This task proposal waits for your decision. Open it alone to read its prompt, then start or reject it."
-            : "This task has no session. Open it alone to resume it or to see its changes."}
+          This task has no session. Open it alone to resume it or to see its changes.
         </div>
       )}
     </div>
@@ -132,16 +145,14 @@ function SessionTile({
 
 /** The tile header after its number: repo, state and what the entry is about (task, proposal or window title). */
 function TileTitle({ entry }: { entry: SessionEntry }) {
-  if (entry.kind === "proposal")
+  if (entry.kind === "proposals")
     return (
       <>
-        <span className="min-w-0 truncate text-xs font-medium">{entry.proposal.repo}</span>
+        <span className="min-w-0 truncate text-xs font-medium">{proposalsName(entry.proposals)}</span>
         <span className="shrink-0 text-xs">
-          <StatusLabel tone="warning" label="waiting for your decision" />
+          <StatusLabel {...PROPOSAL_STATUS} />
         </span>
-        <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs" title={entry.proposal.title}>
-          {entry.proposal.title}
-        </span>
+        <span className="min-w-0 flex-1" />
       </>
     );
   const session = entrySession(entry);

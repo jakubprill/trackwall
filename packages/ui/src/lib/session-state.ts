@@ -1,5 +1,6 @@
-import type { Session, SessionList, TaskStateChange } from "@trackwall/protocol";
+import type { Session, SessionList, TaskProposal, TaskStateChange } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
+import { nextWaiting, type SessionEntry } from "./session-entries.ts";
 
 /**
  * Stan sesji Copilot CLI w jednej linii (§4.4): z grupy procesów, gdy sesja się kończy albo skończyła, inaczej ze
@@ -19,6 +20,12 @@ export const STATE_LABELS = {
 
 /** The status of a task proposal wherever it shows (the Sessions list, “Needs you” on the dashboard): waiting for a decision. */
 export const PROPOSAL_STATUS = { tone: "warning", label: "waiting for your decision" } as const;
+
+/** The name of a group of task proposals (ADR-55) on the Sessions list and its grid tile: the repo for one, a count for more. */
+export function proposalsName(proposals: readonly TaskProposal[]): string {
+  const [only] = proposals;
+  return proposals.length === 1 && only ? `${only.repo} · ${only.title}` : `${proposals.length} task proposals`;
+}
 
 /** `Input` the user has already seen (ADR-47): the agent is idle and no longer waits for you. */
 export const IDLE_LABEL = "idle";
@@ -59,27 +66,16 @@ function runningStateLabel(state: TaskStateChange, needsAttention: boolean, idle
 }
 
 /**
- * Następna sesja, która czeka na Ciebie, po bieżącej, w kolejności listy i w kółko; `undefined`, gdy żadna nie czeka.
- * Bieżąca sesja jest wybierana dopiero wtedy, gdy czeka tylko ona.
- */
-export function nextWaiting(sessions: readonly Session[], current: string | undefined): Session | undefined {
-  const waiting = sessions.filter((s) => s.needsAttention);
-  const at = sessions.findIndex((s) => s.id === current);
-  const after = waiting.find((s) => sessions.indexOf(s) > at);
-  return after ?? waiting[0];
-}
-
-/**
- * Alt+J (ADR-48): the session to open, after the selected one, and whether the shortcut takes the key. In Sessions it
- * always does, so that the key never reaches a terminal; elsewhere only when a session is waiting, so that ⌥J still
- * types in a text field.
+ * Alt+J (ADR-48): the entry to open, after the selected one, and whether the shortcut takes the key. In Sessions it
+ * always does, so that the key never reaches a terminal; elsewhere only when something is waiting, so that ⌥J still
+ * types in a text field. Since ADR-55 it goes through task proposals too, like the count on the views bar.
  */
 export function nextWaitingShortcut(
-  sessions: readonly Session[],
-  selected: string | undefined,
+  entries: readonly SessionEntry[],
+  selected: SessionEntry | undefined,
   inSessionsView: boolean,
-): { open: Session | undefined; taken: boolean } {
-  const open = nextWaiting(sessions, selected);
+): { open: SessionEntry | undefined; taken: boolean } {
+  const open = nextWaiting(entries, selected);
   return { open, taken: open !== undefined || inSessionsView };
 }
 
@@ -88,7 +84,7 @@ export function sessionTitle(session: Session): string {
   return session.windowTitle ? `${session.repo} · ${session.windowTitle}` : session.repo;
 }
 
-export function waitingCount(sessions: readonly Session[]): number {
+function waitingCount(sessions: readonly Session[]): number {
   return sessions.filter((s) => s.needsAttention).length;
 }
 

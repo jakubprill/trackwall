@@ -1,4 +1,4 @@
-//! System notifications (ADR-50): a session that starts waiting for you and a new task proposal show a notification
+//! System notifications (ADR-50): a session that starts waiting for you and new task proposals show a notification
 //! while no Trackwall window has the focus, and clicking it opens that session or proposal like the tray menu does.
 //!
 //! The official notification plugin cannot tell the shell about a click on the desktop, and on Windows it only shows
@@ -39,8 +39,23 @@ fn proposal_notice(proposal: &Proposal) -> Notice {
     }
 }
 
+/// New proposals: a main session usually proposes a plan of several tasks at once, so the proposals that arrived since
+/// the previous poll make one notification with their titles (ADR-55); clicking it opens the first one, among the rest
+/// of its session's proposals in the Sessions view.
+fn proposals_notice(proposals: &[Proposal]) -> Option<Notice> {
+    match proposals {
+        [] => None,
+        [only] => Some(proposal_notice(only)),
+        [first, ..] => Some(Notice {
+            title: format!("{} task proposals", proposals.len()),
+            body: proposals.iter().map(|p| format!("{}: {}", p.repo, p.title)).collect::<Vec<_>>().join("\n"),
+            target: Jump::Proposal(first.id.clone()),
+        }),
+    }
+}
+
 fn notices(news: &News) -> Vec<Notice> {
-    news.sessions.iter().map(session_notice).chain(news.proposals.iter().map(proposal_notice)).collect()
+    news.sessions.iter().map(session_notice).chain(proposals_notice(&news.proposals)).collect()
 }
 
 /// The name notifications are shown under: the app identifier, with a suffix in a debug build so that `tauri dev`
@@ -61,7 +76,7 @@ pub fn init(app: &AppHandle) {
     }
 }
 
-/// One notification for each session that started waiting and each new proposal.
+/// One notification for each session that started waiting, and one for the new proposals.
 pub fn show_news(app: &AppHandle, news: &News) {
     let app_id = app_id(app);
     for notice in notices(news) {
@@ -234,6 +249,25 @@ mod tests {
         };
         let targets: Vec<Jump> = notices(&news).into_iter().map(|n| n.target).collect();
         assert_eq!(targets, vec![Jump::Session("s1".into()), Jump::Proposal("p1".into())]);
+    }
+
+    #[test]
+    fn proposals_that_arrive_together_make_one_notice_that_opens_the_first() {
+        let news = News {
+            sessions: vec![],
+            proposals: vec![
+                Proposal { id: "p1".into(), repo: "billing".into(), title: "Add refund endpoint".into() },
+                Proposal { id: "p2".into(), repo: "web-shop".into(), title: "Show refund status".into() },
+            ],
+        };
+        assert_eq!(
+            notices(&news),
+            vec![Notice {
+                title: "2 task proposals".into(),
+                body: "billing: Add refund endpoint\nweb-shop: Show refund status".into(),
+                target: Jump::Proposal("p1".into()),
+            }]
+        );
     }
 
     /// Runs on `windows-latest` in CI: the registry value toasts depend on lands where Windows looks for it.

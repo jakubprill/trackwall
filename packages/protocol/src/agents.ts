@@ -24,6 +24,8 @@ export type TaskId = z.infer<typeof TaskId>;
  */
 export const TASK_PROMPT_MAX = 8000;
 export const TaskPrompt = z.string().trim().min(1).max(TASK_PROMPT_MAX);
+/** The longest reason for rejecting a task proposal (ADR-55): a few sentences for the session that proposed it. */
+export const REJECTION_REASON_MAX = 1000;
 
 /**
  * Tytuł zadania (ADR-39): krótki opis na liście sesji, który nadaje sesja proponująca zadanie, tak jak tytuł wątku.
@@ -213,8 +215,15 @@ export const agentsApi = {
    * użytkownik mógł poprawić przed startem. Nieudany start zostawia propozycję do ponownej próby albo odrzucenia.
    */
   approveProposal: endpoint("approve-proposal", ProposalRequest.extend({ prompt: TaskPrompt }), Task),
-  /** Odrzucenie propozycji: znika z listy, a sesja, która na nią czeka, dostaje `proposal_rejected`. */
-  rejectProposal: endpoint("reject-proposal", ProposalRequest, Done),
+  /**
+   * Odrzucenie propozycji: znika z listy, a sesja, która na nią czeka, dostaje `proposal_rejected` z powodem od
+   * użytkownika, jeśli go podał (ADR-55); pusty powód to brak powodu.
+   */
+  rejectProposal: endpoint(
+    "reject-proposal",
+    ProposalRequest.extend({ reason: z.string().trim().max(REJECTION_REASON_MAX).optional() }),
+    Done,
+  ),
 };
 
 /**

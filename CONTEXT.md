@@ -248,8 +248,12 @@ A short one-line description of a task (up to 80 characters), given by the sessi
 _Avoid_: window title (that is a session's `windowTitle`)
 
 **Task proposal** (`TaskProposal`, MCP tool `propose_task`, the `approve-proposal` and `reject-proposal` actions):
-A task that a session or an agent outside Trackwall submitted through MCP and that waits in the Sessions view for the user's decision: "Start task" turns it into a task with the same identifier, "Reject" rejects it. Until then nothing starts. It lives only in daemon memory (ADR-39).
+A task that a session or an agent outside Trackwall submitted through MCP and that waits in the Sessions view for the user's decision: "Start task" turns it into a task with the same identifier, "Reject…" rejects it with an optional rejection reason. Until then nothing starts. It lives only in daemon memory (ADR-39). The proposals of one main session are one entry in the Sessions view, reviewed together (ADR-55).
 _Avoid_: order, request, application
+
+**Rejection reason** (`reason` of `reject-proposal`, `rejectionReason` of `wait_for_session`):
+What the user writes when rejecting a task proposal, for the session that proposed it, so it can propose the work differently. Optional; up to 1000 characters (ADR-55).
+_Avoid_: comment, feedback
 
 **Shared files** (`TaskSharedFiles`, action `task-shared-files`):
 Files that both this task and another task of the same repo change, each compared with its own base commit. The one merged second will likely get a conflict, so the task panel warns about them and leads to the other task. It is only a warning: nothing is stopped (ADR-44).

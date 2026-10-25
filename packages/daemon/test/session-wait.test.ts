@@ -3,7 +3,7 @@ import type { WaitStatus } from "@trackwall/protocol";
 import { type WaitOutcome, waitUntilSettled } from "../src/modules/agents/session-wait.ts";
 
 function outcome(status: WaitStatus): WaitOutcome {
-  return { status, proposal: null, task: null, session: null };
+  return { status, proposal: null, task: null, session: null, rejectionReason: null };
 }
 
 describe("czekanie na sesję", () => {

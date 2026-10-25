@@ -165,8 +165,9 @@ export class Agents {
     }
   }
 
-  rejectProposal(id: string): void {
-    this.#proposals.reject(id);
+  /** An empty reason is no reason, so the waiting session gets `null` instead of "". */
+  rejectProposal(id: string, reason: string | undefined): void {
+    this.#proposals.reject(id, reason === undefined || reason === "" ? null : reason);
   }
 
   /** Podsumowanie od sesji `caller` do jej własnego zadania (`report_result`). */
@@ -186,19 +187,26 @@ export class Agents {
   #waitOutcome(target: WaitTarget): WaitOutcome {
     if ("session" in target) {
       const session = this.session(target.session);
-      return { status: sessionWaitStatus(session), proposal: null, task: session.task === null ? null : this.task(session.task), session };
+      return {
+        status: sessionWaitStatus(session),
+        proposal: null,
+        task: session.task === null ? null : this.task(session.task),
+        session,
+        rejectionReason: null,
+      };
     }
     const task = this.#tasks.find(target.task);
     if (task) {
       const session = this.#views().find((s) => s.task === task.id) ?? null;
       const status = session ? sessionWaitStatus(session) : this.#tasks.busy(task.id) ? "starting" : "no_session";
-      return { status, proposal: null, task, session };
+      return { status, proposal: null, task, session, rejectionReason: null };
     }
     const approving = this.#proposals.approving(target.task);
-    if (approving) return { status: "starting", proposal: approving, task: null, session: null };
+    if (approving) return { status: "starting", proposal: approving, task: null, session: null, rejectionReason: null };
     const proposal = this.#proposals.find(target.task);
-    if (proposal) return { status: "proposal_pending", proposal, task: null, session: null };
-    if (this.#proposals.wasRejected(target.task)) return { status: "proposal_rejected", proposal: null, task: null, session: null };
+    if (proposal) return { status: "proposal_pending", proposal, task: null, session: null, rejectionReason: null };
+    const rejection = this.#proposals.rejection(target.task);
+    if (rejection) return { status: "proposal_rejected", proposal: null, task: null, session: null, rejectionReason: rejection.reason };
     throw new DomainError("not_found", `no task or task proposal ${target.task}`);
   }
 

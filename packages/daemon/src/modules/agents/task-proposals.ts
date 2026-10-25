@@ -6,7 +6,7 @@ import { DomainError } from "../../infra/errors.ts";
  * Propozycje zadań (ADR-39): zadania zgłoszone narzędziem MCP `propose_task`, które czekają na decyzję użytkownika
  * w widoku Sessions. Tylko w pamięci daemona, jak sesje, które je zgłaszają: po restarcie sesja proponująca i tak
  * nie żyje, więc nikt nie czeka na odpowiedź. Odrzucone znikają z listy, ale ich identyfikatory zostają, żeby sesja,
- * która na propozycję czeka, dostała `proposal_rejected` zamiast `not_found`.
+ * która na propozycję czeka, dostała `proposal_rejected` zamiast `not_found`, razem z powodem od użytkownika (ADR-55).
  */
 
 /** Tyle propozycji może czekać naraz: sesja w pętli nie zasypie listy, a człowiek i tak nie przejrzy więcej. */
@@ -22,8 +22,8 @@ export class TaskProposals {
    * zatwierdzania (z błędem i poprawionym poleceniem), ale drugi raz nikt ich nie zatwierdzi ani nie odrzuci.
    */
   readonly #approving = new Set<string>();
-  /** Od najstarszego; najstarsze wypadają po `REMEMBERED_REJECTIONS`. */
-  readonly #rejected = new Set<string>();
+  /** Rejected id to the user's reason (`null` without one), oldest first; the oldest drop out after `REMEMBERED_REJECTIONS`. */
+  readonly #rejected = new Map<string, string | null>();
 
   list(): TaskProposal[] {
     return [...this.#pending];
@@ -71,17 +71,18 @@ export class TaskProposals {
     if (!restore) this.#pending = this.#pending.filter((p) => p.id !== id);
   }
 
-  reject(id: string): void {
+  reject(id: string, reason: string | null): void {
     this.get(id);
     this.#pending = this.#pending.filter((p) => p.id !== id);
-    this.#rejected.add(id);
-    for (const old of this.#rejected) {
+    this.#rejected.set(id, reason);
+    for (const old of this.#rejected.keys()) {
       if (this.#rejected.size <= REMEMBERED_REJECTIONS) break;
       this.#rejected.delete(old);
     }
   }
 
-  wasRejected(id: string): boolean {
-    return this.#rejected.has(id);
+  /** How the user rejected the proposal, or `undefined` when it was not rejected (or long enough ago to be forgotten). */
+  rejection(id: string): { reason: string | null } | undefined {
+    return this.#rejected.has(id) ? { reason: this.#rejected.get(id) ?? null } : undefined;
   }
 }

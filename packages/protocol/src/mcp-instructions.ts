@@ -65,9 +65,10 @@ export const MCP_INSTRUCTIONS = [
     `shows too. ${listServices.name} shows the services and their ports; stop what you started with ${stopService.name}.`,
   `- Hand work to another agent, e.g. a change in another repo: ${proposeTask.name} with a prompt that stands on its own; ` +
     `the user approves, edits or rejects it in Trackwall. Then call ${waitForSession.name} with the task id: it returns ` +
-    "when the proposal is rejected or the task's session needs someone (finished its turn, asks for approval, hit an error), goes " +
+    "when the proposal is rejected (with the user's reason, if they gave one) or the task's session needs someone (finished " +
+    "its turn, asks for approval, hit an error), goes " +
     `stale or exits; when it times out (still pending, starting or working), call it again. ${getSession.name} shows ` +
-    "the task's changed files.",
+    "the task's changed files. Propose related tasks together, so the user can review them as one plan.",
   `- ${listSessions.name} shows the Copilot CLI sessions and tasks Trackwall runs (caller is your own session); a session ` +
     `that runs a task ends its work with ${reportResult.name}.`,
   `- Point the user at a repo, session or task in your answer with a link: ${trackwallLink("repo", "<repo id>")}, ` +
