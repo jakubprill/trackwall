@@ -6,6 +6,13 @@ export const REPO = join(import.meta.dir, "..", "..", "..");
 export const DESKTOP = join(REPO, "apps", "desktop");
 export const TAURI_DIR = join(DESKTOP, "src-tauri");
 
+/**
+ * Top-level entries of the portable Windows build (`scripts/package-portable.ts` checks it stages exactly these). The
+ * shell's update moves only these out of the app folder (the Rust `BUILD_ENTRIES` in `portable_update.rs`, which must
+ * keep every name a build has ever shipped; a test compares them).
+ */
+export const BUILD_ENTRIES = ["trackwall.exe", "trackwall-daemon.exe", "ui", "README.txt"];
+
 /** Triple hosta z `rustc -vV`; tak samo nazywa sidecary Tauri. */
 export function hostTriple(): string {
   const out = run(["rustc", "-vV"], REPO, true);

@@ -1,7 +1,6 @@
-import { isTauri } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { errorMessage } from "./api.ts";
-import { isMainWindow } from "./app-window.ts";
+import { inDesktopShell, isMainWindow } from "./app-window.ts";
 import { type AppUpdate, checkUpdate, installUpdate, listenToUpdateProgress, nextUpdate } from "./updates.ts";
 
 /** The first check waits for the app to settle; then once in a while, because the app runs for days in the tray. */
@@ -26,7 +25,7 @@ export function useAppUpdate(): AppUpdateHandle | undefined {
   const [update, dispatch] = useReducer(nextUpdate, { state: "idle" });
   const [dismissed, dismiss] = useState<string>();
   const installing = useRef(false);
-  const tauri = isTauri();
+  const tauri = inDesktopShell();
 
   const check = useCallback(() => {
     dispatch({ kind: "check-started" });
@@ -59,7 +58,7 @@ export function useAppUpdate(): AppUpdateHandle | undefined {
       clearTimeout(first);
       clearInterval(every);
     };
-  }, [tauri, check]);
+  }, [check]);
 
   return tauri ? { update, check, install, dismissed, dismiss } : undefined;
 }

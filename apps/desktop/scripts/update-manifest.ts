@@ -23,13 +23,6 @@ export const UPDATE_PACKAGES = {
 type Target = keyof typeof UPDATE_PACKAGES;
 const TARGETS = Object.keys(UPDATE_PACKAGES) as Target[];
 
-/**
- * Top-level entries of the portable Windows build (`scripts/package-portable.ts` checks it stages exactly these). The
- * shell's update moves only these out of the app folder (`BUILD_ENTRIES` in `portable_update.rs`, which must keep every
- * name a build has ever shipped; a test compares them).
- */
-export const PORTABLE_ENTRIES = ["trackwall.exe", "trackwall-daemon.exe", "ui", "README.txt"];
-
 /** `tauri signer sign` writes the signature next to the file. */
 const signatureFile = (file: string) => `${file}.sig`;
 /** The name the updater's endpoint in `tauri.conf.json` asks for. */
