@@ -1,5 +1,4 @@
-import { createHash } from "node:crypto";
-import type { AgentDialog, AgentDialogOption } from "@trackwall/protocol";
+import type { AgentApproval, AgentDialog, AgentDialogOption, AgentQuestion } from "@trackwall/protocol";
 
 /**
  * The agent dialog read from the session's screen image (§4.4, ADR-66). Copilot CLI 1.0.103 draws an approval request
@@ -10,14 +9,18 @@ import type { AgentDialog, AgentDialogOption } from "@trackwall/protocol";
  *
  * Copilot CLI wraps long lines itself, so a question or an option label can span several screen lines; they are joined
  * again. Both layouts were taken from the real binary (fixtures in `test/fixtures/copilot/`); a layout this reader does
- * not recognise is no dialog, and the user answers in the terminal as before.
+ * not recognise is no dialog, and the user answers in the terminal as before. The id is not read here: it belongs to
+ * the wait the dialog answers (`LiveSession`), since the agent can ask the same thing twice.
  */
+
+/** A dialog as read from the screen, before it gets the id of its wait. */
+export type ScreenDialog = Omit<AgentApproval, "id"> | Omit<AgentQuestion, "id">;
 
 const APPROVAL_FOOTER = "enter to select";
 const QUESTION_HEADING = "Copilot needs information.";
 const QUESTION_FOOTER = "enter accept";
 /** An option line: an optional selection marker, the digit and the label. */
-const OPTION = /^(?:❯\s*)?([1-9])\.\s+(.*)$/;
+const OPTION = /^(❯\s*)?([1-9])\.\s+(.*)$/;
 /** An option that needs text typed in the terminal, so it cannot be answered with its digit alone. */
 const NEEDS_TEXT = /^No\b/;
 /** Lines made only of box drawing and spaces (the inner box's top and bottom, the rule under the heading). */
@@ -25,17 +28,21 @@ const BOX_ONLY = /^[\s╭╮╰╯─│]*$/;
 const MAX_DETAIL_LINES = 20;
 const MAX_TEXT = 300;
 
-/** The dialog on the screen (its visible lines, top to bottom), or `undefined` when there is none or its layout is unknown. */
-export function readAgentDialog(lines: readonly string[]): AgentDialog | undefined {
+/**
+ * The dialog of `kind` on the screen (its visible lines, top to bottom), or `undefined` when there is none or its layout
+ * is unknown. Only the kind the session's state waits for is read, so an approval not cleared yet hides no question.
+ */
+export function readAgentDialog(lines: readonly string[], kind: AgentDialog["kind"]): ScreenDialog | undefined {
   // Copilot CLI indents the lines of a file diff with no-break spaces.
   const plain = lines.map((l) => l.replaceAll("\u00a0", " "));
-  return readApproval(plain) ?? readQuestion(plain);
+  return kind === "approval" ? readApproval(plain) : readQuestion(plain);
 }
 
-function readApproval(lines: readonly string[]): AgentDialog | undefined {
-  const footer = lastIndex(lines, (l) => l.includes(APPROVAL_FOOTER));
+function readApproval(lines: readonly string[]): ScreenDialog | undefined {
+  const footer = lines.findLastIndex((l) => l.includes(APPROVAL_FOOTER));
   if (footer < 0) return undefined;
-  const top = lastIndex(lines.slice(0, footer), (l) => l.trimStart().startsWith("╭"));
+  // The dialog's box starts in the first column; the agent's output, which could imitate it, is indented.
+  const top = lines.slice(0, footer).findLastIndex((l) => l.startsWith("╭"));
   if (top < 0) return undefined;
   const [heading = "", ...body] = lines.slice(top + 1, footer).map(insideBox);
   // The rule under the heading.
@@ -46,7 +53,15 @@ function readApproval(lines: readonly string[]): AgentDialog | undefined {
   const question = cut(joinWrapped(paragraphs.pop() ?? []));
   if (!title || !question || !options?.length) return undefined;
   const answerable = options.filter((o) => !NEEDS_TEXT.test(o.label));
-  return withId({ kind: "approval", title, detail: detailLines(paragraphs), question, options: answerable });
+  // The selection moved to an option that takes text (it may already be taking it), so a digit would not answer.
+  if (options.some((o) => o.selected && !answerable.includes(o))) return undefined;
+  return {
+    kind: "approval",
+    title,
+    detail: detailLines(paragraphs),
+    question,
+    options: answerable.map(({ key, label }) => ({ key, label })),
+  };
 }
 
 /** The paragraphs between the rule and the question, without the inner box around a command. */
@@ -59,32 +74,32 @@ function detailLines(paragraphs: readonly string[][]): string[] {
     .map(cut);
 }
 
-function readQuestion(lines: readonly string[]): AgentDialog | undefined {
-  const heading = lastIndex(lines, (l) => l.trim() === QUESTION_HEADING);
+function readQuestion(lines: readonly string[]): ScreenDialog | undefined {
+  const heading = lines.findLastIndex((l) => l.trim() === QUESTION_HEADING);
   if (heading < 0 || !lines.slice(heading).some((l) => l.includes(QUESTION_FOOTER))) return undefined;
   const asked: string[] = [];
   for (const line of lines.slice(heading + 1)) {
     const text = line.trim();
-    // The first form field ("Database:") or its choices end the question.
-    if (text === "" || text.endsWith(":") || text.startsWith("❯") || text.includes(QUESTION_FOOTER)) break;
+    // An empty line before the first form field ("Database:") ends the question; the rest guards a layout without it.
+    if (text === "" || text.startsWith("❯") || text.includes(QUESTION_FOOTER)) break;
     asked.push(text);
   }
   const question = cut(joinWrapped(asked));
   if (!question) return undefined;
-  return withId({ kind: "question", title: QUESTION_HEADING, detail: [], question, options: [] });
+  return { kind: "question", question };
 }
 
 /** The options of the last paragraph; `undefined` when a line before the first option is not one (not an option list). */
-function readOptions(lines: readonly string[]): AgentDialogOption[] | undefined {
-  const options: { key: string; parts: string[] }[] = [];
+function readOptions(lines: readonly string[]): (AgentDialogOption & { selected: boolean })[] | undefined {
+  const options: { key: string; selected: boolean; parts: string[] }[] = [];
   for (const line of lines) {
     const match = OPTION.exec(line.trim());
     const last = options.at(-1);
-    if (match?.[1] !== undefined) options.push({ key: match[1], parts: [match[2] ?? ""] });
+    if (match?.[2] !== undefined) options.push({ key: match[2], selected: match[1] !== undefined, parts: [match[3] ?? ""] });
     else if (last) last.parts.push(line.trim());
     else return undefined;
   }
-  return options.map((o) => ({ key: o.key, label: cut(joinWrapped(o.parts)) }));
+  return options.map((o) => ({ key: o.key, selected: o.selected, label: cut(joinWrapped(o.parts)) }));
 }
 
 /** A line of the dialog box without its left and right border. */
@@ -109,14 +124,4 @@ function joinWrapped(lines: readonly string[]): string {
 
 function cut(text: string): string {
   return text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT - 1)}…` : text;
-}
-
-function lastIndex(lines: readonly string[], test: (line: string) => boolean): number {
-  for (let i = lines.length - 1; i >= 0; i--) if (test(lines[i] ?? "")) return i;
-  return -1;
-}
-
-function withId(dialog: Omit<AgentDialog, "id">): AgentDialog {
-  const id = createHash("sha256").update(JSON.stringify(dialog)).digest("hex").slice(0, 16);
-  return { id, ...dialog };
 }

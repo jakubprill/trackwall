@@ -113,28 +113,33 @@ export type ProposedBy = z.infer<typeof ProposedBy>;
 export const AgentDialogOption = z.object({ key: z.string().regex(/^[1-9]$/), label: z.string() });
 export type AgentDialogOption = z.infer<typeof AgentDialogOption>;
 
+/** A digest of the dialog and of the wait it belongs to: an answer names it, so it never goes into a later request. */
+const AgentDialogId = z.string();
+
 /**
- * An agent dialog (ADR-66): what Copilot CLI asks on the session's screen, as the daemon reads it from the screen image.
- * An `approval` (run a command, write a file) is answered from outside the terminal with one of `options` or stopped;
- * a `question` (the agent's form) is only shown, and the user answers it in the session terminal. The texts are cut
- * screen text the agent produced, so the UI shows them as plain text.
+ * An approval request (run a command, write a file), answered from outside the terminal with one of `options` or
+ * stopped. The texts are cut screen text the agent produced, so the UI shows them as plain text.
  */
-export const AgentDialog = z.object({
-  /** A digest of the dialog's text: an answer names it, so it is never typed into a dialog the user has not seen. */
-  id: z.string(),
-  kind: z.enum(["approval", "question"]),
+export const AgentApproval = z.object({
+  id: AgentDialogId,
+  kind: z.literal("approval"),
   /** The dialog's heading, e.g. the tool's description ("Create file"). */
   title: z.string(),
   /** What the dialog shows between the heading and the question: the command, the file and its lines. */
   detail: z.array(z.string()),
-  /** "Do you want to run this command?", or the agent's question. */
+  /** "Do you want to run this command?" */
   question: z.string(),
-  /**
-   * The choices that answer the dialog at once with their digit; without "No, and tell Copilot…", which needs text
-   * typed in the terminal. Empty for a `question`.
-   */
+  /** The choices that answer the dialog at once with their digit; without "No, and tell Copilot…", which needs text typed in the terminal. */
   options: z.array(AgentDialogOption),
 });
+export type AgentApproval = z.infer<typeof AgentApproval>;
+
+/** A question from the agent (its form): only shown, the user answers it in the session terminal. */
+export const AgentQuestion = z.object({ id: AgentDialogId, kind: z.literal("question"), question: z.string() });
+export type AgentQuestion = z.infer<typeof AgentQuestion>;
+
+/** An agent dialog (ADR-66): what Copilot CLI asks on the session's screen, as the daemon reads it from the screen image. */
+export const AgentDialog = z.discriminatedUnion("kind", [AgentApproval, AgentQuestion]);
 export type AgentDialog = z.infer<typeof AgentDialog>;
 
 /** An answer to an agent dialog: an option's digit, or `stop`, which is Esc: the agent stops its turn and waits for you. */

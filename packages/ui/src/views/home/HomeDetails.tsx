@@ -81,15 +81,13 @@ export function HomeDetails({
         <Panel title={sessionPlace(session)} onClose={close}>
           <SessionDetails session={session} onSelect={onSelect} />
           {session.dialog && (
-            <div className="w-full">
-              <AgentDialogCard
-                key={session.dialog.id}
-                conn={conn}
-                session={session.id}
-                dialog={session.dialog}
-                onOpen={() => onOpen(sessionKey(session.id))}
-              />
-            </div>
+            <AgentDialogCard
+              key={`${session.id}:${session.dialog.id}`}
+              conn={conn}
+              session={session.id}
+              dialog={session.dialog}
+              onOpen={() => onOpen(sessionKey(session.id))}
+            />
           )}
           <Button size="sm" onClick={() => onOpen(sessionKey(session.id))}>
             Open session

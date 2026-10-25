@@ -19,6 +19,7 @@ import {
   type TaskMiseConfig,
   type TaskProposal,
   type TaskSharedFiles,
+  type ToolPermissions,
 } from "@trackwall/protocol";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { findCopilot } from "./copilot-command.ts";
@@ -91,7 +92,7 @@ interface AgentsRepos {
   repoPath(id: string): Promise<string>;
   projectsDir(): Promise<string>;
   /** The `toolPermissions` patterns for a session in repo `repo` (`null` for the supervisor), ADR-66. */
-  toolPermissions(repo: string | null): { allow: readonly string[]; deny: readonly string[] };
+  toolPermissions(repo: string | null): ToolPermissions;
 }
 
 export interface AgentsDeps {
@@ -583,7 +584,7 @@ interface PreparedSession {
 }
 
 /** Copilot CLI's own approval rules (ADR-66); one argument each, with `=`, so a pattern never reads as another option. */
-function toolPermissionArgs(permissions: { allow: readonly string[]; deny: readonly string[] }): string[] {
+function toolPermissionArgs(permissions: ToolPermissions): string[] {
   return [...permissions.allow.map((p) => `--allow-tool=${p}`), ...permissions.deny.map((p) => `--deny-tool=${p}`)];
 }
 

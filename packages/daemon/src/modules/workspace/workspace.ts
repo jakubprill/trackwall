@@ -20,6 +20,7 @@ import {
   type SyncResult,
   type SyncRun,
   sameHost,
+  type ToolPermissions,
   type TreeEntry,
   type WorkingTreeChanges,
   type WorkspaceSettings,
@@ -31,7 +32,7 @@ import { type CodeSearchQuery, type CodeSearchVcs, searchCode } from "./code-sea
 import { describeDroppedFolder } from "./dropped-folder.ts";
 import { dirKey, findRepos, projectsDirUnavailable, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";
-import { type SessionToolPermissions, sessionToolPermissions } from "./tool-permissions.ts";
+import { sessionToolPermissions } from "./tool-permissions.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
 
 /**
@@ -272,7 +273,7 @@ export class Workspace {
    * The tool permissions of a Copilot CLI session in repo `repo` (`null` for the supervisor) from `workspace.yaml`
    * (ADR-66); `invalid_config` for a bad `toolPermissions`, so that no session starts without a denial the user wrote.
    */
-  toolPermissions(repo: string | null): SessionToolPermissions {
+  toolPermissions(repo: string | null): ToolPermissions {
     return sessionToolPermissions(this.deps.file.toolPermissionRules(), repo);
   }
 

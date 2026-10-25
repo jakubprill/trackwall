@@ -1,4 +1,4 @@
-import type { ToolPermissionRules } from "@trackwall/protocol";
+import type { ToolPermissionRules, ToolPermissions } from "@trackwall/protocol";
 import { globMatcher } from "../../infra/glob.ts";
 
 /**
@@ -7,12 +7,7 @@ import { globMatcher } from "../../infra/glob.ts";
  * every session; one with `repos` only to a session in a repo whose identifier one of them matches, so never to the
  * supervisor, which runs above all repos (`repo` is `null`).
  */
-export interface SessionToolPermissions {
-  allow: string[];
-  deny: string[];
-}
-
-export function sessionToolPermissions(rules: ToolPermissionRules, repo: string | null): SessionToolPermissions {
+export function sessionToolPermissions(rules: ToolPermissionRules, repo: string | null): ToolPermissions {
   const applies = rules.filter(
     (rule) => rule.repos === undefined || (repo !== null && rule.repos.some((p) => globMatcher(p, { ignoreCase: true })(repo))),
   );

@@ -1,8 +1,9 @@
+import { createHash } from "node:crypto";
 import type { AgentDialog, DialogAnswer, RunState, Session, TaskState, TaskStateChange } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 import { readAgentDialog } from "./copilot-dialog.ts";
 import { inPromptBoxAfter } from "./copilot-hooks.ts";
-import { sessionKey } from "./copilot-keys.ts";
+import { ESCAPE, sessionKey } from "./copilot-keys.ts";
 import { CopilotSessionState } from "./copilot-session-state.ts";
 import { HookTail } from "./hook-tail.ts";
 import { SessionAttention } from "./session-attention.ts";
@@ -28,8 +29,11 @@ const SUBMIT_DELAY_MS = 100;
  */
 const RETYPE_AFTER_MS = 5000;
 
-/** The key that stops a turn in an approval dialog (Copilot CLI's "Esc to stop"). */
-const ESCAPE = "\u001b";
+/** The states in which the session waits for an answer to a dialog, and the kind of dialog that answers it (ADR-66). */
+const DIALOG_IN_STATE: ReadonlyMap<TaskState, AgentDialog["kind"]> = new Map([
+  ["Approval", "approval"],
+  ["Input", "question"],
+]);
 
 /** The PTY of the session process: the terminal of the group leader from `procs` (`GroupTerminal`). */
 export interface SessionPty {
@@ -51,7 +55,7 @@ export interface SessionWindow {
  * starts with ESC and also comes from a window in the background. Esc alone is a key; arrows do not count.
  */
 function typedByUser(data: string): boolean {
-  return data === "\u001b" || !data.startsWith("\u001b");
+  return data === ESCAPE || !data.startsWith(ESCAPE);
 }
 
 /**
@@ -60,7 +64,7 @@ function typedByUser(data: string): boolean {
  */
 function writesText(data: string, state: TaskState | undefined): boolean {
   if (state === "Approval" || state === "Plan") return false;
-  return !data.startsWith("\u001b") || data.startsWith("\u001b[200~");
+  return !data.startsWith(ESCAPE) || data.startsWith(`${ESCAPE}[200~`);
 }
 
 export interface LiveSessionOptions {
@@ -104,6 +108,10 @@ export class LiveSession {
   /** The user typed or pasted since their last message was submitted, so the input box may hold their unsent text. */
   #userDraft = false;
   #submitTimer: NodeJS.Timeout | undefined;
+  /** Counts the waits for a dialog (each entry into `Approval` or `Input`), so the same request asked again gets a new id. */
+  #waits = 0;
+  /** The dialog last read, for the screen revision and wait it was read at: the screen is read once per change. */
+  #dialogRead: { revision: number; waits: number; dialog: AgentDialog | null } | undefined;
 
   constructor(o: LiveSessionOptions) {
     this.id = o.id;
@@ -159,13 +167,15 @@ export class LiveSession {
 
   /**
    * Answers the approval on the screen (ADR-66) with an option's digit or Esc, as if the user pressed the key in a
-   * session terminal, but only while the screen still shows the dialog `id` names: an answer never goes into a dialog
-   * the user has not seen, for example after they answered in the terminal and the agent asked again.
+   * session terminal, but only while the emulator's screen still shows the dialog `id` names, in the same wait: an
+   * answer does not go into a request asked after the one the user saw, even an identical one. Output the emulator has
+   * not processed yet is not seen; a key typed into a dialog that just appeared reaches it as a key from the terminal would.
    */
   answerDialog(id: string, answer: DialogAnswer): void {
     const dialog = this.#dialog();
-    if (dialog?.kind !== "approval" || dialog.id !== id)
+    if (dialog?.id !== id)
       throw new DomainError("dialog_changed", "the dialog is no longer on the session's screen; it was answered or it changed");
+    if (dialog.kind === "question") throw new DomainError("bad_request", "a question from the agent is answered in the session terminal");
     if (answer !== "stop" && !dialog.options.some((o) => o.key === answer))
       throw new DomainError("bad_request", `the dialog has no option ${answer} that can be answered outside the terminal`);
     this.input(answer === "stop" ? ESCAPE : answer);
@@ -235,11 +245,23 @@ export class LiveSession {
    * decides, so a dialog Copilot CLI has not cleared from the screen yet after a key is gone at once.
    */
   #dialog(): AgentDialog | null {
-    const state = this.#last?.state;
-    const kind = state === "Approval" ? "approval" : state === "Input" ? "question" : undefined;
+    const kind = this.#last ? DIALOG_IN_STATE.get(this.#last.state) : undefined;
     if (this.#finished || kind === undefined) return null;
-    const dialog = readAgentDialog(this.#screen.lines());
-    return dialog?.kind === kind ? dialog : null;
+    const revision = this.#screen.revision;
+    const read = this.#dialogRead;
+    if (read?.revision === revision && read.waits === this.#waits) return read.dialog;
+    const found = readAgentDialog(this.#screen.lines(), kind);
+    const dialog = found
+      ? {
+          ...found,
+          id: createHash("sha256")
+            .update(JSON.stringify([this.#waits, found]))
+            .digest("hex")
+            .slice(0, 16),
+        }
+      : null;
+    this.#dialogRead = { revision, waits: this.#waits, dialog };
+    return dialog;
   }
 
   dispose(): void {
@@ -263,6 +285,7 @@ export class LiveSession {
     for (const change of changes) {
       if (!change) continue;
       this.#attention.changed(this.#last?.state, change.state);
+      if (change.state !== this.#last?.state && DIALOG_IN_STATE.has(change.state)) this.#waits++;
       this.#last = change;
       // Copilot CLI took the typed prompt: the turn it started is the session's, and the next prompt is a new one.
       if (this.#prompt?.typedAt != null && change.state !== "Input") this.#prompt = undefined;

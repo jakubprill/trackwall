@@ -135,6 +135,12 @@ export const ToolPermissionRule = z
 export const ToolPermissionRules = z.array(ToolPermissionRule);
 export type ToolPermissionRules = z.infer<typeof ToolPermissionRules>;
 
+/** The patterns one session starts with, from the rules that apply to it (`--allow-tool` and `--deny-tool`). */
+export interface ToolPermissions {
+  allow: readonly string[];
+  deny: readonly string[];
+}
+
 export const WorkspaceSettings = z.object({
   projectsDir: ProjectsDir,
   /** The full path of `workspace.yaml`, so that the user knows which file to edit by hand. */

@@ -13,8 +13,7 @@ function screen(name: string): string[] {
 
 describe("an agent dialog read from the session's screen (ADR-66)", () => {
   test("a command approval gives its heading, the command, the question and the options without the one that needs text", () => {
-    expect(readAgentDialog(screen("shell-120"))).toEqual({
-      id: expect.any(String),
+    expect(readAgentDialog(screen("shell-120"), "approval")).toEqual({
       kind: "approval",
       title: "Write a file",
       detail: ["touch /src/app-outside/x.txt"],
@@ -27,7 +26,7 @@ describe("an agent dialog read from the session's screen (ADR-66)", () => {
   });
 
   test("a file approval gives the file and its lines as the detail", () => {
-    expect(readAgentDialog(screen("create-120"))).toMatchObject({
+    expect(readAgentDialog(screen("create-120"), "approval")).toMatchObject({
       title: "Create file",
       detail: ["notes-with-a-rather-long-name-for-wrapping.txt +2 -0", "/src/app-outside", "", "1 +   hi", "2 +   there"],
       question: "Do you want to create /src/app-outside/notes-with-a-rather-long-name-for-wrapping.txt?",
@@ -38,25 +37,39 @@ describe("an agent dialog read from the session's screen (ADR-66)", () => {
     });
   });
 
-  test("lines Copilot CLI wrapped in a narrow terminal are joined into the same dialog with the same id", () => {
-    expect(readAgentDialog(screen("shell-72"))).toEqual(readAgentDialog(screen("shell-120")));
-    expect(readAgentDialog(screen("create-72"))).toEqual(readAgentDialog(screen("create-120")));
+  test("lines Copilot CLI wrapped in a narrow terminal are joined into the same dialog", () => {
+    expect(readAgentDialog(screen("shell-72"), "approval")).toEqual(readAgentDialog(screen("shell-120"), "approval"));
+    expect(readAgentDialog(screen("create-72"), "approval")).toEqual(readAgentDialog(screen("create-120"), "approval"));
   });
 
-  test("a question from the agent gives only its text, with no options to answer it from outside", () => {
-    expect(readAgentDialog(screen("question-120"))).toEqual({
-      id: expect.any(String),
+  test("a question from the agent gives only its text", () => {
+    expect(readAgentDialog(screen("question-120"), "question")).toEqual({
       kind: "question",
-      title: "Copilot needs information.",
-      detail: [],
       question: "Which database should the service use?",
-      options: [],
     });
   });
 
+  test("only the kind asked for is read, so an approval left above a question does not hide it", () => {
+    expect(readAgentDialog(screen("question-120"), "approval")).toBeUndefined();
+    expect(readAgentDialog([...screen("shell-120"), ...screen("question-120")], "question")).toMatchObject({ kind: "question" });
+  });
+
+  test("with the selection moved to the option that takes text, the approval cannot be answered with a digit", () => {
+    const moved = screen("shell-120").map((l) => l.replace("❯ 1.", "  1.").replace("  3. No", "❯ 3. No"));
+
+    expect(moved.some((l) => l.includes("❯ 3. No"))).toBe(true);
+    expect(readAgentDialog(moved, "approval")).toBeUndefined();
+  });
+
+  test("a box the agent's output draws, indented as all its output is, is not a dialog", () => {
+    const indented = screen("shell-120").map((l) => (l.startsWith("╭") ? ` ${l}` : l));
+
+    expect(readAgentDialog(indented, "approval")).toBeUndefined();
+  });
+
   test("a screen without a dialog, or with a numbered list that is not one, gives none", () => {
-    expect(readAgentDialog(["❯ write the file", " ● done", "", "❯"])).toBeUndefined();
-    expect(readAgentDialog(["╭────╮", "│ Plan │", "│ 1. Read the code │", "│ 2. Fix it │", "╰────╯"])).toBeUndefined();
+    expect(readAgentDialog(["❯ write the file", " ● done", "", "❯"], "approval")).toBeUndefined();
+    expect(readAgentDialog(["╭────╮", "│ Plan │", "│ 1. Read the code │", "│ 2. Fix it │", "╰────╯"], "approval")).toBeUndefined();
   });
 });
 
@@ -83,9 +96,12 @@ async function sessionShowing(name: string, notificationType: string) {
   const written: string[] = [];
   session.connect({ write: (data) => written.push(data), resize: () => {} });
   session.output(new TextEncoder().encode(screen(name).join("\r\n")));
-  const notification = { event: "notification", receivedAt: 0, payload: { notification_type: notificationType }, omitted: [] };
-  appendFileSync(hooksFile, `${JSON.stringify(notification)}\n`);
-  session.tick();
+  const notify = (type: string) => {
+    const notification = { event: "notification", receivedAt: 0, payload: { notification_type: type }, omitted: [] };
+    appendFileSync(hooksFile, `${JSON.stringify(notification)}\n`);
+    session.tick();
+  };
+  notify(notificationType);
   // The screen image is ready once the emulator has processed the output.
   await new Promise<void>((resolve) =>
     session.attach(
@@ -94,7 +110,7 @@ async function sessionShowing(name: string, notificationType: string) {
       () => {},
     ),
   );
-  return { session, written };
+  return { session, written, notify };
 }
 
 function dialogError(answer: () => void): string | undefined {
@@ -138,6 +154,19 @@ describe("answering an agent dialog from outside the terminal (ADR-66)", () => {
     expect(written).toEqual(["1"]);
   });
 
+  test("the same request asked again is a new dialog, which an answer to the first one does not reach", async () => {
+    const { session, written, notify } = await sessionShowing("shell-120", "permission_prompt");
+    const first = session.view()?.dialog?.id ?? "";
+    session.answerDialog(first, "1");
+    notify("permission_prompt");
+
+    const again = session.view()?.dialog;
+    expect(again).toMatchObject({ kind: "approval", question: "Do you want to run this command?" });
+    expect(again?.id).not.toBe(first);
+    expect(dialogError(() => session.answerDialog(first, "1"))).toBe("dialog_changed");
+    expect(written).toEqual(["1"]);
+  });
+
   test("an option the dialog does not offer outside the terminal is refused", async () => {
     const { session, written } = await sessionShowing("shell-120", "permission_prompt");
 
@@ -150,7 +179,7 @@ describe("answering an agent dialog from outside the terminal (ADR-66)", () => {
     const dialog = session.view()?.dialog;
     expect(dialog).toMatchObject({ kind: "question", question: "Which database should the service use?" });
 
-    expect(dialogError(() => session.answerDialog(dialog?.id ?? "", "1"))).toBe("dialog_changed");
+    expect(dialogError(() => session.answerDialog(dialog?.id ?? "", "1"))).toBe("bad_request");
     expect(written).toEqual([]);
   });
 

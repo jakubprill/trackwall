@@ -357,7 +357,7 @@ _Avoid_: split, dashboard (that is Home)
 Alt (⌥ on macOS) + digit selects the entry at that position in the Sessions list; Alt+0 opens the supervisor panel (ADR-58); Alt+J opens the next session or task proposals waiting for you, also from other views (ADR-55), and the supervisor panel once nothing on the list waits but the supervisor does (ADR-58). A shortcut never reaches the session terminal. Win+Alt+J (⌃⌥J on macOS) is the global shortcut that does what Alt+J does from any app (ADR-50).
 
 **Tray panel** (`TrayPanel`, window `tray-panel`):
-The small window next to the tray icon, opened by a left click on it, with the task proposals and the sessions waiting for you (ADR-50). A click opens the entry in the main window.
+The small window next to the tray icon, opened by a left click on it, with the task proposals and the sessions waiting for you (ADR-50), those asking for approval first with their agent dialogs, answered in the panel (ADR-66). A click on another entry opens it in the main window.
 _Avoid_: popup, tray menu (that is the menu on a right click)
 
 **Screen image** (`TerminalScreen`):
@@ -375,7 +375,7 @@ Enter, a digit 1–9, Esc or Ctrl+C sent to the session terminal as a whole chun
 _Avoid_: input (that is the whole content from the keyboard), shortcut
 
 **Agent dialog** (`AgentDialog`, `Session.dialog`, `readAgentDialog`; API `answer-dialog`):
-What Copilot CLI asks on a session's screen, read by the daemon from the screen image (ADR-66): an **approval** (run a command, change a file) with Copilot CLI's own options, which the tray panel and Home answer by typing the option's digit, or Esc for "Stop the agent", into the session; or a **question** from the agent (its form), only shown. An answer names the dialog by its id, and the daemon types nothing once the screen shows another one. Never sent to agents over MCP.
+What Copilot CLI asks on a session's screen, read by the daemon from the screen image (ADR-66): an **approval** (run a command, change a file) with Copilot CLI's own options, which the tray panel and Home answer by typing the option's digit, or Esc for "Stop the agent", into the session; or a **question** from the agent (its form), only shown. An answer names the dialog by its id (its text and the wait it belongs to), and the daemon types nothing once the screen shows another one, or the same one asked again. Never sent to agents over MCP.
 _Avoid_: popup, prompt (that is the text sent to an agent), permission request (Copilot CLI's internal name)
 
 **Tool permission rule** (`toolPermissions` in `workspace.yaml`, `ToolPermissionRules`, `sessionToolPermissions`):

@@ -91,7 +91,13 @@ function WaitingSession({ conn, session, onOpen }: { conn: Connection | undefine
       </QueueItem>
       {conn && session.dialog && (
         <li className="px-2 pb-2">
-          <AgentDialogCard key={session.dialog.id} conn={conn} session={session.id} dialog={session.dialog} onOpen={onOpen} />
+          <AgentDialogCard
+            key={`${session.id}:${session.dialog.id}`}
+            conn={conn}
+            session={session.id}
+            dialog={session.dialog}
+            onOpen={onOpen}
+          />
         </li>
       )}
     </>

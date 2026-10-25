@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Session } from "@trackwall/protocol";
+import type { Session, ToolPermissions } from "@trackwall/protocol";
 import { DomainError } from "../../src/infra/errors.ts";
 import { Agents } from "../../src/modules/agents/agents.ts";
 import { Logs } from "../../src/modules/logs/logs.ts";
@@ -25,7 +25,7 @@ export function makeAgents(
   repos: Record<string, string>,
   home = mkdtempSync(join(tmpdir(), "trackwall-agents-")),
   projectsDir: string | null = null,
-  toolPermissions: { allow: string[]; deny: string[] } = { allow: [], deny: [] },
+  toolPermissions: ToolPermissions = { allow: [], deny: [] },
 ) {
   const procs = new ProcessGroups({
     logs: new Logs({ dir: join(home, "logs"), maxFileBytes: 1024 * 1024, log: () => {} }),
