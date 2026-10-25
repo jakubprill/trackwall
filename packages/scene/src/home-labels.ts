@@ -1,10 +1,10 @@
 import type { HomeRepo, HomeSession } from "./home-model.ts";
 
 /**
- * Etykiety na scenie są absolutnym minimum (ADR-33): reszta jest w karcie podglądu po najechaniu i w panelach UI.
- * Czyste repo i pracująca sesja nie mają etykiety, bo mówią kolorem i ruchem; etykieta pojawia się tam, gdzie trzeba
- * coś zrobić albo coś sprawdzić. Scena decyduje tylko, czy etykieta jest, a jej treść pisze UI (`createLabel`),
- * tymi samymi słowami co reszta aplikacji.
+ * Labels on the scene are the bare minimum (ADR-33): the rest is in the hover preview card and in the UI panels.
+ * A clean repo and a working session have no label, because colour and motion say enough; a label appears where something
+ * needs doing or checking. The scene only decides whether a label exists; the UI writes its text (`createLabel`),
+ * in the same words as the rest of the application.
  */
 
 export function repoHasLabel(repo: HomeRepo): boolean {

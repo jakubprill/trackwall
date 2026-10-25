@@ -1,14 +1,16 @@
 import type { EdgeKind } from "@trackwall/protocol";
 
 /**
- * Model widoku pulpitu (ADR-33): migawka pulpitu, czyli to, co scena pokazuje, policzone przez UI z odpowiedzi daemona.
- * Scena nie zna API ani reguł stanu: stan repo i sesji dostaje gotowy (te same reguły co lista repo i widok Sesji),
- * a warstwę repo z układu grafu. Dzięki temu źródłem migawki może być dziś odpytywanie, a później zdarzenia z `/ws`.
+ * View model of the dashboard (ADR-33): the dashboard snapshot, that is what the scene shows, computed by the UI from the
+ * daemon's responses.
+ * The scene knows neither the API nor the state rules: it gets repo and session states ready-made (the same rules as the
+ * repo list and the Sessions view), and a repo's layer from the graph layout. So the snapshot can come from polling today
+ * and from `/ws` events later.
  */
 
 /**
- * Stan repo na pulpicie, w kolejności od najmniej do najbardziej pilnego: `unavailable` to stan repo `unavailable`,
- * `changed` to lokalne zmiany, `behind` to commity do pobrania; repo tylko z niewypchniętymi commitami jest `clean`.
+ * A repo's state on the dashboard, from least to most urgent: `unavailable` is the repo state `unavailable`,
+ * `changed` is local changes, `behind` is commits to pull; a repo with only unpushed commits is `clean`.
  */
 export const HOME_REPO_STATES = ["clean", "behind", "changed", "unavailable"] as const;
 export type HomeRepoState = (typeof HOME_REPO_STATES)[number];
@@ -16,14 +18,14 @@ export type HomeRepoState = (typeof HOME_REPO_STATES)[number];
 export interface HomeRepo {
   id: string;
   /**
-   * Warstwa z grafu (§5.5), ta sama co kolumna w „Przeglądzie”: 0 to repo, którego nikt nie używa, ostatnia to
-   * biblioteki. `null` dla repo bez połączeń w grafie; takie repo dostaje własny łuk za ostatnią warstwą.
+   * Layer from the graph (§5.5), the same as the column in "Overview": 0 is a repo nobody uses, the last one is
+   * libraries. `null` for a repo without connections in the graph; such a repo gets its own arc after the last layer.
    */
   layer: number | null;
   state: HomeRepoState;
-  /** Lokalne zmiany przy `changed`, commity do pobrania przy `behind`; inaczej 0. */
+  /** Local changes for `changed`, commits to pull for `behind`; otherwise 0. */
   count: number;
-  /** Nazwa działającego taska mise albo `null`. */
+  /** Name of the running mise task or `null`. */
   runningTask: string | null;
 }
 
@@ -37,12 +39,12 @@ export type HomeSessionState = (typeof HOME_SESSION_STATES)[number];
 
 export interface HomeSession {
   id: string;
-  /** Repo, w którym (albo w którego worktree) działa sesja. */
+  /** The repo the session runs in (or in whose worktree it runs). */
   repo: string;
   state: HomeSessionState;
 }
 
-/** Połączenie z grafu: od repo, które używa, do repo używanego. */
+/** A connection from the graph: from the repo that uses to the repo that is used. */
 export interface HomeLink {
   from: string;
   to: string;
@@ -50,7 +52,7 @@ export interface HomeLink {
 }
 
 export interface HomeModel {
-  /** Liczba warstw grafu (kolumn „Przeglądu”); `HomeRepo.layer` jest od 0 do `layerCount - 1`. */
+  /** Number of graph layers (columns of "Overview"); `HomeRepo.layer` is from 0 to `layerCount - 1`. */
   layerCount: number;
   repos: readonly HomeRepo[];
   sessions: readonly HomeSession[];
@@ -58,7 +60,7 @@ export interface HomeModel {
   daemonRunning: boolean;
 }
 
-/** Klucz obiektu sceny, ten sam w zdarzeniach wyboru, etykietach i encjach. */
+/** Key of a scene object, the same in selection events, labels and entities. */
 export type HomeKey = `repo:${string}` | `session:${string}` | "daemon";
 
 const REPO_PREFIX = "repo:";
@@ -68,7 +70,7 @@ export const repoKey = (id: string): HomeKey => `${REPO_PREFIX}${id}`;
 export const sessionKey = (id: string): HomeKey => `${SESSION_PREFIX}${id}`;
 export const DAEMON_KEY: HomeKey = "daemon";
 
-/** Co wskazuje klucz; `null` dla klucza, który nie jest obiektem pulpitu (np. przewód albo łuk warstwy). */
+/** What a key points to; `null` for a key that is not a dashboard object (for example a wire or a layer arc). */
 export type HomeTarget = { kind: "repo" | "session"; id: string } | { kind: "daemon" };
 
 export function parseHomeKey(key: string): HomeTarget | null {

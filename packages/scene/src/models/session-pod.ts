@@ -4,16 +4,16 @@ import { type ScenePalette, sessionStateColor } from "../palette.ts";
 import { cylinder, flatRing, type HomeVisual, light, outline, solid, unpickable } from "./kit.ts";
 
 /**
- * Sesja Copilot jako dron (ADR-33): sześciokątny korpus z pierścieniem, który kręci się, gdy sesja pracuje.
- * Sesja, która czeka na Ciebie albo skończyła się błędem, ma słup światła z unoszącym się pierścieniem, widoczny
- * z każdego miejsca sceny; to jedyny tak głośny element pulpitu.
+ * A Copilot session as a drone (ADR-33): a hexagonal body with a ring that spins while the session is working.
+ * A session that is waiting for you or ended with an error has a light pillar with a rising ring, visible from anywhere
+ * in the scene; it is the only element on the dashboard this loud.
  */
 
-/** Wysokość słupa światła nad dronem. */
+/** Height of the light pillar above the drone. */
 const BEACON_HEIGHT = 2.6;
 
 export function sessionPod(session: HomeSession, palette: ScenePalette): HomeVisual {
-  // Scena co klatkę przepisuje pozycję encji do obiektu, więc kołysze się wewnętrzna grupa, nie obiekt encji.
+  // The scene copies the entity position to the object every frame, so the inner group sways, not the entity's object.
   const root = new Group();
   const group = new Group();
   root.add(group);
@@ -35,7 +35,7 @@ export function sessionPod(session: HomeSession, palette: ScenePalette): HomeVis
   };
 }
 
-/** Słup światła i pierścień, który wznosi się po nim i gaśnie; zwraca animację. */
+/** A light pillar and a ring that rises along it and fades; returns the animation. */
 function addBeacon(group: Group, color: string): (elapsed: number) => void {
   const shaft = unpickable(cylinder([0.045, 0.1], BEACON_HEIGHT, 12, light(color, 0.25), [0, BEACON_HEIGHT / 2 + 0.05, 0]));
   const rising = flatRing(0.14, 0.012, 24, light(color, 0.9));

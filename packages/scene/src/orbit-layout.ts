@@ -1,19 +1,19 @@
 import type { HomeModel, HomeRepo, HomeSession } from "./home-model.ts";
 
 /**
- * Układ „Orbit” (ADR-33): repo na zewnętrznym pierścieniu w łukach warstw, sesje na wewnętrznym torze naprzeciw
- * swojego repo, daemon w środku. Czysta funkcja kątów i promieni, bez three.js, więc testowana wprost.
- * Pierwsza warstwa leży z tyłu sceny (kąt −π/2), kolejne idą zgodnie z ruchem wskazówek zegara, a repo bez połączeń
- * w grafie (`layer: null`) mają ostatni łuk.
+ * The "Orbit" layout (ADR-33): repos on the outer ring in layer arcs, sessions on the inner track opposite their repo,
+ * the daemon in the centre. A pure function of angles and radii, without three.js, so it is tested directly.
+ * The first layer lies at the back of the scene (angle −π/2), the next ones go clockwise, and repos without connections
+ * in the graph (`layer: null`) get the last arc.
  */
 
 export const REPO_RADIUS = 6.6;
 export const SESSION_RADIUS = 3.3;
-/** Przerwa między łukami warstw, w radianach. */
+/** Gap between layer arcs, in radians. */
 const LAYER_GAP = 0.34;
-/** Największy odstęp kątowy między sesjami jednego repo; przy wielu sesjach mniejszy, żeby zostały przy swoim repo. */
+/** The largest angular spacing between sessions of one repo; smaller with many sessions, so they stay by their repo. */
 const SESSION_SPREAD = 0.14;
-/** Część kąta repo, którą mogą zająć jego sesje; reszta oddziela je od sesji sąsiada. */
+/** The share of a repo's angle its sessions may take; the rest separates them from the neighbour's sessions. */
 const SESSION_SHARE = 0.8;
 
 interface OrbitPoint {
@@ -30,7 +30,7 @@ interface OrbitSector {
 export interface OrbitLayout {
   sectors: OrbitSector[];
   repos: Map<string, OrbitPoint>;
-  /** Sesja repo spoza modelu (np. repo zniknęło z folderu) nie ma miejsca na torze i nie jest rysowana. */
+  /** A session of a repo outside the model (for example the repo vanished from the folder) has no place on the track and is not drawn. */
   sessions: Map<string, OrbitPoint>;
 }
 
@@ -38,9 +38,9 @@ const point = (angle: number, radius: number): OrbitPoint => ({ angle, x: Math.c
 
 export function orbitLayout(model: Pick<HomeModel, "layerCount" | "repos" | "sessions">): OrbitLayout {
   const misplaced = model.repos.find((r) => r.layer !== null && (!Number.isInteger(r.layer) || r.layer < 0 || r.layer >= model.layerCount));
-  if (misplaced) throw new Error(`Repo ${misplaced.id} ma warstwę ${misplaced.layer} spoza ${model.layerCount} warstw pulpitu`);
+  if (misplaced) throw new Error(`Repo ${misplaced.id} has layer ${misplaced.layer}, outside the ${model.layerCount} dashboard layers`);
 
-  // Pusta warstwa nie dostaje łuku ani przerwy, żeby nie zostawiać dziury w pierścieniu.
+  // An empty layer gets neither an arc nor a gap, so as not to leave a hole in the ring.
   const groups = [...Array.from({ length: model.layerCount }, (_, layer) => layer), null]
     .map((layer) => model.repos.filter((r) => r.layer === layer))
     .filter((repos) => repos.length > 0);

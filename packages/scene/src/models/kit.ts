@@ -15,21 +15,22 @@ import {
 } from "three";
 
 /**
- * Klocki modeli pulpitu (ADR-33). Modele są złożone z prostych brył, żeby nie wozić plików glTF, dopóki wygląd się
- * ustala; gdy się ustali, ten sam kształt może przyjść jako model przez `Model` z Pawn bez zmiany reszty sceny.
- * Każda funkcja zwraca nowy obiekt z własnym materiałem, bo stan (kolor, jasność) zmienia się per obiekt.
+ * Building blocks of dashboard models (ADR-33). Models are made of simple solids so that no glTF files are shipped while
+ * the look is still settling; once it settles, the same shape can come as a model through Pawn's `Model` without changing
+ * the rest of the scene. Every function returns a new object with its own material, because state (colour, brightness)
+ * changes per object.
  */
 
 /**
- * Obiekt, który scena rysuje dla encji, z opcjonalną animacją w czasie sceny (sekundy). Scena ustawia pozę z chwili 0
- * zaraz po zbudowaniu modelu, a dalej animuje tylko przy włączonym ruchu, więc model nie dostaje flagi ruchu.
+ * The object the scene draws for an entity, with an optional animation in scene time (seconds). The scene sets the pose
+ * from time 0 right after building the model and animates further only with motion on, so the model gets no motion flag.
  */
 export interface HomeVisual {
   object: Object3D;
   animate?: (elapsed: number) => void;
 }
 
-/** Matowy materiał korpusu, opcjonalnie lekko świecący. */
+/** Matte body material, optionally glowing slightly. */
 export function solid(color: string, glow = 0, opacity = 1): MeshStandardMaterial {
   return new MeshStandardMaterial({
     color,
@@ -42,7 +43,7 @@ export function solid(color: string, glow = 0, opacity = 1): MeshStandardMateria
   });
 }
 
-/** Świecący materiał bez cieni: diody, ekrany, pierścienie. Półprzezroczysty dodaje światło do tła. */
+/** Glowing material without shadows: LEDs, screens, rings. A translucent one adds light to the background. */
 export function light(color: string, opacity = 1): MeshBasicMaterial {
   const translucent = opacity < 1;
   return new MeshBasicMaterial({
@@ -76,7 +77,7 @@ export function cylinder<M extends Material>(
   return mesh;
 }
 
-/** Płaski pierścień leżący na podłodze (torus obrócony do poziomu). */
+/** A flat ring lying on the floor (a torus turned horizontal). */
 export function flatRing<M extends Material>(radius: number, tube: number, segments: number, material: M, y = 0): Mesh<TorusGeometry, M> {
   const mesh = new Mesh(new TorusGeometry(radius, tube, 6, segments), material);
   mesh.rotation.x = Math.PI / 2;
@@ -85,8 +86,8 @@ export function flatRing<M extends Material>(radius: number, tube: number, segme
 }
 
 /**
- * Wyłącza wskazywanie obiektu i jego dzieci. Wskaźnik Pawn bierze pierwsze trafienie w scenie, także w obiekt bez
- * `Hoverable`, więc ozdoba (przewód, łuk, słup światła) zasłaniałaby repo i sesje za sobą.
+ * Turns off pointing at an object and its children. The Pawn pointer takes the first hit in the scene, also on an object
+ * without `Hoverable`, so a decoration (wire, arc, light pillar) would hide the repos and sessions behind it.
  */
 export function unpickable<T extends Object3D>(object: T): T {
   object.traverse((o) => {
@@ -96,8 +97,8 @@ export function unpickable<T extends Object3D>(object: T): T {
 }
 
 /**
- * Krawędzie bryły jako cienkie linie: daje rysunek HUD bez cieniowania. Linii nie da się wskazać, bo three.js trafia
- * w linię z odległości do 1 jednostki i obrys modelu przejmowałby kliknięcia sąsiada.
+ * Edges of a solid as thin lines: a HUD drawing without shading. Lines cannot be pointed at, because three.js hits a line
+ * from up to 1 unit away and a model's outline would take over its neighbour's clicks.
  */
 export function outline(mesh: Mesh, color: string, opacity: number): LineSegments {
   const lines = unpickable(
