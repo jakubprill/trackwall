@@ -4,6 +4,7 @@ import {
   type Session,
   type SessionList,
   TASK_PROMPT_MAX,
+  type Task,
   type TaskProposal,
   workspaceApi,
 } from "@trackwall/protocol";
@@ -71,7 +72,7 @@ export function SessionsView({
   // Zakończone zadanie znika od razu, a nie po odświeżeniu listy, żeby panel nie pokazał go znowu bez worktree.
   const [removed, setRemoved] = useState<{ task: string; afterLoad: number }>();
   const hidden = removed && actionIsNewer(removed.afterLoad, sessions.loadNumber) ? removed.task : undefined;
-  const rows = sessions.data ? sessionRows({ ...sessions.data, tasks: sessions.data.tasks.filter((t) => t.id !== hidden) }) : [];
+  const { tasks, rows } = visibleTasksAndRows(sessions.data, hidden);
   const entries = rows.map((r) => r.entry);
   const current = findEntry(entries, selected);
   const show = (id: string) => onSelect({ kind: "session", id });
@@ -159,6 +160,7 @@ export function SessionsView({
             onLayout={onLayout}
             onSelect={onSelect}
             sessions={list}
+            tasks={tasks}
             onChanged={sessions.reload}
             onTaskRemoved={(task) => {
               setRemoved({ task, afterLoad: sessions.sentLoads() });
@@ -170,6 +172,16 @@ export function SessionsView({
       </section>
     </div>
   );
+}
+
+/**
+ * Tasks and list rows without the task the user has just ended (`hidden`), which the list may still return; the same
+ * tasks feed the tree and the task panel.
+ */
+function visibleTasksAndRows(data: SessionList | undefined, hidden: string | undefined): { tasks: Task[]; rows: SessionRow[] } {
+  if (!data) return { tasks: [], rows: [] };
+  const tasks = data.tasks.filter((t) => t.id !== hidden);
+  return { tasks, rows: sessionRows({ ...data, tasks }) };
 }
 
 /** Indent per tree level; deeper rows do not move further, so the repo name still fits in the panel. */
@@ -306,6 +318,7 @@ function SelectedEntry({
   onLayout,
   onSelect,
   sessions,
+  tasks,
   onChanged,
   onTaskRemoved,
 }: {
@@ -316,6 +329,8 @@ function SelectedEntry({
   onLayout: (layout: SessionLayout) => void;
   onSelect: (selection: SessionSelection) => void;
   sessions: readonly Session[];
+  /** The tasks on the list, for the task panel's shared-files warning. */
+  tasks: readonly Task[];
   onChanged: () => void;
   onTaskRemoved: (task: string) => void;
 }) {
@@ -327,6 +342,7 @@ function SelectedEntry({
           conn={conn}
           entry={current}
           sessions={sessions}
+          tasks={tasks}
           onSelect={onSelect}
           onChanged={onChanged}
           onTaskRemoved={onTaskRemoved}
@@ -365,6 +381,7 @@ function EntryPanel({
   conn,
   entry,
   sessions,
+  tasks,
   onSelect,
   onChanged,
   onTaskRemoved,
@@ -372,6 +389,8 @@ function EntryPanel({
   conn: Connection;
   entry: SessionEntry;
   sessions: readonly Session[];
+  /** The tasks on the list, for the task panel's shared-files warning. */
+  tasks: readonly Task[];
   onSelect: (selection: SessionSelection) => void;
   onChanged: () => void;
   onTaskRemoved: (task: string) => void;
@@ -401,8 +420,10 @@ function EntryPanel({
         task={entry.task}
         session={entry.session}
         sessions={sessions}
+        tasks={tasks}
         onChanged={onChanged}
         onRemoved={() => onTaskRemoved(entry.task.id)}
+        onOpenTask={(id) => onSelect({ kind: "task", id })}
       />
     );
   return (

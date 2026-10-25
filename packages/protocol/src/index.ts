@@ -9,6 +9,7 @@ export * from "./events.ts";
 export * from "./evidence.ts";
 export * from "./graph.ts";
 export * from "./http.ts";
+export * from "./links.ts";
 export * from "./logs.ts";
 export * from "./mcp.ts";
 export * from "./mcp-instructions.ts";

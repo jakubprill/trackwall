@@ -9,12 +9,24 @@ Proces `trackwall-daemon`, który trzyma cały stan i całą logikę. Jedyne źr
 _Unikaj_: backend, serwer (bez dopowiedzenia)
 
 **Powłoka** (`apps/desktop`):
-Aplikacja Tauri: okno, tray, uruchamianie i nadzór daemona jako sidecara, sprawdzenie WebView2. Nie zawiera logiki domenowej.
+Aplikacja Tauri: okna, tray, uruchamianie i nadzór daemona jako sidecara, sprawdzenie WebView2. Nie zawiera logiki domenowej.
 _Unikaj_: aplikacja (gdy chodzi tylko o Tauri)
 
 **Widok** (`View`; po angielsku *view*):
 Ekran aplikacji w UI (Home, Repos, Sessions, Overview, Daemon, Settings), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
 _Unikaj_: zakładka (dla całego ekranu)
+
+**Window** (`windows.rs` in the shell; label `main` or `window-<n>`):
+A desktop shell window with the whole UI and its own view (ADR-49). The main window comes from `tauri.conf.json` and hides to the tray; an extra window is opened with “Open in new window” and closes for real.
+_Avoid_: screen (that is a monitor), tab (that is `TabBar`), terminal window (that is a session terminal)
+
+**Trackwall link** (`trackwall://`, `trackwallLink`, `TRACKWALL_LINK_SCHEME`, `TRACKWALL_LINK_KINDS`; in the shell `link.rs`):
+`trackwall://repo/<repo id>`, `trackwall://session/<session id>` or `trackwall://task/<task id>`: shows that thing in the window (ADR-52). Only navigates, never runs anything.
+_Avoid_: deep link; plain "link" (that is a link in a README, ADR-35)
+
+**Jump** (`Jump`, `jump::request`, `take_jump`, `useJumpRequest`):
+The shell's request to the UI to show a repo, session, task or task proposal, from the tray or from a Trackwall link.
+_Avoid_: focus (that is keyboard focus and the "seen" frame)
 
 **Zakładka** (`TabBar`; po angielsku *tab*):
 Przełącznik części treści wewnątrz widoku, np. README, Files, Commits i mise tasks w widoku Repos.
@@ -235,6 +247,10 @@ _Unikaj_: tytuł okna (to `windowTitle` sesji)
 Zadanie, które sesja albo agent spoza Trackwall zgłosił przez MCP, a które czeka w widoku Sessions na decyzję użytkownika: „Start task” robi z niej zadanie z tym samym identyfikatorem, „Reject” ją odrzuca. Do tej chwili nic się nie uruchamia. Żyje tylko w pamięci daemona (ADR-39).
 _Unikaj_: zlecenie, prośba, wniosek
 
+**Shared files** (`TaskSharedFiles`, action `task-shared-files`):
+Files that both this task and another task of the same repo change, each compared with its own base commit. The one merged second will likely get a conflict, so the task panel warns about them and leads to the other task. It is only a warning: nothing is stopped (ADR-44).
+_Avoid_: overlap, collision, conflict (a conflict is only the result of a merge)
+
 **Sesja główna** (`proposedBy` zadania i propozycji; po angielsku *main session*):
 Sesja albo agent nadrzędny, który rozmawia z użytkownikiem i zleca pracę innym agentom propozycjami zadań, a potem czeka na ich sesje (`wait_for_session`) i czyta podsumowania, jak koordynator z wątkami w Claude (ADR-39). To rola, nie osobny rodzaj sesji: dziś to każda sesja Trackwall albo agent spoza Trackwall (`proposedBy.session: null`). In the Sessions view its tasks and proposals sit indented under it, and it carries a “main” badge with their count.
 _Unikaj_: orkiestrator, planner (ADR-9: rozbijanie celów robi człowiek)
@@ -261,17 +277,18 @@ CLI agenta działające w PTY należącym do daemona, w korzeniu repo albo w wor
 _Unikaj_: sesja POSIX (to pojęcie z grupy procesów), okno (to okno terminala w UI)
 
 **Waiting for you** (`Session.needsAttention`, `SessionAttention`; Polish *czeka na Ciebie*):
-A running session in `Approval` or `Plan`, or in `Input` the user has not seen yet (ADR-47): the agent will not move on without a human, and the human does not know yet. The daemon computes it; the UI (the counter on the activity bar, which also counts task proposals waiting for a decision, ADR-39; "Next waiting") and the tray (the "Waiting: <repo>" menu, the flashing window) only read the field.
+A running session in `Approval` or `Plan`, or in `Input` the user has not seen yet (ADR-47): the agent will not move on without a human, and the human does not know yet. The daemon computes it; the UI (the counter on the activity bar, which also counts task proposals waiting for a decision, ADR-39; "Next waiting") and the tray (the "Waiting: <repo>" menu, the flashing window, the system notification and the tray panel, ADR-50) only read the field.
 
 **Seen** (`SessionAttention.focus`, `typed`; the `focus` frame of `PtyClientMessage`):
-The user has seen the session's current `Input`: a session terminal window was focused and visible, or the user typed into the session, after the state began.
+The user has seen the session's current `Input`: a session terminal was focused and visible, or the user typed into the session, after the state began.
 _Avoid_: read, acknowledged
 
 **Idle** (`isIdle`, `IDLE_LABEL`, dashboard state `idle`):
 A running session in `Input` the user has already seen (ADR-47): the agent waits for the next prompt, but no longer waits for you. Shown as "idle" in Sessions and in calm grey on the dashboard.
 
-**Okno terminala** (`SessionTerminal`; po angielsku *session terminal*):
-xterm.js w widoku Sessions podłączony WebSocketem `/ws/pty/<sesja>` do PTY sesji. Kilka okien może pokazywać tę samą sesję; rozmiar PTY ustala ostatnie, które go zgłosiło.
+**Session terminal** (`SessionTerminal`):
+xterm.js in the Sessions view, connected over the WebSocket `/ws/pty/<session>` to the session's PTY. Several session terminals, also in different windows, can show the same session; the PTY takes the size of the last one that reported it, and a window that comes to the front reports the size of its terminals again (ADR-49).
+_Avoid_: terminal window (a window is the app window)
 
 **Session layout** (`SessionLayout`):
 How the right side of the Sessions view shows entries (ADR-48): `1` is the selected entry alone with its full panel (tabs, Stop, Resume), `2` and `4` a grid page of that many entries, `auto` a grid of the whole list, up to nine per page.
@@ -283,7 +300,11 @@ Several session terminals side by side in the Sessions view, one tile per list e
 _Avoid_: split, dashboard (that is Home)
 
 **Session shortcut** (`SessionShortcut`; Alt+1…9, Alt+J):
-Alt (⌥ on macOS) + digit selects the entry at that position in the Sessions list; Alt+J opens the next session that is waiting for you, also from other views. A shortcut never reaches the session terminal.
+Alt (⌥ on macOS) + digit selects the entry at that position in the Sessions list; Alt+J opens the next session that is waiting for you, also from other views. A shortcut never reaches the session terminal. Win+Alt+J (⌃⌥J on macOS) is the global shortcut that does what Alt+J does from any app (ADR-50).
+
+**Tray panel** (`TrayPanel`, window `tray-panel`):
+The small window next to the tray icon, opened by a left click on it, with the task proposals and the sessions waiting for you (ADR-50). A click opens the entry in the main window.
+_Avoid_: popup, tray menu (that is the menu on a right click)
 
 **Obraz ekranu** (`TerminalScreen`):
 Stan ekranu sesji, który daemon trzyma w emulatorze terminala bez okna i wysyła oknu terminala przy podłączeniu, zanim pójdzie dalsze wyjście.

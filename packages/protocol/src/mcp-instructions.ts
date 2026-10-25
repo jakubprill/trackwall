@@ -1,3 +1,4 @@
+import { trackwallLink } from "./links.ts";
 import { mcpTools } from "./mcp.ts";
 
 /**
@@ -69,4 +70,7 @@ export const MCP_INSTRUCTIONS = [
     "the task's changed files.",
   `- ${listSessions.name} shows the Copilot CLI sessions and tasks Trackwall runs (caller is your own session); a session ` +
     `that runs a task ends its work with ${reportResult.name}.`,
+  `- Point the user at a repo, session or task in your answer with a link: ${trackwallLink("repo", "<repo id>")}, ` +
+    `${trackwallLink("session", "<session id>")} or ${trackwallLink("task", "<task id>")} (also for a task proposal) ` +
+    "opens it in Trackwall when clicked. A link only shows it, it never runs anything.",
 ].join("\n");

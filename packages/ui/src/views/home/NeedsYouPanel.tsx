@@ -2,11 +2,11 @@ import type { Session, TaskProposal } from "@trackwall/protocol";
 import { type HomeKey, type HomeModel, repoKey, sessionKey } from "@trackwall/scene/model";
 import { Lightbulb } from "lucide-react";
 import type { ReactNode } from "react";
+import { QueueItem } from "@/components/QueueItem";
 import { StatusLabel } from "@/components/StatusLabel";
 import { twoDigits } from "@/lib/format";
 import { HOME_SESSION_STATUS, homeRepoStatus } from "@/lib/home-model";
-import { PROPOSAL_STATUS, sessionStateLabel } from "@/lib/session-state";
-import { cn } from "@/lib/utils";
+import { PROPOSAL_STATUS, sessionStateLabel, sessionTitle } from "@/lib/session-state";
 
 /**
  * The queue on the left of the dashboard: first sessions that are waiting for you or ended with an error, then task
@@ -46,7 +46,7 @@ export function NeedsYouPanel({
           // Pełny stan z widoku „Sessions” (np. „asking for approval”), a tytuł okna odróżnia dwie sesje jednego repo.
           const session = sessions.get(s.id);
           const status = session ? sessionStateLabel(session) : HOME_SESSION_STATUS[s.state];
-          const title = session?.windowTitle ? `${s.repo} · ${session.windowTitle}` : s.repo;
+          const title = session ? sessionTitle(session) : s.repo;
           return (
             <Row key={s.id} id={sessionKey(s.id)} selected={selected} onSelect={onSelect} onOpen={onOpen} title={title}>
               <StatusLabel tone={status.tone} label={status.label} />
@@ -103,38 +103,5 @@ function Row({
     <QueueItem title={title} active={id === selected} onClick={() => onSelect(id)} onDoubleClick={() => onOpen(id)}>
       {children}
     </QueueItem>
-  );
-}
-
-/** A queue item: the title, with the status on one line below it. */
-function QueueItem({
-  title,
-  active,
-  onClick,
-  onDoubleClick,
-  children,
-}: {
-  title: string;
-  active: boolean;
-  onClick: () => void;
-  onDoubleClick?: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <li>
-      <button
-        type="button"
-        aria-current={active || undefined}
-        onClick={onClick}
-        onDoubleClick={onDoubleClick}
-        className={cn(
-          "flex w-full flex-col items-start gap-1 rounded-md border border-transparent px-2 py-2 text-left transition-colors hover:bg-accent",
-          active && "bg-accent border-primary/25 hud-active-edge",
-        )}
-      >
-        <span className="w-full truncate text-sm font-medium">{title}</span>
-        <span className="text-xs">{children}</span>
-      </button>
-    </li>
   );
 }

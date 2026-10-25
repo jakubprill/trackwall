@@ -8,8 +8,10 @@ import {
   type Task,
   type TaskChanges,
   type TaskChangesSummary,
+  type TaskSharedFiles,
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
+import { mapLimit } from "../../infra/map-limit.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
 
@@ -85,6 +87,12 @@ export interface TaskOrigin {
 
 /** Zadanie z pliku z worktree, który z niego wynika. */
 type KnownTask = StoredTask & TaskWork;
+
+/**
+ * Other tasks read at once for shared files: each read is several git commands, and a task panel asks every few
+ * seconds, so a repo with many tasks must not start dozens of git processes at a time (slow on Windows).
+ */
+const SHARED_FILES_CONCURRENCY = 3;
 
 export class AgentTasks {
   readonly #deps: AgentTasksDeps;
@@ -191,6 +199,33 @@ export class AgentTasks {
   async summary(id: string): Promise<TaskChangesSummary> {
     const { files, commits, uncommitted } = await this.#readChanges(id, 0);
     return { files: files.slice(0, TASK_SUMMARY_MAX_FILES), filesTruncated: files.length > TASK_SUMMARY_MAX_FILES, commits, uncommitted };
+  }
+
+  /**
+   * Shared files (ADR-44): files changed both in this task and in another task of the same repo. Changes of another task
+   * that cannot be read (being ended, worktree deleted by hand, broken index) are left out, because this is only a
+   * warning; a failure to read this task's own changes is reported as in `changes`. A cut-off file list (`truncated`)
+   * can miss a shared file, which is acceptable for a warning.
+   */
+  async sharedFiles(id: string): Promise<TaskSharedFiles[]> {
+    const own = this.#get(id);
+    const changed = new Set((await this.#readChanges(id, 0)).files.map((f) => f.path));
+    const others = this.#tasks.filter((t) => t.repo === own.repo && t.id !== id);
+    const theirs = await mapLimit(others, SHARED_FILES_CONCURRENCY, async (other) => ({
+      task: other.id,
+      files: (await this.#tryChangedPaths(other.id)).filter((path) => changed.has(path)),
+    }));
+    return theirs.filter((t) => t.files.length > 0);
+  }
+
+  /** Paths changed in a task, or none when its changes cannot be read for a known reason (`DomainError`). */
+  async #tryChangedPaths(id: string): Promise<string[]> {
+    try {
+      return (await this.#readChanges(id, 0)).files.map((f) => f.path);
+    } catch (err) {
+      if (err instanceof DomainError) return [];
+      throw err;
+    }
   }
 
   #readChanges(id: string, maxPatchBytes: number): Promise<TaskChanges> {

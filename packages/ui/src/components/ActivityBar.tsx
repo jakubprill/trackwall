@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { IS_MAC } from "@/lib/platform";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { cn } from "@/lib/utils";
-import { ariaShortcut, matchesShortcut, shortcutLabel, type ViewShortcut } from "@/lib/view-shortcut";
+import { ariaShortcut, shortcutLabel, type ViewShortcut, viewKeyAction } from "@/lib/view-shortcut";
 
 export type ActivityView<Id extends string> = {
   id: Id;
@@ -21,20 +21,32 @@ export function ActivityBar<Id extends string>({
   views,
   active,
   onSelect,
+  newWindow,
   badges = {},
 }: {
   views: readonly ActivityView<Id>[];
   active: Id;
   onSelect: (id: Id) => void;
+  /** Views in new windows (ADR-49): the Ctrl+Shift shortcuts and the icon's context menu; absent outside the shell. */
+  newWindow?: { open: (id: Id) => void; showMenu: (id: Id) => void };
   /** Liczba przy ikonie widoku, np. sesje, które czekają na Ciebie; zero i brak nie pokazują niczego. */
   badges?: Partial<Record<Id, number>>;
 }) {
-  useViewShortcuts(views, onSelect);
+  useViewShortcuts(views, active, onSelect, newWindow?.open);
 
   const group = (placement: ActivityView<Id>["placement"]) =>
     views
       .filter((v) => v.placement === placement)
-      .map((v) => <ActivityButton key={v.id} view={v} active={v.id === active} badge={badges[v.id]} onSelect={() => onSelect(v.id)} />);
+      .map((v) => (
+        <ActivityButton
+          key={v.id}
+          view={v}
+          active={v.id === active}
+          badge={badges[v.id]}
+          onSelect={() => onSelect(v.id)}
+          onContextMenu={newWindow && (() => newWindow.showMenu(v.id))}
+        />
+      ));
 
   return (
     <nav aria-label="Views" className="bg-card w-activity-bar flex shrink-0 flex-col border-r">
@@ -46,11 +58,17 @@ export function ActivityBar<Id extends string>({
 }
 
 /** Shortcuts work in the whole window, also when the focus is in a text field or a session terminal. */
-function useViewShortcuts<Id extends string>(views: readonly ActivityView<Id>[], onSelect: (id: Id) => void) {
+function useViewShortcuts<Id extends string>(
+  views: readonly ActivityView<Id>[],
+  active: Id,
+  onSelect: (id: Id) => void,
+  onOpenInNewWindow: ((id: Id) => void) | undefined,
+) {
   useWindowShortcuts(
-    (event) => views.find((v) => matchesShortcut(event, v.shortcut, IS_MAC)),
-    (view) => {
-      onSelect(view.id);
+    (event) => viewKeyAction(event, views, active, { isMac: IS_MAC, newWindows: onOpenInNewWindow !== undefined }),
+    (action) => {
+      if (action.kind === "select") onSelect(action.id);
+      if (action.kind === "new-window") onOpenInNewWindow?.(action.id);
       return true;
     },
   );
@@ -61,11 +79,13 @@ function ActivityButton<Id extends string>({
   active,
   badge,
   onSelect,
+  onContextMenu,
 }: {
   view: ActivityView<Id>;
   active: boolean;
   badge: number | undefined;
   onSelect: () => void;
+  onContextMenu: (() => void) | undefined;
 }) {
   const Icon = view.icon;
   const count = badge !== undefined && badge > 0 ? badge : undefined;
@@ -77,6 +97,13 @@ function ActivityButton<Id extends string>({
         aria-current={active ? "page" : undefined}
         aria-keyshortcuts={ariaShortcut(view.shortcut, IS_MAC)}
         onClick={onSelect}
+        onContextMenu={
+          onContextMenu &&
+          ((event) => {
+            event.preventDefault();
+            onContextMenu();
+          })
+        }
         className={cn(
           "group focus-visible:ring-ring/50 relative flex h-12 w-full items-center justify-center transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset",
           active ? "hud-active-edge text-primary" : "text-muted-foreground hover:text-foreground",
