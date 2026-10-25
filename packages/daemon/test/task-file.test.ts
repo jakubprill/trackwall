@@ -17,6 +17,8 @@ const stored = {
   proposedBy: { session: "9b1e7d2a-0000-4000-8000-000000000000", supervisor: false },
   summary: { text: "Fixed, test added.", reportedAt: "2026-10-24T10:00:00.000Z" },
   trustedMiseConfig: { "mise.toml": "b".repeat(64) },
+  port: 41003,
+  included: { files: [".env", "config/application-local.yml"], problems: ["data.db is not a regular file (a link or a special file)"] },
 };
 
 describe("tasks.json", () => {
@@ -34,11 +36,11 @@ describe("tasks.json", () => {
 
   test("a task saved before task proposals comes back without a title, origin and summary", () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
-    const { title: _, proposedBy: __, summary: ___, trustedMiseConfig: ____, ...old } = stored;
+    const { title: _, proposedBy: __, summary: ___, trustedMiseConfig: ____, port: _____, included: ______, ...old } = stored;
     writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
 
     expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([
-      { ...old, title: null, proposedBy: null, summary: null, trustedMiseConfig: null },
+      { ...old, title: null, proposedBy: null, summary: null, trustedMiseConfig: null, port: null, included: { files: [], problems: [] } },
     ]);
   });
 
@@ -48,6 +50,16 @@ describe("tasks.json", () => {
     writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
 
     expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, trustedMiseConfig: null }]);
+  });
+
+  test("a task saved before task ports comes back without a port and without included files", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
+    const { port: _, included: __, ...old } = stored;
+    writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
+
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([
+      { ...old, port: null, included: { files: [], problems: [] } },
+    ]);
   });
 
   test("a task proposed before the supervisor comes back as not the supervisor's", () => {

@@ -5,6 +5,7 @@ import { isServiceLive, memberLabel, serviceStateLabel } from "../src/lib/servic
 const RUN = { kind: "running", runId: "r1", startedAt: "2026-10-24T10:00:00.000Z", pid: 42 } as const;
 const service = (state: Service["state"], port: number | null = 8081): Service => ({
   repo: "orders",
+  task: null,
   state,
   port,
   portSource: port === null ? null : "log",
@@ -14,6 +15,7 @@ const service = (state: Service["state"], port: number | null = 8081): Service =
 });
 const member = (outcome: SliceMember["outcome"], problem: string | null = null): SliceMember => ({
   repo: "orders",
+  task: null,
   calledBy: [{ repo: "bff", key: "orders" }],
   outcome,
   service: null,

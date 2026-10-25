@@ -3,6 +3,8 @@ import { dirname } from "node:path";
 import {
   type AgentTaskChanges,
   type ChangedFile,
+  type IncludedFiles,
+  noIncludedFiles,
   PATCH_MAX_BYTES,
   type ProposedBy,
   type Session,
@@ -18,12 +20,14 @@ import { mapLimit } from "../../infra/map-limit.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
 import { type MiseSnapshot, miseConfigChanges, miseConfigDigest, readMiseConfig, reviewMiseConfig } from "./task-mise-config.ts";
+import { freeTaskPort, withTaskPorts } from "./task-port.ts";
 
 /**
  * Agent tasks (§4.4, ADR-31): a prompt for Copilot CLI in its own worktree on a new branch from the repo's default
  * branch, so several tasks in one repo do not get in each other's way or into the user's working directory. A task
  * survives a daemon restart (`tasks.json`), and its session does not; the worktree and branch disappear only when the
- * task is ended, and changes that would be lost then only after the user confirms.
+ * task is ended, and changes that would be lost then only after the user confirms. Each task holds its own port while
+ * it exists, and its worktree starts with the ignored files the repo root names for it (ADR-61).
  */
 
 // The types below repeat the shape of the types from `vcs` (`WorktreeBase`, `WorktreeBranch`, `PendingWork`) instead of
@@ -56,6 +60,7 @@ interface TaskPendingWork {
 export interface TasksVcs {
   defaultBase(dir: string): Promise<TaskBase>;
   addWorktree(repoDir: string, path: string, branch: string, commit: string): Promise<void>;
+  copyIncludedFiles(repoDir: string, worktree: string): Promise<IncludedFiles>;
   removeWorktree(repoDir: string, path: string): Promise<void>;
   deleteBranch(repoDir: string, branch: string): Promise<void>;
   pendingWork(work: TaskWork): Promise<TaskPendingWork>;
@@ -92,8 +97,8 @@ export interface TaskOrigin {
   proposedBy: ProposedBy | null;
 }
 
-/** A task from the file with the worktree that follows from it. */
-type KnownTask = StoredTask & TaskWork;
+/** A task from the file with the worktree that follows from it, and its port (one given when it was read, if it had none). */
+type KnownTask = StoredTask & TaskWork & { port: number };
 
 /**
  * Other tasks read at once for shared files: each read is several git commands, and a task panel asks every few
@@ -107,6 +112,8 @@ export class AgentTasks {
   #tasks: KnownTask[];
   /** Tasks with an action in progress (start, resume, end); a second one at the same time is `bad_request`. */
   readonly #busy = new Set<string>();
+  /** Ports of tasks being created, not on the list yet: two tasks created at once must not get the same one. */
+  readonly #creatingPorts = new Set<number>();
   /** Tasks being ended: computing changes refuses, because the worktree is about to disappear. */
   readonly #removing = new Set<string>();
   /** The task's change computations in progress (several windows at once): ending waits until git stops reading the worktree. */
@@ -114,7 +121,10 @@ export class AgentTasks {
 
   constructor(deps: AgentTasksDeps) {
     this.#deps = deps;
-    this.#tasks = deps.file.read().map((task) => this.#known(task));
+    const stored = deps.file.read();
+    const ported = withTaskPorts(stored);
+    this.#tasks = ported.map((task) => this.#known(task));
+    if (ported.some((task, i) => task.port !== stored[i]?.port)) this.#save(this.#tasks);
   }
 
   list(): Task[] {
@@ -141,11 +151,16 @@ export class AgentTasks {
       proposedBy,
       summary: null,
       trustedMiseConfig: null,
+      port: freeTaskPort([...this.#tasks.map((t) => t.port), ...this.#creatingPorts]),
+      included: noIncludedFiles(),
     });
+    this.#creatingPorts.add(task.port);
     return this.#exclusive(id, async () => {
       mkdirSync(dirname(task.worktree), { recursive: true });
       await asRepoUnavailable(repo, this.#deps.vcs.addWorktree(repoDir, task.worktree, task.branch, task.base));
-      // The mise config of the fresh worktree is the base commit's, from the repo whose config the user trusted (ADR-59).
+      task.included = await this.#copyIncludedFiles(task);
+      // The mise config of the fresh worktree is the base commit's and the ignored files copied from the repo root, whose
+      // config the user trusted (ADR-59, ADR-61).
       task.trustedMiseConfig = await this.#initialMiseConfig(task);
       // Saved before the session starts: the worktree is already on disk and must not disappear from the list if the daemon crashes.
       this.#save([task, ...this.#tasks]);
@@ -161,7 +176,7 @@ export class AgentTasks {
         throw err;
       }
       return view(task);
-    });
+    }).finally(() => this.#creatingPorts.delete(task.port));
   }
 
   /** A new session for a task without a running session; Copilot CLI resumes the task's conversation, because it has the task's UUID. */
@@ -287,7 +302,7 @@ export class AgentTasks {
    * trusted and the task is not being ended: `mise_unavailable` names the changed files, and only the user can trust
    * them, in the task's panel.
    */
-  async trustedWorktree(id: string, repo: string): Promise<string> {
+  async trustedWorktree(id: string, repo: string): Promise<{ worktree: string; port: number }> {
     if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is being ended");
     const task = this.#existingWorktree(id);
     if (task.repo !== repo) throw new DomainError("bad_request", `task ${task.branch} is in ${task.repo}, not in ${repo}`);
@@ -298,7 +313,7 @@ export class AgentTasks {
         `the mise config in the worktree of task ${task.branch} changed since the user trusted it (${changes.map((c) => c.path).join(", ")}); ` +
           "only the user can trust it, in the task's panel in Trackwall",
       );
-    return task.worktree;
+    return { worktree: task.worktree, port: task.port };
   }
 
   openEditor(id: string): void {
@@ -357,6 +372,16 @@ export class AgentTasks {
     if (!keepBranch) await asRepoUnavailable(task.branch, this.#deps.vcs.deleteBranch(task.repoDir, task.branch));
   }
 
+  /** A failure to copy does not stop the task: the agent can still work, and the panel shows what is missing. */
+  async #copyIncludedFiles(task: KnownTask): Promise<IncludedFiles> {
+    try {
+      return await this.#deps.vcs.copyIncludedFiles(task.repoDir, task.worktree);
+    } catch (err) {
+      this.#deps.log(`copying the included files of task ${task.id}: ${messageOf(err)}`);
+      return { files: [], problems: [`copying failed: ${messageOf(err)}`] };
+    }
+  }
+
   /** A worktree whose mise config cannot be read gets no trust: the user can trust it in the task panel. */
   async #initialMiseConfig(task: KnownTask): Promise<MiseSnapshot | null> {
     try {
@@ -405,7 +430,7 @@ export class AgentTasks {
     return task;
   }
 
-  #known(task: StoredTask): KnownTask {
+  #known(task: StoredTask & { port: number }): KnownTask {
     return { ...task, worktree: taskWorktree(this.#deps.worktreesDir, task.repo, task.branch) };
   }
 

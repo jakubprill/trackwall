@@ -67,7 +67,8 @@ export const MCP_INSTRUCTIONS = [
   `- Try a change against the running system: ${startService.name} starts a repo's service (its mise task dev) with ` +
     `the services it calls, dependencies first, and waits until its port answers; ${callEndpoint.name} sends an HTTP ` +
     "request to it and returns the response with the errors every service logged meanwhile, so a failure downstream " +
-    `shows too. ${listServices.name} shows the services and their ports; stop what you started with ${stopService.name}.`,
+    `shows too. With task, the service runs from that task's worktree on the task port, next to the one from the repo root. ` +
+    `${listServices.name} shows the services and their ports; stop what you started with ${stopService.name}.`,
   `- Hand work to another agent, e.g. a change in another repo: ${proposeTask.name} with a prompt that stands on its own; ` +
     `the user approves, edits or rejects it in Trackwall. Then call ${waitForSession.name} with the task id: it returns ` +
     "when the proposal is rejected (with the user's reason, if they gave one) or the task's session needs someone (finished " +

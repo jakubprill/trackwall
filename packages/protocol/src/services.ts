@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TaskId } from "./agents.ts";
 import type { Endpoint } from "./api.ts";
 import { HttpMethod } from "./http.ts";
 import { LogError } from "./logs.ts";
@@ -9,7 +10,8 @@ import { RepoId } from "./workspace.ts";
  * Contract of the `services` module (§4.3, ADR-45): a service is a repo and its mise task `dev`, with a port and
  * a readiness that the daemon observes. Starting a service also starts the services it calls (HTTP and manual edges
  * of the graph), dependencies first, and an endpoint call goes only to the port of a service the daemon started.
- * Each action is `POST /api/services/<action>`.
+ * A service runs from the repo root or from a task's worktree on the task port (ADR-61); a repo can have one of each
+ * at once. Each action is `POST /api/services/<action>`.
  */
 
 /** The mise task that runs a service; the same kind of convention as `setup` and `build` in the batch command (ADR-27). */
@@ -23,12 +25,19 @@ export const SERVICE_MISE_TASK = "dev";
 export const ServiceState = z.enum(["starting", "healthy", "unhealthy", "stopping", "stopped", "crashed"]);
 export type ServiceState = z.infer<typeof ServiceState>;
 
-/** Where the port comes from: `server.port` on the repo card or a line of the service log (`Tomcat started on port 8081`). */
-export const ServicePortSource = z.enum(["card", "log"]);
+/**
+ * Where the port comes from: `server.port` on the repo card, the task port a task's service was given (ADR-61), or a
+ * line of the service log (`Tomcat started on port 8081`).
+ */
+export const ServicePortSource = z.enum(["card", "task", "log"]);
 export type ServicePortSource = z.infer<typeof ServicePortSource>;
+
+/** The task whose worktree a service runs from (ADR-61); `null` for the repo root. */
+const ServiceTask = TaskId.nullable();
 
 export const Service = z.object({
   repo: RepoId,
+  task: ServiceTask,
   state: ServiceState,
   /** The port that answered (or the one waited for); `null` until one is known. */
   port: z.number().int().min(1).max(65535).nullable(),
@@ -49,6 +58,8 @@ export type Service = z.infer<typeof Service>;
  */
 export const SliceMember = z.object({
   repo: RepoId,
+  /** Set only for the root of a task's slice: dependencies run from their repo roots. */
+  task: ServiceTask,
   /** The repos that call this one within the slice, with the edge key (app name, address, note); empty for the root. */
   calledBy: z.array(z.object({ repo: RepoId, key: z.string() })),
   outcome: z.enum(["pending", "started", "running", "skipped"]),
@@ -69,6 +80,7 @@ export const MAX_SLICE_REPOS = 12;
 
 export const ServiceSlice = z.object({
   repo: RepoId,
+  task: ServiceTask,
   /** Dependencies first (in the order they start), the repo asked for last. */
   members: z.array(SliceMember),
   /** Every member has settled (not `starting`); `false` when the wait ended first. */
@@ -79,6 +91,8 @@ export type ServiceSlice = z.infer<typeof ServiceSlice>;
 export const StartServiceRequest = z
   .object({
     repo: RepoId,
+    /** The service from this task's worktree instead of the repo root; its dependencies still run from their roots. */
+    task: ServiceTask,
     /** Also start the services it calls (graph edges `http` and `manual`, not `low` confidence), transitively. */
     dependencies: z.boolean(),
     /** How long to wait for the slice to settle before answering; the start goes on in the background. */
@@ -90,6 +104,7 @@ export type StartServiceRequest = z.infer<typeof StartServiceRequest>;
 export const StopServiceRequest = z
   .object({
     repo: RepoId,
+    task: ServiceTask,
     /** Also stop the dependencies the latest start of this repo started (not the ones that were already running). */
     dependencies: z.boolean(),
   })
@@ -113,6 +128,7 @@ export const CALL_RESPONSE_MAX_CHARS = 32 * 1024;
 export const CallEndpointRequest = z
   .object({
     repo: RepoId,
+    task: ServiceTask,
     method: HttpMethod,
     /** Path with the query, e.g. `/api/orders/42?expand=lines`. */
     path: z

@@ -22,18 +22,19 @@ export function RepoService({ conn, repo }: { conn: Connection; repo: string }) 
   const load = useCallback(() => post(conn, servicesApi.list, {}), [conn]);
   const remote = useRemote(load, { pollMs: (list) => (list?.some(isServiceLive) ? POLL_LIVE_MS : POLL_IDLE_MS) });
   const [slice, setSlice] = useState<ServiceSlice>();
-  const byRepo = new Map((remote.data ?? []).map((s) => [s.repo, s]));
+  // The services from the repo roots; a task's service (ADR-61) shows in its task's panel through its mise task `dev`.
+  const byRepo = new Map((remote.data ?? []).filter((s) => s.task === null).map((s) => [s.repo, s]));
   const service = byRepo.get(repo) ?? null;
   const live = isServiceLive(service);
   const start = useAction(
-    () => post(conn, servicesApi.start, { repo, dependencies: true, waitMs: 0 }),
+    () => post(conn, servicesApi.start, { repo, task: null, dependencies: true, waitMs: 0 }),
     (started) => {
       setSlice(started);
       remote.reload();
     },
   );
   const stop = useAction(
-    () => post(conn, servicesApi.stop, { repo, dependencies: true }),
+    () => post(conn, servicesApi.stop, { repo, task: null, dependencies: true }),
     () => remote.reload(),
   );
   const state = serviceStateLabel(service);

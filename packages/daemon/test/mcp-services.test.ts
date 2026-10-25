@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
 import { CallEndpointResult, ListServicesResult, StartServiceResult, StopServiceResult } from "@trackwall/protocol";
@@ -97,6 +97,35 @@ describe.skipIf(process.versions.bun === undefined)("services from a Trackwall s
         "bad_request: a session in warehouse can start and stop only the service of warehouse, not of shop",
       );
       expect(errorText(await call(client, "stop_service", { repo: "shop" }))).toStartWith("bad_request:");
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a task session starts the service from its own worktree on the task port, calls it, and cannot start another task's",
+    async () => {
+      const own = await daemon.facade.agents.createTask("warehouse", "check the orders endpoint");
+      const other = await daemon.facade.agents.createTask("warehouse", "another task");
+      const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === own.id);
+      if (!session) throw new Error("the task has no session");
+      const token = readFileSync(join(daemon.home, "sessions", session.id, "session-token"), "utf8");
+      const client = await connectHttpClient(daemon.api.port, TOKEN, undefined, { [SESSION_TOKEN_HEADER]: token });
+      clients.push(client);
+
+      const { slice } = StartServiceResult.parse(
+        (await call(client, "start_service", { repo: "warehouse", task: own.id, timeoutSeconds: 30 })).structuredContent,
+      );
+      expect(slice.members).toMatchObject([{ repo: "warehouse", task: own.id, service: { state: "healthy", port: own.port } }]);
+      const called = CallEndpointResult.parse(
+        (await call(client, "call_endpoint", { repo: "warehouse", task: own.id, path: "/" })).structuredContent,
+      );
+      // macOS: the temporary directory is a link (/var → /private/var), and the service sees the real path.
+      expect(JSON.parse(called.response?.body ?? "")).toMatchObject({ cwd: realpathSync(own.worktree), port: String(own.port) });
+
+      expect(errorText(await call(client, "start_service", { repo: "warehouse", task: other.id }))).toBe(
+        `bad_request: a session of task ${own.id} can start and stop only the service of its own worktree, not of that of task ${other.id}`,
+      );
+      await call(client, "stop_service", { repo: "warehouse", task: own.id });
     },
     TIMEOUT,
   );

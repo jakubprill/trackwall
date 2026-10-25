@@ -6,6 +6,7 @@ import {
   AgentTaskChanges,
   Session,
   SessionId,
+  TASK_PORT_ENV,
   TASK_PROMPT_MAX,
   TASK_SUMMARY_MAX,
   TASK_SUMMARY_MAX_FILES,
@@ -246,6 +247,10 @@ const MiseTaskTaskArg = TaskId.describe(
 );
 /** Arguments of the tools that act on one mise task of a repo root or of a task worktree. */
 const MiseTaskArgs = z.object({ repo: RepoArg, task: MiseTaskTaskArg.optional(), miseTask: MiseTaskArg }).strict();
+/** A service from a task's worktree instead of the repo root (ADR-61). */
+const ServiceTaskArg = TaskId.describe(
+  `id of a task of this repo (from ${LIST_SESSIONS}; a task session finds its own in its instructions): the service from that task's worktree, on the task port, instead of the repo root`,
+);
 const START_SERVICE = "start_service";
 const CALL_ENDPOINT = "call_endpoint";
 const GET_ERRORS = "get_errors";
@@ -616,23 +621,29 @@ export const mcpTools = {
     name: START_SERVICE,
     readOnly: false,
     destructive: true,
-    auditArgs: ["repo", "dependencies"] as const,
+    auditArgs: ["repo", "task", "dependencies"] as const,
     description:
       `Start a repo's service (its mise task ${SERVICE_MISE_TASK}, in the repo root) together with the services it calls, ` +
       "found in the connection graph (http and manual connections, not packages, not low confidence), dependencies " +
       "first: a repo starts once the repos it calls are up. A service is ready (healthy) when its port accepts a " +
-      "connection: the port from its log (e.g. 'Tomcat started on port 8081') or server.port on its card. Waits up " +
+      "connection: the port from its log (e.g. 'Tomcat started on port 8081') or server.port on its card (with task, the " +
+      "task port). Waits up " +
       "to timeoutSeconds and returns the slice: each repo with calledBy (why it is in the slice), outcome (pending, " +
       "started, running: it was already running, skipped with problem: no mise task dev, mise config not trusted, " +
       "port taken by another process), service (state starting, healthy, unhealthy, crashed, stopped; port; run with " +
       "runId; reason) and, for crashed and unhealthy, errors from its log. settled: false means some are still " +
       "starting: call again with the same arguments to keep waiting (running services are not restarted; a crashed " +
-      `one starts again, e.g. after you fixed it). At most ${MAX_SLICE_REPOS} repos. A session in Trackwall can start ` +
-      `only its own repo (dependencies come from the graph), and the supervisor none. Then use ${CALL_ENDPOINT}; read logs with tail ` +
-      `(miseTask ${SERVICE_MISE_TASK}) and ${GET_ERRORS}. Stop what you started with stop_service when you are done.`,
+      `one starts again, e.g. after you fixed it). At most ${MAX_SLICE_REPOS} repos. With task, the service runs from ` +
+      `that task's worktree, so it runs the task's changes, on the task port (${TASK_PORT_ENV.join(" and ")} are set to it), next ` +
+      "to the same service from the repo root; its dependencies still run from their repo roots, and the services that " +
+      "call it keep calling the one from the repo root. A session in Trackwall can start only its own repo (dependencies " +
+      "come from the graph), a task session only from its own task's worktree or the repo root, and the supervisor none. " +
+      `Then use ${CALL_ENDPOINT} with the same task; read logs with tail (miseTask ${SERVICE_MISE_TASK}, the same task) and ` +
+      `${GET_ERRORS}. Stop what you started with stop_service when you are done.`,
     args: z
       .object({
         repo: RepoArg,
+        task: ServiceTaskArg.optional(),
         dependencies: z.boolean().default(true).describe("also start the services it calls (default true)"),
         timeoutSeconds: WaitTimeoutArg,
       })
@@ -643,14 +654,16 @@ export const mcpTools = {
     name: "stop_service",
     readOnly: false,
     destructive: true,
-    auditArgs: ["repo", "dependencies"] as const,
+    auditArgs: ["repo", "task", "dependencies"] as const,
     description:
-      "Stop a repo's service (its whole process group) and, with dependencies: true, the services the latest " +
-      `${START_SERVICE} of this repo started (not those that were already running or that another started slice uses). ` +
-      "Returns the stopped services. A session in Trackwall can stop only its own repo's service, and the supervisor none.",
+      "Stop a repo's service (its whole process group), with task the one from that task's worktree, and, with " +
+      `dependencies: true, the services the latest ${START_SERVICE} of it started (not those that were already running ` +
+      "or that another started slice uses). Returns the stopped services. A session in Trackwall can stop only its own " +
+      "repo's service, a task session only its own task's or the repo root's, and the supervisor none.",
     args: z
       .object({
         repo: RepoArg,
+        task: ServiceTaskArg.optional(),
         dependencies: z.boolean().default(false).describe("also stop the dependencies its start started (default false)"),
       })
       .strict(),
@@ -661,8 +674,8 @@ export const mcpTools = {
     readOnly: true,
     description:
       `Services Trackwall started or watched since it started (with ${START_SERVICE}, the UI, or the mise task ` +
-      `${SERVICE_MISE_TASK} run from the UI): repo, state (starting, healthy, unhealthy, stopping, stopped, crashed), ` +
-      "port and where it comes from (log or card), run (runId, pid or exit code) and reason. Cheap: it does not ask mise.",
+      `${SERVICE_MISE_TASK} run from the UI): repo, task (the task whose worktree it runs from, null for the repo root), state (starting, healthy, unhealthy, stopping, stopped, crashed), ` +
+      "port and where it comes from (log, card or task: the task port), run (runId, pid or exit code) and reason. Cheap: it does not ask mise.",
     args: z.object({}).strict(),
     result: ListServicesResult,
   },
@@ -671,18 +684,20 @@ export const mcpTools = {
     readOnly: false,
     destructive: true,
     // The path (a query), headers and body may carry a secret.
-    auditArgs: ["repo", "method"] as const,
+    auditArgs: ["repo", "task", "method"] as const,
     description:
-      `Send an HTTP request to a running (healthy) service started by Trackwall, on its port on this computer ` +
+      "Send an HTTP request to a running (healthy) service started by Trackwall, on its port on this computer " +
       "(the path from the repo card's endpoints, find_endpoint or the code). Returns the status, response headers and " +
       "body (text, cut at 32 KB, secrets from the service environment masked), or failure (connection refused, " +
       "timeout), the duration and errors: error blocks that started in the logs of all services during the call and " +
       "half a second after it, with stack traces (as get_errors). Use it to check a change end to end: start_service, " +
-      "call, read errors, fix, call again. Requests can change data in the services and their databases.",
+      "call, read errors, fix, call again. With task, the request goes to the service from that task's worktree. " +
+      "Requests can change data in the services and their databases.",
     args: z
       .object({
         repo: RepoArg,
         method: CallEndpointRequest.shape.method.default("GET"),
+        task: ServiceTaskArg.optional(),
         path: CallEndpointRequest.shape.path.describe("path with the query, e.g. /api/orders/42?expand=lines"),
         headers: CallEndpointRequest.shape.headers.default({}).describe('request headers, e.g. {"content-type": "application/json"}'),
         body: CallEndpointRequest.shape.body.default(null).describe("request body as text, e.g. JSON"),

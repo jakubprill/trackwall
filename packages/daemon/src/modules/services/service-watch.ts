@@ -2,6 +2,7 @@ import {
   LOG_TAIL_MAX,
   type LogTail,
   type LogTailRequest,
+  type MiseTarget,
   type RunState,
   type Service,
   type ServicePortSource,
@@ -29,10 +30,11 @@ export interface WatchDeps {
 }
 
 export interface WatchedRun {
-  repo: string;
+  /** Where the service runs: the repo root (`task: null`) or a task's worktree (ADR-61). */
+  target: MiseTarget;
   run: RunState;
-  /** Ports from `server.port` on the card, used until the log names one. */
-  cardPorts: readonly number[];
+  /** Ports from `server.port` on the card, or the task port, used until the log names one. */
+  expectedPorts: readonly number[];
   /** Log cursor from which the run's records are read: taken before the start, or the start of the daemon run. */
   cursor: number;
 }
@@ -44,10 +46,10 @@ export interface ServiceAddress {
 }
 
 export class ServiceWatch {
-  readonly repo: string;
+  readonly target: WatchedRun["target"];
   readonly runId: string;
   private readonly deps: WatchDeps;
-  private readonly cardPorts: readonly number[];
+  private readonly expectedPorts: readonly number[];
   private readonly startedAt: number;
   private lastRun: RunState;
   private cursor: number;
@@ -63,20 +65,21 @@ export class ServiceWatch {
   private ended = false;
 
   constructor(watched: WatchedRun, deps: WatchDeps) {
-    this.repo = watched.repo;
+    this.target = watched.target;
     this.runId = watched.run.runId;
     this.lastRun = watched.run;
     this.startedAt = Date.parse(watched.run.startedAt);
-    this.cardPorts = watched.cardPorts;
+    this.expectedPorts = watched.expectedPorts;
     this.cursor = watched.cursor;
     this.deps = deps;
     this.schedule(0);
   }
 
   view(): Service {
-    const port = this.address?.port ?? this.logPort ?? this.cardPorts[0] ?? null;
-    const portSource: ServicePortSource | null = port === null ? null : this.logPort === port ? "log" : "card";
-    return { repo: this.repo, state: this.state, port, portSource, run: this.lastRun, since: this.since, reason: this.reason };
+    const port = this.address?.port ?? this.logPort ?? this.expectedPorts[0] ?? null;
+    const expected: ServicePortSource = this.target.task === null ? "card" : "task";
+    const portSource: ServicePortSource | null = port === null ? null : this.logPort === port ? "log" : expected;
+    return { ...this.target, state: this.state, port, portSource, run: this.lastRun, since: this.since, reason: this.reason };
   }
 
   /** Where to send a request: the port that answered the last probe; `null` unless `healthy`. */
@@ -164,7 +167,7 @@ export class ServiceWatch {
 
   /** The address that answered, or the ports that were tried without an answer. */
   private async probe(): Promise<ServiceAddress | { tried: readonly number[] }> {
-    const ports = this.logPort !== null ? [this.logPort] : this.cardPorts;
+    const ports = this.logPort !== null ? [this.logPort] : this.expectedPorts;
     for (const port of ports) {
       const host = await this.deps.probe(port);
       if (host) return { host, port };
