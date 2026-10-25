@@ -7,6 +7,7 @@ import {
   miseTaskLogSource,
   type RunningMiseTask,
   type RunState,
+  TASK_PORT_ENV,
 } from "@trackwall/protocol";
 import { z } from "zod";
 import { envKey } from "../../infra/env-key.ts";
@@ -20,6 +21,8 @@ import { type MiseCliResult, runMiseCli } from "./mise-cli.ts";
  * command (ADR-27) also `mise install` and runs awaited to the end. A task's mise tasks run in its worktree
  * (ADR-59) only while the repo root's config is trusted and the worktree has the mise config the user trusted; mise
  * gets the worktree as a trusted path for that one run, never through `mise trust`, which would trust the path for good.
+ * A run in a task worktree also gets the task port in `TASK_PORT_ENV` (ADR-61), so a server it starts does not take the
+ * port of the same server running from the repo root or another task.
  */
 
 /** What `mise` needs from `procs`; wired in the facade. */
@@ -37,10 +40,10 @@ interface MiseRepos {
 
 /**
  * What `mise` needs from `agents`: the worktree of a task of the repo, refused while its mise config is not the one the
- * user trusted (ADR-59).
+ * user trusted (ADR-59), and the task port (ADR-61).
  */
 interface MiseTaskWorktrees {
-  trustedTaskWorktree(task: string, repo: string): Promise<string>;
+  trustedTaskWorktree(task: string, repo: string): Promise<{ worktree: string; port: number }>;
 }
 
 export interface MiseDeps {
@@ -222,8 +225,8 @@ export class Mise {
   /**
    * Where a run of `target` happens. A task worktree (ADR-59) needs the repo root's config trusted, since the user
    * trusted the worktree's first config by trusting the root's, and the worktree's mise config as the user trusted it;
-   * then mise gets the worktree as a trusted path in this run's environment only. The worktree is checked last, as
-   * close to the run as the listing of its tasks allows (§8).
+   * then mise gets the worktree as a trusted path in this run's environment only, and the task port (ADR-61). The
+   * worktree is checked last, as close to the run as the listing of its tasks allows (§8).
    */
   private async place(target: MiseTarget): Promise<RunPlace> {
     const root = await this.deps.repos.repoPath(target.repo);
@@ -231,8 +234,8 @@ export class Mise {
     if (target.task === null) return { dir: root, env };
     const listed = await this.list(root, env);
     if (listed.kind !== "ok") throw new DomainError("mise_unavailable", `${target.repo}: ${listed.message}`);
-    const worktree = await this.deps.tasks.trustedTaskWorktree(target.task, target.repo);
-    return { dir: worktree, env: trustingPath(env, worktree) };
+    const { worktree, port } = await this.deps.tasks.trustedTaskWorktree(target.task, target.repo);
+    return { dir: worktree, env: withTaskPort(trustingPath(env, worktree), port) };
   }
 
   private async hasTask(place: RunPlace, miseTask: string): Promise<boolean> {
@@ -350,6 +353,13 @@ function trustingPath(env: NodeJS.ProcessEnv, dir: string): NodeJS.ProcessEnv {
   const key = envKey(env, TRUSTED_PATHS_ENV);
   const own = env[key];
   return { ...env, [key]: own ? `${own}${delimiter}${dir}` : dir };
+}
+
+/** The environment with every `TASK_PORT_ENV` variable set to the task port, replacing the user's own value. */
+function withTaskPort(env: NodeJS.ProcessEnv, port: number): NodeJS.ProcessEnv {
+  const ported = { ...env };
+  for (const name of TASK_PORT_ENV) ported[envKey(ported, name)] = String(port);
+  return ported;
 }
 
 /** The owner of a repo's `mise install` group; a different prefix than mise tasks, because a mise task may be called `install`. */

@@ -11,8 +11,8 @@ import { MAX_MISE_PATH } from "./task-mise-config.ts";
  * stay on disk until the user ends them. A task session lives only in memory, and the worktree follows from the repo
  * and branch (`taskWorktree`), so neither of them is stored. The file can be edited by hand, and its fields go to git
  * (`branch -D`, `diff <base commit>`), so the schema allows only a task branch and a full commit hash (`CommitHash` in `Task`).
- * Fields added later (title, origin and summary, ADR-39; the trusted mise config, ADR-59) have a default in the file,
- * so tasks saved by an older version are not moved aside as an unreadable file.
+ * Fields added later (title, origin and summary, ADR-39; the trusted mise config, ADR-59; the port and the included
+ * files, ADR-61) have a default in the file, so tasks saved by an older version are not moved aside as an unreadable file.
  */
 
 export const StoredTask = Task.omit({ worktree: true }).extend({
@@ -20,6 +20,9 @@ export const StoredTask = Task.omit({ worktree: true }).extend({
   title: Task.shape.title.default(null),
   proposedBy: Task.shape.proposedBy.default(null),
   summary: Task.shape.summary.default(null),
+  /** `null` in a task saved by an older version: `AgentTasks` gives it a free port when it reads the file. */
+  port: Task.shape.port.nullable().default(null),
+  included: Task.shape.included.default({ files: [], problems: [] }),
   /**
    * The worktree's mise config the user trusted (ADR-59): path to SHA-256, taken when the worktree was created and
    * replaced when the user trusts a changed one. `null` in a task saved by an older version, whose config then needs

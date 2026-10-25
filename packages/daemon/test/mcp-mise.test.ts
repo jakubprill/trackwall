@@ -171,7 +171,7 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
       expect(log.records.map((r) => [r.runId, r.msg])).toEqual([[started.run.runId, "[test] $ done"]]);
 
       expect(errorText(await call(client, "run_mise_task", { repo: "warehouse", task: other.id, miseTask: "test" }))).toBe(
-        `bad_request: a session of task ${own.id} can run and stop mise tasks only in its own worktree, not in that of task ${other.id}`,
+        `bad_request: a session of task ${own.id} can run and stop only mise tasks of its own worktree, not of that of task ${other.id}`,
       );
       expect(existsSync(join(other.worktree, "calls.log"))).toBe(false);
       // A task named with another repo is refused before any run is looked up, so a session's repo gate holds.

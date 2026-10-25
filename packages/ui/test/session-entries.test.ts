@@ -29,6 +29,8 @@ function task(id: string, createdAt: string): Task {
     title: null,
     proposedBy: null,
     summary: null,
+    port: 41000,
+    included: { files: [], problems: [] },
   };
 }
 

@@ -15,6 +15,7 @@ const TIMEOUT = 30_000;
 
 /** The one task of the repo `web` in these tests, with its worktree next to the repo. */
 const TASK = "0b7c1a52-3f0e-4c1e-9a43-5d2f8e6b1c07";
+const TASK_PORT = 41007;
 
 /**
  * Repo `web` with a fake mise config (`fake-mise.json`, described in `fixtures/fake-mise.ts`), and the worktree of task
@@ -33,7 +34,7 @@ function setup(config: object, command: readonly string[] = FAKE_MISE) {
     trustedTaskWorktree: async (id: string, repo: string) => {
       if (id !== TASK || repo !== "web") throw new DomainError("bad_request", `no task ${id} in ${repo}`);
       if (refusal) throw refusal;
-      return worktree;
+      return { worktree, port: TASK_PORT };
     },
   };
   /** The `agents` module refuses the worktree, as it does when its mise config changed since the user trusted it. */

@@ -11,6 +11,7 @@ import { remoteAddress } from "./remote.ts";
 import { syncRepo } from "./sync.ts";
 import { addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
 import { workingTreeChanges, worktreeChanges } from "./worktree-changes.ts";
+import { copyIncludedFiles } from "./worktree-include.ts";
 
 /**
  * The `vcs` module (§4, §4.5): the local git adapter. It knows directories, not repo identifiers; `workspace` translates those.
@@ -67,6 +68,7 @@ export class Vcs {
   readonly defaultBase = defaultBase;
   readonly pendingWork = pendingWork;
   readonly worktreeChanges = worktreeChanges;
+  readonly copyIncludedFiles = copyIncludedFiles;
 
   addWorktree(repoDir: string, path: string, branch: string, commit: string): Promise<void> {
     return this.serialWorktreeOp(repoDir, () => addWorktree(repoDir, path, branch, commit));

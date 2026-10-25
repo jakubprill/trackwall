@@ -15,6 +15,7 @@ Start a service together with the services it calls, see when it is ready, and c
 - A clear state for each service: starting, ready on its port, not answering or crashed.
 - One button that stops the service and what that start brought up.
 - The same for agents: they can start a service, call its endpoints and read the errors the services logged during the call.
+- An agent task can run its own copy of a service from its worktree, on its own port, next to yours.
 
 ## How it works
 
@@ -28,6 +29,8 @@ A dependency that cannot start is skipped, and the panel says why: it has no `de
 
 Agents do the same through the [MCP server](/features/mcp): `start_service` starts a service and reports what is ready and what crashed, with the errors from its log; `call_endpoint` sends an HTTP request to a ready service and returns the answer together with the errors any service logged meanwhile, such as the stack trace from the service behind the one called.
 
+An agent working on a [task](/features/tasks) can start the service from the task's worktree instead, so it runs the code the agent changed. That copy listens on the task's own port, so it runs next to the service started from the repo, and the services it calls start from their repos as usual. The services that call this one keep calling the copy started from the repo; the agent calls its own copy directly with `call_endpoint`. A task's service shows in the task panel as its running `dev` mise task.
+
 ## Use it
 
 1. Give the repo a mise task called `dev` that starts the service.
@@ -40,6 +43,7 @@ Agents do the same through the [MCP server](/features/mcp): `start_service` star
 - One start takes at most 12 repos, this one included; a larger set is refused, and the panel says so.
 - Dependencies come from HTTP calls in the graph, including connections you added by hand, not from shared packages.
 - A `dev` mise task started with its own "Run" button also shows in the panel as the service.
-- A service runs from the repo itself, not from the worktree of an [agent task](/features/tasks).
-- An agent in a session starts and stops only the service of its own repo, but may call any running service.
+- The "Service" panel shows the service started from the repo; a service started from a task's worktree shows only in that task.
+- A service from a task's worktree gets the task's port in `SERVER_PORT` and `PORT`. Spring Boot and most Node servers listen on it without changes; a service that reads its port from elsewhere would take the repo's port and be refused as taken.
+- An agent in a session starts and stops only the service of its own repo, and a task's agent only the one of its own worktree, but either may call any running service.
 - `call_endpoint` works only on this computer, returns at most 32 KB of the body and replaces secrets from the environment with `***`.

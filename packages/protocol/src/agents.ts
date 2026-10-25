@@ -19,6 +19,27 @@ export const TaskId = z.uuid();
 export type TaskId = z.infer<typeof TaskId>;
 
 /**
+ * Task ports (ADR-61): every task gets its own port from this range for as long as it exists, the lowest one no other
+ * task holds, so the services of several tasks and of the repo root can run at once. The range lies below the dynamic
+ * ports Windows and macOS hand out to outgoing connections (49152 and up; 32768 and up on Linux).
+ */
+export const TASK_PORT_FIRST = 41000;
+export const TASK_PORT_LAST = 41999;
+export const TaskPort = z.number().int().min(TASK_PORT_FIRST).max(TASK_PORT_LAST);
+
+/**
+ * The variables a mise task in a task worktree gets set to the task port (ADR-61): `SERVER_PORT` for Spring Boot
+ * (`server.port`), `PORT` for Node servers and dev servers that read it.
+ */
+export const TASK_PORT_ENV = ["SERVER_PORT", "PORT"] as const;
+
+/**
+ * The file in a repo root that names files git ignores to copy into every new task worktree (ADR-61): local config,
+ * `.env`, `mise.local.toml`. `.gitignore` syntax, the same file Claude Code reads; it may itself be ignored or untracked.
+ */
+export const WORKTREE_INCLUDE_FILE = ".worktreeinclude";
+
+/**
  * The task prompt. It goes to Copilot CLI as one argument (`--interactive=<prompt>`), and the Windows command line holds
  * 32,767 characters together with the rest of the command.
  */
@@ -122,6 +143,13 @@ export const Task = z.object({
   proposedBy: ProposedBy.nullable(),
   /** The last summary from the task session (`report_result`); `null` until it has reported one. */
   summary: z.object({ text: z.string(), reportedAt: z.string() }).nullable(),
+  /** The task port (ADR-61): `TASK_PORT_ENV` in every mise task run in the worktree, and the port of the task's service. */
+  port: TaskPort,
+  /**
+   * Files from `WORKTREE_INCLUDE_FILE` copied from the repo root into the worktree when the task was created, as paths
+   * relative to the root with `/` (ADR-61), and in `problems` what was not copied and why.
+   */
+  included: z.object({ files: z.array(z.string()), problems: z.array(z.string()) }),
 });
 export type Task = z.infer<typeof Task>;
 

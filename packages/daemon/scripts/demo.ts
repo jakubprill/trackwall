@@ -115,7 +115,7 @@ async function setTheScene(): Promise<void> {
   await facade.agents.createTask("pricing", "Publish a price-changed event when a price changes");
   await facade.agents.createTask("reviews", "Hide reviews from customers who have been deleted");
   for (const repo of DEMO_REPOS) await facade.mise.trust(repo);
-  const slice = await facade.services.start({ repo: "admin-bff", dependencies: true, waitMs: 20_000 });
+  const slice = await facade.services.start({ repo: "admin-bff", task: null, dependencies: true, waitMs: 20_000 });
   const down = slice.members
     .filter((member) => member.service?.state !== "healthy")
     .map((member) => `${member.repo}: ${member.problem ?? member.service?.state ?? member.outcome}`);

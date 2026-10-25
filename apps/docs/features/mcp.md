@@ -41,13 +41,13 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 | `tail` | A mise task's log from a cursor, with secrets replaced by `***`; with `task`, the run in that task's worktree. |
 | `get_errors` | Errors from the mise task logs, newest first: error lines, compiler errors, exceptions with stack traces, Spring and Gradle failure reports; repeats counted once. With `minLevel: warn`, warnings too. |
 | `get_test_results` | The results of the latest test run from the JUnit reports Maven, Gradle, jest or Vitest left in the repo, or with `task` in that task's worktree: totals, each report with its time, and the failed tests with their message and stack trace. |
-| `start_service`, `stop_service`, `list_services`, `call_endpoint` | Start a service with its dependencies, stop it, list services, send an HTTP request to a running one. |
+| `start_service`, `stop_service`, `list_services`, `call_endpoint` | Start a service with its dependencies, stop it, list services, send an HTTP request to a running one; from a repo or from a task's worktree on the task's port. |
 | `list_sessions`, `get_session`, `get_task_changes` | The sessions and tasks in "Sessions", with state, repo, a task's changed files and their diff. |
 | `propose_task`, `wait_for_session`, `report_result` | Propose a task, wait up to 55 s for a session or task to need someone, report a task's summary. |
 
 ## Good to know
 
 - An agent in a session runs and stops only the mise tasks and the service of its own repo; every run is logged with the repo, mise task and session.
-- A task's agent runs mise tasks in the repo root or in its own task's worktree, never in another task's, and in its worktree only with the mise configuration you have trusted (see [Agent tasks](/features/tasks)).
+- A task's agent runs mise tasks and the service in the repo root or in its own task's worktree, never in another task's, and in its worktree only with the mise configuration you have trusted (see [Agent tasks](/features/tasks)).
 - Agents get links in the form `trackwall://…` to point you at a repo, session or task: see [trackwall:// links](/features/links).
 - Calls that wait (`wait_for_mise_task`, `start_service`, `wait_for_session`) return after at most 55 seconds; the agent calls again to keep waiting.

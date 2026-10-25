@@ -295,8 +295,11 @@ export class Agents {
     return this.#tasks.trustMiseConfig(id, digest);
   }
 
-  /** The worktree a mise task of the task runs in, while its mise config is the trusted one; for the `mise` module (ADR-59). */
-  trustedTaskWorktree(id: string, repo: string): Promise<string> {
+  /**
+   * The worktree a mise task of the task runs in, while its mise config is the trusted one, and the task port its runs
+   * get; for the `mise` module (ADR-59, ADR-61).
+   */
+  trustedTaskWorktree(id: string, repo: string): Promise<{ worktree: string; port: number }> {
     return this.#tasks.trustedWorktree(id, repo);
   }
 

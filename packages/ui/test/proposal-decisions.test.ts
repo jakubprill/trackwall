@@ -27,6 +27,8 @@ function task(id: string): Task {
     title: `Task ${id}`,
     proposedBy: { session: "main", supervisor: false },
     summary: null,
+    port: 41000,
+    included: { files: [], problems: [] },
   };
 }
 
