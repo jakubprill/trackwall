@@ -1,8 +1,8 @@
 /**
- * Build aplikacji desktopowej dla bieżącej platformy:
- *   Windows: `trackwall.exe` bez instalatora (`--no-bundle`), sidecar obok,
- *   macOS:   `Trackwall.app` (bundle `app`, bez dmg i bez podpisu).
- * Pakowanie do archiwum robi `scripts/package-portable.ts` (`pnpm portable`).
+ * Builds the desktop app for the current platform:
+ *   Windows: `trackwall.exe` without an installer (`--no-bundle`), the sidecar next to it,
+ *   macOS:   `Trackwall.app` (the `app` bundle, without dmg and without signing).
+ * `scripts/package-portable.ts` (`pnpm portable`) packs it into an archive.
  */
 import { assertVersionsMatch, DESKTOP, REPO, run } from "./lib.ts";
 

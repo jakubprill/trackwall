@@ -1,7 +1,7 @@
 [package]
 name = "trackwall-desktop"
 version = "0.3.0"
-description = "Trackwall: okno, tray i nadzór daemona"
+description = "Trackwall: window, tray and daemon supervision"
 edition = "2021"
 rust-version = "1.90"
 license = "MIT"

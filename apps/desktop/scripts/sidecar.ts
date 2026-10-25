@@ -1,4 +1,4 @@
-/** Buduje daemon dla hosta i kładzie go tam, gdzie Tauri szuka sidecara (`binaries/trackwall-daemon-<triple>`). */
+/** Builds the daemon for the host and puts it where Tauri looks for the sidecar (`binaries/trackwall-daemon-<triple>`). */
 import { copyFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { hostTriple, REPO, run, TAURI_DIR } from "./lib.ts";

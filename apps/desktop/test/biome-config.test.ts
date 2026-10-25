@@ -3,8 +3,9 @@ import { join } from "node:path";
 import { z } from "zod";
 import { parseFile, REPO } from "../scripts/lib.ts";
 
-// Zakaz API Bun w daemonie poza platform/ (ADR-1) stoi w biome.json w kilku nadpisaniach, bo Biome nie łączy opcji
-// reguły z kolejnych nadpisań, tylko bierze opcje ostatniego pasującego. Test sprawdza, co naprawdę obowiązuje w plikach.
+// The ban on Bun APIs in the daemon outside platform/ (ADR-1) stands in several overrides in biome.json, because Biome
+// does not merge a rule's options from successive overrides but takes those of the last matching one. The test checks
+// what really applies to the files.
 
 const Rule = z.union([z.string(), z.object({ options: z.record(z.string(), z.unknown()).optional() })]);
 const Override = z.object({
@@ -19,7 +20,7 @@ function covers(includes: string[], path: string): boolean {
   return positive.some((g) => new Bun.Glob(g).match(path)) && !negative.some((g) => new Bun.Glob(g).match(path));
 }
 
-/** Opcje reguły stylu z ostatniego nadpisania, które obejmuje plik i ustawia tę regułę. */
+/** The options of a style rule from the last override that covers the file and sets that rule. */
 function effectiveOptions(rule: string, path: string): unknown {
   const last = overrides()
     .filter((o) => covers(o.includes, path) && o.linter?.rules?.style?.[rule] !== undefined)
@@ -39,7 +40,7 @@ const DAEMON_OUTSIDE_PLATFORM = [
   "packages/daemon/src/modules/procs/procs.ts",
 ];
 
-test("w daemonie poza platform/ obowiązuje zakaz importów bun i bun:*", () => {
+test("in the daemon outside platform/ imports of bun and bun:* are banned", () => {
   const withoutBan = DAEMON_OUTSIDE_PLATFORM.filter((path) => {
     const options = RestrictedImports.safeParse(effectiveOptions("noRestrictedImports", path));
     return !options.success || !options.data.patterns.some((p) => p.group.includes("bun") && p.group.includes("bun:*"));
@@ -47,7 +48,7 @@ test("w daemonie poza platform/ obowiązuje zakaz importów bun i bun:*", () => 
   expect(withoutBan).toEqual([]);
 });
 
-test("w daemonie poza platform/ obowiązuje zakaz globalnego Bun", () => {
+test("in the daemon outside platform/ the global Bun is banned", () => {
   const withoutBan = DAEMON_OUTSIDE_PLATFORM.filter((path) => {
     const options = RestrictedGlobals.safeParse(effectiveOptions("noRestrictedGlobals", path));
     return !options.success || options.data.deniedGlobals.Bun === undefined;
@@ -55,7 +56,7 @@ test("w daemonie poza platform/ obowiązuje zakaz globalnego Bun", () => {
   expect(withoutBan).toEqual([]);
 });
 
-test("w platform/ import bun:ffi jest dozwolony", () => {
+test("in platform/ importing bun:ffi is allowed", () => {
   const options = RestrictedImports.parse(effectiveOptions("noRestrictedImports", "packages/daemon/src/platform/win32-job.ts"));
   expect(options.patterns.some((p) => p.group.includes("bun:*"))).toBe(false);
 });

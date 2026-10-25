@@ -3,9 +3,9 @@ import { execFileSync } from "node:child_process";
 import { REPO } from "../scripts/lib.ts";
 
 // Guards the directory layout from docs/development.md ("Repo layout").
-// Sprawdza pliki całego repo, nie paczki desktop; leży tu, bo root nie ma własnych testów.
+// Checks files of the whole repo, not of the desktop package; it lives here because the root has no tests of its own.
 
-/** Pierwsze człony ścieżek plików śledzonych przez gita w katalogu: nieśledzone `.DS_Store` czy pliki edytora się nie liczą. */
+/** The first segments of paths of files git tracks in a directory: untracked `.DS_Store` or editor files do not count. */
 function trackedRootEntries(dir: string): string[] {
   const files = execFileSync("git", ["ls-files", "--", dir], { cwd: REPO, encoding: "utf8" }).split("\n").filter(Boolean);
   return [
@@ -20,11 +20,11 @@ function trackedRootEntries(dir: string): string[] {
   ].sort();
 }
 
-test("w korzeniu src/ daemona leżą tylko punkty wejścia i katalogi z docs/development.md", () => {
+test("the root of the daemon's src/ holds only the entry points and directories from docs/development.md", () => {
   expect(trackedRootEntries("packages/daemon/src")).toEqual(["api", "facade.ts", "infra", "main.ts", "mcp", "modules", "platform"]);
 });
 
-test("w korzeniu src/ UI leżą tylko punkty wejścia, a widoki mają foldery nazwane identyfikatorem widoku", () => {
+test("the root of the UI's src/ holds only entry points, and views have folders named after the view identifier", () => {
   expect(trackedRootEntries("packages/ui/src")).toEqual(["App.tsx", "components", "index.css", "lib", "main.tsx", "views"]);
   expect(trackedRootEntries("packages/ui/src/views")).toEqual(["daemon", "graph", "home", "repos", "sessions", "settings", "tray-panel"]);
 });
