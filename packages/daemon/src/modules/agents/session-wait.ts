@@ -19,6 +19,13 @@ export interface WaitOutcome {
   proposal: TaskProposal | null;
   task: Task | null;
   session: Session | null;
+  /** The user's reason for `proposal_rejected` (ADR-55); `null` otherwise and when they gave none. */
+  rejectionReason: string | null;
+}
+
+/** An outcome with what it is about; whatever it does not name is `null`. */
+export function outcome(status: WaitStatus, parts: Partial<Omit<WaitOutcome, "status">> = {}): WaitOutcome {
+  return { status, proposal: null, task: null, session: null, rejectionReason: null, ...parts };
 }
 
 /**

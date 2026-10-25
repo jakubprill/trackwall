@@ -19,7 +19,7 @@ import { type HookCommand, writeCopilotPlugin } from "./copilot-plugin.ts";
 import { LiveSession, type SessionPty, type SessionWindow } from "./live-session.ts";
 import { withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import { SessionTokens } from "./session-tokens.ts";
-import { sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
+import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
 import { TaskFile } from "./task-file.ts";
 import { TaskProposals } from "./task-proposals.ts";
 import { AgentTasks, type TasksVcs } from "./tasks.ts";
@@ -165,8 +165,8 @@ export class Agents {
     }
   }
 
-  rejectProposal(id: string): void {
-    this.#proposals.reject(id);
+  rejectProposal(id: string, reason: string | undefined): void {
+    this.#proposals.reject(id, reason ?? null);
   }
 
   /** Podsumowanie od sesji `caller` do jej własnego zadania (`report_result`). */
@@ -186,19 +186,20 @@ export class Agents {
   #waitOutcome(target: WaitTarget): WaitOutcome {
     if ("session" in target) {
       const session = this.session(target.session);
-      return { status: sessionWaitStatus(session), proposal: null, task: session.task === null ? null : this.task(session.task), session };
+      return outcome(sessionWaitStatus(session), { task: session.task === null ? null : this.task(session.task), session });
     }
     const task = this.#tasks.find(target.task);
     if (task) {
       const session = this.#views().find((s) => s.task === task.id) ?? null;
       const status = session ? sessionWaitStatus(session) : this.#tasks.busy(task.id) ? "starting" : "no_session";
-      return { status, proposal: null, task, session };
+      return outcome(status, { task, session });
     }
     const approving = this.#proposals.approving(target.task);
-    if (approving) return { status: "starting", proposal: approving, task: null, session: null };
+    if (approving) return outcome("starting", { proposal: approving });
     const proposal = this.#proposals.find(target.task);
-    if (proposal) return { status: "proposal_pending", proposal, task: null, session: null };
-    if (this.#proposals.wasRejected(target.task)) return { status: "proposal_rejected", proposal: null, task: null, session: null };
+    if (proposal) return outcome("proposal_pending", { proposal });
+    const rejection = this.#proposals.rejection(target.task);
+    if (rejection) return outcome("proposal_rejected", { rejectionReason: rejection.reason });
     throw new DomainError("not_found", `no task or task proposal ${target.task}`);
   }
 

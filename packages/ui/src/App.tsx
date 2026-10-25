@@ -8,10 +8,10 @@ import { inDesktopShell, openWindow, reportShown, START_PARAMS, showViewMenu, st
 import { DROP_HINT } from "@/lib/dropped-folder";
 import type { DroppedPaths } from "@/lib/file-drop";
 import { IS_MAC } from "@/lib/platform";
-import { entrySession, findEntry, type SessionSelection, sessionRows } from "@/lib/session-entries";
+import { entrySelection, findEntry, nextWaitingShortcut, type SessionSelection, sessionRows } from "@/lib/session-entries";
 import { SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
 import { sessionShortcut } from "@/lib/session-shortcut";
-import { attentionCount, nextWaitingShortcut } from "@/lib/session-state";
+import { attentionCount } from "@/lib/session-state";
 import { useAppMenu } from "@/lib/use-app-menu";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
@@ -101,20 +101,12 @@ export function App() {
     setView("sessions");
     setSession(selection);
   };
-  // Alt+J (ADR-48) and the global shortcut (ADR-50): the session after the selected one, like the "Next waiting" button.
+  // Alt+J (ADR-48) and the global shortcut (ADR-50): the entry after the selected one, like the "Next waiting" button.
   const openNextWaiting = () => {
     const inSessions = view === "sessions";
-    const selected =
-      inSessions && sessions.data
-        ? entrySession(
-            findEntry(
-              sessionRows(sessions.data).map((r) => r.entry),
-              session,
-            ),
-          )?.id
-        : undefined;
-    const { open, taken } = nextWaitingShortcut(sessions.data?.sessions ?? [], selected, inSessions);
-    if (open) openInSessions({ kind: "session", id: open.id });
+    const entries = sessions.data ? sessionRows(sessions.data).map((r) => r.entry) : [];
+    const { open, taken } = nextWaitingShortcut(entries, inSessions ? findEntry(entries, session) : undefined, inSessions);
+    if (open) openInSessions(entrySelection(open));
     return taken;
   };
   // Jump from the tray, a notification or the tray panel (ADR-26, ADR-39, ADR-50), from the global shortcut (ADR-50)

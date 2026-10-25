@@ -213,6 +213,38 @@ impl News {
     }
 }
 
+/// Polls in a row without a new proposal before the held proposals are announced (ADR-55).
+const QUIET_POLLS: u32 = 3;
+
+/// New proposals held back while a main session is still proposing: it writes a plan of several tasks with a few
+/// seconds between `propose_task` calls, and one notification for the plan says more than one per task (ADR-55). They
+/// are announced after `QUIET_POLLS` polls without a new one, about six seconds, and only those still waiting.
+#[derive(Debug, Default)]
+pub struct HeldProposals {
+    held: Vec<Proposal>,
+    quiet: u32,
+}
+
+impl HeldProposals {
+    /// Takes the new proposals of a poll and returns the ones to announce now.
+    pub fn after_poll(&mut self, new: Vec<Proposal>, waiting: &[Proposal]) -> Vec<Proposal> {
+        if !new.is_empty() {
+            self.held.extend(new);
+            self.quiet = 0;
+            return Vec::new();
+        }
+        if self.held.is_empty() {
+            return Vec::new();
+        }
+        self.quiet += 1;
+        if self.quiet < QUIET_POLLS {
+            return Vec::new();
+        }
+        self.quiet = 0;
+        std::mem::take(&mut self.held).into_iter().filter(|p| waiting.iter().any(|w| w.id == p.id)).collect()
+    }
+}
+
 fn any_window_focused(app: &AppHandle) -> bool {
     app.webview_windows().values().any(|w| w.is_focused().unwrap_or(false))
 }
@@ -221,11 +253,13 @@ fn any_window_focused(app: &AppHandle) -> bool {
 pub fn watch(app: AppHandle, state: Arc<DaemonState>, tray_id: &'static str) {
     std::thread::spawn(move || {
         let mut last: Option<Snapshot> = None;
+        let mut held = HeldProposals::default();
         loop {
             std::thread::sleep(POLL);
             let Some(conn) = state.ready() else { continue };
             let Some(now) = daemon::sessions(&conn).ok().and_then(|body| parse_sessions(&body)) else { continue };
-            let news = News::between(last.as_ref(), &now);
+            let mut news = News::between(last.as_ref(), &now);
+            news.proposals = held.after_poll(std::mem::take(&mut news.proposals), &now.proposals);
             if !news.is_empty() {
                 if let Some(window) = app.get_webview_window(&app.state::<Windows>().session_window()) {
                     let _ = window.request_user_attention(Some(UserAttentionType::Informational));
@@ -313,6 +347,29 @@ mod tests {
         let now = parse_sessions(&body("", &[proposal_json("p1"), proposal_json("p2")].join(","))).unwrap();
         assert_eq!(new_proposals(Some(&before), &now.proposals), vec![&proposal("p2")]);
         assert_eq!(new_proposals(None, &now.proposals), Vec::<&Proposal>::new());
+    }
+
+    #[test]
+    fn proposals_are_announced_together_once_the_main_session_stops_proposing() {
+        let mut held = HeldProposals::default();
+        let waiting = [proposal("p1"), proposal("p2")];
+        assert_eq!(held.after_poll(vec![proposal("p1")], &waiting), vec![]);
+        assert_eq!(held.after_poll(vec![], &waiting), vec![]);
+        assert_eq!(held.after_poll(vec![proposal("p2")], &waiting), vec![]);
+        assert_eq!(held.after_poll(vec![], &waiting), vec![]);
+        assert_eq!(held.after_poll(vec![], &waiting), vec![]);
+        assert_eq!(held.after_poll(vec![], &waiting), vec![proposal("p1"), proposal("p2")]);
+        assert_eq!(held.after_poll(vec![], &waiting), vec![]);
+    }
+
+    #[test]
+    fn a_held_proposal_the_user_has_already_decided_on_is_not_announced() {
+        let mut held = HeldProposals::default();
+        assert_eq!(held.after_poll(vec![proposal("p1"), proposal("p2")], &[proposal("p1"), proposal("p2")]), vec![]);
+        for _ in 1..QUIET_POLLS {
+            assert_eq!(held.after_poll(vec![], &[proposal("p2")]), vec![]);
+        }
+        assert_eq!(held.after_poll(vec![], &[proposal("p2")]), vec![proposal("p2")]);
     }
 
     #[test]
