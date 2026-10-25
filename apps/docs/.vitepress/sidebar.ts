@@ -48,6 +48,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       { text: "Home dashboard", link: "/features/home" },
       { text: "Navigation and windows", link: "/features/navigation-and-windows" },
       { text: "trackwall:// links", link: "/features/links" },
+      { text: "Start at sign-in", link: "/features/start-at-sign-in" },
       { text: "App updates", link: "/features/updates" },
     ],
   },

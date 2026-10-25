@@ -27,6 +27,18 @@ A switch for part of the content inside a view, for example README, Files, Commi
 A desktop shell window with the whole UI and its own view (ADR-49). The main window comes from `tauri.conf.json` and hides to the tray; an extra window is opened with "Open in new window" and closes for real.
 _Avoid_: screen (that is a monitor), tab (that is `TabBar`), terminal window (that is a session terminal)
 
+**Start at sign-in** (`autostart.rs`, `autostart_enabled`, `set_autostart`, the `--autostart` argument; in the UI *Start at sign-in*):
+Trackwall started by the system's own start entry when the user signs in, with every window hidden until the user opens it (ADR-65). `autostart` is the identifier in code; UI and documentation say "start at sign-in".
+_Avoid_: launch at login, startup (that is the daemon's start)
+
+**Waiting badge** (`badge.rs`, `Badge`, `TrayIcons`):
+The number of sessions and task proposals waiting for the user on the app's icons: the Dock badge, the taskbar overlay on Windows and a dot on the tray icon (ADR-65).
+_Avoid_: notification (that is the system notification, ADR-50)
+
+**Window zoom** (`zoom.rs`, `ZoomStep`, `zoom_window`, `zoom.json`):
+The zoom of a window's page, stepped with Ctrl+= / Ctrl+- / Ctrl+0 and kept per window label (ADR-65).
+_Avoid_: scale (that is the monitor's scale factor)
+
 **Trackwall link** (`trackwall://`, `trackwallLink`, `TRACKWALL_LINK_SCHEME`, `TRACKWALL_LINK_KINDS`; in the shell `link.rs`):
 `trackwall://repo/<repo id>`, `trackwall://session/<session id>` or `trackwall://task/<task id>`: shows that thing in the window (ADR-52). Only navigates, never runs anything.
 _Avoid_: deep link; plain "link" (that is a link in a README, ADR-35)

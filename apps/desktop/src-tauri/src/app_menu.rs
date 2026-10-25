@@ -1,9 +1,11 @@
 //! The menu bar of the app on macOS (ADR-49): the app menu with Settings, Edit, View with the views of the activity
-//! bar, and Window, which macOS fills with the open windows (`WINDOW_SUBMENU_ID`). Windows has no menu bar, because
-//! there it would be a bar inside every window. A click on a Trackwall item goes to the last focused window as the
-//! event `APP_MENU_EVENT`, and that window's UI acts on it (`use-app-menu.ts`); the other items are the system's own.
+//! bar and the zoom of the page (ADR-65), and Window, which macOS fills with the open windows (`WINDOW_SUBMENU_ID`).
+//! Windows has no menu bar, because there it would be a bar inside every window. A click on a Trackwall item goes to
+//! the last focused window: a zoom item zooms it here (`zoom.rs`), any other item is the event `APP_MENU_EVENT`, and
+//! that window's UI acts on it (`use-app-menu.ts`); the other items are the system's own.
 
 use crate::windows::{self, Windows};
+use crate::zoom::{self, ZoomStep};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -25,6 +27,13 @@ const APP_MENU_EVENT: &str = "app-menu";
 /// Ids of Trackwall's items; menu item ids are shared by every menu of the app, so they carry a prefix.
 const VIEW_ITEM_PREFIX: &str = "app-menu-view:";
 const NEW_WINDOW_ITEM: &str = "app-menu-new-window";
+/// The zoom items of View (ADR-65). Their shortcuts are the keys of `zoom-shortcut.ts`, shown here as a reminder: the
+/// page takes those keys first, so the items act only when the page did not.
+const ZOOM_ITEMS: [(&str, &str, &str, ZoomStep); 3] = [
+    ("app-menu-zoom-reset", "Actual Size", "CmdOrCtrl+0", ZoomStep::Reset),
+    ("app-menu-zoom-in", "Zoom In", "CmdOrCtrl+=", ZoomStep::In),
+    ("app-menu-zoom-out", "Zoom Out", "CmdOrCtrl+-", ZoomStep::Out),
+];
 
 // Only the macOS menu bar shows the shortcut.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
@@ -47,7 +56,7 @@ pub fn view_name(id: &str) -> Option<&'static str> {
     VIEWS.iter().chain([&SETTINGS]).find(|v| v.id == id).map(|v| v.label)
 }
 
-/// The command of a menu item, `None` for an item that is not Trackwall's (the system's, the tray's, a context menu's).
+/// The page's command of a menu item, `None` for any other item.
 fn command(item_id: &str) -> Option<MenuCommand> {
     if item_id == NEW_WINDOW_ITEM {
         return Some(MenuCommand::NewWindow);
@@ -56,15 +65,45 @@ fn command(item_id: &str) -> Option<MenuCommand> {
     view_name(view).map(|_| MenuCommand::View { view: view.to_string() })
 }
 
-/// Sends a click on a Trackwall item to the last focused window, shown first, because the app can be active with all
-/// its windows hidden (main window closed to the tray). A window whose page is still loading shows itself (ADR-11)
-/// and has no listener yet, so a click in that second is lost; the user clicks again.
+/// What a click on a Trackwall item does: a command for the window's page, or a zoom step, which the shell does
+/// itself, because the zoom is the shell's (`zoom.rs`).
+#[derive(Debug, PartialEq, Eq)]
+enum MenuAction {
+    Page(MenuCommand),
+    Zoom(ZoomStep),
+}
+
+/// The action of a menu item, `None` for an item that is not Trackwall's (the system's, the tray's, a context menu's).
+fn action(item_id: &str) -> Option<MenuAction> {
+    if let Some((.., step)) = ZOOM_ITEMS.iter().find(|(id, ..)| *id == item_id) {
+        return Some(MenuAction::Zoom(*step));
+    }
+    command(item_id).map(MenuAction::Page)
+}
+
+/// Acts on a click on a Trackwall item in the last focused window. A command for the page shows the window first,
+/// because the app can be active with all its windows hidden (main window closed to the tray); a window whose page is
+/// still loading shows itself (ADR-11) and has no listener yet, so a click in that second is lost and the user clicks
+/// again.
 pub fn handle(app: &AppHandle, item_id: &str) {
-    let Some(command) = command(item_id) else { return };
+    let Some(action) = action(item_id) else { return };
     let label = app.state::<Windows>().last_focused();
-    windows::show_once_loaded(app, &label);
-    if let Err(err) = app.emit_to(label.as_str(), APP_MENU_EVENT, command) {
-        eprintln!("[desktop] sending a menu command to {label}: {err}");
+    match action {
+        // Off the main thread, where menu events run, because the step saves the zoom file.
+        MenuAction::Zoom(step) => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                if let Err(err) = zoom::apply_step(&app, &label, step) {
+                    eprintln!("[desktop] zooming {label}: {err}");
+                }
+            });
+        }
+        MenuAction::Page(command) => {
+            windows::show_once_loaded(app, &label);
+            if let Err(err) = app.emit_to(label.as_str(), APP_MENU_EVENT, command) {
+                eprintln!("[desktop] sending a menu command to {label}: {err}");
+            }
+        }
     }
 }
 
@@ -115,6 +154,10 @@ pub fn build(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     for v in &VIEWS {
         view.append(&item(v, v.label)?)?;
     }
+    view.append(&separator()?)?;
+    for (id, text, shortcut, _) in ZOOM_ITEMS {
+        view.append(&MenuItem::with_id(app, id, text, true, Some(shortcut))?)?;
+    }
     view.append_items(&[&separator()?, &PredefinedMenuItem::fullscreen(app, None)?])?;
     let window = Submenu::with_id_and_items(
         app,
@@ -143,6 +186,14 @@ mod tests {
         assert_eq!(command("app-menu-view:sessions"), Some(MenuCommand::View { view: "sessions".into() }));
         assert_eq!(command("app-menu-view:settings"), Some(MenuCommand::View { view: "settings".into() }));
         assert_eq!(command("app-menu-new-window"), Some(MenuCommand::NewWindow));
+    }
+
+    #[test]
+    fn a_zoom_item_zooms_in_the_shell_and_a_view_item_goes_to_the_page() {
+        assert_eq!(action("app-menu-zoom-in"), Some(MenuAction::Zoom(ZoomStep::In)));
+        assert_eq!(action("app-menu-zoom-reset"), Some(MenuAction::Zoom(ZoomStep::Reset)));
+        assert_eq!(action("app-menu-view:home"), Some(MenuAction::Page(MenuCommand::View { view: "home".into() })));
+        assert_eq!(action("quit"), None);
     }
 
     #[test]

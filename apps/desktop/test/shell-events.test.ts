@@ -159,3 +159,39 @@ test("the tray panel window opens the page the UI renders the panel for and call
   expect(/invoke\("(\w+)"/.exec(panelUi)?.[1]).toBe("open_from_tray_panel");
   expect(read("apps/desktop/src-tauri/src/main.rs")).toContain("fn open_from_tray_panel(");
 });
+
+const zoomShell = read("apps/desktop/src-tauri/src/zoom.rs");
+const zoomUi = read("packages/ui/src/lib/zoom-shortcut.ts");
+
+test("the UI zooms through the command the shell registers, with the steps the shell knows (ADR-65)", () => {
+  const command = /#\[tauri::command\]\s*pub async fn (\w+)\(window: WebviewWindow, (\w+): ZoomStep\)/.exec(zoomShell);
+  expect(command?.[1]).toBe("zoom_window");
+  expect(read("apps/desktop/src-tauri/src/main.rs")).toContain(`zoom::${command?.[1]}`);
+  expect(/const ZOOM_COMMAND = "(\w+)";/.exec(zoomUi)?.[1]).toBe(command?.[1]);
+  expect(zoomUi).toContain(`invoke(ZOOM_COMMAND, { ${command?.[2]} })`);
+  // `ZoomStep` in Rust has `rename_all = "kebab-case"`.
+  const shellSteps = [...(/pub enum ZoomStep \{([^}]*)\}/.exec(zoomShell)?.[1] ?? "").matchAll(/(\w+),/g)].map((m) => m[1]?.toLowerCase());
+  const uiSteps = [...(/export type ZoomStep = ([^;]*);/.exec(zoomUi)?.[1] ?? "").matchAll(/"(\w+)"/g)].map((m) => m[1]);
+  expect(shellSteps).toEqual(["in", "out", "reset"]);
+  expect(uiSteps).toEqual(shellSteps);
+});
+
+test("the shell tells the page its zoom in the attribute the UI reads (ADR-65)", () => {
+  const shell = /const ZOOM_ATTRIBUTE: &str = "([^"]+)";/.exec(zoomShell)?.[1];
+  const ui = /const ZOOM_ATTRIBUTE = "([^"]+)";/.exec(read("packages/ui/src/lib/file-drop.ts"))?.[1];
+  expect(shell).toBe("data-zoom");
+  expect(ui).toBe(shell);
+});
+
+test("the UI reads and switches the start at sign-in through the commands the shell registers (ADR-65)", () => {
+  const shell = read("apps/desktop/src-tauri/src/autostart.rs");
+  const ui = read("packages/ui/src/lib/autostart.ts");
+  const main = read("apps/desktop/src-tauri/src/main.rs");
+  expect(shell).toContain("pub async fn autostart_enabled(app: AppHandle) -> Result<bool, String>");
+  expect(shell).toContain("pub async fn set_autostart(app: AppHandle, enabled: bool) -> Result<bool, String>");
+  expect(main).toContain("autostart::autostart_enabled");
+  expect(main).toContain("autostart::set_autostart");
+  expect(/const ENABLED_COMMAND = "(\w+)";/.exec(ui)?.[1]).toBe("autostart_enabled");
+  expect(/const SET_COMMAND = "(\w+)";/.exec(ui)?.[1]).toBe("set_autostart");
+  expect(ui).toContain("invoke<unknown>(SET_COMMAND, { enabled })");
+});

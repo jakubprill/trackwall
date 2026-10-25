@@ -1,7 +1,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect, useRef, useState } from "react";
-import { cssPoint, DROP_HOVER, type DroppedPaths, dragStep, dropTargetAt, FileDropEvent } from "./file-drop.ts";
+import { cssPoint, DROP_HOVER, type DroppedPaths, dragStep, dropTargetAt, FileDropEvent, pageZoom } from "./file-drop.ts";
 import { IS_WINDOWS } from "./platform.ts";
 
 /**
@@ -34,7 +34,14 @@ export function useFileDrop(onUnhandled: (paths: DroppedPaths) => void): boolean
         return;
       }
       if (payload.type === "leave") return;
-      const target = dropTargetAt(document, cssPoint(payload.position, IS_WINDOWS, window.devicePixelRatio));
+      const target = dropTargetAt(
+        document,
+        cssPoint(payload.position, {
+          windows: IS_WINDOWS,
+          devicePixelRatio: window.devicePixelRatio,
+          zoom: pageZoom(document.documentElement),
+        }),
+      );
       if (action.kind === "hover") {
         hover(target);
         setDragging(true);
