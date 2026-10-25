@@ -2,8 +2,11 @@ import { Activity, FolderGit2, Network, Orbit, Settings, SquareTerminal } from "
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { FolderDrop } from "@/components/FolderDrop";
 import { Loading } from "@/components/Loading";
 import { inDesktopShell, openWindow, reportShown, START_PARAMS, showViewMenu, startFromLocation } from "@/lib/app-window";
+import { DROP_HINT } from "@/lib/dropped-folder";
+import type { DroppedPaths } from "@/lib/file-drop";
 import { IS_MAC } from "@/lib/platform";
 import { entrySession, findEntry, type SessionSelection, sessionRows } from "@/lib/session-entries";
 import { SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
@@ -12,6 +15,7 @@ import { attentionCount, nextWaitingShortcut } from "@/lib/session-state";
 import { useAppMenu } from "@/lib/use-app-menu";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
+import { useFileDrop } from "@/lib/use-file-drop";
 import { useJumpRequest } from "@/lib/use-jump-request";
 import { useSessions } from "@/lib/use-sessions";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
@@ -38,18 +42,32 @@ const VIEW_IDS = VIEWS.map((v) => v.id);
 
 export function App() {
   // Repo otwarte z pulpitu należy do przejścia, nie do widoku: każde inne przejście do „Repos” zaczyna bez niego.
-  // An extra window starts with the view it was opened with or showed at the last run (ADR-49), the main window with Home.
-  const [{ view, repo }, setNav] = useState<{ view: View; repo?: string }>(() => ({
+  // An extra window starts with the view it was opened with or showed at the last run (ADR-49), the main window with
+  // Home. `visit` grows with every opening of a repo, so that Repos is mounted again with it even when it is already open.
+  const [{ view, repo, visit }, setNav] = useState<{ view: View; repo?: string; visit: number }>(() => ({
     view: startFromLocation(window.location.search, START_PARAMS.view, VIEW_IDS) ?? "home",
+    visit: 0,
   }));
-  const setView = useCallback((next: View, openRepo?: string) => setNav({ view: next, repo: openRepo }), []);
-  // A jump to a repo while "Repos" is open must still select it, and `ReposView` takes the repo only when it mounts.
-  const [repoJumps, setRepoJumps] = useState(0);
+  const setView = useCallback((next: View) => setNav((nav) => ({ view: next, visit: nav.visit })), []);
+  const openRepos = useCallback((openRepo?: string) => setNav((nav) => ({ view: "repos", repo: openRepo, visit: nav.visit + 1 })), []);
   const [session, setSession] = useState<SessionSelection>();
   const [sessionLayout, setSessionLayout] = useState<SessionLayout>(
     () => startFromLocation(window.location.search, START_PARAMS.sessionLayout, SESSION_LAYOUTS) ?? "1",
   );
   const { conn, epoch, error, retry } = useConnection();
+  // A folder dropped outside a session (ADR-51); `seq` mounts a new bar for every drop, also of the same folder. A drop
+  // without a daemon connection is ignored, rather than answered whenever the connection comes back.
+  const [dropped, setDropped] = useState<{ paths: DroppedPaths; seq: number }>();
+  const dragging = useFileDrop((paths) => {
+    if (conn) setDropped((last) => ({ paths, seq: (last?.seq ?? 0) + 1 }));
+  });
+  const openReposFromDrop = useCallback(
+    (openRepo?: string) => {
+      setDropped(undefined);
+      openRepos(openRepo);
+    },
+    [openRepos],
+  );
   const [windowError, setWindowError] = useState<string>();
   const newWindow = useMemo(() => {
     if (!inDesktopShell()) return undefined;
@@ -104,8 +122,7 @@ export function App() {
   useJumpRequest((jump) => {
     if (jump.kind === "next-waiting") return void openNextWaiting();
     if (jump.kind !== "repo") return openInSessions(jump);
-    setView("repos", jump.id);
-    setRepoJumps((n) => n + 1);
+    openRepos(jump.id);
   });
   // Alt+J from every view.
   useWindowShortcuts((event) => {
@@ -124,6 +141,21 @@ export function App() {
       <div className="flex min-w-0 flex-1 flex-col">
         {error && <ErrorBanner message={error} action={{ label: "Try again", onClick: retry }} />}
         {windowError && <ErrorBanner message={windowError} action={{ label: "Dismiss", onClick: () => setWindowError(undefined) }} />}
+        {conn && dropped && (
+          <FolderDrop
+            key={dropped.seq}
+            conn={conn}
+            paths={dropped.paths}
+            onOpenRepos={openReposFromDrop}
+            onDismiss={() => setDropped(undefined)}
+          />
+        )}
+        {dragging && conn && (
+          // Over the page, not in its flow: a bar that pushes the page down would move the terminals under the pointer.
+          <p className="bg-card text-muted-foreground pointer-events-none fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md border px-4 py-2 text-sm shadow-lg">
+            {DROP_HINT}
+          </p>
+        )}
         <main className="hud-grid min-h-0 flex-1 overflow-y-auto">
           {!conn && !error && (
             <div className="p-6">
@@ -137,14 +169,14 @@ export function App() {
               runningLive={runningLive}
               sessions={sessions}
               onOpenInSessions={openInSessions}
-              onOpenRepo={(id) => setView("repos", id)}
+              onOpenRepo={openRepos}
               onOpenDaemon={() => setView("daemon")}
               onOpenSettings={() => setView("settings")}
             />
           )}
           {conn && view === "repos" && (
             <ReposView
-              key={`${epoch}:${repoJumps}`}
+              key={`${epoch}:${visit}`}
               conn={conn}
               initialRepo={repo}
               onRetry={retry}

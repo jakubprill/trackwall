@@ -6,12 +6,15 @@ import { Terminal } from "@xterm/xterm";
 import { useEffect, useRef, useState } from "react";
 import type { Connection } from "@/lib/connection";
 import { daemonSocket } from "@/lib/daemon-socket";
+import { DROP_HOVER_RING, FILE_DROP_TARGET, FileDropEvent } from "@/lib/file-drop";
 import { oncePerFrame } from "@/lib/once-per-frame";
+import { pastedPaths } from "@/lib/pasted-paths";
 import { IS_MAC } from "@/lib/platform";
 import { copiesSelection } from "@/lib/terminal-copy";
 import { trackwallLinkProvider } from "@/lib/terminal-links";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { terminalTheme } from "@/lib/terminal-theme";
+import { cn } from "@/lib/utils";
 import { FocusReporter, terminalInFront } from "@/lib/window-focus";
 
 const RECONNECT_MS = 1000;
@@ -23,7 +26,8 @@ const RECONNECT_MS = 1000;
  * terminal that reported one, and a window that comes to the front reports its terminals' sizes again, so with the
  * session open in two windows (ADR-49) the one you work in sets it. The window also tells the daemon whether it is in front of the user, which marks the session seen
  * (ADR-47). In the grid (ADR-48) several terminals are open at once; only the `focused` one takes the keyboard and
- * counts as in front, so a waiting session in another tile keeps waiting until the user selects it.
+ * counts as in front, so a waiting session in another tile keeps waiting until the user selects it. Files dropped on
+ * the terminal (ADR-51) are pasted as their paths, as if the user typed them.
  */
 export function SessionTerminal({ conn, session, live, focused }: { conn: Connection; session: string; live: boolean; focused: boolean }) {
   const frame = useRef<HTMLDivElement>(null);
@@ -31,6 +35,8 @@ export function SessionTerminal({ conn, session, live, focused }: { conn: Connec
   const term = useRef<Terminal>(undefined);
   const takesFocus = useRef(focused);
   takesFocus.current = focused;
+  const isLive = useRef(live);
+  isLive.current = live;
   const updateFocus = useRef<() => void>(undefined);
   const [notice, setNotice] = useState<string>();
 
@@ -105,6 +111,13 @@ export function SessionTerminal({ conn, session, live, focused }: { conn: Connec
       );
       return false;
     });
+    const takeDrop = (event: Event) => {
+      if (!(event instanceof FileDropEvent)) return;
+      if (!isLive.current) return setNotice("The session has ended, so the dropped path was not pasted.");
+      // `paste` goes through `onData`, and in bracketed paste mode the agent sees it as pasted text, not keys.
+      terminal.paste(pastedPaths(event.paths));
+    };
+    container.addEventListener(FileDropEvent.type, takeDrop);
     const resizer = oncePerFrame(() => {
       const { cols, rows } = terminal;
       fit.fit();
@@ -124,6 +137,7 @@ export function SessionTerminal({ conn, session, live, focused }: { conn: Connec
       clearTimeout(timer);
       resizer.dispose();
       resize.disconnect();
+      container.removeEventListener(FileDropEvent.type, takeDrop);
       window.removeEventListener("focus", onWindowFocus);
       window.removeEventListener("blur", sendFocus);
       document.removeEventListener("visibilitychange", sendFocus);
@@ -150,7 +164,11 @@ export function SessionTerminal({ conn, session, live, focused }: { conn: Connec
           The session has ended; the terminal shows what was left on its screen.
         </p>
       )}
-      <div ref={frame} className="bg-background relative min-h-0 flex-1 overflow-hidden">
+      <div
+        ref={frame}
+        {...{ [FILE_DROP_TARGET]: "" }}
+        className={cn("bg-background relative min-h-0 flex-1 overflow-hidden", DROP_HOVER_RING)}
+      >
         <div ref={host} className="absolute inset-2 font-mono" />
       </div>
     </div>

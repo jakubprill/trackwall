@@ -30,6 +30,7 @@ async function workspaceWithRepos() {
     vcs: new Vcs(),
     hosting: fakeHosting().hosting,
     openEditor: () => {},
+    openFolder: () => {},
   });
   await workspace.setProjectsDir(projects);
   return { workspace, orders };

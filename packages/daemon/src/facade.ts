@@ -49,6 +49,7 @@ export interface FacadeOptions {
   /** Katalog stanu daemona; tam leżą `workspace.yaml` (ADR-13), `runtime.json` (§4.1) `logs/` (§4.2) i karty repo (`cards/`, ADR-25). */
   home: string;
   openUrl: (url: string) => void;
+  openFolder: (dir: string) => void;
   /** Program `mise` z argumentami przed komendą (`["mise"]` w daemonie). */
   miseCommand: readonly string[];
   /** Program Copilot CLI z argumentami przed argumentami sesji (`["copilot"]` w daemonie, atrapa w testach). */
@@ -70,6 +71,7 @@ export function createFacade(o: FacadeOptions): Facade {
     vcs,
     hosting: new Hosting(HOSTING_CLIS),
     openEditor,
+    openFolder: o.openFolder,
   });
   const logs = new Logs({ dir: join(o.home, LOGS_DIR), maxFileBytes: LOG_FILE_MAX_BYTES, log: o.log });
   const procs = new ProcessGroups({

@@ -65,12 +65,15 @@ afterAll(() => api.close());
 
 /** Adresy, które daemon kazał otworzyć systemowi (`openUrl`), zamiast prawdziwej przeglądarki. */
 const openedUrls: string[] = [];
+/** Folders the daemon asked the system to open (`openFolder`), instead of a real Explorer or Finder. */
+const openedFolders: string[] = [];
 
 /** Fasada na pustym katalogu stanu, serwer MCP i zdarzenia na niej: to, co `main.ts` podaje do `startApi`. */
 function modules() {
   const facade = createFacade({
     home: mkdtempSync(join(tmpdir(), "trackwall-home-")),
     openUrl: (url) => openedUrls.push(url),
+    openFolder: (dir) => openedFolders.push(dir),
     miseCommand: ["mise"],
     copilotCommand: ["copilot"],
     hookCommand: () => ({ exec: "true", args: [] }),
@@ -194,6 +197,18 @@ describe("api workspace", () => {
 
     const graph = apiResult(RepoGraph).parse(JSON.parse((await post(graphApi.graph.path, "")).body));
     expect(graph.ok && graph.data.nodes.map((n) => n.repo)).toEqual(["sklep"]);
+  });
+
+  test("open-folder opens the folder of a listed repo in the system, and an unknown repo is 404", async () => {
+    const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
+    makeRepo({ "a.txt": "1" }, "shop", projects);
+    expect((await post(workspaceApi.setProjectsDir.path, JSON.stringify({ path: projects }))).status).toBe(200);
+    openedFolders.length = 0;
+
+    expect((await post(workspaceApi.openFolder.path, JSON.stringify({ repo: "shop" }))).status).toBe(200);
+    expect((await post(workspaceApi.openFolder.path, JSON.stringify({ repo: "missing" }))).status).toBe(404);
+
+    expect(openedFolders).toEqual([join(projects, "shop")]);
   });
 
   test("nieistniejący folder z projektami to 400 z opisem", async () => {

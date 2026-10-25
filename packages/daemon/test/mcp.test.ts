@@ -56,6 +56,7 @@ beforeAll(async () => {
   facade = createFacade({
     home,
     openUrl: () => {},
+    openFolder: () => {},
     // Program, którego nie ma w PATH: lista tasków mise jest wtedy stanem `not_installed`, na każdej maszynie tak samo.
     miseCommand: ["trackwall-test-brak-mise"],
     copilotCommand: ["copilot"],
