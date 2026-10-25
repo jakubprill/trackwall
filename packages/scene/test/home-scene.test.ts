@@ -42,8 +42,8 @@ afterEach(() => {
 });
 
 /**
- * Położenie, obrót i przezroczystość każdej części modelu: zmieniają się tylko wtedy, gdy model się rusza. Obiekt
- * encji jest pominięty, bo jego położenie silnik przepisuje z `Position`.
+ * Position, rotation and opacity of every part of the model: they change only when the model moves. The entity's
+ * object is left out, because the engine copies its position from `Position`.
  */
 function pose(key: HomeKey, scene: HomeScene): string {
   const parts: number[] = [];
@@ -56,7 +56,7 @@ function pose(key: HomeKey, scene: HomeScene): string {
   return parts.map((n) => n.toFixed(4)).join(",");
 }
 
-/** Przezroczystość przewodów połączeń z grafu; przewody sesji mają inną nazwę i nie mają podświetlenia. */
+/** Opacity of the connection wires from the graph; session wires have a different name and no highlighting. */
 function linkOpacities(): number[] {
   const found: number[] = [];
   engine.scene.traverse((o) => {
@@ -67,8 +67,8 @@ function linkOpacities(): number[] {
 
 const positionOf = (key: HomeKey, scene: HomeScene) => scene.entity(key)?.get(Position);
 
-describe("scena pulpitu", () => {
-  test("każde repo, sesja i daemon dostają encję z modelem do narysowania", () => {
+describe("dashboard scene", () => {
+  test("every repo, session and the daemon get an entity with a model to draw", () => {
     const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
     scene.apply(MODEL);
 
@@ -85,7 +85,7 @@ describe("scena pulpitu", () => {
     expect(linkOpacities()).toHaveLength(3);
   });
 
-  test("ta sama migawka drugi raz nie buduje modeli od nowa", () => {
+  test("the same snapshot a second time does not rebuild the models", () => {
     const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
     scene.apply(MODEL);
     const before = scene.entity("repo:orders-api")?.get(Visual);
@@ -95,7 +95,7 @@ describe("scena pulpitu", () => {
     expect(scene.entity("repo:orders-api")?.get(Visual)).toBe(before);
   });
 
-  test("zmiana stanu repo podmienia tylko jego model", () => {
+  test("a change of repo state replaces only its model", () => {
     const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
     scene.apply(MODEL);
     const orders = scene.entity("repo:orders-api")?.get(Visual);
@@ -107,7 +107,7 @@ describe("scena pulpitu", () => {
     expect(scene.entity("repo:web-shop")?.get(Visual)).toBe(web);
   });
 
-  test("repo, które zniknęło z migawki, traci encję razem ze swoją sesją i połączeniami", () => {
+  test("a repo that vanished from the snapshot loses its entity together with its session and connections", () => {
     const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
     scene.apply(MODEL);
 
@@ -118,7 +118,7 @@ describe("scena pulpitu", () => {
     expect(linkOpacities()).toHaveLength(2);
   });
 
-  test("kliknięcie wybiera obiekt, a dwuklik go otwiera", () => {
+  test("a click selects an object and a double click opens it", () => {
     const selected: Array<HomeKey | null> = [];
     const opened: HomeKey[] = [];
     const scene = new HomeScene(engine, {
@@ -129,7 +129,7 @@ describe("scena pulpitu", () => {
     });
     scene.apply(MODEL);
     const session = scene.entity("session:s1");
-    if (!session) throw new Error("brak encji sesji s1");
+    if (!session) throw new Error("no entity for session s1");
 
     engine.events.emit(session, "click", { button: 0, point: undefined });
     engine.events.emit(session, "doubleclick", { button: 0, point: undefined });
@@ -139,7 +139,7 @@ describe("scena pulpitu", () => {
     expect(scene.entity("session:s1")?.get(Scale)?.x).toBeCloseTo(1.12);
   });
 
-  test("dodanie repo przesuwa pozostałe repo i ich sesje na nowe miejsca w układzie", () => {
+  test("adding a repo moves the other repos and their sessions to new places in the layout", () => {
     const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
     scene.apply({ ...MODEL, repos: MODEL.repos.filter((r) => r.id !== "payments-api") });
     const at = positionOf("repo:orders-api", scene);
@@ -156,7 +156,7 @@ describe("scena pulpitu", () => {
     );
   });
 
-  test("zmiana liczby zmian ponad liczbę słupków nie buduje modelu repo od nowa", () => {
+  test("a change in the number of changes beyond the number of bars does not rebuild the repo model", () => {
     const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
     const withCount = (count: number): HomeModel => ({
       ...MODEL,
@@ -170,12 +170,12 @@ describe("scena pulpitu", () => {
     expect(scene.entity("repo:payments-api")?.get(Visual)).toBe(before);
   });
 
-  test("wskazany obiekt, który zniknął z migawki, kończy wskazanie", () => {
+  test("a hovered object that vanished from the snapshot ends the hover", () => {
     const hovered: Array<HomeKey | null> = [];
     const scene = new HomeScene(engine, { palette: PALETTE, motion: true, onHover: (k) => hovered.push(k) });
     scene.apply(MODEL);
     const session = scene.entity("session:s2");
-    if (!session) throw new Error("brak encji sesji s2");
+    if (!session) throw new Error("no entity for session s2");
 
     engine.events.emit(session, "pointerenter", {});
     scene.apply({ ...MODEL, sessions: MODEL.sessions.filter((s) => s.id !== "s2") });
@@ -183,12 +183,12 @@ describe("scena pulpitu", () => {
     expect(hovered).toEqual(["session:s2", null]);
   });
 
-  test("wybrany obiekt, który zniknął z migawki, kończy wybór", () => {
+  test("a selected object that vanished from the snapshot ends the selection", () => {
     const selected: Array<HomeKey | null> = [];
     const scene = new HomeScene(engine, { palette: PALETTE, motion: true, onSelect: (k) => selected.push(k) });
     scene.apply(MODEL);
     const session = scene.entity("session:s2");
-    if (!session) throw new Error("brak encji sesji s2");
+    if (!session) throw new Error("no entity for session s2");
 
     engine.events.emit(session, "click", { button: 0, point: undefined });
     scene.apply({ ...MODEL, sessions: MODEL.sessions.filter((s) => s.id !== "s2") });
@@ -197,13 +197,13 @@ describe("scena pulpitu", () => {
     expect(linkOpacities()).toEqual([0.22, 0.22, 0.22]);
   });
 
-  test("przewody nie zasłaniają repo ani sesji przed wskaźnikiem", () => {
+  test("wires do not hide repos or sessions from the pointer", () => {
     const scene = new HomeScene(engine, { palette: PALETTE, motion: false });
     scene.apply(MODEL);
     const hits: Intersection[] = [];
     engine.scene.traverse((o) => {
       if (!(o instanceof Mesh && o.geometry instanceof TubeGeometry)) return;
-      // Promień z góry prosto w środek przewodu.
+      // A ray from above straight into the middle of the wire.
       const middle = o.geometry.parameters.path.getPoint(0.5);
       const ray = new Raycaster(new Vector3(middle.x, 5, middle.z), new Vector3(0, -1, 0));
       o.raycast(ray, hits);
@@ -212,12 +212,12 @@ describe("scena pulpitu", () => {
     expect(hits).toEqual([]);
   });
 
-  test("zamknięta scena nie zgłasza końca wskazania ani wyboru", () => {
+  test("a disposed scene reports no end of hover or selection", () => {
     const calls: Array<HomeKey | null> = [];
     const scene = new HomeScene(engine, { palette: PALETTE, motion: true, onHover: (k) => calls.push(k), onSelect: (k) => calls.push(k) });
     scene.apply(MODEL);
     const session = scene.entity("session:s1");
-    if (!session) throw new Error("brak encji sesji s1");
+    if (!session) throw new Error("no entity for session s1");
     engine.events.emit(session, "pointerenter", {});
     engine.events.emit(session, "click", { button: 0, point: undefined });
 
@@ -226,7 +226,7 @@ describe("scena pulpitu", () => {
     expect(calls).toEqual(["session:s1", "session:s1"]);
   });
 
-  test("połączenia repo, których nazwy zawierają separatory, nie zlewają się w jedno", () => {
+  test("connections of repos whose names contain separators do not merge into one", () => {
     const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
     const repo = (id: string, layer: number) => ({ id, layer, state: "clean" as const, count: 0, runningTask: null });
 
@@ -244,11 +244,11 @@ describe("scena pulpitu", () => {
     expect(linkOpacities()).toHaveLength(2);
   });
 
-  test("kolor spoza zapisu #rrggbb, np. token oklch wprost z CSS, to błąd przy tworzeniu sceny", () => {
+  test("a colour not written as #rrggbb, for example an oklch token straight from CSS, is an error when the scene is created", () => {
     expect(() => new HomeScene(engine, { palette: { ...PALETTE, primary: "oklch(0.82 0.12 210)" }, motion: true })).toThrow("primary");
   });
 
-  test("wybór sesji powiększa ją i rozjaśnia połączenia jej repo, a resztę przygasza", () => {
+  test("selecting a session enlarges it and brightens its repo's connections, and dims the rest", () => {
     const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
     scene.apply(MODEL);
 
@@ -260,7 +260,7 @@ describe("scena pulpitu", () => {
     expect(linkOpacities()).toEqual([0.22, 0.22, 0.22]);
   });
 
-  test("etykiety dostają tylko repo, które nie są czyste, i sesje, które czekają albo mają błąd", () => {
+  test("only repos that are not clean and sessions that are waiting or have an error get labels", () => {
     const labelled: string[] = [];
     const scene = new HomeScene(engine, {
       palette: PALETTE,
@@ -278,7 +278,7 @@ describe("scena pulpitu", () => {
     expect(scene.entity("repo:orders-api")?.has(Label)).toBe(false);
   });
 
-  test("zamknięcie sceny zwalnia geometrie modeli także po zamknięciu silnika", () => {
+  test("disposing the scene frees model geometries also after the engine is disposed", () => {
     const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
     scene.apply(MODEL);
     let geometries = 0;
@@ -295,7 +295,7 @@ describe("scena pulpitu", () => {
     expect(disposed).toBe(geometries);
   });
 
-  test("bez ruchu scena stoi: klatki nie zmieniają modeli", () => {
+  test("without motion the scene stands still: frames do not change the models", () => {
     const scene = new HomeScene(engine, { palette: PALETTE, motion: false });
     scene.apply(MODEL);
     const before = pose("session:s1", scene);
@@ -305,7 +305,7 @@ describe("scena pulpitu", () => {
     expect(pose("session:s1", scene)).toBe(before);
   });
 
-  test("z ruchem czekająca sesja się porusza", () => {
+  test("with motion a waiting session moves", () => {
     const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
     scene.apply(MODEL);
     const before = pose("session:s1", scene);

@@ -39,45 +39,45 @@ import { assertScenePalette, type ScenePalette, sessionStateColor } from "./pale
 import { repoKind } from "./repo-kind.ts";
 
 /**
- * Scena pulpitu na silniku Pawn (ADR-33, §5.5). `apply` przyjmuje kolejne migawki pulpitu i trzyma jedną encję na
- * obiekt (`KeyedEntities`): nowy obiekt dostaje encję, zniknięty ją traci, każdy staje tam, gdzie wypada w nowym
- * układzie, a model buduje się od nowa tylko wtedy, gdy zmieniło się coś, co widać. Silnik, kamerę, wskaźnik
- * i etykiety daje wołający, więc ta sama scena działa w oknie i w teście bez przeglądarki.
+ * Dashboard scene on the Pawn engine (ADR-33, §5.5). `apply` takes successive dashboard snapshots and keeps one entity
+ * per object (`KeyedEntities`): a new object gets an entity, a vanished one loses it, each one moves to where it falls in
+ * the new layout, and a model is rebuilt only when something visible has changed. The caller provides the engine, camera,
+ * pointer and labels, so the same scene works in a window and in a test without a browser.
  */
 
-/** Obiekt, który dostaje etykietę; jej treść pisze UI. */
+/** An object that gets a label; the UI writes its text. */
 export type LabelTarget = { kind: "repo"; key: HomeKey; repo: HomeRepo } | { kind: "session"; key: HomeKey; session: HomeSession };
 
 export interface HomeSceneOptions {
-  /** Kolory w `#rrggbb` (`ScenePalette`); inny zapis to błąd przy tworzeniu sceny. */
+  /** Colours as `#rrggbb` (`ScenePalette`); any other notation is an error when the scene is created. */
   palette: ScenePalette;
   /**
-   * `false` przy `prefers-reduced-motion`: modele stoją w pozie z chwili 0, stan mówią tylko kolor i kształt. Zmiana
-   * ustawienia w trakcie działania wymaga nowej sceny.
+   * `false` under `prefers-reduced-motion`: models hold their pose from time 0, and only colour and shape show state.
+   * Changing the setting while running needs a new scene.
    */
   motion: boolean;
   /**
-   * Klik: scena sama podświetla obiekt i jego połączenia (`focus`), a UI pokazuje szczegóły. `null`, gdy wybrany
-   * obiekt zniknął z migawki.
+   * Click: the scene itself highlights the object and its connections (`focus`), and the UI shows the details. `null` when
+   * the selected object has vanished from the snapshot.
    */
   onSelect?: (key: HomeKey | null) => void;
-  /** Dwuklik: przejście do sesji albo repo. */
+  /** Double click: go to the session or repo. */
   onOpen?: (key: HomeKey) => void;
-  /** Wskaźnik wszedł na obiekt albo z niego zszedł (`null`), także gdy wskazany obiekt zniknął z migawki. */
+  /** The pointer entered an object or left it (`null`), also when the hovered object vanished from the snapshot. */
   onHover?: (key: HomeKey | null) => void;
-  /** Element etykiety; bez tej funkcji scena nie dodaje etykiet. */
+  /** Label element; without this function the scene adds no labels. */
   createLabel?: (target: LabelTarget) => HTMLElement;
 }
 
-/** Wysokość drona sesji nad podłogą. */
+/** Height of a session drone above the floor. */
 const SESSION_Y = 0.55;
-/** Wysokość, na której przewód sesji dochodzi do repo. */
+/** Height at which a session wire reaches the repo. */
 const TETHER_END_Y = 0.4;
-/** Wysokość przewodów połączeń. */
+/** Height of connection wires. */
 const LINK_Y = 0.12;
 /**
- * Punkt kontrolny krzywej połączenia to środek cięciwy razy ta wartość: 1 to prosta cięciwa, mniej ściąga krzywą do
- * środka pierścienia, a 0 najmocniej (środek krzywej wypada w połowie drogi od cięciwy do środka).
+ * The control point of a connection curve is the chord midpoint times this value: 1 is a straight chord, less pulls the
+ * curve towards the centre of the ring, and 0 the most (the curve's midpoint falls halfway from the chord to the centre).
  */
 const LINK_BEND = 0.2;
 const FOCUS_SCALE = 1.12;
@@ -92,7 +92,7 @@ interface Node {
 
 interface Placement {
   position: { x: number; y: number; z: number };
-  /** Kąt na pierścieniu: model obraca się przodem do środka. */
+  /** Angle on the ring: the model turns its front to the centre. */
   angle?: number;
 }
 
@@ -103,11 +103,11 @@ export class HomeScene {
   readonly #options: HomeSceneOptions;
   readonly #entities: KeyedEntities<string>;
   readonly #nodes = new Map<string, Node>();
-  /** Przewody połączeń z grafu, po kluczu encji, do podświetlania przy wyborze. */
+  /** Connection wires from the graph, by entity key, for highlighting on selection. */
   readonly #links = new Map<string, { link: HomeLink; visual: LinkVisual }>();
-  /** Repo każdej sesji z ostatniej migawki: wybór sesji podświetla połączenia jej repo. */
+  /** The repo of each session from the last snapshot: selecting a session highlights its repo's connections. */
   readonly #sessionRepos = new Map<string, string>();
-  /** Ostatnie miejsce każdej encji. */
+  /** The last place of each entity. */
   readonly #places = new Map<string, string>();
   readonly #removeSystem: () => void;
   #focus: HomeKey | null = null;
@@ -125,7 +125,7 @@ export class HomeScene {
       : () => {};
   }
 
-  /** Encja obiektu, np. do skierowania na nią kamery (`CameraRig.focus`). */
+  /** The object's entity, for example to point the camera at it (`CameraRig.focus`). */
   entity(key: HomeKey): Entity | undefined {
     return this.#entities.get(key);
   }
@@ -143,7 +143,7 @@ export class HomeScene {
     if (lost) this.#options.onSelect?.(null);
   }
 
-  /** Podświetla obiekt i jego połączenia; `null` wraca do widoku całości. */
+  /** Highlights an object and its connections; `null` returns to the full view. */
   focus(key: HomeKey | null): void {
     this.#focus = key;
     const repo = this.#focusRepo(key);
@@ -160,10 +160,10 @@ export class HomeScene {
 
   dispose(): void {
     this.#removeSystem();
-    // Zamykana scena nie zgłasza już wskazania ani wyboru, więc UI w trakcie odmontowania nie dostaje wywołań.
+    // A scene being disposed no longer reports hover or selection, so the UI gets no calls while unmounting.
     this.#hovered = null;
     this.#focus = null;
-    // Zasoby zwalniane wprost, a nie przez `release`, bo `KeyedEntities.clear()` pomija go po zamknięciu silnika.
+    // Resources are freed directly, not through `release`, because `KeyedEntities.clear()` skips it after the engine is disposed.
     for (const node of this.#nodes.values()) {
       for (const off of node.offs) off();
       disposeObject3D(node.visual.object);
@@ -194,7 +194,7 @@ export class HomeScene {
   #putRepos(keep: Set<string>, model: HomeModel, layout: OrbitLayout): void {
     for (const repo of model.repos) {
       const at = layout.repos.get(repo.id);
-      if (!at) throw new Error(`Repo ${repo.id} nie ma miejsca w układzie pulpitu`);
+      if (!at) throw new Error(`Repo ${repo.id} has no place in the dashboard layout`);
       const key = repoKey(repo.id);
       const look = repoLook(repo, repoKind(repo.layer, model.layerCount));
       const place = { position: { x: at.x, y: 0, z: at.z }, angle: at.angle };
@@ -214,7 +214,7 @@ export class HomeScene {
       const key = sessionKey(session.id);
       this.#put(keep, key, session, { position: { x: at.x, y: SESSION_Y, z: at.z } }, () => sessionPod(session, palette));
       this.#setLabel(key, sessionHasLabel(session) ? { kind: "session", key, session } : null);
-      // Przewód od drona do repo: kolor stanu sesji, żeby błąd było widać także przy repo.
+      // Wire from the drone to the repo in the session state colour, so an error is visible at the repo too.
       const color = sessionStateColor(session.state, palette);
       this.#put(keep, `tether:${session.id}`, { at, repoAt, color }, ORIGIN, () => {
         const curve = new QuadraticBezierCurve3(
@@ -231,7 +231,7 @@ export class HomeScene {
     const from = layout.repos.get(link.from);
     const to = layout.repos.get(link.to);
     if (!from || !to) return;
-    // JSON, bo identyfikator repo może zawierać każdy znak, także separator.
+    // JSON, because a repo identifier can contain any character, the separator included.
     const key = `link:${JSON.stringify([link.from, link.to, link.kind])}`;
     this.#put(keep, key, { from, to, kind: link.kind }, ORIGIN, () => {
       const curve = new QuadraticBezierCurve3(
@@ -246,13 +246,13 @@ export class HomeScene {
   }
 
   /**
-   * Zapewnia encję obiektu, zostawia ją w `keep` i stawia ją w `place`. Model buduje od nowa tylko wtedy, gdy zmienił
-   * się `look`, czyli wszystko, od czego zależy wygląd; samo przesunięcie modelu nie przebudowuje.
+   * Makes sure the object has an entity, keeps it in `keep` and puts it at `place`. Rebuilds the model only when `look` has
+   * changed, that is everything the appearance depends on; moving alone does not rebuild the model.
    */
   #put(keep: Set<string>, key: string, look: unknown, place: Placement, build: () => HomeVisual): void {
     keep.add(key);
     const entity = this.#entities.ensure(key, () => this.#spawn(key));
-    if (!entity) throw new Error(`Nie udało się utworzyć encji ${key} na pulpicie`);
+    if (!entity) throw new Error(`Could not create entity ${key} on the dashboard`);
     this.#place(key, entity, place);
     const signature = JSON.stringify(look);
     const existing = this.#nodes.get(key);
@@ -270,7 +270,7 @@ export class HomeScene {
     });
   }
 
-  /** Przestawia encję tylko wtedy, gdy zmieniło się jej miejsce, więc migawka bez zmian nie przesuwa encji. */
+  /** Moves an entity only when its place has changed, so an unchanged snapshot does not move entities. */
   #place(key: string, entity: Entity, place: Placement): void {
     const signature = JSON.stringify(place);
     if (this.#places.get(key) === signature) return;
@@ -305,7 +305,7 @@ export class HomeScene {
     this.#options.onHover?.(key);
   }
 
-  /** Etykieta zmienia się tylko wtedy, gdy zmieniło się to, co UI w niej pisze. */
+  /** A label changes only when what the UI writes in it has changed. */
   #setLabel(key: HomeKey, target: LabelTarget | null): void {
     const node = this.#nodes.get(key);
     const entity = this.#entities.get(key);

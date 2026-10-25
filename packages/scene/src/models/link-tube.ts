@@ -3,13 +3,13 @@ import { type Curve, Group, Mesh, TubeGeometry, type Vector3 } from "three";
 import { box, type HomeVisual, light, unpickable } from "./kit.ts";
 
 /**
- * Przewód jako cienka rura, po której płyną pakiety (ADR-33). Połączenie z grafu: HTTP grubsze, szybciej i gęściej,
- * paczka cieńsza i wolniej, ręczne połączenie najcieńsze i bez pakietów; grubość odróżnia rodzaje także bez ruchu.
- * Przewód sesji łączy drona z jego repo. Jasność przewodu połączenia ustawia scena przez `setEmphasis`, gdy wybrane
- * repo jest jednym z końców.
+ * A wire as a thin tube with packets flowing along it (ADR-33). For a connection from the graph, an HTTP connection is
+ * thicker, faster and denser, a package connection thinner and slower, and a manual connection the thinnest and without
+ * packets; thickness tells the kinds apart even without motion. A session wire joins a drone to its repo. The scene sets a connection wire's brightness
+ * through `setEmphasis` when the selected repo is one of its ends.
  */
 
-/** Nazwy rur przewodów w scenie three.js: po nich da się je znaleźć bez znajomości kluczy encji. */
+/** Names of the wire tubes in the three.js scene: they let you find the tubes without knowing entity keys. */
 export const TUBE_NAMES = { link: "link", tether: "tether" } as const;
 
 interface TubeSpec {
@@ -27,7 +27,7 @@ export const LINK_TUBES: Record<EdgeKind, TubeSpec> = {
 
 export const TETHER_TUBE: TubeSpec = { name: TUBE_NAMES.tether, packets: 1, speed: 0.3, radius: 0.01 };
 
-/** Jasność przewodu: `normal` bez wyboru, `lit` przy wybranym końcu, `dim` przy wyborze gdzie indziej. */
+/** Wire brightness: `normal` with nothing selected, `lit` when one end is selected, `dim` when the selection is elsewhere. */
 export type LinkEmphasis = "normal" | "lit" | "dim";
 const OPACITY: Record<LinkEmphasis, number> = { normal: 0.22, lit: 0.85, dim: 0.05 };
 

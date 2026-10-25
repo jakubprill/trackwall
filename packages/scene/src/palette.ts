@@ -1,24 +1,24 @@
 import type { HomeRepoState, HomeSessionState } from "./home-model.ts";
 
 /**
- * Kolory sceny przychodzą z tokenów UI (`packages/ui/src/index.css`, ADR-16), czytanych przez UI w chwili tworzenia
- * sceny, więc scena nie ma własnej palety, która rozjechałaby się z resztą aplikacji. Tokeny są w `oklch`, którego
- * three.js nie czyta, dlatego UI podaje je przeliczone na sRGB jako `#rrggbb`; scena sprawdza to przy tworzeniu.
+ * Scene colours come from the UI tokens (`packages/ui/src/index.css`, ADR-16), read by the UI when the scene is created,
+ * so the scene has no palette of its own that would drift from the rest of the application. The tokens are in `oklch`,
+ * which three.js does not read, so the UI passes them converted to sRGB as `#rrggbb`; the scene checks this on creation.
  */
 export interface ScenePalette {
-  /** `--primary`: praca w toku, wybór, połączenia. */
+  /** `--primary`: work in progress, selection, connections. */
   primary: string;
-  /** `--warning`: czeka na Ciebie, lokalne zmiany. */
+  /** `--warning`: waiting for you, local changes. */
   warning: string;
-  /** `--destructive`: błąd, repo niedostępne. */
+  /** `--destructive`: error, repo unavailable. */
   destructive: string;
-  /** `--muted-foreground`: zakończone sesje, napisy na ekranach. */
+  /** `--muted-foreground`: ended sessions, text on screens. */
   muted: string;
-  /** `--secondary` bez przezroczystości: spokojny stan, czyste repo. */
+  /** `--secondary` without transparency: calm state, clean repo. */
   idle: string;
-  /** `--card` bez przezroczystości: korpusy modeli. */
+  /** `--card` without transparency: model bodies. */
   body: string;
-  /** `--background`: płyty pod modelami. */
+  /** `--background`: slabs under the models. */
   plate: string;
 }
 
@@ -26,7 +26,7 @@ const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 export function assertScenePalette(palette: ScenePalette): void {
   for (const [name, color] of Object.entries(palette)) {
-    if (!HEX_COLOR.test(color)) throw new Error(`Kolor sceny ${name} musi być w postaci #rrggbb, a jest ${color}`);
+    if (!HEX_COLOR.test(color)) throw new Error(`Scene colour ${name} must be #rrggbb, but is ${color}`);
   }
 }
 

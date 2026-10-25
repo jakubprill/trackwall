@@ -1,8 +1,9 @@
 /**
- * Rodzaj repo na pulpicie wynika z warstwy (ADR-33): wejście (pierwsza warstwa, np. frontend), brama (druga warstwa,
- * gdy są co najmniej cztery, np. BFF), backend (środek grafu i repo bez połączeń) i biblioteka (ostatnia warstwa).
- * Przy trzech warstwach i mniej środek to same backendy, bo druga warstwa nie odróżnia się jeszcze od reszty. Każdy
- * rodzaj ma inną bryłę, więc kształt mówi, gdzie repo leży w grafie, bez czytania etykiety.
+ * A repo's kind on the dashboard follows from its layer (ADR-33): entry (first layer, for example a frontend), gateway
+ * (second layer, when there are at least four, for example a BFF), backend (the middle of the graph and repos without
+ * connections) and library (last layer). With three layers or fewer the middle is all backends, because the second layer
+ * does not yet stand out from the rest. Every kind has a different solid, so the shape tells where a repo sits in the
+ * graph without reading the label.
  */
 export type RepoKind = "entry" | "gateway" | "backend" | "library";
 
