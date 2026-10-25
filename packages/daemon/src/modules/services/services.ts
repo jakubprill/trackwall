@@ -3,7 +3,7 @@ import {
   type CallEndpointResult,
   hasService,
   type LogErrors,
-  type LogErrorsRequest,
+  type LogErrorsQuery,
   type LogSource,
   type LogTail,
   type LogTailRequest,
@@ -53,7 +53,7 @@ interface ServicesMise {
 /** What `services` needs from `logs`: the log of the task `dev` and its errors (ADR-28, ADR-42). */
 interface ServicesLogs {
   tail(request: LogTailRequest): LogTail;
-  errors(request: LogErrorsRequest): LogErrors;
+  errors(query: LogErrorsQuery): LogErrors;
   mask(text: string, env: NodeJS.ProcessEnv): string;
   runStartCursor(): number;
 }

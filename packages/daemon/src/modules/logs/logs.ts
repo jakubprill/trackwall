@@ -1,7 +1,7 @@
 import {
   LOG_BUFFER_RECORDS,
   type LogErrors,
-  type LogErrorsRequest,
+  type LogErrorsQuery,
   type LogRecord,
   type LogSource,
   type LogStream,
@@ -108,7 +108,7 @@ export class Logs {
    * The cursor covers all sources at once because `seq` is global; a cursor from another daemon run gives errors as
    * without one.
    */
-  errors({ repo, task, miseTask, minLevel, sinceSeq, limit }: LogErrorsRequest): LogErrors {
+  errors({ repo, task, miseTask, minLevel, sinceSeq, limit }: LogErrorsQuery): LogErrors {
     const sources = [...this.sources]
       .map(([key, log]) => ({ key, ...log }))
       .filter(

@@ -301,6 +301,11 @@ export class Agents {
     return this.#tasks.task(id);
   }
 
+  /** A task, or `undefined` when there is no such task (unknown or ended). */
+  findTask(id: string): Task | undefined {
+    return this.#tasks.find(id);
+  }
+
   /**
    * A task named next to a repo, which must belong to it: `not_found` for an unknown or ended task, `bad_request` for a
    * task of another repo. Without `repo`, any task.

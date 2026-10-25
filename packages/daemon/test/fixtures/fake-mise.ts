@@ -5,10 +5,11 @@
 // (PIDs in `<repo>/pids`) that runs until stopped. `install` ends with the code `installExit` (0 by default).
 // `run` and `install` append to `<repo>/calls.log`, so that the test sees the order. A mise task in `servers` runs
 // `fake-service.ts` with that config instead (the `services` tests, ADR-45). A config in a directory listed in
-// `MISE_TRUSTED_CONFIG_PATHS` counts as trusted (task worktrees, ADR-59).
+// `MISE_TRUSTED_CONFIG_PATHS` counts as trusted (task worktrees, ADR-59). A mise task in `exits` first prints its lines in
+// `prints` and writes its files in `writes` (path relative to the working directory -> content), e.g. a JUnit report (ADR-64).
 import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { delimiter, join, sep } from "node:path";
+import { delimiter, dirname, join, sep } from "node:path";
 
 const configPath = join(process.cwd(), "fake-mise.json");
 const config = JSON.parse(readFileSync(configPath, "utf8")) as {
@@ -17,6 +18,8 @@ const config = JSON.parse(readFileSync(configPath, "utf8")) as {
   exits?: Record<string, number>;
   installExit?: number;
   servers?: Record<string, object>;
+  prints?: Record<string, string[]>;
+  writes?: Record<string, Record<string, string>>;
 };
 const args = process.argv.slice(2);
 const calls = join(process.cwd(), "calls.log");
@@ -52,6 +55,11 @@ if (args[0] === "tasks" && args[1] === "ls" && args[2] === "--json") {
   process.exit(config.installExit ?? 0);
 } else if (args[0] === "run" && args[1] !== undefined && config.exits?.[args[1]] !== undefined) {
   appendFileSync(calls, `run ${args[1]}\n`);
+  for (const line of config.prints?.[args[1]] ?? []) console.log(line);
+  for (const [file, content] of Object.entries(config.writes?.[args[1]] ?? {})) {
+    mkdirSync(dirname(join(process.cwd(), file)), { recursive: true });
+    writeFileSync(join(process.cwd(), file), content);
+  }
   console.log(`[${args[1]}] $ done`);
   process.exit(config.exits[args[1]]);
 } else if (args[0] === "run" && args[1] !== undefined && config.servers?.[args[1]] !== undefined) {

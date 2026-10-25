@@ -101,6 +101,57 @@ description = "Check the style"
 run = "node -e \\"console.log('no problems')\\""
 `;
 
+/** The services' mise config: the shared tasks and `test`, which runs their tests and writes JUnit reports. */
+const SERVICE_MISE_TOML = `${MISE_TOML}
+[tasks.test]
+description = "Run the tests"
+run = "node run-tests.mjs"
+`;
+
+/**
+ * A test run that stands in for Maven Surefire: three passing tests of the controller and, for every `*Event.java`
+ * in the sources, a test that the event carries the old price, which fails until the record has `oldPrice`. It logs
+ * like Maven and writes a Surefire report, so the verification of the pricing task (ADR-64) fails on what its review
+ * comment asks for. Node runs it, the same on Windows and macOS.
+ */
+function testRunner(pkg: string, type: string): string {
+  return `import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+const dir = join("src", "main", "java", ...${JSON.stringify(pkg.split("."))});
+const cases = [
+  { suite: "${type}ControllerTest", name: "listsAll" },
+  { suite: "${type}ControllerTest", name: "getsOneById" },
+  { suite: "${type}ControllerTest", name: "answers404ForAnUnknownId" },
+];
+for (const file of readdirSync(dir).filter((f) => f.endsWith("Event.java"))) {
+  const event = file.replace(".java", "");
+  const ok = readFileSync(join(dir, file), "utf8").includes("oldPrice");
+  cases.push({ suite: \`\${event}Test\`, name: "carriesTheOldPrice", failure: ok ? undefined : "expected: <19.99> but was: <null>" });
+}
+const reports = join("target", "surefire-reports");
+mkdirSync(reports, { recursive: true });
+let failed = 0;
+for (const suite of [...new Set(cases.map((c) => c.suite))]) {
+  const own = cases.filter((c) => c.suite === suite);
+  console.log(\`[INFO] Running ${pkg}.\${suite}\`);
+  const body = own
+    .map((c) => {
+      if (!c.failure) return \`<testcase name="\${c.name}" classname="${pkg}.\${suite}" time="0.04"/>\`;
+      failed++;
+      console.log(\`[ERROR] \${suite}.\${c.name}:14 \${c.failure}\`);
+      const message = c.failure.replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+      return \`<testcase name="\${c.name}" classname="${pkg}.\${suite}" time="0.02"><failure message="\${message}" type="org.opentest4j.AssertionFailedError">org.opentest4j.AssertionFailedError: \${message}\\n\\tat ${pkg}.\${suite}.\${c.name}(\${suite}.java:14)</failure></testcase>\`;
+    })
+    .join("");
+  writeFileSync(join(reports, \`TEST-${pkg}.\${suite}.xml\`), \`<testsuite name="${pkg}.\${suite}" tests="\${own.length}">\${body}</testsuite>\`);
+}
+console.log(\`[\${failed > 0 ? "ERROR" : "INFO"}] Tests run: \${cases.length}, Failures: \${failed}, Errors: 0, Skipped: 0\`);
+console.log(failed > 0 ? "[INFO] BUILD FAILURE" : "[INFO] BUILD SUCCESS");
+process.exit(failed > 0 ? 1 : 0);
+`;
+}
+
 function servicePom(service: Service): string {
   return `<project>
   <groupId>${GROUP}</groupId>
@@ -181,7 +232,9 @@ function serviceFiles(service: Service): Record<string, string> {
   const type = pascal(service.resource);
   const files: Record<string, string> = {
     "pom.xml": servicePom(service),
-    "mise.toml": MISE_TOML,
+    "mise.toml": SERVICE_MISE_TOML,
+    "run-tests.mjs": testRunner(pkg, type),
+    ".gitignore": "target/\n",
     "dev-server.mjs": devServer(service.port, `Tomcat started on port ${service.port} (http) with context path '/'`),
     "README.md": `# ${service.name}\n\nThe ${service.resource} service of the demo shop. Runs on port ${service.port}.\n`,
     "src/main/resources/application.yml": [

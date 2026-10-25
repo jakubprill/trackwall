@@ -83,7 +83,7 @@ const api = await startApi({
 });
 /**
  * Sessions in every state, a main session with two of its tasks approved and two still proposed, two tasks of their
- * own, and a slice of services running.
+ * own (the pricing one verified, with a failed test), and a slice of services running.
  */
 async function setTheScene(): Promise<void> {
   const sessions = [];
@@ -116,6 +116,9 @@ async function setTheScene(): Promise<void> {
   writePricingTaskChanges(pricing.worktree);
   await facade.agents.createTask("reviews", "Hide reviews from customers who have been deleted");
   for (const repo of DEMO_REPOS) await facade.mise.trust(repo);
+  // The pricing task's tests fail on what its review comment asks for, so its panel shows a failed verification (ADR-64).
+  const verified = await facade.verifications.verify(pricing.id, undefined, 30_000, AbortSignal.timeout(30_000));
+  if (verified.state !== "failed") throw new Error(`the pricing task's verification is ${verified.state}, not failed`);
   const slice = await facade.services.start({ repo: "admin-bff", task: null, dependencies: true, waitMs: 20_000 });
   const down = slice.members
     .filter((member) => member.service?.state !== "healthy")

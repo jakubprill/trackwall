@@ -83,7 +83,7 @@ beforeAll(async () => {
 afterAll(() => api.close());
 
 describe("MCP server over Streamable HTTP", () => {
-  test("announces the repo, card, log, graph, code search, session, mise task and service tools, with the ones that run, stop or call repo code as destructive", async () => {
+  test("announces the repo, card, log, graph, code search, session, mise task, verification and service tools, with the ones that run, stop or call repo code as destructive", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual([
@@ -108,6 +108,7 @@ describe("MCP server over Streamable HTTP", () => {
       "stop_mise_task",
       "wait_for_mise_task",
       "list_running_mise_tasks",
+      "verify_task",
       "start_service",
       "stop_service",
       "list_services",
@@ -122,16 +123,18 @@ describe("MCP server over Streamable HTTP", () => {
       "get_review_comments",
       "run_mise_task",
       "stop_mise_task",
+      "verify_task",
       "start_service",
       "stop_service",
       "call_endpoint",
     ]);
     // A proposal and a summary only write text for a human, and reading review comments marks them read; running a
     // mise task executes repo code, and stopping one can kill a process the user started from the UI; so do starting
-    // and stopping a service, and a request to a service can change its data.
+    // and stopping a service and verifying a task (which runs its tests), and a request to a service can change its data.
     expect(tools.filter((t) => t.annotations?.destructiveHint !== false).map((t) => t.name)).toEqual([
       "run_mise_task",
       "stop_mise_task",
+      "verify_task",
       "start_service",
       "stop_service",
       "call_endpoint",

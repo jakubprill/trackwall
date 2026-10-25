@@ -139,6 +139,11 @@ export const LogErrorsRequest = z
   })
   .strict();
 export type LogErrorsRequest = z.infer<typeof LogErrorsRequest>;
+/**
+ * The same query inside the daemon, where `limit` is not capped at `LOG_ERRORS_MAX`: a verification (ADR-64) reads
+ * the errors of one run from the whole buffer, while an MCP response stays small.
+ */
+export type LogErrorsQuery = Omit<LogErrorsRequest, "limit"> & { limit: number };
 
 function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
   return { path: `/api/logs/${action}`, request, data };

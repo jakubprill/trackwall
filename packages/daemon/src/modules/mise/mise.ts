@@ -14,6 +14,7 @@ import {
 import { z } from "zod";
 import { envKey } from "../../infra/env-key.ts";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
+import { waitLimited } from "../../infra/wait-limit.ts";
 import { type MiseCliResult, runMiseCli } from "./mise-cli.ts";
 
 /**
@@ -169,21 +170,18 @@ export class Mise {
     const groupOwner = owner(target, miseTask);
     // `ended` first waits for a start in progress (e.g. the Run button clicked at the same moment), so the wait sees
     // the new run instead of the previous one or none; an ended group resolves at once, an absent one as `undefined`.
-    const giveUp = AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
-    let stopWaiting = () => {};
-    const gaveUp = new Promise<"gave_up">((resolve) => {
-      stopWaiting = () => resolve("gave_up");
-    });
-    giveUp.addEventListener("abort", stopWaiting, { once: true });
-    if (giveUp.aborted) stopWaiting();
-    try {
-      const end = await Promise.race([this.deps.procs.ended(groupOwner), gaveUp]);
-      const run = end === "gave_up" ? this.deps.procs.state(groupOwner) : end;
-      if (!run) throw await this.notRun(target, miseTask);
-      return run;
-    } finally {
-      giveUp.removeEventListener("abort", stopWaiting);
-    }
+    const end = await waitLimited(this.deps.procs.ended(groupOwner), timeoutMs, signal);
+    const run = end === "gave_up" ? this.deps.procs.state(groupOwner) : end;
+    if (!run) throw await this.notRun(target, miseTask);
+    return run;
+  }
+
+  /**
+   * The current run once the system has confirmed the end of its group, without a time limit, for a verification
+   * (ADR-64); `undefined` when the task has not run.
+   */
+  ended(target: MiseTarget, miseTask: string): Promise<RunState | undefined> {
+    return this.deps.procs.ended(owner(target, miseTask));
   }
 
   /** The current (or last) run of a task in this daemon run, from `procs` without asking mise; `undefined` when it has not run. */
