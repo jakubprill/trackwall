@@ -44,7 +44,7 @@ curl.exe -fL -o "$env:TEMP\$zip" "https://github.com/jakubprill/trackwall/releas
 
 ## macOS
 
-Gatekeeper reports an unsigned app downloaded with a browser as "damaged". Check the archive, unpack it and remove the quarantine mark:
+Gatekeeper reports an unsigned app downloaded with a browser as "damaged". Download the macOS zip and `SHA256SUMS.txt` from [Releases](https://github.com/jakubprill/trackwall/releases) into one folder, then run these commands there to check the archive, unpack it and remove the quarantine mark:
 
 ```sh
 shasum -a 256 -c SHA256SUMS.txt --ignore-missing

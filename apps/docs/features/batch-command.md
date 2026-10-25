@@ -27,7 +27,7 @@ Each repo runs its steps in order, and three repos run at once. The panel fills 
 1. In "Repos", narrow the list with the tag filter if you like.
 2. Press "Batch command".
 3. Choose the repos and steps, and start.
-4. Read the result per repo and step; a failed step shows its exit code and last lines under the repo.
+4. Read the result per repo and step; a failed step shows why it failed, and its last lines, under the repo.
 
 ## Good to know
 
