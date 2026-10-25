@@ -1,6 +1,7 @@
 //! Copilot CLI sessions that are waiting for you (ADR-26) and task proposals waiting for a decision (ADR-39): the shell
 //! asks the daemon for the session list every few seconds and, when a session stops working and starts waiting or a new
-//! proposal arrives, draws the user's attention (taskbar flash, Dock bounce) and updates the tray tooltip and menu.
+//! proposal arrives, draws the user's attention (taskbar flash, Dock bounce) and updates the tray tooltip and menu, and
+//! the number on the app's icons (`badge.rs`, ADR-65).
 //! Clicking a menu item shows the window for sessions (ADR-49) with that session or proposal. While no Trackwall window has the focus, the
 //! same moments also show a system notification (ADR-50, `notification.rs`).
 //!
@@ -9,6 +10,7 @@
 //! for the UI and the tray.
 //! The daemon also clears it, without a state change, once the user has seen an ended turn (ADR-47).
 
+use crate::badge::{Badge, TrayIcons};
 use crate::daemon;
 use crate::daemon_state::DaemonState;
 use crate::jump::Jump;
@@ -267,19 +269,57 @@ impl HeldProposals {
     }
 }
 
+/// Failed polls in a row after which the daemon counts as gone: its sessions ended with it, or it no longer answers
+/// this shell (a new token, another schema). One failed poll does not clear what waits, so the icons do not flicker.
+const FAILED_POLLS: u32 = 3;
+
+/// Counts the polls that got no list in a row.
+#[derive(Debug, Default)]
+pub struct Failures(u32);
+
+impl Failures {
+    /// Records a poll and says whether nothing should show as waiting any more.
+    pub fn after_poll(&mut self, answered: bool) -> bool {
+        self.0 = if answered { 0 } else { self.0.saturating_add(1) };
+        self.0 >= FAILED_POLLS
+    }
+}
+
+/// Shows the waiting sessions and proposals on the tray's tooltip and menu.
+fn show_in_tray(app: &AppHandle, tray_id: &str, waiting: &[Waiting], proposals: &[Proposal]) {
+    if let Some(tray) = app.tray_by_id(tray_id) {
+        let _ = tray.set_tooltip(Some(tooltip(waiting, proposals)));
+        if let Ok(menu) = build_menu(app, waiting, proposals) {
+            let _ = tray.set_menu(Some(menu));
+        }
+    }
+}
+
 fn any_window_focused(app: &AppHandle) -> bool {
     app.webview_windows().values().any(|w| w.is_focused().unwrap_or(false))
 }
 
 /// The thread that asks the daemon for sessions while the shell runs.
-pub fn watch(app: AppHandle, state: Arc<DaemonState>, tray_id: &'static str) {
+pub fn watch(app: AppHandle, state: Arc<DaemonState>, tray_id: &'static str, tray_icons: TrayIcons) {
     std::thread::spawn(move || {
         let mut last: Option<Snapshot> = None;
         let mut held = HeldProposals::default();
+        let mut badge = Badge::default();
+        let mut failures = Failures::default();
         loop {
             std::thread::sleep(POLL);
-            let Some(conn) = state.ready() else { continue };
-            let Some(now) = daemon::sessions(&conn).ok().and_then(|body| parse_sessions(&body)) else { continue };
+            let polled = state.ready().and_then(|conn| daemon::sessions(&conn).ok()).and_then(|body| parse_sessions(&body));
+            let gone = failures.after_poll(polled.is_some());
+            let Some(now) = polled else {
+                if gone {
+                    // Nothing waits without a daemon; the next answer is like the first after the start.
+                    if last.take().is_some() {
+                        show_in_tray(&app, tray_id, &[], &[]);
+                    }
+                    badge.update(&app, tray_id, &tray_icons, 0);
+                }
+                continue;
+            };
             let mut news = News::between(last.as_ref(), &now);
             news.proposals = held.after_poll(std::mem::take(&mut news.proposals), &now.proposals);
             if !news.is_empty() {
@@ -292,13 +332,9 @@ pub fn watch(app: AppHandle, state: Arc<DaemonState>, tray_id: &'static str) {
                 }
             }
             if last.as_ref().is_none_or(|l| l.waiting != now.waiting || l.proposals != now.proposals) {
-                if let Some(tray) = app.tray_by_id(tray_id) {
-                    let _ = tray.set_tooltip(Some(tooltip(&now.waiting, &now.proposals)));
-                    if let Ok(menu) = build_menu(&app, &now.waiting, &now.proposals) {
-                        let _ = tray.set_menu(Some(menu));
-                    }
-                }
+                show_in_tray(&app, tray_id, &now.waiting, &now.proposals);
             }
+            badge.update(&app, tray_id, &tray_icons, now.waiting.len() + now.proposals.len());
             last = Some(now);
         }
     });
@@ -436,6 +472,20 @@ mod tests {
             "Trackwall: 1 session and 2 task proposals are waiting for you"
         );
         assert_eq!(tooltip(&[], &[proposal("p"), proposal("q")]), "Trackwall: 2 task proposals are waiting for you");
+    }
+
+    #[test]
+    fn what_waits_is_cleared_only_after_several_failed_polls_in_a_row() {
+        let mut failures = Failures::default();
+        assert!(!failures.after_poll(false));
+        assert!(!failures.after_poll(false));
+        assert!(!failures.after_poll(true));
+        for _ in 1..FAILED_POLLS {
+            assert!(!failures.after_poll(false));
+        }
+        assert!(failures.after_poll(false));
+        assert!(failures.after_poll(false));
+        assert!(!failures.after_poll(true));
     }
 
     #[test]

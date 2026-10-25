@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 /**
  * Files and folders dropped on the Tauri window (ADR-51). The shell hands the page full paths and a point; the drop
  * target that holds the point (a session terminal) gets a `FileDropEvent` with the paths, and a drop outside every
@@ -24,12 +26,27 @@ export class FileDropEvent extends Event {
   }
 }
 
+/** The attribute with the window's zoom that the shell sets on the page's root (`ZOOM_ATTRIBUTE` in `zoom.rs`, ADR-65). */
+const ZOOM_ATTRIBUTE = "data-zoom";
+
+const Zoom = z.coerce.number().positive().finite();
+
+/** The window's zoom from the shell's attribute; 1 without it (a browser, or before the shell has set it). */
+export function pageZoom(root: Pick<Element, "getAttribute">): number {
+  const zoom = Zoom.safeParse(root.getAttribute(ZOOM_ATTRIBUTE) ?? undefined);
+  return zoom.success ? zoom.data : 1;
+}
+
 /**
- * The drop point in CSS pixels. Tauri calls it physical, but only WebView2 on Windows gives physical pixels; on macOS
- * (and with GTK on Linux) wry hands over the system's own points, which already are CSS pixels.
+ * The drop point in CSS pixels. Tauri calls it physical, but only WebView2 on Windows gives physical pixels, and its
+ * device pixel ratio includes the zoom; on macOS (and with GTK on Linux) wry hands over the system's own points,
+ * which are CSS pixels only at actual size, so they are divided by the window's zoom.
  */
-export function cssPoint(point: { x: number; y: number }, windows: boolean, devicePixelRatio: number): { x: number; y: number } {
-  const scale = windows ? devicePixelRatio : 1;
+export function cssPoint(
+  point: { x: number; y: number },
+  { windows, devicePixelRatio, zoom }: { windows: boolean; devicePixelRatio: number; zoom: number },
+): { x: number; y: number } {
+  const scale = windows ? devicePixelRatio : zoom;
   return { x: point.x / scale, y: point.y / scale };
 }
 

@@ -1,10 +1,23 @@
 import { describe, expect, test } from "bun:test";
-import { cssPoint, DROP_HOVER, DROP_HOVER_RING, dragStep, dropTargetAt, FILE_DROP_TARGET } from "../src/lib/file-drop.ts";
+import { cssPoint, DROP_HOVER, DROP_HOVER_RING, dragStep, dropTargetAt, FILE_DROP_TARGET, pageZoom } from "../src/lib/file-drop.ts";
 
 describe("file drop", () => {
   test("the drop point is divided by the device pixel ratio only on Windows, where WebView2 gives physical pixels", () => {
-    expect(cssPoint({ x: 300, y: 150 }, true, 1.5)).toEqual({ x: 200, y: 100 });
-    expect(cssPoint({ x: 300, y: 150 }, false, 2)).toEqual({ x: 300, y: 150 });
+    expect(cssPoint({ x: 300, y: 150 }, { windows: true, devicePixelRatio: 1.5, zoom: 1 })).toEqual({ x: 200, y: 100 });
+    expect(cssPoint({ x: 300, y: 150 }, { windows: false, devicePixelRatio: 2, zoom: 1 })).toEqual({ x: 300, y: 150 });
+  });
+
+  test("on macOS a zoomed window's drop point is divided by its zoom, on Windows the pixel ratio already holds it", () => {
+    expect(cssPoint({ x: 300, y: 150 }, { windows: false, devicePixelRatio: 3, zoom: 1.5 })).toEqual({ x: 200, y: 100 });
+    expect(cssPoint({ x: 300, y: 150 }, { windows: true, devicePixelRatio: 1.5, zoom: 1.5 })).toEqual({ x: 200, y: 100 });
+  });
+
+  test("the zoom comes from the shell's attribute and is 1 without a valid one", () => {
+    const root = (value: string | null) => ({ getAttribute: (name: string) => (name === "data-zoom" ? value : null) });
+    expect(pageZoom(root("1.25"))).toBe(1.25);
+    expect(pageZoom(root(null))).toBe(1);
+    expect(pageZoom(root("big"))).toBe(1);
+    expect(pageZoom(root("-2"))).toBe(1);
   });
 
   test("the drop target is the marked element that holds the point, and none when nothing marked holds it", () => {
