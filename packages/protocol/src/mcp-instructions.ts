@@ -76,5 +76,6 @@ export const MCP_INSTRUCTIONS = [
     `${trackwallLink("session", "<session id>")} or ${trackwallLink("task", "<task id>")} (also for a task proposal) ` +
     "opens it in Trackwall when clicked. A link only shows it, it never runs anything.",
   `- When you or the user are unsure what Trackwall can do or how a feature works, look it up in the documentation (${TRACKWALL_DOCS_URL}; ` +
-    `${TRACKWALL_DOCS_LLMS_URL} lists its pages) instead of guessing.`,
+    `${TRACKWALL_DOCS_LLMS_URL} lists its pages) instead of guessing; it follows the development version, so a feature ` +
+    "there may be newer than the running Trackwall.",
 ].join("\n");
