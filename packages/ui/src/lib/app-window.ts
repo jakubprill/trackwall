@@ -26,9 +26,9 @@ export function openWindow(view: string): Promise<void> {
   return invoke("open_window", { view });
 }
 
-/** Tells the shell what this window shows, with the view's name for the window title; does nothing outside the shell. */
-export function reportShown(view: string, viewName: string, sessionLayout: string): Promise<void> {
-  return inDesktopShell() ? invoke("window_shows", { view, viewName, sessionLayout }) : Promise.resolve();
+/** Tells the shell what this window shows; does nothing outside the shell. */
+export function reportShown(view: string, sessionLayout: string): Promise<void> {
+  return inDesktopShell() ? invoke("window_shows", { view, sessionLayout }) : Promise.resolve();
 }
 
 // One native menu per window, reused for every right click (see `showViewMenu`).

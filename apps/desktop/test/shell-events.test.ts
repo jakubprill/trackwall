@@ -69,9 +69,8 @@ test("the shell sends menu bar clicks under the same event name the UI listens t
 });
 
 test("the kinds of menu commands are the same in the shell and in the UI", () => {
-  // `MenuCommand` in Rust has `rename_all = "kebab-case"`, so `NewWindow` is `"new-window"`.
-  const variants = /enum MenuCommand \{([^}]*\}[^}]*)\}/.exec(appMenuSource)?.[1] ?? "";
-  const shell = [...variants.matchAll(/^\s*(\w+)/gm)].map((m) => m[1]?.replace(/(?<=.)([A-Z])/g, "-$1").toLowerCase());
+  // From the JSON the shell's own test expects for each `MenuCommand`, so serde's naming is not copied here.
+  const shell = [...appMenuSource.matchAll(/r#"\{"kind":"([\w-]+)"/g)].map((m) => m[1]);
   const ui = [...appMenuUiSource.matchAll(/kind: z\.literal\("([\w-]+)"\)/g)].map((m) => m[1]);
   expect(shell).toEqual(["view", "new-window"]);
   expect(ui).toEqual(shell);
@@ -82,7 +81,7 @@ test("the View menu has the activity bar's views with their names and shortcuts,
   const ui = [...appSource.matchAll(entry)].map((m) => [m[1], m[2], m[3]]);
   const shell = [...appMenuSource.matchAll(/MenuView \{ id: "(\w+)", label: "([^"]+)", shortcut: "([^"]+)" \}/g)].map((m) => [
     m[1],
-    m[2]?.replace("…", ""),
+    m[2],
     m[3],
   ]);
   expect(ui.map((v) => v[0])).toEqual(["home", "repos", "sessions", "graph", "daemon", "settings"]);

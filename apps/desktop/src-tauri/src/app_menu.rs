@@ -8,7 +8,9 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 /// The views of the activity bar in its order, with their labels and shortcuts: the same as `VIEWS` in
-/// `packages/ui/src/App.tsx` (`apps/desktop/test/shell-events.test.ts` keeps them equal). Settings is in the app menu.
+/// `packages/ui/src/App.tsx` (`apps/desktop/test/shell-events.test.ts` keeps them equal). The menu bar has to exist
+/// before any page loads, and a menu set from a page would send its clicks to that page, so the table is here and not
+/// in the UI. Settings is in the app menu.
 const VIEWS: [MenuView; 5] = [
     MenuView { id: "home", label: "Home", shortcut: "1" },
     MenuView { id: "repos", label: "Repos", shortcut: "2" },
@@ -16,7 +18,7 @@ const VIEWS: [MenuView; 5] = [
     MenuView { id: "graph", label: "Overview", shortcut: "4" },
     MenuView { id: "daemon", label: "Daemon", shortcut: "9" },
 ];
-const SETTINGS: MenuView = MenuView { id: "settings", label: "Settings…", shortcut: "," };
+const SETTINGS: MenuView = MenuView { id: "settings", label: "Settings", shortcut: "," };
 
 /// The event with a `MenuCommand` for the window's UI.
 const APP_MENU_EVENT: &str = "app-menu";
@@ -24,7 +26,7 @@ const APP_MENU_EVENT: &str = "app-menu";
 const VIEW_ITEM_PREFIX: &str = "app-menu-view:";
 const NEW_WINDOW_ITEM: &str = "app-menu-new-window";
 
-// Only the macOS menu bar shows the label and the shortcut; elsewhere the views only check menu ids.
+// Only the macOS menu bar shows the shortcut.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 struct MenuView {
     id: &'static str,
@@ -40,21 +42,27 @@ enum MenuCommand {
     NewWindow,
 }
 
+/// The name of a view, for a window's title; `None` for an id that is not a view.
+pub fn view_name(id: &str) -> Option<&'static str> {
+    VIEWS.iter().chain([&SETTINGS]).find(|v| v.id == id).map(|v| v.label)
+}
+
 /// The command of a menu item, `None` for an item that is not Trackwall's (the system's, the tray's, a context menu's).
 fn command(item_id: &str) -> Option<MenuCommand> {
     if item_id == NEW_WINDOW_ITEM {
         return Some(MenuCommand::NewWindow);
     }
     let view = item_id.strip_prefix(VIEW_ITEM_PREFIX)?;
-    VIEWS.iter().chain([&SETTINGS]).any(|v| v.id == view).then(|| MenuCommand::View { view: view.to_string() })
+    view_name(view).map(|_| MenuCommand::View { view: view.to_string() })
 }
 
 /// Sends a click on a Trackwall item to the last focused window, shown first, because the app can be active with all
-/// its windows hidden (main window closed to the tray).
+/// its windows hidden (main window closed to the tray). A window whose page is still loading shows itself (ADR-11)
+/// and has no listener yet, so a click in that second is lost; the user clicks again.
 pub fn handle(app: &AppHandle, item_id: &str) {
     let Some(command) = command(item_id) else { return };
     let label = app.state::<Windows>().last_focused();
-    windows::show(app, &label);
+    windows::show_once_loaded(app, &label);
     if let Err(err) = app.emit_to(label.as_str(), APP_MENU_EVENT, command) {
         eprintln!("[desktop] sending a menu command to {label}: {err}");
     }
@@ -65,8 +73,8 @@ pub fn handle(app: &AppHandle, item_id: &str) {
 #[cfg(target_os = "macos")]
 pub fn build(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID};
-    let item = |view: &MenuView| {
-        MenuItem::with_id(app, format!("{VIEW_ITEM_PREFIX}{}", view.id), view.label, true, Some(format!("CmdOrCtrl+{}", view.shortcut)))
+    let item = |view: &MenuView, text: &str| {
+        MenuItem::with_id(app, format!("{VIEW_ITEM_PREFIX}{}", view.id), text, true, Some(format!("CmdOrCtrl+{}", view.shortcut)))
     };
     let separator = || PredefinedMenuItem::separator(app);
     let info = app.package_info();
@@ -78,7 +86,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
         &[
             &PredefinedMenuItem::about(app, None, Some(about))?,
             &separator()?,
-            &item(&SETTINGS)?,
+            &item(&SETTINGS, &format!("{}…", SETTINGS.label))?,
             &separator()?,
             &PredefinedMenuItem::services(app, None)?,
             &separator()?,
@@ -105,7 +113,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     )?;
     let view = Submenu::with_items(app, "View", true, &[])?;
     for v in &VIEWS {
-        view.append(&item(v)?)?;
+        view.append(&item(v, v.label)?)?;
     }
     view.append_items(&[&separator()?, &PredefinedMenuItem::fullscreen(app, None)?])?;
     let window = Submenu::with_id_and_items(
@@ -114,7 +122,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
         "Window",
         true,
         &[
-            &MenuItem::with_id(app, NEW_WINDOW_ITEM, "New Window", true, Some("CmdOrCtrl+N"))?,
+            &MenuItem::with_id(app, NEW_WINDOW_ITEM, "New Window", true, Some("CmdOrCtrl+Shift+N"))?,
             &separator()?,
             &PredefinedMenuItem::minimize(app, None)?,
             &PredefinedMenuItem::maximize(app, None)?,
@@ -135,6 +143,13 @@ mod tests {
         assert_eq!(command("app-menu-view:sessions"), Some(MenuCommand::View { view: "sessions".into() }));
         assert_eq!(command("app-menu-view:settings"), Some(MenuCommand::View { view: "settings".into() }));
         assert_eq!(command("app-menu-new-window"), Some(MenuCommand::NewWindow));
+    }
+
+    #[test]
+    fn a_view_has_its_activity_bar_name() {
+        assert_eq!(view_name("graph"), Some("Overview"));
+        assert_eq!(view_name("settings"), Some("Settings"));
+        assert_eq!(view_name("nothing"), None);
     }
 
     #[test]

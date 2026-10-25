@@ -47,13 +47,14 @@ async fn open_window(app: AppHandle, view: String) -> Result<(), String> {
     windows::open(&app, Some(&view))
 }
 
-/// What the window shows (its view, the view's name and the session layout): the tray sends sessions to a window that
-/// shows Sessions, extra windows come back with it at the next start, and the name goes into the window's title, which
-/// the taskbar and the Window menu of macOS show.
+/// What the window shows (its view and session layout): the tray sends sessions to a window that shows Sessions, extra
+/// windows come back with it at the next start, and the view's name goes into the window's title, which the taskbar
+/// and the Window menu of macOS show.
 #[tauri::command]
-fn window_shows(window: Window, view: String, view_name: String, session_layout: String) -> Result<(), String> {
+fn window_shows(window: Window, view: String, session_layout: String) -> Result<(), String> {
     let shown = saved_windows::Shown::new(&view, &session_layout).ok_or("not a view or session layout id")?;
-    let title = windows::title(&view_name, &window.app_handle().package_info().name).ok_or("not a view name")?;
+    let view_name = app_menu::view_name(&view).ok_or("not a view")?;
+    let title = windows::title(view_name, &window.app_handle().package_info().name);
     windows::shows(window.app_handle(), window.label(), shown);
     window.set_title(&title).map_err(|e| e.to_string())
 }

@@ -27,6 +27,8 @@ import { SessionsView } from "@/views/sessions/SessionsView";
 import { SettingsView } from "@/views/settings/SettingsView";
 
 /** Kolejność i skróty paska widoków; „Home” jest pierwszy (ADR-33), następne widoki pracy dostają kolejne cyfry. */
+// The macOS menu bar has the same ids, labels and shortcuts (`app_menu.rs`); `apps/desktop/test/shell-events.test.ts`
+// compares them and reads each entry's keys in this order.
 const VIEWS = [
   { id: "home", label: "Home", icon: Orbit, shortcut: "1", placement: "top" },
   { id: "repos", label: "Repos", icon: FolderGit2, shortcut: "2", placement: "top" },
@@ -70,13 +72,12 @@ export function App() {
     };
     return { open, showMenu };
   }, []);
-  const viewName = VIEWS.find((v) => v.id === view)?.label ?? view;
   useEffect(() => {
-    reportShown(view, viewName, sessionLayout).catch(() => {
+    reportShown(view, sessionLayout).catch(() => {
       // Without the report a session from the tray opens in the last focused window, the next start opens this
       // window with what it showed before, and the title stays; nothing to show.
     });
-  }, [view, viewName, sessionLayout]);
+  }, [view, sessionLayout]);
   // The menu bar of macOS (ADR-49) shows a view or opens the current one in a new window, like the activity bar.
   useAppMenu((command) => {
     if (command.kind === "new-window") newWindow?.open(view);
