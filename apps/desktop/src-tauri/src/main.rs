@@ -3,13 +3,20 @@
 // Bez okna konsoli w wydaniu na Windowsie.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod app_menu;
 mod attention;
 mod daemon;
 mod daemon_state;
 mod folder_picker;
+mod global_shortcut;
 mod jump;
 mod link;
 mod lock;
+mod notification;
+mod saved_windows;
+mod tray_panel;
+#[cfg(windows)]
+mod win_text;
 mod window_effect;
 mod windows;
 
@@ -18,6 +25,7 @@ use daemon_state::DaemonState;
 use std::sync::Arc;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, RunEvent, Window, WindowEvent};
+use tray_panel::PanelState;
 use window_effect::WindowEffects;
 use windows::Windows;
 
@@ -46,10 +54,27 @@ async fn open_window(app: AppHandle, view: String) -> Result<(), String> {
     windows::open(&app, Some(&view))
 }
 
-/// The window shows the Sessions view or stopped showing it; the tray sends sessions to such a window.
+/// What the window shows (its view and session layout): the tray sends sessions to a window that shows Sessions, extra
+/// windows come back with it at the next start, and the view's name goes into the window's title, which the taskbar
+/// and the Window menu of macOS show.
 #[tauri::command]
-fn window_shows_sessions(window: Window, windows: tauri::State<'_, Windows>, shows: bool) {
-    windows.shows_sessions(window.label(), shows);
+fn window_shows(window: Window, view: String, session_layout: String) -> Result<(), String> {
+    let shown = saved_windows::Shown::new(&view, &session_layout).ok_or("not a view or session layout id")?;
+    let view_name = app_menu::view_name(&view).ok_or("not a view")?;
+    let title = windows::title(view_name, &window.app_handle().package_info().name);
+    windows::shows(window.app_handle(), window.label(), shown);
+    window.set_title(&title).map_err(|e| e.to_string())
+}
+
+/// A click in the tray panel (ADR-50): hides the panel and jumps to the entry, or shows the main window for "Open
+/// Trackwall".
+#[tauri::command]
+fn open_from_tray_panel(app: AppHandle, target: Option<jump::Jump>) {
+    tray_panel::hide(&app);
+    match target {
+        Some(target) => jump::request(&app, target),
+        None => show_main(&app),
+    }
 }
 
 fn main() {
@@ -77,11 +102,16 @@ fn main() {
             windows::show_once_loaded(app, windows::MAIN);
         }
     }));
+    // The menu bar on macOS (ADR-49); without one Tauri sets its default menu there.
+    #[cfg(target_os = "macos")]
+    let builder = builder.menu(app_menu::build);
     let app = builder
         .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(windows::STATE_FLAGS).build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(Arc::clone(&state))
+        .manage(PanelState::default())
         .manage(WindowEffects::default())
         .manage(Windows::default())
         .manage(jump::PendingJump::default())
@@ -89,9 +119,10 @@ fn main() {
             daemon_connection,
             retry_daemon,
             open_window,
-            window_shows_sessions,
+            window_shows,
             jump::take_jump,
             link::open_link,
+            open_from_tray_panel,
             folder_picker::pick_projects_folder
         ])
         .setup(move |app| {
@@ -99,17 +130,29 @@ fn main() {
             let window = app.get_webview_window(windows::MAIN).ok_or("missing window main from tauri.conf.json")?;
             app.state::<WindowEffects>().apply(&window);
             build_tray(app.handle())?;
+            windows::restore(app.handle());
+            notification::init(app.handle());
+            global_shortcut::register(app.handle());
             attention::watch(app.handle().clone(), Arc::clone(&state), TRAY_ID);
             link::listen(app.handle());
             Ok(())
         })
-        .on_page_load(window_effect::on_page_load)
+        .on_page_load(|webview, payload| {
+            // The tray panel paints its own opaque background and is shown by `tray_panel`, not by the window effect.
+            if webview.label() != tray_panel::LABEL {
+                window_effect::on_page_load(webview, payload);
+            }
+        })
+        .on_menu_event(|app, event| app_menu::handle(app, event.id.as_ref()))
         .on_window_event(|window, event| match event {
+            // The tray panel is not a window for sessions or links: it handles its own events (ADR-50).
+            _ if window.label() == tray_panel::LABEL => tray_panel::on_window_event(window, event),
             // Closing the main window hides it to the tray; the daemon and services keep running. An extra window closes.
             WindowEvent::CloseRequested { api, .. } if window.label() == windows::MAIN => {
                 api.prevent_close();
                 let _ = window.hide();
             }
+            WindowEvent::CloseRequested { .. } => windows::closed_by_user(window.app_handle(), window.label()),
             WindowEvent::Focused(true) => window.state::<Windows>().focused(window.label()),
             WindowEvent::Destroyed => windows::closed(window.app_handle(), window.label()),
             _ => {}
@@ -160,10 +203,19 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 }
             }
         })
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+        .on_tray_icon_event(|tray, event| match event {
+            TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Down, .. } => {
+                tray_panel::press(tray.app_handle());
+            }
+            TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, rect, .. } => {
+                tray_panel::release(tray.app_handle(), rect);
+            }
+            // Windows only: a double click opens the main window, as a click did before the panel (ADR-50).
+            TrayIconEvent::DoubleClick { button: MouseButton::Left, .. } => {
+                tray_panel::double_click(tray.app_handle());
                 show_main(tray.app_handle());
             }
+            _ => {}
         });
     // Pasek menu macOS oczekuje jednobarwnego szablonu, który system sam przebarwia do jasnego i ciemnego paska.
     // Poza macOS zostaje kolorowa ikona aplikacji: zasobnik Windows i Linuksa bywa jasny albo ciemny, a ona jest czytelna na obu.
@@ -202,8 +254,8 @@ fn hide_shell(app: &AppHandle) {
 
 #[cfg(windows)]
 fn windows_alert(text: &str) {
+    use win_text::wide;
     use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
-    let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
     let (text, title) = (wide(text), wide("Trackwall"));
     // SAFETY: oba bufory są zakończone zerem i żyją do końca wywołania.
     unsafe { MessageBoxW(std::ptr::null_mut(), text.as_ptr(), title.as_ptr(), MB_OK | MB_ICONERROR) };
