@@ -7,7 +7,7 @@ description: Move between views with the keyboard, and spread Trackwall over sev
 
 Move between views with the keyboard, and spread Trackwall over several windows and monitors.
 
-![Two Trackwall windows side by side: sessions in one, the connection graph in the other](/screenshots/windows.png)
+![Two Trackwall windows side by side, put together from two screenshots: sessions in one, the connection graph in the other](/screenshots/windows.png)
 
 ## What you get
 

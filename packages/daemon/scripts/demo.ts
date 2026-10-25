@@ -15,11 +15,15 @@ import { fileURLToPath } from "node:url";
 import { EventHub } from "../src/api/event-hub.ts";
 import { startApi } from "../src/api/server.ts";
 import { createFacade } from "../src/facade.ts";
-import { COPILOT_HOOK_COMMAND, MCP_STDIO_COMMAND, SESSION_TOKEN_FILE_OPTION } from "../src/infra/args.ts";
-import { newToken, removeDaemonFile, writeDaemonFile } from "../src/infra/discovery.ts";
+import { COPILOT_HOOK_COMMAND } from "../src/infra/args.ts";
+import { newToken, writeDaemonFile } from "../src/infra/discovery.ts";
+import { selfCommand } from "../src/infra/self-command.ts";
+import { SHUTDOWN_SIGNALS, stopDaemon } from "../src/infra/shutdown.ts";
 import { userEnv } from "../src/infra/user-env.ts";
 import { createMcpEndpoint } from "../src/mcp/endpoint.ts";
+import { mcpStdioCommand, sessionMcpStdioCommand } from "../src/mcp/stdio-command.ts";
 import { runtimeInfo } from "../src/platform/runtime.ts";
+import { TURNS } from "./demo/turns.ts";
 import { createDemoWorkspace, DEMO_REPOS } from "./demo/workspace.ts";
 
 const VERSION = "demo";
@@ -29,7 +33,6 @@ const home = resolve(dir);
 if (existsSync(home) && readdirSync(home).length > 0) throw new Error(`${home} is not empty`);
 
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
-const mainScript = here("../src/main.ts");
 const uiDir = here("../../ui/dist");
 if (!existsSync(join(uiDir, "index.html"))) throw new Error("no built UI: run `pnpm --filter @trackwall/ui build` first");
 
@@ -39,19 +42,14 @@ createDemoWorkspace(projectsDir);
 writeFileSync(join(home, "workspace.yaml"), `projectsDir: ${JSON.stringify(projectsDir)}\n`);
 
 const log = (msg: string) => process.stderr.write(`[demo] ${msg}\n`);
-// Hooks and the MCP bridge run the daemon from source, as `bun src/main.ts` would.
-const daemon = (args: string[]) => ({ exec: process.execPath, args: [mainScript, ...args] });
 const facade = createFacade({
   home,
   openUrl: (url) => log(`open ${url}`),
   openFolder: (folder) => log(`open ${folder}`),
   miseCommand: ["mise"],
   copilotCommand: [process.execPath, here("demo/copilot.ts")],
-  hookCommand: (event, hooksFile) => daemon([COPILOT_HOOK_COMMAND, event, hooksFile]),
-  sessionMcpCommand: (tokenFile) => {
-    const { exec, args } = daemon([MCP_STDIO_COMMAND, "--home", home, SESSION_TOKEN_FILE_OPTION, tokenFile]);
-    return [exec, ...args];
-  },
+  hookCommand: (event, hooksFile) => selfCommand([COPILOT_HOOK_COMMAND, event, hooksFile]),
+  sessionMcpCommand: (tokenFile) => sessionMcpStdioCommand(home, tokenFile),
   userEnv,
   log,
 });
@@ -71,55 +69,71 @@ const api = await startApi({
     runtime: runtimeInfo(),
     launchedBy: "manual",
     home,
-    mcpStdioCommand: [process.execPath, mainScript, MCP_STDIO_COMMAND, "--home", home],
+    mcpStdioCommand: mcpStdioCommand(home),
   }),
   onShutdown: () => void stop(),
   facade,
-  mcp: createMcpEndpoint({ facade, version: VERSION, log }),
-  events: new EventHub({ facade, log }),
+  mcp: createMcpEndpoint({ facade, version: VERSION, log: (msg) => log(`[mcp] ${msg}`) }),
+  events: new EventHub({ facade, log: (msg) => log(`[events] ${msg}`) }),
 });
-/** Sessions in every state, a main session with proposals, two agent tasks and a running slice of services. */
+/**
+ * Sessions in every state, a main session with two of its tasks approved and two still proposed, two tasks of their
+ * own, and a slice of services running.
+ */
 async function setTheScene(): Promise<void> {
-  const sessions = ["orders-api", "payments", "shop-web", "catalog", "inventory", "search", "api-gateway", "admin-bff", "shipping"];
-  const started = [];
-  for (const repo of sessions) started.push(await facade.agents.start(repo));
-  const main = started[0];
+  const sessions = [];
+  for (const repo of Object.keys(TURNS)) sessions.push(await facade.agents.start(repo));
+  const main = sessions[0];
   if (main === undefined) throw new Error("no main session");
-  await facade.agents.propose(main.id, {
-    repo: "payments",
-    title: "Retry the payment call",
-    prompt: "Make POST /api/payments idempotent by order id, so orders-api can retry it twice.",
-  });
-  await facade.agents.propose(main.id, {
-    repo: "notifications",
-    title: "Tell the customer about a retried payment",
-    prompt: "Send one e-mail when a payment succeeds on a retry, not one per attempt.",
-  });
-  await facade.agents.propose(main.id, {
-    repo: "admin-web",
-    title: "Show retries on the order page",
-    prompt: "Show how many times the payment of an order was retried, next to its status.",
-  });
+  const propose = (repo: string, title: string, prompt: string) => facade.agents.propose(main.id, { repo, title, prompt });
+  const retry = await propose(
+    "payments",
+    "Retry the payment call",
+    "Make POST /api/payments idempotent by order id, so orders-api can retry it twice.",
+  );
+  const notify = await propose(
+    "notifications",
+    "Tell the customer about a retried payment",
+    "Send one e-mail when a payment succeeds on a retry, not one per attempt.",
+  );
+  await propose(
+    "admin-web",
+    "Show retries on the order page",
+    "Show how many times the payment of an order was retried, next to its status.",
+  );
+  await propose(
+    "billing",
+    "Invoice an order once, however often it is paid",
+    "Skip the invoice when billing already has one for the order id.",
+  );
+  for (const proposal of [retry, notify]) await facade.agents.approveProposal(proposal.id, proposal.prompt);
   await facade.agents.createTask("pricing", "Publish a price-changed event when a price changes");
   await facade.agents.createTask("reviews", "Hide reviews from customers who have been deleted");
   for (const repo of DEMO_REPOS) await facade.mise.trust(repo);
-  await facade.services.start({ repo: "admin-bff", dependencies: true, waitMs: 20_000 });
+  const slice = await facade.services.start({ repo: "admin-bff", dependencies: true, waitMs: 20_000 });
+  const down = slice.members
+    .filter((member) => member.service?.state !== "healthy")
+    .map((member) => `${member.repo}: ${member.problem ?? member.service?.state}`);
+  if (down.length > 0) throw new Error(`services did not come up (another demo still running?): ${down.join(", ")}`);
   await facade.mise.start("orders-api", "build");
 }
 
+let stopping = false;
 async function stop(): Promise<void> {
-  facade.batch.close();
-  await facade.procs.stopAll();
-  facade.agents.close();
-  removeDaemonFile(home, process.pid);
-  await api.close();
-  facade.logs.flush();
+  if (stopping) return;
+  stopping = true;
+  await stopDaemon(home, facade, api);
   process.exit(0);
 }
-process.on("SIGINT", () => void stop());
-process.on("SIGTERM", () => void stop());
+for (const signal of SHUTDOWN_SIGNALS) process.on(signal, () => void stop());
 
-await setTheScene();
+try {
+  await setTheScene();
+} catch (err) {
+  log(`the scene did not come up: ${err instanceof Error ? err.message : String(err)}`);
+  await stopDaemon(home, facade, api);
+  process.exit(1);
+}
 // Written once the scene is set, so whoever waits for daemon.json finds the demo ready.
 writeDaemonFile(home, { pid: process.pid, port: api.port, token, startedAt, version: VERSION });
 log(`demo shop in ${projectsDir}`);

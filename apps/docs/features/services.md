@@ -7,7 +7,7 @@ description: Start a service together with the services it calls, see when it is
 
 Start a service together with the services it calls, see when it is ready, and call its endpoints.
 
-![The service panel of admin-bff: ready on port 8095, started with its dependencies](/screenshots/mise-tasks.png)
+![The mise tasks of admin-bff: its service ready on port 8095 and the log of the service open](/screenshots/mise-tasks.png)
 
 ## What you get
 

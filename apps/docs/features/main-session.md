@@ -7,7 +7,7 @@ description: Let one agent plan work and hand it to other agents, while you appr
 
 Let one agent plan work and hand it to other agents, while you approve every task before it starts.
 
-![Three task proposals from the main session in orders-api, with the first one open](/screenshots/main-session.png)
+![Task proposals from the main session in orders-api, two of them already running as tasks](/screenshots/main-session.png)
 
 ## What you get
 

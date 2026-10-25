@@ -7,7 +7,7 @@ description: Run several Copilot CLI agents side by side, each in its own repo, 
 
 Run several Copilot CLI agents side by side, each in its own repo, and always know which one is waiting for you.
 
-![Nine Copilot CLI sessions in a grid, some working, some waiting for you or asking for approval](/screenshots/sessions-grid.png)
+![Copilot CLI sessions and agent tasks in a grid, some working, some waiting for you or asking for approval](/screenshots/sessions-grid.png)
 
 ## What you get
 

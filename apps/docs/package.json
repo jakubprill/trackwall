@@ -12,6 +12,7 @@
     "test": "bun test"
   },
   "devDependencies": {
+    "@trackwall/protocol": "workspace:*",
     "@types/bun": "1.4.4",
     "playwright": "1.63.0",
     "typescript": "5.9.3",

@@ -6,34 +6,55 @@
 //
 // It needs Chromium for Playwright (`pnpm --filter @trackwall/docs exec playwright install chromium`) and `mise` on
 // PATH for the services. The images go to `apps/docs/public/screenshots/`.
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { request } from "node:http";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, parse } from "node:path";
 import { fileURLToPath } from "node:url";
+import { DAEMON_FILE, DaemonFile } from "@trackwall/protocol";
 import { chromium, type Page } from "playwright";
 
 const REPO = fileURLToPath(new URL("../../..", import.meta.url));
 const OUT = join(REPO, "apps", "docs", "public", "screenshots");
-const HOME = join(tmpdir(), "trackwall-demo");
+// A short path with no user name in it: the Repos view shows where the projects folder is.
+const HOME = process.platform === "win32" ? join(parse(tmpdir()).root, "trackwall-demo") : join("/tmp", "trackwall-demo");
 const VIEWPORT = { width: 1600, height: 1000 };
 const DEMO_READY_MS = 180_000;
+const DEMO_STOP_MS = 30_000;
 
-async function startDemo(): Promise<{ url: string; stop: () => void }> {
-  rmSync(HOME, { recursive: true, force: true });
-  const demo = spawn(process.execPath, [join(REPO, "packages", "daemon", "scripts", "demo.ts"), HOME], { stdio: "inherit" });
-  const daemonFile = join(HOME, "daemon.json");
+/** Waits until the demo daemon has set its scene and written `daemon.json`. */
+async function demoReady(demo: ChildProcess): Promise<DaemonFile> {
+  const daemonFile = join(HOME, DAEMON_FILE);
   const deadline = Date.now() + DEMO_READY_MS;
   while (!existsSync(daemonFile)) {
     if (demo.exitCode !== null) throw new Error(`the demo daemon ended with ${demo.exitCode}`);
     if (Date.now() > deadline) throw new Error("the demo daemon did not get ready");
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  const file: unknown = JSON.parse(readFileSync(daemonFile, "utf8"));
-  const port = typeof file === "object" && file !== null ? Reflect.get(file, "port") : undefined;
-  const token = typeof file === "object" && file !== null ? Reflect.get(file, "token") : undefined;
-  if (typeof port !== "number" || typeof token !== "string") throw new Error(`${daemonFile} has no port and token`);
-  return { url: `http://127.0.0.1:${port}/#token=${token}`, stop: () => demo.kill("SIGINT") };
+  const parsed = DaemonFile.safeParse(JSON.parse(readFileSync(daemonFile, "utf8")));
+  if (!parsed.success) throw new Error(`${daemonFile} is not a daemon file: ${parsed.error.message}`);
+  return parsed.data;
+}
+
+/**
+ * Stops the demo through its API, so it stops its services and sessions itself: on Windows a signal to the child
+ * would end it at once. A demo that never got ready, or does not answer, is killed.
+ */
+async function stopDemo(demo: ChildProcess, daemon: DaemonFile | undefined): Promise<void> {
+  if (demo.exitCode !== null) return;
+  const exited = new Promise((resolve) => demo.once("exit", resolve));
+  if (daemon === undefined) demo.kill();
+  else {
+    const origin = `http://127.0.0.1:${daemon.port}`;
+    const headers = { authorization: `Bearer ${daemon.token}`, origin, "content-type": "application/json" };
+    // node:http, not fetch: Bun's fetch sends 127.0.0.1 through HTTP_PROXY.
+    const req = request(`${origin}/api/daemon/shutdown`, { method: "POST", headers });
+    req.on("error", () => demo.kill());
+    req.end("{}");
+  }
+  const timeout = new Promise((resolve) => setTimeout(resolve, DEMO_STOP_MS).unref());
+  if ((await Promise.race([exited.then(() => true), timeout.then(() => false)])) === false) demo.kill("SIGKILL");
 }
 
 /** Lets the view load and animate before the picture. */
@@ -56,7 +77,7 @@ const SHOTS: Record<string, (page: Page) => Promise<void>> = {
   },
   "main-session": async (page) => {
     await page.keyboard.press("Control+3");
-    await page.getByText("3 task proposals").click();
+    await page.getByText("2 task proposals").click();
     await settle(page);
   },
   tasks: async (page) => {
@@ -66,11 +87,9 @@ const SHOTS: Record<string, (page: Page) => Promise<void>> = {
   },
   overview: async (page) => {
     // The graph of twenty repos is wider than the other views.
-    await page.setViewportSize({ width: 2400, height: 760 });
+    await page.setViewportSize({ width: 2400, height: 420 });
     await page.keyboard.press("Control+4");
-    await settle(page);
-    await page.getByText("orders-api", { exact: true }).first().click();
-    await settle(page);
+    await settle(page, 3000);
   },
   repos: async (page) => {
     await page.keyboard.press("Control+2");
@@ -108,24 +127,31 @@ async function windowsShot(page: Page, left: string, right: string): Promise<voi
     .bar i { width: 11px; height: 11px; border-radius: 50%; background: #3a434c; }
     .bar span { margin-left: 8px; }
     img { display: block; width: 100%; }
-  </style>${window(left, "left: 40px; top: 70px;")}${window(right, "left: 920px; top: 150px;")}`);
+  </style>${window(left, "left: 40px; top: 70px;")}${window(right, "left: 920px; top: 420px;")}`);
   await shot(page, "windows");
 }
 
 mkdirSync(OUT, { recursive: true });
-const demo = await startDemo();
-const browser = await chromium.launch();
+rmSync(HOME, { recursive: true, force: true });
+const demo = spawn(process.execPath, [join(REPO, "packages", "daemon", "scripts", "demo.ts"), HOME], { stdio: "inherit" });
+let daemon: DaemonFile | undefined;
 try {
-  for (const [name, show] of Object.entries(SHOTS)) {
-    const page = await browser.newPage({ viewport: VIEWPORT, colorScheme: "dark" });
-    await page.goto(demo.url);
-    await settle(page, 2500);
-    await show(page);
-    await shot(page, name);
-    await page.close();
+  daemon = await demoReady(demo);
+  const url = `http://127.0.0.1:${daemon.port}/#token=${daemon.token}`;
+  const browser = await chromium.launch();
+  try {
+    for (const [name, show] of Object.entries(SHOTS)) {
+      const page = await browser.newPage({ viewport: VIEWPORT, colorScheme: "dark" });
+      await page.goto(url);
+      await settle(page, 2500);
+      await show(page);
+      await shot(page, name);
+      await page.close();
+    }
+    await windowsShot(await browser.newPage(), join(OUT, "sessions-grid.png"), join(OUT, "overview.png"));
+  } finally {
+    await browser.close();
   }
-  await windowsShot(await browser.newPage(), join(OUT, "sessions-grid.png"), join(OUT, "overview.png"));
 } finally {
-  await browser.close();
-  demo.stop();
+  await stopDemo(demo, daemon);
 }

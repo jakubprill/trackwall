@@ -7,7 +7,7 @@ description: See which repo uses which, through shared packages and HTTP calls, 
 
 See which repo uses which, through shared packages and HTTP calls, with the line that proves it.
 
-![The connection graph of twenty repos, with orders-api selected and its connections listed on the right](/screenshots/overview.png)
+![The connection graph of twenty repos: who calls whom over HTTP and who uses the shared libraries](/screenshots/overview.png)
 
 ## What you get
 

@@ -1,14 +1,15 @@
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isCompiledBinary, runtimeInfo } from "../platform/runtime.ts";
 
 /**
  * Komenda, która uruchamia ten sam daemon z podkomendą (most stdio MCP, hook wtyczki sesji), do podania innemu
  * programowi. Binarka z wydania to sama ścieżka binarki; uruchomienie ze źródeł dokłada runtime i skrypt.
+ * From source the script is always `src/main.ts`, not `process.argv[1]`, so a script that builds a daemon of its own
+ * (`scripts/demo.ts`) hands out the same commands.
  */
 export function selfCommand(args: readonly string[]): { exec: string; args: string[] } {
-  const script = process.argv[1];
-  const fromSource = !isCompiledBinary() && script !== undefined ? [...runtimeArgs(), resolve(script)] : [];
+  const fromSource = isCompiledBinary() ? [] : [...runtimeArgs(), fileURLToPath(new URL("../main.ts", import.meta.url))];
   return { exec: process.execPath, args: [...fromSource, ...args] };
 }
 

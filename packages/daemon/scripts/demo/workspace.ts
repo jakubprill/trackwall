@@ -14,7 +14,8 @@ interface Service {
   calls: string[];
 }
 
-const SERVICES: Service[] = [
+/** The Spring services; `calls` are the edges the connection graph should show between them. */
+export const DEMO_SERVICES: Service[] = [
   { name: "api-gateway", port: 8080, resource: "routes", calls: ["catalog", "orders-api", "customers", "search", "auth"] },
   { name: "orders-api", port: 8081, resource: "orders", calls: ["payments", "inventory", "pricing", "customers", "notifications"] },
   { name: "payments", port: 8082, resource: "payments", calls: ["billing", "notifications", "customers"] },
@@ -173,7 +174,7 @@ function serviceFiles(service: Service): Record<string, string> {
   const pkg = javaPackage(service.name);
   const dir = `src/main/java/${pkg.replace(/\./g, "/")}`;
   const targets = service.calls.map((name) => {
-    const target = SERVICES.find((s) => s.name === name);
+    const target = DEMO_SERVICES.find((s) => s.name === name);
     if (target === undefined) throw new Error(`${service.name} calls unknown ${name}`);
     return target;
   });
@@ -233,11 +234,11 @@ const LIBRARIES: Record<string, Record<string, string>> = {
 };
 
 /** The names of the demo repos, in the order they are created. */
-export const DEMO_REPOS = [...SERVICES.map((s) => s.name), ...FRONTENDS.map((f) => f.name), ...Object.keys(LIBRARIES)];
+export const DEMO_REPOS = [...DEMO_SERVICES.map((s) => s.name), ...FRONTENDS.map((f) => f.name), ...Object.keys(LIBRARIES)];
 
 /** Creates the demo repos in `projectsDir`, each a git repo with one commit, and leaves a few with uncommitted work. */
 export function createDemoWorkspace(projectsDir: string): void {
-  for (const service of SERVICES) commitRepo(join(projectsDir, service.name), service.name, serviceFiles(service));
+  for (const service of DEMO_SERVICES) commitRepo(join(projectsDir, service.name), service.name, serviceFiles(service));
   for (const frontend of FRONTENDS) commitRepo(join(projectsDir, frontend.name), frontend.name, frontendFiles(frontend));
   for (const [name, files] of Object.entries(LIBRARIES)) commitRepo(join(projectsDir, name), name, files);
   // Work in progress, so "Changes" and the repo list have something to show.

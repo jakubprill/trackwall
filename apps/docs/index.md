@@ -37,4 +37,4 @@ features:
     link: /features/mcp
 ---
 
-![Two Trackwall windows side by side: nine Copilot CLI sessions in one, the connection graph of twenty repos in the other](/screenshots/windows.png)
+![Two Trackwall windows side by side: Copilot CLI sessions and agent tasks in one, the connection graph of twenty repos in the other](/screenshots/windows.png)

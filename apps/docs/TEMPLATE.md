@@ -10,7 +10,7 @@ The page is done when a colleague who has never opened Trackwall can read it alo
 - **Lead with the value.** The description and "What you get" say what changes for the reader, in their words: "see which agent is waiting for you", not "session state from hooks".
 - **Short sentences, one idea each.** Bullets for lists of things, prose for how things fit together, a table for keys or options.
 - **Every fact on one page.** A fact that belongs to another feature is a link to that page, not a copy.
-- **Show it.** A screenshot under the lede shows the feature at work on the demo shop, a made-up projects folder with twenty repos and sessions in every state. Add or update a picture in `scripts/screenshots.ts` and run it (the command is at the top of the script); never take one from your own repos.
+- **Show it.** When the feature has a view, a screenshot under the lede shows it at work on the demo shop (a page about something without a view of its own, such as the MCP tools or links, goes without), a made-up projects folder with twenty repos and sessions in every state. Add or update a picture in `scripts/screenshots.ts` and run it (the command is at the top of the script); never take one from your own repos.
 - **Only what Trackwall does today.** No plans, no history, no decision records and no links into `docs/`: the page describes the delivered feature, and whatever the reader needs is on the site.
 
 The pages in `guide/` (what Trackwall is, installing it, connecting Copilot CLI) are not features and keep their own shape: the same frontmatter and lede, then the steps the reader follows. The same rules of writing apply to them.
