@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
 import { CallEndpointResult, ListServicesResult, StartServiceResult, StopServiceResult } from "@trackwall/protocol";
@@ -119,7 +119,8 @@ describe.skipIf(process.versions.bun === undefined)("services from a Trackwall s
       const called = CallEndpointResult.parse(
         (await call(client, "call_endpoint", { repo: "warehouse", task: own.id, path: "/" })).structuredContent,
       );
-      expect(JSON.parse(called.response?.body ?? "")).toMatchObject({ cwd: own.worktree, port: String(own.port) });
+      // macOS: the temporary directory is a link (/var → /private/var), and the service sees the real path.
+      expect(JSON.parse(called.response?.body ?? "")).toMatchObject({ cwd: realpathSync(own.worktree), port: String(own.port) });
 
       expect(errorText(await call(client, "start_service", { repo: "warehouse", task: other.id }))).toBe(
         `bad_request: a session of task ${own.id} can start and stop only the service of its own worktree, not of that of task ${other.id}`,
