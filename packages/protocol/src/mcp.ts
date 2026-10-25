@@ -455,7 +455,7 @@ export const mcpTools = {
       "The changes of a task's worktree against its base commit with their diff: the task's commits and what its agent has not " +
       "committed yet, new files included and ignored files left out, so you can review what another session did before you report it. " +
       `The same files (at most ${TASK_SUMMARY_MAX_FILES}), commit and uncommitted counts as ${GET_SESSION}, and patch: the unified ` +
-      "diff, cut at a whole line within maxPatchBytes (truncated: true then, or when the file list was cut). Start with " +
+      "diff, cut at a whole line within maxPatchBytes (truncated: true then; with filesTruncated also the file list was cut). Start with " +
       `${GET_SESSION} for the file list, then read the diff of the files you care about with paths (git pathspecs: src/, ` +
       "*.java, :!*.lock to exclude); exclude a generated or minified file that fills the limit. The counts stay those of " +
       "the whole worktree. not_found for an unknown or ended task.",

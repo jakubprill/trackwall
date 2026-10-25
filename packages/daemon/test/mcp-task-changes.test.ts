@@ -7,7 +7,7 @@ import { gitIn } from "./support/git-repo.ts";
 import { connectHttpClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
 
-const TOKEN = "c".repeat(43);
+const TOKEN = "d".repeat(43);
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
 let client: Client;
 

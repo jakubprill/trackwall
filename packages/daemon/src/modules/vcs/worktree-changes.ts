@@ -44,12 +44,7 @@ const NO_PATCH: RunOutput = { stdout: Buffer.alloc(0), truncated: false };
  *
  * `paths` (git pathspecs) narrows the files and the diff; the commit and uncommitted counts stay those of the whole worktree.
  */
-export async function worktreeChanges(
-  dir: string,
-  base: string,
-  maxPatchBytes: number,
-  paths: readonly string[] = [],
-): Promise<TaskChanges> {
+export async function worktreeChanges(dir: string, base: string, maxPatchBytes: number, paths: readonly string[]): Promise<TaskChanges> {
   // Do końca każdej: zakończenie zadania czeka na ten odczyt, zanim skasuje worktree, więc odrzucenie jednej części
   // nie może zostawić gita, który nadal czyta katalog.
   const work = [workingTreeChanges(dir, base, maxPatchBytes, paths), commitCount(dir, base, "HEAD"), uncommittedCount(dir)] as const;

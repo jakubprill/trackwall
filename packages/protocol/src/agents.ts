@@ -179,17 +179,20 @@ export const TASK_SUMMARY_MAX_FILES = 200;
 export const TaskChangesSummary = TaskChanges.omit({ patch: true, truncated: true }).extend({ filesTruncated: z.boolean() });
 export type TaskChangesSummary = z.infer<typeof TaskChangesSummary>;
 
-/** Default and largest diff in one `get_task_changes` result: the result reaches the agent twice (text and `structuredContent`). */
-/** The smallest limit an agent may ask for: less does not hold the header and one hunk of a file. */
+/** The smallest diff limit an agent may ask for in `get_task_changes`: less does not hold a file header and a hunk. */
 export const AGENT_PATCH_MIN_BYTES = 1000;
+/**
+ * The default and the largest diff limit in one `get_task_changes` result: small next to the 1 MB of the "Changes"
+ * tab, because the result reaches the agent twice (text and `structuredContent`).
+ */
 export const AGENT_PATCH_DEFAULT_BYTES = 32_000;
 export const AGENT_PATCH_MAX_BYTES = 200_000;
 
 /**
- * A task's changes for an agent with their diff (`get_task_changes`): `TaskChangesSummary` narrowed to the requested
- * paths, plus the diff of `TaskChanges`, cut at a whole line within the agent's byte limit (`truncated`).
+ * A task's changes for an agent with their diff (`get_task_changes`): `TaskChanges` narrowed to the requested paths,
+ * with the diff cut within the agent's byte limit and at most `TASK_SUMMARY_MAX_FILES` files (`filesTruncated`).
  */
-export const AgentTaskChanges = TaskChangesSummary.extend({ patch: TaskChanges.shape.patch, truncated: TaskChanges.shape.truncated });
+export const AgentTaskChanges = TaskChanges.extend({ filesTruncated: z.boolean() });
 export type AgentTaskChanges = z.infer<typeof AgentTaskChanges>;
 
 /**
