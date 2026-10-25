@@ -8,15 +8,15 @@ import type { Connection } from "@/lib/connection";
 import { useRemote } from "@/lib/use-remote";
 
 /**
- * Diff na żywo: agent zmienia pliki w ciągu sekund, a jedno pytanie to kilka szybkich poleceń gita na worktree
- * (koszt w ADR-31); następne idzie dopiero po odpowiedzi, więc wolny git nie piętrzy pytań.
+ * Live diff: the agent changes files within seconds, and one request is a few quick git commands on the worktree
+ * (cost in ADR-31); the next one goes out only after the answer, so a slow git does not pile up requests.
  */
 const POLL_MS = 2000;
 
 /**
- * Zakładka „Zmiany” zadania (ADR-31): pliki i diff worktree względem commita bazowego, odpytywane co 2 s, póki
- * zakładka jest otwarta, więc widać, co agent robi, zanim cokolwiek zacommituje. `paused` wstrzymuje odpytywanie
- * (w trakcie zakończenia zadania worktree znika), zostawiając ostatnie dane.
+ * The task's "Changes" tab (ADR-31): files and diff of the worktree against the base commit, polled every 2 s while
+ * the tab is open, so you can see what the agent is doing before it commits anything. `paused` stops polling
+ * (the worktree disappears while the task is being ended) and keeps the last data.
  */
 export function TaskChangesView({ conn, task, paused }: { conn: Connection; task: string; paused: boolean }) {
   const load = useCallback(() => post(conn, agentsApi.taskChanges, { task }), [conn, task]);

@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
- * Filtr listy repo po tagach (ADR-25): każdy tag z liczbą repo; wybrane zawężają listę (repo musi mieć wszystkie).
- * Tagi liczy daemon z kart repo i z reguł `repoTags` w `workspace.yaml`.
+ * Filtering the repo list by tags (ADR-25): every tag with its number of repos; the chosen ones narrow the list (a repo
+ * must have all of them). The daemon computes the tags from the repo cards and the `repoTags` rules in `workspace.yaml`.
  */
 export function TagFilter({
   counts,

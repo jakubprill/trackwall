@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { singleFlight } from "../src/lib/single-flight.ts";
 
-describe("jedno wywołanie naraz", () => {
-  test("dwa odczyty naraz dostają jedną odpowiedź, a następny po niej idzie od nowa", async () => {
+describe("one call at a time", () => {
+  test("two reads at once get one answer, and the next one after it starts again", async () => {
     let calls = 0;
     const read = singleFlight(async () => {
       calls += 1;
@@ -13,15 +13,15 @@ describe("jedno wywołanie naraz", () => {
     expect(await read()).toBe(2);
   });
 
-  test("po błędzie następny odczyt idzie od nowa", async () => {
+  test("after an error the next read starts again", async () => {
     let calls = 0;
     const read = singleFlight(async () => {
       calls += 1;
-      if (calls === 1) throw new Error("brak połączenia");
+      if (calls === 1) throw new Error("no connection");
       return calls;
     });
 
-    await expect(read()).rejects.toThrow("brak połączenia");
+    await expect(read()).rejects.toThrow("no connection");
     expect(await read()).toBe(2);
   });
 });

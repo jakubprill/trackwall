@@ -13,7 +13,7 @@ function columns(layout: ReturnType<typeof layoutGraph>): string[][] {
 }
 
 describe("layoutGraph", () => {
-  test("kolumna to najdłuższa ścieżka od repo, którego nikt nie używa: frontend, BFF, API, biblioteka", () => {
+  test("the column is the longest path from a repo nobody uses: frontend, BFF, API, library", () => {
     const layout = layoutGraph(
       ["web", "bff", "api", "lib"],
       [edge("web", "bff"), edge("bff", "api"), edge("api", "lib"), edge("bff", "lib")],
@@ -23,24 +23,24 @@ describe("layoutGraph", () => {
     expect(layout.width).toBe(4 * NODE_WIDTH + 3 * (layout.boxes.get("bff")?.x ?? 0) - 3 * NODE_WIDTH);
   });
 
-  test("repo bez krawędzi nie zajmuje kolumny, tylko trafia do isolated w kolejności listy", () => {
-    const layout = layoutGraph(["z-samotne", "a", "b", "a-samotne"], [edge("a", "b")]);
-    expect(layout.isolated).toEqual(["z-samotne", "a-samotne"]);
+  test("a repo without edges takes no column and goes to isolated in list order", () => {
+    const layout = layoutGraph(["z-alone", "a", "b", "a-alone"], [edge("a", "b")]);
+    expect(layout.isolated).toEqual(["z-alone", "a-alone"]);
     expect(columns(layout)).toEqual([["a"], ["b"]]);
   });
 
-  test("cykl nie zapętla układu: każde repo cyklu dostaje kolumnę", () => {
+  test("a cycle does not loop the layout: every repo in the cycle gets a column", () => {
     const layout = layoutGraph(["a", "b", "c"], [edge("a", "b"), edge("b", "c"), edge("c", "a")]);
     expect(columns(layout)).toEqual([["a"], ["b"], ["c"]]);
     expect(layout.pairs).toHaveLength(3);
   });
 
-  test("pusty graf ma zerowy rozmiar", () => {
+  test("an empty graph has zero size", () => {
     expect(layoutGraph([], [])).toMatchObject({ width: 0, height: 0, isolated: [], pairs: [] });
   });
 
-  test("kolumna jest porządkowana według sąsiadów, żeby linie się nie krzyżowały", () => {
-    // a1 używa b2, a2 używa b1: po nazwie b1 i b2 stałyby odwrotnie niż ich klienci.
+  test("a column is ordered by neighbours so that lines do not cross", () => {
+    // a1 uses b2, a2 uses b1: by name b1 and b2 would stand opposite to their clients.
     const layout = layoutGraph(["a1", "a2", "b1", "b2"], [edge("a1", "b2"), edge("a2", "b1")]);
     expect(columns(layout)).toEqual([
       ["a1", "a2"],
@@ -49,16 +49,16 @@ describe("layoutGraph", () => {
   });
 });
 
-describe("edgePairs i neighbourhood", () => {
-  test("krawędzie jednej pary repo są jedną linią", () => {
-    const pairs = edgePairs([edge("a", "b", "x"), edge("a", "b", "opis", "manual"), edge("b", "c")]);
+describe("edgePairs and neighbourhood", () => {
+  test("the edges of one repo pair are one line", () => {
+    const pairs = edgePairs([edge("a", "b", "x"), edge("a", "b", "description", "manual"), edge("b", "c")]);
     expect(pairs.map((p) => [p.from, p.to, p.edges.map((e) => e.key)])).toEqual([
-      ["a", "b", ["x", "opis"]],
+      ["a", "b", ["x", "description"]],
       ["b", "c", ["b->c"]],
     ]);
   });
 
-  test("sąsiedztwo to repo połączone w obie strony i ono samo", () => {
+  test("the neighbourhood is the repos connected in either direction and the repo itself", () => {
     const pairs = edgePairs([edge("a", "b"), edge("c", "a"), edge("b", "d")]);
     expect([...neighbourhood("a", pairs)].sort()).toEqual(["a", "b", "c"]);
   });

@@ -4,8 +4,9 @@
 //! Clicking a menu item shows the window for sessions (ADR-49) with that session or proposal. While no Trackwall window has the focus, the
 //! same moments also show a system notification (ADR-50, `notification.rs`).
 //!
-//! Pytanie idzie z powłoki, a nie z UI: schowane okno WebView może mieć wstrzymane timery, a tray ma działać także
-//! przy zamkniętym oknie. Czy sesja czeka na Ciebie, liczy daemon (`Session.needsAttention`), tak samo dla UI i traya.
+//! The shell asks, not the UI: a hidden WebView window may have its timers paused, and the tray has to work with the
+//! window closed too. Whether a session is waiting for you is decided by the daemon (`Session.needsAttention`), the same
+//! for the UI and the tray.
 //! The daemon also clears it, without a state change, once the user has seen an ended turn (ADR-47).
 
 use crate::daemon;
@@ -79,7 +80,7 @@ pub struct Proposal {
     pub title: String,
 }
 
-/// Stan sesji z ostatniego pytania: identyfikator i stan (albo `None` bez sygnału).
+/// Session states from the last poll: id and state (or `None` without a signal).
 type States = HashMap<String, Option<TaskState>>;
 
 /// The daemon's reply translated into what the tray shows.
@@ -93,7 +94,7 @@ pub struct Snapshot {
     known: HashSet<String>,
 }
 
-/// Tylko te pola odpowiedzi `POST /api/agents/sessions`, których potrzebuje tray (`SessionList` w protocol).
+/// Only the fields of the `POST /api/agents/sessions` reply that the tray needs (`SessionList` in protocol).
 #[derive(Deserialize)]
 struct Reply {
     data: SessionList,

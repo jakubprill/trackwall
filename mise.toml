@@ -1,22 +1,22 @@
-# Wersje narzędzi dla samego projektu Trackwall (nie dla repo z workspace użytkownika).
+# Tool versions for the Trackwall project itself (not for the repos in the user's workspace).
 [tools]
 node = "22"
 bun = "1.4.4"
 pnpm = "10.28.0"
 rust = "1.90"
 
-# Taski (`mise tasks`, `mise run <nazwa>`): skróty do komend z docs/development.md, które najpierw instalują zależności.
-# Nazwy jak taski repo w workspace (CONTEXT.md: setup, dev, ...).
+# mise tasks (`mise tasks`, `mise run <name>`): shortcuts to commands from docs/development.md that install dependencies first.
+# Named like the repos' mise tasks in a workspace (CONTEXT.md: setup, dev, ...).
 [tasks.setup]
-description = "Zależności workspace z lockfile (pnpm install --frozen-lockfile)"
+description = "Workspace dependencies from the lockfile (pnpm install --frozen-lockfile)"
 run = "pnpm install --frozen-lockfile"
 
 [tasks.dev]
-description = "Daemon i Vite w trybie deweloperskim, UI na http://127.0.0.1:5173 (stan w .trackwall-dev/)"
+description = "Daemon and Vite in development mode, UI on http://127.0.0.1:5173 (state in .trackwall-dev/)"
 depends = ["setup"]
 run = "pnpm dev"
 
 [tasks.portable]
-description = "Portable build z oknem Tauri do out/ (Windows: wymaga Visual Studio Build Tools z C++)"
+description = "Portable build with the Tauri window into out/ (Windows: needs Visual Studio Build Tools with C++)"
 depends = ["setup"]
 run = ["pnpm build:desktop", "pnpm portable"]

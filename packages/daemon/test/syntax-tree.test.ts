@@ -10,8 +10,8 @@ const root = join(import.meta.dir, "..");
 const probe = join("test", "fixtures", "syntax-tree-probe.ts");
 const parsers = await loadSyntaxParsers();
 
-describe("drzewa składni Javy i Kotlina", () => {
-  test("rekord Javy daje pola DTO z typami, także generycznymi", () => {
+describe("Java and Kotlin syntax trees", () => {
+  test("a Java record gives DTO fields with types, generic ones too", () => {
     const source = [
       "@JsonInclude(NON_NULL)",
       'public record OrderDto(String id, List<Line> lines, @JsonProperty("total") BigDecimal sum) {}',
@@ -36,7 +36,7 @@ describe("drzewa składni Javy i Kotlina", () => {
     expect(parameters).toEqual({ kind: "parsed", value: ["val id: String", "val lines: List<Line> = emptyList()"] });
   });
 
-  test("kod niepoprawny składniowo daje drzewo z błędem zamiast wyjątku, a reszta pliku jest czytelna", () => {
+  test("syntactically invalid code gives a tree with an error instead of an exception, and the rest of the file is readable", () => {
     const result = parsers.read("java", "class A { void broken( { }\nrecord B(int x) {}", (root) => ({
       hasError: root.hasError,
       records: root.descendantsOfType("record_declaration").map((r) => r.childForFieldName("name")?.text),
@@ -44,14 +44,14 @@ describe("drzewa składni Javy i Kotlina", () => {
     expect(result).toEqual({ kind: "parsed", value: { hasError: true, records: ["B"] } });
   });
 
-  test("plik, którego parsowanie trwa ponad limit, nie ma drzewa, a następny plik parsuje się poprawnie", () => {
+  test("a file whose parsing takes longer than the limit has no tree, and the next file parses correctly", () => {
     const started = performance.now();
     expect(parsers.read("kotlin", "fun f() = a<".repeat(20_000), (root) => root.type)).toEqual({ kind: "timeout" });
     expect(performance.now() - started).toBeLessThan(PARSE_TIME_LIMIT_MS * 3);
     expect(parsers.read("kotlin", "data class A(val x: Int)", (root) => root.hasError)).toEqual({ kind: "parsed", value: false });
   });
 
-  test("odczyt, który zwraca węzeł albo obietnicę, jest błędem, bo drzewo jest już zwolnione", () => {
+  test("a read that returns a node or a promise is an error, because the tree has already been freed", () => {
     expect(() => parsers.read("java", "class A {}", (root) => root.firstChild)).toThrow("plain values");
     expect(() => parsers.read("java", "class A {}", async (root) => root.type)).toThrow("plain values");
   });
@@ -61,7 +61,7 @@ describe("drzewa składni Javy i Kotlina", () => {
     "(program (record_declaration name: (identifier) parameters: (formal_parameters (formal_parameter type: (integral_type) name: (identifier))) body: (class_body)))";
 
   for (const [name, argv] of RUNTIMES) {
-    test(`gramatyki ładują się pod ${name} z node_modules`, () => {
+    test(`the grammars load under ${name} from node_modules`, () => {
       const run = spawnSync(argv[0] ?? "", [...argv.slice(1), probe, ...javaRecord], { cwd: root, encoding: "utf8" });
       expect(run.stderr).toBe("");
       expect(JSON.parse(run.stdout)).toEqual({ tree: javaTree, embedded: false });
@@ -69,12 +69,12 @@ describe("drzewa składni Javy i Kotlina", () => {
   }
 
   test(
-    "gramatyki są osadzone w binarce z bun build --compile i działają z niej",
+    "the grammars are embedded in the binary from bun build --compile and work from it",
     () => {
       const dir = mkdtempSync(join(tmpdir(), "trackwall-syntax-"));
       try {
         const bin = join(dir, process.platform === "win32" ? "probe.exe" : "probe");
-        // Bun, który uruchomił testy, a nie pierwszy z PATH.
+        // The Bun that ran the tests, not the first one on PATH.
         const build = spawnSync(process.execPath, ["build", "--compile", "--minify", probe, "--outfile", bin], {
           cwd: root,
           encoding: "utf8",

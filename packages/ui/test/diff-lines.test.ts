@@ -3,15 +3,15 @@ import { diffLines } from "../src/lib/diff-lines.ts";
 
 const kinds = (patch: string[]) => diffLines(patch.join("\n"), 100).lines.map((l) => l.kind);
 
-describe("linie diffu zadania", () => {
-  test("nagłówki pliku nie są dodanymi ani usuniętymi liniami", () => {
+describe("task diff lines", () => {
+  test("file headers are neither added nor removed lines", () => {
     expect(
-      kinds(["diff --git a/x.ts b/x.ts", "index 1..2 100644", "--- a/x.ts", "+++ b/x.ts", "@@ -1 +1 @@", "-stara", "+nowa", " bez zmian"]),
+      kinds(["diff --git a/x.ts b/x.ts", "index 1..2 100644", "--- a/x.ts", "+++ b/x.ts", "@@ -1 +1 @@", "-old", "+new", " unchanged"]),
     ).toEqual(["file", "meta", "meta", "meta", "hunk", "removed", "added", "context"]);
   });
 
-  test("w treści zmiany linia zaczynająca się od --- albo +++ jest usunięta albo dodana, a nie nagłówkiem", () => {
-    expect(kinds(["diff --git a/x.sql b/x.sql", "--- a/x.sql", "+++ b/x.sql", "@@ -1 +1 @@", "--- komentarz SQL", "+++ licznik"])).toEqual([
+  test("inside a change a line starting with --- or +++ is removed or added, not a header", () => {
+    expect(kinds(["diff --git a/x.sql b/x.sql", "--- a/x.sql", "+++ b/x.sql", "@@ -1 +1 @@", "--- SQL comment", "+++ counter"])).toEqual([
       "file",
       "meta",
       "meta",
@@ -21,7 +21,7 @@ describe("linie diffu zadania", () => {
     ]);
   });
 
-  test("diff dłuższy niż limit linii daje początek i znacznik, że jest więcej", () => {
+  test("a diff longer than the line limit gives the start and a marker that there is more", () => {
     expect(diffLines("+a\n-b\n c\n", 2)).toEqual({
       lines: [
         { offset: 0, text: "+a", kind: "added" },

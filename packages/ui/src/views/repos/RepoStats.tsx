@@ -6,8 +6,8 @@ import { relativeTime } from "@/lib/format";
 import { branchLabel, repoStatusTone } from "@/lib/repo-status";
 
 /**
- * Kafelki stanu w nagłówku repo: gałąź, gałąź śledzona, katalog roboczy i ostatni commit (§4.5). Zmiany w katalogu
- * roboczym prowadzą do zakładki „Changes” (ADR-34), żeby sama liczba nie była ślepą uliczką.
+ * State tiles in the repo header: branch, tracking branch, working directory and last commit (§4.5). Working directory
+ * changes lead to the "Changes" tab (ADR-34), so that the number alone is not a dead end.
  */
 export function RepoStats({ status, onShowChanges }: { status: RepoStatusOk; onShowChanges: () => void }) {
   const state = repoStatusTone(status);

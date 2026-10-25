@@ -17,7 +17,7 @@ const POLL_MS = 5000;
 export function DaemonPanel({ conn, onRetry }: { conn: Connection; onRetry: () => void }) {
   const load = useCallback(() => call(conn, "/api/daemon/info", DaemonInfo), [conn]);
   const info = useRemote(load, { pollMs: POLL_MS });
-  /** Dane tylko z ostatniej udanej odpowiedzi; po błędzie panel pokazuje błąd zamiast starych wartości. */
+  /** Data only from the last successful response; after an error the panel shows the error instead of stale values. */
   const ready = info.error ? undefined : info.data;
 
   return (

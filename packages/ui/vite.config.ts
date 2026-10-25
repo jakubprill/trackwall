@@ -10,8 +10,8 @@ export default defineConfig({
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
-  // Ścieżki od korzenia: daemon serwuje index.html także dla zagnieżdżonych tras (np. /tasks/123),
-  // a Tauri udostępnia frontendDist pod korzeniem własnego protokołu.
+  // Paths from the root: the daemon serves index.html for nested routes too (e.g. /tasks/123),
+  // and Tauri serves frontendDist at the root of its own protocol.
   base: "/",
   build: {
     outDir: "dist",

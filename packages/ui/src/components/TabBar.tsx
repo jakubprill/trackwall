@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-/** Pasek zakładek w treści widoku, np. w widoku Repo. Widoki aplikacji przełącza `ActivityBar`. */
+/** A tab bar in a view's content, for example in the Repo view. `ActivityBar` switches the app's views. */
 export function TabBar<Id extends string>({
   tabs,
   active,

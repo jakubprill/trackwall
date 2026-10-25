@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { oncePerFrame } from "../src/lib/once-per-frame.ts";
 
-describe("jedno wywołanie na klatkę", () => {
-  test("seria próśb przed następną klatką daje jedno wywołanie, a kolejna klatka następne", () => {
+describe("one call per frame", () => {
+  test("a series of requests before the next frame gives one call, and the next frame another", () => {
     const frames: (() => void)[] = [];
     let calls = 0;
     const perFrame = oncePerFrame(
@@ -23,11 +23,11 @@ describe("jedno wywołanie na klatkę", () => {
     expect(calls).toBe(2);
   });
 
-  test("zamknięcie odwołuje zaplanowane wywołanie", () => {
+  test("closing cancels the scheduled call", () => {
     const cancelled: number[] = [];
     const perFrame = oncePerFrame(
       () => {
-        throw new Error("wywołanie po zamknięciu");
+        throw new Error("call after closing");
       },
       () => 9,
       (handle) => cancelled.push(handle),

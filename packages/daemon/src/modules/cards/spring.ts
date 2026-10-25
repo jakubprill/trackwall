@@ -11,24 +11,25 @@ import type { SpringModule, TypeIndex } from "./spring-module.ts";
 import type { JvmLanguage } from "./syntax-tree.ts";
 
 /**
- * Ekstraktor Spring (§4.6, ADR-30): dla każdego modułu (katalog nad `src/main`) aplikacja z `spring.application.name`,
- * endpointy z kontrolerów i klienci HTTP z interfejsów Feign i `@HttpExchange`, z wywołań `WebClient`, `RestClient`
- * i `RestTemplate` oraz z adresów w konfiguracji, każdy fakt z plikiem i linią. Kod czyta tylko pliki Javy i Kotlina,
- * które odczyt commita wybrał wyszukiwaniem (`JVM_SOURCE_PATTERN`), i nie kompiluje ich.
+ * The Spring extractor (§4.6, ADR-30): for every module (the directory above `src/main`) the app from
+ * `spring.application.name`, endpoints from controllers, and HTTP clients from Feign and `@HttpExchange` interfaces, from
+ * `WebClient`, `RestClient` and `RestTemplate` calls and from addresses in the configuration, each fact with its file and
+ * line. The code reads only the Java and Kotlin files the commit read chose by search (`JVM_SOURCE_PATTERN`), and does
+ * not compile them.
  */
 
 /**
- * Wyrażenie (ERE dla `git grep`), którym odczyt commita wybiera pliki źródłowe do przeczytania: adnotacje mapowań,
- * klienci HTTP i stałe ze ścieżką. Plik bez żadnego z nich nie daje ekstraktorowi faktów, więc nie warto go czytać.
+ * The expression (ERE for `git grep`) the commit read uses to choose source files to read: mapping annotations, HTTP
+ * clients and constants with a path. A file without any of them gives the extractor no facts, so it is not worth reading.
  */
 export const JVM_SOURCE_PATTERN =
   '@(RestController|Controller|RequestMapping|GetMapping|PostMapping|PutMapping|PatchMapping|DeleteMapping|FeignClient|HttpExchange|GetExchange|PostExchange|PutExchange|PatchExchange|DeleteExchange)|WebClient|RestClient|RestTemplate|(final|const val)[[:space:]].*=[[:space:]]*"/';
-/** Rozszerzenia plików źródłowych, które czyta ekstraktor. */
+/** The source file extensions the extractor reads. */
 export const JVM_SOURCE_GLOBS = ["*.java", "*.kt"];
 
 /**
- * Plik źródłowy Javy albo Kotlina z kodu aplikacji: z `src/main/` na dowolnej głębokości (także moduł w katalogu
- * `src/`, jak `src/orders/src/main/java`), a bez `src/main/` tylko poza katalogami `src` (bez testów).
+ * A Java or Kotlin source file of app code: from `src/main/` at any depth (also a module in the `src/` directory, like
+ * `src/orders/src/main/java`), and without `src/main/` only outside `src` directories (no tests).
  */
 export function isJvmSource(path: string): boolean {
   if (path.length > 1024 || jvmLanguageOf(path) === null || isTestPath(path)) return false;
@@ -36,7 +37,7 @@ export function isJvmSource(path: string): boolean {
   return segments.some((s, i) => s === "src" && segments[i + 1] === "main") || !segments.includes("src");
 }
 
-/** Język pliku źródłowego po rozszerzeniu; `null` dla innych plików. */
+/** The source file's language by extension; `null` for other files. */
 export function jvmLanguageOf(path: string): JvmLanguage | null {
   return path.endsWith(".java") ? "java" : path.endsWith(".kt") ? "kotlin" : null;
 }
@@ -47,7 +48,7 @@ type SpringFacts = Extracted<ProvidedApp | ProvidedEndpoint, ConsumedHttp>;
 export function extractSpring(snapshot: RepoSnapshot): SpringFacts {
   const out: SpringFacts = emptyExtracted();
   const configs = readSpringConfigs(snapshot, out);
-  // Pliki typów dociągnięte dla kontraktów (ADR-38) nie zmieniają faktów HTTP: Spring czyta tylko pliki z wyszukiwania.
+  // Type files fetched for contracts (ADR-38) do not change the HTTP facts: Spring reads only the files from the search.
   const files = snapshot.paths
     .filter((p) => isJvmSource(p) && !snapshot.typeFiles.has(p))
     .flatMap((path) => {
@@ -68,7 +69,7 @@ export function extractSpring(snapshot: RepoSnapshot): SpringFacts {
       out.provides.push(...springEndpoints(file, module, lookup));
       codeClients.push(...declarativeClients(file, module, lookup), ...imperativeClients(file, module, lookup));
     }
-    // Bez `push(...lista)`: lista z dużego repo przekroczyłaby limit argumentów wywołania.
+    // No `push(...list)`: a list from a large repo would exceed the call argument limit.
     for (const client of [...codeClients, ...configClients(module, codeClients, out)]) out.consumes.push(client);
   }
   return out;

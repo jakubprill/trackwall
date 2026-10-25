@@ -1,17 +1,17 @@
 import { closingIndex, isIdent, isPunct, type Token, tokenize } from "./java-tokens.ts";
 
 /**
- * Plik Javy albo Kotlina jako typy z adnotacjami i metodami (§4.6, ADR-30): tyle składni, ile trzeba, żeby znaleźć
- * kontrolery Spring, interfejsy Feign i `@HttpExchange`, ich mapowania, stałe tekstowe (`static final String`,
- * `const val`) i pola wstrzykiwane przez `@Value`. Bez pełnego parsera: ciało metody jest pomijane jako blok, a kod,
- * którego ten odczyt nie rozumie, po prostu nie daje faktów.
+ * A Java or Kotlin file as types with annotations and methods (§4.6, ADR-30): as much syntax as it takes to find Spring
+ * controllers, Feign and `@HttpExchange` interfaces, their mappings, text constants (`static final String`,
+ * `const val`) and fields injected with `@Value`. No full parser: a method body is skipped as a block, and code this
+ * reading does not understand simply gives no facts.
  */
 
 export interface JavaAnnotation {
-  /** Ostatni człon nazwy (`GetMapping` z `@org.springframework...GetMapping`). */
+  /** The last part of the name (`GetMapping` from `@org.springframework...GetMapping`). */
   name: string;
   line: number;
-  /** Tokeny między nawiasami; `null` bez nawiasów. */
+  /** The tokens between the brackets; `null` without brackets. */
   args: Token[] | null;
 }
 
@@ -23,27 +23,27 @@ export interface JavaMethod {
 
 export interface JavaType {
   name: string;
-  /** `class`, `interface`, `enum`, `record` albo `object` (Kotlin). */
+  /** `class`, `interface`, `enum`, `record` or `object` (Kotlin). */
   keyword: string;
   line: number;
   annotations: JavaAnnotation[];
   methods: JavaMethod[];
-  /** Proste nazwy typów z `extends` / `implements` (Kotlin: po `:`). */
+  /** Simple type names from `extends` / `implements` (Kotlin: after `:`). */
   supertypes: string[];
 }
 
 export interface JavaFile {
   path: string;
   types: JavaType[];
-  /** Wyrażenia stałych tekstowych po nazwie (`NAZWA`) i po typie (`Typ.NAZWA`), do policzenia przez `java-expr.ts`. */
+  /** Text constant expressions by name (`NAME`) and by type (`Type.NAME`), to be resolved by `java-expr.ts`. */
   constants: Map<string, Token[]>;
   tokens: Token[];
 }
 
 const TYPE_KEYWORDS = new Set(["class", "interface", "enum", "record", "object"]);
-/** Słowa, po których `(` nie otwiera listy parametrów metody. */
+/** Words after which `(` does not open a method's parameter list. */
 const NOT_METHODS = new Set(["if", "for", "while", "switch", "catch", "synchronized", "return", "new", "this", "super", "when", "throw"]);
-/** Słowa kończące listę nadtypów w deklaracji typu. */
+/** Words that end the list of supertypes in a type declaration. */
 const SUPERTYPE_MARKERS = new Set(["extends", "implements", ":", ","]);
 
 type Frame = { kind: "type"; type: JavaType } | { kind: "block" };
@@ -62,7 +62,7 @@ class SourceParser {
   private readonly frames: Frame[] = [];
   private pending: JavaAnnotation[] = [];
   private pendingType: JavaType | null = null;
-  /** Indeks pierwszego tokenu bieżącej deklaracji (za ostatnim `;`, `{` albo `}`). */
+  /** The index of the first token of the current declaration (after the last `;`, `{` or `}`). */
   private statementStart = 0;
   private i = 0;
 
@@ -137,7 +137,7 @@ class SourceParser {
   private memberIdent(text: string): void {
     const next = this.tokens[this.i + 1];
     if (TYPE_KEYWORDS.has(text)) this.typeDeclaration(text);
-    // Konstruktor główny Kotlina (`class A(val b: B)`, `class A @Inject constructor(…)`): typy parametrów to nie nadtypy.
+    // The Kotlin primary constructor (`class A(val b: B)`, `class A @Inject constructor(…)`): parameter types are not supertypes.
     else if (this.pendingType && text === "constructor" && isPunct(next, "(")) this.i = closingIndex(this.tokens, this.i + 1);
     else if (isPunct(next, "(") && !this.pendingType && this.currentType() && !NOT_METHODS.has(text)) this.method(text);
     else if (isPunct(next, "=") && !this.pendingType) this.constant(text);
@@ -153,7 +153,7 @@ class SourceParser {
     return prev?.kind === "ident" || prev?.kind === "punct" ? prev.text : "";
   }
 
-  /** `class Nazwa`, `enum class Nazwa` (Kotlin), `companion object {` bez nazwy. */
+  /** `class Name`, `enum class Name` (Kotlin), `companion object {` without a name. */
   private typeDeclaration(keyword: string): void {
     let j = this.i + 1;
     if (isIdent(this.tokens[j], "class")) j++;
@@ -174,8 +174,8 @@ class SourceParser {
   }
 
   /**
-   * Pole z wartością na poziomie typu albo pliku: stała tekstowa, gdy deklaracja ma `final` (Java) albo `const` (Kotlin).
-   * Wyrażenie kończy `;` albo, w Kotlinie bez średników, nowa linia, która nie kontynuuje sklejania `+`.
+   * A field with a value at type or file level: a text constant when the declaration has `final` (Java) or `const` (Kotlin).
+   * The expression ends with `;` or, in Kotlin without semicolons, with a new line that does not continue a `+` concatenation.
    */
   private constant(name: string): void {
     const declaration = this.tokens.slice(this.statementStart, this.i);
@@ -184,7 +184,7 @@ class SourceParser {
     if (declaration.some((t) => isIdent(t, "final") || isIdent(t, "const"))) {
       const expr = this.tokens.slice(this.i + 2, end);
       if (!this.constants.has(name)) this.constants.set(name, expr);
-      // Stała z poziomu pliku (Kotlin `const val` poza typem) jest tylko pod nazwą.
+      // A file-level constant (Kotlin `const val` outside a type) is only under its name.
       if (type) this.constants.set(`${type.name}.${name}`, expr);
     }
     this.i = end;
@@ -192,7 +192,10 @@ class SourceParser {
   }
 }
 
-/** Indeks za parametrami typu (`<T : Base>`) od `from`; `from`, gdy ich nie ma. Ograniczony, bo plik jest z repo. */
+/**
+ * The index after type parameters (`<T : Base>`) from `from`; `from` when there are none. Bounded, because the file
+ * comes from the repo.
+ */
 function afterTypeParameters(tokens: readonly Token[], from: number): number {
   if (!isPunct(tokens[from], "<")) return from;
   let depth = 0;
@@ -203,7 +206,7 @@ function afterTypeParameters(tokens: readonly Token[], from: number): number {
   return from;
 }
 
-/** Indeks za wyrażeniem od `from`: do `;` poza nawiasami albo do nowej linii bez `+` na styku. */
+/** The index after an expression from `from`: up to `;` outside brackets or up to a new line without `+` at the joint. */
 function expressionEnd(tokens: readonly Token[], from: number): number {
   let depth = 0;
   for (let i = from; i < tokens.length; i++) {
@@ -217,7 +220,7 @@ function expressionEnd(tokens: readonly Token[], from: number): number {
   return tokens.length;
 }
 
-/** Adnotacja o nazwie `name` z listy. */
+/** The annotation named `name` from the list. */
 export function annotationNamed(annotations: readonly JavaAnnotation[], ...names: string[]): JavaAnnotation | undefined {
   return annotations.find((a) => names.includes(a.name));
 }

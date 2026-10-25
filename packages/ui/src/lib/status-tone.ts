@@ -1,6 +1,6 @@
 import type { StatusTone } from "./repo-status.ts";
 
-/** Świecąca kropka stanu dla tonu; stan bez tonu kropki nie ma. */
+/** The glowing state dot for a tone; a state without a tone has no dot. */
 export const STATUS_DOT_CLASS: Record<StatusTone, string> = {
   ok: "bg-success shadow-glow-success",
   warning: "bg-warning shadow-glow-warning",
@@ -8,8 +8,8 @@ export const STATUS_DOT_CLASS: Record<StatusTone, string> = {
 };
 
 /**
- * Kolor tekstu stanu dla tonu (ADR-16): razem z kropką jedno miejsce dla `StatusLabel` i podpisów na scenie pulpitu. Stan bez tonu
- * (np. zatrzymany przez użytkownika) jest wyciszony, a „ok” bierze kolor otoczenia.
+ * The state text colour for a tone (ADR-16): together with the dot one place for `StatusLabel` and the captions on the
+ * dashboard scene. A state without a tone (for example stopped by the user) is muted, and "ok" takes the surrounding colour.
  */
 export function statusTextClass(tone: StatusTone | undefined): string {
   if (tone === "warning") return "text-warning";

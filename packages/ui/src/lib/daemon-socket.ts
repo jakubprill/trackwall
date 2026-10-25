@@ -2,9 +2,9 @@ import { type DaemonSocket, SOCKET_TOKEN_PREFIX } from "@trackwall/protocol";
 import type { Connection } from "./connection.ts";
 
 /**
- * Adres i podprotokoły WebSocketu daemona (§5.2): zdarzeń `/ws` albo terminala sesji `/ws/pty/<sesja>`. Token idzie
- * jako podprotokół, bo przeglądarka nie ustawi nagłówka przy WebSocket; w `vite dev` UI nie zna tokenu i dokłada go
- * proxy Vite (`dev-proxy.ts`).
+ * The address and subprotocols of a daemon WebSocket (§5.2): events on `/ws` or a session terminal on `/ws/pty/<session>`.
+ * The token goes as a subprotocol, because a browser does not set the header on a WebSocket; in `vite dev` the UI does
+ * not know the token, and the Vite proxy (`dev-proxy.ts`) adds it.
  */
 export function daemonSocket(
   conn: Connection,

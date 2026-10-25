@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { type DiffLineKind, diffLines } from "@/lib/diff-lines";
 import { cn } from "@/lib/utils";
 
-/** Ponad tyle linii albo plików przeglądarka zaczyna się dławić, a resztę i tak lepiej czytać w VS Code. */
+/** Beyond this many lines or files the browser starts to choke, and the rest is better read in VS Code anyway. */
 const MAX_LINES = 4000;
 const MAX_FILES = 500;
 
@@ -23,8 +23,8 @@ const LINE_CLASSES: Record<DiffLineKind, string> = {
 };
 
 /**
- * Pliki i diff katalogu roboczego względem commita: zmiany zadania (ADR-31) i zakładka „Changes” repo (ADR-34).
- * Pusty zestaw plików zostaje u wywołującego, bo każdy widok mówi o nim co innego.
+ * Files and diff of the working directory against a commit: a task's changes (ADR-31) and a repo's "Changes" tab (ADR-34).
+ * An empty set of files stays with the caller, because each view says something different about it.
  */
 export function ChangesDiff({ changes }: { changes: WorkingTreeChanges }) {
   const { lines, more } = diffLines(changes.patch, MAX_LINES);

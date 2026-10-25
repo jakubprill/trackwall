@@ -1,10 +1,10 @@
 /**
- * Wzorce ścieżek w stylu globów: `*` to dowolny ciąg bez `/`, `**` także z `/` (a `**` z ukośnikiem za nim także
- * nic), `?` jeden znak bez `/`. Wystarcza na wzorce workspace npm i pnpm oraz na reguły tagów z `workspace.yaml`;
- * nawiasów `{a,b}` i klas `[…]` nie ma.
+ * Glob-style path patterns: `*` is any string without `/`, `**` also with `/` (and `**` followed by a slash also
+ * nothing), `?` one character other than `/`. Enough for npm and pnpm workspace patterns and the tag rules from
+ * `workspace.yaml`; there are no `{a,b}` braces or `[…]` classes.
  *
- * Bez wyrażeń regularnych: wzorzec workspace pochodzi z repo (niezaufany, §8), a `*a*a*a*a` przełożone na wyrażenie
- * cofa się wielomianowo długo na długiej ścieżce. Programowanie dynamiczne daje czas wzorzec × ścieżka.
+ * No regular expressions: a workspace pattern comes from the repo (untrusted, §8), and `*a*a*a*a` turned into a regular
+ * expression backtracks for polynomial time on a long path. Dynamic programming takes pattern × path time.
  */
 
 type Token = { kind: "literal"; char: string } | { kind: "one" | "segment" | "any" | "dirs" };
@@ -34,8 +34,8 @@ function tokenize(pattern: string): Token[] {
 }
 
 /**
- * Czy tokeny od bieżącego do końca pasują do `path` od pozycji `j`, liczone od ostatniego tokenu. Token `dirs`
- * (dwie gwiazdki z ukośnikiem) to nic albo dowolny ciąg zakończony `/`.
+ * Whether the tokens from the current one to the end match `path` from position `j`, computed from the last token. The
+ * `dirs` token (two asterisks with a slash) is nothing or any string ending in `/`.
  */
 function matches(tokens: readonly Token[], path: string): boolean {
   let next = Array.from({ length: path.length + 1 }, (_, j) => j === path.length);
@@ -46,10 +46,10 @@ function matches(tokens: readonly Token[], path: string): boolean {
   return next[0] ?? false;
 }
 
-/** Wynik tokenu dla każdej pozycji `path`, z wyniku `next` dla tokenów za nim. */
+/** A token's result for every position of `path`, from the `next` result for the tokens after it. */
 function row(token: Token, path: string, next: readonly boolean[]): boolean[] {
   const current = new Array<boolean>(path.length + 1).fill(false);
-  // Dla `dirs`: czy od `j` jest `/`, za którym pasują tokeny za tym.
+  // For `dirs`: whether from `j` there is a `/` followed by a match of the tokens after this one.
   let slashAhead = false;
   for (let j = path.length; j >= 0; j--) {
     const c = path[j];
@@ -61,7 +61,7 @@ function row(token: Token, path: string, next: readonly boolean[]): boolean[] {
   return current;
 }
 
-/** Jeden token na znaku `c` z pozycji `j`; `next` to wynik dla kolejnego tokenu, `current` dla tego od `j + 1`. */
+/** One token on character `c` at position `j`; `next` is the result for the next token, `current` for this one from `j + 1`. */
 function step(token: Token, c: string | undefined, j: number, next: readonly boolean[], current: readonly boolean[]): boolean {
   const after = next[j + 1] ?? false;
   const stay = current[j + 1] ?? false;

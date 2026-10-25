@@ -8,18 +8,18 @@ import { CARD_PARSE_BUDGET_MS, loadSyntaxParsers, type SyntaxParsers, unavailabl
 import { repoTags } from "./tags.ts";
 
 /**
- * Moduł `cards` (§4, §4.6, ADR-25, ADR-30): karta repo z plików buildu, konfiguracji i kodu HTTP w commicie HEAD, liczona raz na commit
- * (`CardCache`), i tagi repo z karty oraz z reguł w `workspace.yaml`. Bez LLM: każde pole ma dowód. Graf z kart
- * liczy moduł `graph` z `all()` (ADR-29).
+ * The `cards` module (§4, §4.6, ADR-25, ADR-30): the repo card from build, configuration and HTTP code files in the HEAD
+ * commit, computed once per commit (`CardCache`), and repo tags from the card and from the rules in `workspace.yaml`. No
+ * LLM: every field has evidence. The `graph` module computes the graph from the cards with `all()` (ADR-29).
  */
 
-/** Czego `cards` potrzebuje od `vcs`; podłączane w fasadzie. */
+/** What `cards` needs from `vcs`; wired in the facade. */
 interface CardsVcs extends SnapshotVcs {
   headCommit(dir: string): Promise<string | null>;
   remote(dir: string): Promise<string | null>;
 }
 
-/** Czego `cards` potrzebuje od `workspace`: repo z folderu z projektami i reguły tagów z `workspace.yaml`. */
+/** What `cards` needs from `workspace`: repos from the projects folder and the tag rules from `workspace.yaml`. */
 interface CardsRepos {
   repoEntries(): Promise<{ id: string; path: string }[]>;
   repoPath(id: string): Promise<string>;
@@ -28,12 +28,12 @@ interface CardsRepos {
 
 interface TaggedCard {
   card: RepoCard | null;
-  /** Adres repo zdalnego (`host/ścieżka`); `null` bez remote albo gdy git go nie podał. */
+  /** The remote address (`host/path`); `null` without a remote or when git did not give it. */
   remote: string | null;
   tags: RepoTag[];
 }
 
-/** Karta jednego repo z listy albo powód, dla którego jej nie ma (git nie czyta repo). */
+/** The card of one listed repo or the reason it is missing (git cannot read the repo). */
 type CardOfRepo = ({ kind: "ok"; repo: string } & TaggedCard) | { kind: "unavailable"; repo: string; message: string };
 
 export interface CardsDeps {
@@ -43,8 +43,8 @@ export interface CardsDeps {
 }
 
 /**
- * Ile repo naraz czyta przy liście tagów: pierwsze liczenie kart to dwa procesy `git` na repo, a na Windowsie start
- * procesu i skan antywirusa są drogie.
+ * How many repos are read at once for the tag list: computing cards for the first time is two `git` processes per
+ * repo, and on Windows starting a process and the antivirus scan are expensive.
  */
 const TAGS_CONCURRENCY = 4;
 
@@ -66,7 +66,7 @@ export class Cards {
     }
   }
 
-  /** Tagi wszystkich repo z folderu z projektami; repo, którego git nie czyta, ma powód zamiast tagów. */
+  /** Tags of all repos in the projects folder; a repo git cannot read has a reason instead of tags. */
   async tags(): Promise<RepoTags[]> {
     return (await this.withRules(this.deps.repos.tagRules())).map((c) =>
       c.kind === "ok" ? { kind: "ok", repo: c.repo, tags: c.tags } : { kind: "unavailable", repo: c.repo, message: c.message },
@@ -74,8 +74,8 @@ export class Cards {
   }
 
   /**
-   * Karty i tagi wszystkich repo z folderu z projektami w kolejności listy (dla grafu, §4.6, ADR-29). Zły `repoTags`
-   * nie zabiera kart: repo mają wtedy tylko tagi z karty, a komunikat wraca w `tagRulesProblem`.
+   * Cards and tags of all repos in the projects folder in list order (for the graph, §4.6, ADR-29). A bad `repoTags`
+   * does not take the cards away: repos then have only the tags from the card, and the message comes back in `tagRulesProblem`.
    */
   async all(): Promise<{ cards: CardOfRepo[]; tagRulesProblem: string | null }> {
     const { value: rules, problem: tagRulesProblem } = configOrProblem(() => this.deps.repos.tagRules(), {});
@@ -93,13 +93,13 @@ export class Cards {
     });
   }
 
-  /** Karta repo i tagi z niej, z adresu repo zdalnego (bez niego tylko z identyfikatora) i z reguł. */
+  /** The repo card and its tags, from the remote address (without it only from the identifier) and from the rules. */
   private async tagged(id: string, dir: string, rules: RepoTagRules): Promise<TaggedCard> {
     const [card, remote] = await Promise.all([this.cardOf(dir), this.deps.vcs.remote(dir).catch(() => null)]);
     return { card, remote, tags: repoTags(card, { id, remote }, rules) };
   }
 
-  /** Karta commita HEAD repo w katalogu `dir`; `null` w repo bez commitów. */
+  /** The card of the HEAD commit of the repo in directory `dir`; `null` in a repo without commits. */
   private async cardOf(dir: string): Promise<RepoCard | null> {
     const commit = await this.deps.vcs.headCommit(dir);
     if (commit === null) return null;
@@ -107,13 +107,13 @@ export class Cards {
       const snapshot = await readSnapshot(this.deps.vcs, dir, commit, readsCardFile, CARD_SOURCES);
       const parsers = withParseBudget(await syntaxParsersOrUnavailable(), CARD_PARSE_BUDGET_MS);
       const card = extractCard(snapshot, parsers);
-      // Karta bez części drzew składni (czas, brak parsera) zależy od chwili liczenia, więc nie trafia na dysk.
+      // A card without some syntax trees (time, no parser) depends on the moment of computing, so it does not go to disk.
       return { card, persist: parsers.complete };
     });
   }
 }
 
-/** Bez gramatyk karta powstaje dalej, tylko bez kontraktów endpointów i DTO. */
+/** Without grammars the card is still built, only without endpoint contracts and DTOs. */
 async function syntaxParsersOrUnavailable(): Promise<SyntaxParsers> {
   try {
     return await loadSyntaxParsers();

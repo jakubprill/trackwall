@@ -5,7 +5,7 @@ import { logLevelClass, startsRun } from "@/lib/log-tail";
 import { useLogTail } from "@/lib/use-log-tail";
 import { cn } from "@/lib/utils";
 
-/** Odległość od dołu, przy której lista uznaje, że użytkownik czyta najnowsze linie i ma za nimi iść. */
+/** The distance from the bottom at which the list decides the user reads the newest lines and should follow them. */
 const FOLLOW_SLACK_PX = 24;
 
 /**
@@ -19,7 +19,7 @@ export function MiseTaskLog({ conn, source }: { conn: Connection; source: LogSou
   const box = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
 
-  // Po każdej nowej paczce rekordów, przed malowaniem, żeby lista nie mignęła w starym miejscu.
+  // After every new batch of records, before painting, so that the list does not flash in the old place.
   useLayoutEffect(() => {
     if (follow.current && box.current) box.current.scrollTop = box.current.scrollHeight;
   }, [records]);
@@ -51,7 +51,7 @@ export function MiseTaskLog({ conn, source }: { conn: Connection; source: LogSou
   );
 }
 
-/** Linie malowane od nowa tylko wtedy, gdy przyszły nowe rekordy, a nie przy każdym odpytaniu. */
+/** Lines repainted only when new records arrived, not on every poll. */
 const LogLines = memo(function LogLines({ records }: { records: LogRecord[] }) {
   return records.map((record, i) => (
     <div key={record.seq}>

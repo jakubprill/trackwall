@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { unreferencedDraco } from "../drop-unreferenced-draco.ts";
 
-describe("martwe pliki dekodera Draco w buildzie", () => {
-  test("plik Draco, którego nazwy nie ma w żadnym kawałku kodu, wypada; reszta zostaje", () => {
+describe("dead Draco decoder files in the build", () => {
+  test("a Draco file whose name is in no code chunk is dropped; the rest stays", () => {
     const files = [
       { fileName: "assets/index-a1.js", code: 'import("./HomeCanvas-b2.js")' },
       { fileName: "assets/HomeCanvas-b2.js", code: "new WebGLRenderer()" },
@@ -14,7 +14,7 @@ describe("martwe pliki dekodera Draco w buildzie", () => {
     expect(unreferencedDraco(files)).toEqual(["assets/draco_decoder-c3.wasm", "assets/draco_wasm_wrapper-d4.js"]);
   });
 
-  test("plik Draco, do którego odwołuje się kod, zostaje", () => {
+  test("a Draco file the code refers to stays", () => {
     const files = [
       { fileName: "assets/index-a1.js", code: 'new URL("draco_decoder-c3.wasm", import.meta.url)' },
       { fileName: "assets/draco_decoder-c3.wasm", code: undefined },

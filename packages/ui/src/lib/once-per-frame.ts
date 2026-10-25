@@ -1,6 +1,6 @@
 /**
- * Łączy serię wywołań przed następną klatką w jedno. Zmiana rozmiaru okna daje serię zdarzeń `ResizeObserver`,
- * a dopasowanie terminala sesji na każde z nich przeplatało się z układem strony, więc terminal skakał (ADR-26).
+ * Merges a series of calls before the next frame into one. Resizing the window gives a series of `ResizeObserver`
+ * events, and fitting the session terminal on each of them interleaved with the page layout, so the terminal jumped (ADR-26).
  */
 export function oncePerFrame(
   callback: () => void,

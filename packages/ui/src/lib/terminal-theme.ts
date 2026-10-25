@@ -1,8 +1,8 @@
 import type { ITheme } from "@xterm/xterm";
 
 /**
- * Kolory terminala sesji z tokenów `index.css` (ADR-16): xterm.js przyjmuje kolory jako napisy, więc czyta je
- * z właściwości CSS, a nie z własnej palety. Kolory ANSI zostają domyślne xterm.js: TUI agenta dobiera je sam.
+ * Session terminal colours from the `index.css` tokens (ADR-16): xterm.js takes colours as strings, so it reads them
+ * from CSS properties, not from a palette of its own. The ANSI colours stay xterm.js defaults: the agent's TUI picks them itself.
  */
 export function terminalTheme(root: HTMLElement): ITheme {
   const style = getComputedStyle(root);

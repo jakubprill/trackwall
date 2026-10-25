@@ -14,8 +14,8 @@ const ROOT = JSON.stringify(
   2,
 );
 
-describe("ekstraktor npm", () => {
-  test("monorepo pnpm: paczki z pnpm-workspace.yaml, prywatne nie są udostępniane, zależności między nimi pominięte", () => {
+describe("npm extractor", () => {
+  test("a pnpm monorepo: packages from pnpm-workspace.yaml, private ones are not provided, dependencies between them skipped", () => {
     const out = extractNpm(
       snapshotOf(
         {
@@ -53,7 +53,7 @@ describe("ekstraktor npm", () => {
     ]);
   });
 
-  test("workspaces w package.json i menedżer z pliku blokady", () => {
+  test("workspaces in package.json and the manager from the lock file", () => {
     const out = extractNpm(
       snapshotOf(
         { "package.json": JSON.stringify({ name: "root", workspaces: ["libs/*"] }), "libs/a/package.json": JSON.stringify({ name: "a" }) },
@@ -66,9 +66,9 @@ describe("ekstraktor npm", () => {
     ]);
   });
 
-  test("zły JSON to problem karty, a pole złego typu jest pomijane bez utraty reszty", () => {
+  test("bad JSON is a card problem, and a field of the wrong type is skipped without losing the rest", () => {
     const out = extractNpm(
-      snapshotOf({ "a/package.json": "{ nie json", "b/package.json": JSON.stringify({ name: "b", version: 3, dependencies: { x: "1" } }) }),
+      snapshotOf({ "a/package.json": "{ not json", "b/package.json": JSON.stringify({ name: "b", version: 3, dependencies: { x: "1" } }) }),
     );
     expect(out.problems.map((p) => p.path)).toEqual(["a/package.json"]);
     expect(out.provides.map((p) => [p.name, p.version])).toEqual([["b", null]]);

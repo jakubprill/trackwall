@@ -1,23 +1,24 @@
 /**
- * WebSockety daemona (§5.2): zdarzenia `/ws` (ADR-36) i terminale sesji `/ws/pty/<sesja>` (ADR-26). Adres i podprotokół
- * gniazda idą zawsze w parze (`DaemonSocket`), więc daemon, proxy Vite i UI nie mogą ich połączyć inaczej.
+ * The daemon's WebSockets (§5.2): events on `/ws` (ADR-36) and session terminals on `/ws/pty/<session>` (ADR-26). A
+ * socket's address and subprotocol always go together (`DaemonSocket`), so the daemon, the Vite proxy and the UI cannot
+ * pair them differently.
  */
 
-/** Gniazdo daemona: adres i podprotokół, który klient podaje obok tokenu, a serwer potwierdza. */
+/** A daemon socket: the address and the subprotocol the client gives next to the token and the server confirms. */
 export interface DaemonSocket {
   path: string;
   subprotocol: string;
 }
 
 /**
- * Token daemona w WebSocketach. Przeglądarka nie ustawi nagłówka `Authorization` przy WebSocket, więc token idzie
- * jako drugi podprotokół (`bearer.<token>`), a nie w adresie, który trafia do logów i historii.
+ * The daemon token in WebSockets. A browser does not set the `Authorization` header on a WebSocket, so the token goes as a
+ * second subprotocol (`bearer.<token>`), not in the address, which ends up in logs and history.
  */
 export const SOCKET_TOKEN_PREFIX = "bearer.";
 
 export const EVENTS_SOCKET: DaemonSocket = { path: "/ws", subprotocol: "trackwall.events" };
 
-/** Ścieżka WebSocketu terminala sesji: `/ws/pty/<sesja>`. */
+/** The path of a session terminal's WebSocket: `/ws/pty/<session>`. */
 export const PTY_SOCKET_PREFIX = "/ws/pty/";
 export const PTY_SUBPROTOCOL = "trackwall.pty";
 
@@ -25,7 +26,7 @@ export function ptySocket(session: string): DaemonSocket {
   return { path: `${PTY_SOCKET_PREFIX}${session}`, subprotocol: PTY_SUBPROTOCOL };
 }
 
-/** Gniazdo daemona pod tym adresem (bez query); `undefined` dla adresu spoza daemona (np. HMR Vite). */
+/** The daemon socket at this address (without query); `undefined` for an address outside the daemon (for example Vite HMR). */
 export function daemonSocketAt(path: string): DaemonSocket | undefined {
   if (path === EVENTS_SOCKET.path) return EVENTS_SOCKET;
   if (path.startsWith(PTY_SOCKET_PREFIX)) return ptySocket(path.slice(PTY_SOCKET_PREFIX.length));

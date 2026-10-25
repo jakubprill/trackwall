@@ -96,7 +96,7 @@ export function SessionTerminal({
         focus.connected();
       };
       ws.onmessage = (event: MessageEvent<ArrayBuffer | string>) => {
-        // Ramka tekstowa to obraz ekranu na start połączenia: zastępuje to, co okno pokazywało wcześniej.
+        // A text frame is the screen image at the start of the connection: it replaces what the window showed before.
         if (typeof event.data === "string") {
           terminal.reset();
           terminal.write(event.data);
@@ -116,11 +116,11 @@ export function SessionTerminal({
     const input = terminal.onData((data) => send({ type: "input", data }));
     terminal.attachCustomKeyEventHandler((event) => {
       if (!copiesSelection(event, { mac: IS_MAC, hasSelection: terminal.hasSelection() })) return true;
-      // Bez tego przeglądarka wykona też własny skrót: Ctrl+Shift+C otwiera inspektor w Chrome i WebView2 w trybie dev.
+      // Without this the browser also runs its own shortcut: Ctrl+Shift+C opens the inspector in Chrome and in WebView2 in dev mode.
       event.preventDefault();
       navigator.clipboard.writeText(terminal.getSelection()).then(
         () => terminal.clearSelection(),
-        () => setNotice("Nie udało się skopiować zaznaczenia do schowka; zaznacz tekst jeszcze raz."),
+        () => setNotice("Could not copy the selection to the clipboard; select the text again."),
       );
       return false;
     });
@@ -136,9 +136,9 @@ export function SessionTerminal({
       fit.fit();
       if (terminal.cols !== cols || terminal.rows !== rows) sendSize();
     });
-    // Obserwowana jest ramka, której rozmiar wynika tylko z układu strony; terminal leży w niej absolutnie, więc jego
-    // wymiary nie zmieniają ramki ani nie wywołują pasków przewijania strony. Odstęp od brzegu to `inset`, nie
-    // `padding` kontenera: FitAddon liczy miejsce z rozmiaru kontenera i nie odejmuje jego paddingu.
+    // The observed element is a frame whose size comes only from the page layout; the terminal lies in it absolutely, so its
+    // dimensions neither change the frame nor cause page scroll bars. The distance from the edge is `inset`, not the
+    // container's `padding`: FitAddon computes the space from the container's size and does not subtract its padding.
     const resize = new ResizeObserver(() => resizer.request());
     resize.observe(container);
     window.addEventListener("focus", onWindowFocus);

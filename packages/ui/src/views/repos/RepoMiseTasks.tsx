@@ -16,13 +16,13 @@ import { useRemote } from "@/lib/use-remote";
 import { RepoService } from "./RepoService.tsx";
 
 /**
- * Odpytywanie: często, gdy coś działa (użytkownik czeka na wynik startu albo stopu), rzadko, gdy nic nie działa,
- * bo każde pytanie to `mise tasks ls`, a w zaufanym repo mise wykonuje przy tym `[env]` konfiguracji.
+ * Polling: often when something runs (the user waits for the result of a start or stop), rarely when nothing runs,
+ * because every request is `mise tasks ls`, and in a trusted repo mise runs the config's `[env]` along the way.
  */
 const POLL_LIVE_MS = 2000;
 const POLL_IDLE_MS = 10_000;
 
-/** Taski mise repo (ADR-20): lista z `mise tasks ls`, start i stop całej grupy procesów, stan uruchomienia. */
+/** The repo's mise tasks (ADR-20): the list from `mise tasks ls`, start and stop of the whole process group, the run state. */
 export function RepoMiseTasks({ conn, repo }: { conn: Connection; repo: string }) {
   const load = useCallback(() => post(conn, miseApi.tasks, { repo }), [conn, repo]);
   const remote = useRemote(load, { pollMs: pollInterval });
@@ -111,11 +111,11 @@ function TaskRow({ conn, repo, task, onChange }: { conn: Connection; repo: strin
   const live = isLive(task.run);
   const state = runStateLabel(task.run);
   const [showLog, setShowLog] = useState(false);
-  // Także przy `stopping`: po `stop_unconfirmed` stop można ponowić, a daemon łączy równoległe prośby w jedną.
+  // Also while `stopping`: after `stop_unconfirmed` the stop can be retried, and the daemon merges parallel requests into one.
   const action = useAction(
     () => post(conn, live ? miseApi.stop : miseApi.start, { repo, miseTask: task.name }),
     () => {
-      // Uruchomienie otwiera log: użytkownik i tak chce zobaczyć, co task robi.
+      // Running opens the log: the user wants to see what the mise task does anyway.
       if (!live) setShowLog(true);
       onChange();
     },

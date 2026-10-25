@@ -7,37 +7,37 @@ import { singleFlight } from "./single-flight.ts";
 import { useRemote } from "./use-remote.ts";
 
 /**
- * Odpytywanie co sekundę, póki log jest otwarty: odczyt z bufora w pamięci daemona jest tani, a WebSocket `/ws`
- * (§5.2) jeszcze nie istnieje. Pełna strona odpowiedzi znaczy, że czeka więcej, więc następne pytanie idzie od razu.
+ * Polling every second while the log is open: a read from the buffer in the daemon's memory is cheap, and the `/ws`
+ * WebSocket (§5.2) does not exist yet. A full response page means more is waiting, so the next request goes at once.
  */
 const POLL_MS = 1000;
 
 export interface LogView {
   records: LogRecord[];
-  /** Część linii przepadła (bufor daemona albo restart daemona) i lista zaczęła się od nowa. */
+  /** Some lines are lost (the daemon's buffer or a daemon restart) and the list started over. */
   dropped: boolean;
-  /** Ostatnia odpowiedź była pełna: daemon ma więcej rekordów po kursorze. */
+  /** The last response was full: the daemon has more records after the cursor. */
   full: boolean;
 }
 
 /**
- * Log źródła na żywo, od ostatnich rekordów; kursor `nextSeq` z każdej odpowiedzi idzie do następnej. Odpytywanie,
- * schowane okno i błędy obsługuje `useRemote`; tu zostaje kursor i sklejanie stron.
+ * A source's live log, from the latest records; the `nextSeq` cursor from each response goes into the next. `useRemote`
+ * handles polling, the hidden window and errors; what stays here is the cursor and joining the pages.
  */
 export function useLogTail(conn: Connection, source: LogSource) {
-  // Źródło jako klucz: nowy obiekt z tymi samymi polami przy każdym renderze nie zaczyna logu od nowa.
+  // The source as a key: a new object with the same fields on every render does not start the log over.
   const key = JSON.stringify(source);
   const sourceRef = useRef(source);
   sourceRef.current = source;
 
-  // `key` to treść źródła, samo źródło jest czytane z referencji. Stan kursora żyje w domknięciu: gdy React
-  // wyrzuci je z pamięci, log zaczyna się od ostatnich rekordów, jak po otwarciu.
+  // `key` is the source's content; the source itself is read from a ref. The cursor state lives in the closure: when React
+  // drops it from memory, the log starts from the latest records, as after opening.
   const load = useMemo(() => {
     let sinceSeq: number | undefined;
     let view: LogView = { records: [], dropped: false, full: false };
     return singleFlight(async (): Promise<LogView> => {
       const page = await post(conn, logsApi.tail, { source: sourceRef.current, sinceSeq, limit: LOG_TAIL_MAX });
-      // Pierwsza odpowiedź bez kursora to ostatnie rekordy, a nie dziura w logu.
+      // The first response without a cursor is the latest records, not a gap in the log.
       const dropped = view.dropped || (sinceSeq !== undefined && page.dropped);
       sinceSeq = page.nextSeq;
       const records = mergeTail(view.records, page);

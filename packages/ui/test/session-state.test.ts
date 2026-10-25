@@ -13,7 +13,7 @@ import { closeCutsOffTurn, sessionStateLabel } from "../src/lib/session-state.ts
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-23T10:00:00Z", pid: 10 } as const;
 
-/** `needsAttention` liczy daemon; tu jest podane wprost, tak jak przychodzi w liście sesji. */
+/** The daemon computes `needsAttention`; here it is given directly, as it comes in the session list. */
 function session(id: string, state: Session["state"], run: Session["run"] = running, needsAttention = false): Session {
   return { id, repo: `repo-${id}`, startedAt: "2026-10-23T10:00:00Z", run, state, windowTitle: null, needsAttention, task: null };
 }
@@ -30,8 +30,8 @@ function exited(exitCode: number | null, stoppedByUser = false): Session["run"] 
   return { kind: "exited", runId: "r", startedAt: "", endedAt: "", exitCode, signal: null, stoppedByUser, lastLines: [] };
 }
 
-describe("stan sesji w jednej linii", () => {
-  test("sesja, która czeka na Ciebie, ma ton ostrzeżenia, pracująca ok", () => {
+describe("session state in one line", () => {
+  test("a session waiting for you has a warning tone, a working one ok", () => {
     expect(sessionStateLabel(waiting("a", change("Input")))).toEqual({ tone: "warning", label: "waiting for you" });
     expect(sessionStateLabel(waiting("a", change("Approval")))).toEqual({ tone: "warning", label: "asking for approval" });
     expect(sessionStateLabel(session("a", change("Working")))).toEqual({ tone: "ok", label: "working" });
@@ -42,12 +42,12 @@ describe("stan sesji w jednej linii", () => {
     expect(sessionStateLabel(session("a", change("Input", "medium")))).toEqual({ label: "probably idle" });
   });
 
-  test("słabszy sygnał jest podany jako „prawdopodobnie”", () => {
+  test("a weaker signal is given as “probably”", () => {
     expect(sessionStateLabel(waiting("a", change("Input", "low"))).label).toBe("probably waiting for you");
     expect(sessionStateLabel(session("a", change("Working", "medium"))).label).toBe("probably working");
   });
 
-  test("bez sygnału stan jest nieznany; koniec procesu wygrywa ze stanem z hooków", () => {
+  test("without a signal the state is unknown; the process exit wins over the state from hooks", () => {
     expect(sessionStateLabel(session("a", null))).toEqual({ label: "state unknown" });
     expect(sessionStateLabel(session("a", change("Input"), exited(null, true)))).toEqual({ label: "stopped" });
     expect(sessionStateLabel(session("a", change("Done"), exited(1)))).toEqual({ label: "finished" });
@@ -94,7 +94,7 @@ const proposals: SessionEntry = {
   ],
 };
 
-describe("skok do sesji czekającej", () => {
+describe("jump to a waiting session", () => {
   const list = entries(
     session("a", change("Working")),
     waiting("b", change("Input")),
@@ -103,14 +103,14 @@ describe("skok do sesji czekającej", () => {
   );
   const at = (id: string) => list.find((e) => entryId(e) === id);
 
-  test("następna czekająca po bieżącej, w kółko", () => {
+  test("the next waiting one after the current one, round and round", () => {
     expect(entryIdOf(nextWaiting(list, at("a")))).toBe("b");
     expect(entryIdOf(nextWaiting(list, at("b")))).toBe("c");
     expect(entryIdOf(nextWaiting(list, at("c")))).toBe("b");
     expect(entryIdOf(nextWaiting(list, undefined))).toBe("b");
   });
 
-  test("liczą się tylko sesje, które czekają na Ciebie", () => {
+  test("only sessions waiting for you count", () => {
     expect(nextWaiting(entries(session("a", change("Input"), exited(0))), undefined)).toBeUndefined();
   });
 
