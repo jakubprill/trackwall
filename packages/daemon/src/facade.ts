@@ -19,8 +19,8 @@ import { groupPlatform } from "./platform/group-platform.ts";
 import { terminalPlatform } from "./platform/terminal.ts";
 
 /**
- * Fasada (§4): moduły daemona złożone w jednym miejscu. Zależności między modułami widać tylko tutaj;
- * moduł deklaruje, czego potrzebuje (np. `WorkspaceVcs`), a fasada podaje mu inny moduł.
+ * The facade (§4): the daemon's modules assembled in one place. Dependencies between modules are visible only here;
+ * a module declares what it needs (e.g. `WorkspaceVcs`), and the facade hands it another module.
  */
 export interface Facade {
   workspace: Workspace;
@@ -34,8 +34,8 @@ export interface Facade {
   services: Services;
   testReports: TestReports;
   /**
-   * Otwiera w systemie link z README (ADR-35): adres `http` albo `https` sprawdzony schematem `ExternalLink`.
-   * Nie należy do żadnego modułu, bo nie dotyczy repo ani stanu daemona.
+   * Opens a link from a README in the system (ADR-35): an `http` or `https` address checked by the `ExternalLink` schema.
+   * It belongs to no module, because it concerns neither a repo nor the daemon's state.
    */
   openLink: (url: string) => void;
 }
@@ -46,27 +46,30 @@ const WORKSPACE_FILE = "workspace.yaml";
 const RUNTIME_FILE = "runtime.json";
 const CARDS_DIR = "cards";
 const LOGS_DIR = "logs";
-/** Limit jednego pliku JSONL źródła; z poprzednim plikiem po rotacji źródło zajmuje najwyżej dwa razy tyle. */
+/** The limit of one source JSONL file; with the previous file after rotation a source takes at most twice that. */
 const LOG_FILE_MAX_BYTES = 10 * 1024 * 1024;
 /** Service readiness (ADR-45): checks twice a second, and five minutes for a start, because Gradle and Maven compile first. */
 const SERVICE_TIMING = { intervalMs: 500, startupMs: 5 * 60 * 1000, settleMs: 500 };
 
 export interface FacadeOptions {
-  /** Katalog stanu daemona; tam leżą `workspace.yaml` (ADR-13), `runtime.json` (§4.1) `logs/` (§4.2) i karty repo (`cards/`, ADR-25). */
+  /**
+   * The daemon's state directory; it holds `workspace.yaml` (ADR-13), `runtime.json` (§4.1), `logs/` (§4.2) and repo cards
+   * (`cards/`, ADR-25).
+   */
   home: string;
   openUrl: (url: string) => void;
   openFolder: (dir: string) => void;
-  /** Program `mise` z argumentami przed komendą (`["mise"]` w daemonie). */
+  /** The `mise` program with arguments before the command (`["mise"]` in the daemon). */
   miseCommand: readonly string[];
-  /** Program Copilot CLI z argumentami przed argumentami sesji (`["copilot"]` w daemonie, atrapa w testach). */
+  /** The Copilot CLI program with arguments before the session's arguments (`["copilot"]` in the daemon, a fake in tests). */
   copilotCommand: readonly string[];
   /** The daemon's version (`VERSION`), given to every Copilot CLI session. */
   version: string;
-  /** Program hooka wtyczki sesji (`trackwall-daemon copilot-hook …` w daemonie). */
+  /** The session plugin's hook program (`trackwall-daemon copilot-hook …` in the daemon). */
   hookCommand: AgentsDeps["hookCommand"];
-  /** Most stdio do serwera MCP tego daemona z plikiem tokenu sesji (`sessionMcpStdioCommand`), który dostaje każda sesja Copilot CLI. */
+  /** The Stdio bridge to this daemon's MCP server with the session token file (`sessionMcpStdioCommand`), for every Copilot CLI session. */
   sessionMcpCommand: AgentsDeps["sessionMcpCommand"];
-  /** Środowisko procesów uruchamianych dla użytkownika (`userEnv`). */
+  /** The environment of processes started for the user (`userEnv`). */
   userEnv: () => Promise<NodeJS.ProcessEnv>;
   log: (msg: string) => void;
 }

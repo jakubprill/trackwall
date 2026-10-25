@@ -14,17 +14,17 @@ import type { HttpIndex } from "./http-index.ts";
 import { subgraph } from "./subgraph.ts";
 
 /**
- * Moduł `graph` (§4, §4.6, ADR-29, ADR-30): graf połączeń między repo z kart (`cards`) i z wpisów `graph`
- * w `workspace.yaml`, liczony od nowa, gdy zmieni się commit któregoś repo albo konfiguracja. Karty są w pamięci
- * podręcznej po commicie, więc pytanie kosztuje tyle co lista tagów: odczyt HEAD i remote każdego repo.
+ * The `graph` module (§4, §4.6, ADR-29, ADR-30): the graph of connections between repos from the cards (`cards`) and from the `graph`
+ * entries in `workspace.yaml`, recomputed when the commit of some repo or the configuration changes. The cards are cached
+ * by commit, so a question costs as much as the tag list: a read of every repo's HEAD and remote.
  */
 
-/** Czego `graph` potrzebuje od `cards`; podłączane w fasadzie. */
+/** What `graph` needs from `cards`; wired in the facade. */
 interface GraphCards {
   all(): Promise<{ cards: GraphCardInput[]; tagRulesProblem: string | null }>;
 }
 
-/** Czego `graph` potrzebuje od `workspace`: wpisy `graph` z `workspace.yaml`. */
+/** What `graph` needs from `workspace`: the `graph` entries from `workspace.yaml`. */
 interface GraphWorkspace {
   graphConfig(): GraphConfig;
   configFile(): string;
@@ -38,8 +38,8 @@ export interface GraphDeps {
 export class Graph {
   private readonly deps: GraphDeps;
   /**
-   * Ostatni policzony graf z kluczem wejścia (ADR-30): krawędzie HTTP porównują wywołania z endpointami wszystkich
-   * repo, więc te same commity i ta sama konfiguracja nie liczą grafu drugi raz (UI odpytuje go co 30 s).
+   * The last computed graph with its input key (ADR-30): HTTP edges compare calls with the endpoints of all
+   * repos, so the same commits and the same configuration do not compute the graph a second time (the UI polls it every 30 s).
    */
   private last: { key: string; graph: RepoGraph; http: HttpIndex } | undefined;
 
@@ -51,7 +51,7 @@ export class Graph {
     return (await this.current()).graph;
   }
 
-  /** Endpointy HTTP z kart wszystkich repo pasujące do zapytania, z repo, które je wołają (ADR-30). */
+  /** HTTP endpoints from the cards of all repos matching the query, with the repos that call them (ADR-30). */
   async findEndpoint(query: string, method: HttpMethod | undefined): Promise<FindEndpointResult> {
     return findEndpoints((await this.current()).http, query, method);
   }
@@ -65,13 +65,13 @@ export class Graph {
 
   private async inputs(): Promise<{ cards: GraphCardInput[]; input: GraphConfigInput }> {
     const { cards, tagRulesProblem } = await this.deps.cards.all();
-    // Zły klucz `graph` nie zabiera krawędzi z kart: graf powstaje bez wpisów użytkownika, z powodem do poprawienia.
+    // A bad `graph` key does not take away the edges from the cards: the graph is built without the user's entries, with a reason to fix.
     const { value: config, problem } = configOrProblem(() => this.deps.workspace.graphConfig(), GraphConfig.parse({}));
     const problems = [tagRulesProblem, problem].filter((p) => p !== null);
     return { cards, input: { config, file: this.deps.workspace.configFile(), problems } };
   }
 
-  /** Krawędzie do repo: kto go używa. */
+  /** Edges into a repo: who uses it. */
   async whoCalls(repo: string): Promise<WhoCallsResult> {
     const graph = await this.graphWith(repo);
     return { repo, edges: graph.edges.filter((e) => e.to === repo) };
@@ -89,8 +89,8 @@ export class Graph {
 }
 
 /**
- * Klucz wejścia grafu: karta zależy tylko od commita (ADR-25), więc wystarczą commity, adresy, tagi i powody braku
- * karty oraz konfiguracja `graph`.
+ * The graph's input key: a card depends only on the commit (ADR-25), so the commits, addresses, tags and reasons for a missing
+ * card, plus the `graph` configuration, are enough.
  */
 function graphKey(cards: readonly GraphCardInput[], input: GraphConfigInput): string {
   const repos = cards.map((c) => (c.kind === "ok" ? [c.repo, c.remote, c.card?.commit ?? null, c.tags] : [c.repo, c.message]));

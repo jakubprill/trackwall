@@ -2,32 +2,32 @@ import type { EdgeConfidence, EdgeEvidence, GraphEdge } from "@trackwall/protoco
 import type { GraphCardInput } from "./graph-input.ts";
 
 /**
- * Wspólne dla kroków złączenia kart w graf (§4.6, ADR-29, ADR-30): zbiór krawędzi bez powtórzeń, rozwiązywanie
- * wskazań repo z `workspace.yaml` i błędy wpisów.
+ * Shared by the steps that join cards into the graph (§4.6, ADR-29, ADR-30): a set of edges without repeats, resolving
+ * repo references from `workspace.yaml`, and entry errors.
  */
 
-/** Wspólne dla kroków złączenia: krawędzie, rozwiązywanie wskazań repo i błędy wpisów z `workspace.yaml`. */
+/** Shared by the join steps: edges, resolving repo references and entry errors from `workspace.yaml`. */
 export interface Join {
   edges: EdgeSet;
   resolve: (ref: string) => string[];
   problems: string[];
   /**
-   * Aliasy paczek i aplikacji jako `Map`: nazwa pochodzi z repo, a obiekt z YAML-a dla nazwy `constructor` czy
-   * `toString` oddałby funkcję z prototypu.
+   * Package and app aliases as a `Map`: the name comes from a repo, and an object from YAML would for the name `constructor` or
+   * `toString` give back a function from the prototype.
    */
   aliases: Map<string, string>;
-  /** Aliasy aplikacji z kluczem małymi literami (nazwa aplikacji albo host). */
+  /** App aliases with a lower-case key (an app name or a host). */
   appAliases: Map<string, string>;
   file: string;
 }
 
-/** Ile dowodów zostaje przy krawędzi złożonej z kilku faktów (klient w kilku profilach, wiele wywołań). */
+/** How much evidence stays on an edge made of several facts (a client in several profiles, many calls). */
 const MAX_EVIDENCE = 20;
 const CONFIDENCE_ORDER: EdgeConfidence[] = ["low", "medium", "high", "exact"];
 
 /**
- * Krawędzie bez powtórzeń: ta sama para repo, rodzaj i klucz to jedna krawędź. Druga taka sama dokłada dowody, a
- * pewność zostaje wyższa z obu (klient Feign z adresem w dwóch profilach to jedno połączenie).
+ * Edges without repeats: the same repo pair, kind and key is one edge. A second identical one adds evidence, and
+ * the confidence stays the higher of the two (a Feign client with an address in two profiles is one connection).
  */
 export class EdgeSet {
   private readonly edges = new Map<string, GraphEdge>();
@@ -63,21 +63,21 @@ function uniqueEvidence(evidence: readonly EdgeEvidence[]): EdgeEvidence[] {
     .slice(0, MAX_EVIDENCE);
 }
 
-/** Dopisuje wartość do listy pod kluczem, bez kopiowania listy. */
+/** Appends a value to the list under a key, without copying the list. */
 export function push<K, V>(map: Map<K, V[]>, key: K, value: V): void {
   const list = map.get(key);
   if (list) list.push(value);
   else map.set(key, [value]);
 }
 
-/** Bez `localeCompare`: porządek nie może zależeć od danych ICU w Bun i Node (jak `byName` w `workspace`). */
+/** Without `localeCompare`: the order must not depend on the ICU data in Bun and Node (like `byName` in `workspace`). */
 export function compare(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
 /**
- * Wskazanie repo z `workspace.yaml` (`RepoRef`): identyfikator, a gdy takiego nie ma, adres repo zdalnego bez
- * wielkości liter (hosting tak go porównuje). Jeden adres może mieć kilka repo z listy (klon i worktree).
+ * A repo reference from `workspace.yaml` (`RepoRef`): an identifier, and when there is no such one, the remote repo address,
+ * case-insensitive (the repo host compares it that way). One address may have several repos on the list (a clone and a worktree).
  */
 export function repoResolver(cards: readonly GraphCardInput[]): (ref: string) => string[] {
   const ids = new Set(cards.map((c) => c.repo));

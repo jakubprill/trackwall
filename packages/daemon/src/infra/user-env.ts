@@ -2,10 +2,10 @@ import { spawn } from "node:child_process";
 import { TRACKWALL_HOME_ENV } from "@trackwall/protocol";
 
 /**
- * Środowisko dla procesów, które daemon uruchamia w imieniu użytkownika (taski mise). Na macOS aplikacja otwarta
- * z Findera albo Docka dostaje od launchd tylko systemowy `PATH` (`/usr/bin:/bin:/usr/sbin:/sbin`), bez Homebrew
- * i `~/.local/bin`, więc ani `mise`, ani narzędzia z tasków by się nie znalazły. Dlatego `PATH` pochodzi z powłoki
- * logowania użytkownika, raz na działanie daemona, tak jak robi to VS Code. Windows dziedziczy `PATH` z Eksploratora.
+ * The environment for processes the daemon starts on the user's behalf (mise tasks). On macOS an app opened
+ * from Finder or the Dock gets only the system `PATH` from launchd (`/usr/bin:/bin:/usr/sbin:/sbin`), without Homebrew
+ * and `~/.local/bin`, so neither `mise` nor the tools of mise tasks would be found. So `PATH` comes from the user's login
+ * shell, once per daemon run, as VS Code does. Windows inherits `PATH` from Explorer.
  */
 
 const SHELL_TIMEOUT_MS = 10_000;
@@ -15,7 +15,7 @@ let loginPath: Promise<string | undefined> | undefined;
 
 export async function userEnv(): Promise<NodeJS.ProcessEnv> {
   const env: NodeJS.ProcessEnv = { ...process.env };
-  // Katalog stanu tego daemona nie jest ustawieniem uruchamianego repo (np. Trackwall w trybie dev z folderu z projektami).
+  // This daemon's state directory is not a setting of the repo being run (e.g. Trackwall in dev mode from the projects folder).
   delete env[TRACKWALL_HOME_ENV];
   if (process.platform === "darwin") {
     loginPath ??= readLoginPath();
@@ -25,7 +25,7 @@ export async function userEnv(): Promise<NodeJS.ProcessEnv> {
   return env;
 }
 
-/** `PATH` z interaktywnej powłoki logowania (`-ilc`: tam `brew shellenv` i `mise activate` z `.zprofile` i `.zshrc`). */
+/** `PATH` from an interactive login shell (`-ilc`: that is where `brew shellenv` and `mise activate` from `.zprofile` and `.zshrc` run). */
 function readLoginPath(): Promise<string | undefined> {
   const shell = process.env.SHELL || "/bin/zsh";
   return new Promise((resolve) => {

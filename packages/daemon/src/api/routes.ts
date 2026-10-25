@@ -4,8 +4,8 @@ import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
 
 /**
- * Trasy `POST /api/<moduł>/<akcja>` (§5.2) wszystkich modułów w jednej mapie. Ścieżkę i schematy bierze
- * z `@trackwall/protocol`, więc `server.ts` nie zna modułów, a wynik akcji musi zgadzać się z kontraktem co do typu.
+ * The `POST /api/<module>/<action>` routes (§5.2) of all modules in one map. The path and schemas come
+ * from `@trackwall/protocol`, so `server.ts` does not know the modules, and an action's result must match the contract's type.
  */
 type PostHandler = (facade: Facade, body: unknown) => Promise<unknown>;
 

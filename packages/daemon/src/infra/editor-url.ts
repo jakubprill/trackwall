@@ -1,13 +1,13 @@
 /**
- * Otwieranie katalogu (repo albo worktree zadania) w VS Code; składane w fasadzie i podawane modułom jako
- * `openEditor`, więc reguła adresu jest w jednym miejscu.
+ * Opening a directory (a repo or a task worktree) in VS Code; assembled in the facade and given to modules as
+ * `openEditor`, so the address rule is in one place.
  *
- * Adres, który otwiera katalog w VS Code przez systemowy mechanizm otwierania URL-i, bez uruchamiania `code`
- * przez powłokę: `vscode://file/C:/repo` na Windowsie, `vscode://file/Users/me/repo` na macOS.
+ * The address that opens a directory in VS Code through the system mechanism for opening URLs, without running `code`
+ * through a shell: `vscode://file/C:/repo` on Windows, `vscode://file/Users/me/repo` on macOS.
  */
 export function vscodeUrl(dir: string): string {
   const segments = dir.replaceAll("\\", "/").split("/");
-  // `#`, `?` i `%` w nazwie katalogu muszą być zakodowane; dwukropek litery dysku zostaje.
+  // `#`, `?` and `%` in a directory name must be encoded; the drive letter's colon stays.
   const encoded = segments.map((s) => encodeURIComponent(s).replaceAll("%3A", ":")).join("/");
   return `vscode://file${encoded.startsWith("/") ? encoded : `/${encoded}`}`;
 }

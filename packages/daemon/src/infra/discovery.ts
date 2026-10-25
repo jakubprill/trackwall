@@ -5,15 +5,15 @@ import { DAEMON_FILE, DaemonFile, HealthResult } from "@trackwall/protocol";
 import { writeFileAtomic } from "./atomic-write.ts";
 import { loopbackRequest } from "./loopback.ts";
 
-/** Odkrywanie daemona przez `daemon.json` (§5.1). */
+/** Discovering the daemon through `daemon.json` (§5.1). */
 
 const LOCK_FILE = "daemon.lock";
 /**
- * Po tym czasie blokada startu jest uznawana za porzuconą, nawet jeśli PID z pliku żyje (recykling PID-ów).
- * Sekcja krytyczna trwa milisekundy, a limit musi być krótszy niż czas czekania na blokadę.
+ * After this time the start lock counts as abandoned, even if the PID from the file is alive (PID reuse).
+ * The critical section lasts milliseconds, and the limit must be shorter than the wait for the lock.
  */
 const LOCK_STALE_MS = 10_000;
-/** Plik blokady bez PID-u młodszy niż to jest właśnie zapisywany przez innego startującego. */
+/** A lock file without a PID younger than this is being written right now by another starting daemon. */
 const LOCK_WRITE_GRACE_MS = 2_000;
 
 export function daemonFilePath(home: string): string {
@@ -33,19 +33,19 @@ export function readDaemonFile(home: string): DaemonFile | undefined {
   }
 }
 
-/** Zapis atomowy (plik tymczasowy + rename), uprawnienia tylko dla właściciela tam, gdzie system je ma. */
+/** An atomic write (temporary file + rename), with owner-only permissions where the system has them. */
 export function writeDaemonFile(home: string, file: DaemonFile): void {
   mkdirSync(home, { recursive: true, mode: 0o700 });
   writeFileAtomic(daemonFilePath(home), `${JSON.stringify(file, null, 2)}\n`, 0o600);
 }
 
-/** Usuwa `daemon.json` tylko wtedy, gdy nadal opisuje ten proces (nie kasuje pliku następcy). */
+/** Removes `daemon.json` only while it still describes this process (does not delete a successor's file). */
 export function removeDaemonFile(home: string, pid: number): void {
   const current = readDaemonFile(home);
   if (current?.pid === pid) rmSync(daemonFilePath(home), { force: true });
 }
 
-/** Wersja działającego daemona z `daemon.json` albo `undefined`, gdy nikt nie odpowiada. */
+/** The running daemon's version from `daemon.json`, or `undefined` when nobody answers. */
 export async function probeRunningDaemon(home: string, timeoutMs = 1500): Promise<{ file: DaemonFile; version: string } | undefined> {
   const file = readDaemonFile(home);
   if (!file) return undefined;
@@ -60,11 +60,11 @@ export async function probeRunningDaemon(home: string, timeoutMs = 1500): Promis
 }
 
 /**
- * Sekcja krytyczna startu: sprawdzenie, czy daemon już działa, i zapis `daemon.json` przez nowego.
- * Bez niej dwa równoczesne starty (dwuklik, Tauri + `--ui`) zostawiają dwa daemony, z których jeden jest niewidoczny.
+ * The start's critical section: checking whether a daemon is already running, and the new one writing `daemon.json`.
+ * Without it two simultaneous starts (a double click, Tauri + `--ui`) leave two daemons, one of them invisible.
  *
- * Przejęcie porzuconej blokady nie jest atomowe (Node nie ma flock), więc dwa starty, które jednocześnie uznały
- * ją za porzuconą, mogą obie wejść do sekcji. Ten rzadki przypadek domyka `watchDaemonFile` w daemonie.
+ * Taking over an abandoned lock is not atomic (Node has no flock), so two starts that both decided at once that
+ * it was abandoned can both enter the section. `watchDaemonFile` in the daemon closes this rare case.
  */
 export async function withStartLock<T>(home: string, fn: () => Promise<T>, timeoutMs = 15_000): Promise<T> {
   mkdirSync(home, { recursive: true, mode: 0o700 });
@@ -85,7 +85,7 @@ export async function withStartLock<T>(home: string, fn: () => Promise<T>, timeo
   }
 }
 
-/** `false`, gdy blokada już istnieje; każdy inny błąd systemu plików leci dalej. */
+/** `false` when the lock already exists; any other file system error propagates. */
 function tryCreateLock(lock: string): boolean {
   let fd: number;
   try {
@@ -106,7 +106,7 @@ function releaseLock(lock: string): void {
   try {
     if (readFileSync(lock, "utf8") === String(process.pid)) rmSync(lock, { force: true });
   } catch {
-    // ktoś uznał blokadę za porzuconą i ją usunął
+    // someone decided the lock was abandoned and removed it
   }
 }
 
@@ -117,18 +117,18 @@ function isStaleLock(lock: string): boolean {
     holder = Number(readFileSync(lock, "utf8"));
     ageMs = Date.now() - statSync(lock).mtimeMs;
   } catch {
-    return false; // zniknęła między próbami; następna iteracja ją utworzy
+    return false; // gone between attempts; the next iteration creates it
   }
   if (ageMs > LOCK_STALE_MS) return true;
   if (!Number.isInteger(holder) || holder <= 0) return ageMs > LOCK_WRITE_GRACE_MS;
-  // Własny PID w cudzej blokadzie: poprzednie wcielenie tego procesu (`bun --watch` restartuje przez execve).
+  // Our own PID in someone else's lock: a previous incarnation of this process (`bun --watch` restarts through execve).
   if (holder === process.pid) return true;
   return !isAlive(holder);
 }
 
 /**
- * Pilnuje, żeby `daemon.json` opisywał ten proces. Gdy wskazuje innego żywego daemona, ten proces jest
- * niewidoczny dla klientów i ma się zakończyć; gdy plik zniknął, jest zapisywany ponownie.
+ * Makes sure that `daemon.json` describes this process. When it points to another live daemon, this process is
+ * invisible to clients and is to end; when the file has disappeared, it is written again.
  */
 export function watchDaemonFile(home: string, self: DaemonFile, onSuperseded: (by: DaemonFile) => void, intervalMs = 2000): () => void {
   const timer = setInterval(() => {
