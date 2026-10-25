@@ -52,7 +52,7 @@ Alt+1 … Alt+9, Alt+0 and Alt+J work while a terminal has the focus too, and ar
 
 - Copilot CLI must be on your `PATH` as `copilot` and signed in.
 - The [supervisor](/features/supervisor) is not one of the numbered entries: its heading tops the list with the work it delegated under it, and selecting it opens its panel on the right.
-- Copilot CLI takes over the mouse in the terminal. Select text by dragging with Option (macOS) or Shift (Windows) held down, then copy with Cmd+C or Ctrl+C. Ctrl+C without a selection interrupts the agent.
+- Copilot CLI takes over the mouse in the terminal. Select text by dragging with Option (macOS) or Shift (Windows) held down, then copy with Cmd+C or Ctrl+C. Ctrl+C without a selection interrupts the agent. While text is selected, links in the session open only after you clear the selection with a click.
 - Drag a file or folder from Explorer or Finder onto a terminal to paste its path, quoted when it has a space.
 - "Stop" ends the session with everything it started; "Close" removes an ended session from the list. The X next to a session does both in one click and asks first while the agent is working. On an [agent task](/features/tasks), the X closes only its session: the task stays on the list; select it and press "Resume" to start a new session in its worktree.
 - Sessions end when Trackwall quits and are not recorded.

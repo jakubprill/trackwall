@@ -12,7 +12,7 @@ import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
 import { oncePerFrame } from "@/lib/once-per-frame";
 import { pastedPaths } from "@/lib/pasted-paths";
 import { IS_MAC } from "@/lib/platform";
-import { copiesSelection } from "@/lib/terminal-copy";
+import { copiesSelection, keepsSelection } from "@/lib/terminal-copy";
 import { hyperlinkHandler, trackwallLinkProvider } from "@/lib/terminal-links";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { terminalTheme } from "@/lib/terminal-theme";
@@ -69,6 +69,12 @@ export function SessionTerminal({
       });
     }
     terminal.open(element);
+    // In the capture phase, before xterm.js reports the move to the program and so clears the selection.
+    const holdMove = (event: MouseEvent) => {
+      const state = { hasSelection: terminal.hasSelection(), reportsMoves: terminal.modes.mouseTrackingMode === "any" };
+      if (keepsSelection(event, state)) event.stopPropagation();
+    };
+    element.addEventListener("mousemove", holdMove, { capture: true });
     fit.fit();
     term.current = terminal;
     if (takesFocus.current) terminal.focus();
@@ -158,6 +164,7 @@ export function SessionTerminal({
       resizer.dispose();
       resize.disconnect();
       container.removeEventListener(FileDropEvent.type, takeDrop);
+      element.removeEventListener("mousemove", holdMove, { capture: true });
       window.removeEventListener("focus", onWindowFocus);
       window.removeEventListener("blur", sendFocus);
       document.removeEventListener("visibilitychange", sendFocus);

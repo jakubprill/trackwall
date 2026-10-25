@@ -10,3 +10,16 @@ export function copiesSelection(key: CopyKey, { mac, hasSelection }: { mac: bool
   if (mac || !hasSelection || key.type !== "keydown") return false;
   return key.ctrlKey && !key.altKey && !key.metaKey && key.key.toLowerCase() === "c";
 }
+
+/**
+ * Copilot CLI asks for every mouse move (mode 1003), and xterm.js clears the selection on any input it sends to the
+ * program, mouse reports included. A selection forced with Shift or Option was gone as soon as the mouse moved on to
+ * copy it, so while text is selected and moves are reported, a move without a pressed button stays in the window. A
+ * click or a drag still goes to the program, which also ends the selection.
+ */
+export function keepsSelection(
+  move: Pick<MouseEvent, "buttons">,
+  { hasSelection, reportsMoves }: { hasSelection: boolean; reportsMoves: boolean },
+): boolean {
+  return hasSelection && reportsMoves && move.buttons === 0;
+}
