@@ -6,6 +6,7 @@ import { QueueItem } from "@/components/QueueItem";
 import { StatusLabel } from "@/components/StatusLabel";
 import { twoDigits } from "@/lib/format";
 import { HOME_SESSION_STATUS, homeRepoStatus } from "@/lib/home-model";
+import { proposalName } from "@/lib/session-entries";
 import { PROPOSAL_STATUS, sessionStateLabel, sessionTitle } from "@/lib/session-state";
 
 /**
@@ -43,7 +44,8 @@ export function NeedsYouPanel({
       <ul aria-label="Sessions that need you" className="px-2">
         {urgent.length === 0 && <li className="text-muted-foreground px-2 py-1 text-sm">No session is waiting for you.</li>}
         {urgent.map((s) => {
-          // Pełny stan z widoku „Sessions” (np. „asking for approval”), a tytuł okna odróżnia dwie sesje jednego repo.
+          // The full state from the "Sessions" view (for example "asking for approval"), and the window title tells two
+          // sessions of one repo apart.
           const session = sessions.get(s.id);
           const status = session ? sessionStateLabel(session) : HOME_SESSION_STATUS[s.state];
           const title = session ? sessionTitle(session) : s.repo;
@@ -62,7 +64,7 @@ export function NeedsYouPanel({
           </h2>
           <ul aria-label="Task proposals waiting for your decision" className="px-2">
             {proposals.map((p) => (
-              <QueueItem key={p.id} title={`${p.repo} · ${p.title}`} active={false} onClick={() => onOpenProposal(p.id)}>
+              <QueueItem key={p.id} title={proposalName(p)} active={false} onClick={() => onOpenProposal(p.id)}>
                 <StatusLabel {...PROPOSAL_STATUS} />
               </QueueItem>
             ))}

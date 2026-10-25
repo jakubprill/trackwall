@@ -1,44 +1,44 @@
 /**
- * Linie skryptu Gradle bez komentarzy (§4.6): mały skaner, który pomija napisy, bo `exclude("META-INF/*.SF")` nie
- * zaczyna komentarza, i przenosi komentarz blokowy oraz napis w potrójnym cudzysłowie do następnych linii.
+ * Gradle script lines without comments (§4.6): a small scanner that skips strings, because `exclude("META-INF/*.SF")`
+ * does not start a comment, and carries a block comment and a triple-quoted string over to the next lines.
  */
 
-/** Dłuższa linia to dane (wygenerowany kod, osadzony plik), nie zapis zależności; wyrażenia jej nie widzą. */
+/** A longer line is data (generated code, an embedded file), not a dependency declaration; the expressions do not see it. */
 const MAX_LINE_LENGTH = 2000;
 
-/** Stan skanera między liniami: otwarty komentarz blokowy albo napis w potrójnym cudzysłowie. */
+/** Scanner state between lines: an open block comment or a triple-quoted string. */
 interface ScanState {
   inBlock: boolean;
   quote: string | null;
 }
 
-/** Początek komentarza albo napisu; potrójny cudzysłów przed pojedynczym. */
+/** The start of a comment or a string; a triple quote before a single one. */
 const SCAN_TOKEN = /\/\*|\/\/|"""|'''|["']/g;
 
 /**
- * Linie z numerami, bez komentarzy `//` i blokowych `/* … *\/`, które w skryptach Gradle często wyłączają zależność.
- * Napisy są pomijane przy szukaniu komentarzy, bo `exclude("META-INF/*.SF")` nie zaczyna komentarza. Linie dłuższe niż
- * `MAX_LINE_LENGTH` nie trafiają do wyniku.
+ * Numbered lines without `//` and block `/* … *\/` comments, which in Gradle scripts often disable a dependency.
+ * Strings are skipped when looking for comments, because `exclude("META-INF/*.SF")` does not start a comment. Lines
+ * longer than `MAX_LINE_LENGTH` are left out of the result.
  */
 export function codeLines(text: string): { text: string; number: number }[] {
   const lines: { text: string; number: number }[] = [];
   const state: ScanState = { inBlock: false, quote: null };
   text.split("\n").forEach((raw, i) => {
     const line = stripComments(raw, state);
-    // Zwykły napis kończy się z linią; tylko potrójny cudzysłów ją przekracza.
+    // A plain string ends with the line; only a triple quote crosses it.
     if (state.quote?.length === 1) state.quote = null;
     if (line.trim() !== "" && raw.length <= MAX_LINE_LENGTH) lines.push({ text: line, number: i + 1 });
   });
   return lines;
 }
 
-/** Kawałek linii przeczytany w jednym stanie skanera i pozycja, od której czytać dalej (`-1`: koniec linii). */
+/** A piece of a line read in one scanner state and the position to read on from (`-1`: end of line). */
 interface ScanStep {
   text: string;
   next: number;
 }
 
-/** Linia bez komentarzy; `state` przenosi otwarty komentarz blokowy i napis do następnej linii. */
+/** A line without comments; `state` carries an open block comment and a string over to the next line. */
 function stripComments(raw: string, state: ScanState): string {
   let out = "";
   for (let i = 0; i >= 0 && i < raw.length; ) {
@@ -63,7 +63,7 @@ function readString(raw: string, from: number, state: ScanState): ScanStep {
   return { text: raw.slice(from, end), next: end };
 }
 
-/** Kod do początku komentarza (który zmienia stan) albo napisu (który zostaje w wyniku). */
+/** Code up to the start of a comment (which changes the state) or a string (which stays in the result). */
 function readCode(raw: string, from: number, state: ScanState): ScanStep {
   SCAN_TOKEN.lastIndex = from;
   const token = SCAN_TOKEN.exec(raw);
@@ -79,10 +79,10 @@ function readCode(raw: string, from: number, state: ScanState): ScanStep {
   return { text: code + token[0], next };
 }
 
-/** Indeks za cudzysłowem zamykającym napis od `from`; `-1`, gdy go nie ma w tej linii. */
+/** The index after the quote that closes the string from `from`; `-1` when it is not on this line. */
 function stringEnd(raw: string, from: number, quote: string): number {
   for (let j = from; j < raw.length; j++) {
-    // W potrójnym cudzysłowie (surowy napis Kotlin) `\` nie jest ucieczką.
+    // In a triple-quoted (raw Kotlin) string `\` is not an escape.
     if (raw[j] === "\\" && quote.length === 1) j++;
     else if (raw.startsWith(quote, j)) return j + quote.length;
   }

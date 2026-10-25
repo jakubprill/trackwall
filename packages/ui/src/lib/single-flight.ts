@@ -1,7 +1,7 @@
 /**
- * Wywołanie, które w trakcie trwania oddaje tę samą obietnicę każdemu następnemu wołającemu. Dla odczytu z kursorem:
- * dwa pytania naraz (StrictMode uruchamia efekt dwa razy, `reload` w trakcie odpytywania) poszłyby z tym samym
- * kursorem, a ta sama strona zostałaby doklejona dwa razy.
+ * A call that, while it runs, hands the same promise to every next caller. For a read with a cursor: two requests at
+ * once (StrictMode runs the effect twice, `reload` during polling) would go with the same cursor, and the same page would
+ * be appended twice.
  */
 export function singleFlight<T>(run: () => Promise<T>): () => Promise<T> {
   let inFlight: Promise<T> | undefined;

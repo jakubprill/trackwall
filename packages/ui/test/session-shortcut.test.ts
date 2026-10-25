@@ -28,8 +28,14 @@ describe("session shortcuts", () => {
     expect(sessionShortcut({ ...alt1, altKey: false }, false)).toBeUndefined();
   });
 
-  test("Alt + 0, Alt + another letter and Alt + a keypad digit (a character code on Windows) are not shortcuts", () => {
-    expect(sessionShortcut({ ...alt1, code: "Digit0", key: "0" }, false)).toBeUndefined();
+  test("Alt+0 opens the supervisor, above the first position, also as ⌥0 that types º on macOS", () => {
+    expect(sessionShortcut({ ...alt1, code: "Digit0", key: "0" }, false)).toEqual({ kind: "supervisor" });
+    expect(sessionShortcut({ ...alt1, code: "Digit0", key: "º" }, true)).toEqual({ kind: "supervisor" });
+    expect(sessionShortcutLabel({ kind: "supervisor" }, false)).toBe("Alt+0");
+    expect(ariaSessionShortcut({ kind: "supervisor" })).toBe("Alt+0");
+  });
+
+  test("Alt + another letter and Alt + a keypad digit (a character code on Windows) are not shortcuts", () => {
     expect(sessionShortcut({ ...alt1, code: "KeyK", key: "k" }, false)).toBeUndefined();
     expect(sessionShortcut({ ...alt1, code: "Numpad1" }, false)).toBeUndefined();
   });

@@ -1,24 +1,25 @@
-import { LOG_BUFFER_RECORDS, type LogRecord } from "@trackwall/protocol";
+import { LOG_BUFFER_RECORDS, type LogRecord, type LogSource } from "@trackwall/protocol";
 import { memo, useLayoutEffect, useRef } from "react";
 import type { Connection } from "@/lib/connection";
 import { logLevelClass, startsRun } from "@/lib/log-tail";
 import { useLogTail } from "@/lib/use-log-tail";
 import { cn } from "@/lib/utils";
 
-/** Odległość od dołu, przy której lista uznaje, że użytkownik czyta najnowsze linie i ma za nimi iść. */
+/** The distance from the bottom at which the list decides the user reads the newest lines and should follow them. */
 const FOLLOW_SLACK_PX = 24;
 
 /**
- * Log taska mise na żywo (§4.2, ADR-28): linie bez kolorów ANSI, kolor z poziomu rekordu, stderr oznaczony z boku.
- * Lista idzie za nowymi liniami, dopóki użytkownik nie przewinie jej w górę.
+ * A mise task's live log (§4.2, ADR-28): lines without ANSI colours, coloured by the record's level, stderr marked at
+ * the side. The list follows new lines until the user scrolls it up. `source` is a repo root's mise task or one run in
+ * a task worktree (ADR-59).
  */
-export function MiseTaskLog({ conn, repo, miseTask }: { conn: Connection; repo: string; miseTask: string }) {
-  const log = useLogTail(conn, { kind: "mise-task", repo, miseTask });
+export function MiseTaskLog({ conn, source }: { conn: Connection; source: LogSource }) {
+  const log = useLogTail(conn, source);
   const records = log.data?.records;
   const box = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
 
-  // Po każdej nowej paczce rekordów, przed malowaniem, żeby lista nie mignęła w starym miejscu.
+  // After every new batch of records, before painting, so that the list does not flash in the old place.
   useLayoutEffect(() => {
     if (follow.current && box.current) box.current.scrollTop = box.current.scrollHeight;
   }, [records]);
@@ -50,7 +51,7 @@ export function MiseTaskLog({ conn, repo, miseTask }: { conn: Connection; repo: 
   );
 }
 
-/** Linie malowane od nowa tylko wtedy, gdy przyszły nowe rekordy, a nie przy każdym odpytaniu. */
+/** Lines repainted only when new records arrived, not on every poll. */
 const LogLines = memo(function LogLines({ records }: { records: LogRecord[] }) {
   return records.map((record, i) => (
     <div key={record.seq}>

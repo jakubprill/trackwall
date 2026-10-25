@@ -3,14 +3,14 @@ import { useMemo } from "react";
 import { type EdgePair, edgePath, type GraphLayout, NODE_HEIGHT, NODE_WIDTH, type NodeBox, neighbourhood } from "@/lib/graph-layout";
 import { cn } from "@/lib/utils";
 
-/** Margines wokół rysunku, żeby świecące krawędzie i kropki przy krawędzi nie były ucięte. */
+/** The margin around the drawing, so that glowing edges and dots at the border are not cut off. */
 const PADDING = 24;
-/** Ile tagów zmieścić pod nazwą repo; reszta jest w panelu szczegółów. */
+/** How many tags fit under the repo name; the rest is in the details panel. */
 const NODE_TAGS = 2;
 
 /**
- * Graf połączeń (ADR-29): repo jako karty HUD w kolumnach, krawędzie jako krzywe w SVG pod nimi (od repo, które
- * używa, do używanego), ręczne krawędzie przerywane. Wybór repo podświetla jego sąsiedztwo, a resztę przygasza.
+ * The connection graph (ADR-29): repos as HUD cards in columns, edges as SVG curves under them (from the repo that uses to
+ * the one that is used), manual edges dashed. Selecting a repo highlights its neighbourhood and dims the rest.
  */
 export function GraphCanvas({
   graph,
@@ -108,7 +108,7 @@ function Edge({
   if (!from || !to) return null;
   const active = selected !== undefined && (pair.from === selected || pair.to === selected);
   const dimmed = near !== undefined && !active;
-  // Linia przerywana, gdy wszystkie krawędzie pary są ręczne.
+  // A dashed line when all edges of the pair are manual.
   const manualOnly = pair.edges.every((e) => e.kind === "manual");
   return (
     <g className={cn("transition-opacity", dimmed && "opacity-15")}>
@@ -124,7 +124,7 @@ function Edge({
   );
 }
 
-/** Kropka przy repo używanym, jak węzły na krzywych w inspiracji: kierunek bez grotów strzałek. */
+/** A dot at the repo that is used, like the nodes on curves in the inspiration: direction without arrowheads. */
 function EdgeEnd({ box, active }: { box: NodeBox; active: boolean }) {
   return <circle cx={box.x} cy={box.y + NODE_HEIGHT / 2} r={3} className={active ? "fill-primary" : "fill-muted-foreground"} />;
 }

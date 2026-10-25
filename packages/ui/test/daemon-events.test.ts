@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import type { SessionList } from "@trackwall/protocol";
 import { DaemonEvents, type EventSocket } from "../src/lib/daemon-events.ts";
 
-const LIST: SessionList = { sessions: [], tasks: [], proposals: [], worktreesDir: "/stan/worktrees" };
+const LIST: SessionList = { sessions: [], tasks: [], proposals: [], worktreesDir: "/state/worktrees" };
 
-/** Atrapa WebSocketu przeglądarki: test sam otwiera, przysyła ramki i zamyka połączenie. */
+/** A fake browser WebSocket: the test itself opens the connection, sends frames and closes it. */
 function fakeSockets() {
   const opened: { url: string; protocols: string[]; socket: EventSocket }[] = [];
   const openSocket = (url: string, protocols: string[]) => {
@@ -14,7 +14,7 @@ function fakeSockets() {
   };
   const last = () => {
     const entry = opened.at(-1);
-    if (!entry) throw new Error("brak połączenia");
+    if (!entry) throw new Error("no connection");
     return entry.socket;
   };
   const message = (data: unknown) => last().onmessage?.call(last() as WebSocket, new MessageEvent("message", { data }));
@@ -25,18 +25,18 @@ function fakeSockets() {
 
 function makeEvents(sockets: ReturnType<typeof fakeSockets>) {
   return new DaemonEvents({
-    conn: { baseUrl: "http://127.0.0.1:4100", token: "sekret" },
+    conn: { baseUrl: "http://127.0.0.1:4100", token: "secret" },
     location: { protocol: "tauri:", host: "localhost" },
     openSocket: sockets.openSocket,
   });
 }
 
-describe("zdarzenia daemona w UI", () => {
-  test("łączy się z /ws z tokenem w podprotokole i podaje migawki tematu słuchaczom", () => {
+describe("daemon events in the UI", () => {
+  test("connects to /ws with the token in the subprotocol and passes topic snapshots to listeners", () => {
     const sockets = fakeSockets();
     const events = makeEvents(sockets);
     expect(sockets.opened.map(({ url, protocols }) => ({ url, protocols }))).toEqual([
-      { url: "ws://127.0.0.1:4100/ws", protocols: ["trackwall.events", "bearer.sekret"] },
+      { url: "ws://127.0.0.1:4100/ws", protocols: ["trackwall.events", "bearer.secret"] },
     ]);
     const feed = events.feed("sessions.changed");
     const received: SessionList[] = [];
@@ -51,7 +51,7 @@ describe("zdarzenia daemona w UI", () => {
     events.close();
   });
 
-  test("słuchacz zapisany później dostaje od razu ostatnią migawkę z bieżącego połączenia", () => {
+  test("a listener subscribed later at once gets the latest snapshot from the current connection", () => {
     const sockets = fakeSockets();
     const events = makeEvents(sockets);
     sockets.message(JSON.stringify({ type: "sessions.changed", payload: LIST }));
@@ -61,21 +61,21 @@ describe("zdarzenia daemona w UI", () => {
     events.close();
   });
 
-  test("ramka niezgodna z kontraktem jest pomijana, a temat zostaje na odpytywaniu", () => {
+  test("a frame outside the contract is skipped, and the topic stays on polling", () => {
     const sockets = fakeSockets();
     const events = makeEvents(sockets);
     const feed = events.feed("sessions.changed");
     const received: SessionList[] = [];
     feed.subscribe((list) => received.push(list));
-    sockets.message("nie json");
+    sockets.message("not json");
     sockets.message(JSON.stringify({ type: "sessions.changed", payload: { sessions: "?" } }));
-    sockets.message(JSON.stringify({ type: "nowy.temat", payload: {} }));
+    sockets.message(JSON.stringify({ type: "new.topic", payload: {} }));
     expect(received).toEqual([]);
     expect(feed.isLive()).toBe(false);
     events.close();
   });
 
-  test("po zerwaniu temat przestaje być na żywo, a klient łączy się ponownie po przerwie", async () => {
+  test("after a disconnect the topic is no longer live, and the client reconnects after a pause", async () => {
     const sockets = fakeSockets();
     const events = makeEvents(sockets);
     const feed = events.feed("sessions.changed");
@@ -88,7 +88,7 @@ describe("zdarzenia daemona w UI", () => {
     events.close();
   });
 
-  test("zamknięty klient nie łączy się ponownie", async () => {
+  test("a closed client does not reconnect", async () => {
     const sockets = fakeSockets();
     const events = makeEvents(sockets);
     events.close();

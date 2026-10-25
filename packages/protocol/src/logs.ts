@@ -1,27 +1,34 @@
 import { z } from "zod";
+import { TaskId } from "./agents.ts";
 import type { Endpoint } from "./api.ts";
 import { MiseTaskName } from "./mise.ts";
 import { RepoId } from "./workspace.ts";
 
 /**
- * Kontrakt modułu `logs` (§4.2, ADR-28): rekordy wyjścia procesów z globalnym numerem `seq` i odczyt od kursora.
- * Każda akcja to `POST /api/logs/<akcja>`. Rekord jest już zamaskowany i bez sekwencji ANSI.
+ * Contract of the `logs` module (§4.2, ADR-28): records of process output with a global `seq` number, read from a cursor.
+ * Every action is `POST /api/logs/<action>`. A record is already masked and without ANSI sequences.
  */
 
-/** Ile rekordów daemon trzyma w pamięci na źródło; starsze są tylko w pliku JSONL. */
+/** How many records the daemon keeps in memory per source; older ones are only in the JSONL file. */
 export const LOG_BUFFER_RECORDS = 2000;
-/** Najwięcej rekordów w jednej odpowiedzi `tail`. */
+/** The most records in one `tail` response. */
 export const LOG_TAIL_MAX = 1000;
 
 /**
- * Skąd pochodzi rekord. Dziś task mise repo i `mise install` repo z komendy zbiorczej; serwisy, zadania i daemon
- * dojdą z tymi modułami.
+ * Where a record comes from: a repo's mise task run in the repo root, a mise task run in a task's worktree (ADR-59)
+ * and a repo's `mise install` from the Batch command. Services, sessions and the daemon will come as further kinds.
  */
 export const LogSource = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("mise-task"), repo: RepoId, miseTask: MiseTaskName }).strict(),
+  z.object({ kind: z.literal("task-mise-task"), repo: RepoId, task: TaskId, miseTask: MiseTaskName }).strict(),
   z.object({ kind: z.literal("mise-install"), repo: RepoId }).strict(),
 ]);
 export type LogSource = z.infer<typeof LogSource>;
+
+/** The log source of a mise task run in a repo root (`task: null`) or in a task's worktree (ADR-59). */
+export function miseTaskLogSource(repo: RepoId, task: TaskId | null, miseTask: MiseTaskName): LogSource {
+  return task === null ? { kind: "mise-task", repo, miseTask } : { kind: "task-mise-task", repo, task, miseTask };
+}
 
 export const LogLevel = z.enum(["trace", "debug", "info", "warn", "error"]);
 export type LogLevel = z.infer<typeof LogLevel>;
@@ -31,29 +38,29 @@ export type LogStream = z.infer<typeof LogStream>;
 
 export const LogRecord = z.object({
   /**
-   * Globalny numer rekordu, rosnący dla wszystkich źródeł. Każde działanie daemona zaczyna od chwili startu
-   * w milisekundach razy 1000, więc numery kolejnych działań się nie powtarzają (§4.2).
+   * The global record number, rising across all sources. Every daemon run starts from its start time in milliseconds
+   * times 1000, so the numbers of successive runs do not repeat (§4.2).
    */
   seq: z.number().int().positive(),
-  /** ISO 8601, chwila odebrania linii przez daemon. */
+  /** ISO 8601, when the daemon received the line. */
   ts: z.string(),
-  /** Uruchomienie (`RunState.runId`), z którego pochodzi linia; źródło ma rekordy wielu uruchomień. */
+  /** The run (`RunState.runId`) the line comes from; a source has records of many runs. */
   runId: z.string(),
   stream: LogStream,
-  /** Z treści linii (słowa `ERROR`, `WARN`…), nie ze strumienia: wiele narzędzi pisze zwykły postęp na stderr. */
+  /** From the line's text (the words `ERROR`, `WARN`…), not from the stream: many tools write ordinary progress to stderr. */
   level: LogLevel,
   msg: z.string(),
 });
 export type LogRecord = z.infer<typeof LogRecord>;
 
 export const LogTail = z.object({
-  /** Od najstarszego do najnowszego. */
+  /** From oldest to newest. */
   records: z.array(LogRecord),
-  /** Kursor do następnego pytania (`sinceSeq`). */
+  /** Cursor for the next request (`sinceSeq`). */
   nextSeq: z.number().int().nonnegative(),
   /**
-   * Część rekordów po kursorze przepadła: wypadły z bufora albo kursor pochodzi z innego działania daemona (wtedy
-   * odpowiedź to ostatnie rekordy, jak bez kursora). Klient zaczyna wtedy od tego, co dostał, zamiast doklejać.
+   * Some records after the cursor are lost: they fell out of the buffer, or the cursor comes from another daemon run (then
+   * the response is the latest records, as without a cursor). The client then starts from what it got instead of appending.
    */
   dropped: z.boolean(),
 });
@@ -62,7 +69,7 @@ export type LogTail = z.infer<typeof LogTail>;
 export const LogTailRequest = z
   .object({
     source: LogSource,
-    /** Rekordy z `seq` większym niż kursor, od najstarszego; bez kursora ostatnie `limit` rekordów źródła. */
+    /** Records with `seq` greater than the cursor, oldest first; without a cursor the last `limit` records of the source. */
     sinceSeq: z.number().int().nonnegative().optional(),
     limit: z.number().int().min(1).max(LOG_TAIL_MAX),
   })
@@ -121,7 +128,9 @@ export const LogErrorsRequest = z
   .object({
     /** Only the sources of this repo; all of them without it. */
     repo: RepoId.optional(),
-    /** Only the log of this mise task (in every repo or in `repo`); without it `mise install` too. */
+    /** Only the sources of this task's worktree (ADR-59); with `null`, none of a task's worktree; all of them without it. */
+    task: TaskId.nullable().optional(),
+    /** Only the log of this mise task (in every repo or in `repo`, in repo roots and worktrees); without it `mise install` too. */
     miseTask: MiseTaskName.optional(),
     minLevel: LogErrorLevel,
     /** Only errors whose first record has a `seq` greater than the cursor. */

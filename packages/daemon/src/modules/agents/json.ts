@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 /**
- * Schemat napisu z JSON-em: zły JSON i zły kształt dają ten sam rodzaj błędu zod. Jedno miejsce dla
- * „`JSON.parse` i schemat” na danych z zewnątrz (linie nagrania, `hooks.jsonl`, stdin hooka).
+ * A schema of a string holding JSON: bad JSON and a bad shape give the same kind of zod error. One place for "`JSON.parse`
+ * and a schema" on outside data (recording lines, `hooks.jsonl`, a hook's stdin).
  */
 export function jsonOf<T extends z.ZodType>(schema: T) {
   return z

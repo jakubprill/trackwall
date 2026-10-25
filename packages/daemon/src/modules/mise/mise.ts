@@ -1,5 +1,15 @@
-import { type LogSource, type MiseTask, MiseTaskName, type MiseTasks, type RunningMiseTask, type RunState } from "@trackwall/protocol";
+import { delimiter } from "node:path";
+import {
+  type LogSource,
+  type MiseTask,
+  MiseTaskName,
+  type MiseTasks,
+  miseTaskLogSource,
+  type RunningMiseTask,
+  type RunState,
+} from "@trackwall/protocol";
 import { z } from "zod";
+import { envKey } from "../../infra/env-key.ts";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { type MiseCliResult, runMiseCli } from "./mise-cli.ts";
 
@@ -7,7 +17,9 @@ import { type MiseCliResult, runMiseCli } from "./mise-cli.ts";
  * Moduł `mise` (§4, ADR-20): taski mise repo z workspace i ich uruchomienia. Lista pochodzi z `mise tasks ls --json`
  * przy każdym zapytaniu, więc zmiana `mise.toml` widać od razu. Uruchomienie to `mise run <task>` w korzeniu repo,
  * w grupie procesów modułu `procs`; daemon uruchamia tylko task, który jest na aktualnej liście (§1.2). Dla komendy
- * zbiorczej (ADR-27) także `mise install` i uruchomienia doczekane do końca.
+ * zbiorczej (ADR-27) także `mise install` i uruchomienia doczekane do końca. A task's mise tasks run in its worktree
+ * (ADR-59) only while the repo root's config is trusted and the worktree has the mise config the user trusted; mise
+ * gets the worktree as a trusted path for that one run, never through `mise trust`, which would trust the path for good.
  */
 
 /** Czego `mise` potrzebuje od `procs`; podłączane w fasadzie. */
@@ -23,9 +35,18 @@ interface MiseRepos {
   repoPath(id: string): Promise<string>;
 }
 
+/**
+ * What `mise` needs from `agents`: the worktree of a task of the repo, refused while its mise config is not the one the
+ * user trusted (ADR-59).
+ */
+interface MiseTaskWorktrees {
+  trustedTaskWorktree(task: string, repo: string): Promise<string>;
+}
+
 export interface MiseDeps {
   procs: MiseProcs;
   repos: MiseRepos;
+  tasks: MiseTaskWorktrees;
   /** Program `mise` z ewentualnymi argumentami przed komendą; w daemonie `["mise"]`, w testach atrapa. */
   command: readonly string[];
   /** Środowisko procesów użytkownika (`PATH` z powłoki logowania na macOS). */
@@ -42,51 +63,79 @@ type TaskList = { kind: Exclude<MiseTasks["kind"], "ok">; message: string } | { 
 
 /** Fragment komunikatu mise o konfiguracji bez zaufania (`Config files in … are not trusted`). */
 const UNTRUSTED = /not trusted/i;
+/** mise setting with directories whose configs it trusts, separated like `PATH` (`list_by_os_path_separator`). */
+const TRUSTED_PATHS_ENV = "MISE_TRUSTED_CONFIG_PATHS";
+
+/** Where a mise task runs: the repo root (`task: null`) or the worktree of a task of that repo (ADR-59). */
+export interface MiseTarget {
+  repo: string;
+  task: string | null;
+}
+
+/** The directory and environment of a run. */
+interface RunPlace {
+  dir: string;
+  env: NodeJS.ProcessEnv;
+}
 
 export class Mise {
   private readonly deps: MiseDeps;
-  /** Taski uruchomione w tym działaniu daemona, per repo: lista pokazuje je także po usunięciu z konfiguracji. */
-  private readonly started = new Map<string, Set<string>>();
+  /**
+   * mise tasks started in this daemon run, per target (`targetKey`): the list shows them even after they left the
+   * config, and `running` reports them without asking mise.
+   */
+  private readonly started = new Map<string, MiseTarget & { names: Set<string> }>();
 
   constructor(deps: MiseDeps) {
     this.deps = deps;
   }
 
+  /** The mise tasks of a repo root with their runs there. */
   async tasks(repo: string): Promise<MiseTasks> {
-    const listed = await this.list(await this.deps.repos.repoPath(repo));
-    if (listed.kind !== "ok") return { ...listed, running: this.liveOutside(repo, []) };
-    const tasks: MiseTask[] = listed.tasks.map((t) => ({ ...t, run: this.deps.procs.state(owner(repo, t.name)) ?? null }));
-    return { kind: "ok", tasks: [...tasks, ...this.liveOutside(repo, tasks)] };
+    const root: MiseTarget = { repo, task: null };
+    const dir = await this.deps.repos.repoPath(repo);
+    const listed = await this.list(dir, await this.deps.env());
+    if (listed.kind !== "ok") return { ...listed, running: this.liveOutside(root, []) };
+    const tasks: MiseTask[] = listed.tasks.map((t) => ({ ...t, run: this.deps.procs.state(owner(root, t.name)) ?? null }));
+    return { kind: "ok", tasks: [...tasks, ...this.liveOutside(root, tasks)] };
   }
 
-  /** Działające taski wszystkich repo uruchomione w tym działaniu daemona; stan z `procs`, bez pytania mise. */
+  /** Running mise tasks of all repo roots and task worktrees started in this daemon run; state from `procs`, without asking mise. */
   running(): RunningMiseTask[] {
-    return [...this.started.keys()].flatMap((repo) => this.liveRuns(repo).map(({ name, run }) => ({ repo, miseTask: name, run })));
+    return [...this.started.values()].flatMap((target) =>
+      this.liveRuns(target).map(({ name, run }) => ({ repo: target.repo, task: target.task, miseTask: name, run })),
+    );
   }
 
   /**
    * Działające taski repo spoza listy: usunięte z konfiguracji w trakcie działania albo pokazane, gdy mise listy
    * nie podał. Bez nich nie dałoby się ich zatrzymać z UI.
    */
-  private liveOutside(repo: string, listed: readonly ListedMiseTask[]): MiseTask[] {
-    return this.liveRuns(repo)
+  private liveOutside(target: MiseTarget, listed: readonly ListedMiseTask[]): MiseTask[] {
+    return this.liveRuns(target)
       .filter(({ name }) => !listed.some((t) => t.name === name))
       .map(({ name, run }) => ({ name, description: "", run }));
   }
 
-  /** Taski repo uruchomione przez daemon, których grupa jeszcze nie skończyła (także w trakcie zatrzymywania). */
-  private liveRuns(repo: string): { name: string; run: RunState }[] {
-    return [...(this.started.get(repo) ?? [])].flatMap((name) => {
-      const run = this.deps.procs.state(owner(repo, name));
+  /** mise tasks the daemon started in `target` whose group has not ended yet (also while stopping). */
+  private liveRuns(target: MiseTarget): { name: string; run: RunState }[] {
+    return [...(this.started.get(targetKey(target))?.names ?? [])].flatMap((name) => {
+      const run = this.deps.procs.state(owner(target, name));
       return run && run.kind !== "exited" ? [{ name, run }] : [];
     });
   }
 
-  async start(repo: string, miseTask: string): Promise<RunState> {
-    const dir = await this.deps.repos.repoPath(repo);
-    if (!(await this.hasTask(dir, miseTask))) throw new DomainError("not_found", `repo ${repo} has no mise task "${miseTask}"`);
-    const run = await this.launch(owner(repo, miseTask), dir, ["run", miseTask], repo, taskLogSource(repo, miseTask));
-    this.remember(repo, miseTask);
+  async start(target: MiseTarget, miseTask: string): Promise<RunState> {
+    const place = await this.place(target);
+    if (!(await this.hasTask(place, miseTask))) throw new DomainError("not_found", `${where(target)} has no mise task "${miseTask}"`);
+    const run = await this.launch(
+      owner(target, miseTask),
+      place,
+      ["run", miseTask],
+      target.repo,
+      miseTaskLogSource(target.repo, target.task, miseTask),
+    );
+    this.remember(target, miseTask);
     return run;
   }
 
@@ -96,10 +145,11 @@ export class Mise {
    * koniec. `signal` zatrzymuje grupę tak jak stop ze szczegółów repo.
    */
   async runToEnd(repo: string, miseTask: string, signal: AbortSignal): Promise<RunState | null> {
-    const dir = await this.deps.repos.repoPath(repo);
-    if (!(await this.hasTask(dir, miseTask))) return null;
-    this.remember(repo, miseTask);
-    return this.runGroupToEnd(owner(repo, miseTask), dir, ["run", miseTask], repo, taskLogSource(repo, miseTask), signal);
+    const root: MiseTarget = { repo, task: null };
+    const place = await this.place(root);
+    if (!(await this.hasTask(place, miseTask))) return null;
+    this.remember(root, miseTask);
+    return this.runGroupToEnd(owner(root, miseTask), place, ["run", miseTask], repo, miseTaskLogSource(repo, null, miseTask), signal);
   }
 
   /**
@@ -107,8 +157,8 @@ export class Mise {
    * W grupie procesów jak task, bo instalacja trwa minutami, a przerwanie komendy zbiorczej ma ją zatrzymać.
    */
   async installTools(repo: string, signal: AbortSignal): Promise<RunState> {
-    const dir = await this.deps.repos.repoPath(repo);
-    return this.runGroupToEnd(installOwner(repo), dir, ["install"], repo, { kind: "mise-install", repo }, signal);
+    const place = await this.place({ repo, task: null });
+    return this.runGroupToEnd(installOwner(repo), place, ["install"], repo, { kind: "mise-install", repo }, signal);
   }
 
   /**
@@ -116,8 +166,8 @@ export class Mise {
    * `stopping`), for an agent waiting for the result (`wait_for_mise_task`, ADR-41). `signal` (the client cancelled
    * the call) ends the wait but does not stop the task.
    */
-  async waitForEnd(repo: string, miseTask: string, timeoutMs: number, signal: AbortSignal): Promise<RunState> {
-    const groupOwner = owner(repo, miseTask);
+  async waitForEnd(target: MiseTarget, miseTask: string, timeoutMs: number, signal: AbortSignal): Promise<RunState> {
+    const groupOwner = owner(target, miseTask);
     // `ended` first waits for a start in progress (e.g. the Run button clicked at the same moment), so the wait sees
     // the new run instead of the previous one or none; an ended group resolves at once, an absent one as `undefined`.
     const giveUp = AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
@@ -130,16 +180,21 @@ export class Mise {
     try {
       const end = await Promise.race([this.deps.procs.ended(groupOwner), gaveUp]);
       const run = end === "gave_up" ? this.deps.procs.state(groupOwner) : end;
-      if (!run) throw await this.notRun(repo, miseTask);
+      if (!run) throw await this.notRun(target, miseTask);
       return run;
     } finally {
       giveUp.removeEventListener("abort", stopWaiting);
     }
   }
 
-  async stop(repo: string, miseTask: string): Promise<RunState> {
-    const stopped = await this.deps.procs.stop(owner(repo, miseTask));
-    if (!stopped) throw await this.notRun(repo, miseTask);
+  /** The current (or last) run of a task in this daemon run, from `procs` without asking mise; `undefined` when it has not run. */
+  run(target: MiseTarget, miseTask: string): RunState | undefined {
+    return this.deps.procs.state(owner(target, miseTask));
+  }
+
+  async stop(target: MiseTarget, miseTask: string): Promise<RunState> {
+    const stopped = await this.deps.procs.stop(owner(target, miseTask));
+    if (!stopped) throw await this.notRun(target, miseTask);
     return stopped;
   }
 
@@ -148,13 +203,15 @@ export class Mise {
    * otherwise about the task. Checked only after the run lookup, so a task of a repo that was renamed or removed
    * while it ran can still be stopped and waited for.
    */
-  private async notRun(repo: string, miseTask: string): Promise<DomainError> {
-    await this.deps.repos.repoPath(repo);
-    return new DomainError("not_found", `mise task "${miseTask}" in ${repo} has not been run`);
+  private async notRun(target: MiseTarget, miseTask: string): Promise<DomainError> {
+    await this.deps.repos.repoPath(target.repo);
+    const place = target.task === null ? target.repo : where(target);
+    return new DomainError("not_found", `mise task "${miseTask}" in ${place} has not been run`);
   }
 
   /** `mise trust` bez ścieżki ufa konfiguracji w korzeniu repo, nie w katalogach nadrzędnych. */
   async trust(repo: string): Promise<MiseTasks> {
+    // The repo root only: a task worktree is trusted by its mise config instead (ADR-59, `agents`).
     const dir = await this.deps.repos.repoPath(repo);
     const result = await runMiseCli(this.deps.command, ["trust"], dir, await this.deps.env());
     if (result.kind !== "exited") throw new DomainError("mise_unavailable", result.message);
@@ -162,25 +219,49 @@ export class Mise {
     return this.tasks(repo);
   }
 
-  private async hasTask(dir: string, miseTask: string): Promise<boolean> {
-    const listed = await this.list(dir);
+  /**
+   * Where a run of `target` happens. A task worktree (ADR-59) needs the repo root's config trusted, since the user
+   * trusted the worktree's first config by trusting the root's, and the worktree's mise config as the user trusted it;
+   * then mise gets the worktree as a trusted path in this run's environment only. The worktree is checked last, as
+   * close to the run as the listing of its tasks allows (§8).
+   */
+  private async place(target: MiseTarget): Promise<RunPlace> {
+    const root = await this.deps.repos.repoPath(target.repo);
+    const env = await this.deps.env();
+    if (target.task === null) return { dir: root, env };
+    const listed = await this.list(root, env);
+    if (listed.kind !== "ok") throw new DomainError("mise_unavailable", `${target.repo}: ${listed.message}`);
+    const worktree = await this.deps.tasks.trustedTaskWorktree(target.task, target.repo);
+    return { dir: worktree, env: trustingPath(env, worktree) };
+  }
+
+  private async hasTask(place: RunPlace, miseTask: string): Promise<boolean> {
+    const listed = await this.list(place.dir, place.env);
     if (listed.kind !== "ok") throw new DomainError("mise_unavailable", listed.message);
     return listed.tasks.some((t) => t.name === miseTask);
   }
 
   /** Task uruchomiony w tym działaniu daemona: lista pokaże go do zatrzymania, nawet gdy zniknie z konfiguracji. */
-  private remember(repo: string, miseTask: string): void {
-    const names = this.started.get(repo) ?? new Set<string>();
-    this.started.set(repo, names.add(miseTask));
+  private remember(target: MiseTarget, miseTask: string): void {
+    const key = targetKey(target);
+    const started = this.started.get(key) ?? { ...target, names: new Set<string>() };
+    started.names.add(miseTask);
+    this.started.set(key, started);
   }
 
-  private async launch(groupOwner: string, dir: string, args: readonly string[], repo: string, logSource: LogSource): Promise<RunState> {
+  private async launch(
+    groupOwner: string,
+    place: RunPlace,
+    args: readonly string[],
+    repo: string,
+    logSource: LogSource,
+  ): Promise<RunState> {
     try {
       return await this.deps.procs.start({
         owner: groupOwner,
         command: [...this.deps.command, ...args],
-        cwd: dir,
-        env: await this.deps.env(),
+        cwd: place.dir,
+        env: place.env,
         logSource,
       });
     } catch (err) {
@@ -196,14 +277,14 @@ export class Mise {
    */
   private async runGroupToEnd(
     groupOwner: string,
-    dir: string,
+    place: RunPlace,
     args: readonly string[],
     repo: string,
     logSource: LogSource,
     signal: AbortSignal,
   ): Promise<RunState> {
     signal.throwIfAborted();
-    await this.launch(groupOwner, dir, args, repo, logSource);
+    await this.launch(groupOwner, place, args, repo, logSource);
     let stop = () => {};
     const stopFailed = new Promise<never>((_, reject) => {
       stop = () => void this.deps.procs.stop(groupOwner).catch(reject);
@@ -219,9 +300,8 @@ export class Mise {
     }
   }
 
-  private async list(dir: string): Promise<TaskList> {
-    const result = await runMiseCli(this.deps.command, ["tasks", "ls", "--json"], dir, await this.deps.env());
-    return parseTaskList(result);
+  private async list(dir: string, env: NodeJS.ProcessEnv): Promise<TaskList> {
+    return parseTaskList(await runMiseCli(this.deps.command, ["tasks", "ls", "--json"], dir, env));
   }
 }
 
@@ -247,14 +327,29 @@ export function parseTaskList(result: MiseCliResult): TaskList {
   return { kind: "ok", tasks };
 }
 
-/** Klucz właściciela grupy w `procs`; tylko budowany, nigdy rozbierany z powrotem. */
-function owner(repo: string, miseTask: string): string {
-  return `mise:${repo}:${miseTask}`;
+/**
+ * The group owner in `procs`, only built, never parsed back. A task's prefix differs from a repo's, so no repo id and
+ * mise task name (which may contain `:`) can give the key of a task's run, and the key holds the repo, so a run is
+ * found only through the repo its task is in (a session's repo gate, ADR-41).
+ */
+function owner(target: MiseTarget, miseTask: string): string {
+  return target.task === null ? `mise:${target.repo}:${miseTask}` : `task-mise:${target.task}:${target.repo}:${miseTask}`;
 }
 
-/** Źródło logu taska: ta sama para (repo, task mise) co właściciel grupy, w kształcie z kontraktu `logs`. */
-function taskLogSource(repo: string, miseTask: string): LogSource {
-  return { kind: "mise-task", repo, miseTask };
+function targetKey(target: MiseTarget): string {
+  return target.task === null ? `repo:${target.repo}` : `task:${target.task}:${target.repo}`;
+}
+
+/** The target in a message: the repo, or the task worktree in it. */
+function where({ repo, task }: MiseTarget): string {
+  return task === null ? `repo ${repo}` : `the worktree of task ${task} in ${repo}`;
+}
+
+/** The environment with `dir` added to the paths mise trusts without `mise trust`, after the user's own. */
+function trustingPath(env: NodeJS.ProcessEnv, dir: string): NodeJS.ProcessEnv {
+  const key = envKey(env, TRUSTED_PATHS_ENV);
+  const own = env[key];
+  return { ...env, [key]: own ? `${own}${delimiter}${dir}` : dir };
 }
 
 /** Właściciel grupy `mise install` repo; inny przedrostek niż taski, bo task może nazywać się `install`. */

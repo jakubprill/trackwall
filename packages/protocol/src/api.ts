@@ -1,25 +1,27 @@
 import { z } from "zod";
 
-/** Kody błędów wspólne dla wszystkich modułów API. */
+/** Error codes shared by all API modules. */
 export const ErrorCode = z.enum([
   "unauthorized",
   "forbidden_origin",
   "not_found",
   "bad_request",
-  /** Repo z workspace jest niedostępne (git odmówił, np. uszkodzone `.git`); szczegóły w `message`. */
+  /** A repo from the workspace is unavailable (git refused, for example a damaged `.git`); details in `message`. */
   "repo_unavailable",
-  /** Folder z projektami z `workspace.yaml` nie istnieje albo nie jest katalogiem (np. odłączony dysk). */
+  /** The projects folder from `workspace.yaml` does not exist or is not a directory (for example a disconnected drive). */
   "projects_dir_unavailable",
-  /** `workspace.yaml` nie przechodzi walidacji; użytkownik musi go poprawić ręcznie. */
+  /** `workspace.yaml` fails validation; the user has to fix it by hand. */
   "invalid_config",
-  /** Nie da się uruchomić taska mise: brak mise, konfiguracja bez zaufania albo błąd mise; szczegóły w `message`. */
+  /** A mise task cannot be run: mise is missing, the config is not trusted, or mise failed; details in `message`. */
   "mise_unavailable",
-  /** Po zatrzymaniu z eskalacją część grupy procesów nadal żyje; daemon nie zgłasza zatrzymania, którego nie widział. */
+  /** After a stop with escalation part of the process group is still alive; the daemon does not report a stop it has not seen. */
   "stop_unconfirmed",
-  /** Nie da się uruchomić sesji agenta: brak Copilot CLI w `PATH` albo PTY w tym runtime (daemon pod Node, ADR-26). */
+  /** An agent session cannot be started: no Copilot CLI in `PATH` or no PTY in this runtime (the daemon under Node, ADR-26). */
   "agent_unavailable",
-  /** Zakończenie zadania skasowałoby zmiany (niezacommitowane pliki albo commity), a wołający tego nie potwierdził. */
+  /** Ending the task would delete changes (uncommitted files or commits), and the caller has not confirmed that. */
   "unsaved_changes",
+  /** A service is not running or not ready (no port answers yet), or its port is taken by a process Trackwall did not start (ADR-45). */
+  "service_unavailable",
   "internal",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
@@ -30,25 +32,25 @@ export const ApiError = z.object({
 });
 export type ApiError = z.infer<typeof ApiError>;
 
-/** Koperta każdej odpowiedzi HTTP: `{ ok, data }` albo `{ ok: false, error }`. */
+/** The envelope of every HTTP response: `{ ok, data }` or `{ ok: false, error }`. */
 export function apiResult<T extends z.ZodType>(data: T) {
   return z.discriminatedUnion("ok", [z.object({ ok: z.literal(true), data }), z.object({ ok: z.literal(false), error: ApiError })]);
 }
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: ApiError };
 
 /**
- * Akcja `POST /api/<moduł>/<akcja>` (§5.2): ścieżka, schemat ciała i schemat wyniku w jednym obiekcie,
- * z którego korzystają i daemon (walidacja wejścia), i klienty (typ ciała, walidacja odpowiedzi).
+ * An action `POST /api/<module>/<action>` (§5.2): the path, the body schema and the result schema in one object,
+ * used by both the daemon (input validation) and the clients (body type, response validation).
  */
 export interface Endpoint<Req extends z.ZodType = z.ZodType, Data extends z.ZodType = z.ZodType> {
   path: string;
   request: Req;
-  /** Schemat pola `data` w odpowiedzi `{ ok: true, data }`. */
+  /** Schema of the `data` field in the response `{ ok: true, data }`. */
   data: Data;
 }
 
-/** Wynik akcji, która nic nie zwraca (`data: null`). */
+/** The result of an action that returns nothing (`data: null`). */
 export const Done = z.null();
 
-/** Koperta odpowiedzi bez znajomości `data`; klient sprawdza `data` schematem akcji w drugim kroku. */
+/** The response envelope without knowing `data`; the client checks `data` with the action's schema in a second step. */
 export const ApiEnvelope = apiResult(z.unknown());

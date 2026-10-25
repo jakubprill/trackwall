@@ -1,8 +1,8 @@
-/** Formatowanie dla widoków repo; czyste funkcje, testowane w `test/format.test.ts`. */
+/** Formatting for the repo views; pure functions, tested in `test/format.test.ts`. */
 
 import { countLabel } from "@trackwall/protocol";
 
-/** Przypis pod ucięty plik (README albo podgląd); daemon zwraca tylko początek dużych plików. */
+/** A footnote under a cut file (README or preview); the daemon returns only the beginning of large files. */
 export const TRUNCATED_NOTE = "The file is longer; showing the beginning.";
 
 export function relativeTime(iso: string, now: Date): string {
@@ -18,7 +18,7 @@ export function relativeTime(iso: string, now: Date): string {
   return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
-/** Czas działania daemona: sekundy, minuty albo godziny z minutami. */
+/** The daemon's uptime: seconds, minutes, or hours with minutes. */
 export function formatUptime(ms: number): string {
   const s = Math.floor(ms / 1000);
   const h = Math.floor(s / 3600);
@@ -32,7 +32,7 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-/** Okruszki dla ścieżki w repo: `a/b` daje korzeń, `a` i `a/b`. */
+/** Breadcrumbs for a path in the repo: `a/b` gives the root, `a` and `a/b`. */
 export function breadcrumbs(path: string): { name: string; path: string }[] {
   const crumbs = [{ name: "/", path: "" }];
   if (path === "") return crumbs;
@@ -41,9 +41,9 @@ export function breadcrumbs(path: string): { name: string; path: string }[] {
 }
 
 /**
- * Zmiany w katalogu roboczym z nowymi osobno, bo „4 changes” nie mówi, czy coś zmieniono, czy tylko przybyło:
- * „3 changed, 1 new”. Nowe to wpisy `git status`, więc nowy katalog to jeden wpis, a nie liczba jego plików.
- * `undefined`, gdy repo jest czyste.
+ * Working directory changes with the new ones separate, because "4 changes" does not say whether something was changed or
+ * only added: "3 changed, 1 new". New ones are `git status` entries, so a new directory is one entry, not the number of
+ * its files. `undefined` when the repo is clean.
  */
 export function workingTreeLabel(changed: number, untracked: number): string | undefined {
   const parts = [changed > 0 ? `${changed} changed` : undefined, untracked > 0 ? `${untracked} new` : undefined].filter(
@@ -52,12 +52,12 @@ export function workingTreeLabel(changed: number, untracked: number): string | u
   return parts.length === 0 ? undefined : parts.join(", ");
 }
 
-/** Liczba zmian w katalogu roboczym jako tekst; `undefined`, gdy repo jest czyste. */
+/** The number of working directory changes as text; `undefined` when the repo is clean. */
 export function changesLabel(changes: number): string | undefined {
   return changes === 0 ? undefined : countLabel(changes, { one: "change", other: "changes" });
 }
 
-/** Liczba z co najmniej dwiema cyframi, jak numery na liście repo: 1 daje „01”, 12 daje „12”. */
+/** A number with at least two digits, like the numbers in the repo list: 1 gives "01", 12 gives "12". */
 export function twoDigits(n: number): string {
   return String(n).padStart(2, "0");
 }

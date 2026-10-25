@@ -8,6 +8,7 @@ import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { daemonAnswered, homeHasObject, homeModel } from "@/lib/home-model";
 import { listNeedsSettings, REPO_LIST_POLL_MS } from "@/lib/repo-status";
+import { RUNNING_MISE_POLL_MS } from "@/lib/run-state";
 import type { SessionSelection } from "@/lib/session-entries";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { HomeDetails } from "./HomeDetails.tsx";
@@ -15,20 +16,19 @@ import { HomeHoverCard } from "./HomeHoverCard.tsx";
 import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
 
 /**
- * Widok „Home” (ADR-33, §5.5): pierwszy ekran. Po lewej kolejka „Needs you” (sesje, które czekają albo mają błąd,
- * propozycje zadań, które czekają na decyzję, i repo, które nie są czyste), w środku pulpit 3D w układzie „Orbit”, po prawej szczegóły wybranego obiektu.
- * Klik wybiera, dwuklik albo przycisk w szczegółach przechodzi do sesji lub repo. Dane to te same odpowiedzi daemona
- * co w innych widokach; sesje i działające taski mise przychodzą na żywo z WebSocketu zdarzeń (ADR-36), a sesje
- * pobiera `App`, bo ich liczba jest też na pasku widoków. Poza płótnem widok bierze ze sceny
- * tylko `@trackwall/scene/model` (klucze i typy migawki), żeby three.js i Pawn zostały w leniwie ładowanym kawałku.
+ * The "Home" view (ADR-33, §5.5): the first screen. On the left the "Needs you" queue (sessions that are waiting or have
+ * an error, task proposals waiting for a decision, and repos that are not clean), in the middle the 3D dashboard in the
+ * "Orbit" layout, on the right the details of the selected object. A click selects; a double click or the button in the
+ * details goes to the session or repo. The data is the same daemon responses as in other views; sessions and running mise
+ * tasks come live from the events WebSocket (ADR-36), and `App` fetches the sessions, because their count is also on the
+ * view bar. Outside the canvas the view takes only `@trackwall/scene/model` from the scene (keys and snapshot types), so
+ * that three.js and Pawn stay in the lazily loaded chunk.
  */
 
 const HomeCanvas = lazy(() => import("./HomeCanvas.tsx").then((m) => ({ default: m.HomeCanvas })));
 
-/** Graf liczy się z kart wszystkich repo, a zmienia się z commitami, więc rzadko. */
+/** The graph is computed from the cards of all repos and changes with commits, so rarely. */
 const GRAPH_POLL_MS = 30_000;
-/** Działające taski mise przychodzą na żywo z WebSocketu zdarzeń; odpytywane tylko bez jego połączenia. */
-const RUNNING_POLL_MS = 3000;
 
 export function HomeView({
   conn,
@@ -40,7 +40,7 @@ export function HomeView({
   onOpenSettings,
 }: {
   conn: Connection;
-  /** Działające taski mise ze zdarzeń; `undefined` przez chwilę po zmianie połączenia, do tego czasu są odpytywane. */
+  /** Running mise tasks from the events; `undefined` for a moment after a connection change, and polled until then. */
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
   sessions: RemoteHandle<SessionList>;
   /** Go to the Sessions view with a session or a task proposal. */
@@ -59,7 +59,7 @@ export function HomeView({
   );
   const running = useRemote(
     useCallback(() => post(conn, miseApi.running, {}), [conn]),
-    { pollMs: RUNNING_POLL_MS, live: runningLive },
+    { pollMs: RUNNING_MISE_POLL_MS, live: runningLive },
   );
   const [selected, setSelected] = useState<HomeKey | null>(null);
   const [hovered, setHovered] = useState<HomeKey | null>(null);
@@ -79,9 +79,10 @@ export function HomeView({
       }),
     [repoList, sessionList, graph.data, running.data, daemonRunning],
   );
-  // Wybór obiektu, który zniknął z migawki, przepada: nie wraca sam, gdy repo albo sesja o tym kluczu pojawi się znowu.
+  // A selection of an object that vanished from the dashboard snapshot is dropped: it does not come back by itself when a repo
+  // or session with that key appears again.
   const current = selected && homeHasObject(model, selected) ? selected : null;
-  // Tylko przy wczytanych danych: po zmianie połączenia listy są chwilę puste, a obiekt wcale nie zniknął.
+  // Only with loaded data: after a connection change the lists are empty for a moment, and the object has not vanished at all.
   const loaded = repoList !== undefined && sessionList !== undefined;
   useEffect(() => {
     if (loaded && selected && !current) setSelected(null);

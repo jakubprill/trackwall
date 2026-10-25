@@ -13,25 +13,25 @@ function file(name: string, content: string): string {
   return path;
 }
 
-test("jsonVersion zwraca pole version z pliku JSON", () => {
+test("jsonVersion returns the version field from a JSON file", () => {
   expect(jsonVersion(file("ok.json", '{ "name": "x", "version": "1.2.3" }'))).toBe("1.2.3");
 });
 
-test("jsonVersion rzuca błąd z nazwą pliku, gdy version brakuje albo nie jest napisem", () => {
-  expect(() => jsonVersion(file("brak.json", '{ "name": "x" }'))).toThrow("brak.json");
-  expect(() => jsonVersion(file("liczba.json", '{ "version": 1 }'))).toThrow("liczba.json");
+test("jsonVersion throws an error naming the file when version is missing or not a string", () => {
+  expect(() => jsonVersion(file("missing.json", '{ "name": "x" }'))).toThrow("missing.json");
+  expect(() => jsonVersion(file("number.json", '{ "version": 1 }'))).toThrow("number.json");
 });
 
-test("cargoVersion czyta version z [package], nie z tabeli zależności", () => {
+test("cargoVersion reads version from [package], not from a dependency table", () => {
   const toml = '[dependencies.tauri]\nversion = "2"\n\n[package]\nname = "x"\nversion = "0.4.0"\n';
   expect(cargoVersion(file("Cargo.toml", toml))).toBe("0.4.0");
 });
 
-test("błąd składni pliku podaje jego ścieżkę", () => {
-  expect(() => jsonVersion(file("zepsuty.json", '{ "version": "1.0.0", }'))).toThrow("zepsuty.json");
-  expect(() => cargoVersion(file("zepsuty.toml", "[package\n"))).toThrow("zepsuty.toml");
+test("a syntax error in a file gives its path", () => {
+  expect(() => jsonVersion(file("broken.json", '{ "version": "1.0.0", }'))).toThrow("broken.json");
+  expect(() => cargoVersion(file("broken.toml", "[package\n"))).toThrow("broken.toml");
 });
 
-test("cargoVersion rzuca błąd, gdy [package] nie ma version", () => {
-  expect(() => cargoVersion(file("bez-wersji.toml", '[package]\nname = "x"\n'))).toThrow("bez-wersji.toml");
+test("cargoVersion throws an error when [package] has no version", () => {
+  expect(() => cargoVersion(file("no-version.toml", '[package]\nname = "x"\n'))).toThrow("no-version.toml");
 });

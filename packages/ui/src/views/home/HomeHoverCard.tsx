@@ -3,8 +3,8 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { HOME_SESSION_STATUS, type HomeStatus, homeDaemonStatus, homeRepoStatus } from "@/lib/home-model";
 
 /**
- * Podgląd obiektu pod kursorem: nazwa i stan w rogu sceny. Etykiety na scenie są celowo minimalne (ADR-33), więc
- * to tutaj widać, czym jest najechany obiekt, zanim się go wybierze.
+ * A preview of the object under the cursor: name and state in a corner of the scene. Labels on the scene are deliberately
+ * minimal (ADR-33), so this is where you see what the hovered object is before selecting it.
  */
 export function HomeHoverCard({ target, model }: { target: HomeKey; model: HomeModel }) {
   const preview = hoverPreview(target, model);

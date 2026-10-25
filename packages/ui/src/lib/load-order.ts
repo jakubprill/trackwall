@@ -1,30 +1,30 @@
 /**
- * Numeracja danych jednego widoku (`useRemote`): pytanie HTTP dostaje numer w chwili wysłania, migawka z WebSocketu
- * zdarzeń w chwili przyjścia (ADR-36), z jednego licznika. Na ekran trafiają tylko dane o numerze nie mniejszym niż
- * pokazane, więc odpowiedź na pytanie wysłane przed migawką nie cofa widoku do starszego stanu.
+ * Numbering of one view's data (`useRemote`): an HTTP request gets its number when sent, a snapshot from the events
+ * WebSocket when it arrives (ADR-36), from one counter. Only data with a number not lower than the one shown reaches the
+ * screen, so a response to a request sent before a snapshot does not take the view back to an older state.
  */
 export class LoadOrder {
   #issued = 0;
   #shown = 0;
 
-  /** Numer dla pytania, które właśnie idzie, albo migawki, która właśnie przyszła. */
+  /** The number for a request that is just going out, or a snapshot that just arrived. */
   next(): number {
     return ++this.#issued;
   }
 
-  /** Ile numerów wydano do tej chwili (`sentLoads`). */
+  /** How many numbers have been issued so far (`sentLoads`). */
   issued(): number {
     return this.#issued;
   }
 
-  /** Dane o tym numerze idą na ekran, gdy nie są starsze niż pokazane; wtedy to one są pokazane. */
+  /** Data with this number goes on screen when it is not older than what is shown; then it is what is shown. */
   show(loadNumber: number): boolean {
     if (this.isOutdated(loadNumber)) return false;
     this.#shown = loadNumber;
     return true;
   }
 
-  /** Dane albo błąd starsze niż pokazane dane nic już o nich nie mówią. */
+  /** Data or an error older than the shown data no longer says anything about it. */
   isOutdated(loadNumber: number): boolean {
     return loadNumber < this.#shown;
   }

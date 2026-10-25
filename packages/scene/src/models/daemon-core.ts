@@ -3,8 +3,8 @@ import type { ScenePalette } from "../palette.ts";
 import { box, cylinder, flatRing, type HomeVisual, light, outline, solid } from "./kit.ts";
 
 /**
- * Daemon w środku pierścieni (ADR-33): reaktor z pierścieniem slotów jak w HUD. Rdzeń świeci przez półprzezroczystą
- * kolumnę, gdy daemon działa, a gaśnie (zostaje sam korpus), gdy UI straciło z nim połączenie.
+ * The daemon in the centre of the rings (ADR-33): a reactor with a ring of slots like in a HUD. The core glows through a
+ * translucent column while the daemon runs, and goes dark (only the body stays) when the UI has lost its connection to it.
  */
 
 const SLOTS = 24;

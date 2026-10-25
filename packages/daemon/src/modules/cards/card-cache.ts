@@ -6,23 +6,24 @@ import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
 
 /**
- * Pamięć podręczna kart po hashu commita (ADR-25): karta zależy tylko od drzewa commita i wersji ekstraktorów, więc
- * policzona raz nie zmienia się. W pamięci daemona i w plikach `<katalog stanu>/cards/<commit>.json`, żeby restart
- * daemona nie czytał od nowa setek repo. Plik z inną wersją ekstraktorów albo uszkodzony liczy się jak brak. Karta,
- * której część zależała od czasu liczenia (ADR-38), zostaje tylko w pamięci, więc następny start daemona liczy ją od nowa.
+ * Repo card cache by commit hash (ADR-25): a card depends only on the commit's tree and the extractor version, so
+ * once computed it does not change. In daemon memory and in `<state directory>/cards/<commit>.json` files, so that a
+ * daemon restart does not read hundreds of repos again. A file with another extractor version or a damaged one counts as
+ * missing. A card that partly depended on the time of computing (ADR-38) stays only in memory, so the next daemon start
+ * computes it again.
  */
 
 /**
- * Wersja ekstraktorów zapisana z kartą. Zmiana tego, co ekstraktor wyciąga z tych samych plików, musi ją podbić,
- * bo inaczej stare karty z dysku zostaną przy starym wyniku.
+ * The extractor version saved with a card. A change to what an extractor takes from the same files must bump it,
+ * or old cards on disk keep the old result.
  */
 const EXTRACTOR_VERSION = 4;
-/** Tyle plików kart zostaje na dysku; starsze (po czasie zapisu) są usuwane przy starcie daemona. */
+/** This many card files stay on disk; older ones (by write time) are deleted at daemon start. */
 const MAX_FILES = 2000;
-/** Tyle kart trzyma pamięć daemona; starsze wypadają w kolejności dodania. */
+/** This many cards stay in daemon memory; older ones drop out in the order they were added. */
 const MAX_IN_MEMORY = 1000;
 
-/** Policzona karta; `persist: false`, gdy wynik zależał od chwili liczenia i nie powinien przetrwać restartu. */
+/** A computed card; `persist: false` when the result depended on the moment of computing and should not survive a restart. */
 export interface ComputedCard {
   card: RepoCard;
   persist: boolean;
@@ -34,7 +35,7 @@ export class CardCache {
   private readonly dir: string;
   private readonly log: (msg: string) => void;
   private readonly memory = new Map<string, RepoCard>();
-  /** Karty w trakcie liczenia po commicie: dwa pytania o ten sam commit (lista i karta naraz) czytają gita raz. */
+  /** Cards being computed, by commit: two requests for the same commit (the list and the card at once) read git once. */
   private readonly computing = new Map<string, Promise<RepoCard>>();
 
   constructor(dir: string, log: (msg: string) => void) {
@@ -43,9 +44,9 @@ export class CardCache {
   }
 
   /**
-   * Karta commita z pamięci albo z dysku, a bez niej policzona przez `compute` i zapamiętana (na dysku tylko z
-   * `persist`). Całe zadanie (odczyt dysku i liczenie) trafia do `computing` przed pierwszym `await`, więc równoczesne
-   * pytanie o ten sam commit dostaje to samo zadanie.
+   * The commit's card from memory or from disk, or without it computed by `compute` and stored (on disk only with
+   * `persist`). The whole job (disk read and computing) goes into `computing` before the first `await`, so a concurrent
+   * request for the same commit gets the same job.
    */
   getOrCompute(commit: string, compute: () => Promise<ComputedCard>): Promise<RepoCard> {
     const running = this.computing.get(commit);
@@ -65,7 +66,7 @@ export class CardCache {
   private async get(commit: string): Promise<RepoCard | undefined> {
     const cached = this.memory.get(commit);
     if (cached) return cached;
-    // Tylko pełny hash trafia do nazwy pliku.
+    // Only a full hash goes into the file name.
     if (!CommitHash.safeParse(commit).success) return undefined;
     let text: string;
     try {
@@ -83,7 +84,7 @@ export class CardCache {
     }
   }
 
-  /** Nieudany zapis na dysk trafia do logu: karta w pamięci działa dalej, najwyżej restart policzy ją od nowa. */
+  /** A failed write to disk goes to the log: the card in memory keeps working, at worst a restart computes it again. */
   private save(card: RepoCard): void {
     if (!CommitHash.safeParse(card.commit).success) return;
     try {
@@ -94,7 +95,7 @@ export class CardCache {
     }
   }
 
-  /** Usuwa najstarsze pliki ponad `MAX_FILES`; każdy nowy commit repo to nowy plik, więc bez tego katalog tylko rośnie. */
+  /** Deletes the oldest files beyond `MAX_FILES`; every new commit of a repo is a new file, so without this the directory only grows. */
   async prune(): Promise<void> {
     const names = (await readdir(this.dir).catch(() => [])).filter((n) => n.endsWith(".json"));
     if (names.length <= MAX_FILES) return;

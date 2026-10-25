@@ -56,9 +56,11 @@ beforeAll(async () => {
   facade = createFacade({
     home,
     openUrl: () => {},
+    openFolder: () => {},
     // Program, którego nie ma w PATH: lista tasków mise jest wtedy stanem `not_installed`, na każdej maszynie tak samo.
     miseCommand: ["trackwall-test-brak-mise"],
     copilotCommand: ["copilot"],
+    version: "0.0.0-test",
     hookCommand: () => ({ exec: "true", args: [] }),
     sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
     userEnv: async () => process.env,
@@ -81,7 +83,7 @@ beforeAll(async () => {
 afterAll(() => api.close());
 
 describe("serwer MCP przez Streamable HTTP", () => {
-  test("announces the repo, card, log, graph, code search, session and mise task tools, with only running and stopping a mise task as destructive", async () => {
+  test("announces the repo, card, log, graph, code search, session, mise task and service tools, with the ones that run, stop or call repo code as destructive", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual([
@@ -90,12 +92,14 @@ describe("serwer MCP przez Streamable HTTP", () => {
       "get_repo_card",
       "tail",
       "get_errors",
+      "get_test_results",
       "who_calls",
       "subgraph_for",
       "find_endpoint",
       "search_code",
       "list_sessions",
       "get_session",
+      "get_task_changes",
       "propose_task",
       "report_result",
       "wait_for_session",
@@ -103,14 +107,33 @@ describe("serwer MCP przez Streamable HTTP", () => {
       "stop_mise_task",
       "wait_for_mise_task",
       "list_running_mise_tasks",
+      "start_service",
+      "stop_service",
+      "list_services",
+      "call_endpoint",
     ]);
     // Każde narzędzie z kontraktu, który pokazuje UI, jest zarejestrowane w daemonie.
     expect(tools.map((t) => t.name)).toEqual(Object.values(mcpTools).map((t) => t.name));
     const writing = tools.filter((t) => t.annotations?.readOnlyHint !== true).map((t) => t.name);
-    expect(writing).toEqual(["propose_task", "report_result", "run_mise_task", "stop_mise_task"]);
+    expect(writing).toEqual([
+      "propose_task",
+      "report_result",
+      "run_mise_task",
+      "stop_mise_task",
+      "start_service",
+      "stop_service",
+      "call_endpoint",
+    ]);
     // A proposal and a summary only write text for a human; running a mise task executes repo code, and stopping one
-    // can kill a process the user started from the UI.
-    expect(tools.filter((t) => t.annotations?.destructiveHint !== false).map((t) => t.name)).toEqual(["run_mise_task", "stop_mise_task"]);
+    // can kill a process the user started from the UI; so do starting and stopping a service, and a request to a service
+    // can change its data.
+    expect(tools.filter((t) => t.annotations?.destructiveHint !== false).map((t) => t.name)).toEqual([
+      "run_mise_task",
+      "stop_mise_task",
+      "start_service",
+      "stop_service",
+      "call_endpoint",
+    ]);
     expect(client.getServerVersion()).toMatchObject({ name: "trackwall", version: "9.9.9" });
     await client.close();
   });

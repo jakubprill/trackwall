@@ -13,22 +13,25 @@ import { closingIndex, isIdent, isPunct, type Token } from "./java-tokens.ts";
 import { httpClients, type SpringModule } from "./spring-module.ts";
 
 /**
- * Klienci HTTP z kodu (§4.6, ADR-30): wywołania `WebClient`, `RestClient` i `RestTemplate` w jednym pliku i ich adres
- * bazowy (`baseUrl(…)`, `create(…)`, `rootUri(…)`, adres sklejony z pierwszym argumentem wywołania), także z pola
- * `@Value("${klucz}")`. Plik z jednym adresem bazowym daje jednego klienta z wywołaniami; z kilkoma adresami każdy
- * adres jest osobnym klientem, a wywołań, których nie da się przypisać, graf szuka po samych ścieżkach.
+ * HTTP clients from code (§4.6, ADR-30): calls of `WebClient`, `RestClient` and `RestTemplate` in one file and their
+ * base address (`baseUrl(…)`, `create(…)`, `rootUri(…)`, an address concatenated with the call's first argument), also
+ * from a `@Value("${key}")` field. A file with one base address gives one client with the calls; with several addresses
+ * each address is a separate client, and calls that cannot be assigned are matched by the graph on their paths alone.
  */
 
-/** Typy klientów po nazwie w kodzie, w kolejności sprawdzania. */
+/** Client types by their name in code, in checking order. */
 const CLIENT_TYPES: [string, HttpClientVia][] = [
   ["WebClient", "webclient"],
   ["RestClient", "rest-client"],
   ["RestTemplate", "rest-template"],
   ["RestTemplateBuilder", "rest-template"],
 ];
-/** Metody `WebClient` / `RestClient` wybierające metodę HTTP przed `.uri(…)`. */
+/** `WebClient` / `RestClient` methods that choose the HTTP method before `.uri(…)`. */
 const FLUENT_METHODS = new Set(["get", "post", "put", "patch", "delete", "head", "options"]);
-/** Metody `RestTemplate`: pierwszy argument to adres, a metoda HTTP wynika z nazwy (`null`: z argumentu `HttpMethod`). */
+/**
+ * `RestTemplate` methods: the first argument is the address, and the HTTP method follows from the name (`null`: from an
+ * `HttpMethod` argument).
+ */
 const TEMPLATE_METHODS: Record<string, HttpMethod | null> = {
   getForObject: "GET",
   getForEntity: "GET",
@@ -41,20 +44,20 @@ const TEMPLATE_METHODS: Record<string, HttpMethod | null> = {
   exchange: null,
   execute: null,
 };
-/** Metody ustawiające adres bazowy klienta. */
+/** Methods that set a client's base address. */
 const BASE_METHODS = new Set(["baseUrl", "rootUri", "create"]);
-/** Ile tokenów wstecz szukać metody HTTP w łańcuchu przed `.uri(…)`. */
+/** How many tokens back to look for the HTTP method in the chain before `.uri(…)`. */
 const MAX_CHAIN = 60;
 /**
- * Najdłuższa lista argumentów (w tokenach), którą ekstraktor rozkłada: adres z kilkoma sklejeniami to kilkadziesiąt
- * tokenów, a wywołania zagnieżdżone tysiące razy (plik z repo, §8) kopiowałyby resztę pliku przy każdym wywołaniu.
+ * The longest argument list (in tokens) the extractor takes apart: an address with a few concatenations is a few dozen
+ * tokens, and calls nested thousands of times (a file from the repo, §8) would copy the rest of the file at every call.
  */
 const MAX_ARGUMENT_TOKENS = 256;
-/** Najwięcej wywołań `.uri(…)` i metod `RestTemplate` rozkładanych w jednym pliku: dłuższa lista to nie kod aplikacji. */
+/** At most this many `.uri(…)` calls and `RestTemplate` methods taken apart in one file: a longer list is not app code. */
 const MAX_SCANNED_CALLS = 2000;
 
 interface FoundCall extends HttpCall {
-  /** Adres bazowy sklejony z wywołaniem (`baseUrl + "/orders"`, `"http://…/orders"`); `undefined`, gdy go nie ma. */
+  /** A base address concatenated with the call (`baseUrl + "/orders"`, `"http://…/orders"`); `undefined` when there is none. */
   base: string | undefined;
 }
 
@@ -63,7 +66,7 @@ export function imperativeClients(file: JavaFile, module: SpringModule, lookup: 
   if (via === undefined) return [];
   const ctx: ScanContext = { tokens: file.tokens, lookup, values: valueFields(file.tokens), path: file.path };
   const calls = findCalls(ctx);
-  // Wywołania po adresie bazowym; adres ustawiony tylko w budowniczym (`baseUrl(…)`) bez wywołań to klient bez wywołań.
+  // Calls by base address; an address set only in the builder (`baseUrl(…)`) without calls is a client without calls.
   const byBase = new Map<string | undefined, { line: number | null; calls: HttpCall[] }>();
   for (const base of findBases(ctx)) if (!byBase.has(base.text)) byBase.set(base.text, { line: base.line, calls: [] });
   for (const { base, ...call } of calls) {
@@ -71,7 +74,7 @@ export function imperativeClients(file: JavaFile, module: SpringModule, lookup: 
     group.calls.push(call);
     byBase.set(base, group);
   }
-  // Wywołania bez własnego adresu idą do jedynego adresu bazowego klasy.
+  // Calls without their own address go to the class's only base address.
   const unassigned = byBase.get(undefined);
   const [only, ...others] = [...byBase.keys()].filter((k) => k !== undefined);
   if (unassigned && only !== undefined && others.length === 0) {
@@ -93,12 +96,12 @@ export function imperativeClients(file: JavaFile, module: SpringModule, lookup: 
 interface ScanContext {
   tokens: readonly Token[];
   lookup: Lookup;
-  /** Pola i parametry z `@Value("${klucz}")` po nazwie: tekst z `${…}` do rozwinięcia w konfiguracji. */
+  /** Fields and parameters with `@Value("${key}")` by name: the text with `${…}` to expand in the configuration. */
   values: Map<string, string>;
   path: string;
 }
 
-/** Nazwy pól i parametrów oznaczonych `@Value("…")` z tekstem adnotacji. */
+/** Names of fields and parameters annotated with `@Value("…")`, with the annotation's text. */
 function valueFields(tokens: readonly Token[]): Map<string, string> {
   const fields = new Map<string, string>();
   for (let i = 0; i < tokens.length; i++) {
@@ -111,7 +114,7 @@ function valueFields(tokens: readonly Token[]): Map<string, string> {
   return fields;
 }
 
-/** Nazwa pola albo parametru za adnotacją: ostatni identyfikator przed `,` `)` `;` `=` (Java) albo przed `:` (Kotlin). */
+/** The name of the field or parameter after the annotation: the last identifier before `,` `)` `;` `=` (Java) or before `:` (Kotlin). */
 function boundName(tokens: readonly Token[], from: number): string | undefined {
   for (let j = from; j < from + 8 && j < tokens.length; j++) {
     const t = tokens[j];
@@ -133,7 +136,7 @@ function findBases(ctx: ScanContext): { text: string; line: number }[] {
   return bases;
 }
 
-/** Tekst adresu bazowego z argumentu: napis, stała albo pole `@Value`; `undefined` dla innego wyrażenia. */
+/** The base address text from an argument: a string, a constant or a `@Value` field; `undefined` for another expression. */
 function baseText(arg: readonly Token[], ctx: ScanContext): string | undefined {
   const chain = identChain(arg);
   const field = chain?.length === 1 ? ctx.values.get(chain[0] ?? "") : undefined;
@@ -143,8 +146,8 @@ function baseText(arg: readonly Token[], ctx: ScanContext): string | undefined {
 }
 
 /**
- * Argumenty wywołania z nawiasem `(` pod `open`. Z listy dłuższej niż `MAX_ARGUMENT_TOKENS` (np. ciało żądania
- * `Map.of(…)` w wywołaniu) tylko argumenty, które mieszczą się w limicie w całości: adres i metoda są na początku.
+ * The arguments of the call whose `(` bracket is at `open`. From a list longer than `MAX_ARGUMENT_TOKENS` (e.g. a request
+ * body `Map.of(…)` in the call) only the arguments that fit within the limit in full: the address and the method come first.
  */
 function argumentsAt(tokens: readonly Token[], open: number): Token[][] | undefined {
   const end = closingIndex(tokens, open);
@@ -172,7 +175,7 @@ function findCalls(ctx: ScanContext): FoundCall[] {
     const args = argumentsAt(ctx.tokens, i + 2);
     if (args === undefined) continue;
     const call = t.text === "uri" ? fluentCall(ctx, i, args) : templateCall(ctx, t.text, args);
-    // Bez zapytania: `?apiKey=…` w adresie z kodu nie trafia na kartę.
+    // Without the query: `?apiKey=…` in an address from code does not reach the card.
     if (call) calls.push({ ...call, path: joinHttpPath(call.path), evidence: { path: ctx.path, line: t.line } });
   }
   return calls;
@@ -180,7 +183,7 @@ function findCalls(ctx: ScanContext): FoundCall[] {
 
 type CallWithoutEvidence = Omit<FoundCall, "evidence">;
 
-/** `.get().uri("/orders/{id}", id)` albo `.uri(b -> b.path("/orders").build())`; metoda z łańcucha przed `.uri`. */
+/** `.get().uri("/orders/{id}", id)` or `.uri(b -> b.path("/orders").build())`; the method from the chain before `.uri`. */
 function fluentCall(ctx: ScanContext, dot: number, args: Token[][]): CallWithoutEvidence | undefined {
   const [first = []] = args;
   const pathCall = first.findIndex((t, j) => isIdent(t, "path") && isPunct(first[j + 1], "(") && isPunct(first[j - 1], "."));
@@ -189,7 +192,7 @@ function fluentCall(ctx: ScanContext, dot: number, args: Token[][]): CallWithout
   return url && { method: chainMethod(ctx.tokens, dot), ...url };
 }
 
-/** Metoda HTTP z łańcucha przed `.uri`: `.get()`, `.method(HttpMethod.POST)`; `null`, gdy łańcuch jej nie ma. */
+/** The HTTP method from the chain before `.uri`: `.get()`, `.method(HttpMethod.POST)`; `null` when the chain has none. */
 function chainMethod(tokens: readonly Token[], dot: number): HttpMethod | null {
   for (let j = dot - 1; j >= 0 && j > dot - MAX_CHAIN; j--) {
     const t = tokens[j];
@@ -209,16 +212,16 @@ function templateCall(ctx: ScanContext, name: string, args: Token[][]): CallWith
   return { method: TEMPLATE_METHODS[name] ?? (second ? httpMethodIn(second) : null), ...url };
 }
 
-/** Metoda HTTP z wyrażenia `HttpMethod.POST`; `null` dla innego. */
+/** The HTTP method from an `HttpMethod.POST` expression; `null` for another. */
 function httpMethodIn(tokens: readonly Token[]): HttpMethod | null {
   const name = tokens.findLast((t) => t.kind === "ident");
   return (name?.kind === "ident" && HttpMethodSchema.safeParse(name.text).data) || null;
 }
 
 /**
- * Ścieżka i adres bazowy z wyrażenia adresu: składniki `+` od pierwszego napisu albo stałej. Pole `@Value` albo
- * zmienna na początku to adres bazowy (pole `@Value` daje jego tekst), a składnik po napisie to `{}` (zmienna ścieżki).
- * `undefined`, gdy wyrażenie nie daje ścieżki od `/` ani adresu HTTP.
+ * Path and base address from an address expression: the `+` parts from the first string or constant. A `@Value` field
+ * or a variable at the start is the base address (a `@Value` field gives its text), and a part after a string is `{}` (a
+ * path variable). `undefined` when the expression gives neither a path from `/` nor an HTTP address.
  */
 function urlExpression(expr: readonly Token[], ctx: ScanContext): { path: string; base: string | undefined } | undefined {
   let text = "";
@@ -235,7 +238,7 @@ function urlExpression(expr: readonly Token[], ctx: ScanContext): { path: string
   return splitUrl(text, base);
 }
 
-/** Pełny adres dzieli się na adres bazowy (schemat, host, port) i ścieżkę; ścieżka od `/` zostaje z bazą z pola. */
+/** A full address splits into a base address (scheme, host, port) and a path; a path from `/` keeps the base from the field. */
 function splitUrl(text: string, base: string | undefined): { path: string; base: string | undefined } | undefined {
   if (parseHttpUrl(text)) {
     const slash = text.indexOf("/", text.indexOf("://") + 3);

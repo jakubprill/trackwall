@@ -13,3 +13,15 @@ ignoredBuiltDependencies:
 overrides:
   # The Kotlin grammar package has its author tool in `dependencies` instead of `devDependencies`.
   "@tree-sitter-grammars/tree-sitter-kotlin>npm-check-updates": "-"
+  # VitePress 1.6 asks for Vite 5, whose dev server has known vulnerabilities fixed only in 6.4.4+ (ADR-56).
+  "vitepress>vite": "6.4.5"
+  # VitePress 1.6 bundles markdown-it types from before 14.2; with 14.2 its markdown hook rejects markdown-it plugins.
+  # Pinned for the whole workspace, so that VitePress and vitepress-plugin-llms see the same types.
+  "@types/markdown-it": "14.1.2"
+
+packageExtensions:
+  # vitepress-plugin-llms types its Vite plugin against `vite` without declaring it, so it got whichever Vite pnpm
+  # hoisted (the desktop app's Vite 8 in CI); it runs inside VitePress, so it gets VitePress's Vite.
+  vitepress-plugin-llms:
+    dependencies:
+      vite: "6.4.5"

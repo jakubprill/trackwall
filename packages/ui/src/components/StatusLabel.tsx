@@ -3,8 +3,8 @@ import { STATUS_DOT_CLASS, statusTextClass } from "@/lib/status-tone";
 import { cn } from "@/lib/utils";
 
 /**
- * Świecąca kropka stanu z tekstem; kropka powtarza tekst, więc czytnik ekranu ją pomija. Stan bez tonu (np. zatrzymany
- * przez użytkownika) to wyciszony tekst bez kropki.
+ * A glowing state dot with text; the dot repeats the text, so a screen reader skips it. A state without a tone (for
+ * example stopped by the user) is muted text without a dot.
  */
 export function StatusLabel({ tone, label }: { tone?: StatusTone; label: string }) {
   if (!tone) return <span className={statusTextClass(tone)}>{label}</span>;

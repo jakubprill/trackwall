@@ -1,14 +1,14 @@
 @import "tailwindcss";
-/* Klasy komponentów Streamdown (README, ADR-35); Tailwind nie skanuje node_modules sam. */
+/* Streamdown component classes (README, ADR-35); Tailwind does not scan node_modules by itself. */
 @source "../node_modules/streamdown/dist/*.js";
 
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Jedyny motyw (ADR-16), ciemny HUD: czarne tło, chłodne szklane powierzchnie, cienkie linie i jeden akcent
- * (cyjan) dla tego, co aktywne. Kolory stanu (`success`, `warning`, `destructive`) mówią tylko o stanie.
- * `<html>` ma klasę `dark` tylko dla wariantów `dark:` w komponentach shadcn/ui.
- * `--background` ma swoją kopię jako ACRYLIC_TINT w apps/desktop/src-tauri/src/window_effect.rs.
+ * The only theme (ADR-16), a dark HUD: black background, cool glass surfaces, thin lines and one accent
+ * (cyan) for what is active. State colours (`success`, `warning`, `destructive`) speak only of state.
+ * `<html>` has the `dark` class only for the `dark:` variants in shadcn/ui components.
+ * `--background` has its copy as ACRYLIC_TINT in apps/desktop/src-tauri/src/window_effect.rs.
  */
 :root {
   --radius: 0.375rem;
@@ -34,10 +34,10 @@
 }
 
 /*
- * Okno Tauri z efektem tła (ADR-11, apps/desktop/src-tauri/src/window_effect.rs ustawia atrybut):
- * strona nie maluje tła, a powierzchnie są półprzezroczyste, żeby Mica, Acrylic albo vibrancy były
- * widoczne, a tekst nadal czytelny. Bez atrybutu (przeglądarka, brak efektu) wszystko jest nieprzezroczyste.
- * `--background` zostaje nieprzezroczyste, bo shadcn używa go też jako tła okien dialogowych.
+ * A Tauri window with a background effect (ADR-11, apps/desktop/src-tauri/src/window_effect.rs sets the attribute):
+ * the page paints no background, and surfaces are translucent, so that Mica, Acrylic or vibrancy are visible
+ * and text stays readable. Without the attribute (a browser, no effect) everything is opaque.
+ * `--background` stays opaque, because shadcn also uses it as the background of dialogs.
  */
 [data-window-effect] body {
   background-color: transparent;
@@ -49,7 +49,7 @@
   --border: oklch(0.85 0.04 220 / 14%);
 }
 
-/* Chromium (WebView2) wiąże to z systemowym „Ogranicz przezroczystość”; Acrylic na Windows 10 sam go nie respektuje. */
+/* Chromium (WebView2) ties this to the system "Reduce transparency"; Acrylic on Windows 10 does not respect it by itself. */
 @media (prefers-reduced-transparency: reduce) {
   [data-window-effect] body {
     background-color: var(--background);
@@ -62,7 +62,7 @@
 }
 
 @theme inline {
-  /* Segoe UI Variable przed `system-ui`, bo `system-ui` w WebView2 zawsze trafia w starsze Segoe UI. */
+  /* Segoe UI Variable before `system-ui`, because `system-ui` in WebView2 always hits the older Segoe UI. */
   --font-sans: "Segoe UI Variable Text", system-ui, sans-serif;
   --font-mono: "Cascadia Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
   --text-2xs: 0.6875rem;
@@ -70,6 +70,8 @@
   --tracking-hud: 0.12em;
   --spacing-activity-bar: 3rem;
   --spacing-sidebar: 18rem;
+  /* The pinned supervisor panel (ADR-58): wide enough for Copilot CLI's prompt and tables, about 80 terminal columns. */
+  --spacing-supervisor: 40rem;
   --shadow-glow-primary: 0 0 8px var(--primary);
   --shadow-glow-success: 0 0 6px var(--success);
   --shadow-glow-warning: 0 0 6px var(--warning);
@@ -106,7 +108,7 @@
   }
 }
 
-/* Etykieta HUD: krótki podpis sekcji albo pola, np. „REPO // 02”. */
+/* HUD label: a short caption of a section or field, for example "REPO // 02". */
 @utility hud-label {
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
@@ -116,7 +118,7 @@
   color: var(--muted-foreground);
 }
 
-/* Szklana powierzchnia (ADR-11, ADR-16): `Surface` i kafelki stanu repo. */
+/* Glass surface (ADR-11, ADR-16): `Surface` and the repo state tiles. */
 @utility surface {
   background-color: var(--card);
   color: var(--card-foreground);
@@ -124,13 +126,13 @@
   border-radius: var(--radius);
 }
 
-/* Delikatna siatka pod treścią; obraz, nie kolor tła, więc nie zasłania efektu okna (ADR-11). */
+/* A faint grid under the content; an image, not a background colour, so it does not cover the window effect (ADR-11). */
 @utility hud-grid {
   background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 32px 32px;
 }
 
-/* Znacznik aktywnego elementu listy: świecąca kreska przy lewej krawędzi. */
+/* The marker of the active list item: a glowing stroke at the left edge. */
 @utility hud-active-edge {
   position: relative;
   &::before {

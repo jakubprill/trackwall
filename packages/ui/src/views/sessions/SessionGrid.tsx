@@ -1,21 +1,27 @@
+import type { Task } from "@trackwall/protocol";
 import { Maximize2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { SessionTerminal } from "@/components/SessionTerminal";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
 import { IS_MAC } from "@/lib/platform";
-import { entryId, entrySession, type SessionEntry } from "@/lib/session-entries";
+import { entryId, entrySession, proposalsName, type SessionEntry, type SessionSelection } from "@/lib/session-entries";
 import { type GridPage, gridShape } from "@/lib/session-grid";
 import { sessionShortcutLabel } from "@/lib/session-shortcut";
-import { isLive, sessionStateLabel } from "@/lib/session-state";
+import { isLive, PROPOSAL_STATUS, sessionStateLabel } from "@/lib/session-state";
+import { useSessionClose } from "@/lib/use-session-close";
 import { cn } from "@/lib/utils";
-import { SessionTerminal } from "./SessionTerminal.tsx";
+import { ProposalTile } from "./ProposalTile.tsx";
+import { SessionCloseButton, SessionCloseConfirmation } from "./SessionClose.tsx";
 import { TaskLine } from "./TaskLine.tsx";
 
 /**
  * A page of the Sessions list as a grid of terminals (ADR-48). The selected tile has the accent ring and the keyboard,
  * a session that is waiting for you has the warning frame (also when selected). Clicking a tile or into its terminal
- * selects it; a task without a session and a task proposal (ADR-39) have no terminal, so their tile only leads to the full panel. Tiles appear once
+ * selects it; a task without a session has no terminal, so its tile only leads to the full panel, and task proposals
+ * (ADR-39) show their prompts with “Start task” and “Reject…” (ADR-55). A tile with a session also closes it
+ * (`useSessionClose`). Tiles appear once
  * the area is measured, so that no terminal reports a size to its session from a layout that is about to change.
  */
 export function SessionGrid({
@@ -24,12 +30,23 @@ export function SessionGrid({
   selected,
   onSelect,
   onOpenAlone,
+  tasks,
+  onChanged,
+  onNavigate,
+  currentSelection,
+  onSessionClosed,
 }: {
   conn: Connection;
   page: GridPage<SessionEntry>;
   selected: string;
   onSelect: (entry: SessionEntry) => void;
   onOpenAlone: (entry: SessionEntry) => void;
+  /** For a proposals tile: the tasks for the same-repo hint, the list reload and the selection after a decision. */
+  tasks: readonly Task[];
+  onChanged: () => void;
+  onNavigate: (selection: SessionSelection) => void;
+  currentSelection: () => SessionSelection;
+  onSessionClosed: (entry: SessionEntry) => void;
 }) {
   const area = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ width: number; height: number }>();
@@ -60,6 +77,11 @@ export function SessionGrid({
             selected={entryId(entry) === selected}
             onSelect={() => onSelect(entry)}
             onOpenAlone={() => onOpenAlone(entry)}
+            tasks={tasks}
+            onChanged={onChanged}
+            onNavigate={onNavigate}
+            currentSelection={currentSelection}
+            onSessionClosed={() => onSessionClosed(entry)}
           />
         ))}
     </div>
@@ -73,6 +95,11 @@ function SessionTile({
   selected,
   onSelect,
   onOpenAlone,
+  tasks,
+  onChanged,
+  onNavigate,
+  currentSelection,
+  onSessionClosed,
 }: {
   conn: Connection;
   entry: SessionEntry;
@@ -80,8 +107,14 @@ function SessionTile({
   selected: boolean;
   onSelect: () => void;
   onOpenAlone: () => void;
+  tasks: readonly Task[];
+  onChanged: () => void;
+  onNavigate: (selection: SessionSelection) => void;
+  currentSelection: () => SessionSelection;
+  onSessionClosed: () => void;
 }) {
   const session = entrySession(entry);
+  const close = useSessionClose(conn, session, onSessionClosed);
   const tile = useRef<HTMLDivElement>(null);
   // A selected tile without a terminal takes the keyboard itself, so that keys stop going to the terminal selected before.
   useEffect(() => {
@@ -116,14 +149,28 @@ function SessionTile({
         <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={onOpenAlone} aria-label="Open alone">
           <Maximize2 />
         </Button>
+        {session && <SessionCloseButton close={close} />}
       </header>
-      {session ? (
-        <SessionTerminal conn={conn} session={session.id} live={isLive(session)} focused={selected} />
-      ) : (
+      {session && (
+        // The question lies over the terminal instead of pushing it down, so that it does not resize the PTY mid-turn.
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <SessionCloseConfirmation close={close} className="absolute inset-x-0 top-0 z-10" />
+          <SessionTerminal conn={conn} session={session.id} live={isLive(session)} selected={selected} />
+        </div>
+      )}
+      {entry.kind === "proposals" && (
+        <ProposalTile
+          conn={conn}
+          group={entry}
+          tasks={tasks}
+          onChanged={onChanged}
+          onSelect={onNavigate}
+          currentSelection={currentSelection}
+        />
+      )}
+      {entry.kind === "task" && !session && (
         <div className="text-muted-foreground flex flex-1 items-center justify-center p-4 text-center text-xs">
-          {entry.kind === "proposal"
-            ? "This task proposal waits for your decision. Open it alone to read its prompt, then start or reject it."
-            : "This task has no session. Open it alone to resume it or to see its changes."}
+          This task has no session. Open it alone to resume it or to see its changes.
         </div>
       )}
     </div>
@@ -132,16 +179,14 @@ function SessionTile({
 
 /** The tile header after its number: repo, state and what the entry is about (task, proposal or window title). */
 function TileTitle({ entry }: { entry: SessionEntry }) {
-  if (entry.kind === "proposal")
+  if (entry.kind === "proposals")
     return (
       <>
-        <span className="min-w-0 truncate text-xs font-medium">{entry.proposal.repo}</span>
+        <span className="min-w-0 truncate text-xs font-medium">{proposalsName(entry.proposals)}</span>
         <span className="shrink-0 text-xs">
-          <StatusLabel tone="warning" label="waiting for your decision" />
+          <StatusLabel {...PROPOSAL_STATUS} />
         </span>
-        <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs" title={entry.proposal.title}>
-          {entry.proposal.title}
-        </span>
+        <span className="min-w-0 flex-1" />
       </>
     );
   const session = entrySession(entry);

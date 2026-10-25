@@ -2,8 +2,9 @@ import { useState } from "react";
 import { errorMessage } from "./api.ts";
 
 /**
- * Akcja wywołana przyciskiem: blokada na czas żądania, błąd pod przyciskiem, `onDone` z wynikiem po sukcesie (np.
- * odświeżenie). Argumenty `run` trafiają do `action`, gdy kilka przycisków wysyła to samo żądanie z innymi polami.
+ * An action triggered by a button: locked for the duration of the request, the error under the button, `onDone` with
+ * the result after success (for example a refresh). The arguments of `run` go to `action` when several buttons send the
+ * same request with different fields.
  */
 export function useAction<A extends unknown[], T>(action: (...args: A) => Promise<T>, onDone: (result: T) => void) {
   const [pending, setPending] = useState(false);

@@ -1,5 +1,5 @@
 # Shared job setup: pnpm (version from packageManager), Node, Bun and dependencies.
-# One place for ci.yml and release.yml; actions pinned to a SHA as in the workflows.
+# One place for ci.yml, release.yml and pages.yml; actions pinned to a SHA as in the workflows.
 name: Set up Node, pnpm and Bun
 description: pnpm, Node and Bun at the versions from the workflow (the same as in mise.toml), plus pnpm install
 inputs:

@@ -12,7 +12,7 @@ import { collectErrors } from "./log-errors.ts";
 import { LogFile, logFilePath, sourceParts } from "./log-file.ts";
 import { logLevel } from "./log-level.ts";
 import { RunOutput } from "./run-output.ts";
-import { secretValues } from "./secret-mask.ts";
+import { maskSecrets, secretValues } from "./secret-mask.ts";
 
 /**
  * Moduł `logs` (§4.2, ADR-28): linie wyjścia procesów jako rekordy z jednym globalnym `seq` dla wszystkich źródeł.
@@ -72,6 +72,16 @@ export class Logs {
     return new RunOutput(secretValues(env), (stream, msg) => this.append(log, source, { runId, stream, msg }));
   }
 
+  /** A cursor before every record of this daemon run: `tail` from it pages from the oldest record still buffered. */
+  runStartCursor(): number {
+    return this.baseSeq;
+  }
+
+  /** Text from a process (an HTTP response of a service, ADR-45) masked the same way as its log lines. */
+  mask(text: string, env: NodeJS.ProcessEnv): string {
+    return maskSecrets(text, secretValues(env));
+  }
+
   /** Wyjście tylko do ostatnich linii stanu, zamaskowane tak samo, ale bez logu (ekran PTY sesji zadania). */
   lastLinesOnly(env: NodeJS.ProcessEnv): RunOutput {
     return new RunOutput(secretValues(env), () => {});
@@ -94,16 +104,18 @@ export class Logs {
   }
 
   /**
-   * Errors from the buffers of the sources matching `repo` and `miseTask` (ADR-42), most recent first. The cursor
-   * covers all sources at once because `seq` is global; a cursor from another daemon run gives errors as without one.
+   * Errors from the buffers of the sources matching `repo`, `task` and `miseTask` (ADR-42, ADR-59), most recent first.
+   * The cursor covers all sources at once because `seq` is global; a cursor from another daemon run gives errors as
+   * without one.
    */
-  errors({ repo, miseTask, minLevel, sinceSeq, limit }: LogErrorsRequest): LogErrors {
+  errors({ repo, task, miseTask, minLevel, sinceSeq, limit }: LogErrorsRequest): LogErrors {
     const sources = [...this.sources]
       .map(([key, log]) => ({ key, ...log }))
       .filter(
         ({ source }) =>
           (repo === undefined || source.repo === repo) &&
-          (miseTask === undefined || (source.kind === "mise-task" && source.miseTask === miseTask)),
+          (task === undefined || (source.kind === "task-mise-task" ? source.task === task : task === null)) &&
+          (miseTask === undefined || (source.kind !== "mise-install" && source.miseTask === miseTask)),
       );
     const fromOtherRun = this.fromOtherRun(sinceSeq);
     const cursor = fromOtherRun ? undefined : sinceSeq;

@@ -5,17 +5,17 @@ import type { RepoKind } from "../repo-kind.ts";
 import { box, cylinder, flatRing, type HomeVisual, light, outline, solid } from "./kit.ts";
 
 /**
- * Model repo (ADR-33): płyta z paskiem stanu, na niej bryła rodzaju z warstwy, obok słupki liczby zmian albo
- * commitów do pobrania i pierścień z iskrą, gdy działa task mise. Wszystko, co trzeba
- * wiedzieć bez czytania, jest kolorem albo kształtem; nazwa repo jest w etykiecie i karcie podglądu.
+ * Repo model (ADR-33): a slab with a state stripe, on it the solid for its kind (from the layer), next to it bars for the
+ * number of changes or commits to pull, and a ring with a spark while a mise task runs. Everything you need to know
+ * without reading is colour or shape; the repo name is in the label and the preview card.
  */
 
-/** Najwięcej słupków obok płyty; więcej zmian i tak znaczy „dużo”. */
+/** Maximum number of bars next to the slab; more changes mean "a lot" anyway. */
 const MAX_COUNT_BARS = 5;
-/** Przód modelu: +z w układzie modelu, scena obraca go do środka pierścienia. */
+/** Front of the model: +z in model space; the scene turns it to the centre of the ring. */
 const FRONT_Z = 0.345;
 
-/** Wszystko, od czego zależy wygląd repo; scena buduje model od nowa tylko przy zmianie tej wartości. */
+/** Everything a repo's look depends on; the scene rebuilds the model only when this value changes. */
 export interface RepoLook {
   kind: RepoKind;
   state: HomeRepoState;
@@ -42,7 +42,7 @@ export function repoModel(look: RepoLook, palette: ScenePalette): HomeVisual {
     group.add(visual.object);
     if (visual.animate) animations.push(visual.animate);
   };
-  // Jeden kolor stanu dla paska, bryły i jej świateł: czyste repo jest spokojne, reszta mówi stanem.
+  // One state colour for the stripe, the solid and its lights: a clean repo is calm, the rest shows its state.
   const color = repoStateColor(look.state, palette);
   add(plate(color, palette));
   add(BODIES[look.kind](look, color, palette));
@@ -64,7 +64,7 @@ function plate(color: string, palette: ScenePalette): HomeVisual {
   return { object: group };
 }
 
-/** Słupki są tylko przy `changed` i `behind`, więc mają kolor stanu repo. */
+/** Bars exist only for `changed` and `behind`, so they have the repo state colour. */
 function countBars(look: RepoLook, color: string): HomeVisual {
   const group = new Group();
   for (let i = 0; i < look.bars; i++) {
@@ -87,7 +87,7 @@ function runningHalo(palette: ScenePalette): HomeVisual {
   };
 }
 
-/** Wejście: terminal, czyli ekran na stojaku, świecący kolorem stanu; niedostępne repo migocze. */
+/** Entry: a terminal, that is a screen on a stand glowing in the state colour; an unavailable repo flickers. */
 const entry: Part = (look, color, palette) => {
   const group = new Group();
   const tilt = -0.12;
@@ -113,7 +113,7 @@ const entry: Part = (look, color, palette) => {
   };
 };
 
-/** Brama: walec z anteną i pierścieniem w kolorze stanu. */
+/** Gateway: a cylinder with an antenna and a ring in the state colour. */
 const gateway: Part = (_look, color, palette) => {
   const group = new Group();
   const hub = cylinder([0.22, 0.26], 0.34, 8, solid(palette.body), [0, 0.25, 0]);
@@ -135,7 +135,7 @@ const gateway: Part = (_look, color, palette) => {
   };
 };
 
-/** Backend: szafa z diodami; górna dioda to stan, druga mruga, gdy działa task mise, dwie dolne są ozdobą. */
+/** Backend: a rack with LEDs; the top LED is the state, the second blinks while a mise task runs, the bottom two are decoration. */
 const backend: Part = (look, color, palette) => {
   const group = new Group();
   const body = box([0.56, 0.62, 0.44], solid(palette.body), [0, 0.39, 0]);
@@ -153,7 +153,7 @@ const backend: Part = (look, color, palette) => {
   };
 };
 
-/** Biblioteka: przezroczysta skrzynka z obracającym się rdzeniem. */
+/** Library: a transparent box with a spinning core. */
 const library: Part = (_look, color, palette) => {
   const group = new Group();
   const shell = box([0.46, 0.46, 0.46], solid(palette.body, 0, 0.35), [0, 0.31, 0]);

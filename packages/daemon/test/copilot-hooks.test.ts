@@ -2,16 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { hookRecord } from "../src/modules/agents/copilot-hook-record.ts";
 import { stateFromHook } from "../src/modules/agents/copilot-hooks.ts";
 
-describe("rekord hooka Copilot CLI", () => {
-  test("zapisuje tylko pola z listy, a o reszcie same nazwy", () => {
+describe("Copilot CLI hook record", () => {
+  test("stores only the listed fields, and of the rest only the names", () => {
     const stdin = JSON.stringify({
       sessionId: "s1",
       timestamp: 1,
       cwd: "/repo",
       toolName: "bash",
       toolArgs: { command: "cat .env" },
-      toolResult: { resultType: "success", textResultForLlm: "HASLO=tajne" },
-      somethingNew: "nieznane pole",
+      toolResult: { resultType: "success", textResultForLlm: "PASSWORD=secret" },
+      somethingNew: "unknown field",
     });
 
     expect(hookRecord("postToolUse", stdin, 1000)).toEqual({
@@ -22,22 +22,22 @@ describe("rekord hooka Copilot CLI", () => {
     });
   });
 
-  test("pole z listy, które nie jest napisem ani liczbą, nie jest zapisywane, a długi tekst jest przycinany", () => {
-    const record = hookRecord("notification", JSON.stringify({ message: "x".repeat(2000), title: { nested: "HASLO" } }), 0);
+  test("a listed field that is neither a string nor a number is not stored, and long text is truncated", () => {
+    const record = hookRecord("notification", JSON.stringify({ message: "x".repeat(2000), title: { nested: "PASSWORD" } }), 0);
 
     expect(record?.payload.message).toHaveLength(200);
     expect(record?.payload.title).toBeUndefined();
     expect(record?.omitted).toEqual(["title"]);
   });
 
-  test("stdin, który nie jest obiektem JSON, nie daje rekordu", () => {
-    expect(hookRecord("agentStop", "nie json", 0)).toBeUndefined();
+  test("stdin that is not a JSON object gives no record", () => {
+    expect(hookRecord("agentStop", "not json", 0)).toBeUndefined();
     expect(hookRecord("agentStop", "[1, 2]", 0)).toBeUndefined();
   });
 });
 
-describe("stan zadania z hooków Copilot CLI", () => {
-  test("zdarzenia sesji i tury dają stan z wysoką albo średnią pewnością", () => {
+describe("task state from Copilot CLI hooks", () => {
+  test("session and turn events give a state with high or medium confidence", () => {
     expect(stateFromHook({ event: "sessionStart", receivedAt: 0, payload: {}, omitted: [] })).toMatchObject({
       state: "Input",
       confidence: "medium",
@@ -51,7 +51,7 @@ describe("stan zadania z hooków Copilot CLI", () => {
     expect(stateFromHook({ event: "errorOccurred", receivedAt: 0, payload: {}, omitted: [] })?.state).toBe("Error");
   });
 
-  test("koniec sesji to Done albo Error po powodzie i kończy sesję", () => {
+  test("the end of a session is Done or Error by reason and ends the session", () => {
     expect(stateFromHook({ event: "sessionEnd", receivedAt: 0, payload: { reason: "user_exit" }, omitted: [] })).toEqual({
       state: "Done",
       source: "hook",
@@ -64,12 +64,12 @@ describe("stan zadania z hooków Copilot CLI", () => {
     expect(stateFromHook({ event: "sessionEnd", receivedAt: 0, payload: { reason: "timeout" }, omitted: [] })?.state).toBe("Error");
   });
 
-  test("powiadomienie z rodzajem jest klasyfikowane po rodzaju, nie po treści; prośba o zgodę potwierdzona w prawdziwej sesji ma wysoką pewność", () => {
+  test("a notification with a kind is classified by kind, not by content; an approval request confirmed in a real session has high confidence", () => {
     expect(
       stateFromHook({
         event: "notification",
         receivedAt: 0,
-        payload: { notification_type: "permission_prompt", title: "Permission needed", message: "Path permission needed: <ścieżka>" },
+        payload: { notification_type: "permission_prompt", title: "Permission needed", message: "Path permission needed: <path>" },
         omitted: [],
       }),
     ).toEqual({ state: "Approval", source: "hook", confidence: "high", reason: "hook notification permission_prompt" });
@@ -81,7 +81,7 @@ describe("stan zadania z hooków Copilot CLI", () => {
     });
   });
 
-  test("powiadomienia o agentach i komendach w tle oraz nieznane rodzaje nie zmieniają stanu", () => {
+  test("notifications about background agents and commands and unknown kinds do not change the state", () => {
     expect(stateFromHook({ event: "notification", receivedAt: 0, payload: { type: "agent_idle" }, omitted: [] })).toBeUndefined();
     expect(stateFromHook({ event: "notification", receivedAt: 0, payload: { type: "agent_completed" }, omitted: [] })).toBeUndefined();
     expect(
@@ -97,7 +97,7 @@ describe("stan zadania z hooków Copilot CLI", () => {
     ).toBeUndefined();
   });
 
-  test("powiadomienie bez rodzaju jest klasyfikowane po całych słowach treści z niską pewnością", () => {
+  test("a notification without a kind is classified by whole words of its content with low confidence", () => {
     expect(stateFromHook({ event: "notification", receivedAt: 0, payload: { message: "Allow bash to run tests?" }, omitted: [] })).toEqual({
       state: "Approval",
       source: "hook",

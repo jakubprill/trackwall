@@ -1,0 +1,36 @@
+---
+title: Connection graph
+description: See which repo uses which, through shared packages and HTTP calls, with the line that proves it.
+---
+
+# Connection graph
+
+See which repo uses which, through shared packages and HTTP calls, with the line that proves it.
+
+![The connection graph of twenty repos: who calls whom over HTTP and who uses the shared libraries](/screenshots/overview.png)
+
+## What you get
+
+- A map of your projects folder: which repo uses another repo's package and which one calls another repo's endpoints.
+- Frontends on the left, gateways and backends in the middle, libraries on the right.
+- For every connection, how sure Trackwall is and the file and line that prove it.
+- A place to add the connections Trackwall cannot see.
+
+## How it works
+
+Open "Overview" and Trackwall draws your repos as a graph, built from their [repo cards](/features/repo-card). A line goes from a repo that uses a package to the repo that builds it (Maven, Gradle or npm), and from a repo whose HTTP client calls another repo's app or endpoints, matched by app name, host, `localhost` port or path.
+
+Every connection has a confidence: certain, almost certain, likely or possible. Click a repo and the panel on the right lists what it uses and who uses it, each with its evidence.
+
+Some connections do not show in the code, for example an address that only exists in your deployment. Add those by hand in `~/.trackwall/workspace.yaml`, and they appear in the graph like the others.
+
+## Use it
+
+1. Open "Overview" (Ctrl+4, ⌘4 on macOS).
+2. Click a repo to see what it uses and who uses it.
+3. Add a missing connection under `graph` in `~/.trackwall/workspace.yaml` (below).
+
+## Good to know
+
+- Under `graph`, `packages` assigns a package to a repo (`com.example:orders-client: orders-api`), `apps` assigns an app name or a host (`orders.internal.example.com: orders-api`), and `edges` adds a connection with a note (`- { from: shop-web, to: orders-bff, note: HTTP /api/orders }`). A repo is named by its identifier or its `host/path` address.
+- Agents read the same graph through the [MCP server](/features/mcp) (`who_calls`, `subgraph_for`, `find_endpoint`).

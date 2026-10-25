@@ -5,12 +5,12 @@ import { CloneJob, CloneRequest, HostRepos, RepoHosts } from "./repo-hosts.ts";
 import { SyncRun } from "./sync.ts";
 
 /**
- * Kontrakt modułu `workspace` (§4.5, §6): repo z folderu z projektami i przeglądanie ich zawartości z ostatniego commita.
- * Każda akcja to `POST /api/workspace/<akcja>`; `workspaceApi` trzyma ścieżkę, schemat ciała i schemat wyniku razem,
- * więc daemon i UI nie mogą ich sparować inaczej.
+ * Contract of the `workspace` module (§4.5, §6): the repos of the projects folder and browsing their content from the last
+ * commit. Every action is `POST /api/workspace/<action>`; `workspaceApi` keeps the path, the body schema and the result
+ * schema together, so the daemon and the UI cannot pair them differently.
  */
 
-/** Slug repo z nazwy jego katalogu w folderze z projektami, małe litery. */
+/** A repo's slug from its directory name in the projects folder, lowercase. */
 export const RepoId = z
   .string()
   .min(1)
@@ -19,8 +19,8 @@ export const RepoId = z
 export type RepoId = z.infer<typeof RepoId>;
 
 /**
- * Ścieżka w drzewie commita, z `/` jak w gicie, bez `.` i `..`; pusta znaczy korzeń. Nie dotyka systemu plików
- * (ADR-14), więc `\` jest zwykłym znakiem nazwy. Bez znaków sterujących, bo daemon podaje ją gitowi liniami.
+ * A path in the commit's tree, with `/` as in git, without `.` and `..`; empty means the root. It does not touch the file
+ * system (ADR-14), so `\` is an ordinary name character. Without control characters, because the daemon passes it to git line by line.
  */
 export const RepoPath = z
   .string()
@@ -29,43 +29,43 @@ export const RepoPath = z
   .refine((p) => [...p].every((c) => c >= " "), "repo path: no control characters");
 export type RepoPath = z.infer<typeof RepoPath>;
 
-/** Pełny hash commita, SHA-1 albo SHA-256; tylko taki daemon podaje gitowi jako rewizję i wpisuje w nazwy plików. */
+/** A full commit hash, SHA-1 or SHA-256; the only kind the daemon passes to git as a revision and writes into file names. */
 export const CommitHash = z.string().regex(/^[0-9a-f]{40}([0-9a-f]{24})?$/, "full commit hash");
 
 export const Commit = z.object({
   hash: z.string(),
   subject: z.string(),
   author: z.string(),
-  /** ISO 8601, czas autora. */
+  /** ISO 8601, author time. */
   date: z.string(),
 });
 export type Commit = z.infer<typeof Commit>;
 
-/** Stan repo, który git zwrócił. */
+/** The repo status git returned. */
 export const RepoStatusOk = z.object({
   kind: z.literal("ok"),
-  /** `null` przy odłączonym HEAD. */
+  /** `null` on a detached HEAD. */
   branch: z.string().nullable(),
-  /** `null` w repo bez commitów. */
+  /** `null` in a repo without commits. */
   head: Commit.nullable(),
-  /** Liczba zmienionych i nieśledzonych plików w katalogu roboczym. */
+  /** The number of changed and untracked files in the working directory. */
   changes: z.number().int().nonnegative(),
-  /** Z `changes` te nieśledzone: nowe pliki, których git jeszcze nie zna. */
+  /** The untracked ones out of `changes`: new files git does not know yet. */
   untracked: z.number().int().nonnegative(),
-  /** Gałąź śledzona z licznikami; `null`, gdy gałąź jej nie ma albo zniknęła na zdalnym. */
+  /** The tracking branch with counters; `null` when the branch has none or it disappeared on the remote. */
   upstream: z.object({ name: z.string(), ahead: z.number().int(), behind: z.number().int() }).nullable(),
 });
 export type RepoStatusOk = z.infer<typeof RepoStatusOk>;
 
-/** Zmienione śledzone pliki: `changes` bez nowych; jedno miejsce reguły dla stanu repo i wyniku synchronizacji. */
+/** Changed tracked files: `changes` without the new ones; one place for this rule for the repo status and the sync result. */
 export function trackedChanges(status: Pick<RepoStatusOk, "changes" | "untracked">): number {
   return status.changes - status.untracked;
 }
 
-/** Stan repo zaobserwowany w gicie przy każdym zapytaniu; nigdy nie jest zapisywany. */
+/** The repo status observed in git on every request; it is never saved. */
 export const RepoStatus = z.discriminatedUnion("kind", [
   RepoStatusOk,
-  /** Katalog ma `.git`, ale git go nie czyta (uszkodzone repo, brak uprawnień, brak `git` w `PATH`). */
+  /** The directory has `.git`, but git cannot read it (a damaged repo, no permissions, no `git` in `PATH`). */
   z.object({ kind: z.literal("unavailable"), message: z.string() }),
 ]);
 export type RepoStatus = z.infer<typeof RepoStatus>;
@@ -74,9 +74,9 @@ export const Repo = z.object({
   id: RepoId,
   path: z.string(),
   /**
-   * Adres repo zdalnego bez schematu, użytkownika, portu i `.git`, np. `gitlab.example.com/grupa/projekt`
-   * (ADR-21): to samo repo pod inną nazwą katalogu albo sklonowane przez SSH i HTTPS ma ten sam adres. Z `origin`,
-   * a bez niego z jedynego remote; `null`, gdy remote nie ma, jest ich kilka bez `origin` albo to ścieżka lokalna.
+   * The remote address without scheme, user, port and `.git`, for example `gitlab.example.com/group/project`
+   * (ADR-21): the same repo under another directory name, or cloned over SSH and HTTPS, has the same address. From `origin`,
+   * and without it from the only remote; `null` when there is no remote, there are several without `origin`, or it is a local path.
    */
   remote: z.string().nullable(),
   status: RepoStatus,
@@ -84,31 +84,31 @@ export const Repo = z.object({
 export type Repo = z.infer<typeof Repo>;
 
 /**
- * Pełna ścieżka folderu z projektami (ADR-18); `null`, dopóki użytkownik go nie ustawi (w ustawieniach albo
- * w `workspace.yaml`), a wtedy lista repo jest pusta.
+ * The full path of the projects folder (ADR-18); `null` until the user sets it (in settings or in `workspace.yaml`), and
+ * then the repo list is empty.
  */
 const ProjectsDir = z.string().nullable();
 
 export const RepoList = z.object({
   projectsDir: ProjectsDir,
-  /** Posortowane po nazwie katalogu. */
+  /** Sorted by directory name. */
   repos: z.array(Repo),
 });
 export type RepoList = z.infer<typeof RepoList>;
 
 export const WorkspaceSettings = z.object({
   projectsDir: ProjectsDir,
-  /** Pełna ścieżka `workspace.yaml`, żeby użytkownik wiedział, który plik edytować ręcznie. */
+  /** The full path of `workspace.yaml`, so that the user knows which file to edit by hand. */
   configFile: z.string(),
 });
 export type WorkspaceSettings = z.infer<typeof WorkspaceSettings>;
 
 export const TreeEntry = z.object({
   name: z.string(),
-  /** Ścieżka od korzenia repo, taka, jaką zwrócił git; podawana z powrotem w `tree` i `file`. */
+  /** The path from the repo root, as git returned it; passed back in `tree` and `file`. */
   path: z.string(),
   kind: z.enum(["dir", "file", "submodule"]),
-  /** Rozmiar w bajtach, tylko dla plików. */
+  /** Size in bytes, only for files. */
   size: z.number().int().nonnegative().optional(),
 });
 export type TreeEntry = z.infer<typeof TreeEntry>;
@@ -120,26 +120,45 @@ export const FileContent = z.discriminatedUnion("kind", [
 export type FileContent = z.infer<typeof FileContent>;
 
 /**
- * Adres z README, który UI może otworzyć w przeglądarce systemu (ADR-35): tylko strona, nigdy `file:`, `mailto:`
- * ani własny protokół aplikacji. `normalize` oddaje postać kanoniczną z kodowaniem procentowym, więc do systemu
- * nie trafia spacja, cudzysłów, `\` ani znak sterujący z treści repo.
+ * An address from a README that the UI may open in the system browser (ADR-35): only a web page, never `file:`, `mailto:`
+ * or an app's own protocol. `normalize` gives the canonical form with percent-encoding, so no space, quote, `\` or control
+ * character from the repo's content reaches the system.
  */
 export const ExternalLink = z.url({ protocol: /^https?$/, normalize: true }).max(2048);
 
 export const RepoOverview = z.object({
-  /** `format` mówi, czy README jest Markdownem (ADR-35); `.txt`, `.rst` i `.adoc` są tekstem. */
+  /** `format` says whether the README is Markdown (ADR-35); `.txt`, `.rst` and `.adoc` are text. */
   readme: z.object({ path: z.string(), text: z.string(), truncated: z.boolean(), format: z.enum(["markdown", "text"]) }).nullable(),
-  /** Ostatnie commity, od najnowszego; puste w repo bez commitów. */
+  /** The latest commits, newest first; empty in a repo without commits. */
   commits: z.array(Commit),
 });
 export type RepoOverview = z.infer<typeof RepoOverview>;
 
 export const RemoteRepoList = z.object({
   projectsDir: ProjectsDir,
-  /** Po jednym wpisie na hosting z ustawień, w ich kolejności. */
+  /** One entry per repo host from the settings, in their order. */
   hosts: z.array(HostRepos),
 });
 export type RemoteRepoList = z.infer<typeof RemoteRepoList>;
+
+/**
+ * What a folder dropped on the window means for the repo list (ADR-51): a listed repo (or a folder inside one), the
+ * projects folder itself, a git repo somewhere else, a folder with repos directly inside it, which can become the
+ * projects folder, a repo whose name starts with a dot, a folder without any repos, or a file. Repo counts use the
+ * same rule as the list (ADR-18): direct subfolders with `.git`, without those starting with a dot.
+ */
+export const DroppedFolder = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("listed-repo"), repo: RepoId }),
+  z.object({ kind: z.literal("projects-dir") }),
+  /** `parent` is the folder that holds the repo; `parentRepos` counts the repos in it. */
+  z.object({ kind: z.literal("repo-elsewhere"), path: z.string(), parent: z.string(), parentRepos: z.number().int().nonnegative() }),
+  z.object({ kind: z.literal("folder-with-repos"), path: z.string(), repos: z.number().int().positive() }),
+  /** A git repo whose name starts with a dot, which the list skips wherever it is (ADR-18). */
+  z.object({ kind: z.literal("hidden-repo"), path: z.string() }),
+  z.object({ kind: z.literal("no-repos"), path: z.string() }),
+  z.object({ kind: z.literal("file"), path: z.string() }),
+]);
+export type DroppedFolder = z.infer<typeof DroppedFolder>;
 
 function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
   return { path: `/api/workspace/${action}`, request, data };
@@ -150,7 +169,7 @@ const RepoRequest = z.object({ repo: RepoId }).strict();
 export const workspaceApi = {
   list: endpoint("list", z.object({}).strict(), RepoList),
   settings: endpoint("settings", z.object({}).strict(), WorkspaceSettings),
-  /** `path` to pełna ścieżka istniejącego katalogu na dysku użytkownika; zapisywana w `workspace.yaml`. */
+  /** `path` is the full path of an existing directory on the user's disk; saved in `workspace.yaml`. */
   setProjectsDir: endpoint("set-projects-dir", z.object({ path: z.string().min(1).max(4096) }).strict(), WorkspaceSettings),
   overview: endpoint("overview", RepoRequest, RepoOverview),
   tree: endpoint("tree", z.object({ repo: RepoId, path: RepoPath }).strict(), z.array(TreeEntry)),
@@ -160,36 +179,40 @@ export const workspaceApi = {
     FileContent,
   ),
   /**
-   * Zmiany katalogu roboczego względem HEAD (ADR-34): pliki i diff, z nowymi plikami, bez ignorowanych. Indeks
-   * użytkownika zostaje nietknięty. W repo bez commitów względem pustego drzewa.
+   * Working directory changes against HEAD (ADR-34): files and diff, with new files, without ignored ones. The user's
+   * index stays untouched. In a repo without commits, against the empty tree.
    */
   changes: endpoint("changes", RepoRequest, WorkingTreeChanges),
-  /** Otwiera adres z README w domyślnej przeglądarce (ADR-35), zamiast w oknie aplikacji. */
+  /** Opens an address from the README in the default browser (ADR-35), instead of in the app window. */
   openLink: endpoint("open-link", z.object({ url: ExternalLink }).strict(), Done),
-  /** Otwiera `vscode://` w systemie; daemon nie wie, czy coś obsłużyło adres. */
+  /** Opens `vscode://` in the system; the daemon does not know whether anything handled the address. */
   openEditor: endpoint("open-editor", RepoRequest, Done),
+  /** Opens the repo folder in Explorer, Finder or the Linux file manager (ADR-51); like `openEditor`, without waiting for it. */
+  openFolder: endpoint("open-folder", RepoRequest, Done),
+  /** Says what a folder dropped on the window is (ADR-51); `path` is a full path on the user's disk, read and never saved. */
+  droppedFolder: endpoint("dropped-folder", z.object({ path: z.string().min(1).max(4096) }).strict(), DroppedFolder),
   /**
-   * Hostingi, z których można sklonować repo do folderu z projektami (ADR-19), w kolejności z `workspace.yaml`.
-   * Osobno od `settings`, bo zły wpis w jednym kluczu nie może blokować poprawiania drugiego.
+   * Repo hosts from which repos can be cloned into the projects folder (ADR-19), in the order of `workspace.yaml`. Separate
+   * from `settings`, because a bad entry in one key must not block fixing the other.
    */
   repoHosts: endpoint("repo-hosts", z.object({}).strict(), RepoHosts),
-  /** Zastępuje listę hostingów w `workspace.yaml`. */
+  /** Replaces the list of repo hosts in `workspace.yaml`. */
   setRepoHosts: endpoint("set-repo-hosts", z.object({ repoHosts: RepoHosts }).strict(), RepoHosts),
   /**
-   * Repo dostępne w każdym hostingu, pobierane przez `gh` albo `glab` i pamiętane przez 60 s (§4.5); `query` szuka
-   * w nazwie (GitLab po swojej stronie od 3 znaków, także w ścieżce grupy; krótsze i GitHub filtruje daemon), puste
-   * daje ostatnio zmieniane (GitLab) albo wszystkie (GitHub).
+   * Repos available on each repo host, fetched through `gh` or `glab` and remembered for 60 s (§4.5); `query` searches the
+   * name (GitLab on its side from 3 characters, also in the group path; shorter ones and GitHub are filtered by the daemon),
+   * empty gives the most recently changed (GitLab) or all of them (GitHub).
    */
   remoteRepos: endpoint("remote-repos", z.object({ query: z.string().trim().max(100) }).strict(), RemoteRepoList),
-  /** Zaczyna klonowanie i od razu zwraca je w stanie `running`; postęp przez `clones`. */
+  /** Starts cloning and returns it at once in the `running` state; progress through `clones`. */
   clone: endpoint("clone", CloneRequest, CloneJob),
-  /** Klonowania do bieżącego folderu z projektami od startu daemona, w kolejności rozpoczęcia. */
+  /** Clones into the current projects folder since the daemon started, in the order they began. */
   clones: endpoint("clones", z.object({}).strict(), z.array(CloneJob)),
   /**
-   * Zaczyna synchronizację wszystkich repo z folderu z projektami (ADR-21) i od razu ją zwraca; trwająca zwraca się
-   * bez startu nowej. Postęp przez `syncRun`.
+   * Starts a sync of all repos in the projects folder (ADR-21) and returns it at once; a running one is returned without
+   * starting a new one. Progress through `syncRun`.
    */
   sync: endpoint("sync", z.object({}).strict(), SyncRun),
-  /** Ostatnia synchronizacja bieżącego folderu z projektami od startu daemona; `null`, gdy jej nie było. */
+  /** The last sync of the current projects folder since the daemon started; `null` when there was none. */
   syncRun: endpoint("sync-run", z.object({}).strict(), SyncRun.nullable()),
 };

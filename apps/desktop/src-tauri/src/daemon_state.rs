@@ -1,12 +1,12 @@
-//! Stan połączenia powłoki z daemonem (§5.4): start w tle, czekanie UI na wynik, ponowienie i zatrzymanie.
-//! Gwarantuje, że po `stop` powłoka nie uruchomi już daemona, więc żadna droga wyjścia nie zostawi sieroty.
+//! The state of the shell's connection to the daemon (§5.4): start in the background, the UI waiting for the result, retry and stop.
+//! Guarantees that after `stop` the shell will not start the daemon again, so no exit path leaves an orphan.
 
 use crate::daemon::{self, Connection};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
-/// Odpowiedź dla UI, które pyta o daemon, gdy powłoka już się zamyka.
+/// The answer for a UI that asks for the daemon while the shell is already closing.
 const SHELL_EXITING: &str = "the app is quitting";
 
 #[derive(Clone)]
@@ -15,14 +15,14 @@ enum Phase {
     Starting,
     Ready(Connection),
     Failed(String),
-    /// Powłoka się zamyka: trwa zatrzymywanie daemona albo już się skończyło. Nowy start jest niemożliwy.
+    /// The shell is closing: the daemon is being stopped or already has been. A new start is impossible.
     Stopping,
     Stopped,
 }
 
-/// UI czeka na wynik startu komendą `daemon_connection`; tray i drugie uruchomienie mogą start ponowić albo przerwać.
+/// The UI waits for the start result with the `daemon_connection` command; the tray and a second launch can retry or cancel the start.
 pub struct DaemonState {
-    /// Katalog stanu ustalony raz przy starcie powłoki; błąd trafia do UI przy próbie startu.
+    /// The state directory, resolved once when the shell starts; an error reaches the UI on a start attempt.
     home: Result<PathBuf, String>,
     phase: Mutex<Phase>,
     changed: Condvar,
@@ -34,7 +34,7 @@ impl DaemonState {
         DaemonState { home, phase: Mutex::new(Phase::Idle), changed: Condvar::new(), cancel: AtomicBool::new(false) }
     }
 
-    /// Uruchamia start w tle, jeśli jeszcze nie startowano albo poprzedni start się nie udał.
+    /// Starts in the background if there has been no start yet or the previous one failed.
     pub fn start(self: &Arc<Self>) {
         {
             let mut phase = self.lock();
@@ -42,7 +42,7 @@ impl DaemonState {
                 return;
             }
             *phase = Phase::Starting;
-            // Pod blokadą, żeby nie nadpisać przerwania ustawionego przez `stop`.
+            // Under the lock, so as not to overwrite a cancel set by `stop`.
             self.cancel.store(false, Ordering::SeqCst);
         }
         let me = Arc::clone(self);
@@ -56,7 +56,7 @@ impl DaemonState {
         });
     }
 
-    /// Jak `start`, ale także wtedy, gdy zapisany daemon przestał odpowiadać (np. zakończony spoza aplikacji).
+    /// Like `start`, but also when the saved daemon has stopped answering (for example ended from outside the app).
     pub fn restart_if_down(self: &Arc<Self>) {
         {
             let mut phase = self.lock();
@@ -70,7 +70,7 @@ impl DaemonState {
         self.start();
     }
 
-    /// Połączenie z działającym daemonem bez czekania; `None` w trakcie startu, po błędzie i przy zamykaniu.
+    /// The connection to a running daemon without waiting; `None` during startup, after an error and while closing.
     pub fn ready(&self) -> Option<Connection> {
         match &*self.lock() {
             Phase::Ready(conn) => Some(conn.clone()),
@@ -78,7 +78,7 @@ impl DaemonState {
         }
     }
 
-    /// Czeka na koniec trwającego startu. `Idle` oznacza, że start nie był zlecony.
+    /// Waits for a start in progress to finish. `Idle` means no start was requested.
     pub fn wait(&self) -> Result<Connection, String> {
         let phase = self.wait_while(self.lock(), |p| matches!(p, Phase::Starting));
         match &*phase {
@@ -89,8 +89,8 @@ impl DaemonState {
         }
     }
 
-    /// Przerywa trwający start i łagodnie zatrzymuje daemon; wraca, gdy daemon przestał odpowiadać.
-    /// Kolejne wywołania czekają na koniec pierwszego, żeby żadna droga wyjścia nie zakończyła procesu w połowie.
+    /// Cancels a start in progress and stops the daemon gracefully; returns once the daemon has stopped answering.
+    /// Later calls wait for the first one to finish, so that no exit path ends the process halfway.
     pub fn stop(&self) {
         let started = {
             let phase = self.lock();
@@ -100,7 +100,7 @@ impl DaemonState {
                 drop(self.wait_while(phase, |p| matches!(p, Phase::Stopping)));
                 return;
             }
-            // Po czekaniu faza nie jest już `Starting`, więc zostaje tylko pytanie, czy start się udał.
+            // After waiting the phase is no longer `Starting`, so the only question left is whether the start succeeded.
             match std::mem::replace(&mut *phase, Phase::Stopping) {
                 Phase::Ready(conn) => Some(conn),
                 _ => None,
@@ -112,9 +112,9 @@ impl DaemonState {
         self.changed.notify_all();
     }
 
-    /// Zapisane połączenie mogło się zestarzeć (daemon wstał ponownie na innym porcie), a nieudany start
-    /// nie wyklucza, że daemon działa: wtedy szukamy go po `daemon.json`. Ten sam daemon, który nie zdążył się
-    /// zatrzymać, nie dostaje drugiego polecenia, bo to tylko podwoiłoby czekanie.
+    /// The saved connection may be stale (the daemon came up again on another port), and a failed start does not
+    /// rule out a running daemon: then we look for it through `daemon.json`. The same daemon that did not stop in time
+    /// does not get a second command, because that would only double the waiting.
     fn shutdown(&self, own: Option<&Connection>) {
         if let Some(conn) = own {
             match daemon::shutdown(conn) {
@@ -146,11 +146,11 @@ mod tests {
     use std::net::{TcpListener, TcpStream};
     use std::sync::mpsc;
 
-    /// Daemon na niby: odpowiada 200 na każde żądanie z wersją powłoki w health, a po `POST /api/daemon/shutdown`
-    /// zamyka port, tak jak prawdziwy daemon. Kanał dostaje całe żądania.
+    /// A fake daemon: answers 200 to every request with the shell's version in health, and after `POST /api/daemon/shutdown`
+    /// closes the port, like the real daemon. The channel gets whole requests.
     fn fake_daemon() -> (u16, mpsc::Receiver<String>) {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind 127.0.0.1:0");
-        let port = listener.local_addr().expect("adres nasłuchu").port();
+        let port = listener.local_addr().expect("listening address").port();
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
             for mut stream in listener.incoming().flatten() {
@@ -179,7 +179,7 @@ mod tests {
     }
 
     fn no_home() -> Result<PathBuf, String> {
-        Err("brak katalogu stanu w teście".into())
+        Err("no state directory in the test".into())
     }
 
     fn ready(port: u16) -> DaemonState {
@@ -205,7 +205,7 @@ mod tests {
     fn stop_without_own_start_shuts_down_daemon_from_daemon_json() {
         let (port, rx) = fake_daemon();
         let home = std::env::temp_dir().join(format!("trackwall-desktop-test-{}", std::process::id()));
-        std::fs::create_dir_all(&home).expect("katalog testowy");
+        std::fs::create_dir_all(&home).expect("test directory");
         std::fs::write(home.join("daemon.json"), format!(r#"{{"pid":1,"port":{port},"token":"secret"}}"#)).expect("daemon.json");
         let state = DaemonState::new(Ok(home.clone()));
 
@@ -246,6 +246,6 @@ mod tests {
         *state.lock() = Phase::Stopped;
         state.changed.notify_all();
 
-        second.join().expect("drugie zatrzymanie");
+        second.join().expect("second stop");
     }
 }

@@ -4,6 +4,7 @@ import {
   type AgentSession,
   type McpTool,
   mcpTools,
+  miseTaskLogSource,
   type Repo,
   type RepoTags,
   type Session,
@@ -28,6 +29,12 @@ import { DomainError } from "../infra/errors.ts";
 const README_MAX_CHARS = 32_000;
 /** Ile ostatnich commitów zwraca `get_repo`: tyle wystarcza, żeby agent wiedział, co się ostatnio działo. */
 const RECENT_COMMITS = 10;
+/**
+ * What a session may do only in its own repo, as the `bad_request` message of `assertCallerRepo` puts it: mise tasks
+ * (ADR-41) and the service (ADR-45).
+ */
+const MISE_TASK_ACTION = "run and stop only mise tasks";
+const SERVICE_ACTION = "start and stop only the service";
 
 export interface ToolContext {
   facade: Facade;
@@ -83,7 +90,7 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
           const parsed = tool.args.parse(args);
           // A destructive tool (it runs or stops repo code) logs its arguments before acting: until the `audit` table
           // exists, this line says who ran what (ADR-41). Their arguments are identifiers, never free text.
-          if (!tool.readOnly && tool.destructive) ctx.log(`${label}: ${JSON.stringify(parsed)}`);
+          if (!tool.readOnly && tool.destructive) ctx.log(`${label}: ${JSON.stringify(auditView(parsed, tool.auditArgs))}`);
           const result = tool.result.parse(await run(ctx.facade, parsed, { caller: ctx.caller, signal: extra.mcpReq.signal }));
           ctx.log(`${label}: ok in ${Date.now() - started} ms`);
           return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
@@ -137,17 +144,20 @@ const runs: ToolRuns = {
     };
   },
   getRepoCard: (facade, { repo }) => facade.cards.card(repo),
-  tail: async (facade, { repo, miseTask, sinceSeq, limit }) => {
+  tail: async (facade, { repo, task, miseTask, sinceSeq, limit }) => {
     // Repo musi istnieć (`not_found` jak w get_repo); log taska, który nic nie wypisał, jest pusty.
     await facade.workspace.repo(repo);
-    return facade.logs.tail({ source: { kind: "mise-task", repo, miseTask }, sinceSeq, limit });
+    const target = miseTarget(facade, repo, task);
+    return facade.logs.tail({ source: miseTaskLogSource(target.repo, target.task, miseTask), sinceSeq, limit });
   },
-  getErrors: async (facade, { repo, ...query }) => {
-    // The repo must exist (`not_found` as in tail): a typo in its id must not look like "no errors". A mise task
-    // without output has no log yet, so an unknown task name gives no errors, as an empty log in tail.
+  getErrors: async (facade, { repo, task, ...query }) => {
+    // The repo and the task must exist (`not_found` as in tail): a typo in an id must not look like "no errors". A
+    // mise task without output has no log yet, so an unknown mise task name gives no errors, as an empty log in tail.
     if (repo !== undefined) await facade.workspace.repo(repo);
-    return facade.logs.errors({ repo, ...query });
+    if (task !== undefined) assertTaskOfRepo(facade, task, repo);
+    return facade.logs.errors({ repo, task, ...query });
   },
+  getTestResults: (facade, { repo, task, since }) => facade.testReports.results(miseTarget(facade, repo, task), since),
   whoCalls: (facade, { repo }) => facade.graph.whoCalls(repo),
   subgraphFor: (facade, { repo, depth }) => facade.graph.subgraph(repo, depth),
   findEndpoint: (facade, { query, method }) => facade.graph.findEndpoint(query, method),
@@ -164,7 +174,7 @@ const runs: ToolRuns = {
     // Repo musi istnieć (`not_found` jak w get_repo): literówka w identyfikatorze nie może wyglądać jak „brak sesji”.
     if (repo !== undefined) await facade.workspace.repo(repo);
     const { sessions, tasks, proposals } = facade.agents.sessions();
-    const inRepo = (item: { repo: string }) => repo === undefined || item.repo === repo;
+    const inRepo = (item: { repo: string | null }) => repo === undefined || item.repo === repo;
     return {
       sessions: sessions.filter(inRepo).map(agentSession),
       tasks: tasks.filter(inRepo),
@@ -185,6 +195,7 @@ const runs: ToolRuns = {
       },
     );
   },
+  getTaskChanges: (facade, { task, paths, maxPatchBytes }) => facade.agents.agentTaskChanges(task, maxPatchBytes, paths),
   proposeTask: async (facade, proposal, { caller }) => ({ proposal: await facade.agents.propose(caller, proposal) }),
   reportResult: async (facade, { summary }, { caller }) => ({ task: facade.agents.reportSummary(caller, summary) }),
   waitForSession: async (facade, { session, task, timeoutSeconds }, { caller, signal }) => {
@@ -194,18 +205,27 @@ const runs: ToolRuns = {
     const outcome = await facade.agents.waitFor(caller, target, timeoutSeconds * 1000, signal);
     return { ...outcome, session: outcome.session && agentSession(outcome.session) };
   },
-  runMiseTask: async (facade, { repo, miseTask }, { caller }) => {
-    assertCallerRepo(facade, caller, repo);
-    return { run: await facade.mise.start(repo, miseTask) };
-  },
-  stopMiseTask: async (facade, { repo, miseTask }, { caller }) => {
-    assertCallerRepo(facade, caller, repo);
-    return { run: await facade.mise.stop(repo, miseTask) };
-  },
-  waitForMiseTask: async (facade, { repo, miseTask, timeoutSeconds }, { signal }) => ({
-    run: await facade.mise.waitForEnd(repo, miseTask, timeoutSeconds * 1000, signal),
+  runMiseTask: async (facade, { repo, task, miseTask }, { caller }) => ({
+    run: await facade.mise.start(callerMiseTarget(facade, caller, repo, task), miseTask),
+  }),
+  stopMiseTask: async (facade, { repo, task, miseTask }, { caller }) => ({
+    run: await facade.mise.stop(callerMiseTarget(facade, caller, repo, task), miseTask),
+  }),
+  waitForMiseTask: async (facade, { repo, task, miseTask, timeoutSeconds }, { signal }) => ({
+    run: await facade.mise.waitForEnd(miseTarget(facade, repo, task), miseTask, timeoutSeconds * 1000, signal),
   }),
   listRunningMiseTasks: async (facade) => ({ miseTasks: facade.mise.running() }),
+  startService: async (facade, { repo, dependencies, timeoutSeconds }, { caller }) => {
+    // Only the root comes from the session; its dependencies come from the graph, so they may be other repos.
+    assertCallerRepo(facade, caller, repo, SERVICE_ACTION);
+    return { slice: await facade.services.start({ repo, dependencies, waitMs: timeoutSeconds * 1000 }) };
+  },
+  stopService: async (facade, { repo, dependencies }, { caller }) => {
+    assertCallerRepo(facade, caller, repo, SERVICE_ACTION);
+    return { services: await facade.services.stop({ repo, dependencies }) };
+  },
+  listServices: async (facade) => ({ services: await facade.services.list() }),
+  callEndpoint: (facade, { timeoutSeconds, ...request }) => facade.services.call({ ...request, timeoutMs: timeoutSeconds * 1000 }),
 };
 
 /**
@@ -218,12 +238,14 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.getRepoCard, runs.getRepoCard),
   defineTool(mcpTools.tail, runs.tail),
   defineTool(mcpTools.getErrors, runs.getErrors),
+  defineTool(mcpTools.getTestResults, runs.getTestResults),
   defineTool(mcpTools.whoCalls, runs.whoCalls),
   defineTool(mcpTools.subgraphFor, runs.subgraphFor),
   defineTool(mcpTools.findEndpoint, runs.findEndpoint),
   defineTool(mcpTools.searchCode, runs.searchCode),
   defineTool(mcpTools.listSessions, runs.listSessions),
   defineTool(mcpTools.getSession, runs.getSession),
+  defineTool(mcpTools.getTaskChanges, runs.getTaskChanges),
   defineTool(mcpTools.proposeTask, runs.proposeTask),
   defineTool(mcpTools.reportResult, runs.reportResult),
   defineTool(mcpTools.waitForSession, runs.waitForSession),
@@ -231,7 +253,16 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.stopMiseTask, runs.stopMiseTask),
   defineTool(mcpTools.waitForMiseTask, runs.waitForMiseTask),
   defineTool(mcpTools.listRunningMiseTasks, runs.listRunningMiseTasks),
+  defineTool(mcpTools.startService, runs.startService),
+  defineTool(mcpTools.stopService, runs.stopService),
+  defineTool(mcpTools.listServices, runs.listServices),
+  defineTool(mcpTools.callEndpoint, runs.callEndpoint),
 ];
+
+/** The arguments a destructive tool logs: only the ones its contract names (the rest may be free text with secrets). */
+function auditView(args: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
+  return Object.fromEntries(keys.map((k) => [k, args[k]]));
+}
 
 /** Tag filter of `list_repos` and `search_code`: the repo has every wanted tag. */
 function hasEveryTag(tags: readonly string[], wanted: readonly string[]): boolean {
@@ -240,14 +271,51 @@ function hasEveryTag(tags: readonly string[], wanted: readonly string[]): boolea
 
 /**
  * A Trackwall session starts and stops processes only in the repo it works in (§8, ADR-41), so a task session does
- * not reach other repos in the projects folder through its own bridge. An agent outside Trackwall (`caller: null`) is
- * the user's program, like a terminal, and reaches every repo. A guard for the agent, not a security boundary: a
+ * not reach other repos in the projects folder through its own bridge. The supervisor works in no repo (ADR-58): it
+ * hands running things to the session of the repo with a task proposal. An agent outside Trackwall (`caller: null`)
+ * is the user's program, like a terminal, and reaches every repo. A guard for the agent, not a security boundary: a
  * session process can call `/mcp` without its session token (§8).
  */
-function assertCallerRepo(facade: Facade, caller: string | null, repo: string): void {
+function assertCallerRepo(facade: Facade, caller: string | null, repo: string, action: string): void {
   if (caller === null) return;
   const own = facade.agents.session(caller).repo;
-  if (own !== repo) throw new DomainError("bad_request", `a session in ${own} can run and stop only mise tasks of ${own}, not of ${repo}`);
+  if (own === null)
+    throw new DomainError("bad_request", `the supervisor works in no repo and runs nothing in one; propose a task in ${repo} instead`);
+  if (own !== repo) throw new DomainError("bad_request", `a session in ${own} can ${action} of ${own}, not of ${repo}`);
+}
+
+/**
+ * Where a session may run and stop a mise task (ADR-41, ADR-59): its own repo, and for a task session the repo root or
+ * its own task's worktree, so it does not run another agent's worktree. An agent outside Trackwall reaches every repo
+ * and task. A guard for the agent, not a security boundary, as in `assertCallerRepo`.
+ */
+function callerMiseTarget(
+  facade: Facade,
+  caller: string | null,
+  repo: string,
+  task: string | undefined,
+): { repo: string; task: string | null } {
+  assertCallerRepo(facade, caller, repo, MISE_TASK_ACTION);
+  const own = caller === null ? null : facade.agents.session(caller).task;
+  if (task !== undefined && own !== null && task !== own)
+    throw new DomainError(
+      "bad_request",
+      `a session of task ${own} can run and stop mise tasks only in its own worktree, not in that of task ${task}`,
+    );
+  return miseTarget(facade, repo, task);
+}
+
+/** The repo root, or the worktree of a task of that repo (`bad_request` for a task of another repo, ADR-59). */
+function miseTarget(facade: Facade, repo: string, task: string | undefined): { repo: string; task: string | null } {
+  if (task === undefined) return { repo, task: null };
+  assertTaskOfRepo(facade, task, repo);
+  return { repo, task };
+}
+
+/** A task named next to a repo belongs to it (`not_found` for an unknown or ended task, `bad_request` for another repo's). */
+function assertTaskOfRepo(facade: Facade, task: string, repo: string | undefined): void {
+  const own = facade.agents.task(task).repo;
+  if (repo !== undefined && own !== repo) throw new DomainError("bad_request", `task ${task} is in ${own}, not in ${repo}`);
 }
 
 /** Sesja bez ostatnich linii ekranu zakończonej grupy: ekran jednej sesji nie trafia do innej (§8, ADR-36). */

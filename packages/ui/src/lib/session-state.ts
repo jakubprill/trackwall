@@ -1,10 +1,11 @@
-import type { Session, SessionList, TaskStateChange } from "@trackwall/protocol";
+import { isSupervisor, type Session, type SessionList, type TaskStateChange } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 
 /**
- * Stan sesji Copilot CLI w jednej linii (§4.4): z grupy procesów, gdy sesja się kończy albo skończyła, inaczej ze
- * stanu z hooków, OSC i klawiszy sesji. Słabszy sygnał (pewność `medium` albo `low`) jest podany jako „prawdopodobnie”, bo pochodzi
- * z wnioskowania albo z rodzaju powiadomienia, którego nie potwierdziło jeszcze nagranie prawdziwej sesji.
+ * A Copilot CLI session's state in one line (§4.4): from the process group when the session is ending or has ended,
+ * otherwise from the state from the session's hooks, OSC and keys. A weaker signal (confidence `medium` or `low`) is
+ * shown as "probably", because it comes from inference or from a kind of notification that a recording of a real
+ * session has not confirmed yet.
  */
 
 export const STATE_LABELS = {
@@ -31,9 +32,21 @@ export function isIdle(session: Session): boolean {
   return session.run.kind === "running" && session.state?.state === "Input" && !session.needsAttention;
 }
 
-/** Proces sesji jeszcze działa (także w trakcie zatrzymywania): pisze w swoim katalogu i trzyma jego pliki. */
+/** The session's process is still running (also while stopping): it writes in its directory and holds its files. */
 export function isLive(session: Session): boolean {
   return session.run.kind !== "exited";
+}
+
+/** States in which the agent is in the middle of a turn: working, or asking for approval of a step or a plan. */
+const MID_TURN_STATES: ReadonlySet<TaskStateChange["state"]> = new Set(["Working", "Approval", "Plan"]);
+
+/**
+ * Closing the session would cut the agent off in the middle of a turn, so the Close button asks first. An idle
+ * session, one that waits for your next prompt, one in an unknown state and one that is already stopping or has ended close
+ * at once.
+ */
+export function closeCutsOffTurn(session: Session): boolean {
+  return session.run.kind === "running" && session.state !== null && MID_TURN_STATES.has(session.state.state);
 }
 
 export function sessionStateLabel(session: Session): { tone?: StatusTone; label: string } {
@@ -58,41 +71,30 @@ function runningStateLabel(state: TaskStateChange, needsAttention: boolean, idle
   return { tone: "ok", label: likely };
 }
 
-/**
- * Następna sesja, która czeka na Ciebie, po bieżącej, w kolejności listy i w kółko; `undefined`, gdy żadna nie czeka.
- * Bieżąca sesja jest wybierana dopiero wtedy, gdy czeka tylko ona.
- */
-export function nextWaiting(sessions: readonly Session[], current: string | undefined): Session | undefined {
-  const waiting = sessions.filter((s) => s.needsAttention);
-  const at = sessions.findIndex((s) => s.id === current);
-  const after = waiting.find((s) => sessions.indexOf(s) > at);
-  return after ?? waiting[0];
-}
+/** What the UI calls the session above all repos (ADR-58), wherever a session is named by its place. */
+export const SUPERVISOR = "Supervisor";
 
-/**
- * Alt+J (ADR-48): the session to open, after the selected one, and whether the shortcut takes the key. In Sessions it
- * always does, so that the key never reaches a terminal; elsewhere only when a session is waiting, so that ⌥J still
- * types in a text field.
- */
-export function nextWaitingShortcut(
-  sessions: readonly Session[],
-  selected: string | undefined,
-  inSessionsView: boolean,
-): { open: Session | undefined; taken: boolean } {
-  const open = nextWaiting(sessions, selected);
-  return { open, taken: open !== undefined || inSessionsView };
+/** Where a session works: its repo, or the supervisor, which has none (ADR-58). */
+export function sessionPlace(session: Pick<Session, "repo">): string {
+  return session.repo ?? SUPERVISOR;
 }
 
 /** A session's name in a list: the repo, and the window title that tells two sessions of one repo apart. */
 export function sessionTitle(session: Session): string {
-  return session.windowTitle ? `${session.repo} · ${session.windowTitle}` : session.repo;
+  const place = sessionPlace(session);
+  return session.windowTitle ? `${place} · ${session.windowTitle}` : place;
 }
 
-export function waitingCount(sessions: readonly Session[]): number {
-  return sessions.filter((s) => s.needsAttention).length;
+/** The supervisor is left out: it waits in its own panel, which shows that itself, not in the Sessions list (ADR-58). */
+function waitingCount(sessions: readonly Session[]): number {
+  return sessions.filter((s) => s.needsAttention && !isSupervisor(s)).length;
 }
 
-/** Na pasku widoków: sesje, które czekają na Ciebie, i propozycje zadań czekające na decyzję (ADR-39). */
+/**
+ * On the view bar and the "Next waiting" button: the sessions waiting for you and the task proposals waiting for a
+ * decision (ADR-39), each proposal counted, although Alt+J stops once at the group of one session (ADR-55). The
+ * supervisor's proposals count too, since they are entries of the list.
+ */
 export function attentionCount(list: SessionList | undefined): number {
   return list ? waitingCount(list.sessions) + list.proposals.length : 0;
 }

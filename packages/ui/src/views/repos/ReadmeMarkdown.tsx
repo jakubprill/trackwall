@@ -9,17 +9,17 @@ import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 
 /**
- * README jako sformatowany Markdown (ADR-35): gotowy Streamdown (GFM, surowy HTML przez sanityzację, diagramy Mermaid
- * w trybie `strict`). Ładowany leniwie, bo Mermaid waży kilka MB. Treść z repo jest niezaufana, więc nic z niej nie
- * nawiguje oknem: każdy klik w link, także w SVG diagramu, łapie kontener, adres strony otwiera daemon w przeglądarce
- * systemu, a reszta jest tekstem. Obrazy zastępuje ich opis.
+ * The README as formatted Markdown (ADR-35): ready-made Streamdown (GFM, raw HTML through sanitization, Mermaid diagrams
+ * in `strict` mode). Loaded lazily, because Mermaid weighs a few MB. Content from the repo is untrusted, so nothing in it
+ * navigates the window: the container catches every click on a link, also in a diagram's SVG, the daemon opens a web page
+ * address in the system browser, and the rest is text. Images are replaced by their description.
  */
 const plugins = { mermaid: createMermaidPlugin({ config: { theme: "dark" } }) };
 /**
- * Własne wtyczki zamiast domyślnych Streamdown: sanityzacja ze schematem GitHuba z prefiksem `user-content-` dla `id`
- * i `name` (Streamdown go zdejmuje, a README mógłby wtedy nadpisać nazwane elementy okna) i bez `rehype-harden`,
- * który bez adresu bazowego zamienia linki i obrazy względne w „[blocked]”. `metastring` to opcje bloku kodu, które
- * Streamdown przenosi z ogrodzenia (np. `startLine=10`).
+ * Our own plugins instead of Streamdown's defaults: sanitization with GitHub's schema with the `user-content-` prefix for
+ * `id` and `name` (Streamdown strips it, and a README could then overwrite named elements of the window) and without
+ * `rehype-harden`, which without a base URL turns relative links and images into "[blocked]". `metastring` is the code
+ * block options Streamdown carries over from the fence (for example `startLine=10`).
  */
 const schema = {
   ...defaultSchema,
@@ -33,7 +33,7 @@ const controls = {
 };
 const components = { a: Link, img: Image };
 const mermaid = { errorComponent: MermaidError };
-/** Środkowy przycisk myszy: przeglądarka otworzyłaby link w nowym oknie WebView zamiast w przeglądarce systemu. */
+/** The middle mouse button: the browser would open the link in a new WebView window instead of the system browser. */
 const MIDDLE_BUTTON = 1;
 
 export function ReadmeMarkdown({ conn, text }: { conn: Connection; text: string }) {
@@ -43,7 +43,7 @@ export function ReadmeMarkdown({ conn, text }: { conn: Connection; text: string 
     if (!anchor) return;
     e.preventDefault();
     if (e.type === "auxclick" && e.button !== MIDDLE_BUTTON) return;
-    // Link z diagramu Mermaid to `<a>` w SVG, często z `xlink:href`.
+    // A link from a Mermaid diagram is an `<a>` in SVG, often with `xlink:href`.
     const url = ExternalLink.safeParse(anchor.getAttribute("href") ?? anchor.getAttribute("xlink:href"));
     if (!url.success) return;
     setLinkError(undefined);
@@ -67,7 +67,7 @@ export function ReadmeMarkdown({ conn, text }: { conn: Connection; text: string 
   );
 }
 
-/** Link na stronę wygląda jak link; względny, kotwica i inne protokoły zostają tekstem z adresem w podpowiedzi. */
+/** A link to a web page looks like a link; a relative one, an anchor and other protocols stay text with the address in a tooltip. */
 function Link({ href, children }: ComponentProps<"a">) {
   const url = ExternalLink.safeParse(href);
   if (!url.success) return <span title={href}>{children}</span>;

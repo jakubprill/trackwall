@@ -10,26 +10,26 @@ import type {
 } from "@trackwall/protocol";
 
 /**
- * Commit widziany przez ekstraktory: lista plików i treść plików buildu i konfiguracji, przeczytana z gita jednym
- * procesem przed ekstrakcją (`read-snapshot.ts`). Ekstraktory są czystymi funkcjami na tym obiekcie, więc testuje się
- * je bez gita. Ścieżki jak w `repo-path.ts`.
+ * A commit as the extractors see it: the file list and the content of build and configuration files, read from git in
+ * one process before extraction (`read-snapshot.ts`). The extractors are pure functions on this object, so they are
+ * tested without git. Paths as in `repo-path.ts`.
  */
 export interface RepoSnapshot {
   commit: string;
-  /** Pliki commita poza katalogami zależności (`SKIPPED_DIRS` w `read-snapshot.ts`). */
+  /** The commit's files outside dependency directories (`SKIPPED_DIRS` in `read-snapshot.ts`). */
   paths: readonly string[];
-  /** Treść pliku; `undefined`, gdy go nie ma albo nie był czytany (nie jest plikiem buildu ani konfiguracji). */
+  /** The file's content; `undefined` when it does not exist or was not read (it is neither a build nor a configuration file). */
   text(path: string): string | undefined;
   /**
-   * Pliki źródłowe dociągnięte tylko dla kontraktów endpointów (ADR-38), po nazwach typów: kontrakty czytają z nich DTO,
-   * ale ekstraktory HTTP ich nie widzą, więc fakty HTTP zależą tylko od plików z wyszukiwania.
+   * Source files fetched only for endpoint contracts (ADR-38), by type names: the contracts read DTOs from them, but the
+   * HTTP extractors do not see them, so the HTTP facts depend only on the files from the search.
    */
   typeFiles: ReadonlySet<string>;
-  /** Czego odczyt commita nie dał rady przeczytać (limity); trafia na kartę razem z problemami ekstraktorów. */
+  /** What reading the commit could not read (limits); it goes on the card together with the extractors' problems. */
   problems: readonly CardProblem[];
 }
 
-/** Co ekstraktor wnosi do karty; ekstraktory buildu dają paczki, ekstraktory HTTP aplikacje, endpointy i klientów. */
+/** What an extractor adds to the card; build extractors give packages, HTTP extractors apps, endpoints and clients. */
 export interface Extracted<P extends Provided = ProvidedPackage, C extends Consumed = ConsumedPackage> {
   buildFiles: BuildFile[];
   provides: P[];
@@ -38,14 +38,14 @@ export interface Extracted<P extends Provided = ProvidedPackage, C extends Consu
   problems: CardProblem[];
 }
 
-/** Miejsce na problemy karty dla odczytu, który nie daje innych faktów (katalog wersji, konfiguracja Spring). */
+/** A place for card problems for a read that gives no other facts (the version catalog, Spring configuration). */
 export type ProblemSink = Pick<Extracted, "problems">;
 
 export function emptyExtracted<P extends Provided = ProvidedPackage, C extends Consumed = ConsumedPackage>(): Extracted<P, C> {
   return { buildFiles: [], provides: [], consumes: [], tools: [], problems: [] };
 }
 
-/** Dowód: plik i pierwsza linia pasująca do `pattern` (`null`, gdy żadna nie pasuje). */
+/** Evidence: the file and the first line matching `pattern` (`null` when none matches). */
 export function evidenceAt(path: string, text: string, pattern: RegExp): Evidence {
   const lines = text.split("\n");
   const index = lines.findIndex((line) => pattern.test(line));
@@ -53,10 +53,9 @@ export function evidenceAt(path: string, text: string, pattern: RegExp): Evidenc
 }
 
 /**
- * Linia (od 1) pierwszego wystąpienia każdego klucza, który wyrażenie `key` (z flagą `g`) łapie w pierwszej pasującej
- * grupie (alternatywy dla klucza w cudzysłowie i bez). Jedno
- * przejście przez plik zamiast szukania osobno dla każdej zależności: plik z dziesiątkami tysięcy kluczy dawałby czas
- * kwadratowy, a plik jest niezaufany (§8).
+ * The line (from 1) of the first occurrence of every key the expression `key` (with the `g` flag) captures in its first
+ * matching group (alternatives for a quoted and an unquoted key). One pass over the file instead of a separate search
+ * for every dependency: a file with tens of thousands of keys would take quadratic time, and the file is untrusted (§8).
  */
 export function keyLines(text: string, key: RegExp): Map<string, number> {
   const lines = new Map<string, number>();

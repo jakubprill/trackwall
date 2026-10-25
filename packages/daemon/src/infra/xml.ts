@@ -1,21 +1,26 @@
 /**
- * Najmniejszy parser XML, jakiego potrzebuje `pom.xml`: elementy z tekstem i numerem linii, bez atrybutów, przestrzeni
- * nazw i DTD. Komentarze, instrukcje przetwarzania i `<!DOCTYPE>` są pomijane, `CDATA` i encje dają tekst. Własny,
- * bo biblioteki XML nie podają linii, a karta potrzebuje dowodu z linią (§4.6).
+ * The smallest XML parser that `pom.xml` (the repo card, §4.6) and JUnit test reports (`test-results`, ADR-60) need:
+ * elements with attributes, text and a line number, without namespaces and DTD. Comments, processing instructions
+ * and `<!DOCTYPE>` are skipped, `CDATA` and entities give text. Our own, because XML libraries do not give lines,
+ * and the card needs evidence with a line. Shared infrastructure, so two modules do not keep two parsers. Lenient where
+ * reports need it: an attribute without quotes is skipped rather than refused.
  */
 
 export interface XmlElement {
   name: string;
-  /** Numer linii znacznika otwierającego, od 1. */
+  /** The line number of the opening tag, from 1. */
   line: number;
+  /** Attribute values with entities decoded; a map, so a name like `constructor` is never an inherited property. */
+  attributes: ReadonlyMap<string, string>;
   children: XmlElement[];
-  /** Tekst bezpośrednio w elemencie, bez białych znaków na brzegach. */
+  /** The text directly in the element, without whitespace at the edges. */
   text: string;
 }
 
 const ENTITIES: Record<string, string> = { lt: "<", gt: ">", amp: "&", quot: '"', apos: "'" };
+const ATTRIBUTE = /([^\s=/]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 
-/** Korzeń dokumentu; rzuca błąd z linią, gdy dokument nie jest poprawnym XML w tym zakresie. */
+/** The document root; throws an error with the line when the document is not valid XML within this scope. */
 export function parseXml(src: string): XmlElement {
   return new XmlParser(src).parse();
 }
@@ -41,7 +46,7 @@ class XmlParser {
     return this.root;
   }
 
-  /** Tekst do następnego `<`, potem komentarz, deklaracja, `CDATA` albo znacznik. */
+  /** Text up to the next `<`, then a comment, a declaration, `CDATA` or a tag. */
   private step(): void {
     const lt = this.src.indexOf("<", this.pos);
     const top = this.stack.at(-1);
@@ -55,7 +60,7 @@ class XmlParser {
   }
 
   private tag(lt: number): void {
-    const gt = this.src.indexOf(">", lt);
+    const gt = tagEnd(this.src, lt);
     if (gt < 0) throw new Error(`unclosed tag on line ${this.lineAt(lt)}`);
     const tag = this.src.slice(lt + 1, gt);
     this.pos = gt + 1;
@@ -72,7 +77,14 @@ class XmlParser {
   private open(tag: string, lt: number): void {
     const name = /^[^\s/>]+/.exec(tag)?.[0];
     if (!name) throw new Error(`empty tag on line ${this.lineAt(lt)}`);
-    const element: OpenElement = { name, line: this.lineAt(lt), children: [], text: "", raw: "" };
+    const element: OpenElement = {
+      name,
+      line: this.lineAt(lt),
+      attributes: attributesOf(tag.slice(name.length)),
+      children: [],
+      text: "",
+      raw: "",
+    };
     const top = this.stack.at(-1);
     if (top) top.children.push(element);
     else if (this.root) throw new Error(`second root element on line ${this.lineAt(lt)}`);
@@ -81,24 +93,46 @@ class XmlParser {
   }
 }
 
+/** The `>` that ends the tag at `lt`, or -1; a `>` inside a quoted attribute value (allowed unescaped in XML) does not. */
+function tagEnd(src: string, lt: number): number {
+  let quote: string | undefined;
+  for (let i = lt + 1; i < src.length; i++) {
+    const c = src[i];
+    if (quote !== undefined) {
+      if (c === quote) quote = undefined;
+    } else if (c === '"' || c === "'") quote = c;
+    else if (c === ">") return i;
+  }
+  return -1;
+}
+
+/** `name="value"` or `name='value'` pairs of a start tag after its name; a repeated name keeps its first value. */
+function attributesOf(rest: string): Map<string, string> {
+  const attributes = new Map<string, string>();
+  for (const [, name, double, single] of rest.matchAll(ATTRIBUTE)) {
+    if (name !== undefined && !attributes.has(name)) attributes.set(name, decode(double ?? single ?? ""));
+  }
+  return attributes;
+}
+
 /** Pierwsze dziecko o nazwie `name`. */
 export function child(el: XmlElement | undefined, name: string): XmlElement | undefined {
   return el?.children.find((c) => c.name === name);
 }
 
-/** Dzieci o nazwie `name` w elemencie `path` (np. `children(pom, "dependencies", "dependency")`). */
+/** Children named `name` in element `path` (e.g. `children(pom, "dependencies", "dependency")`). */
 export function children(el: XmlElement | undefined, container: string, name: string): XmlElement[] {
   return child(el, container)?.children.filter((c) => c.name === name) ?? [];
 }
 
-/** Tekst dziecka `name`; `undefined`, gdy go nie ma albo jest pusty. */
+/** The text of child `name`; `undefined` when it is missing or empty. */
 export function childText(el: XmlElement | undefined, name: string): string | undefined {
   return child(el, name)?.text || undefined;
 }
 
 /**
- * Komentarz, instrukcja przetwarzania, deklaracja albo `CDATA` od pozycji `lt`; zwraca pozycję za nimi, a `lt`, gdy
- * to zwykły znacznik. Treść `CDATA` trafia do tekstu elementu bez dekodowania encji (stąd znacznik ochronny).
+ * A comment, processing instruction, declaration or `CDATA` from position `lt`; returns the position after it, and `lt`
+ * when it is a plain tag. `CDATA` content goes into the element's text without decoding entities (hence the guard marker).
  */
 function skipMarkup(src: string, lt: number, top: { raw: string } | undefined): number {
   const skip = (open: string, close: string) => {
@@ -127,7 +161,7 @@ function decode(raw: string): string {
   });
 }
 
-/** Numer linii pozycji w tekście; pozycje rosną, więc licznik idzie tylko do przodu. */
+/** The line number of a position in the text; positions grow, so the counter only moves forward. */
 function lineCounter(src: string): (pos: number) => number {
   let line = 1;
   let counted = 0;

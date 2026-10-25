@@ -93,7 +93,7 @@
                 "patterns": [
                   {
                     "group": ["@trackwall/daemon", "@trackwall/daemon/**", "**/daemon/src/**"],
-                    "message": "Tylko daemon importuje swój kod; wspólny kod bierz z @trackwall/protocol (AGENTS.md, granice modułów)."
+                    "message": "Only the daemon imports its own code; take shared code from @trackwall/protocol (AGENTS.md, module boundaries)."
                   }
                 ]
               }
@@ -120,13 +120,15 @@
             "noRestrictedGlobals": {
               "level": "error",
               "options": {
-                "deniedGlobals": { "Bun": "API Bun tylko w packages/daemon/src/platform (ADR-1); reszta daemona działa też pod Node." }
+                "deniedGlobals": {
+                  "Bun": "Bun APIs only in packages/daemon/src/platform (ADR-1); the rest of the daemon also runs under Node."
+                }
               }
             },
             "noRestrictedImports": {
               "level": "error",
               "options": {
-                "patterns": [{ "group": ["bun", "bun:*"], "message": "Moduły Bun tylko w packages/daemon/src/platform (ADR-1)." }]
+                "patterns": [{ "group": ["bun", "bun:*"], "message": "Bun modules only in packages/daemon/src/platform (ADR-1)." }]
               }
             }
           }
@@ -144,7 +146,7 @@
                 "patterns": [
                   {
                     "group": ["bun", "bun:*"],
-                    "message": "Moduły Bun tylko w packages/daemon/src/platform (ADR-1)."
+                    "message": "Bun modules only in packages/daemon/src/platform (ADR-1)."
                   },
                   {
                     "group": [
@@ -152,9 +154,13 @@
                       "!../../infra/errors.ts",
                       "!../../infra/atomic-write.ts",
                       "!../../infra/map-limit.ts",
+                      "!../../infra/loopback.ts",
+                      "!../../infra/env-key.ts",
+                      "!../../infra/path-inside.ts",
+                      "!../../infra/xml.ts",
                       "!../../platform/**"
                     ],
-                    "message": "Moduł nie importuje innego modułu; zadeklaruj potrzebny interfejs, a fasada (src/facade.ts) poda moduł (AGENTS.md, §4). Z zewnątrz modułu wolno brać tylko wymienione pliki infrastruktury i src/platform/; moduł jest płaskim katalogiem."
+                    "message": "A module does not import another module; declare the interface you need, and the facade (src/facade.ts) passes the module in (AGENTS.md, §4). A module may take from outside only the listed infrastructure files and src/platform/; a module is a flat directory."
                   }
                 ]
               }
@@ -174,11 +180,11 @@
                 "patterns": [
                   {
                     "group": ["bun", "bun:*"],
-                    "message": "Moduły Bun tylko w packages/daemon/src/platform (ADR-1)."
+                    "message": "Bun modules only in packages/daemon/src/platform (ADR-1)."
                   },
                   {
                     "group": ["**/modules/**"],
-                    "message": "Transporty i infrastruktura sięgają do modułów tylko przez fasadę (src/facade.ts, §4)."
+                    "message": "Transports and infrastructure reach modules only through the facade (src/facade.ts, §4)."
                   }
                 ]
               }
@@ -198,7 +204,7 @@
                 "patterns": [
                   {
                     "group": ["**/modules/**"],
-                    "message": "Transporty i infrastruktura sięgają do modułów tylko przez fasadę (src/facade.ts, §4)."
+                    "message": "Transports and infrastructure reach modules only through the facade (src/facade.ts, §4)."
                   }
                 ]
               }
@@ -218,13 +224,31 @@
                 "patterns": [
                   {
                     "group": ["@trackwall/daemon", "@trackwall/daemon/**", "**/daemon/src/**"],
-                    "message": "Tylko daemon importuje swój kod; wspólny kod bierz z @trackwall/protocol (AGENTS.md, granice modułów)."
+                    "message": "Only the daemon imports its own code; take shared code from @trackwall/protocol (AGENTS.md, module boundaries)."
                   },
                   {
                     "group": ["@trackwall/scene"],
-                    "message": "Poza płótnem pulpitu (HomeCanvas.tsx) bierz ze sceny tylko @trackwall/scene/model, żeby three.js i Pawn zostały w leniwie ładowanym kawałku (§5.5)."
+                    "message": "Outside the dashboard canvas (HomeCanvas.tsx) take only @trackwall/scene/model from the scene, so that three.js and Pawn stay in a lazily loaded chunk (§5.5)."
                   }
                 ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/ui/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "alert": "In the Tauri window the dialog plugin replaces alert with a plugin command the page may not call (ADR-51); show the message in the UI.",
+                  "confirm": "In the Tauri window the dialog plugin makes confirm return a Promise, which is always truthy (ADR-51); ask in the UI."
+                }
               }
             }
           }

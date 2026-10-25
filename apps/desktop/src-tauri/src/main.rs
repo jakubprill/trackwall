@@ -1,12 +1,13 @@
 //! The Trackwall desktop shell: windows, tray and daemon supervision. All logic lives in the daemon (§2, §5.4).
 
-// Bez okna konsoli w wydaniu na Windowsie.
+// No console window in the release build on Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app_menu;
 mod attention;
 mod daemon;
 mod daemon_state;
+mod folder_picker;
 mod global_shortcut;
 mod jump;
 mod link;
@@ -32,17 +33,17 @@ use tray_panel::PanelState;
 use window_effect::WindowEffects;
 use windows::Windows;
 
-/// Identyfikator ikony w trayu: potrzebny, żeby usunąć ją przy wyjściu.
+/// Id of the tray icon: needed to remove it on exit.
 const TRAY_ID: &str = "main";
 
-/// Adres i token daemona dla UI. Token przechodzi przez IPC Tauri, nigdy przez URL (§5.2).
+/// The daemon's address and token for the UI. The token goes through Tauri IPC, never through a URL (§5.2).
 #[tauri::command]
 async fn daemon_connection(state: tauri::State<'_, Arc<DaemonState>>) -> Result<Connection, String> {
     let state = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || state.wait()).await.map_err(|e| e.to_string())?
 }
 
-/// Ponowny start po błędzie albo po zniknięciu daemona (przycisk „Spróbuj ponownie” w UI).
+/// Start again after an error or after the daemon disappeared (the "Try again" button in the UI).
 #[tauri::command]
 async fn retry_daemon(state: tauri::State<'_, Arc<DaemonState>>) -> Result<Connection, String> {
     let state = Arc::clone(&state);
@@ -93,8 +94,8 @@ fn main() {
 
     let state = Arc::new(DaemonState::new(daemon::trackwall_home()));
     let builder = tauri::Builder::default();
-    // Ponowne uruchomienie trackwall.exe pokazuje istniejące okno zamiast drugiej powłoki i drugiej ikony w trayu.
-    // Tylko w wydaniu: identyfikator instancji jest wspólny, a `tauri dev` ma działać obok zainstalowanej aplikacji.
+    // Launching trackwall.exe again shows the existing window instead of a second shell and a second tray icon.
+    // Only in a release: the instance id is shared, and `tauri dev` has to run next to the installed app.
     // On Windows a `trackwall://` link starts a second trackwall.exe; the plugin's `deep-link` feature hands the link
     // to the first instance before this callback (ADR-52), and the link shows its own window.
     #[cfg(not(debug_assertions))]
@@ -110,6 +111,7 @@ fn main() {
     let builder = builder.menu(app_menu::build);
     let app = builder
         .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(windows::STATE_FLAGS).build())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -127,6 +129,7 @@ fn main() {
             jump::take_jump,
             link::open_link,
             open_from_tray_panel,
+            folder_picker::pick_projects_folder,
             updates::check_update,
             updates::install_update
         ])
@@ -171,18 +174,19 @@ fn main() {
         .expect("failed to build the Tauri app");
 
     app.run(|handle, event| match event {
-        // macOS: kliknięcie w ikonę w Docku po schowaniu okna.
+        // macOS: a click on the Dock icon after the window was hidden.
         #[cfg(target_os = "macos")]
         RunEvent::Reopen { .. } => show_main(handle),
         RunEvent::ExitRequested { code: None, api, .. } => {
-            // Ostatnie okno schowane to nie powód do wyjścia.
+            // Hiding the last window is no reason to exit.
             api.prevent_exit();
         }
-        // Cmd+Q i „Zakończ” z Docka na macOS (a według kodu tao także koniec sesji Windows) kończą pętlę zdarzeń
-        // z pominięciem `ExitRequested` i traya. Bez tego daemon zostawał osierocony. Po „Quit” z traya daemon jest już zatrzymany.
+        // Cmd+Q and "Quit" from the Dock on macOS (and, according to the tao code, the end of a Windows session too) end the
+        // event loop bypassing `ExitRequested` and the tray. Without this the daemon was left orphaned. After "Quit" from
+        // the tray the daemon is already stopped.
         // The restart after an update (ADR-53) comes this way too, so the new shell never finds the old daemon running.
         RunEvent::Exit => {
-            // Pętla zdarzeń już stoi: bez schowania okno i tray wisiałyby zamrożone do końca zatrzymywania.
+            // The event loop has already stopped: without hiding them, the window and tray would hang frozen until the stop finishes.
             hide_shell(handle);
             handle.state::<Arc<DaemonState>>().stop();
         }
@@ -228,8 +232,8 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             }
             _ => {}
         });
-    // Pasek menu macOS oczekuje jednobarwnego szablonu, który system sam przebarwia do jasnego i ciemnego paska.
-    // Poza macOS zostaje kolorowa ikona aplikacji: zasobnik Windows i Linuksa bywa jasny albo ciemny, a ona jest czytelna na obu.
+    // The macOS menu bar expects a monochrome template, which the system recolours for a light or dark bar itself.
+    // Outside macOS the coloured app icon stays: the Windows and Linux notification area can be light or dark, and it reads on both.
     if cfg!(target_os = "macos") {
         tray = tray.icon(tauri::include_image!("icons/tray-template.png")).icon_as_template(true);
     } else if let Some(icon) = app.default_window_icon() {
@@ -243,8 +247,8 @@ fn show_main(app: &AppHandle) {
     windows::show(app, windows::MAIN);
 }
 
-/// „Quit” z traya: zatrzymanie daemona w tle, żeby pętla zdarzeń działała, a pojedyncza instancja
-/// była trzymana do końca; potem koniec procesu okna.
+/// "Quit" from the tray: stops the daemon in the background, so that the event loop keeps running and the single
+/// instance is held to the end; then the window process ends.
 fn quit_app(app: &AppHandle) {
     hide_shell(app);
     let state = Arc::clone(app.state::<Arc<DaemonState>>().inner());
@@ -255,7 +259,7 @@ fn quit_app(app: &AppHandle) {
     });
 }
 
-/// Chowa okna i ikonę w trayu, żeby zamykająca się powłoka nie przyjmowała już kliknięć.
+/// Hides the windows and the tray icon, so that a closing shell no longer takes clicks.
 fn hide_shell(app: &AppHandle) {
     for window in app.webview_windows().values() {
         let _ = window.hide();
@@ -268,6 +272,6 @@ fn windows_alert(text: &str) {
     use win_text::wide;
     use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
     let (text, title) = (wide(text), wide("Trackwall"));
-    // SAFETY: oba bufory są zakończone zerem i żyją do końca wywołania.
+    // SAFETY: both buffers are null-terminated and live until the end of the call.
     unsafe { MessageBoxW(std::ptr::null_mut(), text.as_ptr(), title.as_ptr(), MB_OK | MB_ICONERROR) };
 }

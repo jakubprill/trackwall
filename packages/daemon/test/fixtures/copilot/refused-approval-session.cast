@@ -1,6 +1,6 @@
-{"version": 2, "width": 120, "height": 30, "timestamp": 1792756800, "title": "Syntetyczna sesja Copilot CLI według nagrania z macOS (nie nagranie): odmowa zgody opcją 3 z tekstem, praca, koniec tury"}
+{"version": 2, "width": 120, "height": 30, "timestamp": 1792756800, "title": "A synthetic Copilot CLI session after a recording from macOS (not a recording): approval refused with option 3 and text, work, end of turn"}
 [0.7, "o", "\u001b]0;GitHub Copilot\u0007\u001b[?1049h> "]
-[2.6, "o", "\u001b]0;Uruchom testy - GitHub Copilot\u0007"]
+[2.6, "o", "\u001b]0;Run the tests - GitHub Copilot\u0007"]
 [2.7, "m", "{\"kind\":\"hook\",\"record\":{\"event\":\"sessionStart\",\"receivedAt\":1792756802700,\"payload\":{\"sessionId\":\"00000000-0000-4000-8000-000000000002\",\"timestamp\":1792756802660,\"source\":\"new\"},\"omitted\":[\"cwd\"]}}"]
 [3.5, "m", "{\"kind\":\"hook\",\"record\":{\"event\":\"userPromptSubmitted\",\"receivedAt\":1792756803500,\"payload\":{\"sessionId\":\"00000000-0000-4000-8000-000000000002\",\"timestamp\":1792756803460},\"omitted\":[\"cwd\"]}}"]
 [4.1, "o", "\u001b]0;Run Tests - GitHub Copilot\u0007⠋ Thinking"]
@@ -11,7 +11,7 @@
 [12.0, "m", "{\"kind\":\"key\",\"key\":\"enter\"}"]
 [12.2, "o", "⠋ Working (esc to interrupt)"]
 [14.6, "m", "{\"kind\":\"hook\",\"record\":{\"event\":\"postToolUse\",\"receivedAt\":1792756814600,\"payload\":{\"sessionId\":\"00000000-0000-4000-8000-000000000002\",\"timestamp\":1792756814560,\"toolName\":\"view\"},\"omitted\":[\"cwd\"]}}"]
-[15.9, "o", "Gotowe.\r\n> "]
+[15.9, "o", "Done.\r\n> "]
 [16.0, "m", "{\"kind\":\"hook\",\"record\":{\"event\":\"agentStop\",\"receivedAt\":1792756816000,\"payload\":{\"sessionId\":\"00000000-0000-4000-8000-000000000002\",\"timestamp\":1792756815960,\"stopReason\":\"end_turn\"},\"omitted\":[\"cwd\",\"transcriptPath\"]}}"]
 [27.9, "m", "{\"kind\":\"hook\",\"record\":{\"event\":\"sessionEnd\",\"receivedAt\":1792756827900,\"payload\":{\"sessionId\":\"00000000-0000-4000-8000-000000000002\",\"timestamp\":1792756827860,\"reason\":\"user_exit\"},\"omitted\":[\"cwd\"]}}"]
 [29.4, "m", "{\"kind\":\"exit\",\"code\":0}"]

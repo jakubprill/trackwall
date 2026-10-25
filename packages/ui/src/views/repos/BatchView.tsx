@@ -6,15 +6,16 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
 import { batchProgress, batchRunLabel, STEP_HINT, STEP_LABEL, stepLabel, stepMessage } from "@/lib/batch-state";
+import { toggle } from "@/lib/set-toggle";
 import type { BatchRunHandle } from "@/lib/use-batch-run";
 
 /**
- * Komenda zbiorcza (ADR-27): wybór kroków i repo, start, przerwanie i wynik każdego kroku w każdym repo. `repos` to
- * lista repo po filtrze tagów (ADR-25), więc grupę repo wybiera filtr, a tu można ją jeszcze zawęzić ręcznie.
+ * The batch command (ADR-27): choosing steps and repos, start, cancel and the result of every step in every repo. `repos`
+ * is the repo list after the tag filter (ADR-25), so the filter picks a group of repos, and it can be narrowed by hand here.
  */
 export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: readonly Repo[] }) {
   const [steps, setSteps] = useState<ReadonlySet<BatchStep>>(() => new Set(BATCH_STEPS));
-  // Domyślnie wszystkie repo; repo, które pojawi się na liście później, nie jest zaznaczane samo.
+  // All repos by default; a repo that appears in the list later is not ticked by itself.
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set(repos.map((r) => r.id)));
   const chosen = repos.filter((r) => selected.has(r.id));
   const { run } = batch;
@@ -49,7 +50,7 @@ export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: read
             None
           </Button>
         </div>
-        {/* Kolumny zamiast jednej listy: przy kilkudziesięciu repo wyniki zostają blisko przycisku startu. */}
+        {/* Columns instead of one list: with a few dozen repos the results stay close to the start button. */}
         <ul className="grid grid-cols-2 lg:grid-cols-3">
           {repos.map((repo) => (
             <Choice key={repo.id} checked={selected.has(repo.id)} onChange={() => setSelected(toggle(selected, repo.id))}>
@@ -80,7 +81,7 @@ export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: read
   );
 }
 
-/** Pod listą repo: przejście do komendy zbiorczej, z postępem, gdy trwa. */
+/** Under the repo list: the way to the batch command, with progress while it runs. */
 export function BatchBar({ batch, onShow }: { batch: BatchRunHandle; onShow: () => void }) {
   const progress = batch.run?.finishedAt === null ? batchProgress(batch.run) : undefined;
   return (
@@ -153,10 +154,4 @@ function Choice({ checked, onChange, children }: { checked: boolean; onChange: (
       </label>
     </li>
   );
-}
-
-function toggle<T>(set: ReadonlySet<T>, item: T): ReadonlySet<T> {
-  const next = new Set(set);
-  if (!next.delete(item)) next.add(item);
-  return next;
 }

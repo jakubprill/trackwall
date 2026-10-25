@@ -3,25 +3,24 @@ import { SessionList } from "./agents.ts";
 import { RunningMiseTask } from "./mise.ts";
 
 /**
- * Zdarzenia daemona na WebSocket `/ws` (§5.2, ADR-36). Zdarzenie niesie całą migawkę jednego tematu (lista sesji,
- * działające taski mise), a nie różnicę: klient, który się podłącza albo łączy ponownie, dostaje najpierw migawkę
- * każdego tematu, więc nie potrzebuje bufora zdarzeń ani `resync`. Daemon wysyła zdarzenie tylko wtedy, gdy migawka
- * tematu się zmieniła. Kolejność daje jedno uporządkowane połączenie, więc zdarzenie nie ma numeru. Klient niczego
- * nie wysyła.
+ * Daemon events on the WebSocket `/ws` (§5.2, ADR-36). An event carries the whole snapshot of one topic (the session list,
+ * running mise tasks), not a difference: a client that connects or reconnects first gets the snapshot of every topic, so it
+ * needs no event buffer and no `resync`. The daemon sends an event only when a topic's snapshot has changed. One ordered
+ * connection gives the order, so an event has no number. The client sends nothing.
  */
 
-/** Klient nie odbiera zdarzeń (za dużo w buforze daemona); łączy się ponownie i zaczyna od migawek. */
+/** The client does not keep up with events (too much in the daemon's buffer); it reconnects and starts from the snapshots. */
 export const EVENTS_CLOSE_SLOW = 4429;
 
 export const DaemonEvent = z.discriminatedUnion("type", [
-  /** Lista sesji i zadań, ta sama co `agents/sessions` (§4.4). */
+  /** The list of sessions and tasks, the same as `agents/sessions` (§4.4). */
   z.object({ type: z.literal("sessions.changed"), payload: SessionList }),
-  /** Działające taski mise wszystkich repo, to samo co `mise/running` (§4.7). */
+  /** Running mise tasks of all repos, the same as `mise/running` (§4.7). */
   z.object({ type: z.literal("mise.running.changed"), payload: z.array(RunningMiseTask) }),
 ]);
 export type DaemonEvent = z.infer<typeof DaemonEvent>;
 export type DaemonEventType = DaemonEvent["type"];
-/** Zdarzenie danego typu. */
+/** An event of the given type. */
 export type DaemonEventOf<T extends DaemonEventType> = Extract<DaemonEvent, { type: T }>;
-/** Migawka tematu zdarzenia danego typu. */
+/** The topic snapshot of an event of the given type. */
 export type DaemonEventPayload<T extends DaemonEventType> = DaemonEventOf<T>["payload"];

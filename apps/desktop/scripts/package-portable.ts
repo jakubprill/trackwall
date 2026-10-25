@@ -1,13 +1,13 @@
 /**
- * Pakuje wynik `pnpm build:desktop` do archiwum w `out/`:
+ * Packs the output of `pnpm build:desktop` into an archive in `out/`:
  *
- *   Windows: trackwall-<wersja>-windows-x64.zip
- *     Trackwall/trackwall.exe          okno + tray (wymaga WebView2)
+ *   Windows: trackwall-<version>-windows-x64.zip
+ *     Trackwall/trackwall.exe          window + tray (needs WebView2)
  *     Trackwall/trackwall-daemon.exe   daemon (sidecar)
- *     Trackwall/ui/                    UI dla trybu bez okna: trackwall-daemon.exe --ui
+ *     Trackwall/ui/                    UI for the windowless mode: trackwall-daemon.exe --ui
  *     Trackwall/README.txt
- *   macOS:   trackwall-<wersja>-macos-<arch>.zip z Trackwall.app
- *            trackwall-<wersja>-macos-<arch>.app.tar.gz, the same bundle as the update package (ADR-53)
+ *   macOS:   trackwall-<version>-macos-<arch>.zip with Trackwall.app
+ *            trackwall-<version>-macos-<arch>.app.tar.gz, the same bundle as the update package (ADR-53)
  *
  * On Windows the zip itself is the update package. The release workflow signs both update packages.
  *
@@ -23,7 +23,7 @@ const OUT = join(REPO, "out");
 const version = assertVersionsMatch();
 
 function need(path: string): string {
-  if (!existsSync(path)) throw new Error(`brak ${path}; najpierw pnpm build:desktop`);
+  if (!existsSync(path)) throw new Error(`${path} is missing; run pnpm build:desktop first`);
   return path;
 }
 
@@ -76,7 +76,7 @@ if (process.platform === "win32") {
   console.log(zip);
   if (process.arch === "arm64") packUpdate(bundles, join(OUT, UPDATE_PACKAGES["darwin-aarch64"](version)));
 } else {
-  throw new Error("portable build jest tylko dla Windows i macOS");
+  throw new Error("the portable build is only for Windows and macOS");
 }
 
 /**

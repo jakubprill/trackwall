@@ -13,17 +13,17 @@ export const TAURI_DIR = join(DESKTOP, "src-tauri");
  */
 export const BUILD_ENTRIES = ["trackwall.exe", "trackwall-daemon.exe", "ui", "README.txt"];
 
-/** Triple hosta z `rustc -vV`; tak samo nazywa sidecary Tauri. */
+/** The host triple from `rustc -vV`; Tauri names sidecars the same way. */
 export function hostTriple(): string {
   const out = run(["rustc", "-vV"], REPO, true);
   const line = out.split("\n").find((l) => l.startsWith("host: "));
-  if (!line) throw new Error("rustc -vV nie podał hosta");
+  if (!line) throw new Error("rustc -vV did not report the host");
   return line.slice("host: ".length).trim();
 }
 
 export function run(cmd: string[], cwd: string, capture = false): string {
   const proc = Bun.spawnSync(cmd, { cwd, stdout: capture ? "pipe" : "inherit", stderr: "inherit" });
-  if (proc.exitCode !== 0) throw new Error(`${cmd.join(" ")} zakończył się kodem ${proc.exitCode}`);
+  if (proc.exitCode !== 0) throw new Error(`${cmd.join(" ")} exited with code ${proc.exitCode}`);
   return capture ? (proc.stdout?.toString() ?? "") : "";
 }
 
@@ -43,7 +43,7 @@ export function parseFile<T>(path: string, schema: z.ZodType<T>, parse: (text: s
   return parsed.data;
 }
 
-/** Pole `version` z pliku JSON (package.json, tauri.conf.json). */
+/** The `version` field from a JSON file (package.json, tauri.conf.json). */
 export function jsonVersion(path: string): string {
   return parseFile(path, JsonManifest, JSON.parse).version;
 }
@@ -53,12 +53,12 @@ export function tauriIdentifier(): string {
   return parseFile(join(TAURI_DIR, "tauri.conf.json"), z.object({ identifier: z.string() }), JSON.parse).identifier;
 }
 
-/** `[package].version` z Cargo.toml. */
+/** `[package].version` from Cargo.toml. */
 export function cargoVersion(path: string): string {
   return parseFile(path, CargoManifest, Bun.TOML.parse).package.version;
 }
 
-/** Wersja musi być ta sama w daemonie, Tauri i Cargo: powłoka porównuje ją z `/api/health`. */
+/** The version must be the same in the daemon, Tauri and Cargo: the shell compares it with `/api/health`. */
 function versions(): Record<string, string> {
   const manifests = {
     "packages/daemon/package.json": jsonVersion,
@@ -73,7 +73,7 @@ export function assertVersionsMatch(): string {
   const [version, ...others] = new Set(Object.values(v));
   if (!version || others.length > 0) {
     throw new Error(
-      `różne wersje:\n${Object.entries(v)
+      `versions differ:\n${Object.entries(v)
         .map(([f, x]) => `  ${f}: ${x}`)
         .join("\n")}`,
     );

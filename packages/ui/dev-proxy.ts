@@ -7,18 +7,18 @@ import { DAEMON_FILE, DaemonFile, daemonSocketAt, SOCKET_TOKEN_PREFIX, TRACKWALL
 import type { Plugin } from "vite";
 
 /**
- * Tylko `vite dev`: przekazuje `/api/*` i WebSockety zdarzeń (`/ws`) i terminala sesji (`/ws/pty/*`) do daemona z `pnpm dev` z tokenem
- * z `daemon.json`.
- * Daemon deweloperski trzyma stan w `<repo>/.trackwall-dev`, osobno od wydanej aplikacji w `~/.trackwall`
- * (`TRACKWALL_HOME` nadpisuje oba).
- * Plik jest czytany przy każdym żądaniu, więc kolejność startu daemona i Vite nie ma znaczenia,
- * a przeglądarka nigdy nie widzi tokenu.
+ * Only `vite dev`: forwards `/api/*` and the WebSockets of events (`/ws`) and session terminals (`/ws/pty/*`) to the
+ * daemon from `pnpm dev`, with the token from `daemon.json`.
+ * The development daemon keeps its state in `<repo>/.trackwall-dev`, separate from the released app in `~/.trackwall`
+ * (`TRACKWALL_HOME` overrides both).
+ * The file is read on every request, so the start order of the daemon and Vite does not matter,
+ * and the browser never sees the token.
  *
- * Proxy dokłada token, więc samo musi pilnować tego, co daemon sprawdza po `Origin` (§5.2): przepuszcza tylko
- * żądania ze strony Vite. Bez tego dowolna strona w przeglądarce mogłaby wysłać formularz POST na
- * `127.0.0.1:5173/api/...` i wykonać akcję w daemonie.
+ * The proxy adds the token, so it has to guard what the daemon checks by `Origin` itself (§5.2): it lets through only
+ * requests from the Vite page. Without this any page in the browser could send a POST form to
+ * `127.0.0.1:5173/api/...` and perform an action in the daemon.
  */
-/** Ten sam katalog podaje skrypt `dev` daemona (`--home ../../.trackwall-dev`). */
+/** The daemon's `dev` script gives the same directory (`--home ../../.trackwall-dev`). */
 const DEV_HOME = fileURLToPath(new URL("../../.trackwall-dev", import.meta.url));
 
 export function daemonDevProxy(): Plugin {
@@ -37,7 +37,7 @@ export function daemonDevProxy(): Plugin {
       const ownOrigins = () => [`http://127.0.0.1:${server.config.server.port}`, `http://localhost:${server.config.server.port}`];
       server.httpServer?.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
         const target = daemonSocketAt(URL.parse(req.url ?? "/", "http://127.0.0.1")?.pathname ?? "");
-        if (!target) return; // HMR Vite ma własną obsługę
+        if (!target) return; // Vite HMR has its own handling
         const daemon = readDaemon();
         if (!daemon || (req.headers.origin !== undefined && !ownOrigins().includes(req.headers.origin))) return void socket.destroy();
         proxyDaemonSocket(req, socket, head, daemon, target.subprotocol);
@@ -57,13 +57,13 @@ export function daemonDevProxy(): Plugin {
         const origin = req.headers.origin;
         const site = req.headers["sec-fetch-site"];
         if ((origin !== undefined && !own.includes(origin)) || (site !== undefined && site !== "same-origin" && site !== "none")) {
-          return reply(403, "żądanie spoza strony Vite");
+          return reply(403, "request from outside the Vite page");
         }
 
         const daemon = readDaemon();
-        if (!daemon) return reply(503, `daemon nie działa (brak albo uszkodzony ${file})`);
+        if (!daemon) return reply(503, `daemon is not running (${file} missing or damaged)`);
 
-        // node:http, nie fetch: bez obejścia przez HTTP_PROXY i ze strumieniowaniem ciała w obie strony.
+        // node:http, not fetch: no detour through HTTP_PROXY, and the body streams both ways.
         const upstream = request(
           {
             host: "127.0.0.1",
@@ -80,13 +80,13 @@ export function daemonDevProxy(): Plugin {
           (up) => {
             res.statusCode = up.statusCode ?? 502;
             res.setHeader("content-type", up.headers["content-type"] ?? "application/json");
-            // Zerwane połączenie w połowie odpowiedzi: przeglądarka ma dostać błąd, a nie wiszące żądanie.
+            // A connection dropped halfway through the response: the browser should get an error, not a hanging request.
             up.on("aborted", () => res.destroy());
             up.on("error", () => res.destroy());
             up.pipe(res);
           },
         );
-        upstream.on("error", (err) => reply(502, `daemon nie odpowiada: ${err.message}`));
+        upstream.on("error", (err) => reply(502, `daemon is not responding: ${err.message}`));
         req.pipe(upstream);
       });
     },
@@ -94,8 +94,8 @@ export function daemonDevProxy(): Plugin {
 }
 
 /**
- * WebSocket daemona: proxy podmienia podprotokoły na podprotokół gniazda z tokenem i bez `Origin` strony Vite
- * (sprawdzonego wyżej), a po przełączeniu protokołu przepuszcza ramki w obie strony bez zmian.
+ * The daemon's WebSocket: the proxy swaps the subprotocols for the socket's subprotocol with the token and drops the Vite
+ * page's `Origin` (checked above), and after the protocol switch it passes frames both ways unchanged.
  */
 function proxyDaemonSocket(req: IncomingMessage, socket: Duplex, head: Buffer, daemon: DaemonFile, subprotocol: string): void {
   const { origin: _, host: __, "sec-websocket-protocol": ___, ...headers } = req.headers;

@@ -16,11 +16,11 @@ import { Button } from "@/components/ui/button";
 import { twoDigits } from "@/lib/format";
 import { homeDaemonStatus, homeRepoStatus, pullLabel } from "@/lib/home-model";
 import { branchLabel } from "@/lib/repo-status";
-import { sessionStateLabel } from "@/lib/session-state";
+import { sessionPlace, sessionStateLabel } from "@/lib/session-state";
 
 /**
- * Prawy panel pulpitu: szczegóły wybranego obiektu i przycisk, który do niego przechodzi. Bez wyboru pokazuje
- * podsumowanie środowiska, żeby panel nigdy nie był pusty, a pulpit dało się czytać bez sceny 3D.
+ * The dashboard's right panel: details of the selected object and a button that goes to it. Without a selection it shows
+ * a summary of the environment, so that the panel is never empty and the dashboard can be read without the 3D scene.
  */
 export function HomeDetails({
   selected,
@@ -73,7 +73,7 @@ export function HomeDetails({
     const session = target?.kind === "session" ? sessions.get(target.id) : undefined;
     if (session) {
       return (
-        <Panel title={session.repo} onClose={close}>
+        <Panel title={sessionPlace(session)} onClose={close}>
           <SessionDetails session={session} onSelect={onSelect} />
           <Button size="sm" onClick={() => onOpen(sessionKey(session.id))}>
             Open session
@@ -133,11 +133,13 @@ function RepoDetails({
       {repo.status.kind === "ok" && (
         <Field name="Branch">
           <span className="font-mono">{branchLabel(repo.status)}</span>
-          {/* Repo ze zmianami ma stan „changed”, więc commity do pobrania widać dopiero tutaj. */}
+          {/* A repo with changes has the state "changed", so commits to pull show only here. */}
           {homeRepo.state === "changed" && behind > 0 && <span className="text-warning">{` · ${pullLabel(behind)}`}</span>}
         </Field>
       )}
-      <Field name="Tasks">{tasks.length === 0 ? "none running" : tasks.map((t) => t.miseTask).join(", ")}</Field>
+      <Field name="Tasks">
+        {tasks.length === 0 ? "none running" : tasks.map((t) => (t.task === null ? t.miseTask : `${t.miseTask} (in a task)`)).join(", ")}
+      </Field>
       <Field name="Sessions">
         {sessions.length === 0
           ? "none"
@@ -152,16 +154,19 @@ function RepoDetails({
 }
 
 function SessionDetails({ session, onSelect }: { session: Session; onSelect: (key: HomeKey) => void }) {
+  const { repo } = session;
   return (
     <dl className="grid w-full grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-xs">
       <Field name="State">
         <StatusLabel {...sessionStateLabel(session)} />
       </Field>
-      <Field name="Repo">
-        <button type="button" className="hover:text-primary font-mono" onClick={() => onSelect(repoKey(session.repo))}>
-          {session.repo}
-        </button>
-      </Field>
+      {repo !== null && (
+        <Field name="Repo">
+          <button type="button" className="hover:text-primary font-mono" onClick={() => onSelect(repoKey(repo))}>
+            {repo}
+          </button>
+        </Field>
+      )}
       {session.windowTitle && <Field name="Window">{session.windowTitle}</Field>}
       {session.task && (
         <Field name="Task">
@@ -181,7 +186,7 @@ function Field({ name, children }: { name: string; children: ReactNode }) {
   );
 }
 
-/** Stan środowiska słowami: to samo, co mówi rdzeń sceny i liczby obiektów na niej. */
+/** The environment's state in words: the same as the scene's core and the object counts on it say. */
 function Summary({ model }: { model: HomeModel }) {
   const count = (state: HomeSessionState) => model.sessions.filter((s) => s.state === state).length;
   const rows = [

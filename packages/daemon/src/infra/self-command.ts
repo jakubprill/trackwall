@@ -1,14 +1,14 @@
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isCompiledBinary, runtimeInfo } from "../platform/runtime.ts";
 
 /**
- * Komenda, która uruchamia ten sam daemon z podkomendą (most stdio MCP, hook wtyczki sesji), do podania innemu
- * programowi. Binarka z wydania to sama ścieżka binarki; uruchomienie ze źródeł dokłada runtime i skrypt.
+ * The command that runs this daemon with a subcommand (the MCP stdio bridge, a session plugin hook), for another
+ * program to run. A release binary is just its own path; from source it is the runtime with `src/main.ts`, whatever
+ * script started this process, so a script that builds a daemon of its own (`scripts/demo.ts`) hands out the same.
  */
 export function selfCommand(args: readonly string[]): { exec: string; args: string[] } {
-  const script = process.argv[1];
-  const fromSource = !isCompiledBinary() && script !== undefined ? [...runtimeArgs(), resolve(script)] : [];
+  const fromSource = isCompiledBinary() ? [] : [...runtimeArgs(), fileURLToPath(new URL("../main.ts", import.meta.url))];
   return { exec: process.execPath, args: [...fromSource, ...args] };
 }
 

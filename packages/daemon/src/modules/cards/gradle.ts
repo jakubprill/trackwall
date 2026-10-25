@@ -5,10 +5,11 @@ import { baseName, dirOf, inDir, rootFiles } from "./repo-path.ts";
 import { type Extracted, emptyExtracted, evidenceAt, type RepoSnapshot } from "./snapshot.ts";
 
 /**
- * Ekstraktor Gradle (§4.6). Skrypty Gradle to kod (Groovy albo Kotlin), więc ekstraktor nie wykonuje ich, tylko
- * czyta linie w typowej postaci: `include(...)` w `settings.gradle(.kts)`, `group` i `version`, zależności
- * `implementation("grupa:artefakt:wersja")` albo z katalogu wersji (`libs.…` z `gradle/libs.versions.toml`), wtyczki
- * `id("…")` i wersję Javy z toolchaina. Zależność złożona w kodzie (zmienne, pętle) nie trafi na kartę.
+ * The Gradle extractor (§4.6). Gradle scripts are code (Groovy or Kotlin), so the extractor does not run them; it reads
+ * lines in the usual form: `include(...)` in `settings.gradle(.kts)`, `group` and `version`, dependencies
+ * `implementation("group:artifact:version")` or from the version catalog (`libs.…` from `gradle/libs.versions.toml`),
+ * plugins `id("…")` and the Java version from the toolchain. A dependency put together in code (variables, loops) does
+ * not reach the card.
  */
 
 const SETTINGS = ["settings.gradle.kts", "settings.gradle"];
@@ -16,21 +17,21 @@ const BUILD = ["build.gradle.kts", "build.gradle"];
 const SCRIPTS = [...SETTINGS, ...BUILD];
 const CATALOG = "gradle/libs.versions.toml";
 
-/** Pliki, które ten ekstraktor czyta, do wyboru plików z commita. */
+/** The files this extractor reads, for choosing files from the commit. */
 export function readsGradleFile(path: string): boolean {
   return SCRIPTS.includes(baseName(path)) || path === CATALOG || path.endsWith(`/${CATALOG}`);
 }
 
-/** Konfiguracja zależności: wbudowane Gradle i wtyczek Java/Kotlin oraz każda kończąca się tak jak one. */
+/** Dependency configurations: the built-in ones of Gradle and the Java/Kotlin plugins, and every one ending like them. */
 const CONFIGURATION =
   /^(api|implementation|compileOnly|runtimeOnly|annotationProcessor|kapt|ksp|developmentOnly|compile|runtime|classpath|\w+(Implementation|Api|CompileOnly|RuntimeOnly|AnnotationProcessor))$/;
 /*
- * Wyrażenia niżej nie mają dwóch `\s*` obok siebie (`\s*\(?\s*`): linia z tysiącami spacji dawałaby kwadratowe
- * dopasowanie, a plik buildu jest niezaufany (§8). Opcjonalny nawias to `(?:\(\s*)?`.
+ * The expressions below never have two `\s*` next to each other (`\s*\(?\s*`): a line with thousands of spaces would
+ * give a quadratic match, and the build file is untrusted (§8). The optional bracket is `(?:\(\s*)?`.
  */
-/** `implementation("g:a:v")`, `implementation 'g:a'`, także w `platform(...)` i `enforcedPlatform(...)`. */
+/** `implementation("g:a:v")`, `implementation 'g:a'`, also inside `platform(...)` and `enforcedPlatform(...)`. */
 const LITERAL_DEPENDENCY = /^\s*(\w+)\s*(?:\(\s*)?(?:(?:enforced)?[pP]latform\s*\(\s*)?["']([^"'\s:]+):([^"'\s:]+)(?::([^"'\s]+))?["']/;
-/** `implementation(libs.spring.boot.web)` albo `implementation libs.spring.boot.web`. */
+/** `implementation(libs.spring.boot.web)` or `implementation libs.spring.boot.web`. */
 const CATALOG_DEPENDENCY = /^\s*(\w+)\s*(?:\(\s*)?(?:(?:enforced)?[pP]latform\s*\(\s*)?libs\.([\w.]+)/;
 /** `id("org.springframework.boot") version "3.3.0"`, `id 'x' version 'y'`, `apply plugin: 'x'`. */
 const PLUGIN_ID =
@@ -40,9 +41,9 @@ const JAVA_TOOLCHAIN =
   /JavaLanguageVersion\.of\(\s*["']?(\d+)["']?\s*\)|(?:source|target)Compatibility\s*=\s*(?:JavaVersion\.VERSION_)?["']?([\d._]+)["']?/;
 
 interface Project {
-  /** Plik buildu projektu; projekt z `include` bez własnego pliku nie trafia na kartę. */
+  /** The project's build file; a project from `include` without its own file does not reach the card. */
   buildPath: string;
-  /** Nazwa projektu: ostatni segment ścieżki z `include` albo `rootProject.name`; `null`, gdy nieznana. */
+  /** The project name: the last segment of the path from `include` or `rootProject.name`; `null` when unknown. */
   name: string | null;
   memberOf: string | null;
 }
@@ -55,7 +56,7 @@ export function extractGradle(snapshot: RepoSnapshot): Extracted {
   return out;
 }
 
-/** Jeden build Gradle z korzeniem w `dir`: projekt główny i projekty z `include`. */
+/** One Gradle build rooted in `dir`: the root project and the projects from `include`. */
 function extractBuild(snapshot: RepoSnapshot, dir: string, out: Extracted): void {
   const catalog = readCatalog(snapshot, inDir(dir, CATALOG), out);
   const projects = buildProjects(snapshot, dir);
@@ -83,7 +84,7 @@ function extractBuild(snapshot: RepoSnapshot, dir: string, out: Extracted): void
   }
 }
 
-/** Projekt główny (z nazwą z `rootProject.name`) i projekty z `include`, które mają plik buildu. */
+/** The root project (named by `rootProject.name`) and the projects from `include` that have a build file. */
 function buildProjects(snapshot: RepoSnapshot, dir: string): (Project & { text: string })[] {
   const settingsPath = SETTINGS.map((name) => inDir(dir, name)).find((p) => snapshot.text(p) !== undefined);
   const settings = settingsPath === undefined ? "" : (snapshot.text(settingsPath) ?? "");
@@ -100,8 +101,8 @@ function buildProjects(snapshot: RepoSnapshot, dir: string): (Project & { text: 
 }
 
 /**
- * Ścieżki projektów z `include` w settings, bez `:` na początku (`:api:core` → `api:core`). `include` bywa rozpisany
- * na wiele linii: w nawiasie (Kotlin) albo z przecinkiem na końcu linii (Groovy).
+ * Project paths from `include` in settings, without the leading `:` (`:api:core` → `api:core`). `include` can be spread
+ * over several lines: in brackets (Kotlin) or with a comma at the end of the line (Groovy).
  */
 function includedProjects(settings: string): string[] {
   const paths: string[] = [];
@@ -111,7 +112,7 @@ function includedProjects(settings: string): string[] {
     if (!continued && !/^\s*include\b/.test(text)) continue;
     if (!continued) depth = 0;
     for (const m of text.matchAll(/["']([^"']+)["']/g)) paths.push((m[1] ?? "").replace(/^:/, ""));
-    // Na liniach include wystarczą proste napisy: komentarze zdjął już `codeLines`.
+    // Plain strings are enough on include lines: `codeLines` has already removed the comments.
     const code = text.replace(/"[^"]*"|'[^']*'/g, "");
     depth += (code.match(/\(/g)?.length ?? 0) - (code.match(/\)/g)?.length ?? 0);
     continued = depth > 0 || text.trimEnd().endsWith(",");
@@ -123,7 +124,7 @@ function buildFileIn(snapshot: RepoSnapshot, dir: string): string | undefined {
   return BUILD.map((name) => inDir(dir, name)).find((p) => snapshot.text(p) !== undefined);
 }
 
-/** Wartość przypisania `name = "…"` (także `name "…"` w Groovy); pierwsze w pliku poza komentarzem. */
+/** The value of the assignment `name = "…"` (also `name "…"` in Groovy); the first in the file outside a comment. */
 function assignment(text: string, name: string): string | undefined {
   const pattern = new RegExp(`^\\s*${name}\\s*(?:=\\s*)?["']([^"']+)["']`);
   for (const line of codeLines(text)) {
@@ -133,7 +134,7 @@ function assignment(text: string, name: string): string | undefined {
   return undefined;
 }
 
-/** Zależności i wtyczki z linii skryptu; jedna linia daje najwyżej jedną paczkę. */
+/** Dependencies and plugins from a script line; one line gives at most one package. */
 function dependencies(path: string, text: string, catalog: Catalog): ConsumedPackage[] {
   const found: ConsumedPackage[] = [];
   for (const line of codeLines(text)) {
@@ -160,7 +161,7 @@ function catalogDependency(line: string, catalog: Catalog): LinePackage | undefi
 
 function pluginDependency(line: string, catalog: Catalog): LinePackage | undefined {
   const plugin = PLUGIN_ID.exec(line);
-  // Wtyczki bez kropki (`java`, `application`) są wbudowane w Gradle, więc nie są zależnością.
+  // Plugins without a dot (`java`, `application`) are built into Gradle, so they are not a dependency.
   if (plugin?.[1]?.includes(".")) return { ecosystem: "gradle-plugin", name: plugin[1], version: plugin[2] ?? null, scope: "plugin" };
   const fromCatalog = CATALOG_PLUGIN.exec(line);
   const entry = fromCatalog ? catalog.plugins.get(alias(fromCatalog[1] ?? "")) : undefined;
@@ -171,7 +172,7 @@ function javaVersion(path: string, text: string): ToolRequirement[] {
   for (const line of codeLines(text)) {
     const m = JAVA_TOOLCHAIN.exec(line.text);
     const version = m?.[1] ?? m?.[2];
-    // `1.8` to Java 8 w starym zapisie; mise zna ją jako `8`.
+    // `1.8` is Java 8 in the old notation; mise knows it as `8`.
     if (version)
       return [
         {

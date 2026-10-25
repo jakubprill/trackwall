@@ -2,18 +2,18 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import headless from "@xterm/headless";
 
 /**
- * Ekran sesji po stronie daemona (§4.4, ADR-26): emulator terminala bez okna, karmiony całym wyjściem PTY.
- * Okno terminala w UI, które podłącza się w trakcie sesji (przełączenie sesji, odświeżenie, drugie okno), dostaje
- * najpierw obraz ekranu z tego emulatora, a potem dalsze wyjście. Bez tego musiałoby odtworzyć całe wyjście od
- * startu, a TUI Copilot CLI pracuje na alternatywnym ekranie, którego koniec bufora nie odtwarza.
+ * The session's screen on the daemon side (§4.4, ADR-26): a windowless terminal emulator fed the whole PTY output. A
+ * session terminal in the UI that connects during the session (switching sessions, a refresh, a second window) first
+ * gets the screen image from this emulator, and then further output. Without it it would have to replay the whole
+ * output from the start, and Copilot CLI's TUI works on the alternate screen, which replaying the end of the buffer does not restore.
  *
- * Emulator przetwarza zapis asynchronicznie, więc wyjście trafia do widzów dopiero w wywołaniu zwrotnym zapisu:
- * widz dołączony po obrazie ekranu dostaje dokładnie te kawałki, których obraz jeszcze nie zawiera.
+ * The emulator processes writes asynchronously, so output reaches viewers only in the write callback: a viewer that
+ * joined after the screen image gets exactly the chunks the image does not contain yet.
  */
 
 const SCROLLBACK_LINES = 2000;
 
-/** `@xterm/headless` to paczka CommonJS; Node nie widzi jej nazwanych eksportów, domyślny eksport działa wszędzie. */
+/** `@xterm/headless` is a CommonJS package; Node does not see its named exports, the default export works everywhere. */
 const { Terminal } = headless;
 
 export type ScreenViewer = (bytes: Uint8Array) => void;
@@ -47,8 +47,8 @@ export class TerminalScreen {
   }
 
   /**
-   * Dołącza widza: `onSnapshot` dostaje obraz ekranu po przetworzeniu całego dotychczasowego wyjścia, a widz każdy
-   * następny kawałek. Zwraca odłączenie.
+   * Attaches a viewer: `onSnapshot` gets the screen image after all output so far has been processed, and the viewer every
+   * following chunk. Returns the detach function.
    */
   attach(viewer: ScreenViewer, onSnapshot: (snapshot: string) => void): () => void {
     let attached = true;

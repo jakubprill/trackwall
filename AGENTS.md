@@ -2,7 +2,7 @@
 
 Trackwall is written mostly by agents, and a human reads the code now and then. Every rule below exists so that the next agent, or a person looking in from the side, can understand a change and trust it without asking. When a rule and intuition disagree, the rule wins. When a rule is wrong, change it here in the same PR and say why.
 
-Repo map and running from source: `docs/development.md`. Features: `docs/features.md`. Architecture and module boundaries: `docs/architecture.md`. Glossary: `CONTEXT.md`. Releases: `docs/release.md`.
+Repo map and running from source: `docs/development.md`. Features: the documentation site in `apps/docs` (one page per feature, published on GitHub Pages). Architecture and module boundaries: `docs/architecture.md`. Glossary: `CONTEXT.md`. Releases: `docs/release.md`.
 
 In this file "agent" means an agent writing Trackwall code. An agent that Trackwall runs in a task is called a "task session" here.
 
@@ -12,7 +12,7 @@ A change is done when it meets every point, not when it compiles:
 
 1. **It works and has a test** at the cheapest level that proves it: a test in the package's `test/` directory (`bun test`), a test with a real child process for `procs` and `logs`, `cargo test` for the Tauri shell. A bug fix starts with a test that fails without it.
 2. **It works on Windows and macOS.** System-dependent code has a test that CI runs in the `windows-latest` + `macos-latest` matrix. CI checks Linux, Windows and macOS on every PR (ADR-22); a PR is ready when the `CI ok` check on its last commit is green. Whatever CI cannot check (WebView2, SmartScreen, a real Windows machine outside CI) goes into the PR as "to check manually".
-3. **Locally,** `pnpm lint`, `pnpm typecheck` and `pnpm test` pass, and when the change touches `apps/desktop`, the daemon build or packaging, so do the steps of the `desktop` job in `.github/workflows/ci.yml` (section "Commands"). CI confirms, it does not hunt for bugs.
+3. **Locally,** `pnpm lint`, `pnpm typecheck` and `pnpm test` pass, and when the change touches `apps/desktop`, the daemon build or packaging, so do the steps of the `desktop` job in `.github/workflows/ci.yml`, and when it touches `apps/docs`, the documentation site build (section "Commands"). CI confirms, it does not hunt for bugs.
 4. **Documentation describes the new behaviour in the same PR** (section "Documentation").
 5. **Nothing company-specific** in code, tests, fixtures, documentation or commits (section "Nothing company-specific in the repo").
 6. **The pre-PR review is done** (section "Pre-PR review"): findings fixed or rejected with a reason.
@@ -35,7 +35,7 @@ The first round runs at the highest level (`/code-review max`), later rounds on 
 - **`docs/architecture.md` is the only architecture document.** A change to a module boundary, protocol, data model or flow updates the matching section in the same PR. Search the whole document for the old behaviour, not just the obvious section.
 - **Decisions go to §12 as ADRs.** A new ADR has a number, a date, a one-sentence decision, the reasoning and what would reverse it. A spike result or a clarification is appended to the existing ADR (like the spike findings in ADR-1). A reversed decision is not deleted: a new ADR, and the old one gets the note "superseded by ADR-N".
 - **A new domain term goes into `CONTEXT.md`** together with its identifier in code. From then on that one word is used in code, UI, MCP tools and documentation.
-- A change to commands, required tools or repo layout updates `docs/development.md` (and the "Commands" section below if it concerns the Definition of done). A new or changed feature updates `docs/features.md`. A change to the release process updates `docs/release.md`.
+- A change to commands, required tools or repo layout updates `docs/development.md` (and the "Commands" section below if it concerns the Definition of done). A new or changed feature updates its page in `apps/docs/features/`; a new feature gets a new page from `apps/docs/TEMPLATE.md` and an entry in `apps/docs/.vitepress/sidebar.ts` (ADR-56). Those pages are for people using Trackwall: what they see and do, in plain words, without ADRs, module names or history; the why stays in `docs/architecture.md`. A change to the release process updates `docs/release.md`.
 - `README.md` is deliberately short (ADR-32): what Trackwall is, that it is an early version, where the releases are and a link to the installation instructions. Do not add feature descriptions or instructions to it.
 
 ## Language
@@ -52,7 +52,7 @@ The repo is meant to be published as open source (header of `docs/architecture.m
 
 - **The daemon listens only on `127.0.0.1`.** Every HTTP, WebSocket and MCP request passes a `Host`/`Origin` check and, apart from `GET /api/health` and the static UI files, also requires the token, compared in constant time. This is done by `handle()` in `packages/daemon/src/api/server.ts` with the help of `api/guard.ts`; a new transport uses the same functions, not its own.
 - **Everything from outside is untrusted**: request bodies, MCP tool arguments, configuration files, process output, files from the user's repos. It comes in through a zod schema (`safeParse` at the point of entry; API contract schemas in `packages/protocol`).
-- **The daemon builds commands from configuration, never from text sent by a task session** (§1.2). Processes of services, mise tasks and task sessions start only through the `procs` module, in a group, with a working directory checked against the root of the repo or worktree.
+- **The daemon builds commands from configuration, never from text sent by a task session** (§1.2). Processes of services, mise tasks and task sessions start only through the `procs` module, in a group, with a working directory checked against the root of the repo or worktree (for the supervisor, the projects folder, ADR-58).
 - **Secrets do not reach task sessions or logs**: values are masked before they are written to the buffer, MCP tools answer "set / missing", environment variables do not go into the audit, error messages or fixtures.
 - No MCP tool changes the daemon configuration, autostart or the list of connected agents; only the UI does that.
 - An agent does not push tags, create releases or change repo settings. A human makes the release following `docs/release.md`.
@@ -77,7 +77,7 @@ The repo is meant to be published as open source (header of `docs/architecture.m
 - **Comments explain why, not what.** A non-obvious module starts with a short comment: what it is for, what it guarantees, where it is described (architecture section).
 - **Explicit over clever**: no magic strings shared between files (export a constant), no hidden global state, no silent defaults for something that must be set.
 - **Delete dead code** instead of commenting it out.
-- **File names**: kebab-case (`open-browser.ts`), React components in PascalCase (`DaemonPanel.tsx`). Exception: shadcn/ui components in `components/ui/` keep the names the generator gives them (`button.tsx`).
+- **File names**: kebab-case (`system-open.ts`), React components in PascalCase (`DaemonPanel.tsx`). Exception: shadcn/ui components in `components/ui/` keep the names the generator gives them (`button.tsx`).
 - **npm dependencies at exact versions** (no `^` or `~`; `.npmrc` has `save-exact=true`, so `pnpm add` takes care of it). Do not add a dependency for something a few lines of code can do. A native addon requires checking that it works in `bun build --compile` on both systems (a spike in a separate PR, findings in an ADR, like ADR-1).
 - **Tests read like documentation**: a test name is a sentence describing the behaviour, and the test shows the input and the expected result without helpers that hide them.
 - **Rules are enforced by a tool wherever possible**: a linter rule holds better than a sentence in this file. When you repeat the same finding in reviews, turn it into a rule. Today these guard the code:
@@ -87,6 +87,9 @@ The repo is meant to be published as open source (header of `docs/architecture.m
   - the test `apps/desktop/test/toolchain.test.ts`: the same tool versions in `mise.toml` and the workflows;
   - the test `apps/desktop/test/layout.test.ts`: the contents of the `src/` root of the daemon and the UI, and the view folders;
   - the test `apps/desktop/test/biome-config.test.ts`: the ban on `bun` imports and the global `Bun` applies everywhere in the daemon outside `platform/` (Biome does not merge override options, so the ban is repeated in several places);
+  - Biome's `noRestrictedGlobals` and the test `apps/desktop/test/ui-dialogs.test.ts`: no `alert` or `confirm` in the UI, which the Tauri dialog plugin replaces (ADR-51);
+  - the test `apps/docs/test/pages.test.ts`: every feature page follows `apps/docs/TEMPLATE.md` (frontmatter, title and lede, sections), is in the sidebar under its title, the home page cards repeat the page descriptions, and no page of the site cites an ADR or links into `docs/`;
+  - the test `apps/docs/test/theme.test.ts`: the documentation site's dark theme, fonts and logo are copies of the app's tokens and icon (ADR-16, ADR-56);
   - the test `packages/ui/test/design-tokens.test.ts`: UI components without raw colours or arbitrary appearance values, only tokens from `index.css` (ADR-16);
   - daemon compatibility with Node (ADR-1): `erasableSyntaxOnly` in the `tsconfig.json` of the daemon and `protocol`, `useImportExtensions` in Biome for their `src` (also in `packages/scene/src`), the ban on Bun APIs in the daemon outside `platform/`, and daemon process tests under Bun and under Node.
 
@@ -108,9 +111,12 @@ cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- 
 cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
 bun packages/daemon/scripts/smoke.ts apps/desktop/src-tauri/target/release/trackwall-daemon
 pnpm portable
+
+# when the change touches apps/docs (a broken link between pages fails the build; the `check` job in CI runs it too):
+pnpm --filter @trackwall/docs build
 ```
 
-Tool versions are in `mise.toml` (`mise install`), which also has the `setup`, `dev` and `portable` tasks. The workflows have them in `env`, and the `.github/actions/setup` action installs them in the jobs that build and test (the audit needs only pnpm and Node); a version change goes into `mise.toml` and both workflows at once (a test guards this).
+Tool versions are in `mise.toml` (`mise install`), which also has the `setup`, `dev` and `portable` tasks. The workflows have them in `env`, and the `.github/actions/setup` action installs them in the jobs that build and test (the audit needs only pnpm and Node); a version change goes into `mise.toml` and every workflow that sets it at once (`ci.yml`, `release.yml`, and Node and Bun in `pages.yml`; a test guards this).
 
 ## Commits and PRs
 

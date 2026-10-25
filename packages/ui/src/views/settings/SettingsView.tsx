@@ -1,4 +1,6 @@
+import { isTauri } from "@tauri-apps/api/core";
 import { workspaceApi } from "@trackwall/protocol";
+import { FolderOpen } from "lucide-react";
 import { type FormEvent, useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
@@ -7,12 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { pickFolder } from "@/lib/folder-picker";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 import { useRemote } from "@/lib/use-remote";
 import { RepoHostsForm } from "./RepoHostsForm.tsx";
 import { UpdatesSurface } from "./UpdatesSurface.tsx";
 
-/** Ustawienia workspace; każde z nich jest też kluczem w `workspace.yaml`, który można edytować ręcznie (ADR-13, ADR-18). */
+/** Workspace settings; each one is also a key in `workspace.yaml`, which can be edited by hand (ADR-13, ADR-18). */
 export function SettingsView({
   conn,
   update,
@@ -52,7 +55,7 @@ export function SettingsView({
               onSaved={onSaved}
             />
           )}
-          {/* Zły `projectsDir` wpisany ręcznie w `workspace.yaml` poprawia się właśnie tym formularzem. */}
+          {/* A bad `projectsDir` typed by hand into `workspace.yaml` is fixed with this very form. */}
           {settings.errorCode === "invalid_config" && <ProjectsDirForm conn={conn} initialPath="" onSaved={onSaved} />}
         </div>
       </Surface>
@@ -62,7 +65,7 @@ export function SettingsView({
   );
 }
 
-/** Hostingi repo (ADR-19) mają własne zapytanie: zły wpis w `repoHosts` nie blokuje folderu z projektami i odwrotnie. */
+/** Repo hosts (ADR-19) have their own request: a bad `repoHosts` entry does not block the projects folder and vice versa. */
 function RepoHostsSurface({ conn }: { conn: Connection }) {
   const load = useCallback(() => post(conn, workspaceApi.repoHosts, {}), [conn]);
   const hosts = useRemote(load);
@@ -76,7 +79,7 @@ function RepoHostsSurface({ conn }: { conn: Connection }) {
         {hosts.error && <ErrorWithRetry message={hosts.error} onRetry={hosts.reload} />}
         {!hosts.data && !hosts.error && <Loading />}
         {hosts.data && <RepoHostsForm conn={conn} initial={hosts.data} />}
-        {/* Zły `repoHosts` wpisany ręcznie poprawia się, zapisując listę od nowa. */}
+        {/* A bad `repoHosts` typed by hand is fixed by saving the list again. */}
         {hosts.errorCode === "invalid_config" && <RepoHostsForm conn={conn} initial={[]} />}
       </div>
     </Surface>
@@ -91,7 +94,7 @@ function ProjectsDirForm({
 }: {
   conn: Connection;
   initialPath: string;
-  /** Nieznany, gdy `workspace.yaml` nie przeszedł walidacji. */
+  /** Unknown when `workspace.yaml` failed validation. */
   configFile?: string;
   onSaved: () => void;
 }) {
@@ -99,12 +102,11 @@ function ProjectsDirForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
+  async function save(dir: string) {
     setBusy(true);
     setError(undefined);
     try {
-      await post(conn, workspaceApi.setProjectsDir, { path: path.trim() });
+      await post(conn, workspaceApi.setProjectsDir, { path: dir });
       onSaved();
     } catch (err) {
       setError(errorMessage(err));
@@ -112,8 +114,27 @@ function ProjectsDirForm({
     }
   }
 
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    void save(path.trim());
+  }
+
+  /** Only the Tauri window has the system picker (ADR-51). A folder chosen in it is saved at once: choosing it already says what the user wants. */
+  async function browse() {
+    setError(undefined);
+    let picked: string | undefined;
+    try {
+      picked = await pickFolder(path.trim());
+    } catch (err) {
+      return setError(errorMessage(err));
+    }
+    if (picked === undefined) return;
+    setPath(picked);
+    await save(picked);
+  }
+
   return (
-    <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-2">
+    <form onSubmit={submit} className="flex flex-col gap-2">
       <div className="flex gap-2">
         <Input
           value={path}
@@ -122,6 +143,11 @@ function ProjectsDirForm({
           aria-label="Full path to the projects folder"
           className="font-mono text-xs"
         />
+        {isTauri() && (
+          <Button type="button" variant="outline" size="sm" onClick={() => void browse()} disabled={busy}>
+            <FolderOpen /> Choose…
+          </Button>
+        )}
         <Button type="submit" size="sm" disabled={busy || path.trim() === ""}>
           Save
         </Button>

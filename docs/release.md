@@ -20,6 +20,7 @@ The last line prints the public key, which goes into `tauri.conf.json` through a
 
 1. Bump the version in three places (the test `apps/desktop/test/versions.test.ts` checks that they match):
    `packages/daemon/package.json`, `apps/desktop/src-tauri/tauri.conf.json`, `apps/desktop/src-tauri/Cargo.toml`.
+   The install commands on `apps/docs/guide/install.md` name the version too; `apps/docs/test/pages.test.ts` checks that they follow it.
    Then `cargo update --workspace --manifest-path apps/desktop/src-tauri/Cargo.toml` carries the new version into `Cargo.lock` (without bumping dependencies); commit it with the rest.
 2. Write the release note `docs/release-notes/v<version>.md` in English (ADR-32) for the user: what is new, how to move from an older version, known limitations (the same test checks that the file exists and is not empty).
 3. Merge the change into `main` through a PR.
@@ -27,11 +28,11 @@ The last line prints the public key, which goes into `tauri.conf.json` through a
 5. On `main`, create and push a tag with the same version:
 
    ```sh
-   git tag v0.2.0
-   git push origin v0.2.0
+   git tag v0.3.0
+   git push origin v0.3.0
    ```
 
-   A tag with a hyphen (for example `v0.2.0-rc.1`) creates a pre-release.
+   A tag with a hyphen (for example `v0.3.0-rc.1`) creates a pre-release.
 6. When the release is out, start the previous version on Windows and macOS (from the first version with the updater, ADR-53) and click "Update and restart" (or "Settings > Updates > Check for updates"): the app restarts in the new version, and on Windows `%LOCALAPPDATA%\Programs\Trackwall\.update` is gone a minute later. This is the only check of the update from a real release.
 
 The workflow checks that the tag points to a commit on `main` and matches the version in `tauri.conf.json`, runs `pnpm test` on `windows-latest` and `macos-latest` (a tag does not require green CI on its commit) and builds in parallel with the same scripts as CI (`pnpm build:desktop`, the sidecar smoke test, `pnpm portable`), signs the update package of each system with the key from the repo secrets (the step fails without `TAURI_SIGNING_PRIVATE_KEY`), and publishes the release only after both builds succeed. The release contains:
@@ -50,49 +51,17 @@ The release description is the note from `docs/release-notes/v<version>.md`, fol
 
 ## Installing on a new computer
 
-Download the archive for your system and check its sum against `SHA256SUMS.txt`.
-
-**Windows.** The browser adds a "Mark of the Web" to the downloaded file, so SmartScreen blocks `trackwall.exe` from starting (often without a "Run anyway" button). Command-line tools do not add this mark, so the simplest way is to download the archive with `gh` (signed in with `gh auth login`) and check the sum:
-
-```powershell
-$v = "0.2.0"
-$zip = "trackwall-$v-windows-x64.zip"
-gh release download "v$v" -R jakubprill/trackwall -p $zip -p SHA256SUMS.txt -D $env:TEMP --clobber
-if ($LASTEXITCODE) { throw "gh release download failed" }
-$sum = ((Select-String -Path "$env:TEMP\SHA256SUMS.txt" -Pattern $zip -SimpleMatch).Line -split '\s+')[0]
-if (-not $sum -or (Get-FileHash "$env:TEMP\$zip" -Algorithm SHA256).Hash -ne $sum) { throw "wrong or missing SHA-256 sum for $zip" }
-if (Test-Path "$env:LOCALAPPDATA\Programs\Trackwall") { Remove-Item "$env:LOCALAPPDATA\Programs\Trackwall" -Recurse -Force }
-Expand-Archive "$env:TEMP\$zip" "$env:LOCALAPPDATA\Programs"
-& "$env:LOCALAPPDATA\Programs\Trackwall\trackwall.exe"
-```
-
-The old folder is removed only after a successful download and a matching sum. Before updating, close Trackwall (tray > Quit), because `Remove-Item` cannot delete the files of a running app. Unblock a file downloaded with a browser before unpacking it: `Unblock-File <file.zip>`. The folder is removed as a whole instead of unpacking over the old one: files of the previous version would stay, and in a folder unpacked earlier from a marked file, so would the mark itself.
-
-Without `gh`, the `curl.exe` built into Windows 10 (since 1803) and 11 downloads the archive, also without the mark: `curl.exe -fL -o "$env:TEMP\$zip" "https://github.com/jakubprill/trackwall/releases/download/v$v/$zip"` (and `SHA256SUMS.txt` the same way). Type `curl.exe`, because in Windows PowerShell 5.1 `curl` is an alias for `Invoke-WebRequest`; `-f` makes an HTTP error end the command instead of saving the error page as the zip. Neither `gh` nor `curl.exe` takes the proxy from the system settings; for `gh` set `HTTPS_PROXY` (`gh` does not support a proxy with Windows sign-in). For `curl.exe`: give the proxy in `HTTPS_PROXY` or `-x http://<proxy>:<port>` (for a proxy with Windows sign-in, also `--proxy-negotiate -U :`), and when the proxy replaces certificates and `CRYPT_E_NO_REVOCATION_CHECK` appears, add `--ssl-no-revoke`.
-
-The archive contains a `Trackwall` folder, so the app lands in `%LOCALAPPDATA%\Programs\Trackwall`.
-
-WebView2 is required (it is in Windows 11 and in most up-to-date Windows 10 installations).
-
-**macOS.** The app is not signed or notarized yet, so after a browser download Gatekeeper reports it as "damaged". After unpacking, remove the quarantine:
-
-```sh
-shasum -a 256 -c SHA256SUMS.txt --ignore-missing
-ditto -x -k trackwall-0.2.0-macos-arm64.zip /Applications
-xattr -dr com.apple.quarantine /Applications/Trackwall.app
-```
+The installation steps for users, with the checksum check and the way around SmartScreen and Gatekeeper, are on the documentation site: [Install](https://jakubprill.github.io/trackwall/guide/install) (source: `apps/docs/guide/install.md`). A change to the archives or their names updates that page in the same PR.
 
 Moving from 0.1.0 (released under the name Pitwall, ADR-12) is described in the [0.2.0 release note](release-notes/v0.2.0.md#przejście-z-pitwall-010) (in Polish): Trackwall does not take over the old installation, so Pitwall has to be closed and removed by hand.
-
-On both systems the user data (`~/.trackwall`, on Windows `%USERPROFILE%\.trackwall`) lives outside the app folder, so a manual update means closing the app (tray > Quit, so that the daemon stops too) and replacing the folder or `.app` with the new one.
 
 ## Updates
 
 From the version with the updater on (ADR-53), Trackwall checks `latest.json` of the latest release 10 s after start and every 6 hours. When a newer version is there, a strip above the views says so; "Update and restart" (also in "Settings > Updates") downloads the update package, checks its signature, installs it and restarts the app. The restart stops the daemon with its services and sessions, so the app never installs without the click. A pre-release is never the latest release, so it reaches nobody this way.
 
-- **Windows**: the update replaces the files of the build in the app folder (`%LOCALAPPDATA%\Programs\Trackwall`), like the manual update above, and leaves anything else there alone; the previous files wait in `.update` inside it until the next start deletes them. The files are downloaded by the app, so they have no "Mark of the Web" and SmartScreen does not stop them. The app folder must be writable by the user, which it is in `%LOCALAPPDATA%\Programs`. If an update says it could not put back the app files, the previous build is in `.update\old`: quit Trackwall, move those files back into the app folder (or install the release by hand as above), then delete `.update`; until then every update refuses to start.
+- **Windows**: the update replaces the files of the build in the app folder (`%LOCALAPPDATA%\Programs\Trackwall`), like [the manual update](https://jakubprill.github.io/trackwall/guide/install#update), and leaves anything else there alone; the previous files wait in `.update` inside it until the next start deletes them. The files are downloaded by the app, so they have no "Mark of the Web" and SmartScreen does not stop them. The app folder must be writable by the user, which it is in `%LOCALAPPDATA%\Programs`. If an update says it could not put back the app files, the previous build is in `.update\old`: quit Trackwall, move those files back into the app folder (or install the release by hand), then delete `.update`; until then every update refuses to start.
 - **macOS**: the bundle is replaced in place (`/Applications/Trackwall.app`); a bundle the user cannot write asks for an administrator password.
-- **Proxy**: the download takes the proxy from the system settings and from `HTTPS_PROXY`. A proxy with Windows sign-in or one that replaces certificates can stop it; then "Settings > Updates" shows the error and the manual update above still works.
+- **Proxy**: the download takes the proxy from the system settings and from `HTTPS_PROXY`. A proxy with Windows sign-in or one that replaces certificates can stop it; then "Settings > Updates" shows the error and the manual update still works.
 
 **Trying an update before it is the latest.** Tag a pre-release (`v0.3.1-rc.1`), wait for its release, and start the installed previous version from a terminal with the pre-release's manifest:
 

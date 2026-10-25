@@ -2,7 +2,7 @@ import type { DtoField } from "@trackwall/protocol";
 import type { Node } from "web-tree-sitter";
 import { lineOf, linesOf, type SourceSyntax, simpleName, type TypeDeclaration, typeText } from "./contract-syntax.ts";
 
-/** Deklaracje typów i kontrakty metod z drzewa składni pliku Javy (ADR-38). */
+/** Type declarations and method contracts from the syntax tree of a Java file (ADR-38). */
 export function readJavaSyntax(root: Node): SourceSyntax {
   const types = root.descendantsOfType(["record_declaration", "class_declaration", "enum_declaration"]).flatMap(javaType);
   const methods = root.descendantsOfType("method_declaration").flatMap((method) => {
@@ -23,7 +23,7 @@ function javaType(node: Node): TypeDeclaration[] {
   }
   const record = node.type === "record_declaration";
   const fields = record ? parameters(node) : instanceFields(node);
-  // Typ bez pól (serwis, wyjątek, kontroler, pusty rekord albo enum) nie niesie danych, więc nie jest DTO.
+  // A type without fields (a service, an exception, a controller, an empty record or an enum) carries no data, so it is not a DTO.
   return fields.length > 0 ? [{ ...declared, kind: record ? "record" : "class", fields }] : [];
 }
 
@@ -31,7 +31,7 @@ function parameters(record: Node): DtoField[] {
   return (record.childForFieldName("parameters")?.namedChildren ?? []).flatMap((p) => field(p, p));
 }
 
-/** Pola instancji klasy: deklaracje pól w ciele bez `static` (stałe i loggery nie są treścią DTO). */
+/** A class's instance fields: field declarations in the body without `static` (constants and loggers are not DTO content). */
 function instanceFields(type: Node): DtoField[] {
   const body = type.childForFieldName("body");
   return (body?.namedChildren ?? [])
@@ -39,7 +39,7 @@ function instanceFields(type: Node): DtoField[] {
     .flatMap((member) => member.childrenForFieldName("declarator").flatMap((d) => field(member, d)));
 }
 
-/** Pole z typu deklaracji i nazwy deklaratora; wymiary tablicy przy nazwie (`int b[]`) należą do typu. */
+/** A field from the declaration's type and the declarator's name; array dimensions at the name (`int b[]`) belong to the type. */
 function field(declaration: Node, declarator: Node): DtoField[] {
   const name = declarator.childForFieldName("name");
   const type = declaration.childForFieldName("type");

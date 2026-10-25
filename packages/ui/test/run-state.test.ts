@@ -12,8 +12,8 @@ const exited = {
   lastLines: ["boom"],
 };
 
-describe("stan uruchomienia taska mise w UI", () => {
-  test("działający ma ton ok, zatrzymywany warning, a zakończony błędem error z kodem albo sygnałem", () => {
+describe("mise task run state in the UI", () => {
+  test("a running one has tone ok, a stopping one warning, and one ended with an error tone error with the code or signal", () => {
     const runs: (RunState | null)[] = [
       null,
       { ...base, kind: "running", pid: 1 },
@@ -35,7 +35,7 @@ describe("stan uruchomienia taska mise w UI", () => {
     expect(runs.map(isLive)).toEqual([false, true, true, false, false, false, false]);
   });
 
-  test("ostatnie linie widać tylko po błędzie, którego użytkownik sam nie spowodował", () => {
+  test("the last lines are shown only after an error the user did not cause", () => {
     expect(showsLastLines({ ...exited, exitCode: 4 })).toBe(true);
     expect(showsLastLines({ ...exited, exitCode: 0 })).toBe(false);
     expect(showsLastLines({ ...exited, exitCode: 1, stoppedByUser: true })).toBe(false);

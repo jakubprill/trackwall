@@ -4,14 +4,15 @@ import { Task } from "@trackwall/protocol";
 import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
 import { TaskBranch } from "./task-branch.ts";
+import { MAX_MISE_PATH } from "./task-mise-config.ts";
 
 /**
- * `tasks.json` w katalogu stanu (ADR-31): zadania przeżywają restart daemona, bo ich worktree i gałęzie zostają
- * na dysku, dopóki użytkownik ich nie zakończy. Sesja zadania żyje tylko w pamięci, a worktree wynika z repo i gałęzi
- * (`taskWorktree`), więc żadne z nich nie jest zapisywane. Plik można zmienić ręcznie, a jego pola trafiają do gita
- * (`branch -D`, `diff <commit bazowy>`), więc schemat dopuszcza tylko gałąź zadania i pełny hash commita (`CommitHash` w `Task`).
- * Pola dodane później (tytuł, pochodzenie i podsumowanie, ADR-39) mają w pliku wartość domyślną, żeby zadania zapisane
- * przez starszą wersję nie trafiły obok jako plik nieczytelny.
+ * `tasks.json` in the state directory (ADR-31): tasks survive a daemon restart, because their worktrees and branches
+ * stay on disk until the user ends them. A task session lives only in memory, and the worktree follows from the repo
+ * and branch (`taskWorktree`), so neither of them is stored. The file can be edited by hand, and its fields go to git
+ * (`branch -D`, `diff <base commit>`), so the schema allows only a task branch and a full commit hash (`CommitHash` in `Task`).
+ * Fields added later (title, origin and summary, ADR-39; the trusted mise config, ADR-59) have a default in the file,
+ * so tasks saved by an older version are not moved aside as an unreadable file.
  */
 
 export const StoredTask = Task.omit({ worktree: true }).extend({
@@ -19,7 +20,16 @@ export const StoredTask = Task.omit({ worktree: true }).extend({
   title: Task.shape.title.default(null),
   proposedBy: Task.shape.proposedBy.default(null),
   summary: Task.shape.summary.default(null),
-  /** Korzeń repo z folderu z projektami, z którego wyszło zadanie: tam git trzyma rejestr worktree i gałąź. */
+  /**
+   * The worktree's mise config the user trusted (ADR-59): path to SHA-256, taken when the worktree was created and
+   * replaced when the user trusts a changed one. `null` in a task saved by an older version, whose config then needs
+   * the user's trust once.
+   */
+  trustedMiseConfig: z
+    .record(z.string().max(MAX_MISE_PATH), z.string().regex(/^[0-9a-f]{64}$/))
+    .nullable()
+    .default(null),
+  /** The root of the repo in the projects folder the task came from: git keeps the worktree registry and the branch there. */
   repoDir: z.string().refine(isAbsolute, "repo root must be a full path"),
 });
 export type StoredTask = z.infer<typeof StoredTask>;
@@ -35,7 +45,7 @@ export class TaskFile {
     this.#log = log;
   }
 
-  /** Brak pliku to brak zadań. Plik nieczytelny trafia obok (`tasks.json.broken-<czas>`), a jego zadania do logu. */
+  /** A missing file means no tasks. An unreadable file is moved aside (`tasks.json.broken-<time>`), and its tasks go to the log. */
   read(): StoredTask[] {
     let text: string;
     try {
@@ -57,7 +67,7 @@ export class TaskFile {
   }
 }
 
-/** Zadania z pliku albo opis, co z nim nie tak. */
+/** The tasks from the file or a description of what is wrong with it. */
 function parse(text: string): StoredTask[] | string {
   let json: unknown;
   try {

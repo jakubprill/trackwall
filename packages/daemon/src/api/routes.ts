@@ -1,4 +1,4 @@
-import { agentsApi, batchApi, cardsApi, type Endpoint, graphApi, logsApi, miseApi, workspaceApi } from "@trackwall/protocol";
+import { agentsApi, batchApi, cardsApi, type Endpoint, graphApi, logsApi, miseApi, servicesApi, workspaceApi } from "@trackwall/protocol";
 import { z } from "zod";
 import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
@@ -39,6 +39,11 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     await f.workspace.openEditor(b.repo);
     return null;
   }),
+  route(workspaceApi.openFolder, async (f, b) => {
+    await f.workspace.openFolder(b.repo);
+    return null;
+  }),
+  route(workspaceApi.droppedFolder, (f, b) => f.workspace.droppedFolder(b.path)),
   route(workspaceApi.repoHosts, (f) => f.workspace.repoHosts()),
   route(workspaceApi.setRepoHosts, (f, b) => f.workspace.setRepoHosts(b.repoHosts)),
   route(workspaceApi.remoteRepos, (f, b) => f.workspace.remoteRepos(b.query)),
@@ -51,21 +56,27 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(graphApi.graph, (f) => f.graph.graph()),
   route(miseApi.tasks, (f, b) => f.mise.tasks(b.repo)),
   route(miseApi.running, (f) => f.mise.running()),
-  route(miseApi.start, (f, b) => f.mise.start(b.repo, b.miseTask)),
-  route(miseApi.stop, (f, b) => f.mise.stop(b.repo, b.miseTask)),
+  route(miseApi.start, (f, b) => f.mise.start({ repo: b.repo, task: b.task }, b.miseTask)),
+  route(miseApi.stop, (f, b) => f.mise.stop({ repo: b.repo, task: b.task }, b.miseTask)),
   route(miseApi.trust, (f, b) => f.mise.trust(b.repo)),
   route(logsApi.tail, (f, b) => f.logs.tail(b)),
+  route(servicesApi.list, (f) => f.services.list()),
+  route(servicesApi.start, (f, b) => f.services.start(b)),
+  route(servicesApi.stop, (f, b) => f.services.stop(b)),
   route(batchApi.start, (f, b) => f.batch.start(b)),
   route(batchApi.run, (f) => f.batch.run()),
   route(batchApi.cancel, (f) => f.batch.cancel()),
   route(agentsApi.sessions, (f) => f.agents.sessions()),
   route(agentsApi.start, (f, b) => f.agents.start(b.repo)),
+  route(agentsApi.startSupervisor, (f) => f.agents.startSupervisor()),
   route(agentsApi.stop, (f, b) => f.agents.stop(b.session)),
   route(agentsApi.dismiss, (f, b) => f.agents.dismiss(b.session)),
   route(agentsApi.createTask, (f, b) => f.agents.createTask(b.repo, b.prompt)),
   route(agentsApi.resumeTask, (f, b) => f.agents.resumeTask(b.task)),
   route(agentsApi.taskChanges, (f, b) => f.agents.taskChanges(b.task)),
   route(agentsApi.taskSharedFiles, async (f, b) => ({ shared: await f.agents.taskSharedFiles(b.task) })),
+  route(agentsApi.taskMiseConfig, (f, b) => f.agents.taskMiseConfig(b.task)),
+  route(agentsApi.trustTaskMiseConfig, (f, b) => f.agents.trustTaskMiseConfig(b.task, b.digest)),
   route(agentsApi.openTaskEditor, (f, b) => {
     f.agents.openTaskEditor(b.task);
     return null;
@@ -76,7 +87,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   }),
   route(agentsApi.approveProposal, (f, b) => f.agents.approveProposal(b.proposal, b.prompt)),
   route(agentsApi.rejectProposal, (f, b) => {
-    f.agents.rejectProposal(b.proposal);
+    f.agents.rejectProposal(b.proposal, b.reason);
     return null;
   }),
 ]);

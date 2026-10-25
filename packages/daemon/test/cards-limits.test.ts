@@ -13,11 +13,11 @@ import { snapshotOf } from "./support/snapshot.ts";
 const parsers = await loadSyntaxParsers();
 
 /**
- * Pliki z repo są niezaufane (§8): repo, którego użytkownik nie wybrał, może mieć plik buildu ułożony tak, żeby
- * zająć pamięć albo procesor daemona. Każdy test tutaj bez poprawki trwał sekundy albo kończył się brakiem pamięci.
+ * Files from a repo are untrusted (§8): a repo the user did not choose can have a build file arranged to take up the
+ * daemon's memory or CPU. Without its fix every test here took seconds or ran out of memory.
  */
-describe("karta repo przy złośliwych i dużych plikach", () => {
-  test("właściwości Maven, które mnożą się przy podstawianiu, nie zajmują pamięci: wersja zostaje niepodstawiona", () => {
+describe("repo card with malicious and large files", () => {
+  test("Maven properties that multiply during substitution do not take up memory: the version stays unsubstituted", () => {
     const props = Array.from({ length: 8 }, (_, i) => `<p${i}>${`\${p${i + 1}}`.repeat(200)}</p${i}>`).join("");
     const pom = `<project><groupId>g</groupId><artifactId>a</artifactId><version>\${p0}</version><properties>${props}<p8>x</p8></properties></project>`;
     const started = performance.now();
@@ -26,14 +26,14 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     expect(provided?.version?.length).toBeLessThanOrEqual(4096);
   });
 
-  test("bardzo długa linia skryptu Gradle nie blokuje daemona", () => {
+  test("a very long Gradle script line does not block the daemon", () => {
     const line = `implementation${" ".repeat(50_000)}x\nid${" ".repeat(50_000)}x\n`;
     const started = performance.now();
     extractGradle(snapshotOf({ "build.gradle": `${line}dependencies { implementation 'com.example:lib:1.0' }\n` }));
     expect(performance.now() - started).toBeLessThan(1000);
   });
 
-  test("dziesiątki tysięcy package.json w drzewie nie blokują szukania korzeni buildów", () => {
+  test("tens of thousands of package.json files in the tree do not block finding build roots", () => {
     const paths = Array.from({ length: 20_000 }, (_, i) => `libs/p${i}/package.json`);
     const started = performance.now();
     const out = extractNpm(snapshotOf({ "web/package.json": JSON.stringify({ name: "web", private: true }) }, paths));
@@ -41,14 +41,14 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     expect(out.buildFiles.map((f) => f.path)).toEqual(["web/package.json"]);
   });
 
-  test("wersja Maven z tysiącami otwartych ${ nie blokuje daemona", () => {
+  test("a Maven version with thousands of open ${ does not block the daemon", () => {
     const pom = `<project><groupId>g</groupId><artifactId>a</artifactId><version>${"${".repeat(100_000)}</version></project>`;
     const started = performance.now();
     extractMaven(snapshotOf({ "pom.xml": pom }));
     expect(performance.now() - started).toBeLessThan(1000);
   });
 
-  test("package.json z dziesiątkami tysięcy zależności i wzorzec workspace z tysiącami ukośników nie blokują daemona", () => {
+  test("a package.json with tens of thousands of dependencies and a workspace pattern with thousands of slashes do not block the daemon", () => {
     const dependencies = Object.fromEntries(Array.from({ length: 40_000 }, (_, i) => [`dep-${i}`, "1.0.0"]));
     const started = performance.now();
     const out = extractNpm(
@@ -58,7 +58,7 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     expect(out.consumes.at(-1)?.evidence).toEqual({ path: "package.json", line: 40_006 });
   });
 
-  test("[tools] z dziesiątkami tysięcy wpisów i wrapper z powtórzonym gradle- nie blokują daemona", () => {
+  test("[tools] with tens of thousands of entries and a wrapper with repeated gradle- do not block the daemon", () => {
     const mise = `[tools]\n${Array.from({ length: 20_000 }, (_, i) => `tool${i} = "1"`).join("\n")}\n`;
     const started = performance.now();
     const { tools } = extractTools(
@@ -69,19 +69,19 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     expect(tools.at(-1)?.evidence).toEqual({ path: "mise.toml", line: 20_001 });
   });
 
-  test("ścieżka z tysiącami powtórzeń k8s/ nie blokuje spisu mechanizmów", () => {
+  test("a path with thousands of repetitions of k8s/ does not block the list of mechanisms", () => {
     const started = performance.now();
     extractCard(snapshotOf({}, [`${"k8s/".repeat(8000)}x.yaml`, `${"k8s/".repeat(8000)}y.yaml`]), parsers);
     expect(performance.now() - started).toBeLessThan(1000);
   });
 
-  test("wzorzec glob z wieloma gwiazdkami na długiej ścieżce kończy się od razu (wzorzec workspace jest z repo)", () => {
+  test("a glob pattern with many asterisks on a long path finishes at once (the workspace pattern comes from the repo)", () => {
     const started = performance.now();
     expect(globMatcher("*a*a*a*a*a*a*a*a*b")("a".repeat(4000))).toBe(false);
     expect(performance.now() - started).toBeLessThan(1000);
   });
 
-  test("plik buildu, którego git nie oddał w limicie odczytu, jest problemem karty", async () => {
+  test("a build file git did not return within the read limit is a card problem", async () => {
     const vcs = {
       commitFiles: async () => ({
         files: [
@@ -98,7 +98,7 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     expect(snapshot.problems).toEqual([{ path: "api/pom.xml", message: "the file was not read within the 67108864 B commit read limit" }]);
   });
 
-  test("plik Javy z tysiącami zagnieżdżonych nawiasów, niezamkniętymi napisami i adnotacjami nie blokuje daemona", () => {
+  test("a Java file with thousands of nested brackets, unclosed strings and annotations does not block the daemon", () => {
     const java = [
       "@RestController class Deep {",
       `  @GetMapping(${"(".repeat(50_000)}"/x"${")".repeat(50_000)})`,
@@ -113,21 +113,21 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
-  test("klasa z RestTemplate, dziesiątkami tysięcy niedomkniętych wywołań i różnych adresów bazowych nie blokuje daemona", () => {
+  test("a class with RestTemplate, tens of thousands of unclosed calls and different base addresses does not block the daemon", () => {
     const java = `class C {\n  RestTemplate rest;\n${"x.a(".repeat(50_000)}\n${Array.from({ length: 20_000 }, (_, i) => `b.baseUrl("http://h${i}");`).join("\n")}\n}`;
     const started = performance.now();
     extractCard(snapshotOf({ "src/main/java/a/C.java": java }), parsers);
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
-  test("tysiące wywołań zagnieżdżonych w ciele metody i łańcuch .uri( nie blokują daemona", () => {
+  test("thousands of calls nested in a method body and a .uri( chain do not block the daemon", () => {
     const nested = `class C {\n  RestTemplate rest;\n  void f() { ${"x.a(".repeat(20_000)}${")".repeat(20_000)} }\n  void g() { ${"w.get().uri(".repeat(20_000)}${")".repeat(20_000)} }\n}`;
     const started = performance.now();
     extractCard(snapshotOf({ "src/main/java/a/C.java": nested }), parsers);
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
-  test("application.yml z tysiącami adresów w jednym module daje kartę z pierwszymi 500 i problemem, a 500 adresów problemu nie daje", () => {
+  test("an application.yml with thousands of addresses in one module gives a card with the first 500 and a problem, and 500 addresses give no problem", () => {
     const urls = Array.from({ length: 5_000 }, (_, i) => `url${i}: http://h${i}`).join("\n");
     const card = extractCard(snapshotOf({ "src/main/resources/application.yml": `${urls}\n` }), parsers);
     expect(card.consumes.filter((c) => c.kind === "http")).toHaveLength(500);
@@ -139,7 +139,7 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     });
   });
 
-  test("plik z dziesiątkami tysięcy wywołań RestTemplate nie blokuje daemona", () => {
+  test("a file with tens of thousands of RestTemplate calls does not block the daemon", () => {
     const calls = Array.from({ length: 30_000 }, (_, i) => `    rest.getForObject("http://h/p${i}", String.class);`).join("\n");
     const java = `class C {\n  RestTemplate rest;\n  void f() {\n${calls}\n  }\n}`;
     const started = performance.now();
@@ -147,7 +147,7 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
-  test("application.yml z dziesiątkami tysięcy kluczy i setkami profili nie blokuje daemona", () => {
+  test("an application.yml with tens of thousands of keys and hundreds of profiles does not block the daemon", () => {
     const flat = Array.from({ length: 30_000 }, (_, i) => `k${i}: v${i}`).join("\n");
     const profiles = Array.from({ length: 800 }, (_, i) => `---\nspring.config.activate.on-profile: p${i}\nurl${i}: http://h${i}`).join(
       "\n",
@@ -157,7 +157,7 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
-  test("błąd wyszukiwania plików źródłowych jest problemem karty, a pliki buildu zostają", async () => {
+  test("a source file search error is a card problem, and the build files stay", async () => {
     const vcs = {
       commitFiles: async () => ({
         files: [
@@ -178,7 +178,7 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     ]);
   });
 
-  test("stałe, które sklejają się same ze sobą albo podwajają, nie zajmują pamięci", () => {
+  test("constants that concatenate with themselves or double do not take up memory", () => {
     const constants = Array.from({ length: 30 }, (_, i) => `static final String C${i} = C${i + 1} + C${i + 1};`).join("\n");
     const java = `@RestController class Api {\n${constants}\nstatic final String C30 = "${"x".repeat(1000)}";\nstatic final String L = L + "/a";\n@GetMapping(C0) void a() {}\n@GetMapping(L) void b() {}\n}`;
     const started = performance.now();
@@ -187,7 +187,7 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     for (const p of card.provides) if (p.kind === "endpoint") expect(p.path.length).toBeLessThanOrEqual(4096);
   });
 
-  test(`\${...} z application.yml, które mnożą się przy rozwiązywaniu albo tworzą cykl, nie blokują daemona`, () => {
+  test(`\${...} from application.yml that multiply while resolving or form a cycle do not block the daemon`, () => {
     const yml = Array.from({ length: 30 }, (_, i) => `k${i}: "\${k${i + 1}}\${k${i + 1}}"`).join("\n");
     const started = performance.now();
     extractCard(
@@ -200,7 +200,7 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     expect(performance.now() - started).toBeLessThan(1000);
   });
 
-  test("typ odpowiedzi i pola DTO z dziesiątkami tysięcy argumentów dają przycięty zapis typu szybko", () => {
+  test("a response type and DTO fields with tens of thousands of arguments give a cut type notation quickly", () => {
     const args = "A,".repeat(40_000);
     const java = `@RestController class Api { @GetMapping("/a") M<${args}A> a() { return null; } }\nclass M { N<${args}D> f; }\nclass D { int x; }`;
     const started = performance.now();
@@ -211,7 +211,7 @@ describe("karta repo przy złośliwych i dużych plikach", () => {
     expect(card.dtos.map((d) => (d.kind === "enum" ? d.name : `${d.name}: ${d.fields[0]?.type.length}`))).toEqual(["M: 257", "D: 3"]);
   });
 
-  test("graf z tysiącami endpointów i klientów bez adresu liczy się szybko", () => {
+  test("a graph with thousands of endpoints and clients without an address is computed quickly", () => {
     const endpoints = Array.from({ length: 3000 }, (_, i) => `  @GetMapping("/api/r${i % 50}/{id}/x${i}") void e${i}() {}`).join("\n");
     const calls = Array.from(
       { length: 200 },

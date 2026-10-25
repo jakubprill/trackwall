@@ -2,14 +2,14 @@ import { describe, expect, test } from "bun:test";
 import type { BatchRun, BatchStepResult } from "@trackwall/protocol";
 import { batchProgress, batchRunLabel, stepLabel, stepMessage } from "../src/lib/batch-state.ts";
 
-describe("komenda zbiorcza w UI", () => {
-  test("krok ma krótki tekst: trwający ostrzega, gotowy pokazuje wynik synchronizacji, nieudany to błąd", () => {
+describe("batch command in the UI", () => {
+  test("a step has a short text: a running one warns, a done one shows the sync result, a failed one is an error", () => {
     const steps: BatchStepResult[] = [
       { step: "sync", state: "waiting" },
       { step: "sync", state: "running" },
       { step: "sync", state: "done", detail: "main +2" },
       { step: "build", state: "done", detail: null },
-      { step: "setup", state: "skipped", message: "repo nie ma taska mise setup" },
+      { step: "setup", state: "skipped", message: "the repo has no setup mise task" },
       { step: "build", state: "failed", message: "exited with code 1", lastLines: [] },
       { step: "tools", state: "cancelled" },
     ];
@@ -27,14 +27,14 @@ describe("komenda zbiorcza w UI", () => {
       undefined,
       undefined,
       undefined,
-      "repo nie ma taska mise setup",
+      "the repo has no setup mise task",
       "exited with code 1",
       undefined,
     ]);
   });
 
-  test("postęp liczy repo, w których żaden krok nie czeka ani nie trwa, i osobno repo z błędem", () => {
-    const repo = { repo: "api", path: "/projekty/api" };
+  test("progress counts repos where no step is waiting or running, and repos with an error separately", () => {
+    const repo = { repo: "api", path: "/projects/api" };
     const run: BatchRun = {
       startedAt: "2026-10-23T10:00:00Z",
       finishedAt: null,
@@ -43,7 +43,7 @@ describe("komenda zbiorcza w UI", () => {
         {
           ...repo,
           steps: [
-            { step: "sync", state: "done", detail: "main aktualna" },
+            { step: "sync", state: "done", detail: "main up to date" },
             { step: "build", state: "running" },
           ],
         },
@@ -73,7 +73,7 @@ describe("komenda zbiorcza w UI", () => {
     expect(batchProgress(run)).toEqual({ done: 2, total: 4, failed: 1 });
   });
 
-  test("nagłówek wyników mówi, czy komenda trwa, czy się skończyła, i czy ją przerwano", () => {
+  test("the results header says whether the command is running or finished, and whether it was cancelled", () => {
     const run = { startedAt: "2026-10-23T10:00:00Z", repos: [] };
     const now = new Date("2026-10-23T10:00:30Z");
     expect(batchRunLabel({ ...run, finishedAt: null, cancelled: false }, now)).toBe("Running");

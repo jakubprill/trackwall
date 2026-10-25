@@ -1,16 +1,16 @@
 import { statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { delimiter, dirname, extname, isAbsolute, join } from "node:path";
-import { envKey } from "./env-key.ts";
+import { envKey } from "../../infra/env-key.ts";
 
 /**
- * Program Copilot CLI (§4.4): pełna ścieżka pliku, który da się uruchomić bez powłoki. `npm install -g` daje na
- * Windowsie `copilot.cmd`, a uruchomienie go przez `cmd.exe` psuje argumenty ze spacjami i `&` (inne reguły
- * cytowania), więc zamiast skryptu bierzemy natywny `copilot.exe` z paczki platformy, tak jak robi to sam skrypt.
- * Na macOS Homebrew daje zwykły plik wykonywalny.
+ * The Copilot CLI program (§4.4): the full path of a file that can be run without a shell. `npm install -g` gives
+ * `copilot.cmd` on Windows, and running it through `cmd.exe` breaks arguments with spaces and `&` (other quoting rules),
+ * so instead of the script we take the native `copilot.exe` from the platform package, as the script itself does. On
+ * macOS Homebrew gives a plain executable.
  */
 
-/** Pełna ścieżka programu albo `undefined`, gdy go nie ma; `program` może być nazwą z `PATH` albo pełną ścieżką. */
+/** The program's full path or `undefined` when it is missing; `program` can be a name from `PATH` or a full path. */
 export function findCopilot(program: string, env: NodeJS.ProcessEnv): string | undefined {
   const found = which(program, env);
   if (!found || !/\.(cmd|bat)$/i.test(found)) return found;
@@ -20,7 +20,7 @@ export function findCopilot(program: string, env: NodeJS.ProcessEnv): string | u
 function nativeCopilot(script: string): string | undefined {
   const npmPackage = join(dirname(script), "node_modules", "@github", "copilot", "package.json");
   try {
-    // Paczka platformy eksportuje sam plik binarny (`exports: { ".": "./copilot.exe" }`).
+    // The platform package exports only the binary (`exports: { ".": "./copilot.exe" }`).
     const exe = createRequire(npmPackage).resolve(`@github/copilot-${process.platform}-${process.arch}`);
     return isFile(exe) ? exe : undefined;
   } catch {
@@ -29,8 +29,8 @@ function nativeCopilot(script: string): string | undefined {
 }
 
 /**
- * Szuka programu jak powłoka: w katalogach `PATH`, na Windowsie z rozszerzeniami z `PATHEXT` (w ich kolejności, jak
- * `cmd.exe`). Nazwa z ukośnikiem to ścieżka, a nie nazwa do szukania.
+ * Looks for a program like a shell: in the `PATH` directories, on Windows with the extensions from `PATHEXT` (in their
+ * order, like `cmd.exe`). A name with a slash is a path, not a name to look for.
  */
 function which(program: string, env: NodeJS.ProcessEnv): string | undefined {
   const windows = process.platform === "win32";

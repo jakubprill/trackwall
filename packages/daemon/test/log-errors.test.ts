@@ -295,6 +295,18 @@ describe("errors from the log", () => {
     expect(logs.errors({ ...ALL, sinceSeq: 5 })).toMatchObject({ dropped: true, errors: { length: 4 } });
   });
 
+  test("a task's filter gives the runs in its worktree, and task null only the repo roots, for the services' own dev", () => {
+    const logs = newLogs();
+    const task = "0b7c1a52-3f0e-4c1e-9a43-5d2f8e6b1c07";
+    const inTask = { kind: "task-mise-task", repo: "orders", task, miseTask: "dev" } as const;
+    write("stdout", logs.open(DEV, "r1", {}), "ERROR orders dev in the root");
+    write("stdout", logs.open(inTask, "r2", {}), "ERROR orders dev in the task worktree");
+
+    expect(logs.errors({ ...ALL, miseTask: "dev" }).errors.map((e) => e.source)).toEqual([inTask, DEV]);
+    expect(logs.errors({ ...ALL, task }).errors.map((e) => e.source)).toEqual([inTask]);
+    expect(logs.errors({ ...ALL, task: null, miseTask: "dev" }).errors.map((e) => e.source)).toEqual([DEV]);
+  });
+
   test("a stack trace with the mise task prefix is trimmed like one without it", () => {
     const logs = newLogs();
     const frames = Array.from({ length: 15 }, (_, i) => `[build]     at f${i} (/repo/a.js:${i + 1}:1)`);

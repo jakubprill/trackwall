@@ -4,8 +4,9 @@
 //! Clicking a menu item shows the window for sessions (ADR-49) with that session or proposal. While no Trackwall window has the focus, the
 //! same moments also show a system notification (ADR-50, `notification.rs`).
 //!
-//! Pytanie idzie z powłoki, a nie z UI: schowane okno WebView może mieć wstrzymane timery, a tray ma działać także
-//! przy zamkniętym oknie. Czy sesja czeka na Ciebie, liczy daemon (`Session.needsAttention`), tak samo dla UI i traya.
+//! The shell asks, not the UI: a hidden WebView window may have its timers paused, and the tray has to work with the
+//! window closed too. Whether a session is waiting for you is decided by the daemon (`Session.needsAttention`), the same
+//! for the UI and the tray.
 //! The daemon also clears it, without a state change, once the user has seen an ended turn (ADR-47).
 
 use crate::daemon;
@@ -32,8 +33,29 @@ const MENU_PROPOSAL_PREFIX: &str = "proposal:";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Waiting {
     pub id: String,
-    pub repo: String,
+    /// `None` for the supervisor, the session in the projects folder (ADR-58).
+    pub repo: Option<String>,
     pub state: Option<TaskState>,
+}
+
+/// What the UI calls the session above all repos (`SUPERVISOR` in the UI's `session-state.ts`, ADR-58).
+pub const SUPERVISOR: &str = "Supervisor";
+
+impl Waiting {
+    /// Where the session works, for the menu and a notification title: its repo, or the supervisor.
+    pub fn place(&self) -> &str {
+        self.repo.as_deref().unwrap_or(SUPERVISOR)
+    }
+
+    /// The title of its notification: "Session in <repo>", or "Supervisor".
+    pub fn titled(&self) -> String {
+        self.repo.as_ref().map_or_else(|| SUPERVISOR.to_owned(), |repo| format!("Session in {repo}"))
+    }
+
+    /// The session in a sentence: "a session in <repo>", or "the supervisor".
+    fn described(&self) -> String {
+        self.repo.as_ref().map_or_else(|| "the supervisor".to_owned(), |repo| format!("a session in {repo}"))
+    }
 }
 
 /// `TaskState` from protocol; a state this shell does not know yet reads as `Unknown` instead of failing the reply.
@@ -58,7 +80,7 @@ pub struct Proposal {
     pub title: String,
 }
 
-/// Stan sesji z ostatniego pytania: identyfikator i stan (albo `None` bez sygnału).
+/// Session states from the last poll: id and state (or `None` without a signal).
 type States = HashMap<String, Option<TaskState>>;
 
 /// The daemon's reply translated into what the tray shows.
@@ -72,7 +94,7 @@ pub struct Snapshot {
     known: HashSet<String>,
 }
 
-/// Tylko te pola odpowiedzi `POST /api/agents/sessions`, których potrzebuje tray (`SessionList` w protocol).
+/// Only the fields of the `POST /api/agents/sessions` reply that the tray needs (`SessionList` in protocol).
 #[derive(Deserialize)]
 struct Reply {
     data: SessionList,
@@ -94,7 +116,7 @@ struct TaskRef {
 #[serde(rename_all = "camelCase")]
 struct Session {
     id: String,
-    repo: String,
+    repo: Option<String>,
     run: Run,
     state: Option<StateChange>,
     needs_attention: bool,
@@ -143,7 +165,7 @@ pub fn new_proposals<'a>(previous: Option<&Snapshot>, proposals: &'a [Proposal])
 pub fn tooltip(waiting: &[Waiting], proposals: &[Proposal]) -> String {
     match (waiting, proposals) {
         ([], []) => "Trackwall".to_owned(),
-        ([only], []) => format!("Trackwall: a session in {} is waiting for you", only.repo),
+        ([only], []) => format!("Trackwall: {} is waiting for you", only.described()),
         ([], [only]) => format!("Trackwall: a task proposal for {} is waiting for your decision", only.repo),
         _ => {
             let parts: Vec<String> = [(waiting.len(), "session", "sessions"), (proposals.len(), "task proposal", "task proposals")]
@@ -169,7 +191,7 @@ pub fn build_menu(app: &AppHandle, waiting: &[Waiting], proposals: &[Proposal]) 
         menu.append(&MenuItem::with_id(app, format!("{MENU_PROPOSAL_PREFIX}{}", p.id), label, true, None::<&str>)?)?;
     }
     for w in waiting {
-        let label = menu_text(&format!("Waiting: {}", w.repo));
+        let label = menu_text(&format!("Waiting: {}", w.place()));
         menu.append(&MenuItem::with_id(app, format!("{MENU_SESSION_PREFIX}{}", w.id), label, true, None::<&str>)?)?;
     }
     if !waiting.is_empty() || !proposals.is_empty() {
@@ -213,6 +235,38 @@ impl News {
     }
 }
 
+/// Polls in a row without a new proposal before the held proposals are announced (ADR-55).
+const QUIET_POLLS: u32 = 3;
+
+/// New proposals held back while a main session is still proposing: it writes a plan of several tasks with a few
+/// seconds between `propose_task` calls, and one notification for the plan says more than one per task (ADR-55). They
+/// are announced after `QUIET_POLLS` polls without a new one, about six seconds, and only those still waiting.
+#[derive(Debug, Default)]
+pub struct HeldProposals {
+    held: Vec<Proposal>,
+    quiet: u32,
+}
+
+impl HeldProposals {
+    /// Takes the new proposals of a poll and returns the ones to announce now.
+    pub fn after_poll(&mut self, new: Vec<Proposal>, waiting: &[Proposal]) -> Vec<Proposal> {
+        if !new.is_empty() {
+            self.held.extend(new);
+            self.quiet = 0;
+            return Vec::new();
+        }
+        if self.held.is_empty() {
+            return Vec::new();
+        }
+        self.quiet += 1;
+        if self.quiet < QUIET_POLLS {
+            return Vec::new();
+        }
+        self.quiet = 0;
+        std::mem::take(&mut self.held).into_iter().filter(|p| waiting.iter().any(|w| w.id == p.id)).collect()
+    }
+}
+
 fn any_window_focused(app: &AppHandle) -> bool {
     app.webview_windows().values().any(|w| w.is_focused().unwrap_or(false))
 }
@@ -221,11 +275,13 @@ fn any_window_focused(app: &AppHandle) -> bool {
 pub fn watch(app: AppHandle, state: Arc<DaemonState>, tray_id: &'static str) {
     std::thread::spawn(move || {
         let mut last: Option<Snapshot> = None;
+        let mut held = HeldProposals::default();
         loop {
             std::thread::sleep(POLL);
             let Some(conn) = state.ready() else { continue };
             let Some(now) = daemon::sessions(&conn).ok().and_then(|body| parse_sessions(&body)) else { continue };
-            let news = News::between(last.as_ref(), &now);
+            let mut news = News::between(last.as_ref(), &now);
+            news.proposals = held.after_poll(std::mem::take(&mut news.proposals), &now.proposals);
             if !news.is_empty() {
                 if let Some(window) = app.get_webview_window(&app.state::<Windows>().session_window()) {
                     let _ = window.request_user_attention(Some(UserAttentionType::Informational));
@@ -279,7 +335,16 @@ mod tests {
     }
 
     fn waiting(id: &str, state: TaskState) -> Waiting {
-        Waiting { id: id.into(), repo: format!("repo-{id}"), state: Some(state) }
+        Waiting { id: id.into(), repo: Some(format!("repo-{id}")), state: Some(state) }
+    }
+
+    #[test]
+    fn the_supervisor_has_no_repo_and_is_named_as_the_supervisor() {
+        let supervisor = r#"{"id":"s","repo":null,"startedAt":"x","run":{"kind":"running"},"state":{"state":"Input","source":"hook","confidence":"high","at":"x","reason":"r"},"windowTitle":null,"needsAttention":true}"#;
+        let now = parse_sessions(&body(supervisor, "")).expect("a valid reply");
+        assert_eq!(now.waiting, vec![Waiting { id: "s".into(), repo: None, state: Some(TaskState::Input) }]);
+        assert_eq!(now.waiting[0].place(), "Supervisor");
+        assert_eq!(tooltip(&now.waiting, &[]), "Trackwall: the supervisor is waiting for you");
     }
 
     #[test]
@@ -313,6 +378,29 @@ mod tests {
         let now = parse_sessions(&body("", &[proposal_json("p1"), proposal_json("p2")].join(","))).unwrap();
         assert_eq!(new_proposals(Some(&before), &now.proposals), vec![&proposal("p2")]);
         assert_eq!(new_proposals(None, &now.proposals), Vec::<&Proposal>::new());
+    }
+
+    #[test]
+    fn proposals_are_announced_together_once_the_main_session_stops_proposing() {
+        let mut held = HeldProposals::default();
+        let waiting = [proposal("p1"), proposal("p2")];
+        assert_eq!(held.after_poll(vec![proposal("p1")], &waiting), vec![]);
+        assert_eq!(held.after_poll(vec![], &waiting), vec![]);
+        assert_eq!(held.after_poll(vec![proposal("p2")], &waiting), vec![]);
+        assert_eq!(held.after_poll(vec![], &waiting), vec![]);
+        assert_eq!(held.after_poll(vec![], &waiting), vec![]);
+        assert_eq!(held.after_poll(vec![], &waiting), vec![proposal("p1"), proposal("p2")]);
+        assert_eq!(held.after_poll(vec![], &waiting), vec![]);
+    }
+
+    #[test]
+    fn a_held_proposal_the_user_has_already_decided_on_is_not_announced() {
+        let mut held = HeldProposals::default();
+        assert_eq!(held.after_poll(vec![proposal("p1"), proposal("p2")], &[proposal("p1"), proposal("p2")]), vec![]);
+        for _ in 1..QUIET_POLLS {
+            assert_eq!(held.after_poll(vec![], &[proposal("p2")]), vec![]);
+        }
+        assert_eq!(held.after_poll(vec![], &[proposal("p2")]), vec![proposal("p2")]);
     }
 
     #[test]

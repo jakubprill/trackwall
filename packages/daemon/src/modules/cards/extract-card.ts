@@ -16,33 +16,33 @@ import type { SyntaxParsers } from "./syntax-tree.ts";
 import { extractTools, readsToolFile } from "./tools.ts";
 
 /**
- * Karta repo z jednego commita (§4.6, ADR-25, ADR-30): ekstraktory systemów budowania, potem narzędzia z katalogów ich
- * buildów, konfiguracja i taski mise (ADR-34), fakty HTTP (Spring i frontend) z kontraktami
- * endpointów i DTO (ADR-38) i spis mechanizmów z tego, czego repo używa. Ten sam commit daje tę samą kartę, chyba że
- * parsery nie dały drzewa składni w czasie (`CardParsers.complete`).
+ * The repo card from one commit (§4.6, ADR-25, ADR-30): build system extractors, then tools from their build
+ * directories, configuration and mise tasks (ADR-34), HTTP facts (Spring and frontend) with endpoint contracts and DTOs
+ * (ADR-38), and the list of mechanisms from what the repo uses. The same commit gives the same card, unless the parsers
+ * did not produce a syntax tree in time (`CardParsers.complete`).
  */
 
-/** Ekstraktor systemu budowania razem z wyborem plików, które czyta, żeby nowy nie mógł zapomnieć o drugim. */
+/** A build system extractor together with the choice of files it reads, so that a new one cannot forget the other. */
 const BUILD_EXTRACTORS = [
   { reads: readsMavenFile, extract: extractMaven },
   { reads: readsGradleFile, extract: extractGradle },
   { reads: readsNpmFile, extract: extractNpm },
 ];
 
-/** Ekstraktory faktów HTTP z plikami, które czytają; pliki źródłowe Javy i Kotlina wybiera wyszukiwanie (`JVM_SOURCE_PATTERN`). */
+/** HTTP fact extractors with the files they read; Java and Kotlin source files are chosen by the search (`JVM_SOURCE_PATTERN`). */
 const HTTP_EXTRACTORS = [
   { reads: readsSpringConfigFile, extract: extractSpring },
   { reads: readsFrontendHttpFile, extract: extractFrontendHttp },
 ];
 
-/** Czy któryś ekstraktor czyta plik `path`; tylko takie pliki (i wybrane pliki źródłowe) odczyt commita wyciąga z gita. */
+/** Whether some extractor reads file `path`; only such files (and the chosen source files) are taken from git when reading a commit. */
 export function readsCardFile(path: string): boolean {
   return readsToolFile(path) || isMiseConfigFile(path) || [...BUILD_EXTRACTORS, ...HTTP_EXTRACTORS].some((e) => e.reads(path));
 }
 
 /**
- * Pliki źródłowe Javy i Kotlina, które czyta ekstraktor Spring: z mapowaniami, klientami HTTP albo stałymi ścieżek,
- * i pliki typów, które wymieniają (DTO, ADR-38).
+ * The Java and Kotlin source files the Spring extractor reads: with mappings, HTTP clients or path constants, and the
+ * files of the types they mention (DTOs, ADR-38).
  */
 export const CARD_SOURCES: SourceSelection = {
   pattern: JVM_SOURCE_PATTERN,
@@ -55,7 +55,7 @@ export function extractCard(snapshot: RepoSnapshot, parsers: SyntaxParsers): Rep
   const mise = extractMiseSetup(snapshot);
   const builds = BUILD_EXTRACTORS.map((e) => e.extract(snapshot));
   const buildDirs = builds.flatMap((b) => b.buildFiles.map((f) => dirOf(f.path)));
-  // Ekstraktory buildu dają tylko paczki, a HTTP aplikacje, endpointy i klientów; karta trzyma je razem.
+  // Build extractors give only packages, and HTTP gives apps, endpoints and clients; the card keeps them together.
   const all: Extracted<Provided, Consumed>[] = [
     ...builds,
     extractTools(snapshot, buildDirs),
@@ -83,7 +83,7 @@ export function extractCard(snapshot: RepoSnapshot, parsers: SyntaxParsers): Rep
   };
 }
 
-/** Każda paczka raz, z pierwszym wystąpieniem: moduły wielomodułowego repo powtarzają te same zależności. */
+/** Every package once, with its first occurrence: the modules of a multi-module repo repeat the same dependencies. */
 function unique(consumes: Consumed[]): Consumed[] {
   const seen = new Set<string>();
   return consumes.filter((c) => {

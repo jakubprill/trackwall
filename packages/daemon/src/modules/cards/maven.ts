@@ -1,28 +1,30 @@
 import type { ConsumedPackage, Evidence } from "@trackwall/protocol";
 import { messageOf } from "../../infra/errors.ts";
+import { child, children, childText, parseXml, type XmlElement } from "../../infra/xml.ts";
 import { baseName, dirOf, inDir, joinPath, rootFiles } from "./repo-path.ts";
 import { type Extracted, emptyExtracted, type RepoSnapshot } from "./snapshot.ts";
-import { child, children, childText, parseXml, type XmlElement } from "./xml.ts";
 
 /**
- * Ekstraktor Maven (§4.6): `pom.xml` korzeni i modułów, które korzenie wymieniają (także w profilach). Daje
- * współrzędne każdego modułu (udostępniane), rodzica spoza repo, zależności, importowane BOM-y i wtyczki (używane)
- * oraz wersję Javy z właściwości. Wersje z `${…}` podstawia z właściwości pom i jego rodziców z repo.
+ * The Maven extractor (§4.6): the `pom.xml` of the roots and of the modules the roots list (also in profiles). Gives
+ * the coordinates of every module (provided), a parent from outside the repo, dependencies, imported BOMs and plugins
+ * (used) and the Java version from the properties. It substitutes versions with `${…}` from the properties of the pom
+ * and its parents in the repo.
  */
 
 const POM = "pom.xml";
-/** Właściwości, którymi projekty podają wersję Javy, od najpewniejszej. */
+/** Properties projects use to give the Java version, most reliable first. */
 const JAVA_VERSION_PROPERTIES = ["maven.compiler.release", "java.version", "maven.compiler.source"];
 const DEFAULT_PLUGIN_GROUP = "org.apache.maven.plugins";
-/** Ile razy podstawiać właściwości w jednej wartości: właściwość może odwoływać się do innej, ale nie w kółko. */
+/** How many times to substitute properties in one value: a property can refer to another, but not in a loop. */
 const MAX_SUBSTITUTIONS = 10;
 /**
- * Najdłuższa wartość po podstawieniu. Właściwość z setką odwołań do kolejnej, która ma ich setkę, rośnie wykładniczo;
- * bez limitu kilka KB pom zajęłoby całą pamięć daemona (§8). Dłuższa wersja i tak nie jest wersją.
+ * The longest value after substitution. A property with a hundred references to the next one, which has a hundred of its
+ * own, grows exponentially; without a limit a few KB of pom would take all of the daemon's memory (§8). A longer version
+ * is not a version anyway.
  */
 const MAX_SUBSTITUTED_LENGTH = 4096;
 
-/** Pliki, które ten ekstraktor czyta, do wyboru plików z commita. */
+/** The files this extractor reads, for choosing files from the commit. */
 export function readsMavenFile(path: string): boolean {
   return baseName(path) === POM;
 }
@@ -83,13 +85,13 @@ export function extractMaven(snapshot: RepoSnapshot): Extracted {
   return out;
 }
 
-/** Moduły z `<modules>` i z `<modules>` w profilach: profil bywa jedynym miejscem, gdzie moduł jest wymieniony. */
+/** Modules from `<modules>` and from `<modules>` in profiles: a profile is sometimes the only place a module is listed. */
 function moduleNames(pom: XmlElement): string[] {
   const profiles = children(pom, "profiles", "profile");
   return [pom, ...profiles].flatMap((el) => children(el, "modules", "module").map((m) => m.text)).filter((m) => m !== "");
 }
 
-/** Rodzic, zależności, importowane BOM-y i wtyczki buildu jednego pom. */
+/** The parent, dependencies, imported BOMs and build plugins of one pom. */
 function consumed(pom: Pom, resolve: (value: string | undefined) => string | null): ConsumedPackage[] {
   const pkg = (el: XmlElement, scope: string, defaultGroup?: string): ConsumedPackage | undefined => {
     const groupId = resolve(childText(el, "groupId") ?? defaultGroup);
@@ -108,14 +110,14 @@ function consumed(pom: Pom, resolve: (value: string | undefined) => string | nul
 }
 
 /**
- * Współrzędne pom: `groupId` i `version` bez własnej wartości dziedziczą z `<parent>` (tak robi Maven), więc
- * moduł wielomodułowego projektu ma pełne współrzędne bez powtarzania grupy.
+ * The pom's coordinates: `groupId` and `version` without their own value are inherited from `<parent>` (as Maven does),
+ * so a module of a multi-module project has full coordinates without repeating the group.
  */
 function resolveCoordinates(pom: Pom, poms: ReadonlyMap<string, Pom>, seen = new Set<string>()): Coordinates {
   seen.add(pom.path);
   const parent = child(pom.xml, "parent");
   const inherited = repoParent(pom, poms);
-  // Rodzice zapętleni przez `relativePath` to błąd w repo; Maven by go odrzucił, karta bierze to, co ma.
+  // Parents looped through `relativePath` are an error in the repo; Maven would reject it, the card takes what it has.
   const fromParent = inherited && !seen.has(inherited.path) ? resolveCoordinates(inherited, poms, seen) : undefined;
   return {
     groupId: childText(pom.xml, "groupId") ?? childText(parent, "groupId") ?? fromParent?.groupId,
@@ -124,7 +126,7 @@ function resolveCoordinates(pom: Pom, poms: ReadonlyMap<string, Pom>, seen = new
   };
 }
 
-/** Rodzic z tego repo: pom pod `relativePath` (domyślnie `../pom.xml`) z tym samym `artifactId` co w `<parent>`. */
+/** A parent from this repo: the pom at `relativePath` (by default `../pom.xml`) with the same `artifactId` as in `<parent>`. */
 function repoParent(pom: Pom, poms: ReadonlyMap<string, Pom>): Pom | undefined {
   const parent = child(pom.xml, "parent");
   if (!parent) return undefined;
@@ -135,7 +137,7 @@ function repoParent(pom: Pom, poms: ReadonlyMap<string, Pom>): Pom | undefined {
     : undefined;
 }
 
-/** Właściwości pom: rodzice z repo najpierw, więc własne je nadpisują; do tego `project.*` jak w Mavenie. */
+/** The pom's properties: parents from the repo first, so its own override them; plus `project.*` as in Maven. */
 function properties(pom: Pom, poms: ReadonlyMap<string, Pom>, seen = new Set<string>()): Map<string, string> {
   seen.add(pom.path);
   const parent = repoParent(pom, poms);
@@ -155,11 +157,11 @@ function properties(pom: Pom, poms: ReadonlyMap<string, Pom>, seen = new Set<str
 }
 
 /**
- * Podstawia `${nazwa}` znanymi właściwościami; nieznana (albo taka, która przekroczyłaby `MAX_SUBSTITUTED_LENGTH`)
- * zostaje w tekście, żeby było widać, skąd wersja pochodzi.
+ * Substitutes `${name}` with known properties; an unknown one (or one that would exceed `MAX_SUBSTITUTED_LENGTH`)
+ * stays in the text, so that it is visible where the version comes from.
  */
 function substitute(value: string, props: ReadonlyMap<string, string>): string {
-  // Wartość dłuższa niż wynik po podstawieniu nie jest wersją, a przeszukiwanie jej kosztuje.
+  // A value longer than the result after substitution is not a version, and searching it is expensive.
   if (value.length > MAX_SUBSTITUTED_LENGTH) return value;
   let current = value;
   for (let i = 0; i < MAX_SUBSTITUTIONS && current.includes("${"); i++) {
@@ -176,7 +178,7 @@ function substitute(value: string, props: ReadonlyMap<string, string>): string {
   return current;
 }
 
-/** Pom wskazany ścieżką względną (moduł, `relativePath`): plik `.xml` wprost albo `pom.xml` w katalogu. */
+/** The pom a relative path points to (a module, `relativePath`): a `.xml` file directly or `pom.xml` in a directory. */
 function pomAt(dir: string, rel: string): string | undefined {
   const target = joinPath(dir, rel);
   if (target === undefined) return undefined;

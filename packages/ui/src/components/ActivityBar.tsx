@@ -9,13 +9,13 @@ export type ActivityView<Id extends string> = {
   label: string;
   icon: LucideIcon;
   shortcut: ViewShortcut;
-  /** Widoki pracy są u góry paska, a ustawienia i stan aplikacji przy dolnej krawędzi, jak w VS Code. */
+  /** Work views are at the top of the bar, and settings and the app state at the bottom edge, as in VS Code. */
   placement: "top" | "bottom";
 };
 
 /**
- * Pasek widoków przy lewej krawędzi okna (activity bar z VS Code): ikona na widok, nazwa i skrót w podpowiedzi,
- * aktywny widok ze świecącą kreską (ADR-16).
+ * The view bar at the left edge of the window (like the activity bar in VS Code): an icon per view, the name and shortcut
+ * in a tooltip, the active view with a glowing stroke (ADR-16).
  */
 export function ActivityBar<Id extends string>({
   views,
@@ -29,7 +29,7 @@ export function ActivityBar<Id extends string>({
   onSelect: (id: Id) => void;
   /** Views in new windows (ADR-49): the Ctrl+Shift shortcuts and the icon's context menu; absent outside the shell. */
   newWindow?: { open: (id: Id) => void; showMenu: (id: Id) => void };
-  /** Liczba przy ikonie widoku, np. sesje, które czekają na Ciebie; zero i brak nie pokazują niczego. */
+  /** The number at a view's icon, for example sessions waiting for you; zero and none show nothing. */
   badges?: Partial<Record<Id, number>>;
 }) {
   useViewShortcuts(views, active, onSelect, newWindow?.open);

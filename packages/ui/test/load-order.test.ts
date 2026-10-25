@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { LoadOrder } from "../src/lib/load-order.ts";
 
-describe("kolejność danych widoku", () => {
-  test("odpowiedź na pytanie wysłane przed migawką z WebSocketu nie zastępuje migawki", () => {
+describe("order of view data", () => {
+  test("the answer to a request sent before a WebSocket snapshot does not replace the snapshot", () => {
     const order = new LoadOrder();
     const question = order.next();
     const snapshot = order.next();
@@ -11,7 +11,7 @@ describe("kolejność danych widoku", () => {
     expect(order.isOutdated(question)).toBe(true);
   });
 
-  test("odpowiedź na pytanie wysłane po migawce zastępuje ją, a numery liczą pytania i migawki razem", () => {
+  test("the answer to a request sent after a snapshot replaces it, and the numbers count requests and snapshots together", () => {
     const order = new LoadOrder();
     expect(order.show(order.next())).toBe(true);
     const question = order.next();

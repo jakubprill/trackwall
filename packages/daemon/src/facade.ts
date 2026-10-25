@@ -9,6 +9,8 @@ import { Logs } from "./modules/logs/logs.ts";
 import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
+import { Services } from "./modules/services/services.ts";
+import { TestReports } from "./modules/test-results/test-reports.ts";
 import { HOSTING_CLIS, Hosting } from "./modules/vcs/hosting.ts";
 import { Vcs } from "./modules/vcs/vcs.ts";
 import { Workspace } from "./modules/workspace/workspace.ts";
@@ -29,6 +31,8 @@ export interface Facade {
   logs: Logs;
   agents: Agents;
   batch: Batch;
+  services: Services;
+  testReports: TestReports;
   /**
    * Otwiera w systemie link z README (ADR-35): adres `http` albo `https` sprawdzony schematem `ExternalLink`.
    * Nie należy do żadnego modułu, bo nie dotyczy repo ani stanu daemona.
@@ -44,15 +48,20 @@ const CARDS_DIR = "cards";
 const LOGS_DIR = "logs";
 /** Limit jednego pliku JSONL źródła; z poprzednim plikiem po rotacji źródło zajmuje najwyżej dwa razy tyle. */
 const LOG_FILE_MAX_BYTES = 10 * 1024 * 1024;
+/** Service readiness (ADR-45): checks twice a second, and five minutes for a start, because Gradle and Maven compile first. */
+const SERVICE_TIMING = { intervalMs: 500, startupMs: 5 * 60 * 1000, settleMs: 500 };
 
 export interface FacadeOptions {
   /** Katalog stanu daemona; tam leżą `workspace.yaml` (ADR-13), `runtime.json` (§4.1) `logs/` (§4.2) i karty repo (`cards/`, ADR-25). */
   home: string;
   openUrl: (url: string) => void;
+  openFolder: (dir: string) => void;
   /** Program `mise` z argumentami przed komendą (`["mise"]` w daemonie). */
   miseCommand: readonly string[];
   /** Program Copilot CLI z argumentami przed argumentami sesji (`["copilot"]` w daemonie, atrapa w testach). */
   copilotCommand: readonly string[];
+  /** The daemon's version (`VERSION`), given to every Copilot CLI session. */
+  version: string;
   /** Program hooka wtyczki sesji (`trackwall-daemon copilot-hook …` w daemonie). */
   hookCommand: AgentsDeps["hookCommand"];
   /** Most stdio do serwera MCP tego daemona z plikiem tokenu sesji (`sessionMcpStdioCommand`), który dostaje każda sesja Copilot CLI. */
@@ -70,6 +79,7 @@ export function createFacade(o: FacadeOptions): Facade {
     vcs,
     hosting: new Hosting(HOSTING_CLIS),
     openEditor,
+    openFolder: o.openFolder,
   });
   const logs = new Logs({ dir: join(o.home, LOGS_DIR), maxFileBytes: LOG_FILE_MAX_BYTES, log: o.log });
   const procs = new ProcessGroups({
@@ -79,23 +89,26 @@ export function createFacade(o: FacadeOptions): Facade {
     terminals: terminalPlatform(),
     log: o.log,
   });
-  const mise = new Mise({ procs, repos: workspace, command: o.miseCommand, env: o.userEnv });
   const cache = new CardCache(join(o.home, CARDS_DIR), o.log);
   cache.prune().catch((err: unknown) => o.log(`failed to clean up cards: ${String(err)}`));
   const cards = new Cards({ vcs, repos: workspace, cache });
-  const batch = new Batch({ workspace, mise, log: o.log });
   const agents = new Agents({
     procs,
     repos: workspace,
     vcs,
     home: o.home,
     copilot: o.copilotCommand,
+    version: o.version,
     env: o.userEnv,
     hookCommand: o.hookCommand,
     sessionMcpCommand: o.sessionMcpCommand,
     openEditor,
     log: o.log,
   });
+  const mise = new Mise({ procs, repos: workspace, tasks: agents, command: o.miseCommand, env: o.userEnv });
+  const batch = new Batch({ workspace, mise, log: o.log });
   const graph = new Graph({ cards, workspace });
-  return { workspace, cards, graph, mise, procs, logs, batch, agents, openLink: o.openUrl };
+  const services = new Services({ mise, logs, graph, cards, env: o.userEnv, ...SERVICE_TIMING });
+  const testReports = new TestReports({ repos: workspace, tasks: agents, logs, env: o.userEnv });
+  return { workspace, cards, graph, mise, procs, logs, batch, agents, services, testReports, openLink: o.openUrl };
 }

@@ -2,20 +2,22 @@
 
 Repo layout, running from source and tools for people who develop Trackwall. Project documentation (moving to English, ADR-43):
 
-- [Features](features.md)
+- [Features](https://jakubprill.github.io/trackwall/): the documentation site, source in `apps/docs`
 - [Architecture](architecture.md)
 - [Rules for agents and Definition of done](../AGENTS.md)
 - [Glossary](../CONTEXT.md)
-- [Releases and installation](release.md)
+- [Releases](release.md)
+- [Installation](https://jakubprill.github.io/trackwall/guide/install): the steps for users, on the documentation site
 
 ## Repo layout
 
 | Path | What it is |
 |---|---|
-| `packages/protocol` | types and zod schemas shared by the daemon, the UI and the CLI |
+| `packages/protocol` | types and zod schemas shared by the daemon, the UI and the CLI; the docs site takes its address from it |
 | `packages/daemon` | the daemon (Bun, Node-compatible code), built into a single binary; `src/modules/` are the modules from §4 of the architecture, `src/api/` and `src/mcp/` the transports, `src/platform/` system APIs, `src/infra/` the rest of the infrastructure; the root of `src/` holds only `main.ts` and `facade.ts` |
 | `packages/ui` | React + Tailwind + shadcn/ui, Vite; `src/views/<view identifier>/` are the views from the bar on the left (`home`, `repos`, `sessions`, `graph` for Overview, `daemon`, `settings`) and `tray-panel`, the page of the tray panel window (ADR-50), `src/components/` shared components, `src/lib/` logic without React and hooks; the root of `src/` holds only `main.tsx`, `App.tsx` and `index.css` |
 | `packages/scene` | the 3D dashboard scene on Pawn (`@pawnjs/core` from npm): view model, "Orbit" layout, models |
+| `apps/docs` | the feature documentation site (VitePress, ADR-56): `guide/` and one page per feature in `features/` written from `TEMPLATE.md`, the sidebar (and the groups of "All features") in `.vitepress/sidebar.ts`, the Trackwall look in `.vitepress/theme/`; the screenshots in `public/screenshots/`, taken by `scripts/screenshots.ts` from the demo daemon; the build also writes `llms.txt`, `llms-full.txt` and a Markdown copy of every page for AI tools; `.github/workflows/pages.yml` publishes it on GitHub Pages |
 | `apps/desktop` | the Tauri 2 shell: windows (the main one and extra ones, translucent, ADR-11, ADR-49), tray and tray panel, system notifications and the global shortcut (ADR-50), starting and stopping the daemon |
 
 ## Running from source
@@ -32,6 +34,8 @@ pnpm dev                       # daemon (bun --watch, state in .trackwall-dev/) 
 pnpm --filter @trackwall/desktop dev   # the same in a Tauri window (state in ~/.trackwall-dev, separate from the release)
 pnpm lint                      # Biome and knip (pnpm format fixes formatting)
 pnpm test                      # tests of every package
+pnpm --filter @trackwall/docs dev     # the documentation site under /trackwall/ (Vite prints the address; 5174 when `pnpm dev` holds 5173)
+pnpm --filter @trackwall/docs build   # the site into apps/docs/dist; fails on a broken link between pages
 ```
 
 The daemon alone with the UI in the browser, without Tauri:
@@ -40,6 +44,16 @@ The daemon alone with the UI in the browser, without Tauri:
 pnpm build
 bun packages/daemon/src/main.ts --ui
 ```
+
+A daemon on a made-up shop of twenty repos, with sessions in every state, task proposals, agent tasks and running services, for demos and the screenshots of the documentation site. Copilot CLI is replaced by a stand-in (`packages/daemon/scripts/demo/copilot.ts`) that never calls a model; the services need `mise` and Node on PATH:
+
+```sh
+pnpm --filter @trackwall/ui build
+pnpm --filter @trackwall/daemon demo <empty state directory>   # prints the address of the UI
+pnpm --filter @trackwall/docs screenshots                      # the pictures in apps/docs/public/screenshots, from the same demo
+```
+
+The screenshots need Chromium for Playwright once: `pnpm --filter @trackwall/docs exec playwright install chromium`.
 
 The same daemon also runs under plain Node, without Bun (ADR-1): `pnpm --filter @trackwall/ui build`, then `pnpm --filter @trackwall/daemon start:node`.
 
@@ -58,13 +72,23 @@ Every CI run (PR, push to `main`, manual run) publishes both archives as artifac
 
 ## Icons
 
-The icon sources are `apps/desktop/assets/icon.svg` (the app icon) and `apps/desktop/assets/tray-icon.svg` (the single-colour tray mark). After changing either of them:
+The icon sources are `apps/desktop/assets/icon.svg` (the app icon; the documentation site has a copy without the comment in `apps/docs/public/logo.svg`, kept equal by `apps/docs/test/theme.test.ts`) and `apps/desktop/assets/tray-icon.svg` (the single-colour tray mark). After changing either of them:
 
 ```sh
 pnpm --filter @trackwall/desktop icons   # icons from bundle.icon in tauri.conf.json, the macOS tray template and the UI favicon
 ```
 
 The generated files go into the repo together with the changed SVG. `tauri icon` writes `icon.icns` with its entries in a different order every time, so discard a changed `icon.icns` after a run without an SVG change (`git checkout -- apps/desktop/src-tauri/icons/icon.icns`).
+
+## Copilot CLI with the MCP server from source
+
+The user guide (`apps/docs/guide/connect-copilot-cli.md`) shows the command for an installed Trackwall. From source, Copilot CLI starts the bridge with Bun:
+
+```sh
+copilot mcp add trackwall -- bun --no-env-file --config=<trackwall>/packages/daemon/bunfig.toml <trackwall>/packages/daemon/src/main.ts mcp-stdio --home <state directory>
+```
+
+Checking it by hand needs a signed-in Copilot CLI. Start Trackwall with the projects folder set, run the command from the "Daemon" view, run `copilot` in the projects folder, check in `/mcp` that `trackwall` is connected with the tools `list_repos`, `get_repo`, `get_repo_card`, `tail`, `get_errors`, `get_test_results`, `who_calls`, `subgraph_for`, `find_endpoint`, `search_code`, `list_sessions`, `get_session`, `get_task_changes`, `propose_task`, `report_result`, `wait_for_session`, `run_mise_task`, `stop_mise_task`, `wait_for_mise_task`, `list_running_mise_tasks`, `start_service`, `stop_service`, `list_services` and `call_endpoint`, ask for the repo list, then for the details of one of them (README, mise tasks), for its card (for example "Which packages does orders-bff use?") and for who uses it ("Which repos does a change in core-lib affect?", "Who calls GET /api/orders/{id}?"), for code across many repos ("Where do the Java repos use RestTemplate?"), and with a session from the "Sessions" view running, for Trackwall sessions ("Which Trackwall sessions are waiting for me?"), then for commissioning a task ("Propose a task in orders-bff that adds a health endpoint, then wait for it"): the proposal should appear in the "Sessions" view, and after "Start task" the task session should start working at once, not wait for you. The daemon log (the `pnpm dev` terminal or `trackwall-daemon`) shows every call as `[mcp] list_repos: ok in … ms`.
 
 ## Recording Copilot CLI sessions
 

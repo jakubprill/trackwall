@@ -6,14 +6,15 @@ import { SessionAttention } from "./session-attention.ts";
 import { type ScreenViewer, TerminalScreen } from "./terminal-screen.ts";
 
 /**
- * Jedna działająca (albo zakończona) sesja Copilot CLI w daemonie (§4.4): ekran dla okien terminala, stan z hooków,
- * OSC i klawiszy sesji oraz terminal do pisania. Proces i jego grupę trzyma moduł `procs`; sesja tylko obserwuje jego stan.
+ * One running (or ended) Copilot CLI session in the daemon (§4.4): the screen for session terminals, the state from hooks,
+ * OSC and session keys, and the terminal to write to. The `procs` module holds the process and its group; the session
+ * only observes its state.
  */
 
-/** Ten sam próg co w prototypie (`copilot-record.ts`), żeby nagranie i daemon liczyły `Stale` tak samo. */
+/** The same threshold as in the prototype (`copilot-record.ts`), so that the recording and the daemon compute `Stale` the same way. */
 export const STALE_AFTER_MS = 60_000;
 
-/** PTY procesu sesji: terminal lidera grupy z `procs` (`GroupTerminal`). */
+/** The PTY of the session process: the terminal of the group leader from `procs` (`GroupTerminal`). */
 export interface SessionPty {
   write(data: string): void;
   resize(cols: number, rows: number): void;
@@ -38,22 +39,23 @@ function typedByUser(data: string): boolean {
 
 export interface LiveSessionOptions {
   id: string;
-  repo: string;
-  /** Zadanie, w którego worktree działa sesja; `null` w korzeniu repo. */
+  /** `null` for the supervisor in the projects folder (ADR-58). */
+  repo: string | null;
+  /** The task in whose worktree the session runs; `null` in the repo root. */
   task: string | null;
   cols: number;
   rows: number;
-  /** `hooks.jsonl` sesji, do którego dopisują procesy hooków wtyczki sesji. */
+  /** The session's `hooks.jsonl`, which the session plugin's hook processes append to. */
   hooksFile: string;
-  /** Copilot CLI dostał polecenie jako pierwszą wiadomość (`--interactive`), więc po starcie od razu pracuje. */
+  /** Copilot CLI got the prompt as its first message (`--interactive`), so it works right after the start. */
   promptOnStart: boolean;
-  /** Stan grupy procesów sesji w `procs`; `undefined` przed startem. */
+  /** The state of the session's process group in `procs`; `undefined` before the start. */
   run: () => RunState | undefined;
 }
 
 export class LiveSession {
   readonly id: string;
-  readonly repo: string;
+  readonly repo: string | null;
   readonly task: string | null;
   readonly startedAt = new Date().toISOString();
   readonly #run: () => RunState | undefined;
@@ -77,18 +79,18 @@ export class LiveSession {
     this.#hooks = new HookTail(o.hooksFile);
   }
 
-  /** Terminal procesu; przychodzi po starcie grupy, a wyjście może przyjść już wcześniej. */
+  /** The process terminal; it arrives after the group starts, and output can arrive earlier. */
   connect(terminal: SessionPty): void {
     this.#terminal = terminal;
   }
 
-  /** Wyjście PTY: na ekran, do okien terminala i do detektorów stanu (OSC). */
+  /** PTY output: to the screen, to the session terminals and to the state detectors (OSC). */
   output(bytes: Uint8Array): void {
     this.#screen.write(bytes);
     this.#report(this.#state.output(this.#decoder.decode(bytes, { stream: true })));
   }
 
-  /** Wejście z okna terminala: do PTY, a klawisz odpowiedzi albo przerwania także do detektorów stanu. */
+  /** Input from a session terminal: to the PTY, and an answer or interrupt key also to the state detectors. */
   input(data: string): void {
     if (this.#finished || !this.#terminal) return;
     this.#terminal.write(data);
@@ -101,14 +103,14 @@ export class LiveSession {
     if (typedByUser(data)) this.#attention.typed();
   }
 
-  /** Rozmiar ustala ostatnie okno, które go zgłosiło; TUI dostaje go razem z PTY. */
+  /** The size is set by the last terminal that reported it; the TUI gets it together with the PTY. */
   resize(cols: number, rows: number): void {
     if (this.#finished || (cols === this.#screen.cols && rows === this.#screen.rows)) return;
     this.#screen.resize(cols, rows);
     this.#terminal?.resize(cols, rows);
   }
 
-  /** `onClosed` dostaje widz, którego sesja znika (`dismiss`), żeby jego okno nie czekało na wyjście, które nie przyjdzie. */
+  /** `onClosed` goes to a viewer whose session disappears (`dismiss`), so that its terminal does not wait for output that will not come. */
   attach(viewer: ScreenViewer, onSnapshot: (snapshot: string) => void, onClosed: () => void): SessionWindow {
     const detach = this.#screen.attach(viewer, onSnapshot);
     const attention = this.#attention.window();
@@ -126,8 +128,9 @@ export class LiveSession {
   }
 
   /**
-   * Nowe rekordy hooków, próg `Stale` i koniec procesu; po końcu nic już nie zmienia stanu. Wołane cyklicznie
-   * i przed każdym odczytem stanu, bo koniec procesu widać w `procs` wcześniej niż w cyklu. Zwraca, czy sesja żyje.
+   * New hook records, the `Stale` threshold and the end of the process; after the end nothing changes the state. Called
+   * periodically and before every read of the state, because `procs` sees the end of the process sooner than the cycle.
+   * Returns whether the session is alive.
    */
   tick(): boolean {
     if (this.#finished) return false;
@@ -135,7 +138,7 @@ export class LiveSession {
     this.#report([this.#state.tick()]);
     const run = this.#run();
     if (run?.kind !== "exited") return true;
-    // Zatrzymanie przez użytkownika to zamierzony koniec, nie błąd sesji, choć proces kończy się sygnałem.
+    // A stop by the user is an intended end, not a session error, even though the process ends with a signal.
     this.#report(this.#state.exit(run.stoppedByUser ? 0 : (run.exitCode ?? 1)));
     this.#finished = true;
     this.#hooks.close();

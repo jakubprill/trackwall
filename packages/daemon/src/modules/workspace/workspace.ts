@@ -2,6 +2,7 @@ import { dirname, join } from "node:path";
 import {
   type CloneJob,
   type Commit,
+  type DroppedFolder,
   type FileContent,
   type GraphConfig,
   type HostedRepo,
@@ -23,11 +24,12 @@ import {
   type WorkingTreeChanges,
   type WorkspaceSettings,
 } from "@trackwall/protocol";
-import { DomainError, messageOf } from "../../infra/errors.ts";
+import { configOrProblem, DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
 import { CloneJobs } from "./clone-jobs.ts";
 import { type CodeSearchQuery, type CodeSearchVcs, searchCode } from "./code-search.ts";
-import { dirKey, findRepos, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
+import { describeDroppedFolder } from "./dropped-folder.ts";
+import { dirKey, findRepos, projectsDirUnavailable, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
 
@@ -80,6 +82,8 @@ export interface WorkspaceDeps {
   hosting: WorkspaceHosting;
   /** Otwiera katalog w VS Code (`vscode://` w systemie, składane w fasadzie). */
   openEditor: (dir: string) => void;
+  /** Opens a folder in Explorer, Finder or the Linux file manager (ADR-51). */
+  openFolder: (dir: string) => void;
 }
 
 export class Workspace {
@@ -103,6 +107,15 @@ export class Workspace {
   async setProjectsDir(path: string): Promise<WorkspaceSettings> {
     this.deps.file.setProjectsDir(await resolveProjectsDir(path));
     return this.settings();
+  }
+
+  /**
+   * What a folder dropped on the window is (ADR-51). A bad `projectsDir` or a missing projects folder does not get in
+   * the way: dropping a folder is one of the ways to fix them.
+   */
+  async droppedFolder(path: string): Promise<DroppedFolder> {
+    const projectsDir = configOrProblem(() => this.deps.file.projectsDir(), null).value;
+    return describeDroppedFolder(path, projectsDir);
   }
 
   repoHosts(): RepoHost[] {
@@ -227,9 +240,21 @@ export class Workspace {
     this.deps.openEditor((await this.entry(id)).path);
   }
 
+  /** Only a listed repo's folder is opened, never a path from the request (ADR-51). */
+  async openFolder(id: string): Promise<void> {
+    this.deps.openFolder((await this.entry(id)).path);
+  }
+
   /** Korzeń repo po identyfikatorze, dla modułów, które uruchamiają w nim procesy (`mise`). */
   async repoPath(id: string): Promise<string> {
     return (await this.entry(id)).path;
+  }
+
+  /** The projects folder itself, where the supervisor runs (ADR-58); `bad_request` while it is not set. */
+  async projectsDir(): Promise<string> {
+    const projectsDir = this.deps.file.projectsDir();
+    if (projectsDir === null) throw new DomainError("bad_request", "set the projects folder first");
+    return projectsDir;
   }
 
   /** Repo z folderu z projektami (identyfikator i korzeń), dla modułów, które czytają każde repo (`cards`). */
@@ -255,7 +280,7 @@ export class Workspace {
   /** Bez ustawionego folderu z projektami nie ma repo. */
   private async entries(): Promise<{ projectsDir: string | null; entries: RepoEntry[] }> {
     const projectsDir = this.deps.file.projectsDir();
-    return { projectsDir, entries: projectsDir === null ? [] : await findRepos(projectsDir) };
+    return { projectsDir, entries: projectsDir === null ? [] : await findRepos(projectsDir, projectsDirUnavailable) };
   }
 
   private async entry(id: string): Promise<RepoEntry> {

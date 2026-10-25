@@ -3,19 +3,19 @@ import { readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { terminalPlatform } from "../src/platform/terminal.ts";
 
-/** Otwarte deskryptory daemona; `/dev/fd` jest na macOS i Linuksie, na Windowsie PTY to ConPTY bez deskryptorów. */
+/** The daemon's open descriptors; `/dev/fd` exists on macOS and Linux, on Windows the PTY is ConPTY without descriptors. */
 function openDescriptors(): number {
   return readdirSync("/dev/fd").length;
 }
 
 const STARTS = 20;
 
-describe.skipIf(process.versions.bun === undefined || process.platform === "win32")("PTY z Bun.spawn", () => {
-  test("po końcu procesu terminal jest zamknięty i nie zostawia deskryptora", async () => {
+describe.skipIf(process.versions.bun === undefined || process.platform === "win32")("PTY from Bun.spawn", () => {
+  test("after the process ends the terminal is closed and leaves no descriptor", async () => {
     const terminals = await terminalPlatform();
-    if (!terminals) throw new Error("pod Bun PTY musi być dostępny");
-    // Pierwszy start może otworzyć deskryptory samego Bun, więc liczymy dopiero od drugiego. Inne testy w tym samym
-    // procesie mogą jeszcze zamykać swoje gniazda, więc liczy się wzrost mniejszy niż liczba startów, a nie zero.
+    if (!terminals) throw new Error("under Bun the PTY must be available");
+    // The first start may open descriptors of Bun itself, so we count only from the second. Other tests in the same
+    // process may still be closing their sockets, so what counts is growth smaller than the number of starts, not zero.
     let before = 0;
     for (let i = 0; i <= STARTS; i++) {
       if (i === 1) before = openDescriptors();

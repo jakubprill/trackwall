@@ -1,8 +1,8 @@
 import { Component, type ReactNode } from "react";
 
 /**
- * Granica błędu wokół sformatowanego README (ADR-35): gdy nie da się załadować paczki Streamdown (np. okno sprzed
- * aktualizacji daemona) albo README wywróci renderowanie, zakładka pokazuje surowy tekst zamiast pustego okna.
+ * An error boundary around the formatted README (ADR-35): when the Streamdown bundle cannot be loaded (for example a
+ * window from before a daemon update) or the README breaks rendering, the tab shows the raw text instead of an empty window.
  */
 export class ReadmeFallback extends Component<{ text: string; children: ReactNode }, { error?: string }> {
   override state: { error?: string } = {};

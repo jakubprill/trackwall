@@ -25,13 +25,13 @@ async function recordFakeSession(exitCode: number) {
   return { out, code, stdout, stderr, states };
 }
 
-describe("nagrywanie sesji Copilot CLI (prawdziwy PTY i procesy hooków)", () => {
-  test("hooki z wtyczki sesji dają stan, nagranie odtwarza te same zmiany co do milisekundy, a treść sesji nie trafia do rekordów", async () => {
+describe("recording a Copilot CLI session (a real PTY and hook processes)", () => {
+  test("hooks from the session plugin give the state, the recording replays the same changes to the millisecond, and the session's content does not reach the records", async () => {
     const { out, code, stdout, stderr, states } = await recordFakeSession(0);
 
     expect(code).toBe(0);
     expect(stdout).toContain("Thinking");
-    expect(stderr).toContain("Zmiany stanu");
+    expect(stderr).toContain("State changes");
     const hookStates = states.filter((s) => s.source === "hook").map((s) => `${s.state} ${s.reason}`);
     expect(hookStates).toEqual([
       "Input hook sessionStart",
@@ -48,16 +48,16 @@ describe("nagrywanie sesji Copilot CLI (prawdziwy PTY i procesy hooków)", () =>
     );
 
     const hooks = readFileSync(join(out, "hooks.jsonl"), "utf8");
-    expect(hooks).not.toContain("tajny prompt");
-    expect(hooks).not.toContain("HASLO");
-    expect(states.at(-1)?.windowTitle).toBe("Naprawa testu");
+    expect(hooks).not.toContain("secret prompt");
+    expect(hooks).not.toContain("PASSWORD");
+    expect(states.at(-1)?.windowTitle).toBe("Fixing the test");
   }, 30_000);
 
-  test("niezerowy kod wyjścia sesji jest kodem wyjścia nagrywania", async () => {
+  test("a non-zero session exit code is the recording's exit code", async () => {
     const { code, states } = await recordFakeSession(3);
 
     expect(code).toBe(3);
-    // Hook zgłosił koniec sesji, więc stan z hooka zostaje, a kod wyjścia go nie nadpisuje.
+    // The hook reported the end of the session, so the state from the hook stays, and the exit code does not override it.
     expect(states.at(-1)).toMatchObject({ state: "Done", source: "hook" });
   }, 30_000);
 });

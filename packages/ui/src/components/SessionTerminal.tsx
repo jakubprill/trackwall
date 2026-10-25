@@ -3,15 +3,19 @@ import { isTauri } from "@tauri-apps/api/core";
 import { PTY_CLOSE_NOT_FOUND, type PtyClientMessage, ptySocket } from "@trackwall/protocol";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import type { Connection } from "@/lib/connection";
 import { daemonSocket } from "@/lib/daemon-socket";
+import { DROP_HOVER_RING, FILE_DROP_TARGET, FileDropEvent } from "@/lib/file-drop";
+import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
 import { oncePerFrame } from "@/lib/once-per-frame";
+import { pastedPaths } from "@/lib/pasted-paths";
 import { IS_MAC } from "@/lib/platform";
 import { copiesSelection } from "@/lib/terminal-copy";
 import { trackwallLinkProvider } from "@/lib/terminal-links";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { terminalTheme } from "@/lib/terminal-theme";
+import { cn } from "@/lib/utils";
 import { FocusReporter, terminalInFront } from "@/lib/window-focus";
 
 const RECONNECT_MS = 1000;
@@ -22,15 +26,30 @@ const RECONNECT_MS = 1000;
  * not an empty terminal. Keys and the terminal size go to the session; the PTY takes the size of the last session
  * terminal that reported one, and a window that comes to the front reports its terminals' sizes again, so with the
  * session open in two windows (ADR-49) the one you work in sets it. The window also tells the daemon whether it is in front of the user, which marks the session seen
- * (ADR-47). In the grid (ADR-48) several terminals are open at once; only the `focused` one takes the keyboard and
- * counts as in front, so a waiting session in another tile keeps waiting until the user selects it.
+ * (ADR-47). In the grid (ADR-48) several terminals are open at once; only the `selected` one takes the keyboard and
+ * counts as in front, so a waiting session in another tile keeps waiting until the user selects it. Files dropped on
+ * the terminal (ADR-51) are pasted as their paths, as if the user typed them.
  */
-export function SessionTerminal({ conn, session, live, focused }: { conn: Connection; session: string; live: boolean; focused: boolean }) {
+export function SessionTerminal({
+  conn,
+  session,
+  live,
+  selected,
+}: {
+  conn: Connection;
+  session: string;
+  live: boolean;
+  selected: boolean;
+}) {
+  const keyboardElsewhere = useContext(KeyboardElsewhere);
+  const focused = selected && !keyboardElsewhere;
   const frame = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const term = useRef<Terminal>(undefined);
   const takesFocus = useRef(focused);
   takesFocus.current = focused;
+  const isLive = useRef(live);
+  isLive.current = live;
   const updateFocus = useRef<() => void>(undefined);
   const [notice, setNotice] = useState<string>();
 
@@ -77,7 +96,7 @@ export function SessionTerminal({ conn, session, live, focused }: { conn: Connec
         focus.connected();
       };
       ws.onmessage = (event: MessageEvent<ArrayBuffer | string>) => {
-        // Ramka tekstowa to obraz ekranu na start połączenia: zastępuje to, co okno pokazywało wcześniej.
+        // A text frame is the screen image at the start of the connection: it replaces what the window showed before.
         if (typeof event.data === "string") {
           terminal.reset();
           terminal.write(event.data);
@@ -97,22 +116,29 @@ export function SessionTerminal({ conn, session, live, focused }: { conn: Connec
     const input = terminal.onData((data) => send({ type: "input", data }));
     terminal.attachCustomKeyEventHandler((event) => {
       if (!copiesSelection(event, { mac: IS_MAC, hasSelection: terminal.hasSelection() })) return true;
-      // Bez tego przeglądarka wykona też własny skrót: Ctrl+Shift+C otwiera inspektor w Chrome i WebView2 w trybie dev.
+      // Without this the browser also runs its own shortcut: Ctrl+Shift+C opens the inspector in Chrome and in WebView2 in dev mode.
       event.preventDefault();
       navigator.clipboard.writeText(terminal.getSelection()).then(
         () => terminal.clearSelection(),
-        () => setNotice("Nie udało się skopiować zaznaczenia do schowka; zaznacz tekst jeszcze raz."),
+        () => setNotice("Could not copy the selection to the clipboard; select the text again."),
       );
       return false;
     });
+    const takeDrop = (event: Event) => {
+      if (!(event instanceof FileDropEvent)) return;
+      if (!isLive.current) return setNotice("The session has ended, so the dropped path was not pasted.");
+      // `paste` goes through `onData`, and in bracketed paste mode the agent sees it as pasted text, not keys.
+      terminal.paste(pastedPaths(event.paths));
+    };
+    container.addEventListener(FileDropEvent.type, takeDrop);
     const resizer = oncePerFrame(() => {
       const { cols, rows } = terminal;
       fit.fit();
       if (terminal.cols !== cols || terminal.rows !== rows) sendSize();
     });
-    // Obserwowana jest ramka, której rozmiar wynika tylko z układu strony; terminal leży w niej absolutnie, więc jego
-    // wymiary nie zmieniają ramki ani nie wywołują pasków przewijania strony. Odstęp od brzegu to `inset`, nie
-    // `padding` kontenera: FitAddon liczy miejsce z rozmiaru kontenera i nie odejmuje jego paddingu.
+    // The observed element is a frame whose size comes only from the page layout; the terminal lies in it absolutely, so its
+    // dimensions neither change the frame nor cause page scroll bars. The distance from the edge is `inset`, not the
+    // container's `padding`: FitAddon computes the space from the container's size and does not subtract its padding.
     const resize = new ResizeObserver(() => resizer.request());
     resize.observe(container);
     window.addEventListener("focus", onWindowFocus);
@@ -124,6 +150,7 @@ export function SessionTerminal({ conn, session, live, focused }: { conn: Connec
       clearTimeout(timer);
       resizer.dispose();
       resize.disconnect();
+      container.removeEventListener(FileDropEvent.type, takeDrop);
       window.removeEventListener("focus", onWindowFocus);
       window.removeEventListener("blur", sendFocus);
       document.removeEventListener("visibilitychange", sendFocus);
@@ -150,7 +177,11 @@ export function SessionTerminal({ conn, session, live, focused }: { conn: Connec
           The session has ended; the terminal shows what was left on its screen.
         </p>
       )}
-      <div ref={frame} className="bg-background relative min-h-0 flex-1 overflow-hidden">
+      <div
+        ref={frame}
+        {...{ [FILE_DROP_TARGET]: "" }}
+        className={cn("bg-background relative min-h-0 flex-1 overflow-hidden", DROP_HOVER_RING)}
+      >
         <div ref={host} className="absolute inset-2 font-mono" />
       </div>
     </div>

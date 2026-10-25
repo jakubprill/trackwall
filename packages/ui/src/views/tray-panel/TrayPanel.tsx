@@ -5,6 +5,7 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { errorMessage } from "@/lib/api";
 import { twoDigits } from "@/lib/format";
+import { proposalName } from "@/lib/session-entries";
 import { PROPOSAL_STATUS, sessionStateLabel, sessionTitle } from "@/lib/session-state";
 import { openFromTrayPanel, type TrayPanelTarget, trayPanelEntries } from "@/lib/tray-panel";
 import { useConnection } from "@/lib/use-connection";
@@ -55,7 +56,7 @@ export function TrayPanel() {
         {entries && count > 0 && (
           <ul aria-label="Waiting for you">
             {entries.proposals.map((p) => (
-              <QueueItem key={p.id} title={`${p.repo} · ${p.title}`} active={false} onClick={() => open({ kind: "proposal", id: p.id })}>
+              <QueueItem key={p.id} title={proposalName(p)} active={false} onClick={() => open({ kind: "proposal", id: p.id })}>
                 <StatusLabel {...PROPOSAL_STATUS} />
               </QueueItem>
             ))}

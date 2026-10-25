@@ -1,12 +1,12 @@
 import type { GraphEdge } from "@trackwall/protocol";
 
 /**
- * Układ grafu w widoku „Przegląd” (ADR-29): kolumny od repo, których nikt nie używa (frontendy), do tych, których
- * używają wszyscy (biblioteki), jak warstwy z §5.5: kolumna = najdłuższa ścieżka od repo bez krawędzi wchodzących.
- * Bez biblioteki grafów: kilkadziesiąt repo układa się w kolumny w kilka milisekund, a SVG rysuje React.
+ * The graph layout in the "Overview" view (ADR-29): columns from repos nobody uses (frontends) to those everybody uses
+ * (libraries), like the layers of §5.5: column = the longest path from a repo without incoming edges.
+ * No graph library: a few dozen repos lay out in columns in a few milliseconds, and React draws the SVG.
  */
 
-/** Wszystkie krawędzie jednej pary repo jako jedna linia na rysunku. */
+/** All edges of one repo pair as one line in the drawing. */
 export interface EdgePair {
   from: string;
   to: string;
@@ -23,7 +23,7 @@ export interface NodeBox {
 export interface GraphLayout {
   boxes: Map<string, NodeBox>;
   pairs: EdgePair[];
-  /** Repo bez żadnej krawędzi: pokazane osobno, żeby nie rozpychały kolumn. */
+  /** Repos without any edge: shown separately so that they do not widen the columns. */
   isolated: string[];
   width: number;
   height: number;
@@ -33,10 +33,10 @@ export const NODE_WIDTH = 184;
 export const NODE_HEIGHT = 48;
 const COLUMN_GAP = 88;
 const ROW_GAP = 16;
-/** Ile razy porządkować kolumny według sąsiadów; więcej rzadko zmniejsza liczbę przecięć. */
+/** How many times to order the columns by their neighbours; more rarely reduces the number of crossings. */
 const ORDER_SWEEPS = 4;
 
-/** Krawędzie zgrupowane po parze repo, w kolejności pierwszego wystąpienia. */
+/** Edges grouped by repo pair, in the order of first occurrence. */
 export function edgePairs(edges: readonly GraphEdge[]): EdgePair[] {
   const pairs = new Map<string, EdgePair>();
   for (const edge of edges) {
@@ -57,7 +57,7 @@ export function layoutGraph(repos: readonly string[], edges: readonly GraphEdge[
   const tallest = Math.max(0, ...columns.map((c) => c.length));
   const boxes = new Map<string, NodeBox>();
   columns.forEach((column, c) => {
-    // Krótsze kolumny są wyśrodkowane względem najwyższej, żeby nie kleiły się do góry, a krzywe do nich były krótsze.
+    // Shorter columns are centred against the tallest one, so that they do not stick to the top and the curves to them are shorter.
     const offset = ((tallest - column.length) * (NODE_HEIGHT + ROW_GAP)) / 2;
     column.forEach((repo, row) => {
       boxes.set(repo, { repo, column: c, x: c * (NODE_WIDTH + COLUMN_GAP), y: offset + row * (NODE_HEIGHT + ROW_GAP) });
@@ -74,8 +74,8 @@ export function layoutGraph(repos: readonly string[], edges: readonly GraphEdge[
 }
 
 /**
- * Najdłuższa ścieżka od repo bez krawędzi wchodzących. Cykl (A używa B, B używa A) nie ma takiej ścieżki, więc
- * krawędzie wracające w przeszukiwaniu w głąb są pomijane przy liczeniu kolumn (nadal są rysowane).
+ * The longest path from a repo without incoming edges. A cycle (A uses B, B uses A) has no such path, so edges that go
+ * back in the depth-first search are skipped when counting columns (they are still drawn).
  */
 function columnOf(nodes: readonly string[], pairs: readonly EdgePair[]): Map<string, number> {
   const out = new Map<string, string[]>(nodes.map((n) => [n, []]));
@@ -96,7 +96,7 @@ function columnOf(nodes: readonly string[], pairs: readonly EdgePair[]): Map<str
   };
   for (const node of nodes) if (!state.has(node)) visit(node);
 
-  // `order` to porządek po zakończeniu przeszukiwania, więc odwrócony jest topologiczny dla krawędzi `forward`.
+  // `order` is the post-order of the search, so reversed it is topological for the `forward` edges.
   const column = new Map<string, number>(nodes.map((n) => [n, 0]));
   for (const node of order.reverse()) {
     for (const next of forward.get(node) ?? []) column.set(next, Math.max(column.get(next) ?? 0, (column.get(node) ?? 0) + 1));
@@ -114,8 +114,8 @@ function groupByColumn(nodes: readonly string[], column: Map<string, number>): s
 }
 
 /**
- * Porządek w kolumnie według średniej pozycji sąsiadów (heurystyka barycentrum), kolumna po kolumnie na przemian
- * w prawo i w lewo; pierwsza kolumna w pierwszym przejściu zostaje po nazwie i jest punktem odniesienia.
+ * Order within a column by the average position of the neighbours (the barycentre heuristic), column by column,
+ * alternating right and left; the first column in the first pass stays sorted by name and is the reference point.
  */
 function orderColumns(columns: string[][], pairs: readonly EdgePair[]): string[][] {
   const neighbours = new Map<string, string[]>();
@@ -148,7 +148,7 @@ function barycentre(neighbours: readonly string[], position: Map<string, number>
   return known.length === 0 ? undefined : known.reduce((a, b) => a + b, 0) / known.length;
 }
 
-/** Krzywa od prawej krawędzi repo, które używa, do lewej krawędzi repo używanego (z powrotem pętlą, gdy jest w lewo). */
+/** A curve from the right edge of the repo that uses to the left edge of the repo that is used (looping back when it goes left). */
 export function edgePath(from: NodeBox, to: NodeBox): string {
   const x1 = from.x + NODE_WIDTH;
   const y1 = from.y + NODE_HEIGHT / 2;
@@ -158,7 +158,7 @@ export function edgePath(from: NodeBox, to: NodeBox): string {
   return `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
 }
 
-/** Repo połączone z `repo` krawędzią w którąkolwiek stronę, razem z nim samym (podświetlenie po wyborze). */
+/** Repos joined to `repo` by an edge in either direction, together with it (highlighting after a selection). */
 export function neighbourhood(repo: string, pairs: readonly EdgePair[]): Set<string> {
   const near = new Set([repo]);
   for (const p of pairs) {

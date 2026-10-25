@@ -1,8 +1,9 @@
-import { type MiseTask, type MiseTasks, miseApi } from "@trackwall/protocol";
+import { hasService, type MiseTask, type MiseTasks, miseApi, miseTaskLogSource } from "@trackwall/protocol";
 import { Play, ScrollText, ShieldCheck, Square } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
+import { MiseTaskLog } from "@/components/MiseTaskLog";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
@@ -12,16 +13,16 @@ import { relativeTime } from "@/lib/format";
 import { isLive, runStateLabel, showsLastLines } from "@/lib/run-state";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
-import { MiseTaskLog } from "./MiseTaskLog.tsx";
+import { RepoService } from "./RepoService.tsx";
 
 /**
- * Odpytywanie: często, gdy coś działa (użytkownik czeka na wynik startu albo stopu), rzadko, gdy nic nie działa,
- * bo każde pytanie to `mise tasks ls`, a w zaufanym repo mise wykonuje przy tym `[env]` konfiguracji.
+ * Polling: often when something runs (the user waits for the result of a start or stop), rarely when nothing runs,
+ * because every request is `mise tasks ls`, and in a trusted repo mise runs the config's `[env]` along the way.
  */
 const POLL_LIVE_MS = 2000;
 const POLL_IDLE_MS = 10_000;
 
-/** Taski mise repo (ADR-20): lista z `mise tasks ls`, start i stop całej grupy procesów, stan uruchomienia. */
+/** The repo's mise tasks (ADR-20): the list from `mise tasks ls`, start and stop of the whole process group, the run state. */
 export function RepoMiseTasks({ conn, repo }: { conn: Connection; repo: string }) {
   const load = useCallback(() => post(conn, miseApi.tasks, { repo }), [conn, repo]);
   const remote = useRemote(load, { pollMs: pollInterval });
@@ -53,7 +54,10 @@ function TaskPanel({ conn, repo, tasks, onChange }: { conn: Connection; repo: st
         This repo has no mise tasks. Add them under [tasks] in mise.toml in the repo root to run setup, dev or build from here.
       </p>
     ) : (
-      rows(tasks.tasks, "mise tasks")
+      <div className="flex flex-col gap-4">
+        {hasService(tasks.tasks) && <RepoService conn={conn} repo={repo} />}
+        {rows(tasks.tasks, "mise tasks")}
+      </div>
     );
   }
   return (
@@ -107,11 +111,11 @@ function TaskRow({ conn, repo, task, onChange }: { conn: Connection; repo: strin
   const live = isLive(task.run);
   const state = runStateLabel(task.run);
   const [showLog, setShowLog] = useState(false);
-  // Także przy `stopping`: po `stop_unconfirmed` stop można ponowić, a daemon łączy równoległe prośby w jedną.
+  // Also while `stopping`: after `stop_unconfirmed` the stop can be retried, and the daemon merges parallel requests into one.
   const action = useAction(
     () => post(conn, live ? miseApi.stop : miseApi.start, { repo, miseTask: task.name }),
     () => {
-      // Uruchomienie otwiera log: użytkownik i tak chce zobaczyć, co task robi.
+      // Running opens the log: the user wants to see what the mise task does anyway.
       if (!live) setShowLog(true);
       onChange();
     },
@@ -134,7 +138,7 @@ function TaskRow({ conn, repo, task, onChange }: { conn: Connection; repo: strin
           {live ? <Square /> : <Play />} {live ? "Stop" : "Run"}
         </Button>
       </div>
-      {showLog && <MiseTaskLog conn={conn} repo={repo} miseTask={task.name} />}
+      {showLog && <MiseTaskLog conn={conn} source={miseTaskLogSource(repo, null, task.name)} />}
       {!showLog && showsLastLines(task.run) && (
         <pre className="text-muted-foreground overflow-x-auto font-mono text-xs whitespace-pre-wrap break-all">
           {task.run.lastLines.join("\n")}

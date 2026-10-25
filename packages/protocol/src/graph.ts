@@ -6,44 +6,44 @@ import { HttpClientVia, HttpMethod } from "./http.ts";
 import { RepoId } from "./workspace.ts";
 
 /**
- * Kontrakt modułu `graph` (§4.6, ADR-29, ADR-30): graf połączeń między repo z folderu z projektami. Krawędź to złączenie
- * paczki, której repo używa, z repo, które ją buduje, klienta HTTP z aplikacją albo endpointem innego repo (karty repo,
- * ADR-25), albo wpis użytkownika w `workspace.yaml`.
- * Każda krawędź ma dowody, a graf jest liczony z kart od nowa, gdy zmieni się commit któregoś repo albo konfiguracja,
- * więc nie ma trwałego stanu.
+ * Contract of the `graph` module (§4.6, ADR-29, ADR-30): the graph of connections between the repos of the projects folder.
+ * An edge joins a package a repo uses with the repo that builds it, an HTTP client with an application or endpoint of
+ * another repo (repo cards, ADR-25), or comes from a user entry in `workspace.yaml`.
+ * Every edge has evidence, and the graph is computed from the cards anew when a repo's commit or the configuration
+ * changes, so there is no persistent state.
  */
 
 /**
- * Wskazanie repo w `workspace.yaml`: identyfikator z listy repo albo adres repo zdalnego (`host/ścieżka`, jak
- * `Repo.remote`). Adres przetrwa zmianę nazwy katalogu, identyfikator jest krótszy.
+ * A repo reference in `workspace.yaml`: an identifier from the repo list or a remote address (`host/path`, like
+ * `Repo.remote`). The address survives a directory rename; the identifier is shorter.
  */
 export const RepoRef = z.string().min(1).max(300);
 export type RepoRef = z.infer<typeof RepoRef>;
 
-/** Ręczna krawędź: połączenie, którego karty nie widzą (np. wywołanie HTTP przez bramkę). */
+/** A manual edge: a connection the cards do not see (for example an HTTP call through a gateway). */
 export const ManualEdge = z
   .object({
-    /** Repo, które używa (wywołuje, zależy od). */
+    /** The repo that uses (calls, depends on). */
     from: RepoRef,
-    /** Repo, którego `from` używa. */
+    /** The repo that `from` uses. */
     to: RepoRef,
-    /** Opis połączenia dla człowieka i agenta, np. `HTTP /api/orders`. */
+    /** A description of the connection for a person and an agent, for example `HTTP /api/orders`. */
     note: z.string().min(1).max(200),
   })
   .strict();
 export type ManualEdge = z.infer<typeof ManualEdge>;
 
 /**
- * Klucz `graph` w `workspace.yaml` (ADR-29), tylko ręcznie w pliku, bo połączenia między repo z pracy zna tylko
- * użytkownik (ADR-7). `packages`: alias paczki, czyli nazwa paczki (`grupa:artefakt`, nazwa npm) i repo, które ją
- * dostarcza, gdy karta tego repo jej nie pokazuje (paczka budowana poza plikami buildu, inna nazwa w repozytorium
- * artefaktów). `apps`: alias aplikacji, czyli nazwa aplikacji albo host z adresu klienta HTTP (`orders`,
- * `orders.internal.example.com`) i repo, które ją wystawia, gdy żadna karta nie ma aplikacji o tej nazwie (nazwa
- * w DNS klastra inna niż `spring.application.name`, bramka). `edges`: ręczne krawędzie.
+ * The `graph` key in `workspace.yaml` (ADR-29), only by hand in the file, because only the user knows the connections
+ * between work repos (ADR-7). `packages`: a package alias, that is a package name (`group:artifact`, an npm name) and the
+ * repo that provides it, when that repo's card does not show it (a package built outside the build files, a different
+ * name in the artifact repository). `apps`: an application alias, that is an application name or a host from an HTTP
+ * client's address (`orders`, `orders.internal.example.com`) and the repo that serves it, when no card has an
+ * application of that name (a cluster DNS name other than `spring.application.name`, a gateway). `edges`: manual edges.
  */
 export const GraphConfig = z
   .object({
-    // Pusty podklucz (`packages:` z zakomentowanymi wpisami) YAML czyta jako `null`, tak jak brak klucza.
+    // YAML reads an empty subkey (`packages:` with commented-out entries) as `null`, like a missing key.
     packages: z
       .record(z.string().min(1).max(300), RepoRef)
       .nullish()
@@ -61,73 +61,75 @@ export const GraphConfig = z
 export type GraphConfig = z.infer<typeof GraphConfig>;
 
 /**
- * Skąd jest krawędź: `package` z kart (repo używa paczki, którą buduje drugie), `http` z kart (klient HTTP repo woła
- * aplikację albo endpoint drugiego), `manual` z wpisu w `workspace.yaml`. Topiki przyjdą z ekstraktorami kart.
+ * Where an edge comes from: `package` from the cards (a repo uses a package the other builds), `http` from the cards (a
+ * repo's HTTP client calls the other's application or endpoint), `manual` from an entry in `workspace.yaml`. Topics will
+ * come with card extractors.
  */
 export const EdgeKind = z.enum(["package", "http", "manual"]);
 export type EdgeKind = z.infer<typeof EdgeKind>;
 
 /**
- * Pewność krawędzi. Paczka: `exact`, gdy buduje ją dokładnie jedno repo; `high` z aliasu paczki; `medium`, gdy
- * buduje ją kilka repo z listy (np. dwa klony jednego repo). HTTP (ADR-30): `exact`, gdy nazwa aplikacji wskazuje
- * jedno repo, a każde wywołanie ma w nim endpoint; `high` za samą nazwę aplikacji albo z aliasu aplikacji; `medium` za host równy
- * nazwie repo, port aplikacji na `localhost`, ścieżki pasujące do endpointów jednego repo albo nazwę w kilku repo;
- * `low` za ścieżki pasujące do endpointów kilku repo. Ręczna krawędź `exact`.
+ * Edge confidence. Package: `exact` when exactly one repo builds it; `high` from a package alias; `medium` when several
+ * repos in the list build it (for example two clones of one repo). HTTP (ADR-30): `exact` when the application name
+ * points to one repo and every call has an endpoint in it; `high` for the application name alone or from an application
+ * alias; `medium` for a host equal to the repo name, an application port on `localhost`, paths matching the endpoints of
+ * one repo, or a name in several repos; `low` for paths matching the endpoints of several repos. A manual edge is `exact`.
  */
 export const EdgeConfidence = z.enum(["exact", "high", "medium", "low"]);
 export type EdgeConfidence = z.infer<typeof EdgeConfidence>;
 
 /**
- * Dowód krawędzi: miejsce w repo (plik i linia w commicie z karty) albo w `workspace.yaml` (`repo: null`, pełna
- * ścieżka), ze zdaniem, co w tym miejscu wskazuje połączenie, np. `używa com.example:orders-client (compile)`.
+ * Edge evidence: a place in a repo (file and line in the card's commit) or in `workspace.yaml` (`repo: null`, full
+ * path), with a sentence saying what at that place points to the connection, for example
+ * `uses com.example:orders-client (compile)`.
  */
 export const EdgeEvidence = MechanismEvidence.extend({ repo: RepoId.nullable() });
 export type EdgeEvidence = z.infer<typeof EdgeEvidence>;
 
-/** Krawędź od repo, które używa, do repo, którego używa. */
+/** An edge from the repo that uses to the repo that is used. */
 export const GraphEdge = z.object({
   from: RepoId,
   to: RepoId,
   kind: EdgeKind,
-  /** Nazwa paczki dla `package`, nazwa aplikacji albo adres klienta dla `http`, opis z `workspace.yaml` dla `manual`. */
+  /** The package name for `package`, the application name or client address for `http`, the description from `workspace.yaml` for `manual`. */
   key: z.string(),
   confidence: EdgeConfidence,
   evidence: z.array(EdgeEvidence).min(1),
 });
 export type GraphEdge = z.infer<typeof GraphEdge>;
 
-/** Repo jako węzeł grafu. */
+/** A repo as a graph node. */
 export const GraphNode = z.object({
   repo: RepoId,
-  /** Adres repo zdalnego (`host/ścieżka`); `null` bez remote. */
+  /** The remote address (`host/path`); `null` without a remote. */
   remote: z.string().nullable(),
   tags: z.array(TagName),
-  /** Ile paczek repo buduje; `null`, gdy karty nie da się policzyć. */
+  /** How many packages the repo builds; `null` when the card cannot be computed. */
   provides: z.number().int().nonnegative().nullable(),
-  /** Nazwy aplikacji Spring Boot z karty (ADR-30). */
+  /** Spring Boot application names from the card (ADR-30). */
   apps: z.array(z.string()),
-  /** Ile endpointów HTTP repo udostępnia; `null`, gdy karty nie da się policzyć. */
+  /** How many HTTP endpoints the repo provides; `null` when the card cannot be computed. */
   endpoints: z.number().int().nonnegative().nullable(),
-  /** Powód, dla którego karty nie ma (git nie czyta repo); wtedy repo jest w grafie bez krawędzi z kart. */
+  /** The reason there is no card (git cannot read the repo); then the repo is in the graph without edges from cards. */
   problem: z.string().nullable(),
 });
 export type GraphNode = z.infer<typeof GraphNode>;
 
-/** Cały graf: węzły w kolejności listy repo, krawędzie i błędy wpisów `graph` w `workspace.yaml`. */
+/** The whole graph: nodes in the order of the repo list, edges, and errors in `graph` entries of `workspace.yaml`. */
 export const RepoGraph = z.object({
   nodes: z.array(GraphNode),
   edges: z.array(GraphEdge),
-  /** Wpis `graph` w `workspace.yaml`, którego nie da się użyć (np. repo spoza listy), jako zdanie dla człowieka. */
+  /** A `graph` entry in `workspace.yaml` that cannot be used (for example a repo not in the list), as a sentence for a person. */
   configProblems: z.array(z.string()),
-  /** Pełna ścieżka `workspace.yaml`, w którym dopisuje się aliasy paczek i ręczne krawędzie. */
+  /** The full path of `workspace.yaml`, where package aliases and manual edges are added. */
   configFile: z.string(),
 });
 export type RepoGraph = z.infer<typeof RepoGraph>;
 
-/** Najdalsze sąsiedztwo w `subgraph_for`: dalej graf firmowy to zwykle cały graf, a wynik przestaje mieścić się w kontekście agenta. */
+/** The farthest neighbourhood in `subgraph_for`: beyond it a company graph is usually the whole graph, and the result no longer fits an agent's context. */
 export const MAX_SUBGRAPH_DEPTH = 3;
 
-/** Fragment grafu wokół jednego repo. */
+/** A part of the graph around one repo. */
 export const Subgraph = z.object({
   repo: RepoId,
   depth: z.number().int().min(1).max(MAX_SUBGRAPH_DEPTH),
@@ -138,36 +140,36 @@ export type Subgraph = z.infer<typeof Subgraph>;
 
 export const WhoCallsResult = z.object({
   repo: RepoId,
-  /** Krawędzie do tego repo: kto go używa, czego (klucz) i skąd to wiadomo (dowody). */
+  /** Edges into this repo: who uses it, what (the key) and how that is known (evidence). */
   edges: z.array(GraphEdge),
 });
 export type WhoCallsResult = z.infer<typeof WhoCallsResult>;
 
-/** Najwięcej endpointów w wyniku `find_endpoint`: więcej nie mieści się sensownie w kontekście agenta. */
+/** The most endpoints in a `find_endpoint` result: more does not fit an agent's context sensibly. */
 export const MAX_FOUND_ENDPOINTS = 50;
 
-/** Repo, którego klient HTTP woła znaleziony endpoint (ADR-30). */
+/** A repo whose HTTP client calls the found endpoint (ADR-30). */
 export const EndpointCaller = z.object({
   repo: RepoId,
   via: HttpClientVia,
-  /** Nazwa klienta z karty (interfejs Feign, klasa z wywołaniami). */
+  /** The client name from the card (a Feign interface, a class with calls). */
   client: z.string(),
   method: HttpMethod.nullable(),
-  /** Pełna ścieżka wywołania (ścieżka z adresu klienta i ścieżka wywołania). */
+  /** The full call path (the path from the client address plus the call path). */
   path: z.string(),
   confidence: EdgeConfidence,
   evidence: Evidence,
 });
 export type EndpointCaller = z.infer<typeof EndpointCaller>;
 
-/** Endpoint z karty repo pasujący do zapytania, z repo, które go wołają. */
+/** An endpoint from a repo card that matches the query, with the repos that call it. */
 export const FoundEndpoint = z.object({
   repo: RepoId,
   app: z.string().nullable(),
   method: HttpMethod.nullable(),
   path: z.string(),
   handler: z.string(),
-  /** Typ ciała żądania i odpowiedzi z karty (ADR-38). */
+  /** The request and response body types from the card (ADR-38). */
   request: z.string().nullable(),
   response: z.string().nullable(),
   evidence: Evidence,
@@ -178,7 +180,7 @@ export type FoundEndpoint = z.infer<typeof FoundEndpoint>;
 export const FindEndpointResult = z.object({
   query: z.string(),
   endpoints: z.array(FoundEndpoint),
-  /** Pasujących było więcej niż `MAX_FOUND_ENDPOINTS`; zawęź zapytanie. */
+  /** More matched than `MAX_FOUND_ENDPOINTS`; narrow the query. */
   truncated: z.boolean(),
 });
 export type FindEndpointResult = z.infer<typeof FindEndpointResult>;
@@ -188,6 +190,6 @@ function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string,
 }
 
 export const graphApi = {
-  /** Graf wszystkich repo z folderu z projektami, liczony z kart (pierwsze pytanie o commit czyta pliki z gita). */
+  /** The graph of all repos in the projects folder, computed from the cards (the first request for a commit reads the files from git). */
   graph: endpoint("graph", z.object({}).strict(), RepoGraph),
 };

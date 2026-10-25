@@ -1,9 +1,12 @@
 import type { RunState } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 
+/** Running mise tasks come live from the events WebSocket; polled only while it is not connected (Home, task panel). */
+export const RUNNING_MISE_POLL_MS = 3000;
+
 /**
- * Stan uruchomienia (`RunState`, §4.1) w jednej linii; dziś pokazują go taski mise, później serwisy. Ton ma tylko to, co wymaga uwagi albo działa;
- * task nieuruchamiany i zatrzymany przez użytkownika są bez tonu (zwykły tekst).
+ * The state of a run (`RunState`, §4.1) in one line; today mise tasks show it, later services. Only what needs attention
+ * or is running has a tone; a mise task never run and one stopped by the user have no tone (plain text).
  */
 export function runStateLabel(run: RunState | null): { tone?: StatusTone; label: string } {
   if (!run) return { label: "not started" };
@@ -14,12 +17,12 @@ export function runStateLabel(run: RunState | null): { tone?: StatusTone; label:
   return { tone: "error", label: run.exitCode === null ? `killed (${run.signal ?? "signal"})` : `failed, code ${run.exitCode}` };
 }
 
-/** Ostatnie linie wyjścia pokazujemy tylko wtedy, gdy task zakończył się sam i nie kodem 0. */
+/** The last output lines are shown only when the mise task ended on its own and not with code 0. */
 export function showsLastLines(run: RunState | null): run is Extract<RunState, { kind: "exited" }> {
   return run?.kind === "exited" && !run.stoppedByUser && run.exitCode !== 0 && run.lastLines.length > 0;
 }
 
-/** Działający task ma przycisk „Zatrzymaj”, każdy inny „Uruchom”. */
+/** A running mise task has the "Stop" button, any other "Run". */
 export function isLive(run: RunState | null): boolean {
   return run?.kind === "running" || run?.kind === "stopping";
 }

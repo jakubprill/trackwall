@@ -55,7 +55,7 @@ The secret from `~/.trackwall/daemon.json` with which the UI, `ws`, the shell an
 **MCP server** (`/mcp`, `createMcpEndpoint`):
 The part of the daemon through which agents read its state with MCP tools; the same port and token as the API (§5.3, ADR-24).
 
-**MCP tool** (`McpTool`, the `mcpTools` list in protocol, for example `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`, `search_code`, `list_sessions`):
+**MCP tool** (`McpTool`, the `mcpTools` list in protocol, for example `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`, `search_code`, `list_sessions`, `start_service`, `call_endpoint`):
 One call of the MCP server with an English name, input and result described by a schema from `packages/protocol/src/mcp.ts`; a mapping to the facade, without domain logic of its own.
 _Avoid_: command, action (those are API and CLI terms)
 
@@ -76,6 +76,10 @@ _Avoid_: project
 **Projects folder** (`projectsDir`):
 One directory on the user's disk, set in `workspace.yaml` or in the settings. Each of its direct subdirectories with `.git` is a repo of the workspace (ADR-18); a repo is added by cloning it into this folder.
 _Avoid_: workspace directory, root, folder (without qualification)
+
+**Dropped folder** (`DroppedFolder`, action `dropped-folder`, UI `FolderDrop`; in Polish *upuszczony folder*):
+A folder or file dropped on the Trackwall window outside a session terminal, described by the daemon: a listed repo (or a folder inside one), the projects folder, a repo elsewhere, a hidden repo, a folder with repos, a folder without repos or a file (ADR-51). It never adds a repo by itself; it can only lead to a new projects folder.
+_Avoid_: imported repo, added repo
 
 **Repo host** (`RepoHost`, `repoHosts` in `workspace.yaml`):
 GitLab or GitHub with a host name (`gitlab.example.com`), from which Trackwall searches for repos and clones them into the projects folder through a logged-in `glab` or `gh` (ADR-19).
@@ -107,12 +111,16 @@ The branch, the last commit, the number of changes in the working directory (of 
 _Avoid_: state (that is a task state or a service state), sync (that is a separate action)
 
 **Changes** (working directory changes, `WorkingTreeChanges`, the `changes` action; the "Changes" tab in the UI):
-The files and diff of the working directory (with new files, without ignored ones) against a commit: a repo against HEAD in the repo details (ADR-34), a task's worktree against the base commit in the task changes (`TaskChanges`, ADR-31). Read-only.
+The files and diff of the working directory (with new files, without ignored ones) against a commit: a repo against HEAD in the repo details (ADR-34), a task's worktree against the base commit in the task changes (`TaskChanges`, ADR-31). Read-only. An agent gets a task's changes without the diff in `get_session` (`TaskChangesSummary`) and with it, narrowed to paths, in `get_task_changes` (`AgentTaskChanges`).
 In working directory counts "changed" (`changed`) are tracked files, and "new" (`untracked`) untracked entries; `RepoStatus.changes` is their sum (`trackedChanges` counts the changed ones).
 _Avoid_: diff (that is only a part), status
 
 **Repo overview** (`RepoOverview`):
 The README and the latest commits of a repo in one response; the repo status comes from the repo list. Files are browsed separately, always from the HEAD commit (ADR-14).
+
+**Test results** (`TestResults`, module `test-results`, MCP tool `get_test_results`; a **test report** is one JUnit XML file, `TestReport`; a failed test is a `TestFailure`):
+The outcome of the latest test runs in a repo root or a task's worktree, read from the JUnit XML reports the build tools left on disk (ADR-60): counts of tests, failures (an assertion did not hold), errors (the test threw) and skipped, and each failed test with its message and stack trace. Trackwall runs no tests for it.
+_Avoid_: test run (that is the mise task that wrote the reports), coverage
 
 **Code search** (`searchCode`, MCP tool `search_code`, result `SearchCodeResult`):
 A fixed string or a regular expression in the files of the latest commit of many repos of the projects folder at once, through `git grep` (ADR-40); a match (`CodeMatch`) is a repo, path, line, column and context lines. It does not see uncommitted changes, just like browsing a repo.
@@ -123,6 +131,9 @@ A separate git working directory for a task, on the task's branch, in `worktrees
 
 **Base commit** (`Task.base`):
 The commit of the default branch from which the task's branch started. The task changes (`TaskChanges`) are the worktree's working directory against it: the task's commits and uncommitted files together.
+
+**Trusted mise config** (`StoredTask.trustedMiseConfig`, `TaskMiseConfig`, actions `task-mise-config` and `trust-task-mise-config`; UI "Trust this config"):
+The mise files of a task's worktree (config files, `.tool-versions`, file tasks) as the user consented to them, kept as hashes in `tasks.json`: as the worktree was created, or as the user trusted them later in the task panel (ADR-59). A mise task runs in the worktree only while its files match; a changed file shows up as a `MiseConfigChange`.
 
 **Card** (repo card, `RepoCard`):
 Facts about a repo extracted deterministically from build files, configuration and code in the HEAD commit: build files, what the repo provides (`provides`), what it uses (`consumes`), required tools, mechanisms and problems, every fact with evidence. It depends only on the commit, so it is computed once per commit (ADR-25). An LLM will add only a description and connection proposals marked `origin: 'llm'` (ADR-6). In the UI, the "Card" tab in the repo details.
@@ -202,11 +213,15 @@ _Avoid_: dashboard (that is the 3D scene), repo overview (that is the README and
 ## Processes and services
 
 **Service** (`Service`, `ServiceId`):
-A repo plus its mise task `dev`, port and health probe. One repo can have several services.
+A repo with its mise task `dev` (`SERVICE_MISE_TASK`), its port and its readiness. Today one per repo, run from the repo root (ADR-45); later a repo may have several services.
 _Avoid_: app, microservice (when the entity in Trackwall is meant)
 
-**Service state**:
-`stopped`, `starting`, `healthy`, `unhealthy`, `stopping` or `crashed`; always observed, never assumed.
+**Service state** (`ServiceState`):
+`stopped`, `starting`, `healthy`, `unhealthy`, `stopping` or `crashed`; always observed, never assumed. In the UI `healthy` reads "ready on port N" and `unhealthy` "not answering".
+
+**Slice** (`ServiceSlice`, member `SliceMember`):
+A service with every service it calls at runtime (graph edges `http` and `manual`), started together by `start_service`, dependencies first in waves (ADR-45). A member is `pending`, `started`, `running` (it was already running) or `skipped` with the reason.
+_Avoid_: stack, environment (for the set of services)
 
 **Process group** (`ProcessGroup`):
 A leader process and all its descendants, stopped together: a Job Object on Windows, a new POSIX session (`setsid`) killed by `-pgid` on macOS.
@@ -216,7 +231,7 @@ _Avoid_: process tree (when the managed unit is meant)
 The key under which `procs` keeps a process group and its last state; it is given by the module that started it (today a mise task in a repo). One owner has at most one group that is not confirmed empty.
 
 **Probe** (health):
-The mise task `health` run periodically; its result decides `healthy` / `unhealthy`.
+A TCP connection to the service's port on loopback (`probePort`), with the port from its log or `server.port` on its card; it decides `healthy` / `unhealthy` (ADR-45). The planned mise task `health` is not used.
 
 **Lease** (`Lease`):
 Which branch or worktree holds a service on its port. By default the main repo; a task can take it over and give it back.
@@ -244,15 +259,19 @@ A short one-line description of a task (up to 80 characters), given by the sessi
 _Avoid_: window title (that is a session's `windowTitle`)
 
 **Task proposal** (`TaskProposal`, MCP tool `propose_task`, the `approve-proposal` and `reject-proposal` actions):
-A task that a session or an agent outside Trackwall submitted through MCP and that waits in the Sessions view for the user's decision: "Start task" turns it into a task with the same identifier, "Reject" rejects it. Until then nothing starts. It lives only in daemon memory (ADR-39).
+A task that a session or an agent outside Trackwall submitted through MCP and that waits in the Sessions view for the user's decision: "Start task" turns it into a task with the same identifier, "Reject…" rejects it with an optional rejection reason. Until then nothing starts. It lives only in daemon memory (ADR-39). The proposals of one main session are one entry in the Sessions view, reviewed together (ADR-55).
 _Avoid_: order, request, application
+
+**Rejection reason** (`reason` of `reject-proposal`, `rejectionReason` of `wait_for_session`):
+What the user writes when rejecting a task proposal, for the session that proposed it, so it can propose the work differently. Optional; up to 1000 characters (ADR-55).
+_Avoid_: comment, feedback
 
 **Shared files** (`TaskSharedFiles`, action `task-shared-files`):
 Files that both this task and another task of the same repo change, each compared with its own base commit. The one merged second will likely get a conflict, so the task panel warns about them and leads to the other task. It is only a warning: nothing is stopped (ADR-44).
 _Avoid_: overlap, collision, conflict (a conflict is only the result of a merge)
 
 **Main session** (`proposedBy` of a task and a proposal):
-A session or supervising agent that talks to the user and commissions work to other agents with task proposals, then waits for their sessions (`wait_for_session`) and reads the summaries, like a coordinator with threads in Claude (ADR-39). It is a role, not a separate kind of session: today it is any Trackwall session or an agent outside Trackwall (`proposedBy.session: null`). In the Sessions view its tasks and proposals sit indented under it, and it carries a "main" badge with their count.
+A session or supervising agent that talks to the user and commissions work to other agents with task proposals, then waits for their sessions (`wait_for_session`) and reads the summaries, like a coordinator with threads in Claude (ADR-39). It is a role, not a separate kind of session: any Trackwall session or an agent outside Trackwall (`proposedBy.session: null`); the supervisor is the main session above all repos (ADR-58). In the Sessions view its tasks and proposals sit indented under it, and it carries a "main" badge with their count.
 _Avoid_: orchestrator, planner (ADR-9: a human splits goals)
 
 **mise task**:
@@ -268,12 +287,20 @@ _Avoid_: authorisation, acceptance
 **Adapter**:
 Everything Trackwall knows about one agent CLI: the command template, the MCP configuration, resuming, state detectors. The only adapter is Copilot CLI (ADR-8).
 
+**Supervisor** (`isSupervisor`, `startSupervisor`, `ProposedBy.supervisor`, "Supervisor" in the UI):
+The one Trackwall session above all others: Copilot CLI in the projects folder, not in a repo (`Session.repo` is `null`), at most one running at a time (ADR-58). The user talks to it in the supervisor panel on the right of every view; it plans work across repos, proposes tasks and follows them. What it proposes carries `ProposedBy.supervisor`, so that its work stays under the "Supervisor" heading of the Sessions list after the session that proposed it is gone. It is the main session above all repos; it has no more rights than any other session. Unlike a supervising agent, Trackwall starts and owns it, with a session token.
+_Avoid_: orchestrator, root session, supervising agent (that is an agent outside Trackwall)
+
+**Supervisor panel** (`SupervisorPanel`):
+The column on the right of the main window, in every view, with the supervisor's terminal, its state and the work it delegated, or "Start supervisor" while there is none (ADR-58). Pinned open, or folded to a strip that keeps a bell while the supervisor or a task proposal under it waits for you; Alt+0 pins it open and puts the keyboard in its terminal.
+_Avoid_: sidebar (that is the list on the left of a view), drawer
+
 **Supervising agent**:
-An agent CLI (today Copilot CLI) started by the user outside a task, for example in the projects folder, with access to the MCP server. Unlike a task session it has no worktree, budget or session token. A term from the documentation and tool descriptions; in code it has no identifier of its own, because the daemon keeps nothing about it.
-_Avoid_: orchestrator, main agent
+An agent CLI (today Copilot CLI) started by the user outside a task, for example in the projects folder, with access to the MCP server. Unlike a task session it has no worktree, budget or session token. A term from the documentation and tool descriptions; in code it has no identifier of its own, because the daemon keeps nothing about it. Not the supervisor, which is a session Trackwall runs (ADR-58).
+_Avoid_: orchestrator, main agent, supervisor
 
 **Session** (task session, `Session`, `SessionId`):
-An agent CLI running in a PTY owned by the daemon, in a repo root or in a task's worktree (`Session.task`), as a process group, with its own `sessions/<session>/` directory (session plugin, `hooks.jsonl`). The Sessions view starts it in a repo with one click (ADR-26) or together with a task (ADR-31). A session lives only until the daemon exits, a task longer. Only `copilot-record.ts` records it.
+An agent CLI running in a PTY owned by the daemon, in a repo root, in a task's worktree (`Session.task`) or, for the supervisor, in the projects folder (ADR-58), as a process group, with its own `sessions/<session>/` directory (session plugin, `hooks.jsonl`). The Sessions view starts it in a repo with one click (ADR-26) or together with a task (ADR-31). A session lives only until the daemon exits, a task longer. Only `copilot-record.ts` records it.
 _Avoid_: POSIX session (that is a process group term), window (that is the terminal window in the UI)
 
 **Waiting for you** (`Session.needsAttention`, `SessionAttention`):
@@ -287,7 +314,7 @@ _Avoid_: read, acknowledged
 A running session in `Input` the user has already seen (ADR-47): the agent waits for the next prompt, but no longer waits for you. Shown as "idle" in Sessions and in calm grey on the dashboard.
 
 **Session terminal** (`SessionTerminal`):
-xterm.js in the Sessions view, connected over the WebSocket `/ws/pty/<session>` to the session's PTY. Several session terminals, also in different windows, can show the same session; the PTY takes the size of the last one that reported it, and a window that comes to the front reports the size of its terminals again (ADR-49).
+xterm.js in the Sessions view and the supervisor panel, connected over the WebSocket `/ws/pty/<session>` to the session's PTY. Several session terminals, also in different windows, can show the same session; the PTY takes the size of the last one that reported it, and a window that comes to the front reports the size of its terminals again (ADR-49).
 _Avoid_: terminal window (a window is the app window)
 
 **Session layout** (`SessionLayout`):
@@ -296,11 +323,11 @@ In the Sessions view the switch is labelled just "Layout".
 _Avoid_: view (that is a screen of the app), mode
 
 **Session grid** (`SessionGrid`, tile):
-Several session terminals side by side in the Sessions view, one tile per list entry, on pages of the list. The tile of the selected entry has the accent ring and takes the keyboard; a tile that is waiting for you has the warning frame.
+Several session terminals side by side in the Sessions view, one tile per list entry, on pages of the list. The tile of the selected entry has the accent ring and takes the keyboard; a tile that is waiting for you has the warning frame. A tile, like a list row, has an X that closes its session: "Close session" in the UI is `stop` and then `dismiss` in the API.
 _Avoid_: split, dashboard (that is Home)
 
-**Session shortcut** (`SessionShortcut`; Alt+1…9, Alt+J):
-Alt (⌥ on macOS) + digit selects the entry at that position in the Sessions list; Alt+J opens the next session that is waiting for you, also from other views. A shortcut never reaches the session terminal. Win+Alt+J (⌃⌥J on macOS) is the global shortcut that does what Alt+J does from any app (ADR-50).
+**Session shortcut** (`SessionShortcut`; Alt+1…9, Alt+0, Alt+J):
+Alt (⌥ on macOS) + digit selects the entry at that position in the Sessions list; Alt+0 opens the supervisor panel (ADR-58); Alt+J opens the next session or task proposals waiting for you, also from other views (ADR-55), and the supervisor panel once nothing on the list waits but the supervisor does (ADR-58). A shortcut never reaches the session terminal. Win+Alt+J (⌃⌥J on macOS) is the global shortcut that does what Alt+J does from any app (ADR-50).
 
 **Tray panel** (`TrayPanel`, window `tray-panel`):
 The small window next to the tray icon, opened by a left click on it, with the task proposals and the sessions waiting for you (ADR-50). A click opens the entry in the main window.
@@ -325,7 +352,7 @@ A directory with `plugin.json` and `hooks.json` that the daemon gives Copilot CL
 _Avoid_: plugin (without qualification), hook configuration
 
 **Session instructions** (`writeSessionInstructions`, file `trackwall.instructions.md`):
-The instruction file in the session directory that the daemon gives Copilot CLI through `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`: the session's role (a main session in the repo root, or a task session in its worktree with the task rules and `report_result` at the end) and the **MCP instruction** (`MCP_INSTRUCTIONS`, also the MCP server's `instructions`): when to reach for which Trackwall tool (ADR-46). It changes neither the repo nor `~/.copilot`.
+The instruction file in the session directory that the daemon gives Copilot CLI through `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`: the Trackwall version that started the session and where the user sees it, the session's role (a main session in the repo root, or a task session in its worktree with the task rules and `report_result` at the end) and the **MCP instruction** (`MCP_INSTRUCTIONS`, also the MCP server's `instructions`): when to reach for which Trackwall tool and where the documentation is (ADR-46). It changes neither the repo nor `~/.copilot`.
 _Avoid_: system prompt (Copilot CLI builds it itself), repository instructions (those are files in the user's repo)
 
 **Hook record** (`CopilotHookRecord`):

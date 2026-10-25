@@ -1,11 +1,11 @@
-//! Półprzezroczyste tło okna (ADR-11): Mica na Windows 11, Acrylic na Windows 10, vibrancy na macOS.
+//! Translucent window background (ADR-11): Mica on Windows 11, Acrylic on Windows 10, vibrancy on macOS.
 //!
-//! Okno jest przezroczyste (`transparent` w `tauri.conf.json`), więc bez efektu byłoby widać przez nie pulpit.
-//! UI domyślnie maluje nieprzezroczyste tło i zdejmuje je dopiero, gdy powłoka ustawi na `<html>` atrybut
-//! z nazwą efektu, który system faktycznie przyjął. Okno startuje schowane (`visible: false`) i pokazuje się
-//! dopiero, gdy skrypt ustawiający atrybut się wykonał, żeby przy starcie nie mignęło nieprzezroczyste tło.
-//! Odświeżenie strony (F5) maluje ją nieprzezroczyście do końca ładowania; to świadomie zostawione (ADR-11).
-//! `set_effects` z Tauri nie nadaje się tu, bo bierze tylko pierwszy efekt z listy i nie mówi, czy się udał.
+//! The window is transparent (`transparent` in `tauri.conf.json`), so without an effect the desktop would show through it.
+//! The UI paints an opaque background by default and removes it only once the shell sets an attribute on `<html>`
+//! with the name of the effect the system actually accepted. The window starts hidden (`visible: false`) and shows
+//! only after the script setting the attribute has run, so that no opaque background flashes at startup.
+//! A page reload (F5) paints it opaque until loading ends; this is deliberately left (ADR-11).
+//! Tauri's `set_effects` does not fit here, because it takes only the first effect of the list and does not say whether it worked.
 
 use crate::lock::lock;
 use crate::windows;
@@ -17,7 +17,7 @@ use std::time::Duration;
 use tauri::webview::{PageLoadEvent, PageLoadPayload};
 use tauri::{AppHandle, Manager, Webview, WebviewWindow};
 
-/// Efekt przyjęty przez system; `index.css` sprawdza tylko obecność atrybutu, nazwa służy diagnostyce.
+/// An effect the system accepted; `index.css` checks only that the attribute is present, the name is for diagnostics.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WindowEffect {
     #[cfg_attr(not(windows), allow(dead_code))]
@@ -38,7 +38,7 @@ impl WindowEffect {
     }
 }
 
-/// Atrybut na `<html>`, od którego `packages/ui/src/index.css` przełącza tło na półprzezroczyste.
+/// The attribute on `<html>` that makes `packages/ui/src/index.css` switch the background to translucent.
 const ATTRIBUTE: &str = "data-window-effect";
 
 type Apply<W, E> = fn(&W) -> Result<(), E>;
@@ -48,14 +48,14 @@ type ApplyError = window_vibrancy::Error;
 #[cfg(not(any(windows, target_os = "macos")))]
 type ApplyError = String;
 
-/// Kolor `--background` z `packages/ui/src/index.css` z kryciem ok. 70%: Acrylic sam w sobie jest jasny
-/// i bez przyciemnienia tekst na nim słabo się czyta.
+/// The `--background` colour from `packages/ui/src/index.css` at about 70% opacity: Acrylic itself is light,
+/// and without darkening, text on it is hard to read.
 #[cfg(windows)]
 const ACRYLIC_TINT: (u8, u8, u8, u8) = (9, 9, 11, 180);
 
-/// Efekty w kolejności prób. Mica nie ma problemów z wydajnością, ale wymaga Windows 11. Acrylic działa
-/// od Windows 10 1809, za to przy przeciąganiu okna na Windows 10 1903+ potrafi przycinać
-/// (dokumentacja window-vibrancy). Poza Windows i macOS pusto: tam o przezroczystości decyduje kompozytor.
+/// Effects in the order they are tried. Mica has no performance problems but needs Windows 11. Acrylic works
+/// from Windows 10 1809, but it can stutter while dragging the window on Windows 10 1903+
+/// (window-vibrancy documentation). Empty outside Windows and macOS: there the compositor decides on transparency.
 fn candidates() -> &'static [(WindowEffect, Apply<WebviewWindow, ApplyError>)] {
     #[cfg(windows)]
     return &[
@@ -76,8 +76,8 @@ fn candidates() -> &'static [(WindowEffect, Apply<WebviewWindow, ApplyError>)] {
     return &[];
 }
 
-/// Próbuje efektów po kolei i zwraca pierwszy przyjęty albo `None`, gdy żaden. Powody odrzucenia idą na stderr, widoczny
-/// tylko w `tauri dev` (wydanie na Windowsie nie ma konsoli).
+/// Tries the effects in turn and returns the first one accepted, or `None` when none is. Rejection reasons go to stderr,
+/// visible only in `tauri dev` (the release on Windows has no console).
 fn first_applied<W, E: Display>(window: &W, candidates: &[(WindowEffect, Apply<W, E>)]) -> Option<WindowEffect> {
     for (effect, apply) in candidates {
         match apply(window) {
@@ -88,8 +88,8 @@ fn first_applied<W, E: Display>(window: &W, candidates: &[(WindowEffect, Apply<W
     None
 }
 
-/// Gdyby strona nigdy nie zgłosiła końca ładowania (WKWebView nie zgłasza go przy błędzie nawigacji),
-/// okno i tak pokaże się po tym czasie, z nieprzezroczystym UI.
+/// Should the page never report the end of loading (WKWebView does not report it on a navigation error),
+/// the window shows after this time anyway, with an opaque UI.
 const REVEAL_FALLBACK: Duration = Duration::from_secs(10);
 
 /// The effect a window accepted (unset until it is applied on the main thread) and whether the window has been shown
@@ -161,7 +161,7 @@ impl WindowEffects {
     }
 }
 
-/// Skrypt, który przekazuje UI przyjęty efekt.
+/// The script that passes the accepted effect to the UI.
 fn ui_script(effect: WindowEffect) -> String {
     format!("document.documentElement.setAttribute({ATTRIBUTE:?}, {:?});", effect.as_str())
 }
@@ -216,7 +216,7 @@ mod tests {
     use super::*;
     use std::cell::RefCell;
 
-    /// Lista wywołanych efektów w kolejności prób.
+    /// The list of effects called, in the order tried.
     type Calls = RefCell<Vec<&'static str>>;
 
     #[test]
@@ -243,7 +243,7 @@ mod tests {
     #[test]
     fn none_when_every_effect_is_rejected() {
         let rejected: &[(WindowEffect, Apply<(), String>)] =
-            &[(WindowEffect::Mica, |_| Err("brak".into())), (WindowEffect::Acrylic, |_| Err("brak".into()))];
+            &[(WindowEffect::Mica, |_| Err("unavailable".into())), (WindowEffect::Acrylic, |_| Err("unavailable".into()))];
         assert_eq!(first_applied(&(), rejected), None);
         assert_eq!(first_applied::<(), String>(&(), &[]), None);
     }

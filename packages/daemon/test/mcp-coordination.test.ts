@@ -65,22 +65,22 @@ describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (p
       repo: "sklep",
       title: "Dodaj README",
       prompt: "Opisz uruchomienie w README",
-      proposedBy: { session: null },
+      proposedBy: { session: null, supervisor: false },
     });
     expect(daemon.facade.agents.sessions().proposals).toEqual([proposed]);
 
     const pending = WaitForSessionResult.parse(
       (await call(outside, "wait_for_session", { task: proposed.id, timeoutSeconds: 1 })).structuredContent,
     );
-    expect(pending).toEqual({ status: "proposal_pending", proposal: proposed, task: null, session: null });
+    expect(pending).toEqual({ status: "proposal_pending", proposal: proposed, task: null, session: null, rejectionReason: null });
 
-    await daemon.post(agentsApi.rejectProposal, { proposal: proposed.id });
+    await daemon.post(agentsApi.rejectProposal, { proposal: proposed.id, reason: "  The README is in the wiki  " });
     expect(daemon.facade.agents.sessions().proposals).toEqual([]);
     const started = Date.now();
     const rejected = WaitForSessionResult.parse(
       (await call(outside, "wait_for_session", { task: proposed.id, timeoutSeconds: 30 })).structuredContent,
     );
-    expect(rejected.status).toBe("proposal_rejected");
+    expect(rejected).toMatchObject({ status: "proposal_rejected", rejectionReason: "The README is in the wiki" });
     expect(Date.now() - started).toBeLessThan(5000);
   }, 30_000);
 
@@ -93,14 +93,14 @@ describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (p
     const { proposal } = ProposeTaskResult.parse(
       (await call(mainClient, "propose_task", { repo: "sklep", title: "Napraw logowanie", prompt: "napraw logowanie" })).structuredContent,
     );
-    expect(proposal.proposedBy).toEqual({ session: main.id });
+    expect(proposal.proposedBy).toEqual({ session: main.id, supervisor: false });
 
     const task = await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: "napraw logowanie i dodaj test" });
     expect(task).toMatchObject({
       id: proposal.id,
       title: "Napraw logowanie",
       prompt: "napraw logowanie i dodaj test",
-      proposedBy: { session: main.id },
+      proposedBy: { session: main.id, supervisor: false },
       summary: null,
     });
     expect(task.branch).toMatch(/^trackwall\/napraw-logowanie-[0-9a-f]{6}$/);

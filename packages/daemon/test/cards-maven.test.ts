@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { parseXml } from "../src/infra/xml.ts";
 import { extractMaven } from "../src/modules/cards/maven.ts";
-import { parseXml } from "../src/modules/cards/xml.ts";
 import { snapshotOf } from "./support/snapshot.ts";
 
 const PARENT_POM = `<?xml version="1.0" encoding="UTF-8"?>
-<!-- projekt nadrzędny -->
+<!-- parent project -->
 <project>
   <parent>
     <groupId>org.springframework.boot</groupId>
@@ -91,8 +91,8 @@ const APP_POM = `<project>
 </project>
 `;
 
-describe("ekstraktor Maven", () => {
-  test("wielomodułowy projekt: każdy moduł udostępnia współrzędne z grupą i wersją dziedziczoną z rodzica", () => {
+describe("Maven extractor", () => {
+  test("a multi-module project: every module provides coordinates with the group and version inherited from the parent", () => {
     const out = extractMaven(snapshotOf({ "pom.xml": PARENT_POM, "orders-api/pom.xml": API_POM, "orders-app/pom.xml": APP_POM }));
 
     expect(out.provides).toEqual([
@@ -125,27 +125,27 @@ describe("ekstraktor Maven", () => {
     ]);
   });
 
-  test("używane: rodzic spoza repo, importowany BOM, zależności z zakresem i wtyczki; moduły z repo i zwykłe wpisy dependencyManagement pominięte", () => {
+  test("used: a parent from outside the repo, an imported BOM, dependencies with a scope and plugins; modules from the repo and plain dependencyManagement entries skipped", () => {
     const out = extractMaven(snapshotOf({ "pom.xml": PARENT_POM, "orders-api/pom.xml": API_POM, "orders-app/pom.xml": APP_POM }));
 
     expect(out.consumes.map((c) => [c.name, c.version, c.scope, c.evidence.path, c.evidence.line])).toEqual([
       ["org.springframework.boot:spring-boot-starter-parent", "3.3.0", "parent", "pom.xml", 4],
       ["org.springframework.cloud:spring-cloud-dependencies", "2023.0.2", "import", "pom.xml", 23],
       ["org.springframework.cloud:spring-cloud-starter-openfeign", "4.1.2", "compile", "orders-app/pom.xml", 14],
-      // Właściwości nie ma w repo, więc zostaje w tekście: widać, skąd wersja pochodzi.
-      // biome-ignore lint/suspicious/noTemplateCurlyInString: to dosłowny zapis właściwości Maven, nie szablon JS.
+      // The property is not in the repo, so it stays in the text: it is visible where the version comes from.
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: a literal Maven property, not a JS template.
       ["com.example.payments:payments-client", "${payments.version}", "compile", "orders-app/pom.xml", 19],
       ["org.junit.jupiter:junit-jupiter", null, "test", "orders-app/pom.xml", 24],
       ["org.apache.maven.plugins:maven-surefire-plugin", null, "plugin", "orders-app/pom.xml", 32],
     ]);
   });
 
-  test("wersja Javy z właściwości to podpowiedź narzędzia", () => {
+  test("the Java version from the properties is a tool hint", () => {
     const out = extractMaven(snapshotOf({ "pom.xml": PARENT_POM }));
     expect(out.tools).toEqual([{ tool: "java", version: "21", source: "hint", evidence: { path: "pom.xml", line: 14 } }]);
   });
 
-  test("pom spoza modułów (fixture testów) nie trafia na kartę, a pom w osobnym katalogu bez korzenia tak", () => {
+  test("a pom outside the modules (a test fixture) does not reach the card, and a pom in a separate directory without a root does", () => {
     const fixture = "<project><groupId>x</groupId><artifactId>fixture</artifactId></project>";
     const out = extractMaven(
       snapshotOf({
@@ -156,7 +156,7 @@ describe("ekstraktor Maven", () => {
     expect(out.provides.map((p) => p.name)).toEqual(["com.example:service"]);
   });
 
-  test("moduł z profilu też jest częścią buildu", () => {
+  test("a module from a profile is also part of the build", () => {
     const out = extractMaven(
       snapshotOf({
         "pom.xml":
@@ -168,13 +168,13 @@ describe("ekstraktor Maven", () => {
     expect(out.provides.map((p) => p.name)).toEqual(["g:root", "g:extra"]);
   });
 
-  test("uszkodzony pom to problem karty, nie błąd", () => {
+  test("a damaged pom is a card problem, not an error", () => {
     const out = extractMaven(snapshotOf({ "pom.xml": "<project><artifactId>x</project>" }));
     expect(out.provides).toEqual([]);
     expect(out.problems).toEqual([{ path: "pom.xml", message: "mismatched tag </project> on line 1" }]);
   });
 
-  test("rodzice zapętleni przez relativePath nie zawieszają ekstraktora", () => {
+  test("parents looped through relativePath do not hang the extractor", () => {
     const pom = (self: string, parent: string) =>
       `<project><parent><groupId>g</groupId><artifactId>${parent}</artifactId><relativePath>../${parent}/pom.xml</relativePath></parent><artifactId>${self}</artifactId><modules><module>../${parent}</module></modules></project>`;
     const out = extractMaven(
@@ -188,10 +188,10 @@ describe("ekstraktor Maven", () => {
   });
 });
 
-describe("parser XML", () => {
-  test("tekst z encjami i CDATA, komentarze i deklaracje pominięte, linie od 1", () => {
+describe("XML parser", () => {
+  test("text with entities and CDATA, comments and declarations skipped, lines from 1", () => {
     const root = parseXml(
-      '<?xml version="1.0"?>\n<!DOCTYPE x>\n<a>\n  <!-- <b>nie</b> -->\n  <b>R&amp;D &lt;3 &#65;</b>\n  <c><![CDATA[<x> & y]]></c>\n  <d/>\n</a>',
+      '<?xml version="1.0"?>\n<!DOCTYPE x>\n<a>\n  <!-- <b>no</b> -->\n  <b>R&amp;D &lt;3 &#65;</b>\n  <c><![CDATA[<x> & y]]></c>\n  <d/>\n</a>',
     );
     expect(root.children.map((c) => [c.name, c.text, c.line])).toEqual([
       ["b", "R&D <3 A", 5],

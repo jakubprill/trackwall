@@ -3,17 +3,17 @@ import { join } from "node:path";
 import { COPILOT_HOOK_EVENTS, type CopilotHookEvent } from "./copilot-hook-record.ts";
 
 /**
- * Wtyczka sesji (§4.4, ADR-17): katalog podawany Copilot CLI przez `--plugin-dir`, który rejestruje hooki
- * zgłaszające stan. Działa tylko w tej jednej sesji, więc nie zmienia konfiguracji użytkownika
- * (`~/.copilot`) ani plików w repo (`.github/hooks`).
+ * The session plugin (§4.4, ADR-17): a directory given to Copilot CLI through `--plugin-dir` that registers the hooks
+ * reporting the state. It works only in this one session, so it changes neither the user's configuration (`~/.copilot`)
+ * nor files in the repo (`.github/hooks`).
  */
 
 const COPILOT_PLUGIN_NAME = "trackwall-session";
 
 /**
- * Program uruchamiany bez powłoki (`exec` + `args`), więc ścieżki ze spacjami nie wymagają cytowania. `cwd` musi
- * być katalogiem wtyczki sesji, nie repo: Copilot CLI domyślnie uruchamia hooki w repo, a wtedy np. Bun wczytałby
- * `bunfig.toml` i `.env` z repo użytkownika (cudzy kod i sekrety w procesie hooka).
+ * A program run without a shell (`exec` + `args`), so paths with spaces need no quoting. `cwd` must be the session
+ * plugin's directory, not the repo: Copilot CLI runs hooks in the repo by default, and then e.g. Bun would load
+ * `bunfig.toml` and `.env` from the user's repo (someone else's code and secrets in the hook process).
  */
 export interface HookCommand {
   exec: string;
@@ -21,7 +21,7 @@ export interface HookCommand {
   cwd: string;
 }
 
-/** Hook stanu ma odpowiedzieć od razu; dłuższe czekanie tylko spowalnia agenta. */
+/** A state hook must answer at once; waiting longer only slows the agent down. */
 const HOOK_TIMEOUT_SEC = 5;
 
 export function writeCopilotPlugin(dir: string, command: (event: CopilotHookEvent) => HookCommand): void {

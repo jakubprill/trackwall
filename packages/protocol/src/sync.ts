@@ -1,89 +1,89 @@
 import { z } from "zod";
 
 /**
- * Synchronizacja wszystkich repo z folderu z projektami (§4.5, §7 „`ws sync`”, ADR-21): fetch i fast-forward gałęzi
- * domyślnej, w tle, z wynikiem per repo. Trzymana tylko w pamięci daemona, jak klonowania.
+ * Sync of all repos in the projects folder (§4.5, §7 "`ws sync`", ADR-21): fetch and fast-forward of the default branch,
+ * in the background, with a result per repo. Kept only in the daemon's memory, like clones.
  */
 
 /**
- * Dlaczego gałąź domyślna nie została przesunięta, choć fetch mógł się udać. Każdy powód zostawia repo nietknięte:
- * synchronizacja nigdy nie scala, nie robi rebase ani nie nadpisuje lokalnych zmian.
+ * Why the default branch was not moved, although the fetch may have succeeded. Every reason leaves the repo untouched:
+ * sync never merges, rebases or overwrites local changes.
  */
 export const SyncSkipReason = z.enum([
-  /** Repo nie ma `origin` ani jedynego innego remote. */
+  /** The repo has neither `origin` nor a single other remote. */
   "no-remote",
-  /** Remote nie mówi, która gałąź jest domyślna (brak `refs/remotes/<remote>/HEAD` także po `remote set-head --auto`). */
+  /** The remote does not say which branch is the default (no `refs/remotes/<remote>/HEAD`, also after `remote set-head --auto`). */
   "no-default-branch",
-  /** Gałęzi domyślnej nie ma lokalnie; fetch pobrał zmiany, ale nie ma czego przesuwać. */
+  /** The default branch does not exist locally; the fetch got the changes, but there is nothing to move. */
   "no-local-branch",
-  /** Gałąź domyślna jest wybrana, a w katalogu roboczym są zmiany w śledzonych plikach. */
+  /** The default branch is checked out, and the working directory has changes in tracked files. */
   "dirty",
-  /** Lokalna gałąź domyślna ma commity, których nie ma na zdalnym, i odwrotnie; trzeba scalić ręcznie. */
+  /** The local default branch has commits the remote does not have, and the other way round; it has to be merged by hand. */
   "diverged",
-  /** Lokalna gałąź domyślna ma tylko commity, których nie ma na zdalnym (niewypchnięte); zdalny nie ma nic nowego. */
+  /** The local default branch has only commits the remote does not have (unpushed); the remote has nothing new. */
   "ahead",
-  /** Gałąź domyślna jest wybrana w innym worktree tego repo; przesunięcie zmieniłoby jego katalog roboczy pod spodem. */
+  /** The default branch is checked out in another worktree of this repo; moving it would change that working directory underneath. */
   "checked-out-elsewhere",
 ]);
 export type SyncSkipReason = z.infer<typeof SyncSkipReason>;
 
 /**
- * Katalog roboczy repo po synchronizacji, żeby wynik mówił, co zostało u użytkownika: wybrana gałąź (gałąź domyślna
- * przesuwa się także wtedy, gdy wybrana jest inna, a wtedy pliki się nie zmieniają) i niezacommitowane pliki, których
- * synchronizacja nigdy nie rusza.
+ * The repo's working directory after the sync, so that the result says what is left for the user: the checked-out branch
+ * (the default branch moves also when another is checked out, and then the files do not change) and uncommitted files,
+ * which sync never touches.
  */
 export const SyncWorkingTree = z.object({
-  /** `null` przy odłączonym HEAD. */
+  /** `null` on a detached HEAD. */
   branch: z.string().nullable(),
-  /** Zmienione, dodane i usunięte pliki, które git śledzi. */
+  /** Changed, added and deleted files git tracks. */
   changed: z.number().int().nonnegative(),
-  /** Nowe pliki, których git jeszcze nie śledzi. */
+  /** New files git does not track yet. */
   untracked: z.number().int().nonnegative(),
 });
 export type SyncWorkingTree = z.infer<typeof SyncWorkingTree>;
 
-/** Co synchronizacja zrobiła z gałęzią domyślną. */
+/** What the sync did with the default branch. */
 export const SyncBranchOutcome = z.discriminatedUnion("state", [
-  /** Gałąź domyślna przesunięta do zdalnej (`remoteBranch`, np. `origin/main`) o `commits` commitów. */
+  /** The default branch moved to the remote one (`remoteBranch`, for example `origin/main`) by `commits` commits. */
   z.object({ state: z.literal("updated"), branch: z.string(), remoteBranch: z.string(), commits: z.number().int().positive() }),
-  /** Fetch się udał, a gałąź domyślna już była równa zdalnej. */
+  /** The fetch succeeded, and the default branch already equalled the remote one. */
   z.object({ state: z.literal("up-to-date"), branch: z.string(), remoteBranch: z.string() }),
-  /** `message` to zdanie dla użytkownika, z nazwą gałęzi, gdy jest znana. */
+  /** `message` is a sentence for the user, with the branch name when it is known. */
   z.object({ state: z.literal("skipped"), reason: SyncSkipReason, message: z.string() }),
 ]);
 export type SyncBranchOutcome = z.infer<typeof SyncBranchOutcome>;
 
 /**
- * Wynik synchronizacji jednego repo bez błędu: to, co zwraca `vcs`, a błąd gita jest u niego wyjątkiem. `workingTree`
- * jest `null`, gdy `git status` po synchronizacji zawiódł: gałąź i tak już się przesunęła, więc to nie błąd repo.
+ * The sync result of one repo without an error: what `vcs` returns, where a git error is an exception. `workingTree` is
+ * `null` when `git status` after the sync failed: the branch has already moved anyway, so it is not a repo error.
  */
 export const SyncResult = z.intersection(SyncBranchOutcome, z.object({ workingTree: SyncWorkingTree.nullable() }));
 export type SyncResult = z.infer<typeof SyncResult>;
 
-/** Wynik synchronizacji jednego repo, gdy już się skończyła. */
+/** The sync result of one repo, once it has finished. */
 export const SyncOutcome = z.union([
   SyncResult,
-  /** Git odmówił (sieć, logowanie, klucz hosta, limit czasu); `message` to komunikat gita. */
+  /** Git refused (network, sign-in, host key, timeout); `message` is git's message. */
   z.object({ state: z.literal("failed"), message: z.string() }),
 ]);
 export type SyncOutcome = z.infer<typeof SyncOutcome>;
 
 const SyncTarget = z.object({
-  /** Identyfikator repo w chwili startu synchronizacji (ADR-18: może się zmienić razem z nazwą katalogu). */
+  /** The repo identifier when the sync started (ADR-18: it can change together with the directory name). */
   repo: z.string(),
   path: z.string(),
 });
 
-/** Jedno repo w synchronizacji: czeka na wolne miejsce, trwa albo ma wynik. */
+/** One repo in a sync: waiting for a free slot, running, or with a result. */
 export const SyncRepo = z.union([SyncTarget.extend({ state: z.enum(["waiting", "running"]) }), z.intersection(SyncTarget, SyncOutcome)]);
 export type SyncRepo = z.infer<typeof SyncRepo>;
 
 export const SyncRun = z.object({
   /** ISO 8601. */
   startedAt: z.string(),
-  /** ISO 8601; `null`, dopóki któreś repo czeka albo trwa. */
+  /** ISO 8601; `null` while some repo is waiting or running. */
   finishedAt: z.string().nullable(),
-  /** Repo z folderu z projektami w chwili startu, w kolejności listy repo. */
+  /** The repos of the projects folder when it started, in the order of the repo list. */
   repos: z.array(SyncRepo),
 });
 export type SyncRun = z.infer<typeof SyncRun>;
