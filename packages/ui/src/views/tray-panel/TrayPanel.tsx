@@ -14,25 +14,24 @@ import { useSessions } from "@/lib/use-sessions";
 /**
  * The tray panel (ADR-50): a small window next to the tray icon, with the task proposals and the sessions waiting for
  * you. A click opens the entry in the main window, the same way as the tray menu; the shell hides the panel. The page
- * stays loaded while the shell runs, so it asks for the daemon's connection again each time it is shown or focused:
- * the daemon may have been restarted from the main window with a new port and token.
+ * stays loaded while the shell runs, so each time it is shown it asks for the daemon's connection again (the daemon may
+ * have been restarted from the main window with a new port and token) and loads the list at once.
  */
 export function TrayPanel() {
   const { conn, error, refresh } = useConnection();
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === "visible") refresh();
-    };
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [refresh]);
   const events = useDaemonEvents(conn);
-  // Hidden most of the time: without the event connection it polls at the slower pace.
-  const sessions = useSessions(conn, events, false);
+  // `useRemote` does not poll while the panel is hidden.
+  const sessions = useSessions(conn, events, true);
+  const { reload } = sessions;
+  useEffect(() => {
+    // The shell focuses the panel each time it shows it.
+    const onShown = () => {
+      refresh();
+      reload();
+    };
+    window.addEventListener("focus", onShown);
+    return () => window.removeEventListener("focus", onShown);
+  }, [refresh, reload]);
   const entries = sessions.data && trayPanelEntries(sessions.data);
   const open = (target?: TrayPanelTarget) => {
     openFromTrayPanel(target).catch((err: unknown) => console.error(`[tray panel] ${errorMessage(err)}`));

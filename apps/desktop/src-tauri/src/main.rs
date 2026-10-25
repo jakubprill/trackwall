@@ -150,7 +150,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             }
             // Windows only: a double click opens the main window, as a click did before the panel.
             TrayIconEvent::DoubleClick { button: MouseButton::Left, .. } => {
-                tray_panel::hide(tray.app_handle());
+                tray_panel::double_click(tray.app_handle());
                 main_window::show(tray.app_handle());
             }
             _ => {}

@@ -107,6 +107,13 @@ pub fn release(app: &AppHandle, icon: Rect) {
     }
 }
 
+/// A double click on the icon (Windows) opens the main window: it hides the panel, and its second release, however
+/// long the press, does not show it again.
+pub fn double_click(app: &AppHandle) {
+    hide(app);
+    app.state::<PanelState>().closing_press.store(true, Ordering::SeqCst);
+}
+
 pub fn hide(app: &AppHandle) {
     if let Some(panel) = app.get_webview_window(LABEL) {
         app.state::<PanelState>().mark_hidden();
@@ -203,10 +210,8 @@ fn place(panel: &WebviewWindow, icon: Rect) -> tauri::Result<()> {
             }
         })
         .collect();
-    let Some(screen) = screen_for_icon(icon, &screens).and_then(|i| screens.get(i)) else {
-        eprintln!("[desktop] no display holds the tray icon at {icon:?}");
-        return Ok(());
-    };
+    // macOS lists the main display first: the fallback when no display holds the icon (one was just unplugged).
+    let Some(screen) = screen_for_icon(icon, &screens).and_then(|i| screens.get(i)).or(screens.first()) else { return Ok(()) };
     let outer = panel.outer_size()?.to_logical::<f64>(panel.scale_factor()?);
     let (x, y) = panel_position(icon.in_points(screen.scale), (outer.width, outer.height), screen.work.in_points(screen.scale), GAP);
     panel.set_position(tauri::LogicalPosition::new(x, y))
