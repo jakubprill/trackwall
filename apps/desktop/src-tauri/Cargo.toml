@@ -16,11 +16,18 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2.12.1", features = ["tray-icon"] }
-tauri-plugin-single-instance = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-deep-link = "2"
 tauri-plugin-window-state = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-dialog = "2"
+
+# tauri-plugin-deep-link 2.6.2 builds `rust-ini`'s `ParseOption` with a struct literal (Linux only), and 0.21.2 added
+# fields to it, so a newer rust-ini breaks the Linux build. CI builds the shell only on Windows and macOS, so this pin
+# keeps `cargo test` working on Linux; drop it once the plugin compiles with the latest rust-ini.
+[target.'cfg(target_os = "linux")'.dependencies]
+rust-ini = "=0.21.1"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation"] }

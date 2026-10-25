@@ -1,4 +1,5 @@
 import "@xterm/xterm/css/xterm.css";
+import { isTauri } from "@tauri-apps/api/core";
 import { PTY_CLOSE_NOT_FOUND, type PtyClientMessage, ptySocket } from "@trackwall/protocol";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
@@ -10,6 +11,7 @@ import { oncePerFrame } from "@/lib/once-per-frame";
 import { pastedPaths } from "@/lib/pasted-paths";
 import { IS_MAC } from "@/lib/platform";
 import { copiesSelection } from "@/lib/terminal-copy";
+import { trackwallLinkProvider } from "@/lib/terminal-links";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { terminalTheme } from "@/lib/terminal-theme";
 import { cn } from "@/lib/utils";
@@ -45,6 +47,7 @@ export function SessionTerminal({ conn, session, live, focused }: { conn: Connec
     const terminal = new Terminal(sessionTerminalOptions(terminalTheme(document.documentElement), getComputedStyle(element).fontFamily));
     const fit = new FitAddon();
     terminal.loadAddon(fit);
+    const links = isTauri() ? terminal.registerLinkProvider(trackwallLinkProvider(terminal, IS_MAC)) : undefined;
     terminal.open(element);
     fit.fit();
     term.current = terminal;
@@ -140,6 +143,7 @@ export function SessionTerminal({ conn, session, live, focused }: { conn: Connec
       document.removeEventListener("visibilitychange", sendFocus);
       focus.dispose();
       input.dispose();
+      links?.dispose();
       socket?.close();
       term.current = undefined;
       updateFocus.current = undefined;

@@ -19,8 +19,8 @@ import { attentionCount, nextWaitingShortcut } from "@/lib/session-state";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
 import { useFileDrop } from "@/lib/use-file-drop";
+import { useJumpRequest } from "@/lib/use-jump-request";
 import { useRemote } from "@/lib/use-remote";
-import { useSessionFocus } from "@/lib/use-session-focus";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { DaemonPanel } from "@/views/daemon/DaemonPanel";
 import { GraphView } from "@/views/graph/GraphView";
@@ -97,8 +97,11 @@ export function App() {
     setView("sessions");
     setSession(selection);
   };
-  // Jump from the tray (ADR-26, ADR-39): the shell shows the window and passes a waiting session or a task proposal.
-  useSessionFocus(openInSessions);
+  // Jump from the tray (ADR-26, ADR-39) or from a `trackwall://` link (ADR-52): the shell shows the window first.
+  useJumpRequest((jump) => {
+    if (jump.kind !== "repo") return openInSessions(jump);
+    openRepos(jump.id);
+  });
   // Alt+J from every view (ADR-48), after the selected session like the "Next waiting" button.
   useWindowShortcuts(
     (event) => {

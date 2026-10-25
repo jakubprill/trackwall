@@ -4,6 +4,7 @@
 //! the monitor, size and position of the last window with that label. The shell remembers which windows show the
 //! Sessions view and in which order they were last focused, to pick the window for a session from the tray (§5.4).
 
+use crate::jump::PendingJump;
 use crate::lock::lock;
 use crate::window_effect::WindowEffects;
 use std::sync::Mutex;
@@ -139,6 +140,8 @@ pub fn open(app: &AppHandle, view: Option<&str>) -> Result<(), String> {
 pub fn closed(app: &AppHandle, label: &str) {
     app.state::<Windows>().with(|r| r.closed(label));
     app.state::<WindowEffects>().forget(label);
+    // Labels are reused: a new window with this label must not take a jump meant for the closed one.
+    app.state::<PendingJump>().forget(label);
     if let Err(err) = app.save_window_state(STATE_FLAGS) {
         eprintln!("[desktop] saving the window state: {err}");
     }
@@ -152,6 +155,14 @@ pub fn show(app: &AppHandle, label: &str) {
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
+    }
+}
+
+/// Shows a window unless its page is still loading: the page then shows it itself (ADR-11), and showing it earlier
+/// would flash the opaque background. For a link or a second start, which can come before the page has loaded.
+pub fn show_once_loaded(app: &AppHandle, label: &str) {
+    if !app.state::<WindowEffects>().reveal_pending(label) {
+        show(app, label);
     }
 }
 
