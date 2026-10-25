@@ -20,5 +20,6 @@ const files = readdirSync(CONTRACT_DIR)
   .filter((name) => name.endsWith(".contract.ts"))
   .map((name) => join(CONTRACT_DIR, name));
 if (files.length === 0) throw new Error(`no *.contract.ts in ${CONTRACT_DIR}`);
-const run = spawnSync(process.execPath, ["test", ...files, ...process.argv.slice(2)], { stdio: "inherit" });
+// One time limit for every test: a real Copilot CLI session takes seconds to start, more on a slow Windows runner.
+const run = spawnSync(process.execPath, ["test", "--timeout", "90000", ...files, ...process.argv.slice(2)], { stdio: "inherit" });
 process.exit(run.status ?? 1);

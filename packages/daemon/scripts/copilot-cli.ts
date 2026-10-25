@@ -5,6 +5,7 @@
  *
  *   bun packages/daemon/scripts/copilot-cli.ts     # downloads it when missing and prints the binary's path
  */
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -12,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
 import { z } from "zod";
 
-/** The Copilot CLI version Trackwall is checked against; `copilot --version` of the binary must say the same. */
+/** The Copilot CLI version Trackwall is checked against; a download whose `copilot --version` says otherwise is refused. */
 export const COPILOT_CLI_VERSION = "1.0.103";
 
 const CACHE = fileURLToPath(new URL("../node_modules/.cache/copilot-cli", import.meta.url));
@@ -32,13 +33,16 @@ export async function copilotCli(): Promise<string> {
   const dir = join(CACHE, COPILOT_CLI_VERSION, `${process.platform}-${process.arch}`);
   const binary = join(dir, BINARY);
   if (existsSync(binary)) return binary;
-  const tarball = await download(platformPackage());
+  const name = platformPackage();
+  const tarball = await download(name);
   const file = tarFile(gunzipSync(tarball), `package/${BINARY}`);
   mkdirSync(dir, { recursive: true });
   // Written next to the target and renamed, so that a broken download never leaves a binary that looks complete.
   const partial = `${binary}.partial`;
   writeFileSync(partial, file);
   chmodSync(partial, 0o755);
+  const version = spawnSync(partial, ["--version"], { encoding: "utf8" }).stdout;
+  if (!version.includes(` ${COPILOT_CLI_VERSION}.`)) throw new Error(`${name} says it is "${version.trim()}", not ${COPILOT_CLI_VERSION}`);
   rmSync(binary, { force: true });
   renameSync(partial, binary);
   return binary;

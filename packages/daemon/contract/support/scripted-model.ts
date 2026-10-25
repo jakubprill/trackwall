@@ -15,7 +15,6 @@ const Content = z.union([z.string(), z.array(z.object({ type: z.string(), text: 
 const Message = z.object({
   role: z.string(),
   content: Content.optional(),
-  tool_call_id: z.string().optional(),
 });
 const Request = z.object({
   messages: z.array(Message),
@@ -62,16 +61,18 @@ type QueuedReply = ModelReply | ((request: ModelRequest) => ModelReply);
 
 /** The chat-completions answer as a stream of chunks, which is what Copilot CLI asks for. */
 function answer(res: ServerResponse, reply: ModelReply, callId: string): void {
-  const delta =
+  const { delta, finish } =
     "text" in reply
-      ? { role: "assistant", content: reply.text }
+      ? { delta: { role: "assistant", content: reply.text }, finish: "stop" }
       : {
-          role: "assistant",
-          tool_calls: [
-            { index: 0, id: callId, type: "function", function: { name: reply.tool, arguments: JSON.stringify(reply.arguments) } },
-          ],
+          delta: {
+            role: "assistant",
+            tool_calls: [
+              { index: 0, id: callId, type: "function", function: { name: reply.tool, arguments: JSON.stringify(reply.arguments) } },
+            ],
+          },
+          finish: "tool_calls",
         };
-  const finish = "text" in reply ? "stop" : "tool_calls";
   const base = { id: callId, object: "chat.completion.chunk", created: 0, model: SCRIPTED_MODEL };
   const chunks = [
     { ...base, choices: [{ index: 0, delta, finish_reason: null }] },
@@ -88,36 +89,43 @@ function answer(res: ServerResponse, reply: ModelReply, callId: string): void {
 /** The model name Copilot CLI sends (`COPILOT_MODEL`); outside its catalog, so it uses default token limits. */
 export const SCRIPTED_MODEL = "trackwall-scripted-model";
 
+function parseJson(body: string): unknown {
+  try {
+    return JSON.parse(body);
+  } catch {
+    return undefined;
+  }
+}
+
 export async function startScriptedModel() {
   const queue: QueuedReply[] = [];
   const requests: ModelRequest[] = [];
-  const unexpected: ModelRequest[] = [];
+  /** What went wrong with a request: none queued for it, or one the stand-in does not understand. */
+  const problems: string[] = [];
+
+  /** A request the test did not plan for: the test fails on `problems`, and Copilot CLI shows a model error. */
+  function refuse(res: ServerResponse, problem: string): void {
+    problems.push(problem);
+    res.writeHead(500, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: { message: `scripted model: ${problem}` } }));
+  }
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(Buffer.from(chunk));
-    const parsed = Request.safeParse(JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}"));
-    if (!req.url?.endsWith("/chat/completions") || !parsed.success || parsed.data.stream !== true) {
-      res.writeHead(404).end();
-      return;
-    }
+    if (req.method !== "POST" || !req.url?.endsWith("/chat/completions")) return refuse(res, `${req.method} ${req.url}`);
+    const parsed = Request.safeParse(parseJson(Buffer.concat(chunks).toString("utf8")));
+    if (!parsed.success) return refuse(res, `a request it cannot read: ${parsed.error.message}`);
+    if (parsed.data.stream !== true) return refuse(res, "a request without streaming");
     const request = summarize(parsed.data);
     requests.push(request);
     const next = queue.shift();
-    if (next === undefined) {
-      // A request the test did not plan for: the test fails on `unexpected`, and Copilot CLI shows the model error.
-      unexpected.push(request);
-      res.writeHead(500, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: { message: "the scripted model has no reply queued" } }));
-      return;
-    }
+    if (next === undefined) return refuse(res, `no reply queued for the request after "${request.lastUserText.slice(-80)}"`);
     answer(res, typeof next === "function" ? next(request) : next, `call_${requests.length}`);
   }
 
   const server = createServer((req, res) => {
-    handle(req, res).catch((err: unknown) => {
-      res.writeHead(500).end(String(err));
-    });
+    handle(req, res).catch((err: unknown) => refuse(res, String(err)));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;
@@ -130,10 +138,11 @@ export async function startScriptedModel() {
       queue.push(...replies);
     },
     requests: () => [...requests],
-    /** Requests that came with no reply queued. */
-    unexpected: () => [...unexpected],
-    /** Replies queued and not taken yet. */
-    pending: () => queue.length,
+    /**
+     * What a test leaves behind, and clears it for the next test of the same model: refused requests and replies
+     * queued but never asked for.
+     */
+    takeLeftovers: () => ({ problems: problems.splice(0), unusedReplies: queue.splice(0).length }),
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }

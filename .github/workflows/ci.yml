@@ -105,7 +105,7 @@ jobs:
       - run: pnpm test
 
   # The real Copilot CLI of the pinned version in BYOK mode against a scripted model (ADR-67): no account and no secret.
-  # The binary (~60 MB packed) is cached under the version, which lives only in scripts/copilot-cli.ts.
+  # The binary (113–130 MB packed) is cached under the version, which lives only in scripts/copilot-cli.ts.
   contract:
     name: contract with Copilot CLI (${{ matrix.os }})
     strategy:
