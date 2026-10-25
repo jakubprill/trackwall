@@ -17,7 +17,7 @@ const TIMEOUT = 30_000;
 const TASK = "0b7c1a52-3f0e-4c1e-9a43-5d2f8e6b1c07";
 
 /**
- * Repo `web` z atrapą konfiguracji mise (`fake-mise.json`, opis w `fixtures/fake-mise.ts`), and the worktree of task
+ * Repo `web` with a fake mise config (`fake-mise.json`, described in `fixtures/fake-mise.ts`), and the worktree of task
  * `TASK` with the same config, which mise does not trust by itself: only through the trusted path of a run (ADR-59).
  */
 function setup(config: object, command: readonly string[] = FAKE_MISE) {
@@ -50,7 +50,7 @@ function setup(config: object, command: readonly string[] = FAKE_MISE) {
   let present = true;
   const repos = {
     repoPath: async (id: string) => {
-      if (id !== "web" || !present) throw new DomainError("not_found", `nie ma repo ${id}`);
+      if (id !== "web" || !present) throw new DomainError("not_found", `no repo ${id}`);
       return repoDir;
     },
   };
@@ -66,22 +66,22 @@ function writeConfig(repoDir: string, config: object): void {
   writeFileSync(join(repoDir, "fake-mise.json"), JSON.stringify(config));
 }
 
-const DEV = { name: "dev", description: "serwer deweloperski" };
+const DEV = { name: "dev", description: "development server" };
 
 describe("mise", () => {
-  test("lista tasków pochodzi z mise, bez ukrytych, z opisem i bez uruchomienia", async () => {
-    const { mise } = setup({ tasks: [DEV, { name: "build:ui", description: null }, { name: "_wewn", description: "", hide: true }] });
+  test("the list of mise tasks comes from mise, without hidden ones, with a description and without a run", async () => {
+    const { mise } = setup({ tasks: [DEV, { name: "build:ui", description: null }, { name: "_internal", description: "", hide: true }] });
 
     expect(await mise.tasks("web")).toEqual({
       kind: "ok",
       tasks: [
-        { name: "dev", description: "serwer deweloperski", run: null },
+        { name: "dev", description: "development server", run: null },
         { name: "build:ui", description: "", run: null },
       ],
     });
   });
 
-  test("konfiguracja bez zaufania daje stan untrusted, a trust go zdejmuje", async () => {
+  test("an untrusted config gives the state untrusted, and trust clears it", async () => {
     const { mise, repoDir } = setup({ tasks: [DEV], untrusted: true });
 
     const before = await mise.tasks("web");
@@ -93,18 +93,18 @@ describe("mise", () => {
     expect(JSON.parse(readFileSync(join(repoDir, "fake-mise.json"), "utf8")).untrusted).toBe(false);
   });
 
-  test("brak programu mise daje stan not_installed, a start kończy się błędem mise_unavailable", async () => {
-    const { mise } = setup({ tasks: [DEV] }, ["trackwall-nie-ma-mise"]);
+  test("a missing mise program gives the state not_installed, and start ends with the error mise_unavailable", async () => {
+    const { mise } = setup({ tasks: [DEV] }, ["trackwall-no-such-mise"]);
 
     expect(await mise.tasks("web")).toEqual({
       kind: "not_installed",
-      message: "program trackwall-nie-ma-mise not found in PATH",
+      message: "program trackwall-no-such-mise not found in PATH",
       running: [],
     });
     await expect(mise.start({ repo: "web", task: null }, "dev")).rejects.toMatchObject({ code: "mise_unavailable" });
   });
 
-  test("start taska, którego nie ma na liście, jest odrzucany bez uruchamiania czegokolwiek", async () => {
+  test("starting a mise task that is not on the list is rejected without running anything", async () => {
     const { mise, repoDir } = setup({ tasks: [DEV] });
 
     await expect(mise.start({ repo: "web", task: null }, "deploy")).rejects.toMatchObject({ code: "not_found" });
@@ -112,7 +112,7 @@ describe("mise", () => {
   });
 
   test(
-    "start uruchamia mise run w korzeniu repo, stan trafia na listę, a stop zatrzymuje całą grupę procesów",
+    "start runs mise run in the repo root, the state goes onto the list, and stop halts the whole process group",
     async () => {
       const { mise, repoDir } = setup({ tasks: [DEV] });
 
@@ -133,7 +133,7 @@ describe("mise", () => {
   );
 
   test(
-    "task usunięty z konfiguracji w trakcie działania zostaje na liście, żeby dało się go zatrzymać",
+    "a mise task removed from the config while running stays on the list, so that it can be stopped",
     async () => {
       const { mise, repoDir } = setup({ tasks: [DEV] });
       await mise.start({ repo: "web", task: null }, "dev");
@@ -149,7 +149,7 @@ describe("mise", () => {
   );
 
   test(
-    "gdy mise przestaje podawać listę (np. konfiguracja bez zaufania), działający task nadal jest do zatrzymania",
+    "when mise stops giving the list (e.g. an untrusted config), a running mise task can still be stopped",
     async () => {
       const { mise, repoDir } = setup({ tasks: [DEV] });
       await mise.start({ repo: "web", task: null }, "dev");
@@ -165,12 +165,12 @@ describe("mise", () => {
   );
 
   test(
-    "działające taski wszystkich repo są na liście bez pytania mise, a zatrzymany z niej znika",
+    "running mise tasks of all repos are on the list without asking mise, and a stopped one disappears from it",
     async () => {
       const { mise, repoDir } = setup({ tasks: [DEV] });
       expect(mise.running()).toEqual([]);
       const started = await mise.start({ repo: "web", task: null }, "dev");
-      // Konfiguracja, której mise nie czyta: lista działających i tak jest pełna, bo nie pyta mise.
+      // A config mise does not read: the list of running ones is complete anyway, because it does not ask mise.
       writeConfig(repoDir, { tasks: [DEV], untrusted: true });
 
       expect(mise.running()).toEqual([{ repo: "web", task: null, miseTask: "dev", run: started }]);
@@ -219,11 +219,11 @@ describe("mise", () => {
     const { mise } = setup({ tasks: [DEV] });
     await expect(mise.waitForEnd({ repo: "api", task: null }, "dev", 1000, new AbortController().signal)).rejects.toMatchObject({
       code: "not_found",
-      message: "nie ma repo api",
+      message: "no repo api",
     });
   });
 
-  test("stop taska, który nie był uruchamiany, to not_found", async () => {
+  test("stopping a mise task that has not been run is not_found", async () => {
     const { mise } = setup({ tasks: [DEV] });
     await expect(mise.stop({ repo: "web", task: null }, "dev")).rejects.toMatchObject({ code: "not_found" });
   });
@@ -242,7 +242,7 @@ describe("mise tasks in a task worktree (ADR-59)", () => {
       expect(readFileSync(join(worktree, "calls.log"), "utf8")).toBe("run test\n");
       expect(existsSync(join(repoDir, "calls.log"))).toBe(false);
       const log = logs.tail({ source: { kind: "task-mise-task", repo: "web", task: TASK, miseTask: "test" }, limit: 10 });
-      expect(log.records.map((r) => r.msg)).toEqual(["[test] $ koniec"]);
+      expect(log.records.map((r) => r.msg)).toEqual(["[test] $ done"]);
       expect(logs.tail({ source: { kind: "mise-task", repo: "web", miseTask: "test" }, limit: 10 }).records).toEqual([]);
     },
     TIMEOUT,
@@ -308,7 +308,7 @@ describe("mise tasks in a task worktree (ADR-59)", () => {
   test("a task named with an unknown repo is not_found, and so is stopping a task's mise task that has not run", async () => {
     const { mise } = setup({ tasks: [DEV] });
 
-    await expect(mise.start({ repo: "api", task: TASK }, "dev")).rejects.toMatchObject({ code: "not_found", message: "nie ma repo api" });
+    await expect(mise.start({ repo: "api", task: TASK }, "dev")).rejects.toMatchObject({ code: "not_found", message: "no repo api" });
     await expect(mise.stop({ repo: "web", task: TASK }, "dev")).rejects.toMatchObject({
       code: "not_found",
       message: `mise task "dev" in the worktree of task ${TASK} in web has not been run`,
@@ -317,12 +317,12 @@ describe("mise tasks in a task worktree (ADR-59)", () => {
 });
 
 describe("mise tasks ls --json", () => {
-  test("format z prawdziwego mise (2026.10) daje nazwę i opis, resztę pól pomija", () => {
+  test("the format from a real mise (2026.10) gives the name and description, and skips the other fields", () => {
     const stdout = JSON.stringify([
       {
         name: "dev",
         aliases: [],
-        description: "Daemon i Vite",
+        description: "Daemon and Vite",
         source: "/repo/mise.toml",
         depends: ["setup"],
         hide: false,
@@ -331,11 +331,11 @@ describe("mise tasks ls --json", () => {
     ]);
     expect(parseTaskList({ kind: "exited", code: 0, stdout, stderr: "" })).toEqual({
       kind: "ok",
-      tasks: [{ name: "dev", description: "Daemon i Vite" }],
+      tasks: [{ name: "dev", description: "Daemon and Vite" }],
     });
   });
 
-  test("błąd mise inny niż zaufanie to stan error z komunikatem mise", () => {
+  test("a mise error other than trust is the state error with the mise message", () => {
     const stderr = "mise ERROR error parsing config file: /repo/mise.toml\nmise ERROR expected `=`\n";
     expect(parseTaskList({ kind: "exited", code: 1, stdout: "", stderr })).toEqual({
       kind: "error",
@@ -343,12 +343,12 @@ describe("mise tasks ls --json", () => {
     });
   });
 
-  test("wyjście, które nie jest listą tasków, to stan error, a nie wyjątek", () => {
-    expect(parseTaskList({ kind: "exited", code: 0, stdout: "nie json", stderr: "" }).kind).toBe("error");
+  test("output that is not a list of mise tasks is the state error, not an exception", () => {
+    expect(parseTaskList({ kind: "exited", code: 0, stdout: "not json", stderr: "" }).kind).toBe("error");
     expect(parseTaskList({ kind: "exited", code: 0, stdout: '{"dev":1}', stderr: "" }).kind).toBe("error");
   });
 
-  test("nazwa, której mise użyłby jako opcji, nie trafia na listę", () => {
+  test("a name mise would use as an option does not get onto the list", () => {
     const stdout = JSON.stringify([{ name: "--help" }, { name: "lint" }]);
     expect(parseTaskList({ kind: "exited", code: 0, stdout, stderr: "" })).toEqual({
       kind: "ok",

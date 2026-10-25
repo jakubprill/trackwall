@@ -3,8 +3,8 @@ import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
 
 /**
- * `runtime.json` (§4.1): rejestr żywych grup procesów, żeby następny start daemona mógł posprzątać sieroty po
- * awarii albo twardym zabiciu. Grupa trafia do pliku po starcie i znika z niego po potwierdzeniu, że nie żyje.
+ * `runtime.json` (§4.1): the register of live process groups, so that the next daemon start can clean up orphans after
+ * a crash or a hard kill. A group goes into the file after its start and leaves it once it is confirmed dead.
  */
 
 const RuntimeGroup = z.object({
@@ -14,7 +14,7 @@ const RuntimeGroup = z.object({
   cwd: z.string(),
   startedAt: z.string(),
   pid: z.number().int().positive(),
-  /** Czas startu lidera według systemu (`GroupPlatform.identity`); `null`, gdy system go nie podaje. */
+  /** The leader's start time according to the system (`GroupPlatform.identity`); `null` when the system does not give it. */
   identity: z.string().nullable(),
 });
 export type RuntimeGroup = z.infer<typeof RuntimeGroup>;
@@ -28,7 +28,7 @@ export class RuntimeFile {
     this.path = path;
   }
 
-  /** Brak pliku to brak grup. Plik, który nie przechodzi schematu, jest błędem: bez niego nie wiadomo, co sprzątać. */
+  /** A missing file means no groups. A file that fails the schema is an error: without it, nobody knows what to clean up. */
   read(): RuntimeGroup[] {
     let text: string;
     try {
@@ -48,7 +48,7 @@ export class RuntimeFile {
     return parsed.data.groups;
   }
 
-  /** Przenosi nieczytelny plik obok (`runtime.json.broken-<czas>`) i zwraca nową ścieżkę. */
+  /** Moves an unreadable file aside (`runtime.json.broken-<time>`) and returns the new path. */
   moveAside(): string {
     const aside = `${this.path}.broken-${Date.now()}`;
     renameSync(this.path, aside);

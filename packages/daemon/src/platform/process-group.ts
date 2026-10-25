@@ -1,49 +1,49 @@
 /**
- * Grupa procesów (§4.1) od strony systemu: jak uruchomić lidera, żeby jego potomkowie byli z nim jedną jednostką,
- * jak ją zatrzymać i jak sprawdzić, że nie żyje. Moduł `procs` zna tylko ten interfejs i sam decyduje o kolejności
- * kroków; Windows ma Job Object (pod Bun, ADR-20), macOS i Linux nową sesję POSIX (`setsid`) z sygnałami do `-pgid`.
+ * A process group (§4.1) from the system side: how to start the leader so that its descendants are one unit with it,
+ * how to stop it and how to check that it is dead. The `procs` module knows only this interface and decides the order
+ * of steps itself; Windows has a Job Object (under Bun, ADR-20), macOS and Linux a new POSIX session (`setsid`) with signals to `-pgid`.
  */
 
-/** Metody nie rzucają: błąd systemu przy zatrzymywaniu wychodzi jako grupa, która nie jest pusta. */
+/** The methods do not throw: a system error while stopping comes out as a group that is not empty. */
 export interface GroupControl {
-  /** Łagodna prośba o koniec: SIGTERM do całej grupy, na Windowsie zamknięcie wejścia lidera. */
+  /** A gentle request to end: SIGTERM to the whole group, on Windows closing the leader's input. */
   askToStop(): void;
-  /** Zabija każdy proces grupy, także te, które zostały po wyjściu lidera. */
+  /** Kills every process of the group, including those left after the leader exited. */
   kill(): void;
-  /** `true` dopiero wtedy, gdy system potwierdza, że żaden proces grupy nie żyje. */
+  /** `true` only when the system confirms that no process of the group is alive. */
   isEmpty(): boolean;
-  /** Zwalnia zasoby systemowe grupy (uchwyt joba); wołane po potwierdzeniu, że grupa jest pusta. */
+  /** Frees the group's system resources (the job handle); called after confirming the group is empty. */
   release(): void;
 }
 
 /**
- * Lider grupy widziany przez platformę: proces z rurami albo proces w PTY (`terminal.ts`). Platforma potrzebuje
- * PID-u, łagodnej prośby o koniec od strony wejścia i tego, czy lider już skończył.
+ * The group leader as the platform sees it: a process with pipes or a process in a PTY (`terminal.ts`). The platform needs
+ * the PID, a gentle request to end from the input side, and whether the leader has already ended.
  */
 export interface GroupLeader {
   pid: number;
-  /** Zamyka wejście lidera: stdin procesu z rurami albo terminal (ConPTY wysyła wtedy `CTRL_CLOSE_EVENT`). */
+  /** Closes the leader's input: the stdin of a process with pipes or the terminal (ConPTY then sends `CTRL_CLOSE_EVENT`). */
   closeInput(): void;
   hasExited(): boolean;
 }
 
 export interface GroupPlatform {
-  /** `setsid` na POSIX; na Windowsie lider zostaje w konsoli daemona, a grupę tworzy job. */
+  /** `setsid` on POSIX; on Windows the leader stays in the daemon's console, and the job makes the group. */
   detached: boolean;
-  /** Czas łaski między `askToStop` a `kill`. */
+  /** The grace period between `askToStop` and `kill`. */
   graceMs: number;
-  /** Robi z uruchomionego lidera grupę. Rzuca, gdy system odmówi (wtedy wołający zabija lidera). */
+  /** Makes a group from a started leader. Throws when the system refuses (the caller then kills the leader). */
   adopt(leader: GroupLeader): GroupControl;
-  /** Tożsamość lidera do `runtime.json` (czas startu procesu), `null`, gdy system jej nie podaje. */
+  /** The leader's identity for `runtime.json` (the process start time), `null` when the system does not give it. */
   identity(pid: number): Promise<string | null>;
   /**
-   * Grupa z poprzedniego działania daemona (`runtime.json`), jeśli wciąż żyje i na pewno jest nasza; `unverified`,
-   * gdy żyje proces o tym PID-ie, ale nie da się potwierdzić, że to nasz lider (PID z recyklingu).
+   * A group from the previous daemon run (`runtime.json`), if it is still alive and certainly ours; `unverified`
+   * when a process with that PID is alive, but it cannot be confirmed to be our leader (a recycled PID).
    */
   reattach(pid: number, identity: string | null): Promise<GroupControl | "gone" | "unverified">;
 }
 
-/** Sygnał 0 sprawdza istnienie; EPERM znaczy, że proces żyje, tylko należy do innego użytkownika. */
+/** Signal 0 checks existence; EPERM means the process is alive, it just belongs to another user. */
 export function signalExists(target: number): boolean {
   try {
     process.kill(target, 0);

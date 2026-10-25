@@ -1,6 +1,6 @@
 /**
- * Warstwa platformy: jedyne miejsce, w którym kod daemona może sprawdzać, czy działa pod Bun czy Node
- * (ADR-1). Moduły poza `platform/` używają wyłącznie API `node:`.
+ * The platform layer: the only place where daemon code may check whether it runs under Bun or Node
+ * (ADR-1). Modules outside `platform/` use only `node:` APIs.
  */
 export interface RuntimeInfo {
   name: "bun" | "node";
@@ -8,14 +8,14 @@ export interface RuntimeInfo {
 }
 
 /**
- * Czy daemon działa jako binarka z `bun build --compile`. Skrypt leży wtedy w wirtualnym systemie plików Bun
- * (`/$bunfs/root/…`, na Windowsie `B:\~BUN\root\…`), który `node:fs` w Bun też widzi, więc `existsSync` tego nie rozstrzyga.
+ * Whether the daemon runs as a binary from `bun build --compile`. The script then lies in Bun's virtual file system
+ * (`/$bunfs/root/…`, on Windows `B:\~BUN\root\…`), which `node:fs` in Bun also sees, so `existsSync` does not settle it.
  */
 export function isCompiledBinary(): boolean {
   return isInBinary(process.argv[1] ?? "");
 }
 
-/** Czy ścieżka wskazuje plik osadzony w binarce z `bun build --compile` (wirtualny system plików Bun). */
+/** Whether a path points to a file embedded in a binary from `bun build --compile` (Bun's virtual file system). */
 export function isInBinary(path: string): boolean {
   return /[\\/]\$bunfs[\\/]|~BUN[\\/]/.test(path);
 }

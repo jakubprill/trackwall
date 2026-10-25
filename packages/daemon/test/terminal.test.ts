@@ -21,7 +21,7 @@ describe.skipIf(process.versions.bun === undefined || process.platform === "win3
       if (i === 1) before = openDescriptors();
       let output = "";
       const proc = terminals.spawn({
-        command: [process.execPath, "-e", "console.log('koniec')"],
+        command: [process.execPath, "-e", "console.log('done')"],
         cwd: tmpdir(),
         env: process.env,
         cols: 80,
@@ -31,7 +31,7 @@ describe.skipIf(process.versions.bun === undefined || process.platform === "win3
         },
       });
       expect(await proc.exited).toEqual({ code: 0, signal: null });
-      expect(output).toContain("koniec");
+      expect(output).toContain("done");
     }
     expect(openDescriptors() - before).toBeLessThan(STARTS / 2);
   });

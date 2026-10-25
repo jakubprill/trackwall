@@ -9,59 +9,59 @@ import type { TerminalPlatform, TerminalProcess } from "../../platform/terminal.
 import type { RuntimeFile, RuntimeGroup } from "./runtime-file.ts";
 
 /**
- * Moduł `procs` (§4.1, ADR-20): każdy proces startuje jako grupa procesów i jako grupa się kończy. Stan jest
- * obserwowany: uruchomienie jest `exited` dopiero wtedy, gdy system potwierdził, że żaden proces grupy nie żyje.
- * Lider, który zakończył się sam, zabiera ze sobą resztę grupy, więc nic nie zostaje w tle bez nadzoru.
+ * The `procs` module (§4.1, ADR-20): every process starts as a process group and ends as a group. State is
+ * observed: a run is `exited` only once the system has confirmed that no process of the group is alive.
+ * A leader that ended by itself takes the rest of the group with it, so nothing stays in the background unsupervised.
  *
- * Właściciel (`owner`) to klucz wołającego, np. task mise w repo; na właściciela przypada jedna żywa grupa,
- * a po jej końcu zostaje ostatni stan, do następnego startu.
+ * The owner (`owner`) is the caller's key, e.g. a mise task in a repo; an owner has one live group,
+ * and after it ends its last state stays until the next start.
  */
 
 /**
- * Ile czekać na koniec grupy po zabiciu; dłużej znaczy proces, którego system nie umie zakończyć. Czas łaski
- * (5 s na POSIX) plus ten limit mieszczą się w 10 s, które powłoka Tauri czeka na zatrzymanie daemona (§5.4).
+ * How long to wait for the end of a group after killing it; longer means a process the system cannot end. The grace period
+ * (5 s on POSIX) plus this limit fit in the 10 s the Tauri shell waits for the daemon to stop (§5.4).
  */
 const KILL_WAIT_MS = 3000;
 
 export interface GroupSpec {
   owner: string;
-  /** Program i argumenty, bez powłoki. */
+  /** The program and arguments, without a shell. */
   command: readonly string[];
-  /** Pełna ścieżka istniejącego katalogu: korzeń repo albo worktree, sprawdzony przez wołającego. */
+  /** The full path of an existing directory: the repo root or a worktree, checked by the caller. */
   cwd: string;
   env: NodeJS.ProcessEnv;
 }
 
-/** Grupa z liderem na rurach (task mise): jej wyjście trafia do logu źródła w module `logs`. */
+/** A group with the leader on pipes (a mise task): its output goes to the source's log in the `logs` module. */
 export interface PipedGroupSpec extends GroupSpec {
   logSource: LogSource;
 }
 
-/** Grupa z liderem w PTY: rozmiar terminala i odbiorca jego wyjścia. */
+/** A group with the leader in a PTY: the terminal size and the receiver of its output. */
 export interface TerminalGroupSpec extends GroupSpec {
   cols: number;
   rows: number;
   onData: (bytes: Uint8Array) => void;
 }
 
-/** Terminal lidera grupy: wejście z klawiatury i rozmiar okna. */
+/** The group leader's terminal: keyboard input and the window size. */
 export interface GroupTerminal {
   write(data: string): void;
   resize(cols: number, rows: number): void;
 }
 
-/** Wyjście jednego uruchomienia od strony `procs`: bajty wchodzą, ostatnie linie wychodzą do stanu `exited`. */
+/** The output of one run from the `procs` side: bytes go in, the last lines come out into the `exited` state. */
 interface RunOutput {
   push(stream: LogStream, chunk: Buffer): void;
   end(stream: LogStream): void;
   lastLines(): string[];
 }
 
-/** Czego `procs` potrzebuje od `logs` (§4.2); podłączane w fasadzie. */
+/** What `procs` needs from `logs` (§4.2); wired in the facade. */
 interface ProcsLogs {
-  /** Wyjście, które trafia do logu źródła. */
+  /** Output that goes to the source's log. */
   open(source: LogSource, runId: string, env: NodeJS.ProcessEnv): RunOutput;
-  /** Wyjście tylko do ostatnich linii stanu, zamaskowane, bez logu: ekran PTY to nie linie logu (ADR-28). */
+  /** Output only for the state's last lines, masked, without a log: a PTY screen is not log lines (ADR-28). */
   lastLinesOnly(env: NodeJS.ProcessEnv): RunOutput;
 }
 
@@ -69,7 +69,7 @@ export interface ProcessGroupsDeps {
   runtime: RuntimeFile;
   logs: ProcsLogs;
   platform: Promise<GroupPlatform>;
-  /** PTY dla `startTerminal`; `null` albo brak, gdy runtime go nie ma (Node) albo wołający go nie używa. */
+  /** A PTY for `startTerminal`; `null` or absent when the runtime has none (Node) or the caller does not use it. */
   terminals?: Promise<TerminalPlatform | null>;
   log: (msg: string) => void;
 }
@@ -81,8 +81,8 @@ interface Exit {
 }
 
 /**
- * `live`: lider żyje. `draining`: lider skończył, ale część grupy jeszcze żyje (zabijanie trwa albo się nie udało).
- * `exited`: system potwierdził, że grupa jest pusta; tylko ta faza zwalnia właściciela dla nowego startu.
+ * `live`: the leader is alive. `draining`: the leader ended, but part of the group is still alive (killing is in progress or failed).
+ * `exited`: the system confirmed the group is empty; only this phase frees the owner for a new start.
  */
 type Phase = { kind: "live" } | { kind: "draining"; exit: Exit } | { kind: "exited"; exit: Exit };
 
@@ -93,14 +93,14 @@ interface Group {
   readonly leaderExit: Promise<Exit>;
   phase: Phase;
   /**
-   * Stop zlecił użytkownik albo wyjście daemona, zanim lider skończył się sam; zostaje w stanie `exited` jako
-   * `stoppedByUser`. Stop po końcu lidera nie zmienia wyniku: liczy się kod wyjścia lidera.
+   * The user or a daemon exit ordered the stop before the leader ended by itself; it stays in the `exited` state as
+   * `stoppedByUser`. A stop after the leader's end does not change the result: the leader's exit code counts.
    */
   stopRequested: boolean;
   stopping?: Promise<RunState>;
-  /** Zabijanie reszty grupy po końcu lidera; stop w tym czasie czeka na nie zamiast zabijać drugi raz. */
+  /** Killing the rest of the group after the leader's end; a stop meanwhile waits for it instead of killing a second time. */
   draining?: Promise<boolean>;
-  /** Spełniana w `finish`, czyli po potwierdzeniu pustej grupy; grupa, której nie da się zabić, nie kończy się nigdy. */
+  /** Fulfilled in `finish`, i.e. after the empty group is confirmed; a group that cannot be killed never ends. */
   readonly ended: { promise: Promise<void>; resolve: () => void };
 }
 
@@ -108,16 +108,16 @@ export class ProcessGroups {
   private readonly deps: ProcessGroupsDeps;
   private readonly groups = new Map<string, Group>();
   private readonly starting = new Map<string, Promise<RunState>>();
-  /** Sieroty, których sprzątanie przy starcie się nie udało: zostają w `runtime.json` do następnego startu. */
+  /** Orphans whose cleanup at start failed: they stay in `runtime.json` until the next start. */
   private orphans: RuntimeGroup[] = [];
-  /** Daemon się zatrzymuje: nowe grupy powstałyby już po `stopAll` i przeżyłyby daemon. */
+  /** The daemon is stopping: new groups would be created after `stopAll` and would outlive the daemon. */
   private closing = false;
 
   constructor(deps: ProcessGroupsDeps) {
     this.deps = deps;
   }
 
-  /** Uruchamia grupę; gdy właściciel ma już grupę, która nie skończyła się na pewno, zwraca jej stan zamiast drugiej. */
+  /** Starts a group; when the owner already has a group that has not certainly ended, returns its state instead of a second one. */
   start(spec: PipedGroupSpec): Promise<RunState> {
     if (this.closing) return Promise.reject(new SpawnFailure("spawn_failed", "the daemon is stopping"));
     const current = this.groups.get(spec.owner);
@@ -135,8 +135,8 @@ export class ProcessGroups {
   }
 
   /**
-   * Uruchamia grupę, której lider działa w PTY (§4.4, ADR-26), i zwraca terminal do pisania i zmiany rozmiaru.
-   * Właściciel musi być nowy: sesja w terminalu nie ma „drugiego startu”, który oddałby istniejącą.
+   * Starts a group whose leader runs in a PTY (§4.4, ADR-26), and returns the terminal for writing and resizing.
+   * The owner must be new: a session in a terminal has no "second start" that would hand back the existing one.
    */
   async startTerminal(spec: TerminalGroupSpec): Promise<{ run: RunState; terminal: GroupTerminal }> {
     if (this.closing) throw new SpawnFailure("spawn_failed", "the daemon is stopping");
@@ -145,7 +145,7 @@ export class ProcessGroups {
     if (!terminals) throw new SpawnFailure("terminal_unavailable", "this daemon runtime has no PTY (daemon under Node)");
     const started = this.spawnGroup(spec, async (cwd) => launchTerminal(terminals, spec, cwd, this.deps.logs.lastLinesOnly(spec.env)));
     const run = started.then(({ group }) => stateOf(group));
-    // Błąd startu odbiera wołający przez `started`; `starting` służy tylko innym do czekania na koniec startu.
+    // The caller receives a start error through `started`; `starting` only lets others wait for the start to finish.
     run.catch(() => {});
     this.starting.set(spec.owner, run);
     try {
@@ -170,8 +170,8 @@ export class ProcessGroups {
   }
 
   /**
-   * Stan `exited` bieżącej grupy właściciela, gdy system potwierdzi jej koniec; `undefined`, gdy właściciel nie ma
-   * grupy. Dla wołającego, który czeka na wynik (komenda zbiorcza), a nie tylko pokazuje stan.
+   * The `exited` state of the owner's current group, once the system confirms its end; `undefined` when the owner has no
+   * group. For a caller that waits for the result (the batch command), not one that only shows the state.
    */
   async ended(owner: string): Promise<RunState | undefined> {
     await this.starting.get(owner)?.catch(() => undefined);
@@ -182,12 +182,12 @@ export class ProcessGroups {
   }
 
   /**
-   * Łagodny stop, po czasie łaski zabicie całej grupy. Wraca dopiero po potwierdzeniu, że grupa nie żyje;
-   * inaczej `stop_unconfirmed`, a uruchomienie zostaje `stopping`, więc stop można ponowić.
+   * A gentle stop, after the grace period a kill of the whole group. Returns only after confirming the group is dead;
+   * otherwise `stop_unconfirmed`, and the run stays `stopping`, so the stop can be retried.
    */
   async stop(owner: string): Promise<RunState | undefined> {
-    // Start w toku (np. czekanie na `ps`) jeszcze nie ma grupy w mapie; stop czeka na niego zamiast zgłosić brak.
-    // Nieudany start nie zostawia grupy, więc stop kończy się jak dla właściciela bez grupy.
+    // A start in progress (e.g. waiting for `ps`) has no group in the map yet; the stop waits for it instead of reporting none.
+    // A failed start leaves no group, so the stop ends as for an owner without a group.
     await this.starting.get(owner)?.catch(() => undefined);
     const group = this.groups.get(owner);
     if (!group) return undefined;
@@ -198,7 +198,7 @@ export class ProcessGroups {
     return group.stopping;
   }
 
-  /** Wyjście daemona: zatrzymuje wszystkie żywe grupy równolegle; grupy, których nie udało się zatrzymać, zgłasza w logu. */
+  /** Daemon exit: stops all live groups in parallel; groups that could not be stopped are reported in the log. */
   async stopAll(): Promise<void> {
     this.closing = true;
     await Promise.allSettled(this.starting.values());
@@ -210,8 +210,8 @@ export class ProcessGroups {
   }
 
   /**
-   * Start daemona: grupy z `runtime.json` zostały po poprzednim działaniu (awaria, twarde zabicie). Sprzątana jest
-   * tylko grupa, która na pewno jest nasza (§4.1, `GroupPlatform.reattach`), tym samym stopem co żywe grupy.
+   * Daemon start: groups from `runtime.json` were left by the previous run (a crash, a hard kill). Only a group that is
+   * certainly ours is cleaned up (§4.1, `GroupPlatform.reattach`), with the same stop as live groups.
    */
   async sweepOrphans(): Promise<void> {
     const platform = await this.deps.platform;
@@ -242,7 +242,7 @@ export class ProcessGroups {
   ): Promise<{ group: Group; launched: L }> {
     await requireDirectory(spec.cwd);
     const platform = await this.deps.platform;
-    // Przed startem: wyjście lidera trafia do logu z identyfikatorem uruchomienia od pierwszego bajtu.
+    // Before the start: the leader's output goes to the log with the run identifier from the first byte.
     const runId = randomUUID();
     const launched = await launch(spec.cwd, platform, runId);
     const { leader, leaderExit, output } = launched;
@@ -271,10 +271,10 @@ export class ProcessGroups {
     return { group, launched };
   }
 
-  /** Lider skończył sam albo po stopie: reszta grupy jest zabijana, a uruchomienie kończy się dopiero przy pustej grupie. */
+  /** The leader ended by itself or after a stop: the rest of the group is killed, and the run ends only at an empty group. */
   private async onLeaderExit(group: Group, exit: Exit): Promise<void> {
     group.phase = { kind: "draining", exit };
-    if (group.stopping) return; // stop sam potwierdzi koniec
+    if (group.stopping) return; // the stop confirms the end itself
     group.draining = (group.control.isEmpty() ? Promise.resolve(true) : killAndWait(group.control)).finally(() => {
       group.draining = undefined;
     });
@@ -283,7 +283,7 @@ export class ProcessGroups {
   }
 
   private async stopGroup(group: Group): Promise<RunState> {
-    // Lider, który skończył sam, nie został zatrzymany przez użytkownika: jego kod wyjścia jest wynikiem.
+    // A leader that ended by itself was not stopped by the user: its exit code is the result.
     if (group.phase.kind === "live") group.stopRequested = true;
     const platform = await this.deps.platform;
     const empty = group.draining ? await group.draining : await terminate(group.control, platform.graceMs);
@@ -293,13 +293,13 @@ export class ProcessGroups {
         `${group.record.command.join(" ")} (pid ${group.record.pid}): some processes of the group are still running after the kill`,
       );
     }
-    // Pusta grupa znaczy, że lider nie żyje; zdarzenie `exit` przychodzi najpóźniej chwilę później.
+    // An empty group means the leader is dead; the `exit` event arrives a moment later at the latest.
     if (group.phase.kind === "live") group.phase = { kind: "draining", exit: await group.leaderExit };
     this.finish(group);
     return stateOf(group);
   }
 
-  /** Grupa potwierdzona jako pusta: koniec uruchomienia i zniknięcie z `runtime.json`. */
+  /** A group confirmed empty: the end of the run and its removal from `runtime.json`. */
   private finish(group: Group): void {
     if (group.phase.kind !== "draining") return;
     group.phase = { kind: "exited", exit: group.phase.exit };
@@ -309,8 +309,8 @@ export class ProcessGroups {
   }
 
   /**
-   * Jedyny zapis `runtime.json`: sieroty, których nie udało się sprzątnąć, i grupy bez potwierdzonego końca.
-   * Nieudany zapis (np. plik trzymany przez antywirusa) nie zmienia stanu w pamięci; następny zapis go nadrobi.
+   * The only write of `runtime.json`: orphans that could not be cleaned up, and groups without a confirmed end.
+   * A failed write (e.g. a file held by an antivirus) does not change the in-memory state; the next write catches up.
    */
   private persist(): void {
     const live = [...this.groups.values()].filter((g) => g.phase.kind !== "exited").map((g) => g.record);
@@ -321,7 +321,7 @@ export class ProcessGroups {
     }
   }
 
-  /** Plik, którego nie da się odczytać, jest odkładany obok, żeby następny zapis nie skasował zapisanych w nim grup. */
+  /** A file that cannot be read is moved aside, so that the next write does not erase the groups recorded in it. */
   private readRuntime(): RuntimeGroup[] {
     try {
       return this.deps.runtime.read();
@@ -333,19 +333,19 @@ export class ProcessGroups {
   }
 }
 
-/** Uruchomiony lider, zanim stanie się grupą: wyjście i koniec są już podłączone. */
+/** A started leader before it becomes a group: its output and end are already wired. */
 interface Launched {
   leader: GroupLeader & { kill(): void };
   leaderExit: Promise<Exit>;
   output: RunOutput;
 }
 
-/** Lider z rurami (stdin, stdout, stderr), jak task mise. */
+/** A leader with pipes (stdin, stdout, stderr), like a mise task. */
 async function launchPiped(spec: GroupSpec, cwd: string, detached: boolean, output: RunOutput): Promise<Launched> {
   const [program, ...args] = spec.command;
   if (program === undefined) throw new Error("empty command");
   const child = spawn(program, args, { cwd, env: spec.env, detached, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
-  // Wyjście i koniec procesu są podłączone od razu: krótki task może skończyć się, zanim padnie pierwszy `await`.
+  // The process output and end are wired at once: a short mise task may end before the first `await` happens.
   attachOutput(child, output);
   const leaderExit = new Promise<Exit>((resolve) => {
     child.once("exit", (code, signal) => resolve({ code, signal, at: new Date().toISOString() }));
@@ -362,7 +362,7 @@ async function launchPiped(spec: GroupSpec, cwd: string, detached: boolean, outp
   return { leader, leaderExit, output };
 }
 
-/** Lider w PTY jest zarazem terminalem; jego wyjście idzie do wołającego i do ostatnich linii stanu `exited`. */
+/** A leader in a PTY is also the terminal; its output goes to the caller and to the last lines of the `exited` state. */
 function launchTerminal(
   terminals: TerminalPlatform,
   spec: TerminalGroupSpec,
@@ -391,15 +391,15 @@ function launchTerminal(
   return { leader, leaderExit, output };
 }
 
-/** stdout i stderr są czytane zawsze, bo nieczytana rura blokuje proces po kilkudziesięciu KB (§4.1). */
+/** stdout and stderr are always read, because an unread pipe blocks the process after a few dozen KB (§4.1). */
 function attachOutput(child: ChildProcess, output: RunOutput): void {
   for (const stream of ["stdout", "stderr"] as const) {
     child[stream]?.on("data", (chunk: Buffer) => output.push(stream, chunk));
     child[stream]?.on("end", () => output.end(stream));
   }
-  // Proces, który nie czyta stdin, może go zamknąć; EPIPE przy łagodnym stopie nie jest błędem.
+  // A process that does not read stdin may close it; EPIPE on a gentle stop is not an error.
   child.stdin?.on("error", () => {});
-  // Błąd po starcie (np. nieudany `kill`) bez słuchacza zakończyłby daemon; stan i tak wynika z `exit`.
+  // An error after the start (e.g. a failed `kill`) without a listener would end the daemon; the state follows from `exit` anyway.
   child.on("error", () => {});
 }
 
@@ -428,7 +428,7 @@ function stateOf(group: Group): RunState {
   };
 }
 
-/** Jedna droga zatrzymania dla żywych grup i sierot: łagodnie, po czasie łaski zabicie, potem czekanie na pustą grupę. */
+/** One way to stop for live groups and orphans: gently, after the grace period a kill, then waiting for an empty group. */
 async function terminate(control: GroupControl, graceMs: number): Promise<boolean> {
   control.askToStop();
   return (await waitUntil(() => control.isEmpty(), graceMs)) || killAndWait(control);
@@ -445,7 +445,7 @@ async function requireDirectory(cwd: string): Promise<void> {
   if (!info?.isDirectory()) throw new SpawnFailure("cwd_invalid", `the working directory does not exist: ${cwd}`);
 }
 
-/** Czeka na `spawn` albo `error`: dopiero wtedy wiadomo, czy program w ogóle wystartował. */
+/** Waits for `spawn` or `error`: only then is it known whether the program started at all. */
 function spawned(child: ChildProcess, program: string): Promise<void> {
   return new Promise((resolve, reject) => {
     child.once("spawn", () => resolve());
