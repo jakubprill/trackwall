@@ -13,11 +13,11 @@ Run, stop and follow the mise tasks of any repo, with live logs and the errors p
 - A live log of each task, with errors and warnings highlighted.
 - A clean stop: a stopped task takes everything it started with it.
 - Secrets kept out of the log.
-- The tasks agents run, in the same place, where you can watch and stop them.
+- The mise tasks agents run, in the same place, where you can watch and stop them.
 
 ## How it works
 
-Select a repo and open its "mise tasks" tab: it lists the repo's tasks as `mise tasks ls` shows them. "Run" starts a task in the repo root and opens its log, which follows the output live, with errors and warnings highlighted. When a task fails, the tab shows its exit code and the last lines of output.
+Select a repo and open its "mise tasks" tab: it lists the repo's tasks as `mise tasks ls` shows them. "Run" starts a task in the repo root and opens its log, which follows the output live, with errors and warnings highlighted. When a task fails, the tab shows its exit code and the last lines of output. "Log" next to any task shows or hides its log, also for a run an agent started.
 
 "Stop" ends the task together with every process it started, on Windows and on macOS alike, so no server is left holding a port. Quitting Trackwall stops every task, and if Trackwall ever crashes, its next start cleans up what was left running.
 

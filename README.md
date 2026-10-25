@@ -4,7 +4,7 @@ A desktop app for working across many git repositories and many CLI coding agent
 
 Trackwall is at a very early stage. Expect missing features, rough edges and breaking changes between versions.
 
-Runs on Windows and macOS. Builds are on the [Releases](https://github.com/jakubprill/trackwall/releases) page; they are not signed yet, so see [installation notes](docs/release.md#installing-on-a-new-computer) before the first run.
+Runs on Windows and macOS. Builds are on the [Releases](https://github.com/jakubprill/trackwall/releases) page; they are not signed yet, so see [installation notes](https://jakubprill.github.io/trackwall/guide/install) before the first run.
 
 ## License
 

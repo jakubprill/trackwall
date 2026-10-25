@@ -17,7 +17,7 @@ Give an agent a task on its own branch and worktree, and review its changes befo
 
 ## How it works
 
-Press "+" in "Sessions", pick a repo and write the prompt. Trackwall creates a branch named after the prompt (`trackwall/<prompt slug>`) from the repo's default branch, in a separate git worktree, and starts Copilot CLI there with your prompt as the first message. The task shows on the list like a session, with the same states.
+Press "+" in "Sessions", pick a repo and write the prompt. Trackwall creates a branch named after the task's title or prompt (`trackwall/<slug>`) from the repo's default branch, in a separate git worktree, and starts Copilot CLI there with your prompt as the first message. The task shows on the list like a session, with the same states.
 
 The "Changes" tab follows the worktree live: the files and diff against the default branch, the task's commits and what the agent has not committed yet. "VS Code" opens the worktree in your editor. When the agent finishes, it leaves a summary above the task's tabs.
 
@@ -36,5 +36,5 @@ When another task in the same repo changes some of the same files, a warning abo
 
 - Worktrees live in `~/.trackwall/worktrees/<repo>/`.
 - Copilot CLI asks to trust every new folder. To stop it asking for every task, add the `worktrees` folder (the new task form shows its full path) to `trustedFolders` in `~/.copilot/config.json`.
-- A task's agent stays in its worktree and does not push; the branch is yours to push.
+- Trackwall tells a task's agent to stay in its worktree, commit on its branch and not push unless your prompt asks for it. This is an instruction to the agent, not a lock: the branch is yours to push.
 - An agent can also propose a task for you to start: see [Main session and task proposals](/features/main-session).

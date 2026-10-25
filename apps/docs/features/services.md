@@ -16,11 +16,11 @@ Start a service together with the services it calls, see when it is ready, and c
 
 ## How it works
 
-A repo with a mise task called `dev` has a "Service" panel at the top of its [mise tasks](/features/mise-tasks) tab. "Start with dependencies" looks at the [connection graph](/features/graph), finds the repos this service calls over HTTP (up to 12) and runs `dev` in each of them, starting a repo only once the repos it calls are up.
+A repo with a mise task called `dev` has a "Service" panel at the top of its [mise tasks](/features/mise-tasks) tab. "Start with dependencies" looks at the [connection graph](/features/graph), finds the repos this service calls over HTTP and runs `dev` in each of them, starting a repo only once the repos it calls are up.
 
 A service is "ready on port N" as soon as its port accepts connections. Trackwall takes the port from the service's log (`Tomcat started on port 8081`, `Local: http://localhost:5173`) or from `server.port` on its [repo card](/features/repo-card). A service is "not answering" when its port does not open within five minutes or stops answering, and "crashed" when its process ends by itself.
 
-A dependency that cannot start is skipped, and the panel says why: it has no `dev` task, its mise configuration is not trusted, or its port is already taken by another service or by a program Trackwall did not start.
+A dependency that cannot start is skipped, and the panel says why: it has no `dev` mise task, its mise configuration is not trusted, or its port is already taken by another service or by a program Trackwall did not start.
 
 "Stop with dependencies" stops the service and the dependencies this start brought up, and leaves alone the ones that were already running. Pressing it while the start is still going cancels the start.
 
@@ -35,8 +35,9 @@ Agents do the same through the [MCP server](/features/mcp): `start_service` star
 
 ## Good to know
 
+- One start takes at most 12 repos, this one included; a larger set is refused, and the panel says so.
 - Dependencies come from HTTP calls in the graph, including connections you added by hand, not from shared packages.
-- A `dev` task started with its own "Run" button also shows in the panel as the service.
+- A `dev` mise task started with its own "Run" button also shows in the panel as the service.
 - A service runs from the repo itself, not from the worktree of an [agent task](/features/tasks).
 - An agent in a session starts and stops only the service of its own repo, but may call any running service.
 - `call_endpoint` works only on this computer, returns at most 32 KB of the body and replaces secrets from the environment with `***`.

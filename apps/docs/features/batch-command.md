@@ -18,18 +18,18 @@ Sync, install, set up and build many repos with one command, and see the result 
 
 "Batch command", under the repo list, opens a panel. Choose the repos (by default every repo the tag filter shows) and the steps: sync, tools (`mise install`), dependencies (the mise task `setup`) and build (the mise task `build`).
 
-Each repo runs its steps in order, and three repos run at once. The panel fills in as the steps finish. A repo without one of the tasks skips that step; an error stops only that repo, and the others carry on.
+Each repo runs its steps in order, and three repos run at once. The panel fills in as the steps finish. A repo without one of the mise tasks skips that step; an error stops only that repo, and the others carry on.
 
-"Cancel" stops the tasks that are running, including one you had started yourself from the repo before the command took it over, and starts no further ones.
+"Cancel" stops the mise tasks that are running, including one you had started yourself from the repo before the command took it over, and starts no further ones.
 
 ## Use it
 
 1. In "Repos", narrow the list with the tag filter if you like.
 2. Press "Batch command".
 3. Choose the repos and steps, and start.
-4. Read the result per repo and step; open a failed one to see its last lines.
+4. Read the result per repo and step; a failed step shows its exit code and last lines under the repo.
 
 ## Good to know
 
-- A repo tagged `no-mise` has no tasks for the setup and build steps.
-- Running the command again is fast when the tasks declare their `sources` and `outputs` in `mise.toml`, because mise then skips work that is up to date.
+- A repo tagged `no-mise` has no mise tasks for the setup and build steps.
+- Running the command again is fast when the mise tasks declare their `sources` and `outputs` in `mise.toml`, because mise then skips work that is up to date.

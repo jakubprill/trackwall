@@ -11,7 +11,7 @@ Let one agent plan work and hand it to other agents, while you approve every tas
 
 - A main session that splits a larger job into tasks and proposes them, each with a title and a prompt.
 - Every proposal waiting for your decision: read it, edit the prompt, start it or reject it with a reason.
-- Several proposals started at once.
+- Several proposals started with one press; they start one after another.
 - The main session following its tasks to the end and reading their summaries and changes.
 
 ## How it works
@@ -34,5 +34,5 @@ A task's agent finishes with a summary, shown above the task's tabs. The main se
 - A proposal for a repo that already has tasks says so.
 - In the session grid, a tile with proposals shows their prompts with "Start task" and "Reject…"; "Next waiting" and Alt+J go to proposals too.
 - Proposals last until Trackwall quits, at most 20 at a time; summaries stay with their tasks.
-- A proposal from an agent outside Trackwall is marked "agent outside Trackwall" and listed at the top level.
+- A proposal from an agent outside Trackwall is marked "agent outside Trackwall" and listed at the top level, like a proposal from a session you have closed. Such an agent can propose tasks, but cannot report a task's summary.
 - Prompts, titles and summaries cannot contain invisible characters, so what you read before "Start task" is the whole prompt.

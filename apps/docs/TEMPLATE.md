@@ -1,6 +1,6 @@
 # Feature page template
 
-Every page in `features/` follows this template, so a reader who knows one page knows them all, and the "All features" list, the sidebar and `llms.txt` stay complete. Copy the block below into `features/<feature>.md`, add the page to its group in `.vitepress/sidebar.ts` (the groups are also the sections of "All features"), and fill it in. `test/pages.test.ts` checks the frontmatter, the title and lede, the sections, the sidebar and that no page points at decision records.
+Every page in `features/` follows this template, so a reader who knows one page knows them all, and the "All features" list, the sidebar and `llms.txt` stay complete. Copy the block below into `features/<feature>.md`, add the page to its group in `.vitepress/sidebar.ts` (the groups are also the sections of "All features"), and fill it in. `test/pages.test.ts` checks the frontmatter, the title and lede, the sections and their order, the length of "What you get", the sidebar and the home page cards, and that no page points at decision records or the developer documents.
 
 The page is done when a colleague who has never opened Trackwall can read it aloud in a technical meeting and everyone in the room knows what the feature gives them, how to use it and where it stops.
 
@@ -10,7 +10,9 @@ The page is done when a colleague who has never opened Trackwall can read it alo
 - **Lead with the value.** The description and "What you get" say what changes for the reader, in their words: "see which agent is waiting for you", not "session state from hooks".
 - **Short sentences, one idea each.** Bullets for lists of things, prose for how things fit together, a table for keys or options.
 - **Every fact on one page.** A fact that belongs to another feature is a link to that page, not a copy.
-- **Only what Trackwall does today.** No plans, no history, no decision records: the page describes the delivered feature.
+- **Only what Trackwall does today.** No plans, no history, no decision records and no links into `docs/`: the page describes the delivered feature, and whatever the reader needs is on the site.
+
+The pages in `guide/` (what Trackwall is, installing it, connecting Copilot CLI) are not features and keep their own shape: the same frontmatter and lede, then the steps the reader follows. The same rules of writing apply to them.
 
 ## The page
 

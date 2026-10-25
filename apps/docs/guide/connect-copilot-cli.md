@@ -7,13 +7,28 @@ description: Connect Copilot CLI to the Trackwall MCP server once, and every ses
 
 Connect Copilot CLI to the Trackwall MCP server once, and every session can use it.
 
-Copilot CLI starts Trackwall's MCP bridge (`trackwall-daemon mcp-stdio`) as a local MCP server. The bridge finds the running Trackwall by itself, so you connect once, and the configuration holds no token. The ready command for your installation is in the "Daemon" view (Ctrl+9, copy button). It looks like this:
+Once connected, an agent can answer questions like "Which repos are in my projects folder?" or "Who calls orders-api?" from what Trackwall knows, and use the rest of the [MCP server](/features/mcp) tools.
 
-```sh
-copilot mcp add trackwall -- /Applications/Trackwall.app/Contents/MacOS/trackwall-daemon mcp-stdio                     # macOS
-copilot mcp add trackwall '--' '<Trackwall directory>\trackwall-daemon.exe' mcp-stdio    # Windows (PowerShell; `--` in single quotes)
-```
+## Connect
 
-The command adds a `trackwall` entry to `~/.copilot/mcp-config.json` (on Windows `%USERPROFILE%\.copilot\mcp-config.json`; the same entry in JSON is in the "Daemon" view, in case it needs to be pasted by hand). Trackwall must be running before Copilot CLI starts, because Copilot starts MCP servers at session start; `/mcp` in Copilot CLI shows whether the `trackwall` server is connected. Then it is enough to ask the agent, for example, "Which repos are in my projects folder?". The MCP server also gives an instruction on when to reach for which tool, but Copilot CLI 1.0.103 takes such instructions only from servers on its own allowlist; in a session started outside Trackwall you can turn it on with `copilot --allow-all-mcp-server-instructions` (which turns on the instructions of every connected MCP server). Sessions from the "Sessions" view get it without that.
+1. Start Trackwall.
+2. Open the "Daemon" view (Ctrl+9) and copy the command shown there. It is ready for your installation and looks like this:
 
-Other MCP clients can also talk to the daemon directly through Streamable HTTP at `http://127.0.0.1:<port>/mcp` with the header `Authorization: Bearer <token>`; the port and token are in `daemon.json` in Trackwall's state folder (`~/.trackwall`) and change every time Trackwall starts.
+   ```sh
+   copilot mcp add trackwall -- /Applications/Trackwall.app/Contents/MacOS/trackwall-daemon mcp-stdio                     # macOS
+   copilot mcp add trackwall '--' '<Trackwall directory>\trackwall-daemon.exe' mcp-stdio    # Windows (PowerShell; `--` in single quotes)
+   ```
+
+3. Run it once in a terminal.
+4. Start Copilot CLI and type `/mcp`: the `trackwall` server shows as connected.
+
+## Good to know
+
+- The command adds a `trackwall` entry to `~/.copilot/mcp-config.json` (on Windows `%USERPROFILE%\.copilot\mcp-config.json`). The "Daemon" view also shows the entry as JSON, in case you prefer to paste it there by hand.
+- The entry holds no password or token: it finds the running Trackwall by itself, so it keeps working after a restart.
+- Trackwall must be running before a Copilot CLI session starts, because Copilot CLI connects to its MCP servers when a session starts.
+- Trackwall also tells the agent when to reach for which tool. Sessions started from "Sessions" get this guidance; in a session you start yourself, Copilot CLI uses it only when started as `copilot --allow-all-mcp-server-instructions`, which accepts it from every connected MCP server.
+
+## Other MCP clients
+
+An MCP client that speaks HTTP can connect to `http://127.0.0.1:<port>/mcp` with the header `Authorization: Bearer <token>`. The port and token are in `daemon.json` in the state directory (`~/.trackwall`) and change every time Trackwall starts, so the command above is the simpler way.

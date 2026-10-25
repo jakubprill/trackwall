@@ -19,7 +19,7 @@ Run several Copilot CLI agents side by side, each in its own repo, and always kn
 
 Open "Sessions", pick a repo and Copilot CLI starts in a terminal inside Trackwall, already connected to the [Trackwall MCP server](/features/mcp). Start as many sessions as you like; the list on the left shows each one with its repo, its state and what the agent is doing right now.
 
-When an agent finishes its turn or asks for approval, its session turns to "waiting for you" and the counter on the view bar goes up. The session stays waiting until you have looked at it: open its terminal, or type into it, and it becomes "idle". A request for approval keeps waiting until you answer it. "Next waiting" (or Alt+J) takes you straight to the next session that needs you.
+When an agent finishes its turn, its session shows "waiting for you"; when it asks for approval, "asking for approval". Either way the counter on the view bar goes up. The session stays waiting until you have looked at it: select it, or type into its terminal, and it becomes "idle". In the grid, only the selected tile counts as looked at. A request for approval keeps waiting until you answer it. "Next waiting" (or Alt+J) takes you straight to the next session that needs you.
 
 You do not have to keep Trackwall in front. When its window is in the background, a waiting session shows a system notification ("Session in orders-api: Copilot CLI is asking for approval"), the taskbar icon flashes (the Dock icon bounces on macOS), and the tray menu gets a "Waiting: orders-api" item. Win+Alt+J (⌃⌥J on macOS) works from any app: it brings Trackwall forward on the next session that needs you. A left click on the tray icon opens a small panel with everything waiting for you.
 
@@ -42,16 +42,15 @@ Every session also gets short instructions from Trackwall on how to work with yo
 | Alt+1 … Alt+9 (⌥ on macOS) | Select the session at that position in the list, turning the grid to its page. |
 | Alt+J | Jump to the next session or task proposal waiting for you, from any view. |
 | Win+Alt+J (⌃⌥J on macOS) | Bring Trackwall forward on the next session waiting for you, from any app. |
-| Esc, Ctrl+C | Interrupt the agent's turn, as in Copilot CLI. |
 
-These keys work while a terminal has the focus and are not typed into the session. On macOS, an Option key that types a character on your keyboard layout (⌥5 for `[` on a German keyboard) stays a character.
+Alt+1 … Alt+9 and Alt+J work while a terminal has the focus too, and are not typed into the session; Esc and Ctrl+C go to Copilot CLI as usual and interrupt the agent's turn. On macOS, an Option key that types a character on your keyboard layout (⌥5 for `[` on a German keyboard) stays a character.
 
 ## Good to know
 
 - Copilot CLI must be on your `PATH` as `copilot` and signed in.
 - Copilot CLI takes over the mouse in the terminal. Select text by dragging with Option (macOS) or Shift (Windows) held down, then copy with Cmd+C or Ctrl+C. Ctrl+C without a selection interrupts the agent.
 - Drag a file or folder from Explorer or Finder onto a terminal to paste its path, quoted when it has a space.
-- "Stop" ends the session with everything it started; "Close" removes an ended session from the list. The X next to a session does both in one click and asks first while the agent is working.
+- "Stop" ends the session with everything it started; "Close" removes an ended session from the list. The X next to a session does both in one click and asks first while the agent is working. On an [agent task](/features/tasks), the X closes only its session: the task stays on the list, and opening it alone resumes it.
 - Sessions end when Trackwall quits and are not recorded.
 - The notifications appear under "Trackwall" in the notification settings of Windows and macOS, where you can turn them off.
 - The layout lasts until Trackwall closes; an extra window keeps its layout across restarts.

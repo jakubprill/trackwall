@@ -30,6 +30,6 @@ Click an object to select it and turn the camera to it; the panel on the right s
 
 ## Good to know
 
-- Without WebGL (an old graphics driver, a blocked graphics card), a message with "Try again" takes the place of the picture; the queue and the details keep working.
+- Without WebGL (an old graphics driver, a blocked graphics card), or when the graphics card drops the picture, a message with "Try again" takes the place of the picture; the queue and the details keep working.
 - When the projects folder has gone or `workspace.yaml` has an error, the view says so and offers "Open Settings".
 - With reduced motion turned on in your system, the picture stands still.

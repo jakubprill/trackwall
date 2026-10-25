@@ -33,5 +33,5 @@ From the card Trackwall gives each repo tags: `java`, `typescript`, `frontend`, 
 
 - A card is computed once per commit and kept in `~/.trackwall/cards`, so it opens instantly the next time.
 - `no-mise` shows as the warning "no mise tasks": the setup and build steps of the [Batch command](/features/batch-command) and the [mise tasks](/features/mise-tasks) tab have nothing to run in that repo.
-- Add your own tags under `repoTags` in `~/.trackwall/workspace.yaml`, as a tag and the repo names or remote addresses it matches: `repoTags: { core-api: ["*-core"] }`. This is done by hand for now.
+- Add your own tags under `repoTags` in `~/.trackwall/workspace.yaml`, as a tag and the repo names or remote addresses it matches: `repoTags: { core-api: ["*-core"] }`. You edit this file by hand.
 - The card is what the [connection graph](/features/graph) and the [MCP server](/features/mcp) build on.
