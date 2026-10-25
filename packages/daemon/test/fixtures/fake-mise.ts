@@ -1,9 +1,9 @@
-// Atrapa `mise` dla testów modułów `mise` i `batch`: zachowanie wynika z `fake-mise.json` w katalogu roboczym
-// (korzeń repo). { tasks: [{ name, description?, hide? }], untrusted?: boolean, exits?: { [task]: kod }, installExit?: kod }
-// `tasks ls --json` drukuje taski albo błąd zaufania, `trust` zdejmuje `untrusted`. `run <task>` drukuje nazwę taska
-// i, gdy task jest w `exits`, kończy się od razu z tym kodem, a inaczej uruchamia drzewo procesów z `process-tree.ts`
-// (PID-y w `<repo>/pids`), które działa do zatrzymania. `install` kończy się kodem `installExit` (domyślnie 0).
-// `run` i `install` dopisują się do `<repo>/calls.log`, żeby test widział kolejność. A task in `servers` runs
+// A fake `mise` for the tests of the `mise` and `batch` modules: its behaviour follows `fake-mise.json` in the working directory
+// (the repo root). { tasks: [{ name, description?, hide? }], untrusted?: boolean, exits?: { [task]: code }, installExit?: code }
+// `tasks ls --json` prints the mise tasks or the trust error, `trust` clears `untrusted`. `run <task>` prints the mise task's name
+// and, when the mise task is in `exits`, ends at once with that code, and otherwise starts a process tree from `process-tree.ts`
+// (PIDs in `<repo>/pids`) that runs until stopped. `install` ends with the code `installExit` (0 by default).
+// `run` and `install` append to `<repo>/calls.log`, so that the test sees the order. A mise task in `servers` runs
 // `fake-service.ts` with that config instead (the `services` tests, ADR-45). A config in a directory listed in
 // `MISE_TRUSTED_CONFIG_PATHS` counts as trusted (task worktrees, ADR-59).
 import { spawn } from "node:child_process";
@@ -52,7 +52,7 @@ if (args[0] === "tasks" && args[1] === "ls" && args[2] === "--json") {
   process.exit(config.installExit ?? 0);
 } else if (args[0] === "run" && args[1] !== undefined && config.exits?.[args[1]] !== undefined) {
   appendFileSync(calls, `run ${args[1]}\n`);
-  console.log(`[${args[1]}] $ koniec`);
+  console.log(`[${args[1]}] $ done`);
   process.exit(config.exits[args[1]]);
 } else if (args[0] === "run" && args[1] !== undefined && config.servers?.[args[1]] !== undefined) {
   appendFileSync(calls, `run ${args[1]}\n`);
@@ -69,6 +69,6 @@ if (args[0] === "tasks" && args[1] === "ls" && args[2] === "--json") {
   const tree = spawn(process.execPath, [join(import.meta.dir, "process-tree.ts"), pids, "0", "2"], { stdio: "inherit", windowsHide: true });
   tree.on("exit", (code) => process.exit(code ?? 1));
 } else {
-  console.error(`atrapa mise: nieznana komenda ${args.join(" ")}`);
+  console.error(`fake mise: unknown command ${args.join(" ")}`);
   process.exit(2);
 }

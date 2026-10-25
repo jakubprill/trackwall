@@ -1,13 +1,13 @@
 import type { TerminalPlatform, TerminalProcess, TerminalSpec } from "./terminal.ts";
 
 /**
- * PTY z `Bun.spawn({ terminal })` (ADR-1, ADR-26): ConPTY na Windowsie, PTY z `setsid` na macOS i Linuksie.
- * Ładowany tylko pod Bun.
+ * A PTY from `Bun.spawn({ terminal })` (ADR-1, ADR-26): ConPTY on Windows, a PTY with `setsid` on macOS and Linux.
+ * Loaded only under Bun.
  */
 
 /**
- * Ile po końcu lidera czekać na koniec strumienia PTY. Na POSIX przychodzi, gdy żaden proces nie trzyma już
- * terminala; ConPTY nie kończy strumienia, dopóki pseudokonsola jest otwarta, więc tam zamyka ją ten limit.
+ * How long to wait after the leader's end for the end of the PTY stream. On POSIX it arrives when no process holds the
+ * terminal any more; ConPTY does not end the stream while the pseudoconsole is open, so there this limit closes it.
  */
 const DRAIN_MS = 500;
 
@@ -29,8 +29,8 @@ function spawn(spec: TerminalSpec): TerminalProcess {
   const close = () => {
     if (!terminal.closed) terminal.close();
   };
-  // Terminal zamyka się dopiero po końcu lidera i jego wyjścia: inaczej każda sesja zostawiałaby otwarty PTY
-  // (deskryptor na POSIX, pseudokonsolę z procesem conhost na Windowsie) do wyjścia daemona.
+  // The terminal closes only after the leader and its output end: otherwise every session would leave an open PTY
+  // (a descriptor on POSIX, a pseudoconsole with a conhost process on Windows) until the daemon exits.
   const exited = proc.exited.then(async (code) => {
     await Promise.race([streamEnded, Bun.sleep(DRAIN_MS)]);
     close();

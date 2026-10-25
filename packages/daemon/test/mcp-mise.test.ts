@@ -22,7 +22,7 @@ const clients: Client[] = [];
 
 beforeAll(async () => {
   daemon = await startSessionApi(TOKEN, {
-    repos: { sklep: { "fake-mise.json": MISE_CONFIG }, magazyn: { "fake-mise.json": MISE_CONFIG } },
+    repos: { shop: { "fake-mise.json": MISE_CONFIG }, warehouse: { "fake-mise.json": MISE_CONFIG } },
     miseCommand: FAKE_MISE,
   });
   outside = await connectHttpClient(daemon.api.port, TOKEN);
@@ -50,17 +50,15 @@ describe("mise tasks over MCP (real process groups, fake mise)", () => {
   test(
     "run_mise_task runs a listed task, wait_for_mise_task returns its exit code and tail the output of that run",
     async () => {
-      const started = MiseTaskRunResult.parse(
-        (await call(outside, "run_mise_task", { repo: "sklep", miseTask: "test" })).structuredContent,
-      );
+      const started = MiseTaskRunResult.parse((await call(outside, "run_mise_task", { repo: "shop", miseTask: "test" })).structuredContent);
 
       const ended = MiseTaskRunResult.parse(
-        (await call(outside, "wait_for_mise_task", { repo: "sklep", miseTask: "test", timeoutSeconds: 20 })).structuredContent,
+        (await call(outside, "wait_for_mise_task", { repo: "shop", miseTask: "test", timeoutSeconds: 20 })).structuredContent,
       );
       expect(ended.run).toMatchObject({ kind: "exited", runId: started.run.runId, exitCode: 3, stoppedByUser: false });
 
-      const log = LogTail.parse((await call(outside, "tail", { repo: "sklep", miseTask: "test", limit: 10 })).structuredContent);
-      expect(log.records.map((r) => [r.runId, r.msg])).toContainEqual([started.run.runId, "[test] $ koniec"]);
+      const log = LogTail.parse((await call(outside, "tail", { repo: "shop", miseTask: "test", limit: 10 })).structuredContent);
+      expect(log.records.map((r) => [r.runId, r.msg])).toContainEqual([started.run.runId, "[test] $ done"]);
     },
     TIMEOUT,
   );
@@ -68,21 +66,19 @@ describe("mise tasks over MCP (real process groups, fake mise)", () => {
   test(
     "a running task: the wait ends at the timeout with running, the list shows it and stop_mise_task stops the group",
     async () => {
-      const started = MiseTaskRunResult.parse((await call(outside, "run_mise_task", { repo: "sklep", miseTask: "dev" })).structuredContent);
-      const again = MiseTaskRunResult.parse((await call(outside, "run_mise_task", { repo: "sklep", miseTask: "dev" })).structuredContent);
+      const started = MiseTaskRunResult.parse((await call(outside, "run_mise_task", { repo: "shop", miseTask: "dev" })).structuredContent);
+      const again = MiseTaskRunResult.parse((await call(outside, "run_mise_task", { repo: "shop", miseTask: "dev" })).structuredContent);
       // The second call does not start a second group; it returns the running one.
       expect(again.run.runId).toBe(started.run.runId);
 
       const waited = MiseTaskRunResult.parse(
-        (await call(outside, "wait_for_mise_task", { repo: "sklep", miseTask: "dev", timeoutSeconds: 1 })).structuredContent,
+        (await call(outside, "wait_for_mise_task", { repo: "shop", miseTask: "dev", timeoutSeconds: 1 })).structuredContent,
       );
       expect(waited.run).toMatchObject({ kind: "running", runId: started.run.runId });
       const running = ListRunningMiseTasksResult.parse((await call(outside, "list_running_mise_tasks", {})).structuredContent);
-      expect(running.miseTasks.map((t) => [t.repo, t.miseTask, t.run.runId])).toEqual([["sklep", "dev", started.run.runId]]);
+      expect(running.miseTasks.map((t) => [t.repo, t.miseTask, t.run.runId])).toEqual([["shop", "dev", started.run.runId]]);
 
-      const stopped = MiseTaskRunResult.parse(
-        (await call(outside, "stop_mise_task", { repo: "sklep", miseTask: "dev" })).structuredContent,
-      );
+      const stopped = MiseTaskRunResult.parse((await call(outside, "stop_mise_task", { repo: "shop", miseTask: "dev" })).structuredContent);
       expect(stopped.run).toMatchObject({ kind: "exited", runId: started.run.runId, stoppedByUser: true });
       expect(ListRunningMiseTasksResult.parse((await call(outside, "list_running_mise_tasks", {})).structuredContent)).toEqual({
         miseTasks: [],
@@ -92,29 +88,29 @@ describe("mise tasks over MCP (real process groups, fake mise)", () => {
   );
 
   test("a task not on the mise list is not_found and nothing runs", async () => {
-    expect(errorText(await call(outside, "run_mise_task", { repo: "magazyn", miseTask: "deploy" }))).toBe(
-      'not_found: repo magazyn has no mise task "deploy"',
+    expect(errorText(await call(outside, "run_mise_task", { repo: "warehouse", miseTask: "deploy" }))).toBe(
+      'not_found: repo warehouse has no mise task "deploy"',
     );
-    expect(existsSync(join(daemon.projects, "magazyn", "calls.log"))).toBe(false);
+    expect(existsSync(join(daemon.projects, "warehouse", "calls.log"))).toBe(false);
   });
 
   test("waiting for and stopping a task that has not been run is not_found", async () => {
-    expect(errorText(await call(outside, "wait_for_mise_task", { repo: "magazyn", miseTask: "dev", timeoutSeconds: 1 }))).toBe(
-      'not_found: mise task "dev" in magazyn has not been run',
+    expect(errorText(await call(outside, "wait_for_mise_task", { repo: "warehouse", miseTask: "dev", timeoutSeconds: 1 }))).toBe(
+      'not_found: mise task "dev" in warehouse has not been run',
     );
-    expect(errorText(await call(outside, "stop_mise_task", { repo: "magazyn", miseTask: "dev" }))).toBe(
-      'not_found: mise task "dev" in magazyn has not been run',
+    expect(errorText(await call(outside, "stop_mise_task", { repo: "warehouse", miseTask: "dev" }))).toBe(
+      'not_found: mise task "dev" in warehouse has not been run',
     );
   });
 
   test("an untrusted mise config runs no task, and there is no tool that would trust it", async () => {
-    const config = join(daemon.projects, "magazyn", "fake-mise.json");
+    const config = join(daemon.projects, "warehouse", "fake-mise.json");
     writeFileSync(config, JSON.stringify({ ...JSON.parse(MISE_CONFIG), untrusted: true }));
     try {
-      expect(errorText(await call(outside, "run_mise_task", { repo: "magazyn", miseTask: "test" }))).toStartWith(
+      expect(errorText(await call(outside, "run_mise_task", { repo: "warehouse", miseTask: "test" }))).toStartWith(
         "mise_unavailable: mise ERROR Config files in",
       );
-      expect(existsSync(join(daemon.projects, "magazyn", "calls.log"))).toBe(false);
+      expect(existsSync(join(daemon.projects, "warehouse", "calls.log"))).toBe(false);
       const { tools } = await outside.listTools();
       expect(tools.map((t) => t.name).filter((name) => name.includes("trust"))).toEqual([]);
     } finally {
@@ -127,18 +123,18 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
   test(
     "a session runs and stops mise tasks only of its own repo",
     async () => {
-      const session = await daemon.facade.agents.start("magazyn");
+      const session = await daemon.facade.agents.start("warehouse");
       const token = readFileSync(join(daemon.home, "sessions", session.id, "session-token"), "utf8");
       const client = await connectHttpClient(daemon.api.port, TOKEN, undefined, { [SESSION_TOKEN_HEADER]: token });
       clients.push(client);
 
-      expect(errorText(await call(client, "run_mise_task", { repo: "sklep", miseTask: "test" }))).toBe(
-        "bad_request: a session in magazyn can run and stop only mise tasks of magazyn, not of sklep",
+      expect(errorText(await call(client, "run_mise_task", { repo: "shop", miseTask: "test" }))).toBe(
+        "bad_request: a session in warehouse can run and stop only mise tasks of warehouse, not of shop",
       );
-      expect(errorText(await call(client, "stop_mise_task", { repo: "sklep", miseTask: "dev" }))).toStartWith("bad_request:");
-      const own = MiseTaskRunResult.parse((await call(client, "run_mise_task", { repo: "magazyn", miseTask: "test" })).structuredContent);
+      expect(errorText(await call(client, "stop_mise_task", { repo: "shop", miseTask: "dev" }))).toStartWith("bad_request:");
+      const own = MiseTaskRunResult.parse((await call(client, "run_mise_task", { repo: "warehouse", miseTask: "test" })).structuredContent);
       const ended = MiseTaskRunResult.parse(
-        (await call(client, "wait_for_mise_task", { repo: "magazyn", miseTask: "test", timeoutSeconds: 20 })).structuredContent,
+        (await call(client, "wait_for_mise_task", { repo: "warehouse", miseTask: "test", timeoutSeconds: 20 })).structuredContent,
       );
       expect(ended.run).toMatchObject({ kind: "exited", runId: own.run.runId, exitCode: 3 });
       // Stopped only after its sessionStart: killing a process in ConPTY while it starts could crash Bun on Windows.
@@ -151,8 +147,8 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
   test(
     "a task session runs mise tasks in its own worktree, reads their log, and cannot run them in another task's worktree",
     async () => {
-      const own = await daemon.facade.agents.createTask("magazyn", "run the tests");
-      const other = await daemon.facade.agents.createTask("magazyn", "another task");
+      const own = await daemon.facade.agents.createTask("warehouse", "run the tests");
+      const other = await daemon.facade.agents.createTask("warehouse", "another task");
       const sessions = daemon.facade.agents.sessions().sessions.filter((s) => s.task === own.id || s.task === other.id);
       const session = sessions.find((s) => s.task === own.id);
       if (!session) throw new Error("the task has no session");
@@ -161,26 +157,26 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
       clients.push(client);
 
       const started = MiseTaskRunResult.parse(
-        (await call(client, "run_mise_task", { repo: "magazyn", task: own.id, miseTask: "test" })).structuredContent,
+        (await call(client, "run_mise_task", { repo: "warehouse", task: own.id, miseTask: "test" })).structuredContent,
       );
       const ended = MiseTaskRunResult.parse(
-        (await call(client, "wait_for_mise_task", { repo: "magazyn", task: own.id, miseTask: "test", timeoutSeconds: 20 }))
+        (await call(client, "wait_for_mise_task", { repo: "warehouse", task: own.id, miseTask: "test", timeoutSeconds: 20 }))
           .structuredContent,
       );
       expect(ended.run).toMatchObject({ kind: "exited", runId: started.run.runId, exitCode: 3 });
       expect(readFileSync(join(own.worktree, "calls.log"), "utf8")).toBe("run test\n");
       const log = LogTail.parse(
-        (await call(client, "tail", { repo: "magazyn", task: own.id, miseTask: "test", limit: 10 })).structuredContent,
+        (await call(client, "tail", { repo: "warehouse", task: own.id, miseTask: "test", limit: 10 })).structuredContent,
       );
-      expect(log.records.map((r) => [r.runId, r.msg])).toEqual([[started.run.runId, "[test] $ koniec"]]);
+      expect(log.records.map((r) => [r.runId, r.msg])).toEqual([[started.run.runId, "[test] $ done"]]);
 
-      expect(errorText(await call(client, "run_mise_task", { repo: "magazyn", task: other.id, miseTask: "test" }))).toBe(
+      expect(errorText(await call(client, "run_mise_task", { repo: "warehouse", task: other.id, miseTask: "test" }))).toBe(
         `bad_request: a session of task ${own.id} can run and stop mise tasks only in its own worktree, not in that of task ${other.id}`,
       );
       expect(existsSync(join(other.worktree, "calls.log"))).toBe(false);
       // A task named with another repo is refused before any run is looked up, so a session's repo gate holds.
-      expect(errorText(await call(outside, "stop_mise_task", { repo: "sklep", task: own.id, miseTask: "test" }))).toBe(
-        `bad_request: task ${own.id} is in magazyn, not in sklep`,
+      expect(errorText(await call(outside, "stop_mise_task", { repo: "shop", task: own.id, miseTask: "test" }))).toBe(
+        `bad_request: task ${own.id} is in warehouse, not in shop`,
       );
 
       for (const s of sessions) {
@@ -194,10 +190,10 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
   test(
     "a mise config the agent changed in a task worktree runs nothing until the user trusts the config they saw in the UI",
     async () => {
-      const task = await daemon.facade.agents.createTask("magazyn", "change the build");
+      const task = await daemon.facade.agents.createTask("warehouse", "change the build");
       writeFileSync(join(task.worktree, "mise.toml"), '[tasks.test]\nrun = "anything"\n');
 
-      expect(errorText(await call(outside, "run_mise_task", { repo: "magazyn", task: task.id, miseTask: "test" }))).toBe(
+      expect(errorText(await call(outside, "run_mise_task", { repo: "warehouse", task: task.id, miseTask: "test" }))).toBe(
         `mise_unavailable: the mise config in the worktree of task ${task.branch} changed since the user trusted it (mise.toml); ` +
           "only the user can trust it, in the task's panel in Trackwall",
       );
@@ -206,9 +202,9 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
       const seen = await daemon.post(agentsApi.taskMiseConfig, { task: task.id });
       expect(seen.changes).toEqual([{ path: "mise.toml", change: "added", content: '[tasks.test]\nrun = "anything"\n' }]);
       await daemon.post(agentsApi.trustTaskMiseConfig, { task: task.id, digest: seen.digest });
-      await call(outside, "run_mise_task", { repo: "magazyn", task: task.id, miseTask: "test" });
+      await call(outside, "run_mise_task", { repo: "warehouse", task: task.id, miseTask: "test" });
       const ended = MiseTaskRunResult.parse(
-        (await call(outside, "wait_for_mise_task", { repo: "magazyn", task: task.id, miseTask: "test", timeoutSeconds: 20 }))
+        (await call(outside, "wait_for_mise_task", { repo: "warehouse", task: task.id, miseTask: "test", timeoutSeconds: 20 }))
           .structuredContent,
       );
       expect(ended.run).toMatchObject({ kind: "exited", exitCode: 3 });
@@ -230,16 +226,16 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
       const client = await connectHttpClient(daemon.api.port, TOKEN, undefined, { [SESSION_TOKEN_HEADER]: token });
       clients.push(client);
 
-      expect(errorText(await call(client, "run_mise_task", { repo: "magazyn", miseTask: "test" }))).toBe(
-        "bad_request: the supervisor works in no repo and runs nothing in one; propose a task in magazyn instead",
+      expect(errorText(await call(client, "run_mise_task", { repo: "warehouse", miseTask: "test" }))).toBe(
+        "bad_request: the supervisor works in no repo and runs nothing in one; propose a task in warehouse instead",
       );
       for (const [tool, args] of [
-        ["stop_mise_task", { repo: "magazyn", miseTask: "test" }],
-        ["start_service", { repo: "magazyn" }],
-        ["stop_service", { repo: "magazyn" }],
+        ["stop_mise_task", { repo: "warehouse", miseTask: "test" }],
+        ["start_service", { repo: "warehouse" }],
+        ["stop_service", { repo: "warehouse" }],
       ] as const) {
         expect(errorText(await call(client, tool, args))).toBe(
-          "bad_request: the supervisor works in no repo and runs nothing in one; propose a task in magazyn instead",
+          "bad_request: the supervisor works in no repo and runs nothing in one; propose a task in warehouse instead",
         );
       }
       await waitFor(daemon.facade.agents, supervisor.id, (s) => s.state !== null, "sessionStart");

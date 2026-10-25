@@ -14,15 +14,15 @@ import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { type MiseCliResult, runMiseCli } from "./mise-cli.ts";
 
 /**
- * Moduł `mise` (§4, ADR-20): taski mise repo z workspace i ich uruchomienia. Lista pochodzi z `mise tasks ls --json`
- * przy każdym zapytaniu, więc zmiana `mise.toml` widać od razu. Uruchomienie to `mise run <task>` w korzeniu repo,
- * w grupie procesów modułu `procs`; daemon uruchamia tylko task, który jest na aktualnej liście (§1.2). Dla komendy
- * zbiorczej (ADR-27) także `mise install` i uruchomienia doczekane do końca. A task's mise tasks run in its worktree
+ * The `mise` module (§4, ADR-20): the mise tasks of workspace repos and their runs. The list comes from `mise tasks ls --json`
+ * on every query, so a change to `mise.toml` shows at once. A run is `mise run <task>` in the repo root,
+ * in a process group of the `procs` module; the daemon runs only a mise task that is on the current list (§1.2). For the batch
+ * command (ADR-27) also `mise install` and runs awaited to the end. A task's mise tasks run in its worktree
  * (ADR-59) only while the repo root's config is trusted and the worktree has the mise config the user trusted; mise
  * gets the worktree as a trusted path for that one run, never through `mise trust`, which would trust the path for good.
  */
 
-/** Czego `mise` potrzebuje od `procs`; podłączane w fasadzie. */
+/** What `mise` needs from `procs`; wired in the facade. */
 interface MiseProcs {
   start(spec: { owner: string; command: readonly string[]; cwd: string; env: NodeJS.ProcessEnv; logSource: LogSource }): Promise<RunState>;
   state(owner: string): RunState | undefined;
@@ -30,7 +30,7 @@ interface MiseProcs {
   stop(owner: string): Promise<RunState | undefined>;
 }
 
-/** Czego `mise` potrzebuje od `workspace`: korzeń repo po identyfikatorze (`not_found`, gdy repo nie ma). */
+/** What `mise` needs from `workspace`: the repo root by identifier (`not_found` when there is no such repo). */
 interface MiseRepos {
   repoPath(id: string): Promise<string>;
 }
@@ -47,21 +47,21 @@ export interface MiseDeps {
   procs: MiseProcs;
   repos: MiseRepos;
   tasks: MiseTaskWorktrees;
-  /** Program `mise` z ewentualnymi argumentami przed komendą; w daemonie `["mise"]`, w testach atrapa. */
+  /** The `mise` program with any arguments before the command; `["mise"]` in the daemon, a fake in tests. */
   command: readonly string[];
-  /** Środowisko procesów użytkownika (`PATH` z powłoki logowania na macOS). */
+  /** The environment of the user's processes (`PATH` from the login shell on macOS). */
   env: () => Promise<NodeJS.ProcessEnv>;
 }
 
-/** Pola `mise tasks ls --json`, których używamy; reszta (zależności, źródła, `run`) zostaje w mise. */
+/** The `mise tasks ls --json` fields we use; the rest (dependencies, sources, `run`) stays in mise. */
 const ListedTask = z.object({ name: z.string(), description: z.string().nullish(), hide: z.boolean().optional() });
 const ListedTasks = z.array(ListedTask);
 
-/** Task z `mise tasks ls`, jeszcze bez stanu uruchomienia. */
+/** A mise task from `mise tasks ls`, still without a run state. */
 type ListedMiseTask = Omit<MiseTask, "run">;
 type TaskList = { kind: Exclude<MiseTasks["kind"], "ok">; message: string } | { kind: "ok"; tasks: ListedMiseTask[] };
 
-/** Fragment komunikatu mise o konfiguracji bez zaufania (`Config files in … are not trusted`). */
+/** A fragment of mise's message about an untrusted config (`Config files in … are not trusted`). */
 const UNTRUSTED = /not trusted/i;
 /** mise setting with directories whose configs it trusts, separated like `PATH` (`list_by_os_path_separator`). */
 const TRUSTED_PATHS_ENV = "MISE_TRUSTED_CONFIG_PATHS";
@@ -108,8 +108,8 @@ export class Mise {
   }
 
   /**
-   * Działające taski repo spoza listy: usunięte z konfiguracji w trakcie działania albo pokazane, gdy mise listy
-   * nie podał. Bez nich nie dałoby się ich zatrzymać z UI.
+   * Running mise tasks of the repo that are not on the list: removed from the config while running, or shown when mise did not
+   * give a list. Without this they could not be stopped from the UI.
    */
   private liveOutside(target: MiseTarget, listed: readonly ListedMiseTask[]): MiseTask[] {
     return this.liveRuns(target)
@@ -140,9 +140,9 @@ export class Mise {
   }
 
   /**
-   * Komenda zbiorcza (§4.8): task z aktualnej listy uruchomiony i doczekany do potwierdzonego końca grupy; `null`,
-   * gdy repo nie ma takiego taska. Działający już task (np. ze szczegółów repo) nie startuje drugi raz: wynikiem jest jego
-   * koniec. `signal` zatrzymuje grupę tak jak stop ze szczegółów repo.
+   * The batch command (§4.8): a mise task from the current list started and awaited to the confirmed end of the group; `null`
+   * when the repo has no such mise task. A mise task that is already running (e.g. from the repo details) does not start
+   * a second time: the result is its end. `signal` stops the group like a stop from the repo details.
    */
   async runToEnd(repo: string, miseTask: string, signal: AbortSignal): Promise<RunState | null> {
     const root: MiseTarget = { repo, task: null };
@@ -153,8 +153,8 @@ export class Mise {
   }
 
   /**
-   * `mise install` w korzeniu repo, doczekany do końca: narzędzia (JDK, Node…) w wersjach z konfiguracji mise repo.
-   * W grupie procesów jak task, bo instalacja trwa minutami, a przerwanie komendy zbiorczej ma ją zatrzymać.
+   * `mise install` in the repo root, awaited to the end: tools (JDK, Node…) in the versions from the repo's mise config.
+   * In a process group like a mise task, because installing takes minutes and cancelling the batch command must stop it.
    */
   async installTools(repo: string, signal: AbortSignal): Promise<RunState> {
     const place = await this.place({ repo, task: null });
@@ -209,7 +209,7 @@ export class Mise {
     return new DomainError("not_found", `mise task "${miseTask}" in ${place} has not been run`);
   }
 
-  /** `mise trust` bez ścieżki ufa konfiguracji w korzeniu repo, nie w katalogach nadrzędnych. */
+  /** `mise trust` without a path trusts the config in the repo root, not in parent directories. */
   async trust(repo: string): Promise<MiseTasks> {
     // The repo root only: a task worktree is trusted by its mise config instead (ADR-59, `agents`).
     const dir = await this.deps.repos.repoPath(repo);
@@ -241,7 +241,7 @@ export class Mise {
     return listed.tasks.some((t) => t.name === miseTask);
   }
 
-  /** Task uruchomiony w tym działaniu daemona: lista pokaże go do zatrzymania, nawet gdy zniknie z konfiguracji. */
+  /** A mise task started in this daemon run: the list shows it so it can be stopped, even when it vanishes from the config. */
   private remember(target: MiseTarget, miseTask: string): void {
     const key = targetKey(target);
     const started = this.started.get(key) ?? { ...target, names: new Set<string>() };
@@ -271,9 +271,9 @@ export class Mise {
   }
 
   /**
-   * Start (albo dołączenie do działającej grupy tego właściciela) i koniec grupy po potwierdzeniu w systemie.
-   * `signal` zatrzymuje grupę; gdy grupa przeżyje zabicie, wynikiem jest `stop_unconfirmed`, a nie czekanie bez
-   * końca, więc przerwanie zawsze kończy czekanie. Grupa zostaje wtedy `stopping` w szczegółach repo, skąd stop można ponowić.
+   * Start (or joining this owner's running group) and the end of the group once the system confirms it.
+   * `signal` stops the group; when the group survives the kill, the result is `stop_unconfirmed`, not endless
+   * waiting, so cancelling always ends the wait. The group then stays `stopping` in the repo details, where the stop can be retried.
    */
   private async runGroupToEnd(
     groupOwner: string,
@@ -305,7 +305,7 @@ export class Mise {
   }
 }
 
-/** Wynik `mise tasks ls --json` jako lista tasków albo powód, dla którego jej nie ma. */
+/** The result of `mise tasks ls --json` as a list of mise tasks or the reason there is none. */
 export function parseTaskList(result: MiseCliResult): TaskList {
   if (result.kind === "not_started") return { kind: "not_installed", message: result.message };
   if (result.kind === "failed") return { kind: "error", message: result.message };
@@ -352,12 +352,12 @@ function trustingPath(env: NodeJS.ProcessEnv, dir: string): NodeJS.ProcessEnv {
   return { ...env, [key]: own ? `${own}${delimiter}${dir}` : dir };
 }
 
-/** Właściciel grupy `mise install` repo; inny przedrostek niż taski, bo task może nazywać się `install`. */
+/** The owner of a repo's `mise install` group; a different prefix than mise tasks, because a mise task may be called `install`. */
 function installOwner(repo: string): string {
   return `mise-install:${repo}`;
 }
 
-/** Komunikat błędu mise bez ostrzeżeń, które nie są przyczyną (np. nieudane sprawdzenie nowej wersji). */
+/** A mise error message without warnings that are not the cause (e.g. a failed check for a new version). */
 function failure(stderr: string, code: number | null): string {
   const lines = stderr
     .split(/\r?\n/)
