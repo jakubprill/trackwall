@@ -110,7 +110,7 @@ _Avoid_: bulk operation, workflow
 The branch, the last commit, the number of changes in the working directory (of which, separately, new untracked files, `untracked`) and ahead/behind against the tracking branch, read from git on every request (`ok`), or `unavailable` with a message when git does not read it (a repo whose directory disappeared drops off the list). It is never stored.
 _Avoid_: state (that is a task state or a service state), sync (that is a separate action)
 
-**Repo watch** (`RepoWatch`, snapshot `RepoChanges`, topic `repos.changed`):
+**Repo watch** (`RepoWatch`, snapshot `RepoWatchState`, topic `repos.changed`):
 The daemon's comparison, every second, of the set of repos in the projects folder and of the HEAD and refs of each, read from the files of its git directory (ADR-63). A commit, checkout, pull, fetch or a new or removed repo bumps the revision; uncommitted changes do not. The UI fetches the list, tags and the graph again after every new revision.
 _Avoid_: file watcher (the daemon does not use file system notifications), working directory watch (the working directory is not watched)
 
@@ -150,7 +150,7 @@ The mise files of a task's worktree (config files, `.tool-versions`, file tasks)
 Facts about a repo extracted deterministically from build files, configuration and code in the HEAD commit: build files, what the repo provides (`provides`), what it uses (`consumes`), required tools, mechanisms and problems, every fact with evidence. It depends only on the commit, so it is computed once per commit (ADR-25). An LLM will add only a description and connection proposals marked `origin: 'llm'` (ADR-6). In the UI, the "Card" tab in the repo details.
 _Avoid_: profile, metadata; "repo card" for the whole repo details panel
 
-**Card warm-up** (`CardWarmup`, `cards/warmup`, topic `cards.warmup.changed`; UI "Repo cards"):
+**Card warm-up** (`CardWarmup`, progress `CardWarmupProgress`, `cards/warmup`, topic `cards.warmup.changed`; UI "Repo cards"):
 Computing the cards of new and changed repos in the background, two at once, after the daemon's start and after the repo watch sees a change (ADR-63), so that the graph and MCP take them from the cache. A request never waits for it.
 _Avoid_: indexing, scan, prefetch
 

@@ -1,96 +1,135 @@
 import type { Stats } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
+import { mapLimit } from "../../infra/map-limit.ts";
 
 /**
  * The state of a repo's HEAD and refs read from the files in its git directory, without a `git` process (§4.5, ADR-63):
- * `HEAD`, `packed-refs` and the directories under `refs/`. A commit, checkout, reset, pull, fetch or a new branch changes
- * one of them (git writes `<name>.lock` and renames it over the ref, so the directory of a loose ref changes too), and
- * `git status` changes none of them, so comparing the key every second costs a few `stat` calls per repo and does not
- * see the UI's own reads. The working directory and the index are not read on purpose: the key is about commits.
+ * `HEAD`, the file of the branch it points to, `packed-refs`, the directories under `refs/` and, with the reftable ref
+ * backend, `reftable/tables.list`. A commit, checkout, reset, pull, fetch or a new branch changes one of them (git writes
+ * `<name>.lock` and renames it over the ref, so the directory of a loose ref changes too), and `git status` changes none
+ * of them, so comparing the keys every second costs a few `stat` calls per repo and does not see the UI's own reads. The
+ * working directory and the index are not read on purpose: the state is about commits.
  */
 
 export interface GitState {
-  /** Equal for two reads exactly when HEAD and the refs did not change in between (as far as the file system shows). */
-  key: string;
+  /** Equal for two reads when HEAD (the file and the file of its branch) did not change in between. */
+  head: string;
+  /** Equal for two reads when no other ref changed in between (as far as the file system shows). */
+  refs: string;
   /** When HEAD last moved (`logs/HEAD`, without the reflog `HEAD`), for "recently used first". */
   usedMs: number;
 }
 
-/** A directory under `refs/` with its subdirectories, read again only when its modification time changes. */
+/** How many repos are read at once: a few `stat` calls each, but the folder can lie on a network drive. */
+const READ_CONCURRENCY = 16;
+/**
+ * A directory listing is reused only when the directory's time is older than this at the moment of listing: on a file
+ * system with coarse times (whole seconds on HFS+, FAT or some network shares) a subdirectory created in the same tick
+ * would otherwise never be visited (git's "racy timestamp" rule).
+ */
+const RACY_MS = 2000;
+
+/** A directory under `refs/` with its subdirectories, listed again only when its modification time changes. */
 interface RefsDir {
   mtimeMs: number;
   subdirs: string[];
 }
 
-export class GitStateReader {
-  /** Subdirectories by directory path: a fetch of a remote with hundreds of loose refs does not cost a `readdir` every second. */
-  private readonly refsDirs = new Map<string, RefsDir>();
-  /** The ref HEAD points to, by the `HEAD` file and its key: the file is read again only after git rewrote it. */
-  private readonly headRefs = new Map<string, { key: string; ref: string | null }>();
+/** What the reads of one repo remember between comparisons. */
+interface RepoCache {
+  /** The ref HEAD points to, by the key of the `HEAD` file: the file is read again only after git rewrote it. */
+  headRef?: { key: string; ref: string | null };
+  refsDirs: Map<string, RefsDir>;
+}
 
-  /** The state of the repo in directory `repo`; `null` when it has no readable git directory (no `.git`, a broken `gitdir:`). */
-  async read(repo: string): Promise<GitState | null> {
-    const dirs = await gitDirs(repo);
-    if (!dirs) return null;
-    const head = await stat(join(dirs.gitDir, "HEAD")).catch(() => undefined);
-    if (!head) return null;
-    const ref = await this.headRef(join(dirs.gitDir, "HEAD"), fileKey(head));
-    const [branch, packed, log, refs] = await Promise.all([
-      ref === null ? undefined : stat(join(dirs.commonDir, ...ref.split("/"))).catch(() => undefined),
-      stat(join(dirs.commonDir, "packed-refs")).catch(() => undefined),
-      stat(join(dirs.gitDir, "logs", "HEAD")).catch(() => undefined),
-      this.refsKeys(join(dirs.commonDir, "refs"), ""),
-    ]);
-    return {
-      key: [
-        `HEAD ${fileKey(head)}`,
-        // The checked-out branch's own file: a commit renames a new file over it, which a coarse directory time may not show.
-        `${ref ?? "detached"} ${branch ? fileKey(branch) : "-"}`,
-        `packed-refs ${packed ? fileKey(packed) : "-"}`,
-        ...refs,
-      ].join("\n"),
-      usedMs: (log ?? head).mtimeMs,
+export class GitStateReader {
+  /** By repo root; replaced at every `readAll`, so a repo that left the list and a deleted ref directory leave no entry. */
+  private caches = new Map<string, RepoCache>();
+
+  /** The state of every repo in `repos`; `null` for one without a readable git directory (no `.git`, a broken `gitdir:`). */
+  async readAll(repos: readonly string[]): Promise<Map<string, GitState | null>> {
+    const next = new Map<string, RepoCache>();
+    const states = await mapLimit(repos, READ_CONCURRENCY, async (repo) => {
+      const previous = this.caches.get(repo);
+      const cache: RepoCache = { headRef: previous?.headRef, refsDirs: new Map() };
+      next.set(repo, cache);
+      const state = await readRepo(repo, cache, previous?.refsDirs ?? new Map()).catch(() => null);
+      return [repo, state] as const;
+    });
+    this.caches = next;
+    return new Map(states);
+  }
+}
+
+async function readRepo(repo: string, cache: RepoCache, previousDirs: ReadonlyMap<string, RefsDir>): Promise<GitState | null> {
+  const dirs = await gitDirs(repo);
+  if (!dirs) return null;
+  const headFile = join(dirs.gitDir, "HEAD");
+  const head = await stat(headFile).catch(() => undefined);
+  if (!head) return null;
+  const ref = await headRef(headFile, fileKey(head), cache);
+  const [branch, packed, reftable, log, refs] = await Promise.all([
+    ref === null ? undefined : stat(join(dirs.commonDir, ...ref.split("/"))).catch(() => undefined),
+    stat(join(dirs.commonDir, "packed-refs")).catch(() => undefined),
+    stat(join(dirs.commonDir, "reftable", "tables.list")).catch(() => undefined),
+    stat(join(dirs.gitDir, "logs", "HEAD")).catch(() => undefined),
+    refsKeys(join(dirs.commonDir, "refs"), "", previousDirs, cache.refsDirs),
+  ]);
+  return {
+    // The checked-out branch's own file: a commit renames a new file over it, which a coarse directory time may not show.
+    head: [`HEAD ${fileKey(head)}`, `${ref ?? "detached"} ${optionalKey(branch)}`].join("\n"),
+    // `packed-refs` and `tables.list` can also hold the checked-out branch; a change there is reported as a ref change.
+    refs: [`packed-refs ${optionalKey(packed)}`, `reftable ${optionalKey(reftable)}`, ...refs].join("\n"),
+    usedMs: (log ?? head).mtimeMs,
+  };
+}
+
+/** `refs/heads/<branch>` from `ref: …` in HEAD, `null` for a detached HEAD or a ref outside `refs/`; a failed read is not kept. */
+async function headRef(file: string, key: string, cache: RepoCache): Promise<string | null> {
+  if (cache.headRef?.key === key) return cache.headRef.ref;
+  const text = await readFile(file, "utf8").catch(() => undefined);
+  if (text === undefined) return null;
+  const match = /^ref:\s*(refs\/\S+)\s*$/.exec(text);
+  const ref = match?.[1] && !match[1].split("/").includes("..") ? match[1] : null;
+  cache.headRef = { key, ref };
+  return ref;
+}
+
+/** `refs/<path> <mtime>` of directory `dir` and of every directory under it, in a fixed order. */
+async function refsKeys(
+  dir: string,
+  path: string,
+  previous: ReadonlyMap<string, RefsDir>,
+  visited: Map<string, RefsDir>,
+): Promise<string[]> {
+  const info = await stat(dir).catch(() => undefined);
+  if (!info?.isDirectory()) return [];
+  const listedAt = Date.now();
+  let listing = previous.get(dir);
+  if (listing?.mtimeMs !== info.mtimeMs) {
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    listing = {
+      mtimeMs: info.mtimeMs,
+      subdirs: entries
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name)
+        .sort(),
     };
   }
-
-  /** `refs/heads/<branch>` from `ref: …` in HEAD, `null` for a detached HEAD or a ref outside `refs/`. */
-  private async headRef(file: string, key: string): Promise<string | null> {
-    const cached = this.headRefs.get(file);
-    if (cached?.key === key) return cached.ref;
-    const match = /^ref:\s*(refs\/\S+)\s*$/.exec(await readFile(file, "utf8").catch(() => ""));
-    const ref = match?.[1] && !match[1].split("/").includes("..") ? match[1] : null;
-    this.headRefs.set(file, { key, ref });
-    return ref;
-  }
-
-  /** `refs/<path> <mtime>` of directory `dir` and of every directory under it, in a fixed order. */
-  private async refsKeys(dir: string, path: string): Promise<string[]> {
-    const info = await stat(dir).catch(() => undefined);
-    if (!info?.isDirectory()) {
-      this.refsDirs.delete(dir);
-      return [];
-    }
-    let cached = this.refsDirs.get(dir);
-    if (cached?.mtimeMs !== info.mtimeMs) {
-      const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-      cached = {
-        mtimeMs: info.mtimeMs,
-        subdirs: entries
-          .filter((e) => e.isDirectory())
-          .map((e) => e.name)
-          .sort(),
-      };
-      this.refsDirs.set(dir, cached);
-    }
-    const nested = await Promise.all(cached.subdirs.map((name) => this.refsKeys(join(dir, name), `${path}/${name}`)));
-    return [`refs${path} ${info.mtimeMs}`, ...nested.flat()];
-  }
+  // A listing from the same timestamp tick as a change could miss it, so it is listed again next time.
+  if (listedAt - info.mtimeMs > RACY_MS) visited.set(dir, listing);
+  const nested = await Promise.all(listing.subdirs.map((name) => refsKeys(join(dir, name), `${path}/${name}`, previous, visited)));
+  return [`refs${path} ${info.mtimeMs}`, ...nested.flat()];
 }
 
 /** Size and file identity next to the time: a rename over the file gives a new identity even within one timestamp tick. */
 function fileKey(info: Stats): string {
   return `${info.mtimeMs}:${info.size}:${info.ino}`;
+}
+
+function optionalKey(info: Stats | undefined): string {
+  return info ? fileKey(info) : "-";
 }
 
 /**

@@ -32,9 +32,12 @@ export class Vcs {
   private readonly worktreeOps = new KeyedQueue();
   private readonly states = new GitStateReader();
 
-  /** HEAD and refs read from the git directory's files, without a `git` process (ADR-63); `null` without a readable git directory. */
-  gitState(dir: string): Promise<GitState | null> {
-    return this.states.read(dir);
+  /**
+   * HEAD and refs of every repo read from the files of its git directory, without a `git` process (ADR-63); `null` for a
+   * repo without a readable git directory. What a read remembers is kept only for the repos of the last call.
+   */
+  gitStates(dirs: readonly string[]): Promise<Map<string, GitState | null>> {
+    return this.states.readAll(dirs);
   }
 
   async status(dir: string): Promise<RepoStatusOk> {

@@ -10,74 +10,33 @@ import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 import { fakeHosting } from "./support/hosting.ts";
 
-/** The repo watch on real git and a real projects folder; the test calls each comparison itself instead of a timer. */
+/** The repo watch on real git and a real projects folder; the test runs each comparison itself instead of a timer. */
 async function setup() {
   const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
   const vcs = new Vcs();
-  const file = new WorkspaceFile(join(home, "workspace.yaml"));
-  const workspace = new Workspace({ file, vcs, hosting: fakeHosting().hosting, openEditor: () => {}, openFolder: () => {} });
+  const workspace = new Workspace({
+    file: new WorkspaceFile(join(home, "workspace.yaml")),
+    vcs,
+    hosting: fakeHosting().hosting,
+    openEditor: () => {},
+    openFolder: () => {},
+  });
   await workspace.setProjectsDir(projects);
   const handed: string[][] = [];
-  const logs: string[] = [];
   const watch = new RepoWatch({
     repos: workspace,
     vcs,
-    onChanged: (repos: RepoEntry[]) => handed.push(repos.map((r) => r.id)),
-    log: (msg) => logs.push(msg),
+    onHeadMoved: (repos: RepoEntry[]) => handed.push(repos.map((r) => r.id)),
+    log: () => {},
   });
-  return { home, projects, vcs, file, watch, handed, logs };
+  const revision = () => watch.state().revision;
+  return { home, projects, watch, handed, revision };
 }
 
-describe("git state from the files of the git directory", () => {
-  test("a commit, a new branch, a checkout and a ref from a fetch change the state, and git status does not", async () => {
-    const vcs = new Vcs();
-    const repo = makeRepo({ "a.txt": "1" });
-    const states = [await vcs.gitState(repo)];
-
-    gitIn(repo, "status");
-    writeFileSync(join(repo, "a.txt"), "uncommitted");
-    gitIn(repo, "status");
-    expect((await vcs.gitState(repo))?.key).toBe(states[0]?.key);
-
-    commitFiles(repo, { "a.txt": "2" }, "second");
-    states.push(await vcs.gitState(repo));
-    gitIn(repo, "branch", "feature/x");
-    states.push(await vcs.gitState(repo));
-    gitIn(repo, "checkout", "-q", "feature/x");
-    states.push(await vcs.gitState(repo));
-    gitIn(repo, "update-ref", "refs/remotes/origin/main", "HEAD");
-    states.push(await vcs.gitState(repo));
-
-    const keys = states.map((s) => s?.key);
-    expect(new Set(keys).size).toBe(keys.length);
-  });
-
-  test("a worktree's state comes from its own HEAD and the refs of the main repo", async () => {
-    const vcs = new Vcs();
-    const repo = makeRepo({ "a.txt": "1" });
-    const worktree = join(mkdtempSync(join(tmpdir(), "trackwall-wt-")), "wt");
-    gitIn(repo, "worktree", "add", "-q", "-b", "task", worktree);
-    const before = await vcs.gitState(worktree);
-    expect(before).not.toBeNull();
-
-    commitFiles(worktree, { "b.txt": "1" }, "in the worktree");
-
-    expect((await vcs.gitState(worktree))?.key).not.toBe(before?.key);
-  });
-
-  test("a directory without a readable git directory has no state", async () => {
-    const vcs = new Vcs();
-    const dir = mkdtempSync(join(tmpdir(), "trackwall-nogit-"));
-    expect(await vcs.gitState(dir)).toBeNull();
-    writeFileSync(join(dir, ".git"), "gitdir: ../nowhere\n");
-    expect(await vcs.gitState(dir)).toBeNull();
-  });
-});
-
 describe("the repo watch", () => {
-  test("the first comparison hands over every repo, the most recently used first, and bumps the revision once", async () => {
-    const { projects, watch, handed } = await setup();
+  test("the first comparison hands over every repo, the most recently used first, and is revision 0", async () => {
+    const { projects, watch, handed, revision } = await setup();
     const old = makeRepo({ "a.txt": "1" }, "old", projects);
     makeRepo({ "a.txt": "1" }, "recent", projects);
     const past = new Date("2020-01-01T00:00:00Z");
@@ -86,27 +45,39 @@ describe("the repo watch", () => {
     await watch.check();
 
     expect(handed).toEqual([["recent", "old"]]);
-    expect(watch.changes()).toEqual({ revision: 1 });
+    expect(revision()).toBe(0);
   });
 
-  test("without a change nothing is handed over and the revision stays, a commit hands over only its repo", async () => {
-    const { projects, watch, handed } = await setup();
+  test("without a change nothing happens, and a commit bumps the revision and hands over only its repo", async () => {
+    const { projects, watch, handed, revision } = await setup();
     const shop = makeRepo({ "a.txt": "1" }, "shop", projects);
     makeRepo({ "a.txt": "1" }, "web", projects);
     await watch.check();
     gitIn(shop, "status");
     await watch.check();
-    expect(watch.changes()).toEqual({ revision: 1 });
+    expect(revision()).toBe(0);
 
     commitFiles(shop, { "a.txt": "2" }, "second");
     await watch.check();
 
     expect(handed.slice(1)).toEqual([["shop"]]);
-    expect(watch.changes()).toEqual({ revision: 2 });
+    expect(revision()).toBe(1);
+  });
+
+  test("a new branch or a fetched ref bumps the revision without a card warm-up, because HEAD stayed", async () => {
+    const { projects, watch, handed, revision } = await setup();
+    const shop = makeRepo({ "a.txt": "1" }, "shop", projects);
+    await watch.check();
+
+    gitIn(shop, "update-ref", "refs/remotes/origin/main", "HEAD");
+    await watch.check();
+
+    expect(revision()).toBe(1);
+    expect(handed).toHaveLength(1);
   });
 
   test("a repo added to the folder is handed over, and a removed one bumps the revision without a handover", async () => {
-    const { projects, watch, handed } = await setup();
+    const { projects, watch, handed, revision } = await setup();
     makeRepo({ "a.txt": "1" }, "shop", projects);
     await watch.check();
 
@@ -117,7 +88,7 @@ describe("the repo watch", () => {
     rmSync(added, { recursive: true, force: true });
     await watch.check();
     expect(handed).toHaveLength(2);
-    expect(watch.changes()).toEqual({ revision: 3 });
+    expect(revision()).toBe(2);
   });
 
   test("a directory that becomes a repo later (git clone from a terminal) is handed over when its .git appears", async () => {
@@ -132,19 +103,19 @@ describe("the repo watch", () => {
     expect(handed).toEqual([["cloning"]]);
   });
 
-  test("a projects folder that cannot be read is logged once and leaves no repos to watch", async () => {
-    const { projects, watch, handed, logs } = await setup();
+  test("a workspace.yaml that cannot be read for a moment keeps the previous repos, so its repair is no change", async () => {
+    const { home, projects, watch, handed, revision } = await setup();
     makeRepo({ "a.txt": "1" }, "shop", projects);
     await watch.check();
-    rmSync(projects, { recursive: true, force: true });
+    const file = join(home, "workspace.yaml");
 
-    await watch.check();
+    writeFileSync(file, "projectsDir: [unclosed\n");
+    await expect(watch.check()).rejects.toThrow();
+    writeFileSync(file, `projectsDir: ${JSON.stringify(projects)}\n`);
     await watch.check();
 
-    expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("repo watch cannot read the repo list");
     expect(handed).toHaveLength(1);
-    expect(watch.changes()).toEqual({ revision: 2 });
+    expect(revision()).toBe(0);
   });
 
   test("a comparison asked for during a running one is that same comparison", async () => {

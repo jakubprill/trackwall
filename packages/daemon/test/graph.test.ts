@@ -267,7 +267,7 @@ describe("Graph on cards from real git", () => {
     const file = new WorkspaceFile(join(home, "workspace.yaml"));
     const workspace = new Workspace({ file, vcs, hosting: fakeHosting().hosting, openEditor: () => {}, openFolder: () => {} });
     await workspace.setProjectsDir(projects);
-    const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(join(home, "cards"), () => {}) });
+    const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(join(home, "cards"), () => {}), log: () => {} });
     return { projects, workspaceFile: file.path, graph: new Graph({ cards, workspace }) };
   }
 

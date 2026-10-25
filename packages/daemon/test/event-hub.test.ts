@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type CardWarmup, DaemonEvent, type RunningMiseTask, type SessionList } from "@trackwall/protocol";
+import { type CardWarmupProgress, DaemonEvent, type RunningMiseTask, type SessionList } from "@trackwall/protocol";
 import { EventHub } from "../src/api/event-hub.ts";
 import type { Facade } from "../src/facade.ts";
 
@@ -11,19 +11,20 @@ const RUNNING: RunningMiseTask = {
   run: { kind: "running", runId: "r1", startedAt: "2026-10-24T10:00:00.000Z", pid: 42 },
 };
 
-const IDLE_WARMUP: CardWarmup = { running: false, done: 0, total: 0 };
+const STARTED_AT = "2026-10-25T18:00:00.000Z";
+const IDLE_WARMUP: CardWarmupProgress = { running: false, done: 0, total: 0 };
 
 /** A facade with only the reads the event source makes; events do not touch the rest. */
 function fakeFacade(state: {
   sessions: () => SessionList;
   running: () => RunningMiseTask[];
   revision?: () => number;
-  warmup?: () => CardWarmup;
+  warmup?: () => CardWarmupProgress;
 }): Facade {
   return {
     agents: { sessions: state.sessions },
     mise: { running: state.running },
-    repoWatch: { changes: () => ({ revision: state.revision?.() ?? 0 }) },
+    repoWatch: { state: () => ({ startedAt: STARTED_AT, revision: state.revision?.() ?? 0 }) },
     cards: { warmupProgress: state.warmup ?? (() => IDLE_WARMUP) },
   } as unknown as Facade;
 }
@@ -50,7 +51,7 @@ describe("the /ws event source", () => {
     expect(client.events).toEqual([
       { type: "sessions.changed", payload: EMPTY },
       { type: "mise.running.changed", payload: [] },
-      { type: "repos.changed", payload: { revision: 0 } },
+      { type: "repos.changed", payload: { startedAt: STARTED_AT, revision: 0 } },
       { type: "cards.warmup.changed", payload: IDLE_WARMUP },
     ]);
 
@@ -99,7 +100,7 @@ describe("the /ws event source", () => {
     const unsubscribeLate = hub.subscribe(late.listener);
     expect(late.events).toEqual([
       { type: "mise.running.changed", payload: [RUNNING] },
-      { type: "repos.changed", payload: { revision: 0 } },
+      { type: "repos.changed", payload: { startedAt: STARTED_AT, revision: 0 } },
       { type: "cards.warmup.changed", payload: IDLE_WARMUP },
     ]);
     unsubscribe();
@@ -121,7 +122,7 @@ describe("the /ws event source", () => {
     await tick();
 
     expect(client.events.slice(4)).toEqual([
-      { type: "repos.changed", payload: { revision: 1 } },
+      { type: "repos.changed", payload: { startedAt: STARTED_AT, revision: 1 } },
       { type: "cards.warmup.changed", payload: { running: true, done: 3, total: 10 } },
     ]);
     unsubscribe();

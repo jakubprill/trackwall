@@ -99,10 +99,11 @@ export type RepoList = z.infer<typeof RepoList>;
 /**
  * The repo watch (ADR-63): the revision grows when the HEAD or refs of a repo in the projects folder change, or the set of
  * repos does. It carries no repo state, only "something changed since the last snapshot", so a client fetches the list and
- * the graph again; it starts from 0 at every daemon start.
+ * the graph again. Revision 0 is the state at the watch's start (`startedAt`), and both start anew with every daemon, so a
+ * client tells a restarted daemon by `startedAt`.
  */
-export const RepoChanges = z.object({ revision: z.number().int().nonnegative() });
-export type RepoChanges = z.infer<typeof RepoChanges>;
+export const RepoWatchState = z.object({ startedAt: z.iso.datetime(), revision: z.number().int().nonnegative() });
+export type RepoWatchState = z.infer<typeof RepoWatchState>;
 
 export const WorkspaceSettings = z.object({
   projectsDir: ProjectsDir,

@@ -1,17 +1,19 @@
-import { graphApi } from "@trackwall/protocol";
+import { type CardWarmupProgress, graphApi } from "@trackwall/protocol";
 import { RefreshCw } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
+import { graphLoadingText } from "@/lib/card-warmup";
 import type { Connection } from "@/lib/connection";
-import type { DaemonEvents } from "@/lib/daemon-events";
+import type { LiveFeed } from "@/lib/daemon-events";
 import { twoDigits } from "@/lib/format";
 import { layoutGraph } from "@/lib/graph-layout";
-import { GRAPH_PACE } from "@/lib/repo-changes";
+import { GRAPH_PACE } from "@/lib/repo-watch";
+import { useCardWarmup } from "@/lib/use-card-warmup";
 import { useRemote } from "@/lib/use-remote";
-import { type RepoChangesHandle, useCardWarmup } from "@/lib/use-repo-changes";
+import type { RepoWatchHandle } from "@/lib/use-repo-watch";
 import { GraphCanvas } from "./GraphCanvas.tsx";
 import { GraphNodePanel, GraphSummaryPanel } from "./GraphNodePanel.tsx";
 
@@ -22,16 +24,16 @@ import { GraphNodePanel, GraphSummaryPanel } from "./GraphNodePanel.tsx";
  */
 export function GraphView({
   conn,
-  events,
-  repoChanges,
+  warmupLive,
+  repoWatch,
 }: {
   conn: Connection;
-  events: DaemonEvents | undefined;
-  repoChanges: RepoChangesHandle;
+  warmupLive: LiveFeed<CardWarmupProgress> | undefined;
+  repoWatch: RepoWatchHandle;
 }) {
   const load = useCallback(() => post(conn, graphApi.graph, {}), [conn]);
-  const graph = useRemote(load, { pollMs: () => repoChanges.pollMs(GRAPH_PACE), refreshKey: repoChanges.key });
-  const warmup = useCardWarmup(conn, events).data;
+  const graph = useRemote(load, repoWatch.options(GRAPH_PACE));
+  const warmup = useCardWarmup(conn, warmupLive).data;
   const [selected, setSelected] = useState<string>();
   const data = graph.data;
   const layout = useMemo(
@@ -61,9 +63,7 @@ export function GraphView({
         )}
         {!data && !graph.error && (
           <div className="px-4">
-            <Loading
-              text={warmup?.running ? `Computing repo cards: ${warmup.done} of ${warmup.total}…` : "Building the graph from repo cards…"}
-            />
+            <Loading text={graphLoadingText(warmup)} />
           </div>
         )}
         {data && layout && <GraphCanvas graph={data} layout={layout} selected={node?.repo} onSelect={setSelected} />}

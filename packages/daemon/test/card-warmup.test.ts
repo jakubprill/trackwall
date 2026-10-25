@@ -17,6 +17,7 @@ function controlled(concurrency = 2) {
   const finish = new Map<string, () => void>();
   const warmup = new CardWarmup({
     concurrency,
+    log: () => {},
     warm: (repo) =>
       new Promise<void>((resolve) => {
         started.push(repo.id);
@@ -50,7 +51,7 @@ describe("the card warm-up", () => {
     expect(warmup.progress()).toEqual({ running: false, done: 3, total: 3 });
   });
 
-  test("repos handed over later go before the waiting ones, and a queued repo keeps its single place", async () => {
+  test("repos handed over later go before the waiting ones, and a waiting repo handed over again moves to the front once", async () => {
     const { warmup, started, done } = controlled(1);
     warmup.add([repo("a"), repo("b"), repo("c")]);
     warmup.add([repo("changed"), repo("c")]);
@@ -58,9 +59,19 @@ describe("the card warm-up", () => {
 
     await done("a");
     await done("changed");
-    await done("b");
     await done("c");
-    expect(started).toEqual(["a", "changed", "b", "c"]);
+    await done("b");
+    expect(started).toEqual(["a", "changed", "c", "b"]);
+  });
+
+  test("a closed warm-up starts nothing more", async () => {
+    const { warmup, started, done } = controlled(1);
+    warmup.add([repo("a"), repo("b")]);
+    warmup.close();
+    warmup.add([repo("c")]);
+    await done("a");
+    expect(started).toEqual(["a"]);
+    expect(warmup.progress().running).toBe(false);
   });
 
   test("a repo being computed is queued again, because its HEAD has moved meanwhile", async () => {
@@ -82,18 +93,24 @@ describe("the card warm-up", () => {
     await done("b");
   });
 
-  test("a failing repo counts as done and does not stop the others", async () => {
+  test("a failing repo counts as done, goes to the log once and does not stop the others", async () => {
     const seen: string[] = [];
+    const logs: string[] = [];
     const warmup = new CardWarmup({
+      log: (msg) => logs.push(msg),
       warm: async (r) => {
         seen.push(r.id);
         if (r.id === "broken") throw new Error("git cannot read the repo");
       },
     });
     warmup.add([repo("broken"), repo("ok")]);
-    await new Promise((r) => setTimeout(r, 10));
-    expect(seen).toEqual(["broken", "ok"]);
-    expect(warmup.progress()).toEqual({ running: false, done: 2, total: 2 });
+    while (warmup.progress().running) await new Promise((r) => setTimeout(r, 1));
+    warmup.add([repo("broken")]);
+    while (warmup.progress().running) await new Promise((r) => setTimeout(r, 1));
+
+    expect(seen).toEqual(["broken", "ok", "broken"]);
+    expect(logs).toEqual(["card warm-up of broken: git cannot read the repo"]);
+    expect(warmup.progress()).toEqual({ running: false, done: 1, total: 1 });
   });
 
   test("a warmed-up card is in the cache, so a request after it does not read files from git", async () => {
@@ -109,7 +126,7 @@ describe("the card warm-up", () => {
     });
     await workspace.setProjectsDir(projects);
     const path = makeRepo({ "package.json": JSON.stringify({ name: "web", private: true }) }, "web", projects);
-    const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(join(home, "cards"), () => {}) });
+    const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(join(home, "cards"), () => {}), log: () => {} });
 
     cards.warmUp([{ id: "web", path }]);
     while (cards.warmupProgress().running) await new Promise((r) => setTimeout(r, 10));

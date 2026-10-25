@@ -29,7 +29,11 @@ export interface RemoteOptions<T> {
    * request at the new pace at once.
    */
   pollMs?: number | ((data: T | undefined) => number);
-  /** A change of the value fetches the data anew, keeping the previous data until the response (for example the repo's HEAD hash). */
+  /**
+   * A change of the value fetches the data anew, keeping the previous data until the response (for example the repo's HEAD
+   * hash). Changes during a request, or while the window is hidden, make one fetch after the response or when the window
+   * shows, so a key that changes faster than the daemon answers does not cancel every response.
+   */
   refreshKey?: string;
   /**
    * The same data live from the events WebSocket (§5.2, ADR-36), stable between renders (`useMemo`): every snapshot
@@ -64,6 +68,11 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
   liveRef.current = live;
   const dataRef = useRef<T | undefined>(undefined);
   const order = useRef(new LoadOrder()).current;
+  const refreshKeyRef = useRef(refreshKey);
+  /** A request is on its way, so a new `refreshKey` waits for its response. */
+  const busy = useRef(false);
+  /** The data is older than the latest `refreshKey`. */
+  const stale = useRef(false);
   const show = useCallback(
     (data: T, loadNumber: number) => {
       if (!order.show(loadNumber)) return;
@@ -73,7 +82,7 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
     [order],
   );
 
-  // `generation` and `refreshKey` are not read in the effect: their change is a request to fetch again.
+  // `generation` is not read in the effect: its change is a request to fetch again.
   useEffect(() => {
     if (!load) return;
     const changed = previousLoad.current !== load;
@@ -90,6 +99,8 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
       setState({});
     }
     const loadNumber = order.next();
+    busy.current = true;
+    stale.current = false;
     load()
       .then(
         (data) => {
@@ -101,13 +112,31 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
         },
       )
       .finally(() => {
-        if (current && pollRef.current !== undefined) timer = setTimeout(next, interval());
+        if (!current) return;
+        busy.current = false;
+        if (stale.current && !document.hidden) setGeneration((g) => g + 1);
+        else if (pollRef.current !== undefined) timer = setTimeout(next, interval());
       });
     return () => {
       current = false;
       clearTimeout(timer);
     };
-  }, [load, generation, refreshKey, show, order]);
+  }, [load, generation, show, order]);
+
+  useEffect(() => {
+    if (refreshKeyRef.current === refreshKey) return;
+    refreshKeyRef.current = refreshKey;
+    if (busy.current || document.hidden) stale.current = true;
+    else setGeneration((g) => g + 1);
+  }, [refreshKey]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden && stale.current && !busy.current) setGeneration((g) => g + 1);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
 
   // A snapshot counts like a response to a request sent when it arrived. A snapshot read in the daemon just before an
   // action and received after it counts as newer than the action; the next one (at most 200 ms later) corrects it.

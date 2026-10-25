@@ -1,4 +1,4 @@
-import type { CardWarmup as CardWarmupProgress, RepoCard, RepoCardResult, RepoTag, RepoTagRules, RepoTags } from "@trackwall/protocol";
+import type { CardWarmupProgress, RepoCard, RepoCardResult, RepoTag, RepoTagRules, RepoTags } from "@trackwall/protocol";
 import { configOrProblem, DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
 import type { CardCache } from "./card-cache.ts";
@@ -41,6 +41,7 @@ export interface CardsDeps {
   vcs: CardsVcs;
   repos: CardsRepos;
   cache: CardCache;
+  log: (msg: string) => void;
 }
 
 /**
@@ -55,19 +56,17 @@ export class Cards {
 
   constructor(deps: CardsDeps) {
     this.deps = deps;
-    // A repo git cannot read has no card to warm up; `card` and the list say why when someone asks.
-    this.warmup = new CardWarmup({
-      warm: (repo) =>
-        this.cardOf(repo.path).then(
-          () => {},
-          () => {},
-        ),
-    });
+    this.warmup = new CardWarmup({ warm: (repo) => this.cardOf(repo.path), log: deps.log });
   }
 
   /** Computes the cards of these repos in the background (ADR-63), before the ones already waiting. */
   warmUp(repos: readonly WarmupRepo[]): void {
     this.warmup.add(repos);
+  }
+
+  /** At daemon stop: the warm-up starts no further card. */
+  close(): void {
+    this.warmup.close();
   }
 
   /** The progress of the card warm-up (`cards/warmup`, the `cards.warmup.changed` topic). */

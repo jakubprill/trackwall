@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { apiResult, CardWarmup, DaemonInfoResult } from "@trackwall/protocol";
+import { apiResult, CardWarmupProgress, DaemonInfoResult } from "@trackwall/protocol";
 import { readDaemonFile } from "../src/infra/discovery.ts";
 import { loopbackRequest } from "../src/infra/loopback.ts";
 import { makeRepo } from "./support/git-repo.ts";
@@ -116,7 +116,7 @@ describe.each(RUNTIMES)("daemon process under %s", (name, runtime) => {
       const file = await waitFor(() => readDaemonFile(home), daemon);
       const warmup = async () => {
         const res = await loopbackRequest(file.port, "/api/cards/warmup", { method: "POST", token: file.token });
-        const result = apiResult(CardWarmup).parse(JSON.parse(res.body));
+        const result = apiResult(CardWarmupProgress).parse(JSON.parse(res.body));
         if (!result.ok) throw new Error(result.error.message);
         return result.data;
       };

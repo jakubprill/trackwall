@@ -97,9 +97,9 @@ export function createFacade(o: FacadeOptions): Facade {
   });
   const cache = new CardCache(join(o.home, CARDS_DIR), o.log);
   cache.prune().catch((err: unknown) => o.log(`failed to clean up cards: ${String(err)}`));
-  const cards = new Cards({ vcs, repos: workspace, cache });
-  // A new or changed repo gets its card in the background, so the next graph does not wait for it (ADR-63).
-  const repoWatch = new RepoWatch({ repos: workspace, vcs, onChanged: (repos) => cards.warmUp(repos), log: o.log });
+  const cards = new Cards({ vcs, repos: workspace, cache, log: o.log });
+  // A new repo or one whose HEAD moved gets its card in the background, so the next graph does not wait for it (ADR-63).
+  const repoWatch = new RepoWatch({ repos: workspace, vcs, onHeadMoved: (repos) => cards.warmUp(repos), log: o.log });
   const agents = new Agents({
     procs,
     repos: workspace,

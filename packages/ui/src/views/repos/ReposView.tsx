@@ -8,13 +8,13 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { relativeTime, twoDigits } from "@/lib/format";
-import { REPO_LIST_PACE } from "@/lib/repo-changes";
 import { branchLabel, listNeedsSettings, repoStatusTone } from "@/lib/repo-status";
+import { REPO_LIST_PACE } from "@/lib/repo-watch";
 import { statusTextClass } from "@/lib/status-tone";
 import { listSyncBadge, type SyncBadge, syncedByPath } from "@/lib/sync-state";
 import { type BatchRunHandle, useBatchRun } from "@/lib/use-batch-run";
 import { useRemote } from "@/lib/use-remote";
-import type { RepoChangesHandle } from "@/lib/use-repo-changes";
+import type { RepoWatchHandle } from "@/lib/use-repo-watch";
 import { type SyncRunHandle, useSyncRun } from "@/lib/use-sync-run";
 import { useTagFilter } from "@/lib/use-tag-filter";
 import { cn } from "@/lib/utils";
@@ -30,7 +30,7 @@ type Panel = "repo" | "clone" | "sync" | "batch";
 export function ReposView({
   conn,
   initialRepo,
-  repoChanges,
+  repoWatch,
   onRetry,
   onOpenSettings,
 }: {
@@ -38,21 +38,21 @@ export function ReposView({
   /** The repo selected at start, for example opened from the dashboard in the "Home" view. */
   initialRepo?: string;
   /** Commits and repos added to the folder (ADR-63): the list is fetched again at once. */
-  repoChanges: RepoChangesHandle;
+  repoWatch: RepoWatchHandle;
   onRetry: () => void;
   onOpenSettings: () => void;
 }) {
   const [selected, setSelected] = useState(initialRepo);
   const [panel, setPanel] = useState<Panel>("repo");
   const load = useCallback(() => post(conn, workspaceApi.list, {}), [conn]);
-  const list = useRemote(load, { pollMs: () => repoChanges.pollMs(REPO_LIST_PACE), refreshKey: repoChanges.key });
+  const list = useRemote(load, repoWatch.options(REPO_LIST_PACE));
   const sync = useSyncRun(conn, list.reload);
   const synced = syncedByPath(sync.run);
   const batch = useBatchRun(conn, list.reload);
 
   const needsSettings = listNeedsSettings(list.errorCode);
   const allRepos = needsSettings ? [] : (list.data?.repos ?? []);
-  const filter = useTagFilter(conn, allRepos, repoChanges);
+  const filter = useTagFilter(conn, allRepos, repoWatch);
   const repos = filter.repos;
   const current = repos.find((r) => r.id === selected) ?? repos[0];
   const canSync = Boolean(list.data?.projectsDir) && !needsSettings;

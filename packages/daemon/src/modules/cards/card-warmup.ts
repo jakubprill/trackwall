@@ -1,49 +1,57 @@
-import type { CardWarmup as CardWarmupProgress } from "@trackwall/protocol";
+import type { CardWarmupProgress } from "@trackwall/protocol";
+import { messageOf } from "../../infra/errors.ts";
 
 /**
- * The card warm-up (§4.6, ADR-63): repos whose card may be missing (all at daemon start, then the ones the repo watch saw
- * change) are computed in the background, a few at once, so that the first graph or `get_repo_card` after a start or a
- * commit takes the card from the cache. A request never waits for the queue: it computes its card itself, and the card
- * cache gives both the same job. A repo handed over again while it is queued keeps its place; one being computed is queued
- * again, because its HEAD has moved meanwhile.
+ * The card warm-up (§4.6, ADR-63): repos whose card may be missing (all at daemon start, then the ones whose HEAD the repo
+ * watch saw move) are computed in the background, a few at once, so that the first graph or `get_repo_card` after a start
+ * or a commit takes the card from the cache. A request never waits for the queue: it computes its card itself (so the
+ * repo open in the UI is never behind the queue), and the card cache gives both the same job. A repo handed over again
+ * goes to the front; one being computed is queued again, because its HEAD has moved meanwhile.
  */
 
 /** Two at once: the warm-up runs next to the user's work and must not take every core and the disk. */
 const CONCURRENCY = 2;
 
 export interface WarmupRepo {
+  /** For the log only. */
   id: string;
   path: string;
 }
 
 export interface CardWarmupDeps {
-  /** Computes the card of the repo's current HEAD (or takes it from the cache); an error belongs to that repo only. */
-  warm: (repo: WarmupRepo) => Promise<void>;
+  /** Computes the card of the repo's current HEAD (or takes it from the cache). */
+  warm: (repo: WarmupRepo) => Promise<unknown>;
+  log: (msg: string) => void;
   concurrency?: number;
 }
 
 export class CardWarmup {
   readonly #deps: CardWarmupDeps;
-  /** Waiting repos by root, in the order they will be computed. */
+  /** Waiting repos in the order they will be computed. */
   #queue: WarmupRepo[] = [];
   #active = 0;
   #done = 0;
   #total = 0;
+  #closed = false;
+  /** The last error of each repo, so that a repo broken the same way does not write to the log at every commit elsewhere. */
+  readonly #failures = new Map<string, string>();
 
   constructor(deps: CardWarmupDeps) {
     this.#deps = deps;
   }
 
-  /** Repos to compute before the ones already waiting (the latest change is the one the user is looking at). */
+  /** Repos to compute before the ones already waiting: the latest change is the one the user is looking at. */
   add(repos: readonly WarmupRepo[]): void {
-    const fresh = repos.filter((repo) => !this.#queue.some((queued) => queued.path === repo.path));
-    if (fresh.length === 0) return;
-    if (this.#active === 0 && this.#queue.length === 0) {
+    if (this.#closed || repos.length === 0) return;
+    if (!this.progress().running) {
       this.#done = 0;
       this.#total = 0;
     }
-    this.#queue = [...fresh, ...this.#queue];
-    this.#total += fresh.length;
+    const paths = new Set(repos.map((repo) => repo.path));
+    const waiting = this.#queue.filter((queued) => !paths.has(queued.path));
+    // A repo that was already waiting is counted once.
+    this.#total += repos.length - (this.#queue.length - waiting.length);
+    this.#queue = [...repos, ...waiting];
     this.#pump();
   }
 
@@ -51,21 +59,36 @@ export class CardWarmup {
     return { running: this.#active > 0 || this.#queue.length > 0, done: this.#done, total: this.#total };
   }
 
+  /** At daemon stop: nothing new starts, and a card being computed ends without a successor. */
+  close(): void {
+    this.#closed = true;
+    this.#queue = [];
+  }
+
   #pump(): void {
     const limit = this.#deps.concurrency ?? CONCURRENCY;
-    while (this.#active < limit) {
+    while (!this.#closed && this.#active < limit) {
       const repo = this.#queue.shift();
       if (!repo) break;
       this.#active++;
-      // `warm` handles its own errors; the catch only keeps a bug in it from ending the warm-up.
-      void this.#deps
+      this.#deps
         .warm(repo)
-        .catch(() => {})
+        .then(
+          () => this.#failures.delete(repo.path),
+          (err: unknown) => this.#failed(repo, err),
+        )
         .finally(() => {
           this.#active--;
           this.#done++;
           this.#pump();
         });
     }
+  }
+
+  /** A repo git cannot read has no card; whoever asks for it gets the error, the log gets it once. */
+  #failed(repo: WarmupRepo, err: unknown): void {
+    const message = messageOf(err);
+    if (this.#failures.get(repo.path) !== message) this.#deps.log(`card warm-up of ${repo.id}: ${message}`);
+    this.#failures.set(repo.path, message);
   }
 }

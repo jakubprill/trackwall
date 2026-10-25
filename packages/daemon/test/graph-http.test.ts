@@ -330,7 +330,7 @@ describe("the graph and find_endpoint on real git", () => {
     });
     await workspace.setProjectsDir(projects);
     for (const name of SHOP) makeRepo(fixtureFiles(name), name, projects);
-    const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(join(home, "cards"), () => {}) });
+    const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(join(home, "cards"), () => {}), log: () => {} });
     return { home, projects, cards, graph: new Graph({ cards, workspace }), workspace };
   }
 

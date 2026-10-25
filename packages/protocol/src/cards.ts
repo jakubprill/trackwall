@@ -218,12 +218,12 @@ export type RepoTags = z.infer<typeof RepoTags>;
  * The card warm-up (ADR-63): the daemon computes the cards of new and changed repos in the background. `total` counts the
  * repos handed to it since it was last idle and `done` the ones finished, also those whose card was already in the cache.
  */
-export const CardWarmup = z.object({
+export const CardWarmupProgress = z.object({
   running: z.boolean(),
   done: z.number().int().nonnegative(),
   total: z.number().int().nonnegative(),
 });
-export type CardWarmup = z.infer<typeof CardWarmup>;
+export type CardWarmupProgress = z.infer<typeof CardWarmupProgress>;
 
 function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
   return { path: `/api/cards/${action}`, request, data };
@@ -235,5 +235,5 @@ export const cardsApi = {
   /** The tags of every repo in the projects folder, in the order of the repo list. */
   tags: endpoint("tags", z.object({}).strict(), z.array(RepoTags)),
   /** The progress of the card warm-up, from daemon memory. */
-  warmup: endpoint("warmup", z.object({}).strict(), CardWarmup),
+  warmup: endpoint("warmup", z.object({}).strict(), CardWarmupProgress),
 };

@@ -14,6 +14,9 @@ export function repoStatusTone(status: RepoStatus): { tone: StatusTone; label: s
   return changes ? { tone: "warning", label: changes } : { tone: "ok", label: "clean" };
 }
 
+/** The "Changes" tab of one repo: the user's uncommitted work, which no event reports. */
+export const WORKING_TREE_POLL_MS = 10_000;
+
 /**
  * The repo list does not exist until the projects folder is fixed in the settings: it disappeared or is wrong in
  * `workspace.yaml`. An old list would then look current, so the views do not show it.
