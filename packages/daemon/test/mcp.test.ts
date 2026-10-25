@@ -125,8 +125,6 @@ describe("MCP server over Streamable HTTP", () => {
       "report_result",
       "get_review_comments",
       "send_message",
-      "get_messages",
-      "get_updates",
       "run_mise_task",
       "stop_mise_task",
       "verify_task",
@@ -135,7 +133,7 @@ describe("MCP server over Streamable HTTP", () => {
       "call_endpoint",
     ]);
     // A proposal and a summary only write text for a human, a message only text for another agent, and reading review
-    // comments, messages and updates marks them read; running a
+    // comments marks them read; running a
     // mise task executes repo code, and stopping one can kill a process the user started from the UI; so do starting
     // and stopping a service and verifying a task (which runs its tests), and a request to a service can change its data.
     expect(tools.filter((t) => t.annotations?.destructiveHint !== false).map((t) => t.name)).toEqual([

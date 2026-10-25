@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, te
 import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
+import { inboxPrompt } from "../src/modules/agents/inbox-prompt.ts";
 import { viewer, waitFor } from "../test/support/agents.ts";
 import { hookRecords, startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
@@ -192,4 +193,62 @@ describe("an agent task with the real Copilot CLI", () => {
     // Copilot CLI names its working directory by the real path (macOS: /private/var/… for the temporary /var/…).
     expect(first?.system).toContain(realpathSync.native(task.worktree));
   });
+});
+
+describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
+  /** Waits until session `id` has ended `turns` turns (its `agentStop` hook records). */
+  const turnsEnded = (id: string, turns: number) =>
+    waitFor(
+      daemon.facade.agents,
+      id,
+      () => hookRecords(daemon.home, id).filter((r) => r.event === "agentStop").length >= turns,
+      `${turns} ended turns`,
+      SESSION_MS,
+    );
+
+  // Six steps of SESSION_MS, more than the file's limit: the start and five ended turns.
+  test(
+    "the prompt the daemon types is the agent's next message, and the message and updates reach it through the tools",
+    async () => {
+      const { agents } = daemon.facade;
+      const main = await startSession();
+      model.reply({ text: "Hello." });
+      main.window.attachment.input("hello\r");
+      await turnsEnded(main.id, 1);
+
+      // The task's first turn ends: the main session is asked to read the update and reads it.
+      model.reply(
+        { text: "Starting on the login test." },
+        { tool: copilotToolName(mcpTools.getUpdates.name), arguments: {} },
+        { text: "The task has started." },
+      );
+      const proposal = await agents.propose(main.id, { repo: "shop", title: "Add a login test", prompt: "add a login test" });
+      const task = await agents.approveProposal(proposal.id, "add a login test");
+      const session = agents.sessions().sessions.find((s) => s.task === task.id);
+      if (session === undefined) throw new Error("the task has no session");
+      await turnsEnded(session.id, 1);
+      await turnsEnded(main.id, 2);
+
+      // A message with what the input box would mangle: an @, a leading slash and a line break.
+      const text = "/keep the old endpoint\n@Deprecated callers still use it";
+      model.reply(
+        { tool: copilotToolName(mcpTools.getMessages.name), arguments: {} },
+        { text: "Kept the old endpoint." },
+        { text: "The task kept the old endpoint." },
+      );
+      expect(agents.sendMessage(main.id, task.id, text).delivery).toBe("typed");
+      await turnsEnded(session.id, 2);
+      await turnsEnded(main.id, 3);
+
+      const requests = model.requests();
+      const updatesPrompt = inboxPrompt({ reviewComments: 0, messages: 0, updates: 1 });
+      const messagesPrompt = inboxPrompt({ reviewComments: 0, messages: 1, updates: 0 });
+      const readUpdates = requests.findIndex((r) => r.lastUserText.endsWith(updatesPrompt ?? "-"));
+      expect(requests[readUpdates + 1]?.toolResults.join("\n")).toContain('"kind":"turn_ended"');
+      const readMessages = requests.findIndex((r) => r.lastUserText.endsWith(messagesPrompt ?? "-"));
+      expect(requests[readMessages + 1]?.toolResults.join("\n")).toContain(JSON.stringify(text).slice(1, -1));
+      expect(requests.at(-1)?.lastUserText).toEndWith(updatesPrompt ?? "-");
+    },
+    7 * SESSION_MS,
+  );
 });

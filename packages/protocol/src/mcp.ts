@@ -44,9 +44,10 @@ import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
  * Contract of the daemon's MCP tools (§5.3, ADR-24): the name, the description for the agent, the input and the result of
  * every tool in one `McpTool` object, like `Endpoint` for the API. The daemon announces `tools/list` from them and checks
  * arguments and `structuredContent` with them, and tests, the UI and clients take names from them and parse responses.
- * The tools read; those with `readOnly: false` submit a task proposal or summary (ADR-39; a task starts only after
- * approval in the UI), mark the user's review comments read (ADR-62), send a message to a delegated task's session or
- * mark messages and updates read (ADR-68), or run and stop mise tasks from a repo's trusted
+ * The tools read (`get_messages` and `get_updates` also mark what they return read, which only Trackwall keeps, so
+ * an agent the daemon woke reads them without an approval request, ADR-68); those with `readOnly: false` submit a task
+ * proposal or summary (ADR-39; a task starts only after approval in the UI), mark the user's review comments read
+ * (ADR-62), send a message to a delegated task's session (ADR-68), or run and stop mise tasks from a repo's trusted
  * config (ADR-41). Tool names, fields and descriptions are in English (ADR-32).
  */
 
@@ -623,8 +624,8 @@ export const mcpTools = {
   },
   getMessages: {
     name: GET_MESSAGES,
-    readOnly: false,
-    destructive: false,
+    // Marking them read changes only Trackwall's own bookkeeping; an approval would stall the agent it woke (ADR-68).
+    readOnly: true,
     description:
       `Read the messages the session that proposed your task sent you with ${SEND_MESSAGE} and you have not read yet, ` +
       "oldest first. Only for a session that runs a task in Trackwall; Trackwall asks you to call it when a message " +
@@ -636,8 +637,8 @@ export const mcpTools = {
   },
   getUpdates: {
     name: GET_UPDATES,
-    readOnly: false,
-    destructive: false,
+    // Marking them read changes only Trackwall's own bookkeeping; an approval would stall the agent it woke (ADR-68).
+    readOnly: true,
     description:
       "Read what happened to the work you delegated since your last call, oldest first: for each task you proposed (the " +
       "supervisor: any supervisor proposed), turn_ended (its session finished a turn and waits; read its summary and " +
