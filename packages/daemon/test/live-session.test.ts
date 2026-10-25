@@ -104,6 +104,35 @@ describe("a Copilot CLI session in the daemon", () => {
 });
 
 /** A running session with an empty `hooks.jsonl`; the hook records are the input of each test. */
+describe("a prompt the daemon types into a session (a review, ADR-62)", () => {
+  test("goes in only once the session waits for input, with Enter written separately after the text", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+
+    expect(session.typePrompt("read the review")).toBe("queued");
+    expect(written).toEqual([]);
+
+    endTurn(session, hooksFile);
+    expect(written).toEqual(["read the review"]);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(written).toEqual(["read the review", "\r"]);
+  });
+
+  test("goes in at once while the session waits for input, and does not mark the end of the turn seen", () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    endTurn(session, hooksFile);
+
+    expect(session.typePrompt("read the review")).toBe("typed");
+
+    expect(written).toEqual(["read the review"]);
+    expect(session.view()?.needsAttention).toBe(true);
+  });
+});
+
 function runningSession(): { session: LiveSession; hooksFile: string } {
   const hooksFile = join(mkdtempSync(join(tmpdir(), "trackwall-session-")), "hooks.jsonl");
   writeFileSync(hooksFile, "");

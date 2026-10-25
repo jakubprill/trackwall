@@ -102,6 +102,7 @@ describe("MCP server over Streamable HTTP", () => {
       "get_task_changes",
       "propose_task",
       "report_result",
+      "get_review_comments",
       "wait_for_session",
       "run_mise_task",
       "stop_mise_task",
@@ -118,13 +119,14 @@ describe("MCP server over Streamable HTTP", () => {
     expect(writing).toEqual([
       "propose_task",
       "report_result",
+      "get_review_comments",
       "run_mise_task",
       "stop_mise_task",
       "start_service",
       "stop_service",
       "call_endpoint",
     ]);
-    // A proposal and a summary only write text for a human; running a mise task executes repo code, and stopping one
+    // A proposal and a summary only write text for a human, and reading review comments marks them read; running a mise task executes repo code, and stopping one
     // can kill a process the user started from the UI; so do starting and stopping a service, and a request to a service
     // can change its data.
     expect(tools.filter((t) => t.annotations?.destructiveHint !== false).map((t) => t.name)).toEqual([

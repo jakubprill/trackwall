@@ -26,6 +26,7 @@ const {
   getTaskChanges,
   proposeTask,
   reportResult,
+  getReviewComments,
   waitForSession,
   runMiseTask,
   stopMiseTask,
@@ -77,7 +78,8 @@ export const MCP_INSTRUCTIONS = [
     `the task's changed files and ${getTaskChanges.name} their diff (narrow it with paths): review it before you tell the ` +
     "user the work is done. Propose related tasks together, so the user can review them as one plan.",
   `- ${listSessions.name} shows the Copilot CLI sessions and tasks Trackwall runs (caller is your own session); a session ` +
-    `that runs a task ends its work with ${reportResult.name}.`,
+    `that runs a task ends its work with ${reportResult.name}. When the user sends a review of its changes, Trackwall asks ` +
+    `it to call ${getReviewComments.name}, which returns the comments to address.`,
   `- Point the user at a repo, session or task in your answer with a link: ${trackwallLink("repo", "<repo id>")}, ` +
     `${trackwallLink("session", "<session id>")} or ${trackwallLink("task", "<task id>")} (also for a task proposal) ` +
     "opens it in Trackwall when clicked. A link only shows it, it never runs anything.",

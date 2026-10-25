@@ -14,6 +14,12 @@ import { type ScreenViewer, TerminalScreen } from "./terminal-screen.ts";
 /** The same threshold as in the prototype (`copilot-record.ts`), so that the recording and the daemon compute `Stale` the same way. */
 export const STALE_AFTER_MS = 60_000;
 
+/**
+ * The pause between the text of a prompt the daemon types and its Enter (ADR-62): written together, the TUI reads them as
+ * one pasted string, in which a carriage return is text and does not submit.
+ */
+const SUBMIT_DELAY_MS = 100;
+
 /** The PTY of the session process: the terminal of the group leader from `procs` (`GroupTerminal`). */
 export interface SessionPty {
   write(data: string): void;
@@ -68,6 +74,9 @@ export class LiveSession {
   readonly #attention = new SessionAttention();
   #finished = false;
   readonly #closers = new Set<() => void>();
+  /** A daemon prompt waiting for the session to wait for input (`typePrompt`). */
+  #queuedPrompt: string | undefined;
+  #submitTimer: NodeJS.Timeout | undefined;
 
   constructor(o: LiveSessionOptions) {
     this.id = o.id;
@@ -101,6 +110,18 @@ export class LiveSession {
     if (key) this.#report(this.#state.key(key));
     // After the key's own state change, so that the `Input` an Esc causes counts as seen.
     if (typedByUser(data)) this.#attention.typed();
+  }
+
+  /**
+   * A prompt the daemon types on the user's behalf (ADR-62): at once while the session waits for input, otherwise as
+   * soon as it does again; a later prompt replaces a queued one. Never while the agent works or asks for approval, when
+   * the text would land in the middle of a turn and Enter would answer the prompt on screen.
+   */
+  typePrompt(text: string): "typed" | "queued" {
+    this.#readHooks();
+    this.#queuedPrompt = text;
+    this.#typeQueuedPrompt();
+    return this.#queuedPrompt === undefined ? "typed" : "queued";
   }
 
   /** The size is set by the last terminal that reported it; the TUI gets it together with the PTY. */
@@ -163,6 +184,7 @@ export class LiveSession {
   dispose(): void {
     if (!this.#finished) this.#hooks.close();
     this.#finished = true;
+    clearTimeout(this.#submitTimer);
     for (const close of this.#closers) close();
     this.#closers.clear();
     this.#screen.dispose();
@@ -178,5 +200,19 @@ export class LiveSession {
       this.#attention.changed(this.#last?.state, change.state);
       this.#last = change;
     }
+    this.#typeQueuedPrompt();
+  }
+
+  /** The queued prompt goes into the PTY once the session waits for input; Enter follows after `SUBMIT_DELAY_MS`. */
+  #typeQueuedPrompt(): void {
+    const terminal = this.#terminal;
+    const text = this.#queuedPrompt;
+    if (text === undefined || this.#finished || !terminal || this.#last?.state !== "Input") return;
+    this.#queuedPrompt = undefined;
+    terminal.write(text);
+    this.#submitTimer = setTimeout(() => {
+      if (!this.#finished) terminal.write("\r");
+    }, SUBMIT_DELAY_MS);
+    this.#submitTimer.unref();
   }
 }

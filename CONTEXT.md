@@ -277,6 +277,14 @@ _Avoid_: comment, feedback
 Files that both this task and another task of the same repo change, each compared with its own base commit. The one merged second will likely get a conflict, so the task panel warns about them and leads to the other task. It is only a warning: nothing is stopped (ADR-44).
 _Avoid_: overlap, collision, conflict (a conflict is only the result of a merge)
 
+**Review** (`send-review`, `SendReviewResult`; "Send N comments to the agent" in the UI):
+The review comments the user sends to a task's agent together, from the task's "Changes" tab (ADR-62). The daemon asks the task's session to read them as soon as it waits for input (`ReviewDelivery`: `typed`, `queued`, `on_resume`).
+_Avoid_: code review (that is the pre-PR review in `AGENTS.md`), feedback
+
+**Review comment** (`ReviewComment`, `ReviewSide`, MCP tool `get_review_comments`):
+What the user writes on one line of a task's changes for its agent: the file, the side (`new` for an added or unchanged line, `old` for a removed one), the line number, the line's code and the text. Queued in daemon memory until the task's session reads it with `get_review_comments`, which marks it read (ADR-62).
+_Avoid_: note, remark, comment on a pull request (Trackwall opens none)
+
 **Main session** (`proposedBy` of a task and a proposal):
 A session or supervising agent that talks to the user and commissions work to other agents with task proposals, then waits for their sessions (`wait_for_session`) and reads the summaries, like a coordinator with threads in Claude (ADR-39). It is a role, not a separate kind of session: any Trackwall session or an agent outside Trackwall (`proposedBy.session: null`); the supervisor is the main session above all repos (ADR-58). In the Sessions view its tasks and proposals sit indented under it, and it carries a "main" badge with their count.
 _Avoid_: orchestrator, planner (ADR-9: a human splits goals)

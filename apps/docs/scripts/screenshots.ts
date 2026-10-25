@@ -4,6 +4,8 @@
 //
 //   pnpm --filter @trackwall/ui build && pnpm --filter @trackwall/docs screenshots
 //
+// Names of pictures after the command (`… screenshots task-review`) take only those, and not the two-window picture.
+//
 // It needs Chromium for Playwright (`pnpm --filter @trackwall/docs exec playwright install chromium`) and `mise` on
 // PATH for the services. The images go to `apps/docs/public/screenshots/`.
 import { type ChildProcess, spawn } from "node:child_process";
@@ -85,6 +87,22 @@ const SHOTS: Record<string, (page: Page) => Promise<void>> = {
     await page.getByText("pricing", { exact: true }).first().click();
     await settle(page);
   },
+  "task-review": async (page) => {
+    await page.keyboard.press("Control+3");
+    await page.getByText("pricing", { exact: true }).first().click();
+    await page.getByRole("tab", { name: "Changes" }).click();
+    await settle(page);
+    // A comment on the diff line that contains `code`; the last one stays open in its form.
+    const comment = async (code: string, text: string, add: boolean) => {
+      await page.locator("pre div", { hasText: code }).first().getByRole("button").click();
+      await page.getByRole("textbox", { name: /^Comment on line/ }).fill(text);
+      if (add) await page.getByRole("button", { name: "Add comment" }).click();
+    };
+    await comment("HALF_EVEN", "Round half up: the shop shows 2.345 as 2.35 everywhere else.", true);
+    await comment("record PriceChangedEvent", "Add the old price too, so listeners can tell a raise from a cut.", true);
+    await comment("publishEvent", "Publish only when the price really changed.", false);
+    await settle(page, 500);
+  },
   overview: async (page) => {
     // The graph of twenty repos is wider than the other views.
     await page.setViewportSize({ width: 2400, height: 420 });
@@ -140,7 +158,8 @@ try {
   const url = `http://127.0.0.1:${daemon.port}/#token=${daemon.token}`;
   const browser = await chromium.launch();
   try {
-    for (const [name, show] of Object.entries(SHOTS)) {
+    const only = process.argv.slice(2);
+    for (const [name, show] of Object.entries(SHOTS).filter(([name]) => only.length === 0 || only.includes(name))) {
       const page = await browser.newPage({ viewport: VIEWPORT, colorScheme: "dark" });
       await page.goto(url);
       // The supervisor's panel is folded to its strip, so the view gets the width; the supervisor has a page of its own.
@@ -150,7 +169,7 @@ try {
       await shot(page, name);
       await page.close();
     }
-    await windowsShot(await browser.newPage(), join(OUT, "sessions-grid.png"), join(OUT, "overview.png"));
+    if (only.length === 0) await windowsShot(await browser.newPage(), join(OUT, "sessions-grid.png"), join(OUT, "overview.png"));
   } finally {
     await browser.close();
   }

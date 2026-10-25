@@ -95,7 +95,8 @@ export async function workingTreeChanges(
     const work = [
       diff(["--name-status", "-z"]),
       diff(["--numstat", "-z"]),
-      maxPatchBytes > 0 ? diff([], maxPatchBytes) : Promise.resolve(NO_PATCH),
+      // Fixed prefixes whatever the user's `diff.noprefix` or `diff.mnemonicPrefix`: the UI reads file paths from them (ADR-62).
+      maxPatchBytes > 0 ? diff(["--src-prefix=a/", "--dst-prefix=b/"], maxPatchBytes) : Promise.resolve(NO_PATCH),
     ] as const;
     await Promise.allSettled(work);
     const [names, stats, patch] = await Promise.all(work);

@@ -1,6 +1,7 @@
 import type { ChangedFile, WorkingTreeChanges } from "@trackwall/protocol";
+import { Fragment, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
-import { type DiffLineKind, diffLines } from "@/lib/diff-lines";
+import { type DiffLine, type DiffLineKind, diffLines } from "@/lib/diff-lines";
 import { cn } from "@/lib/utils";
 
 /** Beyond this many lines or files the browser starts to choke, and the rest is better read in VS Code anyway. */
@@ -23,10 +24,19 @@ const LINE_CLASSES: Record<DiffLineKind, string> = {
 };
 
 /**
+ * What a view adds to the diff lines: a task's review comments (ADR-62) put a button in front of every line of a change
+ * and the comment form under it. Both get only lines with an anchor.
+ */
+export interface LineAnnotations {
+  gutter: (line: DiffLine) => ReactNode;
+  below: (line: DiffLine) => ReactNode;
+}
+
+/**
  * Files and diff of the working directory against a commit: a task's changes (ADR-31) and a repo's "Changes" tab (ADR-34).
  * An empty set of files stays with the caller, because each view says something different about it.
  */
-export function ChangesDiff({ changes }: { changes: WorkingTreeChanges }) {
+export function ChangesDiff({ changes, annotations }: { changes: WorkingTreeChanges; annotations?: LineAnnotations }) {
   const { lines, more } = diffLines(changes.patch, MAX_LINES);
   const files = changes.files.slice(0, MAX_FILES);
   return (
@@ -48,11 +58,21 @@ export function ChangesDiff({ changes }: { changes: WorkingTreeChanges }) {
         </p>
       )}
       <pre className="bg-muted overflow-x-auto rounded-md border p-3 font-mono text-xs leading-5">
-        {lines.map((line) => (
-          <div key={line.offset} className={cn("px-1 whitespace-pre", LINE_CLASSES[line.kind])}>
-            {line.text || " "}
-          </div>
-        ))}
+        {lines.map((line) =>
+          annotations ? (
+            <Fragment key={line.offset}>
+              <div className={cn("group flex px-1 whitespace-pre", LINE_CLASSES[line.kind])}>
+                <span className="w-5 shrink-0">{line.anchor && annotations.gutter(line)}</span>
+                {line.text || " "}
+              </div>
+              {line.anchor && annotations.below(line)}
+            </Fragment>
+          ) : (
+            <div key={line.offset} className={cn("px-1 whitespace-pre", LINE_CLASSES[line.kind])}>
+              {line.text || " "}
+            </div>
+          ),
+        )}
       </pre>
       {(changes.truncated || more) && (
         <p className="text-muted-foreground text-xs">The changes are longer; showing the beginning. See all of them in VS Code.</p>

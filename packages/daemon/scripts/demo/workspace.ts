@@ -248,3 +248,56 @@ export function createDemoWorkspace(projectsDir: string): void {
   });
   write(join(projectsDir, "shop-web"), { "src/Checkout.tsx": "export function Checkout() {\n  return null;\n}\n" });
 }
+
+/**
+ * What the agent of the pricing task has changed so far, uncommitted in its worktree: the "Changes" tab of that task
+ * and its review comments in the screenshots.
+ */
+export function writePricingTaskChanges(worktree: string): void {
+  const dir = "src/main/java/com/example/shop/pricing";
+  write(worktree, {
+    [`${dir}/PricesController.java`]: `package com.example.shop.pricing;
+
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.web.bind.annotation.*;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/prices")
+public class PricesController {
+
+    private final ApplicationEventPublisher events;
+
+    public PricesController(ApplicationEventPublisher events) {
+        this.events = events;
+    }
+
+    @GetMapping
+    public List<PricesDto> list() {
+        return List.of();
+    }
+
+    @GetMapping("/{id}")
+    public PricesDto get(@PathVariable String id) {
+        return new PricesDto(id);
+    }
+
+    @PutMapping("/{id}")
+    public PricesDto change(@PathVariable String id, @RequestBody BigDecimal amount) {
+        BigDecimal rounded = amount.setScale(2, RoundingMode.HALF_EVEN);
+        events.publishEvent(new PriceChangedEvent(id, rounded));
+        return new PricesDto(id);
+    }
+}
+`,
+    [`${dir}/PriceChangedEvent.java`]: `package com.example.shop.pricing;
+
+import java.math.BigDecimal;
+
+/** Published after a price has changed; catalog and orders-api listen for it. */
+public record PriceChangedEvent(String productId, BigDecimal newPrice) {}
+`,
+  });
+}

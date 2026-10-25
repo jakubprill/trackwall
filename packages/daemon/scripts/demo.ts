@@ -24,7 +24,7 @@ import { createMcpEndpoint } from "../src/mcp/endpoint.ts";
 import { mcpStdioCommand, sessionMcpStdioCommand } from "../src/mcp/stdio-command.ts";
 import { runtimeInfo } from "../src/platform/runtime.ts";
 import { TURNS } from "./demo/turns.ts";
-import { createDemoWorkspace, DEMO_REPOS } from "./demo/workspace.ts";
+import { createDemoWorkspace, DEMO_REPOS, writePricingTaskChanges } from "./demo/workspace.ts";
 
 const VERSION = "demo";
 const dir = process.argv[2];
@@ -112,7 +112,8 @@ async function setTheScene(): Promise<void> {
     "Skip the invoice when billing already has one for the order id.",
   );
   for (const proposal of [retry, notify]) await facade.agents.approveProposal(proposal.id, proposal.prompt);
-  await facade.agents.createTask("pricing", "Publish a price-changed event when a price changes");
+  const pricing = await facade.agents.createTask("pricing", "Publish a price-changed event when a price changes");
+  writePricingTaskChanges(pricing.worktree);
   await facade.agents.createTask("reviews", "Hide reviews from customers who have been deleted");
   for (const repo of DEMO_REPOS) await facade.mise.trust(repo);
   const slice = await facade.services.start({ repo: "admin-bff", task: null, dependencies: true, waitMs: 20_000 });
