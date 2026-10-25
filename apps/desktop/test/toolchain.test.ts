@@ -26,28 +26,21 @@ test("mise.toml ustala wersje Node, Bun, pnpm i Rust", () => {
   expect(Object.keys(miseTools()).sort()).toEqual(["bun", "node", "pnpm", "rust"]);
 });
 
-test("mise.toml i oba workflow używają tych samych wersji Node, Bun i Rust", () => {
-  const tools = miseTools();
-  for (const workflow of [".github/workflows/ci.yml", ".github/workflows/release.yml"]) {
-    const yaml = read(workflow);
-    expect({
-      workflow,
-      node: workflowEnv(yaml, "NODE_VERSION"),
-      bun: workflowEnv(yaml, "BUN_VERSION"),
-      rust: workflowEnv(yaml, "RUST_VERSION"),
-    }).toEqual({
-      workflow,
-      node: tools.node,
-      bun: tools.bun,
-      rust: tools.rust,
-    });
-  }
-});
+/** The versions each workflow sets in `env`; the documentation site builds no Rust. */
+const WORKFLOW_TOOLS = {
+  ".github/workflows/ci.yml": { node: "NODE_VERSION", bun: "BUN_VERSION", rust: "RUST_VERSION" },
+  ".github/workflows/release.yml": { node: "NODE_VERSION", bun: "BUN_VERSION", rust: "RUST_VERSION" },
+  ".github/workflows/pages.yml": { node: "NODE_VERSION", bun: "BUN_VERSION" },
+} satisfies Record<string, Partial<Record<"node" | "bun" | "rust", string>>>;
 
-test("the documentation site workflow uses the Node and Bun versions from mise.toml", () => {
+test("every workflow uses the Node, Bun and Rust versions from mise.toml", () => {
   const tools = miseTools();
-  const yaml = read(".github/workflows/pages.yml");
-  expect({ node: workflowEnv(yaml, "NODE_VERSION"), bun: workflowEnv(yaml, "BUN_VERSION") }).toEqual({ node: tools.node, bun: tools.bun });
+  for (const [workflow, variables] of Object.entries(WORKFLOW_TOOLS)) {
+    const yaml = read(workflow);
+    const inWorkflow = Object.fromEntries(Object.entries(variables).map(([tool, variable]) => [tool, workflowEnv(yaml, variable)]));
+    const inMise = Object.fromEntries(Object.keys(variables).map((tool) => [tool, tools[tool]]));
+    expect({ workflow, ...inWorkflow }).toEqual({ workflow, ...inMise });
+  }
 });
 
 test("pnpm z mise.toml jest tym z packageManager, a Rust z mise.toml tym z rust-version w Cargo.toml", () => {

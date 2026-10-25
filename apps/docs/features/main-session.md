@@ -10,4 +10,4 @@ A task session finishes its work with the `report_result` tool, and its summary 
 
 ## Decisions
 
-Why it works this way: [ADR-39](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief) in the architecture document.
+Why it works this way: ADR-39 in [§12 of the architecture document](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief).

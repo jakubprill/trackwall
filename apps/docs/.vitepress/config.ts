@@ -2,19 +2,20 @@
 import { defineConfig } from "vitepress";
 
 const REPO_URL = "https://github.com/jakubprill/trackwall";
+// GitHub Pages serves a project site under /<repo>/; `pnpm dev` uses the same path.
+const BASE = "/trackwall/";
 
 export default defineConfig({
   title: "Trackwall",
   description: "A desktop app for working across many git repositories and many CLI coding agents at once.",
-  // GitHub Pages serves a project site under /<repo>/; `pnpm dev` uses the same path.
-  base: "/trackwall/",
+  base: BASE,
   outDir: "dist",
   cleanUrls: true,
   // The app has one dark theme (ADR-16); the site opens dark and still offers the light one.
   appearance: "dark",
   // Dates come from git; pages.yml checks out the full history.
   lastUpdated: true,
-  head: [["link", { rel: "icon", type: "image/svg+xml", href: "/trackwall/logo.svg" }]],
+  head: [["link", { rel: "icon", type: "image/svg+xml", href: `${BASE}logo.svg` }]],
   themeConfig: {
     logo: "/logo.svg",
     search: { provider: "local" },

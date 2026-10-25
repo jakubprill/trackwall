@@ -8,4 +8,4 @@ On macOS the system registers the scheme once you have started the app; on Windo
 
 ## Decisions
 
-Why it works this way: [ADR-52](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief) in the architecture document.
+Why it works this way: ADR-52 in [§12 of the architecture document](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief).

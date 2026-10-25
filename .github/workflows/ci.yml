@@ -58,7 +58,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
-      # A broken link or page fails the build; pages.yml publishes the same build from main (ADR-56).
+      # A broken page or link between pages fails the build (links to GitHub are not checked); pages.yml publishes the same build from main (ADR-56).
       - name: Documentation site
         run: pnpm --filter @trackwall/docs build
 

@@ -14,4 +14,4 @@ A folder inside a listed repo opens that repo, the projects folder itself opens 
 
 ## Decisions
 
-Why it works this way: [ADR-35](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief), [ADR-51](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief) in the architecture document.
+Why it works this way: ADR-35, ADR-51 in [§12 of the architecture document](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief).

@@ -12,4 +12,4 @@ When another task of the same repo changes the same files, a warning above the t
 
 ## Decisions
 
-Why it works this way: [ADR-31](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief), [ADR-44](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief) in the architecture document.
+Why it works this way: ADR-31, ADR-44 in [§12 of the architecture document](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief).

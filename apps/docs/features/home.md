@@ -10,4 +10,4 @@ A click selects an object and points the camera at it, a double click or "Open r
 
 ## Decisions
 
-Why it works this way: [ADR-33](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief), [ADR-47](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief) in the architecture document.
+Why it works this way: ADR-33, ADR-47 in [§12 of the architecture document](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief).

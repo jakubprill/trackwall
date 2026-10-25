@@ -12,4 +12,4 @@ A session from "Sessions" starts and stops only its own repo's service, but may 
 
 ## Decisions
 
-Why it works this way: [ADR-45](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief) in the architecture document.
+Why it works this way: ADR-45 in [§12 of the architecture document](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief).

@@ -110,7 +110,7 @@ cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
 bun packages/daemon/scripts/smoke.ts apps/desktop/src-tauri/target/release/trackwall-daemon
 pnpm portable
 
-# when the change touches apps/docs (a broken link fails the build; the `check` job in CI runs it too):
+# when the change touches apps/docs (a broken link between pages fails the build; the `check` job in CI runs it too):
 pnpm --filter @trackwall/docs build
 ```
 

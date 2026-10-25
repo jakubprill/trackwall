@@ -33,7 +33,8 @@ pnpm dev                       # daemon (bun --watch, state in .trackwall-dev/) 
 pnpm --filter @trackwall/desktop dev   # the same in a Tauri window (state in ~/.trackwall-dev, separate from the release)
 pnpm lint                      # Biome and knip (pnpm format fixes formatting)
 pnpm test                      # tests of every package
-pnpm --filter @trackwall/docs dev     # the documentation site at http://localhost:5173/trackwall/
+pnpm --filter @trackwall/docs dev     # the documentation site under /trackwall/ (Vite prints the address; 5174 when `pnpm dev` holds 5173)
+pnpm --filter @trackwall/docs build   # the site into apps/docs/dist; fails on a broken link between pages
 ```
 
 The daemon alone with the UI in the browser, without Tauri:
@@ -60,7 +61,7 @@ Every CI run (PR, push to `main`, manual run) publishes both archives as artifac
 
 ## Icons
 
-The icon sources are `apps/desktop/assets/icon.svg` (the app icon) and `apps/desktop/assets/tray-icon.svg` (the single-colour tray mark). After changing either of them:
+The icon sources are `apps/desktop/assets/icon.svg` (the app icon; the documentation site has a copy without the comment in `apps/docs/public/logo.svg`, kept equal by `apps/docs/test/theme.test.ts`) and `apps/desktop/assets/tray-icon.svg` (the single-colour tray mark). After changing either of them:
 
 ```sh
 pnpm --filter @trackwall/desktop icons   # icons from bundle.icon in tauri.conf.json, the macOS tray template and the UI favicon
