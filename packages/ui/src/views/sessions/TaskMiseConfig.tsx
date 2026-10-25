@@ -37,7 +37,14 @@ export function TaskMiseConfig({ conn, task, paused }: { conn: Connection; task:
   // Adjusting state during render, as React documents for state derived from props: no extra render with stale text.
   const next = shownMiseConfig(shown, latest, trustedDigest);
   if (next !== shown) setShown(next);
-  if (remote.errorCode === "mise_unavailable") return <Warning title="mise tasks cannot run in this worktree">{remote.error}</Warning>;
+  // The trust is shown as done only until the daemon reports the trusted config, so a later return to that version warns.
+  if (trustedDigest !== undefined && latest?.changes.length === 0) setTrustedDigest(undefined);
+  if (remote.error)
+    return remote.errorCode === "mise_unavailable" ? (
+      <Warning title="mise tasks cannot run in this worktree">
+        <p className="text-muted-foreground text-xs">{remote.error}</p>
+      </Warning>
+    ) : null;
   if (!next) return null;
   const changedAgain = changedSinceShown(next, latest);
   return (

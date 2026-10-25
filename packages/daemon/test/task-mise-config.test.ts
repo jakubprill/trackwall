@@ -93,7 +93,7 @@ describe("the mise config of a task worktree (ADR-59)", () => {
   );
 
   test.skipIf(process.platform === "win32")(
-    "a link out of the worktree, a linked mise directory and a socket (not a regular file) are refused",
+    "a link out of the worktree, a broken link, a linked mise directory and a socket (not a regular file) are refused",
     async () => {
       const outside = worktreeWith({ "secret.toml": "token\n" });
       const linkedFile = worktreeWith({});
@@ -110,13 +110,22 @@ describe("the mise config of a task worktree (ADR-59)", () => {
         code: "mise_unavailable",
         message: "the mise config of the task worktree has a symbolic link out of the worktree (mise.toml), which Trackwall does not check",
       });
+      const broken = worktreeWith({});
+      symlinkSync(join(broken, "nowhere.toml"), join(broken, "mise.local.toml"));
+      await expect(readMiseConfig(broken)).rejects.toMatchObject({
+        message: "the mise config of the task worktree has a broken symbolic link (mise.local.toml), which Trackwall does not check",
+      });
       await expect(readMiseConfig(linkedDir)).rejects.toMatchObject({
         message: "the mise config of the task worktree has a linked directory (mise-tasks), which Trackwall does not check",
       });
-      await expect(readMiseConfig(socketDir)).rejects.toMatchObject({
-        message: "the mise config of the task worktree has something other than a file (mise-tasks/build), which Trackwall does not check",
-      });
-      server.close();
+      try {
+        await expect(readMiseConfig(socketDir)).rejects.toMatchObject({
+          message:
+            "the mise config of the task worktree has something other than a file (mise-tasks/build), which Trackwall does not check",
+        });
+      } finally {
+        server.close();
+      }
     },
   );
 

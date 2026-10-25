@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import type { Dirent } from "node:fs";
 import { lstat, readdir, readFile, realpath, stat } from "node:fs/promises";
-import { isAbsolute, join, relative, sep } from "node:path";
+import { join } from "node:path";
 import type { MiseConfigChange, TaskMiseConfig } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
+import { isInside } from "../../infra/path-inside.ts";
 
 /**
  * The mise config of a task worktree (§4.4, ADR-59): the files mise reads for the tasks and the environment of a run in
@@ -71,10 +72,13 @@ function snapshotOf(files: Map<string, Buffer>): MiseSnapshot {
   return Object.fromEntries([...files].map(([path, content]) => [path, sha256(content)]));
 }
 
+/** A changed file before its text is added for the user (`reviewMiseConfig`). */
+type MiseFileChange = Omit<MiseConfigChange, "content">;
+
 /** What differs in `current` from `trusted`, sorted by path. */
-export function miseConfigChanges(trusted: MiseSnapshot, current: MiseSnapshot): Omit<MiseConfigChange, "content">[] {
+export function miseConfigChanges(trusted: MiseSnapshot, current: MiseSnapshot): MiseFileChange[] {
   const paths = [...new Set([...Object.keys(trusted), ...Object.keys(current)])].sort();
-  return paths.flatMap((path): Omit<MiseConfigChange, "content">[] => {
+  return paths.flatMap((path): MiseFileChange[] => {
     const before = trusted[path];
     const now = current[path];
     if (before === now) return [];
@@ -130,19 +134,26 @@ async function addFile(walk: Walk, path: readonly string[]): Promise<void> {
   if (key.length > MAX_MISE_PATH) throw tooLarge(`a path longer than ${MAX_MISE_PATH} characters`);
   let full = join(walk.root, ...path);
   if ((await lstat(full)).isSymbolicLink()) {
-    full = await realpath(full);
-    if (!inside(walk.realRoot, full)) throw unchecked(path, "a symbolic link out of the worktree");
+    full = await linkTarget(full, path);
+    if (!isInside(walk.realRoot, full)) throw unchecked(path, "a symbolic link out of the worktree");
   }
   const info = await stat(full);
+  if (info.isDirectory()) throw unchecked(path, "a linked directory");
   if (!info.isFile()) throw unchecked(path, "something other than a file");
   walk.bytes += info.size;
   if (walk.bytes > MAX_BYTES) throw tooLarge(`more than ${MAX_BYTES / 1024 / 1024} MB`);
   walk.files.set(key, await readFile(full));
 }
 
-function inside(root: string, path: string): boolean {
-  const rel = relative(root, path);
-  return rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+/** The real path behind a link; a link to nothing or a loop of links is refused, not a daemon error. */
+async function linkTarget(full: string, path: readonly string[]): Promise<string> {
+  try {
+    return await realpath(full);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ELOOP") throw unchecked(path, "a broken symbolic link");
+    throw err;
+  }
 }
 
 /** Entries of a directory; a missing one (or a file in its place) has none. */
