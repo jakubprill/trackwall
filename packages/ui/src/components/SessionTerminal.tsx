@@ -1,9 +1,10 @@
 import "@xterm/xterm/css/xterm.css";
 import { isTauri } from "@tauri-apps/api/core";
-import { PTY_CLOSE_NOT_FOUND, type PtyClientMessage, ptySocket } from "@trackwall/protocol";
+import { PTY_CLOSE_NOT_FOUND, type PtyClientMessage, ptySocket, workspaceApi } from "@trackwall/protocol";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { useContext, useEffect, useRef, useState } from "react";
+import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { daemonSocket } from "@/lib/daemon-socket";
 import { DROP_HOVER_RING, FILE_DROP_TARGET, FileDropEvent } from "@/lib/file-drop";
@@ -11,8 +12,8 @@ import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
 import { oncePerFrame } from "@/lib/once-per-frame";
 import { pastedPaths } from "@/lib/pasted-paths";
 import { IS_MAC } from "@/lib/platform";
-import { copiesSelection } from "@/lib/terminal-copy";
-import { trackwallLinkProvider } from "@/lib/terminal-links";
+import { copiesSelection, keepsSelection } from "@/lib/terminal-copy";
+import { hyperlinkHandler, trackwallLinkProvider } from "@/lib/terminal-links";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { terminalTheme } from "@/lib/terminal-theme";
 import { cn } from "@/lib/utils";
@@ -60,8 +61,20 @@ export function SessionTerminal({
     const terminal = new Terminal(sessionTerminalOptions(terminalTheme(document.documentElement), getComputedStyle(element).fontFamily));
     const fit = new FitAddon();
     terminal.loadAddon(fit);
-    const links = isTauri() ? terminal.registerLinkProvider(trackwallLinkProvider(terminal, IS_MAC)) : undefined;
+    let links: { dispose: () => void } | undefined;
+    if (isTauri()) {
+      links = terminal.registerLinkProvider(trackwallLinkProvider(terminal, IS_MAC));
+      terminal.options.linkHandler = hyperlinkHandler(IS_MAC, (url) => {
+        post(conn, workspaceApi.openLink, { url }).catch((err: unknown) => setNotice(`Could not open the link: ${errorMessage(err)}`));
+      });
+    }
     terminal.open(element);
+    // In the capture phase, before xterm.js reports the move to the program and so clears the selection.
+    const holdMove = (event: MouseEvent) => {
+      const state = { hasSelection: terminal.hasSelection(), reportsMoves: terminal.modes.mouseTrackingMode === "any" };
+      if (keepsSelection(event, state)) event.stopPropagation();
+    };
+    element.addEventListener("mousemove", holdMove, { capture: true });
     fit.fit();
     term.current = terminal;
     if (takesFocus.current) terminal.focus();
@@ -151,6 +164,7 @@ export function SessionTerminal({
       resizer.dispose();
       resize.disconnect();
       container.removeEventListener(FileDropEvent.type, takeDrop);
+      element.removeEventListener("mousemove", holdMove, { capture: true });
       window.removeEventListener("focus", onWindowFocus);
       window.removeEventListener("blur", sendFocus);
       document.removeEventListener("visibilitychange", sendFocus);
