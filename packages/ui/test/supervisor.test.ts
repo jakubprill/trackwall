@@ -1,0 +1,126 @@
+import { describe, expect, test } from "bun:test";
+import type { Session, SessionList, Task, TaskProposal } from "@trackwall/protocol";
+import { entryId, proposerLabel, sessionRows, supervisorWork } from "../src/lib/session-entries.ts";
+import { attentionCount, sessionTitle } from "../src/lib/session-state.ts";
+import { currentSupervisor, selectsSupervisor, supervisorProposals } from "../src/lib/supervisor.ts";
+import { readSupervisorPinned, saveSupervisorPinned } from "../src/lib/supervisor-pin.ts";
+
+function session(id: string, repo: string | null, run: Session["run"]["kind"] = "running"): Session {
+  const startedAt = "2026-10-25T10:00:00Z";
+  return {
+    id,
+    repo,
+    startedAt,
+    run:
+      run === "exited"
+        ? { kind: "exited", runId: id, startedAt, endedAt: startedAt, exitCode: 0, signal: null, stoppedByUser: true, lastLines: [] }
+        : { kind: "running", runId: id, startedAt, pid: 1 },
+    state: null,
+    windowTitle: null,
+    needsAttention: false,
+    task: null,
+  };
+}
+
+function task(id: string, proposedBy: Task["proposedBy"]): Task {
+  return {
+    id,
+    repo: "shop",
+    prompt: "fix the cart",
+    branch: `trackwall/fix-${id}`,
+    baseBranch: "main",
+    base: "a".repeat(40),
+    worktree: `/home/me/.trackwall/worktrees/shop/fix-${id}`,
+    createdAt: "2026-10-25T10:05:00Z",
+    title: "Fix the cart",
+    proposedBy,
+    summary: null,
+  };
+}
+
+function proposal(id: string, proposedBy: TaskProposal["proposedBy"]): TaskProposal {
+  return { id, repo: "billing", title: "Add refunds", prompt: "add refunds", proposedBy, createdAt: "2026-10-25T10:10:00Z" };
+}
+
+function list(parts: Partial<SessionList>): SessionList {
+  return { sessions: [], tasks: [], proposals: [], worktreesDir: "/home/me/.trackwall/worktrees", ...parts };
+}
+
+const shape = (data: SessionList) => sessionRows(data).map((r) => `${entryId(r.entry)} @${r.depth}${r.supervised ? " supervised" : ""}`);
+
+describe("the supervisor (ADR-58)", () => {
+  test("the supervisor is not an entry of the list; its work comes first, one level under its heading", () => {
+    const data = list({
+      sessions: [session("sup", null), session("s1", "shop")],
+      tasks: [task("t1", { session: "sup", supervisor: true }), task("t2", null)],
+      proposals: [proposal("p1", { session: "sup", supervisor: true })],
+    });
+    expect(shape(data)).toEqual(["proposals:sup @1 supervised", "t1 @1 supervised", "t2 @0", "s1 @0"]);
+    expect(supervisorWork(sessionRows(data))).toBe(2);
+  });
+
+  test("the supervisor's work stays under its heading after the supervisor session that delegated it is gone", () => {
+    const data = list({ tasks: [task("t1", { session: "gone", supervisor: true }), task("t2", { session: "gone", supervisor: false })] });
+    expect(shape(data)).toEqual(["t1 @1 supervised", "t2 @0"]);
+  });
+
+  test("work a supervised task delegated further sits under that task, still under the supervisor", () => {
+    const data = list({
+      sessions: [{ ...session("ts1", "shop"), task: "t1" }],
+      tasks: [task("t1", { session: "sup", supervisor: true })],
+      proposals: [proposal("p1", { session: "ts1", supervisor: false })],
+    });
+    expect(shape(data)).toEqual(["t1 @1 supervised", "proposals:ts1 @2 supervised"]);
+    expect(supervisorWork(sessionRows(data))).toBe(1);
+  });
+
+  test("the panel shows the running supervisor, otherwise the newest that has ended", () => {
+    expect(currentSupervisor(list({ sessions: [session("old", null, "exited"), session("now", null), session("s1", "shop")] }))?.id).toBe(
+      "now",
+    );
+    expect(currentSupervisor(list({ sessions: [session("newer", null, "exited"), session("older", null, "exited")] }))?.id).toBe("newer");
+    expect(currentSupervisor(list({ sessions: [session("s1", "shop")] }))).toBeUndefined();
+    expect(currentSupervisor(undefined)).toBeUndefined();
+  });
+
+  test("a selection of the supervisor session goes to its panel, any other selection to Sessions", () => {
+    const data = list({ sessions: [session("sup", null), session("s1", "shop")] });
+    expect(selectsSupervisor(data, { kind: "session", id: "sup" })).toBe(true);
+    expect(selectsSupervisor(data, { kind: "session", id: "s1" })).toBe(false);
+    expect(selectsSupervisor(data, { kind: "task", id: "sup" })).toBe(false);
+    expect(selectsSupervisor(undefined, { kind: "session", id: "sup" })).toBe(false);
+  });
+
+  test("the supervisor waits in its panel, so the Sessions count leaves it out but counts its proposals", () => {
+    const data = list({
+      sessions: [
+        { ...session("sup", null), needsAttention: true },
+        { ...session("s1", "shop"), needsAttention: true },
+      ],
+      proposals: [proposal("p1", { session: "sup", supervisor: true }), proposal("p2", { session: "s1", supervisor: false })],
+    });
+    expect(attentionCount(data)).toBe(3);
+    expect(supervisorProposals(data)).toBe(1);
+  });
+
+  test("the supervisor is named Supervisor, and its proposals say they come from it", () => {
+    expect(sessionTitle({ ...session("sup", null), windowTitle: "Plan the refunds" })).toBe("Supervisor · Plan the refunds");
+    expect(proposerLabel({ session: "sup", supervisor: true }, [])).toBe("proposed by the supervisor");
+  });
+
+  test("the panel is pinned until folded, and storage that refuses access reads as pinned", () => {
+    const stored = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => stored.get(key) ?? null,
+      setItem: (key: string, value: string) => void stored.set(key, value),
+    };
+    expect(readSupervisorPinned(() => storage)).toBe(true);
+    saveSupervisorPinned(() => storage, false);
+    expect(readSupervisorPinned(() => storage)).toBe(false);
+    const refusing = () => {
+      throw new Error("SecurityError");
+    };
+    expect(readSupervisorPinned(refusing)).toBe(true);
+    expect(() => saveSupervisorPinned(refusing, false)).not.toThrow();
+  });
+});

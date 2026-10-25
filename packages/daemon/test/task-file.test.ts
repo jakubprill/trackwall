@@ -14,7 +14,7 @@ const stored = {
   base: "a".repeat(40),
   createdAt: "2026-10-23T22:00:00.000Z",
   title: "Napraw logowanie",
-  proposedBy: { session: "9b1e7d2a-0000-4000-8000-000000000000" },
+  proposedBy: { session: "9b1e7d2a-0000-4000-8000-000000000000", supervisor: false },
   summary: { text: "Poprawione, test dodany.", reportedAt: "2026-10-24T10:00:00.000Z" },
 };
 
@@ -33,6 +33,14 @@ describe("tasks.json", () => {
     writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
 
     expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, title: null, proposedBy: null, summary: null }]);
+  });
+
+  test("a task proposed before the supervisor comes back as not the supervisor's", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
+    const old = { ...stored, proposedBy: { session: stored.proposedBy.session } };
+    writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
+
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([stored]);
   });
 
   test.each([

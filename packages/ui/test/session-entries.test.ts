@@ -33,11 +33,11 @@ function task(id: string, createdAt: string): Task {
 }
 
 function proposal(id: string, createdAt: string, proposer: string | null = null): TaskProposal {
-  return { id, repo: "sklep", title: "Dodaj test", prompt: "dodaj test", proposedBy: { session: proposer }, createdAt };
+  return { id, repo: "sklep", title: "Dodaj test", prompt: "dodaj test", proposedBy: { session: proposer, supervisor: false }, createdAt };
 }
 
 function delegated(id: string, createdAt: string, proposer: string): Task {
-  return { ...task(id, createdAt), title: "Dodaj test", proposedBy: { session: proposer } };
+  return { ...task(id, createdAt), title: "Dodaj test", proposedBy: { session: proposer, supervisor: false } };
 }
 
 /** The entries of the rows, in display order, without depth. */
@@ -200,7 +200,7 @@ describe("pozycje widoku Sesje", () => {
   });
 
   test("a gone group of an agent outside Trackwall gives way to its task, not to a task typed in the form", () => {
-    const outside: Task = { ...task("p1", "2026-10-23T12:00:00Z"), proposedBy: { session: null } };
+    const outside: Task = { ...task("p1", "2026-10-23T12:00:00Z"), proposedBy: { session: null, supervisor: false } };
     const entries = rowEntries({ sessions: [], tasks: [task("t0", "2026-10-23T13:00:00Z"), outside], proposals: [], worktreesDir: "/w" });
     expect(findEntry(entries, { kind: "proposals", proposer: null })).toMatchObject({ kind: "task", task: { id: "p1" } });
   });
@@ -249,8 +249,8 @@ describe("pozycje widoku Sesje", () => {
 
   test("propozycja mówi, czy przyszła od sesji z listy, od zamkniętej sesji, czy od agenta spoza Trackwall", () => {
     const sessions = [{ ...session("s1", "2026-10-23T12:00:00Z"), windowTitle: "Plan sprintu" }];
-    expect(proposerLabel({ session: "s1" }, sessions)).toBe("proposed by the session in sklep (Plan sprintu)");
-    expect(proposerLabel({ session: "s9" }, sessions)).toBe("proposed by a session that is no longer listed");
-    expect(proposerLabel({ session: null }, sessions)).toBe("proposed by an agent outside Trackwall");
+    expect(proposerLabel({ session: "s1", supervisor: false }, sessions)).toBe("proposed by the session in sklep (Plan sprintu)");
+    expect(proposerLabel({ session: "s9", supervisor: false }, sessions)).toBe("proposed by a session that is no longer listed");
+    expect(proposerLabel({ session: null, supervisor: false }, sessions)).toBe("proposed by an agent outside Trackwall");
   });
 });

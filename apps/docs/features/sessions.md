@@ -41,13 +41,15 @@ Every session also gets short instructions from Trackwall on how to work with yo
 |---|---|
 | Alt+1 … Alt+9 (⌥ on macOS) | Select the session at that position in the list, turning the grid to its page. |
 | Alt+J | Jump to the next session or task proposal waiting for you, from any view. |
+| Alt+0 | Open the [supervisor](/features/supervisor) panel, from any view. |
 | Win+Alt+J (⌃⌥J on macOS) | Bring Trackwall forward on the next session waiting for you, from any app. |
 
-Alt+1 … Alt+9 and Alt+J work while a terminal has the focus too, and are not typed into the session; Esc and Ctrl+C go to Copilot CLI as usual and interrupt the agent's turn. On macOS, an Option key that types a character on your keyboard layout (⌥5 for `[` on a German keyboard) stays a character.
+Alt+1 … Alt+9, Alt+0 and Alt+J work while a terminal has the focus too, and are not typed into the session; Esc and Ctrl+C go to Copilot CLI as usual and interrupt the agent's turn. On macOS, an Option key that types a character on your keyboard layout (⌥5 for `[` on a German keyboard) stays a character.
 
 ## Good to know
 
 - Copilot CLI must be on your `PATH` as `copilot` and signed in.
+- The [supervisor](/features/supervisor) is not one of the numbered entries: its heading tops the list with the work it delegated under it, and selecting it opens its panel on the right.
 - Copilot CLI takes over the mouse in the terminal. Select text by dragging with Option (macOS) or Shift (Windows) held down, then copy with Cmd+C or Ctrl+C. Ctrl+C without a selection interrupts the agent.
 - Drag a file or folder from Explorer or Finder onto a terminal to paste its path, quoted when it has a space.
 - "Stop" ends the session with everything it started; "Close" removes an ended session from the list. The X next to a session does both in one click and asks first while the agent is working. On an [agent task](/features/tasks), the X closes only its session: the task stays on the list; select it and press "Resume" to start a new session in its worktree.

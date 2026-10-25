@@ -74,7 +74,16 @@ const entries = (...sessions: Session[]): SessionEntry[] => sessions.map((sessio
 const proposals: SessionEntry = {
   kind: "proposals",
   proposer: null,
-  proposals: [{ id: "p1", repo: "billing", title: "Add refunds", prompt: "add refunds", proposedBy: { session: null }, createdAt: "" }],
+  proposals: [
+    {
+      id: "p1",
+      repo: "billing",
+      title: "Add refunds",
+      prompt: "add refunds",
+      proposedBy: { session: null, supervisor: false },
+      createdAt: "",
+    },
+  ],
 };
 
 describe("skok do sesji czekającej", () => {

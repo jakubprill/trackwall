@@ -170,7 +170,7 @@ const runs: ToolRuns = {
     // Repo musi istnieć (`not_found` jak w get_repo): literówka w identyfikatorze nie może wyglądać jak „brak sesji”.
     if (repo !== undefined) await facade.workspace.repo(repo);
     const { sessions, tasks, proposals } = facade.agents.sessions();
-    const inRepo = (item: { repo: string }) => repo === undefined || item.repo === repo;
+    const inRepo = (item: { repo: string | null }) => repo === undefined || item.repo === repo;
     return {
       sessions: sessions.filter(inRepo).map(agentSession),
       tasks: tasks.filter(inRepo),

@@ -32,8 +32,21 @@ const MENU_PROPOSAL_PREFIX: &str = "proposal:";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Waiting {
     pub id: String,
-    pub repo: String,
+    /// `None` for the supervisor, the session in the projects folder (ADR-58).
+    pub repo: Option<String>,
     pub state: Option<TaskState>,
+}
+
+impl Waiting {
+    /// Where the session works, for the menu: its repo, or the supervisor.
+    pub fn place(&self) -> &str {
+        self.repo.as_deref().unwrap_or("supervisor")
+    }
+
+    /// The session in a sentence: "a session in <repo>", or "the supervisor".
+    fn described(&self) -> String {
+        self.repo.as_ref().map_or_else(|| "the supervisor".to_owned(), |repo| format!("a session in {repo}"))
+    }
 }
 
 /// `TaskState` from protocol; a state this shell does not know yet reads as `Unknown` instead of failing the reply.
@@ -94,7 +107,7 @@ struct TaskRef {
 #[serde(rename_all = "camelCase")]
 struct Session {
     id: String,
-    repo: String,
+    repo: Option<String>,
     run: Run,
     state: Option<StateChange>,
     needs_attention: bool,
@@ -143,7 +156,7 @@ pub fn new_proposals<'a>(previous: Option<&Snapshot>, proposals: &'a [Proposal])
 pub fn tooltip(waiting: &[Waiting], proposals: &[Proposal]) -> String {
     match (waiting, proposals) {
         ([], []) => "Trackwall".to_owned(),
-        ([only], []) => format!("Trackwall: a session in {} is waiting for you", only.repo),
+        ([only], []) => format!("Trackwall: {} is waiting for you", only.described()),
         ([], [only]) => format!("Trackwall: a task proposal for {} is waiting for your decision", only.repo),
         _ => {
             let parts: Vec<String> = [(waiting.len(), "session", "sessions"), (proposals.len(), "task proposal", "task proposals")]
@@ -169,7 +182,7 @@ pub fn build_menu(app: &AppHandle, waiting: &[Waiting], proposals: &[Proposal]) 
         menu.append(&MenuItem::with_id(app, format!("{MENU_PROPOSAL_PREFIX}{}", p.id), label, true, None::<&str>)?)?;
     }
     for w in waiting {
-        let label = menu_text(&format!("Waiting: {}", w.repo));
+        let label = menu_text(&format!("Waiting: {}", w.place()));
         menu.append(&MenuItem::with_id(app, format!("{MENU_SESSION_PREFIX}{}", w.id), label, true, None::<&str>)?)?;
     }
     if !waiting.is_empty() || !proposals.is_empty() {
@@ -313,7 +326,16 @@ mod tests {
     }
 
     fn waiting(id: &str, state: TaskState) -> Waiting {
-        Waiting { id: id.into(), repo: format!("repo-{id}"), state: Some(state) }
+        Waiting { id: id.into(), repo: Some(format!("repo-{id}")), state: Some(state) }
+    }
+
+    #[test]
+    fn the_supervisor_has_no_repo_and_is_named_as_the_supervisor() {
+        let supervisor = r#"{"id":"s","repo":null,"startedAt":"x","run":{"kind":"running"},"state":{"state":"Input","source":"hook","confidence":"high","at":"x","reason":"r"},"windowTitle":null,"needsAttention":true}"#;
+        let now = parse_sessions(&body(supervisor, "")).expect("a valid reply");
+        assert_eq!(now.waiting, vec![Waiting { id: "s".into(), repo: None, state: Some(TaskState::Input) }]);
+        assert_eq!(now.waiting[0].place(), "supervisor");
+        assert_eq!(tooltip(&now.waiting, &[]), "Trackwall: the supervisor is waiting for you");
     }
 
     #[test]

@@ -1,8 +1,9 @@
 import { agentsApi, countLabel, type Session, type SessionList, TASK_PROMPT_MAX, type Task, workspaceApi } from "@trackwall/protocol";
-import { BellRing, GitBranch, Lightbulb, Play, Plus, Square, X } from "lucide-react";
+import { BellRing, Crown, GitBranch, Lightbulb, Play, Plus, Square, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
+import { SessionTerminal } from "@/components/SessionTerminal";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,10 +26,12 @@ import {
   selectedProposal,
   selectionAfterClose,
   sessionRows,
+  supervisorWork,
 } from "@/lib/session-entries";
 import { gridPage, SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
 import { ariaSessionShortcut, SHORTCUT_POSITIONS, sessionShortcut, sessionShortcutLabel } from "@/lib/session-shortcut";
-import { attentionCount, isLive, PROPOSAL_STATUS, sessionStateLabel } from "@/lib/session-state";
+import { attentionCount, isLive, PROPOSAL_STATUS, SUPERVISOR, sessionStateLabel } from "@/lib/session-state";
+import { currentSupervisor } from "@/lib/supervisor";
 import { useAction } from "@/lib/use-action";
 import { actionIsNewer, type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { useSessionClose } from "@/lib/use-session-close";
@@ -37,7 +40,6 @@ import { cn } from "@/lib/utils";
 import { ProposalInbox } from "./ProposalInbox.tsx";
 import { SessionCloseButton, SessionCloseConfirmation } from "./SessionClose.tsx";
 import { SessionGrid } from "./SessionGrid.tsx";
-import { SessionTerminal } from "./SessionTerminal.tsx";
 import { TaskLine } from "./TaskLine.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
 
@@ -58,6 +60,7 @@ export function SessionsView({
   onSelect,
   layout,
   onLayout,
+  onShowSupervisor,
 }: {
   conn: Connection;
   sessions: RemoteHandle<SessionList>;
@@ -65,6 +68,8 @@ export function SessionsView({
   onSelect: (selection: SessionSelection) => void;
   layout: SessionLayout;
   onLayout: (layout: SessionLayout) => void;
+  /** Opens the supervisor panel (ADR-58): the supervisor heading of the list leads there, not to a terminal here. */
+  onShowSupervisor: () => void;
 }) {
   const list = sessions.data?.sessions ?? [];
   // Zakończone zadanie znika od razu, a nie po odświeżeniu listy, żeby panel nie pokazał go znowu bez worktree.
@@ -130,6 +135,9 @@ export function SessionsView({
             <p className="text-muted-foreground px-2 text-sm">
               No sessions yet. Give the agent a task or start Copilot CLI in a repo from your projects folder.
             </p>
+          )}
+          {sessions.data && (currentSupervisor(sessions.data) || rows.some((r) => r.supervised)) && (
+            <SupervisorListItem supervisor={currentSupervisor(sessions.data)} delegated={supervisorWork(rows)} onOpen={onShowSupervisor} />
           )}
           {rows.map((row, i) => (
             <SessionListItem
@@ -302,6 +310,42 @@ function StartedListItem({
     </div>
   );
 }
+
+/**
+ * The supervisor heading (ADR-58) above the list, with the work it delegated right under it. It has no position: Alt+0
+ * reaches it, and it opens the supervisor panel instead of a terminal in this view.
+ */
+function SupervisorListItem({ supervisor, delegated, onOpen }: { supervisor: Session | undefined; delegated: number; onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-keyshortcuts={ariaSessionShortcut(SUPERVISOR_SHORTCUT)}
+      className="hover:bg-accent flex w-full items-start gap-3 rounded-md border border-transparent py-2 pr-8 pl-2 text-left transition-colors"
+    >
+      <span className="flex w-8 shrink-0 flex-col items-end gap-0.5 pt-0.5">
+        <Crown className="text-primary size-3.5" aria-hidden />
+        <span className="text-muted-foreground/70 font-mono text-2xs">{sessionShortcutLabel(SUPERVISOR_SHORTCUT, IS_MAC)}</span>
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-sm font-medium">{SUPERVISOR}</span>
+          {delegated > 0 && (
+            <Badge aria-label={`supervisor, ${countLabel(delegated, { one: "task or proposal", other: "tasks and proposals" })} under it`}>
+              {`main · ${delegated}`}
+            </Badge>
+          )}
+          {supervisor?.needsAttention && <BellRing className="text-warning size-3.5 shrink-0" aria-hidden />}
+        </span>
+        <span className="text-muted-foreground text-xs">
+          {supervisor ? <StatusLabel {...sessionStateLabel(supervisor)} /> : "not running"}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+const SUPERVISOR_SHORTCUT = { kind: "supervisor" } as const;
 
 /** The position of a list entry and its Alt + digit shortcut, the same for sessions, tasks and proposals. */
 function PositionLabel({ position }: { position: number }) {

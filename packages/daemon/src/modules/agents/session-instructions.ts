@@ -7,9 +7,9 @@ import { envKey } from "./env-key.ts";
  * Session instructions (§4.4, ADR-46): an `*.instructions.md` file in the session directory that Copilot CLI loads as a
  * repository instruction, because the daemon adds its directory to `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` in the session
  * environment. It changes neither the user's repo nor `~/.copilot`. The content is the session's environment (the
- * Trackwall version and where the user sees the session), its role (a main session in the repo root or a task session
- * in a worktree) and the shared MCP instruction (`MCP_INSTRUCTIONS`), which Copilot CLI does not take from the MCP
- * server.
+ * Trackwall version and where the user sees the session), its role (the supervisor in the projects folder, a main
+ * session in the repo root or a task session in a worktree) and the shared MCP instruction (`MCP_INSTRUCTIONS`), which
+ * Copilot CLI does not take from the MCP server.
  */
 
 /** Copilot CLI 1.0.103 variable with instruction directories separated by commas (checked with `copilot instruction list`). */
@@ -17,9 +17,12 @@ const INSTRUCTIONS_DIRS_ENV = "COPILOT_CUSTOM_INSTRUCTIONS_DIRS";
 const INSTRUCTIONS_DIR = "instructions";
 const INSTRUCTIONS_FILE = "trackwall.instructions.md";
 
-/** Who the session is: a main session in the repo root (`task: null`) or a task session in the task's worktree. */
+/**
+ * Who the session is: the supervisor in the projects folder (`repo: null`, ADR-58), a main session in the repo root
+ * (`task: null`) or a task session in the task's worktree.
+ */
 export interface SessionRole {
-  repo: string;
+  repo: string | null;
   task: string | null;
 }
 
@@ -52,18 +55,32 @@ function sessionInstructions(version: string, { repo, task }: SessionRole): stri
     "# Working in Trackwall",
     "",
     `Trackwall ${version} started this Copilot CLI session, and its \`trackwall\` MCP server is connected. The user ` +
-      "sees this session in Trackwall's Sessions view next to their other sessions, and Trackwall tells them when you " +
-      "end your turn or ask for approval.",
+      `sees this session ${repo === null ? "in the supervisor panel on the right of every Trackwall view" : "in Trackwall's Sessions view next to their other sessions"}, ` +
+      "and Trackwall tells them when you end your turn or ask for approval.",
     "",
     "## Your session",
     "",
-    ...(task === null ? repoRole(repo) : taskRole(repo, task)),
+    ...sessionRole({ repo, task }),
     "",
     "## Trackwall tools",
     "",
     MCP_INSTRUCTIONS,
     "",
   ].join("\n");
+}
+
+function sessionRole({ repo, task }: SessionRole): string[] {
+  if (repo === null) return supervisorRole();
+  return task === null ? repoRole(repo) : taskRole(repo, task);
+}
+
+function supervisorRole(): string[] {
+  return [
+    "You are the supervisor: the one session above all others, in the projects folder that holds the user's repos. The user talks to you to plan and follow work across repos.",
+    `- You coordinate, you do not change code: hand each piece of work to an agent with ${mcpTools.proposeTask.name}, one proposal per repo with a prompt that stands on its own. The user approves every proposal before it starts.`,
+    `- Follow the work with ${mcpTools.waitForSession.name}, ${mcpTools.listSessions.name} and ${mcpTools.getSession.name}: they cover every session and task, also the ones the user started.`,
+    "- Tell the user what you delegated, what came back and what needs their decision.",
+  ];
 }
 
 function repoRole(repo: string): string[] {

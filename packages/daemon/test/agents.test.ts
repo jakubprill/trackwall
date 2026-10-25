@@ -117,6 +117,43 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
     expect(existsSync(join(home, "sessions", started.id))).toBe(false);
   }, 60_000);
 
+  test("the supervisor starts once in the projects folder, with no repo and the supervisor's instructions", async () => {
+    const projectsDir = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
+    const { agents, procs, home } = makeAgents({ sklep: mkdtempSync(join(tmpdir(), "trackwall-repo-")) }, undefined, projectsDir);
+    cleanups.push(() => procs.stopAll());
+
+    const [first, second] = await Promise.all([agents.startSupervisor(), agents.startSupervisor()]);
+    expect(first).toMatchObject({ repo: null, task: null, run: { kind: "running" } });
+    expect(second.id).toBe(first.id);
+    expect((await agents.startSupervisor()).id).toBe(first.id);
+    expect(agents.sessions().sessions.map((s) => s.id)).toEqual([first.id]);
+
+    const window = viewer(agents, first.id);
+    await waitFor(agents, first.id, () => window.unwrappedText().includes(projectsDir), "the projects folder as the working directory");
+    const instructions = readFileSync(join(home, "sessions", first.id, "instructions", "trackwall.instructions.md"), "utf8");
+    expect(instructions).toContain("You are the supervisor");
+    window.attachment.detach();
+
+    // What it proposes is marked as the supervisor's, so that it stays under the supervisor after this session is gone.
+    const proposal = await agents.propose(first.id, { repo: "sklep", title: "Fix the cart", prompt: "Fix the cart total" });
+    expect(proposal.proposedBy).toEqual({ session: first.id, supervisor: true });
+
+    // Once it has ended, the next start is a new supervisor that replaces it: the ended one is closed with its files.
+    await agents.stop(first.id);
+    const next = await agents.startSupervisor();
+    expect(next.id).not.toBe(first.id);
+    expect(agents.sessions().sessions.map((s) => s.id)).toEqual([next.id]);
+    expect(existsSync(join(home, "sessions", first.id))).toBe(false);
+    expect(agents.sessions().proposals.map((p) => p.id)).toEqual([proposal.id]);
+    await agents.stop(next.id);
+  }, 60_000);
+
+  test("the supervisor needs the projects folder to be set", async () => {
+    const { agents } = makeAgents({});
+    await expect(agents.startSupervisor()).rejects.toMatchObject({ code: "bad_request", message: "set the projects folder first" });
+    expect(agents.sessions().sessions).toEqual([]);
+  });
+
   test("brak Copilot CLI i nieznane repo to błędy z kodem, bez procesu", async () => {
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
     const { agents } = makeAgents({ sklep: repoDir });
@@ -128,7 +165,7 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
         state: () => undefined,
         stop: async () => undefined,
       },
-      repos: { repoPath: async () => repoDir },
+      repos: { repoPath: async () => repoDir, projectsDir: async () => repoDir },
       vcs: new Vcs(),
       home: mkdtempSync(join(tmpdir(), "trackwall-agents-")),
       copilot: ["copilot-ktorego-nie-ma"],

@@ -28,7 +28,8 @@ fn session_notice(waiting: &Waiting) -> Notice {
         Some(TaskState::Plan) => "Copilot CLI is waiting for plan approval",
         _ => "Copilot CLI is waiting for you",
     };
-    Notice { title: format!("Session in {}", waiting.repo), body: body.to_owned(), target: Jump::Session(waiting.id.clone()) }
+    let title = waiting.repo.as_ref().map_or_else(|| "Supervisor".to_owned(), |repo| format!("Session in {repo}"));
+    Notice { title, body: body.to_owned(), target: Jump::Session(waiting.id.clone()) }
 }
 
 fn proposal_notice(proposal: &Proposal) -> Notice {
@@ -215,7 +216,13 @@ mod tests {
     use super::*;
 
     fn waiting(state: Option<TaskState>) -> Waiting {
-        Waiting { id: "s1".into(), repo: "orders-api".into(), state }
+        Waiting { id: "s1".into(), repo: Some("orders-api".into()), state }
+    }
+
+    #[test]
+    fn a_supervisor_notice_is_titled_supervisor() {
+        let supervisor = Waiting { id: "s0".into(), repo: None, state: Some(TaskState::Input) };
+        assert_eq!(session_notice(&supervisor).title, "Supervisor");
     }
 
     #[test]

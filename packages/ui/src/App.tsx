@@ -4,6 +4,7 @@ import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { FolderDrop } from "@/components/FolderDrop";
 import { Loading } from "@/components/Loading";
+import { SupervisorPanel } from "@/components/SupervisorPanel";
 import { inDesktopShell, openWindow, reportShown, START_PARAMS, showViewMenu, startFromLocation } from "@/lib/app-window";
 import { DROP_HINT } from "@/lib/dropped-folder";
 import type { DroppedPaths } from "@/lib/file-drop";
@@ -12,6 +13,8 @@ import { entrySelection, findEntry, nextWaitingShortcut, type SessionSelection, 
 import { SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
 import { sessionShortcut } from "@/lib/session-shortcut";
 import { attentionCount } from "@/lib/session-state";
+import { currentSupervisor, selectsSupervisor, supervisorProposals } from "@/lib/supervisor";
+import { readSupervisorPinned, saveSupervisorPinned } from "@/lib/supervisor-pin";
 import { useAppMenu } from "@/lib/use-app-menu";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
@@ -95,16 +98,30 @@ export function App() {
     }
   });
   const events = useDaemonEvents(conn);
-  const sessions = useSessions(conn, events, view === "sessions" || view === "home");
+  // The supervisor panel (ADR-58) is on the right of every view; pinned, it shows the supervisor's state all the time.
+  const [supervisorPinned, setSupervisorPinned] = useState(() => readSupervisorPinned(() => window.localStorage));
+  const pinSupervisor = useCallback((pinned: boolean) => {
+    setSupervisorPinned(pinned);
+    saveSupervisorPinned(() => window.localStorage, pinned);
+  }, []);
+  const [supervisorFocus, setSupervisorFocus] = useState(0);
+  const showSupervisor = () => {
+    pinSupervisor(true);
+    setSupervisorFocus((n) => n + 1);
+  };
+  const sessions = useSessions(conn, events, view === "sessions" || view === "home" || supervisorPinned);
   const runningLive = useMemo(() => events?.feed("mise.running.changed"), [events]);
+  const rows = useMemo(() => (sessions.data ? sessionRows(sessions.data) : []), [sessions.data]);
+  // The supervisor has no entry in Sessions: a jump or selection that points at it opens its panel instead.
   const openInSessions = (selection: SessionSelection) => {
+    if (selectsSupervisor(sessions.data, selection)) return showSupervisor();
     setView("sessions");
     setSession(selection);
   };
   // Alt+J (ADR-48) and the global shortcut (ADR-50): the entry after the selected one, like the "Next waiting" button.
   const openNextWaiting = () => {
     const inSessions = view === "sessions";
-    const entries = sessions.data ? sessionRows(sessions.data).map((r) => r.entry) : [];
+    const entries = rows.map((r) => r.entry);
     const { open, taken } = nextWaitingShortcut(entries, inSessions ? findEntry(entries, session) : undefined, inSessions);
     if (open) openInSessions(entrySelection(open));
     return taken;
@@ -116,11 +133,18 @@ export function App() {
     if (jump.kind !== "repo") return openInSessions(jump);
     openRepos(jump.id);
   });
-  // Alt+J from every view.
-  useWindowShortcuts((event) => {
-    const shortcut = sessionShortcut(event, IS_MAC);
-    return shortcut?.kind === "next-waiting" ? shortcut : undefined;
-  }, openNextWaiting);
+  // Alt+J and Alt+0 from every view.
+  useWindowShortcuts(
+    (event) => {
+      const shortcut = sessionShortcut(event, IS_MAC);
+      return shortcut?.kind === "next-waiting" || shortcut?.kind === "supervisor" ? shortcut : undefined;
+    },
+    (shortcut) => {
+      if (shortcut.kind === "next-waiting") return openNextWaiting();
+      showSupervisor();
+      return true;
+    },
+  );
   return (
     <div className="flex h-screen">
       <ActivityBar
@@ -181,7 +205,8 @@ export function App() {
               conn={conn}
               sessions={sessions}
               selected={session}
-              onSelect={setSession}
+              onSelect={(selection) => (selectsSupervisor(sessions.data, selection) ? showSupervisor() : setSession(selection))}
+              onShowSupervisor={showSupervisor}
               layout={sessionLayout}
               onLayout={setSessionLayout}
             />
@@ -199,6 +224,20 @@ export function App() {
           )}
         </main>
       </div>
+      {conn && (
+        <SupervisorPanel
+          key={epoch}
+          conn={conn}
+          supervisor={currentSupervisor(sessions.data)}
+          work={rows.filter((r) => r.supervised)}
+          waitingProposals={supervisorProposals(sessions.data)}
+          pinned={supervisorPinned}
+          onPinned={pinSupervisor}
+          focusRequest={supervisorFocus}
+          onOpenInSessions={openInSessions}
+          onChanged={sessions.reload}
+        />
+      )}
     </div>
   );
 }

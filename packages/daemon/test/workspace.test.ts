@@ -92,12 +92,14 @@ describe("workspace", () => {
     expect(await workspace.list()).toEqual({ projectsDir: null, repos: [] });
     expect(workspace.settings()).toEqual({ projectsDir: null, configFile: file });
     await expect(workspace.overview("api")).rejects.toMatchObject({ code: "not_found" });
+    await expect(workspace.projectsDir()).rejects.toMatchObject({ code: "bad_request", message: "set the projects folder first" });
   });
 
   test("ustawienie folderu zapisuje pełną ścieżkę w workspace.yaml", async () => {
     const { workspace, file, projects } = await workspaceWithProjectsDir();
     expect(workspace.settings()).toEqual({ projectsDir: projects, configFile: file });
     expect(readFileSync(file, "utf8")).toContain(`projectsDir: ${projects}`);
+    expect(await workspace.projectsDir()).toBe(projects);
   });
 
   test("ścieżka względna, nieistniejąca albo do pliku jest odrzucana jako bad_request i niczego nie zapisuje", async () => {

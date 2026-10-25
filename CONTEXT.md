@@ -260,7 +260,7 @@ Files that both this task and another task of the same repo change, each compare
 _Avoid_: overlap, collision, conflict (a conflict is only the result of a merge)
 
 **Main session** (`proposedBy` of a task and a proposal):
-A session or supervising agent that talks to the user and commissions work to other agents with task proposals, then waits for their sessions (`wait_for_session`) and reads the summaries, like a coordinator with threads in Claude (ADR-39). It is a role, not a separate kind of session: today it is any Trackwall session or an agent outside Trackwall (`proposedBy.session: null`). In the Sessions view its tasks and proposals sit indented under it, and it carries a "main" badge with their count.
+A session or supervising agent that talks to the user and commissions work to other agents with task proposals, then waits for their sessions (`wait_for_session`) and reads the summaries, like a coordinator with threads in Claude (ADR-39). It is a role, not a separate kind of session: any Trackwall session or an agent outside Trackwall (`proposedBy.session: null`); the supervisor is the main session above all repos (ADR-58). In the Sessions view its tasks and proposals sit indented under it, and it carries a "main" badge with their count.
 _Avoid_: orchestrator, planner (ADR-9: a human splits goals)
 
 **mise task**:
@@ -276,12 +276,20 @@ _Avoid_: authorisation, acceptance
 **Adapter**:
 Everything Trackwall knows about one agent CLI: the command template, the MCP configuration, resuming, state detectors. The only adapter is Copilot CLI (ADR-8).
 
+**Supervisor** (`isSupervisor`, `startSupervisor`, `ProposedBy.supervisor`, "Supervisor" in the UI):
+The one Trackwall session above all others: Copilot CLI in the projects folder, not in a repo (`Session.repo` is `null`), at most one running at a time (ADR-58). The user talks to it in the supervisor panel on the right of every view; it plans work across repos, proposes tasks and follows them. What it proposes carries `ProposedBy.supervisor`, so that its work stays under the "Supervisor" heading of the Sessions list after the session that proposed it is gone. It is the main session above all repos; it has no more rights than any other session.
+_Avoid_: orchestrator, coordinator, root session
+
+**Supervisor panel** (`SupervisorPanel`):
+The column on the right of the main window, in every view, with the supervisor's terminal, its state and the work it delegated, or "Start supervisor" while there is none (ADR-58). Pinned open, or folded to a strip that keeps a bell while the supervisor or its proposals wait for you; Alt+0 pins it open and puts the keyboard in its terminal.
+_Avoid_: sidebar (that is the list on the left of a view), drawer
+
 **Supervising agent**:
 An agent CLI (today Copilot CLI) started by the user outside a task, for example in the projects folder, with access to the MCP server. Unlike a task session it has no worktree, budget or session token. A term from the documentation and tool descriptions; in code it has no identifier of its own, because the daemon keeps nothing about it.
 _Avoid_: orchestrator, main agent
 
 **Session** (task session, `Session`, `SessionId`):
-An agent CLI running in a PTY owned by the daemon, in a repo root or in a task's worktree (`Session.task`), as a process group, with its own `sessions/<session>/` directory (session plugin, `hooks.jsonl`). The Sessions view starts it in a repo with one click (ADR-26) or together with a task (ADR-31). A session lives only until the daemon exits, a task longer. Only `copilot-record.ts` records it.
+An agent CLI running in a PTY owned by the daemon, in a repo root, in a task's worktree (`Session.task`) or, for the supervisor, in the projects folder (ADR-58), as a process group, with its own `sessions/<session>/` directory (session plugin, `hooks.jsonl`). The Sessions view starts it in a repo with one click (ADR-26) or together with a task (ADR-31). A session lives only until the daemon exits, a task longer. Only `copilot-record.ts` records it.
 _Avoid_: POSIX session (that is a process group term), window (that is the terminal window in the UI)
 
 **Waiting for you** (`Session.needsAttention`, `SessionAttention`):
@@ -295,7 +303,7 @@ _Avoid_: read, acknowledged
 A running session in `Input` the user has already seen (ADR-47): the agent waits for the next prompt, but no longer waits for you. Shown as "idle" in Sessions and in calm grey on the dashboard.
 
 **Session terminal** (`SessionTerminal`):
-xterm.js in the Sessions view, connected over the WebSocket `/ws/pty/<session>` to the session's PTY. Several session terminals, also in different windows, can show the same session; the PTY takes the size of the last one that reported it, and a window that comes to the front reports the size of its terminals again (ADR-49).
+xterm.js in the Sessions view and the supervisor panel, connected over the WebSocket `/ws/pty/<session>` to the session's PTY. Several session terminals, also in different windows, can show the same session; the PTY takes the size of the last one that reported it, and a window that comes to the front reports the size of its terminals again (ADR-49).
 _Avoid_: terminal window (a window is the app window)
 
 **Session layout** (`SessionLayout`):
@@ -307,8 +315,8 @@ _Avoid_: view (that is a screen of the app), mode
 Several session terminals side by side in the Sessions view, one tile per list entry, on pages of the list. The tile of the selected entry has the accent ring and takes the keyboard; a tile that is waiting for you has the warning frame. A tile, like a list row, has an X that closes its session: "Close session" in the UI is `stop` and then `dismiss` in the API.
 _Avoid_: split, dashboard (that is Home)
 
-**Session shortcut** (`SessionShortcut`; Alt+1…9, Alt+J):
-Alt (⌥ on macOS) + digit selects the entry at that position in the Sessions list; Alt+J opens the next session or task proposals waiting for you, also from other views (ADR-55). A shortcut never reaches the session terminal. Win+Alt+J (⌃⌥J on macOS) is the global shortcut that does what Alt+J does from any app (ADR-50).
+**Session shortcut** (`SessionShortcut`; Alt+1…9, Alt+0, Alt+J):
+Alt (⌥ on macOS) + digit selects the entry at that position in the Sessions list; Alt+0 opens the supervisor panel (ADR-58); Alt+J opens the next session or task proposals waiting for you, also from other views (ADR-55). A shortcut never reaches the session terminal. Win+Alt+J (⌃⌥J on macOS) is the global shortcut that does what Alt+J does from any app (ADR-50).
 
 **Tray panel** (`TrayPanel`, window `tray-panel`):
 The small window next to the tray icon, opened by a left click on it, with the task proposals and the sessions waiting for you (ADR-50). A click opens the entry in the main window.

@@ -1,6 +1,7 @@
 import type { Task } from "@trackwall/protocol";
 import { Maximize2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { SessionTerminal } from "@/components/SessionTerminal";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
@@ -13,7 +14,6 @@ import { useSessionClose } from "@/lib/use-session-close";
 import { cn } from "@/lib/utils";
 import { ProposalTile } from "./ProposalTile.tsx";
 import { SessionCloseButton, SessionCloseConfirmation } from "./SessionClose.tsx";
-import { SessionTerminal } from "./SessionTerminal.tsx";
 import { TaskLine } from "./TaskLine.tsx";
 
 /**

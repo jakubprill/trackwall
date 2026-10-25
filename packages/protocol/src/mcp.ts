@@ -414,7 +414,7 @@ export const mcpTools = {
     readOnly: true,
     description:
       "Copilot CLI sessions that Trackwall runs (the Sessions view), newest first, and tasks. A session has an id, " +
-      "repo, start time, process state (run: running, stopping, exited with exit code; the screen is not shared), the " +
+      "repo (null for the supervisor, the one session in the projects folder above all repos), start time, process state (run: running, stopping, exited with exit code; the screen is not shared), the " +
       "latest state change (state: Working, Input, Approval, Plan, Done, Error, Stale, with source and confidence; " +
       "null before the first signal), window title (what the agent is working on), needsAttention (running and " +
       "waiting for the user: approval, plan approval, or an ended turn the user has not seen yet) and task: the id of the task whose worktree it runs in, null in the repo root. A task " +

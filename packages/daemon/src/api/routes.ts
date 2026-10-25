@@ -68,6 +68,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(batchApi.cancel, (f) => f.batch.cancel()),
   route(agentsApi.sessions, (f) => f.agents.sessions()),
   route(agentsApi.start, (f, b) => f.agents.start(b.repo)),
+  route(agentsApi.startSupervisor, (f) => f.agents.startSupervisor()),
   route(agentsApi.stop, (f, b) => f.agents.stop(b.session)),
   route(agentsApi.dismiss, (f, b) => f.agents.dismiss(b.session)),
   route(agentsApi.createTask, (f, b) => f.agents.createTask(b.repo, b.prompt)),
