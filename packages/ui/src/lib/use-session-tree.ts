@@ -1,7 +1,8 @@
 import type { SessionList, Task } from "@trackwall/protocol";
 import { useMemo, useState } from "react";
 import { type SessionRow, sessionRows } from "./session-entries.ts";
-import { actionIsNewer, type RemoteHandle } from "./use-remote.ts";
+import { activeHides, type TaskHide } from "./task-hides.ts";
+import type { RemoteHandle } from "./use-remote.ts";
 
 /** The rows of the Sessions list and their tasks, shared by the list and the supervisor panel. */
 export interface SessionTree {
@@ -16,10 +17,9 @@ export interface SessionTree {
  * worktree; the same tasks feed the tree, the task panel and the supervisor's "Delegated".
  */
 export function useSessionTree(sessions: RemoteHandle<SessionList>): SessionTree {
-  const [removed, setRemoved] = useState<readonly { task: string; afterLoad: number }[]>([]);
+  const [removed, setRemoved] = useState<readonly TaskHide[]>([]);
   // The hidden ids as one string, so that the rows below are rebuilt only when the hidden set itself changes.
-  const hiddenKey = removed
-    .filter((r) => actionIsNewer(r.afterLoad, sessions.loadNumber))
+  const hiddenKey = activeHides(removed, sessions.loadNumber)
     .map((r) => r.task)
     .join(" ");
   const { data } = sessions;
@@ -32,7 +32,7 @@ export function useSessionTree(sessions: RemoteHandle<SessionList>): SessionTree
   const hideTask = (task: string) => {
     const afterLoad = sessions.sentLoads();
     // Hides that a newer list already covers are dropped, so the list does not grow for the life of the view.
-    setRemoved((all) => [...all.filter((r) => actionIsNewer(r.afterLoad, sessions.loadNumber)), { task, afterLoad }]);
+    setRemoved((all) => [...activeHides(all, sessions.loadNumber), { task, afterLoad }]);
   };
   return { ...visible, hideTask };
 }
