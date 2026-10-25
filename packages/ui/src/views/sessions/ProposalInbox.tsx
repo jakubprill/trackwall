@@ -43,7 +43,8 @@ export function ProposalInbox({
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
   // `null` once the user closed it; an id that is no longer waiting falls back to the first proposal.
   const [open, setOpen] = useState<string | null>(focus ?? proposals[0].id);
-  // Proposals that have been open; a ticked one has been, too.
+  // Proposals that have been open. A ticked one has been too; it counts by itself as well, so that a box can never be
+  // checked and locked at once, whatever the order of the effect below.
   const [read, setRead] = useState<ReadonlySet<string>>(new Set());
   const shown = open !== null && !proposals.some((p) => p.id === open) ? proposals[0].id : open;
   const wasRead = (id: string) => id === shown || read.has(id) || ticked.has(id);

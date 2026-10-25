@@ -199,6 +199,12 @@ describe("pozycje widoku Sesje", () => {
     expect(findEntry(entries, { kind: "proposals", proposer: "s9" })).toBe(entries[0]);
   });
 
+  test("a gone group of an agent outside Trackwall gives way to its task, not to a task typed in the form", () => {
+    const outside: Task = { ...task("p1", "2026-10-23T12:00:00Z"), proposedBy: { session: null } };
+    const entries = rowEntries({ sessions: [], tasks: [task("t0", "2026-10-23T13:00:00Z"), outside], proposals: [], worktreesDir: "/w" });
+    expect(findEntry(entries, { kind: "proposals", proposer: null })).toMatchObject({ kind: "task", task: { id: "p1" } });
+  });
+
   test("the main badge counts every proposal of the group under it", () => {
     const list = {
       sessions: [session("s1", "2026-10-23T10:00:00Z")],

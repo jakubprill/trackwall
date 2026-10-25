@@ -136,7 +136,8 @@ function entryTime(entry: StartedEntry): string {
 }
 
 /**
- * The entry for a selection, and the first entry without one or for an unknown one. A task session (from the tray or
+ * The entry for a selection, and the first entry without one or for an unknown one (a group that is gone first falls
+ * back to its newest task, `startedFrom`). A task session (from the tray or
  * "Next waiting") selects its task; a proposal selects the group it waits in, and once approved the task with its id,
  * and a task id finds a proposal too, since a `trackwall://task/` link may point at one.
  */
@@ -168,7 +169,8 @@ export function selectionAfterClose(
 
 /**
  * A group whose last proposal has just become a task is gone from the list before the start ends; its newest task from
- * the same proposer stands in for it, instead of an unrelated entry. `undefined` when there is none.
+ * the same proposer stands in for it, instead of an unrelated entry, until the decision selects where to go next (in a
+ * batch that may be an earlier task). `undefined` when there is none.
  */
 function startedFrom(entries: readonly SessionEntry[], proposer: string | null): SessionEntry | undefined {
   return entries.find((e) => e.kind === "task" && e.task.proposedBy !== null && e.task.proposedBy.session === proposer);
