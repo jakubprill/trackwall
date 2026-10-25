@@ -23,7 +23,7 @@ A switch for part of the content inside a view, for example README, Files, Commi
 The set of daemon module interfaces passed to the transports (HTTP, MCP, events). Modules talk to each other only through it.
 
 **Module**:
-A separate part of the daemon from Â§4 of the architecture (`procs`, `logs`, `workspace`""¦), with an explicit interface and a list of dependencies. Â§4 calls its interface a "service class"; in code do not give it the `Service` suffix, because that word belongs to a service from the workspace.
+A separate part of the daemon from Â§4 of the architecture (`procs`, `logs`, `workspace`â€¦), with an explicit interface and a list of dependencies. Â§4 calls its interface a "service class"; in code do not give it the `Service` suffix, because that word belongs to a service from the workspace.
 _Avoid_: service (that is a workspace entity, see below), pnpm package
 
 **pnpm package**:
@@ -145,13 +145,13 @@ A name from `application-<profile>.yml` or `spring.config.activate.on-profile`; 
 A tool and version from mise configuration or `.tool-versions` (source `mise`) or from a file that gives the version in its own way (`.nvmrc`, the Maven wrapper, `engines.node`; source `hint`).
 
 **Mechanism** (`Mechanism`, `MechanismId`):
-A technology recognised in the repo by a package or file (Spring Boot, Feign, Kafka, Helm""¦), with an inventory of evidence. An inventory, not a conclusion: a mechanism does not say whom the repo connects to.
+A technology recognised in the repo by a package or file (Spring Boot, Feign, Kafka, Helmâ€¦), with an inventory of evidence. An inventory, not a conclusion: a mechanism does not say whom the repo connects to.
 
 **Extractor**:
 A pure function on a commit snapshot (`RepoSnapshot`) in `modules/cards/` (`maven.ts`, `gradle.ts`, `npm.ts`, `tools.ts`, `mechanisms.ts`, `spring.ts`, `frontend-http.ts`) that returns facts with a position in the file. It executes nothing.
 
 **Tag** (repo tag, `RepoTag`):
-A short name of a group of repos (`java`, `frontend`, `bff`, `monorepo`, `no-mise`""¦) with a reason, computed from the card, the identifier and the remote address or from a tag rule. Tags are orthogonal: a filter with several tags shows the repos that have all of them.
+A short name of a group of repos (`java`, `frontend`, `bff`, `monorepo`, `no-mise`â€¦) with a reason, computed from the card, the identifier and the remote address or from a tag rule. Tags are orthogonal: a filter with several tags shows the repos that have all of them.
 _Avoid_: label, category
 
 **Tag rule** (`repoTags` in `workspace.yaml`, `RepoTagRules`):
@@ -232,7 +232,7 @@ A task that a session or an agent outside Trackwall submitted through MCP and th
 _Avoid_: order, request, application
 
 **Main session** (`proposedBy` of a task and a proposal):
-A session or supervising agent that talks to the user and commissions work to other agents with task proposals, then waits for their sessions (`wait_for_session`) and reads the summaries, like a coordinator with threads in Claude (ADR-39). It is a role, not a separate kind of session: today it is any Trackwall session or an agent outside Trackwall (`proposedBy.session: null`). In the Sessions view its tasks and proposals sit indented under it, and it carries a """main""" badge with their count.
+A session or supervising agent that talks to the user and commissions work to other agents with task proposals, then waits for their sessions (`wait_for_session`) and reads the summaries, like a coordinator with threads in Claude (ADR-39). It is a role, not a separate kind of session: today it is any Trackwall session or an agent outside Trackwall (`proposedBy.session: null`). In the Sessions view its tasks and proposals sit indented under it, and it carries a "main" badge with their count.
 _Avoid_: orchestrator, planner (ADR-9: a human splits goals)
 
 **mise task**:
@@ -278,8 +278,8 @@ _Avoid_: view (that is a screen of the app), mode
 Several session terminals side by side in the Sessions view, one tile per list entry, on pages of the list. The tile of the selected entry has the accent ring and takes the keyboard; a tile that is waiting for you has the warning frame.
 _Avoid_: split, dashboard (that is Home)
 
-**Session shortcut** (`SessionShortcut`; Alt+1""¦9, Alt+J):
-Alt ("Œ¥ on macOS) + digit selects the entry at that position in the Sessions list; Alt+J opens the next session that is waiting for you, also from other views. A shortcut never reaches the session terminal.
+**Session shortcut** (`SessionShortcut`; Alt+1â€¦9, Alt+J):
+Alt (âŒ¥ on macOS) + digit selects the entry at that position in the Sessions list; Alt+J opens the next session that is waiting for you, also from other views. A shortcut never reaches the session terminal.
 
 **Screen image** (`TerminalScreen`):
 The state of a session's screen, which the daemon keeps in a windowless terminal emulator and sends to a session terminal on connection, before further output.
@@ -292,7 +292,7 @@ _Avoid_: screenshot (that is a picture), output history
 A rule that infers the task state from hooks, terminal sequences, the look of the screen or a human's keys in the session terminal.
 
 **Session key** (`SessionKey`, `sessionKey`):
-Enter, a digit 1""“9, Esc or Ctrl+C sent to the session terminal as a whole chunk of input (`enter`, `choice`, `escape`, `interrupt`). It answers an approval request or interrupts a turn, which Copilot CLI does not report with a hook, so it is the source of the `keyboard` state; a recording stores only the kind of key.
+Enter, a digit 1â€“9, Esc or Ctrl+C sent to the session terminal as a whole chunk of input (`enter`, `choice`, `escape`, `interrupt`). It answers an approval request or interrupts a turn, which Copilot CLI does not report with a hook, so it is the source of the `keyboard` state; a recording stores only the kind of key.
 _Avoid_: input (that is the whole content from the keyboard), shortcut
 
 **Session plugin** (`writeCopilotPlugin`):
@@ -344,7 +344,7 @@ _Avoid_: record (that is the log), notification (that is OSC or a hook)
 The whole state of one event topic, the same value as the response of an HTTP action (`SessionList` from `agents/sessions`, `RunningMiseTask[]` from `mise/running`). Do not confuse with the dashboard snapshot (`HomeModel`), which the UI assembles from several topics and responses.
 
 **Masking**:
-Replacing secret values with `***` before a record is written to the buffer, the file and the last state lines. Today secrets are the values of process environment variables with secret names (`GH_TOKEN`, `DB_PASSWORD`""¦, Â§4.2).
+Replacing secret values with `***` before a record is written to the buffer, the file and the last state lines. Today secrets are the values of process environment variables with secret names (`GH_TOKEN`, `DB_PASSWORD`â€¦, Â§4.2).
 
 **Audit** (`AuditEntry`):
 A record of every MCP tool call: client, tool, arguments, time, result hash. Visible only in the UI.
