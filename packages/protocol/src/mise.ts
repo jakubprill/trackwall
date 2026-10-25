@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TaskId } from "./agents.ts";
 import type { Endpoint } from "./api.ts";
 import { RunState } from "./procs.ts";
 import { RepoId } from "./workspace.ts";
@@ -47,21 +48,28 @@ export const MiseTasks = z.discriminatedUnion("kind", [
 ]);
 export type MiseTasks = z.infer<typeof MiseTasks>;
 
-/** Działający task mise (także zatrzymywany) z tego działania daemona: pulpit pokazuje go przy repo bez pytania mise. */
-export const RunningMiseTask = z.object({ repo: RepoId, miseTask: MiseTaskName, run: RunState });
+/**
+ * A running (or stopping) mise task of this daemon run, which the dashboard shows by its repo without asking mise.
+ * `task` is the task whose worktree it runs in (ADR-59), `null` in the repo root.
+ */
+export const RunningMiseTask = z.object({ repo: RepoId, task: TaskId.nullable(), miseTask: MiseTaskName, run: RunState });
 export type RunningMiseTask = z.infer<typeof RunningMiseTask>;
 
 function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
   return { path: `/api/mise/${action}`, request, data };
 }
 
-const MiseTaskRequest = z.object({ repo: RepoId, miseTask: MiseTaskName }).strict();
+/** `task`: a mise task in that task's worktree (ADR-59); the repo root without it. */
+const MiseTaskRequest = z.object({ repo: RepoId, task: TaskId.nullable().default(null), miseTask: MiseTaskName }).strict();
 
 export const miseApi = {
   tasks: endpoint("tasks", z.object({ repo: RepoId }).strict(), MiseTasks),
   /** Działające taski wszystkich repo, bez uruchamiania mise: tani do częstego odpytywania (pulpit, ADR-33). */
   running: endpoint("running", z.object({}).strict(), z.array(RunningMiseTask)),
-  /** Uruchamia task w grupie procesów (`mise run <task>` w korzeniu repo); działający już task zwraca jego stan. */
+  /**
+   * Starts a mise task in a process group (`mise run <task>` in the repo root, or in the worktree of `task`, ADR-59);
+   * a task already running returns its state.
+   */
   start: endpoint("start", MiseTaskRequest, RunState),
   /** Wraca po potwierdzeniu, że żaden proces grupy nie żyje; zakończony już task zwraca jego stan. */
   stop: endpoint("stop", MiseTaskRequest, RunState),

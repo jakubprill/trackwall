@@ -120,7 +120,7 @@ async function setTheScene(): Promise<void> {
     .filter((member) => member.service?.state !== "healthy")
     .map((member) => `${member.repo}: ${member.problem ?? member.service?.state ?? member.outcome}`);
   if (down.length > 0) throw new Error(`services did not come up (another demo still running?): ${down.join(", ")}`);
-  await facade.mise.start("orders-api", "build");
+  await facade.mise.start({ repo: "orders-api", task: null }, "build");
 }
 
 for (const signal of SHUTDOWN_SIGNALS) process.on(signal, () => void stop(signal));

@@ -162,6 +162,14 @@ export class ProcessGroups {
   }
 
   /**
+   * Some group not confirmed empty works in `dir` (its working directory, compared as given), e.g. a mise task in a task
+   * worktree that would lock the worktree's files on Windows (ADR-59).
+   */
+  liveIn(dir: string): boolean {
+    return [...this.groups.values()].some((group) => group.phase.kind !== "exited" && group.record.cwd === dir);
+  }
+
+  /**
    * Stan `exited` bieżącej grupy właściciela, gdy system potwierdzi jej koniec; `undefined`, gdy właściciel nie ma
    * grupy. Dla wołającego, który czeka na wynik (komenda zbiorcza), a nie tylko pokazuje stan.
    */

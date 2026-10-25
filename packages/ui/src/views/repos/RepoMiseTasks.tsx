@@ -1,8 +1,9 @@
-import { hasService, type MiseTask, type MiseTasks, miseApi } from "@trackwall/protocol";
+import { hasService, type MiseTask, type MiseTasks, miseApi, miseTaskLogSource } from "@trackwall/protocol";
 import { Play, ScrollText, ShieldCheck, Square } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
+import { MiseTaskLog } from "@/components/MiseTaskLog";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,6 @@ import { relativeTime } from "@/lib/format";
 import { isLive, runStateLabel, showsLastLines } from "@/lib/run-state";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
-import { MiseTaskLog } from "./MiseTaskLog.tsx";
 import { RepoService } from "./RepoService.tsx";
 
 /**
@@ -138,7 +138,7 @@ function TaskRow({ conn, repo, task, onChange }: { conn: Connection; repo: strin
           {live ? <Square /> : <Play />} {live ? "Stop" : "Run"}
         </Button>
       </div>
-      {showLog && <MiseTaskLog conn={conn} repo={repo} miseTask={task.name} />}
+      {showLog && <MiseTaskLog conn={conn} source={miseTaskLogSource(repo, null, task.name)} />}
       {!showLog && showsLastLines(task.run) && (
         <pre className="text-muted-foreground overflow-x-auto font-mono text-xs whitespace-pre-wrap break-all">
           {task.run.lastLines.join("\n")}

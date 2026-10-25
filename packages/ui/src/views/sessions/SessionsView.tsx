@@ -1,4 +1,13 @@
-import { agentsApi, countLabel, type Session, type SessionList, TASK_PROMPT_MAX, type Task, workspaceApi } from "@trackwall/protocol";
+import {
+  agentsApi,
+  countLabel,
+  type RunningMiseTask,
+  type Session,
+  type SessionList,
+  TASK_PROMPT_MAX,
+  type Task,
+  workspaceApi,
+} from "@trackwall/protocol";
 import { BellRing, Crown, GitBranch, Lightbulb, Play, Plus, Square, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -10,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import type { LiveFeed } from "@/lib/daemon-events";
 import { relativeTime, twoDigits } from "@/lib/format";
 import { IS_MAC } from "@/lib/platform";
 import {
@@ -62,6 +72,7 @@ import { TaskPanel } from "./TaskPanel.tsx";
 export function SessionsView({
   conn,
   sessions,
+  runningLive,
   selected,
   onSelect,
   layout,
@@ -72,6 +83,8 @@ export function SessionsView({
 }: {
   conn: Connection;
   sessions: RemoteHandle<SessionList>;
+  /** Pushes of the running mise tasks, for the mise tasks a task's agent runs in its worktree. */
+  runningLive: LiveFeed<RunningMiseTask[]> | undefined;
   selected: SessionSelection;
   onSelect: (selection: SessionSelection) => void;
   layout: SessionLayout;
@@ -187,6 +200,7 @@ export function SessionsView({
             onSelect={onSelect}
             sessions={list}
             tasks={tasks}
+            runningLive={runningLive}
             onChanged={sessions.reload}
             onSessionClosed={sessionClosed}
             onTaskRemoved={(task) => {
@@ -406,6 +420,7 @@ function SelectedEntry({
   onSelect,
   sessions,
   tasks,
+  runningLive,
   onChanged,
   onSessionClosed,
   onTaskRemoved,
@@ -422,6 +437,8 @@ function SelectedEntry({
   sessions: readonly Session[];
   /** The tasks on the list, for the task panel's shared-files warning. */
   tasks: readonly Task[];
+  /** Pushes of the running mise tasks, for the mise tasks a task's agent runs in its worktree. */
+  runningLive: LiveFeed<RunningMiseTask[]> | undefined;
   onChanged: () => void;
   onSessionClosed: (entry: SessionEntry) => void;
   onTaskRemoved: (task: string) => void;
@@ -437,6 +454,7 @@ function SelectedEntry({
           currentSelection={currentSelection}
           sessions={sessions}
           tasks={tasks}
+          runningLive={runningLive}
           onSelect={onSelect}
           onChanged={onChanged}
           onSessionClosed={onSessionClosed}
@@ -484,6 +502,7 @@ function EntryPanel({
   currentSelection,
   sessions,
   tasks,
+  runningLive,
   onSelect,
   onChanged,
   onSessionClosed,
@@ -496,6 +515,8 @@ function EntryPanel({
   sessions: readonly Session[];
   /** The tasks on the list, for the task panel's shared-files warning and the same-repo hint of proposals. */
   tasks: readonly Task[];
+  /** Pushes of the running mise tasks, for the mise tasks a task's agent runs in its worktree. */
+  runningLive: LiveFeed<RunningMiseTask[]> | undefined;
   onSelect: (selection: SessionSelection) => void;
   onChanged: () => void;
   onSessionClosed: (entry: SessionEntry) => void;
@@ -524,6 +545,7 @@ function EntryPanel({
         session={entry.session}
         sessions={sessions}
         tasks={tasks}
+        runningLive={runningLive}
         onChanged={onChanged}
         onRemoved={() => onTaskRemoved(entry.task.id)}
         onOpenTask={(id) => onSelect({ kind: "task", id })}

@@ -56,8 +56,9 @@ export const MCP_INSTRUCTIONS = [
   `- Diagnose a failure: ${getErrors.name} gives the errors from the logs of all mise tasks with their stack traces and ` +
     `root cause; ${tail.name} reads the log of one mise task (${getRepo.name} lists them), from an error on with sinceSeq ` +
     "one less than its seq. In both, pass nextSeq as sinceSeq to get only what is new.",
-  `- Build, test or run a service: ${runMiseTask.name} runs a mise task listed by ${getRepo.name} in the repo root ` +
-    `(not in a task worktree), ${waitForMiseTask.name} waits for its exit code and ${tail.name} gives its output; ` +
+  `- Build, test or run a service: ${runMiseTask.name} runs a mise task listed by ${getRepo.name} in the repo root, ` +
+    "or with task in that task's worktree, which has the task's changes (a task session passes its own task); " +
+    `${waitForMiseTask.name} waits for its exit code and ${tail.name} gives its output, with the same task; ` +
     `${listRunningMiseTasks.name} shows what already runs. Stop long-running tasks with ${stopMiseTask.name} when ` +
     "you no longer need them.",
   `- Try a change against the running system: ${startService.name} starts a repo's service (its mise task dev) with ` +

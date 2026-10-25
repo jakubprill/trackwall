@@ -87,11 +87,9 @@ export function createFacade(o: FacadeOptions): Facade {
     terminals: terminalPlatform(),
     log: o.log,
   });
-  const mise = new Mise({ procs, repos: workspace, command: o.miseCommand, env: o.userEnv });
   const cache = new CardCache(join(o.home, CARDS_DIR), o.log);
   cache.prune().catch((err: unknown) => o.log(`failed to clean up cards: ${String(err)}`));
   const cards = new Cards({ vcs, repos: workspace, cache });
-  const batch = new Batch({ workspace, mise, log: o.log });
   const agents = new Agents({
     procs,
     repos: workspace,
@@ -105,6 +103,8 @@ export function createFacade(o: FacadeOptions): Facade {
     openEditor,
     log: o.log,
   });
+  const mise = new Mise({ procs, repos: workspace, tasks: agents, command: o.miseCommand, env: o.userEnv });
+  const batch = new Batch({ workspace, mise, log: o.log });
   const graph = new Graph({ cards, workspace });
   const services = new Services({ mise, logs, graph, cards, env: o.userEnv, ...SERVICE_TIMING });
   return { workspace, cards, graph, mise, procs, logs, batch, agents, services, openLink: o.openUrl };

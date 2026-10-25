@@ -37,8 +37,8 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 | `who_calls` | Who uses a repo, through packages and HTTP, with evidence. |
 | `subgraph_for` | The part of the connection graph around a repo. |
 | `find_endpoint` | An HTTP endpoint by path or name, with its types and the repos that call it. |
-| `run_mise_task`, `wait_for_mise_task`, `stop_mise_task`, `list_running_mise_tasks` | Run a repo's mise task, wait up to 55 s for it, stop it, list what runs. |
-| `tail` | A mise task's log from a cursor, with secrets replaced by `***`. |
+| `run_mise_task`, `wait_for_mise_task`, `stop_mise_task`, `list_running_mise_tasks` | Run a repo's mise task, wait up to 55 s for it, stop it, list what runs. With `task`, in that task's worktree. |
+| `tail` | A mise task's log from a cursor, with secrets replaced by `***`; with `task`, the run in that task's worktree. |
 | `get_errors` | Errors from the mise task logs, newest first: error lines, compiler errors, exceptions with stack traces, Spring and Gradle failure reports; repeats counted once. With `minLevel: warn`, warnings too. |
 | `start_service`, `stop_service`, `list_services`, `call_endpoint` | Start a service with its dependencies, stop it, list services, send an HTTP request to a running one. |
 | `list_sessions`, `get_session` | The sessions and tasks in "Sessions", with state, repo and a task's changed files. |
@@ -47,5 +47,6 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 ## Good to know
 
 - An agent in a session runs and stops only the mise tasks and the service of its own repo; every run is logged with the repo, mise task and session.
+- A task's agent runs mise tasks in the repo root or in its own task's worktree, never in another task's, and in its worktree only with the mise configuration you have trusted (see [Agent tasks](/features/tasks)).
 - Agents get links in the form `trackwall://…` to point you at a repo, session or task: see [trackwall:// links](/features/links).
 - Calls that wait (`wait_for_mise_task`, `start_service`, `wait_for_session`) return after at most 55 seconds; the agent calls again to keep waiting.

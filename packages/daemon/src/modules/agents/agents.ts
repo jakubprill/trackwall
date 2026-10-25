@@ -10,6 +10,7 @@ import {
   type Task,
   type TaskChanges,
   type TaskChangesSummary,
+  type TaskMiseConfig,
   type TaskProposal,
   type TaskSharedFiles,
 } from "@trackwall/protocol";
@@ -62,6 +63,7 @@ interface AgentsProcs {
   }): Promise<{ run: RunState; terminal: SessionPty }>;
   state(owner: string): RunState | undefined;
   stop(owner: string): Promise<RunState | undefined>;
+  liveIn(dir: string): boolean;
 }
 
 /**
@@ -123,6 +125,7 @@ export class Agents {
       vcs: deps.vcs,
       repos: deps.repos,
       file: new TaskFile(join(deps.home, TASKS_FILE), deps.log),
+      liveIn: (dir) => deps.procs.liveIn(dir),
       worktreesDir,
       openEditor: deps.openEditor,
       log: deps.log,
@@ -268,6 +271,21 @@ export class Agents {
 
   openTaskEditor(id: string): void {
     this.#tasks.openEditor(id);
+  }
+
+  /** The task worktree's mise config against the one the user trusted (ADR-59). */
+  taskMiseConfig(id: string): Promise<TaskMiseConfig> {
+    return this.#tasks.miseConfig(id);
+  }
+
+  /** The user trusts the worktree's mise config they saw (`digest`), only from the UI (ADR-59). */
+  trustTaskMiseConfig(id: string, digest: string): Promise<TaskMiseConfig> {
+    return this.#tasks.trustMiseConfig(id, digest);
+  }
+
+  /** The worktree a mise task of the task runs in, while its mise config is the trusted one; for the `mise` module (ADR-59). */
+  trustedTaskWorktree(id: string, repo: string): Promise<string> {
+    return this.#tasks.trustedWorktree(id, repo);
   }
 
   removeTask(id: string, keepBranch: boolean, discardChanges: boolean): Promise<void> {
