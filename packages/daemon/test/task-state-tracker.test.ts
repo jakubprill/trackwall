@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { TaskStateTracker } from "../src/modules/agents/task-state-tracker.ts";
 
-describe("łączenie sygnałów stanu zadania", () => {
-  test("zmiana niesie stan, źródło, pewność, powód i czas", () => {
+describe("combining task state signals", () => {
+  test("a change carries the state, source, confidence, reason and time", () => {
     const tracker = new TaskStateTracker({ now: () => Date.UTC(2026, 9, 23, 12, 0, 0), staleAfterMs: 60_000 });
 
     expect(tracker.signal({ state: "Working", source: "osc", confidence: "high", reason: "osc 9;4;3" })).toEqual({
@@ -14,14 +14,14 @@ describe("łączenie sygnałów stanu zadania", () => {
     });
   });
 
-  test("ten sam stan z tego samego źródła i z tą samą pewnością nie jest zmianą", () => {
+  test("the same state from the same source with the same confidence is not a change", () => {
     const tracker = new TaskStateTracker({ now: () => 0, staleAfterMs: 60_000 });
     tracker.signal({ state: "Working", source: "hook", confidence: "high", reason: "hook postToolUse" });
 
     expect(tracker.signal({ state: "Working", source: "hook", confidence: "high", reason: "hook userPromptSubmitted" })).toBeUndefined();
   });
 
-  test("po pierwszym hooku sekwencje terminala nie zmieniają już stanu", () => {
+  test("after the first hook terminal sequences no longer change the state", () => {
     const tracker = new TaskStateTracker({ now: () => 0, staleAfterMs: 60_000 });
     tracker.signal({ state: "Working", source: "osc", confidence: "high", reason: "osc 9;4;3" });
     tracker.signal({ state: "Approval", source: "hook", confidence: "medium", reason: "hook notification" });
@@ -30,7 +30,7 @@ describe("łączenie sygnałów stanu zadania", () => {
     expect(tracker.current?.state).toBe("Approval");
   });
 
-  test("klawisz człowieka zmienia stan także po hooku, bo hooki nie zgłaszają odpowiedzi na prośbę o zgodę", () => {
+  test("a human's key changes the state also after a hook, because hooks do not report an answer to an approval request", () => {
     const tracker = new TaskStateTracker({ now: () => 0, staleAfterMs: 60_000 });
     tracker.signal({ state: "Approval", source: "hook", confidence: "high", reason: "hook notification permission_prompt" });
 
@@ -38,12 +38,12 @@ describe("łączenie sygnałów stanu zadania", () => {
       state: "Working",
       source: "keyboard",
     });
-    // Klawisz nie obniża rangi źródeł: pasek postępu dalej nie zaczyna pracy po hooku.
+    // The key does not lower the source ranking: the progress bar still does not start work after a hook.
     tracker.signal({ state: "Input", source: "hook", confidence: "high", reason: "hook agentStop" });
     expect(tracker.signal({ state: "Working", source: "osc", confidence: "high", reason: "osc 9;4;3" })).toBeUndefined();
   });
 
-  test("słabsze źródło może zakończyć Working, gdy hook końca tury nie przyszedł, ale nie zaczyna pracy po hooku", () => {
+  test("a weaker source can end Working when the end-of-turn hook did not come, but does not start work after a hook", () => {
     const tracker = new TaskStateTracker({ now: () => 0, staleAfterMs: 60_000 });
     tracker.signal({ state: "Working", source: "hook", confidence: "high", reason: "hook userPromptSubmitted" });
 
@@ -54,7 +54,7 @@ describe("łączenie sygnałów stanu zadania", () => {
     expect(tracker.signal({ state: "Working", source: "osc", confidence: "high", reason: "osc 9;4;3" })).toBeUndefined();
   });
 
-  test("Working bez wyjścia dłużej niż próg przechodzi w Stale, a wyjście przywraca Working", () => {
+  test("Working without output for longer than the threshold turns into Stale, and output restores Working", () => {
     let now = 0;
     const tracker = new TaskStateTracker({ now: () => now, staleAfterMs: 60_000 });
     tracker.signal({ state: "Working", source: "hook", confidence: "high", reason: "hook postToolUse" });
@@ -62,7 +62,7 @@ describe("łączenie sygnałów stanu zadania", () => {
     now = 59_000;
     expect(tracker.tick()).toBeUndefined();
     now = 75_000;
-    // Czas i powód zależą od progu, nie od chwili wywołania `tick`.
+    // The time and reason depend on the threshold, not on when `tick` is called.
     expect(tracker.tick()).toMatchObject({
       state: "Stale",
       source: "timeout",
@@ -73,7 +73,7 @@ describe("łączenie sygnałów stanu zadania", () => {
     expect(tracker.activity()).toMatchObject({ state: "Working", source: "hook", reason: "hook postToolUse" });
   });
 
-  test("czekanie na człowieka nie przechodzi w Stale, ile by nie trwało", () => {
+  test("waiting for a human does not turn into Stale, however long it lasts", () => {
     let now = 0;
     const tracker = new TaskStateTracker({ now: () => now, staleAfterMs: 60_000 });
     tracker.signal({ state: "Approval", source: "hook", confidence: "medium", reason: "hook notification" });
@@ -82,7 +82,7 @@ describe("łączenie sygnałów stanu zadania", () => {
     expect(tracker.tick()).toBeUndefined();
   });
 
-  test("kod wyjścia rozstrzyga Done albo Error, gdy hook nie zgłosił końca sesji", () => {
+  test("the exit code decides Done or Error when the hook did not report the end of the session", () => {
     const ok = new TaskStateTracker({ now: () => 0, staleAfterMs: 60_000 });
     ok.signal({ state: "Input", source: "hook", confidence: "high", reason: "hook agentStop" });
     expect(ok.exit(0)).toMatchObject({ state: "Done", source: "exit", confidence: "exact", reason: "exit code 0" });
@@ -92,14 +92,14 @@ describe("łączenie sygnałów stanu zadania", () => {
     expect(crashed.exit(1)).toMatchObject({ state: "Error", source: "exit", reason: "exit code 1" });
   });
 
-  test("błąd z hooka bez końca sesji nie wygrywa z kodem wyjścia 0", () => {
+  test("an error from a hook without an end of session does not win over exit code 0", () => {
     const tracker = new TaskStateTracker({ now: () => 0, staleAfterMs: 60_000 });
     tracker.signal({ state: "Error", source: "hook", confidence: "medium", reason: "hook errorOccurred" });
 
     expect(tracker.exit(0)).toMatchObject({ state: "Done", source: "exit" });
   });
 
-  test("koniec sesji z hooka zostaje po wyjściu procesu, a potem nic już stanu nie zmienia", () => {
+  test("the end of session from a hook stays after the process exits, and after that nothing changes the state", () => {
     const tracker = new TaskStateTracker({ now: () => 0, staleAfterMs: 60_000 });
     tracker.signal({ state: "Done", source: "hook", confidence: "high", reason: "hook sessionEnd user_exit", endsSession: true });
 

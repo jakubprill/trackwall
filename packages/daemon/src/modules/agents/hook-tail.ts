@@ -4,9 +4,9 @@ import { CopilotHookRecord } from "./copilot-hook-record.ts";
 import { jsonOf } from "./json.ts";
 
 /**
- * Czyta linie dopisywane do `hooks.jsonl` sesji przez procesy hooków (ADR-17), od miejsca, w którym skończył
- * poprzednio. Hook to osobny proces uruchamiany przez Copilot CLI, więc plik jest jedynym kanałem do daemona,
- * który nie wymaga podawania hookowi tokenu.
+ * Reads the lines that hook processes append to the session's `hooks.jsonl` (ADR-17), from where it stopped last time.
+ * A hook is a separate process Copilot CLI runs, so the file is the only channel to the daemon that does not require
+ * giving the hook a token.
  */
 
 const HookLine = jsonOf(CopilotHookRecord);
@@ -33,7 +33,7 @@ export class HookTail {
     }
     const lines = text.split("\n");
     this.#partial = lines.pop() ?? "";
-    // Linia, która nie jest rekordem (np. dwa hooki dopisały się naraz), jest pomijana: to tylko gorszy stan.
+    // A line that is not a record (e.g. two hooks appended at once) is skipped: it only means a worse state.
     return lines.flatMap((line) => HookLine.safeParse(line).data ?? []);
   }
 

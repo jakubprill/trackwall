@@ -16,9 +16,9 @@ const fakeCopilot = join(import.meta.dir, "..", "fixtures", "fake-copilot-sessio
 const daemonMain = join(import.meta.dir, "..", "..", "src", "main.ts");
 
 /**
- * Sesje z prawdziwym PTY, grupą procesów, prawdziwym gitem i hookami przez podkomendę `copilot-hook` daemona;
- * Copilot CLI to atrapa. `repos` to repo z folderu z projektami: identyfikator → katalog. `home` podany z zewnątrz
- * udaje restart daemona z tym samym katalogiem stanu. `projectsDir` is where the supervisor runs; `null` is an unset
+ * Sessions with a real PTY, a process group, real git and hooks through the daemon's `copilot-hook` subcommand;
+ * Copilot CLI is a fake. `repos` are the repos of the projects folder: identifier → directory. A `home` passed in
+ * simulates a daemon restart with the same state directory. `projectsDir` is where the supervisor runs; `null` is an unset
  * projects folder.
  */
 export function makeAgents(
@@ -39,7 +39,7 @@ export function makeAgents(
     repos: {
       repoPath: async (id) => {
         const dir = repos[id];
-        if (dir === undefined) throw new DomainError("not_found", `nie ma repo ${id}`);
+        if (dir === undefined) throw new DomainError("not_found", `no repo ${id}`);
         return dir;
       },
       projectsDir: async () => {
@@ -65,14 +65,14 @@ export async function waitFor(agents: Agents, id: string, check: (s: Session) =>
   for (;;) {
     const session = agents.sessions().sessions.find((s) => s.id === id);
     if (session && check(session)) return session;
-    if (Date.now() > until) throw new Error(`nie doczekano się: ${what}; ostatni stan ${JSON.stringify(session)}`);
+    if (Date.now() > until) throw new Error(`gave up waiting for: ${what}; last state ${JSON.stringify(session)}`);
     await new Promise((r) => setTimeout(r, 50));
   }
 }
 
 /**
- * Okno terminala na niby: obraz ekranu i wyjście jako tekst oraz to, czy daemon je zamknął. `unwrappedText` to tekst
- * bez końców linii i sekwencji terminala, do szukania tego, co program wypisał w kilku liniach.
+ * A fake session terminal: the screen image and the output as text, and whether the daemon closed it. `unwrappedText`
+ * is the text without line ends and terminal sequences, for finding what the program printed over several lines.
  */
 export function viewer(agents: Agents, id: string) {
   let screen = "";

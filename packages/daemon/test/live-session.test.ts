@@ -9,14 +9,14 @@ afterEach(() => {
   for (const s of sessions.splice(0)) s.dispose();
 });
 
-describe("sesja Copilot CLI w daemonie", () => {
-  test("klawisz liczy się ze stanu po hookach, które już są w hooks.jsonl, choć cykl odczytu jeszcze ich nie przeczytał", () => {
+describe("a Copilot CLI session in the daemon", () => {
+  test("a key counts from the state after the hooks already in hooks.jsonl, although the read cycle has not read them yet", () => {
     const hooksFile = join(mkdtempSync(join(tmpdir(), "trackwall-session-")), "hooks.jsonl");
     writeFileSync(hooksFile, "");
     const written: string[] = [];
     const session = new LiveSession({
       id: "s1",
-      repo: "sklep",
+      repo: "shop",
       task: null,
       cols: 80,
       rows: 24,
@@ -109,7 +109,7 @@ function runningSession(): { session: LiveSession; hooksFile: string } {
   writeFileSync(hooksFile, "");
   const session = new LiveSession({
     id: "s2",
-    repo: "sklep",
+    repo: "shop",
     task: null,
     cols: 80,
     rows: 24,

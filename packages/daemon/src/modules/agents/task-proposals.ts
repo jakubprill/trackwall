@@ -3,24 +3,24 @@ import type { ProposedBy, TaskProposal } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 
 /**
- * Propozycje zadań (ADR-39): zadania zgłoszone narzędziem MCP `propose_task`, które czekają na decyzję użytkownika
- * w widoku Sessions. Tylko w pamięci daemona, jak sesje, które je zgłaszają: po restarcie sesja proponująca i tak
- * nie żyje, więc nikt nie czeka na odpowiedź. Odrzucone znikają z listy, ale ich identyfikatory zostają, żeby sesja,
- * która na propozycję czeka, dostała `proposal_rejected` zamiast `not_found`.
+ * Task proposals (ADR-39): tasks submitted with the MCP tool `propose_task` that wait for the user's decision in the
+ * Sessions view. Only in daemon memory, like the sessions that submit them: after a restart the proposing session is
+ * not alive anyway, so nobody waits for an answer. Rejected ones disappear from the list, but their identifiers stay, so
+ * that a session waiting for the proposal gets `proposal_rejected` instead of `not_found`.
  * Since ADR-55 a rejection also keeps the user's reason for that session.
  */
 
-/** Tyle propozycji może czekać naraz: sesja w pętli nie zasypie listy, a człowiek i tak nie przejrzy więcej. */
+/** This many proposals can wait at once: a session in a loop does not flood the list, and a human would not review more anyway. */
 export const MAX_PENDING_PROPOSALS = 20;
-/** Tyle ostatnich odrzuceń pamięta daemon dla czekających sesji. */
+/** This many recent rejections the daemon remembers for waiting sessions. */
 const REMEMBERED_REJECTIONS = 100;
 
 export class TaskProposals {
-  /** Od najnowszej. */
+  /** Newest first. */
   #pending: TaskProposal[] = [];
   /**
-   * Zatwierdzone, których zadanie jeszcze się tworzy: zostają na liście, żeby panel w UI nie zniknął w trakcie
-   * zatwierdzania (z błędem i poprawionym poleceniem), ale drugi raz nikt ich nie zatwierdzi ani nie odrzuci.
+   * Approved ones whose task is still being created: they stay on the list, so that the panel in the UI does not disappear
+   * during approval (with an error and an edited prompt), but nobody approves or rejects them a second time.
    */
   readonly #approving = new Set<string>();
   /** Rejected id to the user's reason (`null` without one), oldest first; the oldest drop out after `REMEMBERED_REJECTIONS`. */
@@ -42,31 +42,34 @@ export class TaskProposals {
     return added;
   }
 
-  /** Propozycja, która czeka na decyzję (nie ta w trakcie zatwierdzania), albo `undefined`. */
+  /** A proposal waiting for a decision (not one being approved), or `undefined`. */
   find(id: string): TaskProposal | undefined {
     return this.#approving.has(id) ? undefined : this.#pending.find((p) => p.id === id);
   }
 
-  /** Czekająca propozycja (`not_found`, gdy jej nie ma, bo użytkownik już zdecydował). */
+  /** A waiting proposal (`not_found` when it is missing, because the user has already decided). */
   get(id: string): TaskProposal {
     const proposal = this.find(id);
     if (!proposal) throw new DomainError("not_found", `no task proposal ${id} is waiting for a decision`);
     return proposal;
   }
 
-  /** Propozycja zatwierdzona w trakcie tworzenia zadania albo `undefined`. */
+  /** A proposal approved while its task is being created, or `undefined`. */
   approving(id: string): TaskProposal | undefined {
     return this.#approving.has(id) ? this.#pending.find((p) => p.id === id) : undefined;
   }
 
-  /** Bierze czekającą propozycję do zatwierdzenia; drugie `take` albo `reject` to `not_found`, dopóki trwa. */
+  /** Takes a waiting proposal for approval; a second `take` or `reject` is `not_found` while it lasts. */
   take(id: string): TaskProposal {
     const proposal = this.get(id);
     this.#approving.add(id);
     return proposal;
   }
 
-  /** Koniec zatwierdzania: z `restore` propozycja znów czeka (zadanie nie powstało), bez niego znika, bo jest już zadaniem. */
+  /**
+   * The end of approval: with `restore` the proposal waits again (the task was not created), without it it disappears,
+   * because it is a task now.
+   */
   release(id: string, restore: boolean): void {
     this.#approving.delete(id);
     if (!restore) this.#pending = this.#pending.filter((p) => p.id !== id);

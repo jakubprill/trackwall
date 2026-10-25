@@ -9,8 +9,8 @@ const fixture = (name: string) => parseAsciicast(readFileSync(join(import.meta.d
 const summary = (changes: ReturnType<typeof replayCopilotRecording>) =>
   changes.map((c) => `${c.state} ${c.source} ${c.confidence} ${c.reason}`);
 
-describe("stan sesji Copilot CLI z nagrania", () => {
-  test("sesja z hookami: prośba o zgodę trwa ponad minutę bez Stale, a zdjęcie paska postępu kończy pracę przed hookiem końca tury", () => {
+describe("Copilot CLI session state from a recording", () => {
+  test("a session with hooks: an approval request lasts over a minute without Stale, and removing the progress bar ends work before the end-of-turn hook", () => {
     const changes = replayCopilotRecording(fixture("approval-session.cast"), { staleAfterMs: 60_000 });
 
     expect(summary(changes)).toEqual([
@@ -25,7 +25,7 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     expect(changes[2]?.at).toBe("2026-10-23T12:00:04.000Z");
   });
 
-  test("odmowa zgody z tekstem dla agenta: Enter kończy czekanie na zgodę od razu, a nie dopiero przy następnym narzędziu", () => {
+  test("refusing approval with text for the agent: Enter ends waiting for approval at once, not only at the next tool", () => {
     const changes = replayCopilotRecording(fixture("refused-approval-session.cast"), { staleAfterMs: 60_000 });
 
     expect(summary(changes)).toEqual([
@@ -40,7 +40,7 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     expect(changes[3]?.at).toBe("2026-10-23T12:00:08.800Z");
   });
 
-  test("Esc przy prośbie o zgodę przerywa turę bez hooka, więc sesja czeka na Ciebie zamiast prosić o zgodę do końca", () => {
+  test("Esc at an approval request interrupts the turn without a hook, so the session is waiting for you instead of asking for approval until the end", () => {
     const cast = parseAsciicast(
       [
         '{"version": 2, "width": 80, "height": 24, "timestamp": 0}',
@@ -56,7 +56,7 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     ]);
   });
 
-  test("odmowa cyfrą bez Entera: cyfra kończy czekanie na zgodę, a komunikat o przerwanej turze daje czekanie na Ciebie", () => {
+  test("refusing with a digit without Enter: the digit ends waiting for approval, and the interrupted turn message gives waiting for you", () => {
     const cast = parseAsciicast(
       [
         '{"version": 2, "width": 80, "height": 24, "timestamp": 0}',
@@ -73,7 +73,7 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     ]);
   });
 
-  test("sesja bez hooków: stan z paska postępu OSC 9;4, Stale po ciszy i kod wyjścia na końcu", () => {
+  test("a session without hooks: the state from the OSC 9;4 progress bar, Stale after silence and the exit code at the end", () => {
     const cast = parseAsciicast(
       [
         '{"version": 2, "width": 80, "height": 24, "timestamp": 0}',
@@ -92,19 +92,19 @@ describe("stan sesji Copilot CLI z nagrania", () => {
       "Input osc low osc 9;4;0",
       "Done exit exact exit code 0",
     ]);
-    // Stale ma czas progu (62 s), a nie następnego wyjścia (70 s), tak jak na żywo.
+    // Stale has the threshold's time (62 s), not that of the next output (70 s), as live.
     expect(replayCopilotRecording(cast, { staleAfterMs: 60_000 })[1]?.at).toBe("1970-01-01T00:01:02.000Z");
   });
 
-  test("czas zmiany to pełna milisekunda zapisana w nagraniu, także gdy sekundy nie mają dokładnego zapisu binarnego", () => {
-    // 1.005 * 1000 to w liczbach zmiennoprzecinkowych 1004.9999999999999, a nagranie zapisało 1005 ms.
+  test("the change time is the whole millisecond stored in the recording, also when the seconds have no exact binary representation", () => {
+    // 1.005 * 1000 is 1004.9999999999999 in floating point, and the recording stored 1005 ms.
     const cast = parseAsciicast('{"version": 2, "width": 80, "height": 24, "timestamp": 0}\n[1.005, "o", "\\u001b]9;4;3;0\\u0007"]\n');
 
     expect(replayCopilotRecording(cast, { staleAfterMs: 60_000 })[0]?.at).toBe("1970-01-01T00:00:01.005Z");
   });
 
-  test("znacznik, który nie jest rekordem sesji, jest pomijany, a zła linia nagrania jest błędem z numerem", () => {
-    const withManualMarker = parseAsciicast('{"version": 2, "width": 80, "height": 24, "timestamp": 0}\n[1.0, "m", "tu się zawiesza"]\n');
+  test("a marker that is not a session record is skipped, and a bad recording line is an error with its number", () => {
+    const withManualMarker = parseAsciicast('{"version": 2, "width": 80, "height": 24, "timestamp": 0}\n[1.0, "m", "it hangs here"]\n');
     expect(replayCopilotRecording(withManualMarker, { staleAfterMs: 60_000 })).toEqual([]);
 
     expect(() => parseAsciicast('{"version": 2, "width": 80, "height": 24, "timestamp": 0}\n[1.0, "x", "?"]\n')).toThrow(
@@ -115,17 +115,17 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     );
   });
 
-  test("pierwszy sessionStart sesji zadania, która startuje z poleceniem, to praca, a kolejny i w zwykłej sesji czekanie na Ciebie", () => {
+  test("the first sessionStart of a task session that starts with a prompt is work, and a later one and one in a plain session is waiting for you", () => {
     const record = { event: "sessionStart" as const, receivedAt: 0, payload: {}, omitted: [] };
     const task = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: true });
     expect(task.hook(record).map((c) => `${c.state} ${c.reason}`)).toEqual(["Working hook sessionStart with a prompt"]);
-    // `/clear` w sesji zadania: nowa rozmowa nie ma polecenia, więc sesja czeka na Ciebie.
+    // `/clear` in a task session: the new conversation has no prompt, so the session is waiting for you.
     expect(task.hook(record).map((c) => `${c.state} ${c.reason}`)).toEqual(["Input hook sessionStart"]);
     const plain = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false });
     expect(plain.hook(record).map((c) => `${c.state} ${c.reason}`)).toEqual(["Input hook sessionStart"]);
   });
 
-  test("koniec procesu po progu bez cyklicznego sprawdzenia daje najpierw Stale, tak jak odtwarzanie nagrania", () => {
+  test("the end of the process after the threshold without a periodic check first gives Stale, like replaying the recording", () => {
     let now = 0;
     const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false });
     session.output("\x1b]9;4;3;0\x07");
@@ -134,11 +134,11 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     expect(session.exit(0).map((c) => `${c.state} ${c.at}`)).toEqual(["Stale 1970-01-01T00:01:00.000Z", "Done 1970-01-01T00:01:01.100Z"]);
   });
 
-  test("komunikat o przerwanej turze tuż po klawiszu kończy pracę bez hooka, także rozdzielony na dwa kawałki wyjścia", () => {
+  test("the interrupted turn message right after a key ends work without a hook, also when split over two output chunks", () => {
     let now = 0;
     const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false });
     session.hook({ event: "notification", receivedAt: 0, payload: { notification_type: "permission_prompt" }, omitted: [] });
-    // Enter na „No, and tell Copilot…”, a Copilot CLI kończy turę zamiast czekać na tekst.
+    // Enter on “No, and tell Copilot…”, and Copilot CLI ends the turn instead of waiting for text.
     now = 1_000;
     session.key("enter");
 
@@ -149,7 +149,7 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     ]);
   });
 
-  test("komunikat o przerwanej turze bez niedawnej odpowiedzi klawiszem to przerysowana historia ekranu i nie zmienia stanu", () => {
+  test("the interrupted turn message without a recent key answer is redrawn screen history and does not change the state", () => {
     let now = 0;
     const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false });
     session.hook({ event: "notification", receivedAt: 0, payload: { notification_type: "permission_prompt" }, omitted: [] });
@@ -157,7 +157,7 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     now = 20_000;
     expect(session.output(" ● Operation cancelled by user")).toEqual([]);
 
-    // Enter, który wysyła nowy prompt, nie jest odpowiedzią i nie otwiera okna.
+    // An Enter that sends a new prompt is not an answer and opens no dialog.
     session.hook({ event: "agentStop", receivedAt: 20_000, payload: {}, omitted: [] });
     session.key("enter");
     session.hook({ event: "userPromptSubmitted", receivedAt: 20_100, payload: {}, omitted: [] });
@@ -165,7 +165,7 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     expect(session.output(" ● Operation cancelled by user")).toEqual([]);
   });
 
-  test("Esc po progu bez cyklicznego sprawdzenia daje najpierw Stale, a potem czekanie na Ciebie, tak jak na żywo", () => {
+  test("Esc after the threshold without a periodic check first gives Stale and then waiting for you, as live", () => {
     let now = 0;
     const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false });
     session.output("\x1b]9;4;3;0\x07");
@@ -177,7 +177,7 @@ describe("stan sesji Copilot CLI z nagrania", () => {
     ]);
   });
 
-  test("wyjście po progu bez cyklicznego sprawdzenia daje Stale i powrót, tak jak odtwarzanie nagrania", () => {
+  test("output after the threshold without a periodic check gives Stale and a return, like replaying the recording", () => {
     let now = 0;
     const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false });
     session.output("\x1b]9;4;3;0\x07");

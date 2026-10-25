@@ -6,21 +6,21 @@ import { TaskFile } from "../src/modules/agents/task-file.ts";
 
 const stored = {
   id: "3f2a9c1e-0000-4000-8000-000000000000",
-  repo: "sklep",
-  repoDir: join(tmpdir(), "sklep"),
-  prompt: "napraw",
-  branch: "trackwall/napraw-3f2a9c",
+  repo: "shop",
+  repoDir: join(tmpdir(), "shop"),
+  prompt: "fix",
+  branch: "trackwall/fix-3f2a9c",
   baseBranch: "main",
   base: "a".repeat(40),
   createdAt: "2026-10-23T22:00:00.000Z",
-  title: "Napraw logowanie",
+  title: "Fix the login",
   proposedBy: { session: "9b1e7d2a-0000-4000-8000-000000000000", supervisor: false },
-  summary: { text: "Poprawione, test dodany.", reportedAt: "2026-10-24T10:00:00.000Z" },
+  summary: { text: "Fixed, test added.", reportedAt: "2026-10-24T10:00:00.000Z" },
   trustedMiseConfig: { "mise.toml": "b".repeat(64) },
 };
 
 describe("tasks.json", () => {
-  test("zapisane zadania wracają po odczycie, a brak pliku to brak zadań", () => {
+  test("saved tasks come back after reading, and a missing file means no tasks", () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
     const file = new TaskFile(join(home, "tasks.json"), () => {});
     expect(file.read()).toEqual([]);
@@ -32,7 +32,7 @@ describe("tasks.json", () => {
     expect(file.read()).toEqual([supervised]);
   });
 
-  test("zadanie zapisane przed propozycjami zadań wraca bez tytułu, pochodzenia i podsumowania", () => {
+  test("a task saved before task proposals comes back without a title, origin and summary", () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
     const { title: _, proposedBy: __, summary: ___, trustedMiseConfig: ____, ...old } = stored;
     writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
@@ -59,12 +59,12 @@ describe("tasks.json", () => {
   });
 
   test.each([
-    ["gałąź spoza trackwall/, bo zakończenie usuwa ją z branch -D", { branch: "main" }],
-    ["gałąź z separatorem ścieżki, bo z niej powstaje katalog worktree", { branch: "trackwall/../../dokumenty" }],
-    ["commit bazowy, który nie jest pełnym hashem, bo trafia do git diff", { base: "--output=plik" }],
-    ["względny korzeń repo", { repoDir: "sklep" }],
-    ["a trusted mise config hash that is not SHA-256", { trustedMiseConfig: { "mise.toml": "nie-hash" } }],
-  ])("zadanie z %s odkłada plik na bok i nie wraca", (_, change) => {
+    ["a branch outside trackwall/, because ending deletes it with branch -D", { branch: "main" }],
+    ["a branch with a path separator, because the worktree directory is made from it", { branch: "trackwall/../../documents" }],
+    ["a base commit that is not a full hash, because it goes to git diff", { base: "--output=file" }],
+    ["a relative repo root", { repoDir: "shop" }],
+    ["a trusted mise config hash that is not SHA-256", { trustedMiseConfig: { "mise.toml": "not-a-hash" } }],
+  ])("a task with %s moves the file aside and does not come back", (_, change) => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
     const logged: string[] = [];
     const file = new TaskFile(join(home, "tasks.json"), (msg) => logged.push(msg));

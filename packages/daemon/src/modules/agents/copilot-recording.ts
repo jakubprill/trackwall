@@ -7,10 +7,10 @@ import { CopilotSessionState } from "./copilot-session-state.ts";
 import { jsonOf } from "./json.ts";
 
 /**
- * Nagranie sesji Copilot CLI (§4.4, §10): znaczniki (`m`) z rekordami hooków, rodzajem klawisza i kodem wyjścia, linie
- * `states.jsonl` i odtwarzanie wykrywania stanu z nagrania. Samo nagranie wystarcza, żeby policzyć stan jeszcze raz
- * po zmianie reguł. Znacznik hooka ma czas odczytu `hooks.jsonl` (do ~200 ms po hooku), więc przy odtwarzaniu
- * hook trafia między wyjście w tej samej kolejności co na żywo.
+ * A Copilot CLI session recording (§4.4, §10): markers (`m`) with hook records, the kind of session key and the exit
+ * code, the lines of `states.jsonl`, and replaying state detection from a recording. The recording alone is enough to
+ * compute the state again after the rules change. A hook marker has the time `hooks.jsonl` was read (up to ~200 ms after
+ * the hook), so in a replay the hook lands among the output in the same order as live.
  */
 
 const SessionMarker = z.discriminatedUnion("kind", [
@@ -25,12 +25,12 @@ export function encodeMarker(marker: SessionMarker): string {
   return JSON.stringify(marker);
 }
 
-/** `undefined` dla znacznika dodanego ręcznie w odtwarzaczu (zwykły tekst albo inny JSON): to nie błąd nagrania. */
+/** `undefined` for a marker added by hand in the player (plain text or other JSON): not a recording error. */
 function decodeMarker(label: string): SessionMarker | undefined {
   return SessionMarkerLabel.safeParse(label).data;
 }
 
-/** Linia `states.jsonl`: zmiana stanu i tytuł okna w chwili zmiany. */
+/** A line of `states.jsonl`: a state change and the window title at the moment of the change. */
 export const StatesLine = TaskStateChange.extend({ windowTitle: z.string().optional() });
 export type StatesLine = z.infer<typeof StatesLine>;
 
@@ -38,7 +38,7 @@ export interface ReplayOptions {
   staleAfterMs: number;
 }
 
-/** Zmiany stanu w kolejności, w jakiej pojawiły się na żywo; czas liczony od nagłówka nagrania. */
+/** State changes in the order they appeared live; time counted from the recording's header. */
 export function replayCopilotRecording(cast: Asciicast, o: ReplayOptions): TaskStateChange[] {
   let now = eventTimeMs(cast.header, 0);
   const session = new CopilotSessionState({ now: () => now, staleAfterMs: o.staleAfterMs, promptOnStart: false });

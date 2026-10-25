@@ -2,18 +2,19 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { Session, Task, TaskProposal, WaitStatus } from "@trackwall/protocol";
 
 /**
- * Czekanie na sesję albo zadanie (`wait_for_session`, ADR-39): co cykl sesji odczyt stanu z pamięci daemona, aż stan
- * wymaga kogoś (sesja czeka na człowieka, nie odpowiada, skończyła się, propozycję odrzucono) albo minie limit czasu.
- * Odpytywanie zamiast źródła zdarzeń `/ws`, bo czeka się na jeden obiekt, a odczyt sesji to odczyt z pamięci.
+ * Waiting for a session or task (`wait_for_session`, ADR-39): every session cycle reads the state from daemon memory,
+ * until the state needs someone (the session is waiting for a human, is unresponsive, has ended, the proposal was
+ * rejected) or the time limit passes. Polling instead of the `/ws` event source, because the wait is for one object,
+ * and reading a session is a read from memory.
  */
 
-/** Tyle co cykl sesji (`TICK_MS` w `agents.ts`), z którego przychodzą nowe rekordy hooków. */
+/** The same as the session cycle (`TICK_MS` in `agents.ts`), which brings new hook records. */
 const CHECK_MS = 200;
 
-/** Stany, w których czekanie trwa dalej. */
+/** States in which the wait goes on. */
 const UNSETTLED: ReadonlySet<WaitStatus> = new Set(["proposal_pending", "starting", "working"]);
 
-/** Co zastało czekanie: stan i obiekty, których dotyczy. */
+/** What the wait found: the state and the objects it concerns. */
 export interface WaitOutcome {
   status: WaitStatus;
   proposal: TaskProposal | null;
@@ -29,9 +30,9 @@ export function outcome(status: WaitStatus, parts: Partial<Omit<WaitOutcome, "st
 }
 
 /**
- * Stan sesji dla czekającego; zatrzymywana sesja wciąż pracuje, dopóki jej grupa nie skończy. Błąd (`Error` z hooka
- * `errorOccurred`) też wymaga kogoś: nie wiadomo, czy Copilot CLI wyśle po nim koniec tury, a bez tego czekanie
- * wracałoby z `working` po każdym limicie czasu.
+ * The session's state for the waiter; a stopping session is still working until its group ends. An error (`Error`
+ * from the `errorOccurred` hook) also needs someone: it is unknown whether Copilot CLI sends an end of turn after it, and
+ * without this the wait would return with `working` after every time limit.
  */
 export function sessionWaitStatus(session: Session): WaitStatus {
   if (session.run.kind === "exited") return "exited";
@@ -39,7 +40,7 @@ export function sessionWaitStatus(session: Session): WaitStatus {
   return session.state?.state === "Stale" ? "stale" : "working";
 }
 
-/** `read` co cykl, aż stan przestanie być „w toku”, minie `timeoutMs` albo klient przerwie wywołanie. */
+/** `read` every cycle, until the state stops being “in progress”, `timeoutMs` passes or the client cancels the call. */
 export async function waitUntilSettled(read: () => WaitOutcome, timeoutMs: number, signal: AbortSignal): Promise<WaitOutcome> {
   const until = Date.now() + timeoutMs;
   for (;;) {
