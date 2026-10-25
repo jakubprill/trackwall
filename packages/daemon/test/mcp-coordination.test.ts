@@ -72,15 +72,15 @@ describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (p
     const pending = WaitForSessionResult.parse(
       (await call(outside, "wait_for_session", { task: proposed.id, timeoutSeconds: 1 })).structuredContent,
     );
-    expect(pending).toEqual({ status: "proposal_pending", proposal: proposed, task: null, session: null });
+    expect(pending).toEqual({ status: "proposal_pending", proposal: proposed, task: null, session: null, rejectionReason: null });
 
-    await daemon.post(agentsApi.rejectProposal, { proposal: proposed.id });
+    await daemon.post(agentsApi.rejectProposal, { proposal: proposed.id, reason: "  The README is in the wiki  " });
     expect(daemon.facade.agents.sessions().proposals).toEqual([]);
     const started = Date.now();
     const rejected = WaitForSessionResult.parse(
       (await call(outside, "wait_for_session", { task: proposed.id, timeoutSeconds: 30 })).structuredContent,
     );
-    expect(rejected.status).toBe("proposal_rejected");
+    expect(rejected).toMatchObject({ status: "proposal_rejected", rejectionReason: "The README is in the wiki" });
     expect(Date.now() - started).toBeLessThan(5000);
   }, 30_000);
 

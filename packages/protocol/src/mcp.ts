@@ -152,6 +152,8 @@ export const WaitForSessionResult = z.object({
   proposal: TaskProposal.nullable(),
   task: Task.nullable(),
   session: AgentSession.nullable(),
+  /** The user's reason for rejecting the proposal (ADR-55): only with `proposal_rejected`, and `null` when they gave none. */
+  rejectionReason: z.string().nullable(),
 });
 export type WaitForSessionResult = z.infer<typeof WaitForSessionResult>;
 
@@ -478,7 +480,8 @@ export const mcpTools = {
       `or ${LIST_SESSIONS}). Returns as soon as the status is proposal_rejected, stale, needs_attention (the session ` +
       "finished its turn or asks the user for approval), exited or no_session, or after timeoutSeconds with " +
       "proposal_pending, starting or working; then call it again. Waiting on a task follows its latest session. " +
-      `The result has the proposal, task (with its summary from ${REPORT_RESULT}) and session; ${GET_SESSION} gives the changed files.`,
+      `The result has the proposal, task (with its summary from ${REPORT_RESULT}) and session; ${GET_SESSION} gives the changed files. ` +
+      "With proposal_rejected, rejectionReason is the user's reason when they gave one: use it before proposing again.",
     args: z
       .object({
         session: SessionId.optional().describe(`session id from ${LIST_SESSIONS}`),

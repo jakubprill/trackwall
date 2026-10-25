@@ -1,13 +1,4 @@
-import {
-  agentsApi,
-  countLabel,
-  type Session,
-  type SessionList,
-  TASK_PROMPT_MAX,
-  type Task,
-  type TaskProposal,
-  workspaceApi,
-} from "@trackwall/protocol";
+import { agentsApi, countLabel, type Session, type SessionList, TASK_PROMPT_MAX, type Task, workspaceApi } from "@trackwall/protocol";
 import { BellRing, GitBranch, Lightbulb, Play, Plus, Square, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -23,23 +14,27 @@ import { IS_MAC } from "@/lib/platform";
 import {
   entryId,
   entrySelection,
-  entrySession,
   findEntry,
+  nextWaiting,
+  type ProposalsEntry,
+  proposalsName,
   type SessionEntry,
   type SessionRow,
   type SessionSelection,
+  type StartedEntry,
+  selectedProposal,
   selectionAfterClose,
   sessionRows,
 } from "@/lib/session-entries";
 import { gridPage, SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
 import { ariaSessionShortcut, SHORTCUT_POSITIONS, sessionShortcut, sessionShortcutLabel } from "@/lib/session-shortcut";
-import { isLive, nextWaiting, PROPOSAL_STATUS, sessionStateLabel, waitingCount } from "@/lib/session-state";
+import { attentionCount, isLive, PROPOSAL_STATUS, sessionStateLabel } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
 import { actionIsNewer, type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { useSessionClose } from "@/lib/use-session-close";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { cn } from "@/lib/utils";
-import { ProposalPanel } from "./ProposalPanel.tsx";
+import { ProposalInbox } from "./ProposalInbox.tsx";
 import { SessionCloseButton, SessionCloseConfirmation } from "./SessionClose.tsx";
 import { SessionGrid } from "./SessionGrid.tsx";
 import { SessionTerminal } from "./SessionTerminal.tsx";
@@ -47,11 +42,11 @@ import { TaskLine } from "./TaskLine.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
 
 /**
- * Widok „Sesje” (§4.4, ADR-26, ADR-31): kilka sesji Copilot CLI naraz, każda w repo z folderu z projektami albo
- * w worktree zadania. Po lewej lista sesji i zadań ze stanem i skokiem do następnej sesji, która czeka na Ciebie,
- * a nad nimi propozycje zadań od agentów (ADR-39); po prawej terminal wybranej sesji, przy zadaniu także jego zmiany,
- * a przy propozycji jej polecenie do zatwierdzenia. Listę odpytuje `App`, bo liczba czekających
- * sesji jest też na pasku widoków.
+ * The Sessions view (§4.4, ADR-26, ADR-31): several Copilot CLI sessions at once, each in a repo from the projects
+ * folder or in a task's worktree. On the left the list of sessions and tasks with their state and a jump to the next
+ * entry waiting for you, and above them the task proposals from agents (ADR-39), one entry per session that proposed
+ * them (ADR-55); on the right the selected session's terminal, for a task also its changes, and for proposals their
+ * prompts to decide on. `App` polls the list, since the count of waiting sessions and proposals is on the view bar too.
  *
  * Since ADR-48 the right side shows the selected entry alone or a page of the list as a grid of terminals, and
  * Alt + digit selects an entry by its position; `App` keeps the layout across views and owns Alt+J.
@@ -78,14 +73,14 @@ export function SessionsView({
   const { tasks, rows } = visibleTasksAndRows(sessions.data, hidden);
   const entries = rows.map((r) => r.entry);
   const current = findEntry(entries, selected);
-  const show = (id: string) => onSelect({ kind: "session", id });
-  const next = nextWaiting(list, entrySession(current)?.id);
-  const waiting = waitingCount(list);
-  // A stop can take seconds and the user may select another entry meanwhile, so the close decides on the selection as
-  // it is when it ends. `entries` comes from the render of the click (the action keeps that `onDone`), so it still
-  // holds the closed entry even when a refreshed list without it arrived before the close ended.
+  const next = nextWaiting(entries, current);
+  const waiting = attentionCount(sessions.data);
+  // A stop can take seconds, and a decision on proposals a while, and the user may select another entry meanwhile, so
+  // both decide on the selection as it is when they end. `entries` comes from the render of the click (the action keeps
+  // that `onDone`), so it still holds the closed entry even when a refreshed list without it arrived before the close ended.
   const latestSelected = useRef(selected);
   latestSelected.current = selected;
+  const currentSelection = useCallback(() => latestSelected.current, []);
   const sessionClosed = (entry: SessionEntry) => {
     const afterClose = selectionAfterClose(entries, latestSelected.current, entry);
     if (afterClose !== "keep") onSelect(afterClose);
@@ -121,10 +116,10 @@ export function SessionsView({
               variant="outline"
               size="sm"
               className="w-full"
-              onClick={() => show(next.id)}
+              onClick={() => onSelect(entrySelection(next))}
               aria-keyshortcuts={ariaSessionShortcut(NEXT_WAITING)}
             >
-              <BellRing /> {waiting === 1 ? "A session is waiting for you" : `Next waiting (${waiting})`}
+              <BellRing /> {waiting === 1 ? "One thing is waiting for you" : `Next waiting (${waiting})`}
               <span className="text-muted-foreground ml-auto font-mono text-2xs">{sessionShortcutLabel(NEXT_WAITING, IS_MAC)}</span>
             </Button>
           </div>
@@ -171,6 +166,8 @@ export function SessionsView({
             conn={conn}
             entries={entries}
             current={current}
+            focus={selectedProposal(selected)}
+            currentSelection={currentSelection}
             layout={layout}
             onLayout={onLayout}
             onSelect={onSelect}
@@ -225,8 +222,8 @@ function SessionListItem({
   const { entry, depth } = row;
   return (
     <div className={cn(INDENT[Math.min(depth, INDENT.length - 1)], depth > 0 && "border-l pl-1")}>
-      {entry.kind === "proposal" ? (
-        <ProposalListItem proposal={entry.proposal} position={position} active={active} onSelect={onSelect} />
+      {entry.kind === "proposals" ? (
+        <ProposalsListItem entry={entry} position={position} active={active} onSelect={onSelect} />
       ) : (
         <StartedListItem
           conn={conn}
@@ -253,7 +250,7 @@ function StartedListItem({
   onSessionClosed,
 }: {
   conn: Connection;
-  entry: Exclude<SessionEntry, { kind: "proposal" }>;
+  entry: StartedEntry;
   /** Tasks and proposals directly under this entry. */
   delegated: number;
   position: number;
@@ -317,18 +314,22 @@ function PositionLabel({ position }: { position: number }) {
   );
 }
 
-/** Propozycja zadania na liście: czeka na Twoją decyzję, więc ma ton ostrzeżenia jak sesja, która czeka. */
-function ProposalListItem({
-  proposal,
+/**
+ * The task proposals of one session on the list (ADR-55): they wait for your decision, so they have the warning tone
+ * of a waiting session; the repos tell what the plan touches.
+ */
+function ProposalsListItem({
+  entry,
   position,
   active,
   onSelect,
 }: {
-  proposal: TaskProposal;
+  entry: ProposalsEntry;
   position: number;
   active: boolean;
   onSelect: () => void;
 }) {
+  const repos = [...new Set(entry.proposals.map((p) => p.repo))].join(", ");
   return (
     <button
       type="button"
@@ -343,10 +344,14 @@ function ProposalListItem({
       <PositionLabel position={position} />
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-sm font-medium">{proposal.repo}</span>
-          <Lightbulb className="text-warning size-3.5 shrink-0" aria-label="task proposal" />
+          <Lightbulb className="text-warning size-3.5 shrink-0" aria-hidden />
+          <span className="truncate text-sm font-medium">
+            {entry.proposals.length === 1 ? "Task proposal" : proposalsName(entry.proposals)}
+          </span>
         </span>
-        <span className="text-muted-foreground truncate text-xs">{proposal.title}</span>
+        <span className="text-muted-foreground truncate text-xs">
+          {entry.proposals.length === 1 ? proposalsName(entry.proposals) : repos}
+        </span>
         <span className="text-xs">
           <StatusLabel {...PROPOSAL_STATUS} />
         </span>
@@ -360,6 +365,8 @@ function SelectedEntry({
   conn,
   entries,
   current,
+  focus,
+  currentSelection,
   layout,
   onLayout,
   onSelect,
@@ -372,6 +379,9 @@ function SelectedEntry({
   conn: Connection;
   entries: readonly SessionEntry[];
   current: SessionEntry;
+  /** The selected task proposal, to open first among the proposals of its session. */
+  focus: string | undefined;
+  currentSelection: () => SessionSelection;
   layout: SessionLayout;
   onLayout: (layout: SessionLayout) => void;
   onSelect: (selection: SessionSelection) => void;
@@ -389,6 +399,8 @@ function SelectedEntry({
         <EntryPanel
           conn={conn}
           entry={current}
+          focus={focus}
+          currentSelection={currentSelection}
           sessions={sessions}
           tasks={tasks}
           onSelect={onSelect}
@@ -420,16 +432,22 @@ function SelectedEntry({
           onSelect(entrySelection(entry));
           onLayout("1");
         }}
+        tasks={tasks}
+        onChanged={onChanged}
+        onNavigate={onSelect}
+        currentSelection={currentSelection}
         onSessionClosed={onSessionClosed}
       />
     </>
   );
 }
 
-/** The full panel of one entry: a task proposal to decide on, a task with its tabs, or a session in a repo root. */
+/** The full panel of one entry: task proposals to decide on, a task with its tabs, or a session in a repo root. */
 function EntryPanel({
   conn,
   entry,
+  focus,
+  currentSelection,
   sessions,
   tasks,
   onSelect,
@@ -439,29 +457,28 @@ function EntryPanel({
 }: {
   conn: Connection;
   entry: SessionEntry;
+  focus: string | undefined;
+  currentSelection: () => SessionSelection;
   sessions: readonly Session[];
-  /** The tasks on the list, for the task panel's shared-files warning. */
+  /** The tasks on the list, for the task panel's shared-files warning and the same-repo hint of proposals. */
   tasks: readonly Task[];
   onSelect: (selection: SessionSelection) => void;
   onChanged: () => void;
   onSessionClosed: (entry: SessionEntry) => void;
   onTaskRemoved: (task: string) => void;
 }) {
-  if (entry.kind === "proposal")
+  if (entry.kind === "proposals")
     return (
-      <ProposalPanel
-        key={entry.proposal.id}
+      <ProposalInbox
+        key={entryId(entry)}
         conn={conn}
-        proposal={entry.proposal}
+        group={entry}
+        focus={focus}
         sessions={sessions}
-        onApproved={(task) => {
-          onSelect({ kind: "task", id: task.id });
-          onChanged();
-        }}
-        onRejected={() => {
-          onSelect(undefined);
-          onChanged();
-        }}
+        tasks={tasks}
+        onChanged={onChanged}
+        onSelect={onSelect}
+        currentSelection={currentSelection}
       />
     );
   if (entry.kind === "task")

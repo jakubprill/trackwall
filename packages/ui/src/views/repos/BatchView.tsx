@@ -6,6 +6,7 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
 import { batchProgress, batchRunLabel, STEP_HINT, STEP_LABEL, stepLabel, stepMessage } from "@/lib/batch-state";
+import { toggle } from "@/lib/set-toggle";
 import type { BatchRunHandle } from "@/lib/use-batch-run";
 
 /**
@@ -153,10 +154,4 @@ function Choice({ checked, onChange, children }: { checked: boolean; onChange: (
       </label>
     </li>
   );
-}
-
-function toggle<T>(set: ReadonlySet<T>, item: T): ReadonlySet<T> {
-  const next = new Set(set);
-  if (!next.delete(item)) next.add(item);
-  return next;
 }

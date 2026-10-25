@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Session } from "@trackwall/protocol";
-import { closeCutsOffTurn, nextWaiting, nextWaitingShortcut, sessionStateLabel, waitingCount } from "../src/lib/session-state.ts";
+import { entryId, nextWaiting, nextWaitingShortcut, type SessionEntry } from "../src/lib/session-entries.ts";
+import { closeCutsOffTurn, sessionStateLabel } from "../src/lib/session-state.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-23T10:00:00Z", pid: 10 } as const;
 
@@ -67,39 +68,60 @@ describe("closing a session", () => {
   });
 });
 
+/** Session entries of the list, in this order. */
+const entries = (...sessions: Session[]): SessionEntry[] => sessions.map((session) => ({ kind: "session", session }));
+
+const proposals: SessionEntry = {
+  kind: "proposals",
+  proposer: null,
+  proposals: [{ id: "p1", repo: "billing", title: "Add refunds", prompt: "add refunds", proposedBy: { session: null }, createdAt: "" }],
+};
+
 describe("skok do sesji czekającej", () => {
-  const list = [
+  const list = entries(
     session("a", change("Working")),
     waiting("b", change("Input")),
     waiting("c", change("Approval")),
     session("d", change("Working")),
-  ];
+  );
+  const at = (id: string) => list.find((e) => entryId(e) === id);
 
   test("następna czekająca po bieżącej, w kółko", () => {
-    expect(nextWaiting(list, "a")?.id).toBe("b");
-    expect(nextWaiting(list, "b")?.id).toBe("c");
-    expect(nextWaiting(list, "c")?.id).toBe("b");
-    expect(nextWaiting(list, undefined)?.id).toBe("b");
+    expect(entryIdOf(nextWaiting(list, at("a")))).toBe("b");
+    expect(entryIdOf(nextWaiting(list, at("b")))).toBe("c");
+    expect(entryIdOf(nextWaiting(list, at("c")))).toBe("b");
+    expect(entryIdOf(nextWaiting(list, undefined))).toBe("b");
   });
 
   test("liczą się tylko sesje, które czekają na Ciebie", () => {
-    const ended = [session("a", change("Input"), exited(0))];
-    expect(nextWaiting(ended, undefined)).toBeUndefined();
-    expect(waitingCount(ended)).toBe(0);
-    expect(waitingCount(list)).toBe(2);
+    expect(nextWaiting(entries(session("a", change("Input"), exited(0))), undefined)).toBeUndefined();
+  });
+
+  test("task proposals wait for you too, in list order", () => {
+    const withProposals = [proposals, ...list];
+    expect(entryIdOf(nextWaiting(withProposals, undefined))).toBe("proposals:outside");
+    expect(entryIdOf(nextWaiting(withProposals, at("c")))).toBe("proposals:outside");
   });
 });
 
 describe("Alt+J", () => {
-  test("opens the next waiting session after the selected one", () => {
-    const list = [waiting("a", change("Input")), session("b", change("Working")), waiting("c", change("Approval"))];
-    expect(nextWaitingShortcut(list, "a", true).open?.id).toBe("c");
-    expect(nextWaitingShortcut(list, undefined, false).open?.id).toBe("a");
+  test("opens the next waiting entry after the selected one", () => {
+    const list = entries(waiting("a", change("Input")), session("b", change("Working")), waiting("c", change("Approval")));
+    expect(entryIdOf(nextWaitingShortcut(list, list[0], true).open)).toBe("c");
+    expect(entryIdOf(nextWaitingShortcut(list, undefined, false).open)).toBe("a");
+  });
+
+  test("opens task proposals, also outside Sessions", () => {
+    expect(nextWaitingShortcut([proposals], undefined, false)).toEqual({ open: proposals, taken: true });
   });
 
   test("in Sessions takes the key also when nothing is waiting, elsewhere leaves it for a text field", () => {
-    const list = [session("b", change("Working"))];
-    expect(nextWaitingShortcut(list, "b", true)).toEqual({ open: undefined, taken: true });
+    const list = entries(session("b", change("Working")));
+    expect(nextWaitingShortcut(list, list[0], true)).toEqual({ open: undefined, taken: true });
     expect(nextWaitingShortcut(list, undefined, false)).toEqual({ open: undefined, taken: false });
   });
 });
+
+function entryIdOf(entry: SessionEntry | undefined): string | undefined {
+  return entry && entryId(entry);
+}

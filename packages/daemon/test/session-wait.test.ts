@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { WaitStatus } from "@trackwall/protocol";
-import { type WaitOutcome, waitUntilSettled } from "../src/modules/agents/session-wait.ts";
-
-function outcome(status: WaitStatus): WaitOutcome {
-  return { status, proposal: null, task: null, session: null };
-}
+import { outcome, waitUntilSettled } from "../src/modules/agents/session-wait.ts";
 
 describe("czekanie na sesję", () => {
   test("czekanie trwa, dopóki stan jest w toku, i kończy się na pierwszym stanie, który wymaga kogoś", async () => {

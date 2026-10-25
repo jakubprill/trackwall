@@ -70,41 +70,19 @@ function runningStateLabel(state: TaskStateChange, needsAttention: boolean, idle
   return { tone: "ok", label: likely };
 }
 
-/**
- * Następna sesja, która czeka na Ciebie, po bieżącej, w kolejności listy i w kółko; `undefined`, gdy żadna nie czeka.
- * Bieżąca sesja jest wybierana dopiero wtedy, gdy czeka tylko ona.
- */
-export function nextWaiting(sessions: readonly Session[], current: string | undefined): Session | undefined {
-  const waiting = sessions.filter((s) => s.needsAttention);
-  const at = sessions.findIndex((s) => s.id === current);
-  const after = waiting.find((s) => sessions.indexOf(s) > at);
-  return after ?? waiting[0];
-}
-
-/**
- * Alt+J (ADR-48): the session to open, after the selected one, and whether the shortcut takes the key. In Sessions it
- * always does, so that the key never reaches a terminal; elsewhere only when a session is waiting, so that ⌥J still
- * types in a text field.
- */
-export function nextWaitingShortcut(
-  sessions: readonly Session[],
-  selected: string | undefined,
-  inSessionsView: boolean,
-): { open: Session | undefined; taken: boolean } {
-  const open = nextWaiting(sessions, selected);
-  return { open, taken: open !== undefined || inSessionsView };
-}
-
 /** A session's name in a list: the repo, and the window title that tells two sessions of one repo apart. */
 export function sessionTitle(session: Session): string {
   return session.windowTitle ? `${session.repo} · ${session.windowTitle}` : session.repo;
 }
 
-export function waitingCount(sessions: readonly Session[]): number {
+function waitingCount(sessions: readonly Session[]): number {
   return sessions.filter((s) => s.needsAttention).length;
 }
 
-/** Na pasku widoków: sesje, które czekają na Ciebie, i propozycje zadań czekające na decyzję (ADR-39). */
+/**
+ * On the view bar and the "Next waiting" button: the sessions waiting for you and the task proposals waiting for a
+ * decision (ADR-39), each proposal counted, although Alt+J stops once at the group of one session (ADR-55).
+ */
 export function attentionCount(list: SessionList | undefined): number {
   return list ? waitingCount(list.sessions) + list.proposals.length : 0;
 }

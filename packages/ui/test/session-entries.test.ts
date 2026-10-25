@@ -125,8 +125,35 @@ describe("pozycje widoku Sesje", () => {
       proposals: [proposal("p2", "2026-10-23T11:00:00Z"), proposal("p1", "2026-10-23T10:00:00Z")],
       worktreesDir: "/home/ja/.trackwall/worktrees",
     });
-    expect(entries.map((e) => `${e.kind} ${entryId(e)}`)).toEqual(["proposal p2", "proposal p1", "task t1", "session s1"]);
-    expect(findEntry(entries, { kind: "proposal", id: "p1" })).toMatchObject({ kind: "proposal", proposal: { id: "p1" } });
+    expect(entries.map((e) => `${e.kind} ${entryId(e)}`)).toEqual(["proposals proposals:outside", "task t1", "session s1"]);
+    expect(findEntry(entries, { kind: "proposal", id: "p1" })).toMatchObject({ kind: "proposals", proposer: null });
+  });
+
+  test("proposals of one session are one entry, in the order the session proposed them, and a group of each session", () => {
+    const entries = rowEntries({
+      sessions: [session("s2", "2026-10-23T09:00:00Z"), session("s1", "2026-10-23T08:00:00Z")],
+      tasks: [],
+      // Newest first, as the daemon sends them.
+      proposals: [
+        proposal("p3", "2026-10-23T12:00:00Z", "s2"),
+        proposal("p2", "2026-10-23T11:00:00Z", "s1"),
+        proposal("p1", "2026-10-23T10:00:00Z", "s1"),
+      ],
+      worktreesDir: "/w",
+    });
+    expect(entries.map((e) => (e.kind === "proposals" ? `${e.proposer}: ${e.proposals.map((p) => p.id).join(" ")}` : entryId(e)))).toEqual([
+      "s2",
+      "s2: p3",
+      "s1",
+      "s1: p1 p2",
+    ]);
+    const group = entries[3];
+    if (!group) throw new Error("no group");
+    expect(entrySelection(group)).toEqual({ kind: "proposals", proposer: "s1" });
+    expect(findEntry(entries, { kind: "proposals", proposer: "s1" })).toBe(group);
+    expect(findEntry(entries, { kind: "proposal", id: "p2" })).toBe(group);
+    // A trackwall://task/ link to a proposal.
+    expect(findEntry(entries, { kind: "task", id: "p2" })).toBe(group);
   });
 
   test("wybrana propozycja, z której powstało zadanie, wybiera to zadanie, a nie pierwszą pozycję", () => {
@@ -157,8 +184,35 @@ describe("pozycje widoku Sesje", () => {
       proposals: [proposal("p1", "2026-10-23T11:30:00Z", "s1")],
       worktreesDir: "/w",
     };
-    expect(shape(list)).toEqual(["session s2 @0", "session s1 @0", "proposal p1 @1", "task t1 @1", "task t2 @0"]);
+    expect(shape(list)).toEqual(["session s2 @0", "session s1 @0", "proposals proposals:s1 @1", "task t1 @1", "task t2 @0"]);
     expect(sessionRows(list).find((r) => entryId(r.entry) === "s1")?.children).toBe(2);
+  });
+
+  test("a group whose last proposal has just started gives way to the newest task from the same session", () => {
+    const entries = rowEntries({
+      sessions: [session("s1", "2026-10-23T08:00:00Z")],
+      tasks: [delegated("p1", "2026-10-23T12:00:00Z", "s1"), task("t0", "2026-10-23T13:00:00Z")],
+      proposals: [],
+      worktreesDir: "/w",
+    });
+    expect(findEntry(entries, { kind: "proposals", proposer: "s1" })).toMatchObject({ kind: "task", task: { id: "p1" } });
+    expect(findEntry(entries, { kind: "proposals", proposer: "s9" })).toBe(entries[0]);
+  });
+
+  test("a gone group of an agent outside Trackwall gives way to its task, not to a task typed in the form", () => {
+    const outside: Task = { ...task("p1", "2026-10-23T12:00:00Z"), proposedBy: { session: null } };
+    const entries = rowEntries({ sessions: [], tasks: [task("t0", "2026-10-23T13:00:00Z"), outside], proposals: [], worktreesDir: "/w" });
+    expect(findEntry(entries, { kind: "proposals", proposer: null })).toMatchObject({ kind: "task", task: { id: "p1" } });
+  });
+
+  test("the main badge counts every proposal of the group under it", () => {
+    const list = {
+      sessions: [session("s1", "2026-10-23T10:00:00Z")],
+      tasks: [delegated("t1", "2026-10-23T11:00:00Z", "s1")],
+      proposals: [proposal("p2", "2026-10-23T11:40:00Z", "s1"), proposal("p1", "2026-10-23T11:30:00Z", "s1")],
+      worktreesDir: "/w",
+    };
+    expect(sessionRows(list).find((r) => entryId(r.entry) === "s1")?.children).toBe(3);
   });
 
   test("a task delegated by the session of another task sits under that task, also when it is not its latest session", () => {
@@ -178,7 +232,7 @@ describe("pozycje widoku Sesje", () => {
       proposals: [proposal("p1", "2026-10-23T09:00:00Z")],
       worktreesDir: "/w",
     };
-    expect(shape(list)).toEqual(["proposal p1 @0", "task t1 @0", "session s1 @0"]);
+    expect(shape(list)).toEqual(["proposals proposals:outside @0", "task t1 @0", "session s1 @0"]);
   });
 
   test("tasks that delegate to each other stay on the list instead of looping it", () => {

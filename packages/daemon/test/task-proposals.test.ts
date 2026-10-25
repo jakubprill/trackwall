@@ -14,12 +14,12 @@ describe("propozycje zadań", () => {
     expect(proposals.list()).toEqual([second, first]);
     expect(proposals.approving(first.id)).toEqual(first);
     expect(() => proposals.take(first.id)).toThrow(`no task proposal ${first.id} is waiting for a decision`);
-    expect(() => proposals.reject(first.id)).toThrow(`no task proposal ${first.id} is waiting for a decision`);
+    expect(() => proposals.reject(first.id, null)).toThrow(`no task proposal ${first.id} is waiting for a decision`);
 
     proposals.release(first.id, false);
     expect(proposals.approving(first.id)).toBeUndefined();
     expect(proposals.list()).toEqual([second]);
-    expect(proposals.wasRejected(first.id)).toBe(false);
+    expect(proposals.rejection(first.id)).toBeUndefined();
   });
 
   test("propozycja, z której nie powstało zadanie, znów czeka na decyzję", () => {
@@ -36,10 +36,17 @@ describe("propozycje zadań", () => {
   test("odrzucona propozycja znika z listy, ale daemon pamięta odrzucenie dla sesji, która na nią czeka", () => {
     const proposals = new TaskProposals();
     const proposal = proposals.add(PROPOSAL);
-    proposals.reject(proposal.id);
+    proposals.reject(proposal.id, null);
     expect(proposals.list()).toEqual([]);
-    expect(proposals.wasRejected(proposal.id)).toBe(true);
-    expect(() => proposals.reject(proposal.id)).toThrow(`no task proposal ${proposal.id} is waiting for a decision`);
+    expect(proposals.rejection(proposal.id)).toEqual({ reason: null });
+    expect(() => proposals.reject(proposal.id, null)).toThrow(`no task proposal ${proposal.id} is waiting for a decision`);
+  });
+
+  test("a rejection keeps the user's reason for the session that waits on the proposal", () => {
+    const proposals = new TaskProposals();
+    const proposal = proposals.add(PROPOSAL);
+    proposals.reject(proposal.id, "Do it in billing instead");
+    expect(proposals.rejection(proposal.id)).toEqual({ reason: "Do it in billing instead" });
   });
 
   test(`najwyżej ${MAX_PENDING_PROPOSALS} propozycji czeka naraz; kolejna to bad_request, a nie dłuższa lista`, () => {
