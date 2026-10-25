@@ -176,19 +176,37 @@ export function findEntry(entries: readonly SessionEntry[], selection: SessionSe
 }
 
 /**
- * What to select after the session of `closed` was closed: `"keep"` unless `closed` is the selected entry and leaves the
- * list with its session (a session in a repo root; a task stays listed). Then its neighbour in `entries`, the list
- * that still holds `closed`: the next entry or the previous one after the last, so the selection stays where the user
- * was (also on the same grid page); `undefined` (the first entry) when nothing else is left. `selected` is the raw
- * selection, not the entry `findEntry` falls back to once a refreshed list no longer has `closed`.
+ * What to select after the session of `closed` was closed: a session in a repo root leaves the list with it
+ * (`selectionAfterRemoval`), while a task stays listed, so its selection is kept.
  */
 export function selectionAfterClose(
   entries: readonly SessionEntry[],
   selected: SessionSelection,
   closed: SessionEntry,
 ): SessionSelection | "keep" {
-  if (closed.kind !== "session" || selected?.kind !== "session" || selected.id !== closed.session.id) return "keep";
-  const at = entries.findIndex((entry) => entryId(entry) === entryId(closed));
+  return closed.kind === "session" ? selectionAfterRemoval(entries, selected, closed) : "keep";
+}
+
+/** A session selection points at the entry that holds the session (also a task's), a task selection at the task. */
+function selectsEntry(selected: SessionSelection, entry: SessionEntry): boolean {
+  if (selected?.kind === "session") return entrySession(entry)?.id === selected.id;
+  return selected?.kind === "task" && entry.kind === "task" && entry.task.id === selected.id;
+}
+
+/**
+ * What to select after `removed` left the list (a closed session in a repo root, an ended task): `"keep"` unless it is
+ * the selected entry. Then its neighbour in `entries`, the list that still holds `removed`: the next entry or the
+ * previous one after the last, so the selection stays where the user was (also on the same grid page); `undefined`
+ * (the first entry) when nothing else is left. `selected` is the raw selection, not the entry `findEntry` falls back
+ * to once a refreshed list no longer has `removed`.
+ */
+export function selectionAfterRemoval(
+  entries: readonly SessionEntry[],
+  selected: SessionSelection,
+  removed: SessionEntry,
+): SessionSelection | "keep" {
+  if (!selectsEntry(selected, removed)) return "keep";
+  const at = entries.findIndex((entry) => entryId(entry) === entryId(removed));
   const neighbour = at === -1 ? undefined : (entries[at + 1] ?? entries[at - 1]);
   return neighbour ? entrySelection(neighbour) : undefined;
 }

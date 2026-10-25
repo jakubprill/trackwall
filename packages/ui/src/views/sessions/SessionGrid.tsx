@@ -13,7 +13,7 @@ import { isLive, PROPOSAL_STATUS, sessionStateLabel } from "@/lib/session-state"
 import { useSessionClose } from "@/lib/use-session-close";
 import { cn } from "@/lib/utils";
 import { ProposalTile } from "./ProposalTile.tsx";
-import { SessionCloseButton, SessionCloseConfirmation } from "./SessionClose.tsx";
+import { EndTaskButton, SessionCloseButton, SessionCloseConfirmation, TaskEnding } from "./SessionClose.tsx";
 import { TaskLine } from "./TaskLine.tsx";
 
 /**
@@ -35,6 +35,7 @@ export function SessionGrid({
   onNavigate,
   currentSelection,
   onSessionClosed,
+  onTaskRemoved,
 }: {
   conn: Connection;
   page: GridPage<SessionEntry>;
@@ -47,6 +48,7 @@ export function SessionGrid({
   onNavigate: (selection: SessionSelection) => void;
   currentSelection: () => SessionSelection;
   onSessionClosed: (entry: SessionEntry) => void;
+  onTaskRemoved: (task: string) => void;
 }) {
   const area = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ width: number; height: number }>();
@@ -82,6 +84,7 @@ export function SessionGrid({
             onNavigate={onNavigate}
             currentSelection={currentSelection}
             onSessionClosed={() => onSessionClosed(entry)}
+            onTaskRemoved={onTaskRemoved}
           />
         ))}
     </div>
@@ -100,6 +103,7 @@ function SessionTile({
   onNavigate,
   currentSelection,
   onSessionClosed,
+  onTaskRemoved,
 }: {
   conn: Connection;
   entry: SessionEntry;
@@ -112,9 +116,11 @@ function SessionTile({
   onNavigate: (selection: SessionSelection) => void;
   currentSelection: () => SessionSelection;
   onSessionClosed: () => void;
+  onTaskRemoved: (task: string) => void;
 }) {
   const session = entrySession(entry);
   const close = useSessionClose(conn, session, onSessionClosed);
+  const [ending, setEnding] = useState(false);
   const tile = useRef<HTMLDivElement>(null);
   // A selected tile without a terminal takes the keyboard itself, so that keys stop going to the terminal selected before.
   useEffect(() => {
@@ -150,6 +156,7 @@ function SessionTile({
           <Maximize2 />
         </Button>
         {session && <SessionCloseButton close={close} />}
+        {entry.kind === "task" && !session && <EndTaskButton onClick={() => setEnding((open) => !open)} />}
       </header>
       {session && (
         // The question lies over the terminal instead of pushing it down, so that it does not resize the PTY mid-turn.
@@ -168,9 +175,19 @@ function SessionTile({
           currentSelection={currentSelection}
         />
       )}
-      {entry.kind === "task" && !session && (
+      {entry.kind === "task" && !session && ending && (
+        // A small tile scrolls the question, so that its buttons stay reachable.
+        <TaskEnding
+          className="min-h-0 flex-1 overflow-y-auto"
+          conn={conn}
+          task={entry.task}
+          onRemoved={() => onTaskRemoved(entry.task.id)}
+          onCancel={() => setEnding(false)}
+        />
+      )}
+      {entry.kind === "task" && !session && !ending && (
         <div className="text-muted-foreground flex flex-1 items-center justify-center p-4 text-center text-xs">
-          This task has no session. Open it alone to resume it or to see its changes.
+          This task has no session. Open it alone to resume it or to see its changes, or end it with the X.
         </div>
       )}
     </div>
