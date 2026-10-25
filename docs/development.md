@@ -2,7 +2,7 @@
 
 Repo layout, running from source and tools for people who develop Trackwall. Project documentation (moving to English, ADR-43):
 
-- [Features](features.md)
+- [Features](https://jakubprill.github.io/trackwall/): the documentation site, source in `apps/docs`
 - [Architecture](architecture.md)
 - [Rules for agents and Definition of done](../AGENTS.md)
 - [Glossary](../CONTEXT.md)
@@ -16,6 +16,7 @@ Repo layout, running from source and tools for people who develop Trackwall. Pro
 | `packages/daemon` | the daemon (Bun, Node-compatible code), built into a single binary; `src/modules/` are the modules from §4 of the architecture, `src/api/` and `src/mcp/` the transports, `src/platform/` system APIs, `src/infra/` the rest of the infrastructure; the root of `src/` holds only `main.ts` and `facade.ts` |
 | `packages/ui` | React + Tailwind + shadcn/ui, Vite; `src/views/<view identifier>/` are the views from the bar on the left (`home`, `repos`, `sessions`, `graph` for Overview, `daemon`, `settings`) and `tray-panel`, the page of the tray panel window (ADR-50), `src/components/` shared components, `src/lib/` logic without React and hooks; the root of `src/` holds only `main.tsx`, `App.tsx` and `index.css` |
 | `packages/scene` | the 3D dashboard scene on Pawn (`@pawnjs/core` from npm): view model, "Orbit" layout, models |
+| `apps/docs` | the feature documentation site (VitePress, ADR-56): `guide/` and one page per feature in `features/`, the sidebar in `.vitepress/config.ts`, the Trackwall look in `.vitepress/theme/`; `.github/workflows/pages.yml` publishes it on GitHub Pages |
 | `apps/desktop` | the Tauri 2 shell: windows (the main one and extra ones, translucent, ADR-11, ADR-49), tray and tray panel, system notifications and the global shortcut (ADR-50), starting and stopping the daemon |
 
 ## Running from source
@@ -32,6 +33,7 @@ pnpm dev                       # daemon (bun --watch, state in .trackwall-dev/) 
 pnpm --filter @trackwall/desktop dev   # the same in a Tauri window (state in ~/.trackwall-dev, separate from the release)
 pnpm lint                      # Biome and knip (pnpm format fixes formatting)
 pnpm test                      # tests of every package
+pnpm --filter @trackwall/docs dev     # the documentation site at http://localhost:5173/trackwall/
 ```
 
 The daemon alone with the UI in the browser, without Tauri:

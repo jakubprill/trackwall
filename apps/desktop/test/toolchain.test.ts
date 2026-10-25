@@ -44,6 +44,12 @@ test("mise.toml i oba workflow używają tych samych wersji Node, Bun i Rust", (
   }
 });
 
+test("the documentation site workflow uses the Node and Bun versions from mise.toml", () => {
+  const tools = miseTools();
+  const yaml = read(".github/workflows/pages.yml");
+  expect({ node: workflowEnv(yaml, "NODE_VERSION"), bun: workflowEnv(yaml, "BUN_VERSION") }).toEqual({ node: tools.node, bun: tools.bun });
+});
+
 test("pnpm z mise.toml jest tym z packageManager, a Rust z mise.toml tym z rust-version w Cargo.toml", () => {
   const tools = miseTools();
   expect(read("package.json")).toContain(`"packageManager": "pnpm@${tools.pnpm}"`);

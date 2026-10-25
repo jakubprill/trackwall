@@ -1,0 +1,13 @@
+# Main session and task proposals
+
+Let one agent commission work to other agents, with you approving each task.
+
+A Copilot CLI session with the Trackwall MCP server (in the "Sessions" view or in your terminal, for example in the projects folder) can commission work to another agent like a coordinator that opens threads (ADR-39). The `propose_task` tool submits a task proposal with a title and a prompt; the "Sessions" view shows it as "waiting for your decision", and the view bar counts it together with the sessions that are waiting. A proposal from a listed session, and the task made from it, sit indented under that session (or under the task whose session delegated it), and the main session has a "main" badge with the number of items under it; a proposal from an agent outside Trackwall or from a closed session is at the top level.
+
+Proposals also show in the "Needs you" queue on the Home dashboard (a click opens it in "Sessions") and in the tray menu ("Proposal: &lt;repo&gt; · &lt;title&gt;"); a new proposal flashes the window in the taskbar or bounces the Dock icon like a session that started waiting, and the tray tooltip counts proposals together with sessions. When selected, it shows who proposed it and the whole prompt, which can be edited; "Start task" turns it into an ordinary task (worktree, branch from the title, a session with the prompt), "Reject" rejects it, and until then nothing starts.
+
+A task session finishes its work with the `report_result` tool, and its summary is shown above the task's tabs ("Summary"). The main session waits for the result with the `wait_for_session` tool (it returns when the session ends its turn, asks for approval, reports an error, stops responding or ends, or when the proposal is rejected) and reads the changes through `get_session`. Proposals live only until Trackwall quits (at most 20 at once), summaries stay with the task. Every Trackwall session has its own session token, by which the MCP server knows who is calling; an agent outside Trackwall proposes as "agent outside Trackwall", but does not report summaries. The prompt and title of a proposal and the summary cannot contain invisible characters, so that what you read before "Start task" is the whole prompt.
+
+## Decisions
+
+Why it works this way: [ADR-39](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief) in the architecture document.
