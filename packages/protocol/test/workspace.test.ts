@@ -3,7 +3,7 @@ import { HostName, RemoteRepoName, RepoHosts, RepoPath, workspaceApi } from "../
 
 describe("workspace contract", () => {
   test("a path in a repo does not leave the commit's tree and has no control characters", () => {
-    for (const ok of ["", "src", "src/a b.ts", "win\\style.txt"]) expect(RepoPath.safeParse(ok).success).toBe(true);
+    for (const ok of ["", "src", "src/a b.ts", "win\\file.txt"]) expect(RepoPath.safeParse(ok).success).toBe(true);
     for (const bad of ["..", "src/../x", "./src", "/src", "src/", "a\nb", "a\0b"]) expect(RepoPath.safeParse(bad).success).toBe(false);
   });
 
@@ -12,7 +12,7 @@ describe("workspace contract", () => {
   });
 
   test("the tree accepts file names as git returns them, also with a backslash", () => {
-    expect(workspaceApi.tree.data.safeParse([{ name: "win\\style.txt", path: "win\\style.txt", kind: "file", size: 1 }]).success).toBe(true);
+    expect(workspaceApi.tree.data.safeParse([{ name: "win\\file.txt", path: "win\\file.txt", kind: "file", size: 1 }]).success).toBe(true);
   });
 
   test("a full repo name from a repo host has at least two segments, and none starts with - or .", () => {
