@@ -147,4 +147,30 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
     },
     TIMEOUT,
   );
+
+  test(
+    "the supervisor runs and stops no mise tasks or services: it works in no repo and proposes a task instead",
+    async () => {
+      const supervisor = await daemon.facade.agents.startSupervisor();
+      const token = readFileSync(join(daemon.home, "sessions", supervisor.id, "session-token"), "utf8");
+      const client = await connectHttpClient(daemon.api.port, TOKEN, undefined, { [SESSION_TOKEN_HEADER]: token });
+      clients.push(client);
+
+      expect(errorText(await call(client, "run_mise_task", { repo: "magazyn", miseTask: "test" }))).toBe(
+        "bad_request: the supervisor works in no repo and runs nothing in one; propose a task in magazyn instead",
+      );
+      for (const [tool, args] of [
+        ["stop_mise_task", { repo: "magazyn", miseTask: "test" }],
+        ["start_service", { repo: "magazyn" }],
+        ["stop_service", { repo: "magazyn" }],
+      ] as const) {
+        expect(errorText(await call(client, tool, args))).toBe(
+          "bad_request: the supervisor works in no repo and runs nothing in one; propose a task in magazyn instead",
+        );
+      }
+      await waitFor(daemon.facade.agents, supervisor.id, (s) => s.state !== null, "sessionStart");
+      await daemon.facade.agents.stop(supervisor.id);
+    },
+    TIMEOUT,
+  );
 });

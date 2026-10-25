@@ -42,7 +42,8 @@ export function homeModel({ repos, sessions, graph, running, daemonRunning }: Ho
       ...repoState(repo),
       runningTask: running.find((t) => t.repo === repo.id)?.miseTask ?? null,
     })),
-    sessions: sessions.filter((s) => ids.has(s.repo)).map((s) => ({ id: s.id, repo: s.repo, state: homeSessionState(s) })),
+    // A session stands at its repo on the scene; the supervisor has none (ADR-58) and lives in its own panel.
+    sessions: sessions.flatMap((s) => (s.repo !== null && ids.has(s.repo) ? [{ id: s.id, repo: s.repo, state: homeSessionState(s) }] : [])),
     links: homeLinks(edges),
     daemonRunning,
   };

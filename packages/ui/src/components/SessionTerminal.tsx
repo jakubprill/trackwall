@@ -3,10 +3,11 @@ import { isTauri } from "@tauri-apps/api/core";
 import { PTY_CLOSE_NOT_FOUND, type PtyClientMessage, ptySocket } from "@trackwall/protocol";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import type { Connection } from "@/lib/connection";
 import { daemonSocket } from "@/lib/daemon-socket";
 import { DROP_HOVER_RING, FILE_DROP_TARGET, FileDropEvent } from "@/lib/file-drop";
+import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
 import { oncePerFrame } from "@/lib/once-per-frame";
 import { pastedPaths } from "@/lib/pasted-paths";
 import { IS_MAC } from "@/lib/platform";
@@ -25,11 +26,23 @@ const RECONNECT_MS = 1000;
  * not an empty terminal. Keys and the terminal size go to the session; the PTY takes the size of the last session
  * terminal that reported one, and a window that comes to the front reports its terminals' sizes again, so with the
  * session open in two windows (ADR-49) the one you work in sets it. The window also tells the daemon whether it is in front of the user, which marks the session seen
- * (ADR-47). In the grid (ADR-48) several terminals are open at once; only the `focused` one takes the keyboard and
+ * (ADR-47). In the grid (ADR-48) several terminals are open at once; only the `selected` one takes the keyboard and
  * counts as in front, so a waiting session in another tile keeps waiting until the user selects it. Files dropped on
  * the terminal (ADR-51) are pasted as their paths, as if the user typed them.
  */
-export function SessionTerminal({ conn, session, live, focused }: { conn: Connection; session: string; live: boolean; focused: boolean }) {
+export function SessionTerminal({
+  conn,
+  session,
+  live,
+  selected,
+}: {
+  conn: Connection;
+  session: string;
+  live: boolean;
+  selected: boolean;
+}) {
+  const keyboardElsewhere = useContext(KeyboardElsewhere);
+  const focused = selected && !keyboardElsewhere;
   const frame = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const term = useRef<Terminal>(undefined);

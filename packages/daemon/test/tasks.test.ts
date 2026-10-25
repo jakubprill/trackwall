@@ -315,7 +315,7 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
 
     renameSync(moved, dir);
     const task = await agents.approveProposal(proposal.id, proposal.prompt);
-    expect(task).toMatchObject({ id: proposal.id, title: "Dodaj wylogowanie", proposedBy: { session: null } });
+    expect(task).toMatchObject({ id: proposal.id, title: "Dodaj wylogowanie", proposedBy: { session: null, supervisor: false } });
     expect(agents.sessions().proposals).toEqual([]);
     await expect(agents.approveProposal(proposal.id, proposal.prompt)).rejects.toMatchObject({ code: "not_found" });
   }, 60_000);

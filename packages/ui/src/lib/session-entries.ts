@@ -1,4 +1,12 @@
-import { countLabel, type ProposedBy, type Session, type SessionList, type Task, type TaskProposal } from "@trackwall/protocol";
+import {
+  countLabel,
+  isSupervisor,
+  type ProposedBy,
+  type Session,
+  type SessionList,
+  type Task,
+  type TaskProposal,
+} from "@trackwall/protocol";
 
 /**
  * Pozycje listy w widoku „Sesje” (§4.4, ADR-31): sesja w korzeniu repo albo zadanie z ostatnią sesją, jeśli ma ją
@@ -46,7 +54,8 @@ export type SessionSelection =
  */
 function sessionEntries({ sessions, tasks, proposals }: SessionList): SessionEntry[] {
   const started: StartedEntry[] = [
-    ...sessions.filter((s) => s.task === null).map((session) => ({ kind: "session" as const, session })),
+    // The supervisor is not an entry: it has its own panel, and its work sits under its heading (ADR-58).
+    ...sessions.filter((s) => s.task === null && !isSupervisor(s)).map((session) => ({ kind: "session" as const, session })),
     ...tasks.map((task) => ({ kind: "task" as const, task, session: latestSession(sessions, task.id) })),
   ];
   return [...proposalGroups(proposals), ...started.sort((a, b) => entryTime(b).localeCompare(entryTime(a)))];
@@ -76,6 +85,8 @@ export interface SessionRow {
   entry: SessionEntry;
   depth: number;
   children: number;
+  /** The row is the supervisor's work (ADR-58), directly or under work it delegated: it sits under the supervisor heading. */
+  supervised: boolean;
 }
 
 /**
@@ -100,22 +111,37 @@ export function sessionRows(list: SessionList): SessionRow[] {
   }
   const rows: SessionRow[] = [];
   const placed = new Set<string>();
-  const place = (entry: SessionEntry, depth: number) => {
+  const place = (entry: SessionEntry, depth: number, supervised: boolean) => {
     const id = entryId(entry);
     if (placed.has(id)) return;
     placed.add(id);
-    const row = { entry, depth, children: 0 };
+    const row = { entry, depth, children: 0, supervised };
     rows.push(row);
     for (const child of children.get(id) ?? []) {
       if (placed.has(entryId(child))) continue;
       // The "main" badge counts work, so a group counts each of its proposals.
-      row.children += child.kind === "proposals" ? child.proposals.length : 1;
-      place(child, depth + 1);
+      row.children += workCount(child);
+      place(child, depth + 1, supervised);
     }
   };
-  // After the roots, all entries once more: entries in a cycle have no root, so they go to the top level.
-  for (const entry of [...roots, ...entries]) place(entry, 0);
+  // The supervisor's work first, one level under its heading, also when the supervisor session that delegated it is
+  // gone (ADR-58); then the other roots. After them all entries once more: entries in a cycle have no root, so they go
+  // to the top level.
+  for (const entry of roots.filter(fromSupervisor)) place(entry, 1, true);
+  for (const entry of [...roots, ...entries]) place(entry, 0, false);
   return rows;
+}
+
+/** How much work an entry is for a count: a group counts each of its proposals. */
+export function workCount(entry: SessionEntry): number {
+  return entry.kind === "proposals" ? entry.proposals.length : 1;
+}
+
+/** The supervisor delegated this task or these proposals (ADR-58). */
+function fromSupervisor(entry: SessionEntry): boolean {
+  if (entry.kind === "session") return false;
+  if (entry.kind === "proposals") return entry.proposals[0].proposedBy.supervisor;
+  return entry.task.proposedBy?.supervisor === true;
 }
 
 /** The session that proposed a task or proposals; `null` for a session, a task from the form and an agent outside Trackwall. */
@@ -208,8 +234,25 @@ export function nextWaiting(entries: readonly SessionEntry[], current: SessionEn
   return waiting.find((e) => entries.indexOf(e) > at) ?? waiting[0];
 }
 
+/** What "Next waiting" and Alt+J open: an entry of the list, or the supervisor, which has its panel instead (ADR-58). */
+export type WaitingTarget = SessionEntry | typeof SUPERVISOR_TARGET;
+export const SUPERVISOR_TARGET = { kind: "supervisor" } as const;
+
 /**
- * Alt+J (ADR-48): the entry to open, after the selected one, and whether the shortcut takes the key. In Sessions it
+ * The next thing waiting for you: the entry after the current one (`nextWaiting`, which goes round the list), and the
+ * supervisor only when nothing on the list waits but the supervisor session itself does. Its panel is in view and has
+ * its own bell, so the shortcut does not stop there while the list still holds work.
+ */
+export function nextWaitingTarget(
+  entries: readonly SessionEntry[],
+  current: SessionEntry | undefined,
+  supervisorWaits: boolean,
+): WaitingTarget | undefined {
+  return nextWaiting(entries, current) ?? (supervisorWaits ? SUPERVISOR_TARGET : undefined);
+}
+
+/**
+ * Alt+J (ADR-48): what to open, after the selected entry, and whether the shortcut takes the key. In Sessions it
  * always does, so that the key never reaches a terminal; elsewhere only when something is waiting, so that ⌥J still
  * types in a text field.
  */
@@ -217,8 +260,9 @@ export function nextWaitingShortcut(
   entries: readonly SessionEntry[],
   selected: SessionEntry | undefined,
   inSessionsView: boolean,
-): { open: SessionEntry | undefined; taken: boolean } {
-  const open = nextWaiting(entries, selected);
+  supervisorWaits: boolean,
+): { open: WaitingTarget | undefined; taken: boolean } {
+  const open = nextWaitingTarget(entries, selected, supervisorWaits);
   return { open, taken: open !== undefined || inSessionsView };
 }
 
@@ -257,6 +301,7 @@ export function proposalsName(proposals: ProposalsEntry["proposals"]): string {
  * albo agent spoza Trackwall (agent nadrzędny z tokenem daemona).
  */
 export function proposerLabel(proposedBy: ProposedBy, sessions: readonly Session[]): string {
+  if (proposedBy.supervisor) return "proposed by the supervisor";
   if (proposedBy.session === null) return "proposed by an agent outside Trackwall";
   const session = sessions.find((s) => s.id === proposedBy.session);
   if (!session) return "proposed by a session that is no longer listed";

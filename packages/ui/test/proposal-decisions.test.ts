@@ -9,7 +9,7 @@ function proposal(id: string): TaskProposal {
     repo: "billing",
     title: `Task ${id}`,
     prompt: `do ${id}`,
-    proposedBy: { session: "main" },
+    proposedBy: { session: "main", supervisor: false },
     createdAt: "2026-10-25T10:00:00Z",
   };
 }
@@ -25,7 +25,7 @@ function task(id: string): Task {
     worktree: `/w/billing/${id}`,
     createdAt: "2026-10-25T10:01:00Z",
     title: `Task ${id}`,
-    proposedBy: { session: "main" },
+    proposedBy: { session: "main", supervisor: false },
     summary: null,
   };
 }
