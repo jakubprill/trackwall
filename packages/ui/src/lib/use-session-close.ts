@@ -38,7 +38,11 @@ export function useSessionClose(conn: Connection, session: Session | undefined, 
     confirming: confirming && cutsOff,
     request: () => (cutsOff ? setConfirming(true) : run()),
     confirm: run,
-    cancel: () => setConfirming(false),
+    /** Drops the question and the error of the last close, which otherwise covers the top of a tile's terminal. */
+    cancel: () => {
+      setConfirming(false);
+      setTarget(undefined);
+    },
   };
 }
 

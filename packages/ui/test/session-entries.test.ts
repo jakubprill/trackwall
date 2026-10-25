@@ -74,9 +74,9 @@ describe("pozycje widoku Sesje", () => {
     });
     const [s1, s2, s3] = entries;
     if (!s1 || !s2 || !s3) throw new Error("expected three entries");
-    expect(selectionAfterClose(entries, s2, s2)).toEqual({ kind: "session", id: "s3" });
-    expect(selectionAfterClose(entries, s3, s3)).toEqual({ kind: "session", id: "s2" });
-    expect(selectionAfterClose([s1], s1, s1)).toBeUndefined();
+    expect(selectionAfterClose(entries, { kind: "session", id: "s2" }, s2)).toEqual({ kind: "session", id: "s3" });
+    expect(selectionAfterClose(entries, { kind: "session", id: "s3" }, s3)).toEqual({ kind: "session", id: "s2" });
+    expect(selectionAfterClose([s1], { kind: "session", id: "s1" }, s1)).toBeUndefined();
   });
 
   test("closing a session that is not selected, or a task's session, keeps the selection", () => {
@@ -89,8 +89,9 @@ describe("pozycje widoku Sesje", () => {
     const [taskEntry, s2] = entries;
     if (!taskEntry || !s2) throw new Error("expected two entries");
     expect(taskEntry.kind).toBe("task");
-    expect(selectionAfterClose(entries, taskEntry, s2)).toBe("keep");
-    expect(selectionAfterClose(entries, taskEntry, taskEntry)).toBe("keep");
+    expect(selectionAfterClose(entries, { kind: "task", id: "t1" }, s2)).toBe("keep");
+    expect(selectionAfterClose(entries, { kind: "session", id: "s1" }, taskEntry)).toBe("keep");
+    expect(selectionAfterClose(entries, undefined, s2)).toBe("keep");
   });
 
   test("wybór sesji zadania (z traya albo „Następna czekająca”) wskazuje jej zadanie", () => {

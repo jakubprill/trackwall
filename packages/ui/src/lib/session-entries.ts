@@ -118,17 +118,18 @@ export function findEntry(entries: readonly SessionEntry[], selection: SessionSe
 }
 
 /**
- * What to select after the session of `closed` was closed: `"keep"` unless `closed` was the selected entry and leaves the
- * list with its session (a session in a repo root; a task stays listed). Then its neighbour, the next entry or the
- * previous one after the last, so the selection stays where the user was (also on the same grid page); `undefined`
- * (the first entry) when nothing else is left.
+ * What to select after the session of `closed` was closed: `"keep"` unless `closed` is the selected entry and leaves the
+ * list with its session (a session in a repo root; a task stays listed). Then its neighbour in `entries`, the list
+ * that still holds `closed`: the next entry or the previous one after the last, so the selection stays where the user
+ * was (also on the same grid page); `undefined` (the first entry) when nothing else is left. `selected` is the raw
+ * selection, not the entry `findEntry` falls back to once a refreshed list no longer has `closed`.
  */
 export function selectionAfterClose(
   entries: readonly SessionEntry[],
-  current: SessionEntry | undefined,
+  selected: SessionSelection,
   closed: SessionEntry,
 ): SessionSelection | "keep" {
-  if (closed.kind !== "session" || current === undefined || entryId(current) !== entryId(closed)) return "keep";
+  if (closed.kind !== "session" || selected?.kind !== "session" || selected.id !== closed.session.id) return "keep";
   const at = entries.findIndex((entry) => entryId(entry) === entryId(closed));
   const neighbour = at === -1 ? undefined : (entries[at + 1] ?? entries[at - 1]);
   return neighbour ? entrySelection(neighbour) : undefined;

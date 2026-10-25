@@ -81,13 +81,14 @@ export function SessionsView({
   const show = (id: string) => onSelect({ kind: "session", id });
   const next = nextWaiting(list, entrySession(current)?.id);
   const waiting = waitingCount(list);
-  // A stop can take seconds, and the user may select another entry meanwhile, so the close decides on the list and the
-  // selection as they are when it ends, not when the X was clicked.
-  const latest = useRef({ entries, current });
-  latest.current = { entries, current };
+  // A stop can take seconds and the user may select another entry meanwhile, so the close decides on the selection as
+  // it is when it ends. `entries` comes from the render of the click (the action keeps that `onDone`), so it still
+  // holds the closed entry even when a refreshed list without it arrived before the close ended.
+  const latestSelected = useRef(selected);
+  latestSelected.current = selected;
   const sessionClosed = (entry: SessionEntry) => {
-    const next = selectionAfterClose(latest.current.entries, latest.current.current, entry);
-    if (next !== "keep") onSelect(next);
+    const afterClose = selectionAfterClose(entries, latestSelected.current, entry);
+    if (afterClose !== "keep") onSelect(afterClose);
     sessions.reload();
   };
   // Taken also with no entry at that position, so that the key never reaches a session terminal by accident.
@@ -521,7 +522,7 @@ function LayoutBar({ layout, onLayout, summary }: { layout: SessionLayout; onLay
   );
 }
 
-/** Nagłówek wybranej sesji (repo, stan, nad czym pracuje, przyciski) i jej terminal. Close of an ended session is the X's close (`useSessionClose`). */
+/** The header of the selected session (repo, state, what it works on, buttons) and its terminal. Close of an ended session is the X's close (`useSessionClose`). */
 function SessionPanel({
   conn,
   session,

@@ -52,7 +52,16 @@ export function SessionCloseConfirmation({ close, className }: { close: SessionC
           </Button>
         </>
       )}
-      {close.error && <span className="text-destructive min-w-0 truncate text-xs">{close.error}</span>}
+      {close.error && (
+        <>
+          <span className="text-destructive min-w-0 flex-1 truncate text-xs">{close.error}</span>
+          {!close.confirming && (
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={close.cancel}>
+              Dismiss
+            </Button>
+          )}
+        </>
+      )}
     </div>
   );
 }
