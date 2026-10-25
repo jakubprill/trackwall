@@ -1,10 +1,13 @@
 // The sidebar, and with it the groups and order of "All features" (features/features.data.ts): one list of pages.
 import type { DefaultTheme } from "vitepress";
 
-/** A group of feature pages; its title is the heading in the sidebar and in "All features". */
-/** "All features", drawn by Vue from the groups below, so its Markdown source holds no list. */
+/**
+ * "All features", drawn by Vue from the groups below, so its Markdown source holds no list: it gets no Markdown
+ * copy and no "Copy page" button, and llms.txt lists the features with their descriptions anyway.
+ */
 export const FEATURE_LIST_PAGE = "features/index.md";
 
+/** A group of feature pages; its title is the heading in the sidebar and in "All features". */
 export interface FeatureGroup {
   text: string;
   items: { text: string; link: string }[];

@@ -23,8 +23,8 @@ export default defineConfig({
   markdown: { config: (md) => md.use(copyOrDownloadAsMarkdownButtons) },
   head: [["link", { rel: "icon", type: "image/svg+xml", href: `${BASE}logo.svg` }]],
   // llms.txt (an index of the pages) and llms-full.txt (every page in one file) for AI tools, plus a Markdown copy
-  // of each page and a "Copy page" button under its title, so an agent reads the same text as a person. "All features"
-  // is drawn by Vue, so its Markdown holds no list; llms.txt lists the features with their descriptions anyway.
+  // of each page and a "Copy page" button under its title, so an agent reads the same text as a person
+  // (except FEATURE_LIST_PAGE).
   vite: { plugins: [llmstxt({ ignoreFiles: [TEMPLATE, FEATURE_LIST_PAGE] })] },
   themeConfig: {
     logo: "/logo.svg",

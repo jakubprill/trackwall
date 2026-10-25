@@ -5,8 +5,7 @@ import { defineComponent, h } from "vue";
 import { FEATURE_LIST_PAGE } from "../sidebar.ts";
 import "./trackwall.css";
 
-// The "Copy page" button under each title: the page as Markdown, for pasting into an AI chat. "All features" is
-// drawn by Vue, so its Markdown holds no list and the page gets no button.
+// The "Copy page" button under each title: the page as Markdown, for pasting into an AI chat; none on FEATURE_LIST_PAGE.
 const CopyPageButton = defineComponent(() => {
   const { page } = useData();
   return () => (page.value.relativePath === FEATURE_LIST_PAGE ? null : h(CopyOrDownloadAsMarkdownButtons));

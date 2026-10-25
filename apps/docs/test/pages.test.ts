@@ -9,6 +9,8 @@ const featurePages = readdirSync(join(DOCS, "features")).filter((file) => file.e
 const guidePages = readdirSync(join(DOCS, "guide")).filter((file) => file.endsWith(".md"));
 const sitePages = ["index.md", "features/index.md", ...featurePages.map((f) => `features/${f}`), ...guidePages.map((f) => `guide/${f}`)];
 const read = (path: string) => readFileSync(join(DOCS, path), "utf8");
+/** A field of a parsed YAML or JSON value, or undefined when the value is not an object. */
+const field = (value: unknown, key: string): unknown => (typeof value === "object" && value !== null ? Reflect.get(value, key) : undefined);
 /** The file of a feature page from its link, `/features/repos` → `repos.md`. */
 const pageFile = (link: string) => `${link.replace(/^\/features\//, "")}.md`;
 /** The sections a feature page may have between "Use it" and "Good to know" (TEMPLATE.md). */
@@ -96,8 +98,8 @@ test("a feature card on the home page shows the description of its page", () => 
   const cards: unknown[] = features;
   expect(cards.length).toBeGreaterThan(0);
   for (const card of cards) {
-    const link: unknown = typeof card === "object" && card !== null ? Reflect.get(card, "link") : undefined;
-    const details: unknown = typeof card === "object" && card !== null ? Reflect.get(card, "details") : undefined;
+    const link = field(card, "link");
+    const details = field(card, "details");
     if (typeof link !== "string") throw new Error("a feature card on the home page has no link");
     const file = pageFile(link);
     expect({ file, details }).toEqual({ file, details: featurePage(file).description });
@@ -111,7 +113,7 @@ test("no page of the site points at decision records or the developer documents"
 
 test("the install commands download the current version", () => {
   const daemon: unknown = JSON.parse(readFileSync(join(DOCS, "../../packages/daemon/package.json"), "utf8"));
-  const version: unknown = typeof daemon === "object" && daemon !== null ? Reflect.get(daemon, "version") : undefined;
+  const version = field(daemon, "version");
   if (typeof version !== "string") throw new Error("packages/daemon/package.json has no version");
   const install = read("guide/install.md");
   const versions = [...install.matchAll(/\$v = "([^"]+)"|trackwall-(\d[^-]*)-macos/g)].map((m) => m[1] ?? m[2]);
