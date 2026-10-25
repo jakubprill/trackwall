@@ -61,8 +61,9 @@ export function SessionTerminal({
     const terminal = new Terminal(sessionTerminalOptions(terminalTheme(document.documentElement), getComputedStyle(element).fontFamily));
     const fit = new FitAddon();
     terminal.loadAddon(fit);
-    const links = isTauri() ? terminal.registerLinkProvider(trackwallLinkProvider(terminal, IS_MAC)) : undefined;
+    let links: { dispose: () => void } | undefined;
     if (isTauri()) {
+      links = terminal.registerLinkProvider(trackwallLinkProvider(terminal, IS_MAC));
       terminal.options.linkHandler = hyperlinkHandler(IS_MAC, (url) => {
         post(conn, workspaceApi.openLink, { url }).catch((err: unknown) => setNotice(`Could not open the link: ${errorMessage(err)}`));
       });

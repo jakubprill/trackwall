@@ -1,6 +1,13 @@
 import { expect, test } from "bun:test";
 import type { IBufferLine, ILink, Terminal } from "@xterm/xterm";
-import { findTrackwallLinks, hyperlinkTarget, opensLink, type TerminalRow, trackwallLinkProvider } from "../src/lib/terminal-links.ts";
+import {
+  findTrackwallLinks,
+  hyperlinkHandler,
+  hyperlinkTarget,
+  opensLink,
+  type TerminalRow,
+  trackwallLinkProvider,
+} from "../src/lib/terminal-links.ts";
 
 const TASK = "0b7e3a52-5c1f-4c55-9a4e-2f1d7c3b9e10";
 const row = (text: string, wrapped = false): TerminalRow => ({ text, wrapped });
@@ -41,6 +48,14 @@ test("a link that Copilot CLI broke inside its scheme, kind or right after the k
   expect(texts([row("  Open trackwall://ta  │"), row(`    sk/${TASK} now │`)])).toEqual([`trackwall://task/${TASK}`]);
   expect(texts([row("  x trackwall://task/"), row(`    ${TASK}`)])).toEqual([`trackwall://task/${TASK}`]);
   expect(texts([row("  see trackwall://repo/"), row("    orders-api")])).toEqual(["trackwall://repo/orders-api"]);
+});
+
+test("a link cut after a bracket stuck to it is joined, and an upper-case scheme is found", () => {
+  expect(texts([row("  Started (trackwall://task/0b7e3a52-5c1f"), row("    -4c55-9a4e-2f1d7c3b9e10).")])).toEqual([
+    `trackwall://task/${TASK}`,
+  ]);
+  expect(texts([row("  Started (trackw"), row(`    all://task/${TASK}).`)])).toEqual([`trackwall://task/${TASK}`]);
+  expect(texts([row("Open TRACKWALL://repo/orders")])).toEqual(["TRACKWALL://repo/orders"]);
 });
 
 test("an empty row ends a cut link instead of joining it with what comes after", () => {
@@ -93,7 +108,7 @@ test("a link opens on Ctrl+click on Windows and Cmd+click on macOS, not on a pla
 });
 
 test("a hyperlink whose label is other text opens a Trackwall link in the window and a web address in the browser", () => {
-  // Copilot CLI shows the Markdown link `[sesja nadzorująca](trackwall://session/…)` as this hyperlink.
+  // Copilot CLI shows the Markdown link `[supervisor session](trackwall://session/…)` as this hyperlink.
   expect(hyperlinkTarget(`trackwall://session/${TASK}`)).toEqual({ kind: "trackwall", url: `trackwall://session/${TASK}` });
   expect(hyperlinkTarget("https://example.com/docs")).toEqual({ kind: "external", url: "https://example.com/docs" });
   expect(hyperlinkTarget("file:///etc/passwd")).toBeUndefined();
@@ -124,4 +139,15 @@ test("a link split over two rows is underlined on each row over its own characte
   expect(linksOn(terminal, 1)).toEqual([]);
   expect(linksOn(terminal, 2)).toEqual([{ text: link, range: { start: { x: 19, y: 2 }, end: { x: 53, y: 2 } } }]);
   expect(linksOn(terminal, 3)).toEqual([{ text: link, range: { start: { x: 5, y: 3 }, end: { x: 22, y: 3 } } }]);
+});
+
+test("a hyperlink to a web address opens in the browser on Ctrl+click only, and one to another scheme never", () => {
+  const opened: string[] = [];
+  const handler = hyperlinkHandler(false, (url) => opened.push(url));
+  const click = (ctrlKey: boolean) => ({ ctrlKey, metaKey: false }) as MouseEvent;
+  const range = { start: { x: 1, y: 1 }, end: { x: 24, y: 1 } };
+  handler.activate(click(false), "https://example.com/docs", range);
+  handler.activate(click(true), "file:///etc/passwd", range);
+  handler.activate(click(true), "https://example.com/docs", range);
+  expect(opened).toEqual(["https://example.com/docs"]);
 });

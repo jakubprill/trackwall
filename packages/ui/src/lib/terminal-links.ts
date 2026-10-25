@@ -15,14 +15,15 @@ const OPEN_LINK_COMMAND = "open_link";
 
 /** Candidates only: the shell decides what a link means. The id does not end on a full stop, so the one ending a
  * sentence is not part of it (a `RepoId` may end on `_` or `-`, which no sentence does). */
-const LINK = new RegExp(`${TRACKWALL_LINK_SCHEME}://[A-Za-z]+/[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9_-])?/?`, "g");
+const LINK = new RegExp(`${TRACKWALL_LINK_SCHEME}://[A-Za-z]+/[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9_-])?/?`, "gi");
 const SCHEME_PREFIX = `${TRACKWALL_LINK_SCHEME}://`;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UUID_START = /^[0-9a-f-]{0,35}$/i;
 /** Indentation and box borders that Copilot CLI puts at the start or the end of a row of its answer. */
-const ROW_START = /^[\s│┃|]*/;
-const ROW_END = /[\s│┃|]*$/;
-const LAST_WORD = /[^\s│┃|]*$/;
+const BORDER = "\\s│┃|";
+const ROW_START = new RegExp(`^[${BORDER}]*`);
+const ROW_END = new RegExp(`[${BORDER}]*$`);
+const LAST_WORD = new RegExp(`[^${BORDER}]*$`);
 /** The longest link (`trackwall://repo/` with a 64-character `RepoId` and a slash) is 82 characters, and every row it
  * covers holds at least one of them, so a link that covers a row starts and ends at most this many rows from it. */
 const LINK_REACH = 81;
@@ -79,12 +80,16 @@ function lastWord(text: string): string {
   return LAST_WORD.exec(text.replace(ROW_END, ""))?.[0] ?? "";
 }
 
-/** The end of a row that can only be the start of a longer link. A cut repo id can be whole, so it does not count. */
+/** The end of a row that can only be the start of a longer link. A cut repo id can be whole, so it does not count. The
+ * word may start with a bracket or other mark stuck to the link, like `(trackwall://…`. */
 function cutLink(word: string): boolean {
   const lower = word.toLowerCase();
-  if (lower === "") return false;
-  if (!lower.startsWith(SCHEME_PREFIX)) return SCHEME_PREFIX.startsWith(lower);
-  const [kind = "", id, ...more] = lower.slice(SCHEME_PREFIX.length).split("/");
+  const at = lower.lastIndexOf(SCHEME_PREFIX);
+  if (at < 0) {
+    const start = lower.replace(/^[^a-z]+/, "");
+    return start !== "" && SCHEME_PREFIX.startsWith(start);
+  }
+  const [kind = "", id, ...more] = linkParts(lower.slice(at));
   if (id === undefined) return /^[a-z]*$/.test(kind);
   if (more.length > 0) return false;
   return id === "" || ((kind === "session" || kind === "task") && UUID_START.test(id) && !UUID.test(id));
@@ -92,8 +97,13 @@ function cutLink(word: string): boolean {
 
 /** A session or task id must be a whole UUID; a repo id is checked by the UI like any other link (`RepoId`). */
 function validLink(link: string): boolean {
-  const [kind = "", id = ""] = link.slice(SCHEME_PREFIX.length).replace(/\/$/, "").toLowerCase().split("/");
+  const [kind = "", id = ""] = linkParts(link.replace(/\/$/, ""));
   return (kind !== "session" && kind !== "task") || UUID.test(id);
+}
+
+/** The kind, the id and anything after it, in lower case, of text that starts with the scheme. */
+function linkParts(link: string): string[] {
+  return link.slice(SCHEME_PREFIX.length).toLowerCase().split("/");
 }
 
 function partsOf(places: readonly { row: number; index: number }[]): FoundLink["parts"] {
@@ -114,7 +124,7 @@ export function opensLink(event: Pick<MouseEvent, "ctrlKey" | "metaKey">, mac: b
 /** What a hyperlink (OSC 8) in a session terminal opens: a Trackwall link in this window, an `http` or `https`
  * address in the system browser through the daemon (`open-link`, like a README link, ADR-35), anything else nothing. */
 export function hyperlinkTarget(uri: string): { kind: "trackwall" | "external"; url: string } | undefined {
-  if (uri.toLowerCase().startsWith(`${TRACKWALL_LINK_SCHEME}://`)) return { kind: "trackwall", url: uri };
+  if (uri.toLowerCase().startsWith(SCHEME_PREFIX)) return { kind: "trackwall", url: uri };
   const external = ExternalLink.safeParse(uri);
   return external.success ? { kind: "external", url: external.data } : undefined;
 }
