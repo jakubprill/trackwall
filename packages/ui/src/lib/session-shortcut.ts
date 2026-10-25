@@ -12,6 +12,9 @@ export type SessionShortcut = { kind: "position"; position: number } | { kind: "
 
 type KeyPress = Pick<KeyboardEvent, "code" | "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey">;
 
+/** Alt+0: the supervisor panel (ADR-58). */
+export const SUPERVISOR_SHORTCUT = { kind: "supervisor" } as const satisfies SessionShortcut;
+
 /** The highest position a shortcut reaches; the list can be longer. */
 export const SHORTCUT_POSITIONS = 9;
 

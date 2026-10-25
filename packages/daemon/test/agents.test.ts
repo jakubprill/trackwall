@@ -117,29 +117,60 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
     expect(existsSync(join(home, "sessions", started.id))).toBe(false);
   }, 60_000);
 
-  test("the supervisor starts once in the projects folder, with no repo and the supervisor's instructions", async () => {
+  test("the supervisor starts in the projects folder, with no repo and the supervisor's instructions", async () => {
     const projectsDir = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
-    const { agents, procs, home } = makeAgents({ sklep: mkdtempSync(join(tmpdir(), "trackwall-repo-")) }, undefined, projectsDir);
+    const { agents, procs, home } = makeAgents({}, undefined, projectsDir);
+    cleanups.push(() => procs.stopAll());
+
+    const supervisor = await agents.startSupervisor();
+    expect(supervisor).toMatchObject({ repo: null, task: null, run: { kind: "running" } });
+    const window = viewer(agents, supervisor.id);
+    await waitFor(
+      agents,
+      supervisor.id,
+      () => window.unwrappedText().includes(projectsDir),
+      "the projects folder as the working directory",
+    );
+    const instructions = readFileSync(join(home, "sessions", supervisor.id, "instructions", "trackwall.instructions.md"), "utf8");
+    expect(instructions).toContain("You are the supervisor");
+    window.attachment.detach();
+    await agents.stop(supervisor.id);
+  }, 60_000);
+
+  test("two starts at once, and a start while one runs, give the same supervisor", async () => {
+    const { agents, procs } = makeAgents({}, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
     cleanups.push(() => procs.stopAll());
 
     const [first, second] = await Promise.all([agents.startSupervisor(), agents.startSupervisor()]);
-    expect(first).toMatchObject({ repo: null, task: null, run: { kind: "running" } });
     expect(second.id).toBe(first.id);
     expect((await agents.startSupervisor()).id).toBe(first.id);
     expect(agents.sessions().sessions.map((s) => s.id)).toEqual([first.id]);
-
-    const window = viewer(agents, first.id);
-    await waitFor(agents, first.id, () => window.unwrappedText().includes(projectsDir), "the projects folder as the working directory");
-    const instructions = readFileSync(join(home, "sessions", first.id, "instructions", "trackwall.instructions.md"), "utf8");
-    expect(instructions).toContain("You are the supervisor");
-    window.attachment.detach();
-
-    // What it proposes is marked as the supervisor's, so that it stays under the supervisor after this session is gone.
-    const proposal = await agents.propose(first.id, { repo: "sklep", title: "Fix the cart", prompt: "Fix the cart total" });
-    expect(proposal.proposedBy).toEqual({ session: first.id, supervisor: true });
-
-    // Once it has ended, the next start is a new supervisor that replaces it: the ended one is closed with its files.
     await agents.stop(first.id);
+  }, 60_000);
+
+  test("what the supervisor proposes is marked as the supervisor's, and what another session proposes is not", async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
+    const { agents, procs } = makeAgents({ sklep: repoDir }, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
+    cleanups.push(() => procs.stopAll());
+    const supervisor = await agents.startSupervisor();
+    const session = await agents.start("sklep");
+
+    const fromSupervisor = await agents.propose(supervisor.id, { repo: "sklep", title: "Fix the cart", prompt: "Fix the cart total" });
+    const fromSession = await agents.propose(session.id, { repo: "sklep", title: "Add a test", prompt: "Add a cart test" });
+    expect(fromSupervisor.proposedBy).toEqual({ session: supervisor.id, supervisor: true });
+    expect(fromSession.proposedBy).toEqual({ session: session.id, supervisor: false });
+    await agents.stop(supervisor.id);
+    await agents.stop(session.id);
+  }, 60_000);
+
+  test("a new supervisor replaces the ended one: the ended one is closed with its files, its proposals stay", async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
+    const { agents, procs, home } = makeAgents({ sklep: repoDir }, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
+    cleanups.push(() => procs.stopAll());
+    const first = await agents.startSupervisor();
+    const proposal = await agents.propose(first.id, { repo: "sklep", title: "Fix the cart", prompt: "Fix the cart total" });
+    await agents.stop(first.id);
+
     const next = await agents.startSupervisor();
     expect(next.id).not.toBe(first.id);
     expect(agents.sessions().sessions.map((s) => s.id)).toEqual([next.id]);

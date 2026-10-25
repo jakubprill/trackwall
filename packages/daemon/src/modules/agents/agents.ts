@@ -65,8 +65,8 @@ interface AgentsProcs {
 }
 
 /**
- * Czego `agents` potrzebuje od `workspace`: korzeń repo po identyfikatorze (`not_found`, gdy repo nie ma) and the
- * projects folder the supervisor runs in (`bad_request` while it is not set).
+ * What `agents` needs from `workspace`: a repo root by its id (`not_found` without such a repo) and the projects folder
+ * the supervisor runs in (`bad_request` while it is not set).
  */
 interface AgentsRepos {
   repoPath(id: string): Promise<string>;
@@ -152,21 +152,26 @@ export class Agents {
 
   /**
    * The supervisor (ADR-58): Copilot CLI in the projects folder, above the sessions of all repos. At most one runs at a
-   * time: while one runs, or is starting, this returns it. A new one replaces the ended ones, which are closed first;
-   * the work they delegated stays, marked as the supervisor's (`ProposedBy.supervisor`).
+   * time: while one is starting or runs, this returns it. A new one replaces the ended ones, which are closed once it
+   * has started, so a failed start keeps the last screen; the work they delegated stays, marked as the supervisor's
+   * (`ProposedBy.supervisor`).
    */
-  startSupervisor(): Promise<Session> {
-    const supervisors = this.#views().filter(isSupervisor);
-    const running = supervisors.find((s) => s.run.kind !== "exited");
-    if (running) return Promise.resolve(running);
-    if (!this.#supervisorStart) for (const ended of supervisors) this.#close(ended.id);
-    this.#supervisorStart ??= this.#deps.repos
-      .projectsDir()
-      .then((cwd) => this.#launch({ repo: null, cwd, task: null, args: [], promptOnStart: false }))
-      .finally(() => {
-        this.#supervisorStart = undefined;
-      });
+  async startSupervisor(): Promise<Session> {
+    if (this.#supervisorStart) return this.#supervisorStart;
+    const running = this.#views().find((s) => isSupervisor(s) && s.run.kind !== "exited");
+    if (running) return running;
+    this.#supervisorStart = this.#replaceSupervisor().finally(() => {
+      this.#supervisorStart = undefined;
+    });
     return this.#supervisorStart;
+  }
+
+  async #replaceSupervisor(): Promise<Session> {
+    const ended = this.#views().filter(isSupervisor);
+    const cwd = await this.#deps.repos.projectsDir();
+    const started = await this.#launch({ repo: null, cwd, task: null, args: [], promptOnStart: false });
+    for (const old of ended) this.#close(old.id);
+    return started;
   }
 
   /** Sesja, której token sesji przyszedł z mostu stdio; `undefined` dla nieznanego tokenu. */
@@ -446,7 +451,7 @@ export class Agents {
   }
 }
 
-/** Co uruchamia `#launch`: Copilot CLI w katalogu repo albo worktree zadania, or the supervisor in the projects folder. */
+/** What `#launch` starts: Copilot CLI in a repo root, in a task's worktree, or the supervisor in the projects folder. */
 interface LaunchSpec {
   /** `null` for the supervisor. */
   repo: string | null;

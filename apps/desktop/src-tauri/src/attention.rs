@@ -37,10 +37,13 @@ pub struct Waiting {
     pub state: Option<TaskState>,
 }
 
+/// What the UI calls the session above all repos (`SUPERVISOR` in the UI's `session-state.ts`, ADR-58).
+pub const SUPERVISOR: &str = "Supervisor";
+
 impl Waiting {
-    /// Where the session works, for the menu: its repo, or the supervisor.
+    /// Where the session works, for the menu and a notification title: its repo, or the supervisor.
     pub fn place(&self) -> &str {
-        self.repo.as_deref().unwrap_or("supervisor")
+        self.repo.as_deref().unwrap_or(SUPERVISOR)
     }
 
     /// The session in a sentence: "a session in <repo>", or "the supervisor".
@@ -334,7 +337,7 @@ mod tests {
         let supervisor = r#"{"id":"s","repo":null,"startedAt":"x","run":{"kind":"running"},"state":{"state":"Input","source":"hook","confidence":"high","at":"x","reason":"r"},"windowTitle":null,"needsAttention":true}"#;
         let now = parse_sessions(&body(supervisor, "")).expect("a valid reply");
         assert_eq!(now.waiting, vec![Waiting { id: "s".into(), repo: None, state: Some(TaskState::Input) }]);
-        assert_eq!(now.waiting[0].place(), "supervisor");
+        assert_eq!(now.waiting[0].place(), "Supervisor");
         assert_eq!(tooltip(&now.waiting, &[]), "Trackwall: the supervisor is waiting for you");
     }
 

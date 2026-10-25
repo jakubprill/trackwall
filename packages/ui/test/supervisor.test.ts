@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { Session, SessionList, Task, TaskProposal } from "@trackwall/protocol";
-import { entryId, proposerLabel, sessionRows, supervisorWork } from "../src/lib/session-entries.ts";
+import { entryId, proposerLabel, sessionRows } from "../src/lib/session-entries.ts";
 import { attentionCount, sessionTitle } from "../src/lib/session-state.ts";
-import { currentSupervisor, selectsSupervisor, supervisorProposals } from "../src/lib/supervisor.ts";
+import { selectsSupervisor, supervisorSummary } from "../src/lib/supervisor.ts";
 import { readSupervisorPinned, saveSupervisorPinned } from "../src/lib/supervisor-pin.ts";
 
 function session(id: string, repo: string | null, run: Session["run"]["kind"] = "running"): Session {
@@ -46,6 +46,7 @@ function list(parts: Partial<SessionList>): SessionList {
   return { sessions: [], tasks: [], proposals: [], worktreesDir: "/home/me/.trackwall/worktrees", ...parts };
 }
 
+const summary = (data: SessionList) => supervisorSummary(data, sessionRows(data));
 const shape = (data: SessionList) => sessionRows(data).map((r) => `${entryId(r.entry)} @${r.depth}${r.supervised ? " supervised" : ""}`);
 
 describe("the supervisor (ADR-58)", () => {
@@ -56,12 +57,13 @@ describe("the supervisor (ADR-58)", () => {
       proposals: [proposal("p1", { session: "sup", supervisor: true })],
     });
     expect(shape(data)).toEqual(["proposals:sup @1 supervised", "t1 @1 supervised", "t2 @0", "s1 @0"]);
-    expect(supervisorWork(sessionRows(data))).toBe(2);
+    expect(summary(data)).toMatchObject({ delegated: 2, waitingProposals: 1, waits: true, listed: true });
   });
 
   test("the supervisor's work stays under its heading after the supervisor session that delegated it is gone", () => {
     const data = list({ tasks: [task("t1", { session: "gone", supervisor: true }), task("t2", { session: "gone", supervisor: false })] });
     expect(shape(data)).toEqual(["t1 @1 supervised", "t2 @0"]);
+    expect(summary(data)).toMatchObject({ session: undefined, delegated: 1, waits: false, listed: true });
   });
 
   test("work a supervised task delegated further sits under that task, still under the supervisor", () => {
@@ -71,16 +73,16 @@ describe("the supervisor (ADR-58)", () => {
       proposals: [proposal("p1", { session: "ts1", supervisor: false })],
     });
     expect(shape(data)).toEqual(["t1 @1 supervised", "proposals:ts1 @2 supervised"]);
-    expect(supervisorWork(sessionRows(data))).toBe(1);
+    expect(summary(data)).toMatchObject({ delegated: 1, waitingProposals: 1 });
   });
 
   test("the panel shows the running supervisor, otherwise the newest that has ended", () => {
-    expect(currentSupervisor(list({ sessions: [session("old", null, "exited"), session("now", null), session("s1", "shop")] }))?.id).toBe(
+    expect(summary(list({ sessions: [session("old", null, "exited"), session("now", null), session("s1", "shop")] })).session?.id).toBe(
       "now",
     );
-    expect(currentSupervisor(list({ sessions: [session("newer", null, "exited"), session("older", null, "exited")] }))?.id).toBe("newer");
-    expect(currentSupervisor(list({ sessions: [session("s1", "shop")] }))).toBeUndefined();
-    expect(currentSupervisor(undefined)).toBeUndefined();
+    expect(summary(list({ sessions: [session("newer", null, "exited"), session("older", null, "exited")] })).session?.id).toBe("newer");
+    expect(summary(list({ sessions: [session("s1", "shop")] })).session).toBeUndefined();
+    expect(supervisorSummary(undefined, [])).toMatchObject({ session: undefined, listed: false, waits: false });
   });
 
   test("a selection of the supervisor session goes to its panel, any other selection to Sessions", () => {
@@ -100,7 +102,7 @@ describe("the supervisor (ADR-58)", () => {
       proposals: [proposal("p1", { session: "sup", supervisor: true }), proposal("p2", { session: "s1", supervisor: false })],
     });
     expect(attentionCount(data)).toBe(3);
-    expect(supervisorProposals(data)).toBe(1);
+    expect(summary(data)).toMatchObject({ waitingProposals: 1, waits: true });
   });
 
   test("the supervisor is named Supervisor, and its proposals say they come from it", () => {

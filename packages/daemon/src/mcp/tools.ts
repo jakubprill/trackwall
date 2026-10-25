@@ -266,13 +266,16 @@ function hasEveryTag(tags: readonly string[], wanted: readonly string[]): boolea
 
 /**
  * A Trackwall session starts and stops processes only in the repo it works in (§8, ADR-41), so a task session does
- * not reach other repos in the projects folder through its own bridge. An agent outside Trackwall (`caller: null`) is
- * the user's program, like a terminal, and reaches every repo. A guard for the agent, not a security boundary: a
+ * not reach other repos in the projects folder through its own bridge. The supervisor works in no repo (ADR-58): it
+ * hands running things to the session of the repo with a task proposal. An agent outside Trackwall (`caller: null`)
+ * is the user's program, like a terminal, and reaches every repo. A guard for the agent, not a security boundary: a
  * session process can call `/mcp` without its session token (§8).
  */
 function assertCallerRepo(facade: Facade, caller: string | null, repo: string, action: string): void {
   if (caller === null) return;
   const own = facade.agents.session(caller).repo;
+  if (own === null)
+    throw new DomainError("bad_request", `the supervisor works in no repo and runs nothing in one; propose a task in ${repo} instead`);
   if (own !== repo) throw new DomainError("bad_request", `a session in ${own} can ${action} of ${own}, not of ${repo}`);
 }
 

@@ -277,16 +277,16 @@ _Avoid_: authorisation, acceptance
 Everything Trackwall knows about one agent CLI: the command template, the MCP configuration, resuming, state detectors. The only adapter is Copilot CLI (ADR-8).
 
 **Supervisor** (`isSupervisor`, `startSupervisor`, `ProposedBy.supervisor`, "Supervisor" in the UI):
-The one Trackwall session above all others: Copilot CLI in the projects folder, not in a repo (`Session.repo` is `null`), at most one running at a time (ADR-58). The user talks to it in the supervisor panel on the right of every view; it plans work across repos, proposes tasks and follows them. What it proposes carries `ProposedBy.supervisor`, so that its work stays under the "Supervisor" heading of the Sessions list after the session that proposed it is gone. It is the main session above all repos; it has no more rights than any other session.
-_Avoid_: orchestrator, coordinator, root session
+The one Trackwall session above all others: Copilot CLI in the projects folder, not in a repo (`Session.repo` is `null`), at most one running at a time (ADR-58). The user talks to it in the supervisor panel on the right of every view; it plans work across repos, proposes tasks and follows them. What it proposes carries `ProposedBy.supervisor`, so that its work stays under the "Supervisor" heading of the Sessions list after the session that proposed it is gone. It is the main session above all repos; it has no more rights than any other session. Unlike a supervising agent, Trackwall starts and owns it, with a session token.
+_Avoid_: orchestrator, root session, supervising agent (that is an agent outside Trackwall)
 
 **Supervisor panel** (`SupervisorPanel`):
 The column on the right of the main window, in every view, with the supervisor's terminal, its state and the work it delegated, or "Start supervisor" while there is none (ADR-58). Pinned open, or folded to a strip that keeps a bell while the supervisor or its proposals wait for you; Alt+0 pins it open and puts the keyboard in its terminal.
 _Avoid_: sidebar (that is the list on the left of a view), drawer
 
 **Supervising agent**:
-An agent CLI (today Copilot CLI) started by the user outside a task, for example in the projects folder, with access to the MCP server. Unlike a task session it has no worktree, budget or session token. A term from the documentation and tool descriptions; in code it has no identifier of its own, because the daemon keeps nothing about it.
-_Avoid_: orchestrator, main agent
+An agent CLI (today Copilot CLI) started by the user outside a task, for example in the projects folder, with access to the MCP server. Unlike a task session it has no worktree, budget or session token. A term from the documentation and tool descriptions; in code it has no identifier of its own, because the daemon keeps nothing about it. Not the supervisor, which is a session Trackwall runs (ADR-58).
+_Avoid_: orchestrator, main agent, supervisor
 
 **Session** (task session, `Session`, `SessionId`):
 An agent CLI running in a PTY owned by the daemon, in a repo root, in a task's worktree (`Session.task`) or, for the supervisor, in the projects folder (ADR-58), as a process group, with its own `sessions/<session>/` directory (session plugin, `hooks.jsonl`). The Sessions view starts it in a repo with one click (ADR-26) or together with a task (ADR-31). A session lives only until the daemon exits, a task longer. Only `copilot-record.ts` records it.

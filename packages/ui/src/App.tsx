@@ -4,22 +4,24 @@ import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { FolderDrop } from "@/components/FolderDrop";
 import { Loading } from "@/components/Loading";
+import { KeyboardInSupervisor } from "@/components/SessionTerminal";
 import { SupervisorPanel } from "@/components/SupervisorPanel";
 import { inDesktopShell, openWindow, reportShown, START_PARAMS, showViewMenu, startFromLocation } from "@/lib/app-window";
 import { DROP_HINT } from "@/lib/dropped-folder";
 import type { DroppedPaths } from "@/lib/file-drop";
 import { IS_MAC } from "@/lib/platform";
-import { entrySelection, findEntry, nextWaitingShortcut, type SessionSelection, sessionRows } from "@/lib/session-entries";
+import { entrySelection, findEntry, nextWaitingShortcut, type SessionSelection } from "@/lib/session-entries";
 import { SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
 import { sessionShortcut } from "@/lib/session-shortcut";
 import { attentionCount } from "@/lib/session-state";
-import { currentSupervisor, selectsSupervisor, supervisorProposals } from "@/lib/supervisor";
+import { selectsSupervisor, supervisorSummary } from "@/lib/supervisor";
 import { readSupervisorPinned, saveSupervisorPinned } from "@/lib/supervisor-pin";
 import { useAppMenu } from "@/lib/use-app-menu";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
 import { useFileDrop } from "@/lib/use-file-drop";
 import { useJumpRequest } from "@/lib/use-jump-request";
+import { useSessionTree } from "@/lib/use-session-tree";
 import { useSessions } from "@/lib/use-sessions";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { DaemonPanel } from "@/views/daemon/DaemonPanel";
@@ -104,14 +106,18 @@ export function App() {
     setSupervisorPinned(pinned);
     saveSupervisorPinned(() => window.localStorage, pinned);
   }, []);
-  const [supervisorFocus, setSupervisorFocus] = useState(0);
+  // Whether the keyboard is in the supervisor panel: then its terminal is the one in front of the user, not the one
+  // selected in Sessions (ADR-47), and Alt+0 puts it there.
+  const [supervisorFocused, setSupervisorFocused] = useState(false);
   const showSupervisor = () => {
     pinSupervisor(true);
-    setSupervisorFocus((n) => n + 1);
+    setSupervisorFocused(true);
   };
   const sessions = useSessions(conn, events, view === "sessions" || view === "home" || supervisorPinned);
   const runningLive = useMemo(() => events?.feed("mise.running.changed"), [events]);
-  const rows = useMemo(() => (sessions.data ? sessionRows(sessions.data) : []), [sessions.data]);
+  const tree = useSessionTree(sessions);
+  const { rows } = tree;
+  const supervisor = supervisorSummary(sessions.data, rows);
   // The supervisor has no entry in Sessions: a jump or selection that points at it opens its panel instead.
   const openInSessions = (selection: SessionSelection) => {
     if (selectsSupervisor(sessions.data, selection)) return showSupervisor();
@@ -124,6 +130,11 @@ export function App() {
     const entries = rows.map((r) => r.entry);
     const { open, taken } = nextWaitingShortcut(entries, inSessions ? findEntry(entries, session) : undefined, inSessions);
     if (open) openInSessions(entrySelection(open));
+    else if (supervisor.session?.needsAttention) {
+      // The supervisor is not on the list, so it comes last: when nothing else waits, the shortcut goes to its panel.
+      showSupervisor();
+      return true;
+    }
     return taken;
   };
   // Jump from the tray, a notification or the tray panel (ADR-26, ADR-39, ADR-50), from the global shortcut (ADR-50)
@@ -172,68 +183,71 @@ export function App() {
             {DROP_HINT}
           </p>
         )}
-        <main className="hud-grid min-h-0 flex-1 overflow-y-auto">
-          {!conn && !error && (
-            <div className="p-6">
-              <Loading text="Connecting to the daemon…" />
-            </div>
-          )}
-          {conn && view === "home" && (
-            <HomeView
-              key={epoch}
-              conn={conn}
-              runningLive={runningLive}
-              sessions={sessions}
-              onOpenInSessions={openInSessions}
-              onOpenRepo={openRepos}
-              onOpenDaemon={() => setView("daemon")}
-              onOpenSettings={() => setView("settings")}
-            />
-          )}
-          {conn && view === "repos" && (
-            <ReposView
-              key={`${epoch}:${visit}`}
-              conn={conn}
-              initialRepo={repo}
-              onRetry={retry}
-              onOpenSettings={() => setView("settings")}
-            />
-          )}
-          {conn && view === "sessions" && (
-            <SessionsView
-              key={epoch}
-              conn={conn}
-              sessions={sessions}
-              selected={session}
-              onSelect={(selection) => (selectsSupervisor(sessions.data, selection) ? showSupervisor() : setSession(selection))}
-              onShowSupervisor={showSupervisor}
-              layout={sessionLayout}
-              onLayout={setSessionLayout}
-            />
-          )}
-          {conn && view === "graph" && <GraphView key={epoch} conn={conn} />}
-          {conn && view === "daemon" && (
-            <div className="flex justify-center p-6">
-              <DaemonPanel key={epoch} conn={conn} onRetry={retry} />
-            </div>
-          )}
-          {conn && view === "settings" && (
-            <div className="flex justify-center p-6">
-              <SettingsView key={epoch} conn={conn} onRetry={retry} onSaved={() => setView("repos")} />
-            </div>
-          )}
-        </main>
+        <KeyboardInSupervisor.Provider value={supervisorFocused}>
+          <main className="hud-grid min-h-0 flex-1 overflow-y-auto">
+            {!conn && !error && (
+              <div className="p-6">
+                <Loading text="Connecting to the daemon…" />
+              </div>
+            )}
+            {conn && view === "home" && (
+              <HomeView
+                key={epoch}
+                conn={conn}
+                runningLive={runningLive}
+                sessions={sessions}
+                onOpenInSessions={openInSessions}
+                onOpenRepo={openRepos}
+                onOpenDaemon={() => setView("daemon")}
+                onOpenSettings={() => setView("settings")}
+              />
+            )}
+            {conn && view === "repos" && (
+              <ReposView
+                key={`${epoch}:${visit}`}
+                conn={conn}
+                initialRepo={repo}
+                onRetry={retry}
+                onOpenSettings={() => setView("settings")}
+              />
+            )}
+            {conn && view === "sessions" && (
+              <SessionsView
+                key={epoch}
+                conn={conn}
+                sessions={sessions}
+                selected={session}
+                onSelect={openInSessions}
+                onShowSupervisor={showSupervisor}
+                tree={tree}
+                supervisor={supervisor}
+                layout={sessionLayout}
+                onLayout={setSessionLayout}
+              />
+            )}
+            {conn && view === "graph" && <GraphView key={epoch} conn={conn} />}
+            {conn && view === "daemon" && (
+              <div className="flex justify-center p-6">
+                <DaemonPanel key={epoch} conn={conn} onRetry={retry} />
+              </div>
+            )}
+            {conn && view === "settings" && (
+              <div className="flex justify-center p-6">
+                <SettingsView key={epoch} conn={conn} onRetry={retry} onSaved={() => setView("repos")} />
+              </div>
+            )}
+          </main>
+        </KeyboardInSupervisor.Provider>
       </div>
       {conn && (
         <SupervisorPanel
           key={epoch}
           conn={conn}
-          supervisor={currentSupervisor(sessions.data)}
-          work={rows.filter((r) => r.supervised)}
-          waitingProposals={supervisorProposals(sessions.data)}
+          supervisor={supervisor}
           pinned={supervisorPinned}
           onPinned={pinSupervisor}
-          focusRequest={supervisorFocus}
+          focused={supervisorFocused}
+          onFocusedChange={setSupervisorFocused}
           onOpenInSessions={openInSessions}
           onChanged={sessions.reload}
         />

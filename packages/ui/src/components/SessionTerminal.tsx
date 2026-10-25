@@ -3,7 +3,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { PTY_CLOSE_NOT_FOUND, type PtyClientMessage, ptySocket } from "@trackwall/protocol";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { Connection } from "@/lib/connection";
 import { daemonSocket } from "@/lib/daemon-socket";
 import { DROP_HOVER_RING, FILE_DROP_TARGET, FileDropEvent } from "@/lib/file-drop";
@@ -19,6 +19,9 @@ import { FocusReporter, terminalInFront } from "@/lib/window-focus";
 
 const RECONNECT_MS = 1000;
 
+/** The keyboard is in the supervisor panel (ADR-58); `App` sets it around the views, not around the panel itself. */
+export const KeyboardInSupervisor = createContext(false);
+
 /**
  * The session terminal of one session (§4.4, ADR-26): xterm.js connected over a WebSocket to the PTY in the daemon. The
  * daemon sends the screen image first, so switching sessions or a dropped connection starts from the current screen,
@@ -29,7 +32,20 @@ const RECONNECT_MS = 1000;
  * counts as in front, so a waiting session in another tile keeps waiting until the user selects it. Files dropped on
  * the terminal (ADR-51) are pasted as their paths, as if the user typed them.
  */
-export function SessionTerminal({ conn, session, live, focused }: { conn: Connection; session: string; live: boolean; focused: boolean }) {
+export function SessionTerminal({
+  conn,
+  session,
+  live,
+  focused: selected,
+}: {
+  conn: Connection;
+  session: string;
+  live: boolean;
+  focused: boolean;
+}) {
+  // While the keyboard is in the supervisor panel (ADR-58), a terminal of the view is not the one in front of the user.
+  const keyboardInSupervisor = useContext(KeyboardInSupervisor);
+  const focused = selected && !keyboardInSupervisor;
   const frame = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const term = useRef<Terminal>(undefined);

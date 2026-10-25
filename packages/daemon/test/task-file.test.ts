@@ -25,6 +25,10 @@ describe("tasks.json", () => {
     expect(file.read()).toEqual([]);
     file.write([stored]);
     expect(file.read()).toEqual([stored]);
+    // The supervisor's mark survives the file, so its work stays under it after a restart (ADR-58).
+    const supervised = { ...stored, proposedBy: { ...stored.proposedBy, supervisor: true } };
+    file.write([supervised]);
+    expect(file.read()).toEqual([supervised]);
   });
 
   test("zadanie zapisane przed propozycjami zadań wraca bez tytułu, pochodzenia i podsumowania", () => {

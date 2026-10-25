@@ -133,13 +133,8 @@ export function sessionRows(list: SessionList): SessionRow[] {
 }
 
 /** How much work an entry is for a count: a group counts each of its proposals. */
-function workCount(entry: SessionEntry): number {
+export function workCount(entry: SessionEntry): number {
   return entry.kind === "proposals" ? entry.proposals.length : 1;
-}
-
-/** The tasks and proposals directly under the supervisor heading, counted like the "main" badge (ADR-58). */
-export function supervisorWork(rows: readonly SessionRow[]): number {
-  return rows.filter((r) => r.supervised && r.depth === 1).reduce((sum, r) => sum + workCount(r.entry), 0);
 }
 
 /** The supervisor delegated this task or these proposals (ADR-58). */

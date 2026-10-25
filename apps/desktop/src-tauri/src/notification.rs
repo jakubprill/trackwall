@@ -28,7 +28,7 @@ fn session_notice(waiting: &Waiting) -> Notice {
         Some(TaskState::Plan) => "Copilot CLI is waiting for plan approval",
         _ => "Copilot CLI is waiting for you",
     };
-    let title = waiting.repo.as_ref().map_or_else(|| "Supervisor".to_owned(), |repo| format!("Session in {repo}"));
+    let title = if waiting.repo.is_some() { format!("Session in {}", waiting.place()) } else { waiting.place().to_owned() };
     Notice { title, body: body.to_owned(), target: Jump::Session(waiting.id.clone()) }
 }
 
