@@ -1,13 +1,9 @@
-import { agentsApi } from "@trackwall/protocol";
 import { Activity, FolderGit2, Network, Orbit, Settings, SquareTerminal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { Loading } from "@/components/Loading";
-import { post } from "@/lib/api";
 import { inDesktopShell, openWindow, reportShown, START_PARAMS, showViewMenu, startFromLocation } from "@/lib/app-window";
-import type { Connection } from "@/lib/connection";
-import type { DaemonEvents } from "@/lib/daemon-events";
 import { IS_MAC } from "@/lib/platform";
 import { entrySession, findEntry, type SessionSelection, sessionRows } from "@/lib/session-entries";
 import { SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
@@ -17,7 +13,7 @@ import { useAppMenu } from "@/lib/use-app-menu";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
 import { useJumpRequest } from "@/lib/use-jump-request";
-import { useRemote } from "@/lib/use-remote";
+import { useSessions } from "@/lib/use-sessions";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { DaemonPanel } from "@/views/daemon/DaemonPanel";
 import { GraphView } from "@/views/graph/GraphView";
@@ -39,12 +35,6 @@ const VIEWS = [
 ] as const satisfies readonly ActivityView<string>[];
 type View = (typeof VIEWS)[number]["id"];
 const VIEW_IDS = VIEWS.map((v) => v.id);
-
-/**
- * Lista sesji przychodzi na żywo z WebSocketu zdarzeń (ADR-36), bo pasek widoków pokazuje, ile czeka. Bez połączenia
- * zdarzeń jest odpytywana, częściej, gdy otwarty jest widok, który pokazuje sesje („Home” albo „Sessions”).
- */
-const SESSIONS_POLL_MS = { open: 1000, closed: 3000 };
 
 export function App() {
   // Repo otwarte z pulpitu należy do przejścia, nie do widoku: każde inne przejście do „Repos” zaczyna bez niego.
@@ -93,34 +83,35 @@ export function App() {
     setView("sessions");
     setSession(selection);
   };
-  // Jump from the tray (ADR-26, ADR-39) or from a `trackwall://` link (ADR-52): the shell shows the window first.
+  // Alt+J (ADR-48) and the global shortcut (ADR-50): the session after the selected one, like the "Next waiting" button.
+  const openNextWaiting = () => {
+    const inSessions = view === "sessions";
+    const selected =
+      inSessions && sessions.data
+        ? entrySession(
+            findEntry(
+              sessionRows(sessions.data).map((r) => r.entry),
+              session,
+            ),
+          )?.id
+        : undefined;
+    const { open, taken } = nextWaitingShortcut(sessions.data?.sessions ?? [], selected, inSessions);
+    if (open) openInSessions({ kind: "session", id: open.id });
+    return taken;
+  };
+  // Jump from the tray, a notification or the tray panel (ADR-26, ADR-39, ADR-50), from the global shortcut (ADR-50)
+  // or from a `trackwall://` link (ADR-52): the shell shows the window first.
   useJumpRequest((jump) => {
+    if (jump.kind === "next-waiting") return void openNextWaiting();
     if (jump.kind !== "repo") return openInSessions(jump);
     setView("repos", jump.id);
     setRepoJumps((n) => n + 1);
   });
-  // Alt+J from every view (ADR-48), after the selected session like the "Next waiting" button.
-  useWindowShortcuts(
-    (event) => {
-      const shortcut = sessionShortcut(event, IS_MAC);
-      return shortcut?.kind === "next-waiting" ? shortcut : undefined;
-    },
-    () => {
-      const inSessions = view === "sessions";
-      const selected =
-        inSessions && sessions.data
-          ? entrySession(
-              findEntry(
-                sessionRows(sessions.data).map((r) => r.entry),
-                session,
-              ),
-            )?.id
-          : undefined;
-      const { open, taken } = nextWaitingShortcut(sessions.data?.sessions ?? [], selected, inSessions);
-      if (open) openInSessions({ kind: "session", id: open.id });
-      return taken;
-    },
-  );
+  // Alt+J from every view.
+  useWindowShortcuts((event) => {
+    const shortcut = sessionShortcut(event, IS_MAC);
+    return shortcut?.kind === "next-waiting" ? shortcut : undefined;
+  }, openNextWaiting);
   return (
     <div className="flex h-screen">
       <ActivityBar
@@ -186,10 +177,4 @@ export function App() {
       </div>
     </div>
   );
-}
-
-function useSessions(conn: Connection | undefined, events: DaemonEvents | undefined, open: boolean) {
-  const load = useMemo(() => conn && (() => post(conn, agentsApi.sessions, {})), [conn]);
-  const live = useMemo(() => events?.feed("sessions.changed"), [events]);
-  return useRemote(load, { pollMs: () => (open ? SESSIONS_POLL_MS.open : SESSIONS_POLL_MS.closed), live });
 }

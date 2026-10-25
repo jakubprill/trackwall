@@ -5,7 +5,8 @@ import { useEffect, useRef } from "react";
 import { z } from "zod";
 
 /**
- * A jump the Tauri shell asks for: a waiting session (ADR-26) or a task proposal (ADR-39) clicked in the tray, or a
+ * A jump the Tauri shell asks for: a waiting session (ADR-26) or a task proposal (ADR-39) clicked in the tray, in a
+ * system notification or in the tray panel, the global shortcut for the next waiting session (ADR-50), or a
  * `trackwall://` link to a repo, session or task (ADR-52). The shell keeps the jump and sends `JUMP_EVENT`; the UI
  * takes it with `TAKE_JUMP_COMMAND` on that event and once at start, because a link that started the app arrives
  * before the page listens. The names and the shape (`Jump`) are also in `apps/desktop/src-tauri/src/jump.rs`. The
@@ -19,8 +20,9 @@ const Jump = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("session"), id: SessionId }),
   z.object({ kind: z.literal("task"), id: TaskId }),
   z.object({ kind: z.literal("proposal"), id: TaskId }),
+  z.object({ kind: z.literal("next-waiting") }),
 ]);
-type Jump = z.infer<typeof Jump>;
+export type Jump = z.infer<typeof Jump>;
 
 /** Calls `onJump` when the shell asks to show something; does nothing outside the Tauri window. */
 export function useJumpRequest(onJump: (jump: Jump) => void): void {

@@ -83,6 +83,11 @@ export function nextWaitingShortcut(
   return { open, taken: open !== undefined || inSessionsView };
 }
 
+/** A session's name in a list: the repo, and the window title that tells two sessions of one repo apart. */
+export function sessionTitle(session: Session): string {
+  return session.windowTitle ? `${session.repo} · ${session.windowTitle}` : session.repo;
+}
+
 export function waitingCount(sessions: readonly Session[]): number {
   return sessions.filter((s) => s.needsAttention).length;
 }

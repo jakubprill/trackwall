@@ -1,5 +1,6 @@
-//! Jumps to a repo, session, task or task proposal in the window: from the tray (ADR-26, ADR-39) and from a
-//! `trackwall://` link (ADR-52). The shell keeps the last requested jump and signals the UI, and the UI takes it with
+//! Jumps to a repo, session, task or task proposal in the window: from the tray, a system notification or the tray
+//! panel (ADR-26, ADR-39, ADR-50) and from a `trackwall://` link (ADR-52), and to the next session waiting for you
+//! from the global shortcut (ADR-50). The shell keeps the last requested jump and signals the UI, and the UI takes it with
 //! the `take_jump` command, both on the signal and when it starts. A link that started the app arrives before the
 //! page listens for events, so a jump sent only as an event payload would be lost.
 //!
@@ -9,21 +10,25 @@
 
 use crate::lock::lock;
 use crate::windows::{self, Windows};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
 /// Signal for the UI that a jump is waiting (`use-jump-request.ts` has the same name).
 const JUMP_EVENT: &str = "jump-requested";
 
-/// What to show; for the UI `{"kind":"repo"|"session"|"task"|"proposal","id":...}` (`Jump` in `use-jump-request.ts`).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// What to show; for the UI `{"kind":"repo"|"session"|"task"|"proposal","id":...}` or `{"kind":"next-waiting"}`, for
+/// which the UI picks the session after the selected one like Alt+J (ADR-48) (`Jump` in `use-jump-request.ts`).
+/// Deserialized from the tray panel's command (`open_from_tray_panel`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "id", rename_all = "lowercase")]
 pub enum Jump {
     Repo(String),
     Session(String),
     Task(String),
     Proposal(String),
+    #[serde(rename = "next-waiting")]
+    NextWaiting,
 }
 
 /// The jump the UI has not taken yet, with the label of the window that is to take it. A newer jump replaces an older
@@ -58,7 +63,7 @@ impl PendingJump {
 pub fn request(app: &AppHandle, target: Jump) {
     let label = match target {
         Jump::Repo(_) => windows::MAIN.to_owned(),
-        Jump::Session(_) | Jump::Task(_) | Jump::Proposal(_) => app.state::<Windows>().session_window(),
+        Jump::Session(_) | Jump::Task(_) | Jump::Proposal(_) | Jump::NextWaiting => app.state::<Windows>().session_window(),
     };
     windows::show_once_loaded(app, &label);
     app.state::<PendingJump>().put(&label, target);
@@ -105,5 +110,7 @@ mod tests {
     fn the_ui_gets_the_kind_and_the_id() {
         assert_eq!(serde_json::to_string(&Jump::Proposal("abc".into())).unwrap(), r#"{"kind":"proposal","id":"abc"}"#);
         assert_eq!(serde_json::to_string(&Jump::Repo("orders".into())).unwrap(), r#"{"kind":"repo","id":"orders"}"#);
+        assert_eq!(serde_json::to_string(&Jump::NextWaiting).unwrap(), r#"{"kind":"next-waiting"}"#);
+        assert_eq!(serde_json::from_str::<Jump>(r#"{"kind":"session","id":"s"}"#).unwrap(), Jump::Session("s".into()));
     }
 }
