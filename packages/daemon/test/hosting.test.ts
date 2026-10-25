@@ -10,7 +10,7 @@ const GITHUB = { kind: "github", host: "github.com" } as const;
 
 const githubRepo = (fullName: string, archived = false) => ({
   full_name: fullName,
-  description: `opis ${fullName}`,
+  description: `description of ${fullName}`,
   html_url: `https://github.com/${fullName}`,
   pushed_at: "2026-10-01T10:00:00Z",
   archived,
@@ -23,18 +23,18 @@ const gitlabProject = (path: string) => ({
   last_activity_at: "2026-10-20T08:00:00Z",
 });
 
-describe("hostingi repo przez gh i glab", () => {
-  test("GitLab szuka po swojej stronie, w ścieżce z grupą, i podaje glab nazwę hosta", async () => {
-    const { hosting, calls } = fakeHosting({ repos: [gitlabProject("sklep/zamowienia/orders-bff")] });
+describe("repo hosts through gh and glab", () => {
+  test("GitLab searches on its side, in the path with the group, and glab gets the host name", async () => {
+    const { hosting, calls } = fakeHosting({ repos: [gitlabProject("shop/orders/orders-bff")] });
 
     const result = await hosting.repos(GITLAB, "orders bff");
 
     expect(result).toEqual({
       repos: [
         {
-          fullName: "sklep/zamowienia/orders-bff",
+          fullName: "shop/orders/orders-bff",
           description: null,
-          webUrl: "https://gitlab.example.com/sklep/zamowienia/orders-bff",
+          webUrl: "https://gitlab.example.com/shop/orders/orders-bff",
           updatedAt: "2026-10-20T08:00:00Z",
         },
       ],
@@ -47,8 +47,8 @@ describe("hostingi repo przez gh i glab", () => {
     expect(call?.env).toMatchObject({ GITLAB_HOST: "gitlab.example.com", NO_PROMPT: "1", GIT_TERMINAL_PROMPT: "0" });
   });
 
-  test("GitLab pobiera jedną stronę, a pełna strona znaczy, że trzeba zawęzić wyszukiwanie", async () => {
-    const { hosting, calls } = fakeHosting({ repos: Array.from({ length: 150 }, (_, i) => gitlabProject(`grupa/repo-${i}`)) });
+  test("GitLab fetches one page, and a full page means the search must be narrowed", async () => {
+    const { hosting, calls } = fakeHosting({ repos: Array.from({ length: 150 }, (_, i) => gitlabProject(`group/repo-${i}`)) });
 
     const result = await hosting.repos(GITLAB, "");
 
@@ -58,11 +58,11 @@ describe("hostingi repo przez gh i glab", () => {
     expect(calls()[0]?.args[3]).not.toContain("search=");
   });
 
-  test("GitHub pobiera kolejne strony do końca, pomija zarchiwizowane i filtruje po nazwie albo opisie", async () => {
+  test("GitHub fetches pages to the end, skips archived repos and filters by name or description", async () => {
     const repos = [
-      ...Array.from({ length: 100 }, (_, i) => githubRepo(`ja/inne-${i}`)),
-      githubRepo("ja/trackwall"),
-      githubRepo("ja/stare-trackwall", true),
+      ...Array.from({ length: 100 }, (_, i) => githubRepo(`me/other-${i}`)),
+      githubRepo("me/trackwall"),
+      githubRepo("me/old-trackwall", true),
     ];
     const { hosting, calls } = fakeHosting({ repos });
 
@@ -71,9 +71,9 @@ describe("hostingi repo przez gh i glab", () => {
     expect(result).toEqual({
       repos: [
         {
-          fullName: "ja/trackwall",
-          description: "opis ja/trackwall",
-          webUrl: "https://github.com/ja/trackwall",
+          fullName: "me/trackwall",
+          description: "description of me/trackwall",
+          webUrl: "https://github.com/me/trackwall",
           updatedAt: "2026-10-01T10:00:00Z",
         },
       ],
@@ -83,60 +83,60 @@ describe("hostingi repo przez gh i glab", () => {
     expect(calls()[0]?.env).toMatchObject({ GH_HOST: "github.com", GH_PROMPT_DISABLED: "1" });
   });
 
-  test("zapytanie krótsze niż 3 znaki GitLab dostaje bez wyszukiwania, a daemon dopasowuje je sam", async () => {
-    const { hosting, calls } = fakeHosting({ repos: [gitlabProject("sklep/tw"), gitlabProject("sklep/api")] });
+  test("GitLab gets a query shorter than 3 characters without search, and the daemon matches it itself", async () => {
+    const { hosting, calls } = fakeHosting({ repos: [gitlabProject("shop/tw"), gitlabProject("shop/api")] });
 
-    expect((await hosting.repos(GITLAB, "TW")).repos.map((r) => r.fullName)).toEqual(["sklep/tw"]);
+    expect((await hosting.repos(GITLAB, "TW")).repos.map((r) => r.fullName)).toEqual(["shop/tw"]);
     expect(calls()[0]?.args[3]).not.toContain("search=");
   });
 
-  test("kolejne wyszukiwanie filtrowane w daemonie nie pyta hostingu drugi raz, a nieudane pytanie nie zostaje w pamięci", async () => {
-    const { hosting, calls } = fakeHosting({ repos: [githubRepo("ja/trackwall"), githubRepo("ja/pawn")] });
+  test("a later search filtered in the daemon does not ask the repo host again, and a failed question does not stay in memory", async () => {
+    const { hosting, calls } = fakeHosting({ repos: [githubRepo("me/trackwall"), githubRepo("me/pawn")] });
     await hosting.repos(GITHUB, "track");
-    expect((await hosting.repos(GITHUB, "pawn")).repos.map((r) => r.fullName)).toEqual(["ja/pawn"]);
+    expect((await hosting.repos(GITHUB, "pawn")).repos.map((r) => r.fullName)).toEqual(["me/pawn"]);
     expect(calls()).toHaveLength(1);
 
-    const failing = fakeHosting({ apiErrors: { "github.com": "gh: brak sieci" } });
-    await expect(failing.hosting.repos(GITHUB, "")).rejects.toThrow("brak sieci");
-    await expect(failing.hosting.repos(GITHUB, "")).rejects.toThrow("brak sieci");
+    const failing = fakeHosting({ apiErrors: { "github.com": "gh: no network" } });
+    await expect(failing.hosting.repos(GITHUB, "")).rejects.toThrow("no network");
+    await expect(failing.hosting.repos(GITHUB, "")).rejects.toThrow("no network");
     expect(failing.calls()).toHaveLength(2);
   });
 
-  test("nazwa, która mogłaby być opcją programu, nie trafia na listę", async () => {
-    const { hosting } = fakeHosting({ repos: [githubRepo("ja/-x"), githubRepo("ja/ok")] });
-    expect((await hosting.repos(GITHUB, "")).repos.map((r) => r.fullName)).toEqual(["ja/ok"]);
+  test("a name that could be a program option does not get onto the list", async () => {
+    const { hosting } = fakeHosting({ repos: [githubRepo("me/-x"), githubRepo("me/ok")] });
+    expect((await hosting.repos(GITHUB, "")).repos.map((r) => r.fullName)).toEqual(["me/ok"]);
   });
 
-  test("błąd glab wraca z komunikatem z stderr, a odpowiedź niezgodna z API z opisem bez zrzutu", async () => {
+  test("a glab error comes back with the message from stderr, and a response that does not match the API with a description without a dump", async () => {
     await expect(fakeHosting({ apiErrors: { "gitlab.example.com": "glab: 401 Unauthorized" } }).hosting.repos(GITLAB, "")).rejects.toThrow(
       "401 Unauthorized",
     );
-    await expect(fakeHosting({ apiRaw: '{"message":"nie lista"}' }).hosting.repos(GITLAB, "")).rejects.toThrow(
+    await expect(fakeHosting({ apiRaw: '{"message":"not a list"}' }).hosting.repos(GITLAB, "")).rejects.toThrow(
       "glab api returned a response that does not match the gitlab.example.com API",
     );
   });
 
-  test("brak programu w PATH to czytelny komunikat", async () => {
+  test("a program missing from PATH is a readable message", async () => {
     const hosting = new Hosting({
-      github: { command: "trackwall-nie-ma-takiego-gh", args: [] },
-      gitlab: { command: "trackwall-nie-ma-takiego-glab", args: [] },
+      github: { command: "trackwall-no-such-gh", args: [] },
+      gitlab: { command: "trackwall-no-such-glab", args: [] },
     });
-    await expect(hosting.repos(GITLAB, "")).rejects.toThrow("program trackwall-nie-ma-takiego-glab not found in PATH");
+    await expect(hosting.repos(GITLAB, "")).rejects.toThrow("program trackwall-no-such-glab not found in PATH");
   });
 
-  test("klon woła repo clone z pełną nazwą i katalogiem, bez odziedziczonego GIT_DIR", async () => {
+  test("clone calls repo clone with the full name and directory, without an inherited GIT_DIR", async () => {
     const { hosting, calls } = fakeHosting();
-    const dest = join(mkdtempSync(join(tmpdir(), "trackwall-klon-")), "orders-bff");
-    process.env.GIT_DIR = "/gdzies/indziej";
+    const dest = join(mkdtempSync(join(tmpdir(), "trackwall-clone-")), "orders-bff");
+    process.env.GIT_DIR = "/somewhere/else";
     try {
-      await hosting.clone(GITLAB, "sklep/orders-bff", dest);
+      await hosting.clone(GITLAB, "shop/orders-bff", dest);
     } finally {
       delete process.env.GIT_DIR;
     }
 
     expect(calls()).toEqual([
       {
-        args: ["repo", "clone", "sklep/orders-bff", dest],
+        args: ["repo", "clone", "shop/orders-bff", dest],
         env: { GITLAB_HOST: "gitlab.example.com", NO_PROMPT: "1", GIT_TERMINAL_PROMPT: "0" },
       },
     ]);

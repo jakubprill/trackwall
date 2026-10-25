@@ -11,20 +11,20 @@ import { mainRemote, readConfig } from "./git-config.ts";
 import { parseStatus } from "./parse.ts";
 
 /**
- * Synchronizacja jednego repo (§4.5, ADR-21): `git fetch` głównego remote, potem fast-forward lokalnej gałęzi
- * domyślnej do zdalnej, i nic poza tym. Nie scala, nie robi rebase, nie przełącza gałęzi i nie dotyka katalogu
- * roboczego, w którym są zmiany; każdy taki przypadek to pominięcie z powodem, a błąd gita to wyjątek. Każdy wynik
- * mówi też, co zostało w katalogu roboczym (ADR-34), bo „aktualne” przy czterech zmienionych plikach albo przesunięta
- * gałąź domyślna, gdy wybrana jest inna, bez tego wyglądają jak synchronizacja, która nic nie zrobiła.
+ * Sync of one repo (§4.5, ADR-21): `git fetch` of the main remote, then a fast-forward of the local default branch
+ * to the remote one, and nothing else. It does not merge, rebase, switch branches or touch a working directory
+ * with changes; each such case is a skip with a reason, and a git error is an exception. Every result also
+ * says what is left in the working directory (ADR-34), because "up to date" with four changed files, or a moved
+ * default branch while another one is checked out, look without it like a sync that did nothing.
  */
 
 /**
- * Fetch dużego repo przez VPN trwa minutami; dłużej to raczej zawieszone połączenie. Zabicie gita po limicie nie
- * psuje repo: fetch zapisuje refy dopiero na końcu.
+ * A fetch of a large repo over VPN takes minutes; longer is more likely a hung connection. Killing git after the limit does not
+ * break the repo: fetch writes refs only at the end.
  */
 const FETCH_TIMEOUT_MS = 5 * 60_000;
 
-/** Fast-forward wybranej gałęzi aktualizuje pliki w katalogu roboczym; duże repo z LFS pobiera przy tym obiekty. */
+/** A fast-forward of the checked-out branch updates files in the working directory; a large repo with LFS fetches objects meanwhile. */
 const MERGE_TIMEOUT_MS = 5 * 60_000;
 
 export async function syncRepo(dir: string): Promise<SyncResult> {
@@ -45,10 +45,10 @@ async function syncDefaultBranch(dir: string): Promise<SyncBranchOutcome> {
 }
 
 /**
- * Gałąź domyślna zdalnego repo z `refs/remotes/<remote>/HEAD`, który ustawia `git clone`. Gdy go nie ma (repo
- * z `git init` i `remote add`) albo wskazuje gałąź, której już nie ma (hosting zmienił gałąź domyślną, a fetch
- * z `prune` usunął starą), jedno pytanie do serwera (`remote set-head --auto`). Zmiany gałęzi domyślnej, której
- * stara wersja nadal istnieje, daemon nie wykryje bez pytania serwera przy każdej synchronizacji.
+ * The default branch of the remote repo from `refs/remotes/<remote>/HEAD`, which `git clone` sets. When it is missing (a repo
+ * from `git init` and `remote add`) or points to a branch that no longer exists (the repo host changed the default branch and a
+ * fetch with `prune` removed the old one), one question to the server (`remote set-head --auto`). The daemon does not detect a
+ * change of default branch whose old branch still exists unless it asks the server on every sync.
  */
 async function defaultBranch(dir: string, remote: string, network: GitNetwork): Promise<string | undefined> {
   const read = () => knownDefaultBranch(dir, remote);
@@ -82,8 +82,8 @@ async function fastForward(dir: string, branch: string, remote: string, network:
   );
   if (status.branch === branch) {
     if (status.changes > 0) return skipped("dirty", `${branch} is checked out and has uncommitted changes`);
-    // Przesunięcie wybranej gałęzi musi też zaktualizować katalog roboczy; `--ff-only` odmówi, zamiast nadpisać
-    // nieśledzony plik, który leży na drodze. Filtr LFS może przy tym pobierać obiekty, stąd środowisko sieciowe.
+    // Moving the checked-out branch must also update the working directory; `--ff-only` refuses instead of overwriting
+    // an untracked file that is in the way. An LFS filter may fetch objects meanwhile, hence the network environment.
     await git(dir, ["merge", "--ff-only", "--quiet", remoteRef], {
       timeoutMs: MERGE_TIMEOUT_MS,
       network,
@@ -91,15 +91,15 @@ async function fastForward(dir: string, branch: string, remote: string, network:
   } else {
     if (await checkedOutInWorktree(dir, localRef))
       return skipped("checked-out-elsewhere", `${branch} is checked out in another worktree of this repo`);
-    // Fetch z bieżącego repo bez `+` przyjmuje tylko fast-forward i odmawia, gdy gałąź jest w użyciu w którymś
-    // worktree także bez bycia wybraną (rebase albo bisect w toku), czego nie widać w `worktree list`. Bez
-    // submodułów (`submodule.recurse` użytkownika pobierałby je drugi raz z sieci) i bez nadpisania `FETCH_HEAD`.
+    // A fetch from the current repo without `+` accepts only a fast-forward and refuses when the branch is in use in some
+    // worktree even without being checked out (a rebase or bisect in progress), which `worktree list` does not show. Without
+    // submodules (the user's `submodule.recurse` would fetch them a second time from the network) and without overwriting `FETCH_HEAD`.
     await git(dir, ["fetch", "--quiet", "--no-recurse-submodules", "--no-write-fetch-head", ".", `${remoteRef}:${localRef}`]);
   }
   return { state: "updated", branch, remoteBranch, commits: behind };
 }
 
-/** Ile commitów ma tylko lokalna gałąź (`ahead`), a ile tylko zdalna (`behind`). */
+/** How many commits only the local branch has (`ahead`), and how many only the remote one (`behind`). */
 async function divergence(dir: string, localRef: string, remoteRef: string): Promise<{ ahead: number; behind: number }> {
   const { stdout } = await git(dir, ["rev-list", "--left-right", "--count", `${localRef}...${remoteRef}`]);
   const m = /^(\d+)\s+(\d+)/.exec(stdout.toString("utf8").trim());
@@ -108,8 +108,8 @@ async function divergence(dir: string, localRef: string, remoteRef: string): Pro
 }
 
 /**
- * Czy gałąź jest wybrana w którymś worktree; wołane, gdy w bieżącym nie jest, więc chodzi o inny worktree. Linie
- * zamiast `-z`, które git ma dopiero od 2.36.
+ * Whether the branch is checked out in some worktree; called when it is not in the current one, so it is about another worktree.
+ * Lines instead of `-z`, which git has only since 2.36.
  */
 async function checkedOutInWorktree(dir: string, localRef: string): Promise<boolean> {
   const { stdout } = await git(dir, ["worktree", "list", "--porcelain"]);
@@ -120,9 +120,9 @@ async function checkedOutInWorktree(dir: string, localRef: string): Promise<bool
 }
 
 /**
- * Wybrana gałąź i niezacommitowane pliki po synchronizacji; nieśledzone osobno, bo nigdy jej nie blokują. Błąd to
- * `null`, a nie wyjątek: po przesuniętej gałęzi (antywirus na Windowsie skanuje nowe pliki) `git status` potrafi
- * przekroczyć limit, a synchronizacja i tak się udała.
+ * The checked-out branch and uncommitted files after sync; untracked ones separately, because they never block it. An error is
+ * `null`, not an exception: after a moved branch (an antivirus on Windows scans new files) `git status` can
+ * exceed the limit, and the sync succeeded anyway.
  */
 async function workingTree(dir: string): Promise<SyncWorkingTree | null> {
   try {

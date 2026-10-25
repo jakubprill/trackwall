@@ -13,18 +13,18 @@ import { addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } f
 import { workingTreeChanges, worktreeChanges } from "./worktree-changes.ts";
 
 /**
- * Moduł `vcs` (§4, §4.5): lokalny adapter gita. Zna katalogi, nie identyfikatory repo; te tłumaczy `workspace`.
- * Zawartość repo czyta z obiektów commita HEAD (ADR-14), więc ścieżka nie może wskazać pliku spoza repo,
- * a przeglądanie nie zależy od tego, co leży w katalogu roboczym; katalog roboczy czytają tylko stan repo i jego
- * zmiany (`changes`, ADR-34). Zmieniają coś tylko `sync` (ADR-21): fetch,
- * fast-forward gałęzi domyślnej i aktualizacja katalogu roboczego, gdy ta gałąź jest wybrana, oraz worktree zadań
- * agentów (ADR-31): nowa gałąź z worktree, jej usunięcie i usunięcie gałęzi.
+ * The `vcs` module (§4, §4.5): the local git adapter. It knows directories, not repo identifiers; `workspace` translates those.
+ * It reads repo contents from the objects of the HEAD commit (ADR-14), so a path cannot point to a file outside the repo,
+ * and browsing does not depend on what lies in the working directory; only the repo state and its changes read the
+ * working directory (`changes`, ADR-34). Only two things change anything: `sync` (ADR-21), i.e. fetch, a fast-forward
+ * of the default branch and an update of the working directory when that branch is checked out, and agent task worktrees
+ * (ADR-31): a new branch with a worktree, its removal and the removal of the branch.
  */
 export class Vcs {
   /**
-   * Trwające synchronizacje po katalogu `.git` (wspólnym dla repo i jego worktree): repo i jego worktree albo
-   * dowiązanie w folderze z projektami to kilka wpisów listy, a dwa równoczesne fetch w jednym `.git` walczą o te
-   * same refy i jeden pada.
+   * Running syncs by `.git` directory (shared by a repo and its worktrees): a repo and its worktree, or a
+   * link in the projects folder, are several list entries, and two simultaneous fetches in one `.git` fight over the
+   * same refs and one fails.
    */
   private readonly syncing = new KeyedQueue();
   private readonly worktreeOps = new KeyedQueue();
@@ -37,22 +37,22 @@ export class Vcs {
   }
 
   /**
-   * Katalog roboczy względem HEAD (ADR-34), tym samym odczytem co zmiany zadania, więc bez zapisu do indeksu
-   * użytkownika. W repo bez commitów względem pustego drzewa: wtedy każdy plik jest nowy.
+   * The working directory against HEAD (ADR-34), with the same read as task changes, so without writing to the user's
+   * index. In a repo without commits, against the empty tree: then every file is new.
    */
   async changes(dir: string, maxPatchBytes: number): Promise<WorkingTreeChanges> {
     return workingTreeChanges(dir, (await this.headCommit(dir)) ?? (await emptyTree(dir)), maxPatchBytes, []);
   }
 
-  /** Adres głównego remote (`origin` albo jedyny) jako `host/ścieżka` (ADR-21); `null` bez takiego remote. */
+  /** The address of the main remote (`origin` or the only one) as `host/path` (ADR-21); `null` without such a remote. */
   async remote(dir: string): Promise<string | null> {
     const remote = mainRemote(await readConfig(dir));
     return (remote && remoteAddress(remote.url)) ?? null;
   }
 
   /**
-   * Fetch i fast-forward gałęzi domyślnej (ADR-21); powód pominięcia jest wynikiem, a błąd gita wyjątkiem. Repo
-   * z tym samym katalogiem `.git` synchronizują się po kolei.
+   * Fetch and fast-forward of the default branch (ADR-21); a skip reason is a result, and a git error an exception. Repos
+   * with the same `.git` directory sync one after another.
    */
   async sync(dir: string): Promise<SyncResult> {
     return this.syncing.run(await this.commonDir(dir), () => syncRepo(dir));
@@ -62,8 +62,8 @@ export class Vcs {
   readonly grepFiles = grepFiles;
   readonly grep = grep;
 
-  // Worktree zadań (ADR-31, `worktree.ts`, `worktree-changes.ts`). Odczyty idą wprost; zmiany rejestru worktree
-  // i gałęzi po kolei w jednym repo.
+  // Task worktrees (ADR-31, `worktree.ts`, `worktree-changes.ts`). Reads go straight through; changes to the worktree
+  // registry and branches go one after another within one repo.
   readonly defaultBase = defaultBase;
   readonly pendingWork = pendingWork;
   readonly worktreeChanges = worktreeChanges;
@@ -81,29 +81,29 @@ export class Vcs {
   }
 
   /**
-   * Zmiany worktree w jednym repo po kolei: dwa równoczesne `worktree add` walczą o blokady w `.git`. Osobno od
-   * synchronizacji, bo fetch trwa minutami, a nie zmienia rejestru worktree ani gałęzi zadań.
+   * Worktree changes in one repo one after another: two simultaneous `worktree add` fight over locks in `.git`. Separate from
+   * sync, because a fetch takes minutes and does not change the worktree registry or task branches.
    */
   private async serialWorktreeOp(repoDir: string, job: () => Promise<void>): Promise<void> {
-    // Repo, którego już nie ma, nie ma blokad do pilnowania (ani `.git`, z którego wziąć klucz).
+    // A repo that no longer exists has no locks to guard (nor a `.git` to take the key from).
     if (!existsSync(repoDir)) return job();
     return this.worktreeOps.run(await this.commonDir(repoDir), job);
   }
 
-  /** Katalog `.git` wspólny dla repo i jego worktree jako klucz kolejki (`pathKey`). */
+  /** The `.git` directory shared by a repo and its worktrees as the queue key (`pathKey`). */
   private async commonDir(dir: string): Promise<string> {
     const { stdout } = await git(dir, ["rev-parse", "--git-common-dir"]);
-    // Ścieżka bywa względna do katalogu repo (`.git`), stąd `resolve`.
+    // The path is sometimes relative to the repo directory (`.git`), hence `resolve`.
     return pathKey(resolve(dir, stdout.toString("utf8").trim()));
   }
 
-  /** Ostatnie commity od HEAD; pusto w repo bez commitów (`--ignore-missing` pomija nieistniejący HEAD). */
+  /** The latest commits from HEAD; empty in a repo without commits (`--ignore-missing` skips a missing HEAD). */
   async log(dir: string, limit: number): Promise<Commit[]> {
     const { stdout } = await git(dir, ["log", "-z", "--ignore-missing", `--max-count=${limit}`, LOG_FORMAT, "HEAD", "--"]);
     return parseLog(stdout.toString("utf8"));
   }
 
-  /** Zawartość katalogu `path` w HEAD; `undefined`, gdy nie ma takiego katalogu. Pusty korzeń w repo bez commitów. */
+  /** The contents of directory `path` in HEAD; `undefined` when there is no such directory. An empty root in a repo without commits. */
   async tree(dir: string, path: string): Promise<TreeEntry[] | undefined> {
     const [head, object] = await this.objects(dir, ["HEAD", `HEAD:${path}`]);
     if (!head) return path === "" ? [] : undefined;
@@ -112,7 +112,7 @@ export class Vcs {
     return parseTree(stdout.toString("utf8"), path);
   }
 
-  /** Plik `path` z HEAD, ucięty do `maxBytes`; `undefined`, gdy nie ma takiego pliku. */
+  /** File `path` from HEAD, cut to `maxBytes`; `undefined` when there is no such file. */
   async file(dir: string, path: string, maxBytes: number): Promise<FileContent | undefined> {
     const [object] = await this.objects(dir, [`HEAD:${path}`]);
     if (object?.type !== "blob") return undefined;
@@ -121,27 +121,27 @@ export class Vcs {
     return { kind: "text", text: stdout.toString("utf8"), size: object.size, truncated };
   }
 
-  /** Pełny hash commita HEAD; `null` w repo bez commitów. */
+  /** The full hash of the HEAD commit; `null` in a repo without commits. */
   async headCommit(dir: string): Promise<string | null> {
     const [head] = await this.objects(dir, ["HEAD"]);
     return head?.type === "commit" ? head.oid : null;
   }
 
   /**
-   * Wszystkie pliki commita z rozmiarami, bez katalogów i submodułów; `truncated`, gdy lista przekroczyła
-   * `maxBytes` wyjścia (repo z setkami tysięcy plików) i jest niepełna.
+   * All files of a commit with their sizes, without directories and submodules; `truncated` when the list exceeded
+   * `maxBytes` of output (a repo with hundreds of thousands of files) and is incomplete.
    */
   async commitFiles(dir: string, commit: string, maxBytes: number): Promise<{ files: TreeEntry[]; truncated: boolean }> {
     const { stdout, truncated } = await git(dir, ["ls-tree", "-r", "-z", "--long", commit], { maxBytes });
     const files = parseTree(stdout.toString("utf8"), "").filter((e) => e.kind === "file");
-    // Ostatni rekord uciętego wyjścia może być niepełną ścieżką.
+    // The last record of cut output may be an incomplete path.
     return { files: truncated ? files.slice(0, -1) : files, truncated };
   }
 
   /**
-   * Treść wielu plików commita jednym procesem (`cat-file --batch`), bez filtrów i `textconv`, więc repo nie
-   * uruchamia przy tym żadnego programu. Plik, którego nie ma albo który nie zmieścił się w `maxBytes` całego
-   * wyjścia, nie trafia do wyniku.
+   * The contents of many commit files in one process (`cat-file --batch`), without filters and `textconv`, so the repo does not
+   * run any program meanwhile. A file that is missing or did not fit in `maxBytes` of the whole
+   * output does not get into the result.
    */
   async readFiles(dir: string, commit: string, paths: readonly string[], maxBytes: number): Promise<Map<string, Buffer>> {
     if (paths.length === 0) return new Map();
@@ -156,9 +156,9 @@ export class Vcs {
   }
 
   /**
-   * Istnienie, typ i rozmiar obiektów w jednym procesie (`cat-file --batch-check`); `undefined` dla brakującego,
-   * także dla submodułu, którego commitu nie ma w tym repo. Specyfikacje idą liniami, stąd zakaz znaków
-   * sterujących w `RepoPath`.
+   * Existence, type and size of objects in one process (`cat-file --batch-check`); `undefined` for a missing one,
+   * also for a submodule whose commit is not in this repo. Specifications go by lines, hence the ban on control
+   * characters in `RepoPath`.
    */
   private async objects(dir: string, specs: string[]): Promise<(GitObject | undefined)[]> {
     const { stdout } = await git(dir, ["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"], {
@@ -168,7 +168,7 @@ export class Vcs {
   }
 }
 
-/** Hash pustego drzewa w formacie obiektów repo (SHA-1 albo SHA-256), bez zapisu do `.git/objects`. */
+/** The hash of the empty tree in the repo's object format (SHA-1 or SHA-256), without writing to `.git/objects`. */
 async function emptyTree(dir: string): Promise<string> {
   return (await git(dir, ["hash-object", "-t", "tree", "--stdin"], { stdin: "" })).stdout.toString("utf8").trim();
 }

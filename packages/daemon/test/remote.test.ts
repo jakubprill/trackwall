@@ -3,19 +3,19 @@ import { networkEnv } from "../src/modules/vcs/git.ts";
 import { mainRemote, parseConfig } from "../src/modules/vcs/git-config.ts";
 import { remoteAddress } from "../src/modules/vcs/remote.ts";
 
-describe("adres repo zdalnego", () => {
-  test("SSH, scp i HTTPS do tego samego repo dają ten sam adres, bez użytkownika, tokenu, portu i .git", () => {
+describe("remote repo address", () => {
+  test("SSH, scp and HTTPS to the same repo give the same address, without the user, token, port and .git", () => {
     for (const url of [
-      "git@gitlab.example.com:sklep/zamowienia/api.git",
-      "ssh://git@GitLab.Example.com:2222/sklep/zamowienia/api.git",
-      "https://gitlab.example.com/sklep/zamowienia/api",
-      "https://jan:tajny-token@gitlab.example.com/sklep/zamowienia/api.git/",
-      "git+ssh://git@gitlab.example.com/sklep/zamowienia/api.git",
+      "git@gitlab.example.com:shop/orders/api.git",
+      "ssh://git@GitLab.Example.com:2222/shop/orders/api.git",
+      "https://gitlab.example.com/shop/orders/api",
+      "https://jan:secret-token@gitlab.example.com/shop/orders/api.git/",
+      "git+ssh://git@gitlab.example.com/shop/orders/api.git",
     ])
-      expect(remoteAddress(url)).toBe("gitlab.example.com/sklep/zamowienia/api");
+      expect(remoteAddress(url)).toBe("gitlab.example.com/shop/orders/api");
   });
 
-  test("ścieżka lokalna, file:// i litera dysku Windowsa nie są adresem hostingu", () => {
+  test("a local path, file:// and a Windows drive letter are not a hosting address", () => {
     for (const url of [
       "/srv/git/api.git",
       "../api",
@@ -23,13 +23,13 @@ describe("adres repo zdalnego", () => {
       "C:/repo/api",
       "file:///srv/git/api.git",
       "https://gitlab.example.com/",
-      "ext::sshpass -p tajne ssh git@gitlab.example.com %S 'sklep/api'",
+      "ext::sshpass -p secret ssh git@gitlab.example.com %S 'shop/api'",
       "",
     ])
       expect(remoteAddress(url)).toBeUndefined();
   });
 
-  test("główny remote to origin, a bez niego jedyny remote; kilku bez origin nie zgadujemy", () => {
+  test("the main remote is origin, and without it the only remote; with several and no origin we do not guess", () => {
     const config = (out: string) => mainRemote(parseConfig(out));
     expect(config("remote.upstream.url\nu\0remote.origin.url\no\0")).toEqual({ name: "origin", url: "o" });
     expect(config("remote.Fork.url\nf\0core.bare\nfalse\0")).toEqual({ name: "Fork", url: "f" });
@@ -37,16 +37,16 @@ describe("adres repo zdalnego", () => {
     expect(config("core.bare\nfalse\0core.quotepath\0")).toBeUndefined();
   });
 
-  test("adres remote jest po skrócie insteadOf, z najdłuższym pasującym prefiksem, jak w gicie", () => {
+  test("the remote address is after the insteadOf shortcut, with the longest matching prefix, as in git", () => {
     const config = parseConfig(
-      "url.git@gitlab.example.com:.insteadof\ngl:\0url.git@inny.example.com:sklep/.insteadof\ngl:sklep/\0remote.origin.url\ngl:sklep/api\0",
+      "url.git@gitlab.example.com:.insteadof\ngl:\0url.git@other.example.com:shop/.insteadof\ngl:shop/\0remote.origin.url\ngl:shop/api\0",
     );
-    expect(mainRemote(config)).toEqual({ name: "origin", url: "git@inny.example.com:sklep/api" });
+    expect(mainRemote(config)).toEqual({ name: "origin", url: "git@other.example.com:shop/api" });
   });
 });
 
-describe("komendy sieciowe bez pytań", () => {
-  test("ssh w trybie wsadowym, pusty GIT_ASKPASS i Git Credential Manager bez okien", () => {
+describe("network commands without prompts", () => {
+  test("ssh in batch mode, an empty GIT_ASKPASS and Git Credential Manager without windows", () => {
     expect(networkEnv(undefined, {})).toEqual({
       GIT_ASKPASS: "",
       GCM_INTERACTIVE: "never",
@@ -54,9 +54,9 @@ describe("komendy sieciowe bez pytań", () => {
     });
   });
 
-  test("program ssh ustawiony przez użytkownika zostaje", () => {
+  test("an ssh program set by the user stays", () => {
     expect(networkEnv(parseConfig("core.sshcommand\nplink -batch\0").sshCommand, {}).GIT_SSH_COMMAND).toBeUndefined();
     expect(networkEnv(undefined, { GIT_SSH: "plink" }).GIT_SSH_COMMAND).toBeUndefined();
-    expect(networkEnv(undefined, { GIT_SSH_COMMAND: "ssh -i klucz" }).GIT_SSH_COMMAND).toBeUndefined();
+    expect(networkEnv(undefined, { GIT_SSH_COMMAND: "ssh -i key" }).GIT_SSH_COMMAND).toBeUndefined();
   });
 });
