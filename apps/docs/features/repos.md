@@ -38,6 +38,7 @@ The "+" button above the list searches the GitLab and GitHub hosts you added in 
 
 - Trackwall needs `git` on your `PATH`. Cloning needs a signed-in `glab` (`glab auth login --hostname <host>`) for GitLab or `gh` (`gh auth login`) for GitHub; Trackwall does not store your token.
 - Only repos directly inside the projects folder are listed, and folders whose name starts with a dot are skipped.
+- A commit, checkout, pull or new branch, made in Trackwall or anywhere else, shows in the list within a couple of seconds, and so does a repo cloned into the folder. The count of uncommitted files refreshes about every 30 seconds.
 - Dropping a folder on the window: a listed repo opens in "Repos"; a folder full of repos, or a repo from somewhere else, is offered as the new projects folder.
 - "Show in Explorer" ("Show in Finder" on macOS) in the repo header opens the repo folder.
 - In a README, links to websites open in your browser; links to files in the repo and images show only as text. A `.txt`, `.rst` or `.adoc` README stays plain text.

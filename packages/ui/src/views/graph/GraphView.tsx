@@ -6,21 +6,32 @@ import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import type { DaemonEvents } from "@/lib/daemon-events";
 import { twoDigits } from "@/lib/format";
 import { layoutGraph } from "@/lib/graph-layout";
+import { GRAPH_PACE } from "@/lib/repo-changes";
 import { useRemote } from "@/lib/use-remote";
+import { type RepoChangesHandle, useCardWarmup } from "@/lib/use-repo-changes";
 import { GraphCanvas } from "./GraphCanvas.tsx";
 import { GraphNodePanel, GraphSummaryPanel } from "./GraphNodePanel.tsx";
 
 /**
  * The "Overview" view (§4.6, ADR-29): the graph of connections between repos at full width and the details panel of the
- * selected repo on the right. The daemon computes the graph from the repo cards, so a new commit in a repo changes it at the next poll.
+ * selected repo on the right. The daemon computes the graph from the repo cards, so a new commit in a repo changes it as soon as
+ * the repo watch reports it (ADR-63). While the first graph is computed, the view shows how far the card warm-up is.
  */
-const POLL_MS = 30_000;
-
-export function GraphView({ conn }: { conn: Connection }) {
+export function GraphView({
+  conn,
+  events,
+  repoChanges,
+}: {
+  conn: Connection;
+  events: DaemonEvents | undefined;
+  repoChanges: RepoChangesHandle;
+}) {
   const load = useCallback(() => post(conn, graphApi.graph, {}), [conn]);
-  const graph = useRemote(load, { pollMs: POLL_MS });
+  const graph = useRemote(load, { pollMs: () => repoChanges.pollMs(GRAPH_PACE), refreshKey: repoChanges.key });
+  const warmup = useCardWarmup(conn, events).data;
   const [selected, setSelected] = useState<string>();
   const data = graph.data;
   const layout = useMemo(
@@ -50,7 +61,9 @@ export function GraphView({ conn }: { conn: Connection }) {
         )}
         {!data && !graph.error && (
           <div className="px-4">
-            <Loading text="Building the graph from repo cards…" />
+            <Loading
+              text={warmup?.running ? `Computing repo cards: ${warmup.done} of ${warmup.total}…` : "Building the graph from repo cards…"}
+            />
           </div>
         )}
         {data && layout && <GraphCanvas graph={data} layout={layout} selected={node?.repo} onSelect={setSelected} />}

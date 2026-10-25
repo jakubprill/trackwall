@@ -16,6 +16,7 @@ export async function stopDaemon(home: string, facade: Facade | undefined, api: 
   facade?.batch.close();
   await facade?.procs.stopAll();
   facade?.agents.close();
+  facade?.repoWatch.close();
   removeDaemonFile(home, process.pid);
   await api?.close();
   // Last: the final lines of the stopped groups, also those after the leader's `exit`, reach the log files.

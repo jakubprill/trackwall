@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { SessionList } from "./agents.ts";
+import { CardWarmup } from "./cards.ts";
 import { RunningMiseTask } from "./mise.ts";
+import { RepoChanges } from "./workspace.ts";
 
 /**
  * Daemon events on the WebSocket `/ws` (§5.2, ADR-36). An event carries the whole snapshot of one topic (the session list,
@@ -17,6 +19,10 @@ export const DaemonEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("sessions.changed"), payload: SessionList }),
   /** Running mise tasks of all repos, the same as `mise/running` (§4.7). */
   z.object({ type: z.literal("mise.running.changed"), payload: z.array(RunningMiseTask) }),
+  /** The revision of the repo watch (ADR-63): only this topic has no HTTP action, because polling it would be the polling it replaces. */
+  z.object({ type: z.literal("repos.changed"), payload: RepoChanges }),
+  /** The progress of the card warm-up, the same as `cards/warmup` (ADR-63). */
+  z.object({ type: z.literal("cards.warmup.changed"), payload: CardWarmup }),
 ]);
 export type DaemonEvent = z.infer<typeof DaemonEvent>;
 export type DaemonEventType = DaemonEvent["type"];

@@ -7,10 +7,12 @@ import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { daemonAnswered, homeHasObject, homeModel } from "@/lib/home-model";
-import { listNeedsSettings, REPO_LIST_POLL_MS } from "@/lib/repo-status";
+import { GRAPH_PACE, REPO_LIST_PACE } from "@/lib/repo-changes";
+import { listNeedsSettings } from "@/lib/repo-status";
 import { RUNNING_MISE_POLL_MS } from "@/lib/run-state";
 import type { SessionSelection } from "@/lib/session-entries";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
+import type { RepoChangesHandle } from "@/lib/use-repo-changes";
 import { HomeDetails } from "./HomeDetails.tsx";
 import { HomeHoverCard } from "./HomeHoverCard.tsx";
 import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
@@ -27,12 +29,10 @@ import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
 
 const HomeCanvas = lazy(() => import("./HomeCanvas.tsx").then((m) => ({ default: m.HomeCanvas })));
 
-/** The graph is computed from the cards of all repos and changes with commits, so rarely. */
-const GRAPH_POLL_MS = 30_000;
-
 export function HomeView({
   conn,
   runningLive,
+  repoChanges,
   sessions,
   onOpenInSessions,
   onOpenRepo,
@@ -42,6 +42,8 @@ export function HomeView({
   conn: Connection;
   /** Running mise tasks from the events; `undefined` for a moment after a connection change, and polled until then. */
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
+  /** Commits and repos added to the folder (ADR-63): the list and the graph are fetched again at once. */
+  repoChanges: RepoChangesHandle;
   sessions: RemoteHandle<SessionList>;
   /** Go to the Sessions view with a session or a task proposal. */
   onOpenInSessions: (selection: SessionSelection) => void;
@@ -51,11 +53,11 @@ export function HomeView({
 }) {
   const repos = useRemote(
     useCallback(() => post(conn, workspaceApi.list, {}), [conn]),
-    { pollMs: REPO_LIST_POLL_MS },
+    { pollMs: () => repoChanges.pollMs(REPO_LIST_PACE), refreshKey: repoChanges.key },
   );
   const graph = useRemote(
     useCallback(() => post(conn, graphApi.graph, {}), [conn]),
-    { pollMs: GRAPH_POLL_MS },
+    { pollMs: () => repoChanges.pollMs(GRAPH_PACE), refreshKey: repoChanges.key },
   );
   const running = useRemote(
     useCallback(() => post(conn, miseApi.running, {}), [conn]),

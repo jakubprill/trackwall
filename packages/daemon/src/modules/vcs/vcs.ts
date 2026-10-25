@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import type { Commit, FileContent, RepoStatusOk, SyncResult, TreeEntry, WorkingTreeChanges } from "@trackwall/protocol";
 import { git } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
+import { type GitState, GitStateReader } from "./git-state.ts";
 import { grep, grepFiles } from "./grep.ts";
 import { KeyedQueue } from "./keyed-queue.ts";
 import { type GitObject, isBinary, LOG_FORMAT, parseBlobs, parseLog, parseObjects, parseStatus, parseTree } from "./parse.ts";
@@ -29,6 +30,12 @@ export class Vcs {
    */
   private readonly syncing = new KeyedQueue();
   private readonly worktreeOps = new KeyedQueue();
+  private readonly states = new GitStateReader();
+
+  /** HEAD and refs read from the git directory's files, without a `git` process (ADR-63); `null` without a readable git directory. */
+  gitState(dir: string): Promise<GitState | null> {
+    return this.states.read(dir);
+  }
 
   async status(dir: string): Promise<RepoStatusOk> {
     const { stdout } = await git(dir, ["status", "--porcelain=v2", "--branch", "-z"]);

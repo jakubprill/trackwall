@@ -96,6 +96,14 @@ export const RepoList = z.object({
 });
 export type RepoList = z.infer<typeof RepoList>;
 
+/**
+ * The repo watch (ADR-63): the revision grows when the HEAD or refs of a repo in the projects folder change, or the set of
+ * repos does. It carries no repo state, only "something changed since the last snapshot", so a client fetches the list and
+ * the graph again; it starts from 0 at every daemon start.
+ */
+export const RepoChanges = z.object({ revision: z.number().int().nonnegative() });
+export type RepoChanges = z.infer<typeof RepoChanges>;
+
 export const WorkspaceSettings = z.object({
   projectsDir: ProjectsDir,
   /** The full path of `workspace.yaml`, so that the user knows which file to edit by hand. */

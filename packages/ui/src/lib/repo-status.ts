@@ -15,12 +15,6 @@ export function repoStatusTone(status: RepoStatus): { tone: StatusTone; label: s
 }
 
 /**
- * The repo list and the repos' states come from the projects folder and from git on every request (§4.5): `git status`
- * in every repo, so "Repos" and "Home" poll it rarely and equally often.
- */
-export const REPO_LIST_POLL_MS = 10_000;
-
-/**
  * The repo list does not exist until the projects folder is fixed in the settings: it disappeared or is wrong in
  * `workspace.yaml`. An old list would then look current, so the views do not show it.
  */
