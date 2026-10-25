@@ -13,6 +13,7 @@ import { pickFolder } from "@/lib/folder-picker";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 import { useRemote } from "@/lib/use-remote";
 import { RepoHostsForm } from "./RepoHostsForm.tsx";
+import { StartAtSignInSurface } from "./StartAtSignInSurface.tsx";
 import { UpdatesSurface } from "./UpdatesSurface.tsx";
 
 /** Workspace settings; each one is also a key in `workspace.yaml`, which can be edited by hand (ADR-13, ADR-18). */
@@ -60,6 +61,7 @@ export function SettingsView({
         </div>
       </Surface>
       <RepoHostsSurface conn={conn} />
+      <StartAtSignInSurface />
       <UpdatesSurface handle={update} />
     </div>
   );

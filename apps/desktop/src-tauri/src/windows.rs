@@ -5,6 +5,7 @@
 //! in which order they were last focused, to pick the window for a session from the tray (§5.4), and saves the open
 //! extra windows so that the next start opens them again (`saved_windows`).
 
+use crate::json_file;
 use crate::jump::PendingJump;
 use crate::lock::lock;
 use crate::saved_windows::{self, SavedWindow, Shown};
@@ -33,6 +34,8 @@ pub const STATE_FLAGS: StateFlags = StateFlags::POSITION.union(StateFlags::SIZE)
 pub struct Windows {
     registry: Mutex<Registry>,
     opening: Mutex<()>,
+    /// Saved windows held back by a start at sign-in (ADR-65) until the main window shows.
+    held: Mutex<Vec<SavedWindow>>,
 }
 
 #[derive(Default, Debug)]
@@ -69,6 +72,12 @@ impl Registry {
         for w in saved {
             self.extra_shown.insert(w.label.clone(), w.shown.clone());
         }
+    }
+
+    /// The lowest extra window label that is neither open nor in the saved list, which holds the windows still to be
+    /// restored.
+    fn free_label(&self, open: &[String]) -> String {
+        next_label(open.iter().chain(self.extra_shown.keys()).map(String::as_str))
     }
 
     fn saved(&self) -> Vec<SavedWindow> {
@@ -115,9 +124,19 @@ impl Windows {
 /// The view id of Sessions in the UI (`App.tsx`).
 const SESSIONS_VIEW: &str = "sessions";
 
+/// A Trackwall window: the main window or an extra one, not the tray panel.
+pub fn is_window(label: &str) -> bool {
+    label == MAIN || is_extra(label)
+}
+
 /// A label `next_label` can give: the prefix and a number from 2, written without a sign or leading zero.
 fn is_extra(label: &str) -> bool {
     label.strip_prefix(EXTRA_PREFIX).is_some_and(|n| n.parse::<u32>().is_ok_and(|parsed| parsed >= 2 && parsed.to_string() == n))
+}
+
+/// The lowest label that is neither open nor saved for a window still to be restored.
+fn free_label(app: &AppHandle, open: &[String]) -> String {
+    app.state::<Windows>().with(|r| r.free_label(open))
 }
 
 /// The lowest free extra window label, so that a reopened window takes the place of the one closed before.
@@ -163,17 +182,39 @@ pub fn open(app: &AppHandle, view: Option<&str>) -> Result<(), String> {
 /// runtime, because windows are not built on the main thread.
 ///
 /// The saved list goes into the registry before the first window is built, so a report from one restored window or
-/// a closed one does not save a list without the others still loading; opening is held for the whole restore, so a
-/// "New window" meanwhile cannot take a saved label. A window that cannot be built stays in the list: the failure
-/// may be the app quitting in the middle of the restore, and the file's entries are already checked by `parse`.
+/// a closed one does not save a list without the others still loading, and a "New window" meanwhile skips the saved
+/// labels (`free_label`). A window that cannot be built stays in the list: the failure may be the app quitting in the
+/// middle of the restore, and the file's entries are already checked by `parse`.
 pub fn restore(app: &AppHandle) {
-    let Some(path) = saved_path(app) else { return };
+    let saved = load_saved(app);
+    build_saved(app, saved);
+}
+
+/// `restore` for a start at sign-in (ADR-65), which keeps the windows hidden: the saved windows are in the registry
+/// at once, so a "New window" from the tray meanwhile takes another label, and they are built when the main window
+/// first shows, so sign-in puts no window on screen without the main one.
+pub fn restore_when_shown(app: &AppHandle) {
+    let saved = load_saved(app);
+    *lock(&app.state::<Windows>().held) = saved;
+}
+
+/// The saved windows, entered in the registry.
+fn load_saved(app: &AppHandle) -> Vec<SavedWindow> {
+    let saved = json_file::config_file(app, saved_windows::FILE)
+        .map(|path| json_file::load(&path, |text| saved_windows::parse(text, is_extra)))
+        .unwrap_or_default();
+    app.state::<Windows>().with(|r| r.restoring(&saved));
+    saved
+}
+
+fn build_saved(app: &AppHandle, saved: Vec<SavedWindow>) {
+    if saved.is_empty() {
+        return;
+    }
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let windows = app.state::<Windows>();
         let _one_at_a_time = lock(&windows.opening);
-        let saved = saved_windows::load(&path, is_extra);
-        windows.with(|r| r.restoring(&saved));
         for w in saved {
             let url = window_url(Some(w.shown.view()), Some(w.shown.session_layout()));
             let opened = url.ok_or_else(|| "not an id".to_string()).and_then(|url| build_while_opening(&app, Some(w.label.clone()), url));
@@ -205,7 +246,7 @@ fn build_while_opening(app: &AppHandle, label: Option<String>, url: String) -> R
         let label = match label {
             Some(label) if taken().contains(&label) => return Err(format!("{label} is already open")),
             Some(label) => label,
-            None => next_label(taken().iter().map(String::as_str)),
+            None => free_label(app, &taken()),
         };
         app.state::<WindowEffects>().register(&label);
         let mut window_config = config.clone();
@@ -239,15 +280,11 @@ pub fn closed_by_user(app: &AppHandle, label: &str) {
     });
 }
 
-fn saved_path(app: &AppHandle) -> Option<std::path::PathBuf> {
-    app.path().app_config_dir().ok().map(|dir| dir.join(saved_windows::FILE))
-}
-
 /// Called with the registry locked, so two threads never write the file at once and the last write is the newest list.
 fn persist(app: &AppHandle, saved: &[SavedWindow]) {
-    let written = saved_path(app)
+    let written = json_file::config_file(app, saved_windows::FILE)
         .ok_or_else(|| std::io::Error::other("no configuration directory"))
-        .and_then(|path| saved_windows::save(&path, saved));
+        .and_then(|path| json_file::save(&path, &saved));
     if let Err(err) = written {
         eprintln!("[desktop] saving the open windows: {err}");
     }
@@ -268,6 +305,10 @@ pub fn closed(app: &AppHandle, label: &str) {
 /// Shows and focuses a window, also one hidden to the tray or minimized; one shown before its page has loaded does
 /// not pop up again after loading.
 pub fn show(app: &AppHandle, label: &str) {
+    if label == MAIN {
+        let held = std::mem::take(&mut *lock(&app.state::<Windows>().held));
+        build_saved(app, held);
+    }
     app.state::<WindowEffects>().mark_revealed(label);
     if let Some(window) = app.get_webview_window(label) {
         let _ = window.unminimize();
@@ -343,6 +384,13 @@ mod tests {
         assert!(!is_extra("window-x"));
         assert!(!is_extra("window-02"));
         assert!(!is_extra("window-+2"));
+    }
+
+    #[test]
+    fn a_new_window_during_a_hidden_start_skips_the_labels_of_windows_still_to_be_restored() {
+        let mut r = Registry::default();
+        r.restoring(&[SavedWindow { label: "window-2".into(), shown: sessions() }]);
+        assert_eq!(r.free_label(&["main".to_string()]), "window-3");
     }
 
     #[test]

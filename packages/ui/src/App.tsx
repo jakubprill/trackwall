@@ -27,6 +27,7 @@ import { useRepoWatch } from "@/lib/use-repo-watch";
 import { useSessionTree } from "@/lib/use-session-tree";
 import { useSessions } from "@/lib/use-sessions";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
+import { zoomStepOf, zoomWindow } from "@/lib/zoom-shortcut";
 import { DaemonPanel } from "@/views/daemon/DaemonPanel";
 import { GraphView } from "@/views/graph/GraphView";
 import { HomeView } from "@/views/home/HomeView";
@@ -158,6 +159,14 @@ export function App() {
     (shortcut) => {
       if (shortcut.kind === "next-waiting") return openNextWaiting();
       showSupervisor();
+      return true;
+    },
+  );
+  // Ctrl+= / Ctrl+- / Ctrl+0 zoom the window in the desktop app (ADR-65); a browser zooms on its own.
+  useWindowShortcuts(
+    (event) => (inDesktopShell() ? zoomStepOf(event, IS_MAC) : undefined),
+    (step) => {
+      zoomWindow(step).catch((err: unknown) => console.error("[zoom] could not zoom the window", err));
       return true;
     },
   );

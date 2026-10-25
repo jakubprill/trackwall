@@ -13,7 +13,7 @@ Run several Copilot CLI agents side by side, each in its own repo, and always kn
 
 - Several Copilot CLI sessions at once, each in a repo from your projects folder, all in one window.
 - A state for every session: working, waiting for you, asking for approval or idle.
-- A nudge when an agent needs you: a flashing taskbar icon, a system notification and an entry in the tray.
+- A nudge when an agent needs you: a flashing taskbar icon with the number waiting, a system notification and an entry in the tray.
 - A grid of terminals, so you can watch up to nine agents at once on a wide monitor.
 - Sessions that keep running when you close the window.
 
@@ -23,7 +23,7 @@ Open "Sessions", pick a repo and Copilot CLI starts in a terminal inside Trackwa
 
 When an agent finishes its turn, its session shows "waiting for you"; when it asks for approval of a step or a plan, "asking for approval" or "waiting for plan approval". Either way the counter on the view bar goes up. The session stays waiting until you have looked at it: select it, or type into its terminal, and it becomes "idle". In the grid, only the selected tile counts as looked at. A request for approval keeps waiting until you answer it. "Next waiting" (or Alt+J) takes you straight to the next session that needs you.
 
-You do not have to keep Trackwall in front. When its window is in the background, a waiting session shows a system notification ("Session in orders-api: Copilot CLI is asking for approval"), the taskbar icon flashes (the Dock icon bounces on macOS), and the tray menu gets a "Waiting: orders-api" item. Win+Alt+J (⌃⌥J on macOS) works from any app: it brings Trackwall forward on the next session that needs you. A left click on the tray icon opens a small panel with everything waiting for you, where you can also [answer an approval request](/features/approvals) without opening the session.
+You do not have to keep Trackwall in front. When its window is in the background, a waiting session shows a system notification ("Session in orders-api: Copilot CLI is asking for approval"), the taskbar icon flashes (the Dock icon bounces on macOS), and the tray menu gets a "Waiting: orders-api" item. While anything waits for you, the Trackwall icon on the taskbar (in the Dock on macOS) shows how many sessions and task proposals are waiting, and the tray icon has a dot. Win+Alt+J (⌃⌥J on macOS) works from any app: it brings Trackwall forward on the next session that needs you. A left click on the tray icon opens a small panel with everything waiting for you, where you can also [answer an approval request](/features/approvals) without opening the session.
 
 The switch above the terminal changes the layout: 1 shows the selected session with its full panel, 2 and 4 show pages of that many terminals, and Auto fits the whole list on screen, up to nine at a time (six sessions on a 34-inch ultrawide are three columns and two rows). The selected tile has the accent ring and takes the keyboard; a tile waiting for you has a warning frame.
 

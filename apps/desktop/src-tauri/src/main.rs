@@ -5,10 +5,13 @@
 
 mod app_menu;
 mod attention;
+mod autostart;
+mod badge;
 mod daemon;
 mod daemon_state;
 mod folder_picker;
 mod global_shortcut;
+mod json_file;
 mod jump;
 mod link;
 mod lock;
@@ -23,7 +26,9 @@ mod portable_update;
 mod updates;
 mod window_effect;
 mod windows;
+mod zoom;
 
+use badge::TrayIcons;
 use daemon::Connection;
 use daemon_state::DaemonState;
 use std::sync::Arc;
@@ -121,6 +126,7 @@ fn main() {
         .manage(Windows::default())
         .manage(jump::PendingJump::default())
         .manage(updates::Updates::default())
+        .manage(zoom::Zooms::default())
         .invoke_handler(tauri::generate_handler![
             daemon_connection,
             retry_daemon,
@@ -131,7 +137,10 @@ fn main() {
             open_from_tray_panel,
             folder_picker::pick_projects_folder,
             updates::check_update,
-            updates::install_update
+            updates::install_update,
+            autostart::autostart_enabled,
+            autostart::set_autostart,
+            zoom::zoom_window
         ])
         .setup(move |app| {
             state.start();
@@ -140,13 +149,23 @@ fn main() {
             if let Ok(dir) = portable_update::app_dir() {
                 std::thread::spawn(move || portable_update::clean_up(&dir));
             }
+            zoom::Zooms::load(app.handle());
+            zoom::apply_to_main(app.handle());
             let window = app.get_webview_window(windows::MAIN).ok_or("missing window main from tauri.conf.json")?;
             app.state::<WindowEffects>().apply(&window);
-            build_tray(app.handle())?;
-            windows::restore(app.handle());
+            let tray_icons = build_tray(app.handle())?;
+            // A start at sign-in (ADR-65) keeps the windows hidden until the user opens Trackwall.
+            if autostart::starts_hidden(app.handle(), std::env::args()) {
+                app.state::<WindowEffects>().mark_revealed(windows::MAIN);
+                windows::restore_when_shown(app.handle());
+            } else {
+                windows::restore(app.handle());
+            }
+            let refreshing = app.handle().clone();
+            std::thread::spawn(move || autostart::refresh(&refreshing));
             notification::init(app.handle());
             global_shortcut::register(app.handle());
-            attention::watch(app.handle().clone(), Arc::clone(&state), TRAY_ID);
+            attention::watch(app.handle().clone(), Arc::clone(&state), TRAY_ID, tray_icons);
             link::listen(app.handle());
             Ok(())
         })
@@ -155,6 +174,7 @@ fn main() {
             if webview.label() != tray_panel::LABEL {
                 window_effect::on_page_load(webview, payload);
             }
+            zoom::on_page_load(webview, payload);
         })
         .on_menu_event(|app, event| app_menu::handle(app, event.id.as_ref()))
         .on_window_event(|window, event| match event {
@@ -194,7 +214,8 @@ fn main() {
     });
 }
 
-fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+/// The tray icon with its menu; returns its image, which gets a dot while something waits (`badge.rs`).
+fn build_tray(app: &AppHandle) -> tauri::Result<TrayIcons> {
     let menu = attention::build_menu(app, &[], &[])?;
     let mut tray = TrayIconBuilder::with_id(TRAY_ID)
         .tooltip(attention::tooltip(&[], &[]))
@@ -234,13 +255,15 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         });
     // The macOS menu bar expects a monochrome template, which the system recolours for a light or dark bar itself.
     // Outside macOS the coloured app icon stays: the Windows and Linux notification area can be light or dark, and it reads on both.
-    if cfg!(target_os = "macos") {
-        tray = tray.icon(tauri::include_image!("icons/tray-template.png")).icon_as_template(true);
-    } else if let Some(icon) = app.default_window_icon() {
-        tray = tray.icon(icon.clone());
-    }
+    let icons = if cfg!(target_os = "macos") {
+        TrayIcons::new(tauri::include_image!("icons/tray-template.png"), true)
+    } else {
+        let icon = app.default_window_icon().ok_or_else(|| tauri::Error::AssetNotFound("the app icon".into()))?;
+        TrayIcons::new(icon.clone().to_owned(), false)
+    };
+    tray = tray.icon(icons.icon(false)).icon_as_template(icons.template());
     tray.build(app)?;
-    Ok(())
+    Ok(icons)
 }
 
 fn show_main(app: &AppHandle) {

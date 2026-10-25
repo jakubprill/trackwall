@@ -6,6 +6,7 @@
 //! macOS installs through the plugin (`.app.tar.gz`, the bundle swapped in place), the portable Windows folder through
 //! `portable_update`. Then the shell restarts: `RunEvent::Exit` stops the old daemon before the new shell starts its own.
 
+use crate::autostart;
 use serde::Serialize;
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
@@ -110,6 +111,7 @@ pub async fn install_update(app: AppHandle, updates: State<'_, Updates>, version
         *updates.lock() = Phase::Found(update);
         return Err(err);
     }
+    autostart::before_restart(&app);
     app.request_restart();
     Ok(())
 }

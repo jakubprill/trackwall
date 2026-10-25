@@ -4,7 +4,6 @@
 //! daemon's state directory, because only the shell has windows.
 
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 
 /// File name in the shell's configuration directory.
 pub const FILE: &str = "windows.json";
@@ -79,25 +78,10 @@ pub fn parse(text: &str, is_label: impl Fn(&str) -> bool) -> Vec<SavedWindow> {
     valid
 }
 
-pub fn load(path: &Path, is_label: impl Fn(&str) -> bool) -> Vec<SavedWindow> {
-    std::fs::read_to_string(path).map(|text| parse(&text, is_label)).unwrap_or_default()
-}
-
-/// Writes the list through a temporary file and a rename, so a crash in the middle leaves the old list, not half of
-/// the new one.
-pub fn save(path: &Path, windows: &[SavedWindow]) -> std::io::Result<()> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    let text = serde_json::to_string_pretty(windows).map_err(std::io::Error::other)?;
-    let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, text)?;
-    std::fs::rename(&tmp, path)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::json_file;
 
     fn extra(label: &str) -> bool {
         label.starts_with("window-")
@@ -112,15 +96,15 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("trackwall-saved-windows-{}", std::process::id()));
         let path = dir.join(FILE);
         let windows = vec![saved("window-2", "sessions", "auto"), saved("window-3", "home", "1")];
-        save(&path, &windows).expect("save");
-        assert_eq!(load(&path, extra), windows);
+        json_file::save(&path, &windows).expect("save");
+        assert_eq!(json_file::load(&path, |text| parse(text, extra)), windows);
         std::fs::remove_dir_all(dir).expect("cleanup");
     }
 
     #[test]
     fn a_missing_or_damaged_file_opens_no_windows() {
         let missing = std::env::temp_dir().join("trackwall-no-such-dir").join(FILE);
-        assert_eq!(load(&missing, extra), vec![]);
+        assert_eq!(json_file::load(&missing, |text| parse(text, extra)), vec![]);
         assert_eq!(parse("{not json", extra), vec![]);
         assert_eq!(parse(r#"{"label":"window-2"}"#, extra), vec![]);
     }

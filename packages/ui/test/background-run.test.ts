@@ -25,4 +25,10 @@ describe("background run in the UI", () => {
     expect(currentRun(acted, { data: fresh, loadNumber: 6 })).toBe(fresh);
     expect(currentRun(acted, { data: null, loadNumber: 6 })).toBeNull();
   });
+
+  test("an action's answer of false is shown like any other until a fresh read lands", () => {
+    const answered = { run: false, afterLoad: 2 };
+    expect(currentRun(answered, { data: true, loadNumber: 2 })).toBe(false);
+    expect(currentRun(answered, { data: true, loadNumber: 3 })).toBe(true);
+  });
 });
