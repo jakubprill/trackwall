@@ -14,9 +14,9 @@ Repo layout, running from source and tools for people who develop Trackwall. Pro
 |---|---|
 | `packages/protocol` | types and zod schemas shared by the daemon, the UI and the CLI |
 | `packages/daemon` | the daemon (Bun, Node-compatible code), built into a single binary; `src/modules/` are the modules from §4 of the architecture, `src/api/` and `src/mcp/` the transports, `src/platform/` system APIs, `src/infra/` the rest of the infrastructure; the root of `src/` holds only `main.ts` and `facade.ts` |
-| `packages/ui` | React + Tailwind + shadcn/ui, Vite; `src/views/<view identifier>/` are the views from the bar on the left (`home`, `repos`, `sessions`, `graph` for Overview, `daemon`, `settings`), `src/components/` shared components, `src/lib/` logic without React and hooks; the root of `src/` holds only `main.tsx`, `App.tsx` and `index.css` |
+| `packages/ui` | React + Tailwind + shadcn/ui, Vite; `src/views/<view identifier>/` are the views from the bar on the left (`home`, `repos`, `sessions`, `graph` for Overview, `daemon`, `settings`) and `tray-panel`, the page of the tray panel window (ADR-50), `src/components/` shared components, `src/lib/` logic without React and hooks; the root of `src/` holds only `main.tsx`, `App.tsx` and `index.css` |
 | `packages/scene` | the 3D dashboard scene on Pawn (`@pawnjs/core` from npm): view model, "Orbit" layout, models |
-| `apps/desktop` | the Tauri 2 shell: windows (the main one and extra ones, translucent, ADR-11, ADR-49), tray, starting and stopping the daemon |
+| `apps/desktop` | the Tauri 2 shell: windows (the main one and extra ones, translucent, ADR-11, ADR-49), tray and tray panel, system notifications and the global shortcut (ADR-50), starting and stopping the daemon |
 
 ## Running from source
 
@@ -50,7 +50,7 @@ pnpm build:desktop   # UI, the daemon as a binary, Tauri without an installer
 pnpm portable        # out/trackwall-<version>-windows-x64.zip or out/trackwall-<version>-macos-<arch>.zip
 ```
 
-Windows: the zip contains `trackwall.exe`, `trackwall-daemon.exe` and `ui/`. Unpacking it and running `trackwall.exe` is enough; state goes to `%USERPROFILE%\.trackwall`. Without WebView2, `trackwall.exe` shows a message, and `trackwall-daemon.exe --ui` opens Trackwall in the browser. The files are not signed, so SmartScreen shows a warning (signing is planned before publication, §9).
+Windows: the zip contains `trackwall.exe`, `trackwall-daemon.exe` and `ui/`. Unpacking it and running `trackwall.exe` is enough; state goes to `%USERPROFILE%\.trackwall`. Without WebView2, `trackwall.exe` shows a message, and `trackwall-daemon.exe --ui` opens Trackwall in the browser. The files are not signed, so SmartScreen shows a warning (signing with Azure Trusted Signing is planned before publication, §9 of the architecture).
 
 macOS: the zip contains an unsigned `Trackwall.app`; open it the first time with right click > Open or `xattr -dr com.apple.quarantine Trackwall.app`.
 

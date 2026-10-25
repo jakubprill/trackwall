@@ -11,11 +11,12 @@
  *
  * On Windows the zip itself is the update package. The release workflow signs both update packages.
  *
- * Bez instalatora i bez zapisu poza katalogiem użytkownika: archiwum rozpakowuje się gdziekolwiek.
+ * No installer: the archive unpacks anywhere. Outside the user's folders Trackwall writes only the notification
+ * registration in HKCU on Windows (ADR-50), which README.txt mentions.
  */
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { assertVersionsMatch, BUILD_ENTRIES, REPO, run, TAURI_DIR } from "./lib.ts";
+import { assertVersionsMatch, BUILD_ENTRIES, REPO, run, TAURI_DIR, tauriIdentifier } from "./lib.ts";
 import { UPDATE_PACKAGES } from "./update-manifest.ts";
 
 const OUT = join(REPO, "out");
@@ -53,6 +54,10 @@ if (process.platform === "win32") {
       "After deleting the folder, remove that registry key to forget them.",
       "",
       "Daemon startup log: %USERPROFILE%\\.trackwall\\logs\\daemon-start.log",
+      "",
+      "For its notifications Trackwall registers itself under this registry key:",
+      `HKEY_CURRENT_USER\\Software\\Classes\\AppUserModelId\\${tauriIdentifier()}`,
+      "Delete it after removing Trackwall if you want no trace of it.",
       "",
     ].join("\r\n"),
   );

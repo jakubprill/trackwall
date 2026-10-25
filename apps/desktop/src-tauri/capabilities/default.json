@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Trackwall windows (the main window and extra windows, ADR-49): the app's commands (daemon_connection, retry_daemon, open_window, window_shows_sessions, take_jump, open_link, and the app update commands check_update and install_update, ADR-53; the updater plugin is used from Rust) and core:default (events, the native context menu of view icons), no system plugin permissions.",
-  "windows": ["main", "window-*"],
+  "description": "Trackwall windows (the main window and extra windows, ADR-49, and the tray panel, ADR-50): the app's commands (daemon_connection, retry_daemon, open_window, window_shows, take_jump, open_link, open_from_tray_panel, and the app update commands check_update and install_update, ADR-53; the updater plugin is used from Rust) and core:default (events, the native context menu of view icons), no system plugin permissions.",
+  "windows": ["main", "window-*", "tray-panel"],
   "permissions": ["core:default"]
 }

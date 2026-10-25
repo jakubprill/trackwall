@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
@@ -211,6 +211,23 @@ describe("vcs na prawdziwym gicie", () => {
 
   test("brak katalogu repo to błąd gita z komunikatem, a nie wyjątek uruchomienia", async () => {
     await expect(vcs.status(join(makeRepo(), "..", "nie-istnieje"))).rejects.toThrow(/nie-istnieje/);
+  });
+
+  test("a same-size edit within the second the index was written is a change, as in git status", async () => {
+    // Racy git: a file with the size and mtime its index entry records counts as unchanged, unless the index was written
+    // no later than that mtime; then git compares the content. The second case is set up here without waiting.
+    const dir = makeRepo({ "a.txt": "a = 1\n" }, "racy");
+    const base = gitIn(dir, "rev-parse", "HEAD").trim();
+    const second = new Date(Math.floor(Date.now() / 1000) * 1000 - 10_000);
+    utimesSync(join(dir, "a.txt"), second, second);
+    gitIn(dir, "update-index", "--really-refresh");
+    utimesSync(join(dir, ".git", "index"), second, second);
+    writeFileSync(join(dir, "a.txt"), "a = 2\n");
+    utimesSync(join(dir, "a.txt"), second, second);
+
+    const changes = await vcs.worktreeChanges(dir, base, 0);
+    expect(changes.files).toEqual([{ path: "a.txt", change: "modified", additions: 1, deletions: 1 }]);
+    expect(gitIn(dir, "status", "--porcelain")).toBe(" M a.txt\n");
   });
 
   test("zmiany worktree z limitem diffu 0 dają pliki i liczby bez treści zmian", async () => {

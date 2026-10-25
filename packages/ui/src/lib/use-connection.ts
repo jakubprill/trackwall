@@ -9,6 +9,11 @@ export interface ConnectionHandle {
   /** Błąd ustalenia połączenia albo ostatniej próby ponownego połączenia. */
   error?: string;
   retry: () => void;
+  /**
+   * Asks for the connection again without restarting the daemon, for a page that outlives a daemon restart in another
+   * window (the tray panel, ADR-50); a changed address or token replaces the connection.
+   */
+  refresh: () => void;
 }
 
 /**
@@ -37,5 +42,15 @@ export function useConnection(): ConnectionHandle {
     );
   }, []);
 
-  return { conn, epoch, error, retry };
+  const refresh = useCallback(() => {
+    resolveConnection().then(
+      (next) => {
+        setError(undefined);
+        setConn((prev) => (prev?.baseUrl === next.baseUrl && prev.token === next.token ? prev : next));
+      },
+      (err: unknown) => setError(errorMessage(err)),
+    );
+  }, []);
+
+  return { conn, epoch, error, retry, refresh };
 }
