@@ -19,12 +19,13 @@ const daemonMain = join(import.meta.dir, "..", "..", "src", "main.ts");
  * Sessions with a real PTY, a process group, real git and hooks through the daemon's `copilot-hook` subcommand;
  * Copilot CLI is a fake. `repos` are the repos of the projects folder: identifier → directory. A `home` passed in
  * simulates a daemon restart with the same state directory. `projectsDir` is where the supervisor runs; `null` is an unset
- * projects folder.
+ * projects folder. `toolPermissions` are the patterns every session gets from the workspace (ADR-66).
  */
 export function makeAgents(
   repos: Record<string, string>,
   home = mkdtempSync(join(tmpdir(), "trackwall-agents-")),
   projectsDir: string | null = null,
+  toolPermissions: { allow: string[]; deny: string[] } = { allow: [], deny: [] },
 ) {
   const procs = new ProcessGroups({
     logs: new Logs({ dir: join(home, "logs"), maxFileBytes: 1024 * 1024, log: () => {} }),
@@ -46,6 +47,7 @@ export function makeAgents(
         if (projectsDir === null) throw new DomainError("bad_request", "set the projects folder first");
         return projectsDir;
       },
+      toolPermissions: () => toolPermissions,
     },
     vcs: new Vcs(),
     home,

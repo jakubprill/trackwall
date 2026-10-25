@@ -1,4 +1,6 @@
-import type { RunState, Session, TaskState, TaskStateChange } from "@trackwall/protocol";
+import type { AgentDialog, DialogAnswer, RunState, Session, TaskState, TaskStateChange } from "@trackwall/protocol";
+import { DomainError } from "../../infra/errors.ts";
+import { readAgentDialog } from "./copilot-dialog.ts";
 import { inPromptBoxAfter } from "./copilot-hooks.ts";
 import { sessionKey } from "./copilot-keys.ts";
 import { CopilotSessionState } from "./copilot-session-state.ts";
@@ -25,6 +27,9 @@ const SUBMIT_DELAY_MS = 100;
  * text and Enter as one paste, and the next `typePrompt` types it again.
  */
 const RETYPE_AFTER_MS = 5000;
+
+/** The key that stops a turn in an approval dialog (Copilot CLI's "Esc to stop"). */
+const ESCAPE = "\u001b";
 
 /** The PTY of the session process: the terminal of the group leader from `procs` (`GroupTerminal`). */
 export interface SessionPty {
@@ -152,6 +157,20 @@ export class LiveSession {
     return this.#prompt?.typedAt != null ? "typed" : "queued";
   }
 
+  /**
+   * Answers the approval on the screen (ADR-66) with an option's digit or Esc, as if the user pressed the key in a
+   * session terminal, but only while the screen still shows the dialog `id` names: an answer never goes into a dialog
+   * the user has not seen, for example after they answered in the terminal and the agent asked again.
+   */
+  answerDialog(id: string, answer: DialogAnswer): void {
+    const dialog = this.#dialog();
+    if (dialog?.kind !== "approval" || dialog.id !== id)
+      throw new DomainError("dialog_changed", "the dialog is no longer on the session's screen; it was answered or it changed");
+    if (answer !== "stop" && !dialog.options.some((o) => o.key === answer))
+      throw new DomainError("bad_request", `the dialog has no option ${answer} that can be answered outside the terminal`);
+    this.input(answer === "stop" ? ESCAPE : answer);
+  }
+
   /** The size is set by the last terminal that reported it; the TUI gets it together with the PTY. */
   resize(cols: number, rows: number): void {
     if (this.#finished || (cols === this.#screen.cols && rows === this.#screen.rows)) return;
@@ -207,7 +226,20 @@ export class LiveSession {
       windowTitle: this.#state.windowTitle ?? null,
       needsAttention: run.kind === "running" && this.#attention.waiting(this.#last?.state),
       task: this.task,
+      dialog: run.kind === "running" ? this.#dialog() : null,
     };
+  }
+
+  /**
+   * The agent dialog on the screen that matches the state: an approval in `Approval`, a question in `Input`. The state
+   * decides, so a dialog Copilot CLI has not cleared from the screen yet after a key is gone at once.
+   */
+  #dialog(): AgentDialog | null {
+    const state = this.#last?.state;
+    const kind = state === "Approval" ? "approval" : state === "Input" ? "question" : undefined;
+    if (this.#finished || kind === undefined) return null;
+    const dialog = readAgentDialog(this.#screen.lines());
+    return dialog?.kind === kind ? dialog : null;
   }
 
   dispose(): void {

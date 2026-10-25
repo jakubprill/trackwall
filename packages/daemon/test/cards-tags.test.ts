@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { RepoCard } from "@trackwall/protocol";
+import { globMatcher } from "../src/infra/glob.ts";
 import { extractCard } from "../src/modules/cards/extract-card.ts";
-import { globMatcher } from "../src/modules/cards/glob.ts";
 import { loadSyntaxParsers } from "../src/modules/cards/syntax-tree.ts";
 import { repoTags } from "../src/modules/cards/tags.ts";
 import { snapshotOf } from "./support/snapshot.ts";

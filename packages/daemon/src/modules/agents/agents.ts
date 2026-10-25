@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   type AgentTaskChanges,
   copilotMcpServers,
+  type DialogAnswer,
   isSupervisor,
   MCP_SERVER_NAME,
   mcpTools,
@@ -83,12 +84,14 @@ interface AgentsProcs {
 }
 
 /**
- * What `agents` needs from `workspace`: a repo root by its id (`not_found` without such a repo) and the projects folder
- * the supervisor runs in (`bad_request` while it is not set).
+ * What `agents` needs from `workspace`: a repo root by its id (`not_found` without such a repo), the projects folder
+ * the supervisor runs in (`bad_request` while it is not set) and the tool permissions a session starts with.
  */
 interface AgentsRepos {
   repoPath(id: string): Promise<string>;
   projectsDir(): Promise<string>;
+  /** The `toolPermissions` patterns for a session in repo `repo` (`null` for the supervisor), ADR-66. */
+  toolPermissions(repo: string | null): { allow: readonly string[]; deny: readonly string[] };
 }
 
 export interface AgentsDeps {
@@ -371,6 +374,7 @@ export class Agents {
     const [name = "copilot", ...prefix] = this.#deps.copilot;
     const program = findCopilot(name, env);
     if (!program) throw new DomainError("agent_unavailable", `Copilot CLI (${name}) not found in PATH`);
+    const permissions = this.#deps.repos.toolPermissions(repo);
     const id = randomUUID();
     const dir = this.#sessionDir(id);
     const token = this.#tokens.issue(id);
@@ -393,6 +397,7 @@ export class Agents {
           join(dir, "plugin"),
           "--additional-mcp-config",
           `@${join(dir, MCP_CONFIG_FILE)}`,
+          ...toolPermissionArgs(permissions),
           ...args,
         ],
         cwd,
@@ -418,6 +423,15 @@ export class Agents {
   async stop(id: string): Promise<Session> {
     const session = this.#get(id);
     await this.#deps.procs.stop(owner(id));
+    return this.#view(session);
+  }
+
+  /** Answers a running session's approval from outside its terminal (ADR-66); see `LiveSession.answerDialog`. */
+  answerDialog(id: string, dialog: string, answer: DialogAnswer): Session {
+    const session = this.#get(id);
+    // The state after the hooks already written, so that an approval just answered in the terminal is not answered again.
+    if (this.#fresh(session)?.run.kind !== "running") throw new DomainError("dialog_changed", "the session is no longer running");
+    session.answerDialog(dialog, answer);
     return this.#view(session);
   }
 
@@ -566,6 +580,11 @@ interface SessionFiles {
 interface PreparedSession {
   session: LiveSession;
   instructionsDir: string | null;
+}
+
+/** Copilot CLI's own approval rules (ADR-66); one argument each, with `=`, so a pattern never reads as another option. */
+function toolPermissionArgs(permissions: { allow: readonly string[]; deny: readonly string[] }): string[] {
+  return [...permissions.allow.map((p) => `--allow-tool=${p}`), ...permissions.deny.map((p) => `--deny-tool=${p}`)];
 }
 
 /** The group owner key in `procs`; only ever built, never taken apart again. */

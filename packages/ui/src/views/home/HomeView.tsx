@@ -161,6 +161,7 @@ export function HomeView({
         {repos.error && <p className="text-destructive absolute bottom-3 left-3 text-sm">{repos.error}</p>}
       </div>
       <HomeDetails
+        conn={conn}
         selected={current}
         model={model}
         repos={lookup.repos}

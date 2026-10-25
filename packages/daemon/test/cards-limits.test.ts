@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { globMatcher } from "../src/infra/glob.ts";
 import { CARD_SOURCES, extractCard } from "../src/modules/cards/extract-card.ts";
-import { globMatcher } from "../src/modules/cards/glob.ts";
 import { extractGradle } from "../src/modules/cards/gradle.ts";
 import { extractMaven } from "../src/modules/cards/maven.ts";
 import { extractNpm } from "../src/modules/cards/npm.ts";

@@ -335,8 +335,11 @@ function miseTarget(facade: Facade, repo: string, task: string | undefined): Mis
   return { repo, task };
 }
 
-/** A session without the last screen lines of an ended group: one session's screen does not reach another (§8, ADR-36). */
-function agentSession({ run, ...session }: Session): AgentSession {
+/**
+ * A session without the last screen lines of an ended group and without its agent dialog, which is read from the screen:
+ * one session's screen does not reach another (§8, ADR-36, ADR-66).
+ */
+function agentSession({ run, dialog: _dialog, ...session }: Session): AgentSession {
   if (run.kind !== "exited") return { ...session, run };
   const { lastLines: _, ...exited } = run;
   return { ...session, run: exited };

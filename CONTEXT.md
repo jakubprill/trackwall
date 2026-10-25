@@ -374,6 +374,14 @@ A rule that infers the task state from hooks, terminal sequences, the look of th
 Enter, a digit 1–9, Esc or Ctrl+C sent to the session terminal as a whole chunk of input (`enter`, `choice`, `escape`, `interrupt`). It answers an approval request or interrupts a turn, which Copilot CLI does not report with a hook, so it is the source of the `keyboard` state; a recording stores only the kind of key.
 _Avoid_: input (that is the whole content from the keyboard), shortcut
 
+**Agent dialog** (`AgentDialog`, `Session.dialog`, `readAgentDialog`; API `answer-dialog`):
+What Copilot CLI asks on a session's screen, read by the daemon from the screen image (ADR-66): an **approval** (run a command, change a file) with Copilot CLI's own options, which the tray panel and Home answer by typing the option's digit, or Esc for "Stop the agent", into the session; or a **question** from the agent (its form), only shown. An answer names the dialog by its id, and the daemon types nothing once the screen shows another one. Never sent to agents over MCP.
+_Avoid_: popup, prompt (that is the text sent to an agent), permission request (Copilot CLI's internal name)
+
+**Tool permission rule** (`toolPermissions` in `workspace.yaml`, `ToolPermissionRules`, `sessionToolPermissions`):
+Patterns of Copilot CLI tools (`shell(git push)`, `write`) a session may use without asking (`allow`) or never (`deny`), for every session or for repos matching `repos`, given to each new session as `--allow-tool` and `--deny-tool` (ADR-66). By hand only.
+_Avoid_: permission (without qualification), allowlist
+
 **Session plugin** (`writeCopilotPlugin`):
 A directory with `plugin.json` and `hooks.json` that the daemon gives Copilot CLI through `--plugin-dir`, so that hooks report the state of this one session only (ADR-17).
 _Avoid_: plugin (without qualification), hook configuration

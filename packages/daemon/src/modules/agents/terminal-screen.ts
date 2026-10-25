@@ -46,6 +46,12 @@ export class TerminalScreen {
     this.#terminal.resize(cols, rows);
   }
 
+  /** The visible lines as plain text, top to bottom, as far as the emulator has processed the output (ADR-66). */
+  lines(): string[] {
+    const buffer = this.#terminal.buffer.active;
+    return Array.from({ length: this.#terminal.rows }, (_, y) => buffer.getLine(buffer.baseY + y)?.translateToString(true) ?? "");
+  }
+
   /**
    * Attaches a viewer: `onSnapshot` gets the screen image after all output so far has been processed, and the viewer every
    * following chunk. Returns the detach function.

@@ -21,7 +21,6 @@ if (turn === undefined) throw new Error(`no demo turn for ${basename(process.cwd
 const dim = (text: string) => `\x1b[2m${text}\x1b[0m`;
 const accent = (text: string) => `\x1b[36m${text}\x1b[0m`;
 const ok = (text: string) => `\x1b[32m${text}\x1b[0m`;
-const warn = (text: string) => `\x1b[33m${text}\x1b[0m`;
 const line = (text = "") => process.stdout.write(`${text}\r\n`);
 
 process.stdout.write(`\x1b]0;${turn.prompt}\x07`);
@@ -50,16 +49,38 @@ if (turn.ending === "working") {
   think(tick);
   setInterval(() => think(++tick), 2000);
 } else if (turn.ending === "approval") {
-  line(warn("Allow this command?"));
-  line(dim("  mvn -q test -pl ."));
-  line();
-  line(`  ${accent("1. Yes")}   2. Yes, and don't ask again   3. No`);
-  fire("notification", { notification_type: "permission_prompt", message: "Allow bash: mvn -q test -pl ." });
+  approvalDialog("Run the tests", "mvn -q test -pl .");
+  fire("notification", { notification_type: "permission_prompt", message: "Run command: mvn -q test -pl ." });
 } else {
   for (const text of turn.answer) line(text);
   line();
   line(`${accent(">")} `);
   fire("agentStop", { stopReason: "end_turn" });
+}
+
+/**
+ * The approval box of Copilot CLI 1.0.103, in the layout the daemon reads as an agent dialog (ADR-66), so the tray panel
+ * and Home show it in the screenshots.
+ */
+function approvalDialog(title: string, command: string): void {
+  const width = Math.min(process.stdout.columns || 100, 100);
+  const inner = width - 4;
+  const row = (text = "") => line(`│ ${text.padEnd(inner)} │`);
+  line(`╭${"─".repeat(width - 2)}╮`);
+  row(title);
+  row("─".repeat(inner));
+  row(`╭${"─".repeat(inner - 2)}╮`);
+  row(`│ ${command.padEnd(inner - 4)} │`);
+  row(`╰${"─".repeat(inner - 2)}╯`);
+  row();
+  row("Do you want to run this command?");
+  row();
+  row("❯ 1. Yes");
+  row("  2. Yes, and don't ask again for `mvn` in this repo");
+  row("  3. No, and tell Copilot what to do differently (Esc to stop)");
+  row();
+  row("↑/↓ to navigate · enter to select · esc to cancel");
+  line(`╰${"─".repeat(width - 2)}╯`);
 }
 
 // Keep the session open until Trackwall stops it, as an interactive Copilot CLI does.

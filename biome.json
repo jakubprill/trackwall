@@ -158,6 +158,7 @@
                       "!../../infra/env-key.ts",
                       "!../../infra/path-inside.ts",
                       "!../../infra/xml.ts",
+                      "!../../infra/glob.ts",
                       "!../../infra/wait-limit.ts",
                       "!../../platform/**"
                     ],

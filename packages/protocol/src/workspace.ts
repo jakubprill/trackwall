@@ -105,6 +105,36 @@ export type RepoList = z.infer<typeof RepoList>;
 export const RepoWatchState = z.object({ startedAt: z.iso.datetime(), revision: z.number().int().nonnegative() });
 export type RepoWatchState = z.infer<typeof RepoWatchState>;
 
+/**
+ * A Copilot CLI tool permission pattern (ADR-66), `kind` or `kind(argument)` as `copilot help permissions` describes
+ * it: `shell(git push)`, `shell(mvn:*)`, `write`, `trackwall(get_repo)`. It reaches Copilot CLI as one argument
+ * (`--allow-tool=<pattern>`), so it is one line without control characters.
+ */
+export const ToolPermissionPattern = z
+  .string()
+  .min(1)
+  .max(300)
+  // `refine` instead of `regex`, so that `\p{Cc}` is read with the `u` flag (as in `visibleText`).
+  .refine((p) => /^[A-Za-z0-9_.-]+(?:\([^\p{Cc}]*\))?$/u.test(p), {
+    message: "a tool permission is `kind` or `kind(argument)` on one line, e.g. `shell(git push)`",
+  });
+
+/**
+ * Tool permission rules from `workspace.yaml` (`toolPermissions`, ADR-66), by hand only: every rule whose `repos`
+ * patterns match a session's repo identifier (`*` without `/`, ignoring case) adds its patterns to the session's
+ * `--allow-tool` and `--deny-tool`; a rule without `repos` applies to every session, the supervisor included. Copilot
+ * CLI applies them, and a denial wins over an approval.
+ */
+export const ToolPermissionRule = z
+  .object({
+    repos: z.array(z.string().min(1).max(300)).min(1).optional(),
+    allow: z.array(ToolPermissionPattern).default([]),
+    deny: z.array(ToolPermissionPattern).default([]),
+  })
+  .strict();
+export const ToolPermissionRules = z.array(ToolPermissionRule);
+export type ToolPermissionRules = z.infer<typeof ToolPermissionRules>;
+
 export const WorkspaceSettings = z.object({
   projectsDir: ProjectsDir,
   /** The full path of `workspace.yaml`, so that the user knows which file to edit by hand. */

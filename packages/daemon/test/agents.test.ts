@@ -117,6 +117,23 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     expect(existsSync(join(home, "sessions", started.id))).toBe(false);
   }, 60_000);
 
+  test("a session starts with the workspace's tool permissions as Copilot CLI's own approval rules (ADR-66)", async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
+    const permissions = { allow: ["shell(mvn:*)", "write"], deny: ["shell(git push)"] };
+    const { agents, procs } = makeAgents({ shop: repoDir }, undefined, null, permissions);
+    cleanups.push(() => procs.stopAll());
+
+    const started = await agents.start("shop");
+    const window = viewer(agents, started.id);
+    await waitFor(agents, started.id, () => window.text().includes("Argument: --deny-tool"), "tool permission arguments");
+
+    expect(window.text()).toContain("Argument: --allow-tool=shell(mvn:*)");
+    expect(window.text()).toContain("Argument: --allow-tool=write");
+    expect(window.text()).toContain("Argument: --deny-tool=shell(git push)");
+    window.attachment.detach();
+    await agents.stop(started.id);
+  }, 60_000);
+
   test("the supervisor starts in the projects folder, with no repo and the supervisor's instructions", async () => {
     const projectsDir = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
     const { agents, procs, home } = makeAgents({}, undefined, projectsDir);
@@ -210,7 +227,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
         stop: async () => undefined,
         liveIn: () => false,
       },
-      repos: { repoPath: async () => repoDir, projectsDir: async () => repoDir },
+      repos: { repoPath: async () => repoDir, projectsDir: async () => repoDir, toolPermissions: () => ({ allow: [], deny: [] }) },
       vcs: new Vcs(),
       home: mkdtempSync(join(tmpdir(), "trackwall-agents-")),
       copilot: ["copilot-that-does-not-exist"],
