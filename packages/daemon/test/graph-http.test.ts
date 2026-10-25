@@ -20,11 +20,11 @@ import { fixtureFiles } from "./support/spring-fixtures.ts";
 
 const parsers = await loadSyntaxParsers();
 
-const CONFIG_FILE = "/home/ja/.trackwall/workspace.yaml";
+const CONFIG_FILE = "/home/me/.trackwall/workspace.yaml";
 const NO_CONFIG: GraphConfig = { packages: {}, apps: {}, edges: [] };
 const SHOP = ["orders-api", "orders-bff", "payments", "legacy-reports", "shop-web"];
 
-/** Karty repo sklepu z fixture'ów (`test/fixtures/spring`), policzone bez gita. */
+/** The cards of the shop repos from the fixtures (`test/fixtures/spring`), computed without git. */
 function shopCards(): GraphCardInput[] {
   return SHOP.map((repo) => ({ kind: "ok", repo, remote: null, card: extractCard(snapshotOf(fixtureFiles(repo)), parsers), tags: [] }));
 }
@@ -79,18 +79,18 @@ function repo(id: string, repoCard: RepoCard, remote: string | null = null): Gra
   return { kind: "ok", repo: id, remote, card: repoCard, tags: [] };
 }
 
-describe("krawędzie http na repo sklepu", () => {
-  test("Feign, WebClient, RestTemplate i adresy frontendu dają krawędzie z pewnością z tego, co je łączy", () => {
+describe("http edges on the shop repos", () => {
+  test("Feign, WebClient, RestTemplate and frontend addresses give edges with a confidence from what joins them", () => {
     const graph = buildGraph(shopCards(), { config: NO_CONFIG, file: CONFIG_FILE, problems: [] });
 
     expect(graph.edges.map((e) => [e.from, e.to, e.kind, e.key, e.confidence])).toEqual([
-      // Same ścieżki pasujące do endpointów jednego repo: adres bazowy jest poza konfiguracją.
+      // Only paths matching the endpoints of one repo: the base address is outside the configuration.
       ["legacy-reports", "orders-api", "http", "OrdersReport", "medium"],
-      // Nazwa aplikacji z @FeignClient i ścieżki obu wywołań zgadzają się z orders-api.
+      // The app name from @FeignClient and the paths of both calls agree with orders-api.
       ["orders-bff", "orders-api", "http", "orders-api", "exact"],
-      // Host z adresu WebClient to spring.application.name, a /api z adresu i /payments/{orderId} to endpoint.
+      // The host from the WebClient address is spring.application.name, and /api from the address plus /payments/{orderId} is an endpoint.
       ["orders-bff", "payments", "http", "payments-service", "exact"],
-      // localhost:8090 z .env i proxy Vite to port aplikacji orders-bff.
+      // localhost:8090 from .env and the Vite proxy is the port of the orders-bff app.
       ["shop-web", "orders-bff", "http", "localhost:8090", "medium"],
     ]);
     expect(graph.nodes.map((n) => [n.repo, n.apps, n.endpoints])).toEqual([
@@ -102,7 +102,7 @@ describe("krawędzie http na repo sklepu", () => {
     ]);
   });
 
-  test("krawędź klienta Feign ma dowody: adnotację, adres z każdego profilu, aplikację celu i pary wywołanie–endpoint", () => {
+  test("a Feign client's edge has evidence: the annotation, the address from each profile, the target app and call–endpoint pairs", () => {
     const graph = buildGraph(shopCards(), { config: NO_CONFIG, file: CONFIG_FILE, problems: [] });
     const feign = graph.edges.find((e) => e.from === "orders-bff" && e.to === "orders-api");
 
@@ -150,13 +150,13 @@ describe("krawędzie http na repo sklepu", () => {
   });
 });
 
-describe("krawędzie http: dopasowanie celu", () => {
-  test("nazwa aplikacji daje exact tylko wtedy, gdy każde wywołanie ma endpoint w repo celu, a wywołanie pasujące do dwóch endpointów jest dowodem obu", () => {
+describe("http edges: target matching", () => {
+  test("an app name gives exact only when every call has an endpoint in the target repo, and a call matching two endpoints is evidence of both", () => {
     const calls = (...paths: string[]) =>
       paths.map((path, i) => ({ method: "GET" as const, path, evidence: { path: "src/main/java/C.java", line: 10 + i } }));
     const graph = buildGraph(
       [
-        repo("bff", card([], [client({ via: "feign", name: "OrdersClient", app: "orders", calls: calls("/orders/special", "/nie-ma") })])),
+        repo("bff", card([], [client({ via: "feign", name: "OrdersClient", app: "orders", calls: calls("/orders/special", "/missing") })])),
         repo("orders-api", card([app("orders"), endpoint("/orders/{id}"), endpoint("/orders/special")], [])),
       ],
       { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
@@ -169,7 +169,7 @@ describe("krawędzie http: dopasowanie celu", () => {
     ]);
   });
 
-  test("endpoint przekierowujący wszystko (SPA) nie jest celem wywołań, a pasujące wywołanie jest dowodem każdego pasującego endpointu", () => {
+  test("an endpoint that forwards everything (a SPA) is not a call target, and a matching call is evidence of every matching endpoint", () => {
     const calls = [{ method: "GET" as const, path: "/api/orders/search", evidence: { path: "src/main/java/R.java", line: 20 } }];
     const graph = buildGraph(
       [
@@ -184,7 +184,7 @@ describe("krawędzie http: dopasowanie celu", () => {
     ]);
   });
 
-  test("nazwa aplikacji albo port wskazujące repo klienta kończą szukanie bez krawędzi", () => {
+  test("an app name or port pointing to the client's repo ends the search without an edge", () => {
     const calls = [{ method: "GET" as const, path: "/api/orders/{id}", evidence: { path: "src/main/java/B.java", line: 20 } }];
     const graph = buildGraph(
       [
@@ -205,7 +205,7 @@ describe("krawędzie http: dopasowanie celu", () => {
     expect(graph.edges).toEqual([]);
   });
 
-  test("lb://nazwa w konfiguracji wskazuje aplikację po nazwie, a bez wywołań pewność jest high", () => {
+  test("lb://name in the configuration points to an app by name, and without calls the confidence is high", () => {
     const graph = buildGraph(
       [
         repo("gateway", card([], [client({ name: "spring.cloud.gateway.routes[0].uri", app: "orders", url: "lb://orders" })])),
@@ -216,7 +216,7 @@ describe("krawędzie http: dopasowanie celu", () => {
     expect(graph.edges.map((e) => [e.from, e.to, e.key, e.confidence])).toEqual([["gateway", "orders-api", "orders", "high"]]);
   });
 
-  test("aplikacja o tej samej nazwie w repo klienta nie obniża pewności krawędzi do jedynego innego repo", () => {
+  test("an app with the same name in the client's repo does not lower the confidence of the edge to the only other repo", () => {
     const graph = buildGraph(
       [
         repo("bff", card([app("orders")], [client({ via: "feign", name: "OrdersClient", app: "orders" })])),
@@ -227,7 +227,7 @@ describe("krawędzie http: dopasowanie celu", () => {
     expect(graph.edges.map((e) => [e.to, e.confidence])).toEqual([["orders-api", "high"]]);
   });
 
-  test("adres wspólny dla kilku profili wymienia je wszystkie w dowodzie", () => {
+  test("an address shared by several profiles lists them all in the evidence", () => {
     const graph = buildGraph(
       [
         repo("shop-bff", card([], [client({ app: "orders", url: "http://orders:8080", profiles: ["dev", "prod"] })])),
@@ -238,7 +238,7 @@ describe("krawędzie http: dopasowanie celu", () => {
     expect(graph.edges[0]?.evidence[0]?.detail).toBe("address in config orders.url: orders, http://orders:8080 (profiles: dev, prod)");
   });
 
-  test("ta sama nazwa aplikacji w dwóch repo (klon, fork) daje krawędź do każdego z pewnością medium", () => {
+  test("the same app name in two repos (a clone, a fork) gives an edge to each with medium confidence", () => {
     const graph = buildGraph(
       [
         repo("bff", card([], [client({ via: "feign", name: "OrdersClient", app: "orders" })])),
@@ -253,7 +253,7 @@ describe("krawędzie http: dopasowanie celu", () => {
     ]);
   });
 
-  test("host równy nazwie repo albo ostatniemu członowi adresu repo zdalnego daje krawędź medium", () => {
+  test("a host equal to the repo name or to the last segment of the remote repo address gives a medium edge", () => {
     const graph = buildGraph(
       [
         repo(
@@ -261,32 +261,32 @@ describe("krawędzie http: dopasowanie celu", () => {
           card([], [client({ url: "http://orders-api.shop.svc:8080" }), client({ name: "billing.url", url: "https://billing/api" })]),
         ),
         repo("orders-api", card([], [])),
-        repo("rozliczenia", card([], []), "gitlab.example.com/sklep/billing"),
+        repo("settlements", card([], []), "gitlab.example.com/shop/billing"),
       ],
       { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
     );
     expect(graph.edges.map((e) => [e.to, e.key, e.confidence])).toEqual([
       ["orders-api", "orders-api", "medium"],
-      ["rozliczenia", "billing", "medium"],
+      ["settlements", "billing", "medium"],
     ]);
   });
 
-  test("alias aplikacji z workspace.yaml wskazuje repo dla nazwy, której żadna karta nie ma, a zły alias trafia do configProblems", () => {
+  test("an app alias from workspace.yaml points to a repo for a name no card has, and a bad alias goes to configProblems", () => {
     const graph = buildGraph(
-      [repo("bff", card([], [client({ url: "http://zamowienia.internal.example.com/api" })])), repo("orders-api", card([], []))],
+      [repo("bff", card([], [client({ url: "http://sales.internal.example.com/api" })])), repo("orders-api", card([], []))],
       {
-        config: { packages: {}, apps: { "Zamowienia.internal.example.com": "orders-api", inne: "nie-ma" }, edges: [] },
+        config: { packages: {}, apps: { "Sales.internal.example.com": "orders-api", other: "missing" }, edges: [] },
         file: CONFIG_FILE,
         problems: [],
       },
     );
     expect(graph.edges.map((e) => [e.to, e.key, e.confidence, e.evidence[1]?.detail])).toEqual([
-      ["orders-api", "zamowienia.internal.example.com", "high", "graph.apps: zamowienia.internal.example.com → orders-api"],
+      ["orders-api", "sales.internal.example.com", "high", "graph.apps: sales.internal.example.com → orders-api"],
     ]);
-    expect(graph.configProblems).toEqual(["graph.apps “inne”: no repo “nie-ma” in the repo list (give its id or host/path address)"]);
+    expect(graph.configProblems).toEqual(["graph.apps “other”: no repo “missing” in the repo list (give its id or host/path address)"]);
   });
 
-  test("wywołania bez adresu pasujące do endpointów dwóch repo dają krawędzie low, a ścieżka bez stałego członu nie daje żadnej", () => {
+  test("calls without an address matching the endpoints of two repos give low edges, and a path without a fixed segment gives none", () => {
     const calls = (path: string) => [{ method: "GET" as const, path, evidence: { path: "src/main/java/Report.java", line: 20 } }];
     const graph = buildGraph(
       [
@@ -303,7 +303,7 @@ describe("krawędzie http: dopasowanie celu", () => {
     ]);
   });
 
-  test("klient repo nigdy nie łączy repo z nim samym", () => {
+  test("a repo's client never joins the repo with itself", () => {
     const graph = buildGraph([repo("orders-api", card([app("orders-api", 8081)], [client({ url: "http://localhost:8081" })]))], {
       config: NO_CONFIG,
       file: CONFIG_FILE,
@@ -313,13 +313,13 @@ describe("krawędzie http: dopasowanie celu", () => {
   });
 });
 
-describe("graf i find_endpoint na prawdziwym gicie", () => {
-  // Kilka repo z commitami i dwa liczenia kart na prawdziwym gicie trwają na Windowsie w CI dłużej niż domyślne 5 s.
+describe("the graph and find_endpoint on real git", () => {
+  // Several repos with commits and two card computations on real git take longer than the default 5 s on Windows in CI.
   const REAL_GIT_TIMEOUT = 30_000;
 
   async function setup() {
     const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
-    const projects = mkdtempSync(join(tmpdir(), "trackwall-projekty-"));
+    const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
     const vcs = new Vcs();
     const workspace = new Workspace({
       file: new WorkspaceFile(join(home, "workspace.yaml")),
@@ -335,7 +335,7 @@ describe("graf i find_endpoint na prawdziwym gicie", () => {
   }
 
   test(
-    "karty z commita czytają kontrolery i klientów wybranych wyszukiwaniem, bez kodu testów, a DTO z plików o nazwach typów",
+    "cards from a commit read the controllers and clients picked by search, without test code, and DTOs from files named after the types",
     async () => {
       const { graph, cards } = await setup();
       const found = await graph.findEndpoint("/api/orders/42", "GET");
@@ -349,16 +349,16 @@ describe("graf i find_endpoint na prawdziwym gicie", () => {
         ["orders-bff", "feign", "OrdersClient", "/api/orders/{id}", "exact"],
         ["orders-bff", "feign", "OrdersClient", "/api/orders/{id}", "exact"],
       ]);
-      // Kontroler z src/test nie jest endpointem aplikacji.
+      // A controller from src/test is not an app endpoint.
       expect((await graph.findEndpoint("test-only", undefined)).endpoints).toEqual([]);
-      // Pliki DTO nie mają adnotacji, więc odczyt dociąga je po nazwach typów z kontrolera.
+      // DTO files have no annotations, so the read pulls them in by the type names from the controller.
       expect((await cards.card("orders-api")).card?.dtos.map((d) => d.name)).toEqual(["OrderDto", "OrderLine", "OrderStatus"]);
     },
     REAL_GIT_TIMEOUT,
   );
 
   test(
-    "find_endpoint szuka też po fragmencie ścieżki, handlera i nazwy aplikacji, bez wielkości liter",
+    "find_endpoint also searches by a fragment of the path, handler and app name, case-insensitive",
     async () => {
       const { graph } = await setup();
       const paths = async (query: string) => (await graph.findEndpoint(query, undefined)).endpoints.map((e) => `${e.method} ${e.path}`);
@@ -370,7 +370,7 @@ describe("graf i find_endpoint na prawdziwym gicie", () => {
   );
 
   test(
-    "nowy commit w repo zmienia graf przy następnym pytaniu",
+    "a new commit in a repo changes the graph on the next question",
     async () => {
       const { graph, projects } = await setup();
       expect((await graph.graph()).edges.some((e) => e.from === "orders-api")).toBe(false);
@@ -380,7 +380,7 @@ describe("graf i find_endpoint na prawdziwym gicie", () => {
           "src/main/java/com/example/orders/api/PaymentsCheck.java":
             '@FeignClient(name = "payments-service")\ninterface PaymentsCheck {\n  @PostMapping("/api/payments/{id}") void pay();\n}\n',
         },
-        "Dodaj klienta płatności",
+        "Add the payments client",
       );
       expect((await graph.graph()).edges.filter((e) => e.from === "orders-api").map((e) => [e.to, e.key, e.confidence])).toEqual([
         ["payments", "payments-service", "exact"],
@@ -390,7 +390,7 @@ describe("graf i find_endpoint na prawdziwym gicie", () => {
   );
 
   test(
-    "alias aplikacji z workspace.yaml działa od razu, bez nowego commita",
+    "an app alias from workspace.yaml works at once, without a new commit",
     async () => {
       const { graph, workspace } = await setup();
       const before = await graph.graph();

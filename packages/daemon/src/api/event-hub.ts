@@ -2,28 +2,28 @@ import type { DaemonEvent, DaemonEventOf, DaemonEventType } from "@trackwall/pro
 import type { Facade } from "../facade.ts";
 
 /**
- * Źródło zdarzeń `/ws` (§5.2, ADR-36): migawki tematów z fasady, porównywane co `CHECK_MS`, dopóki ktoś słucha.
- * Zmieniona migawka idzie do wszystkich słuchaczy jako zdarzenie, a nowy słuchacz dostaje najpierw najnowszą migawkę
- * każdego tematu. Porównanie zamiast powiadomień z modułów: stan sesji zmienia się w wielu miejscach (hooki, OSC,
- * klawisze, próg `Stale`, koniec grupy w `procs`), a migawka to odczyt z pamięci daemona, więc jedno porównanie nie
- * zgubi zmiany, o której moduł zapomniałby powiadomić.
+ * The source of `/ws` events (§5.2, ADR-36): topic snapshots from the facade, compared every `CHECK_MS` while someone listens.
+ * A changed snapshot goes to all listeners as an event, and a new listener first gets the latest snapshot of
+ * every topic. Comparing instead of notifications from modules: a session's state changes in many places (hooks, OSC,
+ * keys, the `Stale` threshold, the end of a group in `procs`), and a snapshot is a read from the daemon's memory, so one
+ * comparison does not lose a change a module would forget to notify about.
  */
 
-/** Tyle co cykl sesji (`TICK_MS` w `agents`), z którego przychodzą nowe rekordy hooków. */
+/** The same as the session cycle (`TICK_MS` in `agents`), from which new hook records come. */
 const CHECK_MS = 200;
 
-/** Odczyt migawki każdego tematu; brak tematu z `DaemonEvent` to błąd kompilacji. */
+/** The snapshot read of every topic; a topic from `DaemonEvent` missing here is a compile error. */
 const TOPICS: { [T in DaemonEventType]: (facade: Facade) => DaemonEventOf<T> } = {
   "sessions.changed": (facade) => ({ type: "sessions.changed", payload: facade.agents.sessions() }),
   "mise.running.changed": (facade) => ({ type: "mise.running.changed", payload: facade.mise.running() }),
 };
 
 export interface EventListener {
-  /** Zdarzenie jako gotowa ramka JSON, serializowana raz dla wszystkich słuchaczy. */
+  /** The event as a ready JSON frame, serialised once for all listeners. */
   event: (frame: string) => void;
   /**
-   * Temat, którego migawkę słuchacz już dostał, przestał się dać odczytać: jego migawka jest nieaktualna, a nowej
-   * nie będzie, więc słuchacz musi przestać ją uważać za stan na żywo.
+   * A topic whose snapshot the listener already got can no longer be read: its snapshot is out of date and no new one
+   * will come, so the listener must stop treating it as live state.
    */
   topicFailed: () => void;
 }
@@ -36,9 +36,9 @@ export interface EventHubOptions {
 export class EventHub {
   readonly #o: EventHubOptions;
   readonly #listeners = new Set<EventListener>();
-  /** Ostatnia ramka i migawka jako JSON, po typie; temat, którego nie da się odczytać, tu nie jest. */
+  /** The last frame and snapshot as JSON, by type; a topic that cannot be read is not here. */
   readonly #latest = new Map<DaemonEventType, { frame: string; json: string }>();
-  /** Ostatni błąd odczytu tematu, żeby ten sam błąd co cykl nie zalewał logu. */
+  /** The last error reading a topic, so that the same error every cycle does not flood the log. */
   readonly #failures = new Map<DaemonEventType, string>();
   #timer: NodeJS.Timeout | undefined;
 
@@ -46,7 +46,7 @@ export class EventHub {
     this.#o = o;
   }
 
-  /** Słuchacz dostaje od razu migawkę każdego tematu, potem każdą zmianę; zwraca wypisanie. */
+  /** A listener gets the snapshot of every topic at once, then every change; returns the unsubscribe. */
   subscribe(listener: EventListener): () => void {
     this.#check();
     for (const { frame } of this.#latest.values()) listener.event(frame);
@@ -61,7 +61,7 @@ export class EventHub {
     };
   }
 
-  /** Koniec porównywania; słuchacze, którzy zostali, nie dostaną już zdarzeń. */
+  /** The end of comparing; listeners that remain get no more events. */
   close(): void {
     clearInterval(this.#timer);
     this.#timer = undefined;

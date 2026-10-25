@@ -5,34 +5,38 @@ import { readBody } from "../api/body.ts";
 import { TOOL_REGISTRATIONS, type ToolContext } from "./tools.ts";
 
 /**
- * Serwer MCP daemona w transporcie Streamable HTTP (§5.3, ADR-24), bez sesji MCP: każde żądanie dostaje świeży
- * `McpServer` z tymi samymi narzędziami, bo stan trzyma fasada, a nie serwer. SDK obsługuje i rewizję 2026-07-28,
- * i starsze klienty z `initialize` (bezstanowo). Host, Origin i token daemona sprawdza wcześniej `handle()`
- * w `api/server.ts`, jak dla każdej trasy (AGENTS.md, Bezpieczeństwo); tu tylko token sesji (ADR-39), po którym
- * narzędzia wiedzą, która sesja Trackwall woła.
+ * The daemon's MCP server in the Streamable HTTP transport (§5.3, ADR-24), without MCP sessions: every request gets a fresh
+ * `McpServer` with the same tools, because the facade holds the state, not the server. The SDK handles both revision 2026-07-28
+ * and older clients with `initialize` (statelessly). `handle()` in `api/server.ts` checks the Host, Origin and daemon token
+ * earlier, as for every route (AGENTS.md, Security); here only the session token (ADR-39), by which the
+ * tools know which Trackwall session is calling.
  */
 
-/** Ścieżka serwera MCP: ten sam port, ochrona `Host`/`Origin` i token co API (§5.2). */
+/** The MCP server's path: the same port, `Host`/`Origin` protection and token as the API (§5.2). */
 export const MCP_PATH = "/mcp";
 
 /**
- * Nagłówek z tokenem sesji, który dokłada most stdio sesji Trackwall (`--session-token-file`, ADR-39). Bez niego woła
- * agent spoza Trackwall; z nieznanym tokenem (sesja zamknięta) żądanie jest odrzucane, żeby sesja nie wyglądała na obcą.
+ * The header with the session token that the Stdio bridge of a Trackwall session adds (`--session-token-file`, ADR-39). Without it
+ * the caller is an agent outside Trackwall; with an unknown token (an ended session) the request is rejected, so that the session
+ * does not look foreign.
  */
 export const SESSION_TOKEN_HEADER = "x-trackwall-session-token";
 
-/** Żądania MCP to małe obiekty JSON-RPC; `initialize` z możliwościami klienta mieści się z dużym zapasem. */
+/** MCP requests are small JSON-RPC objects; `initialize` with the client's capabilities fits with a large margin. */
 const MAX_REQUEST_BYTES = 256 * 1024;
 
 export interface McpEndpoint {
-  /** Żądanie z tokenem daemona od sesji `caller` (`null`: agent spoza Trackwall), już rozpoznanej po tokenie sesji. */
+  /**
+   * A request with the daemon token from session `caller` (`null`: an agent outside Trackwall), already recognised by the
+   * session token.
+   */
   handle: (req: IncomingMessage, res: ServerResponse, caller: string | null) => Promise<void>;
   close: () => Promise<void>;
 }
 
 export function createMcpEndpoint(o: ToolContext & { version: string }): McpEndpoint {
   const handler = createMcpHandler(
-    // Sesja, która woła, przychodzi z `handle` jako `authInfo.clientId`: to jedyna droga SDK od żądania do fabryki serwera.
+    // The calling session comes from `handle` as `authInfo.clientId`: the SDK's only path from the request to the server factory.
     ({ authInfo }) => {
       const server = new McpServer({ name: MCP_SERVER_NAME, version: o.version }, { instructions: MCP_INSTRUCTIONS });
       const caller = authInfo?.clientId ?? null;
@@ -43,12 +47,12 @@ export function createMcpEndpoint(o: ToolContext & { version: string }): McpEndp
   );
   return {
     handle: async (req, res, caller) => {
-      // Rozłączony klient przerywa żądanie także w SDK (`request.signal`), nie tylko strumień odpowiedzi.
+      // A disconnected client aborts the request in the SDK too (`request.signal`), not only the response stream.
       const aborted = new AbortController();
       res.once("close", () => {
         if (!res.writableFinished) aborted.abort();
       });
-      // `token` jest w SDK wymagany, ale serwer go nie czyta; sam token sesji nie wychodzi poza `handle()` w API.
+      // `token` is required in the SDK, but the server does not read it; the session token itself never leaves `handle()` in the API.
       const authInfo = caller === null ? undefined : { token: "", clientId: caller, scopes: [] };
       await send(res, await handler.fetch(await toWebRequest(req, aborted.signal), { authInfo }));
     },
@@ -56,7 +60,7 @@ export function createMcpEndpoint(o: ToolContext & { version: string }): McpEndp
   };
 }
 
-/** `IncomingMessage` jako `Request` ze standardu Fetch, którego oczekuje SDK; adres zawsze z loopbacku. */
+/** `IncomingMessage` as the Fetch standard's `Request` the SDK expects; the address always from loopback. */
 async function toWebRequest(req: IncomingMessage, signal: AbortSignal): Promise<Request> {
   const headers = new Headers();
   for (const [name, value] of Object.entries(req.headers)) {
@@ -68,8 +72,8 @@ async function toWebRequest(req: IncomingMessage, signal: AbortSignal): Promise<
 }
 
 /**
- * Odpowiedź SDK (JSON albo strumień SSE) przepisana do `ServerResponse`; rozłączony klient przerywa strumień, a błąd
- * strumienia zrywa połączenie, żeby klient nie czekał na koniec odpowiedzi, która nie przyjdzie.
+ * The SDK's response (JSON or an SSE stream) copied to `ServerResponse`; a disconnected client aborts the stream, and a stream
+ * error breaks the connection, so that the client does not wait for the end of a response that will not come.
  */
 async function send(res: ServerResponse, response: Response): Promise<void> {
   res.writeHead(response.status, Object.fromEntries(response.headers));

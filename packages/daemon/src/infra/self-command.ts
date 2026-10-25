@@ -13,9 +13,9 @@ export function selfCommand(args: readonly string[]): { exec: string; args: stri
 }
 
 /**
- * Bun bez `.env` i `bunfig.toml` z katalogu, w którym uruchomi go tamten program (repo, w którym pracuje agent,
- * ustawiałoby zmienne i preload); `--config` wskazuje pusty `bunfig.toml` paczki daemona. Node z flagami daemona,
- * bo bez nich nie uruchomi TypeScriptu.
+ * Bun without `.env` and `bunfig.toml` from the directory the other program starts it in (the repo the agent works in
+ * would set variables and a preload); `--config` points to the daemon package's empty `bunfig.toml`. Node with the daemon's
+ * flags, because without them it will not run TypeScript.
  */
 function runtimeArgs(): string[] {
   if (runtimeInfo().name === "node") return process.execArgv;

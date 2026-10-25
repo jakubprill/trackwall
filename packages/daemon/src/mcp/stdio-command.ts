@@ -4,9 +4,9 @@ import { defaultTrackwallHome } from "../infra/home.ts";
 import { selfCommand } from "../infra/self-command.ts";
 
 /**
- * Komenda mostu stdio dla tego daemona, do konfiguracji MCP CLI agenta (`copilot mcp add trackwall -- …`) i dla sesji
- * w widoku „Sesje” (ADR-26). Agent uruchamia most w swoim katalogu roboczym i bez zmiennych daemona, więc
- * niedomyślny katalog stanu (tryb deweloperski) trafia do komendy jako `--home`.
+ * The stdio bridge command for this daemon, for an agent CLI's MCP configuration (`copilot mcp add trackwall -- …`) and for sessions
+ * in the "Sessions" view (ADR-26). The agent starts the bridge in its working directory and without the daemon's variables, so
+ * a non-default state directory (development mode) goes into the command as `--home`.
  */
 export function mcpStdioCommand(home: string): string[] {
   const homeArgs = resolve(home) === defaultTrackwallHome() ? [] : ["--home", resolve(home)];
@@ -14,7 +14,10 @@ export function mcpStdioCommand(home: string): string[] {
   return [exec, ...args];
 }
 
-/** Most stdio sesji Copilot CLI z widoku „Sesje”: z plikiem jej tokenu sesji, po którym serwer MCP wie, kto woła (ADR-39). */
+/**
+ * The Stdio bridge of a Copilot CLI session from the "Sessions" view: with the file of its session token, by which the MCP
+ * server knows who is calling (ADR-39).
+ */
 export function sessionMcpStdioCommand(home: string, tokenFile: string): string[] {
   return [...mcpStdioCommand(home), SESSION_TOKEN_FILE_OPTION, tokenFile];
 }

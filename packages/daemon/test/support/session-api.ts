@@ -13,7 +13,7 @@ import { makeRepo } from "./git-repo.ts";
 const fakeCopilot = join(import.meta.dir, "..", "fixtures", "fake-copilot-session.ts");
 const daemonMain = join(import.meta.dir, "..", "..", "src", "main.ts");
 
-/** Projects-folder repos and the `mise` program for a test that needs something other than the single repo `sklep`. */
+/** Projects-folder repos and the `mise` program for a test that needs something other than the single repo `shop`. */
 interface SessionApiOptions {
   /** Repo name and its files in the first commit. */
   repos: Record<string, Record<string, string>>;
@@ -22,11 +22,11 @@ interface SessionApiOptions {
   log?: (msg: string) => void;
 }
 
-const ONE_REPO: SessionApiOptions = { repos: { sklep: { "README.md": "# sklep\n" } }, miseCommand: ["mise"] };
+const ONE_REPO: SessionApiOptions = { repos: { shop: { "README.md": "# shop\n" } }, miseCommand: ["mise"] };
 
 /**
- * API daemona z prawdziwą fasadą i atrapą Copilot CLI w PTY, na folderze z projektami z repo z `options` (domyślnie
- * jedno repo `sklep`): to, co `main.ts` podaje do `startApi`. `stop` zatrzymuje sesje i taski i zamyka API.
+ * The daemon API with a real facade and a fake Copilot CLI in a PTY, on a projects folder with the repos from `options` (by default
+ * one repo, `shop`): what `main.ts` gives to `startApi`. `stop` stops the sessions and mise tasks and closes the API.
  */
 export async function startSessionApi(token: string, options: SessionApiOptions = ONE_REPO) {
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
@@ -49,14 +49,14 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
     token,
     version: "1",
     info: () => {
-      throw new Error("nieużywane");
+      throw new Error("unused");
     },
     onShutdown: () => {},
     facade,
     mcp: createMcpEndpoint({ facade, version: "test", log: options.log ?? (() => {}) }),
     events: new EventHub({ facade, log: () => {} }),
   });
-  /** Akcja API z tokenem; wynik sprawdzony schematem akcji. */
+  /** An API action with the token; the result checked by the action's schema. */
   async function post<Req extends z.ZodType, Data extends z.ZodType>(
     endpoint: Endpoint<Req, Data>,
     body: z.input<Req>,

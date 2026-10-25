@@ -8,10 +8,10 @@ describe("required tools", () => {
       snapshotOf({
         "mise.toml":
           '[tools]\njava = "temurin-21"\nnode = ["22", "20"]\n"npm:prettier" = { version = "3.3.0" }\n"ubi:cli/cli[exe=gh]" = "2.60.0"\n',
-        ".tool-versions": "# komentarz\nmaven 3.9.6\n",
+        ".tool-versions": "# comment\nmaven 3.9.6\n",
         "web/.nvmrc": "v22.12.0\n",
         ".mvn/wrapper/maven-wrapper.properties": "distributionUrl=https://repo.example.com/apache-maven-3.9.9-bin.zip\n",
-        "inny/.nvmrc": "18\n",
+        "other/.nvmrc": "18\n",
       }),
       ["web"],
     );

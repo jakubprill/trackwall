@@ -30,14 +30,14 @@ let api: ApiServer;
 let shutdowns = 0;
 
 beforeAll(async () => {
-  // Katalog nadrzędny o nazwie `assets` sprawdza, że cache zależy od ścieżki względem UI, nie całej ścieżki.
+  // A parent directory named `assets` checks that caching depends on the path relative to the UI, not the whole path.
   const parent = join(mkdtempSync(join(tmpdir(), "trackwall-ui-")), "assets");
   const uiDir = join(parent, "ui");
   mkdirSync(join(uiDir, "assets"), { recursive: true });
   writeFileSync(join(uiDir, "index.html"), "<!doctype html><title>trackwall</title>");
   writeFileSync(join(uiDir, "assets", "app.js"), "console.log(1)");
-  // Plik tuż obok katalogu UI: cel prób wyjścia poza katalog w teście path traversal.
-  writeFileSync(join(parent, "trackwall-secret.txt"), "nie do odczytu");
+  // A file right next to the UI directory: the target of attempts to leave the directory in the path traversal test.
+  writeFileSync(join(parent, "trackwall-secret.txt"), "not to be read");
   api = await startApi({
     token: TOKEN,
     version: "9.9.9",
@@ -63,12 +63,12 @@ beforeAll(async () => {
 
 afterAll(() => api.close());
 
-/** Adresy, które daemon kazał otworzyć systemowi (`openUrl`), zamiast prawdziwej przeglądarki. */
+/** The addresses the daemon asked the system to open (`openUrl`), instead of a real browser. */
 const openedUrls: string[] = [];
 /** Folders the daemon asked the system to open (`openFolder`), instead of a real Explorer or Finder. */
 const openedFolders: string[] = [];
 
-/** Fasada na pustym katalogu stanu, serwer MCP i zdarzenia na niej: to, co `main.ts` podaje do `startApi`. */
+/** A facade on an empty state directory, with the MCP server and events on it: what `main.ts` gives to `startApi`. */
 function modules() {
   const facade = createFacade({
     home: mkdtempSync(join(tmpdir(), "trackwall-home-")),
@@ -85,38 +85,38 @@ function modules() {
   return { facade, mcp: createMcpEndpoint({ facade, version: "test", log: () => {} }), events: new EventHub({ facade, log: () => {} }) };
 }
 
-/** Żądania przez node:http: pozwala ustawić `Host` i nie idzie przez HTTP_PROXY. */
+/** Requests through node:http: it can set `Host` and does not go through HTTP_PROXY. */
 const req = (path: string, opts: LoopbackOptions = {}) => loopbackRequest(api.port, path, opts);
 const authed = (path: string, opts: LoopbackOptions = {}) => req(path, { token: TOKEN, ...opts });
 
 describe("api", () => {
-  test("health jest publiczne i zwraca wersję", async () => {
+  test("health is public and returns the version", async () => {
     const res = await req("/api/health");
     expect(res.status).toBe(200);
     expect(HealthResult.parse(JSON.parse(res.body))).toEqual({ ok: true, data: { status: "ok", version: "9.9.9" } });
   });
 
-  test("info wymaga tokenu", async () => {
+  test("info requires the token", async () => {
     expect((await req("/api/daemon/info")).status).toBe(401);
     expect((await req("/api/daemon/info", { token: "x".repeat(43) })).status).toBe(401);
-    expect((await req("/api/daemon/info", { token: "krótki" })).status).toBe(401);
+    expect((await req("/api/daemon/info", { token: "short" })).status).toBe(401);
     const res = await authed("/api/daemon/info");
     expect(res.status).toBe(200);
     expect(DaemonInfoResult.parse(JSON.parse(res.body)).ok).toBe(true);
   });
 
-  test("obcy Origin jest odrzucany nawet z poprawnym tokenem", async () => {
+  test("a foreign Origin is rejected even with a valid token", async () => {
     expect((await authed("/api/daemon/info", { headers: { origin: "https://evil.example" } })).status).toBe(403);
     expect((await authed("/api/daemon/info", { headers: { origin: "null" } })).status).toBe(403);
   });
 
-  test("Host spoza loopbacku jest odrzucany (DNS rebinding)", async () => {
+  test("a Host outside loopback is rejected (DNS rebinding)", async () => {
     expect((await req("/api/health", { headers: { host: `evil.example:${api.port}` } })).status).toBe(403);
     expect((await req("/api/health", { headers: { host: `localhost:${api.port}` } })).status).toBe(200);
     expect((await req("/api/health", { headers: { host: "127.0.0.1:1" } })).status).toBe(403);
   });
 
-  test("okno Tauri dostaje nagłówki CORS i preflight", async () => {
+  test("the Tauri window gets CORS headers and preflight", async () => {
     const pre = await req("/api/daemon/info", {
       method: "OPTIONS",
       headers: { origin: "http://tauri.localhost", "access-control-request-headers": "authorization" },
@@ -129,13 +129,13 @@ describe("api", () => {
     expect(res.headers["access-control-allow-origin"]).toBe("tauri://localhost");
   });
 
-  test("strona z daemona nie dostaje CORS, bo jest same-origin", async () => {
+  test("the daemon's own page gets no CORS, because it is same-origin", async () => {
     const res = await req("/api/health", { headers: { origin: `http://127.0.0.1:${api.port}` } });
     expect(res.status).toBe(200);
     expect(res.headers["access-control-allow-origin"]).toBeUndefined();
   });
 
-  test("UI: index, assets, fallback SPA i brak wyjścia poza katalog", async () => {
+  test("UI: index, assets, SPA fallback and no way out of the directory", async () => {
     const index = await req("/");
     expect(index.body).toContain("trackwall");
     expect(index.headers["cache-control"]).toBe("no-cache");
@@ -151,17 +151,17 @@ describe("api", () => {
       "/assets/..%2f..%2ftrackwall-secret.txt",
     ]) {
       const res = await req(path);
-      expect({ path, status: res.status, leaked: res.body.includes("nie do odczytu") }).toEqual({ path, status: 404, leaked: false });
+      expect({ path, status: res.status, leaked: res.body.includes("not to be read") }).toEqual({ path, status: 404, leaked: false });
     }
   });
 
-  test("nieznana trasa API to 404 w kopercie błędu", async () => {
+  test("an unknown API route is 404 in the error envelope", async () => {
     const res = await authed("/api/nope");
     expect(res.status).toBe(404);
     expect(JSON.parse(res.body)).toMatchObject({ ok: false, error: { code: "not_found" } });
   });
 
-  test("shutdown odpowiada, a potem wywołuje zatrzymanie", async () => {
+  test("shutdown answers, then triggers the stop", async () => {
     const res = await authed("/api/daemon/shutdown", { method: "POST" });
     expect(JSON.parse(res.body)).toEqual({ ok: true, data: { stopping: true } });
     await Bun.sleep(20);
@@ -172,7 +172,7 @@ describe("api", () => {
 describe("api workspace", () => {
   const post = (path: string, body: string) => authed(path, { method: "POST", headers: { "content-type": "application/json" }, body });
 
-  test("każda akcja z kontraktów workspace, kart, grafu, mise i batch ma trasę w daemonie", () => {
+  test("every action of the workspace, cards, graph, mise and batch contracts has a route in the daemon", () => {
     const endpoints = [
       ...Object.values(workspaceApi),
       ...Object.values(cardsApi),
@@ -183,21 +183,21 @@ describe("api workspace", () => {
     expect(endpoints.filter((endpoint) => !postRoutes.has(endpoint.path))).toEqual([]);
   });
 
-  test("trasy workspace wymagają tokenu", async () => {
+  test("workspace routes require the token", async () => {
     expect((await req(workspaceApi.list.path, { method: "POST" })).status).toBe(401);
   });
 
-  test("po ustawieniu folderu z projektami jego repo są na liście ze stanem z gita", async () => {
-    const projects = mkdtempSync(join(tmpdir(), "trackwall-projekty-"));
-    makeRepo({ "a.txt": "1" }, "sklep", projects);
+  test("after the projects folder is set, its repos are on the list with their state from git", async () => {
+    const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
+    makeRepo({ "a.txt": "1" }, "shop", projects);
     const set = await post(workspaceApi.setProjectsDir.path, JSON.stringify({ path: projects }));
     expect(set.status).toBe(200);
 
     const list = apiResult(RepoList).parse(JSON.parse((await post(workspaceApi.list.path, "")).body));
-    expect(list.ok && list.data.repos.map((r) => [r.id, r.status.kind])).toEqual([["sklep", "ok"]]);
+    expect(list.ok && list.data.repos.map((r) => [r.id, r.status.kind])).toEqual([["shop", "ok"]]);
 
     const graph = apiResult(RepoGraph).parse(JSON.parse((await post(graphApi.graph.path, "")).body));
-    expect(graph.ok && graph.data.nodes.map((n) => n.repo)).toEqual(["sklep"]);
+    expect(graph.ok && graph.data.nodes.map((n) => n.repo)).toEqual(["shop"]);
   });
 
   test("open-folder opens the folder of a listed repo in the system, and an unknown repo is 404", async () => {
@@ -212,8 +212,8 @@ describe("api workspace", () => {
     expect(openedFolders).toEqual([join(projects, "shop")]);
   });
 
-  test("nieistniejący folder z projektami to 400 z opisem", async () => {
-    const res = await post(workspaceApi.setProjectsDir.path, JSON.stringify({ path: join(tmpdir(), "trackwall-nie-ma-takiego") }));
+  test("a projects folder that does not exist is 400 with a description", async () => {
+    const res = await post(workspaceApi.setProjectsDir.path, JSON.stringify({ path: join(tmpdir(), "trackwall-no-such-folder") }));
     expect(res.status).toBe(400);
     expect(JSON.parse(res.body)).toMatchObject({
       ok: false,
@@ -221,20 +221,20 @@ describe("api workspace", () => {
     });
   });
 
-  test("ciało niezgodne ze schematem albo niebędące JSON-em to 400 z opisem", async () => {
-    const bad = await post(workspaceApi.tree.path, JSON.stringify({ repo: "sklep", path: "../poza" }));
+  test("a body that does not match the schema or is not JSON is 400 with a description", async () => {
+    const bad = await post(workspaceApi.tree.path, JSON.stringify({ repo: "shop", path: "../outside" }));
     expect(bad.status).toBe(400);
     expect(JSON.parse(bad.body)).toMatchObject({ ok: false, error: { code: "bad_request", message: expect.stringContaining("..") } });
-    expect((await post(workspaceApi.setProjectsDir.path, "{nie json")).status).toBe(400);
+    expect((await post(workspaceApi.setProjectsDir.path, "{not json")).status).toBe(400);
   });
 
-  test("ciało większe niż 64 KB jest odrzucane przed parsowaniem", async () => {
-    const res = await post(workspaceApi.list.path, JSON.stringify({ zbyt: "x".repeat(70_000) }));
+  test("a body larger than 64 KB is rejected before parsing", async () => {
+    const res = await post(workspaceApi.list.path, JSON.stringify({ tooLarge: "x".repeat(70_000) }));
     expect(res.status).toBe(400);
     expect(JSON.parse(res.body)).toMatchObject({ error: { code: "bad_request", message: expect.stringContaining("larger than") } });
   });
 
-  test("link z README otwiera się w systemie tylko jako strona, w postaci kanonicznej", async () => {
+  test("a link from a README opens in the system only as a web page, in canonical form", async () => {
     openedUrls.length = 0;
     for (const url of ["https://example.com/docs?a=1#b", 'https://example.com/a b"c', "https://example.com\\..\\x"]) {
       expect((await post(workspaceApi.openLink.path, JSON.stringify({ url }))).status).toBe(200);
@@ -246,24 +246,24 @@ describe("api workspace", () => {
     expect(openedUrls).toEqual(["https://example.com/docs?a=1#b", "https://example.com/a%20b%22c", "https://example.com/x"]);
   });
 
-  test("nieznane repo to 404, a GET na trasie POST nie istnieje", async () => {
-    const res = await post(workspaceApi.overview.path, JSON.stringify({ repo: "nie-ma" }));
+  test("an unknown repo is 404, and GET on a POST route does not exist", async () => {
+    const res = await post(workspaceApi.overview.path, JSON.stringify({ repo: "missing" }));
     expect(res.status).toBe(404);
     expect((await authed(workspaceApi.list.path)).status).toBe(404);
   });
 
-  test("komenda zbiorcza bez repo albo z nieznanym krokiem to 400, a z nieznanym repo 404, i żadna nie startuje", async () => {
+  test("a batch command without repos or with an unknown step is 400, with an unknown repo 404, and none starts", async () => {
     const noRepos = await post(batchApi.start.path, JSON.stringify({ repos: [], steps: ["build"] }));
     expect(noRepos.status).toBe(400);
     expect(JSON.parse(noRepos.body)).toMatchObject({ error: { message: expect.stringContaining("at least one repo") } });
-    expect((await post(batchApi.start.path, JSON.stringify({ repos: ["sklep"], steps: ["deploy"] }))).status).toBe(400);
-    expect((await post(batchApi.start.path, JSON.stringify({ repos: ["nie-ma"], steps: ["build"] }))).status).toBe(404);
+    expect((await post(batchApi.start.path, JSON.stringify({ repos: ["shop"], steps: ["deploy"] }))).status).toBe(400);
+    expect((await post(batchApi.start.path, JSON.stringify({ repos: ["missing"], steps: ["build"] }))).status).toBe(404);
 
     const last = apiResult(BatchRun.nullable()).parse(JSON.parse((await post(batchApi.run.path, "")).body));
     expect(last).toEqual({ ok: true, data: null });
   });
 
-  test("klon z nazwą, która byłaby opcją gh albo glab, to 400 jeszcze przed uruchomieniem programu", async () => {
+  test("a clone with a name that would be a gh or glab option is 400 before the program even starts", async () => {
     const res = await post(
       workspaceApi.clone.path,
       JSON.stringify({ host: { kind: "gitlab", host: "gitlab.example.com" }, fullName: "--upload-pack=x/y" }),
@@ -276,11 +276,11 @@ describe("api logs", () => {
   const post = (path: string, body: unknown) =>
     authed(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
-  test("każda akcja z kontraktów mise i logs ma trasę w daemonie", () => {
+  test("every action of the mise and logs contracts has a route in the daemon", () => {
     expect([...Object.values(miseApi), ...Object.values(logsApi)].filter((endpoint) => !postRoutes.has(endpoint.path))).toEqual([]);
   });
 
-  test("log taska, który nic nie wypisał, jest pusty, a źródło niezgodne ze schematem to 400", async () => {
+  test("the log of a mise task that printed nothing is empty, and a source that does not match the schema is 400", async () => {
     const source = { kind: "mise-task", repo: "web", miseTask: "dev" };
     const empty = await post(logsApi.tail.path, { source, limit: 100 });
     expect(apiResult(LogTail).parse(JSON.parse(empty.body))).toMatchObject({ ok: true, data: { records: [], dropped: false } });
@@ -292,13 +292,13 @@ describe("api logs", () => {
 });
 
 describe("--allow-origin", () => {
-  test("dodatkowy origin dostaje dostęp i CORS, inne nie", async () => {
+  test("an extra origin gets access and CORS, others do not", async () => {
     const extra = await startApi({
       token: TOKEN,
       version: "1",
       allowOrigins: ["http://127.0.0.1:5173"],
       info: () => {
-        throw new Error("nieużywane");
+        throw new Error("unused");
       },
       onShutdown: () => {},
       ...modules(),

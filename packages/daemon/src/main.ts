@@ -19,7 +19,7 @@ import { runStdioBridge } from "./mcp/stdio-bridge.ts";
 import { mcpStdioCommand, sessionMcpStdioCommand } from "./mcp/stdio-command.ts";
 import { runtimeInfo } from "./platform/runtime.ts";
 
-/** Kody wyjścia czytane przez Tauri. */
+/** Exit codes read by Tauri. */
 const EXIT_USAGE = 2;
 const EXIT_OTHER_VERSION_RUNNING = 3;
 
@@ -28,8 +28,8 @@ async function main(args: DaemonArgs): Promise<void> {
   const uiDir = resolveUiDir(args.uiDir);
   const startedAt = new Date().toISOString();
 
-  // Stan potrzebny do zatrzymania jest zadeklarowany przed startem API: shutdown może przyjść żądaniem HTTP
-  // albo sygnałem w dowolnym momencie po otwarciu portu.
+  // The state needed to stop is declared before the API starts: shutdown can come as an HTTP request
+  // or a signal at any moment after the port opens.
   let api: ApiServer | undefined;
   let facade: Facade | undefined;
   let stopWatching = () => {};
@@ -56,7 +56,7 @@ async function main(args: DaemonArgs): Promise<void> {
       log,
     });
     facade.agents.sweepLeftovers();
-    // Pod blokadą startu: drugi daemon nie może w tym czasie uruchomić grupy, którą ten wziąłby za sierotę.
+    // Under the start lock: a second daemon cannot meanwhile start a group that this one would take for an orphan.
     await facade.procs.sweepOrphans().catch((err: unknown) => log(`cleaning up orphans from runtime.json: ${String(err)}`));
     api = await startApi(
       {
@@ -112,19 +112,19 @@ async function main(args: DaemonArgs): Promise<void> {
   }
 }
 
-/** Kolejność: `--ui-dir`, `TRACKWALL_UI_DIR`, `ui/` obok binarki (portable), `packages/ui/dist` (dev). */
+/** Order: `--ui-dir`, `TRACKWALL_UI_DIR`, `ui/` next to the binary (portable), `packages/ui/dist` (dev). */
 function resolveUiDir(explicit: string | undefined): string | undefined {
   if (explicit) return isUiDir(explicit) ? explicit : undefined;
   const candidates = [process.env.TRACKWALL_UI_DIR, join(dirname(process.execPath), "ui")];
   try {
     candidates.push(fileURLToPath(new URL("../../ui/dist", import.meta.url)));
   } catch {
-    // w skompilowanej binarce import.meta.url wskazuje na wirtualny system plików
+    // in a compiled binary import.meta.url points to the virtual file system
   }
   return candidates.find(isUiDir);
 }
 
-/** Token w fragmencie URL: nie trafia do serwera, logów ani nagłówka Referer. UI usuwa go z paska adresu. */
+/** The token in the URL fragment: it does not reach the server, logs or the Referer header. The UI removes it from the address bar. */
 function uiUrl(port: number, token: string): string {
   return `http://127.0.0.1:${port}/#token=${token}`;
 }
@@ -156,8 +156,8 @@ if (commandLine.command === MCP_STDIO_COMMAND) {
 }
 
 /**
- * Most stdio do serwera MCP działającego daemona. stdout należy do protokołu MCP, więc komunikaty mostu idą tylko na
- * stderr; proces kończy się sam po opróżnieniu stdout (`process.exit` ucięłoby odpowiedzi czekające w buforze rury).
+ * The Stdio bridge to the running daemon's MCP server. stdout belongs to the MCP protocol, so the bridge's messages go only to
+ * stderr; the process ends by itself once stdout is drained (`process.exit` would cut off replies waiting in the pipe buffer).
  */
 function runMcpStdio(home: string, sessionTokenFile: string | undefined): void {
   const log = (msg: string) => process.stderr.write(`[mcp-stdio] ${msg}\n`);
@@ -167,7 +167,7 @@ function runMcpStdio(home: string, sessionTokenFile: string | undefined): void {
   });
 }
 
-/** Hook wtyczki sesji: payload na stdin, rekord do `hooks.jsonl`; nic na stdout i zawsze kod 0 (ADR-17). */
+/** The session plugin's hook: payload on stdin, a record to `hooks.jsonl`; nothing on stdout and always exit code 0 (ADR-17). */
 function runHook(event: string | undefined, hooksFile: string | undefined): void {
   const chunks: Buffer[] = [];
   process.stdin.on("data", (chunk: Buffer) => chunks.push(chunk));

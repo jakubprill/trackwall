@@ -14,7 +14,7 @@ beforeAll(async () => {
 
 afterAll(() => daemon.stop());
 
-/** Klient zdarzeń: zbiera zdarzenia sprawdzone kontraktem. */
+/** An event client: collects events checked by the contract. */
 function connect(path: string, protocols: string[], headers: Record<string, string> = {}) {
   const ws = new WebSocket(`ws://127.0.0.1:${daemon.api.port}${path}`, protocols, { headers });
   const events: DaemonEvent[] = [];
@@ -30,41 +30,44 @@ function connect(path: string, protocols: string[], headers: Record<string, stri
 async function until(check: () => boolean, what: string): Promise<void> {
   const deadline = Date.now() + 15_000;
   while (!check()) {
-    if (Date.now() > deadline) throw new Error(`nie doczekano się: ${what}`);
+    if (Date.now() > deadline) throw new Error(`gave up waiting for: ${what}`);
     await new Promise((r) => setTimeout(r, 50));
   }
 }
 
-describe.skipIf(process.versions.bun === undefined)("zdarzenia daemona przez WebSocket /ws", () => {
-  test("klient dostaje najpierw migawkę każdego tematu, a potem nową sesję i jej stan bez odpytywania", async () => {
+describe.skipIf(process.versions.bun === undefined)("daemon events over the /ws WebSocket", () => {
+  test("a client first gets a snapshot of every topic, then a new session and its state without polling", async () => {
     const client = connect("/ws", [EVENTS_SUBPROTOCOL, `bearer.${TOKEN}`]);
     await client.opened;
     expect(client.ws.protocol).toBe(EVENTS_SUBPROTOCOL);
-    await until(() => client.events.length >= 2, "migawki na start");
+    await until(() => client.events.length >= 2, "snapshots at start");
     expect(client.events.map((e) => e.type).sort()).toEqual(DaemonEvent.options.map((o) => o.shape.type.value).sort());
     expect(client.events.find((e) => e.type === "sessions.changed")?.payload).toMatchObject({ sessions: [], tasks: [] });
 
-    const session = await daemon.post(agentsApi.start, { repo: "sklep" });
+    const session = await daemon.post(agentsApi.start, { repo: "shop" });
     const sessionsIn = (e: DaemonEvent) => (e.type === "sessions.changed" ? e.payload.sessions : []);
     await until(
       () => client.events.some((e) => sessionsIn(e).some((s) => s.id === session.id && s.state?.state === "Input")),
-      "stan Input z hooka",
+      "Input state from the hook",
     );
 
     await daemon.post(agentsApi.stop, { session: session.id });
-    await until(() => client.events.some((e) => sessionsIn(e).some((s) => s.id === session.id && s.run.kind === "exited")), "koniec sesji");
+    await until(
+      () => client.events.some((e) => sessionsIn(e).some((s) => s.id === session.id && s.run.kind === "exited")),
+      "end of the session",
+    );
     client.ws.close();
   }, 60_000);
 
-  test("bez tokenu, z obcym Origin, bez podprotokołu zdarzeń albo pod nieznanym adresem połączenie jest odrzucane", async () => {
+  test("a connection without a token, with a foreign Origin, without the events subprotocol or at an unknown address is refused", async () => {
     await expect(connect("/ws", [EVENTS_SUBPROTOCOL]).opened).rejects.toThrow("status 401");
     await expect(connect("/ws", [EVENTS_SUBPROTOCOL, `bearer.${"x".repeat(43)}`]).opened).rejects.toThrow("status 401");
-    // Bez tokenu nieznany adres też daje 401: klient bez tokenu nie pozna adresów daemona.
-    await expect(connect("/ws/inne", [EVENTS_SUBPROTOCOL]).opened).rejects.toThrow("status 401");
+    // Without a token an unknown address also gives 401: a client without a token does not learn the daemon's addresses.
+    await expect(connect("/ws/other", [EVENTS_SUBPROTOCOL]).opened).rejects.toThrow("status 401");
     await expect(connect("/ws", ["trackwall.pty", `bearer.${TOKEN}`]).opened).rejects.toThrow("status 400");
     await expect(connect("/ws", [EVENTS_SUBPROTOCOL, `bearer.${TOKEN}`], { origin: "https://evil.example" }).opened).rejects.toThrow(
       "status 403",
     );
-    await expect(connect("/ws/inne", [EVENTS_SUBPROTOCOL, `bearer.${TOKEN}`]).opened).rejects.toThrow("status 404");
+    await expect(connect("/ws/other", [EVENTS_SUBPROTOCOL, `bearer.${TOKEN}`]).opened).rejects.toThrow("status 404");
   });
 });

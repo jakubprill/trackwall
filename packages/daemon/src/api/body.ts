@@ -2,8 +2,8 @@ import type { IncomingMessage } from "node:http";
 import { DomainError } from "../infra/errors.ts";
 
 /**
- * Całe ciało żądania, najwyżej `maxBytes`: większe jest odrzucane, zanim trafi do pamięci w całości.
- * Wspólne dla tras API i serwera MCP.
+ * The whole request body, at most `maxBytes`: a larger one is rejected before it is held in memory in full.
+ * Shared by the API routes and the MCP server.
  */
 export async function readBody(req: IncomingMessage, maxBytes: number): Promise<Buffer> {
   const chunks: Buffer[] = [];

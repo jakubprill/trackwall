@@ -29,7 +29,7 @@ describe("Java and Kotlin syntax trees", () => {
     });
   });
 
-  test("data class Kotlina daje parametry konstruktora", () => {
+  test("a Kotlin data class gives the constructor parameters", () => {
     const parameters = parsers.read("kotlin", "data class OrderDto(val id: String, val lines: List<Line> = emptyList())", (root) =>
       root.descendantsOfType("class_parameter").map((p) => p.text),
     );

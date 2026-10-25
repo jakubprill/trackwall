@@ -40,7 +40,7 @@ async function until(check: () => boolean | Promise<boolean>, what: string): Pro
 
 describe.skipIf(process.versions.bun === undefined)("session terminal over WebSocket", () => {
   test("a window in front of the user marks the waiting session seen, and the session no longer waits for you", async () => {
-    const session = await daemon.post(agentsApi.start, { repo: "sklep" });
+    const session = await daemon.post(agentsApi.start, { repo: "shop" });
     const current = async () => (await daemon.post(agentsApi.sessions, {})).sessions.find((s) => s.id === session.id);
     await until(async () => (await current())?.needsAttention === true, "waiting for you after sessionStart");
 
@@ -55,7 +55,7 @@ describe.skipIf(process.versions.bun === undefined)("session terminal over WebSo
   }, 60_000);
 
   test("the terminal gets the session screen, and keys and size reach Copilot CLI", async () => {
-    const session = await daemon.post(agentsApi.start, { repo: "sklep" });
+    const session = await daemon.post(agentsApi.start, { repo: "shop" });
     const client = connect(session.id, [PTY_SUBPROTOCOL, `bearer.${TOKEN}`]);
     await client.opened;
     expect(client.ws.protocol).toBe(PTY_SUBPROTOCOL);

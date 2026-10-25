@@ -15,19 +15,19 @@ import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
 
 /**
- * Narzędzia MCP daemona (§5.3, ADR-24): każde to cienkie mapowanie na fasadę, więc agent widzi ten sam stan co UI
- * (§1.1). Żadne nie zmienia konfiguracji ani repo (§8) i żadne nie uruchamia sesji, nie odpowiada w niej ani jej nie
- * zatrzymuje. Zapisują tylko `propose_task` (propozycja, którą zadaniem robi dopiero użytkownik w UI) i `report_result`
- * (podsumowanie własnego zadania sesji), ADR-39; procesy uruchamiają i zatrzymują tylko `run_mise_task`
- * i `stop_mise_task`: task mise z aktualnej listy zaufanej konfiguracji repo, jak przycisk w UI (ADR-41).
+ * The daemon's MCP tools (§5.3, ADR-24): each is a thin mapping onto the facade, so the agent sees the same state as the UI
+ * (§1.1). None changes the configuration or a repo (§8), and none starts a session, answers in one or stops one. Only
+ * `propose_task` (a proposal, which only the user turns into a task in the UI) and `report_result` (the summary of the
+ * session's own task) write anything, ADR-39; only `run_mise_task` and `stop_mise_task` start and stop processes: a mise
+ * task from the current list of the repo's trusted configuration, like the button in the UI (ADR-41).
  */
 
 /**
- * README dłuższe niż to i tak nie mieści się sensownie w kontekście agenta (wynik niesie je dwa razy: w tekście
- * i w `structuredContent`); limit podglądu w UI (512 KB) jest dla człowieka, który przewija.
+ * A README longer than this does not fit sensibly into the agent's context anyway (the result carries it twice: in the
+ * text and in `structuredContent`); the preview limit in the UI (512 KB) is for a human who scrolls.
  */
 const README_MAX_CHARS = 32_000;
-/** Ile ostatnich commitów zwraca `get_repo`: tyle wystarcza, żeby agent wiedział, co się ostatnio działo. */
+/** How many recent commits `get_repo` returns: enough for the agent to know what has happened lately. */
 const RECENT_COMMITS = 10;
 /**
  * What a session may do only in its own repo, as the `bad_request` message of `assertCallerRepo` puts it: mise tasks
@@ -39,38 +39,38 @@ const SERVICE_ACTION = "start and stop only the service";
 export interface ToolContext {
   facade: Facade;
   /**
-   * Linia logu daemona o wywołaniu (narzędzie, czas, wynik), bez argumentów poza narzędziami niszczącymi (ADR-41);
-   * tabela `audit` przyjdzie z SQLite.
+   * A daemon log line about the call (tool, time, result), without arguments except for destructive tools (ADR-41);
+   * the `audit` table will come with SQLite.
    */
   log: (msg: string) => void;
 }
 
-/** Jedno wywołanie: sesja, która woła (po tokenie sesji, ADR-39; `null` dla agenta spoza Trackwall), i przerwanie przez klienta. */
+/** One call: the calling session (by session token, ADR-39; `null` for an agent outside Trackwall), and cancellation by the client. */
 interface ToolCall {
   caller: string | null;
   signal: AbortSignal;
 }
 
-/** Wykonanie narzędzia na fasadzie: argumenty i wynik mają typy schematów z jego kontraktu. */
+/** A tool's run on the facade: arguments and result have the types of the schemas from its contract. */
 type ToolRun<Args extends z.ZodObject, Result extends z.ZodObject> = (
   facade: Facade,
   args: z.output<Args>,
   call: ToolCall,
 ) => Promise<z.input<Result>>;
 
-/** Rejestruje jedno narzędzie w serwerze MCP utworzonym dla jednego żądania jednej sesji (`caller`). */
+/** Registers one tool in the MCP server created for one request of one session (`caller`). */
 type ToolRegistration = (server: McpServer, ctx: ToolContext & { caller: string | null }) => void;
 
 /**
- * Narzędzie z kontraktu (`mcpTools` w protocol) i jego wykonanie na fasadzie; wynik musi zgadzać się z kontraktem
- * co do typu, jak trasy API w `api/routes.ts`.
+ * A tool from the contract (`mcpTools` in protocol) and its run on the facade; the result must match the contract's
+ * type, like the API routes in `api/routes.ts`.
  */
 function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
   tool: McpTool<Args, Result>,
   run: ToolRun<Args, Result>,
 ): ToolRegistration {
-  // SDK typuje argumenty z typu schematu, a z parametru generycznego nie umie; argumenty przechodzą więc przez
-  // schemat narzędzia jeszcze raz (SDK sprawdza je już przed wywołaniem), co daje ich dokładny typ bez rzutowania.
+  // The SDK types the arguments from the schema's type and cannot do it from a generic parameter; so the arguments pass
+  // through the tool's schema once more (the SDK already checks them before the call), which gives their exact type without a cast.
   const inputSchema: z.ZodObject = tool.args;
   const outputSchema: z.ZodObject = tool.result;
   return (server, ctx) => {
@@ -84,7 +84,8 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
       },
       async (args, extra) => {
         const started = Date.now();
-        // Wołająca sesja w logu, bo propozycja i podsumowanie zapisują coś w jej imieniu; tabela `audit` przyjdzie z SQLite.
+        // The calling session goes into the log, because a proposal and a summary write something on its behalf; the `audit` table
+        // will come with SQLite.
         const label = ctx.caller === null ? tool.name : `${tool.name} (session ${ctx.caller})`;
         try {
           const parsed = tool.args.parse(args);
@@ -96,7 +97,7 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
           return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
         } catch (err) {
           ctx.log(`${label}: error in ${Date.now() - started} ms: ${String(err)}`);
-          // Błąd zgłoszony świadomie przez moduł idzie do agenta z kodem i treścią, jak w API (§5.2); inny bez szczegółów.
+          // An error a module raised on purpose goes to the agent with its code and message, as in the API (§5.2); others without details.
           const text = err instanceof DomainError ? `${err.code}: ${err.message}` : "internal: daemon error";
           return { content: [{ type: "text", text }], isError: true };
         }
@@ -107,10 +108,11 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
 
 type ToolRuns = { [K in keyof typeof mcpTools]: (typeof mcpTools)[K] extends McpTool<infer A, infer R> ? ToolRun<A, R> : never };
 
-/** Po jednym wykonaniu na każde narzędzie z `mcpTools`: brak któregoś to błąd kompilacji. */
+/** One run for every tool in `mcpTools`: a missing one is a compile error. */
 const runs: ToolRuns = {
   listRepos: async (facade, { tags: wanted = [] }) => {
-    // Bez filtra lista repo nie zależy od tagów: zły `repoTags` w workspace.yaml zostawia repo bez tagów, nie bez listy.
+    // Without a filter the repo list does not depend on tags: a bad `repoTags` in workspace.yaml leaves repos without tags,
+    // not without a list.
     const tags = facade.cards.tags().catch((err: unknown) => {
       if (wanted.length > 0) throw err;
       return [];
@@ -125,8 +127,8 @@ const runs: ToolRuns = {
       facade.workspace.repo(id),
       facade.workspace.overview(id),
       facade.mise.tasks(id),
-      // Karta nie zabiera README i tasków: repo, którego karty nie da się policzyć, ma tu tylko puste tagi, a powód
-      // podaje `get_repo_card`.
+      // A card that cannot be computed does not take away the README and mise tasks: such a repo only has empty tags here, and
+      // `get_repo_card` gives the reason.
       facade.cards.card(id).then(
         (result) => result.tags.map((t) => t.name),
         () => [],
@@ -145,7 +147,7 @@ const runs: ToolRuns = {
   },
   getRepoCard: (facade, { repo }) => facade.cards.card(repo),
   tail: async (facade, { repo, task, miseTask, sinceSeq, limit }) => {
-    // Repo musi istnieć (`not_found` jak w get_repo); log taska, który nic nie wypisał, jest pusty.
+    // The repo must exist (`not_found` as in get_repo); the log of a mise task that printed nothing is empty.
     await facade.workspace.repo(repo);
     const target = miseTarget(facade, repo, task);
     return facade.logs.tail({ source: miseTaskLogSource(target.repo, target.task, miseTask), sinceSeq, limit });
@@ -171,7 +173,7 @@ const runs: ToolRuns = {
     return facade.workspace.searchCode(query, repos ? repos.filter((id) => tagged.includes(id) || isUnknown(id)) : tagged);
   },
   listSessions: async (facade, { repo }, { caller }) => {
-    // Repo musi istnieć (`not_found` jak w get_repo): literówka w identyfikatorze nie może wyglądać jak „brak sesji”.
+    // The repo must exist (`not_found` as in get_repo): a typo in the id must not look like "no sessions".
     if (repo !== undefined) await facade.workspace.repo(repo);
     const { sessions, tasks, proposals } = facade.agents.sessions();
     const inRepo = (item: { repo: string | null }) => repo === undefined || item.repo === repo;
@@ -186,7 +188,7 @@ const runs: ToolRuns = {
     const session = agentSession(facade.agents.session(id));
     if (session.task === null) return { session, task: null, changes: null, changesError: null };
     const task = facade.agents.task(session.task);
-    // Sesja i zadanie istnieją, nawet gdy zmian nie da się policzyć (worktree usunięty ręcznie, trwa zakończenie).
+    // The session and the task exist even when the changes cannot be computed (worktree deleted by hand, ending in progress).
     return facade.agents.taskChangesSummary(task.id).then(
       (changes) => ({ session, task, changes, changesError: null }),
       (err: unknown) => {
@@ -199,7 +201,7 @@ const runs: ToolRuns = {
   proposeTask: async (facade, proposal, { caller }) => ({ proposal: await facade.agents.propose(caller, proposal) }),
   reportResult: async (facade, { summary }, { caller }) => ({ task: facade.agents.reportSummary(caller, summary) }),
   waitForSession: async (facade, { session, task, timeoutSeconds }, { caller, signal }) => {
-    // Schemat narzędzia przepuszcza dokładnie jedno z nich; drugie sprawdzenie daje typ bez rzutowania.
+    // The tool's schema lets through exactly one of them; the second check gives the type without a cast.
     const target = session !== undefined ? { session } : task !== undefined ? { task } : undefined;
     if (!target) throw new DomainError("bad_request", "pass exactly one of session and task");
     const outcome = await facade.agents.waitFor(caller, target, timeoutSeconds * 1000, signal);
@@ -229,8 +231,8 @@ const runs: ToolRuns = {
 };
 
 /**
- * Rejestracje w kolejności `mcpTools`, w której UI wypisuje nazwy. TypeScript nie powiąże `mcpTools[k]` z `runs[k]`
- * w pętli po kluczach, więc lista jest jawna, a jej komplet i kolejność względem `mcpTools` sprawdza test `tools/list`.
+ * Registrations in the order of `mcpTools`, in which the UI lists the names. TypeScript will not tie `mcpTools[k]` to `runs[k]`
+ * in a loop over the keys, so the list is explicit, and the `tools/list` test checks that it is complete and in `mcpTools` order.
  */
 export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.listRepos, runs.listRepos),
@@ -318,20 +320,20 @@ function assertTaskOfRepo(facade: Facade, task: string, repo: string | undefined
   if (repo !== undefined && own !== repo) throw new DomainError("bad_request", `task ${task} is in ${own}, not in ${repo}`);
 }
 
-/** Sesja bez ostatnich linii ekranu zakończonej grupy: ekran jednej sesji nie trafia do innej (§8, ADR-36). */
+/** A session without the last screen lines of an ended group: one session's screen does not reach another (§8, ADR-36). */
 function agentSession({ run, ...session }: Session): AgentSession {
   if (run.kind !== "exited") return { ...session, run };
   const { lastLines: _, ...exited } = run;
   return { ...session, run: exited };
 }
 
-/** Repo łączy się z wynikiem synchronizacji po ścieżce, bo identyfikator może się zmienić razem z nazwą katalogu (ADR-18). */
+/** A repo joins its sync result by path, because the id can change together with the directory name (ADR-18). */
 function agentRepo(repo: Repo, run: SyncRun | null, tags: string[]): AgentRepo {
   const result = run?.repos.find((r) => r.path === repo.path);
   return { ...repo, lastSync: run && result ? { startedAt: run.startedAt, finishedAt: run.finishedAt, result } : null, tags };
 }
 
-/** Nazwy tagów repo; repo, którego git nie czyta, nie ma tagów (jego stan na liście i tak mówi, że jest niedostępne). */
+/** The repo's tag names; a repo git cannot read has no tags (its state on the list says it is unavailable anyway). */
 function tagNames(entry: RepoTags | undefined): string[] {
   return entry?.kind === "ok" ? entry.tags.map((t) => t.name) : [];
 }

@@ -1,12 +1,12 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
-/** Katalog zmyślonych repo sklepu (`test/fixtures/spring`, opis w jego README). */
+/** The directory of the made-up shop repos (`test/fixtures/spring`, described in its README). */
 const SPRING_FIXTURES = join(import.meta.dir, "..", "fixtures", "spring");
 
 /**
- * Pliki repo z fixture'a jako ścieżka w repo (z `/`, jak w gicie) → treść, w kolejności gita (bajtowo po ścieżce):
- * kolejność `readdirSync` zależy od systemu plików, a karta wymienia klientów w kolejności plików.
+ * A fixture repo's files as a path in the repo (with `/`, as in git) → contents, in git's order (bytewise by path):
+ * the `readdirSync` order depends on the file system, and a card lists clients in file order.
  */
 export function fixtureFiles(repo: string): Record<string, string> {
   const root = join(SPRING_FIXTURES, repo);

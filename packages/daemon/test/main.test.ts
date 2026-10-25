@@ -9,11 +9,11 @@ import { RUNTIMES } from "./support/runtimes.ts";
 
 const MAIN = join(import.meta.dir, "..", "src", "main.ts");
 
-/** Czeka na wartość; gdy podany proces skończy się wcześniej, kończy test od razu z jego kodem wyjścia. */
+/** Waits for a value; when the given process ends first, ends the test at once with its exit code. */
 async function waitFor<T>(fn: () => T | undefined, proc?: { exitCode: number | null }, timeoutMs = 10_000): Promise<T> {
   const until = Date.now() + timeoutMs;
   while (Date.now() < until) {
-    if (proc?.exitCode != null) throw new Error(`proces zakończył się kodem ${proc.exitCode}, zanim pojawiła się wartość`);
+    if (proc?.exitCode != null) throw new Error(`the process exited with code ${proc.exitCode} before the value appeared`);
     const v = fn();
     if (v !== undefined) return v;
     await Bun.sleep(50);
@@ -30,8 +30,8 @@ function isAlive(pid: number): boolean {
   }
 }
 
-describe.each(RUNTIMES)("proces daemona pod %s", (name, runtime) => {
-  test("start, drugi start z tą samą wersją kończy się 0, shutdown sprząta daemon.json", async () => {
+describe.each(RUNTIMES)("daemon process under %s", (name, runtime) => {
+  test("start, a second start with the same version exits with 0, shutdown cleans up daemon.json", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-e2e-"));
     const env = { ...process.env, TRACKWALL_HOME: home };
     const daemon = Bun.spawn([...runtime, MAIN], { env, stdout: "ignore", stderr: "pipe" });
@@ -54,13 +54,13 @@ describe.each(RUNTIMES)("proces daemona pod %s", (name, runtime) => {
     }
   }, 20_000);
 
-  test("równoczesne starty zostawiają dokładnie jeden daemon", async () => {
+  test("simultaneous starts leave exactly one daemon", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-race-"));
     const env = { ...process.env, TRACKWALL_HOME: home };
     const procs = Array.from({ length: 5 }, () => Bun.spawn([...runtime, MAIN], { env, stdout: "ignore", stderr: "ignore" }));
     try {
       const file = await waitFor(() => readDaemonFile(home));
-      // Przegrani kończą się sami kodem 0; zwycięzca działa dalej.
+      // The losers exit by themselves with code 0; the winner keeps running.
       const losers = procs.filter((p) => p.pid !== file.pid);
       expect(await Promise.all(losers.map((p) => p.exited))).toEqual([0, 0, 0, 0]);
       expect(procs.filter((p) => isAlive(p.pid)).map((p) => p.pid)).toEqual([file.pid]);
@@ -69,9 +69,9 @@ describe.each(RUNTIMES)("proces daemona pod %s", (name, runtime) => {
     }
   }, 30_000);
 
-  test("pusty TRACKWALL_HOME znaczy domyślny katalog ~/.trackwall, nie błąd", async () => {
+  test("an empty TRACKWALL_HOME means the default directory ~/.trackwall, not an error", async () => {
     const fakeHome = mkdtempSync(join(tmpdir(), "trackwall-userhome-"));
-    // os.homedir(): HOME na Unixie, USERPROFILE na Windowsie.
+    // os.homedir(): HOME on Unix, USERPROFILE on Windows.
     const env = { ...process.env, TRACKWALL_HOME: "", HOME: fakeHome, USERPROFILE: fakeHome };
     const daemon = Bun.spawn([...runtime, MAIN], { env, stdout: "ignore", stderr: "ignore" });
     try {
@@ -84,7 +84,7 @@ describe.each(RUNTIMES)("proces daemona pod %s", (name, runtime) => {
     }
   }, 20_000);
 
-  test("strona UI z --ui-dir jest serwowana, a info podaje runtime, pod którym działa daemon", async () => {
+  test("the UI page from --ui-dir is served, and info gives the runtime the daemon runs under", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-ui-"));
     const ui = mkdtempSync(join(tmpdir(), "trackwall-ui-dir-"));
     writeFileSync(join(ui, "index.html"), "<!doctype html><title>trackwall-test</title>");
@@ -105,7 +105,7 @@ describe.each(RUNTIMES)("proces daemona pod %s", (name, runtime) => {
     }
   }, 20_000);
 
-  test("zły argument kończy się kodem 2", async () => {
+  test("a bad argument exits with code 2", async () => {
     const p = Bun.spawn([...runtime, MAIN, "--port", "abc"], { stdout: "ignore", stderr: "pipe" });
     expect(await p.exited).toBe(2);
   });
