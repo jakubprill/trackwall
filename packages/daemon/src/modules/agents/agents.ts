@@ -10,6 +10,7 @@ import {
   type Task,
   type TaskChanges,
   type TaskChangesSummary,
+  type TaskDiff,
   type TaskMiseConfig,
   type TaskProposal,
   type TaskSharedFiles,
@@ -267,6 +268,11 @@ export class Agents {
   /** Zmiany zadania bez diffu, dla agenta (narzędzie MCP `get_session`). */
   taskChangesSummary(id: string): Promise<TaskChangesSummary> {
     return this.#tasks.summary(id);
+  }
+
+  /** A task's diff for an agent (MCP tool `get_task_diff`), under `paths`, cut within `maxBytes`. */
+  taskDiff(id: string, paths: readonly string[], maxBytes: number): Promise<TaskDiff> {
+    return this.#tasks.diff(id, paths, maxBytes);
   }
 
   openTaskEditor(id: string): void {

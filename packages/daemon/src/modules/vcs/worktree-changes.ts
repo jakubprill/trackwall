@@ -39,12 +39,18 @@ const NO_PATCH: RunOutput = { stdout: Buffer.alloc(0), truncated: false };
 
 /**
  * Zmiany worktree zadania razem z liczbą commitów zadania i niezacommitowanych plików. `maxPatchBytes` 0 pomija diff:
- * git nie liczy treści zmian, a `patch` jest pusty.
+ * git nie liczy treści zmian, a `patch` jest pusty. `paths` (git pathspecs) narrows the files and the diff; the commit
+ * and uncommitted counts stay those of the whole worktree.
  */
-export async function worktreeChanges(dir: string, base: string, maxPatchBytes: number): Promise<TaskChanges> {
+export async function worktreeChanges(
+  dir: string,
+  base: string,
+  maxPatchBytes: number,
+  paths: readonly string[] = [],
+): Promise<TaskChanges> {
   // Do końca każdej: zakończenie zadania czeka na ten odczyt, zanim skasuje worktree, więc odrzucenie jednej części
   // nie może zostawić gita, który nadal czyta katalog.
-  const work = [workingTreeChanges(dir, base, maxPatchBytes), commitCount(dir, base, "HEAD"), uncommittedCount(dir)] as const;
+  const work = [workingTreeChanges(dir, base, maxPatchBytes, paths), commitCount(dir, base, "HEAD"), uncommittedCount(dir)] as const;
   await Promise.allSettled(work);
   const [changes, commits, uncommitted] = await Promise.all(work);
   return { ...changes, commits, uncommitted };
@@ -66,8 +72,13 @@ async function copyIndex(index: string, copy: string): Promise<void> {
   }
 }
 
-/** Katalog roboczy `dir` względem `base` (commit albo drzewo). */
-export async function workingTreeChanges(dir: string, base: string, maxPatchBytes: number): Promise<WorkingTreeChanges> {
+/** Katalog roboczy `dir` względem `base` (commit albo drzewo), only under `paths` (git pathspecs; none is the whole tree). */
+export async function workingTreeChanges(
+  dir: string,
+  base: string,
+  maxPatchBytes: number,
+  paths: readonly string[] = [],
+): Promise<WorkingTreeChanges> {
   const out = (await git(dir, ["rev-parse", "--git-path", "index", "--show-object-format"])).stdout.toString("utf8").trim();
   const [indexPath, objectFormat] = out.split(/\r?\n/);
   const emptyBlob = objectFormat === undefined ? undefined : EMPTY_BLOB.get(objectFormat);
@@ -76,9 +87,9 @@ export async function workingTreeChanges(dir: string, base: string, maxPatchByte
   const tmp = resolve(tmpdir(), `trackwall-index-${randomUUID()}`);
   try {
     await copyIndex(index, tmp);
-    const untrackedTruncated = await addUntracked(dir, tmp, emptyBlob);
+    const untrackedTruncated = await addUntracked(dir, tmp, emptyBlob, paths);
     const diff = (args: string[], maxBytes?: number) =>
-      git(dir, ["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", ...args, base, "--"], {
+      git(dir, ["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", ...args, base, "--", ...paths], {
         indexFile: tmp,
         timeoutMs: CHANGES_TIMEOUT_MS,
         maxBytes,
@@ -109,8 +120,8 @@ export async function workingTreeChanges(dir: string, base: string, maxPatchByte
  * roboczym i tak czyta ich treść i tryb z dysku, a `update-index --index-info`, w przeciwieństwie do
  * `add --intent-to-add`, nie zapisuje bloba do `.git/objects`. Zwraca, czy lista nowych plików była ucięta.
  */
-async function addUntracked(dir: string, index: string, emptyBlob: string): Promise<boolean> {
-  const listed = await git(dir, ["ls-files", "--others", "--exclude-standard", "-z"], {
+async function addUntracked(dir: string, index: string, emptyBlob: string, pathspecs: readonly string[]): Promise<boolean> {
+  const listed = await git(dir, ["ls-files", "--others", "--exclude-standard", "-z", "--", ...pathspecs], {
     indexFile: index,
     timeoutMs: CHANGES_TIMEOUT_MS,
   });

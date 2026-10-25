@@ -2,12 +2,15 @@ import { z } from "zod";
 import {
   Session,
   SessionId,
+  TASK_DIFF_DEFAULT_BYTES,
+  TASK_DIFF_MAX_BYTES,
   TASK_PROMPT_MAX,
   TASK_SUMMARY_MAX,
   TASK_SUMMARY_MAX_FILES,
   TASK_TITLE_MAX,
   Task,
   TaskChangesSummary,
+  TaskDiff,
   TaskId,
   TaskPrompt,
   TaskProposal,
@@ -16,7 +19,7 @@ import {
   visibleText,
 } from "./agents.ts";
 import { RepoCardResult, TagName } from "./cards.ts";
-import { CODE_SEARCH_LINE_MAX_CHARS, CODE_SEARCH_MAX_MATCHES, CodeQuery, SearchCodeResult } from "./code-search.ts";
+import { CODE_SEARCH_LINE_MAX_CHARS, CODE_SEARCH_MAX_MATCHES, CodePathspec, CodeQuery, SearchCodeResult } from "./code-search.ts";
 import { FindEndpointResult, MAX_FOUND_ENDPOINTS, MAX_SUBGRAPH_DEPTH, Subgraph, WhoCallsResult } from "./graph.ts";
 import { HttpMethod } from "./http.ts";
 import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErrors, LogTail } from "./logs.ts";
@@ -225,6 +228,7 @@ const LIST_REPOS = "list_repos";
 const GET_REPO = "get_repo";
 const LIST_SESSIONS = "list_sessions";
 const GET_SESSION = "get_session";
+const GET_TASK_DIFF = "get_task_diff";
 const PROPOSE_TASK = "propose_task";
 const REPORT_RESULT = "report_result";
 const WAIT_FOR_SESSION = "wait_for_session";
@@ -438,10 +442,39 @@ export const mcpTools = {
       `One session from ${LIST_SESSIONS}, its task (null in the repo root and for the supervisor) and, for a task, the changes in its ` +
       `worktree against the base commit: changed files with added and deleted lines (at most ${TASK_SUMMARY_MAX_FILES}, filesTruncated: ` +
       "true when there were more), commits on the task branch and the number of uncommitted entries, without the diff " +
-      "itself; read the worktree for the content. changes: null with changesError when they cannot be computed " +
+      `itself; ${GET_TASK_DIFF} gives the diff. changes: null with changesError when they cannot be computed ` +
       "(e.g. the worktree was deleted or the task is being ended).",
     args: z.object({ session: SessionId.describe(`session id from ${LIST_SESSIONS} (the id field)`) }).strict(),
     result: GetSessionResult,
+  },
+  getTaskDiff: {
+    name: GET_TASK_DIFF,
+    readOnly: true,
+    description:
+      "The diff of a task's worktree against its base commit: the task's commits and what its agent has not committed yet, " +
+      "new files included and ignored files left out, so you can review what another session did before you report it. " +
+      `The same files, commit and uncommitted counts as ${GET_SESSION} (at most ${TASK_SUMMARY_MAX_FILES} files), and patch: ` +
+      `the unified diff, cut at a whole line within maxBytes (patchTruncated: true then). Start with ${GET_SESSION} for the ` +
+      "file list, then read the diff of the files you care about with paths (git pathspecs: src/, *.java, :!*.lock to " +
+      "exclude). not_found for an unknown or ended task.",
+    args: z
+      .object({
+        task: TaskId.describe(`task id from ${LIST_SESSIONS} or ${GET_SESSION} (the task field)`),
+        paths: z
+          .array(CodePathspec)
+          .max(20)
+          .default([])
+          .describe('only these paths (git pathspecs), e.g. ["src/main/", ":!*.lock"]; default the whole worktree'),
+        maxBytes: z
+          .number()
+          .int()
+          .min(1000)
+          .max(TASK_DIFF_MAX_BYTES)
+          .default(TASK_DIFF_DEFAULT_BYTES)
+          .describe(`most bytes of patch, default ${TASK_DIFF_DEFAULT_BYTES}, up to ${TASK_DIFF_MAX_BYTES}`),
+      })
+      .strict(),
+    result: TaskDiff,
   },
   proposeTask: {
     name: PROPOSE_TASK,

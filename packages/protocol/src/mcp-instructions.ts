@@ -22,6 +22,7 @@ const {
   findEndpoint,
   listSessions,
   getSession,
+  getTaskDiff,
   proposeTask,
   reportResult,
   waitForSession,
@@ -70,7 +71,8 @@ export const MCP_INSTRUCTIONS = [
     "when the proposal is rejected (with the user's reason, if they gave one) or the task's session needs someone (finished " +
     "its turn, asks for approval, hit an error), goes " +
     `stale or exits; when it times out (still pending, starting or working), call it again. ${getSession.name} shows ` +
-    "the task's changed files. Propose related tasks together, so the user can review them as one plan.",
+    `the task's changed files and ${getTaskDiff.name} their diff (narrow it with paths): review it before you tell the ` +
+    "user the work is done. Propose related tasks together, so the user can review them as one plan.",
   `- ${listSessions.name} shows the Copilot CLI sessions and tasks Trackwall runs (caller is your own session); a session ` +
     `that runs a task ends its work with ${reportResult.name}.`,
   `- Point the user at a repo, session or task in your answer with a link: ${trackwallLink("repo", "<repo id>")}, ` +

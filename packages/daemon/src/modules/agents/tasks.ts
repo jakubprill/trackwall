@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import {
+  type ChangedFile,
   PATCH_MAX_BYTES,
   type ProposedBy,
   type Session,
@@ -8,6 +9,7 @@ import {
   type Task,
   type TaskChanges,
   type TaskChangesSummary,
+  type TaskDiff,
   type TaskMiseConfig,
   type TaskSharedFiles,
 } from "@trackwall/protocol";
@@ -56,7 +58,7 @@ export interface TasksVcs {
   removeWorktree(repoDir: string, path: string): Promise<void>;
   deleteBranch(repoDir: string, branch: string): Promise<void>;
   pendingWork(work: TaskWork): Promise<TaskPendingWork>;
-  worktreeChanges(dir: string, base: string, maxPatchBytes: number): Promise<TaskChanges>;
+  worktreeChanges(dir: string, base: string, maxPatchBytes: number, paths: readonly string[]): Promise<TaskChanges>;
 }
 
 /** Sesje Copilot CLI z `Agents`, w których działają zadania. */
@@ -97,6 +99,7 @@ type KnownTask = StoredTask & TaskWork;
  * seconds, so a repo with many tasks must not start dozens of git processes at a time (slow on Windows).
  */
 const SHARED_FILES_CONCURRENCY = 3;
+const NEWLINE = 0x0a;
 
 export class AgentTasks {
   readonly #deps: AgentTasksDeps;
@@ -205,7 +208,21 @@ export class AgentTasks {
    */
   async summary(id: string): Promise<TaskChangesSummary> {
     const { files, commits, uncommitted } = await this.#readChanges(id, 0);
-    return { files: files.slice(0, TASK_SUMMARY_MAX_FILES), filesTruncated: files.length > TASK_SUMMARY_MAX_FILES, commits, uncommitted };
+    return { ...summaryFiles(files), commits, uncommitted };
+  }
+
+  /**
+   * The diff for an agent (MCP tool `get_task_diff`), so a session that handed out the task can review it: only under
+   * `paths` (git pathspecs; none is the whole worktree), with the patch cut at the last whole line within `maxBytes`.
+   */
+  async diff(id: string, paths: readonly string[], maxBytes: number): Promise<TaskDiff> {
+    // One byte over the limit tells a patch of exactly `maxBytes` from a cut one.
+    const { files, patch, commits, uncommitted } = await this.#readChanges(id, maxBytes + 1, paths);
+    const bytes = Buffer.from(patch);
+    const patchTruncated = bytes.length > maxBytes;
+    // A newline byte is never inside a UTF-8 sequence, so cutting after one leaves whole lines and whole characters.
+    const kept = patchTruncated ? bytes.subarray(0, bytes.lastIndexOf(NEWLINE, maxBytes - 1) + 1).toString("utf8") : patch;
+    return { ...summaryFiles(files), commits, uncommitted, patch: kept, patchTruncated };
   }
 
   /**
@@ -235,10 +252,10 @@ export class AgentTasks {
     }
   }
 
-  #readChanges(id: string, maxPatchBytes: number): Promise<TaskChanges> {
+  #readChanges(id: string, maxPatchBytes: number, paths: readonly string[] = []): Promise<TaskChanges> {
     if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is already being ended");
     const task = this.#existingWorktree(id);
-    const reading = asRepoUnavailable(task.branch, this.#deps.vcs.worktreeChanges(task.worktree, task.base, maxPatchBytes));
+    const reading = asRepoUnavailable(task.branch, this.#deps.vcs.worktreeChanges(task.worktree, task.base, maxPatchBytes, paths));
     const reads = this.#reading.get(id) ?? new Set();
     this.#reading.set(id, reads.add(reading));
     void reading
@@ -401,6 +418,14 @@ export class AgentTasks {
     this.#deps.file.write(tasks.map(({ worktree: _, ...stored }) => stored));
     this.#tasks = tasks;
   }
+}
+
+/**
+ * At most `TASK_SUMMARY_MAX_FILES` files for an agent's context. A file list git cut short has tens of thousands of
+ * entries, so `filesTruncated` covers it too.
+ */
+function summaryFiles(files: ChangedFile[]): { files: ChangedFile[]; filesTruncated: boolean } {
+  return { files: files.slice(0, TASK_SUMMARY_MAX_FILES), filesTruncated: files.length > TASK_SUMMARY_MAX_FILES };
 }
 
 function view({ repoDir: _, trustedMiseConfig: __, ...task }: KnownTask): Task {

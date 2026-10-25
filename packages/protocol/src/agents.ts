@@ -179,6 +179,17 @@ export const TASK_SUMMARY_MAX_FILES = 200;
 export const TaskChangesSummary = TaskChanges.omit({ patch: true, truncated: true }).extend({ filesTruncated: z.boolean() });
 export type TaskChangesSummary = z.infer<typeof TaskChangesSummary>;
 
+/** Default and largest diff in one `get_task_diff` result: the result reaches the agent twice (text and `structuredContent`). */
+export const TASK_DIFF_DEFAULT_BYTES = 32_000;
+export const TASK_DIFF_MAX_BYTES = 200_000;
+
+/**
+ * A task's diff for an agent (`get_task_diff`): the summary of `TaskChangesSummary`, narrowed to the requested paths,
+ * plus the unified diff cut at a whole line within the byte limit (`patchTruncated`).
+ */
+export const TaskDiff = TaskChangesSummary.extend({ patch: z.string(), patchTruncated: z.boolean() });
+export type TaskDiff = z.infer<typeof TaskDiff>;
+
 /**
  * Shared files of a task (ADR-44): files that both this task and another task of the same repo change, each compared
  * with its own base commit. The task merged second will likely get a conflict in them.

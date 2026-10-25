@@ -194,6 +194,7 @@ const runs: ToolRuns = {
       },
     );
   },
+  getTaskDiff: (facade, { task, paths, maxBytes }) => facade.agents.taskDiff(task, paths, maxBytes),
   proposeTask: async (facade, proposal, { caller }) => ({ proposal: await facade.agents.propose(caller, proposal) }),
   reportResult: async (facade, { summary }, { caller }) => ({ task: facade.agents.reportSummary(caller, summary) }),
   waitForSession: async (facade, { session, task, timeoutSeconds }, { caller, signal }) => {
@@ -242,6 +243,7 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.searchCode, runs.searchCode),
   defineTool(mcpTools.listSessions, runs.listSessions),
   defineTool(mcpTools.getSession, runs.getSession),
+  defineTool(mcpTools.getTaskDiff, runs.getTaskDiff),
   defineTool(mcpTools.proposeTask, runs.proposeTask),
   defineTool(mcpTools.reportResult, runs.reportResult),
   defineTool(mcpTools.waitForSession, runs.waitForSession),
