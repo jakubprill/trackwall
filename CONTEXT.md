@@ -357,7 +357,7 @@ _Avoid_: split, dashboard (that is Home)
 Alt (⌥ on macOS) + digit selects the entry at that position in the Sessions list; Alt+0 opens the supervisor panel (ADR-58); Alt+J opens the next session or task proposals waiting for you, also from other views (ADR-55), and the supervisor panel once nothing on the list waits but the supervisor does (ADR-58). A shortcut never reaches the session terminal. Win+Alt+J (⌃⌥J on macOS) is the global shortcut that does what Alt+J does from any app (ADR-50).
 
 **Tray panel** (`TrayPanel`, window `tray-panel`):
-The small window next to the tray icon, opened by a left click on it, with the task proposals and the sessions waiting for you (ADR-50), those asking for approval first with their agent dialogs, answered in the panel (ADR-66). A click on another entry opens it in the main window.
+The small window next to the tray icon, opened by a left click on it, with the task proposals and the sessions waiting for you (ADR-50), those asking for approval first, with their approval requests answered in the panel (ADR-66). A click on another entry opens it in the main window.
 _Avoid_: popup, tray menu (that is the menu on a right click)
 
 **Screen image** (`TerminalScreen`):

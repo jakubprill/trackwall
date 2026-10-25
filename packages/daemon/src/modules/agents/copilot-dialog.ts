@@ -80,7 +80,7 @@ function readQuestion(lines: readonly string[]): ScreenDialog | undefined {
   const asked: string[] = [];
   for (const line of lines.slice(heading + 1)) {
     const text = line.trim();
-    // An empty line before the first form field ("Database:") ends the question; the rest guards a layout without it.
+    // The empty line before the first form field ("Database:") ends the question, as in every form seen on the binary.
     if (text === "" || text.startsWith("❯") || text.includes(QUESTION_FOOTER)) break;
     asked.push(text);
   }
@@ -89,8 +89,11 @@ function readQuestion(lines: readonly string[]): ScreenDialog | undefined {
   return { kind: "question", question };
 }
 
+/** An option and whether the selection marker is on it. */
+type ScreenOption = AgentDialogOption & { selected: boolean };
+
 /** The options of the last paragraph; `undefined` when a line before the first option is not one (not an option list). */
-function readOptions(lines: readonly string[]): (AgentDialogOption & { selected: boolean })[] | undefined {
+function readOptions(lines: readonly string[]): ScreenOption[] | undefined {
   const options: { key: string; selected: boolean; parts: string[] }[] = [];
   for (const line of lines) {
     const match = OPTION.exec(line.trim());

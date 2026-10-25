@@ -20,7 +20,7 @@ Approve or stop an agent's command from the tray panel or the Home dashboard, an
 
 When an agent asks for approval, for example to run `mvn test` or to write a file outside its folder, its session shows "asking for approval" as before. Trackwall also reads the request from the session's screen and shows it outside the terminal: at the top of the tray panel, and on the [Home dashboard](/features/home) when you select the session. You see what the agent wants to do, the question Copilot CLI asks, and its answers as buttons: "Yes", and "Yes, and don't ask again" for that command or for file changes in this repo.
 
-A click answers in the session's terminal, exactly as if you pressed the key there, and the agent goes on. "Stop the agent" is Esc: the agent ends its turn and waits for you. The terminal keeps working at the same time, so you can still answer there. If you did, or the agent has asked something else meanwhile, the button says the request is no longer there and types nothing.
+A click answers in the session's terminal, exactly as if you pressed the key there, and the agent goes on. "Stop the agent" is Esc: the agent ends its turn and waits for you. The terminal keeps working at the same time, so you can still answer there. If you did, or the agent has asked something else meanwhile, or asked the same thing again, the button says the request is no longer there and types nothing.
 
 When the agent asks a question of its own (Copilot CLI's form with "Copilot needs information."), the panel and Home show the question, and "Answer in the session" opens its terminal, since the answer is yours to type.
 
@@ -46,6 +46,7 @@ toolPermissions:
 - A rule with `repos` applies to sessions whose repo name matches one of the patterns (`*` is any text, the case does not matter); a rule without `repos` applies to every session, the [supervisor](/features/supervisor) included.
 - Rules apply to sessions started after you save the file. A mistake in `toolPermissions` stops new sessions from starting, with a message that names the problem, so a denial you wrote is never silently dropped.
 - "Yes, and don't ask again" is remembered by Copilot CLI for the folder the session runs in. Each agent task has its own folder, so for something every task of a repo may do, add a rule instead.
+- If you move the selection in the terminal to "No, and tell Copilot what to do differently", the buttons disappear until the agent asks again, so a click cannot type into the text you are writing there.
 - Answering from outside the terminal is for approvals only. The option "No, and tell Copilot what to do differently" needs text, so it stays in the terminal.
 - Trackwall reads requests in the layout of Copilot CLI 1.0.103. A request it cannot read is still in the terminal and still makes the session "asking for approval", it only has no buttons.
 - Agents connected to the [MCP server](/features/mcp) never see these requests and cannot answer them.

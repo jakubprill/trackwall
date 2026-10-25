@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { AgentDialog, DialogAnswer, RunState, Session, TaskState, TaskStateChange } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
-import { readAgentDialog } from "./copilot-dialog.ts";
+import { readAgentDialog, type ScreenDialog } from "./copilot-dialog.ts";
 import { inPromptBoxAfter } from "./copilot-hooks.ts";
 import { ESCAPE, sessionKey } from "./copilot-keys.ts";
 import { CopilotSessionState } from "./copilot-session-state.ts";
@@ -67,6 +67,14 @@ function writesText(data: string, state: TaskState | undefined): boolean {
   return !data.startsWith(ESCAPE) || data.startsWith(`${ESCAPE}[200~`);
 }
 
+/** A digest of the dialog's text and of the wait it answers, so the same request asked again gets another id. */
+function dialogId(waits: number, dialog: ScreenDialog): string {
+  return createHash("sha256")
+    .update(JSON.stringify([waits, dialog]))
+    .digest("hex")
+    .slice(0, 16);
+}
+
 export interface LiveSessionOptions {
   id: string;
   /** `null` for the supervisor in the projects folder (ADR-58). */
@@ -111,7 +119,7 @@ export class LiveSession {
   /** Counts the waits for a dialog (each entry into `Approval` or `Input`), so the same request asked again gets a new id. */
   #waits = 0;
   /** The dialog last read, for the screen revision and wait it was read at: the screen is read once per change. */
-  #dialogRead: { revision: number; waits: number; dialog: AgentDialog | null } | undefined;
+  #dialogRead: { revision: number; waits: number; kind: AgentDialog["kind"]; dialog: AgentDialog | null } | undefined;
 
   constructor(o: LiveSessionOptions) {
     this.id = o.id;
@@ -249,18 +257,10 @@ export class LiveSession {
     if (this.#finished || kind === undefined) return null;
     const revision = this.#screen.revision;
     const read = this.#dialogRead;
-    if (read?.revision === revision && read.waits === this.#waits) return read.dialog;
+    if (read?.revision === revision && read.waits === this.#waits && read.kind === kind) return read.dialog;
     const found = readAgentDialog(this.#screen.lines(), kind);
-    const dialog = found
-      ? {
-          ...found,
-          id: createHash("sha256")
-            .update(JSON.stringify([this.#waits, found]))
-            .digest("hex")
-            .slice(0, 16),
-        }
-      : null;
-    this.#dialogRead = { revision, waits: this.#waits, dialog };
+    const dialog = found ? { ...found, id: dialogId(this.#waits, found) } : null;
+    this.#dialogRead = { revision, waits: this.#waits, kind, dialog };
     return dialog;
   }
 

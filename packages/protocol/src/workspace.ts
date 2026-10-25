@@ -135,7 +135,10 @@ export const ToolPermissionRule = z
 export const ToolPermissionRules = z.array(ToolPermissionRule);
 export type ToolPermissionRules = z.infer<typeof ToolPermissionRules>;
 
-/** The patterns one session starts with, from the rules that apply to it (`--allow-tool` and `--deny-tool`). */
+/**
+ * The patterns one session starts with, from the rules that apply to it (`--allow-tool` and `--deny-tool`). Here because
+ * `workspace` computes it and `agents` uses it, and daemon modules share types only through `protocol`.
+ */
 export interface ToolPermissions {
   allow: readonly string[];
   deny: readonly string[];
