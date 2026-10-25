@@ -3,7 +3,7 @@ import type { TaskState } from "@trackwall/protocol";
 /**
  * Whether a running session waits for you (`Session.needsAttention`, §4.4, ADR-47). `Approval` and `Plan` wait until
  * the user answers, because the agent is blocked in the middle of a turn. `Input` (the turn ended or the agent asked
- * a question) waits only until the user has seen it: a session terminal window in front of the user (focused and
+ * a question) waits only until the user has seen it: a session terminal in front of the user (focused and
  * visible) or a key typed into the session marks it seen. A window that is in front of the user when the state
  * changes sees the new state at once. Only a change to another state makes the session unseen again, so a stronger
  * source confirming `Input` (a hook after a key) does not bring back a state the user has already seen. The state
@@ -12,7 +12,7 @@ import type { TaskState } from "@trackwall/protocol";
 
 const WAITS_FOR_ANSWER: ReadonlySet<TaskState> = new Set(["Approval", "Plan"]);
 
-/** One session terminal window as attention sees it. */
+/** One session terminal as attention sees it. */
 export interface AttentionWindow {
   /** The window came in front of the user (focused and visible) or left. */
   focus(focused: boolean): void;

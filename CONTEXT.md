@@ -9,7 +9,7 @@ The `trackwall-daemon` process, which holds all the state and all the logic. The
 _Avoid_: backend, server (without qualification)
 
 **Shell** (`apps/desktop`):
-The Tauri app: window, tray, starting and supervising the daemon as a sidecar, the WebView2 check. It contains no domain logic.
+The Tauri app: windows, tray, starting and supervising the daemon as a sidecar, the WebView2 check. It contains no domain logic.
 _Avoid_: app (when only Tauri is meant)
 
 **View** (`View`):
@@ -18,6 +18,18 @@ _Avoid_: tab (for a whole screen)
 
 **Tab** (`TabBar`):
 A switch for part of the content inside a view, for example README, Files, Commits and mise tasks in the Repos view.
+
+**Window** (`windows.rs` in the shell; label `main` or `window-<n>`):
+A desktop shell window with the whole UI and its own view (ADR-49). The main window comes from `tauri.conf.json` and hides to the tray; an extra window is opened with "Open in new window" and closes for real.
+_Avoid_: screen (that is a monitor), tab (that is `TabBar`), terminal window (that is a session terminal)
+
+**Trackwall link** (`trackwall://`, `trackwallLink`, `TRACKWALL_LINK_SCHEME`, `TRACKWALL_LINK_KINDS`; in the shell `link.rs`):
+`trackwall://repo/<repo id>`, `trackwall://session/<session id>` or `trackwall://task/<task id>`: shows that thing in the window (ADR-52). Only navigates, never runs anything.
+_Avoid_: deep link; plain "link" (that is a link in a README, ADR-35)
+
+**Jump** (`Jump`, `jump::request`, `take_jump`, `useJumpRequest`):
+The shell's request to the UI to show a repo, session, task or task proposal, from the tray or from a Trackwall link.
+_Avoid_: focus (that is keyboard focus and the "seen" frame)
 
 **Facade** (`Facade`):
 The set of daemon module interfaces passed to the transports (HTTP, MCP, events). Modules talk to each other only through it.
@@ -231,6 +243,10 @@ _Avoid_: window title (that is a session's `windowTitle`)
 A task that a session or an agent outside Trackwall submitted through MCP and that waits in the Sessions view for the user's decision: "Start task" turns it into a task with the same identifier, "Reject" rejects it. Until then nothing starts. It lives only in daemon memory (ADR-39).
 _Avoid_: order, request, application
 
+**Shared files** (`TaskSharedFiles`, action `task-shared-files`):
+Files that both this task and another task of the same repo change, each compared with its own base commit. The one merged second will likely get a conflict, so the task panel warns about them and leads to the other task. It is only a warning: nothing is stopped (ADR-44).
+_Avoid_: overlap, collision, conflict (a conflict is only the result of a merge)
+
 **Main session** (`proposedBy` of a task and a proposal):
 A session or supervising agent that talks to the user and commissions work to other agents with task proposals, then waits for their sessions (`wait_for_session`) and reads the summaries, like a coordinator with threads in Claude (ADR-39). It is a role, not a separate kind of session: today it is any Trackwall session or an agent outside Trackwall (`proposedBy.session: null`). In the Sessions view its tasks and proposals sit indented under it, and it carries a "main" badge with their count.
 _Avoid_: orchestrator, planner (ADR-9: a human splits goals)
@@ -257,17 +273,18 @@ An agent CLI running in a PTY owned by the daemon, in a repo root or in a task's
 _Avoid_: POSIX session (that is a process group term), window (that is the terminal window in the UI)
 
 **Waiting for you** (`Session.needsAttention`, `SessionAttention`):
-A running session in `Approval` or `Plan`, or in `Input` the user has not seen yet (ADR-47): the agent will not move on without a human, and the human does not know yet. The daemon computes it; the UI (the counter on the view bar, which also counts task proposals waiting for a decision, ADR-39; "Next waiting") and the tray (the "Waiting: <repo>" menu, the flashing window) only read the field.
+A running session in `Approval` or `Plan`, or in `Input` the user has not seen yet (ADR-47): the agent will not move on without a human, and the human does not know yet. The daemon computes it; the UI (the counter on the view bar, which also counts task proposals waiting for a decision, ADR-39; "Next waiting") and the tray (the "Waiting: <repo>" menu, the flashing window, the system notification and the tray panel, ADR-50) only read the field.
 
 **Seen** (`SessionAttention.focus`, `typed`; the `focus` frame of `PtyClientMessage`):
-The user has seen the session's current `Input`: a session terminal window was focused and visible, or the user typed into the session, after the state began.
+The user has seen the session's current `Input`: a session terminal was focused and visible, or the user typed into the session, after the state began.
 _Avoid_: read, acknowledged
 
 **Idle** (`isIdle`, `IDLE_LABEL`, dashboard state `idle`):
 A running session in `Input` the user has already seen (ADR-47): the agent waits for the next prompt, but no longer waits for you. Shown as "idle" in Sessions and in calm grey on the dashboard.
 
 **Session terminal** (`SessionTerminal`):
-xterm.js in the Sessions view connected through the `/ws/pty/<session>` WebSocket to the session's PTY. Several windows can show the same session; the PTY size is set by the last one that reported it.
+xterm.js in the Sessions view, connected over the WebSocket `/ws/pty/<session>` to the session's PTY. Several session terminals, also in different windows, can show the same session; the PTY takes the size of the last one that reported it, and a window that comes to the front reports the size of its terminals again (ADR-49).
+_Avoid_: terminal window (a window is the app window)
 
 **Session layout** (`SessionLayout`):
 How the right side of the Sessions view shows entries (ADR-48): `1` is the selected entry alone with its full panel (tabs, Stop, Resume), `2` and `4` a grid page of that many entries, `auto` a grid of the whole list, up to nine per page.
@@ -279,7 +296,11 @@ Several session terminals side by side in the Sessions view, one tile per list e
 _Avoid_: split, dashboard (that is Home)
 
 **Session shortcut** (`SessionShortcut`; Alt+1…9, Alt+J):
-Alt (⌥ on macOS) + digit selects the entry at that position in the Sessions list; Alt+J opens the next session that is waiting for you, also from other views. A shortcut never reaches the session terminal.
+Alt (⌥ on macOS) + digit selects the entry at that position in the Sessions list; Alt+J opens the next session that is waiting for you, also from other views. A shortcut never reaches the session terminal. Win+Alt+J (⌃⌥J on macOS) is the global shortcut that does what Alt+J does from any app (ADR-50).
+
+**Tray panel** (`TrayPanel`, window `tray-panel`):
+The small window next to the tray icon, opened by a left click on it, with the task proposals and the sessions waiting for you (ADR-50). A click opens the entry in the main window.
+_Avoid_: popup, tray menu (that is the menu on a right click)
 
 **Screen image** (`TerminalScreen`):
 The state of a session's screen, which the daemon keeps in a windowless terminal emulator and sends to a session terminal on connection, before further output.
@@ -298,6 +319,10 @@ _Avoid_: input (that is the whole content from the keyboard), shortcut
 **Session plugin** (`writeCopilotPlugin`):
 A directory with `plugin.json` and `hooks.json` that the daemon gives Copilot CLI through `--plugin-dir`, so that hooks report the state of this one session only (ADR-17).
 _Avoid_: plugin (without qualification), hook configuration
+
+**Session instructions** (`writeSessionInstructions`, file `trackwall.instructions.md`):
+The instruction file in the session directory that the daemon gives Copilot CLI through `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`: the session's role (a main session in the repo root, or a task session in its worktree with the task rules and `report_result` at the end) and the **MCP instruction** (`MCP_INSTRUCTIONS`, also the MCP server's `instructions`): when to reach for which Trackwall tool (ADR-46). It changes neither the repo nor `~/.copilot`.
+_Avoid_: system prompt (Copilot CLI builds it itself), repository instructions (those are files in the user's repo)
 
 **Hook record** (`CopilotHookRecord`):
 One call of a hook from the session plugin: the event, the time it was received and only the payload fields needed for the state, and for the rest only their names (without the prompt, tool arguments and results). A line of `hooks.jsonl` and a marker in the recording.

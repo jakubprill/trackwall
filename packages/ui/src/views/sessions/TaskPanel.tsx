@@ -11,6 +11,7 @@ import { proposerLabel, taskName } from "@/lib/session-entries";
 import { isLive, sessionStateLabel } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
 import { SessionTerminal } from "./SessionTerminal.tsx";
+import { SharedFiles } from "./SharedFiles.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
 import { TaskRemoval } from "./TaskRemoval.tsx";
 
@@ -20,22 +21,28 @@ type TaskTab = "terminal" | "changes";
  * Wybrane zadanie (ADR-31): tytuł albo polecenie, gałąź i stan sesji w nagłówku, terminal sesji i zmiany w worktree
  * w zakładkach. Zadanie z propozycji mówi, kto je zaproponował, a podsumowanie od sesji zadania (ADR-39) stoi nad
  * zakładkami. Zadanie bez działającej sesji można wznowić albo zakończyć; worktree otwiera się w VS Code zawsze.
+ * The warning about files another task also changes (ADR-44) sits above the summary.
  */
 export function TaskPanel({
   conn,
   task,
   session,
   sessions,
+  tasks,
   onChanged,
   onRemoved,
+  onOpenTask,
 }: {
   conn: Connection;
   task: Task;
   session: Session | undefined;
   /** Wszystkie sesje z listy, żeby nazwać sesję, która zaproponowała zadanie. */
   sessions: readonly Session[];
+  /** All tasks on the list, to name the task that changes the same files. */
+  tasks: readonly Task[];
   onChanged: () => void;
   onRemoved: () => void;
+  onOpenTask: (id: string) => void;
 }) {
   const liveSession = session && isLive(session) ? session : undefined;
   const [tab, setTab] = useState<TaskTab>("terminal");
@@ -98,6 +105,7 @@ export function TaskPanel({
         )}
       </header>
       {confirmingRemoval && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
+      <SharedFiles conn={conn} task={task.id} tasks={tasks} paused={confirmingRemoval} onOpenTask={onOpenTask} />
       {task.summary && <TaskSummary summary={task.summary} />}
       <div className="px-4">
         <TabBar tabs={tabs} active={shown} onSelect={setTab} />

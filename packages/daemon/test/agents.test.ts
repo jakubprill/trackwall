@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agents } from "../src/modules/agents/agents.ts";
@@ -29,6 +29,11 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
     await waitFor(agents, started.id, () => window.text().includes("Witaj w atrapie"), "obraz ekranu");
     expect(window.unwrappedText()).toContain(repoDir);
     expect(window.text()).toContain("MCP: trackwall");
+    // Session instructions with the session's role come from the session directory, not from the repo (ADR-46).
+    expect(window.text()).toContain("Instructions: trackwall.instructions.md");
+    const instructions = readFileSync(join(home, "sessions", started.id, "instructions", "trackwall.instructions.md"), "utf8");
+    expect(instructions).toContain("You are a main session in the root of the repo `sklep`");
+    expect(readdirSync(repoDir)).toEqual([]);
     // Most stdio sesji dostaje plik z tokenem tej sesji, po którym serwer MCP wie, kto woła (ADR-39).
     const tokenFile = join(home, "sessions", started.id, "session-token");
     const mcpConfig = readFileSync(join(home, "sessions", started.id, "mcp-config.json"), "utf8");

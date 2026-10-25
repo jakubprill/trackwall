@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agents } from "../src/modules/agents/agents.ts";
@@ -60,6 +60,10 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
     expect(window.unwrappedText()).toContain(`Katalog:${realpathSync(task.worktree)}`);
     expect(window.text()).toContain("Argument: --interactive=Napraw logowanie w sklepie");
     expect(window.text()).toContain(`Argument: --session-id=${task.id}`);
+    expect(window.text()).toContain("Instructions: trackwall.instructions.md");
+    const instructions = readFileSync(join(home, "sessions", session, "instructions", "trackwall.instructions.md"), "utf8");
+    expect(instructions).toContain(`You run the task \`${task.id}\` in the repo \`sklep\``);
+    expect(instructions).toContain("call report_result");
     window.attachment.detach();
   }, 60_000);
 
@@ -178,6 +182,33 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
         .tasks.map((t) => t.id)
         .sort(),
     ).toEqual([a.id, b.id].sort());
+  }, 60_000);
+
+  test("shared files of a task are the files another task of the same repo also changes, and a task without a worktree is left out", async () => {
+    const { dir } = cloneOnFeatureBranch();
+    const other = makeRepo({ "src/login.ts": "export const login = 1;\n" }, "warehouse");
+    const { agents, procs } = makeAgents({ sklep: dir, warehouse: other });
+    cleanups.push(() => procs.stopAll());
+    const first = await agents.createTask("sklep", "change login");
+    const second = await agents.createTask("sklep", "add a login test");
+    const third = await agents.createTask("sklep", "fix the README");
+    const elsewhere = await agents.createTask("warehouse", "change login in the warehouse");
+
+    writeFileSync(join(first.worktree, "src", "login.ts"), "export const login = 2;\n");
+    writeFileSync(join(first.worktree, "notes.md"), "plan\n");
+    commitFiles(second.worktree, { "src/login.ts": "export const login = 3;\n", "test/login.test.ts": "test\n" }, "login test");
+    writeFileSync(join(third.worktree, "README.md"), "# sklep, changed\n");
+    writeFileSync(join(elsewhere.worktree, "src", "login.ts"), "export const login = 4;\n");
+
+    expect(await agents.taskSharedFiles(first.id)).toEqual([{ task: second.id, files: ["src/login.ts"] }]);
+    expect(await agents.taskSharedFiles(third.id)).toEqual([]);
+
+    // On Windows the running session keeps its worktree's files open, so it stops first.
+    await agents.stop(sessionOf(agents, second.id));
+    rmSync(second.worktree, { recursive: true, force: true });
+    expect(await agents.taskSharedFiles(first.id)).toEqual([]);
+    // The task's own changes are not a warning: without its worktree the call fails as `task-changes` does.
+    await expect(agents.taskSharedFiles(second.id)).rejects.toMatchObject({ code: "not_found" });
   }, 60_000);
 
   test("polecenie ze znakami powłoki i myślnikiem na początku dociera do Copilot CLI dosłownie, jako jeden argument", async () => {

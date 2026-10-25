@@ -163,6 +163,21 @@ export const TASK_SUMMARY_MAX_FILES = 200;
 export const TaskChangesSummary = TaskChanges.omit({ patch: true, truncated: true }).extend({ filesTruncated: z.boolean() });
 export type TaskChangesSummary = z.infer<typeof TaskChangesSummary>;
 
+/**
+ * Shared files of a task (ADR-44): files that both this task and another task of the same repo change, each compared
+ * with its own base commit. The task merged second will likely get a conflict in them.
+ */
+export const TaskSharedFiles = z.object({
+  /** The other task. */
+  task: TaskId,
+  /** Paths relative to the repo root, as in `ChangedFile.path`. */
+  files: z.array(z.string()),
+});
+export type TaskSharedFiles = z.infer<typeof TaskSharedFiles>;
+
+export const SharedFilesList = z.object({ shared: z.array(TaskSharedFiles) });
+export type SharedFilesList = z.infer<typeof SharedFilesList>;
+
 function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
   return { path: `/api/agents/${action}`, request, data };
 }
@@ -184,6 +199,8 @@ export const agentsApi = {
   /** Nowa sesja zadania, które nie ma działającej sesji: Copilot CLI wznawia rozmowę zadania (`--resume`). */
   resumeTask: endpoint("resume-task", TaskRequest, Task),
   taskChanges: endpoint("task-changes", TaskRequest, TaskChanges),
+  /** Other tasks of the same repo that change the same files (ADR-44); tasks whose changes cannot be read are left out. */
+  taskSharedFiles: endpoint("task-shared-files", TaskRequest, SharedFilesList),
   openTaskEditor: endpoint("open-task-editor", TaskRequest, Done),
   /**
    * Zakończenie zadania: usuwa worktree, a bez `keepBranch` także gałąź. Zmiany, które by przepadły (niezacommitowane

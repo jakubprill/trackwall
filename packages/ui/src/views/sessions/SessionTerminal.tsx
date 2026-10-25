@@ -1,4 +1,5 @@
 import "@xterm/xterm/css/xterm.css";
+import { isTauri } from "@tauri-apps/api/core";
 import { PTY_CLOSE_NOT_FOUND, type PtyClientMessage, ptySocket } from "@trackwall/protocol";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
@@ -8,6 +9,7 @@ import { daemonSocket } from "@/lib/daemon-socket";
 import { oncePerFrame } from "@/lib/once-per-frame";
 import { IS_MAC } from "@/lib/platform";
 import { copiesSelection } from "@/lib/terminal-copy";
+import { trackwallLinkProvider } from "@/lib/terminal-links";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { terminalTheme } from "@/lib/terminal-theme";
 import { FocusReporter, terminalInFront } from "@/lib/window-focus";
@@ -15,10 +17,11 @@ import { FocusReporter, terminalInFront } from "@/lib/window-focus";
 const RECONNECT_MS = 1000;
 
 /**
- * The terminal window of one session (§4.4, ADR-26): xterm.js connected over a WebSocket to the PTY in the daemon. The
+ * The session terminal of one session (§4.4, ADR-26): xterm.js connected over a WebSocket to the PTY in the daemon. The
  * daemon sends the screen image first, so switching sessions or a dropped connection starts from the current screen,
- * not an empty terminal. Keys and the window size go to the session; the PTY takes the size of the last window that
- * reported one. The window also tells the daemon whether it is in front of the user, which marks the session seen
+ * not an empty terminal. Keys and the terminal size go to the session; the PTY takes the size of the last session
+ * terminal that reported one, and a window that comes to the front reports its terminals' sizes again, so with the
+ * session open in two windows (ADR-49) the one you work in sets it. The window also tells the daemon whether it is in front of the user, which marks the session seen
  * (ADR-47). In the grid (ADR-48) several terminals are open at once; only the `focused` one takes the keyboard and
  * counts as in front, so a waiting session in another tile keeps waiting until the user selects it.
  */
@@ -38,6 +41,7 @@ export function SessionTerminal({ conn, session, live, focused }: { conn: Connec
     const terminal = new Terminal(sessionTerminalOptions(terminalTheme(document.documentElement), getComputedStyle(element).fontFamily));
     const fit = new FitAddon();
     terminal.loadAddon(fit);
+    const links = isTauri() ? terminal.registerLinkProvider(trackwallLinkProvider(terminal, IS_MAC)) : undefined;
     terminal.open(element);
     fit.fit();
     term.current = terminal;
@@ -57,6 +61,10 @@ export function SessionTerminal({ conn, session, live, focused }: { conn: Connec
     );
     const sendFocus = () => focus.update();
     updateFocus.current = sendFocus;
+    const onWindowFocus = () => {
+      sendSize();
+      sendFocus();
+    };
 
     const connect = () => {
       const { url, protocols } = daemonSocket(conn, ptySocket(session), window.location);
@@ -107,7 +115,7 @@ export function SessionTerminal({ conn, session, live, focused }: { conn: Connec
     // `padding` kontenera: FitAddon liczy miejsce z rozmiaru kontenera i nie odejmuje jego paddingu.
     const resize = new ResizeObserver(() => resizer.request());
     resize.observe(container);
-    window.addEventListener("focus", sendFocus);
+    window.addEventListener("focus", onWindowFocus);
     window.addEventListener("blur", sendFocus);
     document.addEventListener("visibilitychange", sendFocus);
 
@@ -116,11 +124,12 @@ export function SessionTerminal({ conn, session, live, focused }: { conn: Connec
       clearTimeout(timer);
       resizer.dispose();
       resize.disconnect();
-      window.removeEventListener("focus", sendFocus);
+      window.removeEventListener("focus", onWindowFocus);
       window.removeEventListener("blur", sendFocus);
       document.removeEventListener("visibilitychange", sendFocus);
       focus.dispose();
       input.dispose();
+      links?.dispose();
       socket?.close();
       term.current = undefined;
       updateFocus.current = undefined;
