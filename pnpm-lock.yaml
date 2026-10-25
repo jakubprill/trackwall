@@ -26,6 +26,9 @@ importers:
       '@tauri-apps/cli':
         specifier: 2.12.4
         version: 2.12.4
+      '@trackwall/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
       '@types/bun':
         specifier: 1.4.4
         version: 1.4.4

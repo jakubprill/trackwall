@@ -1,5 +1,5 @@
 /**
- * Whether the session terminal window is in front of the user, as the daemon needs it to mark a session seen
+ * Whether the session terminal is in front of the user, as the daemon needs it to mark a session seen
  * (ADR-47). "In front" is a focused and visible document, and it counts only after `SEEN_AFTER_MS`: a click on a
  * tray entry first brings the window to the front with the previous session's terminal and only then switches to
  * the chosen session, and a window the user only flicks past has not been looked at either.

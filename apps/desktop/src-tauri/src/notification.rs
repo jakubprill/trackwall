@@ -9,7 +9,7 @@
 //! (Linux, only built in CI) nothing is shown. Described in §5.4 of docs/architecture.md.
 
 use crate::attention::{News, Proposal, TaskState, Waiting};
-use crate::main_window::{self, Focus};
+use crate::jump::{self, Jump};
 use tauri::AppHandle;
 
 /// What one notification says and what clicking it opens.
@@ -17,7 +17,7 @@ use tauri::AppHandle;
 struct Notice {
     title: String,
     body: String,
-    target: Focus,
+    target: Jump,
 }
 
 /// A session that started waiting; the words are the session state labels of the UI (`STATE_LABELS`, a test in
@@ -28,14 +28,14 @@ fn session_notice(waiting: &Waiting) -> Notice {
         Some(TaskState::Plan) => "Copilot CLI is waiting for plan approval",
         _ => "Copilot CLI is waiting for you",
     };
-    Notice { title: format!("Session in {}", waiting.repo), body: body.to_owned(), target: Focus::Session(waiting.id.clone()) }
+    Notice { title: format!("Session in {}", waiting.repo), body: body.to_owned(), target: Jump::Session(waiting.id.clone()) }
 }
 
 fn proposal_notice(proposal: &Proposal) -> Notice {
     Notice {
         title: format!("Task proposal for {}", proposal.repo),
         body: proposal.title.clone(),
-        target: Focus::Proposal(proposal.id.clone()),
+        target: Jump::Proposal(proposal.id.clone()),
     }
 }
 
@@ -68,7 +68,7 @@ pub fn show_news(app: &AppHandle, news: &News) {
         let clicked = {
             let app = app.clone();
             let target = notice.target.clone();
-            move || main_window::focus(&app, target.clone())
+            move || jump::request(&app, target.clone())
         };
         if let Err(err) = platform::show(&app_id, &notice, clicked) {
             eprintln!("[desktop] showing a system notification: {err}");
@@ -210,7 +210,7 @@ mod tests {
             Notice {
                 title: "Session in orders-api".into(),
                 body: "Copilot CLI is asking for approval".into(),
-                target: Focus::Session("s1".into()),
+                target: Jump::Session("s1".into()),
             }
         );
         assert_eq!(session_notice(&waiting(Some(TaskState::Plan))).body, "Copilot CLI is waiting for plan approval");
@@ -222,11 +222,7 @@ mod tests {
         let proposal = Proposal { id: "p1".into(), repo: "billing".into(), title: "Retry failed invoices".into() };
         assert_eq!(
             proposal_notice(&proposal),
-            Notice {
-                title: "Task proposal for billing".into(),
-                body: "Retry failed invoices".into(),
-                target: Focus::Proposal("p1".into()),
-            }
+            Notice { title: "Task proposal for billing".into(), body: "Retry failed invoices".into(), target: Jump::Proposal("p1".into()) }
         );
     }
 
@@ -236,8 +232,8 @@ mod tests {
             sessions: vec![waiting(Some(TaskState::Input))],
             proposals: vec![Proposal { id: "p1".into(), repo: "billing".into(), title: "t".into() }],
         };
-        let targets: Vec<Focus> = notices(&news).into_iter().map(|n| n.target).collect();
-        assert_eq!(targets, vec![Focus::Session("s1".into()), Focus::Proposal("p1".into())]);
+        let targets: Vec<Jump> = notices(&news).into_iter().map(|n| n.target).collect();
+        assert_eq!(targets, vec![Jump::Session("s1".into()), Jump::Proposal("p1".into())]);
     }
 
     /// Runs on `windows-latest` in CI: the registry value toasts depend on lands where Windows looks for it.

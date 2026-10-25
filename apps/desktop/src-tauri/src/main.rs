@@ -1,4 +1,4 @@
-//! Powłoka desktopowa Trackwall: okno, tray i nadzór daemona. Cała logika żyje w daemonie (§2, §5.4).
+//! The Trackwall desktop shell: windows, tray and daemon supervision. All logic lives in the daemon (§2, §5.4).
 
 // Bez okna konsoli w wydaniu na Windowsie.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -7,19 +7,24 @@ mod attention;
 mod daemon;
 mod daemon_state;
 mod global_shortcut;
-mod main_window;
+mod jump;
+mod link;
+mod lock;
 mod notification;
 mod tray_panel;
 #[cfg(windows)]
 mod win_text;
 mod window_effect;
+mod windows;
 
 use daemon::Connection;
 use daemon_state::DaemonState;
 use std::sync::Arc;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
+use tauri::{AppHandle, Manager, RunEvent, Window, WindowEvent};
 use tray_panel::PanelState;
+use window_effect::WindowEffects;
+use windows::Windows;
 
 /// Identyfikator ikony w trayu: potrzebny, żeby usunąć ją przy wyjściu.
 const TRAY_ID: &str = "main";
@@ -40,14 +45,26 @@ async fn retry_daemon(state: tauri::State<'_, Arc<DaemonState>>) -> Result<Conne
     tauri::async_runtime::spawn_blocking(move || state.wait()).await.map_err(|e| e.to_string())?
 }
 
-/// A click in the tray panel: hides the panel and shows the main window with the entry, or without one for
-/// "Open Trackwall".
+/// Opens an extra window with `view` (ADR-49). Async, because building a window on the main thread deadlocks on Windows.
 #[tauri::command]
-fn open_from_tray_panel(app: AppHandle, target: Option<main_window::Focus>) {
+async fn open_window(app: AppHandle, view: String) -> Result<(), String> {
+    windows::open(&app, Some(&view))
+}
+
+/// The window shows the Sessions view or stopped showing it; the tray sends sessions to such a window.
+#[tauri::command]
+fn window_shows_sessions(window: Window, windows: tauri::State<'_, Windows>, shows: bool) {
+    windows.shows_sessions(window.label(), shows);
+}
+
+/// A click in the tray panel (ADR-50): hides the panel and jumps to the entry, or shows the main window for "Open
+/// Trackwall".
+#[tauri::command]
+fn open_from_tray_panel(app: AppHandle, target: Option<jump::Jump>) {
     tray_panel::hide(&app);
     match target {
-        Some(target) => main_window::focus(&app, target),
-        None => main_window::show(&app),
+        Some(target) => jump::request(&app, target),
+        None => show_main(&app),
     }
 }
 
@@ -66,43 +83,62 @@ fn main() {
     let builder = tauri::Builder::default();
     // Ponowne uruchomienie trackwall.exe pokazuje istniejące okno zamiast drugiej powłoki i drugiej ikony w trayu.
     // Tylko w wydaniu: identyfikator instancji jest wspólny, a `tauri dev` ma działać obok zainstalowanej aplikacji.
+    // On Windows a `trackwall://` link starts a second trackwall.exe; the plugin's `deep-link` feature hands the link
+    // to the first instance before this callback (ADR-52), and the link shows its own window.
     #[cfg(not(debug_assertions))]
-    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
         let state = Arc::clone(app.state::<Arc<DaemonState>>().inner());
         std::thread::spawn(move || state.restart_if_down());
-        main_window::show(app);
+        if !link::in_args(&args) {
+            windows::show_once_loaded(app, windows::MAIN);
+        }
     }));
     let app = builder
+        .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(windows::STATE_FLAGS).build())
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(Arc::clone(&state))
         .manage(PanelState::default())
-        .invoke_handler(tauri::generate_handler![daemon_connection, retry_daemon, open_from_tray_panel])
+        .manage(WindowEffects::default())
+        .manage(Windows::default())
+        .manage(jump::PendingJump::default())
+        .invoke_handler(tauri::generate_handler![
+            daemon_connection,
+            retry_daemon,
+            open_window,
+            window_shows_sessions,
+            jump::take_jump,
+            link::open_link,
+            open_from_tray_panel
+        ])
         .setup(move |app| {
             state.start();
-            let window = app.get_webview_window(main_window::LABEL).ok_or("missing window main from tauri.conf.json")?;
-            app.manage(window_effect::apply(&window));
-            window_effect::reveal_fallback(app.handle(), main_window::show);
+            let window = app.get_webview_window(windows::MAIN).ok_or("missing window main from tauri.conf.json")?;
+            app.state::<WindowEffects>().apply(&window);
             build_tray(app.handle())?;
             notification::init(app.handle());
             global_shortcut::register(app.handle());
             attention::watch(app.handle().clone(), Arc::clone(&state), TRAY_ID);
+            link::listen(app.handle());
             Ok(())
         })
         .on_page_load(|webview, payload| {
             // The tray panel paints its own opaque background and is shown by `tray_panel`, not by the window effect.
-            if webview.label() == main_window::LABEL {
-                window_effect::on_page_load(webview, payload, main_window::show);
+            if webview.label() != tray_panel::LABEL {
+                window_effect::on_page_load(webview, payload);
             }
         })
-        .on_window_event(|window, event| match window.label() {
-            tray_panel::LABEL => tray_panel::on_window_event(window, event),
-            // Closing the window hides it to the tray; the daemon and services keep running.
-            _ => {
-                if let WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    let _ = window.hide();
-                }
+        .on_window_event(|window, event| match event {
+            // The tray panel is not a window for sessions or links: it handles its own events (ADR-50).
+            _ if window.label() == tray_panel::LABEL => tray_panel::on_window_event(window, event),
+            // Closing the main window hides it to the tray; the daemon and services keep running. An extra window closes.
+            WindowEvent::CloseRequested { api, .. } if window.label() == windows::MAIN => {
+                api.prevent_close();
+                let _ = window.hide();
             }
+            WindowEvent::Focused(true) => window.state::<Windows>().focused(window.label()),
+            WindowEvent::Destroyed => windows::closed(window.app_handle(), window.label()),
+            _ => {}
         })
         .build(tauri::generate_context!())
         .expect("failed to build the Tauri app");
@@ -110,7 +146,7 @@ fn main() {
     app.run(|handle, event| match event {
         // macOS: kliknięcie w ikonę w Docku po schowaniu okna.
         #[cfg(target_os = "macos")]
-        RunEvent::Reopen { .. } => main_window::show(handle),
+        RunEvent::Reopen { .. } => show_main(handle),
         RunEvent::ExitRequested { code: None, api, .. } => {
             // Ostatnie okno schowane to nie powód do wyjścia.
             api.prevent_exit();
@@ -133,11 +169,20 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
-            attention::MENU_SHOW => main_window::show(app),
+            attention::MENU_SHOW => show_main(app),
+            attention::MENU_NEW_WINDOW => {
+                // Not on the main thread, where the menu event runs: building a window there deadlocks on Windows.
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(err) = windows::open(&app, None) {
+                        eprintln!("[desktop] opening a window: {err}");
+                    }
+                });
+            }
             attention::MENU_QUIT => quit_app(app),
             id => {
-                if let Some(target) = attention::focus_from_menu(id) {
-                    main_window::focus(app, target);
+                if let Some(target) = attention::jump_from_menu(id) {
+                    jump::request(app, target);
                 }
             }
         })
@@ -148,10 +193,10 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, rect, .. } => {
                 tray_panel::release(tray.app_handle(), rect);
             }
-            // Windows only: a double click opens the main window, as a click did before the panel.
+            // Windows only: a double click opens the main window, as a click did before the panel (ADR-50).
             TrayIconEvent::DoubleClick { button: MouseButton::Left, .. } => {
                 tray_panel::double_click(tray.app_handle());
-                main_window::show(tray.app_handle());
+                show_main(tray.app_handle());
             }
             _ => {}
         });
@@ -164,6 +209,10 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     }
     tray.build(app)?;
     Ok(())
+}
+
+fn show_main(app: &AppHandle) {
+    windows::show(app, windows::MAIN);
 }
 
 /// „Quit” z traya: zatrzymanie daemona w tle, żeby pętla zdarzeń działała, a pojedyncza instancja

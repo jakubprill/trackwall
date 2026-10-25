@@ -2,7 +2,7 @@
 //! session waiting for you, the same choice as Alt+J inside the window (ADR-48). Registered from Rust only: the UI gets
 //! no permission of the plugin. Described in §5.4 of docs/architecture.md.
 
-use crate::main_window::{self, Focus};
+use crate::jump::{self, Jump};
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
@@ -19,7 +19,7 @@ pub fn next_waiting() -> Shortcut {
 pub fn register(app: &AppHandle) {
     let registered = app.global_shortcut().on_shortcut(next_waiting(), |app, _, event| {
         if event.state == ShortcutState::Pressed {
-            main_window::focus(app, Focus::NextWaiting);
+            jump::request(app, Jump::NextWaiting);
         }
     });
     if let Err(err) = registered {

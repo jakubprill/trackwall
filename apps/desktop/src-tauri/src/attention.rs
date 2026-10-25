@@ -1,7 +1,7 @@
 //! Copilot CLI sessions that are waiting for you (ADR-26) and task proposals waiting for a decision (ADR-39): the shell
 //! asks the daemon for the session list every few seconds and, when a session stops working and starts waiting or a new
 //! proposal arrives, draws the user's attention (taskbar flash, Dock bounce) and updates the tray tooltip and menu.
-//! Clicking a menu item shows the window with that session or proposal. While no Trackwall window has the focus, the
+//! Clicking a menu item shows the window for sessions (ADR-49) with that session or proposal. While no Trackwall window has the focus, the
 //! same moments also show a system notification (ADR-50, `notification.rs`).
 //!
 //! Pytanie idzie z powłoki, a nie z UI: schowane okno WebView może mieć wstrzymane timery, a tray ma działać także
@@ -10,8 +10,9 @@
 
 use crate::daemon;
 use crate::daemon_state::DaemonState;
-use crate::main_window::{self, Focus};
+use crate::jump::Jump;
 use crate::notification;
+use crate::windows::Windows;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -22,6 +23,7 @@ use tauri::{AppHandle, Manager, UserAttentionType};
 const POLL: Duration = Duration::from_secs(2);
 /// Tray menu item ids; a session or proposal item is a prefix plus its id.
 pub const MENU_SHOW: &str = "show";
+pub const MENU_NEW_WINDOW: &str = "new-window";
 pub const MENU_QUIT: &str = "quit";
 const MENU_SESSION_PREFIX: &str = "session:";
 const MENU_PROPOSAL_PREFIX: &str = "proposal:";
@@ -174,16 +176,17 @@ pub fn build_menu(app: &AppHandle, waiting: &[Waiting], proposals: &[Proposal]) 
         menu.append(&PredefinedMenuItem::separator(app)?)?;
     }
     menu.append(&MenuItem::with_id(app, MENU_SHOW, "Show Trackwall", true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, MENU_NEW_WINDOW, "New window", true, None::<&str>)?)?;
     menu.append(&MenuItem::with_id(app, MENU_QUIT, "Quit (stops the daemon)", true, None::<&str>)?)?;
     Ok(menu)
 }
 
 /// The session or proposal of a tray menu item; `None` for the fixed items.
-pub fn focus_from_menu(id: &str) -> Option<Focus> {
+pub fn jump_from_menu(id: &str) -> Option<Jump> {
     if let Some(session) = id.strip_prefix(MENU_SESSION_PREFIX) {
-        return Some(Focus::Session(session.to_owned()));
+        return Some(Jump::Session(session.to_owned()));
     }
-    id.strip_prefix(MENU_PROPOSAL_PREFIX).map(|proposal| Focus::Proposal(proposal.to_owned()))
+    id.strip_prefix(MENU_PROPOSAL_PREFIX).map(|proposal| Jump::Proposal(proposal.to_owned()))
 }
 
 /// What deserves the user's attention since the previous poll.
@@ -224,7 +227,7 @@ pub fn watch(app: AppHandle, state: Arc<DaemonState>, tray_id: &'static str) {
             let Some(now) = daemon::sessions(&conn).ok().and_then(|body| parse_sessions(&body)) else { continue };
             let news = News::between(last.as_ref(), &now);
             if !news.is_empty() {
-                if let Some(window) = app.get_webview_window(main_window::LABEL) {
+                if let Some(window) = app.get_webview_window(&app.state::<Windows>().session_window()) {
                     let _ = window.request_user_attention(Some(UserAttentionType::Informational));
                 }
                 // The user looking at Trackwall sees the badges; a notification on top of that would only be noise.
@@ -349,9 +352,9 @@ mod tests {
 
     #[test]
     fn menu_item_points_at_a_session_or_a_proposal() {
-        assert_eq!(focus_from_menu("session:abc"), Some(Focus::Session("abc".into())));
-        assert_eq!(focus_from_menu("proposal:abc"), Some(Focus::Proposal("abc".into())));
-        assert_eq!(focus_from_menu(MENU_SHOW), None);
+        assert_eq!(jump_from_menu("session:abc"), Some(Jump::Session("abc".into())));
+        assert_eq!(jump_from_menu("proposal:abc"), Some(Jump::Proposal("abc".into())));
+        assert_eq!(jump_from_menu(MENU_SHOW), None);
         assert_eq!(menu_text("Fix A & B"), "Fix A && B");
     }
 

@@ -19,7 +19,7 @@ export interface SessionPty {
   resize(cols: number, rows: number): void;
 }
 
-/** One session terminal window (a viewer in the UI): keyboard input, size, focus and leaving. */
+/** One session terminal (a viewer in the UI): keyboard input, size, focus and leaving. */
 export interface SessionWindow {
   input(data: string): void;
   resize(cols: number, rows: number): void;

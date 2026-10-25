@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Session, SessionList, TaskProposal } from "@trackwall/protocol";
-import type { ShellFocus } from "./use-session-focus.ts";
+import type { Jump } from "./use-jump-request.ts";
 
 /**
  * The tray panel (ADR-50): a small window of the Tauri shell next to the tray icon, with the sessions waiting for you
@@ -17,11 +17,12 @@ export function trayPanelEntries(list: SessionList): { proposals: readonly TaskP
   return { proposals: list.proposals, sessions: list.sessions.filter((s) => s.needsAttention) };
 }
 
-/** What a click in the panel opens in the main window: the shell passes it on as `focus-session`. */
-export type TrayPanelTarget = Exclude<ShellFocus, { kind: "next-waiting" }>;
+/** What a click in the panel opens: the shell passes it on as a jump (`jump.rs`). */
+export type TrayPanelTarget = Extract<Jump, { kind: "session" | "proposal" }>;
 
 /**
- * The shell hides the panel and shows the main window with the target, or without one for "Open Trackwall"
+ * The shell hides the panel and jumps to the target in the window for sessions, or shows the main window without one
+ * for "Open Trackwall"
  * (`open_from_tray_panel` in `main.rs`).
  */
 export function openFromTrayPanel(target?: TrayPanelTarget): Promise<void> {
