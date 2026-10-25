@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
@@ -45,6 +45,8 @@ function shellCall(request: ModelRequest, command: { bash: string; powershell: s
  * stdio bridge and the hooks running from source.
  */
 const SESSION_MS = 60_000;
+// A test waits for at most three such steps; its own limit is above their sum, so a slow step fails on its own message.
+setDefaultTimeout(4 * SESSION_MS);
 
 /** Starts a session in `shop` and waits until Copilot CLI shows its input box with the MCP servers loaded. */
 async function startSession() {

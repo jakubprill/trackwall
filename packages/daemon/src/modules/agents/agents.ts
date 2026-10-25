@@ -497,7 +497,7 @@ export class Agents {
    */
   #prepare({ id, repo, task, dir, token, promptOnStart }: SessionFiles): PreparedSession {
     const pluginDir = join(dir, "plugin");
-    const hooksFile = sessionHooksFile(this.#deps.home, id);
+    const hooksFile = join(dir, HOOKS_FILENAME);
     const tokenFile = join(dir, SESSION_TOKEN_FILENAME);
     mkdirSync(dir, { recursive: true });
     writeFileSync(hooksFile, "");

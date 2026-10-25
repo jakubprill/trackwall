@@ -99,6 +99,7 @@ export async function startScriptedModel() {
   /** A request the test did not plan for: the test fails on `problems`, and Copilot CLI shows a model error. */
   function refuse(res: ServerResponse, problem: string): void {
     problems.push(problem);
+    // `answer` threw after writing the headers: the stream can only be cut short.
     if (res.headersSent) {
       res.end();
       return;
