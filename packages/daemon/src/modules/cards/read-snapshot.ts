@@ -7,7 +7,7 @@ import type { RepoSnapshot } from "./snapshot.ts";
  * Reading a commit for the extractors: the file list (`ls-tree`), source files chosen by a content search (`git grep`,
  * ADR-30) and the content of the files chosen by `reads` together with the source files in one `cat-file --batch`,
  * without the working directory (ADR-14), so the card describes exactly this commit. Whatever it did not read within the
- * limits goes to the snapshot's `problems`, so an incomplete card says what it lacks.
+ * limits goes to the commit snapshot's `problems`, so an incomplete card says what it lacks.
  */
 
 /** What `cards` needs from `vcs` to read a commit; wired in the facade. */

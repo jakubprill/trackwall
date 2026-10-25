@@ -96,7 +96,7 @@ describe("repo tags", () => {
 });
 
 describe("mise configuration and the no-mise tag", () => {
-  test("tasks from [tasks] in the mise configuration and files in task directories, each with evidence", () => {
+  test("mise tasks from [tasks] in the mise configuration and files in mise task directories, each with evidence", () => {
     const { mise } = extractCard(
       snapshotOf(
         {
@@ -121,7 +121,7 @@ describe("mise configuration and the no-mise tag", () => {
     ]);
   });
 
-  test("a repo without mise configuration and a repo with a mise.toml without tasks get no-mise with a reason, and one with a task does not", () => {
+  test("a repo without mise configuration and a repo with a mise.toml without mise tasks get no-mise with a reason, and one with a mise task does not", () => {
     const noMise = (files: Record<string, string>, paths: string[] = []) =>
       repoTags(extractCard(snapshotOf(files, paths), parsers), { id: "app", remote: null }, {}).find((t) => t.name === "no-mise")?.reason;
     expect(noMise({})).toBe("no mise config in the repo root");
@@ -129,7 +129,7 @@ describe("mise configuration and the no-mise tag", () => {
     expect(noMise({ "mise.toml": "[tools\n" })).toBe("mise.toml declares no tasks");
     expect(noMise({ "mise.toml": '[tasks]\nbuild = "make"\n' })).toBeUndefined();
     expect(noMise({}, [".mise/tasks/build"])).toBeUndefined();
-    // A config file the card did not read (limits) may have tasks, so there is no tag.
+    // A config file the card did not read (limits) may have mise tasks, so there is no tag.
     expect(noMise({}, ["mise.toml"])).toBeUndefined();
   });
 

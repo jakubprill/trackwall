@@ -8,7 +8,7 @@ import { MISE_CONFIG_FILES, TOML_KEY } from "./tools.ts";
 
 /**
  * The repo's mise configuration from the commit tree (§4.6, ADR-34): which mise config files are in the repo and which
- * tasks are defined in their `[tasks]` and in file task directories. No `mise tasks ls`, for the same reasons as the
+ * mise tasks are defined in their `[tasks]` and in file mise task directories. No `mise tasks ls`, for the same reasons as the
  * tools in `tools.ts` (ADR-25): the commit instead of the working directory, and no mise trust. A config file is parsed
  * here a second time (the first for `[tools]`), because it is a few small files per commit, and a card is computed once.
  */
@@ -16,9 +16,9 @@ import { MISE_CONFIG_FILES, TOML_KEY } from "./tools.ts";
 /** Config files from the root (those from `tools.ts` and `.config/mise/mise.toml`) and `conf.d` directories with any `*.toml`. */
 const ROOT_CONFIG_FILES = [...MISE_CONFIG_FILES, ".config/mise/mise.toml"];
 const CONF_D_DIRS = ["mise/conf.d", ".mise/conf.d", ".config/mise/conf.d"];
-/** File task directories mise reads by default in the repo root. */
+/** File mise task directories mise reads by default in the repo root. */
 const FILE_TASK_DIRS = ["mise-tasks", ".mise-tasks", "mise/tasks", ".mise/tasks", ".config/mise/tasks"];
-/** A task's table header (`[tasks.build]`, `[tasks."test:unit"]`); classes without spaces, so no backtracking on a long line. */
+/** A mise task's table header (`[tasks.build]`, `[tasks."test:unit"]`); classes without spaces, so no backtracking on a long line. */
 const TASK_HEADER = /^\s*\[tasks\.(?:"([^"]*)"|'([^']*)'|([^"'\s\]]+))\s*\]/g;
 const TASKS_TABLE = /^\s*\[tasks\]\s*$/;
 const ANY_TABLE = /^\s*\[/;
@@ -32,7 +32,7 @@ export function isMiseConfigFile(path: string): boolean {
 /**
  * Config files in the order of `ROOT_CONFIG_FILES`, then `conf.d`, so the reason for the `no-mise` tag points to
  * `mise.toml`, not a random file from git's list. The result is incomplete (`complete: false`) when some file was not read
- * or the commit's file list is cut (a read problem without a path): then it is unknown whether the repo has tasks.
+ * or the commit's file list is truncated (a read problem without a path): then it is unknown whether the repo has mise tasks.
  */
 export function extractMiseSetup(snapshot: RepoSnapshot): { mise: MiseSetup; problems: CardProblem[] } {
   const configFiles = snapshot.paths.filter(isMiseConfigFile).sort((a, b) => configRank(a) - configRank(b));
@@ -52,7 +52,7 @@ function configRank(path: string): number {
 }
 
 /**
- * The `[tasks]` keys; a file that is not valid TOML gives no tasks. A card problem is reported here only for files
+ * The `[tasks]` keys; a file that is not valid TOML gives no mise tasks. A card problem is reported here only for files
  * `tools.ts` does not read, so that the same bad file is not on the card twice.
  */
 function tomlTasks(path: string, text: string, problems: CardProblem[]): DeclaredMiseTask[] {
@@ -84,7 +84,10 @@ function tasksTableLines(text: string): Map<string, number> {
   return new Map([...keyLines(table, TOML_KEY)].map(([name, line]) => [name, line + start + 1]));
 }
 
-/** Files in task directories; hidden files (`.gitkeep`) are not tasks, and `_default` is the task named after its directory. */
+/**
+ * Files in mise task directories; hidden files (`.gitkeep`) are not mise tasks, and `_default` is the mise task named
+ * after its directory.
+ */
 function fileTasks(paths: readonly string[]): DeclaredMiseTask[] {
   return FILE_TASK_DIRS.flatMap((dir) =>
     paths

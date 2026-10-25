@@ -219,7 +219,7 @@ describe("endpoint contracts and DTOs", () => {
     expect(dtos(c)).toEqual(["class OrderDto(a: int, b: int[]) src/main/java/a/Api.java:4"]);
   });
 
-  test("an enum with over 200 constants is cut, and an empty record is not a DTO", () => {
+  test("an enum with over 200 constants is truncated, and an empty record is not a DTO", () => {
     const constants = Array.from({ length: 201 }, (_, i) => `C${i}`).join(", ");
     const c = card({
       "src/main/java/a/Api.java": `@RestController class Api { @GetMapping("/a") Many a(@RequestBody Empty body) { return null; } }\nenum Many { ${constants} }\nrecord Empty() {}`,
@@ -238,7 +238,7 @@ describe("endpoint contracts and DTOs", () => {
     expect(contracts(c.provides)).toEqual(["GET /a - -> A", "POST /b X -> B"]);
   });
 
-  test("a DTO with over 200 fields and types longer than 256 characters are cut, with a problem", () => {
+  test("a DTO with over 200 fields and types longer than 256 characters are truncated, with a problem", () => {
     const fields = Array.from({ length: 201 }, (_, i) => `String f${i};`).join(" ");
     const long = `Map<${"A".repeat(300)},String>`;
     const c = card({

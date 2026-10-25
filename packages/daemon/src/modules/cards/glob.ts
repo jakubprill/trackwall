@@ -4,7 +4,7 @@
  * `workspace.yaml`; there are no `{a,b}` braces or `[…]` classes.
  *
  * No regular expressions: a workspace pattern comes from the repo (untrusted, §8), and `*a*a*a*a` turned into a regular
- * expression backtracks for polynomially long on a long path. Dynamic programming takes pattern × path time.
+ * expression backtracks for polynomial time on a long path. Dynamic programming takes pattern × path time.
  */
 
 type Token = { kind: "literal"; char: string } | { kind: "one" | "segment" | "any" | "dirs" };

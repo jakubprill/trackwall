@@ -161,7 +161,7 @@ function properties(pom: Pom, poms: ReadonlyMap<string, Pom>, seen = new Set<str
  * stays in the text, so that it is visible where the version comes from.
  */
 function substitute(value: string, props: ReadonlyMap<string, string>): string {
-  // A value longer than the result after substitution is not a version, and searching it costs.
+  // A value longer than the result after substitution is not a version, and searching it is expensive.
   if (value.length > MAX_SUBSTITUTED_LENGTH) return value;
   let current = value;
   for (let i = 0; i < MAX_SUBSTITUTIONS && current.includes("${"); i++) {

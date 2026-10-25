@@ -81,7 +81,7 @@ export interface UrlVariant {
 
 /**
  * The address text in every profile of the module: first the default profile, then every profile that gives another
- * value. Text without `${…}` is one, without profiles (an address in code). The user and password in the address are
+ * value. Text without `${…}` gives a single entry without profiles (an address in code). The user and password in the address are
  * masked, and the query is left out (§8).
  */
 export function urlVariants(module: SpringModule, text: string): UrlVariant[] {

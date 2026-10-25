@@ -101,7 +101,7 @@ function buildProjects(snapshot: RepoSnapshot, dir: string): (Project & { text: 
 }
 
 /**
- * Project paths from `include` in settings, without the leading `:` (`:api:core` → `api:core`). `include` is often spread
+ * Project paths from `include` in settings, without the leading `:` (`:api:core` → `api:core`). `include` can be spread
  * over several lines: in brackets (Kotlin) or with a comma at the end of the line (Groovy).
  */
 function includedProjects(settings: string): string[] {

@@ -9,7 +9,7 @@ import { type Extracted, emptyExtracted, keyLines, type RepoSnapshot } from "./s
  * Required tools from the commit tree (§4.6, ADR-25): `[tools]` from the mise configuration in the repo root and
  * `.tool-versions` (source `mise`), plus versions from files that give them their own way (source `hint`): `.nvmrc`,
  * `.node-version`, `.java-version`, `.sdkmanrc` and the Maven and Gradle wrappers. It does not ask `mise ls`: that would
- * read the working directory and the global configuration instead of the commit, and would need trust and an installed mise.
+ * read the working directory and the global configuration instead of the commit, and would need mise trust and an installed mise.
  */
 
 /** mise config files in the repo root, in the order mise reads them (the last one wins, so reversed). */

@@ -21,7 +21,7 @@ const MAX_YAML_DEPTH = 64;
 /** How many profiles of a module to consider: each is a separate configuration view, and an app has a few. */
 const MAX_PROFILES = 32;
 
-/** The files this read reads, for choosing files from the commit. */
+/** The files read here, for choosing files from the commit. */
 export function readsSpringConfigFile(path: string): boolean {
   return path.length <= 1024 && CONFIG_FILE.test(path) && !isTestPath(path);
 }

@@ -9,7 +9,7 @@ import { writeFileAtomic } from "../../infra/atomic-write.ts";
  * Repo card cache by commit hash (ADR-25): a card depends only on the commit's tree and the extractor version, so
  * once computed it does not change. In daemon memory and in `<state directory>/cards/<commit>.json` files, so that a
  * daemon restart does not read hundreds of repos again. A file with another extractor version or a damaged one counts as
- * missing. A card part of which depended on the time of computing (ADR-38) stays only in memory, so the next daemon start
+ * missing. A card that partly depended on the time of computing (ADR-38) stays only in memory, so the next daemon start
  * computes it again.
  */
 

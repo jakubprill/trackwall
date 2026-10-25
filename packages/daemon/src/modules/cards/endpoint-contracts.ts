@@ -27,7 +27,7 @@ const MAX_DTOS = 500;
 /** At most this many fields or enum constants of one DTO on a card. */
 const MAX_DTO_MEMBERS = 200;
 /**
- * The longest type notation on a card; a longer one is cut so that one file from the repo does not bloat the card and
+ * The longest type notation on a card; a longer one is truncated so that one file from the repo does not bloat the card and
  * the agent's context.
  */
 const MAX_TYPE_LENGTH = 256;
@@ -55,7 +55,7 @@ export function extractContracts(snapshot: RepoSnapshot, provides: readonly Prov
     syntax,
     problems,
   );
-  // Cutting only after discovering the DTOs: a name cut in half would point to another type.
+  // Truncating only after discovering the DTOs: a name truncated in half would point to another type.
   return clipTypes({ provides: withContracts, dtos, problems });
 }
 
@@ -143,7 +143,7 @@ function typeNames(type: string): string[] {
   return (type.match(/[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*/g) ?? []).map(simpleName).filter(isTypeName);
 }
 
-/** Type notations on the card cut to `MAX_TYPE_LENGTH` characters (with “…”), with one problem per card. */
+/** Type notations on the card truncated to `MAX_TYPE_LENGTH` characters (with “…”), with one problem per card. */
 function clipTypes({ provides, dtos, problems }: Contracts): Contracts {
   let clippedAny = false;
   const clip = (type: string): string => {

@@ -2,7 +2,7 @@ import { type Language, Node, Parser } from "web-tree-sitter";
 import { type JvmGrammars, loadJvmGrammars } from "../../platform/tree-sitter.ts";
 
 /**
- * Java and Kotlin syntax trees from tree-sitter (§4.6, ADR-37) for the extractors tokens are not enough for
+ * Java and Kotlin syntax trees from tree-sitter (§4.6, ADR-37) for the extractors for which tokens are not enough
  * (`java-tokens.ts`): parameter and field types, records, `data class`. The parser runs in WASM in the daemon process,
  * without compiling the repo and without a native addon. Syntactically invalid code gives a tree with `ERROR` nodes, not
  * an exception.
