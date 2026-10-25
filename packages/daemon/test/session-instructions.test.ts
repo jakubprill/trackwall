@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MCP_INSTRUCTIONS, TRACKWALL_DOCS_LLMS_URL, TRACKWALL_DOCS_URL } from "@trackwall/protocol";
+import { MCP_INSTRUCTIONS } from "@trackwall/protocol";
 import { withInstructionsDir, writeSessionInstructions } from "../src/modules/agents/session-instructions.ts";
 
 describe("Copilot CLI session instructions (ADR-46)", () => {
@@ -18,14 +18,12 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).toContain(MCP_INSTRUCTIONS);
   });
 
-  test("every session learns which Trackwall version started it, where the user sees it and where the documentation is", () => {
+  test("every session learns which Trackwall version started it and where the user sees it", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
     writeSessionInstructions(sessionDir, "0.3.0", { repo: "shop", task: null });
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain("Trackwall 0.3.0 started this Copilot CLI session");
     expect(text).toContain("The user sees this session in Trackwall's Sessions view");
-    expect(text).toContain(TRACKWALL_DOCS_URL);
-    expect(text).toContain(TRACKWALL_DOCS_LLMS_URL);
   });
 
   test("a session in the repo root is a main session and does not get the task rules", () => {

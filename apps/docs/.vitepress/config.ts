@@ -1,12 +1,13 @@
 // The feature documentation site (ADR-56), published on GitHub Pages from .github/workflows/pages.yml.
+import { TRACKWALL_DOCS_URL } from "@trackwall/protocol";
 import { defineConfig } from "vitepress";
 import llmstxt, { copyOrDownloadAsMarkdownButtons } from "vitepress-plugin-llms";
 import { FEATURE_LIST_PAGE, SIDEBAR } from "./sidebar.ts";
 
 const REPO_URL = "https://github.com/jakubprill/trackwall";
-// GitHub Pages serves a project site under /<repo>/; `pnpm dev` uses the same path. Agents get the full address
-// (`TRACKWALL_DOCS_URL` in `protocol`), and a protocol test keeps the two equal.
-const BASE = "/trackwall/";
+// GitHub Pages serves a project site under /<repo>/; `pnpm dev` uses the same path. It comes from the address agents
+// get in the MCP instruction, so the two cannot drift apart.
+const BASE = new URL(TRACKWALL_DOCS_URL).pathname;
 // The template for feature pages is for writers, not a page of the site.
 const TEMPLATE = "TEMPLATE.md";
 
