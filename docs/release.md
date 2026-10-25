@@ -13,11 +13,11 @@ Trackwall is distributed as zip archives on [GitHub Releases](https://github.com
 5. On `main`, create and push a tag with the same version:
 
    ```sh
-   git tag v0.2.0
-   git push origin v0.2.0
+   git tag v0.3.0
+   git push origin v0.3.0
    ```
 
-   A tag with a hyphen (for example `v0.2.0-rc.1`) creates a pre-release.
+   A tag with a hyphen (for example `v0.3.0-rc.1`) creates a pre-release.
 
 The workflow checks that the tag points to a commit on `main` and matches the version in `tauri.conf.json`, runs `pnpm test` on `windows-latest` and `macos-latest` (a tag does not require green CI on its commit) and builds in parallel with the same scripts as CI (`pnpm build:desktop`, the sidecar smoke test, `pnpm portable`), and publishes the release only after both builds succeed. The release contains:
 
@@ -36,7 +36,7 @@ Download the archive for your system and check its sum against `SHA256SUMS.txt`.
 **Windows.** The browser adds a "Mark of the Web" to the downloaded file, so SmartScreen blocks `trackwall.exe` from starting (often without a "Run anyway" button). Command-line tools do not add this mark, so the simplest way is to download the archive with `gh` (signed in with `gh auth login`) and check the sum:
 
 ```powershell
-$v = "0.2.0"
+$v = "0.3.0"
 $zip = "trackwall-$v-windows-x64.zip"
 gh release download "v$v" -R jakubprill/trackwall -p $zip -p SHA256SUMS.txt -D $env:TEMP --clobber
 if ($LASTEXITCODE) { throw "gh release download failed" }
@@ -59,7 +59,7 @@ WebView2 is required (it is in Windows 11 and in most up-to-date Windows 10 inst
 
 ```sh
 shasum -a 256 -c SHA256SUMS.txt --ignore-missing
-ditto -x -k trackwall-0.2.0-macos-arm64.zip /Applications
+ditto -x -k trackwall-0.3.0-macos-arm64.zip /Applications
 xattr -dr com.apple.quarantine /Applications/Trackwall.app
 ```
 
