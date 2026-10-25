@@ -1,31 +1,31 @@
 import { spawn } from "node:child_process";
 
 /**
- * Uruchamianie programów modułu `vcs` (`git`, `gh`, `glab`): argumenty zawsze tablicą, bez powłoki, wyjście
- * ograniczone, a błąd to komunikat z stderr. Procesy krótkie i bez grupy; długie procesy z zatrzymywaniem całego
- * drzewa należą do modułu `procs`.
+ * Runs the `vcs` module's programs (`git`, `gh`, `glab`): arguments always as an array, without a shell, output
+ * limited, and an error is the message from stderr. Short processes without a group; long processes that stop the whole
+ * tree belong to the `procs` module.
  */
 
-/** Górny limit wyjścia, gdy wołający nie poda własnego: lista plików ogromnego katalogu, długi log. */
+/** The upper output limit when the caller gives none: the file list of a huge directory, a long log. */
 const DEFAULT_MAX_BYTES = 8 * 1024 * 1024;
-/** Z stderr zostaje koniec: przy błędzie tam jest przyczyna, a początek to zwykle postęp. */
+/** The end of stderr is kept: on an error the cause is there, and the beginning is usually progress. */
 const STDERR_TAIL_BYTES = 16 * 1024;
 
 export interface RunOutput {
   stdout: Buffer;
-  /** Wyjście dłuższe niż `maxBytes` zostało ucięte, a proces zakończony. */
+  /** Output longer than `maxBytes` was cut and the process ended. */
   truncated: boolean;
 }
 
 export interface RunOptions {
-  /** Jak nazwać wywołanie w komunikacie błędu, np. `git status`. */
+  /** How to name the call in an error message, e.g. `git status`. */
   label: string;
   env: NodeJS.ProcessEnv;
   timeoutMs: number;
   maxBytes?: number;
-  /** Wejście dla komend czytających z stdin (`cat-file --batch-check`). */
+  /** Input for commands that read stdin (`cat-file --batch-check`). */
   stdin?: string | Buffer;
-  /** Kody wyjścia poza 0, które są wynikiem, a nie błędem (`git grep`: 1, gdy nic nie pasuje). */
+  /** Exit codes other than 0 that are a result, not an error (`git grep`: 1 when nothing matches). */
   okExitCodes?: readonly number[];
 }
 
@@ -38,8 +38,8 @@ export function runProgram(command: string, args: readonly string[], opts: RunOp
     let stderr = Buffer.alloc(0);
     let settled = false;
 
-    // Na Windowsie `git` z PATH bywa launcherem (`cmd\git.exe`), który uruchamia właściwego gita jako dziecko.
-    // Zabicie launchera nie zamyka rur trzymanych przez wnuka, więc wynik ustalamy bez czekania na `close`.
+    // On Windows `git` from PATH is sometimes a launcher (`cmd\git.exe`) that starts the real git as a child.
+    // Killing the launcher does not close pipes held by the grandchild, so we settle the result without waiting for `close`.
     const finish = (settle: () => void) => {
       if (settled) return;
       settled = true;
@@ -77,7 +77,7 @@ export function runProgram(command: string, args: readonly string[], opts: RunOp
       const message = stderr.toString("utf8").trim() || `${opts.label} ${reason}`;
       finish(() => reject(new Error(message)));
     });
-    // Program, który nie czyta stdin, może go zamknąć przed zapisem; EPIPE nie jest wtedy błędem wywołania.
+    // A program that does not read stdin may close it before the write; EPIPE is then not an error of the call.
     child.stdin.on("error", () => {});
     child.stdin.end(opts.stdin);
   });

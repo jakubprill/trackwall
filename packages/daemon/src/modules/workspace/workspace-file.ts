@@ -8,28 +8,28 @@ import { DomainError } from "../../infra/errors.ts";
 import { isFullPath, NOT_FULL_PATH } from "./full-path.ts";
 
 /**
- * `workspace.yaml` (§4.5, ADR-13): konfiguracja workspace, którą użytkownik może edytować ręcznie i trzymać
- * w prywatnym repo. Czytany przy każdym użyciu, więc ręczna edycja działa bez restartu daemona. Zapis zmienia
- * tylko jeden klucz (`projectsDir` albo `repoHosts`; `repoTags` i `graph` tylko ręcznie) i zachowuje komentarze oraz pozostałe klucze, także nieczytaną
- * już listę `repos` z wersji 0.2.0 (ADR-18): to plik użytkownika, więc usunięcie jej zostawiamy jemu.
+ * `workspace.yaml` (§4.5, ADR-13): the workspace configuration, which the user can edit by hand and keep
+ * in a private repo. Read on every use, so a manual edit works without restarting the daemon. A write changes
+ * only one key (`projectsDir` or `repoHosts`; `repoTags` and `graph` only by hand) and keeps comments and the other keys,
+ * including the `repos` list from version 0.2.0, which is no longer read (ADR-18): it is the user's file, so removing it is up to them.
  */
 
 /**
- * Klucze czytane osobno, więc zły wpis w jednym nie psuje drugiego: literówka w hostingach nie zabiera listy repo,
- * a komunikat mówi, który klucz poprawić.
+ * Keys read separately, so a bad entry in one does not break the other: a typo in the repo hosts does not take away the repo list,
+ * and the message says which key to fix.
  */
 const Keys = {
-  // Pusty klucz (`projectsDir:`) YAML czyta jako `null`, tak samo jak brak klucza.
+  // YAML reads an empty key (`projectsDir:`) as `null`, the same as a missing key.
   projectsDir: z
     .string()
     .refine((dir) => isFullPath(dir), NOT_FULL_PATH)
     .nullish()
     .transform((dir) => dir ?? null),
-  // Hostingi repo (ADR-19); brak klucza to brak hostingów, bo adres GitLab zna tylko użytkownik.
+  // Repo hosts (ADR-19); a missing key means no repo hosts, because only the user knows the GitLab address.
   repoHosts: RepoHosts.nullish().transform((hosts) => hosts ?? []),
-  // Reguły tagów repo (ADR-25); tylko ręcznie w pliku, bo nazwy zespołów i grup zna tylko użytkownik.
+  // Repo tag rules (ADR-25); only by hand in the file, because only the user knows team and group names.
   repoTags: RepoTagRules.nullish().transform((rules) => rules ?? {}),
-  // Aliasy paczek i ręczne krawędzie grafu (ADR-29); tylko ręcznie w pliku, jak `repoTags`.
+  // Package aliases and manual graph edges (ADR-29); only by hand in the file, like `repoTags`.
   graph: GraphConfig.nullish().transform((graph) => graph ?? GraphConfig.parse({})),
 };
 type Key = keyof typeof Keys;
@@ -41,22 +41,22 @@ export class WorkspaceFile {
     this.path = path;
   }
 
-  /** Folder z projektami (ADR-18); `null`, dopóki nie jest ustawiony. */
+  /** The projects folder (ADR-18); `null` until it is set. */
   projectsDir(): string | null {
     return this.get("projectsDir", Keys.projectsDir);
   }
 
-  /** Hostingi repo w kolejności z pliku (ADR-19). */
+  /** Repo hosts in file order (ADR-19). */
   repoHosts(): RepoHost[] {
     return this.get("repoHosts", Keys.repoHosts);
   }
 
-  /** Reguły tagów repo (`repoTags`, ADR-25): tag i wzorce identyfikatora albo adresu repo zdalnego. */
+  /** Repo tag rules (`repoTags`, ADR-25): a tag and patterns of the identifier or remote repo address. */
   repoTagRules(): RepoTagRules {
     return this.get("repoTags", Keys.repoTags);
   }
 
-  /** Aliasy paczek i ręczne krawędzie grafu (`graph`, ADR-29). */
+  /** Package aliases and manual graph edges (`graph`, ADR-29). */
   graphConfig(): GraphConfig {
     return this.get("graph", Keys.graph);
   }
@@ -70,7 +70,7 @@ export class WorkspaceFile {
   }
 
   private get<T>(key: Key, schema: z.ZodType<T>): T {
-    // `load` gwarantuje mapę albo pusty dokument.
+    // `load` guarantees a map or an empty document.
     const config: Record<string, unknown> = this.load().toJS() ?? {};
     const parsed = schema.safeParse(config[key] ?? null);
     if (!parsed.success) throw this.invalid(`${key}: ${z.prettifyError(parsed.error)}`);

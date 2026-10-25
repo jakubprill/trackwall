@@ -7,21 +7,21 @@ import { isFullPath, NOT_FULL_PATH } from "./full-path.ts";
 import { repoIdFor } from "./repo-id.ts";
 
 /**
- * Folder z projektami (§4.5, ADR-18): repo to każdy bezpośredni podkatalog z `.git` (katalogiem albo plikiem,
- * jak w worktree). Folder jest czytany przy każdym zapytaniu, więc repo sklonowane albo usunięte poza Trackwallem
- * pojawia się i znika bez odświeżania konfiguracji. Głębiej nie szukamy: skan zostaje tani i przewidywalny.
- * Odczyt jest asynchroniczny, bo folder bywa na dysku sieciowym albo uśpionym dysku zewnętrznym.
+ * The projects folder (§4.5, ADR-18): a repo is every direct subdirectory with `.git` (a directory or a file,
+ * as in a worktree). The folder is read on every query, so a repo cloned or removed outside Trackwall
+ * appears and disappears without refreshing the configuration. We do not look deeper: the scan stays cheap and predictable.
+ * The read is asynchronous, because the folder is sometimes on a network drive or a sleeping external drive.
  */
 
 export interface RepoEntry {
   id: RepoId;
-  /** Pełna ścieżka katalogu repo. */
+  /** The full path of the repo directory. */
   path: string;
 }
 
 /**
- * Pełna ścieżka folderu do zapisu w `workspace.yaml`; musi istnieć, żeby literówka nie dała po cichu pustej listy.
- * Asynchronicznie, bo wskazany folder może leżeć na uśpionym dysku.
+ * The full path of the folder to save in `workspace.yaml`; it must exist, so that a typo does not silently give an empty list.
+ * Asynchronous, because the chosen folder may lie on a sleeping drive.
  */
 export async function resolveProjectsDir(input: string): Promise<string> {
   const { path, isDir } = await statFullPath(input, NOT_FULL_PATH);
@@ -39,14 +39,14 @@ export async function statFullPath(input: string, notFull: string): Promise<{ pa
   try {
     return { path, isDir: (await stat(path)).isDirectory() };
   } catch (err) {
-    // Nie tylko ENOENT: ENOTDIR, EACCES i zbyt długa nazwa to też zła ścieżka od użytkownika, nie błąd daemona.
+    // Not only ENOENT: ENOTDIR, EACCES and a name that is too long are also a bad path from the user, not a daemon error.
     throw new DomainError("bad_request", `${path} does not exist or cannot be opened (${errorCode(err)})`);
   }
 }
 
 /**
- * Repo w folderze z projektami, posortowane po nazwie katalogu; identyfikator z nazwy, przy kolizji z przyrostkiem
- * w tej samej kolejności (nowy katalog, który sortuje się wcześniej, może więc przejąć identyfikator, ADR-18).
+ * Repos in the projects folder, sorted by directory name; the identifier comes from the name, on a collision with a suffix
+ * in the same order (a new directory that sorts earlier may therefore take over an identifier, ADR-18).
  */
 export async function findRepos(projectsDir: string, unreadable: Unreadable): Promise<RepoEntry[]> {
   const entries = (await listDir(projectsDir, unreadable)).filter((entry) => !entry.name.startsWith("."));
@@ -56,7 +56,7 @@ export async function findRepos(projectsDir: string, unreadable: Unreadable): Pr
     entries
       .filter((_, i) => isRepo[i])
       .map((entry) => entry.name)
-      // Kolejność `readdir` zależy od systemu plików; stała kolejność daje stałe przyrostki przy kolizjach.
+      // The `readdir` order depends on the file system; a fixed order gives fixed suffixes on collisions.
       .sort(byName)
       .map((name) => {
         const path = join(projectsDir, name);
@@ -67,12 +67,12 @@ export async function findRepos(projectsDir: string, unreadable: Unreadable): Pr
   );
 }
 
-/** Klucz nazwy albo ścieżki w folderze z projektami: dyski Windowsa i macOS nie rozróżniają wielkości liter. */
+/** The key of a name or path in the projects folder: Windows and macOS drives are case-insensitive. */
 export function dirKey(name: string): string {
   return name.toLowerCase();
 }
 
-/** Czy w folderze z projektami jest już coś (także plik albo ukryty katalog) o tej nazwie; klon nie może tam trafić. */
+/** Whether the projects folder already has something (also a file or a hidden directory) with this name; a clone cannot go there. */
 export async function takenNames(projectsDir: string): Promise<(name: string) => boolean> {
   const taken = new Set((await listDir(projectsDir, projectsDirUnavailable)).map((entry) => dirKey(entry.name)));
   return (name) => taken.has(dirKey(name));
@@ -95,7 +95,7 @@ async function listDir(dir: string, unreadable: Unreadable): Promise<Dirent[]> {
   }
 }
 
-/** Dowiązanie (na Windowsie także junction) do katalogu liczy się jak katalog; zerwane dowiązanie jest pomijane. */
+/** A link (on Windows also a junction) to a directory counts as a directory; a broken link is skipped. */
 async function isRepoDir(parent: string, entry: Dirent): Promise<boolean> {
   const dir = join(parent, entry.name);
   const isDir = entry.isDirectory() || (entry.isSymbolicLink() && (await stat(dir).catch(() => undefined))?.isDirectory() === true);
@@ -107,7 +107,7 @@ export async function hasGit(dir: string): Promise<boolean> {
   return (await stat(join(dir, ".git")).catch(() => undefined)) !== undefined;
 }
 
-/** Bez `localeCompare`: porządek nie może zależeć od danych ICU w Bun i Node. */
+/** Without `localeCompare`: the order must not depend on the ICU data in Bun and Node. */
 function byName(a: string, b: string): number {
   const [la, lb] = [a.toLowerCase(), b.toLowerCase()];
   if (la !== lb) return la < lb ? -1 : 1;

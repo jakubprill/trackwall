@@ -1,19 +1,19 @@
 /**
- * Adres repo zdalnego (ADR-21): identyfikator repo niezależny od nazwy katalogu i protokołu klonu. Czysta funkcja,
- * testowana bez procesu.
+ * The remote repo address (ADR-21): a repo identifier independent of the directory name and the clone protocol. A pure function,
+ * tested without a process.
  */
 
 const NETWORK_SCHEMES = new Set(["ssh:", "git:", "http:", "https:", "git+ssh:", "ssh+git:"]);
 
 /**
- * Adres repo zdalnego jako `host/ścieżka`: bez schematu, użytkownika (z hasłem albo tokenem, jeśli ktoś je wpisał
- * w URL), portu i końcówki `.git`, z hostem małymi literami. `git@host:grupa/repo.git` i
- * `https://host/grupa/repo` dają to samo. Ścieżka lokalna, `file://` i `transport::` dają `undefined`: nie mówią
- * nic o hostingu.
+ * The remote repo address as `host/path`: without the scheme, the user (with a password or token, if someone put them
+ * in the URL), the port and the `.git` suffix, with the host in lower case. `git@host:group/repo.git` and
+ * `https://host/group/repo` give the same. A local path, `file://` and `transport::` give `undefined`: they say
+ * nothing about the hosting.
  */
 export function remoteAddress(url: string): string | undefined {
   const trimmed = url.trim();
-  // `transport::adres` (np. `ext::<komenda>`) to komenda z argumentami, czasem z hasłem, a nie adres hostingu.
+  // `transport::address` (e.g. `ext::<command>`) is a command with arguments, sometimes with a password, not a hosting address.
   if (/^[A-Za-z][A-Za-z0-9+.-]*::/.test(trimmed)) return undefined;
   const target = trimmed.includes("://") ? fromUrl(trimmed) : fromScp(trimmed);
   if (!target) return undefined;
@@ -37,8 +37,8 @@ function fromUrl(url: string): { host: string; path: string } | undefined {
 }
 
 /**
- * Składnia scp (`[użytkownik@]host:ścieżka`): git rozpoznaje ją po dwukropku przed pierwszym `/`. Jednoliterowy
- * „host” to litera dysku Windowsa (`C:\repo`), czyli ścieżka lokalna.
+ * The scp syntax (`[user@]host:path`): git recognises it by a colon before the first `/`. A one-letter
+ * "host" is a Windows drive letter (`C:\repo`), i.e. a local path.
  */
 function fromScp(url: string): { host: string; path: string } | undefined {
   const m = /^(?:[^@/]+@)?([^:/]+):(.+)$/s.exec(url);

@@ -1,14 +1,14 @@
 import { basename } from "node:path";
 
 /**
- * Identyfikator repo z nazwy katalogu, liczony przy każdym odczycie folderu z projektami: małe litery bez polskich
- * znaków, pozostałe znaki spoza `[a-z0-9._-]` zamienione na `-`, a przy kolizji z identyfikatorem z `taken`
- * (repo wcześniej w kolejności) przyrostek `-2`, `-3`…
+ * The repo identifier from the directory name, computed on every read of the projects folder: lower case without diacritics,
+ * other characters outside `[a-z0-9._-]` replaced with `-`, and on a collision with an identifier from `taken`
+ * (a repo earlier in order) the suffix `-2`, `-3`…
  */
 export function repoIdFor(dir: string, taken: ReadonlySet<string>): string {
   const base =
     basename(dir)
-      // `ł` nie rozkłada się w NFKD na literę i znak diakrytyczny.
+      // NFKD does not decompose `ł` into a letter and a diacritic.
       .replace(/ł/g, "l")
       .replace(/Ł/g, "L")
       .normalize("NFKD")

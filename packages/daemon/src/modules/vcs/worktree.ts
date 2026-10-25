@@ -6,24 +6,24 @@ import { parseStatus } from "./parse.ts";
 import { pathKey } from "./path-key.ts";
 
 /**
- * Worktree zadań agentów (§4.4, ADR-31): gałąź zadania w osobnym katalogu roboczym (w katalogu stanu daemona),
- * od czego wychodzi, co przepadłoby przy jej usunięciu i samo usunięcie. Funkcje dostają katalogi; które repo
- * i który worktree, wie moduł `agents`. Zmiany worktree liczy `worktree-changes.ts`.
+ * Agent task worktrees (§4.4, ADR-31): the task branch in a separate working directory (in the daemon's state directory),
+ * what it starts from, what would be lost on its removal, and the removal itself. Functions get directories; which repo
+ * and which worktree is known to the `agents` module. `worktree-changes.ts` counts worktree changes.
  */
 
-/** `worktree add` wypełnia katalog roboczy, a filtr LFS może przy tym pobierać obiekty. */
+/** `worktree add` fills the working directory, and an LFS filter may fetch objects meanwhile. */
 const CHECKOUT_TIMEOUT_MS = 5 * 60_000;
 
-/** Skąd zadanie wychodzi: gałąź domyślna repo (albo wybrana, gdy domyślnej nie ma) i jej commit. */
+/** What the task starts from: the repo's default branch (or the checked-out one when there is no default) and its commit. */
 export interface WorktreeBase {
   branch: string | null;
   commit: string;
 }
 
 /**
- * Gałąź domyślna bez pytania serwera: z `refs/remotes/<remote>/HEAD`, lokalna, gdy istnieje (to ją przesuwa
- * synchronizacja, ADR-21, i na niej mogą leżeć niewypchnięte commity), inaczej zdalna. Repo bez remote albo bez
- * wskazania gałęzi domyślnej daje gałąź wybraną w repo, a odłączony HEAD sam commit.
+ * The default branch without asking the server: from `refs/remotes/<remote>/HEAD`, the local one when it exists (sync
+ * moves it, ADR-21, and unpushed commits may lie on it), otherwise the remote one. A repo without a remote or without
+ * a default branch pointer gives the branch checked out in the repo, and a detached HEAD the bare commit.
  */
 export async function defaultBase(dir: string): Promise<WorktreeBase> {
   const remote = mainRemote(await readConfig(dir));
@@ -39,19 +39,19 @@ export async function defaultBase(dir: string): Promise<WorktreeBase> {
 }
 
 /**
- * Nowa gałąź `branch` od `commit` i jej worktree w `path`; git odmawia, gdy gałąź albo katalog już istnieją.
- * Git zakłada gałąź przed checkoutem i zostawia ją, gdy checkout się nie uda (zajęty katalog, filtr, limit czasu),
- * więc nieudana próba sprząta po sobie gałąź i katalog; inaczej ponowna próba z tą samą gałęzią (zatwierdzenie tej
- * samej propozycji zadania, ADR-39) zawsze kończyłaby się „already exists”. Gałęzi, która była przed próbą, nie rusza.
- * `path` musi leżeć w katalogu worktree daemona, bo jest kasowany bez pytania gita.
+ * A new branch `branch` from `commit` and its worktree in `path`; git refuses when the branch or the directory already exists.
+ * Git creates the branch before the checkout and leaves it when the checkout fails (a busy directory, a filter, the time limit),
+ * so a failed attempt cleans up its branch and directory; otherwise a retry with the same branch (approving the same
+ * task proposal, ADR-39) would always end in "already exists". A branch that existed before the attempt is left alone.
+ * `path` must lie in the daemon's worktree directory, because it is deleted without asking git.
  */
 export async function addWorktree(repoDir: string, path: string, branch: string, commit: string): Promise<void> {
   if ((await revParse(repoDir, `refs/heads/${branch}`)) !== undefined) throw new Error(`a branch named '${branch}' already exists`);
   try {
     await git(repoDir, ["worktree", "add", "--quiet", "-b", branch, path, commit], { timeoutMs: CHECKOUT_TIMEOUT_MS });
   } catch (err) {
-    // Nieudane sprzątanie (na Windowsie plik trzymany przez inny proces) idzie w treści błędu: ponowna próba
-    // skończy się wtedy „already exists”, a użytkownik musi wiedzieć, co usunąć ręcznie.
+    // A failed cleanup (on Windows a file held by another process) goes into the error text: a retry
+    // will then end in "already exists", and the user must know what to remove by hand.
     const leftovers: string[] = [];
     await removeWorktree(repoDir, path).catch((e: unknown) => leftovers.push(`directory ${path} (${String(e)})`));
     await deleteBranch(repoDir, branch).catch((e: unknown) => leftovers.push(`branch ${branch} (${String(e)})`));
@@ -61,13 +61,13 @@ export async function addWorktree(repoDir: string, path: string, branch: string,
 }
 
 /**
- * Usuwa worktree razem z niezacommitowanymi i ignorowanymi plikami (`--force`): wołający sprawdził `pendingWork`
- * albo użytkownik potwierdził utratę. Git zdejmuje rejestrację worktree przed kasowaniem plików, więc usunięcie
- * przerwane przez plik trzymany przez inny proces (Windows) zostawia katalog, który nie jest już worktree; taki
- * katalog, tak jak każdy niezarejestrowany (`pendingWork` go zgłasza), kasujemy sami, a rejestrację po katalogu
- * usuniętym ręcznie czyści `prune`. Bez repo (przeniesione, odłączony dysk) zostaje samo skasowanie katalogu, a
- * rejestrację w przeniesionym repo czyści jego `prune`.
- * `path` musi leżeć w katalogu worktree daemona, bo jest kasowany bez pytania gita.
+ * Removes a worktree together with uncommitted and ignored files (`--force`): the caller checked `pendingWork`
+ * or the user confirmed the loss. Git drops the worktree registration before deleting files, so a removal
+ * interrupted by a file held by another process (Windows) leaves a directory that is no longer a worktree; such a
+ * directory, like every unregistered one (`pendingWork` reports it), we delete ourselves, and `prune` clears the
+ * registration of a directory removed by hand. Without the repo (moved, a disconnected drive) only the directory
+ * deletion remains, and the moved repo's `prune` clears the registration there.
+ * `path` must lie in the daemon's worktree directory, because it is deleted without asking git.
  */
 export async function removeWorktree(repoDir: string, path: string): Promise<void> {
   const repo = existsSync(repoDir);
@@ -82,7 +82,7 @@ export async function removeWorktree(repoDir: string, path: string): Promise<voi
   if (repo) await git(repoDir, ["worktree", "prune"]);
 }
 
-/** Czy `path` jest worktree repo według `git worktree list`. */
+/** Whether `path` is a worktree of the repo according to `git worktree list`. */
 async function isRegistered(repoDir: string, path: string): Promise<boolean> {
   const { stdout } = await git(repoDir, ["worktree", "list", "--porcelain"]);
   const target = await pathKey(path);
@@ -94,13 +94,13 @@ async function isRegistered(repoDir: string, path: string): Promise<boolean> {
   return false;
 }
 
-/** Usuwa gałąź niezależnie od tego, czy jest scalona; gałęzi, której już nie ma (także bez repo), nie ma czego usuwać. */
+/** Deletes a branch whether or not it is merged; a branch that no longer exists (also without the repo) has nothing to delete. */
 export async function deleteBranch(repoDir: string, branch: string): Promise<void> {
   if (!existsSync(repoDir) || (await revParse(repoDir, `refs/heads/${branch}`)) === undefined) return;
   await git(repoDir, ["branch", "--quiet", "-D", branch]);
 }
 
-/** Gałąź w worktree: repo z gałęzią, katalog worktree i commit, od którego gałąź wyszła. */
+/** A branch in a worktree: the repo with the branch, the worktree directory and the commit the branch started from. */
 export interface WorktreeBranch {
   repoDir: string;
   worktree: string;
@@ -108,22 +108,22 @@ export interface WorktreeBranch {
   base: string;
 }
 
-/** Co przepadłoby przy usunięciu worktree, a bez gałęzi także przy usunięciu gałęzi. */
+/** What would be lost on removing the worktree, and without the branch also on deleting the branch. */
 export interface PendingWork {
-  /** Wpisy `git status` worktree, każdy nowy plik osobno. */
+  /** The worktree's `git status` entries, each new file separately. */
   uncommitted: number;
-  /** Commity HEAD worktree, których nie ma na żadnej gałęzi ani tagu (odłączony HEAD): znikają razem z worktree. */
+  /** Worktree HEAD commits that are on no branch or tag (a detached HEAD): they vanish with the worktree. */
   strayCommits: number;
-  /** Commity gałęzi od `base`. */
+  /** The branch's commits since `base`. */
   branchCommits: number;
   /**
-   * Katalog worktree jest na dysku, ale git go nie zna (przerwane usuwanie, `worktree prune`, repo sklonowane od
-   * nowa albo repo, którego już nie ma), więc nie da się policzyć, co w nim jest; usunięcie skasuje go w całości.
+   * The worktree directory is on disk, but git does not know it (an interrupted removal, `worktree prune`, a repo cloned
+   * again or a repo that no longer exists), so what is in it cannot be counted; removal deletes it entirely.
    */
   unregisteredDir: boolean;
 }
 
-/** Worktree usunięty ręcznie nie ma czego stracić; gałąź usunięta ręcznie też nie. */
+/** A worktree removed by hand has nothing to lose; neither does a branch deleted by hand. */
 export async function pendingWork(work: WorktreeBranch): Promise<PendingWork> {
   const onDisk = existsSync(work.worktree);
   if (!existsSync(work.repoDir)) return { uncommitted: 0, strayCommits: 0, branchCommits: 0, unregisteredDir: onDisk };

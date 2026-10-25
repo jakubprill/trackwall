@@ -1,7 +1,7 @@
 /**
- * Atrapa `gh` i `glab` dla testów hostingów repo. Pierwszy argument to plik JSON z ustawieniami testu; dalej
- * argumenty tak, jak podaje je daemon: `api --hostname <host> <ścieżka>` albo `repo clone <repo> <katalog>`.
- * Każde wywołanie dopisuje do `log` argumenty i zmienne środowiskowe, które daemon ma ustawić.
+ * Fake `gh` and `glab` for repo hosting tests. The first argument is a JSON file with the test settings; then the
+ * arguments as the daemon passes them: `api --hostname <host> <path>` or `repo clone <repo> <directory>`.
+ * Every call appends to `log` the arguments and the environment variables the daemon is meant to set.
  */
 import { execFileSync } from "node:child_process";
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
@@ -9,19 +9,19 @@ import { z } from "zod";
 
 const Config = z.object({
   log: z.string(),
-  /** Repo w kształcie odpowiedzi API hostingu, dzielone na strony według `page` i `per_page` z zapytania. */
+  /** Repos in the shape of the hosting API response, split into pages by `page` and `per_page` from the query. */
   repos: z.array(z.unknown()).default([]),
-  /** Komunikat na stderr i kod 1 dla `api` z danym `--hostname`. */
+  /** A message on stderr and code 1 for `api` with the given `--hostname`. */
   apiErrors: z.record(z.string(), z.string()).default({}),
-  /** Surowa odpowiedź `api` zamiast stron z `repos`. */
+  /** A raw `api` response instead of pages from `repos`. */
   apiRaw: z.string().optional(),
-  /** Repo, których klon kończy się błędem z tym komunikatem. */
+  /** Repos whose clone ends in an error with this message. */
   cloneErrors: z.record(z.string(), z.string()).default({}),
   cloneDelayMs: z.number().default(0),
 });
 
 const [configFile, ...args] = process.argv.slice(2);
-if (!configFile) throw new Error("brak pliku z ustawieniami atrapy");
+if (!configFile) throw new Error("missing fake settings file");
 const config = Config.parse(JSON.parse(readFileSync(configFile, "utf8")));
 const env = Object.fromEntries(
   ["GH_HOST", "GITLAB_HOST", "GH_PROMPT_DISABLED", "NO_PROMPT", "GIT_TERMINAL_PROMPT", "GIT_DIR"].map((name) => [name, process.env[name]]),
@@ -42,14 +42,14 @@ if (command === "api") {
   process.stdout.write(JSON.stringify(config.repos.slice((page - 1) * perPage, page * perPage)));
 } else if (command === "repo" && subcommand === "clone") {
   const [, , repo, dest] = args;
-  if (!repo || !dest) fail("brak repo albo katalogu");
+  if (!repo || !dest) fail("missing repo or directory");
   await new Promise((resolve) => setTimeout(resolve, config.cloneDelayMs));
   const error = config.cloneErrors[repo];
   if (error) fail(error);
   mkdirSync(dest);
   execFileSync("git", ["init", "-q", "-b", "main", dest]);
 } else {
-  fail(`nieznana komenda ${args.join(" ")}`);
+  fail(`unknown command ${args.join(" ")}`);
 }
 
 function fail(message: string): never {

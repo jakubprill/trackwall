@@ -7,63 +7,63 @@ import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 
 const vcs = new Vcs();
 
-describe("vcs na prawdziwym gicie", () => {
-  test("nieudane utworzenie worktree nie zostawia gałęzi, więc ponowna próba z tą samą gałęzią się udaje", async () => {
+describe("vcs on real git", () => {
+  test("a failed worktree creation leaves no branch, so a retry with the same branch succeeds", async () => {
     const dir = makeRepo({ "README.md": "# repo\n" });
     const commit = gitIn(dir, "rev-parse", "HEAD").trim();
-    const path = join(mkdtempSync(join(tmpdir(), "trackwall-worktrees-")), "zadanie");
+    const path = join(mkdtempSync(join(tmpdir(), "trackwall-worktrees-")), "task");
     mkdirSync(path);
-    writeFileSync(join(path, "zajete.txt"), "katalog nie jest pusty");
+    writeFileSync(join(path, "taken.txt"), "the directory is not empty");
 
-    await expect(vcs.addWorktree(dir, path, "trackwall/zadanie-abc123", commit)).rejects.toThrow();
+    await expect(vcs.addWorktree(dir, path, "trackwall/task-abc123", commit)).rejects.toThrow();
     expect(gitIn(dir, "branch", "--list", "trackwall/*").trim()).toBe("");
     expect(existsSync(path)).toBe(false);
 
-    await vcs.addWorktree(dir, path, "trackwall/zadanie-abc123", commit);
-    expect(gitIn(path, "branch", "--show-current").trim()).toBe("trackwall/zadanie-abc123");
+    await vcs.addWorktree(dir, path, "trackwall/task-abc123", commit);
+    expect(gitIn(path, "branch", "--show-current").trim()).toBe("trackwall/task-abc123");
   });
 
-  test("utworzenie worktree na gałęzi, która już jest, odmawia i jej nie usuwa", async () => {
+  test("creating a worktree on a branch that already exists refuses and does not delete the branch", async () => {
     const dir = makeRepo({ "README.md": "# repo\n" });
     const commit = gitIn(dir, "rev-parse", "HEAD").trim();
-    gitIn(dir, "branch", "trackwall/moja");
-    const path = join(mkdtempSync(join(tmpdir(), "trackwall-worktrees-")), "zadanie");
+    gitIn(dir, "branch", "trackwall/mine");
+    const path = join(mkdtempSync(join(tmpdir(), "trackwall-worktrees-")), "task");
 
-    await expect(vcs.addWorktree(dir, path, "trackwall/moja", commit)).rejects.toThrow("a branch named 'trackwall/moja' already exists");
-    expect(gitIn(dir, "branch", "--list", "trackwall/moja").trim()).toBe("trackwall/moja");
+    await expect(vcs.addWorktree(dir, path, "trackwall/mine", commit)).rejects.toThrow("a branch named 'trackwall/mine' already exists");
+    expect(gitIn(dir, "branch", "--list", "trackwall/mine").trim()).toBe("trackwall/mine");
   });
 
-  test("status pokazuje gałąź, ostatni commit i niezacommitowane zmiany", async () => {
+  test("status shows the branch, the last commit and uncommitted changes", async () => {
     const dir = makeRepo({ "README.md": "# repo\n" });
-    commitFiles(dir, { "src/app.ts": "export {};\n" }, "Dodaj aplikację");
-    writeFileSync(join(dir, "README.md"), "# repo zmienione\n");
-    writeFileSync(join(dir, "nowy.txt"), "x");
+    commitFiles(dir, { "src/app.ts": "export {};\n" }, "Add the app");
+    writeFileSync(join(dir, "README.md"), "# repo changed\n");
+    writeFileSync(join(dir, "new.txt"), "x");
 
     const status = await vcs.status(dir);
 
     expect(status).toMatchObject({ kind: "ok", branch: "main", changes: 2, untracked: 1, upstream: null });
-    expect(status.head).toMatchObject({ subject: "Dodaj aplikację", author: "Testowy Autor" });
+    expect(status.head).toMatchObject({ subject: "Add the app", author: "Test Author" });
     expect(status.head?.hash).toMatch(/^[0-9a-f]{40}$/);
   });
 
   test.each(["sha1", "sha256"] as const)(
-    "liczenie zmian z nowymi plikami, także pustym i osadzonym repo, nie zapisuje do repo żadnego obiektu (%s)",
+    "counting changes with new files, including an empty file and an embedded repo, writes no object to the repo (%s)",
     async (objectFormat) => {
-      // Zapis obiektu przy każdym liczeniu sprawiał, że kilka okien „Changes” naraz pisało ten sam pusty blob, a na Windowsie
-      // drugi zapis kończył się „Permission denied” (#36).
+      // Writing an object on every count made several "Changes" windows at once write the same empty blob, and on Windows
+      // the second write ended in "Permission denied" (#36).
       const dir = makeRepo({ "README.md": "# repo\n" }, "repo", undefined, objectFormat);
       const base = gitIn(dir, "rev-parse", "HEAD").trim();
-      writeFileSync(join(dir, "nowy.md"), "x\n");
-      writeFileSync(join(dir, "pusty.md"), "");
-      const embeddedHead = gitIn(makeRepo({ "a.txt": "a\n" }, "osadzone", dir, objectFormat), "rev-parse", "HEAD").trim();
-      makeRepo({}, "osadzone-bez-commitow", dir, objectFormat);
-      // Repo z obiektami w innym formacie nie może być submodułem; `update-index` odrzuciłby przez nie wszystkie wpisy.
-      makeRepo({ "b.txt": "b\n" }, "osadzone-w-innym-formacie", dir, objectFormat === "sha1" ? "sha256" : "sha1");
+      writeFileSync(join(dir, "new.md"), "x\n");
+      writeFileSync(join(dir, "empty.md"), "");
+      const embeddedHead = gitIn(makeRepo({ "a.txt": "a\n" }, "embedded", dir, objectFormat), "rev-parse", "HEAD").trim();
+      makeRepo({}, "embedded-without-commits", dir, objectFormat);
+      // A repo with objects in another format cannot be a submodule; `update-index` would reject every entry because of it.
+      makeRepo({ "b.txt": "b\n" }, "embedded-in-another-format", dir, objectFormat === "sha1" ? "sha256" : "sha1");
       const objectsBefore = gitIn(dir, "count-objects", "-v");
 
       const changes = await vcs.worktreeChanges(dir, base, 1_000_000, []);
 
-      expect(changes.files.map((f) => f.path)).toEqual(["nowy.md", "osadzone", "pusty.md"]);
+      expect(changes.files.map((f) => f.path)).toEqual(["embedded", "empty.md", "new.md"]);
       expect(changes.patch).toContain("+x");
       expect(changes.patch).toContain(`+Subproject commit ${embeddedHead}`);
       expect(gitIn(dir, "count-objects", "-v")).toBe(objectsBefore);
@@ -71,11 +71,11 @@ describe("vcs na prawdziwym gicie", () => {
   );
 
   test.skipIf(process.platform !== "linux")(
-    "nowy plik z nazwą spoza UTF-8 jest w zmianach (Linux; Windows i macOS takich nazw nie mają)",
+    "a new file with a name outside UTF-8 is in the changes (Linux; Windows and macOS have no such names)",
     async () => {
       const dir = makeRepo({ "README.md": "# repo\n" });
       const base = gitIn(dir, "rev-parse", "HEAD").trim();
-      writeFileSync(Buffer.concat([Buffer.from(join(dir, "zly-")), Buffer.from([0xff])]), "x\n");
+      writeFileSync(Buffer.concat([Buffer.from(join(dir, "bad-")), Buffer.from([0xff])]), "x\n");
 
       const changes = await vcs.worktreeChanges(dir, base, 1_000_000, []);
 
@@ -84,7 +84,7 @@ describe("vcs na prawdziwym gicie", () => {
     },
   );
 
-  test("status repo bez commitów ma pusty HEAD, log jest pusty, a korzeń drzewa jest pusty", async () => {
+  test("the status of a repo without commits has an empty HEAD, the log is empty and the tree root is empty", async () => {
     const dir = makeRepo();
     expect(await vcs.status(dir)).toMatchObject({ kind: "ok", branch: "main", head: null, changes: 0 });
     expect(await vcs.log(dir, 10)).toEqual([]);
@@ -92,65 +92,65 @@ describe("vcs na prawdziwym gicie", () => {
     expect(await vcs.tree(dir, "src")).toBeUndefined();
   });
 
-  test("changes pokazuje zmienione, usunięte i nowe pliki względem HEAD z diffem, bez ignorowanych i bez zmiany indeksu", async () => {
-    const dir = makeRepo({ "README.md": "# repo\n", "stary.txt": "x\n", ".gitignore": "build/\n" });
-    writeFileSync(join(dir, "README.md"), "# repo zmienione\n");
-    rmSync(join(dir, "stary.txt"));
-    writeFileSync(join(dir, "nowy.txt"), "nowa linia\n");
+  test("changes shows modified, deleted and new files against HEAD with a diff, without ignored ones and without changing the index", async () => {
+    const dir = makeRepo({ "README.md": "# repo\n", "old.txt": "x\n", ".gitignore": "build/\n" });
+    writeFileSync(join(dir, "README.md"), "# repo changed\n");
+    rmSync(join(dir, "old.txt"));
+    writeFileSync(join(dir, "new.txt"), "new line\n");
     mkdirSync(join(dir, "build"));
-    writeFileSync(join(dir, "build", "wynik.txt"), "ignorowany\n");
+    writeFileSync(join(dir, "build", "output.txt"), "ignored\n");
     const index = readFileSync(join(dir, ".git", "index"));
 
     const changes = await vcs.changes(dir, 1024 * 1024);
 
     expect(changes.files).toEqual([
       { path: "README.md", change: "modified", additions: 1, deletions: 1 },
-      { path: "nowy.txt", change: "added", additions: 1, deletions: 0 },
-      { path: "stary.txt", change: "deleted", additions: 0, deletions: 1 },
+      { path: "new.txt", change: "added", additions: 1, deletions: 0 },
+      { path: "old.txt", change: "deleted", additions: 0, deletions: 1 },
     ]);
-    expect(changes.patch).toContain("+# repo zmienione");
-    expect(changes.patch).toContain("+nowa linia");
+    expect(changes.patch).toContain("+# repo changed");
+    expect(changes.patch).toContain("+new line");
     expect(changes.truncated).toBe(false);
     expect(readFileSync(join(dir, ".git", "index"))).toEqual(index);
-    expect(gitIn(dir, "status", "--porcelain")).toContain("?? nowy.txt");
+    expect(gitIn(dir, "status", "--porcelain")).toContain("?? new.txt");
   });
 
-  test("changes w repo bez commitów pokazuje każdy plik jako nowy", async () => {
+  test("changes in a repo without commits shows every file as new", async () => {
     const dir = makeRepo();
-    writeFileSync(join(dir, "pierwszy.txt"), "a\n");
+    writeFileSync(join(dir, "first.txt"), "a\n");
 
-    expect((await vcs.changes(dir, 1024 * 1024)).files).toEqual([{ path: "pierwszy.txt", change: "added", additions: 1, deletions: 0 }]);
+    expect((await vcs.changes(dir, 1024 * 1024)).files).toEqual([{ path: "first.txt", change: "added", additions: 1, deletions: 0 }]);
   });
 
-  test("ahead/behind względem gałęzi śledzonej", async () => {
-    const remote = makeRepo({ "a.txt": "1" }, "zdalne");
+  test("ahead/behind against the tracked branch", async () => {
+    const remote = makeRepo({ "a.txt": "1" }, "remote");
     const parent = join(remote, "..");
-    gitIn(parent, "clone", "-q", remote, "klon");
-    const clone = join(parent, "klon");
-    commitFiles(clone, { "b.txt": "2" }, "lokalny");
-    commitFiles(remote, { "c.txt": "3" }, "zdalny");
+    gitIn(parent, "clone", "-q", remote, "clone");
+    const clone = join(parent, "clone");
+    commitFiles(clone, { "b.txt": "2" }, "local");
+    commitFiles(remote, { "c.txt": "3" }, "remote");
     gitIn(clone, "fetch", "-q");
 
     expect((await vcs.status(clone)).upstream).toEqual({ name: "origin/main", ahead: 1, behind: 1 });
   });
 
-  test("tree listuje katalog z ostatniego commita, bez plików niezacommitowanych", async () => {
+  test("tree lists a directory from the last commit, without uncommitted files", async () => {
     const dir = makeRepo({ "src/a.ts": "aa", "src/lib/b.ts": "b", "README.md": "r" });
-    writeFileSync(join(dir, "src", "roboczy.ts"), "nie w commicie");
+    writeFileSync(join(dir, "src", "working.ts"), "not in the commit");
 
     expect(await vcs.tree(dir, "src")).toEqual([
       { name: "lib", path: "src/lib", kind: "dir" },
       { name: "a.ts", path: "src/a.ts", kind: "file", size: 2 },
     ]);
     expect(await vcs.tree(dir, "README.md")).toBeUndefined();
-    expect(await vcs.tree(dir, "nie-ma")).toBeUndefined();
+    expect(await vcs.tree(dir, "missing")).toBeUndefined();
   });
 
-  test("file zwraca tekst, rozpoznaje plik binarny i ucina duży plik, podając pełny rozmiar", async () => {
+  test("file returns text, recognises a binary file and cuts a large file, giving the full size", async () => {
     const dir = makeRepo({
       "a.txt": "zażółć\n",
-      "obraz.png": Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01]),
-      "duzy.txt": "x".repeat(5000),
+      "image.png": Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01]),
+      "large.txt": "x".repeat(5000),
     });
 
     expect(await vcs.file(dir, "a.txt", 1024)).toEqual({
@@ -159,46 +159,46 @@ describe("vcs na prawdziwym gicie", () => {
       size: Buffer.byteLength("zażółć\n"),
       truncated: false,
     });
-    expect(await vcs.file(dir, "obraz.png", 1024)).toEqual({ kind: "binary", size: 6 });
-    expect(await vcs.file(dir, "duzy.txt", 100)).toEqual({ kind: "text", text: "x".repeat(100), size: 5000, truncated: true });
-    expect(await vcs.file(dir, "nie-ma.txt", 100)).toBeUndefined();
+    expect(await vcs.file(dir, "image.png", 1024)).toEqual({ kind: "binary", size: 6 });
+    expect(await vcs.file(dir, "large.txt", 100)).toEqual({ kind: "text", text: "x".repeat(100), size: 5000, truncated: true });
+    expect(await vcs.file(dir, "missing.txt", 100)).toBeUndefined();
   });
 
-  test("log zwraca commity od najnowszego", async () => {
+  test("log returns commits newest first", async () => {
     const dir = makeRepo({ "a.txt": "1" });
-    commitFiles(dir, { "a.txt": "2" }, "drugi");
-    expect((await vcs.log(dir, 10)).map((c) => c.subject)).toEqual(["drugi", "pierwszy commit"]);
+    commitFiles(dir, { "a.txt": "2" }, "second");
+    expect((await vcs.log(dir, 10)).map((c) => c.subject)).toEqual(["second", "first commit"]);
   });
 
-  test("submoduł nie jest ani katalogiem, ani plikiem do odczytu", async () => {
-    const inner = makeRepo({ "lib.ts": "1" }, "biblioteka");
+  test("a submodule is neither a directory nor a file to read", async () => {
+    const inner = makeRepo({ "lib.ts": "1" }, "library");
     const dir = makeRepo({ "a.txt": "1" });
     gitIn(dir, "-c", "protocol.file.allow=always", "submodule", "add", "-q", inner, "vendor");
-    gitIn(dir, "commit", "-q", "-m", "submoduł");
+    gitIn(dir, "commit", "-q", "-m", "submodule");
 
     expect(((await vcs.tree(dir, "")) ?? []).map((e) => [e.name, e.kind])).toContainEqual(["vendor", "submodule"]);
     expect(await vcs.tree(dir, "vendor")).toBeUndefined();
     expect(await vcs.file(dir, "vendor", 100)).toBeUndefined();
   });
 
-  test("odziedziczone GIT_DIR nie podmienia repo wskazanego przez -C", async () => {
-    const alfa = makeRepo({ "alfa.txt": "a" }, "alfa");
+  test("an inherited GIT_DIR does not replace the repo given with -C", async () => {
+    const alpha = makeRepo({ "alpha.txt": "a" }, "alpha");
     const beta = makeRepo({ "beta.txt": "b" }, "beta");
     const before = process.env.GIT_DIR;
     process.env.GIT_DIR = join(beta, ".git");
     try {
-      expect(((await vcs.tree(alfa, "")) ?? []).map((e) => e.name)).toEqual(["alfa.txt"]);
+      expect(((await vcs.tree(alpha, "")) ?? []).map((e) => e.name)).toEqual(["alpha.txt"]);
     } finally {
       if (before === undefined) delete process.env.GIT_DIR;
       else process.env.GIT_DIR = before;
     }
   });
 
-  test("grepFiles zwraca pliki z commita pasujące do wzorca w danych rozszerzeniach, a brak trafień to pusta lista, nie błąd", async () => {
+  test("grepFiles returns files of a commit matching the pattern in the given extensions, and no hits is an empty list, not an error", async () => {
     const dir = makeRepo({
       "src/main/java/a/Api.java": "@RestController class Api {}\n",
       "src/main/kotlin/a/Client.kt": '@FeignClient("x") interface Client\n',
-      "docs/notes.md": "@RestController w dokumentacji\n",
+      "docs/notes.md": "@RestController in the documentation\n",
       "src/main/java/a/Plain.java": "class Plain {}\n",
     });
     writeFileSync(join(dir, "src", "main", "java", "a", "Plain.java"), "@RestController class Plain {}\n");
@@ -209,8 +209,8 @@ describe("vcs na prawdziwym gicie", () => {
     expect(await vcs.grepFiles(dir, head, "@HttpExchange", ["*.java"], 1024 * 1024)).toEqual({ paths: [], truncated: false });
   });
 
-  test("brak katalogu repo to błąd gita z komunikatem, a nie wyjątek uruchomienia", async () => {
-    await expect(vcs.status(join(makeRepo(), "..", "nie-istnieje"))).rejects.toThrow(/nie-istnieje/);
+  test("a missing repo directory is a git error with a message, not a spawn exception", async () => {
+    await expect(vcs.status(join(makeRepo(), "..", "does-not-exist"))).rejects.toThrow(/does-not-exist/);
   });
 
   test("a same-size edit within the second the index was written is a change, as in git status", async () => {
@@ -230,8 +230,8 @@ describe("vcs na prawdziwym gicie", () => {
     expect(gitIn(dir, "status", "--porcelain")).toBe(" M a.txt\n");
   });
 
-  test("zmiany worktree z limitem diffu 0 dają pliki i liczby bez treści zmian", async () => {
-    const dir = makeRepo({ "a.txt": "a\n" }, "bez-diffu");
+  test("worktree changes with a diff limit of 0 give files and counts without the change contents", async () => {
+    const dir = makeRepo({ "a.txt": "a\n" }, "no-diff");
     const base = gitIn(dir, "rev-parse", "HEAD").trim();
     writeFileSync(join(dir, "a.txt"), "b\n");
     const changes = await vcs.worktreeChanges(dir, base, 0, []);

@@ -7,69 +7,69 @@ import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 const tempFile = () => join(mkdtempSync(join(tmpdir(), "trackwall-wsf-")), "workspace.yaml");
 
 describe("workspace.yaml", () => {
-  test("brak pliku to nieustawiony folder z projektami, a pierwsze ustawienie tworzy plik", () => {
+  test("a missing file is an unset projects folder, and the first setting creates the file", () => {
     const path = tempFile();
     const file = new WorkspaceFile(path);
     expect(file.projectsDir()).toBeNull();
 
-    // Pełna ścieżka na każdym systemie: na Windowsie `/projekty` nie ma litery dysku.
-    const dir = resolve("/projekty");
+    // A full path on every system: on Windows `/projects` has no drive letter.
+    const dir = resolve("/projects");
     file.setProjectsDir(dir);
 
     expect(file.projectsDir()).toBe(dir);
     expect(readFileSync(path, "utf8")).toBe(`projectsDir: ${dir}\n`);
   });
 
-  test("pusty klucz projectsDir to nieustawiony folder", () => {
+  test("an empty projectsDir key is an unset folder", () => {
     const path = tempFile();
-    writeFileSync(path, "# mój workspace\nprojectsDir:\n");
+    writeFileSync(path, "# my workspace\nprojectsDir:\n");
     expect(new WorkspaceFile(path).projectsDir()).toBeNull();
   });
 
-  test("zmiana folderu zachowuje komentarze i inne klucze", () => {
+  test("changing the folder keeps comments and other keys", () => {
     const path = tempFile();
-    writeFileSync(path, "# mój workspace\nports:\n  api: 8080\n# tu są repo\nprojectsDir: /stare\n");
+    writeFileSync(path, "# my workspace\nports:\n  api: 8080\n# the repos are here\nprojectsDir: /old\n");
     const file = new WorkspaceFile(path);
 
-    file.setProjectsDir("/nowe");
+    file.setProjectsDir("/new");
 
-    expect(readFileSync(path, "utf8")).toBe("# mój workspace\nports:\n  api: 8080\n# tu są repo\nprojectsDir: /nowe\n");
+    expect(readFileSync(path, "utf8")).toBe("# my workspace\nports:\n  api: 8080\n# the repos are here\nprojectsDir: /new\n");
   });
 
-  test("lista repos z wersji 0.2.0 nie jest czytana, ale zostaje w pliku", () => {
+  test("the repos list from version 0.2.0 is not read, but stays in the file", () => {
     const path = tempFile();
     writeFileSync(path, "repos:\n  - id: api\n    path: /repos/api\n");
     const file = new WorkspaceFile(path);
     expect(file.projectsDir()).toBeNull();
 
-    file.setProjectsDir("/projekty");
+    file.setProjectsDir("/projects");
 
-    expect(readFileSync(path, "utf8")).toBe("repos:\n  - id: api\n    path: /repos/api\nprojectsDir: /projekty\n");
+    expect(readFileSync(path, "utf8")).toBe("repos:\n  - id: api\n    path: /repos/api\nprojectsDir: /projects\n");
   });
 
-  test("ścieżka względna albo z ~ jest błędem konfiguracji, a nie cichym zależeniem od katalogu daemona", () => {
+  test("a relative path or one with ~ is a configuration error, not a silent dependence on the daemon's directory", () => {
     const path = tempFile();
-    writeFileSync(path, "projectsDir: ~/projekty\n");
+    writeFileSync(path, "projectsDir: ~/projects\n");
     expect(() => new WorkspaceFile(path).projectsDir()).toThrow(
       expect.objectContaining({ code: "invalid_config", message: expect.stringContaining("must be a full path") }),
     );
   });
 
-  test("niepoprawny plik daje invalid_config ze ścieżką i opisem", () => {
+  test("an invalid file gives invalid_config with the path and a description", () => {
     const path = tempFile();
     writeFileSync(path, "projectsDir: [\n");
     expect(() => new WorkspaceFile(path).projectsDir()).toThrow(
       expect.objectContaining({ code: "invalid_config", message: expect.stringContaining(path) }),
     );
 
-    writeFileSync(path, "- /projekty\n");
+    writeFileSync(path, "- /projects\n");
     expect(() => new WorkspaceFile(path).projectsDir()).toThrow(
       expect.objectContaining({ message: expect.stringContaining("map of keys") }),
     );
   });
-  test("zły wpis w repoHosts jest błędem konfiguracji tego klucza i nie psuje folderu z projektami", () => {
+  test("a bad entry in repoHosts is a configuration error of that key and does not break the projects folder", () => {
     const path = tempFile();
-    const dir = resolve("/projekty");
+    const dir = resolve("/projects");
     writeFileSync(path, `projectsDir: ${JSON.stringify(dir)}\nrepoHosts:\n  - kind: gitlab\n    host: https://gitlab.example.com\n`);
     const file = new WorkspaceFile(path);
 
@@ -79,7 +79,7 @@ describe("workspace.yaml", () => {
     expect(file.projectsDir()).toBe(dir);
   });
 
-  test("ten sam hosting dwa razy w repoHosts jest błędem konfiguracji", () => {
+  test("the same hosting twice in repoHosts is a configuration error", () => {
     const path = tempFile();
     writeFileSync(path, "repoHosts:\n  - { kind: gitlab, host: gitlab.example.com }\n  - { kind: gitlab, host: GitLab.example.com }\n");
     expect(() => new WorkspaceFile(path).repoHosts()).toThrow(expect.objectContaining({ code: "invalid_config" }));

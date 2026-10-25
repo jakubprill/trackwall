@@ -3,11 +3,11 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-/** Uruchamia gita w repo testowym z ustaloną tożsamością autora, niezależnie od konfiguracji maszyny. */
+/** Runs git in a test repo with a fixed author identity, independent of the machine's configuration. */
 export function gitIn(dir: string, ...args: string[]): string {
   return execFileSync(
     "git",
-    ["-c", "user.name=Testowy Autor", "-c", "user.email=autor@example.com", "-c", "commit.gpgsign=false", ...args],
+    ["-c", "user.name=Test Author", "-c", "user.email=author@example.com", "-c", "commit.gpgsign=false", ...args],
     {
       cwd: dir,
       encoding: "utf8",
@@ -16,8 +16,8 @@ export function gitIn(dir: string, ...args: string[]): string {
 }
 
 /**
- * Nowe repo `parent/name` z gałęzią `main` (domyślnie w nowym katalogu tymczasowym i z obiektami SHA-1); pliki
- * z `files` zapisane i zacommitowane jednym commitem.
+ * A new repo `parent/name` with the branch `main` (by default in a new temp directory and with SHA-1 objects); the files
+ * from `files` written and committed in one commit.
  */
 export function makeRepo(
   files: Record<string, string | Buffer> = {},
@@ -28,7 +28,7 @@ export function makeRepo(
   const dir = join(parent, name);
   mkdirSync(dir);
   gitIn(dir, "init", "-q", "-b", "main", `--object-format=${objectFormat}`);
-  if (Object.keys(files).length > 0) commitFiles(dir, files, "pierwszy commit");
+  if (Object.keys(files).length > 0) commitFiles(dir, files, "first commit");
   return dir;
 }
 

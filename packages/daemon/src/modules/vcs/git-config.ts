@@ -1,17 +1,17 @@
 import { git } from "./git.ts";
 
 /**
- * Konfiguracja gita potrzebna synchronizacji i adresowi repo zdalnego (ADR-21): remote, `url.<base>.insteadOf`
- * i `core.sshCommand`, z konfiguracji repo, użytkownika i systemu naraz (`git config -z --list`). Parser to czysta
- * funkcja, testowana bez procesu.
+ * The git configuration that sync and the remote repo address need (ADR-21): remotes, `url.<base>.insteadOf`
+ * and `core.sshCommand`, from the repo, user and system configuration at once (`git config -z --list`). The parser is a pure
+ * function, tested without a process.
  */
 
 export interface GitConfig {
-  /** Remote po nazwie, w kolejności z konfiguracji; pierwszy `url`, gdy remote ma kilka. */
+  /** Remotes by name, in configuration order; the first `url` when a remote has several. */
   remotes: ReadonlyMap<string, string>;
-  /** Skróty adresów: `url.<base>.insteadOf = <prefix>` jako prefiks → base. */
+  /** Address shortcuts: `url.<base>.insteadOf = <prefix>` as prefix → base. */
   insteadOf: ReadonlyMap<string, string>;
-  /** `core.sshCommand`, gdy użytkownik go ustawił. */
+  /** `core.sshCommand`, when the user set it. */
   sshCommand: string | undefined;
 }
 
@@ -20,7 +20,7 @@ export async function readConfig(dir: string): Promise<GitConfig> {
   return parseConfig(stdout.toString("utf8"));
 }
 
-/** Wynik `git config -z --list`: wpisy `klucz\nwartość` rozdzielone NUL; klucz bez wartości nie ma `\n`. */
+/** The result of `git config -z --list`: `key\nvalue` entries separated by NUL; a key without a value has no `\n`. */
 export function parseConfig(out: string): GitConfig {
   const remotes = new Map<string, string>();
   const insteadOf = new Map<string, string>();
@@ -30,7 +30,7 @@ export function parseConfig(out: string): GitConfig {
     if (newline < 0) continue;
     const key = entry.slice(0, newline);
     const value = entry.slice(newline + 1);
-    // Git podaje sekcję i nazwę klucza małymi literami, a podsekcję (nazwę remote, adres) bez zmian.
+    // Git gives the section and key name in lower case, and the subsection (a remote name, an address) unchanged.
     const remote = /^remote\.(.+)\.url$/s.exec(key)?.[1];
     const base = /^url\.(.+)\.insteadof$/s.exec(key)?.[1];
     if (remote !== undefined && !remotes.has(remote)) remotes.set(remote, value);
@@ -41,8 +41,8 @@ export function parseConfig(out: string): GitConfig {
 }
 
 /**
- * `origin`, a bez niego jedyny remote; przy kilku bez `origin` nie zgadujemy, który jest główny. Adres po
- * zastosowaniu `insteadOf` (najdłuższy pasujący prefiks, jak w gicie), czyli ten, z którym git naprawdę się łączy.
+ * `origin`, and without it the only remote; with several and no `origin` we do not guess which one is the main one. The address after
+ * applying `insteadOf` (the longest matching prefix, as in git), i.e. the one git really connects to.
  */
 export function mainRemote(config: GitConfig): { name: string; url: string } | undefined {
   const origin = config.remotes.get("origin");

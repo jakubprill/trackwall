@@ -174,7 +174,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
     const data = GetRepoResult.parse(result.structuredContent);
     expect(data.repo.id).toBe("orders-bff");
     expect(data.readme).toEqual({ path: "README.md", text: README, truncated: false, format: "markdown" });
-    expect(data.commits.map((c) => c.subject)).toEqual(["pierwszy commit"]);
+    expect(data.commits.map((c) => c.subject)).toEqual(["first commit"]);
     expect(data.miseTasks.kind).toBe("not_installed");
     await client.close();
   });

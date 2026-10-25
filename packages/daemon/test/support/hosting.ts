@@ -16,7 +16,7 @@ export interface FakeHostingConfig {
 
 const Call = z.object({ args: z.array(z.string()), env: z.record(z.string(), z.string().optional()) });
 
-/** `Hosting` z atrapą `gh` i `glab` (`fixtures/fake-hosting-cli.ts`) i odczyt jej wywołań. */
+/** `Hosting` with fake `gh` and `glab` (`fixtures/fake-hosting-cli.ts`) and a read of its calls. */
 export function fakeHosting(config: FakeHostingConfig = {}) {
   const dir = mkdtempSync(join(tmpdir(), "trackwall-hosting-"));
   const log = join(dir, "calls.jsonl");

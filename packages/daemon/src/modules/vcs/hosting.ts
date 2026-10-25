@@ -4,13 +4,13 @@ import { githubApi, gitlabApi, type HostingApi } from "./hosted-repo.ts";
 import { runProgram } from "./run.ts";
 
 /**
- * Hostingi repo w module `vcs` (§4.5, ADR-19): lista repo dostępnych dla użytkownika i klon wybranego, przez
- * `gh` (GitHub) i `glab` (GitLab). Logowanie i token należą do tych programów (`gh auth login`, `glab auth login`),
- * więc Trackwall nie widzi ani nie zapisuje tokenu, a klon używa protokołu (SSH albo HTTPS) i poświadczeń
- * ustawionych w nich przez użytkownika.
+ * Repo hosts in the `vcs` module (§4.5, ADR-19): the list of repos available to the user and a clone of the chosen one, through
+ * `gh` (GitHub) and `glab` (GitLab). Sign-in and the token belong to those programs (`gh auth login`, `glab auth login`),
+ * so Trackwall neither sees nor stores the token, and the clone uses the protocol (SSH or HTTPS) and credentials
+ * the user set in them.
  */
 
-/** Program hostingu z argumentami przed komendą; w testach atrapa uruchamiana przez Bun albo Node. */
+/** The repo host's program with arguments before the command; in tests a fake run by Bun or Node. */
 interface HostingCli {
   command: string;
   args: readonly string[];
@@ -25,26 +25,26 @@ export const HOSTING_CLIS: HostingClis = {
 
 const APIS: Record<RepoHostKind, HostingApi> = { github: githubApi, gitlab: gitlabApi };
 
-/** Najwięcej, ile pozwalają GitHub i GitLab na jedną stronę. */
+/** The most GitHub and GitLab allow per page. */
 const PAGE_SIZE = 100;
-/** Jedna strona API; dłużej to raczej brak sieci albo VPN. */
+/** One API page; taking longer usually means there is no network or the VPN is down. */
 const PAGE_TIMEOUT_MS = 30_000;
 /**
- * Jak długo pobrane strony służą kolejnym zapytaniom: wyszukiwanie filtrowane w daemonie (GitHub, krótkie zapytanie
- * w GitLab) nie pobiera listy przy każdym znaku, a nowe repo w hostingu pojawia się najpóźniej po tym czasie.
+ * How long fetched pages serve later queries: a search filtered in the daemon (GitHub, a short query
+ * in GitLab) does not fetch the list on every keystroke, and a new repo on the repo host appears after this time at the latest.
  */
 const CACHE_MS = 60_000;
 /**
- * Klon dużego repo trwa minutami, ale ssh czekające na potwierdzenie klucza hosta w ukrytej konsoli trwałoby
- * zawsze. Po tym czasie klonowanie jest nieudane; git uruchomiony przez `gh` / `glab` może jednak żyć dalej,
- * bo nie jest w grupie procesów (§4.5).
+ * A clone of a large repo takes minutes, but ssh waiting for host key confirmation in a hidden console would take
+ * forever. After this time the clone has failed; git started by `gh` / `glab` may however keep running,
+ * because it is not in a process group (§4.5).
  */
 const CLONE_TIMEOUT_MS = 30 * 60_000;
 
 export interface HostedRepos {
-  /** W kolejności z hostingu (`HostingApi`). */
+  /** In the repo host's order (`HostingApi`). */
   repos: HostedRepo[];
-  /** Pobrano tyle stron, ile pozwala `maxPages`, a ostatnia była pełna. */
+  /** As many pages were fetched as `maxPages` allows, and the last one was full. */
   truncated: boolean;
 }
 
@@ -56,7 +56,7 @@ export class Hosting {
     this.clis = clis;
   }
 
-  /** Repo pasujące do `query` (bez wielkości liter, w pełnej nazwie albo opisie); puste `query` to wszystkie. */
+  /** Repos matching `query` (case-insensitive, in the full name or description); an empty `query` is all of them. */
   async repos(host: RepoHost, query: string): Promise<HostedRepos> {
     const api = APIS[host.kind];
     const onServer = api.searchesOnServer(query);
@@ -64,12 +64,12 @@ export class Hosting {
     return { repos: onServer ? repos : repos.filter((r) => matches(r, query)), truncated };
   }
 
-  /** Klon `fullName` do `dest` (katalogu, którego jeszcze nie ma). */
+  /** A clone of `fullName` into `dest` (a directory that does not exist yet). */
   async clone(host: RepoHost, fullName: string, dest: string): Promise<void> {
     await this.run(host, ["repo", "clone", fullName, dest], CLONE_TIMEOUT_MS);
   }
 
-  /** Nieudane pobranie nie zostaje w pamięci, więc „Spróbuj ponownie” po zalogowaniu pyta hosting od nowa. */
+  /** A failed fetch does not stay in memory, so "Try again" after signing in asks the repo host anew. */
   private fetchCached(host: RepoHost, serverQuery: string): Promise<HostedRepos> {
     const now = Date.now();
     for (const [key, entry] of this.cache) if (now - entry.at > CACHE_MS) this.cache.delete(key);
@@ -109,7 +109,7 @@ export class Hosting {
   }
 }
 
-/** Odpowiedź API to dane z zewnątrz: JSON sprawdzony schematem, a błąd bez zrzutu odpowiedzi. */
+/** The API response is outside data: JSON checked with a schema, and an error without a dump of the response. */
 function parsePage(api: HostingApi, text: string, host: RepoHost): ReturnType<HostingApi["parseReposPage"]> {
   try {
     return api.parseReposPage(JSON.parse(text));
