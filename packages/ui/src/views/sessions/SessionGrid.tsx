@@ -11,6 +11,7 @@ import { type GridPage, gridShape } from "@/lib/session-grid";
 import { sessionShortcutLabel } from "@/lib/session-shortcut";
 import { isLive, PROPOSAL_STATUS, sessionStateLabel } from "@/lib/session-state";
 import { useSessionClose } from "@/lib/use-session-close";
+import { useTaskEnding } from "@/lib/use-task-ending";
 import { cn } from "@/lib/utils";
 import { ProposalTile } from "./ProposalTile.tsx";
 import { EndTaskButton, SessionCloseButton, SessionCloseConfirmation, TaskEnding } from "./SessionClose.tsx";
@@ -19,9 +20,9 @@ import { TaskLine } from "./TaskLine.tsx";
 /**
  * A page of the Sessions list as a grid of terminals (ADR-48). The selected tile has the accent ring and the keyboard,
  * a session that is waiting for you has the warning frame (also when selected). Clicking a tile or into its terminal
- * selects it; a task without a session has no terminal, so its tile only leads to the full panel, and task proposals
- * (ADR-39) show their prompts with “Start task” and “Reject…” (ADR-55). A tile with a session also closes it
- * (`useSessionClose`). Tiles appear once
+ * selects it; a task without a session has no terminal, so its tile leads to the full panel and its X ends the task
+ * (`TaskRemoval`), and task proposals (ADR-39) show their prompts with “Start task” and “Reject…” (ADR-55). A tile
+ * with a session also closes it (`useSessionClose`). Tiles appear once
  * the area is measured, so that no terminal reports a size to its session from a layout that is about to change.
  */
 export function SessionGrid({
@@ -120,7 +121,8 @@ function SessionTile({
 }) {
   const session = entrySession(entry);
   const close = useSessionClose(conn, session, onSessionClosed);
-  const [ending, setEnding] = useState(false);
+  const sessionlessTask = entry.kind === "task" && !session ? entry.task : undefined;
+  const ending = useTaskEnding(sessionlessTask !== undefined);
   const tile = useRef<HTMLDivElement>(null);
   // A selected tile without a terminal takes the keyboard itself, so that keys stop going to the terminal selected before.
   useEffect(() => {
@@ -156,7 +158,7 @@ function SessionTile({
           <Maximize2 />
         </Button>
         {session && <SessionCloseButton close={close} />}
-        {entry.kind === "task" && !session && <EndTaskButton onClick={() => setEnding((open) => !open)} />}
+        {sessionlessTask && <EndTaskButton onClick={ending.show} />}
       </header>
       {session && (
         // The question lies over the terminal instead of pushing it down, so that it does not resize the PTY mid-turn.
@@ -175,17 +177,17 @@ function SessionTile({
           currentSelection={currentSelection}
         />
       )}
-      {entry.kind === "task" && !session && ending && (
+      {sessionlessTask && ending.open && (
         // A small tile scrolls the question, so that its buttons stay reachable.
         <TaskEnding
           className="min-h-0 flex-1 overflow-y-auto"
           conn={conn}
-          task={entry.task}
-          onRemoved={() => onTaskRemoved(entry.task.id)}
-          onCancel={() => setEnding(false)}
+          task={sessionlessTask}
+          onRemoved={() => onTaskRemoved(sessionlessTask.id)}
+          onCancel={ending.hide}
         />
       )}
-      {entry.kind === "task" && !session && !ending && (
+      {sessionlessTask && !ending.open && (
         <div className="text-muted-foreground flex flex-1 items-center justify-center p-4 text-center text-xs">
           This task has no session. Open it alone to resume it or to see its changes, or end it with the X.
         </div>

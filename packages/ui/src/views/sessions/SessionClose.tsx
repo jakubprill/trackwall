@@ -21,7 +21,7 @@ export function SessionCloseButton({ close, className }: { close: SessionClose; 
 
 /**
  * The X of a task without a session: there is no session left to close, so it ends the task, which first asks what to
- * do with its worktree and branch (`TaskEnding`); a second click hides the question again, like its Cancel.
+ * do with its worktree and branch (`TaskEnding`, opened by `useTaskEnding`).
  */
 export function EndTaskButton({ onClick, className }: { onClick: () => void; className?: string }) {
   return <CloseX label="End task" onClick={onClick} className={className} />;

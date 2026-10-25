@@ -52,6 +52,7 @@ import { useAction } from "@/lib/use-action";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { useSessionClose } from "@/lib/use-session-close";
 import type { SessionTree } from "@/lib/use-session-tree";
+import { useTaskEnding } from "@/lib/use-task-ending";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { cn } from "@/lib/utils";
 import { ProposalInbox } from "./ProposalInbox.tsx";
@@ -293,10 +294,11 @@ function StartedListItem({
   const { session } = entry;
   const task = entry.kind === "task" ? entry.task : undefined;
   const close = useSessionClose(conn, session, onSessionClosed);
-  const [ending, setEnding] = useState(false);
+  const sessionlessTask = task && !session ? task : undefined;
+  const ending = useTaskEnding(sessionlessTask !== undefined);
   const xClass = cn(
     "absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
-    (active || close.confirming || ending) && "opacity-100",
+    (active || close.confirming || ending.open) && "opacity-100",
   );
   return (
     <div className="group relative">
@@ -316,10 +318,10 @@ function StartedListItem({
         </span>
       </button>
       {session && <SessionCloseButton close={close} className={xClass} />}
-      {task && !session && <EndTaskButton onClick={() => setEnding((open) => !open)} className={xClass} />}
+      {sessionlessTask && <EndTaskButton onClick={ending.show} className={xClass} />}
       <SessionCloseConfirmation close={close} />
-      {task && !session && ending && (
-        <TaskEnding conn={conn} task={task} onRemoved={() => onTaskRemoved(task.id)} onCancel={() => setEnding(false)} />
+      {sessionlessTask && ending.open && (
+        <TaskEnding conn={conn} task={sessionlessTask} onRemoved={() => onTaskRemoved(sessionlessTask.id)} onCancel={ending.hide} />
       )}
     </div>
   );
