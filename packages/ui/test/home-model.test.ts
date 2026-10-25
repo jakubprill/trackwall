@@ -26,6 +26,7 @@ function session(id: string, repoId: string, over: Partial<Session> = {}): Sessi
     windowTitle: null,
     needsAttention: false,
     task: null,
+    dialog: null,
     ...over,
   };
 }

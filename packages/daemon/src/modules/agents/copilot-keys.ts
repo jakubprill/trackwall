@@ -12,12 +12,15 @@ import type { KeyboardSignal } from "./task-state-tracker.ts";
  * the interruption is then recognised from the message on the screen (`copilot-screen.ts`).
  */
 
+/** Esc: alone a key (it stops a turn, "Esc to stop" in an approval dialog), and the first byte of every escape sequence. */
+export const ESCAPE = "\u001b";
+
 export const SessionKey = z.enum(["enter", "choice", "escape", "interrupt"]);
 export type SessionKey = z.infer<typeof SessionKey>;
 
 const KEYS: ReadonlyMap<string, SessionKey> = new Map([
   ["\r", "enter"],
-  ["\u001b", "escape"],
+  [ESCAPE, "escape"],
   ["\u0003", "interrupt"],
   ...["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit): [string, SessionKey] => [digit, "choice"]),
 ]);

@@ -19,6 +19,7 @@ function session(id: string, repo: string | null, run: Session["run"]["kind"] = 
     windowTitle: null,
     needsAttention: false,
     task: null,
+    dialog: null,
   };
 }
 

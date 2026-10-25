@@ -21,6 +21,7 @@ function session(id: string, startedAt: string, task: string | null = null): Ses
     windowTitle: null,
     needsAttention: false,
     task,
+    dialog: null,
   };
 }
 

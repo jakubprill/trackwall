@@ -94,9 +94,10 @@ const [RunningSession, StoppingSession, ExitedSession] = RunState.options;
 /**
  * A session for the agent: the same as `Session`, but an ended process group comes without the last screen lines: they
  * are masked only with secret values from the process environment (§4.2), and an agent also prints in the terminal what
- * it read from files or got in its prompt, so one session's screen does not reach another (§8, ADR-36).
+ * it read from files or got in its prompt, so one session's screen does not reach another (§8, ADR-36). For the same
+ * reason without the agent dialog (ADR-66): it is read from the screen and holds the command or the lines of a file.
  */
-export const AgentSession = Session.extend({
+export const AgentSession = Session.omit({ dialog: true }).extend({
   run: z.discriminatedUnion("kind", [RunningSession, StoppingSession, ExitedSession.omit({ lastLines: true })]),
 });
 export type AgentSession = z.infer<typeof AgentSession>;

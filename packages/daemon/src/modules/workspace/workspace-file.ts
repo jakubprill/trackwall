@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { GraphConfig, type RepoHost, RepoHosts, RepoTagRules } from "@trackwall/protocol";
+import { GraphConfig, type RepoHost, RepoHosts, RepoTagRules, ToolPermissionRules } from "@trackwall/protocol";
 import { type Document, isMap, parseDocument } from "yaml";
 import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
@@ -10,7 +10,7 @@ import { isFullPath, NOT_FULL_PATH } from "./full-path.ts";
 /**
  * `workspace.yaml` (§4.5, ADR-13): the workspace configuration, which the user can edit by hand and keep
  * in a private repo. Read on every use, so a manual edit works without restarting the daemon. A write changes
- * only one key (`projectsDir` or `repoHosts`; `repoTags` and `graph` only by hand) and keeps comments and the other keys,
+ * only one key (`projectsDir` or `repoHosts`; `repoTags`, `graph` and `toolPermissions` only by hand) and keeps comments and the other keys,
  * including the `repos` list from version 0.2.0, which is no longer read (ADR-18): it is the user's file, so removing it is up to them.
  */
 
@@ -31,6 +31,8 @@ const Keys = {
   repoTags: RepoTagRules.nullish().transform((rules) => rules ?? {}),
   // Package aliases and manual graph edges (ADR-29); only by hand in the file, like `repoTags`.
   graph: GraphConfig.nullish().transform((graph) => graph ?? GraphConfig.parse({})),
+  // Tool permission rules for Copilot CLI sessions (ADR-66); only by hand, like `repoTags`.
+  toolPermissions: ToolPermissionRules.nullish().transform((rules) => rules ?? []),
 };
 type Key = keyof typeof Keys;
 
@@ -59,6 +61,11 @@ export class WorkspaceFile {
   /** Package aliases and manual graph edges (`graph`, ADR-29). */
   graphConfig(): GraphConfig {
     return this.get("graph", Keys.graph);
+  }
+
+  /** Tool permission rules (`toolPermissions`, ADR-66) in file order. */
+  toolPermissionRules(): ToolPermissionRules {
+    return this.get("toolPermissions", Keys.toolPermissions);
   }
 
   setProjectsDir(dir: string): void {

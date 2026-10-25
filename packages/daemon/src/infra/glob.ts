@@ -1,6 +1,6 @@
 /**
  * Glob-style path patterns: `*` is any string without `/`, `**` also with `/` (and `**` followed by a slash also
- * nothing), `?` one character other than `/`. Enough for npm and pnpm workspace patterns and the tag rules from
+ * nothing), `?` one character other than `/`. Enough for npm and pnpm workspace patterns, and the tag and tool permission rules from
  * `workspace.yaml`; there are no `{a,b}` braces or `[…]` classes.
  *
  * No regular expressions: a workspace pattern comes from the repo (untrusted, §8), and `*a*a*a*a` turned into a regular

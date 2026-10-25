@@ -60,10 +60,12 @@ describe.skipIf(process.versions.bun === undefined)("sessions in MCP tools (real
     await daemon.facade.agents.stop(session.id);
     expect(daemon.facade.agents.session(session.id).run).toMatchObject({ kind: "exited", lastLines: expect.any(Array) });
 
-    const list = ListSessionsResult.parse((await client.callTool({ name: "list_sessions", arguments: {} })).structuredContent);
-    const listed = list.sessions.find((s) => s.id === session.id);
+    const result = (await client.callTool({ name: "list_sessions", arguments: {} })).structuredContent;
+    const listed = ListSessionsResult.parse(result).sessions.find((s) => s.id === session.id);
     expect(listed?.run.kind).toBe("exited");
     expect(listed?.run).not.toHaveProperty("lastLines");
+    // Checked before parsing, which would drop a field the schema does not have (ADR-66).
+    expect(JSON.stringify(result)).not.toContain('"dialog"');
   }, 60_000);
 
   test("get_session of a task whose worktree was deleted by hand returns the session and the task, and a reason instead of changes", async () => {

@@ -1,0 +1,30 @@
+ [Current]  Sessions   Issues   Pull requests   Gists
+
+                                                                       ┃
+ ● Tip: /remote                                                        ┃
+   └ Share this session: remote control from GitHub web and mobile, or ┃
+     directly with another CLI                                         ┃
+                                                                       ┃
+ ❯ write the file                                                21:00 ┃
+                                                                       ┃
+ ○ Create notes-with-a-rather-long-name-for-wrapping.txt            5s ┃
+                                                                       ┃
+╭──────────────────────────────────────────────────────────────────────╮
+│ Create file                                                          │
+│ ──────────────────────────────────────────────────────────────────── │
+│ notes-with-a-rather-long-name-for-wrapping.txt +2 -0                 │
+│ /src/app-outside                                                     │
+│                                                                      │
+│ 1 +   hi                                                             │
+│ 2 +   there                                                          │
+│                                                                      │
+│ Do you want to create /src/app-outside/notes-with-a-rather-long-     │
+│ name-for-wrapping.txt?                                               │
+│                                                                      │
+│ ❯ 1. Yes                                                             │
+│   2. Yes, and don't ask again for file operations when in this repo  │
+│   (/src/app-repo)                                                    │
+│   3. No, and tell Copilot what to do differently (Esc to stop)       │
+│                                                                      │
+│ ↑/↓ to navigate · enter to select · esc to cancel                    │
+╰──────────────────────────────────────────────────────────────────────╯

@@ -48,14 +48,14 @@ function sessionEnd(payload: CopilotHookRecord["payload"], reason: string): Stat
 
 /**
  * Notification kinds of the main agent found with Copilot CLI 1.0.103. `permission_prompt` (types of
- * `@github/copilot-sdk`) came in a real session on macOS with an approval request, so it has confidence `high`;
- * `elicitation_dialog` is known only from Copilot CLI's texts, so `medium` until a recording confirms it. Other kinds
+ * `@github/copilot-sdk`) came in a real session on macOS with an approval request, and `elicitation_dialog` with the
+ * agent's question (`ask_user`) on the real binary (ADR-66), so both have confidence `high`. Other kinds
  * (e.g. `agent_idle`, `agent_completed` and `shell_completed` are about background agents and commands) do not change
  * the state, even if the content sounds like an approval request. No kind for a plan was found; `Plan` comes only from the content.
  */
 const KIND_STATES: Record<string, Pick<StateSignal, "state" | "confidence">> = {
   permission_prompt: { state: "Approval", confidence: "high" },
-  elicitation_dialog: { state: "Input", confidence: "medium" },
+  elicitation_dialog: { state: "Input", confidence: "high" },
 };
 
 /** Content without a kind: only whole words, so that “explanation” is not a plan and “task” not a question. */
