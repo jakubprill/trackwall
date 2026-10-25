@@ -100,7 +100,8 @@ describe("the mise config of a task worktree (ADR-59)", () => {
       symlinkSync(join(outside, "secret.toml"), join(linkedFile, "mise.toml"));
       const linkedDir = worktreeWith({});
       symlinkSync(outside, join(linkedDir, "mise-tasks"));
-      const socketDir = worktreeWith({});
+      // A short directory: a socket path on macOS has at most 104 bytes.
+      const socketDir = mkdtempSync(join(tmpdir(), "tw-"));
       mkdirSync(join(socketDir, "mise-tasks"));
       const server = createServer();
       await new Promise<void>((resolve) => server.listen(join(socketDir, "mise-tasks", "build"), resolve));
