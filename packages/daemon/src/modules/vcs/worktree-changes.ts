@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { copyFile, rm } from "node:fs/promises";
+import { copyFile, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import type { TaskChanges, WorkingTreeChanges } from "@trackwall/protocol";
@@ -50,6 +50,21 @@ export async function worktreeChanges(dir: string, base: string, maxPatchBytes: 
   return { ...changes, commits, uncommitted };
 }
 
+/**
+ * A copy of the index with the original's modification time. Git trusts a file's size and time in the index only if
+ * the file is older than the index file ("racy git"); a copy written now would make a file changed to the same size
+ * right after checkout look unchanged. A missing index (repo without commits) gives no copy.
+ */
+async function copyIndex(index: string, copy: string): Promise<void> {
+  try {
+    const { atime, mtime } = await stat(index);
+    await copyFile(index, copy);
+    await utimes(copy, atime, mtime);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+}
+
 /** Katalog roboczy `dir` względem `base` (commit albo drzewo). */
 export async function workingTreeChanges(dir: string, base: string, maxPatchBytes: number): Promise<WorkingTreeChanges> {
   const out = (await git(dir, ["rev-parse", "--git-path", "index", "--show-object-format"])).stdout.toString("utf8").trim();
@@ -59,9 +74,7 @@ export async function workingTreeChanges(dir: string, base: string, maxPatchByte
   const index = resolve(dir, indexPath);
   const tmp = resolve(tmpdir(), `trackwall-index-${randomUUID()}`);
   try {
-    await copyFile(index, tmp).catch((err: NodeJS.ErrnoException) => {
-      if (err.code !== "ENOENT") throw err;
-    });
+    await copyIndex(index, tmp);
     const untrackedTruncated = await addUntracked(dir, tmp, emptyBlob);
     const diff = (args: string[], maxBytes?: number) =>
       git(dir, ["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", ...args, base, "--"], {
