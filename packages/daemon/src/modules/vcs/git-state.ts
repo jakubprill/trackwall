@@ -47,14 +47,18 @@ export class GitStateReader {
   /** By repo root; replaced at every `readAll`, so a repo that left the list and a deleted ref directory leave no entry. */
   private caches = new Map<string, RepoCache>();
 
-  /** The state of every repo in `repos`; `null` for one without a readable git directory (no `.git`, a broken `gitdir:`). */
-  async readAll(repos: readonly string[]): Promise<Map<string, GitState | null>> {
+  /**
+   * The state of every repo in `repos`: `null` for one without a git directory (no `.git`, a broken `gitdir:`), `undefined`
+   * for one whose files could not be read this time (a sharing violation on Windows, a network drive timing out), which
+   * says nothing about whether it changed.
+   */
+  async readAll(repos: readonly string[]): Promise<Map<string, GitState | null | undefined>> {
     const next = new Map<string, RepoCache>();
     const states = await mapLimit(repos, READ_CONCURRENCY, async (repo) => {
       const previous = this.caches.get(repo);
       const cache: RepoCache = { headRef: previous?.headRef, refsDirs: new Map() };
       next.set(repo, cache);
-      const state = await readRepo(repo, cache, previous?.refsDirs ?? new Map()).catch(() => null);
+      const state = await readRepo(repo, cache, previous?.refsDirs ?? new Map()).catch(() => undefined);
       return [repo, state] as const;
     });
     this.caches = next;
@@ -66,7 +70,10 @@ async function readRepo(repo: string, cache: RepoCache, previousDirs: ReadonlyMa
   const dirs = await gitDirs(repo);
   if (!dirs) return null;
   const headFile = join(dirs.gitDir, "HEAD");
-  const head = await stat(headFile).catch(() => undefined);
+  const head = await stat(headFile).catch((err: unknown) => {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw err;
+  });
   if (!head) return null;
   const ref = await headRef(headFile, fileKey(head), cache);
   const [branch, packed, reftable, log, refs] = await Promise.all([
@@ -78,18 +85,18 @@ async function readRepo(repo: string, cache: RepoCache, previousDirs: ReadonlyMa
   ]);
   return {
     // The checked-out branch's own file: a commit renames a new file over it, which a coarse directory time may not show.
-    head: [`HEAD ${fileKey(head)}`, `${ref ?? "detached"} ${optionalKey(branch)}`].join("\n"),
-    // `packed-refs` and `tables.list` can also hold the checked-out branch; a change there is reported as a ref change.
-    refs: [`packed-refs ${optionalKey(packed)}`, `reftable ${optionalKey(reftable)}`, ...refs].join("\n"),
+    // With reftable every ref, the branch too, lives in `tables.list`, so any ref change there counts as HEAD moving.
+    head: [`HEAD ${fileKey(head)}`, `${ref ?? "detached"} ${optionalKey(branch)}`, `reftable ${optionalKey(reftable)}`].join("\n"),
+    // `packed-refs` can also hold the checked-out branch; a change there is reported as a ref change only.
+    refs: [`packed-refs ${optionalKey(packed)}`, ...refs].join("\n"),
     usedMs: (log ?? head).mtimeMs,
   };
 }
 
-/** `refs/heads/<branch>` from `ref: …` in HEAD, `null` for a detached HEAD or a ref outside `refs/`; a failed read is not kept. */
+/** `refs/heads/<branch>` from `ref: …` in HEAD, `null` for a detached HEAD or a ref outside `refs/`; a failed read throws. */
 async function headRef(file: string, key: string, cache: RepoCache): Promise<string | null> {
   if (cache.headRef?.key === key) return cache.headRef.ref;
-  const text = await readFile(file, "utf8").catch(() => undefined);
-  if (text === undefined) return null;
+  const text = await readFile(file, "utf8");
   const match = /^ref:\s*(refs\/\S+)\s*$/.exec(text);
   const ref = match?.[1] && !match[1].split("/").includes("..") ? match[1] : null;
   cache.headRef = { key, ref };
@@ -117,7 +124,8 @@ async function refsKeys(
         .sort(),
     };
   }
-  // A listing from the same timestamp tick as a change could miss it, so it is listed again next time.
+  // A listing from the same timestamp tick as a change could miss it, so it is listed again next time. The times come from
+  // the drive's clock: a network share whose clock is behind ours by more than this loses the protection.
   if (listedAt - info.mtimeMs > RACY_MS) visited.set(dir, listing);
   const nested = await Promise.all(listing.subdirs.map((name) => refsKeys(join(dir, name), `${path}/${name}`, previous, visited)));
   return [`refs${path} ${info.mtimeMs}`, ...nested.flat()];

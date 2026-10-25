@@ -34,9 +34,10 @@ export class Vcs {
 
   /**
    * HEAD and refs of every repo read from the files of its git directory, without a `git` process (ADR-63); `null` for a
-   * repo without a readable git directory. What a read remembers is kept only for the repos of the last call.
+   * repo without a git directory, `undefined` for one that could not be read this time. What a read remembers is kept only
+   * for the repos of the last call.
    */
-  gitStates(dirs: readonly string[]): Promise<Map<string, GitState | null>> {
+  gitStates(dirs: readonly string[]): Promise<Map<string, GitState | null | undefined>> {
     return this.states.readAll(dirs);
   }
 

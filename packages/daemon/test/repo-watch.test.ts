@@ -124,4 +124,52 @@ describe("the repo watch", () => {
     expect(watch.check()).toBe(watch.check());
     await watch.check();
   });
+
+  test("a directory without a git directory is not handed to the warm-up", async () => {
+    const { projects, watch, handed } = await setup();
+    makeRepo({ "a.txt": "1" }, "shop", projects);
+    mkdirSync(join(projects, "broken"));
+    writeFileSync(join(projects, "broken", ".git"), "gitdir: ../nowhere\n");
+
+    await watch.check();
+
+    expect(handed).toEqual([["shop"]]);
+  });
+
+  test("a projects folder that only becomes readable after the start is a change", async () => {
+    const { home, projects, watch, handed, revision } = await setup();
+    makeRepo({ "a.txt": "1" }, "shop", projects);
+    const file = join(home, "workspace.yaml");
+    writeFileSync(file, "projectsDir: [unclosed\n");
+    await expect(watch.check()).rejects.toThrow();
+
+    writeFileSync(file, `projectsDir: ${JSON.stringify(projects)}\n`);
+    await watch.check();
+
+    expect(handed).toEqual([["shop"]]);
+    expect(revision()).toBe(1);
+  });
+
+  test("a repo whose files cannot be read for one comparison keeps its state, so it is no change", async () => {
+    const entries: RepoEntry[] = [{ id: "shop", path: "/projects/shop" }];
+    const reads: ({ head: string; refs: string; usedMs: number } | undefined)[] = [
+      { head: "h1", refs: "r1", usedMs: 0 },
+      undefined,
+      { head: "h1", refs: "r1", usedMs: 0 },
+    ];
+    const handed: string[][] = [];
+    const watch = new RepoWatch({
+      repos: { repoEntries: async () => entries },
+      vcs: { gitStates: async () => new Map([["/projects/shop", reads.shift()]]) },
+      onHeadMoved: (repos) => handed.push(repos.map((r) => r.id)),
+      log: () => {},
+    });
+
+    await watch.check();
+    await watch.check();
+    await watch.check();
+
+    expect(handed).toEqual([["shop"]]);
+    expect(watch.state().revision).toBe(0);
+  });
 });

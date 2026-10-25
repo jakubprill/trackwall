@@ -14,13 +14,20 @@ import type { RepoEntry } from "./projects-dir.ts";
 
 /** How often the repos are compared; a commit reaches the UI within this time plus the event cycle. */
 const CHECK_MS = 1000;
-/** The key of a repo without a readable git directory: it is compared like any other, so its repair is a change too. */
-const UNREADABLE = { head: "unreadable", refs: "unreadable", usedMs: 0 };
+/** HEAD and the other refs of one repo, as compared (`GitState` of `vcs`). */
+interface WatchedState {
+  head: string;
+  refs: string;
+}
+
+/** The state of a directory without a git directory: compared like any other, so its repair is a HEAD move too. */
+const NOT_A_REPO: WatchedState = { head: "not a repo", refs: "not a repo" };
 
 /** What the watch needs from `workspace` and `vcs`; wired in the facade. */
 export interface RepoWatchDeps {
   repos: { repoEntries(): Promise<RepoEntry[]> };
-  vcs: { gitStates(dirs: readonly string[]): Promise<Map<string, { head: string; refs: string; usedMs: number } | null>> };
+  /** `null`: no git directory; `undefined`: not readable this time, so its previous state stays. */
+  vcs: { gitStates(dirs: readonly string[]): Promise<Map<string, (WatchedState & { usedMs: number }) | null | undefined>> };
   /** The repos that are new or whose HEAD moved in one comparison, the most recently used first. */
   onHeadMoved: (repos: RepoEntry[]) => void;
   log: (msg: string) => void;
@@ -30,13 +37,15 @@ export class RepoWatch {
   readonly #deps: RepoWatchDeps;
   readonly #startedAt = new Date().toISOString();
   /** The state of every repo from the previous comparison, by repo root; `undefined` before the first one. */
-  #states: Map<string, { head: string; refs: string }> | undefined;
+  #states: Map<string, WatchedState> | undefined;
   #revision = 0;
   #timer: NodeJS.Timeout | undefined;
   /** A slow drive must not stack comparisons: the next one starts only after the previous one ended. */
   #checking: Promise<void> | undefined;
   /** The last error of a comparison, so that a missing folder does not write to the log every second. */
   #failure: string | undefined;
+  /** A comparison failed before the first one succeeded: the UI saw no repos then, so the first success is a change. */
+  #failedFirst = false;
 
   constructor(deps: RepoWatchDeps) {
     this.#deps = deps;
@@ -62,9 +71,14 @@ export class RepoWatch {
 
   /** One comparison; a call during a running one gets that one instead of starting another. */
   check(): Promise<void> {
-    this.#checking ??= this.#compare().finally(() => {
-      this.#checking = undefined;
-    });
+    this.#checking ??= this.#compare()
+      .catch((err: unknown) => {
+        if (this.#states === undefined) this.#failedFirst = true;
+        throw err;
+      })
+      .finally(() => {
+        this.#checking = undefined;
+      });
     return this.#checking;
   }
 
@@ -89,23 +103,33 @@ export class RepoWatch {
   async #compare(): Promise<void> {
     const entries = await this.#deps.repos.repoEntries();
     const read = await this.#deps.vcs.gitStates(entries.map((entry) => entry.path));
-    const states = entries.map((entry) => ({ entry, state: read.get(entry.path) ?? UNREADABLE }));
     const previous = this.#states;
-    this.#states = new Map(states.map(({ entry, state }) => [entry.path, { head: state.head, refs: state.refs }]));
-    const moved = states.filter(({ entry, state }) => previous?.get(entry.path)?.head !== state.head);
-    if (previous && this.#differs(previous)) this.#revision++;
+    const current = new Map<string, WatchedState>();
+    const moved: { entry: RepoEntry; usedMs: number }[] = [];
+    for (const entry of entries) {
+      const state = read.get(entry.path);
+      const before = previous?.get(entry.path);
+      // Not readable this time: as it was, or not seen yet.
+      if (state === undefined) {
+        if (before) current.set(entry.path, before);
+        continue;
+      }
+      current.set(entry.path, state ?? NOT_A_REPO);
+      if (state !== null && before?.head !== state.head) moved.push({ entry, usedMs: state.usedMs });
+    }
+    this.#states = current;
+    if ((previous || this.#failedFirst) && differs(previous ?? new Map(), current)) this.#revision++;
     if (moved.length === 0) return;
-    moved.sort((a, b) => b.state.usedMs - a.state.usedMs);
+    moved.sort((a, b) => b.usedMs - a.usedMs);
     this.#deps.onHeadMoved(moved.map(({ entry }) => entry));
   }
+}
 
-  #differs(previous: Map<string, { head: string; refs: string }>): boolean {
-    const current = this.#states ?? new Map();
-    if (current.size !== previous.size) return true;
-    for (const [path, state] of current) {
-      const before = previous.get(path);
-      if (before?.head !== state.head || before?.refs !== state.refs) return true;
-    }
-    return false;
+function differs(previous: ReadonlyMap<string, WatchedState>, current: ReadonlyMap<string, WatchedState>): boolean {
+  if (current.size !== previous.size) return true;
+  for (const [path, state] of current) {
+    const before = previous.get(path);
+    if (before?.head !== state.head || before?.refs !== state.refs) return true;
   }
+  return false;
 }

@@ -9,6 +9,8 @@ import { messageOf } from "../../infra/errors.ts";
  * goes to the front; one being computed is queued again, because its HEAD has moved meanwhile.
  */
 
+/** Remembered failures; beyond this the map starts again, so repos removed long ago do not stay for the daemon's life. */
+const MAX_FAILURES = 500;
 /** Two at once: the warm-up runs next to the user's work and must not take every core and the disk. */
 const CONCURRENCY = 2;
 
@@ -88,7 +90,9 @@ export class CardWarmup {
   /** A repo git cannot read has no card; whoever asks for it gets the error, the log gets it once. */
   #failed(repo: WarmupRepo, err: unknown): void {
     const message = messageOf(err);
-    if (this.#failures.get(repo.path) !== message) this.#deps.log(`card warm-up of ${repo.id}: ${message}`);
+    if (this.#failures.get(repo.path) === message) return;
+    this.#deps.log(`card warm-up of ${repo.id}: ${message}`);
+    if (this.#failures.size >= MAX_FAILURES) this.#failures.clear();
     this.#failures.set(repo.path, message);
   }
 }

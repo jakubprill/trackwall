@@ -151,7 +151,7 @@ Facts about a repo extracted deterministically from build files, configuration a
 _Avoid_: profile, metadata; "repo card" for the whole repo details panel
 
 **Card warm-up** (`CardWarmup`, progress `CardWarmupProgress`, `cards/warmup`, topic `cards.warmup.changed`; UI "Repo cards"):
-Computing the cards of new and changed repos in the background, two at once, after the daemon's start and after the repo watch sees a change (ADR-63), so that the graph and MCP take them from the cache. A request never waits for it.
+Computing the cards of new and changed repos in the background, two at once, after the daemon's start and for new repos and repos whose HEAD moved, as the repo watch sees them (ADR-63), so that the graph and MCP take them from the cache. A request never waits for it.
 _Avoid_: indexing, scan, prefetch
 
 **Build file** (`BuildFile`):

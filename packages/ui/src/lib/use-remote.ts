@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { type CallErrorCode, errorCode, errorMessage } from "./api.ts";
 import type { LiveFeed } from "./daemon-events.ts";
 import { LoadOrder } from "./load-order.ts";
+import { RefreshGate } from "./refresh-gate.ts";
 
 /** The last data and the last error separately: a refresh error does not take away a view that already shows something. */
 export interface Remote<T> {
@@ -68,11 +69,10 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
   liveRef.current = live;
   const dataRef = useRef<T | undefined>(undefined);
   const order = useRef(new LoadOrder()).current;
+  // The key of this render, read when a request is sent: a request sent after a key change already covers it.
   const refreshKeyRef = useRef(refreshKey);
-  /** A request is on its way, so a new `refreshKey` waits for its response. */
-  const busy = useRef(false);
-  /** The data is older than the latest `refreshKey`. */
-  const stale = useRef(false);
+  refreshKeyRef.current = refreshKey;
+  const gate = useRef(new RefreshGate(refreshKey)).current;
   const show = useCallback(
     (data: T, loadNumber: number) => {
       if (!order.show(loadNumber)) return;
@@ -99,8 +99,7 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
       setState({});
     }
     const loadNumber = order.next();
-    busy.current = true;
-    stale.current = false;
+    gate.sent(refreshKeyRef.current);
     load()
       .then(
         (data) => {
@@ -113,30 +112,26 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
       )
       .finally(() => {
         if (!current) return;
-        busy.current = false;
-        if (stale.current && !document.hidden) setGeneration((g) => g + 1);
+        if (gate.answered(document.hidden)) setGeneration((g) => g + 1);
         else if (pollRef.current !== undefined) timer = setTimeout(next, interval());
       });
     return () => {
       current = false;
       clearTimeout(timer);
     };
-  }, [load, generation, show, order]);
+  }, [load, generation, show, order, gate]);
 
   useEffect(() => {
-    if (refreshKeyRef.current === refreshKey) return;
-    refreshKeyRef.current = refreshKey;
-    if (busy.current || document.hidden) stale.current = true;
-    else setGeneration((g) => g + 1);
-  }, [refreshKey]);
+    if (gate.keyChanged(refreshKey, document.hidden)) setGeneration((g) => g + 1);
+  }, [refreshKey, gate]);
 
   useEffect(() => {
     const onVisible = () => {
-      if (!document.hidden && stale.current && !busy.current) setGeneration((g) => g + 1);
+      if (!document.hidden && gate.shown()) setGeneration((g) => g + 1);
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, []);
+  }, [gate]);
 
   // A snapshot counts like a response to a request sent when it arrived. A snapshot read in the daemon just before an
   // action and received after it counts as newer than the action; the next one (at most 200 ms later) corrects it.
