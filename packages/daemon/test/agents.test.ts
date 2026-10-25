@@ -132,6 +132,7 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
       vcs: new Vcs(),
       home: mkdtempSync(join(tmpdir(), "trackwall-agents-")),
       copilot: ["copilot-ktorego-nie-ma"],
+      version: "0.0.0-test",
       env: async () => ({ PATH: repoDir }),
       hookCommand: () => ({ exec: "nieuzywane", args: [] }),
       sessionMcpCommand: () => ["nieuzywane"],
