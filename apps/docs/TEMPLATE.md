@@ -40,7 +40,7 @@ description: <One sentence, under 160 characters: what the reader can do with it
 
 ## Shortcuts
 
-<Optional, like any section between "Use it" and "Good to know": a table the reader looks things up in, such as keys ("Shortcuts") or agent tools ("Tools"). Omit it when the feature has none.>
+<Optional, and the only kind of section between "Use it" and "Good to know": a table the reader looks things up in, either keys ("Shortcuts") or agent tools ("Tools"). Omit it when the feature has none. A new kind of table is added to `REFERENCE_SECTIONS` in `test/pages.test.ts`.>
 
 | Keys | What happens |
 |---|---|

@@ -1,12 +1,20 @@
-import type { Theme } from "vitepress";
+import { type Theme, useData } from "vitepress";
 import DefaultTheme from "vitepress/theme-without-fonts";
 import CopyOrDownloadAsMarkdownButtons from "vitepress-plugin-llms/vitepress-components/CopyOrDownloadAsMarkdownButtons.vue";
+import { defineComponent, h } from "vue";
+import { FEATURE_LIST_PAGE } from "../sidebar.ts";
 import "./trackwall.css";
+
+// The "Copy page" button under each title: the page as Markdown, for pasting into an AI chat. "All features" is
+// drawn by Vue, so its Markdown holds no list and the page gets no button.
+const CopyPageButton = defineComponent(() => {
+  const { page } = useData();
+  return () => (page.value.relativePath === FEATURE_LIST_PAGE ? null : h(CopyOrDownloadAsMarkdownButtons));
+});
 
 export default {
   extends: DefaultTheme,
   enhanceApp({ app }) {
-    // The "Copy page" button under each title: the page as Markdown, for pasting into an AI chat.
-    app.component("CopyOrDownloadAsMarkdownButtons", CopyOrDownloadAsMarkdownButtons);
+    app.component("CopyOrDownloadAsMarkdownButtons", CopyPageButton);
   },
 } satisfies Theme;

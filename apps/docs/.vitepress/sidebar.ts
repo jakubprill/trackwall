@@ -2,6 +2,9 @@
 import type { DefaultTheme } from "vitepress";
 
 /** A group of feature pages; its title is the heading in the sidebar and in "All features". */
+/** "All features", drawn by Vue from the groups below, so its Markdown source holds no list. */
+export const FEATURE_LIST_PAGE = "features/index.md";
+
 export interface FeatureGroup {
   text: string;
   items: { text: string; link: string }[];

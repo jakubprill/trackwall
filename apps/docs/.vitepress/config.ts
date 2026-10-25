@@ -1,25 +1,13 @@
 // The feature documentation site (ADR-56), published on GitHub Pages from .github/workflows/pages.yml.
-import { defineConfig, type MarkdownEnv, type MarkdownOptions } from "vitepress";
+import { defineConfig } from "vitepress";
 import llmstxt, { copyOrDownloadAsMarkdownButtons } from "vitepress-plugin-llms";
-import { SIDEBAR } from "./sidebar.ts";
+import { FEATURE_LIST_PAGE, SIDEBAR } from "./sidebar.ts";
 
 const REPO_URL = "https://github.com/jakubprill/trackwall";
 // GitHub Pages serves a project site under /<repo>/; `pnpm dev` uses the same path.
 const BASE = "/trackwall/";
 // The template for feature pages is for writers, not a page of the site.
 const TEMPLATE = "TEMPLATE.md";
-// "All features" is built by Vue from the sidebar, so its Markdown source holds no list; llms.txt lists the
-// features with their descriptions anyway.
-const FEATURE_LIST = "features/index.md";
-
-/** The "Copy page" button under the title of every page whose Markdown source is what the reader sees. */
-const copyPageButton: NonNullable<MarkdownOptions["config"]> = (md) => {
-  const render = md.renderer.render.bind(md.renderer);
-  md.use(copyOrDownloadAsMarkdownButtons);
-  const renderWithButton = md.renderer.render.bind(md.renderer);
-  md.renderer.render = (tokens, options, env: MarkdownEnv) =>
-    (env.relativePath === FEATURE_LIST ? render : renderWithButton)(tokens, options, env);
-};
 
 export default defineConfig({
   title: "Trackwall",
@@ -32,11 +20,12 @@ export default defineConfig({
   appearance: "dark",
   // Dates come from git; pages.yml checks out the full history.
   lastUpdated: true,
-  markdown: { config: copyPageButton },
+  markdown: { config: (md) => md.use(copyOrDownloadAsMarkdownButtons) },
   head: [["link", { rel: "icon", type: "image/svg+xml", href: `${BASE}logo.svg` }]],
   // llms.txt (an index of the pages) and llms-full.txt (every page in one file) for AI tools, plus a Markdown copy
-  // of each page and a "Copy page" button under its title, so an agent reads the same text as a person.
-  vite: { plugins: [llmstxt({ ignoreFiles: [TEMPLATE, FEATURE_LIST] })] },
+  // of each page and a "Copy page" button under its title, so an agent reads the same text as a person. "All features"
+  // is drawn by Vue, so its Markdown holds no list; llms.txt lists the features with their descriptions anyway.
+  vite: { plugins: [llmstxt({ ignoreFiles: [TEMPLATE, FEATURE_LIST_PAGE] })] },
   themeConfig: {
     logo: "/logo.svg",
     search: { provider: "local" },

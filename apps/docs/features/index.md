@@ -13,8 +13,8 @@ import { data as groups } from "./features.data.ts";
 
 Everything Trackwall does today, grouped by what it helps with. Each name opens the feature's page.
 
-<template v-for="group in groups" :key="group.text">
-<h2 :id="group.text.toLowerCase()">{{ group.text }}</h2>
+<template v-for="group in groups" :key="group.id">
+<h2 :id="group.id">{{ group.text }}</h2>
 
 <table class="feature-list">
   <tbody>

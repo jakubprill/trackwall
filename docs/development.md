@@ -6,7 +6,8 @@ Repo layout, running from source and tools for people who develop Trackwall. Pro
 - [Architecture](architecture.md)
 - [Rules for agents and Definition of done](../AGENTS.md)
 - [Glossary](../CONTEXT.md)
-- [Releases and installation](release.md)
+- [Releases](release.md)
+- [Installation](https://jakubprill.github.io/trackwall/guide/install): the steps for users, on the documentation site
 
 ## Repo layout
 

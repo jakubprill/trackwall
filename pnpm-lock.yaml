@@ -58,6 +58,9 @@ importers:
       vitepress-plugin-llms:
         specifier: 1.14.0
         version: 1.14.0
+      vue:
+        specifier: 3.5.44
+        version: 3.5.44(typescript@5.9.3)
 
   packages/daemon:
     dependencies:

@@ -9,6 +9,10 @@ const featurePages = readdirSync(join(DOCS, "features")).filter((file) => file.e
 const guidePages = readdirSync(join(DOCS, "guide")).filter((file) => file.endsWith(".md"));
 const sitePages = ["index.md", "features/index.md", ...featurePages.map((f) => `features/${f}`), ...guidePages.map((f) => `guide/${f}`)];
 const read = (path: string) => readFileSync(join(DOCS, path), "utf8");
+/** The file of a feature page from its link, `/features/repos` → `repos.md`. */
+const pageFile = (link: string) => `${link.replace(/^\/features\//, "")}.md`;
+/** The sections a feature page may have between "Use it" and "Good to know" (TEMPLATE.md). */
+const REFERENCE_SECTIONS = ["Shortcuts", "Tools"];
 
 /** A page's frontmatter, read as YAML as VitePress reads it, and the Markdown after it. */
 function frontmatter(path: string): { fields: Record<string, unknown>; body: string } {
@@ -56,7 +60,7 @@ test("a feature page opens with its title and repeats its description as the led
 test("a feature page has the sections of the template in its order, with only reference tables in between", () => {
   for (const file of featurePages) {
     const headings = sections(featurePage(file).body).map((section) => section.heading);
-    const between = headings.slice(3, -1).filter((heading) => !["Shortcuts", "Tools"].includes(heading));
+    const between = headings.slice(3, -1).filter((heading) => !REFERENCE_SECTIONS.includes(heading));
     expect({ file, start: headings.slice(0, 3), between, end: headings.at(-1) }).toEqual({
       file,
       start: ["What you get", "How it works", "Use it"],
@@ -75,14 +79,13 @@ test("'What you get' lists three to five things", () => {
 });
 
 test("every feature page is in the sidebar, and every sidebar entry has a page", () => {
-  const inSidebar = FEATURE_GROUPS.flatMap((group) => group.items.map((item) => item.link)).sort();
-  const pages = featurePages.map((file) => `/features/${file.replace(/\.md$/, "")}`).sort();
-  expect(inSidebar).toEqual(pages);
+  const inSidebar = FEATURE_GROUPS.flatMap((group) => group.items.map((item) => pageFile(item.link))).sort();
+  expect(inSidebar).toEqual([...featurePages].sort());
 });
 
 test("a sidebar entry has the title of its page", () => {
   for (const item of FEATURE_GROUPS.flatMap((group) => group.items)) {
-    const file = `${item.link.replace("/features/", "")}.md`;
+    const file = pageFile(item.link);
     expect({ file, title: featurePage(file).title }).toEqual({ file, title: item.text });
   }
 });
@@ -90,14 +93,27 @@ test("a sidebar entry has the title of its page", () => {
 test("a feature card on the home page shows the description of its page", () => {
   const { features } = frontmatter("index.md").fields;
   if (!Array.isArray(features)) throw new Error("index.md has no feature cards");
-  expect(features.length).toBeGreaterThan(0);
-  for (const card of features) {
-    const file = `${String(card.link).replace("/features/", "")}.md`;
-    expect({ file, details: card.details }).toEqual({ file, details: featurePage(file).description });
+  const cards: unknown[] = features;
+  expect(cards.length).toBeGreaterThan(0);
+  for (const card of cards) {
+    const link: unknown = typeof card === "object" && card !== null ? Reflect.get(card, "link") : undefined;
+    const details: unknown = typeof card === "object" && card !== null ? Reflect.get(card, "details") : undefined;
+    if (typeof link !== "string") throw new Error("a feature card on the home page has no link");
+    const file = pageFile(link);
+    expect({ file, details }).toEqual({ file, details: featurePage(file).description });
   }
 });
 
 test("no page of the site points at decision records or the developer documents", () => {
   const pointing = sitePages.filter((path) => /ADR-\d+|§\d|\/blob\/main\/docs\//.test(read(path)));
   expect(pointing).toEqual([]);
+});
+
+test("the install commands download the current version", () => {
+  const daemon: unknown = JSON.parse(readFileSync(join(DOCS, "../../packages/daemon/package.json"), "utf8"));
+  const version: unknown = typeof daemon === "object" && daemon !== null ? Reflect.get(daemon, "version") : undefined;
+  if (typeof version !== "string") throw new Error("packages/daemon/package.json has no version");
+  const install = read("guide/install.md");
+  const versions = [...install.matchAll(/\$v = "([^"]+)"|trackwall-(\d[^-]*)-macos/g)].map((m) => m[1] ?? m[2]);
+  expect(versions).toEqual([version, version]);
 });
