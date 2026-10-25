@@ -313,9 +313,14 @@ export function proposalsName(proposals: ProposalsEntry["proposals"]): string {
  * list, or an agent outside Trackwall (a supervising agent with the daemon token).
  */
 export function proposerLabel(proposedBy: ProposedBy, sessions: readonly Session[]): string {
-  if (proposedBy.supervisor) return "proposed by the supervisor";
-  if (proposedBy.session === null) return "proposed by an agent outside Trackwall";
+  return `proposed by ${proposerName(proposedBy, sessions)}`;
+}
+
+/** Who a proposal or a task message (ADR-68) came from, as the end of "proposed by …" or "from …". */
+export function proposerName(proposedBy: ProposedBy, sessions: readonly Session[]): string {
+  if (proposedBy.supervisor) return "the supervisor";
+  if (proposedBy.session === null) return "an agent outside Trackwall";
   const session = sessions.find((s) => s.id === proposedBy.session);
-  if (!session) return "proposed by a session that is no longer listed";
-  return `proposed by the session in ${session.repo}${session.windowTitle ? ` (${session.windowTitle})` : ""}`;
+  if (!session) return "a session that is no longer listed";
+  return `the session in ${session.repo}${session.windowTitle ? ` (${session.windowTitle})` : ""}`;
 }

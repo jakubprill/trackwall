@@ -79,7 +79,8 @@ afterEach(() => {
 });
 
 /** A session in a 120×30 terminal whose screen shows `name` and whose last hook record is `notification`. */
-async function sessionShowing(name: string, notificationType: string) {
+async function sessionShowing(name: string, notificationType: string, prompt: () => string | undefined = () => undefined) {
+  const typedText = { count: 0 };
   const hooksFile = join(mkdtempSync(join(tmpdir(), "trackwall-dialog-")), "hooks.jsonl");
   writeFileSync(hooksFile, "");
   const session = new LiveSession({
@@ -91,6 +92,11 @@ async function sessionShowing(name: string, notificationType: string) {
     hooksFile,
     promptOnStart: false,
     run: () => ({ kind: "running", runId: "r1", startedAt: "2026-10-25T12:00:00.000Z", pid: 1 }),
+    prompt,
+    onUserText: () => {
+      typedText.count++;
+    },
+    onEvent: () => {},
   });
   sessions.push(session);
   const written: string[] = [];
@@ -110,7 +116,7 @@ async function sessionShowing(name: string, notificationType: string) {
       () => {},
     ),
   );
-  return { session, written, notify };
+  return { session, written, notify, hooksFile, typedText };
 }
 
 function dialogError(answer: () => void): string | undefined {
@@ -187,5 +193,28 @@ describe("answering an agent dialog from outside the terminal (ADR-66)", () => {
     const { session } = await sessionShowing("shell-120", "elicitation_dialog");
 
     expect(session.view()).toMatchObject({ state: { state: "Input" }, dialog: null });
+  });
+});
+
+describe("the daemon's prompt and a dialog on the screen (ADR-62, ADR-68)", () => {
+  test("is not typed while the screen shows the agent's question, although the hooks put the session in its input box", async () => {
+    const { session, written, hooksFile } = await sessionShowing("question-120", "elicitation_dialog", () => "read the message");
+    // An end of the turn whose hook came while the question is still open: the hooks say input box, the screen the question.
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "agentStop", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+    expect(session.view()?.dialog).toMatchObject({ kind: "question" });
+
+    expect(session.askToRead()).toBe("queued");
+
+    expect(written).toEqual([]);
+  });
+
+  test("an answer typed into the agent's question is not text the user left in the input box", async () => {
+    const { session, written, typedText } = await sessionShowing("question-120", "elicitation_dialog", () => "read the message");
+
+    session.input("PostgreSQL");
+
+    expect(typedText.count).toBe(0);
+    expect(written).toEqual(["PostgreSQL"]);
   });
 });

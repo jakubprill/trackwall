@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { LogError, LogErrorsQuery, MiseTarget, RunState, TestFailure, TestResults } from "@trackwall/protocol";
+import type { LogError, LogErrorsQuery, MiseTarget, RunState, TestFailure, TestResults, Verification } from "@trackwall/protocol";
 import { DomainError } from "../src/infra/errors.ts";
 import { Verifications } from "../src/modules/verification/verifications.ts";
 import { waitUntil } from "../src/platform/process-group.ts";
@@ -85,6 +85,7 @@ function setup({
   let current: { run: RunState; finish: (state: RunState) => void; ended: Promise<RunState> } | undefined;
   const readSince: (string | undefined)[] = [];
   const errorRequests: LogErrorsQuery[] = [];
+  const verdicts: Verification[] = [];
   const mise = {
     start: async (target: MiseTarget, miseTask: string) => {
       calls.push(`start ${target.repo}/${target.task}/${miseTask}`);
@@ -130,6 +131,7 @@ function setup({
         return { errors: logErrors, truncated: false, nextSeq: 0, dropped: false };
       },
     },
+    onVerdict: (verification) => verdicts.push(verification),
     log: () => {},
   });
   /** Ends the current run like `procs` does once the group is confirmed empty. */
@@ -140,7 +142,7 @@ function setup({
     // The verdict is computed after the end, in the background.
     expect(await waitUntil(() => verifications.get("t1")?.state !== "running", 2000)).toBe(true);
   };
-  return { verifications, mise, tasks, calls, readSince, errorRequests, end };
+  return { verifications, mise, tasks, calls, readSince, errorRequests, verdicts, end };
 }
 
 describe("verification of a task", () => {
@@ -233,6 +235,21 @@ describe("verification of a task", () => {
     const cancelled = await verifications.cancel("t1");
     expect(calls).toEqual(["start shop/t1/test", "stop shop/t1/test"]);
     expect(cancelled).toMatchObject({ state: "cancelled", tests: null, failures: [], errors: [] });
+  });
+
+  test("every verdict, a cancel included, goes to the listener once, and a running verification does not", async () => {
+    const { verifications, verdicts, end } = setup({ reports: results([], { tests: 3 }) });
+
+    await verifications.start("t1");
+    expect(verdicts).toEqual([]);
+    await end(0);
+    await verifications.start("t1");
+    await verifications.cancel("t1");
+
+    expect(verdicts.map((v) => [v.runId, v.state])).toEqual([
+      ["run-1", "passed"],
+      ["run-2", "cancelled"],
+    ]);
   });
 
   test("a worktree without the mise task test is the caller's error, and no verification is kept", async () => {

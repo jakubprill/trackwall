@@ -11,6 +11,7 @@ Talk to one agent above all your repos, pinned on the right of every view, that 
 
 - One place to describe what you want done across repos, visible next to Home, Repos, Sessions and every other view.
 - An agent that splits the work into task proposals, one per repo, and follows the agents that run them.
+- A supervisor that wakes up when one of its tasks finishes a turn, reports or gets a verification verdict, and can send that task's agent a correction or an answer.
 - Everything it delegated, with its state, right under it: in its panel and at the top of "Sessions".
 - A bell on the panel when the supervisor, or a task proposal from it or from the work it delegated, is waiting for you.
 
@@ -20,7 +21,7 @@ The supervisor is a Copilot CLI session that runs in your projects folder, not i
 
 Ask it for something larger than one repo, like "add refunds to billing and show their status in the web shop". It looks through your repos and proposes a task for each repo involved. The proposals wait for you in "Sessions", under the "Supervisor" heading at the top of the list, and in "Delegated" in the panel. You read each one, edit the prompt if you want, and start it or reject it with a reason, as with any [task proposal](/features/main-session). Nothing starts without you.
 
-Once a task runs, the supervisor follows its agent, reads its summary and reviews its diff, and tells you what came back and what needs your decision. A task's agent can still propose more work of its own; that work sits under the task, inside the supervisor's part of the list.
+Once a task runs, the supervisor does not have to keep checking on it. When the task's agent finishes a turn, reports its result, gets a verification verdict, or stops, Trackwall types one line into the supervisor's terminal asking it to look, as soon as the supervisor waits for input. The supervisor then reads the summary, reviews the diff, and tells you what came back and what needs your decision. It can also send the task's agent a message, for example "the BFF now returns `totalCents`, use that", which you see in the task's panel. A task's agent can still propose more work of its own; that work sits under the task, inside the supervisor's part of the list.
 
 The panel can be folded to a narrow strip at the right edge, which keeps a bell when something waits for you. The panel stays pinned or folded the next time you open Trackwall.
 
@@ -40,7 +41,8 @@ The panel can be folded to a narrow strip at the right edge, which keeps a bell 
 ## Good to know
 
 - The supervisor coordinates; it is told not to change code itself. Every task it proposes still needs your approval.
-- It sees every session and task, also the ones you started yourself, but it cannot type into other sessions or change Trackwall's settings.
+- It sees every session and task, also the ones you started yourself, but it sends messages only to the tasks it proposed, never to sessions you started, and it cannot change Trackwall's settings.
+- After five messages to a task without you, the supervisor has to ask you before it sends more. Typing anything into the supervisor or the task, or sending the task a review, counts as you taking part.
 - Stop ends the supervisor; "Start again" starts a new one in its place. The work it delegated stays under the "Supervisor" heading, also after Trackwall restarts.
 - When the supervisor waits for you, the tray, the system notification and the tray panel call it "Supervisor". The "Sessions" counter leaves it out, since its panel shows it; Alt+J and "Next waiting" go to it once nothing else is waiting. It is not on the [Home dashboard](/features/home) either.
 - The supervisor does not run mise tasks or services itself: it works in no single repo, so it proposes a task in the repo instead.

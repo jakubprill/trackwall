@@ -6,29 +6,34 @@ import {
   copilotMcpServers,
   type DialogAnswer,
   isSupervisor,
-  MCP_SERVER_NAME,
-  mcpTools,
   type ReviewComment,
   type RunState,
+  type SendMessageResult,
   type SendReviewResult,
   type Session,
   type SessionList,
   type Task,
   type TaskChanges,
   type TaskChangesSummary,
+  type TaskMessage,
   type TaskMiseConfig,
   type TaskProposal,
   type TaskSharedFiles,
+  type TaskUpdate,
   type ToolPermissions,
+  type Verification,
 } from "@trackwall/protocol";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { findCopilot } from "./copilot-command.ts";
 import type { CopilotHookEvent } from "./copilot-hook-record.ts";
 import { type HookCommand, writeCopilotPlugin } from "./copilot-plugin.ts";
+import { inboxPrompt } from "./inbox-prompt.ts";
 import { LiveSession, type SessionPty, type SessionWindow } from "./live-session.ts";
+import { proposedByOf, proposerKeyOf, SUPERVISOR } from "./proposer.ts";
 import { withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
+import { TaskCoordination } from "./task-coordination.ts";
 import { TaskFile } from "./task-file.ts";
 import { TaskProposals } from "./task-proposals.ts";
 import { TaskReviews } from "./task-reviews.ts";
@@ -43,7 +48,8 @@ import type { ScreenViewer } from "./terminal-screen.ts";
  * session can belong to a task (ADR-31, `tasks.ts`): it then runs in the task's worktree, and the task outlives the
  * daemon. A session can also propose tasks, report the summary of its task and wait for another session (ADR-39): the
  * MCP server recognises it by its session token, and a task from a proposal starts only after the user approves it. One session, the
- * supervisor (ADR-58), runs in the projects folder instead of a repo, above all the others.
+ * supervisor (ADR-58), runs in the projects folder instead of a repo, above all the others. A task's proposer sends its
+ * session messages and hears about its work through updates (ADR-68, `task-coordination.ts`).
  */
 
 /** The PTY size before a session terminal reports its own. */
@@ -62,13 +68,6 @@ const SESSION_TOKEN_FILENAME = "session-token";
 const HOOKS_FILENAME = "hooks.jsonl";
 const SESSIONS_DIR = "sessions";
 const TASKS_FILE = "tasks.json";
-/**
- * What the daemon types into a task's session when the user sends a review (ADR-62): fixed text on one line, without
- * anything the Copilot CLI input box treats specially; the user's comments come from the tool.
- */
-const REVIEW_PROMPT =
-  `The user sent a review of your changes in Trackwall: call ${mcpTools.getReviewComments.name} ` +
-  `(the ${MCP_SERVER_NAME} MCP server) and address every comment.`;
 const WORKTREES_DIR = "worktrees";
 
 /** A session's directory in the state directory: its plugin, MCP configuration, token and hook records. */
@@ -149,6 +148,7 @@ export class Agents {
   readonly #tasks: AgentTasks;
   readonly #proposals = new TaskProposals();
   readonly #reviews = new TaskReviews();
+  readonly #coordination: TaskCoordination;
   readonly #worktreesDir: string;
   /** The supervisor start under way, so that two requests at once start one supervisor, not two (ADR-58). */
   #supervisorStart: Promise<Session> | undefined;
@@ -172,13 +172,23 @@ export class Agents {
         close: (id) => this.#close(id),
       },
     });
+    this.#coordination = new TaskCoordination({
+      task: (id) => this.task(id),
+      findTask: (id) => this.findTask(id),
+      proposedBy: (id) => proposedByOf(this.session(id)),
+      proposerKey: (id) => proposerKeyOf(this.session(id)),
+      runningOfTask: (task) => this.#runningOfTask(task),
+      runningProposer: (proposer) => [...this.#sessions.values()].find((s) => proposerKeyOf(s) === proposer && this.#isRunning(s)),
+      hasProposer: (proposer) => proposer === SUPERVISOR || this.#sessions.has(proposer),
+      log: deps.log,
+    });
   }
 
   sessions(): SessionList {
     const tasks = this.#tasks.list();
     // A proposal being approved that is already a task is only a task: the UI and `list_sessions` see one object.
     const proposals = this.#proposals.list().filter((p) => !tasks.some((t) => t.id === p.id));
-    return { sessions: this.#views(), tasks, proposals, worktreesDir: this.#worktreesDir };
+    return { sessions: this.#views(), tasks, proposals, messages: this.#coordination.messages(), worktreesDir: this.#worktreesDir };
   }
 
   /** One listed session (`not_found` when it does not exist or the user closed it). */
@@ -223,8 +233,7 @@ export class Agents {
   /** A task proposal from session `caller` (`null`: an agent outside Trackwall) in a repo from the projects folder (ADR-39). */
   async propose(caller: string | null, proposal: { repo: string; title: string; prompt: string }): Promise<TaskProposal> {
     await this.#deps.repos.repoPath(proposal.repo);
-    const supervisor = caller !== null && isSupervisor(this.session(caller));
-    return this.#proposals.add({ ...proposal, proposedBy: { session: caller, supervisor } });
+    return this.#proposals.add({ ...proposal, proposedBy: proposedByOf(caller === null ? null : this.session(caller)) });
   }
 
   /**
@@ -242,14 +251,19 @@ export class Agents {
   }
 
   rejectProposal(id: string, reason: string | undefined): void {
+    const proposal = this.#proposals.get(id);
     this.#proposals.reject(id, reason ?? null);
+    this.#coordination.proposalRejected(proposal, reason ?? null);
   }
 
-  /** A summary from session `caller` for its own task (`report_result`). */
+  /** A summary from session `caller` for its own task (`report_result`); it goes to the task's proposer too (ADR-68). */
   reportSummary(caller: string | null, text: string): Task {
     const task = caller === null ? null : this.session(caller).task;
-    if (task === null) throw new DomainError("bad_request", "only a session that runs a task in Trackwall can report a result");
-    return this.#tasks.setSummary(task, text);
+    if (caller === null || task === null)
+      throw new DomainError("bad_request", "only a session that runs a task in Trackwall can report a result");
+    const reported = this.#tasks.setSummary(task, text);
+    this.#coordination.resultReported(reported, caller);
+    return reported;
   }
 
   /**
@@ -260,15 +274,15 @@ export class Agents {
     // Only to refuse an unknown or ended task (`not_found`).
     this.#tasks.task(id);
     const unread = this.#reviews.add(id, comments);
-    const running = [...this.#sessions.values()].find((s) => s.task === id && this.#fresh(s)?.run.kind === "running");
-    const delivery = running && this.#askToReadReview(running);
-    return { unread, delivery: delivery ?? "on_resume" };
+    this.#coordination.reviewed(id);
+    const running = this.#runningOfTask(id);
+    return { unread, delivery: running ? running.askToRead() : "on_resume" };
   }
 
-  /** The prompt that asks a task's session to read its unread review comments, when it has any. */
-  #askToReadReview(session: LiveSession): "typed" | "queued" | undefined {
-    if (session.task === null || this.#reviews.unread(session.task) === 0) return undefined;
-    return session.typePrompt(REVIEW_PROMPT);
+  /** The prompt for what waits unread for a session: its task's review comments and messages, and its updates. */
+  #inboxPrompt(session: { id: string; repo: string | null; task: string | null }): string | undefined {
+    const reviewComments = session.task === null ? 0 : this.#reviews.unread(session.task);
+    return inboxPrompt({ reviewComments, ...this.#coordination.unread(session) });
   }
 
   /** The unread review comments of session `caller`'s own task (`get_review_comments`), which now count as read. */
@@ -276,6 +290,31 @@ export class Agents {
     const task = caller === null ? null : this.session(caller).task;
     if (task === null) throw new DomainError("bad_request", "only a session that runs a task in Trackwall has review comments");
     return this.#reviews.take(task);
+  }
+
+  /**
+   * A message from session `caller` to the session of a task it proposed (`send_message`, ADR-68); the task's agent
+   * reads it with `get_messages`.
+   */
+  sendMessage(caller: string | null, task: string, text: string): SendMessageResult {
+    return this.#coordination.send(caller, task, text);
+  }
+
+  /** The unread messages to session `caller`'s own task (`get_messages`), which now count as read. */
+  takeMessages(caller: string | null): TaskMessage[] {
+    const task = caller === null ? null : this.session(caller).task;
+    if (task === null) throw new DomainError("bad_request", "only a session that runs a task in Trackwall gets messages");
+    return this.#coordination.takeMessages(task);
+  }
+
+  /** The unread updates on the work session `caller` delegated (`get_updates`), which now count as read. */
+  takeUpdates(caller: string | null): { updates: TaskUpdate[]; dropped: number } {
+    return this.#coordination.takeUpdates(caller);
+  }
+
+  /** A task's verification has its verdict (ADR-64), which goes to the task's proposer (ADR-68). */
+  verificationFinished(verification: Verification): void {
+    this.#coordination.verificationFinished(verification);
   }
 
   /** Waits until a session or task needs someone, at most `timeoutMs`; a session cannot wait for itself. */
@@ -377,6 +416,7 @@ export class Agents {
   async removeTask(id: string, keepBranch: boolean, discardChanges: boolean): Promise<void> {
     await this.#tasks.remove(id, keepBranch, discardChanges);
     this.#reviews.take(id);
+    this.#coordination.taskEnded(id);
   }
 
   /**
@@ -428,8 +468,10 @@ export class Agents {
       throw domainError(repo, err);
     }
     this.#sessions.set(id, session);
-    // A review sent while the task had no running session (ADR-62).
-    this.#askToReadReview(session);
+    // A review or a message sent while the task had no running session (ADR-62, ADR-68); the prompt names only what is
+    // unread, and nothing is typed when nothing is. Not the updates of a new supervisor or main session: the user starts
+    // those to talk, and the next update asks them anyway.
+    if (task !== null) session.askToRead();
     this.#startTicking();
     return this.#view(session);
   }
@@ -482,6 +524,7 @@ export class Agents {
     }
     this.#sessions.delete(id);
     this.#tokens.revoke(id);
+    this.#coordination.sessionClosed(session);
     session.dispose();
     this.#removeDir(id);
   }
@@ -517,6 +560,16 @@ export class Agents {
       hooksFile,
       promptOnStart,
       run: () => this.#deps.procs.state(owner(id)),
+      prompt: () => this.#inboxPrompt({ id, repo, task }),
+      onUserText: () => this.#coordination.userTyped({ id, task }),
+      onEvent: (event) => {
+        // The session reads its hooks inside the user's key or another session's call: news for the proposer must not fail them.
+        try {
+          this.#coordination.sessionEvent({ id, task }, event);
+        } catch (err) {
+          this.#deps.log(`session ${id}: telling the proposer: ${String(err)}`);
+        }
+      },
     });
     return { session, instructionsDir };
   }
@@ -537,6 +590,16 @@ export class Agents {
       }
     }
     if (live === 0) this.close();
+  }
+
+  /** The task's newest session while it runs. */
+  #runningOfTask(task: string): LiveSession | undefined {
+    return [...this.#sessions.values()].reverse().find((s) => s.task === task && this.#isRunning(s));
+  }
+
+  /** The state after the hooks already written, as `#fresh` reads it. */
+  #isRunning(session: LiveSession): boolean {
+    return this.#fresh(session)?.run.kind === "running";
   }
 
   #get(id: string): LiveSession {

@@ -82,7 +82,7 @@ const api = await startApi({
   events: new EventHub({ facade, log: (msg) => log(`[events] ${msg}`) }),
 });
 /**
- * Sessions in every state, a main session with two of its tasks approved and two still proposed, two tasks of their
+ * Sessions in every state, a main session with two of its tasks approved (one with its messages) and two still proposed, two tasks of their
  * own (the pricing one verified, with a failed test), and a slice of services running.
  */
 async function setTheScene(): Promise<void> {
@@ -112,6 +112,20 @@ async function setTheScene(): Promise<void> {
     "Skip the invoice when billing already has one for the order id.",
   );
   for (const proposal of [retry, notify]) await facade.agents.approveProposal(proposal.id, proposal.prompt);
+  // The main session steers its notifications task (ADR-68): its agent has read the first message, not the second yet.
+  facade.agents.sendMessage(
+    main.id,
+    notify.id,
+    "payments now answers a retried POST /api/payments with 200 and the first attempt's payment id, so one order has one payment id however often it is retried.",
+  );
+  const notifySession = facade.agents.sessions().sessions.find((session) => session.task === notify.id);
+  if (notifySession === undefined) throw new Error("the notifications task has no session");
+  facade.agents.takeMessages(notifySession.id);
+  facade.agents.sendMessage(
+    main.id,
+    notify.id,
+    "Send the e-mail from the payment.succeeded event of that id only, and say in your summary which template you used.",
+  );
   const pricing = await facade.agents.createTask("pricing", "Publish a price-changed event when a price changes");
   writePricingTaskChanges(pricing.worktree);
   await facade.agents.createTask("reviews", "Hide reviews from customers who have been deleted");

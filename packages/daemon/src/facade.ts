@@ -121,7 +121,14 @@ export function createFacade(o: FacadeOptions): Facade {
   const taskPort = (repo: string, task: string) => agents.taskOfRepo(task, repo).port;
   const services = new Services({ mise, logs, graph, cards, taskPort, env: o.userEnv, ...SERVICE_TIMING });
   const testReports = new TestReports({ repos: workspace, tasks: agents, logs, env: o.userEnv });
-  const verifications = new Verifications({ tasks: agents, mise, testReports, logs, log: o.log });
+  const verifications = new Verifications({
+    tasks: agents,
+    mise,
+    testReports,
+    logs,
+    onVerdict: (verification) => agents.verificationFinished(verification),
+    log: o.log,
+  });
   return {
     workspace,
     repoWatch,

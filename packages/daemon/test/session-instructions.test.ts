@@ -21,6 +21,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
       "Before you report that you are done, call verify_task with repo `shop` and task `1b4e28ba-2fa1-11d2-883f-0016d3cca427`",
     );
     expect(text).toContain("If the repo has no mise task test, do not add one");
+    expect(text).toContain("When Trackwall asks you to call get_messages, the session that proposed your task has written to you");
     expect(text).toContain(MCP_INSTRUCTIONS);
   });
 
@@ -47,6 +48,8 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).toContain("The user sees this session in the supervisor panel on the right of every Trackwall view");
     expect(text).toContain("You are the supervisor: the one session above all others, in the projects folder");
     expect(text).toContain("You coordinate, you do not change code: hand each piece of work to an agent with propose_task");
+    expect(text).toContain("Do not poll the work you delegated: end your turn");
+    expect(text).toContain("Steer your tasks with send_message");
     expect(text).not.toContain("main session in the root");
     expect(text).not.toContain("Work only in this worktree");
     expect(text).toContain(MCP_INSTRUCTIONS);

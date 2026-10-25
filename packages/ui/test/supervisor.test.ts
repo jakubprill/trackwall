@@ -46,7 +46,7 @@ function proposal(id: string, proposedBy: TaskProposal["proposedBy"]): TaskPropo
 }
 
 function list(parts: Partial<SessionList>): SessionList {
-  return { sessions: [], tasks: [], proposals: [], worktreesDir: "/home/me/.trackwall/worktrees", ...parts };
+  return { sessions: [], tasks: [], proposals: [], messages: [], worktreesDir: "/home/me/.trackwall/worktrees", ...parts };
 }
 
 const summary = (data: SessionList) => supervisorSummary(data, sessionRows(data));

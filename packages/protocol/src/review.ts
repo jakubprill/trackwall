@@ -42,19 +42,3 @@ export const ReviewComment = z
   })
   .strict();
 export type ReviewComment = z.infer<typeof ReviewComment>;
-
-/**
- * When the agent gets a review: `typed`, the prompt went into the session's input box (now, or a moment ago for an
- * earlier review the session has not taken yet); `queued`, the session is not in its input box (working, asking for
- * approval or a question, interrupted with Esc, the user typing), and the prompt goes in when it next ends a turn;
- * `on_resume`, the task has no running session, and the prompt goes to the session the user resumes.
- */
-export const ReviewDelivery = z.enum(["typed", "queued", "on_resume"]);
-export type ReviewDelivery = z.infer<typeof ReviewDelivery>;
-
-export const SendReviewResult = z.object({
-  delivery: ReviewDelivery,
-  /** Comments the agent has not read yet, this review's included. */
-  unread: z.number().int().positive(),
-});
-export type SendReviewResult = z.infer<typeof SendReviewResult>;

@@ -1,4 +1,4 @@
-import { agentsApi, type RunningMiseTask, type Session, TASK_PORT_ENV, type Task } from "@trackwall/protocol";
+import { agentsApi, type RunningMiseTask, type Session, TASK_PORT_ENV, type Task, type TaskMessage } from "@trackwall/protocol";
 import { Code, GitBranch, Play, Plug, Square, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { SessionTerminal } from "@/components/SessionTerminal";
@@ -17,6 +17,7 @@ import { useTaskVerification } from "@/lib/use-task-verification";
 import { SharedFiles } from "./SharedFiles.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
 import { TaskIncludedFiles } from "./TaskIncludedFiles.tsx";
+import { TaskMessages } from "./TaskMessages.tsx";
 import { TaskMiseConfig } from "./TaskMiseConfig.tsx";
 import { TaskMiseRuns } from "./TaskMiseRuns.tsx";
 import { TaskRemoval } from "./TaskRemoval.tsx";
@@ -32,7 +33,8 @@ type TaskTab = "terminal" | "changes";
  * sit above the summary, and the mise tasks the agent runs in the worktree below it. The header shows the task port, and
  * the files copied from the repo root into the worktree come first (ADR-61). The review comments written in the
  * "Changes" tab live here, so that switching tabs keeps them (ADR-62). The Verify button in the header runs the
- * task's tests, and the verdict sits below the summary (ADR-64).
+ * task's tests, and the verdict sits below the summary (ADR-64). The messages the task's proposer sent its session sit
+ * above the summary (ADR-68).
  */
 export function TaskPanel({
   conn,
@@ -40,6 +42,7 @@ export function TaskPanel({
   session,
   sessions,
   tasks,
+  messages,
   runningLive,
   onChanged,
   onRemoved,
@@ -52,6 +55,8 @@ export function TaskPanel({
   sessions: readonly Session[];
   /** All tasks on the list, to name the task that changes the same files. */
   tasks: readonly Task[];
+  /** The messages the task's proposer sent its session (ADR-68), oldest first. */
+  messages: readonly TaskMessage[];
   /** Pushes of the running mise tasks, for the mise tasks a task's agent runs in its worktree. */
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
   onChanged: () => void;
@@ -132,6 +137,7 @@ export function TaskPanel({
       <TaskIncludedFiles included={task.included} />
       <SharedFiles conn={conn} task={task.id} tasks={tasks} paused={confirmingRemoval} onOpenTask={onOpenTask} />
       <TaskMiseConfig conn={conn} task={task.id} paused={confirmingRemoval} />
+      <TaskMessages messages={messages} sessions={sessions} />
       {task.summary && <TaskSummary summary={task.summary} />}
       <TaskVerification conn={conn} state={verification} />
       <TaskMiseRuns
