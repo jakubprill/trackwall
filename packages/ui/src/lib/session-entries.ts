@@ -143,7 +143,17 @@ function entryTime(entry: StartedEntry): string {
 export function findEntry(entries: readonly SessionEntry[], selection: SessionSelection): SessionEntry | undefined {
   if (selection?.kind === "new") return undefined;
   if (!selection) return entries[0];
-  return entries.find((entry) => selects(selection, entry)) ?? entries[0];
+  const found = entries.find((entry) => selects(selection, entry));
+  if (found) return found;
+  return (selection.kind === "proposals" ? startedFrom(entries, selection.proposer) : undefined) ?? entries[0];
+}
+
+/**
+ * A group whose last proposal has just become a task is gone from the list before the start ends; its newest task from
+ * the same proposer stands in for it, instead of an unrelated entry. `undefined` when there is none.
+ */
+function startedFrom(entries: readonly SessionEntry[], proposer: string | null): SessionEntry | undefined {
+  return entries.find((e) => e.kind === "task" && e.task.proposedBy !== null && e.task.proposedBy.session === proposer);
 }
 
 function selects(selection: Exclude<SessionSelection, undefined | { kind: "new" }>, entry: SessionEntry): boolean {
@@ -205,13 +215,9 @@ export function entrySelection(entry: SessionEntry): SessionSelection {
 
 /** The id of an entry (React key and comparison with the selected one); a group of proposals has it by its proposer. */
 export function entryId(entry: SessionEntry): string {
-  if (entry.kind === "proposals") return proposalsEntryId(entry.proposer);
+  // `null`, an agent outside Trackwall, gets a word no session id is.
+  if (entry.kind === "proposals") return `proposals:${entry.proposer ?? "outside"}`;
   return entry.kind === "task" ? entry.task.id : entry.session.id;
-}
-
-/** The id of the group of proposals from this proposer; `null`, an agent outside Trackwall, gets a word no session id is. */
-function proposalsEntryId(proposer: string | null): string {
-  return `proposals:${proposer ?? "outside"}`;
 }
 
 /** A proposal's name wherever it is listed: its repo and title. */

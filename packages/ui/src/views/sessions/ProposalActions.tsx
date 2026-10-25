@@ -1,19 +1,19 @@
 import type { Task, TaskProposal } from "@trackwall/protocol";
 import { GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { ProposalReject } from "./ProposalReject.tsx";
 import { SameRepoTasks } from "./SameRepoTasks.tsx";
 
 /**
  * Below a proposal's prompt, in the proposals panel and in a grid tile (ADR-55): the tasks already in its repo,
- * “Start task”, “Reject…” and the error of the last decision.
+ * “Start task” and “Reject…”.
  */
 export function ProposalActions({
   proposal,
   tasks,
   pending,
   canStart,
-  error,
   onStart,
   onReject,
 }: {
@@ -22,7 +22,6 @@ export function ProposalActions({
   pending: boolean;
   /** False with an empty prompt. */
   canStart: boolean;
-  error: string | undefined;
   onStart: () => void;
   onReject: (reason: string) => void;
 }) {
@@ -35,7 +34,11 @@ export function ProposalActions({
         </Button>
         <ProposalReject title={proposal.title} disabled={pending} onReject={onReject} />
       </div>
-      {error && <p className="text-destructive text-xs whitespace-pre-wrap">{error}</p>}
     </>
   );
+}
+
+/** The error of the last decision on a proposal, shown also while the proposal is closed. */
+export function ProposalError({ error, className }: { error: string | undefined; className?: string }) {
+  return error ? <p className={cn("text-destructive text-xs whitespace-pre-wrap", className)}>{error}</p> : null;
 }

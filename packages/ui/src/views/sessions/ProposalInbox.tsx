@@ -9,7 +9,7 @@ import { type ProposalsEntry, proposalName, proposalsName, proposerLabel, type S
 import { toggle } from "@/lib/set-toggle";
 import { useProposalDecisions } from "@/lib/use-proposal-decisions";
 import { cn } from "@/lib/utils";
-import { ProposalActions } from "./ProposalActions.tsx";
+import { ProposalActions, ProposalError } from "./ProposalActions.tsx";
 
 /**
  * The task proposals of one main session or of agents outside Trackwall (ADR-39, ADR-55), reviewed together as the plan
@@ -43,14 +43,13 @@ export function ProposalInbox({
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
   // `null` once the user closed it; an id that is no longer waiting falls back to the first proposal.
   const [open, setOpen] = useState<string | null>(focus ?? proposals[0].id);
-  // Proposals opened before, besides the one open now.
+  // Proposals that have been open; a ticked one has been, too.
   const [read, setRead] = useState<ReadonlySet<string>>(new Set());
   const shown = open !== null && !proposals.some((p) => p.id === open) ? proposals[0].id : open;
-  const wasRead = (id: string) => id === shown || read.has(id);
-  const show = (id: string | null) => {
-    if (shown !== null) setRead(new Set(read).add(shown));
-    setOpen(id);
-  };
+  const wasRead = (id: string) => id === shown || read.has(id) || ticked.has(id);
+  useEffect(() => {
+    if (shown !== null) setRead((r) => (r.has(shown) ? r : new Set(r).add(shown)));
+  }, [shown]);
   useEffect(() => {
     if (focus) setOpen(focus);
   }, [focus]);
@@ -104,7 +103,7 @@ export function ProposalInbox({
                   type="button"
                   className="flex min-w-0 flex-1 items-start gap-2 text-left"
                   aria-expanded={expanded}
-                  onClick={() => show(expanded ? null : p.id)}
+                  onClick={() => setOpen(expanded ? null : p.id)}
                 >
                   {expanded ? (
                     <ChevronDown className="mt-0.5 size-4 shrink-0" aria-hidden />
@@ -131,15 +130,12 @@ export function ProposalInbox({
                     tasks={tasks}
                     pending={decisions.pending}
                     canStart={promptOf(p).trim() !== ""}
-                    error={decisions.errors.get(p.id)}
                     onStart={() => decisions.start([{ id: p.id, prompt: promptOf(p) }])}
                     onReject={(reason) => decisions.reject(p.id, reason)}
                   />
                 </div>
               )}
-              {!expanded && decisions.errors.has(p.id) && (
-                <p className="text-destructive px-3 pb-3 text-xs whitespace-pre-wrap">{decisions.errors.get(p.id)}</p>
-              )}
+              <ProposalError error={decisions.errors.get(p.id)} className="px-3 pb-3" />
             </li>
           );
         })}

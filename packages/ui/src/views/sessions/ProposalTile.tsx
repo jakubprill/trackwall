@@ -2,7 +2,7 @@ import type { Task } from "@trackwall/protocol";
 import type { Connection } from "@/lib/connection";
 import { type ProposalsEntry, proposalName, type SessionSelection } from "@/lib/session-entries";
 import { useProposalDecisions } from "@/lib/use-proposal-decisions";
-import { ProposalActions } from "./ProposalActions.tsx";
+import { ProposalActions, ProposalError } from "./ProposalActions.tsx";
 
 /**
  * The body of a grid tile with task proposals (ADR-48, ADR-55): every prompt in full, to read before “Start task”,
@@ -35,10 +35,10 @@ export function ProposalTile({
             tasks={tasks}
             pending={decisions.pending}
             canStart
-            error={decisions.errors.get(p.id)}
             onStart={() => decisions.start([{ id: p.id, prompt: p.prompt }])}
             onReject={(reason) => decisions.reject(p.id, reason)}
           />
+          <ProposalError error={decisions.errors.get(p.id)} />
         </li>
       ))}
     </ul>

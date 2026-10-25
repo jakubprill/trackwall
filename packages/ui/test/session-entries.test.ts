@@ -159,6 +159,17 @@ describe("pozycje widoku Sesje", () => {
     expect(sessionRows(list).find((r) => entryId(r.entry) === "s1")?.children).toBe(2);
   });
 
+  test("a group whose last proposal has just started gives way to the newest task from the same session", () => {
+    const entries = rowEntries({
+      sessions: [session("s1", "2026-10-23T08:00:00Z")],
+      tasks: [delegated("p1", "2026-10-23T12:00:00Z", "s1"), task("t0", "2026-10-23T13:00:00Z")],
+      proposals: [],
+      worktreesDir: "/w",
+    });
+    expect(findEntry(entries, { kind: "proposals", proposer: "s1" })).toMatchObject({ kind: "task", task: { id: "p1" } });
+    expect(findEntry(entries, { kind: "proposals", proposer: "s9" })).toBe(entries[0]);
+  });
+
   test("the main badge counts every proposal of the group under it", () => {
     const list = {
       sessions: [session("s1", "2026-10-23T10:00:00Z")],
