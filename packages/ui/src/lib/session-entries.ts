@@ -118,13 +118,20 @@ export function findEntry(entries: readonly SessionEntry[], selection: SessionSe
 }
 
 /**
- * The entry to select after `id` leaves the list: the next one, or the previous one when it was last, so the selection
- * stays where the user was (also on the same grid page). `undefined` when nothing else is left or `id` is not listed.
+ * What to select after the session of `closed` was closed: `"keep"` unless `closed` was the selected entry and leaves the
+ * list with its session (a session in a repo root; a task stays listed). Then its neighbour, the next entry or the
+ * previous one after the last, so the selection stays where the user was (also on the same grid page); `undefined`
+ * (the first entry) when nothing else is left.
  */
-export function entryAfterRemoval(entries: readonly SessionEntry[], id: string): SessionEntry | undefined {
-  const at = entries.findIndex((entry) => entryId(entry) === id);
-  if (at === -1) return undefined;
-  return entries[at + 1] ?? entries[at - 1];
+export function selectionAfterClose(
+  entries: readonly SessionEntry[],
+  current: SessionEntry | undefined,
+  closed: SessionEntry,
+): SessionSelection | "keep" {
+  if (closed.kind !== "session" || current === undefined || entryId(current) !== entryId(closed)) return "keep";
+  const at = entries.findIndex((entry) => entryId(entry) === entryId(closed));
+  const neighbour = at === -1 ? undefined : (entries[at + 1] ?? entries[at - 1]);
+  return neighbour ? entrySelection(neighbour) : undefined;
 }
 
 /** Sesja pozycji: sesja w korzeniu repo albo ostatnia sesja zadania; propozycja jeszcze nie ma sesji, a brak pozycji też. */

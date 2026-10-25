@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Session, Task, TaskProposal } from "@trackwall/protocol";
-import { entryAfterRemoval, entryId, entrySelection, findEntry, proposerLabel, sessionRows } from "../src/lib/session-entries.ts";
+import { entryId, entrySelection, findEntry, proposerLabel, selectionAfterClose, sessionRows } from "../src/lib/session-entries.ts";
 import { attentionCount } from "../src/lib/session-state.ts";
 
 function session(id: string, startedAt: string, task: string | null = null): Session {
@@ -65,18 +65,32 @@ describe("pozycje widoku Sesje", () => {
     ]);
   });
 
-  test("after closing an entry the next one is selected, and the previous one after closing the last", () => {
+  test("closing the selected session selects the next entry, and the previous one after the last", () => {
     const entries = rowEntries({
       sessions: [session("s1", "2026-10-23T12:00:00Z"), session("s2", "2026-10-23T11:00:00Z"), session("s3", "2026-10-23T10:00:00Z")],
       tasks: [],
       proposals: [],
       worktreesDir: "/home/ja/.trackwall/worktrees",
     });
-    expect(entries.map(entryId)).toEqual(["s1", "s2", "s3"]);
-    expect(entryAfterRemoval(entries, "s2")).toBe(entries[2]);
-    expect(entryAfterRemoval(entries, "s3")).toBe(entries[1]);
-    expect(entryAfterRemoval(entries, "unknown")).toBeUndefined();
-    expect(entryAfterRemoval(entries.slice(0, 1), "s1")).toBeUndefined();
+    const [s1, s2, s3] = entries;
+    if (!s1 || !s2 || !s3) throw new Error("expected three entries");
+    expect(selectionAfterClose(entries, s2, s2)).toEqual({ kind: "session", id: "s3" });
+    expect(selectionAfterClose(entries, s3, s3)).toEqual({ kind: "session", id: "s2" });
+    expect(selectionAfterClose([s1], s1, s1)).toBeUndefined();
+  });
+
+  test("closing a session that is not selected, or a task's session, keeps the selection", () => {
+    const entries = rowEntries({
+      sessions: [session("s1", "2026-10-23T12:00:00Z", "t1"), session("s2", "2026-10-23T11:00:00Z")],
+      tasks: [task("t1", "2026-10-23T09:00:00Z")],
+      proposals: [],
+      worktreesDir: "/home/ja/.trackwall/worktrees",
+    });
+    const [taskEntry, s2] = entries;
+    if (!taskEntry || !s2) throw new Error("expected two entries");
+    expect(taskEntry.kind).toBe("task");
+    expect(selectionAfterClose(entries, taskEntry, s2)).toBe("keep");
+    expect(selectionAfterClose(entries, taskEntry, taskEntry)).toBe("keep");
   });
 
   test("wybór sesji zadania (z traya albo „Następna czekająca”) wskazuje jej zadanie", () => {

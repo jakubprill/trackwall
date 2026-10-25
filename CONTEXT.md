@@ -295,12 +295,12 @@ xterm.js in the Sessions view, connected over the WebSocket `/ws/pty/<session>` 
 _Avoid_: terminal window (a window is the app window)
 
 **Session layout** (`SessionLayout`):
-How the right side of the Sessions view shows entries (ADR-48): `1` is the selected entry alone with its full panel (tabs, Stop, Resume), `2` and `4` a grid page of that many entries, `auto` a grid of the whole list, up to nine per page. A tile, like a list row, has an X that closes its session.
+How the right side of the Sessions view shows entries (ADR-48): `1` is the selected entry alone with its full panel (tabs, Stop, Resume), `2` and `4` a grid page of that many entries, `auto` a grid of the whole list, up to nine per page.
 In the Sessions view the switch is labelled just "Layout".
 _Avoid_: view (that is a screen of the app), mode
 
 **Session grid** (`SessionGrid`, tile):
-Several session terminals side by side in the Sessions view, one tile per list entry, on pages of the list. The tile of the selected entry has the accent ring and takes the keyboard; a tile that is waiting for you has the warning frame.
+Several session terminals side by side in the Sessions view, one tile per list entry, on pages of the list. The tile of the selected entry has the accent ring and takes the keyboard; a tile that is waiting for you has the warning frame. A tile, like a list row, has an X that closes its session: "Close session" in the UI is `stop` and then `dismiss` in the API.
 _Avoid_: split, dashboard (that is Home)
 
 **Session shortcut** (`SessionShortcut`; Alt+1…9, Alt+J):

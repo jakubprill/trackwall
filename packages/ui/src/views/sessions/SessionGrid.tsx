@@ -8,8 +8,9 @@ import { entryId, entrySession, type SessionEntry } from "@/lib/session-entries"
 import { type GridPage, gridShape } from "@/lib/session-grid";
 import { sessionShortcutLabel } from "@/lib/session-shortcut";
 import { isLive, sessionStateLabel } from "@/lib/session-state";
+import { useSessionClose } from "@/lib/use-session-close";
 import { cn } from "@/lib/utils";
-import { SessionCloseButton, SessionCloseConfirmation, useSessionClose } from "./SessionClose.tsx";
+import { SessionCloseButton, SessionCloseConfirmation } from "./SessionClose.tsx";
 import { SessionTerminal } from "./SessionTerminal.tsx";
 import { TaskLine } from "./TaskLine.tsx";
 
@@ -126,9 +127,12 @@ function SessionTile({
         </Button>
         {session && <SessionCloseButton close={close} />}
       </header>
-      <SessionCloseConfirmation close={close} />
       {session ? (
-        <SessionTerminal conn={conn} session={session.id} live={isLive(session)} focused={selected} />
+        // The question lies over the terminal instead of pushing it down, so that it does not resize the PTY mid-turn.
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <SessionCloseConfirmation close={close} className="absolute inset-x-0 top-0 z-10" />
+          <SessionTerminal conn={conn} session={session.id} live={isLive(session)} focused={selected} />
+        </div>
       ) : (
         <div className="text-muted-foreground flex flex-1 items-center justify-center p-4 text-center text-xs">
           {entry.kind === "proposal"

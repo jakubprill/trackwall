@@ -9,7 +9,7 @@ import {
   workspaceApi,
 } from "@trackwall/protocol";
 import { BellRing, GitBranch, Lightbulb, Play, Plus, Square, X } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -21,7 +21,6 @@ import type { Connection } from "@/lib/connection";
 import { relativeTime, twoDigits } from "@/lib/format";
 import { IS_MAC } from "@/lib/platform";
 import {
-  entryAfterRemoval,
   entryId,
   entrySelection,
   entrySession,
@@ -29,6 +28,7 @@ import {
   type SessionEntry,
   type SessionRow,
   type SessionSelection,
+  selectionAfterClose,
   sessionRows,
 } from "@/lib/session-entries";
 import { gridPage, SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
@@ -36,10 +36,11 @@ import { ariaSessionShortcut, SHORTCUT_POSITIONS, sessionShortcut, sessionShortc
 import { isLive, nextWaiting, PROPOSAL_STATUS, sessionStateLabel, waitingCount } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
 import { actionIsNewer, type RemoteHandle, useRemote } from "@/lib/use-remote";
+import { useSessionClose } from "@/lib/use-session-close";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { cn } from "@/lib/utils";
 import { ProposalPanel } from "./ProposalPanel.tsx";
-import { SessionCloseButton, SessionCloseConfirmation, useSessionClose } from "./SessionClose.tsx";
+import { SessionCloseButton, SessionCloseConfirmation } from "./SessionClose.tsx";
 import { SessionGrid } from "./SessionGrid.tsx";
 import { SessionTerminal } from "./SessionTerminal.tsx";
 import { TaskLine } from "./TaskLine.tsx";
@@ -80,12 +81,13 @@ export function SessionsView({
   const show = (id: string) => onSelect({ kind: "session", id });
   const next = nextWaiting(list, entrySession(current)?.id);
   const waiting = waitingCount(list);
-  // A closed session in a repo root leaves the list, so the selection moves to its neighbour; a task stays listed.
+  // A stop can take seconds, and the user may select another entry meanwhile, so the close decides on the list and the
+  // selection as they are when it ends, not when the X was clicked.
+  const latest = useRef({ entries, current });
+  latest.current = { entries, current };
   const sessionClosed = (entry: SessionEntry) => {
-    if (entry.kind === "session" && current && entryId(current) === entryId(entry)) {
-      const neighbour = entryAfterRemoval(entries, entryId(entry));
-      onSelect(neighbour ? entrySelection(neighbour) : undefined);
-    }
+    const next = selectionAfterClose(latest.current.entries, latest.current.current, entry);
+    if (next !== "keep") onSelect(next);
     sessions.reload();
   };
   // Taken also with no entry at that position, so that the key never reaches a session terminal by accident.
@@ -390,6 +392,7 @@ function SelectedEntry({
           tasks={tasks}
           onSelect={onSelect}
           onChanged={onChanged}
+          onSessionClosed={onSessionClosed}
           onTaskRemoved={onTaskRemoved}
         />
       </>
@@ -430,6 +433,7 @@ function EntryPanel({
   tasks,
   onSelect,
   onChanged,
+  onSessionClosed,
   onTaskRemoved,
 }: {
   conn: Connection;
@@ -439,6 +443,7 @@ function EntryPanel({
   tasks: readonly Task[];
   onSelect: (selection: SessionSelection) => void;
   onChanged: () => void;
+  onSessionClosed: (entry: SessionEntry) => void;
   onTaskRemoved: (task: string) => void;
 }) {
   if (entry.kind === "proposal")
@@ -473,7 +478,13 @@ function EntryPanel({
       />
     );
   return (
-    <SessionPanel key={entry.session.id} conn={conn} session={entry.session} onChanged={onChanged} onClosed={() => onSelect(undefined)} />
+    <SessionPanel
+      key={entry.session.id}
+      conn={conn}
+      session={entry.session}
+      onChanged={onChanged}
+      onClosed={() => onSessionClosed(entry)}
+    />
   );
 }
 
@@ -510,7 +521,7 @@ function LayoutBar({ layout, onLayout, summary }: { layout: SessionLayout; onLay
   );
 }
 
-/** Nagłówek wybranej sesji (repo, stan, nad czym pracuje, przyciski) i jej terminal. */
+/** Nagłówek wybranej sesji (repo, stan, nad czym pracuje, przyciski) i jej terminal. Close of an ended session is the X's close (`useSessionClose`). */
 function SessionPanel({
   conn,
   session,
@@ -524,14 +535,8 @@ function SessionPanel({
 }) {
   const live = isLive(session);
   const stop = useAction(() => post(conn, agentsApi.stop, { session: session.id }), onChanged);
-  const dismiss = useAction(
-    () => post(conn, agentsApi.dismiss, { session: session.id }),
-    () => {
-      onClosed();
-      onChanged();
-    },
-  );
-  const action = live ? stop : dismiss;
+  const close = useSessionClose(conn, session, onClosed);
+  const error = live ? stop.error : close.error;
   return (
     <>
       <header className="flex items-center gap-4 border-b px-4 py-2">
@@ -545,13 +550,13 @@ function SessionPanel({
           </span>
           {session.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
         </div>
-        {action.error && <span className="text-destructive max-w-xs truncate text-xs">{action.error}</span>}
+        {error && <span className="text-destructive max-w-xs truncate text-xs">{error}</span>}
         {live ? (
           <Button variant="outline" size="sm" onClick={stop.run} disabled={stop.pending || session.run.kind === "stopping"}>
             <Square /> Stop
           </Button>
         ) : (
-          <Button variant="outline" size="sm" onClick={dismiss.run} disabled={dismiss.pending}>
+          <Button variant="outline" size="sm" onClick={close.request} disabled={close.pending}>
             <X /> Close
           </Button>
         )}
