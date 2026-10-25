@@ -44,11 +44,11 @@ import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
  * Contract of the daemon's MCP tools (§5.3, ADR-24): the name, the description for the agent, the input and the result of
  * every tool in one `McpTool` object, like `Endpoint` for the API. The daemon announces `tools/list` from them and checks
  * arguments and `structuredContent` with them, and tests, the UI and clients take names from them and parse responses.
- * The tools read (`get_messages` and `get_updates` also mark what they return read, which only Trackwall keeps, so
- * an agent the daemon woke reads them without an approval request, ADR-68); those with `readOnly: false` submit a task
- * proposal or summary (ADR-39; a task starts only after approval in the UI), mark the user's review comments read
- * (ADR-62), send a message to a delegated task's session (ADR-68), or run and stop mise tasks from a repo's trusted
- * config (ADR-41). Tool names, fields and descriptions are in English (ADR-32).
+ * The tools read (`get_review_comments`, `get_messages` and `get_updates` also mark what they return read, which only
+ * Trackwall keeps, so an agent the daemon asked reads them without an approval request, ADR-62, ADR-68); those with
+ * `readOnly: false` submit a task proposal or summary (ADR-39; a task starts only after approval in the UI), send a
+ * message to a delegated task's session (ADR-68), or run and stop mise tasks from a repo's trusted config (ADR-41).
+ * Tool names, fields and descriptions are in English (ADR-32).
  */
 
 /** The MCP server name in `initialize` and in the Copilot CLI config (`copilot mcp add trackwall …`). */
@@ -589,8 +589,8 @@ export const mcpTools = {
   },
   getReviewComments: {
     name: GET_REVIEW_COMMENTS,
-    readOnly: false,
-    destructive: false,
+    // Marking them read changes only Trackwall's own bookkeeping; an approval would stall the agent it asked (ADR-62).
+    readOnly: true,
     description:
       "Read the review comments the user wrote on lines of your task's changes in Trackwall and has not given you yet. " +
       "Only for a session that runs a task in Trackwall; Trackwall asks you to call it when the user sends a review. Each " +

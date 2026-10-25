@@ -195,6 +195,32 @@ describe("an agent task with the real Copilot CLI", () => {
   });
 });
 
+describe("a review of a task's changes with the real Copilot CLI (ADR-62)", () => {
+  test("the agent asked to read the review reads the comments without an approval request", async () => {
+    const { agents } = daemon.facade;
+    model.reply({ text: "Added the test." });
+    const task = await agents.createTask("shop", "add a login test");
+    const session = agents.sessions().sessions.find((s) => s.task === task.id);
+    if (session === undefined) throw new Error("the task has no session");
+    await endOfTurn(session.id);
+
+    model.reply({ tool: copilotToolName(mcpTools.getReviewComments.name), arguments: {} }, { text: "Renamed it." });
+    const review = { path: "README.md", side: "new" as const, line: 1, code: "# shop", text: "Call it @login-test" };
+    expect(agents.sendReview(task.id, [review]).delivery).toBe("typed");
+    await waitFor(
+      agents,
+      session.id,
+      // An approval request ends the wait at once, so a regression fails on its cause, not on the time limit.
+      () => hookRecords(daemon.home, session.id).filter((r) => r.event === "agentStop" || r.event === "notification").length >= 2,
+      "the review turn's end or an approval request",
+      SESSION_MS,
+    );
+
+    expect(hookRecords(daemon.home, session.id).map((r) => r.event)).not.toContain("notification");
+    expect(model.requests().at(-1)?.toolResults.join("\n")).toContain("Call it @login-test");
+  });
+});
+
 describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
   /** Waits until session `id` has ended `turns` turns (its `agentStop` hook records). */
   const turnsEnded = (id: string, turns: number) =>
