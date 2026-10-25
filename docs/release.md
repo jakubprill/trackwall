@@ -28,8 +28,8 @@ The last line prints the public key, which goes into `tauri.conf.json` through a
 5. On `main`, create and push a tag with the same version:
 
    ```sh
-   git tag v0.3.0
-   git push origin v0.3.0
+   git tag v0.4.0
+   git push origin v0.4.0
    ```
 
    A tag with a hyphen (for example `v0.3.0-rc.1`) creates a pre-release.
