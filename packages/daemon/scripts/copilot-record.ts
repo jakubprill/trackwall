@@ -1,16 +1,16 @@
 /**
- * Prototyp etapu 2 (§11, ADR-17): uruchamia Copilot CLI w PTY tak jak daemon (ADR-26), pokazuje go w bieżącym
- * terminalu, nagrywa sesję i na bieżąco liczy stan zadania. Służy do sprawdzenia detektorów na prawdziwym
- * Windowsie i macOS oraz do zbierania nagrań, z których po anonimizacji powstają fixture'y testów; daemon sesji
- * nie nagrywa. Skrypt sięga do plików modułu `agents` wprost, bo działa bez daemona.
+ * Stage 2 prototype (§11, ADR-17): runs Copilot CLI in a PTY the way the daemon does (ADR-26), shows it in the current
+ * terminal, records the session and computes the task state live. It is for checking the detectors on real Windows
+ * and macOS machines and for collecting recordings that become test fixtures after anonymisation; the daemon does not record
+ * sessions. The script reaches into the `agents` module's files directly, because it runs without the daemon.
  *
- *   bun packages/daemon/scripts/copilot-record.ts record [--out <katalog>] [--copilot <program>] [-- <argumenty copilot>]
+ *   bun packages/daemon/scripts/copilot-record.ts record [--out <directory>] [--copilot <program>] [-- <copilot arguments>]
  *   bun packages/daemon/scripts/copilot-record.ts replay <session.cast>
  *
- * `record` zapisuje w katalogu: `session.cast` (wyjście i znaczniki hooków oraz rodzaju klawisza), `states.jsonl` (zmiany stanu),
- * `hooks.jsonl` (rekordy hooków) i `plugin/` (wtyczka sesji). Na końcu drukuje listę zmian stanu.
- * `replay` liczy stan jeszcze raz z nagrania, np. po zmianie reguł. Trzecia komenda, `hook`, jest wywoływana
- * przez Copilot CLI z wtyczki sesji, nie przez człowieka.
+ * `record` writes to the directory: `session.cast` (output and markers of hooks and the kind of key), `states.jsonl` (state changes),
+ * `hooks.jsonl` (hook records) and `plugin/` (the session plugin). At the end it prints the list of state changes.
+ * `replay` computes the state again from a recording, e.g. after the rules change. A third command, `hook`, is called
+ * by Copilot CLI from the session plugin, not by a human.
  */
 import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync, writeSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -32,7 +32,7 @@ import { STALE_AFTER_MS } from "../src/modules/agents/live-session.ts";
 const HOOK_POLL_MS = 200;
 const DEFAULT_COLS = 120;
 const DEFAULT_ROWS = 30;
-const USAGE = "użycie: copilot-record.ts record [--out <katalog>] [--copilot <program>] [-- <argumenty>] | replay <session.cast>";
+const USAGE = "usage: copilot-record.ts record [--out <directory>] [--copilot <program>] [-- <arguments>] | replay <session.cast>";
 
 async function record(argv: string[]): Promise<number> {
   const { values, positionals } = parseArgs({
@@ -53,7 +53,7 @@ async function record(argv: string[]): Promise<number> {
     cwd: pluginDir,
   }));
 
-  // Bez terminala (przekierowane wyjście) albo w `script` rozmiar bywa 0, a PTY 0×0 rozkłada TUI.
+  // Without a terminal (redirected output) or in `script` the size is sometimes 0, and a 0×0 PTY breaks the TUI.
   const size = () => ({ cols: process.stdout.columns || DEFAULT_COLS, rows: process.stdout.rows || DEFAULT_ROWS });
   const { cols, rows } = size();
   const recording = new Recording(out, { cols, rows });
@@ -67,14 +67,14 @@ async function record(argv: string[]): Promise<number> {
     terminal: { cols, rows, data: (_terminal, bytes) => recording.output(bytes, decoder.decode(bytes, { stream: true })) },
   });
   const terminal = proc.terminal;
-  if (!terminal) throw new Error("Bun.spawn nie dał PTY; ta wersja Bun nie obsługuje `terminal` na tym systemie");
+  if (!terminal) throw new Error("Bun.spawn gave no PTY; this Bun version does not support `terminal` on this system");
 
   process.stdin.setRawMode?.(true);
   process.stdin.on("data", (d: Buffer) => {
     terminal.write(d);
     const key = sessionKey(d.toString("utf8"));
     if (!key) return;
-    // Hooki, które już przyszły, idą do nagrania przed klawiszem, tak jak w daemonie (`LiveSession.input`).
+    // Hooks that have already arrived go to the recording before the key, as in the daemon (`LiveSession.input`).
     pumpHooks();
     recording.key(key);
   });
@@ -90,7 +90,7 @@ async function record(argv: string[]): Promise<number> {
 
   try {
     const code = await proc.exited;
-    // Hook `sessionEnd` mógł dopisać rekord tuż przed wyjściem procesu.
+    // The `sessionEnd` hook may have appended a record just before the process exited.
     pumpHooks();
     recording.exit(code);
     return code;
@@ -102,7 +102,7 @@ async function record(argv: string[]): Promise<number> {
     process.stdin.setRawMode?.(false);
     process.stdin.pause();
     printChanges(recording.changes);
-    console.error(`\nNagranie i stany: ${out}`);
+    console.error(`\nRecording and states: ${out}`);
   }
 }
 
@@ -113,16 +113,16 @@ function replay(argv: string[]): void {
   printChanges(replayCopilotRecording(cast, { staleAfterMs: STALE_AFTER_MS }));
 }
 
-/** Wywoływane przez Copilot CLI dla każdego zdarzenia; ten sam hook co w daemonie (`runCopilotHook`). */
+/** Called by Copilot CLI for every event; the same hook as in the daemon (`runCopilotHook`). */
 async function hook(argv: string[]): Promise<void> {
   const [event, log] = argv;
   runCopilotHook(event, log, await Bun.stdin.text());
 }
 
 /**
- * Pliki jednej nagrywanej sesji i stan liczony na bieżąco: wyjście trafia do terminala, nagrania i detektorów,
- * rekord hooka i rodzaj klawisza (bez treści wejścia) do nagrania jako znacznik i do detektorów, każda zmiana stanu
- * do `states.jsonl`.
+ * The files of one recorded session and the state computed live: output goes to the terminal, the recording and the
+ * detectors, a hook record and the kind of key (without the input content) go to the recording as a marker and to the
+ * detectors, and every state change goes to `states.jsonl`.
  */
 class Recording {
   readonly changes: TaskStateChange[] = [];
@@ -130,8 +130,9 @@ class Recording {
   readonly #session: CopilotSessionState;
   readonly #statesFd: number;
   /**
-   * Czas, z którego sesja liczy stan: czas ostatniego zapisanego zdarzenia, a nie chwila liczenia. Odtwarzanie widzi
-   * tylko czasy zdarzeń, więc inaczej zmiana stanu na żywo i z nagrania różniłaby się o czas między zapisem a liczeniem.
+   * The time the session computes the state from: the time of the last written event, not the moment of computing. The
+   * replay sees only event times, so otherwise a state change live and from the recording would differ by the time
+   * between writing and computing.
    */
   #clock: number;
 
@@ -185,24 +186,22 @@ class Recording {
   }
 }
 
-/** Program Copilot CLI z argumentami; ta sama reguła co w daemonie (`findCopilot`). */
+/** The Copilot CLI program with arguments; the same rule as in the daemon (`findCopilot`). */
 function copilotCommand(program: string | undefined, args: string[]): string[] {
   const found = findCopilot(program ?? "copilot", process.env);
   if (!found)
-    throw new Error(
-      `nie znaleziono ${program ?? "copilot"} w PATH (na Windowsie także copilot.exe obok copilot.cmd); podaj go przez --copilot`,
-    );
+    throw new Error(`${program ?? "copilot"} not found in PATH (on Windows also copilot.exe next to copilot.cmd); give it with --copilot`);
   return [found, ...args];
 }
 
 function printChanges(changes: TaskStateChange[]): void {
-  console.error("\nZmiany stanu (czas, stan, źródło, pewność, powód):");
+  console.error("\nState changes (time, state, source, confidence, reason):");
   for (const c of changes) {
     console.error(`  ${c.at.slice(11, 23)}  ${c.state.padEnd(8)}  ${c.source.padEnd(8)}  ${c.confidence.padEnd(6)}  ${c.reason}`);
   }
 }
 
-// Na końcu pliku, bo klasy i stałe wyżej muszą być już zainicjowane, gdy komenda ruszy.
+// At the end of the file, because the classes and constants above must already be initialised when the command starts.
 const [command, ...rest] = Bun.argv.slice(2);
 if (command === "record") process.exit(await record(rest));
 else if (command === "replay") replay(rest);

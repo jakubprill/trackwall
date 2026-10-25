@@ -7,10 +7,10 @@ import { TaskBranch } from "./task-branch.ts";
 import { MAX_MISE_PATH } from "./task-mise-config.ts";
 
 /**
- * `tasks.json` w katalogu stanu (ADR-31): zadania przeżywają restart daemona, bo ich worktree i gałęzie zostają
- * na dysku, dopóki użytkownik ich nie zakończy. Sesja zadania żyje tylko w pamięci, a worktree wynika z repo i gałęzi
- * (`taskWorktree`), więc żadne z nich nie jest zapisywane. Plik można zmienić ręcznie, a jego pola trafiają do gita
- * (`branch -D`, `diff <commit bazowy>`), więc schemat dopuszcza tylko gałąź zadania i pełny hash commita (`CommitHash` w `Task`).
+ * `tasks.json` in the state directory (ADR-31): tasks survive a daemon restart, because their worktrees and branches
+ * stay on disk until the user ends them. A task session lives only in memory, and the worktree follows from the repo
+ * and branch (`taskWorktree`), so neither of them is stored. The file can be edited by hand, and its fields go to git
+ * (`branch -D`, `diff <base commit>`), so the schema allows only a task branch and a full commit hash (`CommitHash` in `Task`).
  * Fields added later (title, origin and summary, ADR-39; the trusted mise config, ADR-59) have a default in the file,
  * so tasks saved by an older version are not moved aside as an unreadable file.
  */
@@ -29,7 +29,7 @@ export const StoredTask = Task.omit({ worktree: true }).extend({
     .record(z.string().max(MAX_MISE_PATH), z.string().regex(/^[0-9a-f]{64}$/))
     .nullable()
     .default(null),
-  /** Korzeń repo z folderu z projektami, z którego wyszło zadanie: tam git trzyma rejestr worktree i gałąź. */
+  /** The root of the repo in the projects folder the task came from: git keeps the worktree registry and the branch there. */
   repoDir: z.string().refine(isAbsolute, "repo root must be a full path"),
 });
 export type StoredTask = z.infer<typeof StoredTask>;
@@ -45,7 +45,7 @@ export class TaskFile {
     this.#log = log;
   }
 
-  /** Brak pliku to brak zadań. Plik nieczytelny trafia obok (`tasks.json.broken-<czas>`), a jego zadania do logu. */
+  /** A missing file means no tasks. An unreadable file is moved aside (`tasks.json.broken-<time>`), and its tasks go to the log. */
   read(): StoredTask[] {
     let text: string;
     try {
@@ -67,7 +67,7 @@ export class TaskFile {
   }
 }
 
-/** Zadania z pliku albo opis, co z nim nie tak. */
+/** The tasks from the file or a description of what is wrong with it. */
 function parse(text: string): StoredTask[] | string {
   let json: unknown;
   try {

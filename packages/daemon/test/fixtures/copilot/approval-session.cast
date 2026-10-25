@@ -1,8 +1,8 @@
-{"version": 2, "width": 120, "height": 30, "timestamp": 1792756800, "title": "Syntetyczna sesja Copilot CLI (nie nagranie): prompt, prośba o zgodę, koniec tury, wyjście"}
+{"version": 2, "width": 120, "height": 30, "timestamp": 1792756800, "title": "A synthetic Copilot CLI session (not a recording): prompt, approval request, end of turn, exit"}
 [0.1, "m", "{\"kind\":\"hook\",\"record\":{\"event\":\"sessionStart\",\"receivedAt\":1792756800100,\"payload\":{\"sessionId\":\"00000000-0000-4000-8000-000000000001\",\"timestamp\":1792756800100,\"source\":\"new\"},\"omitted\":[\"cwd\"]}}"]
 [0.5, "o", "\u001b]0;GitHub Copilot\u0007\u001b[?1049h> "]
 [1.0, "m", "{\"kind\":\"hook\",\"record\":{\"event\":\"userPromptSubmitted\",\"receivedAt\":1792756801000,\"payload\":{\"sessionId\":\"00000000-0000-4000-8000-000000000001\",\"timestamp\":1792756801000},\"omitted\":[\"cwd\"]}}"]
-[1.1, "o", "\u001b]9;4;3;0\u0007\u001b]0;Naprawa testu parsera\u0007⠋ Thinking"]
+[1.1, "o", "\u001b]9;4;3;0\u0007\u001b]0;Fixing the parser test\u0007⠋ Thinking"]
 [3.0, "m", "{\"kind\":\"hook\",\"record\":{\"event\":\"postToolUse\",\"receivedAt\":1792756803000,\"payload\":{\"sessionId\":\"00000000-0000-4000-8000-000000000001\",\"timestamp\":1792756803000,\"toolName\":\"view\"},\"omitted\":[\"cwd\"]}}"]
 [3.9, "o", "Allow bash to run `bun test`? (y/n)"]
 [4.0, "m", "{\"kind\":\"hook\",\"record\":{\"event\":\"notification\",\"receivedAt\":1792756804000,\"payload\":{\"sessionId\":\"00000000-0000-4000-8000-000000000001\",\"timestamp\":1792756804000,\"notification_type\":\"permission_prompt\",\"message\":\"Copilot needs permission to run bash\"},\"omitted\":[\"cwd\"]}}"]

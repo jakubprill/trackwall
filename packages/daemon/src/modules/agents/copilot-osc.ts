@@ -2,13 +2,13 @@ import type { Osc } from "./osc-parser.ts";
 import type { StateSignal } from "./task-state-tracker.ts";
 
 /**
- * Detektor stanu Copilot CLI z sekwencji terminala (§4.4, ADR-17). Copilot CLI przy domyślnym
- * `terminalProgress: true` wysyła OSC 9;4 (pasek postępu Windows Terminal / ConEmu) przez cały czas pracy
- * agenta i zdejmuje go po zakończeniu tury. Zdjęcie paska nie mówi, czy agent czeka na prompt, czy na zgodę,
- * dlatego to tylko `Input` z niską pewnością; dokładniej rozstrzygają hooki.
+ * The Copilot CLI state detector from terminal sequences (§4.4, ADR-17). With the default `terminalProgress: true`
+ * Copilot CLI sends OSC 9;4 (the Windows Terminal / ConEmu progress bar) the whole time the agent works and removes it
+ * after the turn ends. Removing the bar does not say whether the agent waits for a prompt or for approval, so it is only
+ * `Input` with low confidence; hooks decide more precisely.
  */
 
-/** OSC 9;4;<stan>;<postęp>: 0 zdjęty, 1 postęp, 2 błąd, 3 nieokreślony, 4 pauza. */
+/** OSC 9;4;<state>;<progress>: 0 removed, 1 progress, 2 error, 3 indeterminate, 4 paused. */
 const PROGRESS_PREFIX = "4;";
 
 export function stateFromOsc(osc: Osc): StateSignal | undefined {
@@ -22,14 +22,14 @@ export function stateFromOsc(osc: Osc): StateSignal | undefined {
     case "0":
       return { state: "Input", source: "osc", confidence: "low", reason };
     case "2":
-      // Stan błędu paska; Copilot CLI nie dokumentuje, kiedy go ustawia, więc tylko niska pewność.
+      // The bar's error state; Copilot CLI does not document when it sets it, so only low confidence.
       return { state: "Error", source: "osc", confidence: "low", reason };
     default:
       return undefined;
   }
 }
 
-/** Tytuł okna (OSC 0 i 2): Copilot CLI wpisuje tam, nad czym agent teraz pracuje (`updateTerminalTitle`). */
+/** The window title (OSC 0 and 2): Copilot CLI writes there what the agent is working on now (`updateTerminalTitle`). */
 export function windowTitleFromOsc(osc: Osc): string | undefined {
   return osc.code === "0" || osc.code === "2" ? osc.data : undefined;
 }

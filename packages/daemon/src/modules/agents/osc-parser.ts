@@ -1,25 +1,25 @@
 /**
- * Wyłuskuje sekwencje OSC (`ESC ] <kod> ; <dane>`, zakończone BEL albo `ESC \`) ze strumienia wyjścia PTY
- * (§4.4, źródło stanu `osc`). Strumień przychodzi w kawałkach, więc sekwencja przecięta między kawałkami jest
- * składana. Reszta wyjścia jest pomijana: parser niczego nie zmienia w tym, co trafia do terminala i nagrania.
+ * Picks OSC sequences (`ESC ] <code> ; <data>`, ended by BEL or `ESC \`) out of the PTY output stream (§4.4, the `osc`
+ * state source). The stream arrives in chunks, so a sequence split between chunks is put together. The rest of the
+ * output is skipped: the parser changes nothing in what goes to the terminal and the recording.
  */
 
 export interface Osc {
-  /** Numer przed pierwszym `;`, np. `9` albo `0`. */
+  /** The number before the first `;`, e.g. `9` or `0`. */
   code: string;
-  /** Wszystko po pierwszym `;`, np. `4;3;0`; pusty napis, gdy sekwencja nie ma `;`. */
+  /** Everything after the first `;`, e.g. `4;3;0`; an empty string when the sequence has no `;`. */
   data: string;
 }
 
 const ESC = "\x1b";
 const BEL = "\x07";
-/** Dłuższa sekwencja to śmieci albo coś, czego nie czytamy (np. obraz w OSC 1337); nie trzymamy jej w pamięci. */
+/** A longer sequence is garbage or something we do not read (e.g. an image in OSC 1337); we do not keep it in memory. */
 const MAX_OSC_LENGTH = 4096;
 
 export class OscParser {
-  /** Treść rozpoczętej sekwencji; `undefined` poza sekwencją, `null` w sekwencji za długiej, pomijanej do końca. */
+  /** The content of a started sequence; `undefined` outside a sequence, `null` in a sequence that is too long and skipped to its end. */
   #body: string | null | undefined;
-  /** Poprzedni znak był ESC (także na końcu poprzedniego kawałka). */
+  /** The previous character was ESC (also at the end of the previous chunk). */
   #afterEsc = false;
 
   feed(chunk: string): Osc[] {
@@ -39,8 +39,8 @@ export class OscParser {
 
   #inside(ch: string): Osc | undefined {
     if (this.#afterEsc) {
-      // `ESC \` kończy sekwencję; każdy inny znak po ESC ją przerywa i jest czytany jak poza sekwencją, zaraz po ESC
-      // (więc `ESC ]` od razu zaczyna następną).
+      // `ESC \` ends the sequence; any other character after ESC breaks it and is read as outside a sequence, right after
+      // the ESC (so `ESC ]` starts the next one at once).
       if (ch === "\\") {
         this.#afterEsc = false;
         return this.#finish();

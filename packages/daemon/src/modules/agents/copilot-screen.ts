@@ -1,12 +1,12 @@
 import type { StateSignal } from "./task-state-tracker.ts";
 
 /**
- * Detektor stanu Copilot CLI z tekstu na ekranie (§4.4, ADR-17): przerwana tura. Copilot CLI 1.0.103 nie wysyła
- * hooka po przerwaniu (Esc, Ctrl+C, odmowa zgody), a kończy je komunikatem „Operation cancelled by user”, który
- * w nagraniach z macOS i z Windowsa przychodzi jako ciągły tekst. Esc i Ctrl+C zgłasza wcześniej klawisz sesji; ten
- * detektor łapie przerwanie po Enter albo cyfrze na „No”, które klawisz uznał za powrót do pracy. Fraza może trafić na granicę
- * dwóch kawałków wyjścia, więc detektor trzyma ich końcówkę. Kiedy komunikat się liczy, rozstrzyga
- * `CopilotSessionState` (tylko tuż po klawiszu sesji).
+ * The Copilot CLI state detector from text on the screen (§4.4, ADR-17): an interrupted turn. Copilot CLI 1.0.103 sends
+ * no hook after an interruption (Esc, Ctrl+C, a refused approval), and ends it with the message “Operation cancelled by
+ * user”, which in recordings from macOS and Windows arrives as continuous text. Esc and Ctrl+C are reported earlier by
+ * the session key; this detector catches an interruption after Enter or a digit on “No”, which the key took as a return
+ * to work. The phrase can fall on the boundary of two output chunks, so the detector keeps their tail. When the message
+ * counts is decided by `CopilotSessionState` (only right after a session key).
  */
 
 const CANCELLED = "Operation cancelled by user";

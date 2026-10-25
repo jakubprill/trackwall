@@ -1,30 +1,30 @@
 /**
- * Nazwa gałęzi i katalogu worktree zadania (ADR-31) z polecenia: kilka pierwszych słów bez polskich znaków, małymi
- * literami, z łącznikami, i początek identyfikatora zadania, żeby dwa zadania z tym samym poleceniem się nie zderzyły.
- * Tylko `[a-z0-9-]`, więc nazwa jest poprawną gałęzią gita i katalogiem na Windowsie i macOS bez cytowania.
+ * The name of a task's branch and worktree directory (ADR-31) from the prompt: the first few words without diacritics,
+ * in lower case, with hyphens, and the start of the task identifier, so that two tasks with the same prompt do not
+ * collide. Only `[a-z0-9-]`, so the name is a valid git branch and a directory on Windows and macOS without quoting.
  */
 
 import { join } from "node:path";
 import { z } from "zod";
 
-/** Bez znaków specjalnych wyrażeń regularnych, bo trafia do `TaskBranch` dosłownie. */
+/** Without regular expression special characters, because it goes into `TaskBranch` literally. */
 export const TASK_BRANCH_PREFIX = "trackwall/";
 
 /**
- * Gałąź zadania; w `tasks.json` tylko taka, bo daemon usuwa ją z `branch -D` i robi z niej katalog worktree, a plik
- * można zmienić ręcznie. Znaki to te, które daje `taskSlug`.
+ * A task branch; only such a branch goes into `tasks.json`, because the daemon deletes it with `branch -D` and turns it
+ * into a worktree directory, and the file can be edited by hand. The characters are the ones `taskSlug` gives.
  */
 export const TaskBranch = z
   .string()
   .regex(new RegExp(`^${TASK_BRANCH_PREFIX}[a-z0-9][a-z0-9-]*$`), `task branch: ${TASK_BRANCH_PREFIX} and [a-z0-9-]`);
-/** Krótko: katalog worktree leży w katalogu stanu, a Windows ma limit 260 znaków na całą ścieżkę pliku w repo. */
+/** Short: the worktree directory lies in the state directory, and Windows has a 260-character limit on a file's whole path in a repo. */
 const SLUG_MAX = 32;
 const ID_CHARS = 6;
 
-/** Litery, których NFD nie rozkłada na literę bazową i znak diakrytyczny. */
+/** Letters NFD does not split into a base letter and a diacritic. */
 const UNDECOMPOSED: Record<string, string> = { ł: "l", ø: "o", ß: "ss", æ: "ae", œ: "oe", đ: "d" };
 
-/** Ostatni segment gałęzi zadania i zarazem nazwa katalogu jego worktree, np. `napraw-logowanie-3f2a9c`. */
+/** The last segment of a task branch and also the name of its worktree directory, e.g. `fix-login-3f2a9c`. */
 export function taskSlug(prompt: string, taskId: string): string {
   const words = prompt
     .toLowerCase()
@@ -39,15 +39,15 @@ export function taskSlug(prompt: string, taskId: string): string {
     if (next.length > SLUG_MAX) break;
     slug = next;
   }
-  // Pierwsze słowo dłuższe niż limit ucina się zamiast znikać.
+  // A first word longer than the limit is cut instead of disappearing.
   if (slug === "" && words[0]) slug = words[0].slice(0, SLUG_MAX);
   const suffix = taskId.replaceAll("-", "").slice(0, ID_CHARS);
   return slug === "" ? `task-${suffix}` : `${slug}-${suffix}`;
 }
 
 /**
- * Worktree zadania: `<katalog worktree>/<repo>/<gałąź bez prefiksu>`. Liczony, a nie zapisywany, więc z `tasks.json`
- * nie da się wskazać katalogu poza katalogiem worktree (identyfikator repo i gałąź nie mają separatorów ścieżki).
+ * A task's worktree: `<worktrees directory>/<repo>/<branch without prefix>`. Computed, not stored, so `tasks.json` cannot
+ * point to a directory outside the worktrees directory (the repo identifier and the branch have no path separators).
  */
 export function taskWorktree(worktreesDir: string, repo: string, branch: string): string {
   return join(worktreesDir, repo, branch.slice(TASK_BRANCH_PREFIX.length));

@@ -3,10 +3,10 @@ import type { CopilotHookRecord } from "./copilot-hook-record.ts";
 import type { StateSignal } from "./task-state-tracker.ts";
 
 /**
- * Detektor stanu Copilot CLI z rekordów hooków (§4.4, ADR-17), najpewniejsze źródło. Pewne z dokumentacji
- * Copilot CLI: nazwy zdarzeń, `sessionEnd.reason`, `agentStop.stopReason`. Niepewne: pola i rodzaje
- * `notification`, których dokumentacja nie wylicza. Dlatego powiadomienie jest klasyfikowane po znanym rodzaju,
- * a bez rodzaju po słowach treści (pewność `low`).
+ * The Copilot CLI state detector from hook records (§4.4, ADR-17), the most reliable source. Certain from the Copilot CLI
+ * documentation: event names, `sessionEnd.reason`, `agentStop.stopReason`. Uncertain: the fields and kinds of
+ * `notification`, which the documentation does not list. That is why a notification is classified by a known kind, and
+ * without a kind by words of its content (confidence `low`).
  */
 
 export function stateFromHook(record: CopilotHookRecord): StateSignal | undefined {
@@ -35,18 +35,18 @@ function sessionEnd(payload: CopilotHookRecord["payload"], reason: string): Stat
 }
 
 /**
- * Rodzaje powiadomień głównego agenta znalezione przy Copilot CLI 1.0.103. `permission_prompt` (typy
- * `@github/copilot-sdk`) przyszedł w prawdziwej sesji na macOS przy prośbie o zgodę, więc ma pewność `high`;
- * `elicitation_dialog` zna tylko teksty Copilot CLI, więc `medium`, dopóki nagranie go nie potwierdzi. Inne rodzaje
- * (np. `agent_idle`, `agent_completed` i `shell_completed` dotyczą agentów i komend w tle) nie zmieniają stanu, nawet
- * jeśli treść brzmi jak prośba o zgodę. Rodzaju dla planu nie znaleziono; `Plan` daje tylko treść.
+ * Notification kinds of the main agent found with Copilot CLI 1.0.103. `permission_prompt` (types of
+ * `@github/copilot-sdk`) came in a real session on macOS with an approval request, so it has confidence `high`;
+ * `elicitation_dialog` is known only from Copilot CLI's texts, so `medium` until a recording confirms it. Other kinds
+ * (e.g. `agent_idle`, `agent_completed` and `shell_completed` are about background agents and commands) do not change
+ * the state, even if the content sounds like an approval request. No kind for a plan was found; `Plan` comes only from the content.
  */
 const KIND_STATES: Record<string, Pick<StateSignal, "state" | "confidence">> = {
   permission_prompt: { state: "Approval", confidence: "high" },
   elicitation_dialog: { state: "Input", confidence: "medium" },
 };
 
-/** Treść bez rodzaju: tylko całe słowa, żeby „explanation” nie było planem, a „task” pytaniem. */
+/** Content without a kind: only whole words, so that “explanation” is not a plan and “task” not a question. */
 const TEXT_RULES: { pattern: RegExp; state: TaskState }[] = [
   { pattern: /\b(permission|approve|allow)\b/i, state: "Approval" },
   { pattern: /\bplan\b/i, state: "Plan" },
