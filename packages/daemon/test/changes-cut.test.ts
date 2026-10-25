@@ -11,10 +11,14 @@ describe("a cut diff of the working directory", () => {
     const dir = makeRepo({ "README.md": "# repo\n" });
     writeFileSync(join(dir, "notes.txt"), Array.from({ length: 100 }, (_, i) => `note ${i} zażółć\n`).join(""));
 
-    const changes = await vcs.changes(dir, 500);
+    // A limit one byte into a "ż" after the first few lines: a raw cut would end with half a character.
+    const whole = Buffer.from((await vcs.changes(dir, 1_000_000)).patch);
+    const limit = whole.indexOf("ż", 400) + 1;
+
+    const changes = await vcs.changes(dir, limit);
 
     expect(changes.truncated).toBe(true);
-    expect(Buffer.byteLength(changes.patch)).toBeLessThanOrEqual(500);
+    expect(Buffer.byteLength(changes.patch)).toBeLessThan(limit);
     expect(changes.patch).toEndWith("zażółć\n");
     expect(changes.patch).not.toContain("�");
   });

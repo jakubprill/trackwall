@@ -186,13 +186,14 @@ export const AGENT_PATCH_MIN_BYTES = 1000;
  * tab, because the result reaches the agent twice (text and `structuredContent`).
  */
 export const AGENT_PATCH_DEFAULT_BYTES = 32_000;
+/** See `AGENT_PATCH_DEFAULT_BYTES`. */
 export const AGENT_PATCH_MAX_BYTES = 200_000;
 
 /**
  * A task's changes for an agent with their diff (`get_task_changes`): `TaskChanges` narrowed to the requested paths,
  * with the diff cut within the agent's byte limit and at most `TASK_SUMMARY_MAX_FILES` files (`filesTruncated`).
  */
-export const AgentTaskChanges = TaskChanges.extend({ filesTruncated: z.boolean() });
+export const AgentTaskChanges = TaskChanges.extend({ filesTruncated: TaskChangesSummary.shape.filesTruncated });
 export type AgentTaskChanges = z.infer<typeof AgentTaskChanges>;
 
 /**
