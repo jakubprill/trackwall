@@ -1,5 +1,6 @@
 # Release from a vX.Y.Z tag: portable build on Windows and macOS, then one GitHub Release.
 # The release is created only once both builds pass, so it is never half-done.
+# The update packages are signed and listed in `latest.json`, which the app's updater reads (ADR-53).
 # The build steps are the same as in the `desktop` job in ci.yml. Instructions: docs/release.md
 name: Release
 
@@ -72,25 +73,53 @@ jobs:
       - name: smoke test of the built sidecar
         run: bun packages/daemon/scripts/smoke.ts apps/desktop/src-tauri/target/release/trackwall-daemon
       - run: pnpm portable
+      # The app installs only a package signed with the key whose public half is in tauri.conf.json, and
+      # `--app-version` binds the signature to this version (`requireSignedVersion`). Only this step gets the key.
+      - name: Sign the update package
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::The TAURI_SIGNING_PRIVATE_KEY secret is not set, see docs/release.md"
+            exit 1
+          fi
+          shopt -s nullglob
+          # On Windows the release zip is the update package, on macOS the .app.tar.gz next to the zip.
+          packages=(out/*-windows-x64.zip out/*.app.tar.gz)
+          if [ ${#packages[@]} -ne 1 ]; then
+            echo "::error::Expected one update package, found: ${packages[*]}"
+            exit 1
+          fi
+          pnpm --filter @trackwall/desktop exec tauri signer sign --app-version "${TAG#v}" "$GITHUB_WORKSPACE/${packages[0]}"
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: trackwall-${{ runner.os }}
-          path: out/*.zip
+          path: |
+            out/*.zip
+            out/*.tar.gz
+            out/*.sig
           if-no-files-found: error
           retention-days: 7
 
-  publish:
+  # Checks the files and writes SHA256SUMS.txt and latest.json without write access: it runs `pnpm install` for the
+  # script, and only the publish job below may change the repo.
+  manifest:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: write
+      contents: read
     steps:
-      # Only the release note; the versions.test.ts test makes sure it exists for the tagged version.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          sparse-checkout: docs/release-notes
           persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
 
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
@@ -103,18 +132,58 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          shopt -s nullglob
           version="${TAG#v}"
-          for f in "trackwall-$version-windows-x64.zip" "trackwall-$version-macos-arm64.zip"; do
+          win="trackwall-$version-windows-x64.zip"
+          mac="trackwall-$version-macos-arm64.zip"
+          mac_update="trackwall-$version-macos-arm64.app.tar.gz"
+          expected=("$win" "$mac" "$mac_update" "$win.sig" "$mac_update.sig")
+          for f in "${expected[@]}"; do
             [ -f "$f" ] || { echo "::error::Missing $f, found: $(ls)"; exit 1; }
           done
-          zips=(trackwall-*.zip)
-          if [ ${#zips[@]} -ne 2 ]; then
-            echo "::error::Expected 2 archives, found: ${zips[*]}"
+          if [ "$(ls | wc -l)" -ne ${#expected[@]} ]; then
+            echo "::error::Expected only ${expected[*]}, found: $(ls)"
             exit 1
           fi
-          sha256sum "${zips[@]}" > SHA256SUMS.txt
+          sha256sum "$win" "$mac" "$mac_update" > SHA256SUMS.txt
           cat SHA256SUMS.txt
+
+      # The manifest the app's updater reads from releases/latest/download/latest.json (ADR-53); the script refuses a
+      # signature made with another key than the one in tauri.conf.json. A pre-release is never "latest" on GitHub,
+      # so its manifest reaches only a check pointed at it.
+      - name: Update manifest
+        env:
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: bun apps/desktop/scripts/update-manifest.ts dist "$TAG" "$REPO"
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: trackwall-manifest
+          path: |
+            dist/SHA256SUMS.txt
+            dist/latest.json
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: manifest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      # Only the release note; the versions.test.ts test makes sure it exists for the tagged version.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          sparse-checkout: docs/release-notes
+          persist-credentials: false
+
+      # The packages and signatures of both builds and the manifest job's two files.
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          pattern: trackwall-*
+          path: dist
+          merge-multiple: true
 
       - name: GitHub Release
         env:

@@ -1,5 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { Menu } from "@tauri-apps/api/menu";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 /**
  * Trackwall windows (ADR-49): every window of the desktop shell is the same UI with its own view. An extra window
@@ -14,6 +15,14 @@ export const START_PARAMS = { view: "view", sessionLayout: "sessionLayout" } as 
 export function startFromLocation<Value extends string>(search: string, param: string, values: readonly Value[]): Value | undefined {
   const requested = new URLSearchParams(search).get(param);
   return values.find((value) => value === requested);
+}
+
+/** Label of the main window (`MAIN` in `apps/desktop/src-tauri/src/windows.rs`). */
+const MAIN_WINDOW = "main";
+
+/** The main window of the desktop shell, the one that stays in the tray; `false` outside the shell. */
+export function isMainWindow(): boolean {
+  return inDesktopShell() && getCurrentWindow().label === MAIN_WINDOW;
 }
 
 /** Only the desktop shell has windows to open and a registry to report to. */

@@ -1,8 +1,9 @@
 import { X } from "lucide-react";
-import type { MouseEvent } from "react";
+import type { ComponentProps, MouseEvent } from "react";
 import { Button } from "@/components/ui/button";
 import type { SessionClose } from "@/lib/use-session-close";
 import { cn } from "@/lib/utils";
+import { TaskRemoval } from "./TaskRemoval.tsx";
 
 /**
  * A mouse press on the close controls does not take the focus and does not reach the tile, so that closing a tile that
@@ -15,19 +16,41 @@ function keepSelection(event: MouseEvent) {
 
 /** The X that closes a session (`useSessionClose`). */
 export function SessionCloseButton({ close, className }: { close: SessionClose; className?: string }) {
+  return <CloseX label="Close session" onClick={close.request} disabled={close.pending} className={className} />;
+}
+
+/**
+ * The X of a task without a session: there is no session left to close, so it ends the task, which first asks what to
+ * do with its worktree and branch (`TaskEnding`, opened by `useTaskEnding`).
+ */
+export function EndTaskButton({ onClick, className }: { onClick: () => void; className?: string }) {
+  return <CloseX label="End task" onClick={onClick} className={className} />;
+}
+
+function CloseX({ label, onClick, disabled, className }: { label: string; onClick: () => void; disabled?: boolean; className?: string }) {
   return (
     <Button
       variant="ghost"
       size="icon"
       className={cn("size-6 shrink-0", className)}
       onMouseDown={keepSelection}
-      onClick={close.request}
-      disabled={close.pending}
-      aria-label="Close session"
-      title="Close session"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
     >
       <X />
     </Button>
+  );
+}
+
+/** The End task question (`TaskRemoval`) in a tile or under a row; a press on it does not select the tile either. */
+export function TaskEnding({ className, ...props }: ComponentProps<typeof TaskRemoval> & { className?: string }) {
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: the handler only keeps a press on the question from selecting the tile; the buttons inside are the controls.
+    <div onMouseDown={keepSelection} className={className}>
+      <TaskRemoval {...props} />
+    </div>
   );
 }
 

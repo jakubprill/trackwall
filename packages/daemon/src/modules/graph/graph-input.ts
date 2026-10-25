@@ -1,16 +1,16 @@
 import type { GraphConfig, RepoCard, RepoTag } from "@trackwall/protocol";
 
-/** Wejście złączenia kart w graf (§4.6, ADR-29): karty z modułu `cards` i wpisy `graph` z `workspace.yaml`. */
+/** The input of joining cards into the graph (§4.6, ADR-29): cards from the `cards` module and `graph` entries from `workspace.yaml`. */
 
-/** Karta repo z listy, tak jak podaje ją moduł `cards` (`Cards.all`). */
+/** A repo card from the list, as the `cards` module gives it (`Cards.all`). */
 export type GraphCardInput =
   | { kind: "ok"; repo: string; remote: string | null; card: RepoCard | null; tags: RepoTag[] }
   | { kind: "unavailable"; repo: string; message: string };
 
 export interface GraphConfigInput {
   config: GraphConfig;
-  /** Pełna ścieżka `workspace.yaml`: dowód aliasu i ręcznej krawędzi. */
+  /** The full path of `workspace.yaml`: the evidence of an alias and a manual edge. */
   file: string;
-  /** Klucze `workspace.yaml`, których nie dało się przeczytać (zły `graph` albo `repoTags`); trafiają do `configProblems`. */
+  /** `workspace.yaml` keys that could not be read (a bad `graph` or `repoTags`); they go into `configProblems`. */
   problems: string[];
 }

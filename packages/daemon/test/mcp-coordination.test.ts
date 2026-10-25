@@ -18,7 +18,7 @@ import { startSessionApi } from "./support/session-api.ts";
 
 const TOKEN = "c".repeat(43);
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
-/** Agent spoza Trackwall: tylko token daemona, bez tokenu sesji. */
+/** An agent outside Trackwall: only the daemon token, no session token. */
 let outside: Client;
 const clients: Client[] = [];
 
@@ -28,13 +28,13 @@ beforeAll(async () => {
   clients.push(outside);
 });
 
-// Limit zamiast domyślnego braku: zawieszone sprzątanie na Windowsie ma być błędem tego pliku, a nie godziną joba.
+// A limit instead of the default none: a hung cleanup on Windows is to be an error of this file, not an hour of the job.
 afterAll(async () => {
   for (const client of clients) await client.close();
   await daemon.stop();
 }, 30_000);
 
-/** Klient MCP tak, jak widzi go most stdio sesji: z tokenem z pliku w katalogu sesji. */
+/** An MCP client as the session's Stdio bridge sees it: with the token from the file in the session directory. */
 async function clientOfSession(session: string): Promise<Client> {
   const token = readFileSync(join(daemon.home, "sessions", session, "session-token"), "utf8");
   const client = await connectHttpClient(daemon.api.port, TOKEN, undefined, { [SESSION_TOKEN_HEADER]: token });
@@ -43,8 +43,8 @@ async function clientOfSession(session: string): Promise<Client> {
 }
 
 /**
- * Zatrzymanie sesji dopiero po jej `sessionStart`: zabicie procesu w ConPTY w trakcie startu potrafiło na Windowsie
- * zawiesić albo wysypać Bun (segfault w `bun test`).
+ * Stops a session only after its `sessionStart`: killing a process in ConPTY during its start could hang or crash Bun
+ * on Windows (a segfault in `bun test`).
  */
 async function stopStarted(session: string): Promise<void> {
   await waitFor(daemon.facade.agents, session, (s) => s.state !== null, "sessionStart");
@@ -55,16 +55,16 @@ async function call(client: Client, name: string, args: Record<string, unknown>)
   return client.callTool({ name, arguments: args });
 }
 
-describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (prawdziwy PTY i git, atrapa Copilot CLI)", () => {
-  test("propozycja agenta spoza Trackwall czeka na decyzję, a po odrzuceniu czekanie kończy się od razu", async () => {
+describe.skipIf(process.versions.bun === undefined)("main session over MCP (real PTY and git, fake Copilot CLI)", () => {
+  test("a proposal from an agent outside Trackwall waits for a decision, and after rejection the wait ends at once", async () => {
     const proposed = ProposeTaskResult.parse(
-      (await call(outside, "propose_task", { repo: "sklep", title: "Dodaj README", prompt: "Opisz uruchomienie w README" }))
+      (await call(outside, "propose_task", { repo: "shop", title: "Add a README", prompt: "Describe how to run it in the README" }))
         .structuredContent,
     ).proposal;
     expect(proposed).toMatchObject({
-      repo: "sklep",
-      title: "Dodaj README",
-      prompt: "Opisz uruchomienie w README",
+      repo: "shop",
+      title: "Add a README",
+      prompt: "Describe how to run it in the README",
       proposedBy: { session: null, supervisor: false },
     });
     expect(daemon.facade.agents.sessions().proposals).toEqual([proposed]);
@@ -84,39 +84,39 @@ describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (p
     expect(Date.now() - started).toBeLessThan(5000);
   }, 30_000);
 
-  test("sesja proponuje zadanie, użytkownik je zatwierdza z poprawionym poleceniem, a sesja zadania zgłasza podsumowanie", async () => {
-    const main = await daemon.facade.agents.start("sklep");
+  test("a session proposes a task, the user approves it with an edited prompt, and the task's session reports a summary", async () => {
+    const main = await daemon.facade.agents.start("shop");
     const mainClient = await clientOfSession(main.id);
     const listed = ListSessionsResult.parse((await call(mainClient, "list_sessions", {})).structuredContent);
     expect(listed.caller).toBe(main.id);
 
     const { proposal } = ProposeTaskResult.parse(
-      (await call(mainClient, "propose_task", { repo: "sklep", title: "Napraw logowanie", prompt: "napraw logowanie" })).structuredContent,
+      (await call(mainClient, "propose_task", { repo: "shop", title: "Fix login", prompt: "fix login" })).structuredContent,
     );
     expect(proposal.proposedBy).toEqual({ session: main.id, supervisor: false });
 
-    const task = await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: "napraw logowanie i dodaj test" });
+    const task = await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: "fix login and add a test" });
     expect(task).toMatchObject({
       id: proposal.id,
-      title: "Napraw logowanie",
-      prompt: "napraw logowanie i dodaj test",
+      title: "Fix login",
+      prompt: "fix login and add a test",
       proposedBy: { session: main.id, supervisor: false },
       summary: null,
     });
-    expect(task.branch).toMatch(/^trackwall\/napraw-logowanie-[0-9a-f]{6}$/);
+    expect(task.branch).toMatch(/^trackwall\/fix-login-[0-9a-f]{6}$/);
     expect(daemon.facade.agents.sessions().proposals).toEqual([]);
 
-    // Sesja zadania startuje z poleceniem, więc czeka się na jej pracę, a nie wraca od razu z „czeka na Ciebie”.
+    // The task's session starts with a prompt, so the wait is for its work and does not return at once with "waiting for you".
     const working = WaitForSessionResult.parse(
       (await call(mainClient, "wait_for_session", { task: task.id, timeoutSeconds: 2 })).structuredContent,
     );
     expect(working).toMatchObject({ status: "working", task: { id: task.id }, session: { task: task.id } });
-    if (!working.session) throw new Error("czekanie na zadanie w pracy nie zwróciło jego sesji");
+    if (!working.session) throw new Error("waiting for a working task did not return its session");
     const taskSession = working.session.id;
 
-    // Agent zadania kończy turę prośbą o zgodę: czekanie wraca, bo sesja potrzebuje człowieka.
+    // The task's agent ends its turn with an approval request: the wait returns, because the session needs a human.
     const window = viewer(daemon.facade.agents, taskSession);
-    window.attachment.input("napraw logowanie\r");
+    window.attachment.input("fix login\r");
     const needsYou = WaitForSessionResult.parse(
       (await call(mainClient, "wait_for_session", { task: task.id, timeoutSeconds: 10 })).structuredContent,
     );
@@ -125,12 +125,12 @@ describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (p
     window.attachment.detach();
 
     const reported = ReportResultResult.parse(
-      (await call(await clientOfSession(taskSession), "report_result", { summary: "Logowanie naprawione, test w login.test.ts." }))
+      (await call(await clientOfSession(taskSession), "report_result", { summary: "Login fixed, test in login.test.ts." }))
         .structuredContent,
     );
-    expect(reported.task.summary).toEqual({ text: "Logowanie naprawione, test w login.test.ts.", reportedAt: expect.any(String) });
+    expect(reported.task.summary).toEqual({ text: "Login fixed, test in login.test.ts.", reportedAt: expect.any(String) });
     const detail = GetSessionResult.parse((await call(mainClient, "get_session", { session: taskSession })).structuredContent);
-    expect(detail.task?.summary?.text).toBe("Logowanie naprawione, test w login.test.ts.");
+    expect(detail.task?.summary?.text).toBe("Login fixed, test in login.test.ts.");
 
     await daemon.facade.agents.stop(taskSession);
     const exited = WaitForSessionResult.parse(
@@ -139,7 +139,7 @@ describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (p
     expect(exited).toMatchObject({ status: "exited", session: { id: taskSession, run: { kind: "exited" } } });
     expect(exited.session?.run).not.toHaveProperty("lastLines");
 
-    // Zadanie bez sesji (zamkniętej w UI albo po restarcie daemona) nie ma na co czekać.
+    // A task without a session (closed in the UI or after a daemon restart) has nothing to wait for.
     daemon.facade.agents.dismiss(taskSession);
     const orphan = WaitForSessionResult.parse(
       (await call(mainClient, "wait_for_session", { task: task.id, timeoutSeconds: 10 })).structuredContent,
@@ -148,10 +148,10 @@ describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (p
     await daemon.facade.agents.stop(main.id);
   }, 60_000);
 
-  test("report_result działa tylko w sesji zadania: agent spoza Trackwall i sesja w korzeniu repo dostają bad_request", async () => {
-    const root = await daemon.facade.agents.start("sklep");
+  test("report_result works only in a task's session: an agent outside Trackwall and a session in the repo root get bad_request", async () => {
+    const root = await daemon.facade.agents.start("shop");
     for (const client of [outside, await clientOfSession(root.id)]) {
-      const result = await call(client, "report_result", { summary: "gotowe" });
+      const result = await call(client, "report_result", { summary: "done" });
       expect(result.isError).toBe(true);
       expect(result.content).toEqual([
         { type: "text", text: "bad_request: only a session that runs a task in Trackwall can report a result" },
@@ -160,8 +160,8 @@ describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (p
     await stopStarted(root.id);
   }, 30_000);
 
-  test("sesja nie może czekać na samą siebie, a czekanie na nieznane zadanie to not_found", async () => {
-    const session = await daemon.facade.agents.start("sklep");
+  test("a session cannot wait for itself, and waiting for an unknown task is not_found", async () => {
+    const session = await daemon.facade.agents.start("shop");
     const own = await call(await clientOfSession(session.id), "wait_for_session", { session: session.id, timeoutSeconds: 1 });
     expect(own.content).toEqual([{ type: "text", text: "bad_request: a session cannot wait for itself" }]);
 
@@ -173,7 +173,7 @@ describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (p
     await stopStarted(session.id);
   }, 30_000);
 
-  test("propozycja w nieznanym repo to not_found, a zatwierdzenie propozycji, której już nie ma, też", async () => {
+  test("a proposal in an unknown repo is not_found, and so is approving a proposal that no longer exists", async () => {
     const result = await call(outside, "propose_task", { repo: "skelp", title: "x", prompt: "y" });
     expect(JSON.stringify(result.content)).toContain('"text":"not_found:');
     await expect(daemon.post(agentsApi.approveProposal, { proposal: "00000000-0000-4000-8000-000000000000", prompt: "y" })).rejects.toThrow(
@@ -181,13 +181,13 @@ describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (p
     );
   });
 
-  test("żądanie z nieznanym tokenem sesji daemon odrzuca, zamiast traktować sesję jak agenta spoza Trackwall", async () => {
+  test("the daemon refuses a request with an unknown session token instead of treating the session as an agent outside Trackwall", async () => {
     const res = await loopbackRequest(daemon.api.port, MCP_PATH, {
       method: "POST",
       token: TOKEN,
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
       timeoutMs: 5000,
-      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", [SESSION_TOKEN_HEADER]: "nieznany" },
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", [SESSION_TOKEN_HEADER]: "unknown" },
     });
     expect(res.status).toBe(401);
     expect(JSON.parse(res.body)).toMatchObject({ ok: false, error: { code: "unauthorized" } });

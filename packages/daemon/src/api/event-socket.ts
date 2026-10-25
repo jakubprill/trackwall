@@ -4,13 +4,13 @@ import type { EventHub } from "./event-hub.ts";
 import type { SocketRoute } from "./sockets.ts";
 
 /**
- * Zdarzenia daemona przez WebSocket `/ws` (§5.2, ADR-36); `Host`, `Origin` i token sprawdza `sockets.ts`. Daemon
- * wysyła ramki tekstowe JSON `DaemonEvent`, najpierw migawkę każdego tematu, potem zmiany. Klient nic nie wysyła.
+ * Daemon events over the `/ws` WebSocket (§5.2, ADR-36); `sockets.ts` checks `Host`, `Origin` and the token. The daemon
+ * sends `DaemonEvent` JSON text frames, first a snapshot of every topic, then the changes. The client sends nothing.
  */
 
-/** Klient nie ma czego wysyłać; większa ramka kończy połączenie. */
+/** The client has nothing to send; a larger frame ends the connection. */
 const MAX_FRAME_BYTES = 1024;
-/** Klient, który nie odbiera (zawieszona karta), nie może trzymać w pamięci daemona kolejnych migawek. */
+/** A client that does not receive (a frozen tab) cannot keep further snapshots in the daemon's memory. */
 const MAX_BUFFERED_BYTES = 4 * 1024 * 1024;
 
 export function eventSocketRoute(hub: EventHub): SocketRoute {
@@ -21,7 +21,7 @@ export function eventSocketRoute(hub: EventHub): SocketRoute {
   };
 }
 
-/** Temat przestał się dać odczytać: klient łączy się ponownie, dostaje migawki bez niego i pyta o niego HTTP. */
+/** A topic can no longer be read: the client reconnects, gets the snapshots without it and asks for it over HTTP. */
 const EVENTS_CLOSE_TOPIC_FAILED = 1011;
 
 function serve(ws: WebSocket, hub: EventHub): void {

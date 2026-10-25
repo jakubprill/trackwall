@@ -16,20 +16,20 @@ import { trackwallHome } from "../src/infra/home.ts";
 describe("discovery", () => {
   const file = { pid: 4242, port: 4321, token: newToken(), startedAt: "2026-10-23T00:00:00Z", version: "0.1.0" };
 
-  test("zapis i odczyt daemon.json", () => {
+  test("writes and reads daemon.json", () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
     writeDaemonFile(home, file);
     expect(readDaemonFile(home)).toEqual(file);
     if (process.platform !== "win32") expect(statSync(daemonFilePath(home)).mode & 0o777).toBe(0o600);
   });
 
-  test("uszkodzony plik to brak daemona", () => {
+  test("a damaged file means no daemon", () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
-    writeFileSync(daemonFilePath(home), "{nie json");
+    writeFileSync(daemonFilePath(home), "{not json");
     expect(readDaemonFile(home)).toBeUndefined();
   });
 
-  test("usunięcie tylko własnego pliku", () => {
+  test("removes only its own file", () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
     writeDaemonFile(home, file);
     removeDaemonFile(home, 1);
@@ -38,31 +38,31 @@ describe("discovery", () => {
     expect(readDaemonFile(home)).toBeUndefined();
   });
 
-  test("token ma 256 bitów", () => {
+  test("the token has 256 bits", () => {
     expect(Buffer.from(newToken(), "base64url").length).toBe(32);
   });
 });
 
-describe("blokada startu", () => {
-  test("sekcje krytyczne różnych procesów nie nakładają się", async () => {
+describe("start lock", () => {
+  test("critical sections of different processes do not overlap", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-lock-"));
     const worker = join(import.meta.dir, "fixtures", "lock-worker.ts");
     const procs = Array.from({ length: 4 }, () => Bun.spawn(["bun", worker, home], { stdout: "ignore", stderr: "inherit" }));
     expect(await Promise.all(procs.map((p) => p.exited))).toEqual([0, 0, 0, 0]);
     const trace = readFileSync(join(home, "trace"), "utf8").trim().split("\n");
     expect(trace).toHaveLength(8);
-    // Każde wejście jest od razu zamknięte wyjściem tego samego procesu.
+    // Every entry is immediately closed by an exit of the same process.
     for (let i = 0; i < trace.length; i += 2) expect(trace[i + 1]).toBe(`-${trace[i]?.slice(1)}`);
     expect(existsSync(join(home, "daemon.lock"))).toBe(false);
   }, 20_000);
 
-  test("blokada z własnym PID-em to poprzednie wcielenie procesu (bun --watch)", async () => {
+  test("a lock with our own PID is a previous incarnation of the process (bun --watch)", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-lock-"));
     writeFileSync(join(home, "daemon.lock"), String(process.pid));
     expect(await withStartLock(home, async () => "ok", 1000)).toBe("ok");
   });
 
-  test("blokada martwego procesu jest przejmowana", async () => {
+  test("a dead process's lock is taken over", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-lock-"));
     const dead = Bun.spawn(["bun", "-e", "0"]);
     await dead.exited;
@@ -72,7 +72,7 @@ describe("blokada startu", () => {
 });
 
 describe("trackwallHome", () => {
-  test("pusta zmienna to brak zmiennej", () => {
+  test("an empty variable means no variable", () => {
     const prev = process.env.TRACKWALL_HOME;
     process.env.TRACKWALL_HOME = "";
     try {
@@ -89,7 +89,7 @@ describe("trackwallHome", () => {
 describe("watchDaemonFile", () => {
   const self = { pid: process.pid, port: 1, token: newToken(), startedAt: "x", version: "0.1.0" };
 
-  test("odtwarza usunięty plik", async () => {
+  test("recreates a removed file", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-watch-"));
     const stop = watchDaemonFile(home, self, () => {}, 20);
     await Bun.sleep(80);
@@ -97,7 +97,7 @@ describe("watchDaemonFile", () => {
     expect(readDaemonFile(home)?.pid).toBe(process.pid);
   });
 
-  test("ustępuje, gdy plik wskazuje innego żywego daemona", async () => {
+  test("steps aside when the file points to another live daemon", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-watch-"));
     const other = Bun.spawn(["bun", "-e", "setTimeout(() => {}, 5000)"]);
     try {

@@ -35,6 +35,7 @@ import {
   type StartedEntry,
   selectedProposal,
   selectionAfterClose,
+  selectionAfterRemoval,
   type WaitingTarget,
 } from "@/lib/session-entries";
 import { gridPage, SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
@@ -51,10 +52,11 @@ import { useAction } from "@/lib/use-action";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { useSessionClose } from "@/lib/use-session-close";
 import type { SessionTree } from "@/lib/use-session-tree";
+import { useTaskEnding } from "@/lib/use-task-ending";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { cn } from "@/lib/utils";
 import { ProposalInbox } from "./ProposalInbox.tsx";
-import { SessionCloseButton, SessionCloseConfirmation } from "./SessionClose.tsx";
+import { EndTaskButton, SessionCloseButton, SessionCloseConfirmation, TaskEnding } from "./SessionClose.tsx";
 import { SessionGrid } from "./SessionGrid.tsx";
 import { TaskLine } from "./TaskLine.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
@@ -112,6 +114,14 @@ export function SessionsView({
     if (afterClose !== "keep") onSelect(afterClose);
     sessions.reload();
   };
+  // The ended task vanishes at once instead of after the list refresh, so that no panel shows it again without its worktree.
+  const taskRemoved = (task: string) => {
+    const removed = entries.find((entry) => entry.kind === "task" && entry.task.id === task);
+    const afterRemoval = removed ? selectionAfterRemoval(entries, latestSelected.current, removed) : "keep";
+    tree.hideTask(task);
+    if (afterRemoval !== "keep") onSelect(afterRemoval);
+    sessions.reload();
+  };
   // Taken also with no entry at that position, so that the key never reaches a session terminal by accident.
   useWindowShortcuts(
     (event) => {
@@ -167,6 +177,7 @@ export function SessionsView({
               active={current !== undefined && entryId(row.entry) === entryId(current)}
               onSelect={() => onSelect(entrySelection(row.entry))}
               onSessionClosed={() => sessionClosed(row.entry)}
+              onTaskRemoved={taskRemoved}
             />
           ))}
         </nav>
@@ -203,11 +214,7 @@ export function SessionsView({
             runningLive={runningLive}
             onChanged={sessions.reload}
             onSessionClosed={sessionClosed}
-            onTaskRemoved={(task) => {
-              tree.hideTask(task);
-              onSelect(undefined);
-              sessions.reload();
-            }}
+            onTaskRemoved={taskRemoved}
           />
         )}
       </section>
@@ -229,6 +236,7 @@ function SessionListItem({
   active,
   onSelect,
   onSessionClosed,
+  onTaskRemoved,
 }: {
   conn: Connection;
   row: SessionRow;
@@ -236,6 +244,7 @@ function SessionListItem({
   active: boolean;
   onSelect: () => void;
   onSessionClosed: () => void;
+  onTaskRemoved: (task: string) => void;
 }) {
   const { entry, depth } = row;
   return (
@@ -251,13 +260,17 @@ function SessionListItem({
           active={active}
           onSelect={onSelect}
           onSessionClosed={onSessionClosed}
+          onTaskRemoved={onTaskRemoved}
         />
       )}
     </div>
   );
 }
 
-/** A session or task row; the X that closes its session shows on hover, on keyboard focus and on the selected row. */
+/**
+ * A session or task row. Its X closes the session, or ends a task without a session; it shows on hover, on keyboard
+ * focus and on the selected row.
+ */
 function StartedListItem({
   conn,
   entry,
@@ -266,6 +279,7 @@ function StartedListItem({
   active,
   onSelect,
   onSessionClosed,
+  onTaskRemoved,
 }: {
   conn: Connection;
   entry: StartedEntry;
@@ -275,10 +289,17 @@ function StartedListItem({
   active: boolean;
   onSelect: () => void;
   onSessionClosed: () => void;
+  onTaskRemoved: (task: string) => void;
 }) {
   const { session } = entry;
   const task = entry.kind === "task" ? entry.task : undefined;
   const close = useSessionClose(conn, session, onSessionClosed);
+  const sessionlessTask = task && !session ? task : undefined;
+  const ending = useTaskEnding(sessionlessTask !== undefined);
+  const xClass = cn(
+    "absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+    (active || close.confirming || ending.open) && "opacity-100",
+  );
   return (
     <div className="group relative">
       <button
@@ -296,16 +317,12 @@ function StartedListItem({
           {session?.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
         </span>
       </button>
-      {session && (
-        <SessionCloseButton
-          close={close}
-          className={cn(
-            "absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
-            (active || close.confirming) && "opacity-100",
-          )}
-        />
-      )}
+      {session && <SessionCloseButton close={close} className={xClass} />}
+      {sessionlessTask && <EndTaskButton onClick={ending.show} className={xClass} />}
       <SessionCloseConfirmation close={close} />
+      {sessionlessTask && ending.open && (
+        <TaskEnding conn={conn} task={sessionlessTask} onRemoved={() => onTaskRemoved(sessionlessTask.id)} onCancel={ending.hide} />
+      )}
     </div>
   );
 }
@@ -489,6 +506,7 @@ function SelectedEntry({
         onNavigate={onSelect}
         currentSelection={currentSelection}
         onSessionClosed={onSessionClosed}
+        onTaskRemoved={onTaskRemoved}
       />
     </>
   );

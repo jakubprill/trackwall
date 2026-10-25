@@ -10,9 +10,9 @@ import type { SocketRoute } from "./sockets.ts";
  * size and whether the window is in front of the user (ADR-47).
  */
 
-/** Wejście z klawiatury i wklejony tekst; większa ramka to nie człowiek przy klawiaturze. */
+/** Keyboard input and pasted text; a larger frame is not a human at a keyboard. */
 const MAX_FRAME_BYTES = 128 * 1024;
-/** Okno, które nie odbiera wyjścia (zawieszona karta), nie może trzymać w pamięci daemona całej sesji. */
+/** A window that does not receive output (a frozen tab) cannot keep a whole session in the daemon's memory. */
 const MAX_BUFFERED_BYTES = 8 * 1024 * 1024;
 
 const PTY_CLOSE_INTERNAL = 1011;
@@ -42,7 +42,7 @@ function serve(ws: WebSocket, session: string, facade: Facade): void {
       () => ws.close(PTY_CLOSE_NOT_FOUND, "session closed"),
     );
   } catch (err) {
-    // Wyjątek w obsłudze `upgrade` zakończyłby daemon, więc każdy błąd kończy tylko to połączenie.
+    // An exception while handling `upgrade` would end the daemon, so any error ends only this connection.
     const notFound = err instanceof DomainError && err.code === "not_found";
     ws.close(notFound ? PTY_CLOSE_NOT_FOUND : PTY_CLOSE_INTERNAL, notFound ? "no such session" : "daemon error");
     return;
@@ -65,7 +65,7 @@ function serve(ws: WebSocket, session: string, facade: Facade): void {
   ws.on("error", () => attachment.detach());
 }
 
-/** Ramka tekstowa od klienta; `ws` podaje ją jako `Buffer`, w kawałkach albo jako `ArrayBuffer`. */
+/** A text frame from the client; `ws` gives it as a `Buffer`, in pieces or as an `ArrayBuffer`. */
 function parseJson(data: RawData): unknown {
   const bytes = Array.isArray(data) ? Buffer.concat(data) : Buffer.isBuffer(data) ? data : Buffer.from(new Uint8Array(data));
   try {

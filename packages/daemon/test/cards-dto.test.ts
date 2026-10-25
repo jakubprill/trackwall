@@ -42,7 +42,7 @@ describe("endpoint contracts and DTOs", () => {
     ]);
   });
 
-  test("payments: kontroler Javy odpowiada data class Kotlina", () => {
+  test("payments: a Java controller answers with a Kotlin data class", () => {
     expect(dtos(card(fixtureFiles("payments")))).toEqual([
       "data-class Payment(orderId: String, amount: java.math.BigDecimal?) src/main/java/com/example/payments/Payment.kt:3",
     ]);
