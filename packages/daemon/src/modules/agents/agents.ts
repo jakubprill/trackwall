@@ -9,6 +9,7 @@ import {
   type Task,
   type TaskChanges,
   type TaskChangesSummary,
+  type TaskMiseConfig,
   type TaskProposal,
   type TaskSharedFiles,
 } from "@trackwall/protocol";
@@ -22,7 +23,7 @@ import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
 import { TaskFile } from "./task-file.ts";
 import { TaskProposals } from "./task-proposals.ts";
-import { AgentTasks, type TasksVcs } from "./tasks.ts";
+import { AgentTasks, type TaskCheckout, type TasksVcs } from "./tasks.ts";
 import type { ScreenViewer } from "./terminal-screen.ts";
 
 /**
@@ -60,6 +61,7 @@ interface AgentsProcs {
   }): Promise<{ run: RunState; terminal: SessionPty }>;
   state(owner: string): RunState | undefined;
   stop(owner: string): Promise<RunState | undefined>;
+  liveIn(dir: string): boolean;
 }
 
 /** Czego `agents` potrzebuje od `workspace`: korzeń repo po identyfikatorze (`not_found`, gdy repo nie ma). */
@@ -115,6 +117,7 @@ export class Agents {
       vcs: deps.vcs,
       repos: deps.repos,
       file: new TaskFile(join(deps.home, TASKS_FILE), deps.log),
+      liveIn: (dir) => deps.procs.liveIn(dir),
       worktreesDir,
       openEditor: deps.openEditor,
       log: deps.log,
@@ -234,6 +237,21 @@ export class Agents {
 
   openTaskEditor(id: string): void {
     this.#tasks.openEditor(id);
+  }
+
+  /** The task worktree's mise config against the one the user trusted (ADR-59). */
+  taskMiseConfig(id: string): Promise<TaskMiseConfig> {
+    return this.#tasks.miseConfig(id);
+  }
+
+  /** The user trusts the worktree's mise config they saw (`digest`), only from the UI (ADR-59). */
+  trustTaskMiseConfig(id: string, digest: string): Promise<TaskMiseConfig> {
+    return this.#tasks.trustMiseConfig(id, digest);
+  }
+
+  /** Where the task's mise tasks run, for the `mise` module (ADR-59). */
+  taskCheckout(id: string): Promise<TaskCheckout> {
+    return this.#tasks.checkout(id);
   }
 
   removeTask(id: string, keepBranch: boolean, discardChanges: boolean): Promise<void> {

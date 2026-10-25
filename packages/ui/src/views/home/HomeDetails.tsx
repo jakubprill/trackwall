@@ -137,7 +137,9 @@ function RepoDetails({
           {homeRepo.state === "changed" && behind > 0 && <span className="text-warning">{` · ${pullLabel(behind)}`}</span>}
         </Field>
       )}
-      <Field name="Tasks">{tasks.length === 0 ? "none running" : tasks.map((t) => t.miseTask).join(", ")}</Field>
+      <Field name="Tasks">
+        {tasks.length === 0 ? "none running" : tasks.map((t) => (t.task === null ? t.miseTask : `${t.miseTask} (in a task)`)).join(", ")}
+      </Field>
       <Field name="Sessions">
         {sessions.length === 0
           ? "none"

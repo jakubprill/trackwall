@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
-import { ListRunningMiseTasksResult, LogTail, MiseTaskRunResult } from "@trackwall/protocol";
+import { agentsApi, ListRunningMiseTasksResult, LogTail, MiseTaskRunResult } from "@trackwall/protocol";
 import { z } from "zod";
 import { SESSION_TOKEN_HEADER } from "../src/mcp/endpoint.ts";
 import { waitFor } from "./support/agents.ts";
@@ -143,6 +143,76 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
       expect(ended.run).toMatchObject({ kind: "exited", runId: own.run.runId, exitCode: 3 });
       // Stopped only after its sessionStart: killing a process in ConPTY while it starts could crash Bun on Windows.
       await waitFor(daemon.facade.agents, session.id, (s) => s.state !== null, "sessionStart");
+      await daemon.facade.agents.stop(session.id);
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a task session runs mise tasks in its own worktree, reads their log, and cannot run them in another task's worktree",
+    async () => {
+      const own = await daemon.facade.agents.createTask("magazyn", "run the tests");
+      const other = await daemon.facade.agents.createTask("magazyn", "another task");
+      const sessions = daemon.facade.agents.sessions().sessions.filter((s) => s.task === own.id || s.task === other.id);
+      const session = sessions.find((s) => s.task === own.id);
+      if (!session) throw new Error("the task has no session");
+      const token = readFileSync(join(daemon.home, "sessions", session.id, "session-token"), "utf8");
+      const client = await connectHttpClient(daemon.api.port, TOKEN, undefined, { [SESSION_TOKEN_HEADER]: token });
+      clients.push(client);
+
+      const started = MiseTaskRunResult.parse(
+        (await call(client, "run_mise_task", { repo: "magazyn", task: own.id, miseTask: "test" })).structuredContent,
+      );
+      const ended = MiseTaskRunResult.parse(
+        (await call(client, "wait_for_mise_task", { repo: "magazyn", task: own.id, miseTask: "test", timeoutSeconds: 20 }))
+          .structuredContent,
+      );
+      expect(ended.run).toMatchObject({ kind: "exited", runId: started.run.runId, exitCode: 3 });
+      expect(readFileSync(join(own.worktree, "calls.log"), "utf8")).toBe("run test\n");
+      const log = LogTail.parse(
+        (await call(client, "tail", { repo: "magazyn", task: own.id, miseTask: "test", limit: 10 })).structuredContent,
+      );
+      expect(log.records.map((r) => [r.runId, r.msg])).toEqual([[started.run.runId, "[test] $ koniec"]]);
+
+      expect(errorText(await call(client, "run_mise_task", { repo: "magazyn", task: other.id, miseTask: "test" }))).toBe(
+        `bad_request: a session of task ${own.id} can run and stop mise tasks only in its own worktree, not in that of task ${other.id}`,
+      );
+      expect(existsSync(join(other.worktree, "calls.log"))).toBe(false);
+
+      for (const s of sessions) {
+        await waitFor(daemon.facade.agents, s.id, (state) => state.state !== null, "sessionStart");
+        await daemon.facade.agents.stop(s.id);
+      }
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a mise config the agent changed in a task worktree runs nothing until the user trusts the config they saw in the UI",
+    async () => {
+      const task = await daemon.facade.agents.createTask("magazyn", "change the build");
+      writeFileSync(join(task.worktree, "mise.toml"), '[tasks.test]\nrun = "anything"\n');
+
+      expect(errorText(await call(outside, "run_mise_task", { repo: "magazyn", task: task.id, miseTask: "test" }))).toBe(
+        `mise_unavailable: the mise config in the worktree of task ${task.id} changed since the user trusted it (mise.toml); ` +
+          "only the user can trust it, in the task's panel in Trackwall",
+      );
+      expect(existsSync(join(task.worktree, "calls.log"))).toBe(false);
+
+      const seen = await daemon.post(agentsApi.taskMiseConfig, { task: task.id });
+      expect(seen.changes).toEqual([{ path: "mise.toml", change: "added" }]);
+      await daemon.post(agentsApi.trustTaskMiseConfig, { task: task.id, digest: seen.digest });
+      await call(outside, "run_mise_task", { repo: "magazyn", task: task.id, miseTask: "test" });
+      const ended = MiseTaskRunResult.parse(
+        (await call(outside, "wait_for_mise_task", { repo: "magazyn", task: task.id, miseTask: "test", timeoutSeconds: 20 }))
+          .structuredContent,
+      );
+      expect(ended.run).toMatchObject({ kind: "exited", exitCode: 3 });
+      expect(readFileSync(join(task.worktree, "calls.log"), "utf8")).toBe("run test\n");
+
+      const [session] = daemon.facade.agents.sessions().sessions.filter((s) => s.task === task.id);
+      if (!session) throw new Error("the task has no session");
+      await waitFor(daemon.facade.agents, session.id, (state) => state.state !== null, "sessionStart");
       await daemon.facade.agents.stop(session.id);
     },
     TIMEOUT,

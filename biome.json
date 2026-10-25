@@ -153,6 +153,7 @@
                       "!../../infra/atomic-write.ts",
                       "!../../infra/map-limit.ts",
                       "!../../infra/loopback.ts",
+                      "!../../infra/env-key.ts",
                       "!../../platform/**"
                     ],
                     "message": "Moduł nie importuje innego modułu; zadeklaruj potrzebny interfejs, a fasada (src/facade.ts) poda moduł (AGENTS.md, §4). Z zewnątrz modułu wolno brać tylko wymienione pliki infrastruktury i src/platform/; moduł jest płaskim katalogiem."

@@ -13,6 +13,8 @@ import { useAction } from "@/lib/use-action";
 import { SessionTerminal } from "./SessionTerminal.tsx";
 import { SharedFiles } from "./SharedFiles.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
+import { TaskMiseConfig } from "./TaskMiseConfig.tsx";
+import { TaskMiseRuns } from "./TaskMiseRuns.tsx";
 import { TaskRemoval } from "./TaskRemoval.tsx";
 
 type TaskTab = "terminal" | "changes";
@@ -21,7 +23,8 @@ type TaskTab = "terminal" | "changes";
  * Wybrane zadanie (ADR-31): tytuł albo polecenie, gałąź i stan sesji w nagłówku, terminal sesji i zmiany w worktree
  * w zakładkach. Zadanie z propozycji mówi, kto je zaproponował, a podsumowanie od sesji zadania (ADR-39) stoi nad
  * zakładkami. Zadanie bez działającej sesji można wznowić albo zakończyć; worktree otwiera się w VS Code zawsze.
- * The warning about files another task also changes (ADR-44) sits above the summary.
+ * The warnings about files another task also changes (ADR-44) and about a changed mise config of the worktree (ADR-59)
+ * sit above the summary, and the mise tasks the agent runs in the worktree below it.
  */
 export function TaskPanel({
   conn,
@@ -106,7 +109,9 @@ export function TaskPanel({
       </header>
       {confirmingRemoval && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
       <SharedFiles conn={conn} task={task.id} tasks={tasks} paused={confirmingRemoval} onOpenTask={onOpenTask} />
+      <TaskMiseConfig conn={conn} task={task.id} paused={confirmingRemoval} />
       {task.summary && <TaskSummary summary={task.summary} />}
+      <TaskMiseRuns conn={conn} task={task.id} paused={confirmingRemoval} />
       <div className="px-4">
         <TabBar tabs={tabs} active={shown} onSelect={setTab} />
       </div>

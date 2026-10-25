@@ -33,12 +33,18 @@ import { planSlice, type SlicePlan } from "./slice-plan.ts";
  * not outlive the daemon either (§4.1).
  */
 
+/** A service runs from the repo root; a task worktree has no service yet (ADR-59, leases in §4.3). */
+interface RepoRoot {
+  repo: string;
+  task: null;
+}
+
 /** What `services` needs from `mise`: the task `dev` started from the current list, as the button in the UI does. */
 interface ServicesMise {
   tasks(repo: string): Promise<MiseTasks>;
-  start(repo: string, miseTask: string): Promise<RunState>;
-  stop(repo: string, miseTask: string): Promise<RunState>;
-  run(repo: string, miseTask: string): RunState | undefined;
+  start(target: RepoRoot, miseTask: string): Promise<RunState>;
+  stop(target: RepoRoot, miseTask: string): Promise<RunState>;
+  run(target: RepoRoot, miseTask: string): RunState | undefined;
   running(): RunningMiseTask[];
 }
 
@@ -104,7 +110,7 @@ export class Services {
 
   /** Watched services, with a `dev` started elsewhere (the mise tasks tab, `run_mise_task`) adopted first. */
   async list(): Promise<Service[]> {
-    for (const task of this.deps.mise.running()) if (task.miseTask === SERVICE_MISE_TASK) await this.adopt(task.repo);
+    for (const run of this.deps.mise.running()) if (run.task === null && run.miseTask === SERVICE_MISE_TASK) await this.adopt(run.repo);
     return [...this.watches.values()].map((w) => w.view());
   }
 
@@ -231,7 +237,7 @@ export class Services {
     // Right before the start: a stop that came meanwhile wins, unless another running slice still needs the service.
     if (slice.status === "cancelled" && !this.wanted(repo)) return skipped("the start was cancelled by a stop");
     try {
-      this.watch({ repo, run: await this.deps.mise.start(repo, SERVICE_MISE_TASK), cardPorts, cursor });
+      this.watch({ repo, run: await this.deps.mise.start({ repo, task: null }, SERVICE_MISE_TASK), cardPorts, cursor });
       return { outcome: "started", problem: null };
     } catch (err) {
       if (!(err instanceof DomainError)) throw err;
@@ -242,7 +248,7 @@ export class Services {
   private async stopOne(repo: string): Promise<Service | null> {
     const watch = await this.adopt(repo);
     if (!watch) return null;
-    await this.deps.mise.stop(repo, SERVICE_MISE_TASK);
+    await this.deps.mise.stop({ repo, task: null }, SERVICE_MISE_TASK);
     return watch.refresh();
   }
 
@@ -273,7 +279,7 @@ export class Services {
     current?.dispose();
     const source = devSource(repo);
     const watch = new ServiceWatch(watched, {
-      run: () => this.deps.mise.run(repo, SERVICE_MISE_TASK),
+      run: () => this.deps.mise.run({ repo, task: null }, SERVICE_MISE_TASK),
       tail: (page) => this.deps.logs.tail({ source, ...page }),
       probe: probePort,
       intervalMs: this.deps.intervalMs,
@@ -285,7 +291,7 @@ export class Services {
 
   /** The run of the service's task `dev` while its process group is alive (also while it is being stopped). */
   private liveRun(repo: string): RunState | undefined {
-    const run = this.deps.mise.run(repo, SERVICE_MISE_TASK);
+    const run = this.deps.mise.run({ repo, task: null }, SERVICE_MISE_TASK);
     return run && run.kind !== "exited" ? run : undefined;
   }
 

@@ -234,8 +234,12 @@ const TAIL = "tail";
 const RepoArg = RepoId.describe(`repo id from ${LIST_REPOS} (the id field)`);
 const RepoTagsArg = z.array(TagName).max(20);
 const MiseTaskArg = MiseTaskName.describe(`mise task name from ${GET_REPO} (the miseTasks field)`);
-/** Arguments of the tools that act on one mise task of a repo. */
-const MiseTaskArgs = z.object({ repo: RepoArg, miseTask: MiseTaskArg }).strict();
+/** A mise task in a task's worktree instead of the repo root (ADR-59). */
+const MiseTaskTaskArg = TaskId.describe(
+  `id of a task of this repo (from ${LIST_SESSIONS}; a task session finds its own in its instructions): the mise task in that task's worktree instead of the repo root`,
+);
+/** Arguments of the tools that act on one mise task of a repo root or of a task worktree. */
+const MiseTaskArgs = z.object({ repo: RepoArg, task: MiseTaskTaskArg.optional(), miseTask: MiseTaskArg }).strict();
 const START_SERVICE = "start_service";
 const CALL_ENDPOINT = "call_endpoint";
 const GET_ERRORS = "get_errors";
@@ -286,7 +290,7 @@ export const mcpTools = {
     name: TAIL,
     readOnly: true,
     description:
-      "Log of a repo's mise task (stdout and stderr, oldest first): records with a seq number, run (runId), stream, " +
+      "Log of a repo's mise task, or with task of the same mise task in that task's worktree (stdout and stderr, oldest first): records with a seq number, run (runId), stream, " +
       "level from the line text (error, warn, info…) and text without colors, with secrets replaced by ***. Without " +
       "sinceSeq it returns the latest records; then pass nextSeq from the previous response as sinceSeq to get only " +
       `new ones. dropped: true means some records were lost (the daemon keeps the latest records of a mise task, at most ${LOG_BUFFER_RECORDS}) ` +
@@ -294,6 +298,7 @@ export const mcpTools = {
     args: z
       .object({
         repo: RepoArg,
+        task: MiseTaskTaskArg.optional(),
         miseTask: MiseTaskArg,
         sinceSeq: z.number().int().nonnegative().optional().describe("nextSeq from the previous response"),
         limit: z.number().int().min(1).max(LOG_TAIL_MAX).describe(`maximum number of records (up to ${LOG_TAIL_MAX})`),
@@ -305,11 +310,11 @@ export const mcpTools = {
     name: GET_ERRORS,
     readOnly: true,
     description:
-      "Errors from the logs of mise tasks and mise install in all repos (or one repo or one mise task), the most recent first: " +
+      "Errors from the logs of mise tasks and mise install in all repos and task worktrees (or one repo, one task's worktree or one mise task), the most recent first: " +
       "a line with ERROR/FATAL (or WARN with minLevel warn), a compiler error (javac, tsc, kotlinc, Maven [ERROR], npm error) " +
       "or an exception header together with the lines that belong to it: Java and Node stack traces with Caused by, the " +
-      "Spring Boot APPLICATION FAILED TO START report and the Gradle FAILURE report. Each error has its source (repo, mise " +
-      "task), run (runId), exception (the root cause: the last Caused by or the first exception header; null without one), " +
+      "Spring Boot APPLICATION FAILED TO START report and the Gradle FAILURE report. Each error has its source (repo, task " +
+      "for a run in a task worktree, mise task), run (runId), exception (the root cause: the last Caused by or the first exception header; null without one), " +
       "lines (from each stack trace the first frames, the rest replaced by a line '… N frames omitted'; omittedLines counts what is left out), seq and time. " +
       "The same error repeated in one source (same exception and first frame, or same lines; ids, numbers and thread names ignored, file " +
       "locations not) is one entry with count and firstTs. An error still being written when you call is returned with the lines it had then. " +
@@ -319,6 +324,7 @@ export const mcpTools = {
     args: z
       .object({
         repo: RepoArg.optional(),
+        task: TaskId.optional().describe(`only the logs of mise tasks run in this task's worktree (task id from ${LIST_SESSIONS})`),
         miseTask: MiseTaskName.optional().describe(`only the log of this mise task (from ${GET_REPO}, the miseTasks field)`),
         minLevel: LogErrorLevel.default("error").describe("error (default) or warn to include warnings"),
         sinceSeq: z.number().int().nonnegative().optional().describe("nextSeq from the previous response"),
@@ -496,15 +502,18 @@ export const mcpTools = {
     name: RUN_MISE_TASK,
     readOnly: false,
     destructive: true,
-    auditArgs: ["repo", "miseTask"] as const,
+    auditArgs: ["repo", "task", "miseTask"] as const,
     description:
-      "Run a repo's mise task (mise run <task>) in the repo root in the user's projects folder, not in a task worktree, " +
-      `the same as the Run button in Trackwall. Only tasks listed by ${GET_REPO} (miseTasks) can run; a task that is ` +
-      "already running is not started again, and the result is its current run. Returns run: running with runId. Then " +
-      `call ${WAIT_FOR_MISE_TASK} to learn the exit code and ${TAIL} for the output (records of this run have its runId). ` +
-      "A mise config the user has not trusted gives mise_unavailable: only the user can trust it, in Trackwall; ask them. " +
-      "A session in Trackwall can run only mise tasks of its own repo. Long-running tasks (dev servers) keep running " +
-      "until stopped; stop them when you no longer need them.",
+      "Run a repo's mise task (mise run <task>) in the repo root in the user's projects folder, the same as the Run " +
+      "button in Trackwall, or with task in that task's worktree, so it builds and tests the task's changes. Only tasks " +
+      `listed by ${GET_REPO} (miseTasks) can run; a task that is already running there is not started again, and the result is its ` +
+      `current run. Returns run: running with runId. Then call ${WAIT_FOR_MISE_TASK} to learn the exit code and ${TAIL} ` +
+      "for the output (records of this run have its runId); pass the same task to both. A mise config the user has not " +
+      "trusted gives mise_unavailable: only the user can trust it, in Trackwall; ask them. In a task worktree that " +
+      "also happens when its mise config (mise.toml, mise.local.toml, file tasks…) changed since the user trusted it: " +
+      "the user trusts the changed config in the task's panel. A session in Trackwall can run only mise tasks of its own " +
+      "repo, and a task session only in its own task's worktree or the repo root. Long-running tasks (dev servers) keep " +
+      "running until stopped; stop them when you no longer need them.",
     args: MiseTaskArgs,
     result: MiseTaskRunResult,
   },
@@ -512,13 +521,13 @@ export const mcpTools = {
     name: "stop_mise_task",
     readOnly: false,
     destructive: true,
-    auditArgs: ["repo", "miseTask"] as const,
+    auditArgs: ["repo", "task", "miseTask"] as const,
     description:
-      "Stop a running mise task of a repo, also one the user started in Trackwall: a gentle stop, then the whole " +
+      "Stop a running mise task of a repo (with task: in that task's worktree), also one the user started in Trackwall: a gentle stop, then the whole " +
       "process group is killed. Returns after Trackwall has confirmed that no process of the group is alive " +
       "(run: exited with stoppedByUser: true); stop_unconfirmed when some process survived. A task that has already " +
       "ended returns its run; not_found when it has not been run since Trackwall started. A session in Trackwall can " +
-      "stop only mise tasks of its own repo.",
+      "stop only mise tasks of its own repo, and a task session only in its own task's worktree or the repo root.",
     args: MiseTaskArgs,
     result: MiseTaskRunResult,
   },
@@ -526,7 +535,7 @@ export const mcpTools = {
     name: WAIT_FOR_MISE_TASK,
     readOnly: true,
     description:
-      `Wait until a repo's mise task started with ${RUN_MISE_TASK} (or in Trackwall) ends: returns run: exited with ` +
+      `Wait until a repo's mise task started with ${RUN_MISE_TASK} (or in Trackwall) ends, with task the one in that task's worktree: returns run: exited with ` +
       "the exit code (exitCode, signal, stoppedByUser) as soon as the process group has ended, or after timeoutSeconds " +
       "with run: running; then call it again. A task that has already ended returns its last run at once; not_found " +
       `when it has not been run since Trackwall started. ${TAIL} gives the output.`,
@@ -537,8 +546,8 @@ export const mcpTools = {
     name: "list_running_mise_tasks",
     readOnly: true,
     description:
-      "mise tasks running in all repos (also those being stopped) that Trackwall started since it started, from the " +
-      `UI or with ${RUN_MISE_TASK}: repo, mise task name and run (runId, start time, pid). Cheap: it does not ask mise.`,
+      "mise tasks running in all repos and task worktrees (also those being stopped) that Trackwall started since it started, from the " +
+      `UI or with ${RUN_MISE_TASK}: repo, task (the task whose worktree it runs in, null in the repo root), mise task name and run (runId, start time, pid). Cheap: it does not ask mise.`,
     args: z.object({}).strict(),
     result: ListRunningMiseTasksResult,
   },

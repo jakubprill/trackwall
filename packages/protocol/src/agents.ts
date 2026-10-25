@@ -180,6 +180,26 @@ export type TaskSharedFiles = z.infer<typeof TaskSharedFiles>;
 export const SharedFilesList = z.object({ shared: z.array(TaskSharedFiles) });
 export type SharedFilesList = z.infer<typeof SharedFilesList>;
 
+/** How one file of the mise config in a task's worktree differs from the trusted one (ADR-59). */
+export const MiseConfigChange = z.object({
+  /** Relative to the worktree root, with `/`. */
+  path: z.string(),
+  change: z.enum(["added", "modified", "removed"]),
+});
+export type MiseConfigChange = z.infer<typeof MiseConfigChange>;
+
+/**
+ * The mise config of a task's worktree against the one the user trusted (ADR-59): the mise files as the worktree was
+ * created, or as the user trusted them later. mise tasks run in the worktree only without changes.
+ */
+export const TaskMiseConfig = z.object({
+  /** Sorted by path; empty when the worktree has the trusted mise config. */
+  changes: z.array(MiseConfigChange),
+  /** A hash of the current mise files: trusting passes it back, so the user trusts the config they saw, not a newer one. */
+  digest: z.string(),
+});
+export type TaskMiseConfig = z.infer<typeof TaskMiseConfig>;
+
 function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
   return { path: `/api/agents/${action}`, request, data };
 }
@@ -204,6 +224,13 @@ export const agentsApi = {
   /** Other tasks of the same repo that change the same files (ADR-44); tasks whose changes cannot be read are left out. */
   taskSharedFiles: endpoint("task-shared-files", TaskRequest, SharedFilesList),
   openTaskEditor: endpoint("open-task-editor", TaskRequest, Done),
+  /** The worktree's mise config against the trusted one (ADR-59). */
+  taskMiseConfig: endpoint("task-mise-config", TaskRequest, TaskMiseConfig),
+  /**
+   * The user trusts the worktree's current mise config (ADR-59), named by its `digest` from `task-mise-config`; a config
+   * that changed again since then is `bad_request`. Only from the UI, never from MCP.
+   */
+  trustTaskMiseConfig: endpoint("trust-task-mise-config", TaskRequest.extend({ digest: z.string().min(1).max(128) }), TaskMiseConfig),
   /**
    * Zakończenie zadania: usuwa worktree, a bez `keepBranch` także gałąź. Zmiany, które by przepadły (niezacommitowane
    * pliki i commity spoza gałęzi, a bez `keepBranch` także commity zadania), daemon usuwa tylko z `discardChanges`;

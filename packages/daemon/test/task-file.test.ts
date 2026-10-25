@@ -16,6 +16,7 @@ const stored = {
   title: "Napraw logowanie",
   proposedBy: { session: "9b1e7d2a-0000-4000-8000-000000000000" },
   summary: { text: "Poprawione, test dodany.", reportedAt: "2026-10-24T10:00:00.000Z" },
+  trustedMiseConfig: { "mise.toml": "b".repeat(64) },
 };
 
 describe("tasks.json", () => {
@@ -29,10 +30,20 @@ describe("tasks.json", () => {
 
   test("zadanie zapisane przed propozycjami zadań wraca bez tytułu, pochodzenia i podsumowania", () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
-    const { title: _, proposedBy: __, summary: ___, ...old } = stored;
+    const { title: _, proposedBy: __, summary: ___, trustedMiseConfig: ____, ...old } = stored;
     writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
 
-    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, title: null, proposedBy: null, summary: null }]);
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([
+      { ...old, title: null, proposedBy: null, summary: null, trustedMiseConfig: null },
+    ]);
+  });
+
+  test("a task saved before trusted mise configs comes back without one, so its config needs the user's trust once", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
+    const { trustedMiseConfig: _, ...old } = stored;
+    writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
+
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, trustedMiseConfig: null }]);
   });
 
   test.each([
@@ -40,6 +51,7 @@ describe("tasks.json", () => {
     ["gałąź z separatorem ścieżki, bo z niej powstaje katalog worktree", { branch: "trackwall/../../dokumenty" }],
     ["commit bazowy, który nie jest pełnym hashem, bo trafia do git diff", { base: "--output=plik" }],
     ["względny korzeń repo", { repoDir: "sklep" }],
+    ["a trusted mise config hash that is not SHA-256", { trustedMiseConfig: { "mise.toml": "nie-hash" } }],
   ])("zadanie z %s odkłada plik na bok i nie wraca", (_, change) => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
     const logged: string[] = [];

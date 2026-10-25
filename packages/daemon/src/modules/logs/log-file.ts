@@ -97,6 +97,9 @@ export function sourceParts(source: LogSource): [string, ...string[]] {
   switch (source.kind) {
     case "mise-task":
       return [source.kind, source.repo, source.miseTask];
+    // Without the repo: the task id names it, and a shorter path keeps the file under 260 characters on Windows.
+    case "task-mise-task":
+      return [source.kind, source.task, source.miseTask];
     case "mise-install":
       return [source.kind, source.repo];
   }

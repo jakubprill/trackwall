@@ -104,16 +104,18 @@ export class Logs {
   }
 
   /**
-   * Errors from the buffers of the sources matching `repo` and `miseTask` (ADR-42), most recent first. The cursor
-   * covers all sources at once because `seq` is global; a cursor from another daemon run gives errors as without one.
+   * Errors from the buffers of the sources matching `repo`, `task` and `miseTask` (ADR-42, ADR-59), most recent first.
+   * The cursor covers all sources at once because `seq` is global; a cursor from another daemon run gives errors as
+   * without one.
    */
-  errors({ repo, miseTask, minLevel, sinceSeq, limit }: LogErrorsRequest): LogErrors {
+  errors({ repo, task, miseTask, minLevel, sinceSeq, limit }: LogErrorsRequest): LogErrors {
     const sources = [...this.sources]
       .map(([key, log]) => ({ key, ...log }))
       .filter(
         ({ source }) =>
           (repo === undefined || source.repo === repo) &&
-          (miseTask === undefined || (source.kind === "mise-task" && source.miseTask === miseTask)),
+          (task === undefined || (source.kind === "task-mise-task" && source.task === task)) &&
+          (miseTask === undefined || (source.kind !== "mise-install" && source.miseTask === miseTask)),
       );
     const fromOtherRun = this.fromOtherRun(sinceSeq);
     const cursor = fromOtherRun ? undefined : sinceSeq;

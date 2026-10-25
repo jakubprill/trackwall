@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TaskId } from "./agents.ts";
 import type { Endpoint } from "./api.ts";
 import { MiseTaskName } from "./mise.ts";
 import { RepoId } from "./workspace.ts";
@@ -14,14 +15,20 @@ export const LOG_BUFFER_RECORDS = 2000;
 export const LOG_TAIL_MAX = 1000;
 
 /**
- * Skąd pochodzi rekord. Dziś task mise repo i `mise install` repo z komendy zbiorczej; serwisy, zadania i daemon
- * dojdą z tymi modułami.
+ * Where a record comes from: a repo's mise task run in the repo root, a mise task run in a task's worktree (ADR-59)
+ * and a repo's `mise install` from the Batch command. Services, sessions and the daemon will come as further kinds.
  */
 export const LogSource = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("mise-task"), repo: RepoId, miseTask: MiseTaskName }).strict(),
+  z.object({ kind: z.literal("task-mise-task"), repo: RepoId, task: TaskId, miseTask: MiseTaskName }).strict(),
   z.object({ kind: z.literal("mise-install"), repo: RepoId }).strict(),
 ]);
 export type LogSource = z.infer<typeof LogSource>;
+
+/** The log source of a mise task run in a repo root (`task: null`) or in a task's worktree (ADR-59). */
+export function miseTaskLogSource(repo: RepoId, task: TaskId | null, miseTask: MiseTaskName): LogSource {
+  return task === null ? { kind: "mise-task", repo, miseTask } : { kind: "task-mise-task", repo, task, miseTask };
+}
 
 export const LogLevel = z.enum(["trace", "debug", "info", "warn", "error"]);
 export type LogLevel = z.infer<typeof LogLevel>;
@@ -121,7 +128,9 @@ export const LogErrorsRequest = z
   .object({
     /** Only the sources of this repo; all of them without it. */
     repo: RepoId.optional(),
-    /** Only the log of this mise task (in every repo or in `repo`); without it `mise install` too. */
+    /** Only the sources of this task's worktree (ADR-59); the repo roots and other worktrees too without it. */
+    task: TaskId.optional(),
+    /** Only the log of this mise task (in every repo or in `repo`, in repo roots and worktrees); without it `mise install` too. */
     miseTask: MiseTaskName.optional(),
     minLevel: LogErrorLevel,
     /** Only errors whose first record has a `seq` greater than the cursor. */

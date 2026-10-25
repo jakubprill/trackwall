@@ -13,6 +13,13 @@ import { RuntimeFile } from "../src/modules/procs/runtime-file.ts";
 import { Services } from "../src/modules/services/services.ts";
 import { groupPlatform } from "../src/platform/group-platform.ts";
 
+/** These tests run mise tasks in repo roots only, never in a task worktree (ADR-59). */
+const NO_TASKS = {
+  taskCheckout: async () => {
+    throw new Error("no task worktree in this test");
+  },
+};
+
 const FAKE_MISE = [process.execPath, join(import.meta.dir, "fixtures", "fake-mise.ts")];
 const TIMEOUT = 60_000;
 const SECRET = "s3cr3t-token-value";
@@ -36,7 +43,7 @@ function setup(repos: Record<string, object>, opts: { edges?: GraphEdge[]; cardP
     return join(home, id);
   };
   const env = async () => ({ ...process.env, FAKE_API_TOKEN: SECRET });
-  const mise = new Mise({ procs, repos: { repoPath }, command: FAKE_MISE, env });
+  const mise = new Mise({ procs, repos: { repoPath }, tasks: NO_TASKS, command: FAKE_MISE, env });
   const graph = { graph: async () => ({ nodes: [], edges: opts.edges ?? [], configProblems: [], configFile: "" }) as RepoGraph };
   const cards = {
     card: async (repo: string) => {
@@ -306,7 +313,7 @@ describe("services (real process groups, fake mise and fake service)", () => {
     "a dev started from the mise tasks tab is adopted: the list shows it ready on the port from its log",
     async () => {
       const { services, mise } = setup({ web: { ...DEV, servers: { dev: {} } } });
-      await mise.start("web", "dev");
+      await mise.start({ repo: "web", task: null }, "dev");
 
       await waitFor(async () => (await services.list())[0]?.state === "healthy");
 
@@ -332,7 +339,7 @@ describe("services (real process groups, fake mise and fake service)", () => {
 
       expect(stopped.map((s) => [s.repo, s.state])).toEqual([["api", "stopped"]]);
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      expect(mise.run("web", "dev")).toBeUndefined();
+      expect(mise.run({ repo: "web", task: null }, "dev")).toBeUndefined();
       // A new start after the stop makes a new slice instead of reusing the cancelled one.
       const again = await services.start({ repo: "web", dependencies: true, waitMs: 20_000 });
       expect(again.members.map((m) => [m.repo, m.service?.state])).toEqual([

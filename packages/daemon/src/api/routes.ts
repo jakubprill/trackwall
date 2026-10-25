@@ -56,8 +56,8 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(graphApi.graph, (f) => f.graph.graph()),
   route(miseApi.tasks, (f, b) => f.mise.tasks(b.repo)),
   route(miseApi.running, (f) => f.mise.running()),
-  route(miseApi.start, (f, b) => f.mise.start(b.repo, b.miseTask)),
-  route(miseApi.stop, (f, b) => f.mise.stop(b.repo, b.miseTask)),
+  route(miseApi.start, (f, b) => f.mise.start({ repo: b.repo, task: b.task }, b.miseTask)),
+  route(miseApi.stop, (f, b) => f.mise.stop({ repo: b.repo, task: b.task }, b.miseTask)),
   route(miseApi.trust, (f, b) => f.mise.trust(b.repo)),
   route(logsApi.tail, (f, b) => f.logs.tail(b)),
   route(servicesApi.list, (f) => f.services.list()),
@@ -74,6 +74,8 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.resumeTask, (f, b) => f.agents.resumeTask(b.task)),
   route(agentsApi.taskChanges, (f, b) => f.agents.taskChanges(b.task)),
   route(agentsApi.taskSharedFiles, async (f, b) => ({ shared: await f.agents.taskSharedFiles(b.task) })),
+  route(agentsApi.taskMiseConfig, (f, b) => f.agents.taskMiseConfig(b.task)),
+  route(agentsApi.trustTaskMiseConfig, (f, b) => f.agents.trustTaskMiseConfig(b.task, b.digest)),
   route(agentsApi.openTaskEditor, (f, b) => {
     f.agents.openTaskEditor(b.task);
     return null;

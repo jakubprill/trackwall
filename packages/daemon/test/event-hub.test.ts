@@ -6,6 +6,7 @@ import type { Facade } from "../src/facade.ts";
 const EMPTY: SessionList = { sessions: [], tasks: [], proposals: [], worktreesDir: "/stan/worktrees" };
 const RUNNING: RunningMiseTask = {
   repo: "sklep",
+  task: null,
   miseTask: "dev",
   run: { kind: "running", runId: "r1", startedAt: "2026-10-24T10:00:00.000Z", pid: 42 },
 };
