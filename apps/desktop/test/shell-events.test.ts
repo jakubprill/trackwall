@@ -56,3 +56,35 @@ test("the link scheme is the same in the shell, its configuration and protocol",
   expect(/const SCHEME: &str = "([^"]+)";/.exec(linkSource)?.[1]).toBe(TRACKWALL_LINK_SCHEME);
   expect(config).toEqual([TRACKWALL_LINK_SCHEME]);
 });
+
+const appMenuSource = read("apps/desktop/src-tauri/src/app_menu.rs");
+const appMenuUiSource = read("packages/ui/src/lib/use-app-menu.ts");
+const appSource = read("packages/ui/src/App.tsx");
+
+test("the shell sends menu bar clicks under the same event name the UI listens to", () => {
+  const shell = /const APP_MENU_EVENT: &str = "([^"]+)";/.exec(appMenuSource)?.[1];
+  const ui = /const APP_MENU_EVENT = "([^"]+)";/.exec(appMenuUiSource)?.[1];
+  expect(shell).toBe("app-menu");
+  expect(ui).toBe(shell);
+});
+
+test("the kinds of menu commands are the same in the shell and in the UI", () => {
+  // `MenuCommand` in Rust has `rename_all = "kebab-case"`, so `NewWindow` is `"new-window"`.
+  const variants = /enum MenuCommand \{([^}]*\}[^}]*)\}/.exec(appMenuSource)?.[1] ?? "";
+  const shell = [...variants.matchAll(/^\s*(\w+)/gm)].map((m) => m[1]?.replace(/(?<=.)([A-Z])/g, "-$1").toLowerCase());
+  const ui = [...appMenuUiSource.matchAll(/kind: z\.literal\("([\w-]+)"\)/g)].map((m) => m[1]);
+  expect(shell).toEqual(["view", "new-window"]);
+  expect(ui).toEqual(shell);
+});
+
+test("the View menu has the activity bar's views with their names and shortcuts, and Settings in the app menu", () => {
+  const entry = /\{ id: "(\w+)", label: "([^"]+)", (?:icon: \w+, )?shortcut: "([^"]+)"/g;
+  const ui = [...appSource.matchAll(entry)].map((m) => [m[1], m[2], m[3]]);
+  const shell = [...appMenuSource.matchAll(/MenuView \{ id: "(\w+)", label: "([^"]+)", shortcut: "([^"]+)" \}/g)].map((m) => [
+    m[1],
+    m[2]?.replace("…", ""),
+    m[3],
+  ]);
+  expect(ui.map((v) => v[0])).toEqual(["home", "repos", "sessions", "graph", "daemon", "settings"]);
+  expect(shell).toEqual(ui);
+});

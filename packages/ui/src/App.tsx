@@ -13,6 +13,7 @@ import { entrySession, findEntry, type SessionSelection, sessionRows } from "@/l
 import { SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
 import { sessionShortcut } from "@/lib/session-shortcut";
 import { attentionCount, nextWaitingShortcut } from "@/lib/session-state";
+import { useAppMenu } from "@/lib/use-app-menu";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
 import { useJumpRequest } from "@/lib/use-jump-request";
@@ -69,12 +70,21 @@ export function App() {
     };
     return { open, showMenu };
   }, []);
+  const viewName = VIEWS.find((v) => v.id === view)?.label ?? view;
   useEffect(() => {
-    reportShown(view, sessionLayout).catch(() => {
-      // Without the report a session from the tray opens in the last focused window, and the next start opens this
-      // window with what it showed before; nothing to show.
+    reportShown(view, viewName, sessionLayout).catch(() => {
+      // Without the report a session from the tray opens in the last focused window, the next start opens this
+      // window with what it showed before, and the title stays; nothing to show.
     });
-  }, [view, sessionLayout]);
+  }, [view, viewName, sessionLayout]);
+  // The menu bar of macOS (ADR-49) shows a view or opens the current one in a new window, like the activity bar.
+  useAppMenu((command) => {
+    if (command.kind === "new-window") newWindow?.open(view);
+    else {
+      const id = VIEW_IDS.find((v) => v === command.view);
+      if (id) setView(id);
+    }
+  });
   const events = useDaemonEvents(conn);
   const sessions = useSessions(conn, events, view === "sessions" || view === "home");
   const runningLive = useMemo(() => events?.feed("mise.running.changed"), [events]);

@@ -3,6 +3,7 @@
 // Bez okna konsoli w wydaniu na Windowsie.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod app_menu;
 mod attention;
 mod daemon;
 mod daemon_state;
@@ -46,13 +47,15 @@ async fn open_window(app: AppHandle, view: String) -> Result<(), String> {
     windows::open(&app, Some(&view))
 }
 
-/// What the window shows (its view and session layout): the tray sends sessions to a window that shows Sessions, and
-/// extra windows come back with it at the next start.
+/// What the window shows (its view, the view's name and the session layout): the tray sends sessions to a window that
+/// shows Sessions, extra windows come back with it at the next start, and the name goes into the window's title, which
+/// the taskbar and the Window menu of macOS show.
 #[tauri::command]
-fn window_shows(window: Window, view: String, session_layout: String) -> Result<(), String> {
+fn window_shows(window: Window, view: String, view_name: String, session_layout: String) -> Result<(), String> {
     let shown = saved_windows::Shown::new(&view, &session_layout).ok_or("not a view or session layout id")?;
+    let title = windows::title(&view_name, &window.app_handle().package_info().name).ok_or("not a view name")?;
     windows::shows(window.app_handle(), window.label(), shown);
-    Ok(())
+    window.set_title(&title).map_err(|e| e.to_string())
 }
 
 fn main() {
@@ -80,6 +83,9 @@ fn main() {
             windows::show_once_loaded(app, windows::MAIN);
         }
     }));
+    // The menu bar on macOS (ADR-49); without one Tauri sets its default menu there.
+    #[cfg(target_os = "macos")]
+    let builder = builder.menu(app_menu::build);
     let app = builder
         .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(windows::STATE_FLAGS).build())
         .plugin(tauri_plugin_deep_link::init())
@@ -106,6 +112,7 @@ fn main() {
             Ok(())
         })
         .on_page_load(window_effect::on_page_load)
+        .on_menu_event(|app, event| app_menu::handle(app, event.id.as_ref()))
         .on_window_event(|window, event| match event {
             // Closing the main window hides it to the tray; the daemon and services keep running. An extra window closes.
             WindowEvent::CloseRequested { api, .. } if window.label() == windows::MAIN => {

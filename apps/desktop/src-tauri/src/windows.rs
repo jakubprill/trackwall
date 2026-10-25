@@ -102,6 +102,11 @@ impl Windows {
         self.with(|r| r.focused(label));
     }
 
+    /// The window a click in the menu bar is for: the last focused one, otherwise the main window.
+    pub fn last_focused(&self) -> String {
+        self.with(|r| r.focus_order.last().map_or(MAIN, String::as_str).to_string())
+    }
+
     pub fn session_window(&self) -> String {
         self.with(|r| r.session_window().to_string())
     }
@@ -141,6 +146,16 @@ fn window_url(view: Option<&str>, session_layout: Option<&str>) -> Option<String
         }
     }
     Some(if params.is_empty() { "index.html".into() } else { format!("index.html?{}", params.join("&")) })
+}
+
+/// Longest view name a window title takes; the UI's names are single words.
+const MAX_VIEW_NAME_CHARS: usize = 32;
+
+/// A window's title: the name of its view, then the app, so windows differ in the taskbar and the Window menu. `None`
+/// for a name that is empty, long or has control characters.
+pub fn title(view_name: &str, app_name: &str) -> Option<String> {
+    let fits = !view_name.trim().is_empty() && view_name.chars().count() <= MAX_VIEW_NAME_CHARS;
+    (fits && !view_name.chars().any(char::is_control)).then(|| format!("{view_name} – {app_name}"))
 }
 
 /// Opens an extra window with `view` under the lowest free label.
@@ -401,6 +416,15 @@ mod tests {
         r.focused("window-2");
         r.closed("window-2");
         assert_eq!(r.session_window(), "main");
+    }
+
+    #[test]
+    fn a_window_title_is_its_view_name_and_the_app() {
+        assert_eq!(title("Sessions", "Trackwall").as_deref(), Some("Sessions – Trackwall"));
+        assert_eq!(title("", "Trackwall"), None);
+        assert_eq!(title(" ", "Trackwall"), None);
+        assert_eq!(title("Home\nfake", "Trackwall"), None);
+        assert_eq!(title(&"a".repeat(MAX_VIEW_NAME_CHARS + 1), "Trackwall"), None);
     }
 
     #[test]
