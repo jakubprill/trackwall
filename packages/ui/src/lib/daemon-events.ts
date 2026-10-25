@@ -3,25 +3,25 @@ import type { Connection } from "./connection.ts";
 import { daemonSocket } from "./daemon-socket.ts";
 
 /**
- * Zdarzenia daemona z WebSocketu `/ws` (§5.2, ADR-36), jedno połączenie dla całego UI. Zdarzenie niesie całą
- * migawkę tematu, a daemon po każdym podłączeniu wysyła najpierw migawkę każdego tematu, więc po zerwanym połączeniu
- * wystarczy połączyć się ponownie. Widoki biorą temat jako `LiveFeed` (`useRemote` z opcją `live`) i odpytują HTTP
- * tylko wtedy, gdy temat nie ma świeżej migawki z bieżącego połączenia.
+ * Daemon events from the `/ws` WebSocket (§5.2, ADR-36), one connection for the whole UI. An event carries the whole
+ * topic snapshot, and after every connection the daemon first sends the snapshot of every topic, so after a dropped
+ * connection it is enough to reconnect. Views take a topic as a `LiveFeed` (`useRemote` with the `live` option) and poll
+ * HTTP only when the topic has no fresh snapshot from the current connection.
  */
 
-/** Pierwsza przerwa przed ponownym połączeniem; kolejne rosną dwukrotnie do `MAX_RECONNECT_MS`. */
+/** The first pause before reconnecting; the next ones double up to `MAX_RECONNECT_MS`. */
 const RECONNECT_MS = 1000;
 const MAX_RECONNECT_MS = 10_000;
 
-/** Migawki jednego tematu na żywo. */
+/** Live snapshots of one topic. */
 export interface LiveFeed<T> {
-  /** Każda nowa migawka; ta z bieżącego połączenia od razu, jeśli już jest. Zwraca wypisanie. */
+  /** Every new snapshot; the one from the current connection at once, if there already is one. Returns the unsubscribe. */
   subscribe(onData: (data: T) => void): () => void;
-  /** Połączenie działa i przyszła już z niego migawka tematu, więc odpytywanie niczego nie doda. */
+  /** The connection works and a snapshot of the topic has already arrived over it, so polling would add nothing. */
   isLive(): boolean;
 }
 
-/** To, czego klient potrzebuje od WebSocketu przeglądarki; w testach atrapa. */
+/** What the client needs from the browser WebSocket; a fake in tests. */
 export type EventSocket = Pick<WebSocket, "onopen" | "onmessage" | "onclose" | "close">;
 
 export interface DaemonEventsOptions {
@@ -32,7 +32,7 @@ export interface DaemonEventsOptions {
 
 export class DaemonEvents {
   readonly #o: DaemonEventsOptions;
-  /** Migawki z bieżącego połączenia; po zerwaniu znikają, bo mogą być już stare. */
+  /** Snapshots from the current connection; they go after a disconnect, because they may already be stale. */
   readonly #latest = new Map<DaemonEventType, DaemonEvent>();
   readonly #listeners = new Set<(event: DaemonEvent) => void>();
   #socket: EventSocket | undefined;
@@ -47,8 +47,8 @@ export class DaemonEvents {
 
   feed<T extends DaemonEventType>(type: T): LiveFeed<DaemonEventPayload<T>> {
     const ofType = (event: DaemonEvent | undefined): event is DaemonEventOf<T> => event?.type === type;
-    // Jedyne rzutowanie: TypeScript nie wiąże pola `payload` zawężonego zdarzenia z parametrem `T` (dla `T` jako unii
-    // typów byłoby to nawet niepoprawne), choć `ofType` sprawdził typ zdarzenia sparsowanego schematem `DaemonEvent`.
+    // The only cast: TypeScript does not tie the `payload` field of the narrowed event to the parameter `T` (for `T` as a
+    // union of types it would even be unsound), although `ofType` checked the type of the event parsed with the `DaemonEvent` schema.
     const payloadOf = (event: DaemonEventOf<T>) => event.payload as DaemonEventPayload<T>;
     return {
       subscribe: (onData) => {
@@ -91,7 +91,7 @@ export class DaemonEvents {
   #receive(data: unknown): void {
     if (typeof data !== "string") return;
     const event = DaemonEvent.safeParse(parseJson(data));
-    // Zdarzenie niezgodne z kontraktem (inna wersja daemona) pomija się; temat zostaje na odpytywaniu.
+    // An event that does not match the contract (another daemon version) is skipped; the topic stays on polling.
     if (!event.success) return;
     this.#latest.set(event.data.type, event.data);
     for (const listener of this.#listeners) listener(event.data);

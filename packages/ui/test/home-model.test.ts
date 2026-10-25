@@ -5,7 +5,8 @@ import { daemonAnswered, homeHasObject, homeModel, homeRepoStatus, homeSessionSt
 const running = { kind: "running", runId: "r", startedAt: "2026-10-24T10:00:00Z", pid: 10 } as const;
 
 function repo(id: string, status: Partial<{ changes: number; behind: number; unavailable: boolean }> = {}): Repo {
-  if (status.unavailable) return { id, path: `/p/${id}`, remote: null, status: { kind: "unavailable", message: "git nie czyta repo" } };
+  if (status.unavailable)
+    return { id, path: `/p/${id}`, remote: null, status: { kind: "unavailable", message: "git cannot read the repo" } };
   const upstream = status.behind === undefined ? null : { name: "origin/main", ahead: 0, behind: status.behind };
   return {
     id,
@@ -30,7 +31,7 @@ function session(id: string, repoId: string, over: Partial<Session> = {}): Sessi
 }
 
 function edge(from: string, to: string, kind: GraphEdge["kind"], key = "k"): GraphEdge {
-  return { from, to, kind, key, confidence: "exact", evidence: [{ repo: from, path: "pom.xml", line: 1, detail: "zależność" }] };
+  return { from, to, kind, key, confidence: "exact", evidence: [{ repo: from, path: "pom.xml", line: 1, detail: "dependency" }] };
 }
 
 function graph(edges: GraphEdge[]): RepoGraph {
@@ -42,7 +43,7 @@ function exited(exitCode: number, stoppedByUser = false): Session["run"] {
 }
 
 describe("migawka pulpitu", () => {
-  test("stan repo: niedostępne, potem lokalne zmiany, potem commity do pobrania, z ich liczbą", () => {
+  test("repo state: unavailable, then local changes, then commits to pull, with their count", () => {
     const model = homeModel({
       repos: [repo("a", { unavailable: true }), repo("b", { changes: 3, behind: 2 }), repo("c", { behind: 2 }), repo("d", { behind: 0 })],
       sessions: [],
@@ -59,7 +60,7 @@ describe("migawka pulpitu", () => {
     ]);
   });
 
-  test("warstwa repo to kolumna z widoku Overview, a repo bez połączeń nie ma warstwy", () => {
+  test("a repo's layer is its column from the Overview view, and a repo without connections has no layer", () => {
     const model = homeModel({
       repos: [repo("web"), repo("api"), repo("lib"), repo("docs")],
       sessions: [],
@@ -77,7 +78,7 @@ describe("migawka pulpitu", () => {
     ]);
   });
 
-  test("kilka krawędzi tej samej pary i rodzaju to jedno połączenie; krawędzie do repo spoza listy znikają", () => {
+  test("several edges of the same pair and kind are one connection; edges to repos outside the list disappear", () => {
     const model = homeModel({
       repos: [repo("web"), repo("api")],
       sessions: [],
@@ -97,7 +98,7 @@ describe("migawka pulpitu", () => {
     ]);
   });
 
-  test("działający task mise trafia do swojego repo; sesja repo spoza listy nie trafia na pulpit", () => {
+  test("a running mise task goes to its repo; a session of a repo outside the list does not reach the dashboard", () => {
     const model = homeModel({
       repos: [repo("api")],
       sessions: [session("s1", "api"), session("s2", "gone")],
@@ -112,8 +113,8 @@ describe("migawka pulpitu", () => {
   });
 });
 
-describe("stan sesji na pulpicie", () => {
-  test("czekająca na Ciebie, pracująca i niereagująca", () => {
+describe("session state on the dashboard", () => {
+  test("waiting for you, working and unresponsive", () => {
     expect(homeSessionState(session("s", "a", { needsAttention: true }))).toBe("attention");
     expect(homeSessionState(session("s", "a"))).toBe("working");
     expect(homeSessionState(session("s", "a", { state: { state: "Stale", source: "osc", confidence: "low", at: "", reason: "" } }))).toBe(
@@ -127,15 +128,15 @@ describe("stan sesji na pulpicie", () => {
     );
   });
 
-  test("zakończona błędem albo zwykle; zatrzymana przez Ciebie to zakończona", () => {
+  test("ended with an error or normally; stopped by you counts as ended", () => {
     expect(homeSessionState(session("s", "a", { run: exited(1) }))).toBe("error");
     expect(homeSessionState(session("s", "a", { run: exited(0) }))).toBe("done");
     expect(homeSessionState(session("s", "a", { run: exited(1, true) }))).toBe("done");
   });
 });
 
-describe("stan repo na pulpicie słowami", () => {
-  test("liczba zmian i commitów do pobrania jak na liście repo; repo do pobrania nie jest czyste", () => {
+describe("repo state on the dashboard in words", () => {
+  test("number of changes and commits to pull as in the repo list; a repo with commits to pull is not clean", () => {
     const repo = { id: "api", layer: null, runningTask: null };
     expect(homeRepoStatus({ ...repo, state: "changed", count: 1 })).toEqual({ tone: "warning", label: "1 change" });
     expect(homeRepoStatus({ ...repo, state: "behind", count: 1 })).toEqual({ tone: "warning", label: "1 commit to pull" });
@@ -145,8 +146,8 @@ describe("stan repo na pulpicie słowami", () => {
   });
 });
 
-describe("wybór i stan daemona na pulpicie", () => {
-  test("wybór wskazuje obiekt z migawki; repo albo sesja, która zniknęła, nie jest w niej", () => {
+describe("selection and daemon state on the dashboard", () => {
+  test("the selection points to an object from the dashboard snapshot; a repo or session that disappeared is not in it", () => {
     const model = homeModel({ repos: [repo("api")], sessions: [session("s1", "api")], graph: undefined, running: [], daemonRunning: true });
 
     expect(homeHasObject(model, "repo:api")).toBe(true);
@@ -156,7 +157,7 @@ describe("wybór i stan daemona na pulpicie", () => {
     expect(homeHasObject(model, "session:gone")).toBe(false);
   });
 
-  test("daemon działa, dopóki odpowiada: błąd z jego kodem tak, zerwane połączenie i odpowiedź spoza kontraktu nie", () => {
+  test("the daemon is running while it answers: an error with its code counts, a broken connection and a response outside the contract do not", () => {
     expect(daemonAnswered(undefined, undefined)).toBe(true);
     expect(daemonAnswered("workspace.yaml: bad key", "invalid_config")).toBe(true);
     expect(daemonAnswered("Failed to fetch", undefined)).toBe(false);

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-/** Wartość, która nadąża za `value` dopiero po `ms` bez zmian: wyszukiwanie nie pyta hostingu przy każdym znaku. */
+/** A value that follows `value` only after `ms` without changes: the search does not ask the repo host on every keystroke. */
 export function useDebounced<T>(value: T, ms: number): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {

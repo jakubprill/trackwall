@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { EdgePair } from "@/lib/graph-layout";
 
-/** Pewność krawędzi dla człowieka (ADR-29, ADR-30; reguły przy `EdgeConfidence`); `Record` wymusza wpis dla każdej. */
+/** Edge confidence for a person (ADR-29, ADR-30; rules at `EdgeConfidence`); `Record` forces an entry for each. */
 const CONFIDENCE_LABELS: Record<EdgeConfidence, string> = {
   exact: "certain",
   high: "almost certain",
@@ -30,8 +30,8 @@ const EDGE_KIND_LABELS: Record<EdgeKind, string> = {
 };
 
 /**
- * Panel szczegółów wybranego repo w widoku „Przegląd”: kogo repo używa i kto używa jego, każda krawędź z kluczem
- * (paczka, aplikacja albo adres HTTP, opis ręcznej krawędzi) i dowodami. Repo po drugiej stronie krawędzi wybiera się kliknięciem.
+ * The details panel of the selected repo in the "Overview" view: whom the repo uses and who uses it, each edge with its
+ * key (a package, an application or an HTTP address, a manual edge's description) and evidence. A click selects the repo on the other side of an edge.
  */
 export function GraphNodePanel({
   node,
@@ -40,7 +40,7 @@ export function GraphNodePanel({
   onClose,
 }: {
   node: GraphNode;
-  /** Krawędzie zgrupowane po parze repo, te same co na rysunku (`GraphLayout.pairs`). */
+  /** Edges grouped by repo pair, the same as in the drawing (`GraphLayout.pairs`). */
   pairs: readonly EdgePair[];
   onSelect: (repo: string) => void;
   onClose: () => void;
@@ -92,7 +92,7 @@ export function GraphNodePanel({
   );
 }
 
-/** Panel bez wybranego repo: liczby, wpisy `graph` z błędami i gdzie dopisać ręczne połączenia. */
+/** The panel without a selected repo: the counts, `graph` entries with errors, and where to add manual connections. */
 export function GraphSummaryPanel({ graph, pairs }: { graph: RepoGraph; pairs: readonly EdgePair[] }) {
   const withProblems = graph.nodes.filter((n) => n.problem !== null).length;
   return (
@@ -160,19 +160,19 @@ function PairItem({ repo, edges, onSelect }: { repo: string; edges: GraphEdge[];
 }
 
 /**
- * Dowód jako `repo: ścieżka:linia szczegół`. Wpis z `workspace.yaml` ma pełną ścieżkę pliku, którą panel podsumowania
- * pokazuje w całości, więc tu wystarcza nazwa pliku.
+ * Evidence as `repo: path:line detail`. An entry from `workspace.yaml` has the file's full path, which the summary panel
+ * shows in full, so the file name is enough here.
  */
 function evidenceText(e: EdgeEvidence): string {
   return e.repo === null ? `${fileName(e.path)} ${e.detail}` : `${e.repo}: ${evidenceLabel(e)} ${e.detail}`;
 }
 
-/** Ostatni człon pełnej ścieżki z Windowsa albo macOS (UI nie ma `node:path`). */
+/** The last segment of a full Windows or macOS path (the UI has no `node:path`). */
 function fileName(path: string): string {
   return path.split(/[\\/]/).pop() ?? path;
 }
 
-/** Lista w powierzchni z liczbą pozycji w nagłówku i zdaniem, gdy jest pusta. */
+/** A list in a surface with the item count in the header and a sentence when it is empty. */
 function Section({ label, empty, children }: { label: string; empty: string; children: ReactNode[] }) {
   return (
     <Surface label={label} meta={children.length}>

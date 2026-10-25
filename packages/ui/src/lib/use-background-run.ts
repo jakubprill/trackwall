@@ -3,12 +3,12 @@ import { errorMessage } from "./api.ts";
 import { currentRun } from "./background-run.ts";
 import { useRemote } from "./use-remote.ts";
 
-/** W trakcie postęp ma być widać od razu, a przebieg jest w pamięci daemona, więc odpytywanie jest tanie. */
+/** While it runs, progress should show at once, and the run is in the daemon's memory, so polling is cheap. */
 const RUNNING_POLL_MS = 1500;
-/** Bez trwającego przebiegu wystarczy rytm listy repo; łapie przebieg zaczęty w innym oknie. */
+/** Without a running run the repo list's pace is enough; it catches a run started in another window. */
 const IDLE_POLL_MS = 10_000;
 
-/** Przebieg w tle w pamięci daemona: synchronizacja (`SyncRun`) albo komenda zbiorcza (`BatchRun`). */
+/** A background run in the daemon's memory: a sync (`SyncRun`) or the batch command (`BatchRun`). */
 interface BackgroundRun {
   /** ISO 8601. */
   startedAt: string;
@@ -16,18 +16,18 @@ interface BackgroundRun {
 }
 
 export interface BackgroundRunHandle<R> {
-  /** `null`, gdy przebiegu nie było; `undefined` przed pierwszą odpowiedzią. */
+  /** `null` when there was no run; `undefined` before the first response. */
   run: R | null | undefined;
-  /** Przebieg trwa albo akcja (start, przerwanie) czeka na odpowiedź. */
+  /** The run is in progress, or an action (start, cancel) is waiting for its response. */
   running: boolean;
-  /** Błąd akcji albo odpytywania. */
+  /** The error of an action or of polling. */
   error: string | undefined;
 }
 
 /**
- * Ostatni przebieg w tle i akcje na nim (ADR-21, ADR-27). Wynik akcji pokazuje się od razu, bez czekania na
- * odpytanie, więc przycisk startu nie odblokowuje się na chwilę po starcie. `onFinished` jest wołane po końcu
- * przebiegu, żeby lista repo pokazała nowe HEAD bez czekania na swoje odpytanie.
+ * The last background run and the actions on it (ADR-21, ADR-27). An action's result shows at once, without waiting for
+ * a poll, so the start button does not unlock for a moment after the start. `onFinished` is called after the run ends,
+ * so that the repo list shows the new HEAD without waiting for its own poll.
  */
 export function useBackgroundRun<R extends BackgroundRun>(
   load: () => Promise<R | null>,

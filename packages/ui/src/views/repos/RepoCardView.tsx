@@ -24,8 +24,8 @@ import type { Connection } from "@/lib/connection";
 import { useRemote } from "@/lib/use-remote";
 
 /**
- * Zakładka „Karta” (§4.6, ADR-25, ADR-30): fakty z plików buildu, konfiguracji i kodu w ostatnim commicie, każdy
- * z dowodem (plik i linia), oraz tagi repo z powodami. Nowy HEAD w liście pobiera kartę od nowa.
+ * The "Card" tab (§4.6, ADR-25, ADR-30): facts from the build, configuration and code files in the last commit, each
+ * with evidence (file and line), and the repo's tags with reasons. A new HEAD in the list fetches the card anew.
  */
 export function RepoCardView({ conn, repo, head }: { conn: Connection; repo: string; head: string }) {
   const load = useCallback(() => post(conn, cardsApi.card, { repo }), [conn, repo]);
@@ -224,7 +224,7 @@ function Endpoints({ endpoints }: { endpoints: ProvidedEndpoint[] }) {
   );
 }
 
-/** Typ ciała żądania i odpowiedzi endpointu (ADR-38): `CreateOrder → OrderDto`, brak strony to `–`. */
+/** The request and response body types of an endpoint (ADR-38): `CreateOrder → OrderDto`, a missing side is `–`. */
 function Contract({ endpoint }: { endpoint: ProvidedEndpoint }) {
   const label = `${endpoint.request ?? "–"} → ${endpoint.response ?? "–"}`;
   return (
@@ -234,7 +234,7 @@ function Contract({ endpoint }: { endpoint: ProvidedEndpoint }) {
   );
 }
 
-/** DTO z kontraktów endpointów (ADR-38): rodzaj, nazwa, pola z typami albo stałe enuma. */
+/** DTOs from the endpoint contracts (ADR-38): kind, name, fields with types, or enum constants. */
 function Dtos({ dtos }: { dtos: Dto[] }) {
   return (
     <Surface label="DTOs" meta={dtos.length}>
@@ -256,13 +256,13 @@ function Dtos({ dtos }: { dtos: Dto[] }) {
   );
 }
 
-/** Klient HTTP: dokąd woła (aplikacja albo adres, w których profilach) i jakie ścieżki. */
+/** An HTTP client: where it calls (an application or address, in which profiles) and which paths. */
 function HttpClients({ clients }: { clients: ConsumedHttp[] }) {
   return (
     <Surface label="HTTP clients" meta={clients.length}>
       <ul className="divide-y">
         {clients.map((c, i) => (
-          // Dwa wpisy proxy do tego samego adresu mają te same pola: pozycja na liście odróżnia je bez zmiany kolejności.
+          // Two proxy entries to the same address have the same fields: the position in the list tells them apart without changing the order.
           <li key={`${i}:${c.via}:${c.name}:${c.url}`} className="flex min-w-0 flex-col gap-1 px-3 py-2">
             <span className="flex min-w-0 items-center gap-3">
               <Badge variant="secondary">{HTTP_CLIENT_LABELS[c.via]}</Badge>

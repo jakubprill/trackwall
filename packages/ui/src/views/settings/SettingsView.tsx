@@ -13,7 +13,7 @@ import { pickFolder } from "@/lib/folder-picker";
 import { useRemote } from "@/lib/use-remote";
 import { RepoHostsForm } from "./RepoHostsForm.tsx";
 
-/** Ustawienia workspace; każde z nich jest też kluczem w `workspace.yaml`, który można edytować ręcznie (ADR-13, ADR-18). */
+/** Workspace settings; each one is also a key in `workspace.yaml`, which can be edited by hand (ADR-13, ADR-18). */
 export function SettingsView({ conn, onRetry, onSaved }: { conn: Connection; onRetry: () => void; onSaved: () => void }) {
   const load = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
   const settings = useRemote(load);
@@ -43,7 +43,7 @@ export function SettingsView({ conn, onRetry, onSaved }: { conn: Connection; onR
               onSaved={onSaved}
             />
           )}
-          {/* Zły `projectsDir` wpisany ręcznie w `workspace.yaml` poprawia się właśnie tym formularzem. */}
+          {/* A bad `projectsDir` typed by hand into `workspace.yaml` is fixed with this very form. */}
           {settings.errorCode === "invalid_config" && <ProjectsDirForm conn={conn} initialPath="" onSaved={onSaved} />}
         </div>
       </Surface>
@@ -52,7 +52,7 @@ export function SettingsView({ conn, onRetry, onSaved }: { conn: Connection; onR
   );
 }
 
-/** Hostingi repo (ADR-19) mają własne zapytanie: zły wpis w `repoHosts` nie blokuje folderu z projektami i odwrotnie. */
+/** Repo hosts (ADR-19) have their own request: a bad `repoHosts` entry does not block the projects folder and vice versa. */
 function RepoHostsSurface({ conn }: { conn: Connection }) {
   const load = useCallback(() => post(conn, workspaceApi.repoHosts, {}), [conn]);
   const hosts = useRemote(load);
@@ -66,7 +66,7 @@ function RepoHostsSurface({ conn }: { conn: Connection }) {
         {hosts.error && <ErrorWithRetry message={hosts.error} onRetry={hosts.reload} />}
         {!hosts.data && !hosts.error && <Loading />}
         {hosts.data && <RepoHostsForm conn={conn} initial={hosts.data} />}
-        {/* Zły `repoHosts` wpisany ręcznie poprawia się, zapisując listę od nowa. */}
+        {/* A bad `repoHosts` typed by hand is fixed by saving the list again. */}
         {hosts.errorCode === "invalid_config" && <RepoHostsForm conn={conn} initial={[]} />}
       </div>
     </Surface>
@@ -81,7 +81,7 @@ function ProjectsDirForm({
 }: {
   conn: Connection;
   initialPath: string;
-  /** Nieznany, gdy `workspace.yaml` nie przeszedł walidacji. */
+  /** Unknown when `workspace.yaml` failed validation. */
   configFile?: string;
   onSaved: () => void;
 }) {

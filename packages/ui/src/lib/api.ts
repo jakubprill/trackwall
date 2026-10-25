@@ -2,7 +2,7 @@ import { ApiEnvelope, type Endpoint, type ErrorCode } from "@trackwall/protocol"
 import type { z } from "zod";
 import type { Connection } from "./connection.ts";
 
-/** Kody z `ErrorCode` daemona i `bad_response`, gdy odpowiedź nie zgadza się z kontraktem. */
+/** Codes from the daemon's `ErrorCode` and `bad_response` when a response does not match the contract. */
 export type CallErrorCode = ErrorCode | "bad_response";
 
 class ApiCallError extends Error {
@@ -14,7 +14,7 @@ class ApiCallError extends Error {
   }
 }
 
-/** Wywołanie API: koperta `{ ok, data }`, potem `data` sprawdzone tym samym schematem zod, którego używa daemon. */
+/** An API call: the envelope `{ ok, data }`, then `data` checked with the same zod schema the daemon uses. */
 export async function call<S extends z.ZodType>(conn: Connection, path: string, data: S, init: RequestInit = {}): Promise<z.output<S>> {
   const headers = new Headers(init.headers);
   if (conn.token) headers.set("authorization", `Bearer ${conn.token}`);
@@ -27,7 +27,7 @@ export async function call<S extends z.ZodType>(conn: Connection, path: string, 
   return parsed.data;
 }
 
-/** Akcja `POST /api/<moduł>/<akcja>` (§5.2): typ ciała i wyniku wynika z `endpoint`. */
+/** An action `POST /api/<module>/<action>` (§5.2): the body and result types follow from `endpoint`. */
 export function post<Req extends z.ZodType, Data extends z.ZodType>(
   conn: Connection,
   endpoint: Endpoint<Req, Data>,
@@ -40,7 +40,7 @@ export function post<Req extends z.ZodType, Data extends z.ZodType>(
   });
 }
 
-/** Kod błędu API (`error.code`), gdy błąd przyszedł od daemona. */
+/** The API error code (`error.code`) when the error came from the daemon. */
 export function errorCode(err: unknown): CallErrorCode | undefined {
   return err instanceof ApiCallError ? err.code : undefined;
 }

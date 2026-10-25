@@ -1,10 +1,10 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
 /**
- * Skąd UI wie, gdzie jest daemon (§5.2):
- * - okno Tauri: komenda `daemon_connection` (token nigdy nie trafia do URL),
- * - strona z daemona (`trackwall-daemon --ui`): token we fragmencie `#token=`, przeniesiony do sessionStorage,
- * - `vite dev`: względne `/api`, token dokłada proxy Vite.
+ * How the UI knows where the daemon is (§5.2):
+ * - the Tauri window: the `daemon_connection` command (the token never goes into a URL),
+ * - a page served by the daemon (`trackwall-daemon --ui`): the token in the `#token=` fragment, moved to sessionStorage,
+ * - `vite dev`: relative `/api`, the Vite proxy adds the token.
  */
 export interface Connection {
   baseUrl: string;
@@ -18,7 +18,7 @@ export async function resolveConnection(): Promise<Connection> {
   return { baseUrl: "", token: takeTokenFromLocation(window.location, window.history, window.sessionStorage) };
 }
 
-/** Ponowny start daemona po błędzie. Tylko w oknie Tauri; w przeglądarce daemon uruchamia się ręcznie. */
+/** Restarts the daemon after an error. Only in the Tauri window; in a browser the daemon is started by hand. */
 export async function retryConnection(): Promise<Connection | undefined> {
   return isTauri() ? invoke<Connection>("retry_daemon") : undefined;
 }

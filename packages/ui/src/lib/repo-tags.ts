@@ -1,18 +1,18 @@
 import type { RepoTag, RepoTags } from "@trackwall/protocol";
 
 /**
- * Filtr listy repo po tagach (ADR-25): wybrane tagi zawężają listę, więc repo musi mieć każdy z nich
- * („java” + „bff” to BFF w Javie). Czyste funkcje, testowane bez Reacta.
+ * Filtering the repo list by tags (ADR-25): the chosen tags narrow the list, so a repo has to have every one of them
+ * ("java" + "bff" is a BFF in Java). Pure functions, tested without React.
  */
 
-/** Tagi repo z listy po identyfikatorze; repo, którego git nie czyta, nie ma tagów. */
+/** The tags of the repos in the list by identifier; a repo git cannot read has no tags. */
 export function tagsByRepo(list: readonly RepoTags[] | undefined): Map<string, RepoTag[]> {
   return new Map((list ?? []).map((entry) => [entry.repo, entry.kind === "ok" ? entry.tags : []]));
 }
 
 /**
- * Każdy tag z liczbą repo, które go mają: najczęstsze najpierw, przy równej liczbie po nazwie. Wybrany tag, którego
- * żadne repo już nie ma (zmiana reguł albo folderu z projektami), zostaje z liczbą 0, żeby dało się go odznaczyć.
+ * Every tag with the number of repos that have it: the most common first, by name on a tie. A chosen tag no repo has
+ * any more (changed rules or projects folder) stays with the count 0, so that it can be unchecked.
  */
 export function tagCounts(byRepo: ReadonlyMap<string, readonly RepoTag[]>, selected: readonly string[]): { name: string; count: number }[] {
   const counts = new Map(selected.map((name) => [name, 0]));
@@ -22,7 +22,7 @@ export function tagCounts(byRepo: ReadonlyMap<string, readonly RepoTag[]>, selec
     .sort((a, b) => b.count - a.count || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
-/** Czy repo ma wszystkie wybrane tagi; bez wybranych pasuje każde. */
+/** Whether the repo has all the chosen tags; with none chosen, every repo matches. */
 export function hasAllTags(tags: readonly RepoTag[] | undefined, selected: readonly string[]): boolean {
   return selected.every((name) => tags?.some((tag) => tag.name === name) ?? false);
 }

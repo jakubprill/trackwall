@@ -1,13 +1,13 @@
 /**
- * Kadr pulpitu (§5.5): kamera patrzy na środek sceny z góry i z przodu, pod tym samym kątem przy każdym rozmiarze
- * płótna, a odległość wynika z proporcji płótna, żeby cały pierścień repo był w kadrze. W wąskim płótnie decyduje
- * szerokość, w szerokim wysokość.
+ * The dashboard framing (§5.5): the camera looks at the centre of the scene from above and in front, at the same angle
+ * for every canvas size, and the distance follows from the canvas proportions, so that the whole repo ring is in the
+ * frame. In a narrow canvas the width decides, in a wide one the height.
  */
 
 export const HOME_CAMERA_FOV = 40;
-/** Kierunek od środka sceny do kamery (y w górę, z do widza). */
+/** The direction from the centre of the scene to the camera (y up, z towards the viewer). */
 const DIRECTION = { y: 15, z: 13 };
-/** Promień, który musi zmieścić się w kadrze: pierścień repo (6,6 w jednostkach sceny), łuki sektorów i kafle. */
+/** The radius that has to fit in the frame: the repo ring (6.6 in scene units), the sector arcs and the tiles. */
 const SCENE_EXTENT = 8.6;
 export const HOME_CAMERA_MAX_DISTANCE = 44;
 

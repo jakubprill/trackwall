@@ -1,6 +1,6 @@
 import { type CloneJob, type RemoteRepo, type RepoHost, sameHost } from "@trackwall/protocol";
 
-/** Co wiersz repo z hostingu pokazuje zamiast przycisku „Sklonuj” (ADR-19); czyste funkcje, testy w `test/clone-state.test.ts`. */
+/** What a repo host's repo row shows instead of the "Clone" button (ADR-19); pure functions, tests in `test/clone-state.test.ts`. */
 export type CloneState =
   | { kind: "available" }
   | { kind: "in-projects-dir" }
@@ -8,7 +8,7 @@ export type CloneState =
   | { kind: "done" }
   | { kind: "failed"; message: string };
 
-/** Klonowanie z tej sesji daemona ma pierwszeństwo przed tym, co było w folderze przy wyszukiwaniu. */
+/** A clone from this daemon session takes precedence over what was in the folder at search time. */
 export function cloneState(host: RepoHost, repo: RemoteRepo, jobs: readonly CloneJob[]): CloneState {
   const job = jobs.findLast((j) => sameHost(j.host, host) && j.fullName === repo.fullName);
   if (job?.state === "failed") return { kind: "failed", message: job.message };

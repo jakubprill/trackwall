@@ -9,11 +9,11 @@ import {
 } from "@trackwall/protocol";
 
 /**
- * Pozycje listy w widoku „Sesje” (§4.4, ADR-31): sesja w korzeniu repo albo zadanie z ostatnią sesją, jeśli ma ją
- * w tym działaniu daemona. Zadanie nie zna swojej sesji, to sesja wskazuje zadanie (`Session.task`). Zadanie jest
- * jedną pozycją, choć po wznowieniu ma nową sesję, a bez sesji (po restarcie daemona albo zamknięciu sesji) zostaje
- * na liście do zakończenia. Propozycja zadania (ADR-39) czeka na decyzję użytkownika i nie ma jeszcze ani worktree,
- * ani sesji; zatwierdzona staje się zadaniem z tym samym identyfikatorem.
+ * Entries of the list in the "Sessions" view (§4.4, ADR-31): a session in a repo root, or a task with its last session if
+ * it has one in this daemon run. A task does not know its session; the session points to the task (`Session.task`). A task
+ * is one entry, although after resuming it has a new session, and without a session (after a daemon restart or after the
+ * session was closed) it stays on the list until it is ended. A task proposal (ADR-39) waits for the user's decision and
+ * has neither a worktree nor a session yet; once approved it becomes a task with the same id.
  *
  * Since ADR-55 the proposals of one main session are one entry: the session usually proposes a plan of several tasks,
  * and the user reviews them together. `proposer` is the session that proposed them, `null` for an agent outside Trackwall.
@@ -266,7 +266,7 @@ export function nextWaitingShortcut(
   return { open, taken: open !== undefined || inSessionsView };
 }
 
-/** Nazwa zadania na liście i w panelu: tytuł z propozycji, a zadanie z formularza nie ma tytułu, więc polecenie. */
+/** A task's name in the list and in the panel: the title from the proposal; a task from the form has no title, so its prompt. */
 export function taskName(task: Task): string {
   return task.title ?? task.prompt;
 }
@@ -297,8 +297,8 @@ export function proposalsName(proposals: ProposalsEntry["proposals"]): string {
 }
 
 /**
- * Kto zaproponował zadanie, po angielsku dla UI: sesja Trackwall po repo i tytule okna, póki jest na liście,
- * albo agent spoza Trackwall (agent nadrzędny z tokenem daemona).
+ * Who proposed the task, in English for the UI: a Trackwall session by its repo and window title while it is on the
+ * list, or an agent outside Trackwall (a supervising agent with the daemon token).
  */
 export function proposerLabel(proposedBy: ProposedBy, sessions: readonly Session[]): string {
   if (proposedBy.supervisor) return "proposed by the supervisor";

@@ -647,8 +647,8 @@ function SessionPanel({
 }
 
 /**
- * Nowe zadanie albo sesja: repo z folderu z projektami i polecenie dla agenta. Z poleceniem powstaje zadanie
- * w osobnym worktree (ADR-31), bez niego zwykła sesja w korzeniu repo (ADR-26).
+ * A new task or session: a repo from the projects folder and an instruction for the agent. With an instruction it becomes a task
+ * in its own worktree (ADR-31), without one a plain session in the repo root (ADR-26).
  */
 function NewSession({
   conn,

@@ -1,12 +1,12 @@
 import { type RepoStatus, type RepoStatusOk, trackedChanges } from "@trackwall/protocol";
 import { workingTreeLabel } from "./format.ts";
 
-/** Ton stanu w UI; kolor do tonu dobiera `lib/status-tone.ts`, a tokeny są w `index.css` (ADR-16). */
+/** A state's tone in the UI; `lib/status-tone.ts` picks the colour for a tone, and the tokens are in `index.css` (ADR-16). */
 export type StatusTone = "ok" | "warning" | "error";
 
 /**
- * Stan repo w jednej linii (§4.5): ton kropki i tekst obok niej. Jedno miejsce reguły
- * „niedostępne = błąd, zmiany w katalogu roboczym = ostrzeżenie, czysto = ok” dla listy i nagłówka repo.
+ * A repo's state in one line (§4.5): the dot tone and the text next to it. One place for the rule
+ * "unavailable = error, working directory changes = warning, clean = ok" for the list and the repo header.
  */
 export function repoStatusTone(status: RepoStatus): { tone: StatusTone; label: string } {
   if (status.kind !== "ok") return { tone: "error", label: "unavailable" };
@@ -15,14 +15,14 @@ export function repoStatusTone(status: RepoStatus): { tone: StatusTone; label: s
 }
 
 /**
- * Lista repo i ich stan pochodzą z folderu z projektami i z gita przy każdym zapytaniu (§4.5): `git status` w każdym
- * repo, więc „Repos” i „Home” odpytują ją rzadko i tak samo często.
+ * The repo list and the repos' states come from the projects folder and from git on every request (§4.5): `git status`
+ * in every repo, so "Repos" and "Home" poll it rarely and equally often.
  */
 export const REPO_LIST_POLL_MS = 10_000;
 
 /**
- * Lista repo nie istnieje, dopóki folder z projektami nie zostanie poprawiony w ustawieniach: zniknął albo jest źle
- * wpisany w `workspace.yaml`. Stara lista wyglądałaby wtedy na aktualną, więc widoki jej nie pokazują.
+ * The repo list does not exist until the projects folder is fixed in the settings: it disappeared or is wrong in
+ * `workspace.yaml`. An old list would then look current, so the views do not show it.
  */
 export function listNeedsSettings(errorCode: string | undefined): boolean {
   return errorCode === "projects_dir_unavailable" || errorCode === "invalid_config";

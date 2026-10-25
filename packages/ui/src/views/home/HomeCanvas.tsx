@@ -10,15 +10,15 @@ import { statusTextClass } from "@/lib/status-tone";
 import { cn } from "@/lib/utils";
 
 /**
- * Płótno pulpitu: silnik Pawn z kamerą, wskaźnikiem i etykietami, a w nim `HomeScene` (ADR-33). Ładowane leniwie
- * (`React.lazy`), bo three.js i Pawn to większość wagi widoku, a inne widoki ich nie potrzebują. Gdy WebGL nie
- * działa (stary sterownik, zablokowana karta) albo kontekst przepadnie, wywołuje `onUnavailable`, a widok zostaje
- * przy panelach HTML.
+ * The dashboard canvas: the Pawn engine with a camera, pointer and labels, with `HomeScene` in it (ADR-33). Loaded lazily
+ * (`React.lazy`), because three.js and Pawn are most of the view's weight and other views do not need them. When WebGL
+ * does not work (an old driver, a blocked GPU) or the context is lost, it calls `onUnavailable`, and the view stays
+ * with the HTML panels.
  */
 
 export interface HomeCanvasProps {
   model: HomeModel;
-  /** Wybrany obiekt z panelu (np. z kolejki „Needs you”): scena podświetla go i kieruje na niego kamerę. */
+  /** The object selected from a panel (for example from the "Needs you" queue): the scene highlights it and points the camera at it. */
   focus: HomeKey | null;
   onSelect: (key: HomeKey | null) => void;
   onOpen: (key: HomeKey) => void;
@@ -32,14 +32,14 @@ const SCENE_FAILED = "the 3D scene could not be built";
 interface Mounted {
   scene: HomeScene;
   rig: CameraRig;
-  /** Kadr całej sceny dla bieżącego rozmiaru płótna. */
+  /** The framing of the whole scene for the current canvas size. */
   overview: () => void;
 }
 
 export function HomeCanvas(props: HomeCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const mountedRef = useRef<Mounted | null>(null);
-  // Najświeższe wywołania zwrotne bez odtwarzania silnika przy każdym renderze rodzica.
+  // The latest callbacks without recreating the engine on every render of the parent.
   const latest = useRef(props);
   latest.current = props;
 
@@ -66,22 +66,22 @@ export function HomeCanvas(props: HomeCanvasProps) {
       });
       scene.apply(latest.current.model);
     } catch (err) {
-      // Paleta bez płótna 2D, kolor tokenu, którego scena nie przyjmie, albo błąd układu: bez sceny silnik też
-      // znika. Komunikaty sceny są dla osób rozwijających Trackwall (po polsku), więc UI dostaje ogólny tekst.
+      // A palette without a 2D canvas, a token colour the scene does not accept, or a layout error: without the scene the engine
+      // goes too. The scene's messages are for people developing Trackwall, so the UI gets a general text.
       console.error(err);
       engine.dispose();
       canvas.remove();
       latest.current.onUnavailable(SCENE_FAILED);
       return;
     }
-    // Ten sam kąt co na starcie (`reset` cofa obrót użytkownika) i odległość dla bieżących proporcji płótna.
+    // The same angle as at the start (`reset` undoes the user's rotation) and the distance for the current canvas proportions.
     const overview = () => {
       rig.reset();
       rig.focus(ORIGIN, { distance: homeCameraDistance(host.clientWidth, host.clientHeight) });
     };
     mountedRef.current = { scene, rig, overview };
-    // Zmiana rozmiaru okna albo paneli: bez wybranego obiektu odległość pasuje do nowych proporcji, a obrót
-    // użytkownika zostaje.
+    // Resizing the window or the panels: without a selected object the distance fits the new proportions, and the user's
+    // rotation stays.
     engine.fitToElement(host, () => {
       if (!latest.current.focus) rig.focus(ORIGIN, { distance: homeCameraDistance(host.clientWidth, host.clientHeight), immediate: true });
     });
@@ -90,7 +90,7 @@ export function HomeCanvas(props: HomeCanvasProps) {
       latest.current.onUnavailable("the graphics context was lost");
     };
     canvas.addEventListener("webglcontextlost", lost);
-    // Schowane okno nie rysuje: Pawn sam nie wstrzymuje pętli (zgłoszenie do Pawn), a WebView w trayu dalej liczyłby klatki.
+    // A hidden window does not draw: Pawn does not pause its loop by itself (reported to Pawn), and a WebView in the tray would keep computing frames.
     const visibility = () => (document.hidden ? engine.stop() : engine.start());
     document.addEventListener("visibilitychange", visibility);
     if (!document.hidden) engine.start();
@@ -126,8 +126,8 @@ export function HomeCanvas(props: HomeCanvasProps) {
 }
 
 /**
- * Silnik na nowym płótnie albo `null` z powodem w `onUnavailable`. WebGL 2 jest sprawdzany na osobnym płótnie przed
- * silnikiem, bo nieudany konstruktor `Engine` zostawia świat koota, którego nie da się zwolnić (limit 16 na stronę).
+ * The engine on a new canvas, or `null` with the reason in `onUnavailable`. WebGL 2 is checked on a separate canvas before
+ * the engine, because a failed `Engine` constructor leaves a koota world behind that cannot be freed (a limit of 16 per page).
  */
 function createEngine(host: HTMLElement, onUnavailable: (reason: string) => void): { engine: Engine; canvas: HTMLCanvasElement } | null {
   const probe = document.createElement("canvas").getContext("webgl2");
@@ -135,7 +135,7 @@ function createEngine(host: HTMLElement, onUnavailable: (reason: string) => void
     onUnavailable("WebGL 2 is not available");
     return null;
   }
-  // Kontekst próbny zwalniany od razu: przeglądarka trzyma najwyżej kilkanaście naraz i gubi najstarsze.
+  // The test context is released at once: a browser holds at most a dozen or so at a time and drops the oldest.
   probe.getExtension("WEBGL_lose_context")?.loseContext();
   const canvas = document.createElement("canvas");
   canvas.className = "block size-full";
@@ -156,7 +156,7 @@ function createEngine(host: HTMLElement, onUnavailable: (reason: string) => void
   }
 }
 
-/** Etykieta przy obiekcie: sama nazwa repo albo stan sesji, w stylu podpisów HUD i w kolorze stanu. */
+/** The label at an object: just the repo name or the session state, in the style of HUD captions and in the state colour. */
 function sceneLabel(target: LabelTarget): HTMLElement {
   const status: HomeStatus = target.kind === "repo" ? homeRepoStatus(target.repo) : HOME_SESSION_STATUS[target.session.state];
   const label = document.createElement("div");

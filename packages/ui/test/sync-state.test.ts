@@ -2,12 +2,12 @@ import { describe, expect, test } from "bun:test";
 import type { SyncRepo } from "@trackwall/protocol";
 import { listSyncBadge, syncMessage, syncProgress, syncRepoTone } from "../src/lib/sync-state.ts";
 
-const target = { repo: "api", path: "/projekty/api" };
+const target = { repo: "api", path: "/projects/api" };
 const onMain = { branch: "main", changed: 0, untracked: 0 };
 const ff = { branch: "main", remoteBranch: "origin/main" };
 
-describe("synchronizacja w UI", () => {
-  test("wynik repo ma ton i krótki tekst: trwające i pominięte ostrzegają, nieudane to błąd", () => {
+describe("sync in the UI", () => {
+  test("a repo result has a tone and a short text: running and skipped warn, failed is an error", () => {
     const repos: SyncRepo[] = [
       { ...target, state: "waiting" },
       { ...target, state: "running" },
@@ -30,7 +30,7 @@ describe("synchronizacja w UI", () => {
     ]);
   });
 
-  test("postęp liczy repo z wynikiem, a osobno przesunięte, aktualne, pominięte i nieudane", () => {
+  test("progress counts repos with a result, and separately fast-forwarded, up to date, skipped and failed", () => {
     const run = {
       startedAt: "2026-10-23T10:00:00Z",
       finishedAt: null,
@@ -46,7 +46,7 @@ describe("synchronizacja w UI", () => {
     expect(syncProgress(run)).toEqual({ done: 4, total: 6, updated: 1, upToDate: 1, skipped: 1, failed: 1 });
   });
 
-  test("zdanie wyniku mówi, co stało się z gałęzią domyślną, czy pliki się zmieniły i co zostało niezacommitowane", () => {
+  test("the result sentence says what happened to the default branch, whether files changed and what was left uncommitted", () => {
     expect(syncMessage({ ...target, state: "running" })).toBeUndefined();
     expect(syncMessage({ ...target, state: "updated", ...ff, commits: 2, workingTree: onMain })).toBe(
       "main moved 2 commits forward to origin/main. Files in the working directory were updated.",
@@ -76,7 +76,7 @@ describe("synchronizacja w UI", () => {
     expect(syncMessage({ ...target, state: "failed", message: "Could not resolve host: host" })).toBe("Could not resolve host: host.");
   });
 
-  test("na liście repo każdy wynik ma krótki tekst i pełne zdanie z czasem synchronizacji, także aktualne repo", () => {
+  test("in the repo list every result has a short text and a full sentence with the sync time, also an up-to-date repo", () => {
     expect(listSyncBadge(undefined, "5 min ago")).toBeUndefined();
     expect(listSyncBadge({ ...target, state: "waiting" }, "just now")).toEqual({ tone: "warning", label: "waiting", message: undefined });
     expect(listSyncBadge({ ...target, state: "up-to-date", ...ff, workingTree: onMain }, "5 min ago")).toEqual({

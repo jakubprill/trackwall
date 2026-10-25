@@ -2,9 +2,10 @@ import { isSupervisor, type Session, type SessionList, type TaskStateChange } fr
 import type { StatusTone } from "./repo-status.ts";
 
 /**
- * Stan sesji Copilot CLI w jednej linii (§4.4): z grupy procesów, gdy sesja się kończy albo skończyła, inaczej ze
- * stanu z hooków, OSC i klawiszy sesji. Słabszy sygnał (pewność `medium` albo `low`) jest podany jako „prawdopodobnie”, bo pochodzi
- * z wnioskowania albo z rodzaju powiadomienia, którego nie potwierdziło jeszcze nagranie prawdziwej sesji.
+ * A Copilot CLI session's state in one line (§4.4): from the process group when the session is ending or has ended,
+ * otherwise from the state from the session's hooks, OSC and keys. A weaker signal (confidence `medium` or `low`) is
+ * shown as "probably", because it comes from inference or from a kind of notification that a recording of a real
+ * session has not confirmed yet.
  */
 
 export const STATE_LABELS = {
@@ -31,7 +32,7 @@ export function isIdle(session: Session): boolean {
   return session.run.kind === "running" && session.state?.state === "Input" && !session.needsAttention;
 }
 
-/** Proces sesji jeszcze działa (także w trakcie zatrzymywania): pisze w swoim katalogu i trzyma jego pliki. */
+/** The session's process is still running (also while stopping): it writes in its directory and holds its files. */
 export function isLive(session: Session): boolean {
   return session.run.kind !== "exited";
 }

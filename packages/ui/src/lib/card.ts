@@ -1,8 +1,8 @@
 import type { HttpClientVia, MechanismId } from "@trackwall/protocol";
 
-/** Nazwy mechanizmów i rodzajów klientów HTTP z karty repo dla człowieka (ADR-25, ADR-30). */
+/** Human names of mechanisms and HTTP client kinds from the repo card (ADR-25, ADR-30). */
 
-/** Nazwa mechanizmu dla człowieka; `Record` wymusza wpis dla każdego mechanizmu z kontraktu. */
+/** A mechanism's human name; `Record` forces an entry for every mechanism in the contract. */
 export const MECHANISM_LABELS: Record<MechanismId, string> = {
   "spring-boot": "Spring Boot",
   feign: "Feign (OpenFeign)",
@@ -24,7 +24,7 @@ export const MECHANISM_LABELS: Record<MechanismId, string> = {
   nestjs: "NestJS",
 };
 
-/** Skąd jest klient HTTP; `Record` wymusza wpis dla każdego rodzaju z kontraktu. */
+/** Where an HTTP client comes from; `Record` forces an entry for every kind in the contract. */
 export const HTTP_CLIENT_LABELS: Record<HttpClientVia, string> = {
   feign: "Feign",
   "http-interface": "@HttpExchange",

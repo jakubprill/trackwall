@@ -4,40 +4,40 @@ import { ariaShortcut, matchesShortcut, shortcutLabel, viewKeyAction } from "../
 const none = { code: "", key: "", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false };
 const ctrl1 = { ...none, code: "Digit1", key: "1", ctrlKey: true };
 
-describe("skróty widoków", () => {
-  test("na Windowsie widok przełącza Ctrl + klawisz, a ⌘ nie", () => {
+describe("view shortcuts", () => {
+  test("on Windows Ctrl + key switches the view, and ⌘ does not", () => {
     expect(matchesShortcut(ctrl1, "1", false)).toBe(true);
     expect(matchesShortcut({ ...ctrl1, ctrlKey: false, metaKey: true }, "1", false)).toBe(false);
   });
 
-  test("na macOS widok przełącza ⌘ + klawisz, a Ctrl nie", () => {
+  test("on macOS ⌘ + key switches the view, and Ctrl does not", () => {
     expect(matchesShortcut({ ...ctrl1, ctrlKey: false, metaKey: true }, "1", true)).toBe(true);
     expect(matchesShortcut(ctrl1, "1", true)).toBe(false);
   });
 
-  test("Shift, Alt, sam klawisz i inny klawisz nie przełączają widoku", () => {
+  test("Shift, Alt, a bare key and another key do not switch the view", () => {
     expect(matchesShortcut({ ...ctrl1, shiftKey: true }, "1", false)).toBe(false);
     expect(matchesShortcut({ ...ctrl1, altKey: true }, "1", false)).toBe(false);
     expect(matchesShortcut({ ...ctrl1, ctrlKey: false }, "1", false)).toBe(false);
     expect(matchesShortcut(ctrl1, "2", false)).toBe(false);
   });
 
-  test("cyfra liczy się po klawiszu, także gdy układ (AZERTY) daje bez Shift inny znak", () => {
+  test("a digit counts by key, also when the layout (AZERTY) gives another character without Shift", () => {
     expect(matchesShortcut({ ...ctrl1, key: "&" }, "1", false)).toBe(true);
   });
 
-  test("cyfra z klawiatury numerycznej przełącza widok tylko przy włączonym NumLock", () => {
+  test("a digit from the numeric keypad switches the view only with NumLock on", () => {
     expect(matchesShortcut({ ...ctrl1, code: "Numpad1" }, "1", false)).toBe(true);
     expect(matchesShortcut({ ...ctrl1, code: "Numpad1", key: "End" }, "1", false)).toBe(false);
   });
 
-  test("przecinek liczy się po znaku, a nie po klawiszu, na którym w innym układzie leży litera", () => {
+  test("a comma counts by character, not by the key that holds a letter in another layout", () => {
     expect(matchesShortcut({ ...none, code: "KeyM", key: ",", ctrlKey: true }, ",", false)).toBe(true);
     expect(matchesShortcut({ ...none, code: "Comma", key: ";", ctrlKey: true }, ",", false)).toBe(false);
     expect(matchesShortcut({ ...none, code: "Comma", key: "w", ctrlKey: true }, ",", false)).toBe(false);
   });
 
-  test("podpis skrótu w konwencji systemu", () => {
+  test("shortcut label in the system's convention", () => {
     expect(shortcutLabel("1", false)).toBe("Ctrl+1");
     expect(shortcutLabel("1", true)).toBe("⌘1");
     expect(ariaShortcut(",", false)).toBe("Control+,");

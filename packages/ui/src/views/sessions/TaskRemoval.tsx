@@ -5,16 +5,16 @@ import { errorCode, errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { useAction } from "@/lib/use-action";
 
-/** Odmowa daemona z tym, co by przepadło, i wyborem gałęzi, z którym trzeba powtórzyć żądanie. */
+/** The daemon's refusal with what would be lost, and the branch choice the request has to be repeated with. */
 interface Refusal {
   keepBranch: boolean;
   message: string;
 }
 
 /**
- * Zakończenie zadania (ADR-31): worktree znika razem z plikami ignorowanymi przez gita, a gałąź zostaje albo znika
- * razem z nim. Daemon sam odmawia, gdy przepadłyby zmiany (`unsaved_changes`), i dopiero wtedy panel pyta, czy
- * usunąć mimo to, z tym, co przepadnie.
+ * Removing a task (ADR-31): the worktree goes together with the files git ignores, and the branch stays or goes
+ * with it. The daemon itself refuses when changes would be lost (`unsaved_changes`), and only then does the panel ask
+ * whether to remove it anyway, showing what will be lost.
  */
 export function TaskRemoval({
   conn,
@@ -28,7 +28,7 @@ export function TaskRemoval({
   onCancel: () => void;
 }) {
   const [refusal, setRefusal] = useState<Refusal>();
-  // Odmowa to wynik, a nie błąd: zamienia przyciski na pytanie, czy usunąć mimo to.
+  // A refusal is a result, not an error: it turns the buttons into the question whether to remove anyway.
   const remove = useAction(
     (keepBranch: boolean, discardChanges: boolean) =>
       post(conn, agentsApi.removeTask, { task: task.id, keepBranch, discardChanges }).then(

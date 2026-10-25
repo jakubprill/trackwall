@@ -13,8 +13,8 @@ function fakeEnv(hash: string) {
   return { storage, history, location, replaced };
 }
 
-describe("token z adresu", () => {
-  test("fragment #token= trafia do sessionStorage i znika z paska adresu", () => {
+describe("token from the address", () => {
+  test("the #token= fragment goes into sessionStorage and disappears from the address bar", () => {
     const env = fakeEnv("#token=abc");
     expect(takeTokenFromLocation(env.location, env.history, env.storage)).toBe("abc");
     expect(env.replaced).toEqual(["/"]);
@@ -22,7 +22,7 @@ describe("token z adresu", () => {
     expect(takeTokenFromLocation(reload.location, reload.history, env.storage)).toBe("abc");
   });
 
-  test("bez fragmentu i bez zapisu nie ma tokenu (tryb vite dev)", () => {
+  test("without a fragment and without a stored token there is no token (vite dev mode)", () => {
     const env = fakeEnv("");
     expect(takeTokenFromLocation(env.location, env.history, env.storage)).toBeUndefined();
     expect(env.replaced).toEqual([]);

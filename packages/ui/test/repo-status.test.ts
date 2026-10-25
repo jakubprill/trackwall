@@ -4,14 +4,14 @@ import { branchLabel, listNeedsSettings, repoStatusTone } from "../src/lib/repo-
 
 const ok = { kind: "ok", branch: "main", head: null, upstream: null, untracked: 0 } as const;
 
-describe("stan repo w UI", () => {
-  test("czyste repo ma ton ok, repo ze zmianami ton warning ze zmienionymi i nowymi plikami osobno, niedostępne ton error", () => {
+describe("repo state in the UI", () => {
+  test("a clean repo has tone ok, a repo with changes tone warning with changed and new files separately, an unavailable one tone error", () => {
     const statuses: RepoStatus[] = [
       { ...ok, changes: 0 },
       { ...ok, changes: 3 },
       { ...ok, changes: 4, untracked: 1 },
       { ...ok, changes: 2, untracked: 2 },
-      { kind: "unavailable", message: "brak katalogu" },
+      { kind: "unavailable", message: "no directory" },
     ];
     expect(statuses.map(repoStatusTone)).toEqual([
       { tone: "ok", label: "clean" },
@@ -22,13 +22,13 @@ describe("stan repo w UI", () => {
     ]);
   });
 
-  test("gałąź pokazuje swoją nazwę, a bez gałęzi napis „odłączony HEAD”", () => {
+  test("a branch shows its name, and without a branch the label “detached HEAD”", () => {
     expect([branchLabel({ ...ok, changes: 0 }), branchLabel({ ...ok, branch: null, changes: 0 })]).toEqual(["main", "detached HEAD"]);
   });
 });
 
-describe("lista repo do poprawienia w ustawieniach", () => {
-  test("folder z projektami do poprawienia w ustawieniach: zniknął albo zły workspace.yaml", () => {
+describe("repo list to fix in the settings", () => {
+  test("the projects folder to fix in the settings: it disappeared or workspace.yaml is bad", () => {
     expect(listNeedsSettings("projects_dir_unavailable")).toBe(true);
     expect(listNeedsSettings("invalid_config")).toBe(true);
     expect(listNeedsSettings("not_found")).toBe(false);

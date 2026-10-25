@@ -15,14 +15,14 @@ import { HOST_KIND_LABEL, loginCommand } from "@/lib/repo-hosts";
 import { useDebounced } from "@/lib/use-debounced";
 import { useRemote } from "@/lib/use-remote";
 
-/** Wyszukiwanie pyta GitLab po każdej przerwie w pisaniu; krócej to zapytanie przy każdym znaku. */
+/** The search asks GitLab after every pause in typing; shorter would be a request on every keystroke. */
 const SEARCH_DEBOUNCE_MS = 350;
-/** Klonowania są w pamięci daemona, więc odpytywanie ich jest tanie, a postęp ma być widać od razu. */
+/** Clones are in the daemon's memory, so polling them is cheap, and progress should show at once. */
 const CLONES_POLL_MS = 1500;
 
 /**
- * Dodawanie repo (ADR-19): wyszukiwarka repo w hostingach z ustawień i klon jednym kliknięciem do folderu
- * z projektami. Po klonie repo pojawia się na liście z folderu samo; `onCloned` tylko ją odświeża od razu.
+ * Adding repos (ADR-19): a search for repos on the repo hosts from the settings and a one-click clone into the projects
+ * folder. After the clone the repo appears in the folder's list by itself; `onCloned` only refreshes it at once.
  */
 export function CloneView({ conn, onCloned, onOpenSettings }: { conn: Connection; onCloned: () => void; onOpenSettings: () => void }) {
   const [query, setQuery] = useState("");
@@ -79,13 +79,13 @@ export function CloneView({ conn, onCloned, onOpenSettings }: { conn: Connection
 }
 
 /**
- * Wywołuje `onDone`, gdy na liście pojawi się zakończone klonowanie, którego jeszcze nie widział; także takie,
- * które skończyło się przed pierwszym odpytaniem i nigdy nie było widać go w stanie `running`.
+ * Calls `onDone` when a finished clone it has not seen yet appears in the list; also one that finished before the first
+ * poll and was never seen in the `running` state.
  */
 function useOnCloneDone(jobs: readonly CloneJob[], onDone: () => void) {
   const seen = useRef(new Set<string>());
   useEffect(() => {
-    // Ścieżka klonu jest unikalna dla klonowania; to samo repo można sklonować znowu do innego folderu.
+    // A clone's path is unique to the clone; the same repo can be cloned again into another folder.
     const done = jobs.filter((j) => j.state === "done").map((j) => j.path);
     const fresh = done.filter((key) => !seen.current.has(key));
     for (const key of fresh) seen.current.add(key);

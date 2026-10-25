@@ -44,7 +44,7 @@ export function NeedsYouPanel({
       <ul aria-label="Sessions that need you" className="px-2">
         {urgent.length === 0 && <li className="text-muted-foreground px-2 py-1 text-sm">No session is waiting for you.</li>}
         {urgent.map((s) => {
-          // Pełny stan z widoku „Sessions” (np. „asking for approval”), a tytuł okna odróżnia dwie sesje jednego repo.
+          // The full state from the "Sessions" view (for example "asking for approval"), and the window title tells two sessions of one repo apart.
           const session = sessions.get(s.id);
           const status = session ? sessionStateLabel(session) : HOME_SESSION_STATUS[s.state];
           const title = session ? sessionTitle(session) : s.repo;

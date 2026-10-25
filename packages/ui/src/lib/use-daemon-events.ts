@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Connection } from "./connection.ts";
 import { DaemonEvents } from "./daemon-events.ts";
 
-/** Jedno połączenie ze zdarzeniami daemona na połączenie z daemonem; nowe połączenie zamyka poprzednie. */
+/** One connection to the daemon's events per connection to the daemon; a new connection closes the previous one. */
 export function useDaemonEvents(conn: Connection | undefined): DaemonEvents | undefined {
   const [events, setEvents] = useState<DaemonEvents>();
   useEffect(() => {

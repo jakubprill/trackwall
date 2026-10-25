@@ -6,7 +6,7 @@ import { attentionCount } from "../src/lib/session-state.ts";
 function session(id: string, startedAt: string, task: string | null = null): Session {
   return {
     id,
-    repo: "sklep",
+    repo: "shop",
     startedAt,
     run: { kind: "running", runId: id, startedAt, pid: 1 },
     state: null,
@@ -19,12 +19,12 @@ function session(id: string, startedAt: string, task: string | null = null): Ses
 function task(id: string, createdAt: string): Task {
   return {
     id,
-    repo: "sklep",
+    repo: "shop",
     prompt: "napraw",
-    branch: `trackwall/napraw-${id}`,
+    branch: `trackwall/fix-${id}`,
     baseBranch: "main",
     base: "a".repeat(40),
-    worktree: `/home/ja/.trackwall/worktrees/sklep/napraw-${id}`,
+    worktree: `/home/me/.trackwall/worktrees/shop/fix-${id}`,
     createdAt,
     title: null,
     proposedBy: null,
@@ -33,7 +33,7 @@ function task(id: string, createdAt: string): Task {
 }
 
 function proposal(id: string, createdAt: string, proposer: string | null = null): TaskProposal {
-  return { id, repo: "sklep", title: "Dodaj test", prompt: "dodaj test", proposedBy: { session: proposer, supervisor: false }, createdAt };
+  return { id, repo: "shop", title: "Dodaj test", prompt: "dodaj test", proposedBy: { session: proposer, supervisor: false }, createdAt };
 }
 
 function delegated(id: string, createdAt: string, proposer: string): Task {
@@ -46,7 +46,7 @@ const rowEntries = (list: Parameters<typeof sessionRows>[0]) => sessionRows(list
 const shape = (list: Parameters<typeof sessionRows>[0]) => sessionRows(list).map((r) => `${r.entry.kind} ${entryId(r.entry)} @${r.depth}`);
 
 describe("pozycje widoku Sesje", () => {
-  test("zadanie to jedna pozycja z ostatnią sesją, a kolejność idzie od ostatnio uruchomionej", () => {
+  test("a task is one entry with its latest session, and the order goes from the most recently started", () => {
     const list = {
       // Od najnowszej, jak w `SessionList`.
       sessions: [
@@ -56,12 +56,12 @@ describe("pozycje widoku Sesje", () => {
       ],
       tasks: [task("t2", "2026-10-23T11:30:00Z"), task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
-      worktreesDir: "/home/ja/.trackwall/worktrees",
+      worktreesDir: "/home/me/.trackwall/worktrees",
     };
-    expect(rowEntries(list).map((e) => (e.kind === "task" ? `zadanie ${e.task.id} ${e.session?.id}` : `sesja ${entryId(e)}`))).toEqual([
-      "zadanie t1 s3",
-      "zadanie t2 undefined",
-      "sesja s2",
+    expect(rowEntries(list).map((e) => (e.kind === "task" ? `task ${e.task.id} ${e.session?.id}` : `session ${entryId(e)}`))).toEqual([
+      "task t1 s3",
+      "task t2 undefined",
+      "session s2",
     ]);
   });
 
@@ -70,7 +70,7 @@ describe("pozycje widoku Sesje", () => {
       sessions: [session("s1", "2026-10-23T12:00:00Z"), session("s2", "2026-10-23T11:00:00Z"), session("s3", "2026-10-23T10:00:00Z")],
       tasks: [],
       proposals: [],
-      worktreesDir: "/home/ja/.trackwall/worktrees",
+      worktreesDir: "/home/me/.trackwall/worktrees",
     });
     const [s1, s2, s3] = entries;
     if (!s1 || !s2 || !s3) throw new Error("expected three entries");
@@ -84,7 +84,7 @@ describe("pozycje widoku Sesje", () => {
       sessions: [session("s1", "2026-10-23T12:00:00Z", "t1"), session("s2", "2026-10-23T11:00:00Z")],
       tasks: [task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
-      worktreesDir: "/home/ja/.trackwall/worktrees",
+      worktreesDir: "/home/me/.trackwall/worktrees",
     });
     const [taskEntry, s2] = entries;
     if (!taskEntry || !s2) throw new Error("expected two entries");
@@ -94,12 +94,12 @@ describe("pozycje widoku Sesje", () => {
     expect(selectionAfterClose(entries, undefined, s2)).toBe("keep");
   });
 
-  test("wybór sesji zadania (z traya albo „Następna czekająca”) wskazuje jej zadanie", () => {
+  test("selecting a task's session (from the tray or “Next waiting”) points to its task", () => {
     const entries = rowEntries({
       sessions: [session("s1", "2026-10-23T12:00:00Z", "t1")],
       tasks: [task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
-      worktreesDir: "/home/ja/.trackwall/worktrees",
+      worktreesDir: "/home/me/.trackwall/worktrees",
     });
     expect(findEntry(entries, { kind: "session", id: "s1" })).toMatchObject({ kind: "task", task: { id: "t1" } });
     expect(findEntry(entries, { kind: "new" })).toBeUndefined();
@@ -107,23 +107,23 @@ describe("pozycje widoku Sesje", () => {
     expect(findEntry(entries, undefined)).toBe(entries[0]);
   });
 
-  test("wybór z pozycji listy wskazuje zadanie, a nie jego sesję", () => {
+  test("selecting from a list entry points to the task, not its session", () => {
     const [entry] = rowEntries({
       sessions: [session("s1", "2026-10-23T12:00:00Z", "t1")],
       tasks: [task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
-      worktreesDir: "/home/ja/.trackwall/worktrees",
+      worktreesDir: "/home/me/.trackwall/worktrees",
     });
-    if (!entry) throw new Error("brak pozycji");
+    if (!entry) throw new Error("no entry");
     expect(entrySelection(entry)).toEqual({ kind: "task", id: "t1" });
   });
 
-  test("propozycje zadań są na górze, od najnowszej, przed sesjami i zadaniami", () => {
+  test("task proposals are at the top, newest first, before sessions and tasks", () => {
     const entries = rowEntries({
       sessions: [session("s1", "2026-10-23T12:00:00Z")],
       tasks: [task("t1", "2026-10-23T13:00:00Z")],
       proposals: [proposal("p2", "2026-10-23T11:00:00Z"), proposal("p1", "2026-10-23T10:00:00Z")],
-      worktreesDir: "/home/ja/.trackwall/worktrees",
+      worktreesDir: "/home/me/.trackwall/worktrees",
     });
     expect(entries.map((e) => `${e.kind} ${entryId(e)}`)).toEqual(["proposals proposals:outside", "task t1", "session s1"]);
     expect(findEntry(entries, { kind: "proposal", id: "p1" })).toMatchObject({ kind: "proposals", proposer: null });
@@ -156,17 +156,17 @@ describe("pozycje widoku Sesje", () => {
     expect(findEntry(entries, { kind: "task", id: "p2" })).toBe(group);
   });
 
-  test("wybrana propozycja, z której powstało zadanie, wybiera to zadanie, a nie pierwszą pozycję", () => {
+  test("a selected proposal that became a task selects that task, not the first entry", () => {
     const entries = rowEntries({
       sessions: [],
       tasks: [task("t0", "2026-10-23T14:00:00Z"), task("p1", "2026-10-23T13:00:00Z")],
       proposals: [],
-      worktreesDir: "/home/ja/.trackwall/worktrees",
+      worktreesDir: "/home/me/.trackwall/worktrees",
     });
     expect(findEntry(entries, { kind: "proposal", id: "p1" })).toMatchObject({ kind: "task", task: { id: "p1" } });
   });
 
-  test("licznik na pasku widoków liczy sesje, które czekają, i propozycje zadań", () => {
+  test("the counter on the view bar counts sessions that are waiting and task proposals", () => {
     const waiting = { ...session("s1", "2026-10-23T12:00:00Z"), needsAttention: true };
     const list = {
       sessions: [waiting, session("s2", "2026-10-23T11:00:00Z")],
@@ -247,9 +247,9 @@ describe("pozycje widoku Sesje", () => {
     expect(sessionRows(list).map((r) => r.children)).toEqual([1, 0]);
   });
 
-  test("propozycja mówi, czy przyszła od sesji z listy, od zamkniętej sesji, czy od agenta spoza Trackwall", () => {
+  test("a proposal says whether it came from a session in the list, from a closed session or from an agent outside Trackwall", () => {
     const sessions = [{ ...session("s1", "2026-10-23T12:00:00Z"), windowTitle: "Plan sprintu" }];
-    expect(proposerLabel({ session: "s1", supervisor: false }, sessions)).toBe("proposed by the session in sklep (Plan sprintu)");
+    expect(proposerLabel({ session: "s1", supervisor: false }, sessions)).toBe("proposed by the session in shop (Plan sprintu)");
     expect(proposerLabel({ session: "s9", supervisor: false }, sessions)).toBe("proposed by a session that is no longer listed");
     expect(proposerLabel({ session: null, supervisor: false }, sessions)).toBe("proposed by an agent outside Trackwall");
   });

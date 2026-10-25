@@ -19,7 +19,7 @@ import { RepoFiles } from "./RepoFiles.tsx";
 import { RepoMiseTasks } from "./RepoMiseTasks.tsx";
 import { RepoStats } from "./RepoStats.tsx";
 
-/** Streamdown z Mermaidem to kilka MB, więc trafia do osobnego pliku ładowanego dopiero przy pierwszym README. */
+/** Streamdown with Mermaid is a few MB, so it goes into a separate file loaded only with the first README. */
 const ReadmeMarkdown = lazy(() => import("./ReadmeMarkdown.tsx").then((m) => ({ default: m.ReadmeMarkdown })));
 
 const TABS = [
@@ -36,7 +36,7 @@ export function RepoDetail({ conn, repo }: { conn: Connection; repo: Repo }) {
   const [tab, setTab] = useState<Tab>("readme");
   const { status } = repo;
   const available = status.kind === "ok";
-  // Nowy commit (np. z terminala) zmienia HEAD w odpytywanej liście, a to pobiera przegląd i drzewo od nowa.
+  // A new commit (for example from a terminal) changes HEAD in the polled list, and that fetches the overview and the tree anew.
   const head = status.kind === "ok" ? (status.head?.hash ?? "") : "";
   const load = useCallback(() => post(conn, workspaceApi.overview, { repo: repo.id }), [conn, repo.id]);
   const overview = useRemote(available ? load : undefined, { refreshKey: head });

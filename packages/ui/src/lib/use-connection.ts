@@ -4,9 +4,9 @@ import { type Connection, resolveConnection, retryConnection } from "./connectio
 
 export interface ConnectionHandle {
   conn?: Connection;
-  /** Rośnie przy każdej podmianie połączenia; widoki używają go jako `key`, żeby zacząć od czystego stanu. */
+  /** Grows with every connection swap; views use it as `key` to start from a clean state. */
   epoch: number;
-  /** Błąd ustalenia połączenia albo ostatniej próby ponownego połączenia. */
+  /** The error of resolving the connection or of the last reconnection attempt. */
   error?: string;
   retry: () => void;
   /**
@@ -17,9 +17,9 @@ export interface ConnectionHandle {
 }
 
 /**
- * Jedno połączenie z daemonem dla całego UI. `retry` w oknie Tauri uruchamia daemon ponownie, jeśli nie działa,
- * i podmienia połączenie (nowy port i token), a widoki montują się od nowa; w przeglądarce daemon uruchamia się
- * ręcznie, połączenie zostaje, a widok, który wywołał `retry`, sam pobiera dane ponownie.
+ * One connection to the daemon for the whole UI. In the Tauri window `retry` starts the daemon again if it is not
+ * running and swaps the connection (new port and token), and the views mount anew; in a browser the daemon is started by
+ * hand, the connection stays, and the view that called `retry` fetches its data again itself.
  */
 export function useConnection(): ConnectionHandle {
   const [conn, setConn] = useState<Connection>();

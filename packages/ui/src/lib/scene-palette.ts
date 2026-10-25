@@ -1,15 +1,15 @@
 import type { ScenePalette } from "@trackwall/scene/model";
 
 /**
- * Kolory sceny pulpitu z tokenów `index.css` (ADR-16, ADR-33). Tokeny są w `oklch`, którego three.js nie czyta, więc
- * przeglądarka maluje każdy na jednym pikselu płótna na tle `--background` i podaje wynik w sRGB. Półprzezroczyste
- * tokeny (`--card`, `--secondary`) wychodzą przez to takie, jakie widać na tle aplikacji.
+ * Colours of the dashboard scene from the `index.css` tokens (ADR-16, ADR-33). The tokens are in `oklch`, which three.js
+ * does not read, so the browser paints each on one canvas pixel over `--background` and gives the result in sRGB. The
+ * translucent tokens (`--card`, `--secondary`) thereby come out as they look over the app's background.
  */
 export function readScenePalette(host: HTMLElement): ScenePalette {
   const context = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
   if (!context) throw new Error("No 2D canvas to read the theme colors");
-  // Jeden element próbny: `getComputedStyle` rozwija `var()` (np. `--fill-alpha` w `--secondary`) do koloru,
-  // który płótno przyjmie wprost.
+  // One sample element: `getComputedStyle` expands `var()` (for example `--fill-alpha` in `--secondary`) into a colour
+  // the canvas accepts directly.
   const probe = document.createElement("span");
   host.append(probe);
   const resolved = (token: string) => {

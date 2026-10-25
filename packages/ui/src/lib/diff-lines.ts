@@ -1,7 +1,7 @@
 /**
- * Linie zunifikowanego diffu zadania (ADR-31) z rodzajem, od którego zależy kolor w widoku „Zmiany”. Nagłówek pliku
- * trwa od `diff --git` do pierwszego `@@`: tylko tam `+++` i `---` to nazwy plików, a w treści zmiany to dodana albo
- * usunięta linia, która zaczyna się od `++` albo `--` (np. `-- komentarz SQL`).
+ * Lines of a task's unified diff (ADR-31) with a kind, on which the colour in the "Changes" view depends. A file header
+ * runs from `diff --git` to the first `@@`: only there are `+++` and `---` file names, while in the body of a change it is
+ * an added or removed line that starts with `++` or `--` (for example `-- SQL comment`).
  */
 export type DiffLineKind = "file" | "meta" | "hunk" | "added" | "removed" | "context";
 
@@ -12,14 +12,14 @@ function bodyLineKind(line: string): DiffLineKind {
   return "context";
 }
 
-/** Linia diffu z miejscem w tekście (stały klucz przy odświeżeniu) i rodzajem. */
+/** A diff line with its place in the text (a stable key on refresh) and kind. */
 export interface DiffLine {
   offset: number;
   text: string;
   kind: DiffLineKind;
 }
 
-/** Pierwsze `maxLines` linii diffu; `more`, gdy zostały kolejne. */
+/** The first `maxLines` lines of the diff; `more` when there are further ones. */
 export function diffLines(patch: string, maxLines: number): { lines: DiffLine[]; more: boolean } {
   const lines: DiffLine[] = [];
   let offset = 0;
