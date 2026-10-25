@@ -560,7 +560,8 @@ export const mcpTools = {
       "same id: a new branch from the repo's default branch in its own worktree and a Copilot CLI session there with the " +
       "prompt as its first message. Write the prompt so that it stands alone (the agent sees nothing else), with the goal, " +
       `the relevant repos and files, and how to check the result; ask the agent to call ${REPORT_RESULT} when it is done. ` +
-      `Then call ${WAIT_FOR_SESSION} with task: the returned id to learn about approval and the session.`,
+      `Then, in a Trackwall session, end your turn: Trackwall asks you to call ${GET_UPDATES} when there is news about the ` +
+      `task. An agent outside Trackwall calls ${WAIT_FOR_SESSION} with task: the returned id instead.`,
     args: z
       .object({
         repo: RepoArg,

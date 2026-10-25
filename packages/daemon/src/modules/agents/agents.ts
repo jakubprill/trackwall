@@ -29,6 +29,7 @@ import type { CopilotHookEvent } from "./copilot-hook-record.ts";
 import { type HookCommand, writeCopilotPlugin } from "./copilot-plugin.ts";
 import { inboxPrompt } from "./inbox-prompt.ts";
 import { LiveSession, type SessionPty, type SessionWindow } from "./live-session.ts";
+import { proposedByOf, proposerKeyOf, SUPERVISOR } from "./proposer.ts";
 import { withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
@@ -174,13 +175,11 @@ export class Agents {
     this.#coordination = new TaskCoordination({
       task: (id) => this.task(id),
       findTask: (id) => this.findTask(id),
-      session: (id) => this.session(id),
+      proposedBy: (id) => proposedByOf(this.session(id)),
+      proposerKey: (id) => proposerKeyOf(this.session(id)),
       runningOfTask: (task) => this.#runningOfTask(task),
-      runningSupervisor: () => [...this.#sessions.values()].find((s) => s.repo === null && this.#isRunning(s)),
-      running: (id) => {
-        const session = this.#sessions.get(id);
-        return session && this.#isRunning(session) ? session : undefined;
-      },
+      runningProposer: (proposer) => [...this.#sessions.values()].find((s) => proposerKeyOf(s) === proposer && this.#isRunning(s)),
+      hasProposer: (proposer) => proposer === SUPERVISOR || this.#sessions.has(proposer),
       log: deps.log,
     });
   }
@@ -234,8 +233,7 @@ export class Agents {
   /** A task proposal from session `caller` (`null`: an agent outside Trackwall) in a repo from the projects folder (ADR-39). */
   async propose(caller: string | null, proposal: { repo: string; title: string; prompt: string }): Promise<TaskProposal> {
     await this.#deps.repos.repoPath(proposal.repo);
-    const supervisor = caller !== null && isSupervisor(this.session(caller));
-    return this.#proposals.add({ ...proposal, proposedBy: { session: caller, supervisor } });
+    return this.#proposals.add({ ...proposal, proposedBy: proposedByOf(caller === null ? null : this.session(caller)) });
   }
 
   /**
@@ -282,7 +280,7 @@ export class Agents {
   }
 
   /** The prompt for what waits unread for a session: its task's review comments and messages, and its updates. */
-  #inboxPrompt(session: { id: string; task: string | null; supervisor: boolean }): string | undefined {
+  #inboxPrompt(session: { id: string; repo: string | null; task: string | null }): string | undefined {
     const reviewComments = session.task === null ? 0 : this.#reviews.unread(session.task);
     return inboxPrompt({ reviewComments, ...this.#coordination.unread(session) });
   }
@@ -316,7 +314,7 @@ export class Agents {
 
   /** A task's verification has its verdict (ADR-64), which goes to the task's proposer (ADR-68). */
   verificationFinished(verification: Verification): void {
-    this.#coordination.verified(verification);
+    this.#coordination.verificationFinished(verification);
   }
 
   /** Waits until a session or task needs someone, at most `timeoutMs`; a session cannot wait for itself. */
@@ -470,10 +468,10 @@ export class Agents {
       throw domainError(repo, err);
     }
     this.#sessions.set(id, session);
-    // A review or a message sent while the task had no running session (ADR-62, ADR-68). Not the updates of a new
-    // supervisor or main session: the user starts those to talk, and the next update asks them anyway.
-    if (task !== null && (this.#reviews.unread(task) > 0 || this.#coordination.unread({ id, task, supervisor: false }).messages > 0))
-      session.askToRead();
+    // A review or a message sent while the task had no running session (ADR-62, ADR-68); the prompt names only what is
+    // unread, and nothing is typed when nothing is. Not the updates of a new supervisor or main session: the user starts
+    // those to talk, and the next update asks them anyway.
+    if (task !== null) session.askToRead();
     this.#startTicking();
     return this.#view(session);
   }
@@ -526,7 +524,7 @@ export class Agents {
     }
     this.#sessions.delete(id);
     this.#tokens.revoke(id);
-    this.#coordination.sessionClosed(id, session.repo === null);
+    this.#coordination.sessionClosed(session);
     session.dispose();
     this.#removeDir(id);
   }
@@ -562,8 +560,16 @@ export class Agents {
       hooksFile,
       promptOnStart,
       run: () => this.#deps.procs.state(owner(id)),
-      prompt: () => this.#inboxPrompt({ id, task, supervisor: repo === null }),
+      prompt: () => this.#inboxPrompt({ id, repo, task }),
       onUserText: () => this.#coordination.userTyped({ id, task }),
+      onEvent: (event) => {
+        // The session reads its hooks inside the user's key or another session's call: news for the proposer must not fail them.
+        try {
+          this.#coordination.sessionEvent({ id, task }, event);
+        } catch (err) {
+          this.#deps.log(`session ${id}: telling the proposer: ${String(err)}`);
+        }
+      },
     });
     return { session, instructionsDir };
   }
@@ -578,9 +584,6 @@ export class Agents {
     for (const session of this.#sessions.values()) {
       try {
         if (session.tick()) live++;
-        // Also in the cycle that saw the end, so the proposer hears about it (ADR-68).
-        const view = session.task === null ? undefined : session.view();
-        if (view) this.#coordination.watch(view);
       } catch (err) {
         live++;
         this.#deps.log(`session ${session.id}: ${String(err)}`);

@@ -139,26 +139,25 @@ export class Verifications {
     const target: TaskTarget = { repo: this.#deps.tasks.task(task).repo, task };
     const run = await this.#deps.mise.start(target, VERIFY_MISE_TASK);
     const entry: Entry = { verification: runningVerification(target, run), done: Promise.resolve() };
-    entry.done = this.#finish(target, run)
-      .then(
-        (verification) => {
-          entry.verification = verification;
-        },
-        (err: unknown) => {
-          this.#deps.log(`verification of task ${task}: ${messageOf(err)}`);
-          entry.verification = { ...entry.verification, state: "failed", finishedAt: new Date().toISOString(), message: messageOf(err) };
-        },
-      )
-      .then(() => {
-        // The verdict stands whatever its listener does with it.
-        try {
-          this.#deps.onVerdict(entry.verification);
-        } catch (err) {
-          this.#deps.log(`verification of task ${task}: ${messageOf(err)}`);
-        }
-      });
+    entry.done = this.#finish(target, run).then(
+      (verification) => this.#settle(entry, verification),
+      (err: unknown) => {
+        this.#deps.log(`verification of task ${task}: ${messageOf(err)}`);
+        this.#settle(entry, { ...entry.verification, state: "failed", finishedAt: new Date().toISOString(), message: messageOf(err) });
+      },
+    );
     this.#byTask.set(task, entry);
     return entry.verification;
+  }
+
+  /** The verdict goes into the entry and to its listener; it stands whatever the listener does with it. */
+  #settle(entry: Entry, verification: Verification): void {
+    entry.verification = verification;
+    try {
+      this.#deps.onVerdict(verification);
+    } catch (err) {
+      this.#deps.log(`verification of task ${verification.task}: ${messageOf(err)}`);
+    }
   }
 
   /** Ended tasks keep no verification: their failures and log lines would stay in memory for nobody. */

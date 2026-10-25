@@ -15,7 +15,7 @@ export const TASK_UPDATES_KEPT = 50;
 /** What every update says: the task (or proposal) it is about, the task's session and when the daemon saw it. */
 const UpdateBase = z.object({
   task: TaskId,
-  /** The task's session it concerns; `null` when it concerns no session (a verdict, a rejected proposal). */
+  /** The task's session it concerns; `null` when none does (a rejected proposal, a verdict while no session of the task runs). */
   session: SessionId.nullable(),
   /** ISO 8601. */
   at: z.string(),

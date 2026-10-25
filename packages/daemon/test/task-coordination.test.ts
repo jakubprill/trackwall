@@ -2,9 +2,10 @@ import { describe, expect, setSystemTime, test } from "bun:test";
 import type { ProposedBy, Session, Task, TaskState, Verification } from "@trackwall/protocol";
 import { DomainError } from "../src/infra/errors.ts";
 import { inboxPrompt } from "../src/modules/agents/inbox-prompt.ts";
+import { proposedByOf, proposerKeyOf, SUPERVISOR as SUPERVISOR_WORK } from "../src/modules/agents/proposer.ts";
 import { type CoordinatedSession, TaskCoordination } from "../src/modules/agents/task-coordination.ts";
 import { TaskMessages } from "../src/modules/agents/task-messages.ts";
-import { TaskUpdates, TurnWatch } from "../src/modules/agents/task-updates.ts";
+import { TaskUpdates } from "../src/modules/agents/task-updates.ts";
 
 const MAIN = "11111111-1111-4111-8111-111111111111";
 const SUPERVISOR = "22222222-2222-4222-8222-222222222222";
@@ -57,6 +58,7 @@ function setup() {
     ["by-main", task("by-main", BY_MAIN)],
     ["by-supervisor", task("by-supervisor", BY_SUPERVISOR)],
     ["by-user", task("by-user", null)],
+    ["by-outside", task("by-outside", { session: null, supervisor: false })],
   ]);
   const sessions = new Map([
     [MAIN, view(MAIN, null, "Input")],
@@ -68,7 +70,6 @@ function setup() {
   const running = new Set([MAIN, TASK_SESSION, SUPERVISOR]);
   const live = (id: string): CoordinatedSession => ({
     id,
-    task: sessions.get(id)?.task ?? null,
     askToRead: () => {
       asked.push(id);
       return "queued";
@@ -81,14 +82,24 @@ function setup() {
       return found;
     },
     findTask: (id) => tasks.get(id),
-    session: (id) => {
+    proposedBy: (id) => {
       const found = sessions.get(id);
       if (!found) throw new DomainError("not_found", `no session ${id}`);
-      return found;
+      return proposedByOf(found);
+    },
+    proposerKey: (id) => {
+      const found = sessions.get(id);
+      if (!found) throw new DomainError("not_found", `no session ${id}`);
+      return proposerKeyOf(found);
     },
     runningOfTask: (id) => (id === "by-main" && running.has(TASK_SESSION) ? live(TASK_SESSION) : undefined),
-    runningSupervisor: () => [SUPERVISOR, NEW_SUPERVISOR].filter((id) => running.has(id)).map(live)[0],
-    running: (id) => (running.has(id) ? live(id) : undefined),
+    runningProposer: (key) =>
+      key === SUPERVISOR_WORK
+        ? [SUPERVISOR, NEW_SUPERVISOR].filter((id) => running.has(id)).map(live)[0]
+        : running.has(key)
+          ? live(key)
+          : undefined,
+    hasProposer: (key) => key === SUPERVISOR_WORK || sessions.has(key),
     log: () => {},
   });
   return { coordination, tasks, asked, running };
@@ -105,7 +116,7 @@ describe("messages to a task's session", () => {
       message: { task: "by-main", from: BY_MAIN, text: "Also keep the old endpoint.", readAt: null },
     });
     expect(asked).toEqual([TASK_SESSION]);
-    expect(coordination.unread({ id: TASK_SESSION, task: "by-main", supervisor: false }).messages).toBe(1);
+    expect(coordination.unread({ id: TASK_SESSION, repo: "shop", task: "by-main" }).messages).toBe(1);
     expect(coordination.takeMessages("by-main").map((m) => m.text)).toEqual(["Also keep the old endpoint."]);
     expect(coordination.takeMessages("by-main")).toEqual([]);
     expect(coordination.messages()).toEqual([expect.objectContaining({ text: "Also keep the old endpoint.", readAt: expect.any(String) })]);
@@ -122,7 +133,8 @@ describe("messages to a task's session", () => {
     const { coordination } = setup();
 
     expect(() => coordination.send(SUPERVISOR, "by-main", "Hi")).toThrow("task by-main was proposed by another session");
-    expect(() => coordination.send(null, "by-main", "Hi")).toThrow("task by-main was proposed by another session");
+    expect(() => coordination.send(null, "by-main", "Hi")).toThrow("an agent outside Trackwall sends no messages");
+    expect(() => coordination.send(null, "by-outside", "Hi")).toThrow("an agent outside Trackwall sends no messages");
     expect(() => coordination.send(MAIN, "by-user", "Hi")).toThrow("the user started task by-user");
     expect(() => coordination.send(MAIN, "missing", "Hi")).toThrow("no task missing");
   });
@@ -164,6 +176,8 @@ describe("messages to a task's session", () => {
       fill();
       tenMillisecondsLater();
       coordination.userTyped({ id: TASK_SESSION, task: "by-main" });
+      // The task's session closed and resumed in a new one: the user still took part in the task.
+      coordination.sessionClosed({ id: TASK_SESSION, repo: "shop" });
       tenMillisecondsLater();
       fill();
       tenMillisecondsLater();
@@ -182,18 +196,17 @@ describe("messages to a task's session", () => {
     coordination.taskEnded("by-main");
 
     expect(coordination.messages()).toEqual([]);
-    expect(coordination.unread({ id: TASK_SESSION, task: "by-main", supervisor: false }).messages).toBe(0);
+    expect(coordination.unread({ id: TASK_SESSION, repo: "shop", task: "by-main" }).messages).toBe(0);
   });
 });
 
 describe("updates on delegated work", () => {
   test("a turn the agent worked on ends, the proposer is asked to read it, and the updates are read once", () => {
     const { coordination, asked } = setup();
-    coordination.watch(view(TASK_SESSION, "by-main", "Working"));
-    coordination.watch(view(TASK_SESSION, "by-main", "Input"));
+    coordination.sessionEvent({ id: TASK_SESSION, task: "by-main" }, { kind: "turn_ended" });
 
     expect(asked).toEqual([MAIN]);
-    expect(coordination.unread({ id: MAIN, task: null, supervisor: false }).updates).toBe(1);
+    expect(coordination.unread({ id: MAIN, repo: "shop", task: null }).updates).toBe(1);
     expect(coordination.takeUpdates(MAIN)).toEqual({
       updates: [{ kind: "turn_ended", task: "by-main", session: TASK_SESSION, at: expect.any(String) }],
       dropped: 0,
@@ -209,8 +222,8 @@ describe("updates on delegated work", () => {
     running.add(NEW_SUPERVISOR);
 
     coordination.resultReported(reported, TASK_SESSION);
-    coordination.verified({ ...verification("by-supervisor"), state: "running" });
-    coordination.verified({ ...verification("by-supervisor"), state: "failed", message: "mise task test exited with code 1" });
+    coordination.verificationFinished({ ...verification("by-supervisor"), state: "running" });
+    coordination.verificationFinished({ ...verification("by-supervisor"), state: "failed", message: "mise task test exited with code 1" });
     coordination.proposalRejected({ id: "p1", proposedBy: BY_SUPERVISOR }, "Not now");
 
     expect(asked).toEqual([MAIN, NEW_SUPERVISOR, NEW_SUPERVISOR]);
@@ -232,8 +245,7 @@ describe("updates on delegated work", () => {
 
   test("work nobody in Trackwall proposed gives no updates, and an agent outside Trackwall cannot read any", () => {
     const { coordination, asked } = setup();
-    coordination.watch(view(TASK_SESSION, "by-user", "Working"));
-    coordination.watch(view(TASK_SESSION, "by-user", "Input"));
+    coordination.sessionEvent({ id: TASK_SESSION, task: "by-user" }, { kind: "turn_ended" });
     coordination.proposalRejected({ id: "p2", proposedBy: { session: null, supervisor: false } }, null);
 
     expect(asked).toEqual([]);
@@ -242,15 +254,36 @@ describe("updates on delegated work", () => {
     );
   });
 
-  test("a turn the user drove by typing into the task's session gives no update", () => {
-    const { coordination, asked } = setup();
-    coordination.watch(view(TASK_SESSION, "by-main", "Working"));
-    coordination.userTyped({ id: TASK_SESSION, task: "by-main" });
-    coordination.watch(view(TASK_SESSION, "by-main", "Input"));
-    coordination.watch(view(TASK_SESSION, "by-main", "Working"));
-    coordination.watch(view(TASK_SESSION, "by-main", "Input"));
+  test("an error and the end of the process go to the proposer", () => {
+    const { coordination } = setup();
+    const session = { id: TASK_SESSION, task: "by-main" };
 
-    expect(asked).toEqual([MAIN]);
+    coordination.sessionEvent(session, { kind: "error" });
+    coordination.sessionEvent(session, { kind: "exited", exitCode: null, stoppedByUser: true });
+
+    expect(coordination.takeUpdates(MAIN).updates).toEqual([
+      { kind: "error", task: "by-main", session: TASK_SESSION, at: expect.any(String) },
+      { kind: "exited", exitCode: null, stoppedByUser: true, task: "by-main", session: TASK_SESSION, at: expect.any(String) },
+    ]);
+  });
+
+  test("a proposer the user has closed gets nothing queued", () => {
+    const gone = "55555555-5555-4555-8555-555555555555";
+    const tasks = new Map([["by-gone", task("by-gone", { session: gone, supervisor: false })]]);
+    const coordination = new TaskCoordination({
+      task: () => task("by-gone", null),
+      findTask: (id) => tasks.get(id),
+      proposedBy: () => BY_MAIN,
+      proposerKey: () => MAIN,
+      runningOfTask: () => undefined,
+      runningProposer: () => undefined,
+      hasProposer: () => false,
+      log: () => {},
+    });
+
+    coordination.sessionEvent({ id: TASK_SESSION, task: "by-gone" }, { kind: "turn_ended" });
+
+    expect(coordination.unread({ id: gone, repo: "shop", task: null }).updates).toBe(0);
   });
 
   test("a closed main session's updates go with it, the supervisor's stay for the next supervisor", () => {
@@ -258,43 +291,11 @@ describe("updates on delegated work", () => {
     coordination.proposalRejected({ id: "p1", proposedBy: BY_MAIN }, null);
     coordination.proposalRejected({ id: "p2", proposedBy: BY_SUPERVISOR }, null);
 
-    coordination.sessionClosed(MAIN, false);
-    coordination.sessionClosed(SUPERVISOR, true);
+    coordination.sessionClosed({ id: MAIN, repo: "shop" });
+    coordination.sessionClosed({ id: SUPERVISOR, repo: null });
 
-    expect(coordination.unread({ id: MAIN, task: null, supervisor: false }).updates).toBe(0);
+    expect(coordination.unread({ id: MAIN, repo: "shop", task: null }).updates).toBe(0);
     expect(coordination.takeUpdates(NEW_SUPERVISOR).updates.map((u) => u.task)).toEqual(["p2"]);
-  });
-});
-
-describe("following a task session's turns", () => {
-  test("reports a turn that ended after work, not the wait after a start or resume, and each change once", () => {
-    const turns = new TurnWatch();
-
-    expect(turns.next(view(TASK_SESSION, "t1", null))).toBeUndefined();
-    expect(turns.next(view(TASK_SESSION, "t1", "Input"))).toBeUndefined();
-    expect(turns.next(view(TASK_SESSION, "t1", "Working"))).toBeUndefined();
-    expect(turns.next(view(TASK_SESSION, "t1", "Stale"))).toBeUndefined();
-    expect(turns.next(view(TASK_SESSION, "t1", "Input"))).toEqual({ kind: "turn_ended" });
-    expect(turns.next(view(TASK_SESSION, "t1", "Input"))).toBeUndefined();
-    expect(turns.next(view(TASK_SESSION, "t1", "Error"))).toEqual({ kind: "error" });
-  });
-
-  test("reports the end of the process once, with its exit code and whether the user stopped it", () => {
-    const turns = new TurnWatch();
-    const exited: Session["run"] = {
-      kind: "exited",
-      runId: "r1",
-      startedAt: "2026-10-25T12:00:00.000Z",
-      endedAt: "2026-10-25T12:10:00.000Z",
-      exitCode: null,
-      signal: "SIGTERM",
-      stoppedByUser: true,
-      lastLines: [],
-    };
-    turns.next(view(TASK_SESSION, "t1", "Working"));
-
-    expect(turns.next(view(TASK_SESSION, "t1", "Error", exited))).toEqual({ kind: "exited", exitCode: null, stoppedByUser: true });
-    expect(turns.next(view(TASK_SESSION, "t1", "Error", exited))).toBeUndefined();
   });
 });
 

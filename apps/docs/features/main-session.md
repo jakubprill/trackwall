@@ -27,6 +27,8 @@ A task's agent finishes with a summary, shown above the task's tabs. The main se
 
 To steer a running task, the main session sends its agent a message: a correction, an answer to the agent's question, or what changed in another repo. The task's agent is asked to read it the same way, once it waits for input, or when you resume the task. The messages appear in the task's panel under "Messages", with who sent them and whether the agent has read them yet.
 
+![Two messages from the main session in orders-api to its notifications task, the second not read yet](/screenshots/task-messages.png)
+
 ## Use it
 
 1. Start the [supervisor](/features/supervisor), or a session in "Sessions" (or run `copilot` with the Trackwall MCP server in your projects folder).
@@ -39,7 +41,7 @@ To steer a running task, the main session sends its agent a message: a correctio
 - A proposal for a repo that already has tasks says so.
 - In the session grid, a tile with proposals shows their prompts with "Start task" and "Reject…"; "Next waiting" and Alt+J go to proposals too.
 - Proposals last until Trackwall quits, at most 20 at a time; summaries stay with their tasks.
-- A proposal from an agent outside Trackwall is marked "agent outside Trackwall" and listed at the top level, like a proposal from a session you have closed. Such an agent can propose tasks, but cannot report a task's summary.
+- A proposal from an agent outside Trackwall is marked "agent outside Trackwall" and listed at the top level, like a proposal from a session you have closed. Such an agent can propose tasks, but cannot report a task's summary, is not woken when its tasks move and cannot send them messages; it has to keep checking on them itself.
 - Prompts, titles, summaries and messages cannot contain invisible characters, so what you read is the whole text.
 - A session sends messages only to the tasks it proposed. A task you typed yourself, or one another session proposed, takes no messages from it.
 - After five messages to a task without you, the main session has to ask you before it sends more. Typing anything into the main session or the task, or sending the task a review, counts as you taking part.

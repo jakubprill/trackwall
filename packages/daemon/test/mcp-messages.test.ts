@@ -74,7 +74,7 @@ describe.skipIf(process.versions.bun === undefined)(
         message: { task: task.id, from: { session: main.id, supervisor: false }, text: MESSAGE, readAt: null },
       });
       expect((await call(outside, "send_message", { task: task.id, text: "Hi" })).content).toEqual([
-        { type: "text", text: `bad_request: task ${task.id} was proposed by another session; only its proposer sends it messages` },
+        { type: "text", text: "bad_request: an agent outside Trackwall sends no messages; follow its tasks with wait_for_session" },
       ]);
       // The user drives the task's first turn (the fake ends a turn after a line and an approval), so it is no update.
       const window = viewer(daemon.facade.agents, session);

@@ -30,11 +30,11 @@ export class TaskMessages {
     const message: TaskMessage = { id: randomUUID(), task, from, text, sentAt: new Date().toISOString(), readAt: null };
     const next = [...kept, message];
     // The unread ones are fewer than the limit (checked above), so a read one makes room; the unread are never dropped.
-    if (next.length > TASK_MESSAGES_KEPT)
-      next.splice(
-        next.findIndex((m) => m.readAt !== null),
-        1,
-      );
+    if (next.length > TASK_MESSAGES_KEPT) {
+      const oldestRead = next.findIndex((m) => m.readAt !== null);
+      if (oldestRead === -1) throw new Error(`task ${task} keeps more than ${TASK_MESSAGES_KEPT} messages and none is read`);
+      next.splice(oldestRead, 1);
+    }
     this.#byTask.set(task, next);
     return message;
   }

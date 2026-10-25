@@ -297,8 +297,8 @@ _Avoid_: code review (that is the pre-PR review in `AGENTS.md`), feedback
 What the user writes on one line of a task's changes for its agent: the file, the side (`new` for an added or unchanged line, `old` for a removed one), the line number, the line's code and the text. Queued in daemon memory until the task's session reads it with `get_review_comments`, which marks it read (ADR-62).
 _Avoid_: note, remark, comment on a pull request (Trackwall opens none)
 
-**Proposer** (`Task.proposedBy`, `proposerOf` in `task-updates.ts`):
-The session that proposed a task: a main session, or for the supervisor's work whichever supervisor runs now. Only the proposer sends the task's session task messages, and only it gets the task's task updates (ADR-68).
+**Proposer** (`Task.proposedBy`, `proposerOf` in `proposer.ts`):
+The session that proposed a task: a main session, or for the supervisor's work whichever supervisor runs now. Only the proposer sends the task's session task messages (a session in Trackwall; an agent outside Trackwall sends none), and only it gets the task's task updates (ADR-68).
 _Avoid_: parent, owner, manager
 
 **Task message** (`TaskMessage`, MCP tools `send_message` and `get_messages`; "Messages" in the task panel):
@@ -310,7 +310,7 @@ What the daemon saw happen to delegated work, for the proposer: a turn that ende
 _Avoid_: event (that is a `/ws` event), notification (that is a system notification), status
 
 **Main session** (`proposedBy` of a task and a proposal):
-A session or supervising agent that talks to the user and commissions work to other agents with task proposals, then waits for their sessions (`wait_for_session`) and reads the summaries, like a coordinator with threads in Claude (ADR-39). It is a role, not a separate kind of session: any Trackwall session or an agent outside Trackwall (`proposedBy.session: null`); the supervisor is the main session above all repos (ADR-58). In the Sessions view its tasks and proposals sit indented under it, and it carries a "main" badge with their count.
+A session or supervising agent that talks to the user and commissions work to other agents with task proposals, then hears about their sessions through task updates (`get_updates`; an agent outside Trackwall waits with `wait_for_session`) and reads the summaries, like a coordinator with threads in Claude (ADR-39). It is a role, not a separate kind of session: any Trackwall session or an agent outside Trackwall (`proposedBy.session: null`); the supervisor is the main session above all repos (ADR-58). In the Sessions view its tasks and proposals sit indented under it, and it carries a "main" badge with their count.
 _Avoid_: orchestrator, planner (ADR-9: a human splits goals)
 
 **mise task**:

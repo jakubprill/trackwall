@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { AgentDialog, DialogAnswer, RunState, Session, TaskState, TaskStateChange } from "@trackwall/protocol";
+import type { AgentDialog, DialogAnswer, RunState, Session, TaskState, TaskStateChange, TaskUpdate } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 import { readAgentDialog, type ScreenDialog } from "./copilot-dialog.ts";
 import { inPromptBoxAfter } from "./copilot-hooks.ts";
@@ -75,6 +75,16 @@ function dialogId(waits: number, dialog: ScreenDialog): string {
     .slice(0, 16);
 }
 
+type SessionUpdate = Extract<TaskUpdate, { kind: "turn_ended" | "error" | "exited" }>;
+
+/**
+ * What the session's agent did, for the proposer of the session's task (ADR-68): a turn it worked on ended (hook
+ * `agentStop`; not a turn the user drove), an error, or the process ended. A task update without the task, session and time.
+ */
+export type SessionEvent = {
+  [K in SessionUpdate["kind"]]: Omit<Extract<SessionUpdate, { kind: K }>, "task" | "session" | "at">;
+}[SessionUpdate["kind"]];
+
 export interface LiveSessionOptions {
   id: string;
   /** `null` for the supervisor in the projects folder (ADR-58). */
@@ -96,6 +106,8 @@ export interface LiveSessionOptions {
   prompt: () => string | undefined;
   /** The user put text into the session's input box (typed or pasted; not an answer to a dialog, not Esc). */
   onUserText: () => void;
+  /** Called synchronously, from whichever call read the change (hooks are read on every input and state read). */
+  onEvent: (event: SessionEvent) => void;
 }
 
 export class LiveSession {
@@ -106,6 +118,7 @@ export class LiveSession {
   readonly #run: () => RunState | undefined;
   readonly #promptText: () => string | undefined;
   readonly #onUserText: () => void;
+  readonly #onEvent: (event: SessionEvent) => void;
   readonly #screen: TerminalScreen;
   readonly #state: CopilotSessionState;
   readonly #hooks: HookTail;
@@ -123,6 +136,8 @@ export class LiveSession {
   #inPromptBox = false;
   /** The user typed or pasted since their last message was submitted, so the input box may hold their unsent text. */
   #userDraft = false;
+  /** The user put text into the input box or pressed Esc since the last end of a turn: the next end is of their turn. */
+  #userDrove = false;
   #submitTimer: NodeJS.Timeout | undefined;
   /** Counts the waits for a dialog (each entry into `Approval` or `Input`), so the same request asked again gets a new id. */
   #waits = 0;
@@ -136,6 +151,7 @@ export class LiveSession {
     this.#run = o.run;
     this.#promptText = o.prompt;
     this.#onUserText = o.onUserText;
+    this.#onEvent = o.onEvent;
     this.#state = new CopilotSessionState({ now: Date.now, staleAfterMs: STALE_AFTER_MS, promptOnStart: o.promptOnStart });
     this.#screen = new TerminalScreen(o.cols, o.rows);
     this.#hooks = new HookTail(o.hooksFile);
@@ -160,10 +176,13 @@ export class LiveSession {
     // answers the prompt that is already there, and typing marks seen the end of a turn that has already been written.
     this.#readHooks();
     // After the hooks already written, so that an end of a turn read now does not let a prompt join the user's text.
-    if (writesText(data, this.#last?.state)) {
+    // The answer to the agent's question (on the screen in `Input`, ADR-66) leaves nothing in the input box either.
+    if (writesText(data, this.#last?.state) && this.#dialog() === null) {
       this.#userDraft = true;
+      this.#userDrove = true;
       this.#onUserText();
     }
+    if (data === ESCAPE) this.#userDrove = true;
     const key = sessionKey(data);
     if (key) this.#report(this.#state.key(key));
     // After the key's own state change, so that the `Input` an Esc causes counts as seen.
@@ -241,9 +260,11 @@ export class LiveSession {
     const run = this.#run();
     if (run?.kind !== "exited") return true;
     // A stop by the user is an intended end, not a session error, even though the process ends with a signal.
-    this.#report(this.#state.exit(run.stoppedByUser ? 0 : (run.exitCode ?? 1)));
+    // Finished first, so the `Error` a failed exit gives is reported as the exit, not also as an error.
     this.#finished = true;
+    this.#report(this.#state.exit(run.stoppedByUser ? 0 : (run.exitCode ?? 1)));
     this.#hooks.close();
+    this.#onEvent({ kind: "exited", exitCode: run.exitCode, stoppedByUser: run.stoppedByUser });
     return false;
   }
 
@@ -293,6 +314,11 @@ export class LiveSession {
       this.#inPromptBox = inPromptBoxAfter(record) ?? this.#inPromptBox;
       if (record.event === "userPromptSubmitted") this.#userDraft = false;
       this.#report(this.#state.hook(record));
+      // The end of a turn from its hook, not from the state: a question dialog and an Esc give `Input` mid-turn too.
+      if (record.event === "agentStop") {
+        if (!this.#userDrove) this.#onEvent({ kind: "turn_ended" });
+        this.#userDrove = false;
+      }
     }
   }
 
@@ -301,7 +327,9 @@ export class LiveSession {
       if (!change) continue;
       this.#attention.changed(this.#last?.state, change.state);
       if (change.state !== this.#last?.state && DIALOG_IN_STATE.has(change.state)) this.#waits++;
+      const wasError = this.#last?.state === "Error";
       this.#last = change;
+      if (change.state === "Error" && !wasError && !this.#finished) this.#onEvent({ kind: "error" });
       // Copilot CLI took the typed prompt: the turn it started is the session's, and the next prompt is a new one.
       if (change.state !== "Input") this.#promptTyped = undefined;
     }
@@ -314,11 +342,16 @@ export class LiveSession {
     // `Input` too, since a task's first `sessionStart` starts the turn of its prompt.
     if (!this.#promptAsked || this.#promptTyped || this.#finished || !terminal) return;
     if (!this.#inPromptBox || this.#userDraft || this.#last?.state !== "Input") return;
+    // The hooks say the input box, but the screen still shows the agent's question (its hook lost or late, ADR-66): the
+    // prompt with Enter would answer it.
+    if (this.#dialog() !== null) return;
     this.#promptAsked = false;
     // Everything may have been read meanwhile (the agent called the tool on its own): then there is nothing to ask.
     const text = this.#promptText();
     if (text === undefined) return;
     this.#promptTyped = { text, at: Date.now() };
+    // The daemon starts this turn: an Esc earlier (an interrupt gives no `agentStop`) does not make it the user's.
+    this.#userDrove = false;
     terminal.write(text);
     this.#submitTimer = setTimeout(() => {
       if (!this.#finished) terminal.write("\r");

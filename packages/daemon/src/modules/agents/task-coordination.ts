@@ -1,5 +1,4 @@
 import {
-  isSupervisor,
   mcpTools,
   type ProposedBy,
   type SendMessageResult,
@@ -10,8 +9,10 @@ import {
   type Verification,
 } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
+import type { SessionEvent } from "./live-session.ts";
+import { proposerKeyOf, proposerOf, SUPERVISOR } from "./proposer.ts";
 import { TaskMessages } from "./task-messages.ts";
-import { proposerOf, SUPERVISOR, TaskUpdates, TurnWatch } from "./task-updates.ts";
+import { TaskUpdates } from "./task-updates.ts";
 
 /**
  * Coordination between a task's proposer and the task's session (ADR-68): messages down (`send_message`, read with
@@ -24,22 +25,25 @@ import { proposerOf, SUPERVISOR, TaskUpdates, TurnWatch } from "./task-updates.t
 /** A running session as coordination needs it: who it is, and asking it to read what waits (`LiveSession.askToRead`). */
 export interface CoordinatedSession {
   id: string;
-  task: string | null;
   askToRead(): "typed" | "queued";
 }
 
 /** What coordination needs from the rest of `agents`. */
 export interface CoordinationDeps {
+  /** A task (`not_found` for an unknown or ended one). */
   task(id: string): Task;
+  /** A task, or `undefined` for an unknown or ended one. */
   findTask(id: string): Task | undefined;
-  /** A listed session (`not_found` otherwise). */
-  session(id: string): Session;
+  /** A listed session as a proposer (`not_found` otherwise). */
+  proposedBy(session: string): ProposedBy;
+  /** The proposer key of a listed session's own work (`proposerKeyOf`; `not_found` otherwise). */
+  proposerKey(session: string): string;
   /** The newest session of a task, while it runs. */
   runningOfTask(task: string): CoordinatedSession | undefined;
-  /** The running supervisor (ADR-58). */
-  runningSupervisor(): CoordinatedSession | undefined;
-  /** A running session by its id. */
-  running(id: string): CoordinatedSession | undefined;
+  /** The running session behind a proposer key: the session itself, or for `SUPERVISOR` the running supervisor. */
+  runningProposer(proposer: string): CoordinatedSession | undefined;
+  /** Whether anyone is behind a proposer key: always for `SUPERVISOR`, for a session while it is on the list. */
+  hasProposer(proposer: string): boolean;
   log: (msg: string) => void;
 }
 
@@ -47,12 +51,10 @@ export class TaskCoordination {
   readonly #deps: CoordinationDeps;
   readonly #messages = new TaskMessages();
   readonly #updates = new TaskUpdates();
-  /** The state of every task session whose proposer hears about it, by session id. */
-  readonly #turns = new Map<string, TurnWatch>();
-  /** When the user last put text into a session (by session id: milliseconds since the epoch, and the session's task). */
-  readonly #userTextAt = new Map<string, { at: number; task: string | null }>();
-  /** When the user last sent a task a review (task id → milliseconds since the epoch). */
-  readonly #reviewedAt = new Map<string, number>();
+  /** When the user last took part in a task: text in one of its sessions or a review (milliseconds since the epoch). */
+  readonly #userInTask = new Map<string, number>();
+  /** When the user last put text into a session (session id → milliseconds since the epoch). */
+  readonly #userInSession = new Map<string, number>();
 
   constructor(deps: CoordinationDeps) {
     this.#deps = deps;
@@ -65,9 +67,15 @@ export class TaskCoordination {
    */
   send(caller: string | null, id: string, text: string): SendMessageResult {
     const task = this.#deps.task(id);
-    const from = this.#sender(caller);
     if (task.proposedBy === null)
       throw new DomainError("bad_request", `the user started task ${id}, so no session sends it messages; tell the user instead`);
+    // An agent outside Trackwall is not told apart from another one, so it is never a task's proposer here.
+    if (caller === null)
+      throw new DomainError(
+        "bad_request",
+        `an agent outside Trackwall sends no messages; follow its tasks with ${mcpTools.waitForSession.name}`,
+      );
+    const from = this.#deps.proposedBy(caller);
     if (proposerOf(task.proposedBy) !== proposerOf(from))
       throw new DomainError("bad_request", `task ${id} was proposed by another session; only its proposer sends it messages`);
     const message = this.#messages.add(id, from, text, this.#userTookPartAt(caller, id));
@@ -88,13 +96,13 @@ export class TaskCoordination {
         "bad_request",
         `an agent outside Trackwall gets no updates; follow its tasks with ${mcpTools.waitForSession.name}`,
       );
-    return this.#updates.take(this.#proposerKey(caller));
+    return this.#updates.take(this.#deps.proposerKey(caller));
   }
 
-  /** How many messages and updates wait unread for a session (a task session and, as a proposer, any session). */
-  unread(session: { id: string; task: string | null; supervisor: boolean }): { messages: number; updates: number } {
-    const proposer = session.supervisor ? SUPERVISOR : session.id;
-    return { messages: session.task === null ? 0 : this.#messages.unread(session.task), updates: this.#updates.unread(proposer) };
+  /** How many messages wait unread for a session's task, and updates for its own delegated work. */
+  unread(session: Pick<Session, "id" | "repo" | "task">): { messages: number; updates: number } {
+    const messages = session.task === null ? 0 : this.#messages.unread(session.task);
+    return { messages, updates: this.#updates.unread(proposerKeyOf(session)) };
   }
 
   /** Every kept message of the tasks on the list, for the Sessions view. */
@@ -102,12 +110,10 @@ export class TaskCoordination {
     return this.#messages.list();
   }
 
-  /** A task session's fresh view, every session cycle: an ended turn, an error or the end goes to the task's proposer. */
-  watch(view: Session): void {
-    const task = view.task === null ? undefined : this.#deps.findTask(view.task);
-    if (!task || proposerOf(task.proposedBy) === null) return;
-    const change = this.#turnsOf(view.id).next(view);
-    if (change) this.#notify(task.proposedBy, { ...change, task: task.id, session: view.id, at: new Date().toISOString() });
+  /** What a task session's agent did goes to the task's proposer. */
+  sessionEvent(session: { id: string; task: string | null }, event: SessionEvent): void {
+    const task = session.task === null ? undefined : this.#deps.findTask(session.task);
+    if (task) this.#notify(task.proposedBy, { ...event, task: task.id, session: session.id, at: new Date().toISOString() });
   }
 
   /** Session `report_result`: the summary goes to the task's proposer. */
@@ -118,7 +124,7 @@ export class TaskCoordination {
   }
 
   /** A verification with a verdict goes to the task's proposer; one still running or of an ended task does not. */
-  verified(verification: Verification): void {
+  verificationFinished(verification: Verification): void {
     const task = this.#deps.findTask(verification.task);
     if (!task || verification.state === "running") return;
     const { state, message } = verification;
@@ -137,63 +143,41 @@ export class TaskCoordination {
     });
   }
 
-  /** The user put text into a session: it counts as taking part, and the session's turn as one the user drives. */
+  /** The user put text into a session: it counts as taking part in the session's exchanges and its task's. */
   userTyped(session: { id: string; task: string | null }): void {
-    this.#userTextAt.set(session.id, { at: Date.now(), task: session.task });
-    if (session.task !== null) this.#turnsOf(session.id).userTyped();
+    const now = Date.now();
+    this.#userInSession.set(session.id, now);
+    if (session.task !== null) this.#userInTask.set(session.task, now);
   }
 
   /** The user sent task `task` a review: it counts as taking part. */
   reviewed(task: string): void {
-    this.#reviewedAt.set(task, Date.now());
+    this.#userInTask.set(task, Date.now());
   }
 
-  /** A closed session: its watch, its typing and the updates for it (unless it is the supervisor's) go. */
-  sessionClosed(id: string, supervisor: boolean): void {
-    this.#turns.delete(id);
-    this.#userTextAt.delete(id);
-    if (!supervisor) this.#updates.forget(id);
+  /** A closed session: its typing and the updates for it (unless it is the supervisor's) go. */
+  sessionClosed(session: Pick<Session, "id" | "repo">): void {
+    this.#userInSession.delete(session.id);
+    const proposer = proposerKeyOf(session);
+    if (proposer !== SUPERVISOR) this.#updates.forget(proposer);
   }
 
   /** An ended task: its messages go. */
   taskEnded(id: string): void {
     this.#messages.drop(id);
-    this.#reviewedAt.delete(id);
+    this.#userInTask.delete(id);
   }
 
-  #turnsOf(session: string): TurnWatch {
-    let turns = this.#turns.get(session);
-    if (!turns) {
-      turns = new TurnWatch();
-      this.#turns.set(session, turns);
-    }
-    return turns;
+  /** When the user last took part in task `task`'s exchange with session `caller`: in either, or 0 when never. */
+  #userTookPartAt(caller: string, task: string): number {
+    return Math.max(this.#userInSession.get(caller) ?? 0, this.#userInTask.get(task) ?? 0);
   }
 
-  #sender(caller: string | null): ProposedBy {
-    return { session: caller, supervisor: caller !== null && isSupervisor(this.#deps.session(caller)) };
-  }
-
-  #proposerKey(caller: string): string {
-    return isSupervisor(this.#deps.session(caller)) ? SUPERVISOR : caller;
-  }
-
-  /**
-   * When the user last took part in task `task`'s exchange with `caller`: text in the caller's session or in a session
-   * of the task, or a review of the task; 0 when never.
-   */
-  #userTookPartAt(caller: string | null, task: string): number {
-    const typedInTask = [...this.#userTextAt.values()].filter((typed) => typed.task === task).map((typed) => typed.at);
-    const typedInCaller = caller === null ? 0 : (this.#userTextAt.get(caller)?.at ?? 0);
-    return Math.max(0, typedInCaller, this.#reviewedAt.get(task) ?? 0, ...typedInTask);
-  }
-
-  /** Queues an update for the proposer, and asks its running session to read it. */
+  /** Queues an update for a proposer still on the list, and asks its running session to read it. */
   #notify(proposedBy: ProposedBy | null, update: TaskUpdate): void {
     const proposer = proposerOf(proposedBy);
-    if (proposer === null) return;
+    if (proposer === null || !this.#deps.hasProposer(proposer)) return;
     this.#updates.add(proposer, update);
-    const running = proposer === SUPERVISOR ? this.#deps.runningSupervisor() : this.#deps.running(proposer);
-    running?.askToRead();
+    this.#deps.runningProposer(proposer)?.askToRead();
   }
 }

@@ -2,7 +2,8 @@ import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import { appendFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LiveSession } from "../src/modules/agents/live-session.ts";
+import type { RunState } from "@trackwall/protocol";
+import { LiveSession, type SessionEvent } from "../src/modules/agents/live-session.ts";
 
 const sessions: LiveSession[] = [];
 afterEach(() => {
@@ -25,6 +26,7 @@ describe("a Copilot CLI session in the daemon", () => {
       run: () => ({ kind: "running", runId: "r1", startedAt: "2026-10-24T12:00:00.000Z", pid: 1 }),
       prompt: () => undefined,
       onUserText: () => {},
+      onEvent: () => {},
     });
     sessions.push(session);
     session.connect({ write: (data) => written.push(data), resize: () => {} });
@@ -107,14 +109,20 @@ describe("a Copilot CLI session in the daemon", () => {
 
 /**
  * A running session with an empty `hooks.jsonl`; the hook records are the input of each test. `prompt` is what waits
- * for it (its daemon prompt), and `typedText` counts how often the user put text into it.
+ * for it (its daemon prompt), `typedText` counts how often the user put text into it, and `events` collects what its
+ * agent did. `run` is the state of its process group.
  */
-function runningSession(prompt: () => string | undefined = () => "read the review"): {
+function runningSession(
+  prompt: () => string | undefined = () => "read the review",
+  run: () => RunState = () => ({ kind: "running", runId: "r2", startedAt: "2026-10-24T12:00:00.000Z", pid: 1 }),
+): {
   session: LiveSession;
   hooksFile: string;
   typedText: { count: number };
+  events: SessionEvent[];
 } {
   const typedText = { count: 0 };
+  const events: SessionEvent[] = [];
   const hooksFile = join(mkdtempSync(join(tmpdir(), "trackwall-session-")), "hooks.jsonl");
   writeFileSync(hooksFile, "");
   const session = new LiveSession({
@@ -125,14 +133,15 @@ function runningSession(prompt: () => string | undefined = () => "read the revie
     rows: 24,
     hooksFile,
     promptOnStart: false,
-    run: () => ({ kind: "running", runId: "r2", startedAt: "2026-10-24T12:00:00.000Z", pid: 1 }),
+    run,
     prompt,
     onUserText: () => {
       typedText.count++;
     },
+    onEvent: (event) => events.push(event),
   });
   sessions.push(session);
-  return { session, hooksFile, typedText };
+  return { session, hooksFile, typedText, events };
 }
 
 function endTurn(session: LiveSession, hooksFile: string): void {
@@ -329,5 +338,94 @@ describe("text the user puts into a session (ADR-68)", () => {
     session.input("\u001b[200~pasted\u001b[201~");
 
     expect(typedText.count).toBe(2);
+  });
+});
+
+describe("what the session's agent did, for its task's proposer (ADR-68)", () => {
+  test("a turn ends with its agentStop hook, not with the Input a question dialog or an Esc gives in the middle of it", () => {
+    const { session, hooksFile, events } = runningSession();
+    session.connect({ write: () => {}, resize: () => {} });
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    appendFileSync(
+      hooksFile,
+      `${JSON.stringify({ event: "notification", receivedAt: 0, payload: { notification_type: "elicitation_dialog" }, omitted: [] })}\n`,
+    );
+    session.tick();
+    expect(session.view()?.state?.state).toBe("Input");
+    expect(events).toEqual([]);
+
+    endTurn(session, hooksFile);
+
+    expect(events).toEqual([{ kind: "turn_ended" }]);
+  });
+
+  test("a turn after the user's text or Esc is the user's and gives nothing, the next one is not", () => {
+    const { session, hooksFile, events } = runningSession();
+    session.connect({ write: () => {}, resize: () => {} });
+    endTurn(session, hooksFile);
+    session.input("rename foo\r");
+    endTurn(session, hooksFile);
+    session.input("\u001b");
+    endTurn(session, hooksFile);
+    endTurn(session, hooksFile);
+
+    expect(events).toEqual([{ kind: "turn_ended" }, { kind: "turn_ended" }]);
+  });
+
+  test("the turn the daemon's prompt starts is not the user's, even after an Esc that ended no turn", () => {
+    const { session, hooksFile, events } = runningSession();
+    session.connect({ write: () => {}, resize: () => {} });
+    endTurn(session, hooksFile);
+    session.input("\u001b");
+
+    expect(session.askToRead()).toBe("typed");
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    endTurn(session, hooksFile);
+
+    expect(events).toEqual([{ kind: "turn_ended" }, { kind: "turn_ended" }]);
+  });
+
+  test("a crash is reported as the end of the process only, not also as an error", () => {
+    let run: RunState = { kind: "running", runId: "r2", startedAt: "2026-10-24T12:00:00.000Z", pid: 1 };
+    const { session, hooksFile, events } = runningSession(undefined, () => run);
+    endTurn(session, hooksFile);
+    run = {
+      kind: "exited",
+      runId: "r2",
+      startedAt: "2026-10-24T12:00:00.000Z",
+      endedAt: "2026-10-24T12:01:00.000Z",
+      exitCode: null,
+      signal: "SIGKILL",
+      stoppedByUser: false,
+      lastLines: [],
+    };
+
+    session.tick();
+
+    expect(session.view()?.state?.state).toBe("Error");
+    expect(events).toEqual([{ kind: "turn_ended" }, { kind: "exited", exitCode: null, stoppedByUser: false }]);
+  });
+
+  test("an error is reported once, and the end of the process with its exit code", () => {
+    let run: RunState = { kind: "running", runId: "r2", startedAt: "2026-10-24T12:00:00.000Z", pid: 1 };
+    const { session, hooksFile, events } = runningSession(undefined, () => run);
+    for (const event of ["errorOccurred", "errorOccurred"])
+      appendFileSync(hooksFile, `${JSON.stringify({ event, receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+    run = {
+      kind: "exited",
+      runId: "r2",
+      startedAt: "2026-10-24T12:00:00.000Z",
+      endedAt: "2026-10-24T12:01:00.000Z",
+      exitCode: 1,
+      signal: null,
+      stoppedByUser: false,
+      lastLines: [],
+    };
+
+    session.tick();
+    session.tick();
+
+    expect(events).toEqual([{ kind: "error" }, { kind: "exited", exitCode: 1, stoppedByUser: false }]);
   });
 });
