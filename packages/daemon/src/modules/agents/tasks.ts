@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import {
-  type MiseConfigChange,
   PATCH_MAX_BYTES,
   type ProposedBy,
   type Session,
@@ -16,7 +15,7 @@ import { DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
-import { type MiseSnapshot, miseConfigChanges, miseConfigDigest, readMiseConfig } from "./task-mise-config.ts";
+import { type MiseSnapshot, miseConfigChanges, miseConfigDigest, readMiseConfig, shownContent } from "./task-mise-config.ts";
 
 /**
  * Zadania agentów (§4.4, ADR-31): polecenie dla Copilot CLI w osobnym worktree na nowej gałęzi od gałęzi domyślnej
@@ -92,14 +91,6 @@ export interface TaskOrigin {
 
 /** Zadanie z pliku z worktree, który z niego wynika. */
 type KnownTask = StoredTask & TaskWork;
-
-/** Where a task's mise tasks run (ADR-59): its worktree and how its mise config differs from the trusted one. */
-export interface TaskCheckout {
-  repo: string;
-  worktree: string;
-  /** Empty when the worktree has the trusted mise config. */
-  miseConfigChanges: MiseConfigChange[];
-}
 
 /**
  * Other tasks read at once for shared files: each read is several git commands, and a task panel asks every few
@@ -259,11 +250,18 @@ export class AgentTasks {
     return reading;
   }
 
-  /** The worktree's mise config against the trusted one (ADR-59). */
+  /** The worktree's mise config against the trusted one (ADR-59), with the text of each changed file for the user to read. */
   async miseConfig(id: string): Promise<TaskMiseConfig> {
     const task = this.#existingWorktree(id);
     const current = await readMiseConfig(task.worktree);
-    return { changes: miseConfigChanges(task.trustedMiseConfig ?? {}, current), digest: miseConfigDigest(current) };
+    const changes = miseConfigChanges(task.trustedMiseConfig ?? {}, current);
+    return {
+      neverTrusted: task.trustedMiseConfig === null,
+      changes: await Promise.all(
+        changes.map(async (c) => ({ ...c, content: c.change === "removed" ? null : await shownContent(task.worktree, c.path) })),
+      ),
+      digest: miseConfigDigest(current),
+    };
   }
 
   /**
@@ -277,14 +275,26 @@ export class AgentTasks {
       throw new DomainError("bad_request", `the mise config of task ${task.branch} changed again; review it before trusting it`);
     const trusted = { ...this.#get(id), trustedMiseConfig: current };
     this.#save(this.#tasks.map((t) => (t.id === id ? trusted : t)));
-    return { changes: [], digest };
+    return { neverTrusted: false, changes: [], digest };
   }
 
-  /** The task's worktree for running its mise tasks (ADR-59), with its mise config against the trusted one. */
-  async checkout(id: string): Promise<TaskCheckout> {
+  /**
+   * The worktree of a task of `repo` for running a mise task in it (ADR-59), only while it has the mise config the user
+   * trusted and the task is not being ended: `mise_unavailable` names the changed files, and only the user can trust
+   * them, in the task's panel.
+   */
+  async trustedWorktree(id: string, repo: string): Promise<string> {
+    if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is being ended");
     const task = this.#existingWorktree(id);
-    const { changes } = await this.miseConfig(id);
-    return { repo: task.repo, worktree: task.worktree, miseConfigChanges: changes };
+    if (task.repo !== repo) throw new DomainError("bad_request", `task ${task.branch} is in ${task.repo}, not in ${repo}`);
+    const changes = miseConfigChanges(task.trustedMiseConfig ?? {}, await readMiseConfig(task.worktree));
+    if (changes.length > 0)
+      throw new DomainError(
+        "mise_unavailable",
+        `the mise config in the worktree of task ${task.branch} changed since the user trusted it (${changes.map((c) => c.path).join(", ")}); ` +
+          "only the user can trust it, in the task's panel in Trackwall",
+      );
+    return task.worktree;
   }
 
   openEditor(id: string): void {
@@ -301,7 +311,10 @@ export class AgentTasks {
     return this.#exclusive(id, async () => {
       this.#refuseRunning(task, "ending it");
       if (this.#deps.liveIn(task.worktree))
-        throw new DomainError("bad_request", `a mise task runs in the worktree of task ${task.branch}; stop it before ending the task`);
+        throw new DomainError(
+          "bad_request",
+          `a process started by Trackwall still runs in the worktree of task ${task.branch}; stop it before ending the task`,
+        );
       await this.#whileRemoving(id, async () => {
         if (!discardChanges) await this.#refuseLoss(task, keepBranch);
         await this.#discard(task, keepBranch);

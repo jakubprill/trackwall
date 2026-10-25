@@ -5,20 +5,31 @@ import { MiseTaskLog } from "@/components/MiseTaskLog";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import type { LiveFeed } from "@/lib/daemon-events";
 import { relativeTime } from "@/lib/format";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 
-/** The list of running mise tasks is cheap (no mise call), and a test run of the agent lasts seconds to minutes. */
-const POLL_MS = 2000;
+/** Running mise tasks come live from the events WebSocket; polled only while it is not connected, as on Home. */
+const POLL_MS = 3000;
 
 /**
  * The mise tasks running in a task's worktree (ADR-59), started by its agent over MCP: the user watches their log and
  * stops them here, as the repo's "mise tasks" tab does for the repo root. Hidden while nothing runs.
  */
-export function TaskMiseRuns({ conn, task, paused }: { conn: Connection; task: string; paused: boolean }) {
+export function TaskMiseRuns({
+  conn,
+  task,
+  live,
+  paused,
+}: {
+  conn: Connection;
+  task: string;
+  live: LiveFeed<RunningMiseTask[]> | undefined;
+  paused: boolean;
+}) {
   const load = useCallback(() => post(conn, miseApi.running, {}), [conn]);
-  const remote = useRemote(paused ? undefined : load, { pollMs: POLL_MS });
+  const remote = useRemote(paused ? undefined : load, { pollMs: POLL_MS, live });
   const runs = (remote.data ?? []).filter((r) => r.task === task);
   if (runs.length === 0) return null;
   return (

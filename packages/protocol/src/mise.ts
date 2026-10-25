@@ -49,7 +49,7 @@ export const MiseTasks = z.discriminatedUnion("kind", [
 export type MiseTasks = z.infer<typeof MiseTasks>;
 
 /**
- * Działający task mise (także zatrzymywany) z tego działania daemona: pulpit pokazuje go przy repo bez pytania mise.
+ * A running (or stopping) mise task of this daemon run, which the dashboard shows by its repo without asking mise.
  * `task` is the task whose worktree it runs in (ADR-59), `null` in the repo root.
  */
 export const RunningMiseTask = z.object({ repo: RepoId, task: TaskId.nullable(), miseTask: MiseTaskName, run: RunState });
@@ -67,8 +67,8 @@ export const miseApi = {
   /** Działające taski wszystkich repo, bez uruchamiania mise: tani do częstego odpytywania (pulpit, ADR-33). */
   running: endpoint("running", z.object({}).strict(), z.array(RunningMiseTask)),
   /**
-   * Uruchamia task w grupie procesów (`mise run <task>` w korzeniu repo, or in the worktree of `task`, ADR-59);
-   * działający już task zwraca jego stan.
+   * Starts a mise task in a process group (`mise run <task>` in the repo root, or in the worktree of `task`, ADR-59);
+   * a task already running returns its state.
    */
   start: endpoint("start", MiseTaskRequest, RunState),
   /** Wraca po potwierdzeniu, że żaden proces grupy nie żyje; zakończony już task zwraca jego stan. */

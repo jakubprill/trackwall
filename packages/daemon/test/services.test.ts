@@ -15,7 +15,7 @@ import { groupPlatform } from "../src/platform/group-platform.ts";
 
 /** These tests run mise tasks in repo roots only, never in a task worktree (ADR-59). */
 const NO_TASKS = {
-  taskCheckout: async () => {
+  trustedTaskWorktree: async () => {
     throw new Error("no task worktree in this test");
   },
 };

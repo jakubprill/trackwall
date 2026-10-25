@@ -23,7 +23,7 @@ import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
 import { TaskFile } from "./task-file.ts";
 import { TaskProposals } from "./task-proposals.ts";
-import { AgentTasks, type TaskCheckout, type TasksVcs } from "./tasks.ts";
+import { AgentTasks, type TasksVcs } from "./tasks.ts";
 import type { ScreenViewer } from "./terminal-screen.ts";
 
 /**
@@ -249,9 +249,9 @@ export class Agents {
     return this.#tasks.trustMiseConfig(id, digest);
   }
 
-  /** Where the task's mise tasks run, for the `mise` module (ADR-59). */
-  taskCheckout(id: string): Promise<TaskCheckout> {
-    return this.#tasks.checkout(id);
+  /** The worktree a mise task of the task runs in, while its mise config is the trusted one; for the `mise` module (ADR-59). */
+  trustedTaskWorktree(id: string, repo: string): Promise<string> {
+    return this.#tasks.trustedWorktree(id, repo);
   }
 
   removeTask(id: string, keepBranch: boolean, discardChanges: boolean): Promise<void> {

@@ -180,6 +180,7 @@ export function App() {
               key={epoch}
               conn={conn}
               sessions={sessions}
+              runningLive={runningLive}
               selected={session}
               onSelect={setSession}
               layout={sessionLayout}

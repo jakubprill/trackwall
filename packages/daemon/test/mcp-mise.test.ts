@@ -178,6 +178,10 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
         `bad_request: a session of task ${own.id} can run and stop mise tasks only in its own worktree, not in that of task ${other.id}`,
       );
       expect(existsSync(join(other.worktree, "calls.log"))).toBe(false);
+      // A task named with another repo is refused before any run is looked up, so a session's repo gate holds.
+      expect(errorText(await call(outside, "stop_mise_task", { repo: "sklep", task: own.id, miseTask: "test" }))).toBe(
+        `bad_request: task ${own.id} is in magazyn, not in sklep`,
+      );
 
       for (const s of sessions) {
         await waitFor(daemon.facade.agents, s.id, (state) => state.state !== null, "sessionStart");
@@ -194,13 +198,13 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
       writeFileSync(join(task.worktree, "mise.toml"), '[tasks.test]\nrun = "anything"\n');
 
       expect(errorText(await call(outside, "run_mise_task", { repo: "magazyn", task: task.id, miseTask: "test" }))).toBe(
-        `mise_unavailable: the mise config in the worktree of task ${task.id} changed since the user trusted it (mise.toml); ` +
+        `mise_unavailable: the mise config in the worktree of task ${task.branch} changed since the user trusted it (mise.toml); ` +
           "only the user can trust it, in the task's panel in Trackwall",
       );
       expect(existsSync(join(task.worktree, "calls.log"))).toBe(false);
 
       const seen = await daemon.post(agentsApi.taskMiseConfig, { task: task.id });
-      expect(seen.changes).toEqual([{ path: "mise.toml", change: "added" }]);
+      expect(seen.changes).toEqual([{ path: "mise.toml", change: "added", content: '[tasks.test]\nrun = "anything"\n' }]);
       await daemon.post(agentsApi.trustTaskMiseConfig, { task: task.id, digest: seen.digest });
       await call(outside, "run_mise_task", { repo: "magazyn", task: task.id, miseTask: "test" });
       const ended = MiseTaskRunResult.parse(

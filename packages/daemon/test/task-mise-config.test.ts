@@ -71,19 +71,32 @@ describe("the mise config of a task worktree (ADR-59)", () => {
     expect(miseConfigDigest(await readMiseConfig(worktreeWith({ ...files, "mise-tasks/test": "y\n" })))).not.toBe(one);
   });
 
-  // Creating a symbolic link on Windows needs developer mode or administrator rights.
-  test.skipIf(process.platform === "win32")("a symbolic link counts by its target and is not followed out of the worktree", async () => {
-    const outside = worktreeWith({ "secret.toml": "token\n" });
-    const dir = worktreeWith({});
-    mkdirSync(join(dir, "mise-tasks"));
-    symlinkSync(join(outside, "secret.toml"), join(dir, "mise.toml"));
-    symlinkSync(outside, join(dir, "mise-tasks", "linked"));
-    const before = await readMiseConfig(dir);
+  test("names count without regard to case, as mise finds them on Windows and macOS", async () => {
+    const dir = worktreeWith({ "Mise.Local.TOML": "[env]\n", ".Tool-Versions": "java 21\n", "Mise-Tasks/deploy": "#!/bin/sh\n" });
 
-    writeFileSync(join(outside, "secret.toml"), "another token\n");
-    expect(Object.keys(before)).toEqual(["mise-tasks/linked", "mise.toml"]);
-    expect(await readMiseConfig(dir)).toEqual(before);
+    expect(Object.keys(await readMiseConfig(dir))).toEqual([".Tool-Versions", "Mise-Tasks/deploy", "Mise.Local.TOML"]);
   });
+
+  // Creating a symbolic link on Windows needs developer mode or administrator rights.
+  test.skipIf(process.platform === "win32")(
+    "a symbolic link to a config file or a task directory is refused, since mise follows it",
+    async () => {
+      const outside = worktreeWith({ "secret.toml": "token\n" });
+      const linkedFile = worktreeWith({});
+      symlinkSync(join(outside, "secret.toml"), join(linkedFile, "mise.toml"));
+      const linkedDir = worktreeWith({});
+      symlinkSync(outside, join(linkedDir, "mise-tasks"));
+
+      await expect(readMiseConfig(linkedFile)).rejects.toMatchObject({
+        code: "mise_unavailable",
+        message: "the mise config of the task worktree has a symbolic link (mise.toml), which Trackwall does not check",
+      });
+      await expect(readMiseConfig(linkedDir)).rejects.toMatchObject({
+        code: "mise_unavailable",
+        message: "the mise config of the task worktree has a symbolic link (mise-tasks), which Trackwall does not check",
+      });
+    },
+  );
 
   test("a mise directory with more files than a config has is refused instead of read every few seconds", async () => {
     const files = Object.fromEntries(Array.from({ length: 501 }, (_, i) => [`mise-tasks/t${i}`, "x\n"]));

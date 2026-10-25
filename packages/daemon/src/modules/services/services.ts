@@ -172,7 +172,13 @@ export class Services {
     const env = await this.deps.env();
     const result = await callEndpoint(address, request, (text) => this.deps.logs.mask(text, env));
     await new Promise((resolve) => setTimeout(resolve, this.deps.settleMs));
-    const { errors } = this.deps.logs.errors({ miseTask: SERVICE_MISE_TASK, minLevel: "error", sinceSeq: cursor, limit: CALL_ERRORS });
+    const { errors } = this.deps.logs.errors({
+      task: null,
+      miseTask: SERVICE_MISE_TASK,
+      minLevel: "error",
+      sinceSeq: cursor,
+      limit: CALL_ERRORS,
+    });
     return { ...result, errors };
   }
 
@@ -349,7 +355,13 @@ export class Services {
   /** Errors of the member's current run. Newest first, so they lead; the filter drops those of an earlier run. */
   private memberErrors(service: Service) {
     if (service.state !== "crashed" && service.state !== "unhealthy") return [];
-    const { errors } = this.deps.logs.errors({ repo: service.repo, miseTask: SERVICE_MISE_TASK, minLevel: "error", limit: MEMBER_ERRORS });
+    const { errors } = this.deps.logs.errors({
+      repo: service.repo,
+      task: null,
+      miseTask: SERVICE_MISE_TASK,
+      minLevel: "error",
+      limit: MEMBER_ERRORS,
+    });
     return errors.filter((e) => e.runId === service.run.runId);
   }
 }

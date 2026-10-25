@@ -185,6 +185,8 @@ export const MiseConfigChange = z.object({
   /** Relative to the worktree root, with `/`. */
   path: z.string(),
   change: z.enum(["added", "modified", "removed"]),
+  /** The file's text, to be read before trusting it; `null` for a removed file or one too long to show. */
+  content: z.string().nullable(),
 });
 export type MiseConfigChange = z.infer<typeof MiseConfigChange>;
 
@@ -193,6 +195,8 @@ export type MiseConfigChange = z.infer<typeof MiseConfigChange>;
  * created, or as the user trusted them later. mise tasks run in the worktree only without changes.
  */
 export const TaskMiseConfig = z.object({
+  /** No config of this worktree was ever trusted (a task from an older Trackwall): every mise file is a change. */
+  neverTrusted: z.boolean(),
   /** Sorted by path; empty when the worktree has the trusted mise config. */
   changes: z.array(MiseConfigChange),
   /** A hash of the current mise files: trusting passes it back, so the user trusts the config they saw, not a newer one. */

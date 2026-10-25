@@ -114,7 +114,7 @@ export class Logs {
       .filter(
         ({ source }) =>
           (repo === undefined || source.repo === repo) &&
-          (task === undefined || (source.kind === "task-mise-task" && source.task === task)) &&
+          (task === undefined || (source.kind === "task-mise-task" ? source.task === task : task === null)) &&
           (miseTask === undefined || (source.kind !== "mise-install" && source.miseTask === miseTask)),
       );
     const fromOtherRun = this.fromOtherRun(sinceSeq);

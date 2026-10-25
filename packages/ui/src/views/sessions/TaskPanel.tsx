@@ -1,4 +1,4 @@
-import { agentsApi, type Session, type Task } from "@trackwall/protocol";
+import { agentsApi, type RunningMiseTask, type Session, type Task } from "@trackwall/protocol";
 import { Code, GitBranch, Play, Square, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -6,6 +6,7 @@ import { TabBar } from "@/components/TabBar";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import type { LiveFeed } from "@/lib/daemon-events";
 import { relativeTime } from "@/lib/format";
 import { proposerLabel, taskName } from "@/lib/session-entries";
 import { isLive, sessionStateLabel } from "@/lib/session-state";
@@ -32,6 +33,7 @@ export function TaskPanel({
   session,
   sessions,
   tasks,
+  runningLive,
   onChanged,
   onRemoved,
   onOpenTask,
@@ -43,6 +45,8 @@ export function TaskPanel({
   sessions: readonly Session[];
   /** All tasks on the list, to name the task that changes the same files. */
   tasks: readonly Task[];
+  /** Pushes of the running mise tasks, for the mise tasks a task's agent runs in its worktree. */
+  runningLive: LiveFeed<RunningMiseTask[]> | undefined;
   onChanged: () => void;
   onRemoved: () => void;
   onOpenTask: (id: string) => void;
@@ -111,7 +115,7 @@ export function TaskPanel({
       <SharedFiles conn={conn} task={task.id} tasks={tasks} paused={confirmingRemoval} onOpenTask={onOpenTask} />
       <TaskMiseConfig conn={conn} task={task.id} paused={confirmingRemoval} />
       {task.summary && <TaskSummary summary={task.summary} />}
-      <TaskMiseRuns conn={conn} task={task.id} paused={confirmingRemoval} />
+      <TaskMiseRuns conn={conn} task={task.id} live={runningLive} paused={confirmingRemoval} />
       <div className="px-4">
         <TabBar tabs={tabs} active={shown} onSelect={setTab} />
       </div>

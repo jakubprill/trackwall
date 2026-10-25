@@ -4,6 +4,7 @@ import { Task } from "@trackwall/protocol";
 import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
 import { TaskBranch } from "./task-branch.ts";
+import { MAX_MISE_PATH } from "./task-mise-config.ts";
 
 /**
  * `tasks.json` w katalogu stanu (ADR-31): zadania przeżywają restart daemona, bo ich worktree i gałęzie zostają
@@ -25,7 +26,7 @@ export const StoredTask = Task.omit({ worktree: true }).extend({
    * the user's trust once.
    */
   trustedMiseConfig: z
-    .record(z.string().max(1024), z.string().regex(/^[0-9a-f]{64}$/))
+    .record(z.string().max(MAX_MISE_PATH), z.string().regex(/^[0-9a-f]{64}$/))
     .nullable()
     .default(null),
   /** Korzeń repo z folderu z projektami, z którego wyszło zadanie: tam git trzyma rejestr worktree i gałąź. */

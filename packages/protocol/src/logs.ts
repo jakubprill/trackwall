@@ -128,8 +128,8 @@ export const LogErrorsRequest = z
   .object({
     /** Only the sources of this repo; all of them without it. */
     repo: RepoId.optional(),
-    /** Only the sources of this task's worktree (ADR-59); the repo roots and other worktrees too without it. */
-    task: TaskId.optional(),
+    /** Only the sources of this task's worktree (ADR-59); with `null`, none of a task's worktree; all of them without it. */
+    task: TaskId.nullable().optional(),
     /** Only the log of this mise task (in every repo or in `repo`, in repo roots and worktrees); without it `mise install` too. */
     miseTask: MiseTaskName.optional(),
     minLevel: LogErrorLevel,

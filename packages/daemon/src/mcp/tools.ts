@@ -147,8 +147,8 @@ const runs: ToolRuns = {
   tail: async (facade, { repo, task, miseTask, sinceSeq, limit }) => {
     // Repo musi istnieć (`not_found` jak w get_repo); log taska, który nic nie wypisał, jest pusty.
     await facade.workspace.repo(repo);
-    if (task !== undefined) assertTaskOfRepo(facade, task, repo);
-    return facade.logs.tail({ source: miseTaskLogSource(repo, task ?? null, miseTask), sinceSeq, limit });
+    const target = miseTarget(facade, repo, task);
+    return facade.logs.tail({ source: miseTaskLogSource(target.repo, target.task, miseTask), sinceSeq, limit });
   },
   getErrors: async (facade, { repo, task, ...query }) => {
     // The repo and the task must exist (`not_found` as in tail): a typo in an id must not look like "no errors". A
@@ -210,7 +210,7 @@ const runs: ToolRuns = {
     run: await facade.mise.stop(callerMiseTarget(facade, caller, repo, task), miseTask),
   }),
   waitForMiseTask: async (facade, { repo, task, miseTask, timeoutSeconds }, { signal }) => ({
-    run: await facade.mise.waitForEnd({ repo, task: task ?? null }, miseTask, timeoutSeconds * 1000, signal),
+    run: await facade.mise.waitForEnd(miseTarget(facade, repo, task), miseTask, timeoutSeconds * 1000, signal),
   }),
   listRunningMiseTasks: async (facade) => ({ miseTasks: facade.mise.running() }),
   startService: async (facade, { repo, dependencies, timeoutSeconds }, { caller }) => {
@@ -295,7 +295,14 @@ function callerMiseTarget(
       "bad_request",
       `a session of task ${own} can run and stop mise tasks only in its own worktree, not in that of task ${task}`,
     );
-  return { repo, task: task ?? null };
+  return miseTarget(facade, repo, task);
+}
+
+/** The repo root, or the worktree of a task of that repo (`bad_request` for a task of another repo, ADR-59). */
+function miseTarget(facade: Facade, repo: string, task: string | undefined): { repo: string; task: string | null } {
+  if (task === undefined) return { repo, task: null };
+  assertTaskOfRepo(facade, task, repo);
+  return { repo, task };
 }
 
 /** A task named next to a repo belongs to it (`not_found` for an unknown or ended task, `bad_request` for another repo's). */

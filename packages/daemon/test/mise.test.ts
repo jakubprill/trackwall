@@ -28,16 +28,17 @@ function setup(config: object, command: readonly string[] = FAKE_MISE) {
   const worktree = join(home, "worktrees", "web", "task");
   mkdirSync(worktree, { recursive: true });
   writeFileSync(join(worktree, "fake-mise.json"), JSON.stringify({ ...config, untrusted: true }));
-  let miseConfigChanges: { path: string }[] = [];
+  let refusal: DomainError | null = null;
   const tasks = {
-    taskCheckout: async (id: string) => {
-      if (id !== TASK) throw new DomainError("not_found", `no task ${id}`);
-      return { repo: "web", worktree, miseConfigChanges };
+    trustedTaskWorktree: async (id: string, repo: string) => {
+      if (id !== TASK || repo !== "web") throw new DomainError("bad_request", `no task ${id} in ${repo}`);
+      if (refusal) throw refusal;
+      return worktree;
     },
   };
-  /** The agent changed these mise files in the worktree since the user trusted its config. */
-  const changeWorktreeMiseConfig = (...paths: string[]) => {
-    miseConfigChanges = paths.map((path) => ({ path }));
+  /** The `agents` module refuses the worktree, as it does when its mise config changed since the user trusted it. */
+  const refuseWorktree = (error: DomainError) => {
+    refusal = error;
   };
   const logs = new Logs({ dir: join(home, "logs"), maxFileBytes: 1024 * 1024, log: () => {} });
   const procs = new ProcessGroups({
@@ -58,7 +59,7 @@ function setup(config: object, command: readonly string[] = FAKE_MISE) {
     present = false;
   };
   const mise = new Mise({ procs, repos, tasks, command, env: async () => process.env });
-  return { mise, repoDir, worktree, procs, logs, removeRepo, changeWorktreeMiseConfig };
+  return { mise, repoDir, worktree, procs, logs, removeRepo, refuseWorktree };
 }
 
 function writeConfig(repoDir: string, config: object): void {
@@ -270,16 +271,32 @@ describe("mise tasks in a task worktree (ADR-59)", () => {
     TIMEOUT,
   );
 
-  test("a worktree whose mise config changed since the user trusted it runs nothing, and the error names the files", async () => {
-    const { mise, worktree, changeWorktreeMiseConfig } = setup({ tasks: [{ name: "test" }], exits: { test: 0 } });
-    changeWorktreeMiseConfig("mise.toml", "mise-tasks/deploy");
+  test("a worktree the agents module refuses (its mise config changed since the user trusted it) runs nothing", async () => {
+    const { mise, worktree, refuseWorktree } = setup({ tasks: [{ name: "test" }], exits: { test: 0 } });
+    refuseWorktree(new DomainError("mise_unavailable", "the mise config in the worktree of task trackwall/fix changed"));
 
     await expect(mise.start({ repo: "web", task: TASK }, "test")).rejects.toMatchObject({
       code: "mise_unavailable",
-      message: `the mise config in the worktree of task ${TASK} changed since the user trusted it (mise.toml, mise-tasks/deploy); only the user can trust it, in the task's panel in Trackwall`,
+      message: "the mise config in the worktree of task trackwall/fix changed",
     });
     expect(existsSync(join(worktree, "calls.log"))).toBe(false);
   });
+
+  test(
+    "a task's run is found only through the repo of its task, so naming another repo neither stops nor waits for it",
+    async () => {
+      const { mise } = setup({ tasks: [DEV] });
+      try {
+        const started = await mise.start({ repo: "web", task: TASK }, "dev");
+
+        await expect(mise.stop({ repo: "api", task: TASK }, "dev")).rejects.toMatchObject({ code: "not_found" });
+        expect(mise.run({ repo: "web", task: TASK }, "dev")).toMatchObject({ kind: "running", runId: started.runId });
+      } finally {
+        await mise.stop({ repo: "web", task: TASK }, "dev");
+      }
+    },
+    TIMEOUT,
+  );
 
   test("a repo root whose mise config is not trusted runs nothing in its task worktrees either", async () => {
     const { mise, worktree } = setup({ tasks: [{ name: "test" }], exits: { test: 0 }, untrusted: true });

@@ -35,15 +35,18 @@ interface MiseRepos {
   repoPath(id: string): Promise<string>;
 }
 
-/** What `mise` needs from `agents`: a task's worktree and how its mise config differs from the trusted one (ADR-59). */
-interface MiseTaskCheckouts {
-  taskCheckout(task: string): Promise<{ repo: string; worktree: string; miseConfigChanges: readonly { path: string }[] }>;
+/**
+ * What `mise` needs from `agents`: the worktree of a task of the repo, refused while its mise config is not the one the
+ * user trusted (ADR-59).
+ */
+interface MiseTaskWorktrees {
+  trustedTaskWorktree(task: string, repo: string): Promise<string>;
 }
 
 export interface MiseDeps {
   procs: MiseProcs;
   repos: MiseRepos;
-  tasks: MiseTaskCheckouts;
+  tasks: MiseTaskWorktrees;
   /** Program `mise` z ewentualnymi argumentami przed komendą; w daemonie `["mise"]`, w testach atrapa. */
   command: readonly string[];
   /** Środowisko procesów użytkownika (`PATH` z powłoki logowania na macOS). */
@@ -114,7 +117,7 @@ export class Mise {
       .map(({ name, run }) => ({ name, description: "", run }));
   }
 
-  /** Taski uruchomione przez daemon w `target`, których grupa jeszcze nie skończyła (także w trakcie zatrzymywania). */
+  /** mise tasks the daemon started in `target` whose group has not ended yet (also while stopping). */
   private liveRuns(target: MiseTarget): { name: string; run: RunState }[] {
     return [...(this.started.get(targetKey(target))?.names ?? [])].flatMap((name) => {
       const run = this.deps.procs.state(owner(target, name));
@@ -217,28 +220,19 @@ export class Mise {
   }
 
   /**
-   * Where a run of `target` happens. A task worktree (ADR-59) needs the repo root's config trusted, since the
-   * worktree's config came from it, and the worktree's mise config unchanged since the user trusted it; then mise gets
-   * the worktree as a trusted path in this run's environment only.
+   * Where a run of `target` happens. A task worktree (ADR-59) needs the repo root's config trusted, since the user
+   * trusted the worktree's first config by trusting the root's, and the worktree's mise config as the user trusted it;
+   * then mise gets the worktree as a trusted path in this run's environment only. The worktree is checked last, as
+   * close to the run as the listing of its tasks allows (§8).
    */
   private async place(target: MiseTarget): Promise<RunPlace> {
     const root = await this.deps.repos.repoPath(target.repo);
     const env = await this.deps.env();
     if (target.task === null) return { dir: root, env };
-    const checkout = await this.deps.tasks.taskCheckout(target.task);
-    if (checkout.repo !== target.repo)
-      throw new DomainError("bad_request", `task ${target.task} is in ${checkout.repo}, not in ${target.repo}`);
     const listed = await this.list(root, env);
     if (listed.kind !== "ok") throw new DomainError("mise_unavailable", `${target.repo}: ${listed.message}`);
-    if (checkout.miseConfigChanges.length > 0) {
-      const files = checkout.miseConfigChanges.map((c) => c.path).join(", ");
-      throw new DomainError(
-        "mise_unavailable",
-        `the mise config in the worktree of task ${target.task} changed since the user trusted it (${files}); ` +
-          "only the user can trust it, in the task's panel in Trackwall",
-      );
-    }
-    return { dir: checkout.worktree, env: trustingPath(env, checkout.worktree) };
+    const worktree = await this.deps.tasks.trustedTaskWorktree(target.task, target.repo);
+    return { dir: worktree, env: trustingPath(env, worktree) };
   }
 
   private async hasTask(place: RunPlace, miseTask: string): Promise<boolean> {
@@ -334,15 +328,16 @@ export function parseTaskList(result: MiseCliResult): TaskList {
 }
 
 /**
- * Klucz właściciela grupy w `procs`; tylko budowany, nigdy rozbierany z powrotem. A task's prefix differs from a
- * repo's, so no repo id and mise task name (which may contain `:`) can give the key of a task's run.
+ * The group owner in `procs`, only built, never parsed back. A task's prefix differs from a repo's, so no repo id and
+ * mise task name (which may contain `:`) can give the key of a task's run, and the key holds the repo, so a run is
+ * found only through the repo its task is in (a session's repo gate, ADR-41).
  */
 function owner(target: MiseTarget, miseTask: string): string {
-  return target.task === null ? `mise:${target.repo}:${miseTask}` : `task-mise:${target.task}:${miseTask}`;
+  return target.task === null ? `mise:${target.repo}:${miseTask}` : `task-mise:${target.task}:${target.repo}:${miseTask}`;
 }
 
 function targetKey(target: MiseTarget): string {
-  return target.task === null ? `repo:${target.repo}` : `task:${target.task}`;
+  return target.task === null ? `repo:${target.repo}` : `task:${target.task}:${target.repo}`;
 }
 
 /** The target in a message: the repo, or the task worktree in it. */
