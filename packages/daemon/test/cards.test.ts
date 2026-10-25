@@ -14,7 +14,7 @@ import { fakeHosting } from "./support/hosting.ts";
 /** The `cards` module on real git and a projects folder, with the card cache in a temporary directory. */
 async function setup(vcs: Vcs = new Vcs()) {
   const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
-  const projects = mkdtempSync(join(tmpdir(), "trackwall-projekty-"));
+  const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
   const file = new WorkspaceFile(join(home, "workspace.yaml"));
   const workspace = new Workspace({ file, vcs, hosting: fakeHosting().hosting, openEditor: () => {}, openFolder: () => {} });
   await workspace.setProjectsDir(projects);

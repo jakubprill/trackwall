@@ -3,14 +3,14 @@ import type { Join } from "./graph-join.ts";
 import type { HttpIndex, HttpTarget, MatchedCall } from "./http-index.ts";
 
 /**
- * Krawędzie `http` (§4.6, ADR-30): klient HTTP repo i repo, które woła (`HttpIndex.targets`), z dowodami: klient
- * (plik i linia adnotacji albo wywołania), wpis konfiguracji z adresem, aplikacja celu i pary wywołanie–endpoint.
+ * `http` edges (§4.6, ADR-30): a repo's HTTP client and the repo it calls (`HttpIndex.targets`), with evidence: the client
+ * (the file and line of the annotation or call), the configuration entry with the address, the target app and call–endpoint pairs.
  */
 
-/** Ile par wywołanie–endpoint trafia do dowodów jednej krawędzi: kilka wystarcza, resztę pokaże `find_endpoint`. */
+/** How many call–endpoint pairs go into one edge's evidence: a few are enough, `find_endpoint` shows the rest. */
 const MAX_CALL_EVIDENCE = 5;
 
-/** Rodzaj klienta dla człowieka w dowodzie krawędzi; `Record` wymusza wpis dla każdego z kontraktu. */
+/** The client kind for a person in the edge evidence; the `Record` forces an entry for every kind in the contract. */
 const VIA_LABELS: Record<HttpClientVia, string> = {
   feign: "Feign client",
   "http-interface": "@HttpExchange interface",

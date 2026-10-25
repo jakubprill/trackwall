@@ -13,7 +13,7 @@ let client: Client;
 
 beforeAll(async () => {
   daemon = await startSessionApi(TOKEN, {
-    repos: { sklep: { "README.md": "# sklep\n", "src/cart.ts": "export const cart = [];\n" } },
+    repos: { shop: { "README.md": "# shop\n", "src/cart.ts": "export const cart = [];\n" } },
     miseCommand: ["mise"],
   });
   client = await connectHttpClient(daemon.api.port, TOKEN);
@@ -26,7 +26,7 @@ afterAll(async () => {
 
 describe.skipIf(process.versions.bun === undefined)("get_task_changes (real git, fake Copilot CLI)", () => {
   test("gives the committed and uncommitted changes of a task's worktree, narrowed by paths", async () => {
-    const task = await daemon.facade.agents.createTask("sklep", "add a discount");
+    const task = await daemon.facade.agents.createTask("shop", "add a discount");
     writeFileSync(join(task.worktree, "src", "cart.ts"), "export const cart = [];\nexport const discount = 0.1;\n");
     gitIn(task.worktree, "commit", "-am", "Add a discount");
     mkdirSync(join(task.worktree, "docs"));
@@ -52,7 +52,7 @@ describe.skipIf(process.versions.bun === undefined)("get_task_changes (real git,
   }, 60_000);
 
   test("cuts a long diff at the last whole line within maxPatchBytes and says so", async () => {
-    const task = await daemon.facade.agents.createTask("sklep", "add many lines");
+    const task = await daemon.facade.agents.createTask("shop", "add many lines");
     const lines = Array.from({ length: 200 }, (_, i) => `line ${i} żółć\n`).join("");
     writeFileSync(join(task.worktree, "long.txt"), lines);
 

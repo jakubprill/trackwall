@@ -72,28 +72,29 @@ function toInt(value: string | undefined, name: string): number {
   return n;
 }
 
-/** Podkomenda `trackwall-daemon`, która uruchamia most stdio do `/mcp` (§5.3). */
+/** The `trackwall-daemon` subcommand that starts the Stdio bridge to `/mcp` (§5.3). */
 export const MCP_STDIO_COMMAND = "mcp-stdio";
 /**
- * Opcja mostu stdio z plikiem tokenu sesji (ADR-39): podaje ją daemon w konfiguracji MCP każdej swojej sesji, żeby
- * serwer MCP wiedział, która sesja woła. Ścieżka zamiast samego tokenu, bo argumenty procesu widzą inni użytkownicy systemu.
+ * The Stdio bridge option with the session token file (ADR-39): the daemon gives it in the MCP configuration of each of its sessions
+ * so that the MCP server knows which session calls. A path instead of the token itself, because other users of the system see
+ * process arguments.
  */
 const SESSION_TOKEN_FILE_KEY = "session-token-file";
 export const SESSION_TOKEN_FILE_OPTION = `--${SESSION_TOKEN_FILE_KEY}`;
-/** Podkomenda `trackwall-daemon`, którą Copilot CLI uruchamia jako hook wtyczki sesji (ADR-17, ADR-26). */
+/** The `trackwall-daemon` subcommand that Copilot CLI runs as the session plugin's hook (ADR-17, ADR-26). */
 export const COPILOT_HOOK_COMMAND = "copilot-hook";
 
 /**
- * Wiersz poleceń: daemon, most stdio (`mcp-stdio [--home <dir>] [--session-token-file <plik>]`), który ma do ustawienia
- * tylko katalog stanu i token sesji, albo
- * hook wtyczki sesji (`copilot-hook <zdarzenie> <hooks.jsonl>`).
+ * The command line: the daemon, the Stdio bridge (`mcp-stdio [--home <dir>] [--session-token-file <file>]`), which has
+ * only the state directory and the session token to set, or
+ * the session plugin's hook (`copilot-hook <event> <hooks.jsonl>`).
  */
 export type CommandLine =
   | { command: "daemon"; args: DaemonArgs }
   | { command: typeof MCP_STDIO_COMMAND; home?: string; sessionTokenFile?: string }
   | { command: typeof COPILOT_HOOK_COMMAND; event?: string; hooksFile?: string };
 
-/** Hook nie sprawdza argumentów: zły argument to tylko brak rekordu, a hook nie może zatrzymać agenta błędem. */
+/** The hook does not check arguments: a bad argument only means a missing record, and a hook must not stop the agent with an error. */
 export function parseCommandLine(argv: string[]): CommandLine {
   if (argv[0] === COPILOT_HOOK_COMMAND) return { command: COPILOT_HOOK_COMMAND, event: argv[1], hooksFile: argv[2] };
   if (argv[0] !== MCP_STDIO_COMMAND) return { command: "daemon", args: parseDaemonArgs(argv) };

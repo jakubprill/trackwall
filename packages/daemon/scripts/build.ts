@@ -1,11 +1,11 @@
 /**
- * Buduje daemon do jednej binarki przez `bun build --compile`.
+ * Builds the daemon into a single binary with `bun build --compile`.
  *
- *   bun scripts/build.ts                 binarka dla bieżącej platformy
- *   bun scripts/build.ts --target all    wszystkie wspierane platformy (kompilacja krzyżowa)
+ *   bun scripts/build.ts                 a binary for the current platform
+ *   bun scripts/build.ts --target all    all supported platforms (cross-compilation)
  *   bun scripts/build.ts --target x86_64-pc-windows-msvc
  *
- * Wynik: `dist/trackwall-daemon-<triple>[.exe]`, czyli dokładnie nazwa, której Tauri oczekuje od sidecara.
+ * Output: `dist/trackwall-daemon-<triple>[.exe]`, exactly the name Tauri expects of the sidecar.
  */
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -32,14 +32,14 @@ function hostTriple(): Triple {
     "linux-x64": "x86_64-unknown-linux-gnu",
   };
   const triple = map[key];
-  if (!triple) throw new Error(`nieobsługiwana platforma ${key}`);
+  if (!triple) throw new Error(`unsupported platform ${key}`);
   return triple;
 }
 
 const { values } = parseArgs({ args: Bun.argv.slice(2), options: { target: { type: "string" } } });
 const requested = values.target ?? hostTriple();
 if (requested !== "all" && !isTriple(requested)) {
-  throw new Error(`nieznany target ${requested}; dostępne: all, ${Object.keys(TARGETS).join(", ")}`);
+  throw new Error(`unknown target ${requested}; available: all, ${Object.keys(TARGETS).join(", ")}`);
 }
 const triples = requested === "all" ? Object.keys(TARGETS).filter(isTriple) : [requested];
 
@@ -55,8 +55,8 @@ for (const triple of triples) {
       "bun",
       "build",
       "--compile",
-      // Binarka startuje też w cudzym katalogu (most MCP w repo, w którym pracuje agent), więc nie czyta jego `.env`
-      // ani `bunfig.toml`: repo nie może ustawić zmiennych ani opcji runtime daemona.
+      // The binary also starts in someone else's directory (the MCP bridge in the repo the agent works in), so it does not
+      // read its `.env` or `bunfig.toml`: a repo cannot set the daemon's variables or runtime options.
       "--no-compile-autoload-dotenv",
       "--no-compile-autoload-bunfig",
       "--minify",
@@ -69,5 +69,5 @@ for (const triple of triples) {
     { cwd: root, stdout: "inherit", stderr: "inherit" },
   );
   if (proc.exitCode !== 0) process.exit(proc.exitCode ?? 1);
-  console.log(`zbudowano ${outfile}`);
+  console.log(`built ${outfile}`);
 }

@@ -20,8 +20,8 @@ export function isUiDir(dir: string | undefined): dir is string {
 }
 
 /**
- * Serwuje zbudowane UI z `dir`. Ścieżka spoza katalogu kończy się 404; nieznana ścieżka bez rozszerzenia
- * dostaje `index.html` (routing po stronie UI).
+ * Serves the built UI from `dir`. A path outside the directory ends in 404; an unknown path without an extension
+ * gets `index.html` (routing on the UI side).
  */
 export function serveStatic(dir: string, urlPath: string, res: ServerResponse): void {
   const root = resolve(dir);
@@ -45,7 +45,7 @@ export function serveStatic(dir: string, urlPath: string, res: ServerResponse): 
     file = join(root, "index.html");
   }
   const type = CONTENT_TYPES[extname(file)] ?? "application/octet-stream";
-  // Tylko pliki z hashem w nazwie (Vite: `assets/`) liczone względem katalogu UI, nie całej ścieżki na dysku.
+  // Only files with a hash in the name (Vite: `assets/`), counted relative to the UI directory, not the whole path on disk.
   const immutable = relative(root, file).startsWith(`assets${sep}`);
   res.writeHead(200, {
     "content-type": type,

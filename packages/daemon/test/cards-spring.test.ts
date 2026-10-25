@@ -74,7 +74,7 @@ describe("Spring repo card from the shop fixtures", () => {
   });
 });
 
-describe("endpointy Spring", () => {
+describe("Spring endpoints", () => {
   test("an API-first interface: mapping annotations from the interface, the controller path and server.servlet.context-path; /items and /items/ are one endpoint", () => {
     const c = card({
       "src/main/resources/application.properties": "spring.application.name=catalog\nserver.servlet.context-path=/catalog\n",
@@ -176,7 +176,7 @@ describe("endpointy Spring", () => {
   });
 });
 
-describe("klienci HTTP Spring", () => {
+describe("Spring HTTP clients", () => {
   test("Feign with url from the annotation, the address from spring.cloud.openfeign.client.config and path; lb:// gives the app name", () => {
     const c = card({
       "src/main/resources/application.yml": [
@@ -299,14 +299,14 @@ describe("klienci HTTP Spring", () => {
 describe("secrets in addresses", () => {
   test("the user, password and query of an address in application.yml, .env and code do not reach the card", () => {
     const c = card({
-      "src/main/resources/application.yml": "orders:\n  url: http://svc:tajne1@orders:8080/api?token=tajne2\n",
+      "src/main/resources/application.yml": "orders:\n  url: http://svc:hidden1@orders:8080/api?token=hidden2\n",
       "src/main/java/a/Rest.java":
-        'class Rest {\n  RestTemplate rest;\n  void x() { rest.getForObject("http://ja:tajne3@legacy/api/x?key=tajne4", String.class); }\n}\n',
+        'class Rest {\n  RestTemplate rest;\n  void x() { rest.getForObject("http://me:hidden3@legacy/api/x?key=hidden4", String.class); }\n}\n',
       "web/package.json": "{}",
-      "web/.env": "VITE_API=https://ja:tajne5@api.example.com/v1?k=tajne6\n",
+      "web/.env": "VITE_API=https://me:hidden5@api.example.com/v1?k=hidden6\n",
     });
     const text = JSON.stringify(card({}).consumes) + JSON.stringify(c.consumes);
-    expect(text).not.toMatch(/tajne/);
+    expect(text).not.toMatch(/hidden/);
     expect(summary(c)).toEqual([
       "rest-template Rest app=null url=http://***@legacy [] {GET /api/x}",
       "config orders.url app=null url=http://***@orders:8080/api [default] {}",
