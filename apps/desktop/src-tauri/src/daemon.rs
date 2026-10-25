@@ -1,7 +1,7 @@
-//! Nadzór daemona (§5.4): odkrycie przez `daemon.json`, start sidecara, `/api/health`, łagodne wyjście.
+//! Daemon supervision (§5.4): discovery through `daemon.json`, sidecar start, `/api/health`, graceful exit.
 //!
-//! HTTP jest tu pisany ręcznie na `TcpStream`, bo rozmawiamy wyłącznie z własnym daemonem na loopbacku,
-//! a cały ruch to dwa krótkie żądania. Klient HTTP z TLS i async byłby większy niż reszta powłoki.
+//! HTTP is written by hand on `TcpStream` here, because we only talk to our own daemon on loopback,
+//! and all the traffic is a few short requests. An HTTP client with TLS and async would be bigger than the rest of the shell.
 
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
@@ -12,15 +12,15 @@ use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-/// Wersja powłoki musi być równa wersji daemona; pilnuje tego skrypt budowania.
+/// The shell's version must equal the daemon's; the build script guards this.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Hojny limit: pierwsze uruchomienie niepodpisanej binarki bywa długo skanowane przez antywirus (§9).
+/// A generous limit: the first launch of an unsigned binary can be scanned by an antivirus for a long time (§9).
 const START_TIMEOUT: Duration = Duration::from_secs(60);
 const STOP_TIMEOUT: Duration = Duration::from_secs(10);
 const IO_TIMEOUT: Duration = Duration::from_millis(1500);
 
-/// Pola z `daemon.json`, których potrzebuje powłoka; wersję sprawdzamy przez `/api/health`, nie z pliku.
+/// The fields of `daemon.json` the shell needs; the version is checked through `/api/health`, not from the file.
 #[derive(Debug, Clone, Deserialize)]
 pub struct DaemonFile {
     pub pid: u32,
@@ -28,7 +28,7 @@ pub struct DaemonFile {
     pub token: String,
 }
 
-/// To, co dostaje UI przez komendę `daemon_connection`.
+/// What the UI gets through the `daemon_connection` command.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Connection {
@@ -44,11 +44,11 @@ impl From<&DaemonFile> for Connection {
     }
 }
 
-/// Katalog stanu w buildzie deweloperskim jest osobny, żeby `tauri dev` nie podłączał się do daemona
-/// z wydania (albo z `bun ... --ui`), który nie wpuszcza originu serwera Vite.
+/// The state directory in a development build is separate, so that `tauri dev` does not connect to the daemon
+/// of a release (or of `bun ... --ui`), which does not let in the Vite server's origin.
 const HOME_DIR_NAME: &str = if cfg!(debug_assertions) { ".trackwall-dev" } else { ".trackwall" };
 
-/// `TRACKWALL_HOME` albo `~/.trackwall`, tak samo jak w daemonie; pusta zmienna znaczy „nie ustawiono”.
+/// `TRACKWALL_HOME` or `~/.trackwall`, the same as in the daemon; an empty variable means "not set".
 pub fn trackwall_home() -> Result<PathBuf, String> {
     if let Some(dir) = std::env::var_os("TRACKWALL_HOME").filter(|v| !v.is_empty()) {
         return Ok(PathBuf::from(dir));
@@ -60,7 +60,7 @@ pub fn trackwall_home() -> Result<PathBuf, String> {
         .ok_or_else(|| format!("home directory not found ({var} is not set)"))
 }
 
-/// Działający daemon tej samej wersji opisany przez `daemon.json`.
+/// A running daemon of the same version described by `daemon.json`.
 pub fn discover(home: &Path) -> Option<Connection> {
     read_daemon_file(home).filter(|f| health(f.port).as_deref() == Some(VERSION)).map(|f| Connection::from(&f))
 }
@@ -70,7 +70,7 @@ pub fn read_daemon_file(home: &Path) -> Option<DaemonFile> {
     serde_json::from_str(&text).ok()
 }
 
-/// Wersja z `GET /api/health` albo `None`, gdy nikt nie odpowiada.
+/// The version from `GET /api/health`, or `None` when nobody answers.
 pub fn health(port: u16) -> Option<String> {
     let (status, body) = http(port, "GET", "/api/health", None).ok()?;
     if status != 200 {
@@ -83,8 +83,8 @@ pub fn health(port: u16) -> Option<String> {
     v["data"]["version"].as_str().map(str::to_owned)
 }
 
-/// Znajduje działający daemon albo uruchamia sidecar i czeka, aż odpowie.
-/// `cancel` przerywa czekanie i zabija uruchomiony sidecar, który jeszcze nie odpowiada (wyjście w trakcie startu).
+/// Finds a running daemon or starts the sidecar and waits until it answers.
+/// `cancel` stops the waiting and kills a started sidecar that does not answer yet (exit during startup).
 pub fn ensure_daemon(home: &Path, cancel: &AtomicBool) -> Result<Connection, String> {
     if let Some(existing) = read_daemon_file(home) {
         match health(existing.port) {
@@ -96,7 +96,7 @@ pub fn ensure_daemon(home: &Path, cancel: &AtomicBool) -> Result<Connection, Str
                     existing.pid
                 ))
             }
-            None => {} // nieaktualny plik po awarii; nowy daemon go nadpisze
+            None => {} // stale file after a crash; the new daemon overwrites it
         }
     }
     if cancel.load(Ordering::SeqCst) {
@@ -107,7 +107,7 @@ pub fn ensure_daemon(home: &Path, cancel: &AtomicBool) -> Result<Connection, Str
     let deadline = Instant::now() + START_TIMEOUT;
     loop {
         if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
-            // Kod 0 oznacza, że w międzyczasie wystartował inny daemon tej samej wersji.
+            // Code 0 means that another daemon of the same version started in the meantime.
             if status.success() {
                 if let Some(conn) = discover(home) {
                     return Ok(conn);
@@ -120,16 +120,16 @@ pub fn ensure_daemon(home: &Path, cancel: &AtomicBool) -> Result<Connection, Str
                 return Ok(Connection::from(&f));
             }
         }
-        // Po sprawdzeniu gotowości: daemon, który już wstał, wraca do wywołującego i dostaje łagodne zatrzymanie,
-        // a nie twarde zabicie, po którym jego serwisy zostałyby bez rodzica.
+        // After the readiness check: a daemon that is already up returns to the caller and gets a graceful stop,
+        // not a hard kill, after which its services would be left without a parent.
         if cancel.load(Ordering::SeqCst) {
             let _ = child.kill();
             let _ = child.wait();
             return Err("Daemon start cancelled.".into());
         }
         if Instant::now() > deadline {
-            // Nie zostawiamy procesu, którego nikt nie zna: bez tego daemon mógłby wstać chwilę później,
-            // a okno i tray nie miałyby jak się z nim połączyć ani go zatrzymać.
+            // We do not leave behind a process nobody knows about: without this the daemon could come up a moment later,
+            // and the window and tray would have no way to connect to it or stop it.
             let _ = child.kill();
             let _ = child.wait();
             return Err(format!(
@@ -142,7 +142,7 @@ pub fn ensure_daemon(home: &Path, cancel: &AtomicBool) -> Result<Connection, Str
     }
 }
 
-/// Łagodne zatrzymanie: `POST /api/daemon/shutdown`, potem czekanie, aż health przestanie odpowiadać.
+/// Graceful stop: `POST /api/daemon/shutdown`, then waiting until health stops answering.
 pub fn shutdown(conn: &Connection) -> Result<(), String> {
     let (status, body) = http(conn.port, "POST", "/api/daemon/shutdown", Some(&conn.token))?;
     if status != 200 {
@@ -158,7 +158,7 @@ pub fn shutdown(conn: &Connection) -> Result<(), String> {
     Err(format!("daemon is still responding after {} s", STOP_TIMEOUT.as_secs()))
 }
 
-/// Treść odpowiedzi `POST /api/agents/sessions` (lista sesji Copilot CLI, ADR-26).
+/// The body of the `POST /api/agents/sessions` reply (the list of Copilot CLI sessions, ADR-26).
 pub fn sessions(conn: &Connection) -> Result<String, String> {
     let (status, body) = http(conn.port, "POST", "/api/agents/sessions", Some(&conn.token))?;
     if status != 200 {
@@ -167,7 +167,7 @@ pub fn sessions(conn: &Connection) -> Result<String, String> {
     Ok(body)
 }
 
-/// Ścieżka sidecara: obok `trackwall.exe` (portable zip) albo w `Contents/MacOS` (bundle .app).
+/// The sidecar path: next to `trackwall.exe` (portable zip) or in `Contents/MacOS` (.app bundle).
 fn sidecar_path() -> Result<PathBuf, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let dir = exe.parent().ok_or("app directory not found")?;
@@ -187,9 +187,9 @@ fn spawn_sidecar(home: &Path, log_path: &Path) -> Result<Child, String> {
 
     let mut cmd = Command::new(&exe);
     cmd.arg("--parent").arg(std::process::id().to_string());
-    // Jawnie, bo w buildzie deweloperskim katalog domyślny powłoki różni się od domyślnego daemona.
+    // Explicitly, because in a development build the shell's default directory differs from the daemon's default.
     cmd.env("TRACKWALL_HOME", home);
-    // `tauri dev` ładuje UI z serwera Vite, który ma własny origin.
+    // `tauri dev` loads the UI from the Vite server, which has its own origin.
     #[cfg(debug_assertions)]
     cmd.arg("--allow-origin").arg("http://127.0.0.1:5173");
     cmd.stdin(Stdio::null()).stdout(Stdio::from(log)).stderr(Stdio::from(log_err));
@@ -197,7 +197,7 @@ fn spawn_sidecar(home: &Path, log_path: &Path) -> Result<Child, String> {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        // Bez okna konsoli i we własnej grupie, żeby Ctrl+C w terminalu `tauri dev` nie zabijał daemona.
+        // Without a console window and in its own group, so that Ctrl+C in the `tauri dev` terminal does not kill the daemon.
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
         cmd.creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP);
@@ -205,7 +205,7 @@ fn spawn_sidecar(home: &Path, log_path: &Path) -> Result<Child, String> {
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
-        // Własna grupa procesów: daemon ma przeżyć zamknięcie okna i terminala.
+        // Its own process group: the daemon has to outlive closing the window and the terminal.
         cmd.process_group(0);
     }
     cmd.spawn().map_err(|e| format!("Failed to start {}: {e}", exe.display()))
@@ -222,7 +222,7 @@ fn log_tail(path: &Path) -> String {
     }
 }
 
-/// Minimalny klient HTTP/1.1 do daemona na 127.0.0.1: `Connection: close`, odpowiedź czytana do końca.
+/// A minimal HTTP/1.1 client for the daemon on 127.0.0.1: `Connection: close`, the response read to the end.
 fn http(port: u16, method: &str, path: &str, token: Option<&str>) -> Result<(u16, String), String> {
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let mut stream = TcpStream::connect_timeout(&addr, IO_TIMEOUT).map_err(|e| e.to_string())?;
@@ -249,7 +249,7 @@ fn parse_response(raw: &[u8]) -> Result<(u16, String), String> {
     Ok((status, String::from_utf8_lossy(&body).into_owned()))
 }
 
-/// Dekoduje `Transfer-Encoding: chunked` na bajtach (rozmiary chunków są w bajtach, nie znakach).
+/// Decodes `Transfer-Encoding: chunked` on bytes (chunk sizes are in bytes, not characters).
 fn dechunk(mut body: &[u8]) -> Result<Vec<u8>, String> {
     let mut out = Vec::new();
     loop {

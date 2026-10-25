@@ -1,7 +1,7 @@
 /**
- * Generuje ikony z SVG w `assets/` (`pnpm --filter @trackwall/desktop icons`): ikony aplikacji z `bundle.icon`
- * w tauri.conf.json, szablon traya dla macOS i favicon UI. `tauri icon` tworzy też ikony Androida, iOS i Sklepu
- * Windows; tych nie używamy, więc generujemy do katalogu tymczasowego i kopiujemy tylko potrzebne pliki.
+ * Generates icons from the SVGs in `assets/` (`pnpm --filter @trackwall/desktop icons`): the app icons from `bundle.icon`
+ * in tauri.conf.json, the tray template for macOS and the UI favicon. `tauri icon` also makes icons for Android, iOS and
+ * the Microsoft Store; we do not use those, so we generate into a temporary directory and copy only the files we need.
  */
 import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,8 +13,8 @@ const ASSETS = join(DESKTOP, "assets");
 const FAVICON = join(REPO, "packages", "ui", "public", "favicon.png");
 const FAVICON_SIZE = 64;
 const TRAY_SIZE = 64;
-// Kafel w icon.svg zajmuje 50..462 z 512 (siatka macOS); kadr zostawia 6 px przezroczystego marginesu,
-// żeby wygładzona krawędź kafla nie dotykała brzegu ikony.
+// The tile in icon.svg takes 50..462 of 512 (the macOS grid); the crop leaves a 6 px transparent margin,
+// so that the tile's anti-aliased edge does not touch the edge of the icon.
 const MACOS_VIEWBOX = 'viewBox="0 0 512 512"';
 const FULL_BLEED_VIEWBOX = 'viewBox="44 44 424 424"';
 
@@ -22,10 +22,10 @@ function tauriIcon(svg: string, out: string, ...args: string[]): void {
   run(["pnpm", "exec", "tauri", "icon", svg, "-o", out, ...args], DESKTOP);
 }
 
-/** Ta sama ikona przycięta do kafla, w pliku obok, bo `tauri icon` czyta SVG z dysku. */
+/** The same icon cropped to the tile, in a file next to it, because `tauri icon` reads the SVG from disk. */
 function fullBleedSvg(dir: string): string {
   const svg = readFileSync(join(ASSETS, "icon.svg"), "utf8");
-  if (!svg.includes(MACOS_VIEWBOX)) throw new Error(`assets/icon.svg: brak ${MACOS_VIEWBOX}, popraw kadr w icons.ts`);
+  if (!svg.includes(MACOS_VIEWBOX)) throw new Error(`assets/icon.svg: ${MACOS_VIEWBOX} is missing, fix the crop in icons.ts`);
   const path = join(dir, "icon-full-bleed.svg");
   writeFileSync(path, svg.replace(MACOS_VIEWBOX, FULL_BLEED_VIEWBOX));
   return path;

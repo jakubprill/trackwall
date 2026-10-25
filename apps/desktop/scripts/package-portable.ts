@@ -1,12 +1,12 @@
 /**
- * Pakuje wynik `pnpm build:desktop` do archiwum w `out/`:
+ * Packs the output of `pnpm build:desktop` into an archive in `out/`:
  *
- *   Windows: trackwall-<wersja>-windows-x64.zip
- *     Trackwall/trackwall.exe          okno + tray (wymaga WebView2)
+ *   Windows: trackwall-<version>-windows-x64.zip
+ *     Trackwall/trackwall.exe          window + tray (needs WebView2)
  *     Trackwall/trackwall-daemon.exe   daemon (sidecar)
- *     Trackwall/ui/                    UI dla trybu bez okna: trackwall-daemon.exe --ui
+ *     Trackwall/ui/                    UI for the windowless mode: trackwall-daemon.exe --ui
  *     Trackwall/README.txt
- *   macOS:   trackwall-<wersja>-macos-<arch>.zip z Trackwall.app
+ *   macOS:   trackwall-<version>-macos-<arch>.zip with Trackwall.app
  *
  * No installer: the archive unpacks anywhere. Outside the user's folders Trackwall writes only the notification
  * registration in HKCU on Windows (ADR-50), which README.txt mentions.
@@ -19,7 +19,7 @@ const OUT = join(REPO, "out");
 const version = assertVersionsMatch();
 
 function need(path: string): string {
-  if (!existsSync(path)) throw new Error(`brak ${path}; najpierw pnpm build:desktop`);
+  if (!existsSync(path)) throw new Error(`${path} is missing; run pnpm build:desktop first`);
   return path;
 }
 
@@ -65,5 +65,5 @@ if (process.platform === "win32") {
   run(["ditto", "-c", "-k", "--keepParent", app, zip], OUT);
   console.log(zip);
 } else {
-  throw new Error("portable build jest tylko dla Windows i macOS");
+  throw new Error("the portable build is only for Windows and macOS");
 }
