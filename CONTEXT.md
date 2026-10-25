@@ -1,23 +1,26 @@
-# Słownik Trackwall
+# Trackwall glossary
 
-Pojęcia, które łatwo pomylić. Kod, UI, narzędzia MCP i dokumentacja używają tych słów i tylko tych: w polskiej prozie polskiego słowa, w UI, komunikatach daemona i opisach narzędzi MCP słowa angielskiego (*kursywą* przy haśle, ADR-32), w kodzie identyfikatora podanego przy haśle. Szczegóły są w `docs/architecture.md`; tu jest tylko to, co trzeba wiedzieć, żeby nazwać rzecz poprawnie. Nowe pojęcie dopisuje się w tym samym PR, w którym się pojawia.
+Terms that are easy to confuse. Code, UI, MCP tools and documentation use these words and only these: in prose, the UI, daemon messages and MCP tool descriptions the word in bold (or the product word the entry names, ADR-32), in code the identifier given with the entry. Details are in `docs/architecture.md`; here is only what you need to know to name a thing correctly. A new term is added in the same PR in which it appears.
 
-## Aplikacja
+## Application
 
 **Daemon** (`daemon`):
-Proces `trackwall-daemon`, który trzyma cały stan i całą logikę. Jedyne źródło prawdy; UI, CLI `ws` i agenci (przez serwer MCP w daemonie) są klientami jego fasady.
-_Unikaj_: backend, serwer (bez dopowiedzenia)
+The `trackwall-daemon` process, which holds all the state and all the logic. The only source of truth; the UI, the `ws` CLI and agents (through the MCP server in the daemon) are clients of its facade.
+_Avoid_: backend, server (without qualification)
 
-**Powłoka** (`apps/desktop`):
-Aplikacja Tauri: okna, tray, uruchamianie i nadzór daemona jako sidecara, sprawdzenie WebView2. Nie zawiera logiki domenowej.
-_Unikaj_: aplikacja (gdy chodzi tylko o Tauri)
+**Shell** (`apps/desktop`):
+The Tauri app: windows, tray, starting and supervising the daemon as a sidecar, the WebView2 check. It contains no domain logic.
+_Avoid_: app (when only Tauri is meant)
 
-**Widok** (`View`; po angielsku *view*):
-Ekran aplikacji w UI (Home, Repos, Sessions, Overview, Daemon, Settings), przełączany paskiem widoków (`ActivityBar`) przy lewej krawędzi okna albo skrótem.
-_Unikaj_: zakładka (dla całego ekranu)
+**View** (`View`):
+A screen of the app in the UI (Home, Repos, Sessions, Overview, Daemon, Settings), switched with the view bar (`ActivityBar`) at the left edge of the window or with a shortcut.
+_Avoid_: tab (for a whole screen)
+
+**Tab** (`TabBar`):
+A switch for part of the content inside a view, for example README, Files, Commits and mise tasks in the Repos view.
 
 **Window** (`windows.rs` in the shell; label `main` or `window-<n>`):
-A desktop shell window with the whole UI and its own view (ADR-49). The main window comes from `tauri.conf.json` and hides to the tray; an extra window is opened with “Open in new window” and closes for real.
+A desktop shell window with the whole UI and its own view (ADR-49). The main window comes from `tauri.conf.json` and hides to the tray; an extra window is opened with "Open in new window" and closes for real.
 _Avoid_: screen (that is a monitor), tab (that is `TabBar`), terminal window (that is a session terminal)
 
 **Trackwall link** (`trackwall://`, `trackwallLink`, `TRACKWALL_LINK_SCHEME`, `TRACKWALL_LINK_KINDS`; in the shell `link.rs`):
@@ -28,256 +31,253 @@ _Avoid_: deep link; plain "link" (that is a link in a README, ADR-35)
 The shell's request to the UI to show a repo, session, task or task proposal, from the tray or from a Trackwall link.
 _Avoid_: focus (that is keyboard focus and the "seen" frame)
 
-**Zakładka** (`TabBar`; po angielsku *tab*):
-Przełącznik części treści wewnątrz widoku, np. README, Files, Commits i mise tasks w widoku Repos.
+**Facade** (`Facade`):
+The set of daemon module interfaces passed to the transports (HTTP, MCP, events). Modules talk to each other only through it.
 
-**Fasada** (`Facade`):
-Zbiór interfejsów modułów daemona przekazywany do transportów (HTTP, MCP, zdarzenia). Moduły rozmawiają ze sobą tylko przez nią.
+**Module**:
+A separate part of the daemon from §4 of the architecture (`procs`, `logs`, `workspace`…), with an explicit interface and a list of dependencies. §4 calls its interface a "service class"; in code do not give it the `Service` suffix, because that word belongs to a service from the workspace.
+_Avoid_: service (that is a workspace entity, see below), pnpm package
 
-**Moduł**:
-Wydzielona część daemona z §4 architektury (`procs`, `logs`, `workspace`…), z jawnym interfejsem i listą zależności. §4 nazywa jego interfejs „klasą serwisu”; w kodzie nie dawaj jej sufiksu `Service`, bo to słowo należy do serwisu z workspace.
-_Unikaj_: serwis (to byt z workspace, patrz niżej), paczka
-
-**Paczka**:
-Pakiet pnpm z `pnpm-workspace.yaml` (`@trackwall/daemon`, `@trackwall/protocol`, `@trackwall/ui`, `@trackwall/desktop`).
-_Unikaj_: workspace (to osobne pojęcie, patrz niżej)
+**pnpm package**:
+A pnpm package from `pnpm-workspace.yaml` (`@trackwall/daemon`, `@trackwall/protocol`, `@trackwall/ui`, `@trackwall/desktop`).
+_Avoid_: workspace (that is a separate term, see below)
 
 **`ws`**:
-Cienki klient CLI daemona przez HTTP na loopbacku. Nie ma nic wspólnego z WebSocketem `/ws`.
+A thin CLI client of the daemon over HTTP on loopback. It has nothing to do with the `/ws` WebSocket.
 
-**Token daemona**:
-Sekret z `~/.trackwall/daemon.json`, którym UI, `ws`, powłoka i most stdio uwierzytelniają się w API i serwerze MCP.
+**Daemon token**:
+The secret from `~/.trackwall/daemon.json` with which the UI, `ws`, the shell and the stdio bridge authenticate to the API and the MCP server.
 
-**Serwer MCP** (`/mcp`, `createMcpEndpoint`; po angielsku *MCP server*):
-Część daemona, przez którą agenci czytają jego stan narzędziami MCP; ten sam port i token co API (§5.3, ADR-24).
+**MCP server** (`/mcp`, `createMcpEndpoint`):
+The part of the daemon through which agents read its state with MCP tools; the same port and token as the API (§5.3, ADR-24).
 
-**Narzędzie MCP** (`McpTool`, lista `mcpTools` w protocol, np. `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`, `search_code`, `list_sessions`; po angielsku *MCP tool*):
-Jedno wywołanie serwera MCP z nazwą po angielsku, wejściem i wynikiem opisanym schematem z `packages/protocol/src/mcp.ts`; mapowanie na fasadę, bez własnej logiki domenowej.
-_Unikaj_: komenda, akcja (to pojęcia z API i CLI)
+**MCP tool** (`McpTool`, the `mcpTools` list in protocol, for example `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`, `search_code`, `list_sessions`):
+One call of the MCP server with an English name, input and result described by a schema from `packages/protocol/src/mcp.ts`; a mapping to the facade, without domain logic of its own.
+_Avoid_: command, action (those are API and CLI terms)
 
-**Most stdio** (`trackwall-daemon mcp-stdio`, `mcpStdioCommand`; po angielsku *stdio bridge*):
-Proces, który CLI agenta uruchamia jako lokalny serwer MCP; przekazuje wiadomości ze stdin do serwera MCP działającego daemona, z portem i tokenem z `daemon.json`.
-_Unikaj_: proxy, cienki klient (bez dopowiedzenia)
+**Stdio bridge** (`trackwall-daemon mcp-stdio`, `mcpStdioCommand`):
+The process an agent CLI starts as a local MCP server; it passes messages from stdin to the MCP server of the running daemon, with the port and token from `daemon.json`.
+_Avoid_: proxy, thin client (without qualification)
 
-**Token sesji** (`session-token` w katalogu sesji, nagłówek `x-trackwall-session-token`, `callerSession`):
-Losowy token każdej sesji Trackwall obok tokenu daemona, który jej most stdio wysyła do serwera MCP; po nim daemon wie, która sesja woła, i np. zapisuje podsumowanie tylko do jej zadania (ADR-39, §8). Agent spoza Trackwall go nie ma.
-_Unikaj_: token zadania (wcześniejszy plan; token ma każda sesja, także w korzeniu repo)
+**Session token** (`session-token` in the session directory, the `x-trackwall-session-token` header, `callerSession`):
+A random token of every Trackwall session next to the daemon token, which its stdio bridge sends to the MCP server; by it the daemon knows which session is calling and, for example, stores a summary only in that session's task (ADR-39, §8). An agent outside Trackwall does not have it.
+_Avoid_: task token (an earlier plan; every session has a token, also in a repo root)
 
-## Workspace i wiedza
+## Workspace and knowledge
 
 **Workspace** (`workspace`):
-Zbiór repo użytkownika (repo z folderu z projektami) i jego konfiguracja w `workspace.yaml`, poza repozytorium Trackwall. Tu żyje wszystko, co firmowe.
-_Unikaj_: projekt
+The user's set of repos (the repos from the projects folder) and its configuration in `workspace.yaml`, outside the Trackwall repository. Everything company-specific lives here.
+_Avoid_: project
 
-**Folder z projektami** (`projectsDir`; po angielsku *projects folder*):
-Jeden katalog na dysku użytkownika, wskazany w `workspace.yaml` albo w ustawieniach. Każdy jego bezpośredni podkatalog z `.git` to repo z workspace (ADR-18); repo dodaje się, klonując je do tego folderu.
-_Unikaj_: katalog workspace, root, folder (bez dopowiedzenia)
+**Projects folder** (`projectsDir`):
+One directory on the user's disk, set in `workspace.yaml` or in the settings. Each of its direct subdirectories with `.git` is a repo of the workspace (ADR-18); a repo is added by cloning it into this folder.
+_Avoid_: workspace directory, root, folder (without qualification)
 
 **Dropped folder** (`DroppedFolder`, action `dropped-folder`, UI `FolderDrop`; in Polish *upuszczony folder*):
 A folder or file dropped on the Trackwall window outside a session terminal, described by the daemon: a listed repo (or a folder inside one), the projects folder, a repo elsewhere, a hidden repo, a folder with repos, a folder without repos or a file (ADR-51). It never adds a repo by itself; it can only lead to a new projects folder.
 _Avoid_: imported repo, added repo
 
-**Hosting repo** (`RepoHost`, w `workspace.yaml` `repoHosts`; po angielsku *repo host*):
-GitLab albo GitHub z nazwą hosta (`gitlab.example.com`), z którego Trackwall wyszukuje repo i klonuje je do folderu z projektami przez zalogowane `glab` albo `gh` (ADR-19).
-_Unikaj_: remote (to nazwa repo zdalnego w gicie, np. `origin`), serwer, źródło (to pojęcie z logów)
+**Repo host** (`RepoHost`, `repoHosts` in `workspace.yaml`):
+GitLab or GitHub with a host name (`gitlab.example.com`), from which Trackwall searches for repos and clones them into the projects folder through a logged-in `glab` or `gh` (ADR-19).
+_Avoid_: remote (that is the name of a remote in git, for example `origin`), server, source (that is a log term)
 
-**Repo zdalne** (`RemoteRepo`, pełna nazwa `fullName`; po angielsku *remote repo*):
-Repo w hostingu dostępne dla użytkownika, np. `grupa/podgrupa/projekt`. Ostatni segment pełnej nazwy to katalog klonu.
+**Remote repo** (`RemoteRepo`, full name `fullName`):
+A repo on a host available to the user, for example `group/subgroup/project`. The last segment of the full name is the clone directory.
 
-**Klonowanie** (`CloneJob`; po angielsku *clone*):
-Klon jednego repo zdalnego do folderu z projektami, w tle: `running`, `done` albo `failed` z komunikatem. Trzymane tylko w pamięci daemona.
+**Clone** (`CloneJob`):
+A clone of one remote repo into the projects folder, in the background: `running`, `done` or `failed` with a message. Kept only in daemon memory.
 
-**Repo** (`Repo`, `RepoId`; po angielsku *repo*):
-Jedno repozytorium z workspace, identyfikowane slugiem z nazwy jego katalogu.
+**Repo** (`Repo`, `RepoId`):
+One repository of the workspace, identified by a slug from the name of its directory.
 
-**Adres repo zdalnego** (`Repo.remote`):
-Adres głównego remote (`origin` albo jedynego remote w gicie, `mainRemote`) jako `host/ścieżka`, np. `gitlab.example.com/sklep/api`, bez protokołu i użytkownika. Identyfikuje repo niezależnie od nazwy katalogu (ADR-21).
-_Unikaj_: URL repo (URL ma protokół i bywa z tokenem), remote bez dopowiedzenia (to nazwa w gicie, np. `origin`)
+**Remote address** (`Repo.remote`):
+The address of the main remote (`origin` or the only remote in git, `mainRemote`) as `host/path`, for example `gitlab.example.com/shop/api`, without the protocol and user. It identifies the repo independently of the directory name (ADR-21).
+_Avoid_: repo URL (a URL has a protocol and may carry a token), remote without qualification (that is a name in git, for example `origin`)
 
-**Synchronizacja** (`SyncRun`, wynik repo `SyncRepo`; po angielsku *sync*):
-Fetch każdego repo z folderu z projektami i fast-forward jego gałęzi domyślnej, w tle, z wynikiem per repo: przesunięte, aktualne, pominięte z powodem (`SyncSkipReason`) albo błąd; bez błędu także ze stanem katalogu roboczego po synchronizacji (`SyncWorkingTree`, ADR-34). Nigdy nie scala ani nie nadpisuje lokalnych zmian (ADR-21). Trzymana tylko w pamięci daemona.
-_Unikaj_: pull, aktualizacja (bez dopowiedzenia)
+**Sync** (`SyncRun`, repo result `SyncRepo`):
+A fetch of every repo from the projects folder and a fast-forward of its default branch, in the background, with a result per repo: moved, up to date, skipped with a reason (`SyncSkipReason`) or an error; without an error also with the state of the working directory after the sync (`SyncWorkingTree`, ADR-34). It never merges or overwrites local changes (ADR-21). Kept only in daemon memory.
+_Avoid_: pull, update (without qualification)
 
-**Komenda zbiorcza** (`BatchRun`, krok `BatchStep`, wynik repo `BatchRepo`; po angielsku *Batch command*):
-Wybrane kroki na wybranych repo jednym przyciskiem: synchronizacja (`sync`), narzędzia z konfiguracji mise repo (`tools`, `mise install`), zależności (`setup`, task mise `setup`) i build (`build`, task mise `build`), w repo zawsze w tej kolejności, kilka repo naraz, z wynikiem każdego kroku w każdym repo (ADR-27). Błąd kroku kończy repo, pozostałe idą dalej. Trzymana tylko w pamięci daemona.
-_Unikaj_: batch (w polskim tekście), operacja zbiorcza, workflow
+**Batch command** (`BatchRun`, step `BatchStep`, repo result `BatchRepo`):
+Selected steps on selected repos with one button: sync (`sync`), tools from the repo's mise configuration (`tools`, `mise install`), dependencies (`setup`, the mise task `setup`) and build (`build`, the mise task `build`), in a repo always in this order, several repos at once, with the result of every step in every repo (ADR-27). A step error ends the repo, the others go on. Kept only in daemon memory.
+_Avoid_: bulk operation, workflow
 
-**Stan repo** (`RepoStatus`; po angielsku *repo status*):
-Gałąź, ostatni commit, liczba zmian w katalogu roboczym (z nich osobno nowe nieśledzone pliki, `untracked`) i ahead/behind względem gałęzi śledzonej, odczytane z gita przy każdym zapytaniu (`ok`), albo `unavailable` z komunikatem, gdy git go nie czyta (repo, którego katalog zniknął, znika z listy). Nigdy nie jest zapisywany.
-_Unikaj_: status (w polskim tekście), sync (to osobna akcja)
+**Repo status** (`RepoStatus`):
+The branch, the last commit, the number of changes in the working directory (of which, separately, new untracked files, `untracked`) and ahead/behind against the tracking branch, read from git on every request (`ok`), or `unavailable` with a message when git does not read it (a repo whose directory disappeared drops off the list). It is never stored.
+_Avoid_: state (that is a task state or a service state), sync (that is a separate action)
 
-**Zmiany katalogu roboczego** (`WorkingTreeChanges`, akcja `changes`; w UI zakładka „Changes”; po angielsku *changes*):
-Pliki i diff katalogu roboczego (z nowymi plikami, bez ignorowanych) względem commita: repo względem HEAD w szczegółach repo (ADR-34), worktree zadania względem commita bazowego w zmianach zadania (`TaskChanges`, ADR-31). Tylko do odczytu.
-W liczbach katalogu roboczego „zmienione” (`changed`) to śledzone pliki, a „nowe” (`untracked`) nieśledzone wpisy; `RepoStatus.changes` to ich suma (`trackedChanges` liczy zmienione).
-_Unikaj_: diff (to tylko część), status
+**Changes** (working directory changes, `WorkingTreeChanges`, the `changes` action; the "Changes" tab in the UI):
+The files and diff of the working directory (with new files, without ignored ones) against a commit: a repo against HEAD in the repo details (ADR-34), a task's worktree against the base commit in the task changes (`TaskChanges`, ADR-31). Read-only.
+In working directory counts "changed" (`changed`) are tracked files, and "new" (`untracked`) untracked entries; `RepoStatus.changes` is their sum (`trackedChanges` counts the changed ones).
+_Avoid_: diff (that is only a part), status
 
-**Przegląd repo** (`RepoOverview`):
-README i ostatnie commity repo w jednej odpowiedzi; stan repo przychodzi z listy repo. Pliki przeglądane są osobno, zawsze z commita HEAD (ADR-14).
+**Repo overview** (`RepoOverview`):
+The README and the latest commits of a repo in one response; the repo status comes from the repo list. Files are browsed separately, always from the HEAD commit (ADR-14).
 
 **Code search** (`searchCode`, MCP tool `search_code`, result `SearchCodeResult`):
 A fixed string or a regular expression in the files of the latest commit of many repos of the projects folder at once, through `git grep` (ADR-40); a match (`CodeMatch`) is a repo, path, line, column and context lines. It does not see uncommitted changes, just like browsing a repo.
 _Avoid_: grep (the tool underneath), index (there is none)
 
-**Worktree** (worktree zadania, `Task.worktree`; po angielsku *worktree*):
-Osobny katalog roboczy gita dla zadania, na gałęzi zadania, w `worktrees/<repo>/<gałąź bez prefiksu>` w katalogu stanu, poza folderem z projektami (ADR-31). Liczony z repo i gałęzi (`taskWorktree`), nie zapisywany w `tasks.json`. Usuwany tylko na prośbę użytkownika i tylko bez działającej sesji zadania; niezacommitowane zmiany przepadają dopiero po potwierdzeniu.
+**Worktree** (task worktree, `Task.worktree`):
+A separate git working directory for a task, on the task's branch, in `worktrees/<repo>/<branch without prefix>` in the state directory, outside the projects folder (ADR-31). Computed from the repo and branch (`taskWorktree`), not stored in `tasks.json`. Removed only at the user's request and only without a running task session; uncommitted changes are lost only after confirmation.
 
-**Commit bazowy** (`Task.base`; po angielsku *base commit*):
-Commit gałęzi domyślnej, od którego wyszła gałąź zadania. Zmiany zadania (`TaskChanges`) to katalog roboczy worktree względem niego: commity zadania i niezacommitowane pliki razem.
+**Base commit** (`Task.base`):
+The commit of the default branch from which the task's branch started. The task changes (`TaskChanges`) are the worktree's working directory against it: the task's commits and uncommitted files together.
 
-**Karta** (karta repo, `RepoCard`; po angielsku *Card*):
-Fakty o repo wyciągnięte deterministycznie z plików buildu, konfiguracji i kodu w commicie HEAD: pliki buildu, co repo udostępnia (`provides`), czego używa (`consumes`), wymagane narzędzia, mechanizmy i problemy, każdy fakt z dowodem. Zależy tylko od commita, więc liczy się raz na commit (ADR-25). LLM dopisze tylko opis i propozycje połączeń oznaczone `origin: 'llm'` (ADR-6). W UI zakładka „Card” w szczegółach repo.
-_Unikaj_: profil, metadane; „karta repo” dla całego panelu szczegółów repo
+**Card** (repo card, `RepoCard`):
+Facts about a repo extracted deterministically from build files, configuration and code in the HEAD commit: build files, what the repo provides (`provides`), what it uses (`consumes`), required tools, mechanisms and problems, every fact with evidence. It depends only on the commit, so it is computed once per commit (ADR-25). An LLM will add only a description and connection proposals marked `origin: 'llm'` (ADR-6). In the UI, the "Card" tab in the repo details.
+_Avoid_: profile, metadata; "repo card" for the whole repo details panel
 
-**Plik buildu** (`BuildFile`; po angielsku *build file*):
-`pom.xml`, `build.gradle(.kts)` albo `package.json`, który należy do buildu repo: korzeń (bez pliku tego samego rodzaju wyżej) albo moduł lub paczka workspace, którą wymienia inny plik buildu (`memberOf`).
+**Build file** (`BuildFile`):
+A `pom.xml`, `build.gradle(.kts)` or `package.json` that belongs to the repo's build: a root (without a file of the same kind above it) or a module or workspace package that another build file lists (`memberOf`).
 
-**Paczka** (`ProvidedPackage`, `ConsumedPackage`; po angielsku *package*):
-Artefakt Maven (`grupa:artefakt`), wtyczka Gradle albo paczka npm, którą repo udostępnia albo której używa. Paczki z tego samego repo nie są używanymi.
+**Package** (`ProvidedPackage`, `ConsumedPackage`):
+A Maven artifact (`group:artifact`), a Gradle plugin or an npm package that the repo provides or uses. Packages from the same repo are not used ones.
 
-**Aplikacja** (`ProvidedApp`, na karcie `kind: "app"`; po angielsku *app*):
-Aplikacja Spring Boot z karty repo: `spring.application.name` modułu i port z `server.port`. Po jej nazwie klient Feign, `lb://nazwa` albo host adresu wskazuje repo (ADR-30). Nie jest serwisem: serwis to proces, który Trackwall uruchamia.
-_Unikaj_: serwis, mikroserwis (dla faktu z karty)
+**App** (`ProvidedApp`, `kind: "app"` on the card):
+A Spring Boot application from the repo card: the module's `spring.application.name` and the port from `server.port`. By its name a Feign client, `lb://name` or the host of an address points to the repo (ADR-30). It is not a service: a service is a process that Trackwall starts.
+_Avoid_: service, microservice (for a fact from the card)
 
-**Endpoint HTTP** (`ProvidedEndpoint`, na karcie `kind: "endpoint"`; po angielsku *HTTP endpoint*):
-Metoda i pełna ścieżka (ścieżka kontekstu, prefiks kontrolera, ścieżka metody) z kontrolera Spring, z handlerem `Klasa.metoda`. Metoda `null` to każda metoda (`@RequestMapping` bez `method`). Ma typ żądania (`request`, parametr z `@RequestBody`) i typ odpowiedzi (`response`, typ zwracany bez `ResponseEntity`, `Mono` i podobnych opakowań), `null`, gdy go nie ma albo nie został przeczytany (ADR-38).
+**HTTP endpoint** (`ProvidedEndpoint`, `kind: "endpoint"` on the card):
+A method and full path (context path, controller prefix, method path) from a Spring controller, with the handler `Class.method`. A `null` method is any method (`@RequestMapping` without `method`). It has a request type (`request`, the parameter with `@RequestBody`) and a response type (`response`, the return type without `ResponseEntity`, `Mono` and similar wrappers), `null` when there is none or it was not read (ADR-38).
 
-**Kontrakt endpointu** (`ProvidedEndpoint.request` i `response`, liczone przez `extractContracts`; po angielsku *request and response types*):
-Typ żądania i typ odpowiedzi endpointu HTTP (`ProvidedEndpoint.request`, `response`) razem, z metody, w której leży mapowanie endpointu (ADR-38). W tekstach produktu „request and response types”.
+**Endpoint contract** (`ProvidedEndpoint.request` and `response`, computed by `extractContracts`):
+The request type and response type of an HTTP endpoint (`ProvidedEndpoint.request`, `response`) together, from the method that contains the endpoint's mapping (ADR-38). In product texts "request and response types".
 
-**DTO** (`Dto`, `RepoCard.dtos`; po angielsku *DTO*):
-Typ danych z repo, który endpoint przyjmuje albo zwraca, i typy jego pól: rekord, `data class`, klasa z polami (typ bez pól nie jest DTO) albo enum (rodzaj `kind`), z polami i ich typami albo stałymi enuma. Wskazuje go prosta nazwa typu, bez pakietu (ADR-38).
-_Unikaj_: model, encja (dla typu z karty)
+**DTO** (`Dto`, `RepoCard.dtos`):
+A data type from the repo that an endpoint takes or returns, and the types of its fields: a record, a `data class`, a class with fields (a type without fields is not a DTO) or an enum (the `kind`), with fields and their types or enum constants. It is identified by the type's simple name, without the package (ADR-38).
+_Avoid_: model, entity (for a type from the card)
 
-**Klient HTTP** (`ConsumedHttp`, na karcie `kind: "http"`, rodzaj `HttpClientVia`; po angielsku *HTTP client*):
-Miejsce, z którego repo woła HTTP: interfejs Feign albo `@HttpExchange`, klasa z `WebClient`, `RestClient` albo `RestTemplate`, adres z konfiguracji Spring, `.env` albo proxy frontendu. Ma nazwę aplikacji celu albo adres, profile, w których ten adres obowiązuje, i wywołania. Adres na karcie nie ma użytkownika, hasła, zapytania ani członów ścieżki wyglądających na token.
+**HTTP client** (`ConsumedHttp`, `kind: "http"` on the card, kind `HttpClientVia`):
+A place from which the repo calls HTTP: a Feign or `@HttpExchange` interface, a class with `WebClient`, `RestClient` or `RestTemplate`, an address from Spring configuration, `.env` or the frontend proxy. It has the target app's name or an address, the profiles in which that address applies, and calls. An address on the card has no user, password, query or path segments that look like a token.
 
-**Wywołanie** (`HttpCall`; po angielsku *call*):
-Metoda i ścieżka, które klient HTTP woła, z linią w kodzie. Część ścieżki znana dopiero w czasie działania to `{}`.
+**Call** (`HttpCall`):
+A method and path that an HTTP client calls, with the line in the code. A part of the path known only at run time is `{}`.
 
-**Profil** (profil Spring, `ConsumedHttp.profiles`; po angielsku *profile*):
-Nazwa z `application-<profil>.yml` albo `spring.config.activate.on-profile`; `default` to konfiguracja bez profilu. Klient z adresem z konfiguracji ma osobny wpis na każdy profil, w którym adres jest inny.
+**Profile** (Spring profile, `ConsumedHttp.profiles`):
+A name from `application-<profile>.yml` or `spring.config.activate.on-profile`; `default` is the configuration without a profile. A client with an address from configuration has a separate entry for every profile in which the address is different.
 
-**Wymagane narzędzie** (`ToolRequirement`; po angielsku *required tool*):
-Narzędzie i wersja z konfiguracji mise albo `.tool-versions` (źródło `mise`) lub z pliku, który podaje wersję po swojemu (`.nvmrc`, wrapper Maven, `engines.node`; źródło `hint`).
+**Required tool** (`ToolRequirement`):
+A tool and version from mise configuration or `.tool-versions` (source `mise`) or from a file that gives the version in its own way (`.nvmrc`, the Maven wrapper, `engines.node`; source `hint`).
 
-**Mechanizm** (`Mechanism`, `MechanismId`; po angielsku *mechanism*):
-Technologia rozpoznana w repo po paczce albo pliku (Spring Boot, Feign, Kafka, Helm…), ze spisem dowodów. Spis, nie wniosek: mechanizm nie mówi, z kim repo się łączy.
+**Mechanism** (`Mechanism`, `MechanismId`):
+A technology recognised in the repo by a package or file (Spring Boot, Feign, Kafka, Helm…), with an inventory of evidence. An inventory, not a conclusion: a mechanism does not say whom the repo connects to.
 
-**Ekstraktor**:
-Czysta funkcja na migawce commita (`RepoSnapshot`) w `modules/cards/` (`maven.ts`, `gradle.ts`, `npm.ts`, `tools.ts`, `mechanisms.ts`, `spring.ts`, `frontend-http.ts`), która zwraca fakty z pozycją w pliku. Niczego nie wykonuje.
+**Extractor**:
+A pure function on a commit snapshot (`RepoSnapshot`) in `modules/cards/` (`maven.ts`, `gradle.ts`, `npm.ts`, `tools.ts`, `mechanisms.ts`, `spring.ts`, `frontend-http.ts`) that returns facts with a position in the file. It executes nothing.
 
-**Tag repo** (`RepoTag`; po angielsku *tag*):
-Krótka nazwa grupy repo (`java`, `frontend`, `bff`, `monorepo`, `no-mise`…) z powodem, liczona z karty, identyfikatora i adresu repo zdalnego albo z reguły tagów. Tagi są ortogonalne: filtr z kilkoma tagami pokazuje repo, które mają wszystkie.
-_Unikaj_: etykieta, kategoria
+**Tag** (repo tag, `RepoTag`):
+A short name of a group of repos (`java`, `frontend`, `bff`, `monorepo`, `no-mise`…) with a reason, computed from the card, the identifier and the remote address or from a tag rule. Tags are orthogonal: a filter with several tags shows the repos that have all of them.
+_Avoid_: label, category
 
-**Reguła tagów** (`repoTags` w `workspace.yaml`, `RepoTagRules`):
-Tag i wzorce identyfikatora albo adresu repo zdalnego, które go nadają (`core-api: ["*-core"]`). Dla grup, których nie widać w plikach, np. zespołów.
+**Tag rule** (`repoTags` in `workspace.yaml`, `RepoTagRules`):
+A tag and the identifier or remote address patterns that give it (`core-api: ["*-core"]`). For groups that are not visible in the files, for example teams.
 
-**Graf** (graf połączeń, `RepoGraph`, moduł `graph`; po angielsku *connection graph*):
-Repo z folderu z projektami jako węzły (`GraphNode`) i krawędzie między nimi, liczone z kart i z wpisów `graph` w `workspace.yaml` od nowa, gdy zmieni się commit któregoś repo albo konfiguracja. Dziś węzłem jest repo; serwisy (kilka na repo) przyjdą z modułem `services`.
-_Unikaj_: mapa, diagram zależności
+**Connection graph** (`RepoGraph`, the `graph` module):
+The repos from the projects folder as nodes (`GraphNode`) and the connections between them, computed from cards and from the `graph` entries in `workspace.yaml` anew when the commit of some repo or the configuration changes. Today a node is a repo; services (several per repo) will come with the `services` module.
+_Avoid_: map, dependency diagram
 
-**Krawędź** (`GraphEdge`; po angielsku *connection*):
-Połączenie od repo, które używa, do repo używanego, z rodzajem (`EdgeKind`: `package` i `http` z kart, `manual` z `workspace.yaml`; potem `topic`), kluczem (nazwa paczki, nazwa aplikacji, host albo `localhost:<port>`, opis), pewnością i dowodami. Jedna para repo może mieć kilka krawędzi; widok „Overview” rysuje je jedną linią.
+**Connection** (`GraphEdge`; *edge* in the architecture document and in code):
+A link from the repo that uses to the repo that is used, with a kind (`EdgeKind`: `package` and `http` from cards, `manual` from `workspace.yaml`; later `topic`), a key (a package name, an app name, a host or `localhost:<port>`, a description), a confidence and evidence. One pair of repos can have several connections; the "Overview" view draws them as one line.
 
-**Alias paczki** (`graph.packages` w `workspace.yaml`):
-Nazwa paczki i repo, które ją dostarcza, gdy karta tego repo jej nie pokazuje (paczka budowana poza plikami buildu, inna nazwa w repozytorium artefaktów). Działa tylko dla paczki, której nie buduje żadne repo z listy.
+**Package alias** (`graph.packages` in `workspace.yaml`):
+A package name and the repo that provides it, when that repo's card does not show it (a package built outside the build files, a different name in the artifact repository). It works only for a package no repo on the list builds.
 
-**Alias aplikacji** (`graph.apps` w `workspace.yaml`):
-Nazwa aplikacji albo host adresu (bez wielkości liter) i repo, które je obsługuje, gdy żadna karta nie ma tej nazwy (adres bramki, nazwa w DNS inna niż `spring.application.name`).
+**App alias** (`graph.apps` in `workspace.yaml`):
+An app name or the host of an address (case-insensitive) and the repo that serves it, when no card has that name (a gateway address, a DNS name different from `spring.application.name`).
 
-**Ręczna krawędź** (`ManualEdge`, `graph.edges` w `workspace.yaml`):
-Połączenie wpisane przez użytkownika (`from`, `to`, `note`), np. wywołanie HTTP, którego karty jeszcze nie widzą. Repo wskazuje się identyfikatorem albo adresem repo zdalnego (`RepoRef`).
+**Manual connection** (`ManualEdge`, `graph.edges` in `workspace.yaml`):
+A connection entered by the user (`from`, `to`, `note`), for example an HTTP call the cards do not see yet. A repo is given by its identifier or remote address (`RepoRef`).
 
-**Dowód** (`Evidence`, w grafie `EdgeEvidence`; po angielsku *evidence*):
-Plik i linia, z których wynika fakt na karcie lub krawędź w grafie; dowód krawędzi ma też repo (albo `null` dla `workspace.yaml`) i zdanie, co w tym miejscu jest.
+**Evidence** (`Evidence`, `EdgeEvidence` in the graph):
+The file and line from which a fact on the card or a connection in the graph follows; a connection's evidence also has the repo (or `null` for `workspace.yaml`) and a sentence about what is in that place.
 
-**Pewność** (`confidence`, w grafie `EdgeConfidence`; po angielsku *confidence*):
-`exact`, `high`, `medium` albo `low`. Krawędź z paczki budowanej przez jedno repo i ręczna krawędź są `exact`, z aliasu paczki `high`, z paczki budowanej przez kilka repo `medium`. Krawędź HTTP: `exact`, gdy nazwa aplikacji wskazuje jedno repo, a każde wywołanie ma w nim endpoint, `high` za samą nazwę aplikacji albo alias aplikacji, `medium` za host równy nazwie repo, port na `localhost` albo ścieżki pasujące do jednego repo, `low` za ścieżki pasujące do kilku repo (ADR-30). W UI: certain, almost certain, likely, possible. Przy `low` daemon niczego nie robi automatycznie.
+**Confidence** (`confidence`, `EdgeConfidence` in the graph):
+`exact`, `high`, `medium` or `low`. A connection from a package built by one repo and a manual connection are `exact`, from a package alias `high`, from a package built by several repos `medium`. An HTTP connection: `exact` when the app name points to one repo and every call has an endpoint in it, `high` for the app name or an app alias alone, `medium` for a host equal to the repo name, a port on `localhost` or paths matching one repo, `low` for paths matching several repos (ADR-30). In the UI: certain, almost certain, likely, possible. With `low` the daemon does nothing automatically.
 
-**Przegląd** (widok „Overview”, `GraphView`, identyfikator widoku `graph`; po angielsku *Overview*):
-Widok z grafem połączeń na całą szerokość i panelem szczegółów wybranego repo (kogo używa, kto używa jego, dowody).
-_Unikaj_: dashboard (to scena 3D), przegląd repo (to README i commity jednego repo, `RepoOverview`)
+**Overview** (the "Overview" view, `GraphView`, view identifier `graph`):
+The view with the connection graph at full width and a details panel of the selected repo (what it uses, who uses it, evidence).
+_Avoid_: dashboard (that is the 3D scene), repo overview (that is the README and commits of one repo, `RepoOverview`)
 
-## Procesy i serwisy
+## Processes and services
 
-**Serwis** (`Service`, `ServiceId`; po angielsku *service*):
-Repo plus jego task mise `dev`, port i sonda zdrowia. Jedno repo może mieć kilka serwisów.
-_Unikaj_: aplikacja, mikroserwis (gdy chodzi o byt w Trackwall)
+**Service** (`Service`, `ServiceId`):
+A repo plus its mise task `dev`, port and health probe. One repo can have several services.
+_Avoid_: app, microservice (when the entity in Trackwall is meant)
 
-**Stan serwisu**:
-`stopped`, `starting`, `healthy`, `unhealthy`, `stopping` albo `crashed`; zawsze zaobserwowany, nigdy założony.
+**Service state**:
+`stopped`, `starting`, `healthy`, `unhealthy`, `stopping` or `crashed`; always observed, never assumed.
 
-**Grupa procesów** (`ProcessGroup`; po angielsku *process group*):
-Proces-lider i wszyscy jego potomkowie, zatrzymywani razem: Job Object na Windowsie, nowa sesja POSIX (`setsid`) z zabijaniem po `-pgid` na macOS.
-_Unikaj_: drzewo procesów (gdy chodzi o jednostkę zarządzaną)
+**Process group** (`ProcessGroup`):
+A leader process and all its descendants, stopped together: a Job Object on Windows, a new POSIX session (`setsid`) killed by `-pgid` on macOS.
+_Avoid_: process tree (when the managed unit is meant)
 
-**Właściciel grupy** (`owner`):
-Klucz, pod którym `procs` trzyma grupę procesów i jej ostatni stan; nadaje go moduł, który ją uruchomił (dziś task mise w repo). Jeden właściciel ma najwyżej jedną grupę, która nie jest potwierdzona jako pusta.
+**Group owner** (`owner`):
+The key under which `procs` keeps a process group and its last state; it is given by the module that started it (today a mise task in a repo). One owner has at most one group that is not confirmed empty.
 
-**Sonda** (health):
-Task mise `health` uruchamiany cyklicznie; jego wynik decyduje o `healthy` / `unhealthy`.
+**Probe** (health):
+The mise task `health` run periodically; its result decides `healthy` / `unhealthy`.
 
-**Dzierżawa** (`Lease`):
-Informacja, która gałąź albo worktree zajmuje serwis na jego porcie. Domyślnie repo główne; zadanie może ją przejąć i oddać.
-_Unikaj_: lock, rezerwacja
+**Lease** (`Lease`):
+Which branch or worktree holds a service on its port. By default the main repo; a task can take it over and give it back.
+_Avoid_: lock, reservation
 
-**Sierota** (po angielsku *orphan*):
-Grupa procesów z `runtime.json`, której daemon już nie nadzoruje (np. po awarii). Sprzątana przy starcie daemona tylko, gdy lider to ten sam proces (ten sam czas startu) albo już nie żyje, a grupa tak.
+**Orphan**:
+A process group from `runtime.json` that the daemon no longer supervises (for example after a crash). Cleaned up at daemon start only when the leader is the same process (the same start time) or is already dead while the group is alive.
 
-## Agenci
+## Agents
 
-**Zadanie** (`Task`, `TaskId`; po angielsku *task*):
-Praca jednego agenta nad jednym repo: polecenie, worktree, gałąź `trackwall/<skrót>` od gałęzi domyślnej, sesje i podsumowanie; docelowo także budżet i dzierżawy. Dziś (ADR-31) tworzy je widok Sessions z formularza albo z zatwierdzonej propozycji zadania (ADR-39), zapisuje `tasks.json`, a sesję zadania można zatrzymać i wznowić. Zadanie nie wskazuje sesji; to sesja ma `Session.task`. W kodzie i API `task` znaczy zawsze zadanie.
-_Unikaj_: job; „task” w polskim tekście (myli się z taskiem mise); w tekście po angielsku gołe *task* znaczy tylko zadanie, a task mise to zawsze *mise task*
+**Task** (`Task`, `TaskId`):
+The work of one agent on one repo: a prompt, a worktree, a `trackwall/<slug>` branch from the default branch, sessions and a summary; eventually also a budget and leases. Today (ADR-31) the Sessions view creates it from the form or from an approved task proposal (ADR-39), it is stored in `tasks.json`, and the task session can be stopped and resumed. A task does not point to a session; the session has `Session.task`. In code and the API `task` always means a task.
+_Avoid_: job; a bare *task* always means a task, a mise task is always a *mise task*
 
-**Zakończenie zadania** (`removeTask`, „End task” w UI; po angielsku *End task*):
-Usunięcie worktree zadania, a do wyboru także jego gałęzi. Tylko bez działającej sesji; to, co by przepadło (niezacommitowane pliki, commity z odłączonego HEAD, katalog, którego git już nie zna, a z gałęzią także commity zadania), daemon wymienia w odmowie `unsaved_changes`, a przepada ono dopiero po potwierdzeniu. Pliki ignorowane przez gita przepadają zawsze.
-_Unikaj_: usunięcie zadania (zadanie znika z listy, ale gałąź może zostać)
+**End task** (`removeTask`, "End task" in the UI):
+Removing a task's worktree, and optionally its branch. Only without a running session; what would be lost (uncommitted files, commits from a detached HEAD, a directory git no longer knows, and with the branch also the task's commits) the daemon lists in the `unsaved_changes` refusal, and it is lost only after confirmation. Files ignored by git are always lost.
+_Avoid_: delete task (the task disappears from the list, but the branch may stay)
 
-**Polecenie** (`Task.prompt`; po angielsku *prompt*):
-Treść zadania dla agenta, wpisana w widoku Sessions albo przyniesiona przez propozycję zadania (i poprawiona przez użytkownika przed startem); Copilot CLI dostaje ją jako pierwszą wiadomość sesji zadania (`--interactive`).
-_Unikaj_: prompt (w polskim tekście)
+**Prompt** (`Task.prompt`):
+The content of a task for the agent, typed in the Sessions view or brought by a task proposal (and edited by the user before the start); Copilot CLI gets it as the first message of the task session (`--interactive`).
+_Avoid_: instruction, command
 
-**Tytuł zadania** (`Task.title`, `TaskTitle`; po angielsku *title*):
-Krótki opis zadania w jednej linii (do 80 znaków), który nadaje sesja proponująca zadanie, jak tytuł wątku; z niego powstaje skrót gałęzi. Zadanie z formularza nie ma tytułu (`null`), a UI pokazuje wtedy polecenie.
-_Unikaj_: tytuł okna (to `windowTitle` sesji)
+**Task title** (`Task.title`, `TaskTitle`):
+A short one-line description of a task (up to 80 characters), given by the session that proposes the task, like a thread title; the branch slug comes from it. A task from the form has no title (`null`), and the UI then shows the prompt.
+_Avoid_: window title (that is a session's `windowTitle`)
 
-**Propozycja zadania** (`TaskProposal`, narzędzie MCP `propose_task`, akcje `approve-proposal` i `reject-proposal`; po angielsku *task proposal*):
-Zadanie, które sesja albo agent spoza Trackwall zgłosił przez MCP, a które czeka w widoku Sessions na decyzję użytkownika: „Start task” robi z niej zadanie z tym samym identyfikatorem, „Reject” ją odrzuca. Do tej chwili nic się nie uruchamia. Żyje tylko w pamięci daemona (ADR-39).
-_Unikaj_: zlecenie, prośba, wniosek
+**Task proposal** (`TaskProposal`, MCP tool `propose_task`, the `approve-proposal` and `reject-proposal` actions):
+A task that a session or an agent outside Trackwall submitted through MCP and that waits in the Sessions view for the user's decision: "Start task" turns it into a task with the same identifier, "Reject" rejects it. Until then nothing starts. It lives only in daemon memory (ADR-39).
+_Avoid_: order, request, application
 
 **Shared files** (`TaskSharedFiles`, action `task-shared-files`):
 Files that both this task and another task of the same repo change, each compared with its own base commit. The one merged second will likely get a conflict, so the task panel warns about them and leads to the other task. It is only a warning: nothing is stopped (ADR-44).
 _Avoid_: overlap, collision, conflict (a conflict is only the result of a merge)
 
-**Sesja główna** (`proposedBy` zadania i propozycji; po angielsku *main session*):
-Sesja albo agent nadrzędny, który rozmawia z użytkownikiem i zleca pracę innym agentom propozycjami zadań, a potem czeka na ich sesje (`wait_for_session`) i czyta podsumowania, jak koordynator z wątkami w Claude (ADR-39). To rola, nie osobny rodzaj sesji: dziś to każda sesja Trackwall albo agent spoza Trackwall (`proposedBy.session: null`). In the Sessions view its tasks and proposals sit indented under it, and it carries a “main” badge with their count.
-_Unikaj_: orkiestrator, planner (ADR-9: rozbijanie celów robi człowiek)
+**Main session** (`proposedBy` of a task and a proposal):
+A session or supervising agent that talks to the user and commissions work to other agents with task proposals, then waits for their sessions (`wait_for_session`) and reads the summaries, like a coordinator with threads in Claude (ADR-39). It is a role, not a separate kind of session: today it is any Trackwall session or an agent outside Trackwall (`proposedBy.session: null`). In the Sessions view its tasks and proposals sit indented under it, and it carries a "main" badge with their count.
+_Avoid_: orchestrator, planner (ADR-9: a human splits goals)
 
-**Task mise** (po angielsku *mise task*):
-Nazwana komenda z `mise.toml` repo: `setup`, `dev`, `test`, `build`, `lint`, `health`. W kodzie zawsze z dopowiedzeniem (`miseTask`, `mise.run(...)`), nigdy gołe `task`. Taski zapisane w commicie (`DeclaredMiseTask` w `RepoCard.mise`, typ `MiseSetup`: pliki konfiguracji mise i taski z `[tasks]` oraz katalogów tasków) liczy karta repo; repo bez nich ma tag `no-mise` (ADR-34). Narzędzia MCP do tasków mise mają `mise` w nazwie i argument `miseTask` (`run_mise_task`, `stop_mise_task`, `wait_for_mise_task`, `list_running_mise_tasks`, ADR-41).
+**mise task**:
+A named command from a repo's `mise.toml`: `setup`, `dev`, `test`, `build`, `lint`, `health`. In code always qualified (`miseTask`, `mise.run(...)`), never a bare `task`. Tasks stored in the commit (`DeclaredMiseTask` in `RepoCard.mise`, type `MiseSetup`: mise configuration files and the tasks from `[tasks]` and task directories) are computed by the repo card; a repo without them has the `no-mise` tag (ADR-34). The MCP tools for mise tasks have `mise` in the name and the `miseTask` argument (`run_mise_task`, `stop_mise_task`, `wait_for_mise_task`, `list_running_mise_tasks`, ADR-41).
 
-**Uruchomienie** (`run`, `runId`, stan: `RunState`; po angielsku *run*):
-Jednorazowe wykonanie taska mise z UI albo przez `run_mise_task`, z własną grupą procesów i logami. Stan `running`, `stopping` albo `exited` (kod wyjścia, sygnał, czy zatrzymał je użytkownik, ostatnie linie wyjścia), zawsze zaobserwowany. Nie jest zadaniem ani serwisem.
+**Run** (`run`, `runId`, state: `RunState`):
+A one-off execution of a mise task from the UI or through `run_mise_task`, with its own process group and logs. State `running`, `stopping` or `exited` (exit code, signal, whether the user stopped it, the last output lines), always observed. It is neither a task nor a service.
 
-**Zaufanie mise** (`mise trust`, akcja `trust`; po angielsku *trust*):
-Zgoda użytkownika, żeby mise czytał konfigurację repo, która może uruchamiać programy (`[env]`, szablony, hooki). Bez niej mise nie poda listy tasków (`untrusted`). Daje się tylko w UI.
-_Unikaj_: autoryzacja, akceptacja
+**mise trust** (`mise trust`, the `trust` action):
+The user's consent for mise to read a repo configuration that can run programs (`[env]`, templates, hooks). Without it mise does not give the task list (`untrusted`). It can be given only in the UI.
+_Avoid_: authorisation, acceptance
 
 **Adapter**:
-Wszystko, co Trackwall wie o jednym CLI agenta: szablon komendy, konfiguracja MCP, wznowienie, detektory stanu. Jedyny adapter to Copilot CLI (ADR-8).
+Everything Trackwall knows about one agent CLI: the command template, the MCP configuration, resuming, state detectors. The only adapter is Copilot CLI (ADR-8).
 
-**Agent nadrzędny**:
-CLI agenta (dziś Copilot CLI) uruchomione przez użytkownika poza zadaniem, np. w folderze z projektami, z dostępem do serwera MCP. W odróżnieniu od sesji zadania nie ma worktree, budżetu ani tokenu sesji. Pojęcie z dokumentacji i opisów narzędzi; w kodzie nie ma własnego identyfikatora, bo daemon niczego o nim nie trzyma.
-_Unikaj_: orkiestrator, główny agent
+**Supervising agent**:
+An agent CLI (today Copilot CLI) started by the user outside a task, for example in the projects folder, with access to the MCP server. Unlike a task session it has no worktree, budget or session token. A term from the documentation and tool descriptions; in code it has no identifier of its own, because the daemon keeps nothing about it.
+_Avoid_: orchestrator, main agent
 
-**Sesja** (sesja zadania, `Session`, `SessionId`; po angielsku *session*):
-CLI agenta działające w PTY należącym do daemona, w korzeniu repo albo w worktree zadania (`Session.task`), jako grupa procesów, z własnym katalogiem `sessions/<sesja>/` (wtyczka sesji, `hooks.jsonl`). Widok Sessions uruchamia ją w repo jednym kliknięciem (ADR-26) albo razem z zadaniem (ADR-31). Sesja żyje tylko do wyjścia daemona, zadanie dłużej. Nagrywa ją tylko `copilot-record.ts`.
-_Unikaj_: sesja POSIX (to pojęcie z grupy procesów), okno (to okno terminala w UI)
+**Session** (task session, `Session`, `SessionId`):
+An agent CLI running in a PTY owned by the daemon, in a repo root or in a task's worktree (`Session.task`), as a process group, with its own `sessions/<session>/` directory (session plugin, `hooks.jsonl`). The Sessions view starts it in a repo with one click (ADR-26) or together with a task (ADR-31). A session lives only until the daemon exits, a task longer. Only `copilot-record.ts` records it.
+_Avoid_: POSIX session (that is a process group term), window (that is the terminal window in the UI)
 
-**Waiting for you** (`Session.needsAttention`, `SessionAttention`; Polish *czeka na Ciebie*):
-A running session in `Approval` or `Plan`, or in `Input` the user has not seen yet (ADR-47): the agent will not move on without a human, and the human does not know yet. The daemon computes it; the UI (the counter on the activity bar, which also counts task proposals waiting for a decision, ADR-39; "Next waiting") and the tray (the "Waiting: <repo>" menu, the flashing window, the system notification and the tray panel, ADR-50) only read the field.
+**Waiting for you** (`Session.needsAttention`, `SessionAttention`):
+A running session in `Approval` or `Plan`, or in `Input` the user has not seen yet (ADR-47): the agent will not move on without a human, and the human does not know yet. The daemon computes it; the UI (the counter on the view bar, which also counts task proposals waiting for a decision, ADR-39; "Next waiting") and the tray (the "Waiting: <repo>" menu, the flashing window, the system notification and the tray panel, ADR-50) only read the field.
 
 **Seen** (`SessionAttention.focus`, `typed`; the `focus` frame of `PtyClientMessage`):
 The user has seen the session's current `Input`: a session terminal was focused and visible, or the user typed into the session, after the state began.
@@ -306,104 +306,104 @@ Alt (⌥ on macOS) + digit selects the entry at that position in the Sessions li
 The small window next to the tray icon, opened by a left click on it, with the task proposals and the sessions waiting for you (ADR-50). A click opens the entry in the main window.
 _Avoid_: popup, tray menu (that is the menu on a right click)
 
-**Obraz ekranu** (`TerminalScreen`):
-Stan ekranu sesji, który daemon trzyma w emulatorze terminala bez okna i wysyła oknu terminala przy podłączeniu, zanim pójdzie dalsze wyjście.
-_Unikaj_: zrzut ekranu (to obrazek), historia wyjścia
+**Screen image** (`TerminalScreen`):
+The state of a session's screen, which the daemon keeps in a windowless terminal emulator and sends to a session terminal on connection, before further output.
+_Avoid_: screenshot (that is a picture), output history
 
-**Stan zadania** (`TaskState`, zmiana: `TaskStateChange`; po angielsku *state*):
-`Working`, `Input`, `Approval`, `Plan`, `Done`, `Error` albo `Stale`, zawsze ze źródłem (`hook`, `osc`, `screen`, `keyboard`, `timeout`, `exit`) i pewnością (§4.4).
+**Task state** (`TaskState`, change: `TaskStateChange`; *state* in product texts):
+`Working`, `Input`, `Approval`, `Plan`, `Done`, `Error` or `Stale`, always with a source (`hook`, `osc`, `screen`, `keyboard`, `timeout`, `exit`) and a confidence (§4.4).
 
-**Detektor stanu**:
-Reguła, która z hooków, sekwencji terminala, wyglądu ekranu albo klawiszy człowieka w terminalu sesji wnioskuje stan zadania.
+**State detector**:
+A rule that infers the task state from hooks, terminal sequences, the look of the screen or a human's keys in the session terminal.
 
-**Klawisz sesji** (`SessionKey`, `sessionKey`; po angielsku *key*):
-Enter, cyfra 1–9, Esc albo Ctrl+C wysłany do terminala sesji jako cały kawałek wejścia (`enter`, `choice`, `escape`, `interrupt`). Odpowiada na prośbę o zgodę albo przerywa turę, czego Copilot CLI nie zgłasza hookiem, więc jest źródłem stanu `keyboard`; nagranie zapisuje sam rodzaj klawisza.
-_Unikaj_: wejście (to cała treść z klawiatury), skrót
+**Session key** (`SessionKey`, `sessionKey`):
+Enter, a digit 1–9, Esc or Ctrl+C sent to the session terminal as a whole chunk of input (`enter`, `choice`, `escape`, `interrupt`). It answers an approval request or interrupts a turn, which Copilot CLI does not report with a hook, so it is the source of the `keyboard` state; a recording stores only the kind of key.
+_Avoid_: input (that is the whole content from the keyboard), shortcut
 
-**Wtyczka sesji** (`writeCopilotPlugin`; po angielsku *session plugin*):
-Katalog z `plugin.json` i `hooks.json`, który daemon podaje Copilot CLI przez `--plugin-dir`, żeby hooki zgłaszały stan tylko tej jednej sesji (ADR-17).
-_Unikaj_: plugin (w polskim tekście), konfiguracja hooków
+**Session plugin** (`writeCopilotPlugin`):
+A directory with `plugin.json` and `hooks.json` that the daemon gives Copilot CLI through `--plugin-dir`, so that hooks report the state of this one session only (ADR-17).
+_Avoid_: plugin (without qualification), hook configuration
 
-**Instrukcje sesji** (`writeSessionInstructions`, file `trackwall.instructions.md`; in English *session instructions*):
+**Session instructions** (`writeSessionInstructions`, file `trackwall.instructions.md`):
 The instruction file in the session directory that the daemon gives Copilot CLI through `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`: the session's role (a main session in the repo root, or a task session in its worktree with the task rules and `report_result` at the end) and the **MCP instruction** (`MCP_INSTRUCTIONS`, also the MCP server's `instructions`): when to reach for which Trackwall tool (ADR-46). It changes neither the repo nor `~/.copilot`.
 _Avoid_: system prompt (Copilot CLI builds it itself), repository instructions (those are files in the user's repo)
 
-**Rekord hooka** (`CopilotHookRecord`):
-Jedno wywołanie hooka z wtyczki sesji: zdarzenie, czas odebrania i tylko pola payloadu potrzebne do stanu, a o reszcie same nazwy (bez promptu, argumentów i wyników narzędzi). Linia `hooks.jsonl` i znacznik w nagraniu.
-_Unikaj_: rekord (bez dopowiedzenia; to linia logu)
+**Hook record** (`CopilotHookRecord`):
+One call of a hook from the session plugin: the event, the time it was received and only the payload fields needed for the state, and for the rest only their names (without the prompt, tool arguments and results). A line of `hooks.jsonl` and a marker in the recording.
+_Avoid_: record (without qualification; that is a log line)
 
-**Tytuł okna** (`windowTitle`):
-Tytuł, który CLI agenta ustawia sekwencją OSC 0 / 2; w Copilot CLI to opis bieżącej pracy. Pokazywany obok stanu, nigdy nie jest stanem.
-_Unikaj_: intencja, intent
+**Window title** (`windowTitle`):
+The title an agent CLI sets with the OSC 0 / 2 sequence; in Copilot CLI it is a description of the current work. Shown next to the state, it is never the state.
+_Avoid_: intention, intent
 
-**Nagranie** (nagranie sesji, `session.cast`):
-Wyjście sesji w formacie asciicast v2 ze znacznikami rekordów hooków, klawiszy sesji i kodu wyjścia, z którego da się policzyć stan jeszcze raz (`replayCopilotRecording`). Bez treści wejścia z klawiatury.
+**Recording** (session recording, `session.cast`):
+A session's output in the asciicast v2 format with markers for hook records, session keys and the exit code, from which the state can be computed again (`replayCopilotRecording`). Without the content of keyboard input.
 
-**Budżet**:
-Limit czasu i liczby commitów zadania; po przekroczeniu daemon kończy sesję.
+**Budget**:
+A limit on a task's time and number of commits; when it is exceeded the daemon ends the session.
 
-**Podsumowanie** (`Task.summary`, narzędzie MCP `report_result`; po angielsku *summary*):
-Wynik, który sesja zadania zgłasza narzędziem `report_result`: co zrobiła, co zostało, co sprawdzić. Trafia do pola `summary` zadania (z czasem zgłoszenia, w `tasks.json`), do widoku Sessions i do sesji głównej; kolejne zastępuje poprzednie (ADR-39). Docelowo także do propozycji PR. Trackwall niczego sam nie scala (ADR-9).
+**Summary** (`Task.summary`, MCP tool `report_result`):
+The result a task session reports with the `report_result` tool: what it did, what is left, what to check. It goes to the task's `summary` field (with the report time, in `tasks.json`), to the Sessions view and to the main session; a later one replaces the earlier (ADR-39). Eventually also to a PR proposal. Trackwall merges nothing by itself (ADR-9).
 
-## Logi, zdarzenia i audyt
+## Logs, events and audit
 
-**Rekord** (`LogRecord`):
-Jedna linia wyjścia procesu po parsowaniu: `seq`, czas, uruchomienie (`runId`), strumień, poziom, treść (bez ANSI, z zamaskowanymi sekretami), później opcjonalnie identyfikator śladu (`traceId` w TypeScript, `trace_id` w narzędziach MCP).
-_Unikaj_: wpis, event
+**Record** (`LogRecord`):
+One line of process output after parsing: `seq`, time, run (`runId`), stream, level, content (without ANSI, with secrets masked), later optionally a trace identifier (`traceId` in TypeScript, `trace_id` in MCP tools).
+_Avoid_: entry, event
 
-**Źródło** (`LogSource`):
-Skąd pochodzi rekord. Dziś task mise repo (`{ kind: "mise-task", repo, miseTask }`); serwis, zadanie i sam daemon dojdą jako kolejne rodzaje. Źródło ma rekordy wszystkich swoich uruchomień.
+**Source** (`LogSource`):
+Where a record comes from. Today a repo's mise task (`{ kind: "mise-task", repo, miseTask }`); a service, a task and the daemon itself will come as further kinds. A source has the records of all its runs.
 
-**Log** (log taska mise, `logs/tail` i narzędzie MCP `tail`, w UI przycisk „Log”; po angielsku *log*):
-Rekordy jednego źródła w kolejności `seq`: ostatnie (do 2000) w pamięci daemona, nowsze niż ostatnia rotacja w pliku JSONL `logs/<rodzaj>/<repo>/<task mise>.jsonl` w katalogu stanu (bieżący plik i jeden poprzedni, po 10 MB, ADR-28). Nie myl z logiem daemona (stderr procesu `trackwall-daemon`).
-_Unikaj_: konsola, terminal (to PTY sesji zadania)
+**Log** (mise task log, `logs/tail` and the MCP tool `tail`, the "Log" button in the UI):
+The records of one source in `seq` order: the latest (up to 2000) in daemon memory, those newer than the last rotation in the JSONL file `logs/<kind>/<repo>/<mise task>.jsonl` in the state directory (the current file and one previous, 10 MB each, ADR-28). Do not confuse with the daemon log (the stderr of the `trackwall-daemon` process).
+_Avoid_: console, terminal (that is a task session's PTY)
 
-**Błąd z logu** (`LogError`, MCP tool `get_errors`; in English *error*):
+**Error** (error from logs, `LogError`, MCP tool `get_errors`):
 A record at `error` (or `warn`) level or an exception header together with the lines that belong to it (stack trace, `Caused by:`, a Spring or Gradle report), from one source, run and stream. The same error repeated in a source is one error with a count (`count`); `exception` is its cause (ADR-42).
-_Unikaj_: exception (only one kind of error), problem (that is the repo card and the graph), incident
+_Avoid_: exception (only one kind of error), problem (that is the repo card and the graph), incident
 
 **`seq`**:
-Globalny, rosnący numer rekordu dla wszystkich źródeł; każde działanie daemona zaczyna od chwili startu, więc numery się nie powtarzają. Kursor (`sinceSeq` w API i w narzędziach MCP) działa dla jednego źródła i dla całego workspace; `dropped` mówi, że część rekordów po kursorze przepadła.
+A global, increasing record number for all sources; every daemon run starts from the moment of its start, so numbers do not repeat. The cursor (`sinceSeq` in the API and in MCP tools) works for one source and for the whole workspace; `dropped` says that some records after the cursor were lost.
 
-**Zdarzenie** (`DaemonEvent`, `sessions.changed`, `mise.running.changed`; po angielsku *event*):
-Wiadomość daemona na WebSocket `/ws` (ADR-36) z całą migawką jednego tematu, bez numeru. Daemon wysyła je po podłączeniu (migawka każdego tematu) i przy każdej zmianie migawki.
-_Unikaj_: rekord (to log), powiadomienie (to OSC albo hook)
+**Event** (`DaemonEvent`, `sessions.changed`, `mise.running.changed`):
+A daemon message on the `/ws` WebSocket (ADR-36) with the whole snapshot of one topic, without a number. The daemon sends them after connection (a snapshot of every topic) and on every change of a snapshot.
+_Avoid_: record (that is the log), notification (that is OSC or a hook)
 
-**Migawka tematu** (`payload` zdarzenia, `LiveFeed` w UI; po angielsku *snapshot*):
-Cały stan jednego tematu zdarzeń, ta sama wartość co odpowiedź akcji HTTP (`SessionList` z `agents/sessions`, `RunningMiseTask[]` z `mise/running`). Nie myl z migawką pulpitu (`HomeModel`), którą UI składa z kilku tematów i odpowiedzi.
+**Topic snapshot** (the event `payload`, `LiveFeed` in the UI; *snapshot*):
+The whole state of one event topic, the same value as the response of an HTTP action (`SessionList` from `agents/sessions`, `RunningMiseTask[]` from `mise/running`). Do not confuse with the dashboard snapshot (`HomeModel`), which the UI assembles from several topics and responses.
 
-**Maskowanie**:
-Zamiana wartości sekretów na `***` przed zapisem rekordu do bufora, pliku i ostatnich linii stanu. Dziś sekrety to wartości zmiennych środowiska procesu o nazwach sekretów (`GH_TOKEN`, `DB_PASSWORD`…, §4.2).
+**Masking**:
+Replacing secret values with `***` before a record is written to the buffer, the file and the last state lines. Today secrets are the values of process environment variables with secret names (`GH_TOKEN`, `DB_PASSWORD`…, §4.2).
 
-**Audyt** (`AuditEntry`):
-Zapis każdego wywołania narzędzia MCP: klient, narzędzie, argumenty, czas, skrót wyniku. Widoczny tylko w UI.
+**Audit** (`AuditEntry`):
+A record of every MCP tool call: client, tool, arguments, time, result hash. Visible only in the UI.
 
-## Sekrety
+## Secrets
 
-**Repo sekretów**:
-Repozytorium z manifestami k8s `Secret`, po jednej gałęzi `origin/<repo>` na repo z workspace (ADR-10). Klonowane poza workspace.
+**Secrets repo**:
+A repository with k8s `Secret` manifests, one `origin/<repo>` branch per workspace repo (ADR-10). Cloned outside the workspace.
 
-**Sekret** (po angielsku *secret*):
-Klucz z `data` albo `stringData` manifestu, wstrzykiwany jako zmienna środowiskowa o tej samej nazwie. Sesja zadania widzi tylko, czy jest ustawiony.
+**Secret**:
+A key from `data` or `stringData` of a manifest, injected as an environment variable with the same name. A task session only sees whether it is set.
 
-## Scena 3D
+## 3D scene
 
-**Scena** (`@trackwall/scene`, `HomeScene`):
-Scena 3D pulpitu na Pawn. Nie zna API daemona: dostaje kolejne migawki `HomeModel` i trzyma jedną encję na obiekt.
+**Scene** (`@trackwall/scene`, `HomeScene`):
+The dashboard's 3D scene on Pawn. It does not know the daemon API: it gets successive `HomeModel` snapshots and keeps one entity per object.
 
-**Pulpit**:
-Pierwszy ekran, widok „Home” (`HomeView`): stan daemona, sesje (zwłaszcza czekające na Ciebie), repo i połączenia między nimi, w układzie „Orbit” (`orbitLayout`).
+**Dashboard**:
+The first screen, the "Home" view (`HomeView`): the daemon state, sessions (especially those waiting for you), repos and the connections between them, in the "Orbit" layout (`orbitLayout`).
 
-**Kolejka „Needs you”** (`NeedsYouPanel`):
-Left panel of the dashboard: sessions that are waiting for you or have an error, then task proposals waiting for a decision (ADR-39), then repos that are not clean. Sessions and repos also have a label on the scene; proposals are not on the scene, and a click opens them in the Sessions view.
+**"Needs you" queue** (`NeedsYouPanel`):
+The left panel of the dashboard: sessions that are waiting for you or have an error, then task proposals waiting for a decision (ADR-39), then repos that are not clean. Sessions and repos also have a label on the scene; proposals are not on the scene, and a click opens them in the Sessions view.
 
-**Migawka pulpitu** (`HomeModel`):
-To, co pulpit pokazuje, policzone przez UI z odpowiedzi daemona i podane scenie w całości przy każdej zmianie.
-_Unikaj_: snapshot (po angielsku to migawka tematu zdarzeń).
+**Dashboard snapshot** (`HomeModel`):
+What the dashboard shows, computed by the UI from the daemon's responses and given to the scene whole on every change.
+_Avoid_: snapshot alone (that is a topic snapshot of events).
 
-**Warstwa** (`HomeRepo.layer`, `HomeModel.layerCount`):
-Poziom repo na pulpicie, ta sama kolumna co w widoku „Przegląd”: najdłuższa ścieżka od repo, którego nikt nie używa (wejścia po jednej stronie, biblioteki po drugiej). Repo bez połączeń nie ma warstwy (`null`).
+**Layer** (`HomeRepo.layer`, `HomeModel.layerCount`):
+A repo's level on the dashboard, the same column as in the "Overview" view: the longest path from a repo nobody uses (entries on one side, libraries on the other). A repo without connections has no layer (`null`).
 
-**Rodzaj repo** (`RepoKind`: `entry`, `gateway`, `backend`, `library`):
-Rola repo w grafie wyliczona z warstwy: wejście, brama, backend, biblioteka.
-_Unikaj_: serwis (to proces z konfiguracji repo). Na pulpicie każdy rodzaj ma inną bryłę.
+**Repo kind** (`RepoKind`: `entry`, `gateway`, `backend`, `library`):
+A repo's role in the graph computed from its layer: entry, gateway, backend, library.
+_Avoid_: service (that is a process from the repo configuration). On the dashboard every kind has a different solid.
