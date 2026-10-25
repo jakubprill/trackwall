@@ -2,7 +2,7 @@ import { countLabel, type SyncRepo, type SyncRun, type SyncSkipReason, type Sync
 import { workingTreeLabel } from "./format.ts";
 import type { StatusTone } from "./repo-status.ts";
 
-/** Sync in the UI (ADR-21): the tone and short text of a repo's result and the progress of the whole; tests in `test/sync-state.test.ts`. */
+/** Sync in the UI (ADR-21): the tone and short text of a repo's result and the overall progress; tests in `test/sync-state.test.ts`. */
 
 /** Short, because it stands in a row of the repo list; the daemon's full sentence is in the sync panel. */
 const SKIP_LABEL: Record<SyncSkipReason, string> = {

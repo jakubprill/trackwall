@@ -90,7 +90,8 @@ export function HomeCanvas(props: HomeCanvasProps) {
       latest.current.onUnavailable("the graphics context was lost");
     };
     canvas.addEventListener("webglcontextlost", lost);
-    // A hidden window does not draw: Pawn does not pause its loop by itself (reported to Pawn), and a WebView in the tray would keep computing frames.
+    // A hidden window does not draw: Pawn does not pause its loop by itself (reported to Pawn), and a WebView in the tray
+    // would keep computing frames.
     const visibility = () => (document.hidden ? engine.stop() : engine.start());
     document.addEventListener("visibilitychange", visibility);
     if (!document.hidden) engine.start();

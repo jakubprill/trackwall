@@ -31,7 +31,8 @@ const EDGE_KIND_LABELS: Record<EdgeKind, string> = {
 
 /**
  * The details panel of the selected repo in the "Overview" view: whom the repo uses and who uses it, each edge with its
- * key (a package, an application or an HTTP address, a manual edge's description) and evidence. A click selects the repo on the other side of an edge.
+ * key (a package, an app or an HTTP address, a manual edge's description) and evidence. A click selects the repo on the
+ * other side of an edge.
  */
 export function GraphNodePanel({
   node,

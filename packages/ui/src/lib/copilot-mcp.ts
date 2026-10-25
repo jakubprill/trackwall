@@ -16,7 +16,7 @@ export function copilotMcpConfigPath(platform: string): string {
   return platform === "win32" ? "%USERPROFILE%\\.copilot\\mcp-config.json" : "~/.copilot/mcp-config.json";
 }
 
-/** Ten sam wpis w formacie `mcp-config.json`. */
+/** The same entry in the `mcp-config.json` format. */
 export function copilotMcpConfig(mcpStdioCommand: readonly string[]): string {
   return JSON.stringify(copilotMcpServers(mcpStdioCommand), null, 2);
 }

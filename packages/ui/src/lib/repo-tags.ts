@@ -27,7 +27,7 @@ export function hasAllTags(tags: readonly RepoTag[] | undefined, selected: reado
   return selected.every((name) => tags?.some((tag) => tag.name === name) ?? false);
 }
 
-/** Wybrany tag znika z wyboru, niewybrany dochodzi. */
+/** A selected tag leaves the selection, an unselected one joins it. */
 export function toggleTag(selected: readonly string[], name: string): string[] {
   return selected.includes(name) ? selected.filter((n) => n !== name) : [...selected, name];
 }

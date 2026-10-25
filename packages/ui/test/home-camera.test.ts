@@ -6,7 +6,7 @@ function halfWidth(width: number, height: number): number {
   return homeCameraDistance(width, height) * Math.tan((HOME_CAMERA_FOV * Math.PI) / 360) * (width / height);
 }
 
-describe("kadr pulpitu", () => {
+describe("dashboard framing", () => {
   test("in a narrow canvas the camera moves back so that the repo ring (radius 6.6) fits the width", () => {
     expect(halfWidth(576, 800)).toBeGreaterThan(7.3);
     expect(halfWidth(376, 800)).toBeGreaterThan(7.3);

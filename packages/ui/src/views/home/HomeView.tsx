@@ -79,7 +79,8 @@ export function HomeView({
       }),
     [repoList, sessionList, graph.data, running.data, daemonRunning],
   );
-  // A selection of an object that vanished from the snapshot is dropped: it does not come back by itself when a repo or session with that key appears again.
+  // A selection of an object that vanished from the dashboard snapshot is dropped: it does not come back by itself when a repo
+  // or session with that key appears again.
   const current = selected && homeHasObject(model, selected) ? selected : null;
   // Only with loaded data: after a connection change the lists are empty for a moment, and the object has not vanished at all.
   const loaded = repoList !== undefined && sessionList !== undefined;

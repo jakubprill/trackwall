@@ -256,13 +256,14 @@ function Dtos({ dtos }: { dtos: Dto[] }) {
   );
 }
 
-/** An HTTP client: where it calls (an application or address, in which profiles) and which paths. */
+/** An HTTP client: where it calls (an app or address, in which profiles) and which paths. */
 function HttpClients({ clients }: { clients: ConsumedHttp[] }) {
   return (
     <Surface label="HTTP clients" meta={clients.length}>
       <ul className="divide-y">
         {clients.map((c, i) => (
-          // Two proxy entries to the same address have the same fields: the position in the list tells them apart without changing the order.
+          // Two proxy entries to the same address have the same fields: the position in the list tells them apart without
+          // changing the order.
           <li key={`${i}:${c.via}:${c.name}:${c.url}`} className="flex min-w-0 flex-col gap-1 px-3 py-2">
             <span className="flex min-w-0 items-center gap-3">
               <Badge variant="secondary">{HTTP_CLIENT_LABELS[c.via]}</Badge>

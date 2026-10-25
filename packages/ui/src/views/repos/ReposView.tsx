@@ -193,8 +193,9 @@ function ChangeProjectsDir({ onClick }: { onClick: () => void }) {
 }
 
 /**
- * A list row in HUD style (ADR-16): the item number, name, branch, and the state dot and text; the active one has a glowing stroke on the left.
- * The number is only the position in the list, not the repo identifier. Under the state stands the result of the last sync (`listSyncBadge`)
+ * A list row in HUD style (ADR-16): the item number, name, branch, and the state dot and text; the active one has a
+ * glowing stroke on the left. The number is only the position in the list, not the repo identifier. Under the state
+ * stands the result of the last sync (`listSyncBadge`)
  * and the repo's tags (reasons in the tooltip); the `no-mise` tag is warning text, because such a repo has nothing to run (ADR-34).
  */
 function RepoListItem({

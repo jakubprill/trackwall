@@ -16,7 +16,7 @@ const POLL_MS = 2000;
 /**
  * The task's "Changes" tab (ADR-31): files and diff of the worktree against the base commit, polled every 2 s while
  * the tab is open, so you can see what the agent is doing before it commits anything. `paused` stops polling
- * (the worktree disappears while the task is being removed) and keeps the last data.
+ * (the worktree disappears while the task is being ended) and keeps the last data.
  */
 export function TaskChangesView({ conn, task, paused }: { conn: Connection; task: string; paused: boolean }) {
   const load = useCallback(() => post(conn, agentsApi.taskChanges, { task }), [conn, task]);

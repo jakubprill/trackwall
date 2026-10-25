@@ -51,7 +51,7 @@ export interface BatchProgress {
   /** Repos that have finished the command (also with an error or cancelled). */
   done: number;
   total: number;
-  /** Repo z co najmniej jednym nieudanym krokiem. */
+  /** Repos with at least one failed step. */
   failed: number;
 }
 

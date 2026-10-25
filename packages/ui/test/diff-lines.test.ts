@@ -3,7 +3,7 @@ import { diffLines } from "../src/lib/diff-lines.ts";
 
 const kinds = (patch: string[]) => diffLines(patch.join("\n"), 100).lines.map((l) => l.kind);
 
-describe("linie diffu zadania", () => {
+describe("task diff lines", () => {
   test("file headers are neither added nor removed lines", () => {
     expect(
       kinds(["diff --git a/x.ts b/x.ts", "index 1..2 100644", "--- a/x.ts", "+++ b/x.ts", "@@ -1 +1 @@", "-old", "+new", " unchanged"]),
@@ -11,7 +11,7 @@ describe("linie diffu zadania", () => {
   });
 
   test("inside a change a line starting with --- or +++ is removed or added, not a header", () => {
-    expect(kinds(["diff --git a/x.sql b/x.sql", "--- a/x.sql", "+++ b/x.sql", "@@ -1 +1 @@", "--- komentarz SQL", "+++ licznik"])).toEqual([
+    expect(kinds(["diff --git a/x.sql b/x.sql", "--- a/x.sql", "+++ b/x.sql", "@@ -1 +1 @@", "--- SQL comment", "+++ counter"])).toEqual([
       "file",
       "meta",
       "meta",

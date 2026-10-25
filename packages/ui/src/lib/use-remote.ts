@@ -25,7 +25,8 @@ export type RemoteHandle<T> = Remote<T> & {
 export interface RemoteOptions<T> {
   /**
    * Poll every this many ms, counted from the previous response. The function computes the pace from the latest data when
-   * the next request is planned, so a response that changes the pace (for example a mise task started) plans the next request at the new pace at once.
+   * the next request is planned, so a response that changes the pace (for example a mise task started) plans the next
+   * request at the new pace at once.
    */
   pollMs?: number | ((data: T | undefined) => number);
   /** A change of the value fetches the data anew, keeping the previous data until the response (for example the repo's HEAD hash). */

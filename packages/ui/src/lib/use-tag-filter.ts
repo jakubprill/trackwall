@@ -15,7 +15,7 @@ export interface TagFilterHandle {
   tags: Map<string, RepoTag[]>;
   counts: { name: string; count: number }[];
   selected: string[];
-  /** Repo z wszystkimi wybranymi tagami. */
+  /** Repos with all the selected tags. */
   repos: Repo[];
   toggle: (name: string) => void;
   clear: () => void;

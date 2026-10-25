@@ -12,9 +12,9 @@ interface Refusal {
 }
 
 /**
- * Removing a task (ADR-31): the worktree goes together with the files git ignores, and the branch stays or goes
+ * Ending a task (ADR-31): the worktree goes together with the files git ignores, and the branch stays or goes
  * with it. The daemon itself refuses when changes would be lost (`unsaved_changes`), and only then does the panel ask
- * whether to remove it anyway, showing what will be lost.
+ * whether to end it anyway, showing what will be lost.
  */
 export function TaskRemoval({
   conn,
@@ -28,7 +28,7 @@ export function TaskRemoval({
   onCancel: () => void;
 }) {
   const [refusal, setRefusal] = useState<Refusal>();
-  // A refusal is a result, not an error: it turns the buttons into the question whether to remove anyway.
+  // A refusal is a result, not an error: it turns the buttons into the question whether to end it anyway.
   const remove = useAction(
     (keepBranch: boolean, discardChanges: boolean) =>
       post(conn, agentsApi.removeTask, { task: task.id, keepBranch, discardChanges }).then(

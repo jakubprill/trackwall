@@ -116,7 +116,10 @@ export function homeSessionState(session: Session): HomeSessionState {
   return session.state?.state === "Error" ? "error" : "working";
 }
 
-/** The object under the key is in the snapshot; a selection of an object that disappeared (an ended session, a removed repo) is dropped. */
+/**
+ * The object under the key is in the dashboard snapshot; a selection of an object that disappeared (an ended session,
+ * a removed repo) is dropped.
+ */
 export function homeHasObject(model: HomeModel, key: HomeKey): boolean {
   const target = parseHomeKey(key);
   if (target?.kind === "repo") return model.repos.some((r) => r.id === target.id);

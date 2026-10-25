@@ -6,9 +6,9 @@
 
 /*
  * The only theme (ADR-16), a dark HUD: black background, cool glass surfaces, thin lines and one accent
-  * (cyan) for what is active. State colours (`success`, `warning`, `destructive`) speak only of state.
-  * `<html>` has the `dark` class only for the `dark:` variants in shadcn/ui components.
-  * `--background` has its copy as ACRYLIC_TINT in apps/desktop/src-tauri/src/window_effect.rs.
+ * (cyan) for what is active. State colours (`success`, `warning`, `destructive`) speak only of state.
+ * `<html>` has the `dark` class only for the `dark:` variants in shadcn/ui components.
+ * `--background` has its copy as ACRYLIC_TINT in apps/desktop/src-tauri/src/window_effect.rs.
  */
 :root {
   --radius: 0.375rem;
@@ -35,9 +35,9 @@
 
 /*
  * A Tauri window with a background effect (ADR-11, apps/desktop/src-tauri/src/window_effect.rs sets the attribute):
-  * the page paints no background, and surfaces are translucent, so that Mica, Acrylic or vibrancy are visible
-  * and text stays readable. Without the attribute (a browser, no effect) everything is opaque.
-  * `--background` stays opaque, because shadcn also uses it as the background of dialogs.
+ * the page paints no background, and surfaces are translucent, so that Mica, Acrylic or vibrancy are visible
+ * and text stays readable. Without the attribute (a browser, no effect) everything is opaque.
+ * `--background` stays opaque, because shadcn also uses it as the background of dialogs.
  */
 [data-window-effect] body {
   background-color: transparent;
@@ -62,7 +62,7 @@
 }
 
 @theme inline {
-  /* Segoe UI Variable przed `system-ui`, bo `system-ui` w WebView2 zawsze trafia w starsze Segoe UI. */
+  /* Segoe UI Variable before `system-ui`, because `system-ui` in WebView2 always hits the older Segoe UI. */
   --font-sans: "Segoe UI Variable Text", system-ui, sans-serif;
   --font-mono: "Cascadia Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
   --text-2xs: 0.6875rem;
@@ -118,7 +118,7 @@
   color: var(--muted-foreground);
 }
 
-/* Szklana powierzchnia (ADR-11, ADR-16): `Surface` i kafelki stanu repo. */
+/* Glass surface (ADR-11, ADR-16): `Surface` and the repo state tiles. */
 @utility surface {
   background-color: var(--card);
   color: var(--card-foreground);

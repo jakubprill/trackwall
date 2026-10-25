@@ -21,9 +21,9 @@ import { TaskRemoval } from "./TaskRemoval.tsx";
 type TaskTab = "terminal" | "changes";
 
 /**
- * The selected task (ADR-31): title or instruction, branch and session state in the header, the session terminal and the
+ * The selected task (ADR-31): title or prompt, branch and session state in the header, the session terminal and the
  * worktree changes in tabs. A task from a proposal says who proposed it, and the summary from the task session (ADR-39)
- * sits above the tabs. A task without a running session can be resumed or removed; the worktree always opens in VS Code.
+ * sits above the tabs. A task without a running session can be resumed or ended; the worktree always opens in VS Code.
  * The warnings about files another task also changes (ADR-44) and about a changed mise config of the worktree (ADR-59)
  * sit above the summary, and the mise tasks the agent runs in the worktree below it.
  */
@@ -131,7 +131,7 @@ export function TaskPanel({
   );
 }
 
-/** The task's title or instruction and, for a task from a proposal, who proposed it. */
+/** The task's title or prompt and, for a task from a proposal, who proposed it. */
 function taskSubtitle(task: Task, sessions: readonly Session[]): string {
   const name = taskName(task);
   return task.proposedBy ? `${name} · ${proposerLabel(task.proposedBy, sessions)}` : name;

@@ -20,7 +20,7 @@ function task(id: string, createdAt: string): Task {
   return {
     id,
     repo: "shop",
-    prompt: "napraw",
+    prompt: "fix",
     branch: `trackwall/fix-${id}`,
     baseBranch: "main",
     base: "a".repeat(40),
@@ -33,11 +33,11 @@ function task(id: string, createdAt: string): Task {
 }
 
 function proposal(id: string, createdAt: string, proposer: string | null = null): TaskProposal {
-  return { id, repo: "shop", title: "Dodaj test", prompt: "dodaj test", proposedBy: { session: proposer, supervisor: false }, createdAt };
+  return { id, repo: "shop", title: "Add a test", prompt: "add a test", proposedBy: { session: proposer, supervisor: false }, createdAt };
 }
 
 function delegated(id: string, createdAt: string, proposer: string): Task {
-  return { ...task(id, createdAt), title: "Dodaj test", proposedBy: { session: proposer, supervisor: false } };
+  return { ...task(id, createdAt), title: "Add a test", proposedBy: { session: proposer, supervisor: false } };
 }
 
 /** The entries of the rows, in display order, without depth. */
@@ -45,10 +45,10 @@ const rowEntries = (list: Parameters<typeof sessionRows>[0]) => sessionRows(list
 /** A row as “kind id @depth”, so the shape of the tree is visible on one line. */
 const shape = (list: Parameters<typeof sessionRows>[0]) => sessionRows(list).map((r) => `${r.entry.kind} ${entryId(r.entry)} @${r.depth}`);
 
-describe("pozycje widoku Sesje", () => {
+describe("Sessions view entries", () => {
   test("a task is one entry with its latest session, and the order goes from the most recently started", () => {
     const list = {
-      // Od najnowszej, jak w `SessionList`.
+      // Newest first, as in `SessionList`.
       sessions: [
         session("s3", "2026-10-23T12:00:00Z", "t1"),
         session("s2", "2026-10-23T11:00:00Z"),
@@ -248,8 +248,8 @@ describe("pozycje widoku Sesje", () => {
   });
 
   test("a proposal says whether it came from a session in the list, from a closed session or from an agent outside Trackwall", () => {
-    const sessions = [{ ...session("s1", "2026-10-23T12:00:00Z"), windowTitle: "Plan sprintu" }];
-    expect(proposerLabel({ session: "s1", supervisor: false }, sessions)).toBe("proposed by the session in shop (Plan sprintu)");
+    const sessions = [{ ...session("s1", "2026-10-23T12:00:00Z"), windowTitle: "Sprint plan" }];
+    expect(proposerLabel({ session: "s1", supervisor: false }, sessions)).toBe("proposed by the session in shop (Sprint plan)");
     expect(proposerLabel({ session: "s9", supervisor: false }, sessions)).toBe("proposed by a session that is no longer listed");
     expect(proposerLabel({ session: null, supervisor: false }, sessions)).toBe("proposed by an agent outside Trackwall");
   });

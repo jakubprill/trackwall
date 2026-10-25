@@ -16,7 +16,7 @@ const target = { host, fullName: "shop/api", path: "/projects/api" };
 const job = (state: "running" | "done"): CloneJob => ({ ...target, state });
 const failed = (message: string): CloneJob => ({ ...target, state: "failed", message });
 
-describe("clone state in a repo host row", () => {
+describe("clone state in a remote repo's row", () => {
   test("a repo that is not being cloned can be cloned, unless its directory is already in the folder", () => {
     expect(cloneState(host, repo, [])).toEqual({ kind: "available" });
     expect(cloneState(host, { ...repo, inProjectsDir: true }, [])).toEqual({ kind: "in-projects-dir" });

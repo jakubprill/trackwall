@@ -9,7 +9,7 @@ export type BatchRunHandle = BackgroundRunHandle<BatchRun> & {
   cancel: () => void;
 };
 
-/** Ostatnia komenda zbiorcza (ADR-27), jej start i przerwanie; `onFinished` jak w `useBackgroundRun`. */
+/** The last batch command (ADR-27), its start and cancel; `onFinished` as in `useBackgroundRun`. */
 export function useBatchRun(conn: Connection, onFinished: () => void): BatchRunHandle {
   const load = useCallback(() => post(conn, batchApi.run, {}), [conn]);
   const { act, ...handle } = useBackgroundRun(load, onFinished);

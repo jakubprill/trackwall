@@ -42,7 +42,7 @@ function exited(exitCode: number, stoppedByUser = false): Session["run"] {
   return { kind: "exited", runId: "r", startedAt: "", endedAt: "", exitCode, signal: null, stoppedByUser, lastLines: [] };
 }
 
-describe("migawka pulpitu", () => {
+describe("dashboard snapshot", () => {
   test("repo state: unavailable, then local changes, then commits to pull, with their count", () => {
     const model = homeModel({
       repos: [repo("a", { unavailable: true }), repo("b", { changes: 3, behind: 2 }), repo("c", { behind: 2 }), repo("d", { behind: 0 })],

@@ -3,7 +3,7 @@ import { LOG_BUFFER_RECORDS, LogLevel, type LogRecord } from "@trackwall/protoco
 import { logLevelClass, mergeTail, startsRun } from "../src/lib/log-tail.ts";
 
 function record(seq: number, runId = "r1"): LogRecord {
-  return { seq, ts: "2026-10-23T10:00:00Z", runId, stream: "stdout", level: "info", msg: `linia ${seq}` };
+  return { seq, ts: "2026-10-23T10:00:00Z", runId, stream: "stdout", level: "info", msg: `line ${seq}` };
 }
 
 describe("mise task log in the UI", () => {
