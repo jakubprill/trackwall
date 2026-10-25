@@ -1,6 +1,6 @@
 /**
- * Job Object przez `bun:ffi`, bez natywnego addonu (spike z etapu 1, ADR-1). Ładowany tylko pod Bun
- * na Windowsie. Układy struktur dla x64; ARM64 Windows ma ten sam układ.
+ * A Job Object through `bun:ffi`, without a native addon (the stage 1 spike, ADR-1). Loaded only under Bun
+ * on Windows. Struct layouts for x64; ARM64 Windows has the same layout.
  */
 import { dlopen, FFIType, type Pointer } from "bun:ffi";
 
@@ -9,10 +9,10 @@ const JobObjectExtendedLimitInformation = 9;
 const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000;
 const PROCESS_TERMINATE = 0x0001;
 const PROCESS_SET_QUOTA = 0x0100;
-/** sizeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION) na x64; LimitFlags pod offsetem 16. */
+/** sizeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION) on x64; LimitFlags at offset 16. */
 const EXTENDED_LIMIT_SIZE = 144;
 const LIMIT_FLAGS_OFFSET = 16;
-/** sizeof(JOBOBJECT_BASIC_ACCOUNTING_INFORMATION); ActiveProcesses po czterech LARGE_INTEGER i dwóch DWORD. */
+/** sizeof(JOBOBJECT_BASIC_ACCOUNTING_INFORMATION); ActiveProcesses after four LARGE_INTEGERs and two DWORDs. */
 const ACCOUNTING_SIZE = 48;
 const ACTIVE_PROCESSES_OFFSET = 40;
 
@@ -33,8 +33,8 @@ function fail(what: string): never {
 }
 
 /**
- * Job z `KILL_ON_JOB_CLOSE`: system zabija wszystkie jego procesy, gdy zamknie się ostatni uchwyt, także przy
- * twardym zabiciu daemona, więc grupy procesów na Windowsie nie zostają sierotami.
+ * A job with `KILL_ON_JOB_CLOSE`: the system kills all its processes when the last handle closes, also on a
+ * hard kill of the daemon, so process groups on Windows do not become orphans.
  */
 export class Job {
   private handle: Pointer | null;
@@ -49,7 +49,7 @@ export class Job {
     }
   }
 
-  /** Potomkowie procesu utworzeni po przypisaniu trafiają do joba sami. */
+  /** Descendants of a process created after the assignment join the job by themselves. */
   assign(pid: number): void {
     const proc = (f.OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, pid) as Pointer | null) ?? fail(`OpenProcess(${pid})`);
     try {

@@ -1,8 +1,8 @@
 import type { ErrorCode } from "@trackwall/protocol";
 
 /**
- * Błąd, który moduł zgłasza świadomie i który transport ma pokazać klientowi z kodem i treścią.
- * Każdy inny wyjątek API zamienia na `internal` bez szczegółów.
+ * An error a module raises on purpose and that the transport is to show the client with its code and message.
+ * The API turns any other exception into `internal` without details.
  */
 export class DomainError extends Error {
   readonly code: ErrorCode;
@@ -13,7 +13,7 @@ export class DomainError extends Error {
   }
 }
 
-/** Proces nie wystartował: wołający rozróżnia brak programu od złego katalogu roboczego i od reszty. */
+/** The process did not start: the caller tells a missing program from a bad working directory and from the rest. */
 export class SpawnFailure extends Error {
   readonly reason: "program_not_found" | "cwd_invalid" | "terminal_unavailable" | "spawn_failed";
 
@@ -23,7 +23,7 @@ export class SpawnFailure extends Error {
   }
 }
 
-/** Błąd `spawn` jako `SpawnFailure` z komunikatem dla użytkownika; `ENOENT` znaczy brak programu w `PATH`. */
+/** A `spawn` error as a `SpawnFailure` with a message for the user; `ENOENT` means the program is not in `PATH`. */
 export function spawnFailure(program: string, err: NodeJS.ErrnoException): SpawnFailure {
   return err.code === "ENOENT"
     ? new SpawnFailure("program_not_found", `program ${program} not found in PATH`)
@@ -31,8 +31,8 @@ export function spawnFailure(program: string, err: NodeJS.ErrnoException): Spawn
 }
 
 /**
- * Odczyt klucza `workspace.yaml`, którego zły wpis nie może zabrać reszty widoku (graf, ADR-29): `invalid_config` daje
- * wartość zastępczą i komunikat do pokazania, każdy inny błąd idzie dalej.
+ * Reads a `workspace.yaml` key whose bad entry must not take away the rest of the view (graph, ADR-29): `invalid_config` gives
+ * a fallback value and a message to show, any other error propagates.
  */
 export function configOrProblem<T>(read: () => T, fallback: T): { value: T; problem: string | null } {
   try {
@@ -43,7 +43,7 @@ export function configOrProblem<T>(read: () => T, fallback: T): { value: T; prob
   }
 }
 
-/** Komunikat błędu dla użytkownika: wyjątek z kodu albo cokolwiek innego, co zostało rzucone. */
+/** An error message for the user: an exception from code or anything else that was thrown. */
 export function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }

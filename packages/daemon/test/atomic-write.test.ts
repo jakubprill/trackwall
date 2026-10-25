@@ -5,24 +5,24 @@ import { join } from "node:path";
 import { writeFileAtomic } from "../src/infra/atomic-write.ts";
 
 describe("writeFileAtomic", () => {
-  test("nadpisuje istniejący plik i nie zostawia pliku tymczasowego", () => {
+  test("overwrites an existing file and leaves no temporary file", () => {
     const dir = mkdtempSync(join(tmpdir(), "trackwall-aw-"));
     const target = join(dir, "workspace.yaml");
-    writeFileSync(target, "stara treść");
+    writeFileSync(target, "old content");
 
-    writeFileAtomic(target, "nowa treść");
+    writeFileAtomic(target, "new content");
 
-    expect(readFileSync(target, "utf8")).toBe("nowa treść");
+    expect(readFileSync(target, "utf8")).toBe("new content");
     expect(readdirSync(dir)).toEqual(["workspace.yaml"]);
   });
 
-  test("gdy podmiana się nie uda, błąd leci dalej, a plik tymczasowy jest sprzątany", () => {
+  test("when the swap fails, the error propagates and the temporary file is cleaned up", () => {
     const dir = mkdtempSync(join(tmpdir(), "trackwall-aw-"));
-    // Katalog w miejscu pliku: rename na niego kończy się błędem na każdym systemie.
+    // A directory in place of the file: rename onto it fails on every system.
     mkdirSync(join(dir, "workspace.yaml"));
-    writeFileSync(join(dir, "workspace.yaml", "zawartosc"), "x");
+    writeFileSync(join(dir, "workspace.yaml", "content"), "x");
 
-    expect(() => writeFileAtomic(join(dir, "workspace.yaml"), "treść")).toThrow();
+    expect(() => writeFileAtomic(join(dir, "workspace.yaml"), "content")).toThrow();
 
     expect(readdirSync(dir)).toEqual(["workspace.yaml"]);
   });

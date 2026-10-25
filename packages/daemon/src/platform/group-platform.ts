@@ -3,7 +3,7 @@ import { runtimeInfo } from "./runtime.ts";
 
 let platform: Promise<GroupPlatform> | undefined;
 
-/** Implementacja dla bieżącego systemu i runtime'u, ładowana raz; `bun:ffi` tylko pod Bun na Windowsie. */
+/** The implementation for the current system and runtime, loaded once; `bun:ffi` only under Bun on Windows. */
 export function groupPlatform(): Promise<GroupPlatform> {
   platform ??=
     process.platform === "win32"

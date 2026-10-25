@@ -34,32 +34,32 @@ import { SyncRuns } from "./sync-runs.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
 
 /**
- * Moduł `workspace` (§4): repo z folderu z projektami wskazanego w `workspace.yaml` (ADR-18) i ich stan
- * zaobserwowany w gicie, oraz klon nowych repo z hostingów z ustawień (ADR-19). Ani lista, ani stan nie są nigdzie
- * zapisywane; każde zapytanie czyta folder i pyta gita, więc nie rozjeżdżają się z tym, co robi użytkownik.
- * Synchronizacja wszystkich repo (ADR-21) przesuwa gałęzie domyślne do zdalnych. Klonowania i synchronizacje żyją
- * tylko w pamięci, do restartu daemona.
+ * The `workspace` module (§4): repos from the projects folder set in `workspace.yaml` (ADR-18) and their state
+ * as observed in git, plus cloning new repos from the repo hosts in the settings (ADR-19). Neither the list nor the state is
+ * stored anywhere; every query reads the folder and asks git, so they do not drift from what the user does.
+ * Sync of all repos (ADR-21) moves default branches to the remote ones. Clones and syncs live
+ * only in memory, until the daemon restarts.
  */
 
-/** Ile commitów pokazuje przegląd repo. */
+/** How many commits the repo overview shows. */
 const OVERVIEW_COMMITS = 30;
-/** Limit podglądu pliku i README: więcej i tak nikt nie przewija w panelu. */
+/** The limit for a file preview and README: nobody scrolls further in the panel anyway. */
 const PREVIEW_MAX_BYTES = 512 * 1024;
 const README = /^readme(\.(md|markdown|txt|rst|adoc))?$/i;
-/** README, które nie jest Markdownem; bez rozszerzenia to Markdown, tak jak na GitHubie (ADR-35). */
+/** A README that is not Markdown; without an extension it is Markdown, as on GitHub (ADR-35). */
 const PLAIN_TEXT_README = /\.(txt|rst|adoc)$/i;
 /**
- * Ile repo naraz pyta gita przy liście: folder z projektami może mieć ich setki, a każde to dwa procesy `git`,
- * na Windowsie drogie w starcie i skanowane przez antywirus.
+ * How many repos ask git at once for the list: the projects folder can have hundreds of them, and each is two `git` processes,
+ * slow to start on Windows and scanned by the antivirus.
  */
 const STATUS_CONCURRENCY = 8;
 /**
- * Ile repo naraz synchronizuje: fetch trzyma połączenie z hostingiem, a firmowy GitLab albo VPN potrafi
- * ograniczać liczbę równoczesnych połączeń SSH z jednego klienta.
+ * How many repos sync at once: a fetch holds a connection to the repo host, and a self-hosted GitLab or a VPN can
+ * limit the number of simultaneous SSH connections from one client.
  */
 const SYNC_CONCURRENCY = 4;
 
-/** Czego `workspace` potrzebuje od `vcs`; podłączane w fasadzie (§4: moduły nie importują się nawzajem). */
+/** What `workspace` needs from `vcs`; wired in the facade (§4: modules do not import each other). */
 interface WorkspaceVcs extends CodeSearchVcs {
   status(dir: string): Promise<RepoStatusOk>;
   remote(dir: string): Promise<string | null>;
@@ -70,7 +70,7 @@ interface WorkspaceVcs extends CodeSearchVcs {
   changes(dir: string, maxPatchBytes: number): Promise<WorkingTreeChanges>;
 }
 
-/** Czego `workspace` potrzebuje od hostingów repo z modułu `vcs` (ADR-19). */
+/** What `workspace` needs from the repo hosts of the `vcs` module (ADR-19). */
 interface WorkspaceHosting {
   repos(host: RepoHost, query: string): Promise<{ repos: HostedRepo[]; truncated: boolean }>;
   clone(host: RepoHost, fullName: string, dest: string): Promise<void>;
@@ -80,7 +80,7 @@ export interface WorkspaceDeps {
   file: WorkspaceFile;
   vcs: WorkspaceVcs;
   hosting: WorkspaceHosting;
-  /** Otwiera katalog w VS Code (`vscode://` w systemie, składane w fasadzie). */
+  /** Opens a directory in VS Code (`vscode://` in the system, built in the facade). */
   openEditor: (dir: string) => void;
   /** Opens a folder in Explorer, Finder or the Linux file manager (ADR-51). */
   openFolder: (dir: string) => void;
@@ -128,7 +128,7 @@ export class Workspace {
   }
 
   /**
-   * Repo pasujące do `query` z każdego hostingu naraz; hosting, który nie odpowiada, nie zabiera listy pozostałych.
+   * Repos matching `query` from every repo host at once; a repo host that does not answer does not take away the others' lists.
    */
   async remoteRepos(query: string): Promise<RemoteRepoList> {
     const projectsDir = this.deps.file.projectsDir();
@@ -138,8 +138,8 @@ export class Workspace {
   }
 
   /**
-   * Zaczyna klon `fullName` do folderu z projektami, do katalogu o nazwie ostatniego segmentu. Lista repo złapie
-   * klon sama (ADR-18), więc daemon niczego nie zapisuje.
+   * Starts a clone of `fullName` into the projects folder, into a directory named after the last segment. The repo list picks up
+   * the clone by itself (ADR-18), so the daemon stores nothing.
    */
   async clone(host: RepoHost, fullName: string): Promise<CloneJob> {
     if (!this.deps.file.repoHosts().some((h) => sameHost(h, host)))
@@ -148,7 +148,7 @@ export class Workspace {
     if (projectsDir === null) throw new DomainError("bad_request", "set the projects folder first");
     const dir = cloneDir(fullName);
     const taken = await takenNames(projectsDir);
-    // Od tego miejsca bez `await`, żeby dwa równoczesne żądania nie przeszły obu sprawdzeń.
+    // From here on without `await`, so that two simultaneous requests do not both pass the checks.
     const path = join(projectsDir, dir);
     const running = this.clones.runningInto(path);
     if (running && sameHost(running.host, host) && running.fullName === fullName) return running;
@@ -157,7 +157,7 @@ export class Workspace {
     return this.clones.start({ host, fullName, path }, () => this.deps.hosting.clone(host, fullName, path));
   }
 
-  /** Klonowania do bieżącego folderu z projektami; te do folderu sprzed zmiany ustawień nie mówią nic o nim. */
+  /** Clones into the current projects folder; those into the folder from before a settings change say nothing about it. */
   cloneJobs(): CloneJob[] {
     const projectsDir = this.deps.file.projectsDir();
     if (projectsDir === null) return [];
@@ -165,8 +165,8 @@ export class Workspace {
   }
 
   /**
-   * Zaczyna synchronizację repo z folderu z projektami w tle; trwająca synchronizacja tego folderu zwraca się bez
-   * startu nowej. Repo, do którego trwa klonowanie, jest pomijane: jego katalog nie jest jeszcze gotowym repo.
+   * Starts a sync of the repos from the projects folder in the background; a running sync of this folder is returned without
+   * starting a new one. A repo that is being cloned is skipped: its directory is not a ready repo yet.
    */
   async sync(): Promise<SyncRun> {
     const { projectsDir, entries } = await this.entries();
@@ -176,8 +176,8 @@ export class Workspace {
   }
 
   /**
-   * Synchronizacja jednego repo dla komendy zbiorczej (§4.8); repo, do którego trwa klonowanie, to błąd. Trwająca
-   * synchronizacja całego folderu nie przeszkadza, bo `vcs` synchronizuje jeden katalog `.git` po kolei.
+   * Sync of one repo for the batch command (§4.8); a repo that is being cloned is an error. A running
+   * sync of the whole folder does not get in the way, because `vcs` syncs one `.git` directory at a time.
    */
   async syncRepo(id: string): Promise<SyncResult> {
     const entry = await this.entry(id);
@@ -185,13 +185,13 @@ export class Workspace {
     return this.deps.vcs.sync(entry.path);
   }
 
-  /** Ostatnia synchronizacja bieżącego folderu z projektami; ta sprzed zmiany ustawień nie mówi nic o nim. */
+  /** The last sync of the current projects folder; one from before a settings change says nothing about it. */
   syncRun(): SyncRun | null {
     const projectsDir = this.deps.file.projectsDir();
     return projectsDir === null ? null : (this.syncs.last(dirKey(projectsDir)) ?? null);
   }
 
-  /** Jedno repo z listy ze stanem i adresem repo zdalnego, bez pytania gita o pozostałe repo z folderu. */
+  /** One repo from the list with its state and remote repo address, without asking git about the other repos in the folder. */
   async repo(id: string): Promise<Repo> {
     return this.describe(await this.entry(id));
   }
@@ -218,7 +218,7 @@ export class Workspace {
     return content;
   }
 
-  /** Zmiany katalogu roboczego repo względem HEAD (ADR-34). */
+  /** Changes of the repo's working directory against HEAD (ADR-34). */
   async changes(id: string): Promise<WorkingTreeChanges> {
     const entry = await this.entry(id);
     return this.inRepo(entry, () => this.deps.vcs.changes(entry.path, PATCH_MAX_BYTES));
@@ -235,7 +235,7 @@ export class Workspace {
     return searchCode(ids ? entries.filter((e) => ids.includes(e.id)) : entries, this.deps.vcs, query);
   }
 
-  /** Daemon nie wie, czy system obsłużył adres; wynik to tylko potwierdzenie przyjęcia. */
+  /** The daemon does not know whether the system handled the address; the result only confirms it was accepted. */
   async openEditor(id: string): Promise<void> {
     this.deps.openEditor((await this.entry(id)).path);
   }
@@ -245,7 +245,7 @@ export class Workspace {
     this.deps.openFolder((await this.entry(id)).path);
   }
 
-  /** Korzeń repo po identyfikatorze, dla modułów, które uruchamiają w nim procesy (`mise`). */
+  /** The repo root by identifier, for modules that run processes in it (`mise`). */
   async repoPath(id: string): Promise<string> {
     return (await this.entry(id)).path;
   }
@@ -257,27 +257,27 @@ export class Workspace {
     return projectsDir;
   }
 
-  /** Repo z folderu z projektami (identyfikator i korzeń), dla modułów, które czytają każde repo (`cards`). */
+  /** Repos from the projects folder (identifier and root), for modules that read every repo (`cards`). */
   async repoEntries(): Promise<RepoEntry[]> {
     return (await this.entries()).entries;
   }
 
-  /** Reguły tagów repo z `workspace.yaml` (ADR-25). */
+  /** Repo tag rules from `workspace.yaml` (ADR-25). */
   tagRules(): RepoTagRules {
     return this.deps.file.repoTagRules();
   }
 
-  /** Aliasy paczek i ręczne krawędzie grafu z `workspace.yaml` (ADR-29). */
+  /** Package aliases and manual graph edges from `workspace.yaml` (ADR-29). */
   graphConfig(): GraphConfig {
     return this.deps.file.graphConfig();
   }
 
-  /** Pełna ścieżka `workspace.yaml`, np. jako dowód wpisu użytkownika w grafie. */
+  /** The full path of `workspace.yaml`, e.g. as the evidence of a user entry in the graph. */
   configFile(): string {
     return this.deps.file.path;
   }
 
-  /** Bez ustawionego folderu z projektami nie ma repo. */
+  /** Without a projects folder set there are no repos. */
   private async entries(): Promise<{ projectsDir: string | null; entries: RepoEntry[] }> {
     const projectsDir = this.deps.file.projectsDir();
     return { projectsDir, entries: projectsDir === null ? [] : await findRepos(projectsDir, projectsDirUnavailable) };
@@ -292,7 +292,7 @@ export class Workspace {
   private async describe(entry: RepoEntry): Promise<Repo> {
     const [status, remote] = await Promise.all([
       this.deps.vcs.status(entry.path).catch((err: unknown): RepoStatus => ({ kind: "unavailable", message: messageOf(err) })),
-      // Brak adresu nie jest błędem repo: stan repo i tak powie, gdy git go nie czyta.
+      // A missing address is not a repo error: the repo state will say anyway when git cannot read it.
       this.deps.vcs.remote(entry.path).catch(() => null),
     ]);
     return { ...entry, remote, status };
@@ -322,7 +322,7 @@ export class Workspace {
     return { path: best.path, text: content.text, truncated: content.truncated, format };
   }
 
-  /** Błąd gita przy czytaniu repo z listy to stan repo (`repo_unavailable`), nie błąd daemona. */
+  /** A git error while reading a repo from the list is a repo state (`repo_unavailable`), not a daemon error. */
   private async inRepo<T>(entry: RepoEntry, readFromGit: () => Promise<T>): Promise<T> {
     try {
       return await readFromGit();
@@ -336,7 +336,7 @@ function unknownRepo(id: string): DomainError {
   return new DomainError("not_found", `no repo "${id}" in the projects folder`);
 }
 
-/** Katalog klonu: ostatni segment pełnej nazwy, jak przy `git clone` bez podanego katalogu. */
+/** The clone directory: the last segment of the full name, as with `git clone` without a directory. */
 function cloneDir(fullName: string): string {
   const dir = fullName.split("/").at(-1);
   if (!dir) throw new Error(`full repo name has no final segment: "${fullName}"`);

@@ -21,7 +21,7 @@ const daemonLog: string[] = [];
 
 beforeAll(async () => {
   daemon = await startSessionApi(TOKEN, {
-    repos: { sklep: { "fake-mise.json": SERVICE }, magazyn: { "fake-mise.json": SERVICE } },
+    repos: { shop: { "fake-mise.json": SERVICE }, warehouse: { "fake-mise.json": SERVICE } },
     miseCommand: FAKE_MISE,
     log: (msg) => daemonLog.push(msg),
   });
@@ -49,17 +49,17 @@ describe("services over MCP (real process groups, fake mise and fake service)", 
     "start_service waits until the service is healthy, call_endpoint reaches it and stop_service stops it",
     async () => {
       const { slice } = StartServiceResult.parse(
-        (await call(outside, "start_service", { repo: "sklep", timeoutSeconds: 30 })).structuredContent,
+        (await call(outside, "start_service", { repo: "shop", timeoutSeconds: 30 })).structuredContent,
       );
       expect(slice).toMatchObject({
-        repo: "sklep",
+        repo: "shop",
         settled: true,
-        members: [{ repo: "sklep", outcome: "started", service: { state: "healthy" } }],
+        members: [{ repo: "shop", outcome: "started", service: { state: "healthy" } }],
       });
 
       const secret = "Bearer abcdefgh-secret";
       const result = await call(outside, "call_endpoint", {
-        repo: "sklep",
+        repo: "shop",
         method: "POST",
         path: "/api/orders",
         headers: { authorization: secret },
@@ -69,15 +69,15 @@ describe("services over MCP (real process groups, fake mise and fake service)", 
       expect(called.response?.status).toBe(200);
       expect(JSON.parse(called.response?.body ?? "")).toMatchObject({ method: "POST", path: "/api/orders", body: '{"lines":[]}' });
       // The audit line names the service and method, not the headers and the body, which may carry a secret.
-      expect(daemonLog.filter((l) => l.startsWith("call_endpoint: {"))).toEqual(['call_endpoint: {"repo":"sklep","method":"POST"}']);
+      expect(daemonLog.filter((l) => l.startsWith("call_endpoint: {"))).toEqual(['call_endpoint: {"repo":"shop","method":"POST"}']);
       expect(daemonLog.join("\n")).not.toContain(secret);
 
       const { services } = ListServicesResult.parse((await call(outside, "list_services", {})).structuredContent);
-      expect(services.map((s) => [s.repo, s.state, s.portSource])).toEqual([["sklep", "healthy", "log"]]);
-      const stopped = StopServiceResult.parse((await call(outside, "stop_service", { repo: "sklep" })).structuredContent);
-      expect(stopped.services.map((s) => [s.repo, s.state])).toEqual([["sklep", "stopped"]]);
-      expect(errorText(await call(outside, "call_endpoint", { repo: "sklep", path: "/" }))).toBe(
-        "service_unavailable: the service of sklep is stopped",
+      expect(services.map((s) => [s.repo, s.state, s.portSource])).toEqual([["shop", "healthy", "log"]]);
+      const stopped = StopServiceResult.parse((await call(outside, "stop_service", { repo: "shop" })).structuredContent);
+      expect(stopped.services.map((s) => [s.repo, s.state])).toEqual([["shop", "stopped"]]);
+      expect(errorText(await call(outside, "call_endpoint", { repo: "shop", path: "/" }))).toBe(
+        "service_unavailable: the service of shop is stopped",
       );
     },
     TIMEOUT,
@@ -88,15 +88,15 @@ describe.skipIf(process.versions.bun === undefined)("services from a Trackwall s
   test(
     "a session starts and stops only the service of its own repo",
     async () => {
-      const session = await daemon.facade.agents.start("magazyn");
+      const session = await daemon.facade.agents.start("warehouse");
       const token = readFileSync(join(daemon.home, "sessions", session.id, "session-token"), "utf8");
       const client = await connectHttpClient(daemon.api.port, TOKEN, undefined, { [SESSION_TOKEN_HEADER]: token });
       clients.push(client);
 
-      expect(errorText(await call(client, "start_service", { repo: "sklep" }))).toBe(
-        "bad_request: a session in magazyn can start and stop only the service of magazyn, not of sklep",
+      expect(errorText(await call(client, "start_service", { repo: "shop" }))).toBe(
+        "bad_request: a session in warehouse can start and stop only the service of warehouse, not of shop",
       );
-      expect(errorText(await call(client, "stop_service", { repo: "sklep" }))).toStartWith("bad_request:");
+      expect(errorText(await call(client, "stop_service", { repo: "shop" }))).toStartWith("bad_request:");
     },
     TIMEOUT,
   );

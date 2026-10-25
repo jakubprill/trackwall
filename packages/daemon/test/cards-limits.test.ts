@@ -168,13 +168,13 @@ describe("repo card with malicious and large files", () => {
       }),
       readFiles: async () => new Map([["pom.xml", Buffer.from("<project/>")]]),
       grepFiles: async () => {
-        throw new Error("git grep: przekroczony limit czasu");
+        throw new Error("git grep: timed out");
       },
     };
     const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), (path) => path.endsWith("pom.xml"), CARD_SOURCES);
     expect(snapshot.text("pom.xml")).toBe("<project/>");
     expect(snapshot.problems).toEqual([
-      { path: "", message: "searching for files with controllers and HTTP clients failed: git grep: przekroczony limit czasu" },
+      { path: "", message: "searching for files with controllers and HTTP clients failed: git grep: timed out" },
     ]);
   });
 

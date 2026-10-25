@@ -3,9 +3,9 @@ import { loopbackRequest } from "../../src/infra/loopback.ts";
 import { MCP_PATH } from "../../src/mcp/endpoint.ts";
 
 /**
- * Prawdziwy klient MCP z SDK (§10) połączony przez Streamable HTTP z daemonem na `port`. `fetch` idzie przez
- * `loopbackRequest`, bo `fetch` w Bun kieruje 127.0.0.1 przez `HTTP_PROXY` (AGENTS.md, Windows pierwszy). `headers`
- * dokłada nagłówki do każdego żądania, np. token sesji, który w sesji Trackwall dokłada most stdio.
+ * A real MCP client from the SDK (§10) connected over Streamable HTTP to the daemon on `port`. `fetch` goes through
+ * `loopbackRequest`, because `fetch` in Bun routes 127.0.0.1 through `HTTP_PROXY` (AGENTS.md, Windows first). `headers`
+ * adds headers to every request, e.g. the session token, which the Stdio bridge adds in a Trackwall session.
  */
 export async function connectHttpClient(
   port: number,

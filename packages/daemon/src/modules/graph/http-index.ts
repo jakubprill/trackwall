@@ -16,25 +16,25 @@ import type { GraphCardInput } from "./graph-input.ts";
 import { type Join, push } from "./graph-join.ts";
 
 /**
- * Dopasowanie klientów HTTP z kart do aplikacji i endpointów innych repo (§4.6, ADR-30), wspólne dla krawędzi `http`
- * i `find_endpoint`. Klient wskazuje repo nazwą aplikacji (Feign `name`, `lb://nazwa`, host równy
- * `spring.application.name`), aliasem aplikacji z `workspace.yaml`, hostem równym nazwie repo albo portem aplikacji
- * na `localhost`; bez żadnego z nich graf szuka repo, którego endpointy pasują do ścieżek wywołań. Ścieżki wywołań
- * z dopasowanymi endpointami są dowodami i podnoszą pewność.
+ * Matching HTTP clients from the cards to apps and endpoints of other repos (§4.6, ADR-30), shared by the `http` edges
+ * and `find_endpoint`. A client points to a repo by app name (Feign `name`, `lb://name`, a host equal to
+ * `spring.application.name`), by an app alias from `workspace.yaml`, by a host equal to the repo name or by the app's port
+ * on `localhost`; without any of them the graph looks for a repo whose endpoints match the call paths. Call paths
+ * with matched endpoints are evidence and raise the confidence.
  */
 
-/** Skąd wiadomo, że klient woła repo; kolejność od najpewniejszego. */
+/** How we know a client calls a repo; ordered from the most certain. */
 type TargetBasis = "app" | "alias" | "repo-name" | "port" | "path";
 
-/** Wywołanie klienta z endpointem repo, do którego pasuje. */
+/** A client call with the repo endpoint it matches. */
 export interface MatchedCall {
   call: HttpCall;
-  /** Pełna ścieżka: ścieżka z adresu klienta i ścieżka wywołania. */
+  /** The full path: the path from the client's address and the call path. */
   path: string;
   endpoint: ProvidedEndpoint;
 }
 
-/** Repo, które klient woła, z pewnością, kluczem krawędzi, dowodami po stronie celu i dopasowanymi wywołaniami. */
+/** A repo the client calls, with the confidence, the edge key, the evidence on the target side and the matched calls. */
 export interface HttpTarget {
   repo: string;
   basis: TargetBasis;
@@ -44,7 +44,7 @@ export interface HttpTarget {
   calls: MatchedCall[];
 }
 
-/** Klient HTTP z karty repo. */
+/** An HTTP client from a repo card. */
 export interface RepoClient {
   repo: string;
   client: ConsumedHttp;
@@ -55,19 +55,19 @@ interface AppOf {
   app: ProvidedApp;
 }
 
-/** Endpoint z członami ścieżki policzonymi raz: graf porównuje z nim każde wywołanie bez celu. */
+/** An endpoint with its path segments computed once: the graph compares every call without a target with it. */
 interface IndexedEndpoint {
   repo: string;
   endpoint: ProvidedEndpoint;
   segments: string[];
   /**
-   * Czy ścieżka ma stały człon (`/api/**` tak, `/**` i `/{path}` nie). Endpoint bez niego (przekierowanie wszystkiego
-   * do aplikacji SPA) pasowałby do każdego wywołania, więc nie jest dowodem połączenia.
+   * Whether the path has a fixed segment (`/api/**` yes, `/**` and `/{path}` no). An endpoint without one (forwarding everything
+   * to a SPA) would match every call, so it is not evidence of a connection.
    */
   specific: boolean;
 }
 
-/** Hosty, pod którymi aplikacja jest na komputerze dewelopera; dla nich o celu mówi port. */
+/** Hosts under which an app runs on a developer's computer; for them the port says what the target is. */
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "[::1]", "host.docker.internal"]);
 
 export class HttpIndex {
@@ -77,12 +77,12 @@ export class HttpIndex {
   private readonly ports = new Map<number, AppOf[]>();
   private readonly repoNames = new Map<string, string[]>();
   private readonly endpointsByRepo = new Map<string, IndexedEndpoint[]>();
-  /** Endpointy po liczbie członów ścieżki, a z `**` osobno: wywołanie porównuje się tylko z tymi, które mogą pasować. */
+  /** Endpoints by number of path segments, and those with `**` separately: a call is compared only with those that can match. */
   private readonly endpointsByLength = new Map<number, IndexedEndpoint[]>();
   /**
-   * Endpointy po liczbie członów, pozycji i członie na niej (`3/0/api`, ze zmienną `3/2/*`). Wywołanie porównuje się
-   * tylko z endpointami, które mają jego najrzadszy stały człon (albo zmienną) na tej samej pozycji, więc tysiące
-   * endpointów w kilkudziesięciu repo nie mnożą się przez każde wywołanie (§8).
+   * Endpoints by number of segments, position and the segment at it (`3/0/api`, with a variable `3/2/*`). A call is compared
+   * only with endpoints that have its rarest fixed segment (or a variable) at the same position, so thousands
+   * of endpoints in dozens of repos are not multiplied by every call (§8).
    */
   private readonly endpointsBySegment = new Map<string, IndexedEndpoint[]>();
   private readonly tailEndpoints: IndexedEndpoint[] = [];
@@ -125,15 +125,15 @@ export class HttpIndex {
   }
 
   /**
-   * Repo, które klient repo `from` woła; puste, gdy nie wiadomo. Nigdy samo `from`: nazwa, alias albo port, które
-   * wskazują repo klienta, kończą szukanie bez krawędzi (aplikacja woła inną aplikację z tego samego repo).
+   * The repos the client of repo `from` calls; empty when unknown. Never `from` itself: a name, alias or port that
+   * points to the client's repo ends the search without an edge (an app calls another app from the same repo).
    */
   targets(from: string, client: ConsumedHttp): HttpTarget[] {
     const url = client.url === null ? undefined : parseHttpUrl(client.url);
     return this.byName(from, client, url) ?? this.byPath(from, client, url?.path ?? "");
   }
 
-  /** Cele po nazwie aplikacji, aliasie, hoście albo porcie; `undefined`, gdy żaden niczego nie wskazuje. */
+  /** Targets by app name, alias, host or port; `undefined` when none of them points to anything. */
   private byName(from: string, client: ConsumedHttp, url: HttpUrl | undefined): HttpTarget[] | undefined {
     const base = url?.path ?? "";
     const name = client.app ?? (url?.scheme === "lb" ? url.host : undefined);
@@ -158,11 +158,11 @@ export class HttpIndex {
 
   private byApp(from: string, name: string, client: ConsumedHttp, base: string): HttpTarget[] {
     const apps = this.apps.get(name.toLowerCase()) ?? [];
-    // Pewność liczy się z innych repo: aplikacja o tej nazwie w repo klienta nie robi z celu niepewnego.
+    // Confidence is counted from other repos: an app with this name in the client's repo does not make the target uncertain.
     const repos = new Set(apps.map((a) => a.repo).filter((r) => r !== from));
     return apps.map(({ repo, app }) => {
       const calls = this.match(repo, client, base, app.name);
-      // `exact` dopiero, gdy każde wywołanie ma endpoint w tym repo: sama nazwa aplikacji to `high`.
+      // `exact` only when every call has an endpoint in this repo: the app name alone is `high`.
       const everyCall = client.calls.length > 0 && client.calls.every((call) => calls.some((m) => m.call === call));
       const confidence = repos.size > 1 ? "medium" : everyCall ? "exact" : "high";
       return { repo, basis: "app", confidence, key: app.name, evidence: [appEvidence(repo, app)], calls };
@@ -205,12 +205,12 @@ export class HttpIndex {
     }));
   }
 
-  /** Repo z endpointami pasującymi do wywołań klienta: jedno `medium`, kilka `low`. */
+  /** Repos with endpoints matching the client's calls: one `medium`, several `low`. */
   private byPath(from: string, client: ConsumedHttp, base: string): HttpTarget[] {
     const byRepo = new Map<string, MatchedCall[]>();
     for (const call of client.calls) {
       const { path, segments } = callPath(base, call);
-      // Ścieżka bez stałego członu (`/`, `/{id}`) pasowałaby do połowy endpointów, więc sama nie wskazuje repo.
+      // A path without a fixed segment (`/`, `/{id}`) would match half the endpoints, so on its own it does not point to a repo.
       if (!segments.some(isLiteral)) continue;
       const candidates = [...this.sameLength(segments), this.tailEndpoints];
       for (const list of candidates)
@@ -220,7 +220,7 @@ export class HttpIndex {
     return [...byRepo].map(([repo, calls]) => ({ repo, basis: "path", confidence, key: client.name, evidence: [], calls }));
   }
 
-  /** Listy endpointów bez `**` o tej samej liczbie członów, które mogą pasować najrzadszym stałym członem wywołania. */
+  /** Lists of endpoints without `**` with the same number of segments that can match by the call's rarest fixed segment. */
   private sameLength(segments: readonly string[]): IndexedEndpoint[][] {
     const length = segments.length;
     let best: IndexedEndpoint[][] = [this.endpointsByLength.get(length) ?? []];
@@ -238,8 +238,8 @@ export class HttpIndex {
   }
 
   /**
-   * Wywołania klienta z każdym endpointem repo (aplikacji `app`, gdy podana), do którego pasują metodą i ścieżką:
-   * `/orders/{id}` i `/orders/special` pasują do `/orders/special` oba, a `find_endpoint` pyta o każdy z osobna.
+   * The client's calls with every endpoint of the repo (of app `app`, when given) they match by method and path:
+   * `/orders/{id}` and `/orders/special` both match `/orders/special`, and `find_endpoint` asks about each one separately.
    */
   private match(repo: string, client: ConsumedHttp, base: string, app?: string): MatchedCall[] {
     const endpoints = (this.endpointsByRepo.get(repo) ?? []).filter(
@@ -252,12 +252,12 @@ export class HttpIndex {
   }
 }
 
-/** Klucz `endpointsBySegment`: zmienna (`{id}`, `*`) to `*`. */
+/** The `endpointsBySegment` key: a variable (`{id}`, `*`) is `*`. */
 function segmentKey(length: number, at: number, segment: string): string {
   return `${length}/${at}/${isLiteral(segment) ? segment : "*"}`;
 }
 
-/** Pełna ścieżka wywołania (ścieżka z adresu klienta i ścieżka wywołania) i jej człony. */
+/** The full call path (the path from the client's address and the call path) and its segments. */
 function callPath(base: string, call: HttpCall): { path: string; segments: string[] } {
   const path = joinHttpPath(base, call.path);
   return { path, segments: httpPathSegments(path) };

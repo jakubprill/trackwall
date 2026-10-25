@@ -1,16 +1,16 @@
 import type { ChangedFile, Commit, RepoStatusOk, TreeEntry } from "@trackwall/protocol";
 
 /**
- * Parsery wyjścia gita w formatach maszynowych (`-z`, `--porcelain=v2`), bez zależności od języka gita.
- * Czyste funkcje, testowane bez procesu.
+ * Parsers of git output in machine formats (`-z`, `--porcelain=v2`), independent of git's language.
+ * Pure functions, tested without a process.
  */
 
-/** Format `git log` zgodny z `parseLog`: pola rozdzielone 0x1f, commity rozdzielone NUL przez `-z`. */
+/** The `git log` format `parseLog` expects: fields separated by 0x1f, commits separated by NUL through `-z`. */
 export const LOG_FORMAT = "--format=%H%x1f%an%x1f%aI%x1f%s";
 
-/** Wynik `git status --porcelain=v2 --branch -z` bez commita HEAD (dokłada go `vcs`). */
+/** The result of `git status --porcelain=v2 --branch -z` without the HEAD commit (`vcs` adds it). */
 export interface ParsedStatus extends Omit<RepoStatusOk, "head"> {
-  /** `false` w repo bez commitów (`branch.oid (initial)`). */
+  /** `false` in a repo without commits (`branch.oid (initial)`). */
   hasCommits: boolean;
 }
 
@@ -25,7 +25,7 @@ export function parseStatus(out: string): ParsedStatus {
     } else if (/^[12u?] /.test(field)) {
       status.changes++;
       if (field.startsWith("? ")) status.untracked++;
-      // Wpis zmiany nazwy (`2`) ma po sobie osobne pole ze starą ścieżką.
+      // A rename entry (`2`) is followed by a separate field with the old path.
       if (field.startsWith("2 ")) i++;
     }
   }
@@ -40,7 +40,7 @@ function applyHeader(status: ParsedStatus, header: string, upstreamName: string 
   else if (key === "branch.head") status.branch = value === "(detached)" ? null : value;
   else if (key === "branch.upstream") return value;
   else if (key === "branch.ab" && upstreamName !== undefined) {
-    // Bez `branch.ab` gałąź śledzona nie istnieje (np. usunięta na zdalnym), więc nie ma czego porównać.
+    // Without `branch.ab` the tracked branch does not exist (e.g. deleted on the remote), so there is nothing to compare.
     const m = /^\+(\d+) -(\d+)$/.exec(value);
     if (m) status.upstream = { name: upstreamName, ahead: Number(m[1]), behind: Number(m[2]) };
   }
@@ -58,8 +58,8 @@ export function parseLog(out: string): Commit[] {
 }
 
 /**
- * Wynik `git ls-tree -z --long <commit>:<katalog>`. Nazwy są względne do katalogu, więc `dir` dokleja się
- * z przodu, żeby UI mógł podać ścieżkę z powrotem bez składania jej samemu.
+ * The result of `git ls-tree -z --long <commit>:<directory>`. Names are relative to the directory, so `dir` is prepended,
+ * so that the UI can pass the path back without building it itself.
  */
 export function parseTree(out: string, dir: string): TreeEntry[] {
   const entries: TreeEntry[] = [];
@@ -88,8 +88,8 @@ export interface GitObject {
 }
 
 /**
- * Wynik `git cat-file --batch-check='%(objectname) %(objecttype) %(objectsize)'`: linia na każde zapytanie,
- * w tej samej kolejności. Brakujący obiekt git opisuje linią `<zapytanie> missing`, więc rozpoznajemy linie udane.
+ * The result of `git cat-file --batch-check='%(objectname) %(objecttype) %(objectsize)'`: a line per query,
+ * in the same order. Git describes a missing object with the line `<query> missing`, so we recognise the successful lines.
  */
 export function parseObjects(out: string, count: number): (GitObject | undefined)[] {
   const lines = out.split("\n").slice(0, count);
@@ -100,9 +100,9 @@ export function parseObjects(out: string, count: number): (GitObject | undefined
 }
 
 /**
- * Wynik `git cat-file --batch`: na każde zapytanie nagłówek `<oid> <typ> <rozmiar>`, treść i znak nowej linii, albo
- * linia `<zapytanie> missing`. Zwraca treść blobów w kolejności zapytań; brakujący obiekt, obiekt innego typu
- * i treść uciętą końcem wyjścia jako `undefined`.
+ * The result of `git cat-file --batch`: for each query a header `<oid> <type> <size>`, the contents and a newline, or
+ * the line `<query> missing`. Returns blob contents in query order; a missing object, an object of another type
+ * and contents cut by the end of output as `undefined`.
  */
 export function parseBlobs(out: Buffer, count: number): (Buffer | undefined)[] {
   const blobs: (Buffer | undefined)[] = [];
@@ -125,14 +125,14 @@ export function parseBlobs(out: Buffer, count: number): (Buffer | undefined)[] {
   return blobs;
 }
 
-/** Ta sama heurystyka co w gicie: NUL w pierwszych 8000 bajtach znaczy plik binarny. */
+/** The same heuristic as git's: a NUL in the first 8000 bytes means a binary file. */
 export function isBinary(content: Buffer): boolean {
   return content.subarray(0, 8000).includes(0);
 }
 
 /**
- * `diff --name-status -z` (`M\0ścieżka\0`) i `diff --numstat -z` (`dodane\tusunięte\tścieżka\0`, `-` dla pliku
- * binarnego) bez wykrywania zmian nazw, więc każdy plik ma w obu jeden wpis.
+ * `diff --name-status -z` (`M\0path\0`) and `diff --numstat -z` (`added\tdeleted\tpath\0`, `-` for a binary
+ * file) without rename detection, so every file has one entry in both.
  */
 export function parseChangedFiles(nameStatus: string, numstat: string): ChangedFile[] {
   const counts = parseNumstat(numstat);
@@ -158,8 +158,8 @@ function parseNumstat(numstat: string): Map<string, Pick<ChangedFile, "additions
 }
 
 /**
- * Wpisy wyjścia `-z` jako bajty, bez dekodowania: nazwa pliku spoza UTF-8 (na Linuksie) po dekodowaniu wskazywałaby
- * plik, którego nie ma. Kawałek bez końcowego NUL (ucięte wyjście) to niepełna ścieżka, więc odpada.
+ * Entries of `-z` output as bytes, without decoding: a file name outside UTF-8 (on Linux) would after decoding point to
+ * a file that does not exist. A piece without a trailing NUL (cut output) is an incomplete path, so it is dropped.
  */
 export function parseNulTerminated(out: Buffer): Buffer[] {
   const entries: Buffer[] = [];

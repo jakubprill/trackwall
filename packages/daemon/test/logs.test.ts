@@ -23,14 +23,14 @@ function newLogs(maxFileBytes = 1024 * 1024) {
   return { dir, messages, logs: new Logs({ dir, maxFileBytes, log: (m) => messages.push(m) }) };
 }
 
-/** Wyjście uruchomienia z jednym kawałkiem stdout na linię. */
+/** A run's output with one stdout chunk per line. */
 function write(output: RunOutput, ...lines: string[]): void {
   for (const line of lines) output.push("stdout", Buffer.from(`${line}\n`));
 }
 
-describe("logi procesu", () => {
+describe("process logs", () => {
   test(
-    "wyjście taska trafia do logu jego źródła bez kolorów, z poziomem i zamaskowanym sekretem, także w pliku JSONL",
+    "a mise task's output goes to its source's log without colours, with a level and a masked secret, also in the JSONL file",
     async () => {
       const { dir, logs } = newLogs();
       const home = mkdtempSync(join(tmpdir(), "trackwall-logs-home-"));
@@ -43,14 +43,14 @@ describe("logi procesu", () => {
       const script = [
         'console.log("\\x1b[32mstart\\x1b[0m");',
         'console.log("token: " + process.env.GH_TOKEN);',
-        'console.error("ERROR nie ma bazy");',
-        'process.stdout.write("bez końca linii");',
+        'console.error("ERROR no database");',
+        'process.stdout.write("no line end");',
       ].join("");
-      const env = { ...process.env, GH_TOKEN: "ghp_bardzoTajnyToken123" };
+      const env = { ...process.env, GH_TOKEN: "ghp_veryS3cretToken123" };
 
       const started = await groups.start({ owner: "o", command: [process.execPath, "-e", script], cwd: home, env, logSource: DEV });
       expect(await waitUntil(() => groups.state("o")?.kind === "exited", 15_000)).toBe(true);
-      // Ostatnia linia bez `\n` przychodzi z końcem strumienia, który może przyjść chwilę po końcu procesu.
+      // The last line without `\n` comes with the end of the stream, which may arrive a moment after the process ends.
       expect(await waitUntil(() => logs.tail({ source: DEV, limit: 10 }).records.length === 4, 5000)).toBe(true);
 
       const { records } = logs.tail({ source: DEV, limit: 10 });
@@ -58,15 +58,15 @@ describe("logi procesu", () => {
         expect.arrayContaining([
           { stream: "stdout", level: "info", msg: "start", runId: started.runId },
           { stream: "stdout", level: "info", msg: "token: ***", runId: started.runId },
-          { stream: "stderr", level: "error", msg: "ERROR nie ma bazy", runId: started.runId },
-          { stream: "stdout", level: "info", msg: "bez końca linii", runId: started.runId },
+          { stream: "stderr", level: "error", msg: "ERROR no database", runId: started.runId },
+          { stream: "stdout", level: "info", msg: "no line end", runId: started.runId },
         ]),
       );
       expect(groups.state("o")).toMatchObject({ kind: "exited", lastLines: expect.arrayContaining(["token: ***"]) });
 
       logs.flush();
       const file = readFileSync(logFilePath(dir, DEV), "utf8");
-      expect(file).not.toContain("bardzoTajny");
+      expect(file).not.toContain("veryS3cret");
       expect(
         file
           .trim()
@@ -79,10 +79,10 @@ describe("logi procesu", () => {
   );
 });
 
-describe("odczyt od kursora", () => {
-  test("seq jest wspólny dla wszystkich źródeł, a kursor zwraca tylko nowsze rekordy swojego źródła", () => {
+describe("reading from a cursor", () => {
+  test("seq is shared by all sources, and a cursor returns only newer records of its own source", () => {
     const { logs } = newLogs();
-    // Kursor pustego logu to ostatni `seq` przed pierwszym rekordem tego działania daemona.
+    // The cursor of an empty log is the last `seq` before the first record of this daemon run.
     const s = logs.tail({ source: DEV, limit: 1 }).nextSeq;
     const dev = logs.open(DEV, "run-1", {});
     const build = logs.open(BUILD, "run-2", {});
@@ -106,7 +106,7 @@ describe("odczyt od kursora", () => {
     expect(logs.tail({ source: DEV, sinceSeq: s + 3, limit: 10 })).toEqual({ records: [], nextSeq: s + 3, dropped: false });
   });
 
-  test("limit z kursorem daje najstarsze rekordy po nim i kursor na ostatnim zwróconym, bez kursora najnowsze", () => {
+  test("a limit with a cursor gives the oldest records after it and a cursor on the last one returned, without a cursor the newest", () => {
     const { logs } = newLogs();
     const s = logs.tail({ source: DEV, limit: 1 }).nextSeq;
     write(logs.open(DEV, "r", {}), "1", "2", "3", "4");
@@ -116,20 +116,20 @@ describe("odczyt od kursora", () => {
     expect(logs.tail({ source: DEV, limit: 2 })).toMatchObject({ records: [{ msg: "3" }, { msg: "4" }], nextSeq: s + 4 });
   });
 
-  test("kursor starszy niż bufor źródła zgłasza dropped i zwraca rekordy od najstarszego w buforze", () => {
+  test("a cursor older than the source's buffer reports dropped and returns records from the oldest in the buffer", () => {
     const { logs } = newLogs();
     const s = logs.tail({ source: DEV, limit: 1 }).nextSeq;
     const output = logs.open(DEV, "r", {});
-    for (let i = 1; i <= LOG_BUFFER_RECORDS + 5; i++) write(output, `linia ${i}`);
+    for (let i = 1; i <= LOG_BUFFER_RECORDS + 5; i++) write(output, `line ${i}`);
 
     expect(logs.tail({ source: DEV, sinceSeq: s + 2, limit: 1 })).toMatchObject({
       dropped: true,
-      records: [{ seq: s + 6, msg: "linia 6" }],
+      records: [{ seq: s + 6, msg: "line 6" }],
     });
     expect(logs.tail({ source: DEV, sinceSeq: s + 5, limit: 1 }).dropped).toBe(false);
   });
 
-  test("kursor z innego działania daemona, mniejszy albo większy, zgłasza dropped i zwraca ostatnie rekordy", () => {
+  test("a cursor from another daemon run, smaller or larger, reports dropped and returns the last records", () => {
     const { logs } = newLogs();
     const s = logs.tail({ source: DEV, limit: 1 }).nextSeq;
     write(logs.open(DEV, "r", {}), "1", "2");
@@ -143,7 +143,7 @@ describe("odczyt od kursora", () => {
     }
   });
 
-  test("bufor źródła ma limit treści: długie linie wypychają starsze rekordy wcześniej niż po 2000", () => {
+  test("a source's buffer has a content limit: long lines push out older records before 2000", () => {
     const { logs } = newLogs();
     const output = logs.open(DEV, "r", {});
     for (let i = 0; i < 300; i++) write(output, "x".repeat(16 * 1024));
@@ -153,30 +153,30 @@ describe("odczyt od kursora", () => {
     expect(records.reduce((sum, r) => sum + r.msg.length, 0)).toBeLessThanOrEqual(2 * 1024 * 1024);
   });
 
-  test("źródło, które nic nie wypisało, ma pusty log", () => {
+  test("a source that printed nothing has an empty log", () => {
     const { logs } = newLogs();
     const empty = logs.tail({ source: DEV, limit: 10 });
     expect(empty).toMatchObject({ records: [], dropped: false });
 
-    write(logs.open(DEV, "r", {}), "pierwsza");
+    write(logs.open(DEV, "r", {}), "first");
     expect(logs.tail({ source: DEV, sinceSeq: empty.nextSeq, limit: 10 }).records).toMatchObject([{ seq: empty.nextSeq + 1 }]);
   });
 });
 
-describe("linie wyjścia", () => {
-  test("strumienie są składane osobno, bez kolorów i nadpisanego postępu, a puste linie zostają w logu", () => {
+describe("output lines", () => {
+  test("streams are assembled separately, without colours and overwritten progress, and empty lines stay in the log", () => {
     const lines: string[] = [];
     const output = new RunOutput([], (stream, msg) => lines.push(`${stream}: ${msg}`));
-    output.push("stdout", Buffer.from("\x1b[32mstart\x1b[0m\npobieranie 10%\rpobieranie 100%\n"));
-    output.push("stderr", Buffer.from("ostrzeż"));
-    output.push("stdout", Buffer.from("gotowe\n"));
-    output.push("stderr", Buffer.from("enie\n\n"));
+    output.push("stdout", Buffer.from("\x1b[32mstart\x1b[0m\ndownloading 10%\rdownloading 100%\n"));
+    output.push("stderr", Buffer.from("warn"));
+    output.push("stdout", Buffer.from("done\n"));
+    output.push("stderr", Buffer.from("ing\n\n"));
 
-    expect(lines).toEqual(["stdout: start", "stdout: pobieranie 100%", "stdout: gotowe", "stderr: ostrzeżenie", "stderr: "]);
-    expect(output.lastLines()).toEqual(["start", "pobieranie 100%", "gotowe", "ostrzeżenie"]);
+    expect(lines).toEqual(["stdout: start", "stdout: downloading 100%", "stdout: done", "stderr: warning", "stderr: "]);
+    expect(output.lastLines()).toEqual(["start", "downloading 100%", "done", "warning"]);
   });
 
-  test("znak UTF-8 rozcięty między kawałkami nie psuje linii", () => {
+  test("a UTF-8 character split between chunks does not break the line", () => {
     const lines: string[] = [];
     const output = new RunOutput([], (_stream, msg) => lines.push(msg));
     const bytes = Buffer.from("zażółć\n");
@@ -186,32 +186,32 @@ describe("linie wyjścia", () => {
     expect(lines).toEqual(["zażółć"]);
   });
 
-  test("ostatnie linie to 20 ostatnich, z niedokończoną linią na końcu, a koniec strumienia oddaje ją do logu", () => {
+  test("the last lines are the last 20, with the unfinished line at the end, and the end of the stream hands it to the log", () => {
     const lines: string[] = [];
     const output = new RunOutput([], (_stream, msg) => lines.push(msg));
-    output.push("stdout", Buffer.from(Array.from({ length: 30 }, (_, i) => `linia ${i}`).join("\n")));
+    output.push("stdout", Buffer.from(Array.from({ length: 30 }, (_, i) => `line ${i}`).join("\n")));
 
     expect(output.lastLines()).toHaveLength(20);
-    expect(output.lastLines()[0]).toBe("linia 10");
-    expect(output.lastLines().at(-1)).toBe("linia 29");
-    expect(lines.at(-1)).toBe("linia 28");
+    expect(output.lastLines()[0]).toBe("line 10");
+    expect(output.lastLines().at(-1)).toBe("line 29");
+    expect(lines.at(-1)).toBe("line 28");
 
     output.end("stdout");
-    expect(lines.at(-1)).toBe("linia 29");
+    expect(lines.at(-1)).toBe("line 29");
   });
 
-  test("sekret jest maskowany także wtedy, gdy przyszedł w dwóch kawałkach albo między kolorami", () => {
+  test("a secret is masked even when it arrives in two chunks or between colours", () => {
     const lines: string[] = [];
-    const output = new RunOutput(["tajne-haslo-123"], (_stream, msg) => lines.push(msg));
-    output.push("stdout", Buffer.from("hasło: tajne-ha"));
-    output.push("stdout", Buffer.from("slo-123\n\x1b[1mtajne-haslo-123\x1b[0m\n"));
-    output.push("stdout", Buffer.from("w toku: tajne-h"));
+    const output = new RunOutput(["secret-password-123"], (_stream, msg) => lines.push(msg));
+    output.push("stdout", Buffer.from("password: secret-pa"));
+    output.push("stdout", Buffer.from("ssword-123\n\x1b[1msecret-password-123\x1b[0m\n"));
+    output.push("stdout", Buffer.from("in progress: secret-p"));
 
-    expect(lines).toEqual(["hasło: ***", "***"]);
-    expect(output.lastLines()).toEqual(["hasło: ***", "***", "w toku: tajne-h"]);
+    expect(lines).toEqual(["password: ***", "***"]);
+    expect(output.lastLines()).toEqual(["password: ***", "***", "in progress: secret-p"]);
   });
 
-  test("linia bez końca dłuższa niż 64 KB staje się rekordem zamiast rosnąć w pamięci", () => {
+  test("an unterminated line longer than 64 KB becomes a record instead of growing in memory", () => {
     const lines: string[] = [];
     const output = new RunOutput([], (_stream, msg) => lines.push(msg));
     output.push("stdout", Buffer.from("x".repeat(70 * 1024)));
@@ -221,22 +221,22 @@ describe("linie wyjścia", () => {
   });
 });
 
-describe("sekrety do maskowania", () => {
-  test("to wartości zmiennych o nazwach sekretów, bez krótkich i bez PWD", () => {
+describe("secrets to mask", () => {
+  test("they are the values of variables with secret names, without short ones and without PWD", () => {
     expect(
       secretValues({
         GH_TOKEN: "ghp_123456789",
-        DB_PASSWORD: "haslo-do-bazy-dlugie",
-        JWT_SECRET: "krotki",
+        DB_PASSWORD: "a-long-database-password",
+        JWT_SECRET: "short",
         STRIPE_API_KEY: "sk_test_abcdefgh",
-        PWD: "/home/ktos/projekty",
+        PWD: "/home/someone/projects",
         TOKENIZERS_PARALLELISM: "false-false",
         PATH: "/usr/bin:/bin",
       }),
-    ).toEqual(["ghp_123456789", "haslo-do-bazy-dlugie", "sk_test_abcdefgh"]);
+    ).toEqual(["ghp_123456789", "a-long-database-password", "sk_test_abcdefgh"]);
   });
 
-  test("sekret zawierający inny jest maskowany w całości", () => {
+  test("a secret containing another one is masked entirely", () => {
     const secrets = secretValues({ A_TOKEN: "abcdefgh", B_TOKEN: "abcdefgh-ijkl" });
     const lines: string[] = [];
     write(new RunOutput(secrets, (_stream, msg) => lines.push(msg)), "x abcdefgh-ijkl y");
@@ -245,10 +245,10 @@ describe("sekrety do maskowania", () => {
   });
 });
 
-describe("sekret w trudnych miejscach", () => {
-  test("wymuszony podział cofnięty przed sekretem nie rozcina emoji na dwie połówki", () => {
+describe("a secret in hard places", () => {
+  test("a forced split moved back before a secret does not cut an emoji in two halves", () => {
     const lines: string[] = [];
-    const output = new RunOutput(["sekret-12345"], (_stream, msg) => lines.push(msg));
+    const output = new RunOutput(["secret-12345"], (_stream, msg) => lines.push(msg));
     output.push("stdout", Buffer.from(`${"x".repeat(65_525)}${"😀".repeat(7)}`));
     output.end("stdout");
 
@@ -256,7 +256,7 @@ describe("sekret w trudnych miejscach", () => {
     expect(lines[1]).toBe("😀".repeat(6));
   });
 
-  test("klucz wieloliniowy jest maskowany w każdej linii", () => {
+  test("a multi-line key is masked in every line", () => {
     const secrets = secretValues({ DEPLOY_PRIVATE_KEY: "-----BEGIN KEY-----\nMIIEabcdefgh\r\n-----END KEY-----" });
     const lines: string[] = [];
     write(new RunOutput(secrets, (_stream, msg) => lines.push(msg)), "-----BEGIN KEY-----", "MIIEabcdefgh", "-----END KEY-----");
@@ -264,19 +264,19 @@ describe("sekret w trudnych miejscach", () => {
     expect(lines).toEqual(["***", "***", "***"]);
   });
 
-  test("sekrety zachodzące na siebie znikają w całości", () => {
+  test("overlapping secrets vanish entirely", () => {
     const lines: string[] = [];
-    write(new RunOutput(["abcdefgh12", "12345678x"], (_stream, msg) => lines.push(msg)), "przed abcdefgh12345678x po");
+    write(new RunOutput(["abcdefgh12", "12345678x"], (_stream, msg) => lines.push(msg)), "before abcdefgh12345678x after");
 
-    expect(lines).toEqual(["przed *** po"]);
+    expect(lines).toEqual(["before *** after"]);
   });
 
-  test("wymuszony podział długiej linii nie rozcina sekretu", () => {
+  test("a forced split of a long line does not cut a secret", () => {
     const secret = "ghp_SECRETVALUE1234567890";
     const lines: string[] = [];
     const output = new RunOutput([secret], (_stream, msg) => lines.push(msg));
-    // Postęp z `\r` bez `\n` przekracza 64 KB w chwili, gdy sekret jest przecięty na granicy kawałków.
-    output.push("stdout", Buffer.from(`${"postęp 50%\r".repeat(6000)}token=${secret.slice(0, 15)}`));
+    // Progress with `\r` without `\n` exceeds 64 KB at the moment the secret is cut at the chunk boundary.
+    output.push("stdout", Buffer.from(`${"progress 50%\r".repeat(6000)}token=${secret.slice(0, 15)}`));
     output.push("stdout", Buffer.from(`${secret.slice(15)}\n`));
 
     expect(lines.join("\n")).not.toContain("ghp_");
@@ -284,7 +284,7 @@ describe("sekret w trudnych miejscach", () => {
   });
 });
 
-describe("poziom rekordu", () => {
+describe("record level", () => {
   test.each<[string, LogLevel]>([
     ["2026-10-23 12:00:00.123 ERROR 1234 --- [main] o.s.boot.SpringApplication : Application run failed", "error"],
     ["[ERROR] Failed to execute goal", "error"],
@@ -314,8 +314,8 @@ describe("poziom rekordu", () => {
   });
 });
 
-describe("plik logu", () => {
-  test("nazwa pliku jest bezpieczna na Windowsie i macOS i różna dla różnych nazw", () => {
+describe("log file", () => {
+  test("the file name is safe on Windows and macOS and different for different names", () => {
     expect(fileName("build:ui")).toBe("build%3Aui");
     expect(fileName("Build")).toBe("%42uild");
     expect(fileName("con")).toBe("%con");
@@ -325,12 +325,12 @@ describe("plik logu", () => {
     expect(long).not.toBe(fileName(`${"x".repeat(299)}y`));
   });
 
-  test("ścieżka pliku źródła zawiera rodzaj źródła, repo i task mise, a log mise install jest plikiem repo", () => {
-    expect(logFilePath("/stan/logs", BUILD)).toBe(join("/stan/logs", "mise-task", "web", "build%3Aui.jsonl"));
-    expect(logFilePath("/stan/logs", { kind: "mise-install", repo: "Web" })).toBe(join("/stan/logs", "mise-install", "%57eb.jsonl"));
+  test("a source's file path contains the source kind, the repo and the mise task, and the mise install log is a repo file", () => {
+    expect(logFilePath("/state/logs", BUILD)).toBe(join("/state/logs", "mise-task", "web", "build%3Aui.jsonl"));
+    expect(logFilePath("/state/logs", { kind: "mise-install", repo: "Web" })).toBe(join("/state/logs", "mise-install", "%57eb.jsonl"));
   });
 
-  test("plik po przekroczeniu limitu staje się .1.jsonl, a nowy zaczyna się od pustego", () => {
+  test("a file past the limit becomes .1.jsonl, and a new one starts empty", () => {
     const dir = mkdtempSync(join(tmpdir(), "trackwall-logfile-"));
     const path = join(dir, "a", "dev.jsonl");
     const file = new LogFile(path, 30, () => {});
@@ -343,11 +343,11 @@ describe("plik logu", () => {
     expect(readFileSync(path, "utf8")).toBe('{"n":2}\n');
   });
 
-  test("nieudana rotacja nie wstrzymuje zapisu: plik rośnie ponad limit, a błąd jest zgłoszony raz", () => {
+  test("a failed rotation does not hold up writing: the file grows past the limit, and the error is reported once", () => {
     const dir = mkdtempSync(join(tmpdir(), "trackwall-logfile-"));
     const path = join(dir, "dev.jsonl");
-    // Niepusty katalog w miejscu `.1.jsonl`: rename się nie uda, jak na Windowsie przy pliku otwartym gdzie indziej.
-    mkdirSync(join(rotatedPath(path), "zajete"), { recursive: true });
+    // A non-empty directory in place of `.1.jsonl`: the rename fails, as on Windows with a file open elsewhere.
+    mkdirSync(join(rotatedPath(path), "taken"), { recursive: true });
     const errors: unknown[] = [];
     const file = new LogFile(path, 10, (err) => errors.push(err));
     for (const n of [1, 2, 3]) {
@@ -359,7 +359,7 @@ describe("plik logu", () => {
     expect(errors).toHaveLength(1);
   });
 
-  test("rozmiar pliku z poprzedniego działania daemona liczy się do limitu", () => {
+  test("the size of a file from a previous daemon run counts towards the limit", () => {
     const dir = mkdtempSync(join(tmpdir(), "trackwall-logfile-"));
     mkdirSync(join(dir, "a"));
     const path = join(dir, "a", "dev.jsonl");
@@ -372,9 +372,9 @@ describe("plik logu", () => {
     expect(readFileSync(path, "utf8")).toBe('{"n":2}\n');
   });
 
-  test("nieudany zapis zostaje w buforze i trafia do pliku przy następnej próbie, a błąd jest w logu daemona raz", () => {
+  test("a failed write stays in the buffer and reaches the file on the next attempt, and the error is in the daemon log once", () => {
     const { dir, logs, messages } = newLogs();
-    // Plik w miejscu katalogu źródła: mkdir się nie uda, dopóki go nie usuniemy.
+    // A file in place of the source's directory: mkdir fails until we remove it.
     writeFileSync(join(dir, "mise-task"), "");
     write(logs.open(DEV, "r", {}), "a");
     logs.flush();

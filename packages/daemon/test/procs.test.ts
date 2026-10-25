@@ -14,7 +14,7 @@ import { RUNTIMES } from "./support/runtimes.ts";
 const TREE = join(import.meta.dir, "fixtures", "process-tree.ts");
 const HOLDER = join(import.meta.dir, "fixtures", "procs-holder.ts");
 const RUNNER = join(import.meta.dir, "fixtures", "procs-runner.ts");
-/** Drzewo ignoruje łagodny stop, więc krótki czas łaski skraca testy bez zmiany przebiegu. */
+/** The tree ignores a gentle stop, so a short grace period shortens the tests without changing what happens. */
 const TEST_GRACE_MS = 300;
 const TIMEOUT = 30_000;
 const SOURCE = { kind: "mise-task", repo: "web", miseTask: "dev" } as const;
@@ -37,8 +37,8 @@ function setup() {
 }
 
 /**
- * Platforma, na której zabicie grupy się nie udaje: lider kończy się zwykłym `kill`, ale grupa nigdy nie jest pusta.
- * Tak wygląda proces, którego system nie umie zakończyć (np. zawieszony w sterowniku).
+ * A platform on which killing a group fails: the leader ends with an ordinary `kill`, but the group is never empty.
+ * That is what a process the system cannot end looks like (e.g. one hung in a driver).
  */
 async function stubbornPlatform(): Promise<GroupPlatform> {
   const real = await groupPlatform();
@@ -64,7 +64,7 @@ async function waitForTree(dir: string, depth: number): Promise<number[]> {
 
 describe("procs", () => {
   test(
-    "stop zatrzymuje całą grupę, także wnuki ignorujące łagodny stop, i usuwa ją z runtime.json",
+    "stop halts the whole group, including grandchildren that ignore a gentle stop, and removes it from runtime.json",
     async () => {
       const { dir, runtime, groups } = setup();
       const started = await groups.start({
@@ -88,10 +88,10 @@ describe("procs", () => {
   );
 
   test(
-    "ended czeka na potwierdzony koniec grupy i zwraca jej stan, a dla właściciela bez grupy zwraca undefined",
+    "ended waits for the confirmed end of the group and returns its state, and for an owner without a group returns undefined",
     async () => {
       const { dir, groups } = setup();
-      expect(await groups.ended("nikt")).toBeUndefined();
+      expect(await groups.ended("nobody")).toBeUndefined();
       await groups.start({
         owner: "o",
         command: [process.execPath, TREE, dir, "0", "2", "exit-leader", "4"],
@@ -109,7 +109,7 @@ describe("procs", () => {
   );
 
   test(
-    "lider, który kończy się sam, zabiera resztę grupy, a stan ma kod wyjścia i ostatnie linie",
+    "a leader that ends by itself takes the rest of the group, and the state has the exit code and last lines",
     async () => {
       const { dir, groups } = setup();
       await groups.start({
@@ -127,7 +127,7 @@ describe("procs", () => {
         kind: "exited",
         exitCode: 3,
         stoppedByUser: false,
-        lastLines: ["poziom 0 działa", "lider kończy się sam"],
+        lastLines: ["level 0 running", "the leader ends by itself"],
       });
       expect(pids.filter(isAlive)).toEqual([]);
     },
@@ -135,7 +135,7 @@ describe("procs", () => {
   );
 
   test(
-    "drugi start tego samego właściciela zwraca działające uruchomienie zamiast nowej grupy",
+    "a second start of the same owner returns the current run instead of a new group",
     async () => {
       const { dir, groups } = setup();
       const spec = { owner: "o", command: [process.execPath, TREE, dir, "0", "1"], cwd: dir, env: process.env, logSource: SOURCE };
@@ -150,7 +150,7 @@ describe("procs", () => {
   );
 
   test(
-    "stop w trakcie startu czeka na grupę i ją zatrzymuje, a po stopAll nowy start jest odrzucany",
+    "a stop during the start waits for the group and stops it, and after stopAll a new start is rejected",
     async () => {
       const { dir, groups } = setup();
       const spec = { owner: "o", command: [process.execPath, TREE, dir, "0", "1"], cwd: dir, env: process.env, logSource: SOURCE };
@@ -165,24 +165,24 @@ describe("procs", () => {
     TIMEOUT,
   );
 
-  test("program, którego nie ma, kończy start błędem z nazwą programu", async () => {
+  test("a missing program ends the start with an error naming the program", async () => {
     const { dir, groups } = setup();
     const start = groups.start({
       owner: "o",
-      command: ["trackwall-nie-ma-takiego-programu"],
+      command: ["trackwall-no-such-program"],
       cwd: dir,
       env: process.env,
       logSource: SOURCE,
     });
-    await expect(start).rejects.toThrow("program trackwall-nie-ma-takiego-programu not found in PATH");
+    await expect(start).rejects.toThrow("program trackwall-no-such-program not found in PATH");
     expect(groups.state("o")).toBeUndefined();
   });
 
-  test("stop w trakcie startu, który się nie udał, zwraca brak grupy zamiast błędu startu", async () => {
+  test("a stop during a start that failed returns no group instead of the start error", async () => {
     const { dir, groups } = setup();
     const start = groups.start({
       owner: "o",
-      command: ["trackwall-nie-ma-takiego-programu"],
+      command: ["trackwall-no-such-program"],
       cwd: dir,
       env: process.env,
       logSource: SOURCE,
@@ -194,15 +194,15 @@ describe("procs", () => {
     await expect(start).rejects.toThrow("not found in PATH");
   });
 
-  test("katalog roboczy musi być pełną ścieżką istniejącego katalogu", async () => {
+  test("the working directory must be the full path of an existing directory", async () => {
     const { dir, groups } = setup();
     const spec = { owner: "o", command: [process.execPath, TREE, dir, "0", "1"], env: process.env, logSource: SOURCE };
-    await expect(groups.start({ ...spec, cwd: "wzgledny" })).rejects.toThrow("must be a full path");
-    await expect(groups.start({ ...spec, cwd: join(dir, "nie-ma") })).rejects.toThrow("does not exist");
+    await expect(groups.start({ ...spec, cwd: "relative" })).rejects.toThrow("must be a full path");
+    await expect(groups.start({ ...spec, cwd: join(dir, "missing") })).rejects.toThrow("does not exist");
   });
 
   test(
-    "stopAll przy wyjściu daemona zatrzymuje wszystkie grupy",
+    "stopAll on daemon exit stops all groups",
     async () => {
       const { dir, groups } = setup();
       const a = mkdtempSync(join(dir, "a-"));
@@ -220,7 +220,7 @@ describe("procs", () => {
   );
 
   test(
-    "po twardym zabiciu daemona żaden proces grupy nie przeżywa następnego startu",
+    "after a hard kill of the daemon no process of the group survives the next start",
     async () => {
       const home = mkdtempSync(join(tmpdir(), "trackwall-holder-"));
       const holder = spawn(process.execPath, [HOLDER, home], { stdio: "ignore" });
@@ -228,7 +228,8 @@ describe("procs", () => {
       const pids = await waitForTree(join(home, "tree"), 3);
 
       holder.kill("SIGKILL");
-      // Windows: job zamknięty razem z daemonem zabija grupę sam. macOS i Linux: grupa żyje do sprzątania przy starcie.
+      // Windows: the job closed together with the daemon kills the group itself. macOS and Linux: the group lives until
+      // the cleanup at start.
       const logs: string[] = [];
       const next = new ProcessGroups({
         logs: testLogs(),
@@ -245,21 +246,21 @@ describe("procs", () => {
   );
 
   test(
-    "sierota, której PID dostał inny proces, nie jest zabijana",
+    "an orphan whose PID went to another process is not killed",
     async () => {
       const { dir, runtime, groups, logs } = setup();
       const other = spawn(process.execPath, [TREE, dir, "0", "1"], { stdio: "ignore", detached: process.platform !== "win32" });
       const [pid] = await waitForTree(dir, 1);
-      if (pid === undefined) throw new Error("brak PID-u");
+      if (pid === undefined) throw new Error("missing PID");
       runtime.write([
         {
           runId: "r",
-          owner: "stary",
+          owner: "old",
           command: ["mise", "run", "dev"],
           cwd: dir,
           startedAt: "2026-01-01T00:00:00Z",
           pid,
-          identity: "inny czas startu",
+          identity: "another start time",
         },
       ]);
 
@@ -274,18 +275,18 @@ describe("procs", () => {
   );
 });
 
-describe.each(RUNTIMES)("procs pod %s", (_name, runtime) => {
+describe.each(RUNTIMES)("procs under %s", (_name, runtime) => {
   test(
-    "stop zatrzymuje całą grupę procesów, a jej wyjście trafia do ostatnich linii i pliku logu",
+    "stop halts the whole process group, and its output goes to the last lines and the log file",
     async () => {
       const dir = mkdtempSync(join(tmpdir(), "trackwall-procs-runtime-"));
       const proc = Bun.spawn([...runtime, RUNNER, dir], { stdout: "pipe", stderr: "pipe" });
       const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
       expect({ code, err }).toEqual({ code: 0, err: "" });
 
-      expect(JSON.parse(out)).toMatchObject({ kind: "exited", stoppedByUser: true, lastLines: ["poziom 0 działa"] });
+      expect(JSON.parse(out)).toMatchObject({ kind: "exited", stoppedByUser: true, lastLines: ["level 0 running"] });
       const logFile = join(dir, "logs", "mise-task", "web", "dev.jsonl");
-      expect(readFileSync(logFile, "utf8")).toContain('"msg":"poziom 0 działa"');
+      expect(readFileSync(logFile, "utf8")).toContain('"msg":"level 0 running"');
       expect(treePids(dir, 3)).toHaveLength(3);
       expect(treePids(dir, 3).filter(isAlive)).toEqual([]);
     },
@@ -293,16 +294,16 @@ describe.each(RUNTIMES)("procs pod %s", (_name, runtime) => {
   );
 });
 
-describe("procs, gdy lider kończy się sam w trakcie stopu", () => {
+describe("procs, when the leader ends by itself during a stop", () => {
   test(
-    "stop w czasie dobijania reszty grupy czeka na nie, zwraca kod lidera i zwalnia grupę raz",
+    "a stop while the rest of the group is being killed waits for it, returns the leader's code and releases the group once",
     async () => {
       const dir = mkdtempSync(join(tmpdir(), "trackwall-procs-"));
       const real = await groupPlatform();
       let releases = 0;
-      // Grupa wygląda na żywą jeszcze 500 ms po zabiciu: stop przychodzi, gdy lider już nie żyje, a dobijanie trwa.
-      // Na Windowsie potomkowie giną razem z liderem (libuv lidera trzyma ich we własnym jobie), więc bez tego
-      // dobijanie kończyłoby się, zanim test zdąży zatrzymać grupę.
+      // The group looks alive for 500 ms after the kill: the stop arrives when the leader is already dead and the killing is in progress.
+      // On Windows descendants die together with the leader (the leader's libuv keeps them in its own job), so without this
+      // the killing would end before the test manages to stop the group.
       let killedAt: number | undefined;
       const slowKill = (control: GroupControl): GroupControl => ({
         ...control,
@@ -330,7 +331,7 @@ describe("procs, gdy lider kończy się sam w trakcie stopu", () => {
         logSource: SOURCE,
       });
       const pids = await waitForTree(dir, 3);
-      // Bez stopu `stopping` znaczy, że daemon zauważył koniec lidera i dobija resztę grupy.
+      // Without a stop, `stopping` means the daemon noticed the leader's end and is killing the rest of the group.
       expect(await waitUntil(() => groups.state("o")?.kind === "stopping", 15_000)).toBe(true);
 
       const stopped = await groups.stop("o");
@@ -343,9 +344,9 @@ describe("procs, gdy lider kończy się sam w trakcie stopu", () => {
   );
 });
 
-describe("procs, gdy grupy nie da się zabić", () => {
+describe("procs, when the group cannot be killed", () => {
   test(
-    "stop zgłasza stop_unconfirmed, uruchomienie zostaje stopping, a właściciel nie dostaje drugiej grupy",
+    "stop reports stop_unconfirmed, the run stays stopping, and the owner does not get a second group",
     async () => {
       const dir = mkdtempSync(join(tmpdir(), "trackwall-procs-"));
       const runtime = new RuntimeFile(join(dir, "runtime.json"));
@@ -363,13 +364,13 @@ describe("procs, gdy grupy nie da się zabić", () => {
   );
 
   test(
-    "sierota, która przeżyła zabicie, zostaje w runtime.json także po starcie nowej grupy",
+    "an orphan that survived the kill stays in runtime.json also after a new group starts",
     async () => {
       const dir = mkdtempSync(join(tmpdir(), "trackwall-procs-"));
       const runtime = new RuntimeFile(join(dir, "runtime.json"));
       const orphan = {
-        runId: "stara",
-        owner: "stary",
+        runId: "old-run",
+        owner: "old",
         command: ["mise", "run", "dev"],
         cwd: dir,
         startedAt: "2026-01-01T00:00:00Z",
@@ -382,8 +383,8 @@ describe("procs, gdy grupy nie da się zabić", () => {
       await groups.sweepOrphans();
       await groups.start({ owner: "o", command: [process.execPath, TREE, dir, "0", "1"], cwd: dir, env: process.env, logSource: SOURCE });
 
-      expect(runtime.read().map((g) => g.runId)).toContain("stara");
-      // Prawdziwe `kill` atrapy kończy drzewo testu; stop i tak zgłosi brak potwierdzenia.
+      expect(runtime.read().map((g) => g.runId)).toContain("old-run");
+      // The fake's real `kill` ends the test's tree; the stop reports the missing confirmation anyway.
       await groups.stop("o").catch(() => {});
     },
     TIMEOUT,
@@ -391,19 +392,19 @@ describe("procs, gdy grupy nie da się zabić", () => {
 });
 
 describe("runtime.json", () => {
-  test("nieczytelny plik jest odkładany obok, a nie nadpisywany przy następnym zapisie", async () => {
+  test("an unreadable file is moved aside, not overwritten on the next write", async () => {
     const { dir, runtime, groups, logs } = setup();
-    writeFileSync(runtime.path, "{ucięty");
+    writeFileSync(runtime.path, "{truncated");
 
     await groups.sweepOrphans();
 
     const aside = readdirSync(dir).find((f) => f.startsWith("runtime.json.broken-"));
-    expect(aside && readFileSync(join(dir, aside), "utf8")).toBe("{ucięty");
+    expect(aside && readFileSync(join(dir, aside), "utf8")).toBe("{truncated");
     expect(runtime.read()).toEqual([]);
     expect(logs.join("\n")).toContain("not JSON");
   });
 
-  test("brak pliku to brak grup, a plik niezgodny ze schematem jest błędem z jego ścieżką", () => {
+  test("a missing file means no groups, and a file that does not match the schema is an error with its path", () => {
     const dir = mkdtempSync(join(tmpdir(), "trackwall-runtime-"));
     const runtime = new RuntimeFile(join(dir, "runtime.json"));
     expect(runtime.read()).toEqual([]);
@@ -413,9 +414,9 @@ describe("runtime.json", () => {
   });
 });
 
-describe.skipIf(process.versions.bun === undefined)("procs z liderem w PTY", () => {
+describe.skipIf(process.versions.bun === undefined)("procs with the leader in a PTY", () => {
   test(
-    "ekran PTY daje zamaskowane ostatnie linie stanu, ale nie trafia do logu",
+    "the PTY screen gives masked last lines of the state, but does not reach the log",
     async () => {
       const dir = mkdtempSync(join(tmpdir(), "trackwall-procs-"));
       const logsDir = mkdtempSync(join(tmpdir(), "trackwall-procs-logs-"));
@@ -429,9 +430,9 @@ describe.skipIf(process.versions.bun === undefined)("procs z liderem w PTY", () 
       });
       await groups.startTerminal({
         owner: "agent:x",
-        command: [process.execPath, "-e", "console.log('hasło: ' + process.env.DB_PASSWORD)"],
+        command: [process.execPath, "-e", "console.log('password: ' + process.env.DB_PASSWORD)"],
         cwd: dir,
-        env: { ...process.env, DB_PASSWORD: "tajne-haslo-123" },
+        env: { ...process.env, DB_PASSWORD: "secret-password-123" },
         cols: 80,
         rows: 24,
         onData: () => {},
@@ -440,16 +441,16 @@ describe.skipIf(process.versions.bun === undefined)("procs z liderem w PTY", () 
       expect(await waitUntil(() => groups.state("agent:x")?.kind === "exited", 15_000)).toBe(true);
 
       const state = groups.state("agent:x");
-      if (state?.kind !== "exited") throw new Error(`grupa nie zakończona: ${state?.kind}`);
-      expect(state.lastLines).toContain("hasło: ***");
-      expect(state.lastLines.join("\n")).not.toContain("tajne-haslo-123");
+      if (state?.kind !== "exited") throw new Error(`group not ended: ${state?.kind}`);
+      expect(state.lastLines).toContain("password: ***");
+      expect(state.lastLines.join("\n")).not.toContain("secret-password-123");
       logs.flush();
       expect(readdirSync(logsDir)).toEqual([]);
     },
     TIMEOUT,
   );
 
-  test("nieudany start w terminalu odrzuca tylko wywołanie, bez nieobsłużonego błędu w daemonie", async () => {
+  test("a failed start in a terminal rejects only the call, without an unhandled error in the daemon", async () => {
     const unhandled: unknown[] = [];
     const onUnhandled = (err: unknown) => unhandled.push(err);
     process.on("unhandledRejection", onUnhandled);
@@ -465,7 +466,7 @@ describe.skipIf(process.versions.bun === undefined)("procs z liderem w PTY", () 
       const start = groups.startTerminal({
         owner: "agent:x",
         command: [process.execPath, "-e", "0"],
-        cwd: join(dir, "nie-ma"),
+        cwd: join(dir, "missing"),
         env: process.env,
         cols: 80,
         rows: 24,

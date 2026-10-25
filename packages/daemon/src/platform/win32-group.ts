@@ -3,19 +3,19 @@ import { type GroupControl, type GroupLeader, type GroupPlatform, isAlive } from
 import type { Job } from "./win32-job.ts";
 
 /**
- * Grupa procesów na Windowsie (ADR-20). Pod Bun (binarka z `--compile`) lider trafia do Job Object z
- * `KILL_ON_JOB_CLOSE` zaraz po starcie; potomkowie dziedziczą job, a zamknięcie uchwytu, także przy twardym zabiciu
- * daemona, zabija całą grupę. Pod Node nie ma FFI, więc grupę wyznacza drzewo rodzic–dziecko z `taskkill /T`:
- * pusta grupa znaczy tam tylko „lider nie żyje”, a potomek, którego rodzic już nie żyje, wypada z drzewa (luka w §8).
+ * A process group on Windows (ADR-20). Under Bun (a binary from `--compile`) the leader goes into a Job Object with
+ * `KILL_ON_JOB_CLOSE` right after its start; descendants inherit the job, and closing the handle, also on a hard kill of
+ * the daemon, kills the whole group. Under Node there is no FFI, so the group is the parent–child tree from `taskkill /T`:
+ * an empty group there only means "the leader is dead", and a descendant whose parent is already dead drops out of the tree (a gap in §8).
  *
- * Łagodny stop to zamknięcie wejścia lidera: Ctrl+C (`GenerateConsoleCtrlEvent`) wymaga wspólnej konsoli, której
- * proces z ukrytym oknem nie ma. Większość serwerów deweloperskich zamknięcia stdin nie słucha, stąd krótki czas
- * łaski; proces w ConPTY dostaje przy zamknięciu terminala `CTRL_CLOSE_EVENT`, jak przy zamknięciu okna konsoli.
+ * A gentle stop is closing the leader's input: Ctrl+C (`GenerateConsoleCtrlEvent`) needs a shared console, which
+ * a process with a hidden window does not have. Most development servers do not listen for stdin closing, hence the short grace
+ * period; a process in ConPTY gets `CTRL_CLOSE_EVENT` when the terminal closes, as when a console window closes.
  */
 
 const GRACE_MS = 2000;
 
-/** Błąd FFI przy zatrzymywaniu nie może zakończyć daemona; grupa wtedy po prostu nie jest potwierdzona jako pusta. */
+/** An FFI error while stopping must not end the daemon; the group is then simply not confirmed as empty. */
 function jobControl(job: Job, leader: GroupLeader): GroupControl {
   return {
     askToStop: () => leader.closeInput(),
@@ -23,7 +23,7 @@ function jobControl(job: Job, leader: GroupLeader): GroupControl {
       try {
         job.terminate(1);
       } catch {
-        // `isEmpty` pokaże, że grupa żyje.
+        // `isEmpty` will show that the group is alive.
       }
     },
     isEmpty: () => {
@@ -62,8 +62,8 @@ export async function win32Groups(withJobs: boolean): Promise<GroupPlatform> {
       }
       return jobControl(job, leader);
     },
-    // Pod Bun sieroty nie powstają (job zabija grupę z daemonem), a pod Node nie ma taniego czasu startu procesu,
-    // więc żywy PID z `runtime.json` jest zgłaszany, ale nie zabijany.
+    // Under Bun orphans do not arise (the job kills the group with the daemon), and under Node there is no cheap process start time,
+    // so a live PID from `runtime.json` is reported, but not killed.
     identity: async () => null,
     reattach: async (pid) => (isAlive(pid) ? "unverified" : "gone"),
   };

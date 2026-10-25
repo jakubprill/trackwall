@@ -19,7 +19,7 @@ public class OrdersController {
     @GetMapping("/{id}")
     public OrderDto get(@PathVariable("id") String id) {
         if (id.isBlank()) {
-            throw new IllegalArgumentException("brak id: {}");
+            throw new IllegalArgumentException("missing id: {}");
         }
         return service.find(id);
     }

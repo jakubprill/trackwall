@@ -14,32 +14,32 @@ import { mapLimit } from "../../infra/map-limit.ts";
 import { runOutcome, syncOutcome } from "./step-outcome.ts";
 
 /**
- * Moduł `batch` (§4.8, ADR-27): komenda zbiorcza, czyli wybrane kroki (synchronizacja, `mise install`, taski mise
- * `setup` i `build`) na wybranych repo, kilka repo naraz, a w repo krok po kroku. Składa moduły `workspace` i `mise`
- * ponad nimi i nie uruchamia niczego sam: procesy startuje `mise` przez `procs`, więc taski są widoczne i do
- * zatrzymania także w szczegółach repo. Powtórka jest tania dzięki cache mise (`sources` i `outputs` tasku), nie własnemu.
- * Trzymana tylko w pamięci, jak synchronizacja; naraz trwa jedna.
+ * The `batch` module (§4.8, ADR-27): the batch command, i.e. chosen steps (sync, `mise install`, the mise tasks
+ * `setup` and `build`) on chosen repos, several repos at once, and step by step within a repo. It composes the `workspace` and `mise`
+ * modules from above and runs nothing itself: `mise` starts processes through `procs`, so the mise tasks are visible and can be
+ * stopped in the repo details too. A rerun is cheap thanks to mise's cache (the mise task's `sources` and `outputs`), not our own.
+ * Kept only in memory, like sync; one runs at a time.
  */
 
 /**
- * Ile katalogów naraz: build Javy albo frontendu zajmuje kilka rdzeni i GB pamięci, a `mise install` pobiera JDK
- * i Node; więcej równoległych repo na laptopie tylko wydłuża każde z nich.
+ * How many directories at once: a Java or frontend build takes several cores and GBs of memory, and `mise install` downloads a JDK
+ * and Node; more repos in parallel on a laptop only make each of them take longer.
  */
 const BATCH_CONCURRENCY = 3;
 
 /**
- * Krok, który jest taskiem mise, i nazwa tego taska (konwencja z `CONTEXT.md`, „Task mise”). Osobno od nazwy kroku,
- * bo krok jest kontraktem API, a nazwa taska konwencją repo, która może dostać ustawienie w `workspace.yaml`.
+ * A step that is a mise task, and the name of that mise task (the convention from `CONTEXT.md`, "mise task"). Separate from the step name,
+ * because the step is an API contract, and the mise task name a repo convention, which may get a setting in `workspace.yaml`.
  */
 const MISE_TASK = { setup: "setup", build: "build" } as const satisfies Partial<Record<BatchStep, string>>;
 
-/** Czego `batch` potrzebuje od `workspace`; podłączane w fasadzie (§4). */
+/** What `batch` needs from `workspace`; wired in the facade (§4). */
 interface BatchWorkspace {
   repoPath(id: string): Promise<string>;
   syncRepo(id: string): Promise<SyncResult>;
 }
 
-/** Czego `batch` potrzebuje od `mise`: uruchomienie doczekane do końca, przerywane sygnałem. */
+/** What `batch` needs from `mise`: a run awaited to the end, interrupted by a signal. */
 interface BatchMise {
   installTools(repo: string, signal: AbortSignal): Promise<RunState>;
   runToEnd(repo: string, miseTask: string, signal: AbortSignal): Promise<RunState | null>;
@@ -59,16 +59,16 @@ interface Active {
 export class Batch {
   private readonly deps: BatchDeps;
   private last: Active | undefined;
-  /** Start w toku (repo są jeszcze sprawdzane): drugi start w tym czasie zacząłby drugą komendę. */
+  /** A start in progress (repos are still being checked): a second start meanwhile would begin a second command. */
   private starting = false;
-  /** Daemon się zatrzymuje: komenda zaczęta teraz uruchamiałaby procesy po `stopAll`. */
+  /** The daemon is stopping: a command started now would run processes after `stopAll`. */
   private closed = false;
 
   constructor(deps: BatchDeps) {
     this.deps = deps;
   }
 
-  /** Zaczyna komendę w tle i od razu ją zwraca; nieznane repo odrzuca całe żądanie, zanim cokolwiek ruszy. */
+  /** Starts the command in the background and returns it right away; an unknown repo rejects the whole request before anything starts. */
   async start(request: BatchRequest): Promise<BatchRun> {
     if (this.starting || this.last?.run.finishedAt === null)
       throw new DomainError("bad_request", "a batch command is running; wait for it to finish or cancel it");
@@ -99,14 +99,14 @@ export class Batch {
     }
   }
 
-  /** Ostatnia komenda od startu daemona. */
+  /** The last command since the daemon started. */
   run(): BatchRun | null {
     return this.last ? snapshot(this.last.run) : null;
   }
 
   /**
-   * Przerywa trwającą komendę: kroki, które się nie zaczęły, kończą się jako `cancelled`, a trwające procesy `mise`
-   * zatrzymuje stop grupy. Trwająca synchronizacja repo kończy się sama, bo git nie jest w grupie procesów.
+   * Cancels the running command: steps that have not started end as `cancelled`, and the group stop halts running `mise`
+   * processes. A running repo sync finishes on its own, because git is not in a process group.
    */
   cancel(): BatchRun | null {
     if (this.last?.run.finishedAt === null) {
@@ -116,13 +116,13 @@ export class Batch {
     return this.run();
   }
 
-  /** Wyjście daemona: przerywa trwającą komendę i nie pozwala zacząć nowej, także takiej, która właśnie startuje. */
+  /** Daemon exit: cancels the running command and does not allow a new one to start, including one that is just starting. */
   close(): void {
     this.closed = true;
     this.cancel();
   }
 
-  /** Kroki repo po kolei; błąd albo przerwanie kroku kończy repo, a pominięcie (np. brak taska) nie. */
+  /** A repo's steps one after another; an error or cancellation of a step ends the repo, and a skip (e.g. no mise task) does not. */
   private async runRepo(repo: BatchRepo, signal: AbortSignal): Promise<void> {
     let stopped: BatchStepState | undefined;
     for (const [i, { step }] of repo.steps.entries()) {
@@ -141,8 +141,8 @@ export class Batch {
 
   private async runStep({ repo, path }: BatchRepo, step: BatchStep, signal: AbortSignal): Promise<BatchStepState> {
     try {
-      // Identyfikator z nazwy katalogu może przejść na inny katalog w trakcie komendy (ADR-18); krok idzie tylko
-      // w repo, które użytkownik widzi w wynikach.
+      // An identifier from a directory name can move to another directory during the command (ADR-18); a step runs only
+      // in the repo the user sees in the results.
       if ((await this.deps.workspace.repoPath(repo)) !== path)
         return { state: "failed", message: `${repo} now points to a different directory than ${path}`, lastLines: [] };
       switch (step) {
@@ -157,7 +157,7 @@ export class Batch {
         }
       }
     } catch (err) {
-      // Tylko przerwanie przed startem procesu; błąd stopu po przerwaniu (`stop_unconfirmed`) jest błędem kroku.
+      // Only a cancellation before the process starts; a stop error after cancellation (`stop_unconfirmed`) is a step error.
       if (err === signal.reason) return { state: "cancelled" };
       return { state: "failed", message: messageOf(err), lastLines: [] };
     }
@@ -165,11 +165,11 @@ export class Batch {
 }
 
 /**
- * Repo pogrupowane po katalogu na dysku: dowiązanie w folderze z projektami do innego repo z listy to
- * osobny wpis, a dwa `pnpm install` albo buildy naraz w jednym katalogu psują sobie nawzajem pliki. Wpisy jednej
- * grupy idą po kolei, grupy równolegle. Bez wielkości liter, jak dyski Windowsa i macOS (na Linuksie `Web` i `web`
- * idą wtedy po kolei, co kosztuje tylko czas). Katalog, którego `realpath` nie czyta, zostaje pod swoją ścieżką:
- * jego krok i tak skończy się błędem.
+ * Repos grouped by directory on disk: a link in the projects folder to another repo on the list is a
+ * separate entry, and two `pnpm install` runs or builds at once in one directory break each other's files. Entries of one
+ * group go one after another, groups in parallel. Case-insensitive, like Windows and macOS drives (on Linux `Web` and `web`
+ * then go one after another, which costs only time). A directory that `realpath` cannot read stays under its own path:
+ * its step will end in an error anyway.
  */
 async function groupBySameDir(repos: readonly BatchRepo[]): Promise<BatchRepo[][]> {
   const keyed = await Promise.all(
@@ -180,7 +180,7 @@ async function groupBySameDir(repos: readonly BatchRepo[]): Promise<BatchRepo[][
   return [...groups.values()];
 }
 
-/** Kopia dla wołającego: komenda zmienia się w tle, a wynik ma pokazać jedną chwilę. */
+/** A copy for the caller: the command changes in the background, and the result should show one moment. */
 function snapshot(run: BatchRun): BatchRun {
   return { ...run, repos: run.repos.map((repo) => ({ ...repo, steps: [...repo.steps] })) };
 }

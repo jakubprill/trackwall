@@ -37,7 +37,7 @@ import { RUNTIMES } from "./support/runtimes.ts";
 const MAIN = join(import.meta.dir, "..", "src", "main.ts");
 
 const TOKEN = "m".repeat(43);
-const README = "# Zamówienia\n\nBFF sklepu.\n";
+const README = "# Orders\n\nBFF for the shop.\n";
 const POM =
   "<project><parent><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-parent</artifactId>" +
   "<version>3.3.0</version></parent><groupId>com.example</groupId><artifactId>orders-bff</artifactId></project>\n";
@@ -51,14 +51,14 @@ const logs: string[] = [];
 beforeAll(async () => {
   projects = mkdtempSync(join(tmpdir(), "trackwall-mcp-projects-"));
   orders = makeRepo({ "README.md": README, "pom.xml": POM, "src/app.ts": "export {};\n" }, "orders-bff", projects);
-  gitIn(orders, "remote", "add", "origin", "git@gitlab.example.com:sklep/orders-bff.git");
+  gitIn(orders, "remote", "add", "origin", "git@gitlab.example.com:shop/orders-bff.git");
   home = mkdtempSync(join(tmpdir(), "trackwall-mcp-home-"));
   facade = createFacade({
     home,
     openUrl: () => {},
     openFolder: () => {},
-    // Program, którego nie ma w PATH: lista tasków mise jest wtedy stanem `not_installed`, na każdej maszynie tak samo.
-    miseCommand: ["trackwall-test-brak-mise"],
+    // A program that is not in PATH: the mise task list is then in the `not_installed` state, the same on every machine.
+    miseCommand: ["trackwall-test-no-mise"],
     copilotCommand: ["copilot"],
     version: "0.0.0-test",
     hookCommand: () => ({ exec: "true", args: [] }),
@@ -71,7 +71,7 @@ beforeAll(async () => {
     token: TOKEN,
     version: "9.9.9",
     info: () => {
-      throw new Error("nieużywane");
+      throw new Error("unused");
     },
     onShutdown: () => {},
     facade,
@@ -82,7 +82,7 @@ beforeAll(async () => {
 
 afterAll(() => api.close());
 
-describe("serwer MCP przez Streamable HTTP", () => {
+describe("MCP server over Streamable HTTP", () => {
   test("announces the repo, card, log, graph, code search, session, mise task and service tools, with the ones that run, stop or call repo code as destructive", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const { tools } = await client.listTools();
@@ -112,7 +112,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
       "list_services",
       "call_endpoint",
     ]);
-    // Każde narzędzie z kontraktu, który pokazuje UI, jest zarejestrowane w daemonie.
+    // Every tool from the contract the UI shows is registered in the daemon.
     expect(tools.map((t) => t.name)).toEqual(Object.values(mcpTools).map((t) => t.name));
     const writing = tools.filter((t) => t.annotations?.readOnlyHint !== true).map((t) => t.name);
     expect(writing).toEqual([
@@ -147,7 +147,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
     await client.close();
   });
 
-  test("list_repos zwraca repo z folderu z projektami z adresem repo zdalnego i gałęzią", async () => {
+  test("list_repos returns the repos from the projects folder with the remote address and branch", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const result = await client.callTool({ name: "list_repos", arguments: {} });
     expect(result.isError).toBeFalsy();
@@ -157,29 +157,29 @@ describe("serwer MCP przez Streamable HTTP", () => {
     expect(data.repos[0]).toMatchObject({
       id: "orders-bff",
       path: orders,
-      remote: "gitlab.example.com/sklep/orders-bff",
+      remote: "gitlab.example.com/shop/orders-bff",
       status: { kind: "ok", branch: "main", changes: 0 },
       lastSync: null,
       tags: ["backend", "bff", "java", "no-mise"],
     });
-    // Tekst wyniku to ten sam JSON dla klientów, które nie czytają `structuredContent`.
+    // The result's text is the same JSON for clients that do not read `structuredContent`.
     expect(result.content).toEqual([{ type: "text", text: JSON.stringify(data) }]);
     expect(logs.some((l) => l.startsWith("list_repos: ok"))).toBe(true);
     await client.close();
   });
 
-  test("get_repo zwraca README, ostatnie commity i stan tasków mise", async () => {
+  test("get_repo returns the README, recent commits and the state of mise tasks", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const result = await client.callTool({ name: "get_repo", arguments: { repo: "orders-bff" } });
     const data = GetRepoResult.parse(result.structuredContent);
     expect(data.repo.id).toBe("orders-bff");
     expect(data.readme).toEqual({ path: "README.md", text: README, truncated: false, format: "markdown" });
-    expect(data.commits.map((c) => c.subject)).toEqual(["pierwszy commit"]);
+    expect(data.commits.map((c) => c.subject)).toEqual(["first commit"]);
     expect(data.miseTasks.kind).toBe("not_installed");
     await client.close();
   });
 
-  test("list_repos z tagami zwraca tylko repo z każdym z nich", async () => {
+  test("list_repos with tags returns only repos with every one of them", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const ids = async (tags: string[]) =>
       ListReposResult.parse((await client.callTool({ name: "list_repos", arguments: { tags } })).structuredContent).repos.map((r) => r.id);
@@ -188,7 +188,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
     await client.close();
   });
 
-  test("get_repo_card zwraca kartę z dowodami i tagi z powodami", async () => {
+  test("get_repo_card returns the card with evidence and tags with reasons", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const result = await client.callTool({ name: "get_repo_card", arguments: { repo: "orders-bff" } });
     const data = RepoCardResult.parse(result.structuredContent);
@@ -198,27 +198,27 @@ describe("serwer MCP przez Streamable HTTP", () => {
     await client.close();
   });
 
-  test("who_calls i subgraph_for zwracają krawędzie z grafu połączeń, a subgraph_for ma domyślną głębokość 1", async () => {
+  test("who_calls and subgraph_for return edges from the connection graph, and subgraph_for has a default depth of 1", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const calls = await client.callTool({ name: "who_calls", arguments: { repo: "orders-bff" } });
     expect(WhoCallsResult.parse(calls.structuredContent)).toEqual({ repo: "orders-bff", edges: [] });
     const sub = Subgraph.parse((await client.callTool({ name: "subgraph_for", arguments: { repo: "orders-bff" } })).structuredContent);
     expect(sub.depth).toBe(1);
     expect(sub.nodes.map((n) => [n.repo, n.remote, n.tags])).toEqual([
-      ["orders-bff", "gitlab.example.com/sklep/orders-bff", ["backend", "bff", "java", "no-mise"]],
+      ["orders-bff", "gitlab.example.com/shop/orders-bff", ["backend", "bff", "java", "no-mise"]],
     ]);
-    const unknown = await client.callTool({ name: "who_calls", arguments: { repo: "nie-ma" } });
+    const unknown = await client.callTool({ name: "who_calls", arguments: { repo: "missing" } });
     expect(unknown.isError).toBe(true);
-    expect(unknown.content).toEqual([{ type: "text", text: 'not_found: no repo "nie-ma" in the projects folder' }]);
+    expect(unknown.content).toEqual([{ type: "text", text: 'not_found: no repo "missing" in the projects folder' }]);
     const tooDeep = await client.callTool({ name: "subgraph_for", arguments: { repo: "orders-bff", depth: 9 } });
     expect(tooDeep.isError).toBe(true);
     await client.close();
   });
 
-  test("find_endpoint zwraca endpointy pasujące do zapytania, a puste zapytanie odrzuca jak każdy zły argument", async () => {
+  test("find_endpoint returns endpoints matching the query, and rejects an empty query like any bad argument", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const found = await client.callTool({ name: "find_endpoint", arguments: { query: "/api/orders/42", method: "GET" } });
-    // Repo z tego testu nie ma kontrolerów; endpointy i ich klientów na kilku repo sprawdza graph-http.test.ts.
+    // The repo in this test has no controllers; graph-http.test.ts checks endpoints and their clients across several repos.
     expect(FindEndpointResult.parse(found.structuredContent)).toEqual({ query: "/api/orders/42", endpoints: [], truncated: false });
     const empty = await client.callTool({ name: "find_endpoint", arguments: { query: "" } });
     expect(empty.isError).toBe(true);
@@ -239,9 +239,9 @@ describe("serwer MCP przez Streamable HTTP", () => {
           path: "README.md",
           line: 3,
           column: 1,
-          text: "BFF sklepu.",
+          text: "BFF for the shop.",
           before: [
-            { line: 1, text: "# Zamówienia" },
+            { line: 1, text: "# Orders" },
             { line: 2, text: "" },
           ],
           after: [],
@@ -262,15 +262,15 @@ describe("serwer MCP przez Streamable HTTP", () => {
     expect(unknownTagged.isError).toBe(true);
     expect(await searched([])).toEqual(["orders-bff"]);
     // A newline would make git search for every line of the pattern separately.
-    const multiline = await client.callTool({ name: "search_code", arguments: { pattern: "BFF\nsklepu" } });
+    const multiline = await client.callTool({ name: "search_code", arguments: { pattern: "BFF\nfor" } });
     expect(multiline.isError).toBe(true);
     await client.close();
   });
 
-  test("zły repoTags w workspace.yaml: list_repos bez filtra daje repo bez tagów, z filtrem błąd, a get_repo README bez tagów", async () => {
+  test("a bad repoTags in workspace.yaml: list_repos without a filter gives repos without tags, with a filter an error, and get_repo the README without tags", async () => {
     const workspaceFile = join(home, "workspace.yaml");
     const valid = readFileSync(workspaceFile, "utf8");
-    writeFileSync(workspaceFile, `${valid}repoTags:\n  Zła-Nazwa: ["*"]\n`);
+    writeFileSync(workspaceFile, `${valid}repoTags:\n  Bad-Name: ["*"]\n`);
     const client = await connectHttpClient(api.port, TOKEN);
     try {
       const all = ListReposResult.parse((await client.callTool({ name: "list_repos", arguments: {} })).structuredContent);
@@ -286,49 +286,51 @@ describe("serwer MCP przez Streamable HTTP", () => {
     }
   });
 
-  test("get_repo z nieznanym repo zwraca błąd narzędzia z kodem, a nie błąd protokołu", async () => {
+  test("get_repo with an unknown repo returns a tool error with a code, not a protocol error", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
-    const result = await client.callTool({ name: "get_repo", arguments: { repo: "nie-ma-takiego" } });
+    const result = await client.callTool({ name: "get_repo", arguments: { repo: "no-such-repo" } });
     expect(result.isError).toBe(true);
-    expect(result.content).toEqual([{ type: "text", text: 'not_found: no repo "nie-ma-takiego" in the projects folder' }]);
+    expect(result.content).toEqual([{ type: "text", text: 'not_found: no repo "no-such-repo" in the projects folder' }]);
     await client.close();
   });
 
-  test("get_repo odrzuca identyfikator spoza schematu RepoId", async () => {
+  test("get_repo rejects an id outside the RepoId schema", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const result = await client.callTool({ name: "get_repo", arguments: { repo: "../etc" } });
     expect(result.isError).toBe(true);
-    // Odrzuca schemat w SDK, zanim identyfikator dotrze do workspace (tam byłoby `not_found`).
+    // The schema in the SDK rejects it before the id reaches workspace (where it would be `not_found`).
     expect(JSON.stringify(result.content)).toContain("repo id");
     expect(JSON.stringify(result.content)).not.toContain("not_found");
     await client.close();
   });
 
-  test("tail zwraca zamaskowany log taska mise od kursora", async () => {
-    const output = facade.logs.open({ kind: "mise-task", repo: "orders-bff", miseTask: "dev" }, "r1", { DB_PASSWORD: "tajne-haslo-123" });
-    output.push("stdout", Buffer.from("start\nERROR baza: tajne-haslo-123\n"));
+  test("tail returns the masked log of a mise task from the cursor", async () => {
+    const output = facade.logs.open({ kind: "mise-task", repo: "orders-bff", miseTask: "dev" }, "r1", {
+      DB_PASSWORD: "secret-password-123",
+    });
+    output.push("stdout", Buffer.from("start\nERROR database: secret-password-123\n"));
     const client = await connectHttpClient(api.port, TOKEN);
 
     const first = LogTail.parse(
       (await client.callTool({ name: "tail", arguments: { repo: "orders-bff", miseTask: "dev", limit: 1 } })).structuredContent,
     );
-    expect(first.records.map((r) => [r.level, r.msg])).toEqual([["error", "ERROR baza: ***"]]);
+    expect(first.records.map((r) => [r.level, r.msg])).toEqual([["error", "ERROR database: ***"]]);
 
-    output.push("stdout", Buffer.from("gotowe\n"));
+    output.push("stdout", Buffer.from("done\n"));
     const next = LogTail.parse(
       (await client.callTool({ name: "tail", arguments: { repo: "orders-bff", miseTask: "dev", sinceSeq: first.nextSeq, limit: 10 } }))
         .structuredContent,
     );
-    expect(next.records.map((r) => r.msg)).toEqual(["gotowe"]);
+    expect(next.records.map((r) => r.msg)).toEqual(["done"]);
     expect(next.dropped).toBe(false);
     await client.close();
   });
 
-  test("tail z nieznanym repo zwraca not_found, a task bez wyjścia pusty log", async () => {
+  test("tail with an unknown repo returns not_found, and a mise task without output an empty log", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
-    const missing = await client.callTool({ name: "tail", arguments: { repo: "nie-ma-takiego", miseTask: "dev", limit: 10 } });
+    const missing = await client.callTool({ name: "tail", arguments: { repo: "no-such-repo", miseTask: "dev", limit: 10 } });
     expect(missing.isError).toBe(true);
-    expect(missing.content).toEqual([{ type: "text", text: 'not_found: no repo "nie-ma-takiego" in the projects folder' }]);
+    expect(missing.content).toEqual([{ type: "text", text: 'not_found: no repo "no-such-repo" in the projects folder' }]);
 
     const empty = LogTail.parse(
       (await client.callTool({ name: "tail", arguments: { repo: "orders-bff", miseTask: "build", limit: 10 } })).structuredContent,
@@ -338,12 +340,17 @@ describe("serwer MCP przez Streamable HTTP", () => {
   });
 
   test("get_errors returns a masked error with its stack trace after the cursor, and an unknown repo is not_found", async () => {
-    const output = facade.logs.open({ kind: "mise-task", repo: "orders-bff", miseTask: "test" }, "r2", { DB_PASSWORD: "tajne-haslo-123" });
+    const output = facade.logs.open({ kind: "mise-task", repo: "orders-bff", miseTask: "test" }, "r2", {
+      DB_PASSWORD: "secret-password-123",
+    });
     const client = await connectHttpClient(api.port, TOKEN);
     const cursor = LogErrors.parse(
       (await client.callTool({ name: "get_errors", arguments: { repo: "orders-bff" } })).structuredContent,
     ).nextSeq;
-    output.push("stderr", Buffer.from("java.sql.SQLException: login failed for tajne-haslo-123\n\tat com.example.Db.connect(Db.java:7)\n"));
+    output.push(
+      "stderr",
+      Buffer.from("java.sql.SQLException: login failed for secret-password-123\n\tat com.example.Db.connect(Db.java:7)\n"),
+    );
 
     const result = await client.callTool({ name: "get_errors", arguments: { repo: "orders-bff", sinceSeq: cursor } });
     expect(LogErrors.parse(result.structuredContent)).toMatchObject({
@@ -359,19 +366,19 @@ describe("serwer MCP przez Streamable HTTP", () => {
       dropped: false,
     });
 
-    const missing = await client.callTool({ name: "get_errors", arguments: { repo: "nie-ma-takiego" } });
-    expect(missing.content).toEqual([{ type: "text", text: 'not_found: no repo "nie-ma-takiego" in the projects folder' }]);
+    const missing = await client.callTool({ name: "get_errors", arguments: { repo: "no-such-repo" } });
+    expect(missing.content).toEqual([{ type: "text", text: 'not_found: no repo "no-such-repo" in the projects folder' }]);
     await client.close();
   });
 
-  test("klient z rewizją 2026-07-28 dostaje te same narzędzia", async () => {
+  test("a client with revision 2026-07-28 gets the same tools", async () => {
     const client = await connectHttpClient(api.port, TOKEN, { mode: "auto" });
     const data = ListReposResult.parse((await client.callTool({ name: "list_repos", arguments: {} })).structuredContent);
     expect(data.repos.map((r) => r.id)).toEqual(["orders-bff"]);
     await client.close();
   });
 
-  test("bez tokenu albo z obcym Origin daemon odrzuca żądanie przed MCP", async () => {
+  test("without a token or with a foreign Origin the daemon rejects the request before MCP", async () => {
     const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" });
     const headers = { "content-type": "application/json", accept: "application/json, text/event-stream" };
     expect((await loopbackRequest(api.port, MCP_PATH, { method: "POST", body, headers })).status).toBe(401);
@@ -381,7 +388,7 @@ describe("serwer MCP przez Streamable HTTP", () => {
   });
 });
 
-/** Most w tym samym procesie: linie na wejściu (obiekty jako JSON), odpowiedzi jako obiekty z linii wyjścia. */
+/** The bridge in the same process: lines on input (objects as JSON), replies as objects from the output lines. */
 async function throughBridge(home: string, messages: (object | string)[], sessionTokenFile?: string): Promise<unknown[]> {
   const input = new PassThrough();
   const output = new PassThrough();
@@ -394,7 +401,7 @@ async function throughBridge(home: string, messages: (object | string)[], sessio
   return lines.map((l) => JSON.parse(l));
 }
 
-/** Odpowiedź z wynikiem wywołania narzędzia o `id` 2, sprawdzona schematem zamiast rzutowania. */
+/** The reply with the result of the tool call with `id` 2, checked by a schema instead of a cast. */
 const ToolCallReply = z.object({ id: z.literal(2), result: z.object({ structuredContent: z.unknown() }) });
 
 const INITIALIZE = {
@@ -404,8 +411,8 @@ const INITIALIZE = {
   params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "1" } },
 };
 
-describe("most stdio", () => {
-  test("przekazuje initialize, powiadomienie i wywołanie narzędzia do daemona z daemon.json", async () => {
+describe("Stdio bridge", () => {
+  test("passes initialize, a notification and a tool call to the daemon from daemon.json", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-mcp-bridge-"));
     writeDaemonFile(home, { pid: process.pid, port: api.port, token: TOKEN, startedAt: "2026-10-23T00:00:00Z", version: "9.9.9" });
     const replies = await throughBridge(home, [
@@ -413,34 +420,34 @@ describe("most stdio", () => {
       { jsonrpc: "2.0", method: "notifications/initialized" },
       { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "list_repos", arguments: {} } },
     ]);
-    // Na powiadomienie nie ma odpowiedzi; kolejność odpowiedzi nie jest ustalona, bo most przekazuje równolegle.
+    // A notification gets no reply; the order of replies is not fixed, because the bridge passes them on in parallel.
     expect(replies).toHaveLength(2);
     expect(replies).toContainEqual(expect.objectContaining({ id: 1, result: expect.objectContaining({ protocolVersion: "2025-06-18" }) }));
     const call = replies.map((r) => ToolCallReply.safeParse(r)).find((r) => r.success);
     expect(ListReposResult.parse(call?.data?.result.structuredContent).repos.map((r) => r.id)).toEqual(["orders-bff"]);
   });
 
-  test("w sesji Trackwall wysyła token sesji z pliku, a daemon odrzuca token, którego nie zna", async () => {
+  test("in a Trackwall session it sends the session token from the file, and the daemon refuses a token it does not know", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-mcp-session-"));
     writeDaemonFile(home, { pid: process.pid, port: api.port, token: TOKEN, startedAt: "2026-10-23T00:00:00Z", version: "9.9.9" });
     const tokenFile = join(home, "session-token");
-    writeFileSync(tokenFile, "token-zamknietej-sesji");
+    writeFileSync(tokenFile, "token-of-a-closed-session");
 
     const [reply] = await throughBridge(home, [INITIALIZE], tokenFile);
     expect(reply).toMatchObject({ id: 1, error: { code: -32000 } });
     expect(JSON.stringify(reply)).toContain("unknown session token");
   });
 
-  test("bez pliku tokenu sesji nie wysyła żądania jako agent spoza Trackwall, tylko zgłasza koniec sesji", async () => {
+  test("without the session token file it does not send the request as an agent outside Trackwall, but reports the end of the session", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-mcp-notoken-"));
     writeDaemonFile(home, { pid: process.pid, port: api.port, token: TOKEN, startedAt: "2026-10-23T00:00:00Z", version: "9.9.9" });
 
-    const [reply] = await throughBridge(home, [INITIALIZE], join(home, "nie-ma"));
+    const [reply] = await throughBridge(home, [INITIALIZE], join(home, "missing"));
     expect(reply).toMatchObject({ id: 1, error: { code: -32000 } });
     expect(JSON.stringify(reply)).toContain("this session has ended");
   });
 
-  test("sondę server/discover odrzuca jak serwer bez tej metody, żeby klient przeszedł na initialize", async () => {
+  test("it rejects the server/discover probe like a server without that method, so that the client falls back to initialize", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-mcp-discover-"));
     const discover = {
       jsonrpc: "2.0",
@@ -452,14 +459,14 @@ describe("most stdio", () => {
     expect(reply).toMatchObject({ jsonrpc: "2.0", id: 0, error: { code: -32601 } });
   });
 
-  test("bez działającego daemona odpowiada błędem z poleceniem uruchomienia Trackwall", async () => {
+  test("without a running daemon it answers with an error telling the user to start Trackwall", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-mcp-nodaemon-"));
     const [reply] = await throughBridge(home, [INITIALIZE]);
     expect(reply).toMatchObject({ jsonrpc: "2.0", id: 1, error: { code: -32000 } });
     expect(JSON.stringify(reply)).toContain("Start the Trackwall app");
   });
 
-  test("z nieaktualnym tokenem w daemon.json zgłasza odrzucenie przez daemon", async () => {
+  test("with an outdated token in daemon.json it reports the rejection by the daemon", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-mcp-oldtoken-"));
     writeDaemonFile(home, { pid: process.pid, port: api.port, token: "z".repeat(43), startedAt: "2026-10-23T00:00:00Z", version: "9.9.9" });
     const [reply] = await throughBridge(home, [INITIALIZE]);
@@ -469,9 +476,9 @@ describe("most stdio", () => {
     });
   });
 
-  test("linia, która nie jest JSON-em, dostaje błąd parsowania, a JSON spoza JSON-RPC błąd żądania", async () => {
+  test("a line that is not JSON gets a parse error, and JSON that is not JSON-RPC an invalid request error", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-mcp-garbage-"));
-    expect(await throughBridge(home, ["to nie json"])).toEqual([
+    expect(await throughBridge(home, ["this is not json"])).toEqual([
       { jsonrpc: "2.0", id: null, error: { code: -32700, message: "the message is not valid JSON" } },
     ]);
     expect(await throughBridge(home, ["42"])).toEqual([
@@ -479,11 +486,11 @@ describe("most stdio", () => {
     ]);
   });
 
-  test("błąd transportu z id null od daemona trafia do klienta pod identyfikatorem żądania", async () => {
-    // Tak SDK odrzuca żądanie, którego nie powiąże z identyfikatorem (np. nieobsługiwana wersja w nagłówku).
+  test("a transport error with id null from the daemon reaches the client under the request's id", async () => {
+    // This is how the SDK rejects a request it cannot tie to an id (e.g. an unsupported version in the header).
     const rejecting = createServer((_req, res) => {
       res.writeHead(400, { "content-type": "application/json" });
-      res.end(JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32600, message: "Bad Request: wersja" } }));
+      res.end(JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32600, message: "Bad Request: version" } }));
     });
     await new Promise<void>((resolve) => rejecting.listen(0, "127.0.0.1", resolve));
     try {
@@ -491,15 +498,15 @@ describe("most stdio", () => {
       const { port } = rejecting.address() as AddressInfo;
       writeDaemonFile(home, { pid: process.pid, port, token: TOKEN, startedAt: "2026-10-23T00:00:00Z", version: "9.9.9" });
       expect(await throughBridge(home, [INITIALIZE])).toEqual([
-        { jsonrpc: "2.0", id: 1, error: { code: -32600, message: "Bad Request: wersja" } },
+        { jsonrpc: "2.0", id: 1, error: { code: -32600, message: "Bad Request: version" } },
       ]);
     } finally {
       rejecting.close();
     }
   });
 
-  test("odpowiedź daemona bez wiadomości o tym id kończy żądanie błędem zamiast ciszy", async () => {
-    // Daemon, który zrywa strumień SSE bez danych, jak przy wyjściu w trakcie żądania.
+  test("a daemon reply without a message for that id ends the request with an error instead of silence", async () => {
+    // A daemon that breaks the SSE stream without data, as when it exits during a request.
     const silent = createServer((_req, res) => {
       res.writeHead(200, { "content-type": "text/event-stream" });
       res.end();
@@ -518,29 +525,29 @@ describe("most stdio", () => {
   });
 });
 
-describe.each(RUNTIMES)("klient MCP jak Copilot CLI przez komendę mostu z daemona pod %s", (_name, runtime) => {
-  test("komenda z /api/daemon/info uruchamia most w repo agenta, który nie wstrzyknie mu bunfig.toml, i daje listę repo", async () => {
+describe.each(RUNTIMES)("an MCP client like Copilot CLI through the bridge command from the daemon under %s", (_name, runtime) => {
+  test("the command from /api/daemon/info starts the bridge in the agent's repo, which cannot inject a bunfig.toml into it, and gives the repo list", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-mcp-e2e-"));
     const daemon = Bun.spawn([...runtime, MAIN], { env: { ...process.env, TRACKWALL_HOME: home }, stdout: "ignore", stderr: "pipe" });
     try {
       let file = readDaemonFile(home);
       for (const until = Date.now() + 10_000; !file && Date.now() < until; file = readDaemonFile(home)) await Bun.sleep(50);
-      if (!file) throw new Error("daemon nie zapisał daemon.json w 10 s");
+      if (!file) throw new Error("the daemon did not write daemon.json within 10 s");
       const { port, token } = file;
       const setDir = { method: "POST", token, body: JSON.stringify({ path: projects }), headers: { "content-type": "application/json" } };
       expect((await loopbackRequest(port, workspaceApi.setProjectsDir.path, setDir)).status).toBe(200);
       const info = DaemonInfoResult.parse(JSON.parse((await loopbackRequest(port, "/api/daemon/info", { token })).body));
       if (!info.ok) throw new Error(info.error.message);
       const [command, ...args] = info.data.mcpStdioCommand;
-      if (!command) throw new Error("pusta komenda mostu");
+      if (!command) throw new Error("empty bridge command");
 
-      // Agent działa w repo użytkownika i z okrojonym środowiskiem SDK, bez TRACKWALL_HOME daemona. Repo ma
-      // `bunfig.toml` z preloadem, który zostawia ślad, gdyby Bun go wczytał (dotyczy uruchomienia ze źródeł).
+      // The agent works in the user's repo and with the SDK's trimmed environment, without the daemon's TRACKWALL_HOME. The repo
+      // has a `bunfig.toml` with a preload that leaves a trace if Bun loads it (applies to running from source).
       const agentCwd = mkdtempSync(join(tmpdir(), "trackwall-mcp-agent-"));
-      const marker = join(agentCwd, "preload-z-repo");
+      const marker = join(agentCwd, "preload-from-repo");
       writeFileSync(join(agentCwd, "bunfig.toml"), 'preload = ["./preload.ts"]\n');
       writeFileSync(join(agentCwd, "preload.ts"), `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "");\n`);
-      // Jak Copilot CLI: najpierw sonda rewizji 2026-07-28, potem `initialize`.
+      // Like Copilot CLI: first the revision 2026-07-28 probe, then `initialize`.
       const client = new Client({ name: "copilot-test", version: "1" }, { versionNegotiation: { mode: "auto" } });
       await client.connect(new StdioClientTransport({ command, args, cwd: agentCwd, stderr: "ignore" }));
       const result = await client.callTool({ name: "list_repos", arguments: {} });

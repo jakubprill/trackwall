@@ -5,10 +5,10 @@ import { addHttpEdges } from "./http-edges.ts";
 import { HttpIndex } from "./http-index.ts";
 
 /**
- * Złączenie kart repo w graf (§4.6, ADR-29, ADR-30): paczka, której repo używa, i repo, które ją buduje, oraz klient
- * HTTP i repo z aplikacją albo endpointami, które woła, dają krawędź z dowodami z obu stron. Do tego aliasy paczek
- * i aplikacji oraz ręczne krawędzie z `workspace.yaml`. Funkcja czysta: te same karty i ta sama konfiguracja dają ten
- * sam graf.
+ * Joining repo cards into the graph (§4.6, ADR-29, ADR-30): a package a repo uses and the repo that builds it, and an HTTP
+ * client and the repo with the app or endpoints it calls, give an edge with evidence from both sides. On top of that, package
+ * and app aliases and manual edges from `workspace.yaml`. A pure function: the same cards and the same configuration give the
+ * same graph.
  */
 
 interface Provider {
@@ -20,7 +20,7 @@ export function buildGraph(cards: readonly GraphCardInput[], input: GraphConfigI
   return buildGraphWithIndex(cards, input).graph;
 }
 
-/** Graf i indeks HTTP, z którego powstały jego krawędzie `http`; `find_endpoint` pyta ten sam indeks. */
+/** The graph and the HTTP index its `http` edges came from; `find_endpoint` asks the same index. */
 export function buildGraphWithIndex(cards: readonly GraphCardInput[], input: GraphConfigInput): { graph: RepoGraph; http: HttpIndex } {
   const join = joinOf(cards, input);
   const http = new HttpIndex(cards, join);
@@ -32,7 +32,7 @@ export function buildGraphWithIndex(cards: readonly GraphCardInput[], input: Gra
   return { graph, http };
 }
 
-/** Wspólne kroki złączenia z wpisów `graph`; aliasy aplikacji bez wielkości liter, jak nazwy hostów. */
+/** The shared join steps from the `graph` entries; app aliases case-insensitive, like host names. */
 function joinOf(cards: readonly GraphCardInput[], { config, file, problems }: GraphConfigInput): Join {
   const appAliases = new Map(Object.entries(config.apps).map(([name, ref]) => [name.toLowerCase(), ref]));
   const aliases = new Map(Object.entries(config.packages));
@@ -49,15 +49,15 @@ function addPackageEdgesOf(join: Join, cards: readonly GraphCardInput[]): void {
 
 function addPackageUse(join: Join, providers: Map<string, Provider[]>, from: string, pkg: ConsumedPackage): void {
   const all = providers.get(packageKey(pkg)) ?? [];
-  // Alias tylko dla paczki, której nie buduje żadne repo z listy, także to, które jej używa (moduły jednego buildu).
+  // An alias only for a package that no repo on the list builds, including the one that uses it (modules of one build).
   if (all.length === 0) addAliasEdges(join, from, pkg);
   const found = all.filter((p) => p.repo !== from);
   if (found.length > 0) addPackageEdges(join, from, pkg, found);
 }
 
 function addPackageEdges(join: Join, from: string, pkg: ConsumedPackage, found: Provider[]): void {
-  // Kilka repo z tą samą paczką to zwykle klony jednego repo albo fork: krawędź do każdego, ale niepewna. Jedno repo
-  // jest w `found` raz (`providersByPackage`), nawet gdy buduje paczkę dwoma plikami buildu.
+  // Several repos with the same package are usually clones of one repo or a fork: an edge to each, but uncertain. A repo
+  // is in `found` once (`providersByPackage`), even when it builds the package with two build files.
   const confidence: EdgeConfidence = found.length === 1 ? "exact" : "medium";
   for (const p of found) {
     join.edges.add({
@@ -71,7 +71,7 @@ function addPackageEdges(join: Join, from: string, pkg: ConsumedPackage, found: 
   }
 }
 
-/** Alias działa tylko dla paczki, której żadna karta nie pokazuje: fakt z plików buildu wygrywa z wpisem. */
+/** An alias works only for a package no card shows: a fact from the build files beats an entry. */
 function addAliasEdges(join: Join, from: string, pkg: ConsumedPackage): void {
   const alias = join.aliases.get(pkg.name);
   if (alias === undefined) return;
@@ -120,7 +120,7 @@ function graphNode(entry: GraphCardInput): GraphNode {
   };
 }
 
-/** Paczki łączą się w obrębie jednej przestrzeni nazw (`PackageEcosystem`): Maven `a:b` i npm `a:b` to różne paczki. */
+/** Packages join within one namespace (`PackageEcosystem`): Maven `a:b` and npm `a:b` are different packages. */
 function packageKey(pkg: { ecosystem: string; name: string }): string {
   return `${pkg.ecosystem} ${pkg.name}`;
 }
@@ -133,7 +133,7 @@ function providersByPackage(cards: readonly GraphCardInput[]): Map<string, Provi
       if (pkg.kind !== "package") continue;
       const key = packageKey(pkg);
       const list = providers.get(key) ?? [];
-      // Ta sama paczka z dwóch plików buildu jednego repo (np. w trakcie przejścia z Mavena na Gradle) to jedno repo.
+      // The same package from two build files of one repo (e.g. while moving from Maven to Gradle) is one repo.
       if (!list.some((p) => p.repo === entry.repo)) providers.set(key, [...list, { repo: entry.repo, pkg }]);
     }
   }

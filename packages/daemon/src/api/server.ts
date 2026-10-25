@@ -19,12 +19,12 @@ export interface ApiOptions {
   info: () => DaemonInfo;
   onShutdown: () => void;
   facade: Facade;
-  /** Serwer MCP (§5.3) pod `/mcp`; trasa i ochrona są tu, narzędzia w `mcp/`. Zamykany razem z serwerem API. */
+  /** The MCP server (§5.3) under `/mcp`; the route and protection are here, the tools in `mcp/`. Closed together with the API server. */
   mcp: McpEndpoint;
-  /** Zdarzenia dla WebSocketu `/ws` (§5.2, ADR-36); zamykane razem z serwerem API. */
+  /** Events for the `/ws` WebSocket (§5.2, ADR-36); closed together with the API server. */
   events: EventHub;
   uiDir?: string;
-  /** Dodatkowe originy przeglądarki z dostępem do API, np. serwer Vite przy `tauri dev`. */
+  /** Extra browser origins with access to the API, e.g. the Vite server during `tauri dev`. */
   allowOrigins?: readonly string[];
 }
 
@@ -50,10 +50,13 @@ const STATUS: Record<ErrorCode, number> = {
   internal: 500,
 };
 
-/** Ciała żądań to małe obiekty JSON; większe są odrzucane, zanim trafią do pamięci w całości. */
+/** Request bodies are small JSON objects; larger ones are rejected before they are held in memory in full. */
 const MAX_BODY_BYTES = 64 * 1024;
 
-/** HTTP API daemona na `127.0.0.1` z WebSocketami (§5.2) i serwer MCP pod `/mcp` (§5.3). `port: 0` wybiera losowy wolny port. */
+/**
+ * The daemon's HTTP API on `127.0.0.1` with WebSockets (§5.2) and the MCP server under `/mcp` (§5.3); `port: 0` picks a random
+ * free port.
+ */
 export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer> {
   let policy: OriginPolicy | undefined;
   const server = createServer((req, res) => {
@@ -116,7 +119,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, 
     return void res.end();
   }
 
-  // Publiczne są tylko `GET /api/health` i statyczne pliki UI; reszta API i MCP przechodzi jedno sprawdzenie tokenu.
+  // Only `GET /api/health` and the static UI files are public; the rest of the API and MCP pass one token check.
   if (path === "/api/health" && req.method === "GET") return ok<Health>(res, { status: "ok", version: o.version });
   const api = path.startsWith("/api/");
   if ((api || path === MCP_PATH) && !hasValidToken(req, o.token)) return fail(res, "unauthorized", "missing or invalid token");
@@ -126,7 +129,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, 
   return fail(res, "not_found", `no route ${req.method} ${path}`);
 }
 
-/** Trasy `/api/*` z tokenem, już sprawdzonym. */
+/** `/api/*` routes with the token, already checked. */
 async function handleApi(req: IncomingMessage, res: ServerResponse, path: string, o: ApiOptions): Promise<void> {
   if (path === "/api/daemon/info" && req.method === "GET") return ok<DaemonInfo>(res, o.info());
   if (path === "/api/daemon/shutdown" && req.method === "POST") {
@@ -140,7 +143,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
   return fail(res, "not_found", `no route ${req.method} ${path}`);
 }
 
-/** MCP z tokenem daemona; nagłówek tokenu sesji mówi, która sesja Trackwall woła (ADR-39), a nieznany token to odmowa. */
+/** MCP with the daemon token; the session token header says which Trackwall session calls (ADR-39), and an unknown token is refused. */
 function handleMcp(req: IncomingMessage, res: ServerResponse, o: ApiOptions): Promise<void> | void {
   const token = req.headers[SESSION_TOKEN_HEADER];
   if (token === undefined) return o.mcp.handle(req, res, null);
@@ -162,7 +165,7 @@ function send(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-/** Ciało JSON żądania; puste ciało to `{}`. */
+/** The request's JSON body; an empty body is `{}`. */
 async function readJson(req: IncomingMessage): Promise<unknown> {
   const text = (await readBody(req, MAX_BODY_BYTES)).toString("utf8");
   if (text.trim() === "") return {};
@@ -173,9 +176,9 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   }
 }
 
-/** Ciało POST bez treści musi zostać odczytane, żeby połączenie keep-alive się nie zawiesiło. */
+/** A POST body without content must be read so that a keep-alive connection does not hang. */
 async function drain(req: IncomingMessage): Promise<void> {
   for await (const _ of req) {
-    // celowo puste
+    // intentionally empty
   }
 }

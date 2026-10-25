@@ -5,24 +5,24 @@ import { type WebSocket, WebSocketServer } from "ws";
 import { type OriginPolicy, tokenMatches } from "./guard.ts";
 
 /**
- * WebSockety API (§5.2): zdarzenia `/ws` i terminale sesji `/ws/pty/<sesja>`. Jedno miejsce na obsługę `upgrade`
- * i te same zabezpieczenia co reszta API (§8): `Host` i `Origin` z `OriginPolicy`, token porównywany w stałym czasie.
- * Przeglądarka nie ustawi nagłówka przy WebSocket, więc token przychodzi jako podprotokół `bearer.<token>` obok
- * podprotokołu gniazda, a serwer potwierdza tylko ten drugi.
+ * The API's WebSockets (§5.2): `/ws` events and session terminals `/ws/pty/<session>`. One place to handle `upgrade`
+ * and the same protections as the rest of the API (§8): `Host` and `Origin` from `OriginPolicy`, the token compared in constant time.
+ * A browser cannot set a header for a WebSocket, so the token comes as the `bearer.<token>` subprotocol next to
+ * the socket's subprotocol, and the server confirms only the latter.
  */
 
-/** Obsługa jednego gniazda z `DaemonSocket` (protocol), wybieranego po podprotokole adresu (`daemonSocketAt`). */
+/** Handling of one socket from `DaemonSocket` (protocol), chosen by the address's subprotocol (`daemonSocketAt`). */
 export interface SocketRoute {
   subprotocol: string;
-  /** Największa ramka od klienta. */
+  /** The largest frame from the client. */
   maxPayload: number;
-  /** Połączenie pod adresem `path`, już po sprawdzeniu `Host`, `Origin` i tokenu. */
+  /** A connection at address `path`, after `Host`, `Origin` and the token have been checked. */
   serve(ws: WebSocket, path: string): void;
 }
 
 export interface SocketOptions {
   token: string;
-  /** Polityka `Host`/`Origin` serwera API; `undefined`, dopóki port nie jest znany. */
+  /** The API server's `Host`/`Origin` policy; `undefined` until the port is known. */
   policy: () => OriginPolicy | undefined;
   routes: readonly SocketRoute[];
 }
@@ -32,7 +32,7 @@ interface MountedRoute {
   wss: WebSocketServer;
 }
 
-/** Podpina obsługę `upgrade` do serwera API; zwraca zamknięcie wszystkich połączeń. */
+/** Attaches `upgrade` handling to the API server; returns the closing of all connections. */
 export function attachSockets(server: Server, o: SocketOptions): () => void {
   const mounted = new Map<string, MountedRoute>(
     o.routes.map((route) => [
@@ -48,8 +48,8 @@ export function attachSockets(server: Server, o: SocketOptions): () => void {
     ]),
   );
   server.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
-    // Node zdejmuje swój słuchacz `error` z gniazda przed `upgrade`: zerwane połączenie bez słuchacza (np. po odmowie)
-    // zakończyłoby daemon. Tak samo każdy wyjątek tutaj, więc kończy on tylko to połączenie.
+    // Node removes its `error` listener from the socket before `upgrade`: a broken connection without a listener (e.g. after a refusal)
+    // would end the daemon. The same goes for any exception here, so it ends only this connection.
     socket.on("error", () => socket.destroy());
     try {
       const admitted = admit(req, o, mounted);
@@ -69,8 +69,8 @@ export function attachSockets(server: Server, o: SocketOptions): () => void {
 }
 
 /**
- * Gniazdo i adres połączenia albo status HTTP odmowy. Token przed adresem, żeby klient bez tokenu nie poznał po
- * odpowiedzi, które adresy istnieją.
+ * The connection's socket and address, or the HTTP status of the refusal. The token before the address, so that a client
+ * without a token cannot tell from the response which addresses exist.
  */
 function admit(
   req: IncomingMessage,
@@ -82,7 +82,7 @@ function admit(
   const protocols = (req.headers["sec-websocket-protocol"] ?? "").split(",").map((p) => p.trim());
   const given = protocols.find((p) => p.startsWith(SOCKET_TOKEN_PREFIX))?.slice(SOCKET_TOKEN_PREFIX.length);
   if (given === undefined || !tokenMatches(given, o.token)) return { refused: "401 Unauthorized" };
-  // Adres w formie bezwzględnej może się nie dać sparsować; `URL.parse` zwraca wtedy `null` zamiast rzucać.
+  // An address in absolute form may fail to parse; `URL.parse` then returns `null` instead of throwing.
   const path = URL.parse(req.url ?? "/", "http://127.0.0.1")?.pathname ?? "";
   const target = daemonSocketAt(path);
   const route = target && mounted.get(target.subprotocol);
@@ -96,7 +96,7 @@ function reject(socket: Duplex, status: string): void {
     socket.destroy();
     return;
   }
-  // Jak `abortHandshake` w `ws`: zamknięcie dopiero po wysłaniu odpowiedzi, żeby status nie przepadł w buforze.
+  // Like `abortHandshake` in `ws`: close only after the response is sent, so that the status is not lost in the buffer.
   socket.once("finish", () => socket.destroy());
   socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
 }

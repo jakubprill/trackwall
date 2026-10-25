@@ -12,10 +12,10 @@ import { compare, push } from "./graph-join.ts";
 import type { HttpIndex } from "./http-index.ts";
 
 /**
- * Wyszukiwanie endpointów (§4.6, §5.3, ADR-30): endpointy z kart wszystkich repo pasujące do zapytania i repo, których
- * klienci HTTP je wołają, z tą samą pewnością co krawędź `http`. Zapytanie od `/` to ścieżka (także konkretna,
- * `/api/orders/42` pasuje do `/api/orders/{id}`) albo jej fragment; inne to fragment ścieżki, handlera albo nazwy
- * aplikacji, bez wielkości liter.
+ * Endpoint search (§4.6, §5.3, ADR-30): endpoints from the cards of all repos matching the query, and the repos whose
+ * HTTP clients call them, with the same confidence as an `http` edge. A query starting with `/` is a path (also a concrete one,
+ * `/api/orders/42` matches `/api/orders/{id}`) or a fragment of one; anything else is a fragment of a path, handler or app
+ * name, case-insensitive.
  */
 export function findEndpoints(index: HttpIndex, query: string, method: HttpMethod | undefined): FindEndpointResult {
   const wanted = query.trim();
@@ -44,7 +44,7 @@ function matchesQuery(endpoint: ProvidedEndpoint, query: string): boolean {
   return [endpoint.path, endpoint.handler, endpoint.app ?? ""].some((text) => text.toLowerCase().includes(lower));
 }
 
-/** Wywołania klientów wszystkich repo przypisane do endpointów z `wanted` przez cele klientów (`HttpIndex.targets`). */
+/** The calls of the clients of all repos assigned to endpoints from `wanted` through the clients' targets (`HttpIndex.targets`). */
 function callersByEndpoint(index: HttpIndex, wanted: ReadonlySet<ProvidedEndpoint>): Map<ProvidedEndpoint, EndpointCaller[]> {
   const callers = new Map<ProvidedEndpoint, EndpointCaller[]>();
   if (wanted.size === 0) return callers;

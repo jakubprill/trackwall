@@ -1,4 +1,4 @@
-// Proces testowy: wchodzi do sekcji krytycznej i zapisuje znaczniki wejścia i wyjścia do wspólnego pliku.
+// A test process: enters the critical section and writes entry and exit markers to a shared file.
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { withStartLock } from "../../src/infra/discovery.ts";

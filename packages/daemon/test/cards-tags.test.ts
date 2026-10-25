@@ -138,13 +138,13 @@ describe("mise configuration and the no-mise tag", () => {
       snapshotOf({
         ".config/mise.toml": '[tools]\nnode = "22"\n',
         "mise.toml": '[tools]\njava = "21"\n',
-        "mise/conf.d/zly.toml": "[tasks\n",
+        "mise/conf.d/broken.toml": "[tasks\n",
       }),
       parsers,
     );
-    expect(card.mise.configFiles).toEqual(["mise.toml", ".config/mise.toml", "mise/conf.d/zly.toml"]);
+    expect(card.mise.configFiles).toEqual(["mise.toml", ".config/mise.toml", "mise/conf.d/broken.toml"]);
     expect(repoTags(card, { id: "app", remote: null }, {}).find((t) => t.name === "no-mise")?.reason).toBe("mise.toml declares no tasks");
-    expect(card.problems.map((p) => p.path)).toEqual(["mise/conf.d/zly.toml"]);
+    expect(card.problems.map((p) => p.path)).toEqual(["mise/conf.d/broken.toml"]);
   });
 });
 

@@ -3,31 +3,31 @@ import { delimiter, dirname, resolve as resolvePath } from "node:path";
 import { type RunOptions, type RunOutput, runProgram } from "./run.ts";
 
 /**
- * Uruchamianie `git` dla modułu `vcs`. Argumenty zawsze tablicą, bez powłoki; katalog repo przez `-C`,
- * żeby brak katalogu był błędem gita z czytelnym komunikatem, a nie `ENOENT` mylony z brakiem gita.
- * `repoDir` to zawsze korzeń repo, a repo trafia na listę samo, gdy leży w folderze z projektami (ADR-18), więc
- * git nie może szukać repo powyżej niego, a klucze z `NO_REPO_COMMANDS` są wyłączone; reszta konfiguracji repo
- * obowiązuje (luki z filtrem `clean` i z programami z konfiguracji repo przy synchronizacji w §8).
+ * Runs `git` for the `vcs` module. Arguments always as an array, without a shell; the repo directory through `-C`,
+ * so that a missing directory is a git error with a readable message, not an `ENOENT` mistaken for missing git.
+ * `repoDir` is always the repo root, and a repo gets onto the list by itself when it lies in the projects folder (ADR-18), so
+ * git must not look for a repo above it, and the keys from `NO_REPO_COMMANDS` are turned off; the rest of the repo
+ * configuration applies (gaps with the `clean` filter and with programs from the repo configuration during sync in §8).
  */
 
 /**
- * Klucze `.git/config`, którymi repo kazałoby gitowi uruchomić program przy komendach daemona:
- * `core.fsmonitor` przy `status`, `log.showSignature` (z `gpg.program`) przy `log`.
+ * `.git/config` keys with which a repo would make git run a program during daemon commands:
+ * `core.fsmonitor` on `status`, `log.showSignature` (with `gpg.program`) on `log`.
  */
 const NO_REPO_COMMANDS = ["-c", "core.fsmonitor=false", "-c", "log.showSignature=false"];
 
 /**
- * Na Windowsie ścieżki ponad 260 znaków tylko z `core.longpaths`: worktree zadań leżą w katalogu stanu (ADR-31), więc
- * ścieżki plików repo są w nich dłuższe niż w folderze z projektami. Klucz nie zmienia niczego poza Windowsem.
+ * On Windows, paths over 260 characters only with `core.longpaths`: task worktrees lie in the state directory (ADR-31), so
+ * repo file paths are longer in them than in the projects folder. The key changes nothing outside Windows.
  */
 const PLATFORM_CONFIG = process.platform === "win32" ? ["-c", "core.longpaths=true"] : [];
 
-/** Zwykłe wywołania kończą się w ułamku sekundy; limit chroni przed wiszącym gitem (blokada, dysk sieciowy). */
+/** Ordinary calls finish in a fraction of a second; the limit guards against a hanging git (a lock, a network drive). */
 const TIMEOUT_MS = 15_000;
 
 /**
- * Zmienne, którymi git wybiera repo zamiast `-C`. Odziedziczone (daemon uruchomiony z hooka gita albo z powłoki
- * z `GIT_DIR`) sprawiłyby, że każde repo z listy pokazuje dane jednego.
+ * Variables with which git picks a repo instead of `-C`. Inherited ones (a daemon started from a git hook or from a shell
+ * with `GIT_DIR`) would make every repo on the list show the data of one.
  */
 const REPO_SELECTING_ENV = [
   "GIT_DIR",
@@ -40,18 +40,18 @@ const REPO_SELECTING_ENV = [
 ];
 
 type GitOptions = Pick<RunOptions, "maxBytes" | "stdin" | "okExitCodes"> & {
-  /** Limit dłuższy niż `TIMEOUT_MS` dla komend, które pobierają dane albo zmieniają katalog roboczy. */
+  /** A longer limit than `TIMEOUT_MS` for commands that fetch data or change the working directory. */
   timeoutMs?: number;
   /**
-   * Komenda może łączyć się z serwerem (`fetch`, `remote set-head`, `merge` z filtrem LFS): środowisko bez pytań
-   * (`networkEnv`); `sshCommand` to `core.sshCommand` z konfiguracji repo i użytkownika.
+   * The command may connect to a server (`fetch`, `remote set-head`, `merge` with an LFS filter): an environment without prompts
+   * (`networkEnv`); `sshCommand` is `core.sshCommand` from the repo and user configuration.
    */
   network?: GitNetwork;
-  /** Indeks zamiast indeksu repo (`GIT_INDEX_FILE`): zmiany zadania liczone bez dotykania indeksu, którego używa agent. */
+  /** An index instead of the repo index (`GIT_INDEX_FILE`): task changes counted without touching the index the agent uses. */
   indexFile?: string;
 };
 
-/** `core.sshCommand` z konfiguracji repo i użytkownika dla komendy, która łączy się z serwerem. */
+/** `core.sshCommand` from the repo and user configuration for a command that connects to a server. */
 export type GitNetwork = { sshCommand: string | undefined };
 
 export async function git(repoDir: string, args: readonly string[], opts: GitOptions = {}): Promise<RunOutput> {
@@ -62,7 +62,7 @@ export async function git(repoDir: string, args: readonly string[], opts: GitOpt
     stdin,
     okExitCodes,
     label: `git ${args[0]}`,
-    // Odczyt stanu nie może zakładać `index.lock`: daemon pyta cyklicznie, a użytkownik w tym czasie commituje.
+    // Reading state must not take `index.lock`: the daemon asks periodically, and the user commits in the meantime.
     env: {
       ...gitEnv(),
       ...(opts.network && networkEnv(opts.network.sshCommand)),
@@ -74,7 +74,7 @@ export async function git(repoDir: string, args: readonly string[], opts: GitOpt
   });
 }
 
-/** Pełny hash commita, na który wskazuje `ref`; `undefined`, gdy takiego commita nie ma. */
+/** The full hash of the commit `ref` points to; `undefined` when there is no such commit. */
 export async function revParse(dir: string, ref: string): Promise<string | undefined> {
   return git(dir, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]).then(
     ({ stdout }) => stdout.toString("utf8").trim(),
@@ -82,7 +82,7 @@ export async function revParse(dir: string, ref: string): Promise<string | undef
   );
 }
 
-/** Pełna nazwa refu, na który wskazuje dowiązanie `ref` (np. `HEAD`); `undefined`, gdy to nie dowiązanie. */
+/** The full name of the ref the symbolic ref `ref` points to (e.g. `HEAD`); `undefined` when it is not a symbolic ref. */
 export async function symbolicRef(dir: string, ref: string): Promise<string | undefined> {
   return git(dir, ["symbolic-ref", "--quiet", ref]).then(
     ({ stdout }) => stdout.toString("utf8").trim() || undefined,
@@ -91,8 +91,8 @@ export async function symbolicRef(dir: string, ref: string): Promise<string | un
 }
 
 /**
- * Gałąź domyślna `remote` z `refs/remotes/<remote>/HEAD` (ustawia go `git clone`), bez pytania serwera; `undefined`,
- * gdy go nie ma albo wskazuje gałąź zdalną, której już nie ma.
+ * The default branch of `remote` from `refs/remotes/<remote>/HEAD` (set by `git clone`), without asking the server; `undefined`
+ * when it is missing or points to a remote branch that no longer exists.
  */
 export async function knownDefaultBranch(dir: string, remote: string): Promise<string | undefined> {
   const prefix = `refs/remotes/${remote}/`;
@@ -102,23 +102,23 @@ export async function knownDefaultBranch(dir: string, remote: string): Promise<s
 }
 
 /**
- * Katalog nadrzędny korzenia repo dla `GIT_CEILING_DIRECTORIES`: przy pustym albo uszkodzonym `.git` git nie szuka
- * repo wyżej, więc nie pokaże repo, w którym leży folder z projektami (np. katalog domowy pod gitem). Git porównuje
- * go ze ścieżką po rozwinięciu dowiązań, stąd `realpath`. Jawne `--git-dir` też zatrzymałoby szukanie, ale wyłącza
- * sprawdzenie właściciela repo (`safe.directory`), więc repo innego użytkownika z dysku sieciowego by przeszło.
+ * The parent directory of the repo root for `GIT_CEILING_DIRECTORIES`: with an empty or broken `.git`, git does not look for a
+ * repo higher up, so it will not show the repo the projects folder lies in (e.g. a home directory under git). Git compares
+ * it with the path after resolving links, hence `realpath`. An explicit `--git-dir` would also stop the search, but it turns off
+ * the repo owner check (`safe.directory`), so another user's repo from a network drive would get through.
  */
 async function ceilingFor(repoDir: string): Promise<string> {
-  // Brak katalogu zgłosi sam git (`-C`), z czytelnym komunikatem.
+  // git itself reports a missing directory (`-C`), with a readable message.
   const root = await realpath(repoDir).catch(() => resolvePath(repoDir));
   const ceiling = dirname(root);
-  // Zmienna jest listą ścieżek; ścieżka z separatorem rozpadłaby się na kawałki i ochrona zniknęłaby po cichu.
+  // The variable is a list of paths; a path with the separator would fall apart and the protection would silently vanish.
   if (ceiling.includes(delimiter)) throw new Error(`path ${ceiling} contains the character "${delimiter}", which git cannot handle`);
   return ceiling;
 }
 
 /**
- * Środowisko każdego programu, który uruchamia gita (`git`, a pod spodem także `gh repo clone` i `glab repo clone`):
- * bez zmiennych wybierających repo i bez czekania na hasło, bo daemon nie ma terminala.
+ * The environment of every program that runs git (`git`, and underneath also `gh repo clone` and `glab repo clone`):
+ * without the variables that pick a repo and without waiting for a password, because the daemon has no terminal.
  */
 export function gitEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
@@ -127,11 +127,11 @@ export function gitEnv(): NodeJS.ProcessEnv {
 }
 
 /**
- * Dodatki do `gitEnv()` dla komend, które łączą się z serwerem: daemon nie ma terminala ani okna, więc każde pytanie
- * o hasło, token albo klucz hosta wisiałoby do limitu czasu w ukrytej konsoli. Pusty `GIT_ASKPASS` (git nie pyta
- * wtedy przez program, także odziedziczony z terminala VS Code), Git Credential Manager bez okien i ssh w trybie
- * wsadowym, chyba że użytkownik sam ustawił program ssh (`GIT_SSH_COMMAND`, `GIT_SSH`, `core.sshCommand`): wtedy
- * zostaje jego, bo `GIT_SSH_COMMAND` daemona przykryłby go.
+ * Additions to `gitEnv()` for commands that connect to a server: the daemon has neither a terminal nor a window, so every
+ * prompt for a password, token or host key would hang until the time limit in a hidden console. An empty `GIT_ASKPASS` (git
+ * then does not ask through a program, including one inherited from the VS Code terminal), Git Credential Manager without
+ * windows and ssh in batch mode, unless the user set an ssh program themselves (`GIT_SSH_COMMAND`, `GIT_SSH`,
+ * `core.sshCommand`): then theirs stays, because the daemon's `GIT_SSH_COMMAND` would override it.
  */
 export function networkEnv(sshCommand: string | undefined, inherited: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { GIT_ASKPASS: "", GCM_INTERACTIVE: "never" };

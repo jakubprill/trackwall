@@ -1,8 +1,8 @@
 import type { RepoGraph, Subgraph } from "@trackwall/protocol";
 
 /**
- * Repo w odległości do `depth` krawędzi od `repo`, w obie strony (kogo używa i kto używa jego), i krawędzie między
- * nimi. Węzły w kolejności grafu, więc wynik nie zależy od kolejności przechodzenia.
+ * Repos within `depth` edges of `repo`, in both directions (whom it uses and who uses it), and the edges between
+ * them. Nodes in graph order, so the result does not depend on the traversal order.
  */
 export function subgraph(graph: RepoGraph, repo: string, depth: number): Subgraph {
   const neighbours = new Map<string, Set<string>>();

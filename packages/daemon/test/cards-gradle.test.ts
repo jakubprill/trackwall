@@ -4,7 +4,7 @@ import { snapshotOf } from "./support/snapshot.ts";
 
 const SETTINGS = `rootProject.name = "catalog"
 include("catalog-api", ":catalog-app")
-// include("wylaczony")
+// include("disabled")
 `;
 
 const ROOT_BUILD = `plugins {
@@ -29,7 +29,7 @@ dependencies {
     implementation(platform("org.springframework.cloud:spring-cloud-dependencies:2023.0.2"))
     implementation(libs.spring.kafka)
     implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
-    /* testImplementation("com.example:wylaczona:1.0") */
+    /* testImplementation("com.example:disabled:1.0") */
     testImplementation(libs.junit)
 }
 `;
@@ -151,7 +151,7 @@ describe("Gradle extractor", () => {
   });
 
   test("a raw Kotlin string with a backslash ends at the triple quote", () => {
-    const out = extractGradle(snapshotOf({ "build.gradle.kts": 'val dir = """C:\\"""\n// implementation("com.example:wylaczona:1.0")\n' }));
+    const out = extractGradle(snapshotOf({ "build.gradle.kts": 'val dir = """C:\\"""\n// implementation("com.example:disabled:1.0")\n' }));
     expect(out.consumes).toEqual([]);
   });
 
