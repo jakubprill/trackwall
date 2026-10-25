@@ -15,3 +15,5 @@ overrides:
   "@tree-sitter-grammars/tree-sitter-kotlin>npm-check-updates": "-"
   # VitePress 1.6 asks for Vite 5, whose dev server has known vulnerabilities fixed only in 6.4.4+ (ADR-56).
   "vitepress>vite": "6.4.5"
+  # VitePress 1.6 bundles markdown-it types from before 14.2; with 14.2 its markdown hook rejects markdown-it plugins.
+  "@types/markdown-it": "14.1.2"

@@ -83,3 +83,8 @@
   font-size: 18px;
   color: var(--vp-c-text-2);
 }
+
+/* "All features": the name column stays narrow, the description takes the rest. */
+.vp-doc .feature-list td:first-child {
+  white-space: nowrap;
+}

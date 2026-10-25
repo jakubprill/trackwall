@@ -1,3 +1,8 @@
+---
+title: Install
+description: Download Trackwall for Windows or macOS and start it for the first time.
+---
+
 # Install
 
 Trackwall runs on Windows (x64) and macOS (Apple Silicon). Builds are zip archives on the [Releases](https://github.com/jakubprill/trackwall/releases) page, without an installer.

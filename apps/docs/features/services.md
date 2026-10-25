@@ -1,15 +1,42 @@
+---
+title: Services
+description: Start a service together with the services it calls, see when it is ready, and call its endpoints.
+---
+
 # Services
 
-Start a service together with the services it calls, and call its endpoints.
+Start a service together with the services it calls, see when it is ready, and call its endpoints.
 
-A repo with the mise task `dev` has a "Service" panel at the top of the "mise tasks" tab. "Start with dependencies" runs `dev` in the repo and, first, in every repo it calls according to the connection graph (HTTP clients and manual connections from `workspace.yaml`, not packages), up to 12 repos; a repo starts once the repos it calls are up. A service is "ready on port N" once its port accepts a connection: the port it logs (`Tomcat started on port 8081`, `Local: http://localhost:5173`) or `server.port` from its card.
+## What you get
 
-It is "not answering" when the port does not open within 5 minutes or stops answering, and "crashed" when the process ends by itself. A dependency without `dev`, with an untrusted mise config, or whose port is already taken (by another service or by a program Trackwall did not start; the reason says which) is skipped with the reason, the repo itself too. A stop during a start cancels it: nothing starts after the stop. "Stop with dependencies" stops the service and the dependencies this start started (not the ones that were already running).
+- One button that starts a service and, first, every service it calls.
+- A clear state for each service: starting, ready on its port, not answering or crashed.
+- One button that stops the service and what that start brought up.
+- The same for agents: they can start a service, call its endpoints and read the errors the services logged during the call.
 
-The same over MCP: `start_service` (waits up to 55 s and says what is ready, what crashed and with which errors from its log; call it again to keep waiting), `stop_service`, `list_services` and `call_endpoint`, which sends an HTTP request (method, path, headers, body) to a ready service on this computer and returns the status and body (up to 32 KB, secrets from the environment replaced with `***`) together with the errors that the services logged during the call, e.g. the stack trace from the service behind the one called.
+## How it works
 
-A session from "Sessions" starts and stops only its own repo's service, but may call any running service, e.g. the ones behind its own. A `dev` started with the "Run" button is shown in the panel as the service too. The service runs from the repo root, not from a task worktree.
+A repo with a mise task called `dev` has a "Service" panel at the top of its [mise tasks](/features/mise-tasks) tab. "Start with dependencies" looks at the [connection graph](/features/graph), finds the repos this service calls over HTTP (up to 12) and runs `dev` in each of them, starting a repo only once the repos it calls are up.
 
-## Decisions
+A service is "ready on port N" as soon as its port accepts connections. Trackwall takes the port from the service's log (`Tomcat started on port 8081`, `Local: http://localhost:5173`) or from `server.port` on its [repo card](/features/repo-card). A service is "not answering" when its port does not open within five minutes or stops answering, and "crashed" when its process ends by itself.
 
-Why it works this way: ADR-45 in [§12 of the architecture document](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief).
+A dependency that cannot start is skipped, and the panel says why: it has no `dev` task, its mise configuration is not trusted, or its port is already taken by another service or by a program Trackwall did not start.
+
+"Stop with dependencies" stops the service and the dependencies this start brought up, and leaves alone the ones that were already running. Pressing it while the start is still going cancels the start.
+
+Agents do the same through the [MCP server](/features/mcp): `start_service` starts a service and reports what is ready and what crashed, with the errors from its log; `call_endpoint` sends an HTTP request to a ready service and returns the answer together with the errors any service logged meanwhile, such as the stack trace from the service behind the one called.
+
+## Use it
+
+1. Give the repo a mise task called `dev` that starts the service.
+2. Open "Repos", select the repo and open "mise tasks".
+3. Press "Start with dependencies" and wait for "ready on port N".
+4. Press "Stop with dependencies" when you are done.
+
+## Good to know
+
+- Dependencies come from HTTP calls in the graph, including connections you added by hand, not from shared packages.
+- A `dev` task started with its own "Run" button also shows in the panel as the service.
+- A service runs from the repo itself, not from the worktree of an [agent task](/features/tasks).
+- An agent in a session starts and stops only the service of its own repo, but may call any running service.
+- `call_endpoint` works only on this computer, returns at most 32 KB of the body and replaces secrets from the environment with `***`.

@@ -1,17 +1,19 @@
+---
+title: Connect Copilot CLI
+description: Connect Copilot CLI to the Trackwall MCP server once, and every session can use it.
+---
+
 # Connect Copilot CLI
 
-Give Copilot CLI the Trackwall MCP server once, and every session can use it.
+Connect Copilot CLI to the Trackwall MCP server once, and every session can use it.
 
-Copilot CLI runs the daemon's stdio bridge (`trackwall-daemon mcp-stdio`) as a local MCP server; the bridge finds the running daemon through `daemon.json`, so the configuration does not change after a daemon restart and contains no token. The ready command for this installation is shown in the "Daemon" view (Ctrl+9, copy button). It looks like this:
+Copilot CLI starts Trackwall's MCP bridge (`trackwall-daemon mcp-stdio`) as a local MCP server. The bridge finds the running Trackwall by itself, so you connect once, and the configuration holds no token. The ready command for your installation is in the "Daemon" view (Ctrl+9, copy button). It looks like this:
 
 ```sh
 copilot mcp add trackwall -- /Applications/Trackwall.app/Contents/MacOS/trackwall-daemon mcp-stdio                     # macOS
 copilot mcp add trackwall '--' '<Trackwall directory>\trackwall-daemon.exe' mcp-stdio    # Windows (PowerShell; `--` in single quotes)
-copilot mcp add trackwall -- bun --no-env-file --config=<trackwall>/packages/daemon/bunfig.toml <trackwall>/packages/daemon/src/main.ts mcp-stdio --home <state directory>   # from source
 ```
 
-The command adds a `trackwall` entry to `~/.copilot/mcp-config.json` (on Windows `%USERPROFILE%\.copilot\mcp-config.json`; the same entry in JSON is in the "Daemon" view, in case it needs to be pasted by hand). Trackwall must be running before Copilot CLI starts, because Copilot starts MCP servers at session start; `/mcp` in Copilot CLI shows whether the `trackwall` server is connected. Then it is enough to ask the agent, for example, "Which repos are in my projects folder?". The MCP server also gives an instruction on when to reach for which tool, but Copilot CLI 1.0.103 takes such instructions only from servers on its own allowlist; in a session started outside Trackwall you can turn it on with `copilot --allow-all-mcp-server-instructions` (which turns on the instructions of every connected MCP server). Sessions from the "Sessions" view get it without that (ADR-46).
+The command adds a `trackwall` entry to `~/.copilot/mcp-config.json` (on Windows `%USERPROFILE%\.copilot\mcp-config.json`; the same entry in JSON is in the "Daemon" view, in case it needs to be pasted by hand). Trackwall must be running before Copilot CLI starts, because Copilot starts MCP servers at session start; `/mcp` in Copilot CLI shows whether the `trackwall` server is connected. Then it is enough to ask the agent, for example, "Which repos are in my projects folder?". The MCP server also gives an instruction on when to reach for which tool, but Copilot CLI 1.0.103 takes such instructions only from servers on its own allowlist; in a session started outside Trackwall you can turn it on with `copilot --allow-all-mcp-server-instructions` (which turns on the instructions of every connected MCP server). Sessions from the "Sessions" view get it without that.
 
-Manual check (needs a logged-in Copilot CLI): start Trackwall with the projects folder set, run the command from the "Daemon" view, run `copilot` in the projects folder, check in `/mcp` that `trackwall` is connected with the tools `list_repos`, `get_repo`, `get_repo_card`, `tail`, `get_errors`, `who_calls`, `subgraph_for`, `find_endpoint`, `search_code`, `list_sessions`, `get_session`, `propose_task`, `report_result`, `wait_for_session`, `run_mise_task`, `stop_mise_task`, `wait_for_mise_task`, `list_running_mise_tasks`, `start_service`, `stop_service`, `list_services` and `call_endpoint`, ask for the repo list, then for the details of one of them (README, mise tasks), for its card (for example "Which packages does orders-bff use?") and for who uses it ("Which repos does a change in core-lib affect?", "Who calls GET /api/orders/{id}?"), for code across many repos ("Where do the Java repos use RestTemplate?"), and with a session from the "Sessions" view running, for Trackwall sessions ("Which Trackwall sessions are waiting for me?"), then for commissioning a task ("Propose a task in orders-bff that adds a health endpoint, then wait for it"): the proposal should appear in the "Sessions" view, and after "Start task" the task session should start working at once, not wait for you. The daemon log (the `pnpm dev` terminal or `trackwall-daemon`) shows every call as `[mcp] list_repos: ok in … ms`.
-
-Other MCP clients can also talk to the daemon directly through Streamable HTTP at `http://127.0.0.1:<port>/mcp` with the header `Authorization: Bearer <token>`; the port and token are in `daemon.json` and change on every daemon start.
+Other MCP clients can also talk to the daemon directly through Streamable HTTP at `http://127.0.0.1:<port>/mcp` with the header `Authorization: Bearer <token>`; the port and token are in `daemon.json` in Trackwall's state folder (`~/.trackwall`) and change every time Trackwall starts.

@@ -1,3 +1,8 @@
+---
+title: What is Trackwall
+description: A desktop app for working across many git repositories and many CLI coding agents at once.
+---
+
 # What is Trackwall
 
 Trackwall is a desktop app for working across many git repositories and many CLI coding agents at once. It is at a very early stage: expect missing features, rough edges and breaking changes between versions.

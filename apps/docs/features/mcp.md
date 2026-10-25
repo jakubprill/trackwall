@@ -1,13 +1,51 @@
+---
+title: MCP server
+description: "Give Copilot CLI and other agents your whole projects folder: repos, code search, graph, logs and services."
+---
+
 # MCP server
 
-The tools Trackwall gives Copilot CLI and other MCP clients.
+Give Copilot CLI and other agents your whole projects folder: repos, code search, graph, logs and services.
 
-The daemon exposes an MCP server (ADR-24) with the tools `list_repos` (repos from the projects folder: path, remote address, branch, status, the result of the last sync and tags; with the `tags` argument only repos with those tags), `get_repo` (the README, latest commits, mise tasks and tags of one repo), `get_repo_card` (the repo card with tags and evidence), `tail` (a mise task log from a cursor, with secrets replaced with `***`), `get_errors` (errors from the mise task logs of all repos or one repo, most recent first: an `ERROR` line, a compiler error or an exception together with its Java or Node stack trace and the cause from `Caused by:`, the Spring "APPLICATION FAILED TO START" report and the Gradle `FAILURE:` report; a repeated error is one entry with a count, with `minLevel: warn` also warnings; ADR-42), `who_calls` (who uses a given repo, through packages and HTTP, with evidence), `subgraph_for` (a part of the connection graph around a repo), `find_endpoint` (an HTTP endpoint by path or name, with request and response types and the repos that call it), `search_code` (text or a regular expression in the latest commit of all repos at once, narrowed to repos, tags and paths, with the line, column and context of every match; ADR-40), `list_sessions` (Copilot CLI sessions from the "Sessions" view with state, repo and task, and tasks) and `get_session` (one session with its task and the task's changed files, without the diff; ADR-36).
+## What you get
 
-Sessions with the Trackwall MCP server thus see each other, but no tool starts, answers or stops a session. mise tasks (ADR-41): `run_mise_task` runs a task from the repo's list (the same as the button in the "mise tasks" tab; it will not run a configuration without trust, and only you can trust it, in Trackwall), `wait_for_mise_task` waits up to 55 s for it to end and returns the exit code, `stop_mise_task` stops the whole process group (also a task you started), and `list_running_mise_tasks` lists the running tasks of all repos; `tail` gives the output.
+- Agents that can list your repos, read their cards and search code in all of them at once.
+- Answers to "who calls this?" and "where is this endpoint?" from the [connection graph](/features/graph).
+- Logs and errors of running tasks, with stack traces, for the agent to read.
+- mise tasks and [services](/features/services) the agent can start, wait for and stop.
+- Sessions that see each other and hand work over as [task proposals](/features/main-session).
 
-A session from the "Sessions" view runs and stops only tasks of the repo it works in, and every run goes to the daemon log with the repo, task and session. For delegating work (ADR-39) there are `propose_task` (a task proposal: repo, title and prompt for another agent), `report_result` (a summary from a task session to its task) and `wait_for_session` (waiting up to 55 s until a session or task needs someone); see [Main session and task proposals](/features/main-session). Copilot CLI connects once, with the command from the "Daemon" view (see [Connect Copilot CLI](/guide/connect-copilot-cli)).
+## How it works
 
-## Decisions
+Trackwall runs an MCP server that every session in "Sessions" is connected to. Copilot CLI in your own terminal, or another MCP client, can connect to it too: [Connect Copilot CLI](/guide/connect-copilot-cli) shows how.
 
-Why it works this way: ADR-24, ADR-36, ADR-39, ADR-40, ADR-41, ADR-42 in [§12 of the architecture document](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief).
+The agent sees the same projects folder you see in Trackwall, through the tools below. It can read everything, and it can run tasks and services, but never in a repo whose mise configuration you have not trusted. No tool changes Trackwall's settings, and no tool starts, answers or stops a session: those stay with you.
+
+## Use it
+
+1. Connect Copilot CLI once, with the command from the "Daemon" view.
+2. Ask the agent things like "which repos call orders-api?" or "start the shop with its dependencies and call /api/orders".
+
+## Tools
+
+| Tool | What the agent gets |
+|---|---|
+| `list_repos` | The repos of the projects folder with branch, status, last sync and tags; filter by tags. |
+| `get_repo` | One repo's README, latest commits, mise tasks and tags. |
+| `get_repo_card` | The [repo card](/features/repo-card), with evidence. |
+| `search_code` | Text or a regular expression in all repos at once, narrowed by repo, tag or path, with line and context. |
+| `who_calls` | Who uses a repo, through packages and HTTP, with evidence. |
+| `subgraph_for` | The part of the connection graph around a repo. |
+| `find_endpoint` | An HTTP endpoint by path or name, with its types and the repos that call it. |
+| `run_mise_task`, `wait_for_mise_task`, `stop_mise_task`, `list_running_mise_tasks` | Run a repo's mise task, wait up to 55 s for it, stop it, list what runs. |
+| `tail` | A task's log from a cursor, with secrets replaced by `***`. |
+| `get_errors` | Errors from the task logs, newest first: error lines, compiler errors, exceptions with stack traces, Spring and Gradle failure reports; repeats counted once. |
+| `start_service`, `stop_service`, `list_services`, `call_endpoint` | Start a service with its dependencies, stop it, list services, send an HTTP request to a running one. |
+| `list_sessions`, `get_session` | The sessions and tasks in "Sessions", with state, repo and a task's changed files. |
+| `propose_task`, `wait_for_session`, `report_result` | Propose a task, wait up to 55 s for a session or task to need someone, report a task's summary. |
+
+## Good to know
+
+- An agent in a session runs and stops only the tasks and the service of its own repo; every run is logged with the repo, task and session.
+- Agents get links in the form `trackwall://…` to point you at a repo, session or task: see [trackwall:// links](/features/links).
+- Calls that wait (`wait_for_mise_task`, `start_service`, `wait_for_session`) return after at most 55 seconds; the agent calls again to keep waiting.

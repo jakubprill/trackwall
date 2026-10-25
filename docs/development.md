@@ -16,7 +16,7 @@ Repo layout, running from source and tools for people who develop Trackwall. Pro
 | `packages/daemon` | the daemon (Bun, Node-compatible code), built into a single binary; `src/modules/` are the modules from §4 of the architecture, `src/api/` and `src/mcp/` the transports, `src/platform/` system APIs, `src/infra/` the rest of the infrastructure; the root of `src/` holds only `main.ts` and `facade.ts` |
 | `packages/ui` | React + Tailwind + shadcn/ui, Vite; `src/views/<view identifier>/` are the views from the bar on the left (`home`, `repos`, `sessions`, `graph` for Overview, `daemon`, `settings`) and `tray-panel`, the page of the tray panel window (ADR-50), `src/components/` shared components, `src/lib/` logic without React and hooks; the root of `src/` holds only `main.tsx`, `App.tsx` and `index.css` |
 | `packages/scene` | the 3D dashboard scene on Pawn (`@pawnjs/core` from npm): view model, "Orbit" layout, models |
-| `apps/docs` | the feature documentation site (VitePress, ADR-56): `guide/` and one page per feature in `features/`, the sidebar in `.vitepress/config.ts`, the Trackwall look in `.vitepress/theme/`; `.github/workflows/pages.yml` publishes it on GitHub Pages |
+| `apps/docs` | the feature documentation site (VitePress, ADR-56): `guide/` and one page per feature in `features/` written from `TEMPLATE.md`, the sidebar (and the groups of "All features") in `.vitepress/sidebar.ts`, the Trackwall look in `.vitepress/theme/`; the build also writes `llms.txt`, `llms-full.txt` and a Markdown copy of every page for AI tools; `.github/workflows/pages.yml` publishes it on GitHub Pages |
 | `apps/desktop` | the Tauri 2 shell: windows (the main one and extra ones, translucent, ADR-11, ADR-49), tray and tray panel, system notifications and the global shortcut (ADR-50), starting and stopping the daemon |
 
 ## Running from source
@@ -68,6 +68,16 @@ pnpm --filter @trackwall/desktop icons   # icons from bundle.icon in tauri.conf.
 ```
 
 The generated files go into the repo together with the changed SVG. `tauri icon` writes `icon.icns` with its entries in a different order every time, so discard a changed `icon.icns` after a run without an SVG change (`git checkout -- apps/desktop/src-tauri/icons/icon.icns`).
+
+## Copilot CLI with the MCP server from source
+
+The user guide (`apps/docs/guide/connect-copilot-cli.md`) shows the command for an installed Trackwall. From source, Copilot CLI starts the bridge with Bun:
+
+```sh
+copilot mcp add trackwall -- bun --no-env-file --config=<trackwall>/packages/daemon/bunfig.toml <trackwall>/packages/daemon/src/main.ts mcp-stdio --home <state directory>
+```
+
+Checking it by hand needs a signed-in Copilot CLI. Start Trackwall with the projects folder set, run the command from the "Daemon" view, run `copilot` in the projects folder, check in `/mcp` that `trackwall` is connected with the tools `list_repos`, `get_repo`, `get_repo_card`, `tail`, `get_errors`, `who_calls`, `subgraph_for`, `find_endpoint`, `search_code`, `list_sessions`, `get_session`, `propose_task`, `report_result`, `wait_for_session`, `run_mise_task`, `stop_mise_task`, `wait_for_mise_task`, `list_running_mise_tasks`, `start_service`, `stop_service`, `list_services` and `call_endpoint`, ask for the repo list, then for the details of one of them (README, mise tasks), for its card (for example "Which packages does orders-bff use?") and for who uses it ("Which repos does a change in core-lib affect?", "Who calls GET /api/orders/{id}?"), for code across many repos ("Where do the Java repos use RestTemplate?"), and with a session from the "Sessions" view running, for Trackwall sessions ("Which Trackwall sessions are waiting for me?"), then for commissioning a task ("Propose a task in orders-bff that adds a health endpoint, then wait for it"): the proposal should appear in the "Sessions" view, and after "Start task" the task session should start working at once, not wait for you. The daemon log (the `pnpm dev` terminal or `trackwall-daemon`) shows every call as `[mcp] list_repos: ok in … ms`.
 
 ## Recording Copilot CLI sessions
 

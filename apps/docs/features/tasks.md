@@ -1,15 +1,40 @@
+---
+title: Agent tasks
+description: Give an agent a task on its own branch and worktree, and review its changes before anything lands.
+---
+
 # Agent tasks
 
-Give an agent a task on its own branch and worktree, and review its changes.
+Give an agent a task on its own branch and worktree, and review its changes before anything lands.
 
-The "+" button in the "Sessions" view opens the new task form: a repo and a prompt for the agent. Trackwall creates a new branch `trackwall/<prompt slug>` from the repo's default branch in a separate worktree in `~/.trackwall/worktrees/<repo>/` and runs Copilot CLI in it with the prompt as the first message (ADR-31), so several tasks in one repo run at once without collisions, and your working directory stays untouched. The "Changes" tab shows live the files and diff of the worktree against the default branch, with the task's commits and what the agent has not committed yet.
+## What you get
 
-Buttons: "VS Code" opens the worktree, "Resume" runs Copilot CLI with the task's conversation (`--resume`), and "End task" removes the worktree and keeps the branch or removes both; changes that would be lost doing so are deleted by Trackwall only after confirmation. Tasks survive a daemon restart. Copilot CLI asks for trust in every new folder; so that it does not ask for every task, add the `worktrees` directory (the form gives the full path) to `trustedFolders` in `~/.copilot/config.json`.
+- A task for an agent in two fields: a repo and a prompt.
+- A fresh branch and a separate working copy for every task, so several agents can work in one repo at once and your own working copy stays untouched.
+- The task's changes live: files, diff and commits against the default branch.
+- A warning when two tasks in one repo change the same files.
+- Tasks that survive a restart of Trackwall, ready to resume.
 
-## Tasks that touch the same files
+## How it works
 
-When another task of the same repo changes the same files, a warning above the task's tabs names the other task and lists the shared files (refreshed every 5 s), with an "Open that task" button; Trackwall only warns and stops nothing (ADR-44).
+Press "+" in "Sessions", pick a repo and write the prompt. Trackwall creates a branch named after the prompt (`trackwall/<prompt slug>`) from the repo's default branch, in a separate git worktree, and starts Copilot CLI there with your prompt as the first message. The task shows on the list like a session, with the same states.
 
-## Decisions
+The "Changes" tab follows the worktree live: the files and diff against the default branch, the task's commits and what the agent has not committed yet. "VS Code" opens the worktree in your editor. When the agent finishes, it leaves a summary above the task's tabs.
 
-Why it works this way: ADR-31, ADR-44 in [§12 of the architecture document](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief).
+When another task in the same repo changes some of the same files, a warning above the tabs names that task and lists the shared files, with "Open that task". Trackwall only warns; both tasks carry on.
+
+"Resume" starts Copilot CLI again with the task's conversation. "End task" removes the worktree and keeps the branch, or removes both; if that would lose changes, Trackwall asks first.
+
+## Use it
+
+1. Open "Sessions" and press "+".
+2. Pick a repo, write the prompt and start the task.
+3. Watch the agent in the terminal and its work in "Changes".
+4. Review the changes in VS Code, then push the branch yourself or end the task.
+
+## Good to know
+
+- Worktrees live in `~/.trackwall/worktrees/<repo>/`.
+- Copilot CLI asks to trust every new folder. To stop it asking for every task, add the `worktrees` folder (the new task form shows its full path) to `trustedFolders` in `~/.copilot/config.json`.
+- A task's agent stays in its worktree and does not push; the branch is yours to push.
+- An agent can also propose a task for you to start: see [Main session and task proposals](/features/main-session).
