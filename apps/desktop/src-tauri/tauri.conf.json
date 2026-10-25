@@ -31,6 +31,11 @@
     }
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["trackwall"]
+      }
+    },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDAyNDcxMEYxMENEMDI0NEUKUldST0pOQU04UkJIQWczeVB3d0RELzZiU21JQ3ptNW1uWTNtL3BYYUFybmxYRUEraWtDamd5TE8K",
       "endpoints": ["https://github.com/jakubprill/trackwall/releases/latest/download/latest.json"],

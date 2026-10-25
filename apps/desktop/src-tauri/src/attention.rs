@@ -1,7 +1,7 @@
 //! Copilot CLI sessions that are waiting for you (ADR-26) and task proposals waiting for a decision (ADR-39): the shell
 //! asks the daemon for the session list every few seconds and, when a session stops working and starts waiting or a new
 //! proposal arrives, draws the user's attention (taskbar flash, Dock bounce) and updates the tray tooltip and menu.
-//! Clicking a menu item shows the window with that session or proposal.
+//! Clicking a menu item shows the window for sessions (ADR-49) with that session or proposal.
 //!
 //! Pytanie idzie z powłoki, a nie z UI: schowane okno WebView może mieć wstrzymane timery, a tray ma działać także
 //! przy zamkniętym oknie. Czy sesja czeka na Ciebie, liczy daemon (`Session.needsAttention`), tak samo dla UI i traya.
@@ -9,18 +9,19 @@
 
 use crate::daemon;
 use crate::daemon_state::DaemonState;
-use serde::{Deserialize, Serialize};
+use crate::jump::Jump;
+use crate::windows::Windows;
+use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-use tauri::{AppHandle, Emitter, Manager, UserAttentionType};
+use tauri::{AppHandle, Manager, UserAttentionType};
 
 const POLL: Duration = Duration::from_secs(2);
-/// Event for the UI with the session or proposal to show (`Focus`; same name and shape in `use-session-focus.ts`).
-const FOCUS_EVENT: &str = "focus-session";
 /// Tray menu item ids; a session or proposal item is a prefix plus its id.
 pub const MENU_SHOW: &str = "show";
+pub const MENU_NEW_WINDOW: &str = "new-window";
 pub const MENU_QUIT: &str = "quit";
 const MENU_SESSION_PREFIX: &str = "session:";
 const MENU_PROPOSAL_PREFIX: &str = "proposal:";
@@ -157,30 +158,17 @@ pub fn build_menu(app: &AppHandle, waiting: &[Waiting], proposals: &[Proposal]) 
         menu.append(&PredefinedMenuItem::separator(app)?)?;
     }
     menu.append(&MenuItem::with_id(app, MENU_SHOW, "Show Trackwall", true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, MENU_NEW_WINDOW, "New window", true, None::<&str>)?)?;
     menu.append(&MenuItem::with_id(app, MENU_QUIT, "Quit (stops the daemon)", true, None::<&str>)?)?;
     Ok(menu)
 }
 
-/// What to show after a tray menu item is clicked; for the UI `{"kind":"session"|"proposal","id":...}`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(tag = "kind", content = "id", rename_all = "lowercase")]
-pub enum Focus<'a> {
-    Session(&'a str),
-    Proposal(&'a str),
-}
-
 /// The session or proposal of a tray menu item; `None` for the fixed items.
-pub fn focus_from_menu(id: &str) -> Option<Focus<'_>> {
+pub fn jump_from_menu(id: &str) -> Option<Jump> {
     if let Some(session) = id.strip_prefix(MENU_SESSION_PREFIX) {
-        return Some(Focus::Session(session));
+        return Some(Jump::Session(session.to_owned()));
     }
-    id.strip_prefix(MENU_PROPOSAL_PREFIX).map(Focus::Proposal)
-}
-
-/// Shows the window and asks the UI to switch to the session or proposal.
-pub fn focus(app: &AppHandle, target: Focus<'_>, show: fn(&AppHandle)) {
-    show(app);
-    let _ = app.emit_to("main", FOCUS_EVENT, target);
+    id.strip_prefix(MENU_PROPOSAL_PREFIX).map(|proposal| Jump::Proposal(proposal.to_owned()))
 }
 
 /// Wątek pytający daemon o sesje, dopóki działa powłoka.
@@ -194,7 +182,7 @@ pub fn watch(app: AppHandle, state: Arc<DaemonState>, tray_id: &'static str) {
             let Some(now) = daemon::sessions(&conn).ok().and_then(|body| parse_sessions(&body)) else { continue };
             let previous_states = last.as_ref().map_or(&no_states, |l| &l.states);
             if !newly_waiting(previous_states, &now.waiting).is_empty() || !new_proposals(last.as_ref(), &now.proposals).is_empty() {
-                if let Some(window) = app.get_webview_window("main") {
+                if let Some(window) = app.get_webview_window(&app.state::<Windows>().session_window()) {
                     let _ = window.request_user_attention(Some(UserAttentionType::Informational));
                 }
             }
@@ -306,10 +294,9 @@ mod tests {
 
     #[test]
     fn menu_item_points_at_a_session_or_a_proposal() {
-        assert_eq!(focus_from_menu("session:abc"), Some(Focus::Session("abc")));
-        assert_eq!(focus_from_menu("proposal:abc"), Some(Focus::Proposal("abc")));
-        assert_eq!(focus_from_menu(MENU_SHOW), None);
+        assert_eq!(jump_from_menu("session:abc"), Some(Jump::Session("abc".into())));
+        assert_eq!(jump_from_menu("proposal:abc"), Some(Jump::Proposal("abc".into())));
+        assert_eq!(jump_from_menu(MENU_SHOW), None);
         assert_eq!(menu_text("Fix A & B"), "Fix A && B");
-        assert_eq!(serde_json::to_string(&Focus::Proposal("abc")).unwrap(), r#"{"kind":"proposal","id":"abc"}"#);
     }
 }

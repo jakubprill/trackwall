@@ -1,6 +1,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { errorMessage } from "./api.ts";
+import { isMainWindow } from "./app-window.ts";
 import { type AppUpdate, checkUpdate, installUpdate, listenToUpdateProgress, nextUpdate } from "./updates.ts";
 
 /** The first check waits for the app to settle; then once in a while, because the app runs for days in the tray. */
@@ -17,8 +18,9 @@ export interface AppUpdateHandle {
 }
 
 /**
- * Update state of the app (ADR-53), one per window: checks on its own and installs on request (`nextUpdate` has the
- * rules). `undefined` outside the Tauri window, where there is no shell to update.
+ * Update state of the app (ADR-53), one per window: the main window checks on its own, every window checks when asked
+ * ("Settings > Updates") and installs on request (`nextUpdate` has the rules). `undefined` outside the Tauri window,
+ * where there is no shell to update.
  */
 export function useAppUpdate(): AppUpdateHandle | undefined {
   const [update, dispatch] = useReducer(nextUpdate, { state: "idle" });
@@ -49,7 +51,8 @@ export function useAppUpdate(): AppUpdateHandle | undefined {
   }, []);
 
   useEffect(() => {
-    if (!tauri) return;
+    // One periodic check per app, not per window (ADR-49).
+    if (!isMainWindow()) return;
     const first = setTimeout(check, FIRST_CHECK_MS);
     const every = setInterval(check, CHECK_EVERY_MS);
     return () => {
