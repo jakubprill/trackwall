@@ -22,7 +22,7 @@ const proposal: TaskProposal = {
   repo: "billing",
   title: "Retry failed invoices",
   prompt: "Retry invoices that failed to send",
-  proposedBy: { session: null },
+  proposedBy: { session: null, supervisor: false },
   createdAt: "2026-10-24T10:00:00Z",
 };
 

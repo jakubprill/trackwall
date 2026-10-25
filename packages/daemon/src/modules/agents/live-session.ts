@@ -38,7 +38,8 @@ function typedByUser(data: string): boolean {
 
 export interface LiveSessionOptions {
   id: string;
-  repo: string;
+  /** `null` for the supervisor in the projects folder (ADR-58). */
+  repo: string | null;
   /** Zadanie, w którego worktree działa sesja; `null` w korzeniu repo. */
   task: string | null;
   cols: number;
@@ -53,7 +54,7 @@ export interface LiveSessionOptions {
 
 export class LiveSession {
   readonly id: string;
-  readonly repo: string;
+  readonly repo: string | null;
   readonly task: string | null;
   readonly startedAt = new Date().toISOString();
   readonly #run: () => RunState | undefined;

@@ -1,6 +1,7 @@
 import type { Task } from "@trackwall/protocol";
 import { Maximize2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { SessionTerminal } from "@/components/SessionTerminal";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
@@ -13,7 +14,6 @@ import { useSessionClose } from "@/lib/use-session-close";
 import { cn } from "@/lib/utils";
 import { ProposalTile } from "./ProposalTile.tsx";
 import { SessionCloseButton, SessionCloseConfirmation } from "./SessionClose.tsx";
-import { SessionTerminal } from "./SessionTerminal.tsx";
 import { TaskLine } from "./TaskLine.tsx";
 
 /**
@@ -155,7 +155,7 @@ function SessionTile({
         // The question lies over the terminal instead of pushing it down, so that it does not resize the PTY mid-turn.
         <div className="relative flex min-h-0 flex-1 flex-col">
           <SessionCloseConfirmation close={close} className="absolute inset-x-0 top-0 z-10" />
-          <SessionTerminal conn={conn} session={session.id} live={isLive(session)} focused={selected} />
+          <SessionTerminal conn={conn} session={session.id} live={isLive(session)} selected={selected} />
         </div>
       )}
       {entry.kind === "proposals" && (

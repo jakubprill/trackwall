@@ -420,10 +420,10 @@ export const mcpTools = {
     readOnly: true,
     description:
       "Copilot CLI sessions that Trackwall runs (the Sessions view), newest first, and tasks. A session has an id, " +
-      "repo, start time, process state (run: running, stopping, exited with exit code; the screen is not shared), the " +
+      "repo (null for the supervisor, the one session in the projects folder above all repos), start time, process state (run: running, stopping, exited with exit code; the screen is not shared), the " +
       "latest state change (state: Working, Input, Approval, Plan, Done, Error, Stale, with source and confidence; " +
       "null before the first signal), window title (what the agent is working on), needsAttention (running and " +
-      "waiting for the user: approval, plan approval, or an ended turn the user has not seen yet) and task: the id of the task whose worktree it runs in, null in the repo root. A task " +
+      "waiting for the user: approval, plan approval, or an ended turn the user has not seen yet) and task: the id of the task whose worktree it runs in, null in the repo root and for the supervisor. With repo set, the supervisor is left out. A task " +
       "is work in its own worktree on its own branch: prompt, branch, base branch and commit, worktree path. Sessions " +
       "end with Trackwall, tasks stay until the user ends them. Also task proposals waiting for the user's decision " +
       `(${PROPOSE_TASK}) and caller: your own session id when you run in Trackwall, null otherwise. The repo argument ` +
@@ -435,7 +435,7 @@ export const mcpTools = {
     name: GET_SESSION,
     readOnly: true,
     description:
-      `One session from ${LIST_SESSIONS}, its task (null in the repo root) and, for a task, the changes in its ` +
+      `One session from ${LIST_SESSIONS}, its task (null in the repo root and for the supervisor) and, for a task, the changes in its ` +
       `worktree against the base commit: changed files with added and deleted lines (at most ${TASK_SUMMARY_MAX_FILES}, filesTruncated: ` +
       "true when there were more), commits on the task branch and the number of uncommitted entries, without the diff " +
       "itself; read the worktree for the content. changes: null with changesError when they cannot be computed " +
@@ -512,8 +512,8 @@ export const mcpTools = {
       "trusted gives mise_unavailable: only the user can trust it, in Trackwall; ask them. In a task worktree that " +
       "also happens when its mise config (mise.toml, mise.local.toml, file tasks…) changed since the user trusted it: " +
       "the user trusts the changed config in the task's panel. A session in Trackwall can run only mise tasks of its own " +
-      "repo, and a task session only in its own task's worktree or the repo root. Long-running tasks (dev servers) keep " +
-      "running until stopped; stop them when you no longer need them.",
+      "repo, a task session only in its own task's worktree or the repo root, and the supervisor none. Long-running " +
+      "tasks (dev servers) keep running until stopped; stop them when you no longer need them.",
     args: MiseTaskArgs,
     result: MiseTaskRunResult,
   },
@@ -527,7 +527,8 @@ export const mcpTools = {
       "process group is killed. Returns after Trackwall has confirmed that no process of the group is alive " +
       "(run: exited with stoppedByUser: true); stop_unconfirmed when some process survived. A task that has already " +
       "ended returns its run; not_found when it has not been run since Trackwall started. A session in Trackwall can " +
-      "stop only mise tasks of its own repo, and a task session only in its own task's worktree or the repo root.",
+      "stop only mise tasks of its own repo, a task session only in its own task's worktree or the repo root, and the " +
+      "supervisor none.",
     args: MiseTaskArgs,
     result: MiseTaskRunResult,
   },
@@ -567,7 +568,7 @@ export const mcpTools = {
       "runId; reason) and, for crashed and unhealthy, errors from its log. settled: false means some are still " +
       "starting: call again with the same arguments to keep waiting (running services are not restarted; a crashed " +
       `one starts again, e.g. after you fixed it). At most ${MAX_SLICE_REPOS} repos. A session in Trackwall can start ` +
-      `only its own repo (dependencies come from the graph). Then use ${CALL_ENDPOINT}; read logs with tail ` +
+      `only its own repo (dependencies come from the graph), and the supervisor none. Then use ${CALL_ENDPOINT}; read logs with tail ` +
       `(miseTask ${SERVICE_MISE_TASK}) and ${GET_ERRORS}. Stop what you started with stop_service when you are done.`,
     args: z
       .object({
@@ -586,7 +587,7 @@ export const mcpTools = {
     description:
       "Stop a repo's service (its whole process group) and, with dependencies: true, the services the latest " +
       `${START_SERVICE} of this repo started (not those that were already running or that another started slice uses). ` +
-      "Returns the stopped services. A session in Trackwall can stop only its own repo's service.",
+      "Returns the stopped services. A session in Trackwall can stop only its own repo's service, and the supervisor none.",
     args: z
       .object({
         repo: RepoArg,

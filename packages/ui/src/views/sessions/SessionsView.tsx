@@ -8,10 +8,11 @@ import {
   type Task,
   workspaceApi,
 } from "@trackwall/protocol";
-import { BellRing, GitBranch, Lightbulb, Play, Plus, Square, X } from "lucide-react";
+import { BellRing, Crown, GitBranch, Lightbulb, Play, Plus, Square, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
+import { SessionTerminal } from "@/components/SessionTerminal";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,7 @@ import {
   entryId,
   entrySelection,
   findEntry,
-  nextWaiting,
+  nextWaitingTarget,
   type ProposalsEntry,
   proposalsName,
   type SessionEntry,
@@ -34,20 +35,27 @@ import {
   type StartedEntry,
   selectedProposal,
   selectionAfterClose,
-  sessionRows,
+  type WaitingTarget,
 } from "@/lib/session-entries";
 import { gridPage, SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
-import { ariaSessionShortcut, SHORTCUT_POSITIONS, sessionShortcut, sessionShortcutLabel } from "@/lib/session-shortcut";
-import { attentionCount, isLive, PROPOSAL_STATUS, sessionStateLabel } from "@/lib/session-state";
+import {
+  ariaSessionShortcut,
+  SHORTCUT_POSITIONS,
+  SUPERVISOR_SHORTCUT,
+  sessionShortcut,
+  sessionShortcutLabel,
+} from "@/lib/session-shortcut";
+import { attentionCount, isLive, PROPOSAL_STATUS, SUPERVISOR, sessionStateLabel } from "@/lib/session-state";
+import type { SupervisorSummary } from "@/lib/supervisor";
 import { useAction } from "@/lib/use-action";
-import { actionIsNewer, type RemoteHandle, useRemote } from "@/lib/use-remote";
+import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { useSessionClose } from "@/lib/use-session-close";
+import type { SessionTree } from "@/lib/use-session-tree";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { cn } from "@/lib/utils";
 import { ProposalInbox } from "./ProposalInbox.tsx";
 import { SessionCloseButton, SessionCloseConfirmation } from "./SessionClose.tsx";
 import { SessionGrid } from "./SessionGrid.tsx";
-import { SessionTerminal } from "./SessionTerminal.tsx";
 import { TaskLine } from "./TaskLine.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
 
@@ -69,6 +77,9 @@ export function SessionsView({
   onSelect,
   layout,
   onLayout,
+  onShowSupervisor,
+  tree,
+  supervisor,
 }: {
   conn: Connection;
   sessions: RemoteHandle<SessionList>;
@@ -78,15 +89,17 @@ export function SessionsView({
   onSelect: (selection: SessionSelection) => void;
   layout: SessionLayout;
   onLayout: (layout: SessionLayout) => void;
+  /** Opens the supervisor panel (ADR-58): the supervisor heading of the list leads there, not to a terminal here. */
+  onShowSupervisor: () => void;
+  /** The list rows and their tasks, without a task the user has just ended (`useSessionTree`). */
+  tree: SessionTree;
+  supervisor: SupervisorSummary;
 }) {
   const list = sessions.data?.sessions ?? [];
-  // Zakończone zadanie znika od razu, a nie po odświeżeniu listy, żeby panel nie pokazał go znowu bez worktree.
-  const [removed, setRemoved] = useState<{ task: string; afterLoad: number }>();
-  const hidden = removed && actionIsNewer(removed.afterLoad, sessions.loadNumber) ? removed.task : undefined;
-  const { tasks, rows } = visibleTasksAndRows(sessions.data, hidden);
+  const { tasks, rows } = tree;
   const entries = rows.map((r) => r.entry);
   const current = findEntry(entries, selected);
-  const next = nextWaiting(entries, current);
+  const next = nextWaitingTarget(entries, current, supervisor.sessionWaits);
   const waiting = attentionCount(sessions.data);
   // A stop can take seconds, and a decision on proposals a while, and the user may select another entry meanwhile, so
   // both decide on the selection as it is when they end. `entries` comes from the render of the click (the action keeps
@@ -129,10 +142,10 @@ export function SessionsView({
               variant="outline"
               size="sm"
               className="w-full"
-              onClick={() => onSelect(entrySelection(next))}
+              onClick={() => (next.kind === "supervisor" ? onShowSupervisor() : onSelect(entrySelection(next)))}
               aria-keyshortcuts={ariaSessionShortcut(NEXT_WAITING)}
             >
-              <BellRing /> {waiting === 1 ? "One thing is waiting for you" : `Next waiting (${waiting})`}
+              <BellRing /> {nextWaitingLabel(next, waiting)}
               <span className="text-muted-foreground ml-auto font-mono text-2xs">{sessionShortcutLabel(NEXT_WAITING, IS_MAC)}</span>
             </Button>
           </div>
@@ -144,6 +157,7 @@ export function SessionsView({
               No sessions yet. Give the agent a task or start Copilot CLI in a repo from your projects folder.
             </p>
           )}
+          {supervisor.listed && <SupervisorListItem supervisor={supervisor} onOpen={onShowSupervisor} />}
           {rows.map((row, i) => (
             <SessionListItem
               key={entryId(row.entry)}
@@ -190,7 +204,7 @@ export function SessionsView({
             onChanged={sessions.reload}
             onSessionClosed={sessionClosed}
             onTaskRemoved={(task) => {
-              setRemoved({ task, afterLoad: sessions.sentLoads() });
+              tree.hideTask(task);
               onSelect(undefined);
               sessions.reload();
             }}
@@ -199,16 +213,6 @@ export function SessionsView({
       </section>
     </div>
   );
-}
-
-/**
- * Tasks and list rows without the task the user has just ended (`hidden`), which the list may still return; the same
- * tasks feed the tree and the task panel.
- */
-function visibleTasksAndRows(data: SessionList | undefined, hidden: string | undefined): { tasks: Task[]; rows: SessionRow[] } {
-  if (!data) return { tasks: [], rows: [] };
-  const tasks = data.tasks.filter((t) => t.id !== hidden);
-  return { tasks, rows: sessionRows({ ...data, tasks }) };
 }
 
 /** Indent per tree level; deeper rows do not move further, so the repo name still fits in the panel. */
@@ -282,22 +286,11 @@ function StartedListItem({
         onClick={onSelect}
         aria-current={active || undefined}
         aria-keyshortcuts={ariaSessionShortcut({ kind: "position", position })}
-        className={cn(
-          "flex w-full items-start gap-3 rounded-md border border-transparent py-2 pr-8 pl-2 text-left transition-colors hover:bg-accent",
-          active && "bg-accent border-primary/25 hud-active-edge",
-        )}
+        className={cn(ROW_BUTTON, active && "bg-accent border-primary/25 hud-active-edge")}
       >
         <PositionLabel position={position} />
         <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-sm font-medium">{task?.repo ?? session?.repo}</span>
-            {delegated > 0 && (
-              <Badge
-                aria-label={`main session, ${countLabel(delegated, { one: "task or proposal", other: "tasks and proposals" })} under it`}
-              >{`main · ${delegated}`}</Badge>
-            )}
-            {session?.needsAttention && <BellRing className="text-warning size-3.5 shrink-0" aria-label="waiting for you" />}
-          </span>
+          <RowName name={task?.repo ?? session?.repo} delegated={delegated} waits={session?.needsAttention === true} />
           {task && <TaskLine task={task} />}
           <span className="text-muted-foreground text-xs">{session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}</span>
           {session?.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
@@ -314,6 +307,47 @@ function StartedListItem({
       )}
       <SessionCloseConfirmation close={close} />
     </div>
+  );
+}
+
+/**
+ * The supervisor heading (ADR-58) above the list, with the work it delegated right under it. It has no position: Alt+0
+ * reaches it, and it opens the supervisor panel instead of a terminal in this view.
+ */
+function SupervisorListItem({ supervisor, onOpen }: { supervisor: SupervisorSummary; onOpen: () => void }) {
+  const { session } = supervisor;
+  return (
+    <button type="button" onClick={onOpen} aria-keyshortcuts={ariaSessionShortcut(SUPERVISOR_SHORTCUT)} className={ROW_BUTTON}>
+      <span className="flex w-8 shrink-0 flex-col items-end gap-0.5 pt-0.5">
+        <Crown className="text-primary size-3.5" aria-hidden />
+        <span className="text-muted-foreground/70 font-mono text-2xs">{sessionShortcutLabel(SUPERVISOR_SHORTCUT, IS_MAC)}</span>
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
+        <RowName name={SUPERVISOR} delegated={supervisor.delegated} waits={supervisor.sessionWaits} />
+        <span className="text-muted-foreground text-xs">{session ? <StatusLabel {...sessionStateLabel(session)} /> : "not running"}</span>
+      </span>
+    </button>
+  );
+}
+
+const ROW_BUTTON =
+  "flex w-full items-start gap-3 rounded-md border border-transparent py-2 pr-8 pl-2 text-left transition-colors hover:bg-accent";
+
+/**
+ * The first line of a session, task or supervisor row: its name, the "main" badge with the work delegated under it
+ * (the supervisor is the main session above all repos) and a bell while it waits for you.
+ */
+function RowName({ name, delegated, waits }: { name: string | null | undefined; delegated: number; waits: boolean }) {
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <span className="truncate text-sm font-medium">{name}</span>
+      {delegated > 0 && (
+        <Badge aria-label={`main session, ${countLabel(delegated, { one: "task or proposal", other: "tasks and proposals" })} under it`}>
+          {`main · ${delegated}`}
+        </Badge>
+      )}
+      {waits && <BellRing className="text-warning size-3.5 shrink-0" aria-label="waiting for you" />}
+    </span>
   );
 }
 
@@ -530,6 +564,12 @@ function EntryPanel({
 
 const NEXT_WAITING = { kind: "next-waiting" } as const;
 
+/** The "Next waiting" button: the count of the list, which leaves the supervisor out, so it is named once only it waits. */
+function nextWaitingLabel(next: WaitingTarget, waiting: number): string {
+  if (next.kind === "supervisor") return "The supervisor is waiting for you";
+  return waiting === 1 ? "One thing is waiting for you" : `Next waiting (${waiting})`;
+}
+
 const LAYOUT_LABELS: Record<SessionLayout, string> = { "1": "1", "2": "2", "4": "4", auto: "Auto" };
 
 /** The layout switch above the right side: one entry with its full panel, or a grid of 2, 4 or all entries. */
@@ -601,7 +641,7 @@ function SessionPanel({
           </Button>
         )}
       </header>
-      <SessionTerminal conn={conn} session={session.id} live={live} focused />
+      <SessionTerminal conn={conn} session={session.id} live={live} selected />
     </>
   );
 }

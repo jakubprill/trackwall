@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { FEATURE_GROUPS } from "../.vitepress/sidebar.ts";
 
@@ -109,6 +109,15 @@ test("a feature card on the home page shows the description of its page", () => 
 test("no page of the site points at decision records or the developer documents", () => {
   const pointing = sitePages.filter((path) => /ADR-\d+|§\d|\/blob\/main\/docs\//.test(read(path)));
   expect(pointing).toEqual([]);
+});
+
+test("every screenshot a page shows is in public/screenshots", () => {
+  const missing = sitePages.flatMap((path) =>
+    [...read(path).matchAll(/\]\((\/screenshots\/[^)]+)\)/g)]
+      .map((m) => m[1] ?? "")
+      .filter((image) => !existsSync(join(DOCS, "public", image))),
+  );
+  expect(missing).toEqual([]);
 });
 
 test("the install commands download the current version", () => {

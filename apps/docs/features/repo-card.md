@@ -7,6 +7,8 @@ description: See what a repo is made of, read from its build and configuration f
 
 See what a repo is made of, read from its build and configuration files, without building it.
 
+![The card of orders-api: tags, mechanisms, its app and its HTTP endpoints](/screenshots/repo-card.png)
+
 ## What you get
 
 - The packages a repo builds and the packages it uses, from Maven, Gradle and npm.

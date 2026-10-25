@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { MAX_PENDING_PROPOSALS, TaskProposals } from "../src/modules/agents/task-proposals.ts";
 
-const PROPOSAL = { repo: "sklep", title: "Dodaj test", prompt: "dodaj test logowania", proposedBy: { session: null } };
+const PROPOSAL = { repo: "sklep", title: "Dodaj test", prompt: "dodaj test logowania", proposedBy: { session: null, supervisor: false } };
 
 describe("propozycje zadań", () => {
   test("zatwierdzana propozycja zostaje na liście, ale drugie zatwierdzenie i odrzucenie to not_found", () => {

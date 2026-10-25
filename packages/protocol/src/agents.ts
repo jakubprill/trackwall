@@ -64,12 +64,21 @@ export const TaskSummaryText = z.string().trim().min(1).max(TASK_SUMMARY_MAX);
  * Kto zaproponował zadanie (ADR-39): sesja Trackwall po swoim tokenie sesji albo `null` dla agenta spoza Trackwall
  * (agent nadrzędny z tokenem daemona).
  */
-export const ProposedBy = z.object({ session: SessionId.nullable() });
+export const ProposedBy = z.object({
+  session: SessionId.nullable(),
+  /**
+   * The proposing session was the supervisor (ADR-58). Kept with the task, so that the supervisor's work stays under
+   * it in the Sessions view after the supervisor session that proposed it is gone (closed, or the daemon restarted).
+   * Absent in task files from before ADR-58.
+   */
+  supervisor: z.boolean().default(false),
+});
 export type ProposedBy = z.infer<typeof ProposedBy>;
 
 export const Session = z.object({
   id: SessionId,
-  repo: RepoId,
+  /** The repo the session works in; `null` for the supervisor, which runs in the projects folder above all repos (ADR-58). */
+  repo: RepoId.nullable(),
   /** ISO 8601. */
   startedAt: z.string(),
   /** Grupa procesów sesji: `running`, `stopping`, a po końcu kod wyjścia i ostatnie linie ekranu. */
@@ -87,6 +96,11 @@ export const Session = z.object({
   task: TaskId.nullable(),
 });
 export type Session = z.infer<typeof Session>;
+
+/** The supervisor (ADR-58) is the session without a repo: it runs in the projects folder, above all repos. */
+export function isSupervisor(session: Pick<Session, "repo">): boolean {
+  return session.repo === null;
+}
 
 export const Task = z.object({
   id: TaskId,
@@ -219,6 +233,11 @@ export const agentsApi = {
   sessions: endpoint("sessions", z.object({}).strict(), SessionList),
   /** Uruchamia Copilot CLI w korzeniu repo, z wtyczką sesji (ADR-17). */
   start: endpoint("start", z.object({ repo: RepoId }).strict(), Session),
+  /**
+   * Starts the supervisor (ADR-58): Copilot CLI in the projects folder, above the sessions of all repos. There is at
+   * most one running at a time, so while one runs this returns it instead of starting another.
+   */
+  startSupervisor: endpoint("start-supervisor", z.object({}).strict(), Session),
   /** Wraca po potwierdzeniu, że żaden proces sesji nie żyje; zakończona sesja zwraca swój stan. */
   stop: endpoint("stop", SessionRequest, Session),
   /** Usuwa zakończoną sesję z listy; działającej nie da się zamknąć bez zatrzymania. */

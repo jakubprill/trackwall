@@ -65,7 +65,7 @@ describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (p
       repo: "sklep",
       title: "Dodaj README",
       prompt: "Opisz uruchomienie w README",
-      proposedBy: { session: null },
+      proposedBy: { session: null, supervisor: false },
     });
     expect(daemon.facade.agents.sessions().proposals).toEqual([proposed]);
 
@@ -93,14 +93,14 @@ describe.skipIf(process.versions.bun === undefined)("sesja główna przez MCP (p
     const { proposal } = ProposeTaskResult.parse(
       (await call(mainClient, "propose_task", { repo: "sklep", title: "Napraw logowanie", prompt: "napraw logowanie" })).structuredContent,
     );
-    expect(proposal.proposedBy).toEqual({ session: main.id });
+    expect(proposal.proposedBy).toEqual({ session: main.id, supervisor: false });
 
     const task = await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: "napraw logowanie i dodaj test" });
     expect(task).toMatchObject({
       id: proposal.id,
       title: "Napraw logowanie",
       prompt: "napraw logowanie i dodaj test",
-      proposedBy: { session: main.id },
+      proposedBy: { session: main.id, supervisor: false },
       summary: null,
     });
     expect(task.branch).toMatch(/^trackwall\/napraw-logowanie-[0-9a-f]{6}$/);

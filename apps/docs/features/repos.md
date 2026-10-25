@@ -7,6 +7,8 @@ description: Browse, clone and sync every git repo in your projects folder from 
 
 Browse, clone and sync every git repo in your projects folder from one list.
 
+![The repo list with the uncommitted changes of orders-api](/screenshots/repos.png)
+
 ## What you get
 
 - Every repo of your projects folder in one list, with its branch, its uncommitted changes and how far it is ahead of or behind its remote.

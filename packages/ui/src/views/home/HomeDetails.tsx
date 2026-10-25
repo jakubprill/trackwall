@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { twoDigits } from "@/lib/format";
 import { homeDaemonStatus, homeRepoStatus, pullLabel } from "@/lib/home-model";
 import { branchLabel } from "@/lib/repo-status";
-import { sessionStateLabel } from "@/lib/session-state";
+import { sessionPlace, sessionStateLabel } from "@/lib/session-state";
 
 /**
  * Prawy panel pulpitu: szczegóły wybranego obiektu i przycisk, który do niego przechodzi. Bez wyboru pokazuje
@@ -73,7 +73,7 @@ export function HomeDetails({
     const session = target?.kind === "session" ? sessions.get(target.id) : undefined;
     if (session) {
       return (
-        <Panel title={session.repo} onClose={close}>
+        <Panel title={sessionPlace(session)} onClose={close}>
           <SessionDetails session={session} onSelect={onSelect} />
           <Button size="sm" onClick={() => onOpen(sessionKey(session.id))}>
             Open session
@@ -154,16 +154,19 @@ function RepoDetails({
 }
 
 function SessionDetails({ session, onSelect }: { session: Session; onSelect: (key: HomeKey) => void }) {
+  const { repo } = session;
   return (
     <dl className="grid w-full grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-xs">
       <Field name="State">
         <StatusLabel {...sessionStateLabel(session)} />
       </Field>
-      <Field name="Repo">
-        <button type="button" className="hover:text-primary font-mono" onClick={() => onSelect(repoKey(session.repo))}>
-          {session.repo}
-        </button>
-      </Field>
+      {repo !== null && (
+        <Field name="Repo">
+          <button type="button" className="hover:text-primary font-mono" onClick={() => onSelect(repoKey(repo))}>
+            {repo}
+          </button>
+        </Field>
+      )}
       {session.windowTitle && <Field name="Window">{session.windowTitle}</Field>}
       {session.task && (
         <Field name="Task">

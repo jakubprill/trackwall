@@ -5,11 +5,15 @@
  * Option + key types a character (`¡`, `∆`) and on AZERTY a digit without Shift is another character. Characters that
  * Alt or Option exists to type stay keys, not shortcuts: AltGr on Windows (it reports Ctrl + Alt), Alt + keypad digits
  * (a character by its code on Windows) and, on macOS, Option + key that types an ASCII character, like `[` and `{`
- * from ⌥5 and ⌥8 on a German layout.
+ * from ⌥5 and ⌥8 on a German layout. Alt+0, the position before the first, opens the supervisor, which is above the
+ * list (ADR-58).
  */
-export type SessionShortcut = { kind: "position"; position: number } | { kind: "next-waiting" };
+export type SessionShortcut = { kind: "position"; position: number } | { kind: "next-waiting" } | { kind: "supervisor" };
 
 type KeyPress = Pick<KeyboardEvent, "code" | "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey">;
+
+/** Alt+0: the supervisor panel (ADR-58). */
+export const SUPERVISOR_SHORTCUT = { kind: "supervisor" } as const satisfies SessionShortcut;
 
 /** The highest position a shortcut reaches; the list can be longer. */
 export const SHORTCUT_POSITIONS = 9;
@@ -21,6 +25,7 @@ export function sessionShortcut(press: KeyPress, isMac: boolean): SessionShortcu
   if (!press.altKey || press.ctrlKey || press.metaKey || press.shiftKey) return undefined;
   if (isMac && PRINTABLE_ASCII.test(press.key)) return undefined;
   if (press.code === "KeyJ") return { kind: "next-waiting" };
+  if (press.code === "Digit0") return { kind: "supervisor" };
   const digit = DIGIT_CODE.exec(press.code)?.[1];
   return digit === undefined ? undefined : { kind: "position", position: Number(digit) };
 }
@@ -41,5 +46,6 @@ export function ariaSessionShortcut(shortcut: SessionShortcut): string | undefin
 /** The key after the modifier; a position past the last one has no shortcut. */
 function shortcutKey(shortcut: SessionShortcut): string | undefined {
   if (shortcut.kind === "next-waiting") return "J";
+  if (shortcut.kind === "supervisor") return "0";
   return shortcut.position >= 1 && shortcut.position <= SHORTCUT_POSITIONS ? String(shortcut.position) : undefined;
 }

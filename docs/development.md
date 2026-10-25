@@ -17,7 +17,7 @@ Repo layout, running from source and tools for people who develop Trackwall. Pro
 | `packages/daemon` | the daemon (Bun, Node-compatible code), built into a single binary; `src/modules/` are the modules from §4 of the architecture, `src/api/` and `src/mcp/` the transports, `src/platform/` system APIs, `src/infra/` the rest of the infrastructure; the root of `src/` holds only `main.ts` and `facade.ts` |
 | `packages/ui` | React + Tailwind + shadcn/ui, Vite; `src/views/<view identifier>/` are the views from the bar on the left (`home`, `repos`, `sessions`, `graph` for Overview, `daemon`, `settings`) and `tray-panel`, the page of the tray panel window (ADR-50), `src/components/` shared components, `src/lib/` logic without React and hooks; the root of `src/` holds only `main.tsx`, `App.tsx` and `index.css` |
 | `packages/scene` | the 3D dashboard scene on Pawn (`@pawnjs/core` from npm): view model, "Orbit" layout, models |
-| `apps/docs` | the feature documentation site (VitePress, ADR-56): `guide/` and one page per feature in `features/` written from `TEMPLATE.md`, the sidebar (and the groups of "All features") in `.vitepress/sidebar.ts`, the Trackwall look in `.vitepress/theme/`; the build also writes `llms.txt`, `llms-full.txt` and a Markdown copy of every page for AI tools; `.github/workflows/pages.yml` publishes it on GitHub Pages |
+| `apps/docs` | the feature documentation site (VitePress, ADR-56): `guide/` and one page per feature in `features/` written from `TEMPLATE.md`, the sidebar (and the groups of "All features") in `.vitepress/sidebar.ts`, the Trackwall look in `.vitepress/theme/`; the screenshots in `public/screenshots/`, taken by `scripts/screenshots.ts` from the demo daemon; the build also writes `llms.txt`, `llms-full.txt` and a Markdown copy of every page for AI tools; `.github/workflows/pages.yml` publishes it on GitHub Pages |
 | `apps/desktop` | the Tauri 2 shell: windows (the main one and extra ones, translucent, ADR-11, ADR-49), tray and tray panel, system notifications and the global shortcut (ADR-50), starting and stopping the daemon |
 
 ## Running from source
@@ -44,6 +44,16 @@ The daemon alone with the UI in the browser, without Tauri:
 pnpm build
 bun packages/daemon/src/main.ts --ui
 ```
+
+A daemon on a made-up shop of twenty repos, with sessions in every state, task proposals, agent tasks and running services, for demos and the screenshots of the documentation site. Copilot CLI is replaced by a stand-in (`packages/daemon/scripts/demo/copilot.ts`) that never calls a model; the services need `mise` and Node on PATH:
+
+```sh
+pnpm --filter @trackwall/ui build
+pnpm --filter @trackwall/daemon demo <empty state directory>   # prints the address of the UI
+pnpm --filter @trackwall/docs screenshots                      # the pictures in apps/docs/public/screenshots, from the same demo
+```
+
+The screenshots need Chromium for Playwright once: `pnpm --filter @trackwall/docs exec playwright install chromium`.
 
 The same daemon also runs under plain Node, without Bun (ADR-1): `pnpm --filter @trackwall/ui build`, then `pnpm --filter @trackwall/daemon start:node`.
 
