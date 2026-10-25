@@ -26,8 +26,11 @@ const instructionFiles = (process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS ?? "")
   .filter((dir) => dir !== "" && existsSync(dir))
   .flatMap((dir) => readdirSync(dir).filter((name) => name.endsWith(".instructions.md")));
 
-/** Task arguments (`--interactive=`, `--resume=`, `--session-id=`) the fake prints, so that the test sees them. */
-const taskArgs = process.argv.filter((a) => /^--(interactive|resume|session-id)=/.test(a));
+/**
+ * Task arguments (`--interactive=`, `--resume=`, `--session-id=`) and tool permissions (`--allow-tool=`, `--deny-tool=`)
+ * the fake prints, so that the test sees them.
+ */
+const taskArgs = process.argv.filter((a) => /^--(interactive|resume|session-id|allow-tool|deny-tool)=/.test(a));
 
 process.stdout.write(`\x1b]0;Fake Copilot\x07Welcome to the fake, MCP: ${mcpServers.join(", ")}\r\n`);
 process.stdout.write(`Instructions: ${instructionFiles.join(", ")}\r\n`);

@@ -4,7 +4,7 @@ import { isTrayPanel, trayPanelEntries } from "../src/lib/tray-panel.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-24T10:00:00Z", pid: 10 } as const;
 
-function session(id: string, needsAttention: boolean): Session {
+function session(id: string, needsAttention: boolean, dialog: Session["dialog"] = null): Session {
   return {
     id,
     repo: `repo-${id}`,
@@ -14,6 +14,7 @@ function session(id: string, needsAttention: boolean): Session {
     windowTitle: null,
     needsAttention,
     task: null,
+    dialog,
   };
 }
 
@@ -35,6 +36,27 @@ test("the tray panel lists the task proposals and only the sessions that wait fo
   };
   const entries = trayPanelEntries(list);
   expect(entries.proposals).toEqual([proposal]);
+  expect(entries.sessions.map((s) => s.id)).toEqual(["a", "c"]);
+});
+
+test("sessions asking for approval come first, apart from the other waiting sessions, because the panel answers them", () => {
+  const approval = {
+    id: "d1",
+    kind: "approval" as const,
+    title: "Run the tests",
+    detail: ["mvn -q test"],
+    question: "Do you want to run this command?",
+    options: [{ key: "1", label: "Yes" }],
+  };
+  const question = { ...approval, kind: "question" as const, options: [] };
+  const list: SessionList = {
+    sessions: [session("a", true, question), session("b", true, approval), session("c", true)],
+    tasks: [],
+    proposals: [proposal],
+    worktreesDir: "worktrees",
+  };
+  const entries = trayPanelEntries(list);
+  expect(entries.approvals.map((s) => s.id)).toEqual(["b"]);
   expect(entries.sessions.map((s) => s.id)).toEqual(["a", "c"]);
 });
 

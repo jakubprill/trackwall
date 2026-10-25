@@ -22,6 +22,7 @@ export class TerminalScreen {
   readonly #terminal: InstanceType<typeof Terminal>;
   readonly #serializer = new SerializeAddon();
   readonly #viewers = new Set<ScreenViewer>();
+  #revision = 0;
 
   constructor(cols: number, rows: number) {
     this.#terminal = new Terminal({ cols, rows, scrollback: SCROLLBACK_LINES, allowProposedApi: true });
@@ -36,14 +37,27 @@ export class TerminalScreen {
     return this.#terminal.rows;
   }
 
+  /** Changes whenever the screen may have: after a processed write and after a resize. */
+  get revision(): number {
+    return this.#revision;
+  }
+
   write(bytes: Uint8Array): void {
     this.#terminal.write(bytes, () => {
+      this.#revision++;
       for (const viewer of this.#viewers) viewer(bytes);
     });
   }
 
   resize(cols: number, rows: number): void {
     this.#terminal.resize(cols, rows);
+    this.#revision++;
+  }
+
+  /** The visible lines as plain text, top to bottom, as far as the emulator has processed the output (ADR-66). */
+  lines(): string[] {
+    const buffer = this.#terminal.buffer.active;
+    return Array.from({ length: this.#terminal.rows }, (_, y) => buffer.getLine(buffer.baseY + y)?.translateToString(true) ?? "");
   }
 
   /**

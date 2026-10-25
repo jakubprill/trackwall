@@ -1,10 +1,9 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
 import { viewer, waitFor } from "../test/support/agents.ts";
 import { hookRecords, startRealCopilotDaemon } from "./support/real-copilot.ts";
-import { screenText, waitForScreen } from "./support/screen.ts";
 import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
 
 // The contract with the real Copilot CLI (ADR-67): what the daemon relies on, checked on the pinned version with a
@@ -12,7 +11,8 @@ import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./sup
 
 let model: ScriptedModel;
 let daemon: Awaited<ReturnType<typeof startRealCopilotDaemon>>;
-const windows: ReturnType<typeof viewer>[] = [];
+/** The terminal of each session a test started, detached after the test. */
+const windows = new Map<string, ReturnType<typeof viewer>>();
 
 beforeAll(async () => {
   model = await startScriptedModel();
@@ -21,7 +21,8 @@ beforeAll(async () => {
 
 // The tests share one daemon and one model: a test must take every reply it queued and leave no refused request.
 afterEach(() => {
-  for (const window of windows.splice(0)) window.attachment.detach();
+  for (const window of windows.values()) window.attachment.detach();
+  windows.clear();
   expect(model.takeLeftovers()).toEqual({ problems: [], unusedReplies: 0 });
 });
 
@@ -50,13 +51,21 @@ async function startSession() {
   const { agents } = daemon.facade;
   const started = await agents.start("shop");
   const window = viewer(agents, started.id);
-  windows.push(window);
-  await waitForScreen(window.text, "1 MCP server", SESSION_MS);
+  windows.set(started.id, window);
+  // Copilot CLI shows "1 MCP server" in its loading line only for a moment, so it is looked for in the whole output;
+  // without blanks, because ConPTY on Windows replaces runs of blanks with cursor moves.
+  const loaded = () => window.unwrappedText().replace(/\s/g, "").includes("1MCPserver");
+  await waitFor(agents, started.id, loaded, "Copilot CLI with the MCP servers loaded", SESSION_MS);
   return { id: started.id, window };
 }
 
-const endOfTurn = (id: string) =>
-  waitFor(daemon.facade.agents, id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
+function windowOf(id: string): ReturnType<typeof viewer> {
+  const window = windows.get(id);
+  if (window === undefined) throw new Error(`no terminal of session ${id}`);
+  return window;
+}
+
+const endOfTurn = (id: string) => waitFor(daemon.facade.agents, id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
 
 describe("a session of the real Copilot CLI", () => {
   test("sessionStart comes only with the first prompt, and a turn ending in text goes working and back to waiting", async () => {
@@ -86,25 +95,55 @@ describe("a session of the real Copilot CLI", () => {
     expect(records[2]?.payload.stopReason).toBe("end_turn");
   });
 
-  test("a shell command asks for approval as a permission_prompt notification, and 1 runs it", async () => {
+  test("a shell command asks for approval as a permission_prompt notification, the daemon reads the dialog, and its answer runs it", async () => {
     const { agents } = daemon.facade;
-    const { id, window } = await startSession();
+    const { id } = await startSession();
     const repoDir = join(daemon.projects, "shop");
 
     model.reply((request) => shellCall(request, { bash: "touch made-by-agent.txt", powershell: "New-Item made-by-agent.txt" }));
-    window.attachment.input("create a file\r");
-    const approval = await waitFor(agents, id, (s) => s.state?.state === "Approval", "approval request", SESSION_MS);
+    windowOf(id).attachment.input("create a file\r");
+    const approval = await waitFor(agents, id, (s) => s.state?.state === "Approval" && s.dialog !== null, "approval dialog", SESSION_MS);
     expect(approval.state).toMatchObject({ source: "hook", confidence: "high", reason: "hook notification permission_prompt" });
-    expect(await screenText(window.text())).toContain("Do you want to run this command?");
+    // The dialog as the tray panel and Home show it (ADR-66), read from the real Copilot CLI's screen.
+    expect(approval.dialog).toMatchObject({
+      kind: "approval",
+      question: "Do you want to run this command?",
+      options: [
+        { key: "1", label: "Yes" },
+        { key: "2", label: expect.stringContaining("don't ask again") },
+      ],
+    });
+    expect(approval.dialog?.kind === "approval" && approval.dialog.detail.join(" ")).toContain("made-by-agent.txt");
     expect(existsSync(join(repoDir, "made-by-agent.txt"))).toBe(false);
 
     model.reply({ text: "Created the file." });
-    window.attachment.input("1");
+    agents.answerDialog(id, approval.dialog?.id ?? "", "1");
     await endOfTurn(id);
     expect(existsSync(join(repoDir, "made-by-agent.txt"))).toBe(true);
     const records = hookRecords(daemon.home, id);
     expect(records.map((r) => r.event)).toEqual(["sessionStart", "userPromptSubmitted", "notification", "postToolUse", "agentStop"]);
     expect(records[2]?.payload).toMatchObject({ notification_type: "permission_prompt" });
+  });
+
+  test("a deny rule from toolPermissions reaches Copilot CLI as --deny-tool, which refuses the command without asking", async () => {
+    const { agents } = daemon.facade;
+    const workspaceFile = join(daemon.home, "workspace.yaml");
+    const workspace = readFileSync(workspaceFile, "utf8");
+    writeFileSync(workspaceFile, `${workspace}toolPermissions:\n  - repos: [shop]\n    deny: ["shell(touch)", "shell(New-Item)"]\n`);
+    try {
+      const { id } = await startSession();
+      model.reply((request) => shellCall(request, { bash: "touch denied.txt", powershell: "New-Item denied.txt" }), {
+        text: "The command was refused.",
+      });
+      windowOf(id).attachment.input("create a file\r");
+      await endOfTurn(id);
+
+      expect(existsSync(join(daemon.projects, "shop", "denied.txt"))).toBe(false);
+      expect(hookRecords(daemon.home, id).map((r) => r.event)).not.toContain("notification");
+      expect(agents.session(id).dialog).toBeNull();
+    } finally {
+      writeFileSync(workspaceFile, workspace);
+    }
   });
 
   test("the agent gets every Trackwall MCP tool through the session's stdio bridge and the session instructions in its prompt", async () => {

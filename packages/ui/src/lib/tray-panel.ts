@@ -12,9 +12,18 @@ export function isTrayPanel(hash: string): boolean {
   return hash === TRAY_PANEL_HASH;
 }
 
-/** What the panel lists: task proposals first, as in the Sessions view, then the waiting sessions, in list order. */
-export function trayPanelEntries(list: SessionList): { proposals: readonly TaskProposal[]; sessions: readonly Session[] } {
-  return { proposals: list.proposals, sessions: list.sessions.filter((s) => s.needsAttention) };
+/**
+ * What the panel lists: the sessions asking for approval first, since the panel answers them in one click (ADR-66),
+ * then task proposals, as in the Sessions view, then the other waiting sessions; each in list order.
+ */
+export function trayPanelEntries(list: SessionList): {
+  approvals: readonly Session[];
+  proposals: readonly TaskProposal[];
+  sessions: readonly Session[];
+} {
+  const waiting = list.sessions.filter((s) => s.needsAttention);
+  const asksApproval = (s: Session) => s.dialog?.kind === "approval";
+  return { approvals: waiting.filter(asksApproval), proposals: list.proposals, sessions: waiting.filter((s) => !asksApproval(s)) };
 }
 
 /** What a click in the panel opens: the shell passes it on as a jump (`jump.rs`). */

@@ -7,7 +7,7 @@ import {
   type RepoTag,
   type RepoTagRules,
 } from "@trackwall/protocol";
-import { globMatcher } from "./glob.ts";
+import { globMatcher } from "../../infra/glob.ts";
 import { dirOf } from "./repo-path.ts";
 
 /**

@@ -1,0 +1,30 @@
+ [Current]  Sessions   Issues   Pull requests   Gists
+
+   ▔▔▔▔                                                                ┃
+                                                                       ┃
+ ● No copilot-instructions.md found. Run /init to generate.            ┃
+                                                                       ┃
+ ● Tip: /diff                                                          ┃
+   └ Review the changes made in the current directory                  ┃
+                                                                       ┃
+ ❯ write the file                                                21:00 ┃
+                                                                       ┃
+ $ Shell Write a file                                               5s ┃
+   touch /src/app-outside/x.txt                                        ┃
+                                                                       ┃
+╭──────────────────────────────────────────────────────────────────────╮
+│ Write a file                                                         │
+│ ──────────────────────────────────────────────────────────────────── │
+│ ╭──────────────────────────────────────────────────────────────────╮ │
+│ │ touch /src/app-outside/x.txt                                     │ │
+│ ╰──────────────────────────────────────────────────────────────────╯ │
+│                                                                      │
+│ Do you want to run this command?                                     │
+│                                                                      │
+│ ❯ 1. Yes                                                             │
+│  2. Yes, and don't ask again for `touch` in this repo (/src/app-     │
+│  repo)                                                               │
+│   3. No, and tell Copilot what to do differently (Esc to stop)       │
+│                                                                      │
+│ ↑/↓ to navigate · enter to select · esc to cancel                    │
+╰──────────────────────────────────────────────────────────────────────╯

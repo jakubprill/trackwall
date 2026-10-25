@@ -109,6 +109,43 @@ export const ProposedBy = z.object({
 });
 export type ProposedBy = z.infer<typeof ProposedBy>;
 
+/** One choice of an agent dialog: the digit Copilot CLI shows before it, which selects it, and its label as on the screen. */
+export const AgentDialogOption = z.object({ key: z.string().regex(/^[1-9]$/), label: z.string() });
+export type AgentDialogOption = z.infer<typeof AgentDialogOption>;
+
+/** A digest of the dialog and of the wait it belongs to: an answer names it, so it never goes into a later request. */
+const AgentDialogId = z.string();
+
+/**
+ * An approval request (run a command, write a file), answered from outside the terminal with one of `options` or
+ * stopped. The texts are cut screen text the agent produced, so the UI shows them as plain text.
+ */
+export const AgentApproval = z.object({
+  id: AgentDialogId,
+  kind: z.literal("approval"),
+  /** The dialog's heading, e.g. the tool's description ("Create file"). */
+  title: z.string(),
+  /** What the dialog shows between the heading and the question: the command, the file and its lines. */
+  detail: z.array(z.string()),
+  /** "Do you want to run this command?" */
+  question: z.string(),
+  /** The choices that answer the dialog at once with their digit; without "No, and tell Copilot…", which needs text typed in the terminal. */
+  options: z.array(AgentDialogOption),
+});
+export type AgentApproval = z.infer<typeof AgentApproval>;
+
+/** A question from the agent (its form): only shown, the user answers it in the session terminal. */
+export const AgentQuestion = z.object({ id: AgentDialogId, kind: z.literal("question"), question: z.string() });
+export type AgentQuestion = z.infer<typeof AgentQuestion>;
+
+/** An agent dialog (ADR-66): what Copilot CLI asks on the session's screen, as the daemon reads it from the screen image. */
+export const AgentDialog = z.discriminatedUnion("kind", [AgentApproval, AgentQuestion]);
+export type AgentDialog = z.infer<typeof AgentDialog>;
+
+/** An answer to an agent dialog: an option's digit, or `stop`, which is Esc: the agent stops its turn and waits for you. */
+export const DialogAnswer = z.union([AgentDialogOption.shape.key, z.literal("stop")]);
+export type DialogAnswer = z.infer<typeof DialogAnswer>;
+
 export const Session = z.object({
   id: SessionId,
   /** The repo the session works in; `null` for the supervisor, which runs in the projects folder above all repos (ADR-58). */
@@ -128,6 +165,8 @@ export const Session = z.object({
   needsAttention: z.boolean(),
   /** The task in whose worktree the session runs; `null` for a session in the repo root. */
   task: TaskId.nullable(),
+  /** The agent dialog on the screen while the session is in `Approval` (an approval) or in `Input` (a question); otherwise `null`. */
+  dialog: AgentDialog.nullable(),
 });
 export type Session = z.infer<typeof Session>;
 
@@ -294,6 +333,12 @@ export const agentsApi = {
   startSupervisor: endpoint("start-supervisor", z.object({}).strict(), Session),
   /** Returns after confirming that no process of the session is alive; an ended session returns its state. */
   stop: endpoint("stop", SessionRequest, Session),
+  /**
+   * Answers the session's agent dialog named by its `dialog` id (ADR-66): the daemon types the option's digit or Esc
+   * into the session, as a key from the session terminal. A dialog no longer on the screen is `dialog_changed`, and
+   * nothing is typed. Only from the UI, never from MCP: an agent does not approve its own tools.
+   */
+  answerDialog: endpoint("answer-dialog", SessionRequest.extend({ dialog: z.string().min(1).max(64), answer: DialogAnswer }), Session),
   /** Removes an ended session from the list; a running one cannot be closed without stopping it. */
   dismiss: endpoint("dismiss", SessionRequest, SessionList),
   /** Creates a worktree on a new branch from the default branch and starts Copilot CLI in it with the prompt (ADR-31). */

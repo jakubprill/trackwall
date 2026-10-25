@@ -11,8 +11,10 @@ import {
 } from "@trackwall/scene/model";
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
+import { AgentDialogCard } from "@/components/AgentDialogCard";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
+import type { Connection } from "@/lib/connection";
 import { twoDigits } from "@/lib/format";
 import { homeDaemonStatus, homeRepoStatus, pullLabel } from "@/lib/home-model";
 import { branchLabel } from "@/lib/repo-status";
@@ -21,8 +23,10 @@ import { sessionPlace, sessionStateLabel } from "@/lib/session-state";
 /**
  * The dashboard's right panel: details of the selected object and a button that goes to it. Without a selection it shows
  * a summary of the environment, so that the panel is never empty and the dashboard can be read without the 3D scene.
+ * A session asking for approval shows its agent dialog, answered from here (ADR-66).
  */
 export function HomeDetails({
+  conn,
   selected,
   model,
   repos,
@@ -31,6 +35,7 @@ export function HomeDetails({
   onSelect,
   onOpen,
 }: {
+  conn: Connection;
   selected: HomeKey | null;
   model: HomeModel;
   repos: ReadonlyMap<string, Repo>;
@@ -75,6 +80,15 @@ export function HomeDetails({
       return (
         <Panel title={sessionPlace(session)} onClose={close}>
           <SessionDetails session={session} onSelect={onSelect} />
+          {session.dialog && (
+            <AgentDialogCard
+              key={`${session.id}:${session.dialog.id}`}
+              conn={conn}
+              session={session.id}
+              dialog={session.dialog}
+              onOpen={() => onOpen(sessionKey(session.id))}
+            />
+          )}
           <Button size="sm" onClick={() => onOpen(sessionKey(session.id))}>
             Open session
           </Button>

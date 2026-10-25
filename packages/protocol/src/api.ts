@@ -22,6 +22,11 @@ export const ErrorCode = z.enum([
   "unsaved_changes",
   /** A service is not running or not ready (no port answers yet), or its port is taken by a process Trackwall did not start (ADR-45). */
   "service_unavailable",
+  /**
+   * The agent dialog an answer names is no longer on the session's screen (ADR-66): it was answered in the terminal, the
+   * agent moved on, or the dialog changed; nothing was typed.
+   */
+  "dialog_changed",
   "internal",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;

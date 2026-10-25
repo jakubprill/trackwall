@@ -15,7 +15,17 @@ const running = { kind: "running", runId: "r", startedAt: "2026-10-23T10:00:00Z"
 
 /** The daemon computes `needsAttention`; here it is given directly, as it comes in the session list. */
 function session(id: string, state: Session["state"], run: Session["run"] = running, needsAttention = false): Session {
-  return { id, repo: `repo-${id}`, startedAt: "2026-10-23T10:00:00Z", run, state, windowTitle: null, needsAttention, task: null };
+  return {
+    id,
+    repo: `repo-${id}`,
+    startedAt: "2026-10-23T10:00:00Z",
+    run,
+    state,
+    windowTitle: null,
+    needsAttention,
+    task: null,
+    dialog: null,
+  };
 }
 
 function waiting(id: string, state: Session["state"]): Session {

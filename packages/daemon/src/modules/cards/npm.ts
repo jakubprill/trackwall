@@ -2,7 +2,7 @@ import { BuildTool, type ConsumedPackage, type Evidence, type ToolRequirement } 
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { messageOf } from "../../infra/errors.ts";
-import { globMatcher } from "./glob.ts";
+import { globMatcher } from "../../infra/glob.ts";
 import { baseName, dirOf, inDir, isUnder, rootFiles } from "./repo-path.ts";
 import { type Extracted, emptyExtracted, keyLines, type RepoSnapshot } from "./snapshot.ts";
 

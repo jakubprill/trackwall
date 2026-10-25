@@ -76,7 +76,7 @@ describe("task state from Copilot CLI hooks", () => {
     expect(stateFromHook({ event: "notification", receivedAt: 0, payload: { type: "elicitation_dialog" }, omitted: [] })).toEqual({
       state: "Input",
       source: "hook",
-      confidence: "medium",
+      confidence: "high",
       reason: "hook notification elicitation_dialog",
     });
   });

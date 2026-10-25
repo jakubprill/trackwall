@@ -1,0 +1,30 @@
+ [Current]  Sessions   Issues   Pull requests   Gists
+
+  ╭─╮╭─╮
+  ╰─╯╰─╯  Copilot v1.0.103 uses AI.
+  █ ▘▝ █  Check for mistakes.
+   ▔▔▔▔
+
+ ● No copilot-instructions.md found. Run /init to generate.
+
+ ● Tip: /clear
+   └ Abandon this session and start fresh
+
+ ❯ write the file                                                                                                21:00
+
+ ○ Asking user Waiting for response                                                                                 5s
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Copilot needs information.
+ Which database should the service use?
+
+ Database:
+ ❯ postgres
+   h2
+   Other (type your answer)
+
+ ↑/↓ select · enter accept · ctrl+d decline · esc cancel
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
