@@ -7,9 +7,10 @@ import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
 import { createFacade, type Facade, runCopilotHook } from "./facade.ts";
 import { COPILOT_HOOK_COMMAND, type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./infra/args.ts";
-import { newToken, probeRunningDaemon, removeDaemonFile, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
+import { newToken, probeRunningDaemon, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
 import { trackwallHome } from "./infra/home.ts";
 import { selfCommand } from "./infra/self-command.ts";
+import { SHUTDOWN_SIGNALS, shutdownOnce, stopDaemon } from "./infra/shutdown.ts";
 import { openBrowser, openFolder } from "./infra/system-open.ts";
 import { userEnv } from "./infra/user-env.ts";
 import { VERSION } from "./infra/version.ts";
@@ -32,24 +33,11 @@ async function main(args: DaemonArgs): Promise<void> {
   let api: ApiServer | undefined;
   let facade: Facade | undefined;
   let stopWatching = () => {};
-  let shuttingDown = false;
-
-  async function shutdown(reason: string): Promise<void> {
-    if (shuttingDown) return;
-    shuttingDown = true;
+  const shutdown = shutdownOnce(async (reason) => {
     log(`stopping (${reason})`);
     stopWatching();
-    // Grupy procesów przed zamknięciem API: UI widzi „stopping”, a nie zerwane połączenie w trakcie zatrzymywania.
-    // Komenda zbiorcza najpierw, żeby kolejne repo nie próbowały startować w trakcie zatrzymywania.
-    facade?.batch.close();
-    await facade?.procs.stopAll();
-    facade?.agents.close();
-    removeDaemonFile(home, process.pid);
-    await api?.close();
-    // Na końcu: ostatnie linie zatrzymanych grup, także te, które przyszły po `exit` lidera, trafiają do plików logów.
-    facade?.logs.flush();
-    process.exit(0);
-  }
+    await stopDaemon(home, facade, api);
+  });
 
   const started = await withStartLock(home, async () => {
     const running = await probeRunningDaemon(home);
@@ -112,8 +100,7 @@ async function main(args: DaemonArgs): Promise<void> {
 
   const { self } = started;
   stopWatching = watchDaemonFile(home, self, (other) => void shutdown(`daemon.json points to pid ${other.pid}`));
-  const signals: NodeJS.Signals[] = process.platform === "win32" ? ["SIGINT", "SIGBREAK", "SIGHUP"] : ["SIGINT", "SIGTERM", "SIGHUP"];
-  for (const signal of signals) {
+  for (const signal of SHUTDOWN_SIGNALS) {
     process.on(signal, () => void shutdown(signal));
   }
 

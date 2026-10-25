@@ -4,5 +4,5 @@
     "lib": ["ES2023", "DOM"],
     "types": ["bun"]
   },
-  "include": [".vitepress/config.ts", ".vitepress/theme", "features/*.data.ts", "test"]
+  "include": [".vitepress/config.ts", ".vitepress/theme", "features/*.data.ts", "scripts", "test"]
 }

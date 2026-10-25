@@ -7,6 +7,8 @@ description: Run, stop and follow the mise tasks of any repo, with live logs and
 
 Run, stop and follow the mise tasks of any repo, with live logs and the errors picked out.
 
+![The mise tasks of admin-bff, with the service ready and the log of dev open](/screenshots/mise-tasks.png)
+
 ## What you get
 
 - Every mise task of a repo in one tab, with "Run" and "Stop".

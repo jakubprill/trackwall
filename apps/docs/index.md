@@ -39,3 +39,5 @@ features:
     details: "Give Copilot CLI and other agents your whole projects folder: repos, code search, graph, logs and services."
     link: /features/mcp
 ---
+
+![Two Trackwall windows side by side: Copilot CLI sessions and agent tasks in one, the connection graph of twenty repos in the other](/screenshots/windows.png)
