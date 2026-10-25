@@ -39,6 +39,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
     openFolder: () => {},
     miseCommand: options.miseCommand,
     copilotCommand: [process.execPath, fakeCopilot],
+    version: "0.0.0-test",
     hookCommand: (event, hooksFile) => ({ exec: process.execPath, args: ["--no-env-file", daemonMain, "copilot-hook", event, hooksFile] }),
     sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
     userEnv: async () => process.env,

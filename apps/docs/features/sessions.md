@@ -25,7 +25,7 @@ You do not have to keep Trackwall in front. When its window is in the background
 
 The switch above the terminal changes the layout: 1 shows the selected session with its full panel, 2 and 4 show pages of that many terminals, and Auto fits the whole list on screen, up to nine at a time (six sessions on a 34-inch ultrawide are three columns and two rows). The selected tile has the accent ring and takes the keyboard; a tile waiting for you has a warning frame.
 
-Every session also gets short instructions from Trackwall on how to work with you: a session in a repo hands larger work over as a [task proposal](/features/main-session), and a session of an [agent task](/features/tasks) stays in its own worktree, does not push and finishes with a summary. The instructions live with Trackwall, so your repo and your Copilot CLI settings stay untouched.
+Every session also gets short instructions from Trackwall on how to work with you: a session in a repo hands larger work over as a [task proposal](/features/main-session), and a session of an [agent task](/features/tasks) stays in its own worktree, does not push and finishes with a summary. They also tell the agent which Trackwall it runs in and where this documentation is; [Session instructions](/features/session-instructions) has the details.
 
 ## Use it
 

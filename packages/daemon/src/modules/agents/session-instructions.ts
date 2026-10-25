@@ -6,9 +6,10 @@ import { envKey } from "./env-key.ts";
 /**
  * Session instructions (§4.4, ADR-46): an `*.instructions.md` file in the session directory that Copilot CLI loads as a
  * repository instruction, because the daemon adds its directory to `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` in the session
- * environment. It changes neither the user's repo nor `~/.copilot`. The content is the session's role (a main session
- * in the repo root or a task session in a worktree) and the shared MCP instruction (`MCP_INSTRUCTIONS`), which Copilot
- * CLI does not take from the MCP server.
+ * environment. It changes neither the user's repo nor `~/.copilot`. The content is the session's environment (the
+ * Trackwall version and where the user sees the session), its role (a main session in the repo root or a task session
+ * in a worktree) and the shared MCP instruction (`MCP_INSTRUCTIONS`), which Copilot CLI does not take from the MCP
+ * server.
  */
 
 /** Copilot CLI 1.0.103 variable with instruction directories separated by commas (checked with `copilot instruction list`). */
@@ -23,14 +24,15 @@ export interface SessionRole {
 }
 
 /**
- * Writes the instructions to `<sessionDir>/instructions/` and returns that directory, or `null` without writing
- * anything when its path has a comma: the variable splits on commas, so Copilot CLI would read half of the path.
+ * Writes the instructions of a session started by Trackwall `version` to `<sessionDir>/instructions/` and returns that
+ * directory, or `null` without writing anything when its path has a comma: the variable splits on commas, so Copilot
+ * CLI would read half of the path.
  */
-export function writeSessionInstructions(sessionDir: string, role: SessionRole): string | null {
+export function writeSessionInstructions(sessionDir: string, version: string, role: SessionRole): string | null {
   const dir = join(sessionDir, INSTRUCTIONS_DIR);
   if (dir.includes(",")) return null;
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, INSTRUCTIONS_FILE), sessionInstructions(role));
+  writeFileSync(join(dir, INSTRUCTIONS_FILE), sessionInstructions(version, role));
   return dir;
 }
 
@@ -41,7 +43,7 @@ export function withInstructionsDir(env: NodeJS.ProcessEnv, dir: string): NodeJS
   return { ...env, [key]: own ? `${own},${dir}` : dir };
 }
 
-function sessionInstructions({ repo, task }: SessionRole): string {
+function sessionInstructions(version: string, { repo, task }: SessionRole): string {
   return [
     // `applyTo: "**"`: the instruction applies to every file, i.e. to the whole session, like `.github/instructions` in a repo.
     "---",
@@ -49,7 +51,9 @@ function sessionInstructions({ repo, task }: SessionRole): string {
     "---",
     "# Working in Trackwall",
     "",
-    "Trackwall started this Copilot CLI session, and its `trackwall` MCP server is connected.",
+    `Trackwall ${version} started this Copilot CLI session, and its \`trackwall\` MCP server is connected. The user ` +
+      "sees this session in Trackwall's Sessions view next to their other sessions, and Trackwall tells them when you " +
+      "end your turn or ask for approval.",
     "",
     "## Your session",
     "",

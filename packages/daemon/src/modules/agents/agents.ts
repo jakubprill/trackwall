@@ -79,6 +79,8 @@ export interface AgentsDeps {
   home: string;
   /** Program Copilot CLI (nazwa z `PATH` albo pełna ścieżka) z argumentami przed argumentami sesji; w daemonie `["copilot"]`. */
   copilot: readonly string[];
+  /** The daemon's version, which every session learns from its session instructions. */
+  version: string;
   /** Środowisko procesów użytkownika (`PATH` z powłoki logowania na macOS). */
   env: () => Promise<NodeJS.ProcessEnv>;
   /** Program hooka wtyczki sesji dla zdarzenia: daemon z podkomendą `copilot-hook` (bez `cwd`, ustala je moduł). */
@@ -351,7 +353,7 @@ export class Agents {
     const mcpConfig = copilotMcpServers(this.#deps.sessionMcpCommand(tokenFile));
     writeFileSync(join(dir, MCP_CONFIG_FILE), JSON.stringify(mcpConfig, null, 2));
     writeCopilotPlugin(pluginDir, (event) => ({ ...this.#deps.hookCommand(event, hooksFile), cwd: pluginDir }));
-    const instructionsDir = writeSessionInstructions(dir, { repo, task });
+    const instructionsDir = writeSessionInstructions(dir, this.#deps.version, { repo, task });
     if (instructionsDir === null)
       this.#deps.log(`session ${id} starts without Trackwall instructions: the session directory path has a comma`);
     const session = new LiveSession({

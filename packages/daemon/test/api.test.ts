@@ -76,6 +76,7 @@ function modules() {
     openFolder: (dir) => openedFolders.push(dir),
     miseCommand: ["mise"],
     copilotCommand: ["copilot"],
+    version: "0.0.0-test",
     hookCommand: () => ({ exec: "true", args: [] }),
     sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
     userEnv: async () => process.env,

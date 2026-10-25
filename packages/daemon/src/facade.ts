@@ -58,6 +58,8 @@ export interface FacadeOptions {
   miseCommand: readonly string[];
   /** Program Copilot CLI z argumentami przed argumentami sesji (`["copilot"]` w daemonie, atrapa w testach). */
   copilotCommand: readonly string[];
+  /** The daemon's version (`VERSION`), given to every Copilot CLI session. */
+  version: string;
   /** Program hooka wtyczki sesji (`trackwall-daemon copilot-hook …` w daemonie). */
   hookCommand: AgentsDeps["hookCommand"];
   /** Most stdio do serwera MCP tego daemona z plikiem tokenu sesji (`sessionMcpStdioCommand`), który dostaje każda sesja Copilot CLI. */
@@ -96,6 +98,7 @@ export function createFacade(o: FacadeOptions): Facade {
     vcs,
     home: o.home,
     copilot: o.copilotCommand,
+    version: o.version,
     env: o.userEnv,
     hookCommand: o.hookCommand,
     sessionMcpCommand: o.sessionMcpCommand,

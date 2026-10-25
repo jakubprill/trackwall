@@ -333,7 +333,7 @@ A directory with `plugin.json` and `hooks.json` that the daemon gives Copilot CL
 _Avoid_: plugin (without qualification), hook configuration
 
 **Session instructions** (`writeSessionInstructions`, file `trackwall.instructions.md`):
-The instruction file in the session directory that the daemon gives Copilot CLI through `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`: the session's role (a main session in the repo root, or a task session in its worktree with the task rules and `report_result` at the end) and the **MCP instruction** (`MCP_INSTRUCTIONS`, also the MCP server's `instructions`): when to reach for which Trackwall tool (ADR-46). It changes neither the repo nor `~/.copilot`.
+The instruction file in the session directory that the daemon gives Copilot CLI through `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`: the Trackwall version that started the session and where the user sees it, the session's role (a main session in the repo root, or a task session in its worktree with the task rules and `report_result` at the end) and the **MCP instruction** (`MCP_INSTRUCTIONS`, also the MCP server's `instructions`): when to reach for which Trackwall tool and where the documentation is (ADR-46). It changes neither the repo nor `~/.copilot`.
 _Avoid_: system prompt (Copilot CLI builds it itself), repository instructions (those are files in the user's repo)
 
 **Hook record** (`CopilotHookRecord`):

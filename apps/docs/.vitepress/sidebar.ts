@@ -36,6 +36,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       { text: "Copilot CLI sessions", link: "/features/sessions" },
       { text: "Agent tasks", link: "/features/tasks" },
       { text: "Main session and task proposals", link: "/features/main-session" },
+      { text: "Session instructions", link: "/features/session-instructions" },
       { text: "MCP server", link: "/features/mcp" },
     ],
   },
