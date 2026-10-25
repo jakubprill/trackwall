@@ -166,7 +166,7 @@ describe("batch command", () => {
       const run = await finished(batch);
 
       expect(run.repos[0]?.steps).toEqual([
-        { step: "setup", state: "failed", message: "exited with code 3", lastLines: ["[setup] $ koniec"] },
+        { step: "setup", state: "failed", message: "exited with code 3", lastLines: ["[setup] $ done"] },
         { step: "build", state: "skipped", message: "skipped after step setup failed" },
       ]);
       expect(calls(dir("api"))).toEqual(["run setup"]);

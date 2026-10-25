@@ -4,24 +4,24 @@ import { dirname, join } from "node:path";
 import type { LogSource } from "@trackwall/protocol";
 
 /**
- * Plik JSONL jednego źródła (§4.2): `logs/<rodzaj>/<repo>/<task mise>.jsonl` w katalogu stanu, jedna linia na
- * rekord. Zapis jest buforowany i dopisywany paczkami (`flush`), żeby głośny proces nie robił zapisu na każdą linię.
- * Po przekroczeniu limitu plik staje się `<nazwa>.1.jsonl` (poprzedni `.1` znika), więc źródło zajmuje najwyżej
- * dwa limity. Nieudany zapis (np. plik trzymany przez antywirusa) zostaje w buforze do następnej próby.
+ * The JSONL file of one source (§4.2): `logs/<kind>/<repo>/<mise task>.jsonl` in the state directory, one line per
+ * record. Writes are buffered and appended in batches (`flush`), so that a noisy process does not write on every line.
+ * After the limit the file becomes `<name>.1.jsonl` (the previous `.1` disappears), so a source takes at most
+ * two limits. A failed write (e.g. a file held by an antivirus) stays in the buffer until the next attempt.
  */
 
-/** Tyle niezapisanego tekstu czeka najwyżej w pamięci, gdy zapis się nie udaje; nadmiar przepada z wpisem w logu. */
+/** At most this much unwritten text waits in memory when writes fail; the excess is dropped with an entry in the log. */
 const MAX_PENDING_CHARS = 4 * 1024 * 1024;
 
 export class LogFile {
   readonly path: string;
   private readonly maxBytes: number;
   private readonly onRotationError: (err: unknown) => void;
-  /** Nieudana rotacja jest zgłaszana raz, do następnej udanej. */
+  /** A failed rotation is reported once, until the next successful one. */
   private rotationFailing = false;
   private pending: string[] = [];
   private pendingChars = 0;
-  /** Rozmiar pliku na dysku; nieznany do pierwszego zapisu (plik mógł zostać po poprzednim działaniu daemona). */
+  /** The size of the file on disk; unknown until the first write (the file may be left from a previous daemon run). */
   private size: number | undefined;
 
   constructor(path: string, maxBytes: number, onRotationError: (err: unknown) => void) {
@@ -30,7 +30,7 @@ export class LogFile {
     this.onRotationError = onRotationError;
   }
 
-  /** Zwraca `false`, gdy bufor jest pełny i linia przepadła. */
+  /** Returns `false` when the buffer is full and the line was dropped. */
   append(json: string): boolean {
     if (this.pendingChars + json.length > MAX_PENDING_CHARS) return false;
     this.pending.push(`${json}\n`);
@@ -42,7 +42,7 @@ export class LogFile {
     return this.pending.length > 0;
   }
 
-  /** Dopisuje bufor do pliku; rzuca błąd systemu plików, a bufor zostaje do następnej próby. */
+  /** Appends the buffer to the file; throws a file system error, and the buffer stays for the next attempt. */
   flush(): void {
     if (this.pending.length === 0) return;
     const text = this.pending.join("");
@@ -57,8 +57,8 @@ export class LogFile {
   }
 
   /**
-   * Rotacja, która się nie udała (na Windowsie plik otwarty bez `FILE_SHARE_DELETE`, np. przez `Get-Content -Wait`
-   * albo antywirusa), nie wstrzymuje zapisu: plik rośnie ponad limit, a rotacja jest ponawiana przy następnym zapisie.
+   * A rotation that failed (on Windows a file opened without `FILE_SHARE_DELETE`, e.g. by `Get-Content -Wait`
+   * or an antivirus) does not hold up writing: the file grows past the limit, and the rotation is retried on the next write.
    */
   private rotate(): void {
     try {
@@ -85,14 +85,14 @@ export function rotatedPath(path: string): string {
   return path.replace(/\.jsonl$/, ".1.jsonl");
 }
 
-/** Ścieżka pliku źródła w katalogu logów. */
+/** The path of a source's file in the logs directory. */
 export function logFilePath(dir: string, source: LogSource): string {
   const [kind, ...names] = sourceParts(source);
   const encoded = names.map(fileName);
   return `${join(dir, kind, ...encoded)}.jsonl`;
 }
 
-/** Rodzaj i nazwy źródła, od ogólnej do szczegółowej: katalogi i plik logu oraz klucz źródła w pamięci. */
+/** The kind and names of a source, from general to specific: the log directories and file, and the source key in memory. */
 export function sourceParts(source: LogSource): [string, ...string[]] {
   switch (source.kind) {
     case "mise-task":
@@ -106,20 +106,20 @@ export function sourceParts(source: LogSource): [string, ...string[]] {
 }
 
 /**
- * Nazwy urządzeń Windowsa; z rozszerzeniem też (`con.jsonl` to urządzenie), ale po zakodowaniu nazwa nie ma kropki,
- * więc wystarczy porównać całą.
+ * Windows device names; with an extension too (`con.jsonl` is a device), but after encoding the name has no dot,
+ * so comparing the whole name is enough.
  */
 const RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i;
 /**
- * Dłuższa nazwa jest skracana ze skrótem: dwie takie nazwy z `logs\mise-task` i `.1.jsonl` to ok. 140 znaków, więc
- * ścieżka mieści się w limicie 260 znaków Windowsa przy katalogu stanu do ok. 100 znaków.
+ * A longer name is shortened with a hash: two such names with `logs\mise-task` and `.1.jsonl` are about 140 characters, so
+ * the path fits in Windows' 260-character limit with a state directory of up to about 100 characters.
  */
 const MAX_NAME_CHARS = 60;
 
 /**
- * Nazwa pliku z dowolnego napisu, ta sama na Windowsie i macOS: znaki spoza `[a-z0-9_-]` (także `:` z `build:ui`,
- * `.` i wielkie litery, bo system plików macOS i Windowsa nie odróżnia `Build` od `build`) jako `%XX` bajtów UTF-8,
- * a nazwa zarezerwowana zaczyna się od `%`. Różne napisy dają różne nazwy.
+ * A file name from any string, the same on Windows and macOS: characters outside `[a-z0-9_-]` (including `:` from `build:ui`,
+ * `.` and upper case, because the macOS and Windows file systems do not tell `Build` from `build`) as `%XX` UTF-8 bytes,
+ * and a reserved name starts with `%`. Different strings give different names.
  */
 export function fileName(name: string): string {
   let encoded = [...Buffer.from(name, "utf8")]

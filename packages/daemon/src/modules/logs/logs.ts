@@ -15,20 +15,20 @@ import { RunOutput } from "./run-output.ts";
 import { maskSecrets, secretValues } from "./secret-mask.ts";
 
 /**
- * Moduł `logs` (§4.2, ADR-28): linie wyjścia procesów jako rekordy z jednym globalnym `seq` dla wszystkich źródeł.
- * Każde źródło ma bufor ostatnich rekordów w pamięci (dla UI i MCP, odczyt od kursora) i plik JSONL w katalogu
- * stanu. Linia jest maskowana i oczyszczana z ANSI w `RunOutput`, zanim trafi do bufora albo pliku.
+ * The `logs` module (§4.2, ADR-28): process output lines as records with one global `seq` for all sources.
+ * Every source has a buffer of recent records in memory (for the UI and MCP, read from a cursor) and a JSONL file in the state
+ * directory. A line is masked and cleaned of ANSI in `RunOutput` before it reaches the buffer or the file.
  */
 
-/** Zapis do plików paczkami: głośny proces daje setki linii na sekundę. */
+/** Writes to files in batches: a noisy process gives hundreds of lines per second. */
 const FLUSH_DELAY_MS = 250;
-/** Bufor źródła ma też limit treści: 2000 długich linii (np. logów JSON) zajęłoby dziesiątki MB na task. */
+/** A source's buffer also has a content limit: 2000 long lines (e.g. JSON logs) would take tens of MB per mise task. */
 const BUFFER_CHARS = 2 * 1024 * 1024;
 
 export interface LogsDeps {
-  /** Katalog plików JSONL (`<katalog stanu>/logs`). */
+  /** The directory of JSONL files (`<state directory>/logs`). */
   dir: string;
-  /** Limit jednego pliku JSONL przed rotacją. */
+  /** The limit of one JSONL file before rotation. */
   maxFileBytes: number;
   log: (msg: string) => void;
 }
@@ -36,14 +36,14 @@ export interface LogsDeps {
 interface SourceLog {
   readonly source: LogSource;
   readonly records: LogRecord[];
-  /** Suma długości `msg` rekordów w buforze. */
+  /** The sum of `msg` lengths of the records in the buffer. */
   chars: number;
-  /** `seq` ostatniego rekordu, który wypadł z bufora; kursor starszy znaczy, że coś przepadło. */
+  /** The `seq` of the last record that fell out of the buffer; an older cursor means something was lost. */
   evictedSeq: number;
   readonly file: LogFile;
-  /** Błąd zapisu pliku już zgłoszony w logu daemona; zgłaszany raz, do następnego udanego zapisu. */
+  /** A file write error already reported in the daemon log; reported once, until the next successful write. */
   writeErrorReported: boolean;
-  /** Pełny bufor zapisu (rekordy nie trafiają do pliku) już zgłoszony; też raz, do następnego udanego zapisu. */
+  /** A full write buffer (records do not reach the file) already reported; also once, until the next successful write. */
   overflowReported: boolean;
 }
 
@@ -51,9 +51,9 @@ export class Logs {
   private readonly deps: LogsDeps;
   private readonly sources = new Map<string, SourceLog>();
   /**
-   * Pierwszy `seq` tego działania daemona minus jeden: chwila startu w ms razy 1000. Kursor mniejszy pochodzi
-   * z wcześniejszego działania; tysiąc rekordów na milisekundę działania to więcej, niż wypisze jakikolwiek proces,
-   * a wartość mieści się w `Number.MAX_SAFE_INTEGER` do ok. 2255 roku.
+   * The first `seq` of this daemon run minus one: the start time in ms times 1000. A smaller cursor comes
+   * from an earlier run; a thousand records per millisecond of running is more than any process will print,
+   * and the value fits in `Number.MAX_SAFE_INTEGER` until about the year 2255.
    */
   private readonly baseSeq = Date.now() * 1000;
   private seq = this.baseSeq;
@@ -64,8 +64,8 @@ export class Logs {
   }
 
   /**
-   * Wyjście nowego uruchomienia źródła. Sekretami do maskowania są wartości ze środowiska procesu (`secretValues`);
-   * samo środowisko nie trafia nigdzie dalej.
+   * The output of a new run of a source. The secrets to mask are the values from the process environment (`secretValues`);
+   * the environment itself is not passed on.
    */
   open(source: LogSource, runId: string, env: NodeJS.ProcessEnv): RunOutput {
     const log = this.sourceLog(source);
@@ -82,14 +82,14 @@ export class Logs {
     return maskSecrets(text, secretValues(env));
   }
 
-  /** Wyjście tylko do ostatnich linii stanu, zamaskowane tak samo, ale bez logu (ekran PTY sesji zadania). */
+  /** Output only for the state's last lines, masked the same way, but without a log (the PTY screen of a task session). */
   lastLinesOnly(env: NodeJS.ProcessEnv): RunOutput {
     return new RunOutput(secretValues(env), () => {});
   }
 
   /**
-   * Rekordy źródła po kursorze, od najstarszego, najwyżej `limit`. Bez kursora (albo z kursorem z innego działania
-   * daemona) ostatnie `limit` rekordów.
+   * A source's records after the cursor, oldest first, at most `limit`. Without a cursor (or with a cursor from another daemon
+   * run) the last `limit` records.
    */
   tail({ source, sinceSeq, limit }: LogTailRequest): LogTail {
     const log = this.sources.get(sourceKey(source));
@@ -123,7 +123,7 @@ export class Logs {
     return { ...collectErrors(sources, { minLevel, sinceSeq: cursor, limit }), nextSeq: this.seq, dropped: fromOtherRun || evicted };
   }
 
-  /** Zapisuje bufory plików; wołane z opóźnieniem po nowych rekordach i przy wyjściu daemona. */
+  /** Writes the file buffers; called with a delay after new records and on daemon exit. */
   flush(): void {
     clearTimeout(this.flushTimer);
     this.flushTimer = undefined;
@@ -166,7 +166,7 @@ export class Logs {
   private scheduleFlush(): void {
     if (this.flushTimer) return;
     this.flushTimer = setTimeout(() => this.flush(), FLUSH_DELAY_MS);
-    // Opóźniony zapis nie trzyma procesu przy życiu; wyjście daemona woła `flush` samo.
+    // The delayed write does not keep the process alive; daemon exit calls `flush` itself.
     this.flushTimer.unref();
   }
 
@@ -185,7 +185,7 @@ export class Logs {
   }
 }
 
-/** Klucz źródła w mapie; tylko budowany, nigdy rozbierany z powrotem. */
+/** The source key in the map; only built, never taken apart again. */
 function sourceKey(source: LogSource): string {
   return sourceParts(source).join("\0");
 }

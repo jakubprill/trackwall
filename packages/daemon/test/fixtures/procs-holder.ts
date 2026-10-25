@@ -1,5 +1,5 @@
-// „Daemon” na niby: uruchamia drzewo procesów przez moduł `procs`, zgłasza gotowość plikiem `ready` i czeka, aż
-// test zabije go twardo. Argument: katalog stanu (tam `runtime.json`, `tree/` z PID-ami drzewa i `ready`).
+// A pretend "daemon": starts a process tree through the `procs` module, reports readiness with a `ready` file and waits until
+// the test kills it hard. Argument: the state directory (with `runtime.json`, `tree/` with the tree's PIDs and `ready`).
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Logs } from "../../src/modules/logs/logs.ts";
@@ -8,7 +8,7 @@ import { RuntimeFile } from "../../src/modules/procs/runtime-file.ts";
 import { groupPlatform } from "../../src/platform/group-platform.ts";
 
 const home = process.argv[2];
-if (home === undefined) throw new Error("brak katalogu stanu");
+if (home === undefined) throw new Error("missing state directory");
 const tree = join(home, "tree");
 mkdirSync(tree, { recursive: true });
 const groups = new ProcessGroups({

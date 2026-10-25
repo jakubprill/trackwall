@@ -2,21 +2,21 @@ import { spawn } from "node:child_process";
 import { spawnFailure } from "../../infra/errors.ts";
 
 /**
- * Krótkie wywołania `mise` dla zapytań (`tasks ls`, `trust`): bez grupy procesów, z limitem czasu. Taski
- * uruchamia się przez moduł `procs`, nigdy tędy. Nie rzuca: każdy wynik to stan, który moduł pokazuje użytkownikowi.
- * Zakończenie po przekroczeniu limitu dotyczy tylko `mise`; program, który mise uruchomił z `[env]` zaufanej
- * konfiguracji, może przeżyć (§8).
+ * Short `mise` calls for queries (`tasks ls`, `trust`): without a process group, with a time limit. mise tasks
+ * run through the `procs` module, never this way. It does not throw: every result is a state the module shows the user.
+ * Ending after the limit applies only to `mise`; a program that mise started from the `[env]` of a trusted
+ * config may survive (§8).
  */
 
 const TIMEOUT_MS = 15_000;
-/** `mise tasks ls --json` z setkami tasków to kilkaset KB; więcej znaczy, że coś jest nie tak. */
+/** `mise tasks ls --json` with hundreds of mise tasks is a few hundred KB; more means something is wrong. */
 const MAX_STDOUT_BYTES = 4 * 1024 * 1024;
 
 export type MiseCliResult =
   | { kind: "exited"; code: number | null; stdout: string; stderr: string }
-  /** Programu nie ma w `PATH` (albo nie da się go uruchomić); komunikat dla użytkownika. */
+  /** The program is not in `PATH` (or cannot be started); a message for the user. */
   | { kind: "not_started"; message: string }
-  /** mise przekroczył limit czasu albo wyjścia i został zakończony. */
+  /** mise exceeded the time or output limit and was ended. */
   | { kind: "failed"; message: string };
 
 export function runMiseCli(
@@ -40,7 +40,7 @@ export function runMiseCli(
     child.stdout.on("data", (chunk: Buffer) => {
       size += chunk.length;
       if (size <= MAX_STDOUT_BYTES) return void out.push(chunk);
-      // Bez czekania na `close`: rury może trzymać wnuk (np. mise za shimem), który przeżyje zabicie.
+      // Without waiting for `close`: a grandchild (e.g. mise behind a shim) may hold the pipes and survive the kill.
       clearTimeout(timer);
       child.stdout.destroy();
       child.kill();

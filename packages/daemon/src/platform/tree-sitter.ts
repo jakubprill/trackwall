@@ -4,9 +4,9 @@ import { Language, Parser } from "web-tree-sitter";
 import { runtimeInfo } from "./runtime.ts";
 
 /**
- * Runtime tree-sitter w WASM i gramatyki Javy i Kotlina (§4.6, ADR-37). Pod Bun pliki `.wasm` przychodzą importem
- * z atrybutem `type: "file"`, więc `bun build --compile` osadza je w binarce (ścieżka w `$bunfs`, czytana przez
- * `node:fs`); Node tego atrybutu nie zna, więc bierze te same pliki z `node_modules`.
+ * The tree-sitter runtime in WASM and the Java and Kotlin grammars (§4.6, ADR-37). Under Bun the `.wasm` files come by an import
+ * with the attribute `type: "file"`, so `bun build --compile` embeds them in the binary (a path in `$bunfs`, read through
+ * `node:fs`); Node does not know that attribute, so it takes the same files from `node_modules`.
  */
 export interface GrammarFiles {
   runtime: string;
@@ -19,8 +19,8 @@ export interface JvmGrammars {
   kotlin: Language;
 }
 
-// `Parser.init` podmienia moduł WASM całej biblioteki, więc może się wykonać raz na proces; nieudane ładowanie
-// nie zostaje zapamiętane, żeby następne pytanie spróbowało od nowa.
+// `Parser.init` replaces the WASM module of the whole library, so it may run once per process; a failed load
+// is not remembered, so that the next call tries again.
 let loading: Promise<JvmGrammars> | undefined;
 
 export function loadJvmGrammars(): Promise<JvmGrammars> {
@@ -31,14 +31,14 @@ export function loadJvmGrammars(): Promise<JvmGrammars> {
   return loading;
 }
 
-/** Pliki WASM bieżącego runtime'u: w binarce osadzone (`isInBinary`), poza nią z `node_modules`. */
+/** The WASM files of the current runtime: embedded in a binary (`isInBinary`), from `node_modules` outside it. */
 export async function grammarFiles(): Promise<GrammarFiles> {
   return runtimeInfo().name === "bun" ? (await import("./bun-grammar-files.ts")).bunGrammarFiles : nodeGrammarFiles();
 }
 
 async function load(): Promise<JvmGrammars> {
   const files = await grammarFiles();
-  // Runtime dostaje bajty zamiast ścieżki, bo sam szukałby pliku obok swojego skryptu, którego w binarce nie ma.
+  // The runtime gets bytes instead of a path, because it would look for the file next to its own script, which a binary does not have.
   await Parser.init({ wasmBinary: await readFile(files.runtime) });
   const language = async (path: string) => Language.load(new Uint8Array(await readFile(path)));
   return { java: await language(files.java), kotlin: await language(files.kotlin) };

@@ -1,5 +1,5 @@
-// Import pliku `.wasm` z atrybutem `type: "file"` daje ścieżkę do pliku, ale tylko pod Bun, więc typy ma wyłącznie
-// trzy pliki, które importuje `bun-grammar-files.ts`; każdy inny import `.wasm` to błąd kompilacji.
+// Importing a `.wasm` file with the attribute `type: "file"` gives a path to the file, but only under Bun, so only the
+// three files `bun-grammar-files.ts` imports have types; any other `.wasm` import is a compile error.
 declare module "web-tree-sitter/web-tree-sitter.wasm" {
   const path: string;
   export default path;
