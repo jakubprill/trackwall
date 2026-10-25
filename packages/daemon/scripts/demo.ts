@@ -48,6 +48,7 @@ const facade = createFacade({
   openFolder: (folder) => log(`open ${folder}`),
   miseCommand: ["mise"],
   copilotCommand: [process.execPath, here("demo/copilot.ts")],
+  version: VERSION,
   hookCommand: (event, hooksFile) => selfCommand([COPILOT_HOOK_COMMAND, event, hooksFile]),
   sessionMcpCommand: (tokenFile) => sessionMcpStdioCommand(home, tokenFile),
   userEnv,

@@ -49,6 +49,7 @@ async function main(args: DaemonArgs): Promise<void> {
       openFolder,
       miseCommand: ["mise"],
       copilotCommand: ["copilot"],
+      version: VERSION,
       hookCommand: (event, hooksFile) => selfCommand([COPILOT_HOOK_COMMAND, event, hooksFile]),
       sessionMcpCommand: (tokenFile) => sessionMcpStdioCommand(home, tokenFile),
       userEnv,

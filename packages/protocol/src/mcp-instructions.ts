@@ -1,3 +1,4 @@
+import { TRACKWALL_DOCS_LLMS_URL, TRACKWALL_DOCS_URL } from "./docs-site.ts";
 import { trackwallLink } from "./links.ts";
 import { mcpTools } from "./mcp.ts";
 
@@ -74,4 +75,7 @@ export const MCP_INSTRUCTIONS = [
   `- Point the user at a repo, session or task in your answer with a link: ${trackwallLink("repo", "<repo id>")}, ` +
     `${trackwallLink("session", "<session id>")} or ${trackwallLink("task", "<task id>")} (also for a task proposal) ` +
     "opens it in Trackwall when clicked. A link only shows it, it never runs anything.",
+  `- When you or the user are unsure what Trackwall can do or how a feature works, look it up in the documentation (${TRACKWALL_DOCS_URL}; ` +
+    `${TRACKWALL_DOCS_LLMS_URL} lists its pages) instead of guessing; it follows the development version, so a feature ` +
+    "there may be newer than the running Trackwall.",
 ].join("\n");

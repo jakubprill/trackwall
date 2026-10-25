@@ -5,6 +5,7 @@ export * from "./cards.ts";
 export * from "./changes.ts";
 export * from "./code-search.ts";
 export * from "./daemon.ts";
+export * from "./docs-site.ts";
 export * from "./events.ts";
 export * from "./evidence.ts";
 export * from "./graph.ts";

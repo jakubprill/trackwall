@@ -60,6 +60,7 @@ beforeAll(async () => {
     // Program, którego nie ma w PATH: lista tasków mise jest wtedy stanem `not_installed`, na każdej maszynie tak samo.
     miseCommand: ["trackwall-test-brak-mise"],
     copilotCommand: ["copilot"],
+    version: "0.0.0-test",
     hookCommand: () => ({ exec: "true", args: [] }),
     sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
     userEnv: async () => process.env,

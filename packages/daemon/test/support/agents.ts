@@ -41,6 +41,7 @@ export function makeAgents(repos: Record<string, string>, home = mkdtempSync(joi
     vcs: new Vcs(),
     home,
     copilot: [process.execPath, fakeCopilot],
+    version: "0.0.0-test",
     env: async () => process.env,
     hookCommand: (event, hooksFile) => ({ exec: process.execPath, args: ["--no-env-file", daemonMain, "copilot-hook", event, hooksFile] }),
     sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
