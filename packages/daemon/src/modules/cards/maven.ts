@@ -1,8 +1,8 @@
 import type { ConsumedPackage, Evidence } from "@trackwall/protocol";
 import { messageOf } from "../../infra/errors.ts";
+import { child, children, childText, parseXml, type XmlElement } from "../../infra/xml.ts";
 import { baseName, dirOf, inDir, joinPath, rootFiles } from "./repo-path.ts";
 import { type Extracted, emptyExtracted, type RepoSnapshot } from "./snapshot.ts";
-import { child, children, childText, parseXml, type XmlElement } from "./xml.ts";
 
 /**
  * The Maven extractor (§4.6): the `pom.xml` of the roots and of the modules the roots list (also in profiles). Gives

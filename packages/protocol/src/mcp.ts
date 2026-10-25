@@ -28,6 +28,7 @@ import { MiseTaskName, MiseTasks, RunningMiseTask } from "./mise.ts";
 import { RunState } from "./procs.ts";
 import { CallEndpointRequest, CallEndpointResult, MAX_SLICE_REPOS, SERVICE_MISE_TASK, Service, ServiceSlice } from "./services.ts";
 import { SyncRepo } from "./sync.ts";
+import { TEST_RESULTS_MAX_FAILURES, TestResults } from "./test-results.ts";
 import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
 
 /**
@@ -248,6 +249,7 @@ const MiseTaskArgs = z.object({ repo: RepoArg, task: MiseTaskTaskArg.optional(),
 const START_SERVICE = "start_service";
 const CALL_ENDPOINT = "call_endpoint";
 const GET_ERRORS = "get_errors";
+const GET_TEST_RESULTS = "get_test_results";
 
 export const mcpTools = {
   listRepos: {
@@ -343,6 +345,31 @@ export const mcpTools = {
       })
       .strict(),
     result: LogErrors,
+  },
+  getTestResults: {
+    name: GET_TEST_RESULTS,
+    readOnly: true,
+    description:
+      "Results of the latest test runs in a repo root, or with task in that task's worktree, read from the JUnit XML reports the " +
+      "build left on disk: Maven target/surefire-reports and failsafe-reports, Gradle build/test-results, junit.xml of " +
+      "jest-junit or Vitest. totals counts tests, failures (an assertion did not hold), errors (the test threw) and " +
+      "skipped over every report; reports lists each file with its counts and modifiedAt, newest first; failures has " +
+      `each failed test (suite, className, name, type, message, the start of the stack trace with every Caused by), at most ${TEST_RESULTS_MAX_FAILURES}. ` +
+      `Trackwall runs nothing here: run the tests with ${RUN_MISE_TASK} and ${WAIT_FOR_MISE_TASK} first, then pass the run's ` +
+      "startedAt as since, so reports left by earlier runs are not counted; earlierReports counts those left out (when " +
+      "there are some but no reports, the run wrote none, e.g. Gradle found the tests up to date). No reports at all means " +
+      `the build wrote none there; read the log with ${TAIL} or ${GET_ERRORS} then. problems lists reports that could not be read.`,
+    args: z
+      .object({
+        repo: RepoArg,
+        task: MiseTaskTaskArg.optional(),
+        since: z.iso
+          .datetime({ offset: true })
+          .optional()
+          .describe("only reports written at or after this time (ISO 8601), e.g. the startedAt of your test run"),
+      })
+      .strict(),
+    result: TestResults,
   },
   whoCalls: {
     name: "who_calls",

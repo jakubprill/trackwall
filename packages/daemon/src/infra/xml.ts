@@ -1,19 +1,24 @@
 /**
- * The smallest XML parser `pom.xml` needs: elements with text and a line number, without attributes, namespaces and
- * DTD. Comments, processing instructions and `<!DOCTYPE>` are skipped, `CDATA` and entities give text. Our own, because
- * XML libraries do not give lines, and the card needs evidence with a line (§4.6).
+ * The smallest XML parser that `pom.xml` (the repo card, §4.6) and JUnit test reports (`test-results`, ADR-60) need:
+ * elements with attributes, text and a line number, without namespaces and DTD. Comments, processing instructions
+ * and `<!DOCTYPE>` are skipped, `CDATA` and entities give text. Our own, because XML libraries do not give lines,
+ * and the card needs evidence with a line. Shared infrastructure, so two modules do not keep two parsers. Lenient where
+ * reports need it: an attribute without quotes is skipped rather than refused.
  */
 
 export interface XmlElement {
   name: string;
   /** The line number of the opening tag, from 1. */
   line: number;
+  /** Attribute values with entities decoded; a map, so a name like `constructor` is never an inherited property. */
+  attributes: ReadonlyMap<string, string>;
   children: XmlElement[];
   /** The text directly in the element, without whitespace at the edges. */
   text: string;
 }
 
 const ENTITIES: Record<string, string> = { lt: "<", gt: ">", amp: "&", quot: '"', apos: "'" };
+const ATTRIBUTE = /([^\s=/]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 
 /** The document root; throws an error with the line when the document is not valid XML within this scope. */
 export function parseXml(src: string): XmlElement {
@@ -55,7 +60,7 @@ class XmlParser {
   }
 
   private tag(lt: number): void {
-    const gt = this.src.indexOf(">", lt);
+    const gt = tagEnd(this.src, lt);
     if (gt < 0) throw new Error(`unclosed tag on line ${this.lineAt(lt)}`);
     const tag = this.src.slice(lt + 1, gt);
     this.pos = gt + 1;
@@ -72,13 +77,42 @@ class XmlParser {
   private open(tag: string, lt: number): void {
     const name = /^[^\s/>]+/.exec(tag)?.[0];
     if (!name) throw new Error(`empty tag on line ${this.lineAt(lt)}`);
-    const element: OpenElement = { name, line: this.lineAt(lt), children: [], text: "", raw: "" };
+    const element: OpenElement = {
+      name,
+      line: this.lineAt(lt),
+      attributes: attributesOf(tag.slice(name.length)),
+      children: [],
+      text: "",
+      raw: "",
+    };
     const top = this.stack.at(-1);
     if (top) top.children.push(element);
     else if (this.root) throw new Error(`second root element on line ${this.lineAt(lt)}`);
     else this.root = element;
     if (!tag.endsWith("/")) this.stack.push(element);
   }
+}
+
+/** The `>` that ends the tag at `lt`, or -1; a `>` inside a quoted attribute value (allowed unescaped in XML) does not. */
+function tagEnd(src: string, lt: number): number {
+  let quote: string | undefined;
+  for (let i = lt + 1; i < src.length; i++) {
+    const c = src[i];
+    if (quote !== undefined) {
+      if (c === quote) quote = undefined;
+    } else if (c === '"' || c === "'") quote = c;
+    else if (c === ">") return i;
+  }
+  return -1;
+}
+
+/** `name="value"` or `name='value'` pairs of a start tag after its name; a repeated name keeps its first value. */
+function attributesOf(rest: string): Map<string, string> {
+  const attributes = new Map<string, string>();
+  for (const [, name, double, single] of rest.matchAll(ATTRIBUTE)) {
+    if (name !== undefined && !attributes.has(name)) attributes.set(name, decode(double ?? single ?? ""));
+  }
+  return attributes;
 }
 
 /** Pierwsze dziecko o nazwie `name`. */

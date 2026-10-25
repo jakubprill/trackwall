@@ -10,6 +10,7 @@ import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
 import { Services } from "./modules/services/services.ts";
+import { TestReports } from "./modules/test-results/test-reports.ts";
 import { HOSTING_CLIS, Hosting } from "./modules/vcs/hosting.ts";
 import { Vcs } from "./modules/vcs/vcs.ts";
 import { Workspace } from "./modules/workspace/workspace.ts";
@@ -31,6 +32,7 @@ export interface Facade {
   agents: Agents;
   batch: Batch;
   services: Services;
+  testReports: TestReports;
   /**
    * Otwiera w systemie link z README (ADR-35): adres `http` albo `https` sprawdzony schematem `ExternalLink`.
    * Nie należy do żadnego modułu, bo nie dotyczy repo ani stanu daemona.
@@ -107,5 +109,6 @@ export function createFacade(o: FacadeOptions): Facade {
   const batch = new Batch({ workspace, mise, log: o.log });
   const graph = new Graph({ cards, workspace });
   const services = new Services({ mise, logs, graph, cards, env: o.userEnv, ...SERVICE_TIMING });
-  return { workspace, cards, graph, mise, procs, logs, batch, agents, services, openLink: o.openUrl };
+  const testReports = new TestReports({ repos: workspace, tasks: agents, logs, env: o.userEnv });
+  return { workspace, cards, graph, mise, procs, logs, batch, agents, services, testReports, openLink: o.openUrl };
 }

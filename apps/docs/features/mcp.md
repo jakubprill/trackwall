@@ -11,7 +11,7 @@ Give Copilot CLI and other agents your whole projects folder: repos, code search
 
 - Agents that can list your repos, read their cards and search code in all of them at once.
 - Answers to "who calls this?" and "where is this endpoint?" from the [connection graph](/features/graph).
-- Logs and errors of running mise tasks and services, with stack traces, for the agent to read.
+- Logs and errors of running mise tasks and services with stack traces, and which tests failed and why, for the agent to read.
 - mise tasks and [services](/features/services) the agent can start, wait for and stop.
 - Sessions that see each other and hand work over as [task proposals](/features/main-session).
 
@@ -40,6 +40,7 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 | `run_mise_task`, `wait_for_mise_task`, `stop_mise_task`, `list_running_mise_tasks` | Run a repo's mise task, wait up to 55 s for it, stop it, list what runs. With `task`, in that task's worktree. |
 | `tail` | A mise task's log from a cursor, with secrets replaced by `***`; with `task`, the run in that task's worktree. |
 | `get_errors` | Errors from the mise task logs, newest first: error lines, compiler errors, exceptions with stack traces, Spring and Gradle failure reports; repeats counted once. With `minLevel: warn`, warnings too. |
+| `get_test_results` | The results of the latest test run from the JUnit reports Maven, Gradle, jest or Vitest left in the repo, or with `task` in that task's worktree: totals, each report with its time, and the failed tests with their message and stack trace. |
 | `start_service`, `stop_service`, `list_services`, `call_endpoint` | Start a service with its dependencies, stop it, list services, send an HTTP request to a running one. |
 | `list_sessions`, `get_session`, `get_task_changes` | The sessions and tasks in "Sessions", with state, repo, a task's changed files and their diff. |
 | `propose_task`, `wait_for_session`, `report_result` | Propose a task, wait up to 55 s for a session or task to need someone, report a task's summary. |
