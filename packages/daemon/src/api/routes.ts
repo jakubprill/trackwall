@@ -1,4 +1,4 @@
-import { agentsApi, batchApi, cardsApi, type Endpoint, graphApi, logsApi, miseApi, workspaceApi } from "@trackwall/protocol";
+import { agentsApi, batchApi, cardsApi, type Endpoint, graphApi, logsApi, miseApi, servicesApi, workspaceApi } from "@trackwall/protocol";
 import { z } from "zod";
 import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
@@ -60,6 +60,9 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(miseApi.stop, (f, b) => f.mise.stop(b.repo, b.miseTask)),
   route(miseApi.trust, (f, b) => f.mise.trust(b.repo)),
   route(logsApi.tail, (f, b) => f.logs.tail(b)),
+  route(servicesApi.list, (f) => f.services.list()),
+  route(servicesApi.start, (f, b) => f.services.start(b)),
+  route(servicesApi.stop, (f, b) => f.services.stop(b)),
   route(batchApi.start, (f, b) => f.batch.start(b)),
   route(batchApi.run, (f) => f.batch.run()),
   route(batchApi.cancel, (f) => f.batch.cancel()),

@@ -20,6 +20,8 @@ export const ErrorCode = z.enum([
   "agent_unavailable",
   /** Zakończenie zadania skasowałoby zmiany (niezacommitowane pliki albo commity), a wołający tego nie potwierdził. */
   "unsaved_changes",
+  /** A service is not running or not ready (no port answers yet), or its port is taken by a process Trackwall did not start (ADR-45). */
+  "service_unavailable",
   "internal",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;

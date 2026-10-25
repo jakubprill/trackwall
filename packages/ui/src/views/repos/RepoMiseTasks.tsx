@@ -1,4 +1,4 @@
-import { type MiseTask, type MiseTasks, miseApi } from "@trackwall/protocol";
+import { hasService, type MiseTask, type MiseTasks, miseApi } from "@trackwall/protocol";
 import { Play, ScrollText, ShieldCheck, Square } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -13,6 +13,7 @@ import { isLive, runStateLabel, showsLastLines } from "@/lib/run-state";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 import { MiseTaskLog } from "./MiseTaskLog.tsx";
+import { RepoService } from "./RepoService.tsx";
 
 /**
  * Odpytywanie: często, gdy coś działa (użytkownik czeka na wynik startu albo stopu), rzadko, gdy nic nie działa,
@@ -53,7 +54,10 @@ function TaskPanel({ conn, repo, tasks, onChange }: { conn: Connection; repo: st
         This repo has no mise tasks. Add them under [tasks] in mise.toml in the repo root to run setup, dev or build from here.
       </p>
     ) : (
-      rows(tasks.tasks, "mise tasks")
+      <div className="flex flex-col gap-4">
+        {hasService(tasks.tasks) && <RepoService conn={conn} repo={repo} />}
+        {rows(tasks.tasks, "mise tasks")}
+      </div>
     );
   }
   return (

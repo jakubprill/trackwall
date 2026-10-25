@@ -18,6 +18,8 @@ interface SessionApiOptions {
   /** Repo name and its files in the first commit. */
   repos: Record<string, Record<string, string>>;
   miseCommand: readonly string[];
+  /** Daemon log lines (the MCP audit lines among them); dropped without it. */
+  log?: (msg: string) => void;
 }
 
 const ONE_REPO: SessionApiOptions = { repos: { sklep: { "README.md": "# sklep\n" } }, miseCommand: ["mise"] };
@@ -40,7 +42,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
     hookCommand: (event, hooksFile) => ({ exec: process.execPath, args: ["--no-env-file", daemonMain, "copilot-hook", event, hooksFile] }),
     sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
     userEnv: async () => process.env,
-    log: () => {},
+    log: options.log ?? (() => {}),
   });
   const api = await startApi({
     token,
@@ -50,7 +52,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
     },
     onShutdown: () => {},
     facade,
-    mcp: createMcpEndpoint({ facade, version: "test", log: () => {} }),
+    mcp: createMcpEndpoint({ facade, version: "test", log: options.log ?? (() => {}) }),
     events: new EventHub({ facade, log: () => {} }),
   });
   /** Akcja API z tokenem; wynik sprawdzony schematem akcji. */

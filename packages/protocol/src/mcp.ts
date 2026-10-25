@@ -22,6 +22,7 @@ import { HttpMethod } from "./http.ts";
 import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErrors, LogTail } from "./logs.ts";
 import { MiseTaskName, MiseTasks, RunningMiseTask } from "./mise.ts";
 import { RunState } from "./procs.ts";
+import { CallEndpointRequest, CallEndpointResult, MAX_SLICE_REPOS, SERVICE_MISE_TASK, Service, ServiceSlice } from "./services.ts";
 import { SyncRepo } from "./sync.ts";
 import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
 
@@ -170,6 +171,18 @@ const WaitTimeoutArg = z
 export const MiseTaskRunResult = z.object({ run: RunState });
 export type MiseTaskRunResult = z.infer<typeof MiseTaskRunResult>;
 
+export const StartServiceResult = z.object({ slice: ServiceSlice });
+export type StartServiceResult = z.infer<typeof StartServiceResult>;
+
+export const StopServiceResult = z.object({
+  /** The services stopped, each `stopped` with its last run. */
+  services: z.array(Service),
+});
+export type StopServiceResult = z.infer<typeof StopServiceResult>;
+
+export const ListServicesResult = z.object({ services: z.array(Service) });
+export type ListServicesResult = z.infer<typeof ListServicesResult>;
+
 export const ListRunningMiseTasksResult = z.object({
   /** mise tasks started in this Trackwall run (from the UI or over MCP) whose process group is still alive. */
   miseTasks: z.array(RunningMiseTask),
@@ -190,10 +203,21 @@ interface McpToolBase<Args extends z.ZodObject, Result extends z.ZodObject> {
  * text for a human cannot (ADR-39), running repo code or killing a process the user may need (a dev server, a
  * migration) can (ADR-41).
  */
-type McpToolEffect = { readOnly: true } | { readOnly: false; destructive: boolean };
+type McpToolEffect<Args extends z.ZodObject> =
+  | { readOnly: true }
+  | { readOnly: false; destructive: false }
+  | {
+      readOnly: false;
+      destructive: true;
+      /**
+       * The arguments the daemon log gets before the tool acts (ADR-41, until the `audit` table exists). Listed
+       * explicitly, so a new destructive tool cannot log free text that may carry a secret (headers, a body) by default.
+       */
+      auditArgs: readonly (keyof z.output<Args> & string)[];
+    };
 
 export type McpTool<Args extends z.ZodObject = z.ZodObject, Result extends z.ZodObject = z.ZodObject> = McpToolBase<Args, Result> &
-  McpToolEffect;
+  McpToolEffect<Args>;
 
 const LIST_REPOS = "list_repos";
 const GET_REPO = "get_repo";
@@ -210,6 +234,9 @@ const RepoTagsArg = z.array(TagName).max(20);
 const MiseTaskArg = MiseTaskName.describe(`mise task name from ${GET_REPO} (the miseTasks field)`);
 /** Arguments of the tools that act on one mise task of a repo. */
 const MiseTaskArgs = z.object({ repo: RepoArg, miseTask: MiseTaskArg }).strict();
+const START_SERVICE = "start_service";
+const CALL_ENDPOINT = "call_endpoint";
+const GET_ERRORS = "get_errors";
 
 export const mcpTools = {
   listRepos: {
@@ -273,7 +300,7 @@ export const mcpTools = {
     result: LogTail,
   },
   getErrors: {
-    name: "get_errors",
+    name: GET_ERRORS,
     readOnly: true,
     description:
       "Errors from the logs of mise tasks and mise install in all repos (or one repo or one mise task), the most recent first: " +
@@ -466,6 +493,7 @@ export const mcpTools = {
     name: RUN_MISE_TASK,
     readOnly: false,
     destructive: true,
+    auditArgs: ["repo", "miseTask"] as const,
     description:
       "Run a repo's mise task (mise run <task>) in the repo root in the user's projects folder, not in a task worktree, " +
       `the same as the Run button in Trackwall. Only tasks listed by ${GET_REPO} (miseTasks) can run; a task that is ` +
@@ -481,6 +509,7 @@ export const mcpTools = {
     name: "stop_mise_task",
     readOnly: false,
     destructive: true,
+    auditArgs: ["repo", "miseTask"] as const,
     description:
       "Stop a running mise task of a repo, also one the user started in Trackwall: a gentle stop, then the whole " +
       "process group is killed. Returns after Trackwall has confirmed that no process of the group is alive " +
@@ -509,5 +538,84 @@ export const mcpTools = {
       `UI or with ${RUN_MISE_TASK}: repo, mise task name and run (runId, start time, pid). Cheap: it does not ask mise.`,
     args: z.object({}).strict(),
     result: ListRunningMiseTasksResult,
+  },
+  startService: {
+    name: START_SERVICE,
+    readOnly: false,
+    destructive: true,
+    auditArgs: ["repo", "dependencies"] as const,
+    description:
+      `Start a repo's service (its mise task ${SERVICE_MISE_TASK}, in the repo root) together with the services it calls, ` +
+      "found in the connection graph (http and manual connections, not packages, not low confidence), dependencies " +
+      "first: a repo starts once the repos it calls are up. A service is ready (healthy) when its port accepts a " +
+      "connection: the port from its log (e.g. 'Tomcat started on port 8081') or server.port on its card. Waits up " +
+      "to timeoutSeconds and returns the slice: each repo with calledBy (why it is in the slice), outcome (pending, " +
+      "started, running: it was already running, skipped with problem: no mise task dev, mise config not trusted, " +
+      "port taken by another process), service (state starting, healthy, unhealthy, crashed, stopped; port; run with " +
+      "runId; reason) and, for crashed and unhealthy, errors from its log. settled: false means some are still " +
+      "starting: call again with the same arguments to keep waiting (running services are not restarted; a crashed " +
+      `one starts again, e.g. after you fixed it). At most ${MAX_SLICE_REPOS} repos. A session in Trackwall can start ` +
+      `only its own repo (dependencies come from the graph). Then use ${CALL_ENDPOINT}; read logs with tail ` +
+      `(miseTask ${SERVICE_MISE_TASK}) and ${GET_ERRORS}. Stop what you started with stop_service when you are done.`,
+    args: z
+      .object({
+        repo: RepoArg,
+        dependencies: z.boolean().default(true).describe("also start the services it calls (default true)"),
+        timeoutSeconds: WaitTimeoutArg,
+      })
+      .strict(),
+    result: StartServiceResult,
+  },
+  stopService: {
+    name: "stop_service",
+    readOnly: false,
+    destructive: true,
+    auditArgs: ["repo", "dependencies"] as const,
+    description:
+      "Stop a repo's service (its whole process group) and, with dependencies: true, the services the latest " +
+      `${START_SERVICE} of this repo started (not those that were already running or that another started slice uses). ` +
+      "Returns the stopped services. A session in Trackwall can stop only its own repo's service.",
+    args: z
+      .object({
+        repo: RepoArg,
+        dependencies: z.boolean().default(false).describe("also stop the dependencies its start started (default false)"),
+      })
+      .strict(),
+    result: StopServiceResult,
+  },
+  listServices: {
+    name: "list_services",
+    readOnly: true,
+    description:
+      `Services Trackwall started or watched since it started (with ${START_SERVICE}, the UI, or the mise task ` +
+      `${SERVICE_MISE_TASK} run from the UI): repo, state (starting, healthy, unhealthy, stopping, stopped, crashed), ` +
+      "port and where it comes from (log or card), run (runId, pid or exit code) and reason. Cheap: it does not ask mise.",
+    args: z.object({}).strict(),
+    result: ListServicesResult,
+  },
+  callEndpoint: {
+    name: CALL_ENDPOINT,
+    readOnly: false,
+    destructive: true,
+    // The path (a query), headers and body may carry a secret.
+    auditArgs: ["repo", "method"] as const,
+    description:
+      `Send an HTTP request to a running (healthy) service started by Trackwall, on its port on this computer ` +
+      "(the path from the repo card's endpoints, find_endpoint or the code). Returns the status, response headers and " +
+      "body (text, cut at 32 KB, secrets from the service environment masked), or failure (connection refused, " +
+      "timeout), the duration and errors: error blocks that started in the logs of all services during the call and " +
+      "half a second after it, with stack traces (as get_errors). Use it to check a change end to end: start_service, " +
+      "call, read errors, fix, call again. Requests can change data in the services and their databases.",
+    args: z
+      .object({
+        repo: RepoArg,
+        method: CallEndpointRequest.shape.method.default("GET"),
+        path: CallEndpointRequest.shape.path.describe("path with the query, e.g. /api/orders/42?expand=lines"),
+        headers: CallEndpointRequest.shape.headers.default({}).describe('request headers, e.g. {"content-type": "application/json"}'),
+        body: CallEndpointRequest.shape.body.default(null).describe("request body as text, e.g. JSON"),
+        timeoutSeconds: WaitTimeoutArg,
+      })
+      .strict(),
+    result: CallEndpointResult,
   },
 } satisfies Record<string, McpTool>;

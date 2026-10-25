@@ -17,6 +17,7 @@ export * from "./mise.ts";
 export * from "./plural.ts";
 export * from "./procs.ts";
 export * from "./repo-hosts.ts";
+export * from "./services.ts";
 export * from "./sockets.ts";
 export * from "./sync.ts";
 export * from "./task-state.ts";

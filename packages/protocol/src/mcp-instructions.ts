@@ -28,12 +28,17 @@ const {
   stopMiseTask,
   waitForMiseTask,
   listRunningMiseTasks,
+  startService,
+  stopService,
+  listServices,
+  callEndpoint,
 } = mcpTools;
 
 export const MCP_INSTRUCTIONS = [
   "Trackwall is the user's local workbench for the git repos in their projects folder: it syncs them, reads their build " +
     "files and code into repo cards and a graph of connections between apps, runs mise tasks and Copilot CLI sessions. " +
     `Its tools give you that knowledge. ${runMiseTask.name} and ${stopMiseTask.name} start and stop mise tasks, ` +
+    `${startService.name} and ${stopService.name} start and stop services, ` +
     `${proposeTask.name} and ${reportResult.name} record text for the user, and no tool edits repo files or configuration directly.`,
   "",
   "How to work with it:",
@@ -54,6 +59,10 @@ export const MCP_INSTRUCTIONS = [
     `(not in a task worktree), ${waitForMiseTask.name} waits for its exit code and ${tail.name} gives its output; ` +
     `${listRunningMiseTasks.name} shows what already runs. Stop long-running tasks with ${stopMiseTask.name} when ` +
     "you no longer need them.",
+  `- Try a change against the running system: ${startService.name} starts a repo's service (its mise task dev) with ` +
+    `the services it calls, dependencies first, and waits until its port answers; ${callEndpoint.name} sends an HTTP ` +
+    "request to it and returns the response with the errors every service logged meanwhile, so a failure downstream " +
+    `shows too. ${listServices.name} shows the services and their ports; stop what you started with ${stopService.name}.`,
   `- Hand work to another agent, e.g. a change in another repo: ${proposeTask.name} with a prompt that stands on its own; ` +
     `the user approves, edits or rejects it in Trackwall. Then call ${waitForSession.name} with the task id: it returns ` +
     "when the proposal is rejected or the task's session needs someone (finished its turn, asks for approval, hit an error), goes " +

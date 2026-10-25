@@ -137,6 +137,11 @@ export class Mise {
     }
   }
 
+  /** The current (or last) run of a task in this daemon run, from `procs` without asking mise; `undefined` when it has not run. */
+  run(repo: string, miseTask: string): RunState | undefined {
+    return this.deps.procs.state(owner(repo, miseTask));
+  }
+
   async stop(repo: string, miseTask: string): Promise<RunState> {
     const stopped = await this.deps.procs.stop(owner(repo, miseTask));
     if (!stopped) throw await this.notRun(repo, miseTask);

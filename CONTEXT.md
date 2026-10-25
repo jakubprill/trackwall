@@ -51,7 +51,7 @@ The secret from `~/.trackwall/daemon.json` with which the UI, `ws`, the shell an
 **MCP server** (`/mcp`, `createMcpEndpoint`):
 The part of the daemon through which agents read its state with MCP tools; the same port and token as the API (§5.3, ADR-24).
 
-**MCP tool** (`McpTool`, the `mcpTools` list in protocol, for example `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`, `search_code`, `list_sessions`):
+**MCP tool** (`McpTool`, the `mcpTools` list in protocol, for example `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`, `search_code`, `list_sessions`, `start_service`, `call_endpoint`):
 One call of the MCP server with an English name, input and result described by a schema from `packages/protocol/src/mcp.ts`; a mapping to the facade, without domain logic of its own.
 _Avoid_: command, action (those are API and CLI terms)
 
@@ -202,11 +202,15 @@ _Avoid_: dashboard (that is the 3D scene), repo overview (that is the README and
 ## Processes and services
 
 **Service** (`Service`, `ServiceId`):
-A repo plus its mise task `dev`, port and health probe. One repo can have several services.
+A repo with its mise task `dev` (`SERVICE_MISE_TASK`), its port and its readiness. Today one per repo, run from the repo root (ADR-45); later a repo may have several services.
 _Avoid_: app, microservice (when the entity in Trackwall is meant)
 
-**Service state**:
-`stopped`, `starting`, `healthy`, `unhealthy`, `stopping` or `crashed`; always observed, never assumed.
+**Service state** (`ServiceState`):
+`stopped`, `starting`, `healthy`, `unhealthy`, `stopping` or `crashed`; always observed, never assumed. In the UI `healthy` reads "ready on port N" and `unhealthy` "not answering".
+
+**Slice** (`ServiceSlice`, member `SliceMember`):
+A service with every service it calls at runtime (graph edges `http` and `manual`), started together by `start_service`, dependencies first in waves (ADR-45). A member is `pending`, `started`, `running` (it was already running) or `skipped` with the reason.
+_Avoid_: stack, environment (for the set of services)
 
 **Process group** (`ProcessGroup`):
 A leader process and all its descendants, stopped together: a Job Object on Windows, a new POSIX session (`setsid`) killed by `-pgid` on macOS.
@@ -216,7 +220,7 @@ _Avoid_: process tree (when the managed unit is meant)
 The key under which `procs` keeps a process group and its last state; it is given by the module that started it (today a mise task in a repo). One owner has at most one group that is not confirmed empty.
 
 **Probe** (health):
-The mise task `health` run periodically; its result decides `healthy` / `unhealthy`.
+A TCP connection to the service's port on loopback (`probePort`), with the port from its log or `server.port` on its card; it decides `healthy` / `unhealthy` (ADR-45). The planned mise task `health` is not used.
 
 **Lease** (`Lease`):
 Which branch or worktree holds a service on its port. By default the main repo; a task can take it over and give it back.

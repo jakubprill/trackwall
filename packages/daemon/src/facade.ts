@@ -9,6 +9,7 @@ import { Logs } from "./modules/logs/logs.ts";
 import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
+import { Services } from "./modules/services/services.ts";
 import { HOSTING_CLIS, Hosting } from "./modules/vcs/hosting.ts";
 import { Vcs } from "./modules/vcs/vcs.ts";
 import { Workspace } from "./modules/workspace/workspace.ts";
@@ -29,6 +30,7 @@ export interface Facade {
   logs: Logs;
   agents: Agents;
   batch: Batch;
+  services: Services;
   /**
    * Otwiera w systemie link z README (ADR-35): adres `http` albo `https` sprawdzony schematem `ExternalLink`.
    * Nie należy do żadnego modułu, bo nie dotyczy repo ani stanu daemona.
@@ -44,6 +46,8 @@ const CARDS_DIR = "cards";
 const LOGS_DIR = "logs";
 /** Limit jednego pliku JSONL źródła; z poprzednim plikiem po rotacji źródło zajmuje najwyżej dwa razy tyle. */
 const LOG_FILE_MAX_BYTES = 10 * 1024 * 1024;
+/** Service readiness (ADR-45): checks twice a second, and five minutes for a start, because Gradle and Maven compile first. */
+const SERVICE_TIMING = { intervalMs: 500, startupMs: 5 * 60 * 1000, settleMs: 500 };
 
 export interface FacadeOptions {
   /** Katalog stanu daemona; tam leżą `workspace.yaml` (ADR-13), `runtime.json` (§4.1) `logs/` (§4.2) i karty repo (`cards/`, ADR-25). */
@@ -99,5 +103,6 @@ export function createFacade(o: FacadeOptions): Facade {
     log: o.log,
   });
   const graph = new Graph({ cards, workspace });
-  return { workspace, cards, graph, mise, procs, logs, batch, agents, openLink: o.openUrl };
+  const services = new Services({ mise, logs, graph, cards, env: o.userEnv, ...SERVICE_TIMING });
+  return { workspace, cards, graph, mise, procs, logs, batch, agents, services, openLink: o.openUrl };
 }
