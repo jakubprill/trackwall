@@ -159,9 +159,19 @@ mod tests {
         assert_eq!(command("app-menu-view:nothing"), None);
     }
 
+    /// The JSON the UI gets for each command. No `_` arm, so a new command needs its JSON here, and
+    /// `apps/desktop/test/shell-events.test.ts` compares these kinds with the UI's schema.
+    fn sent_as(command: &MenuCommand) -> &'static str {
+        match command {
+            MenuCommand::View { .. } => r#"{"kind":"view","view":"home"}"#,
+            MenuCommand::NewWindow => r#"{"kind":"new-window"}"#,
+        }
+    }
+
     #[test]
     fn the_window_gets_the_command_as_tagged_json() {
-        assert_eq!(serde_json::to_string(&MenuCommand::View { view: "home".into() }).expect("json"), r#"{"kind":"view","view":"home"}"#);
-        assert_eq!(serde_json::to_string(&MenuCommand::NewWindow).expect("json"), r#"{"kind":"new-window"}"#);
+        for command in [MenuCommand::View { view: "home".into() }, MenuCommand::NewWindow] {
+            assert_eq!(serde_json::to_string(&command).expect("json"), sent_as(&command));
+        }
     }
 }
