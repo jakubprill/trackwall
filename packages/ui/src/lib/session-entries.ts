@@ -234,8 +234,24 @@ export function nextWaiting(entries: readonly SessionEntry[], current: SessionEn
   return waiting.find((e) => entries.indexOf(e) > at) ?? waiting[0];
 }
 
+/** What "Next waiting" and Alt+J open: an entry of the list, or the supervisor, which has its panel instead (ADR-58). */
+export type WaitingTarget = SessionEntry | typeof SUPERVISOR_TARGET;
+export const SUPERVISOR_TARGET = { kind: "supervisor" } as const;
+
 /**
- * Alt+J (ADR-48): the entry to open, after the selected one, and whether the shortcut takes the key. In Sessions it
+ * The next thing waiting for you: the entry after the current one (`nextWaiting`), otherwise the supervisor when the
+ * supervisor session itself waits. It is not on the list, so it comes after every entry.
+ */
+export function nextWaitingTarget(
+  entries: readonly SessionEntry[],
+  current: SessionEntry | undefined,
+  supervisorWaits: boolean,
+): WaitingTarget | undefined {
+  return nextWaiting(entries, current) ?? (supervisorWaits ? SUPERVISOR_TARGET : undefined);
+}
+
+/**
+ * Alt+J (ADR-48): what to open, after the selected entry, and whether the shortcut takes the key. In Sessions it
  * always does, so that the key never reaches a terminal; elsewhere only when something is waiting, so that ⌥J still
  * types in a text field.
  */
@@ -243,8 +259,9 @@ export function nextWaitingShortcut(
   entries: readonly SessionEntry[],
   selected: SessionEntry | undefined,
   inSessionsView: boolean,
-): { open: SessionEntry | undefined; taken: boolean } {
-  const open = nextWaiting(entries, selected);
+  supervisorWaits: boolean,
+): { open: WaitingTarget | undefined; taken: boolean } {
+  const open = nextWaitingTarget(entries, selected, supervisorWaits);
   return { open, taken: open !== undefined || inSessionsView };
 }
 

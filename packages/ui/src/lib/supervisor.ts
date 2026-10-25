@@ -15,9 +15,11 @@ export interface SupervisorSummary {
   work: SessionRow[];
   /** Tasks and proposals directly under it, counted like the "main" badge: a group counts each proposal. */
   delegated: number;
-  /** Its task proposals, anywhere under it, that wait for your decision. */
+  /** The task proposals under it, its own and those of the tasks it delegated, that wait for your decision. */
   waitingProposals: number;
-  /** The supervisor itself or a proposal under it waits for you. */
+  /** The supervisor session itself waits for you, like a session's bell on the list. */
+  sessionWaits: boolean;
+  /** The supervisor session or a proposal under it waits for you: the bell of the folded panel. */
   waits: boolean;
   /** The list shows the heading: there is a supervisor or work of one. */
   listed: boolean;
@@ -30,12 +32,14 @@ export function supervisorSummary(list: SessionList | undefined, rows: readonly 
   const work = rows.filter((r) => r.supervised);
   const sum = (items: readonly SessionRow[]) => items.reduce((total, r) => total + workCount(r.entry), 0);
   const waitingProposals = sum(work.filter((r) => r.entry.kind === "proposals"));
+  const sessionWaits = session?.needsAttention === true;
   return {
     session,
     work,
     delegated: sum(work.filter((r) => r.depth === 1)),
     waitingProposals,
-    waits: session?.needsAttention === true || waitingProposals > 0,
+    sessionWaits,
+    waits: sessionWaits || waitingProposals > 0,
     listed: session !== undefined || work.length > 0,
   };
 }

@@ -179,6 +179,19 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
     await agents.stop(next.id);
   }, 60_000);
 
+  test("a supervisor start succeeds even when the ended supervisor is dismissed while it starts", async () => {
+    const { agents, procs } = makeAgents({}, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
+    cleanups.push(() => procs.stopAll());
+    const first = await agents.startSupervisor();
+    await agents.stop(first.id);
+
+    const starting = agents.startSupervisor();
+    agents.dismiss(first.id);
+    const next = await starting;
+    expect(agents.sessions().sessions.map((s) => s.id)).toEqual([next.id]);
+    await agents.stop(next.id);
+  }, 60_000);
+
   test("the supervisor needs the projects folder to be set", async () => {
     const { agents } = makeAgents({});
     await expect(agents.startSupervisor()).rejects.toMatchObject({ code: "bad_request", message: "set the projects folder first" });

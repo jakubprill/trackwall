@@ -16,7 +16,7 @@ import {
   entryId,
   entrySelection,
   findEntry,
-  nextWaiting,
+  nextWaitingTarget,
   type ProposalsEntry,
   proposalsName,
   type SessionEntry,
@@ -25,6 +25,7 @@ import {
   type StartedEntry,
   selectedProposal,
   selectionAfterClose,
+  type WaitingTarget,
 } from "@/lib/session-entries";
 import { gridPage, SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
 import {
@@ -85,7 +86,7 @@ export function SessionsView({
   const { tasks, rows } = tree;
   const entries = rows.map((r) => r.entry);
   const current = findEntry(entries, selected);
-  const next = nextWaiting(entries, current);
+  const next = nextWaitingTarget(entries, current, supervisor.sessionWaits);
   const waiting = attentionCount(sessions.data);
   // A stop can take seconds, and a decision on proposals a while, and the user may select another entry meanwhile, so
   // both decide on the selection as it is when they end. `entries` comes from the render of the click (the action keeps
@@ -128,10 +129,10 @@ export function SessionsView({
               variant="outline"
               size="sm"
               className="w-full"
-              onClick={() => onSelect(entrySelection(next))}
+              onClick={() => (next.kind === "supervisor" ? onShowSupervisor() : onSelect(entrySelection(next)))}
               aria-keyshortcuts={ariaSessionShortcut(NEXT_WAITING)}
             >
-              <BellRing /> {waiting === 1 ? "One thing is waiting for you" : `Next waiting (${waiting})`}
+              <BellRing /> {nextWaitingLabel(next, waiting)}
               <span className="text-muted-foreground ml-auto font-mono text-2xs">{sessionShortcutLabel(NEXT_WAITING, IS_MAC)}</span>
             </Button>
           </div>
@@ -308,7 +309,7 @@ function SupervisorListItem({ supervisor, onOpen }: { supervisor: SupervisorSumm
         <span className="text-muted-foreground/70 font-mono text-2xs">{sessionShortcutLabel(SUPERVISOR_SHORTCUT, IS_MAC)}</span>
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
-        <RowName name={SUPERVISOR} delegated={supervisor.delegated} waits={supervisor.waits} />
+        <RowName name={SUPERVISOR} delegated={supervisor.delegated} waits={supervisor.sessionWaits} />
         <span className="text-muted-foreground text-xs">{session ? <StatusLabel {...sessionStateLabel(session)} /> : "not running"}</span>
       </span>
     </button>
@@ -541,6 +542,12 @@ function EntryPanel({
 
 const NEXT_WAITING = { kind: "next-waiting" } as const;
 
+/** The "Next waiting" button: the count of the list, which leaves the supervisor out, so it is named once only it waits. */
+function nextWaitingLabel(next: WaitingTarget, waiting: number): string {
+  if (next.kind === "supervisor") return "The supervisor is waiting for you";
+  return waiting === 1 ? "One thing is waiting for you" : `Next waiting (${waiting})`;
+}
+
 const LAYOUT_LABELS: Record<SessionLayout, string> = { "1": "1", "2": "2", "4": "4", auto: "Auto" };
 
 /** The layout switch above the right side: one entry with its full panel, or a grid of 2, 4 or all entries. */
@@ -612,7 +619,7 @@ function SessionPanel({
           </Button>
         )}
       </header>
-      <SessionTerminal conn={conn} session={session.id} live={live} focused />
+      <SessionTerminal conn={conn} session={session.id} live={live} selected />
     </>
   );
 }

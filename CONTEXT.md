@@ -281,7 +281,7 @@ The one Trackwall session above all others: Copilot CLI in the projects folder, 
 _Avoid_: orchestrator, root session, supervising agent (that is an agent outside Trackwall)
 
 **Supervisor panel** (`SupervisorPanel`):
-The column on the right of the main window, in every view, with the supervisor's terminal, its state and the work it delegated, or "Start supervisor" while there is none (ADR-58). Pinned open, or folded to a strip that keeps a bell while the supervisor or its proposals wait for you; Alt+0 pins it open and puts the keyboard in its terminal.
+The column on the right of the main window, in every view, with the supervisor's terminal, its state and the work it delegated, or "Start supervisor" while there is none (ADR-58). Pinned open, or folded to a strip that keeps a bell while the supervisor or a task proposal under it waits for you; Alt+0 pins it open and puts the keyboard in its terminal.
 _Avoid_: sidebar (that is the list on the left of a view), drawer
 
 **Supervising agent**:
@@ -316,7 +316,7 @@ Several session terminals side by side in the Sessions view, one tile per list e
 _Avoid_: split, dashboard (that is Home)
 
 **Session shortcut** (`SessionShortcut`; Alt+1…9, Alt+0, Alt+J):
-Alt (⌥ on macOS) + digit selects the entry at that position in the Sessions list; Alt+0 opens the supervisor panel (ADR-58); Alt+J opens the next session or task proposals waiting for you, also from other views (ADR-55). A shortcut never reaches the session terminal. Win+Alt+J (⌃⌥J on macOS) is the global shortcut that does what Alt+J does from any app (ADR-50).
+Alt (⌥ on macOS) + digit selects the entry at that position in the Sessions list; Alt+0 opens the supervisor panel (ADR-58); Alt+J opens the next session or task proposals waiting for you, also from other views (ADR-55), and the supervisor panel once nothing on the list waits but the supervisor does (ADR-58). A shortcut never reaches the session terminal. Win+Alt+J (⌃⌥J on macOS) is the global shortcut that does what Alt+J does from any app (ADR-50).
 
 **Tray panel** (`TrayPanel`, window `tray-panel`):
 The small window next to the tray icon, opened by a left click on it, with the task proposals and the sessions waiting for you (ADR-50). A click opens the entry in the main window.

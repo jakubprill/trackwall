@@ -170,7 +170,8 @@ export class Agents {
     const ended = this.#views().filter(isSupervisor);
     const cwd = await this.#deps.repos.projectsDir();
     const started = await this.#launch({ repo: null, cwd, task: null, args: [], promptOnStart: false });
-    for (const old of ended) this.#close(old.id);
+    // One of them may have been dismissed during the start; the start has still succeeded.
+    for (const old of ended) if (this.#sessions.has(old.id)) this.#close(old.id);
     return started;
   }
 

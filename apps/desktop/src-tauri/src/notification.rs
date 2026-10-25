@@ -28,8 +28,7 @@ fn session_notice(waiting: &Waiting) -> Notice {
         Some(TaskState::Plan) => "Copilot CLI is waiting for plan approval",
         _ => "Copilot CLI is waiting for you",
     };
-    let title = if waiting.repo.is_some() { format!("Session in {}", waiting.place()) } else { waiting.place().to_owned() };
-    Notice { title, body: body.to_owned(), target: Jump::Session(waiting.id.clone()) }
+    Notice { title: waiting.titled(), body: body.to_owned(), target: Jump::Session(waiting.id.clone()) }
 }
 
 fn proposal_notice(proposal: &Proposal) -> Notice {

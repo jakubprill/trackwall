@@ -57,7 +57,7 @@ describe("the supervisor (ADR-58)", () => {
       proposals: [proposal("p1", { session: "sup", supervisor: true })],
     });
     expect(shape(data)).toEqual(["proposals:sup @1 supervised", "t1 @1 supervised", "t2 @0", "s1 @0"]);
-    expect(summary(data)).toMatchObject({ delegated: 2, waitingProposals: 1, waits: true, listed: true });
+    expect(summary(data)).toMatchObject({ delegated: 2, waitingProposals: 1, sessionWaits: false, waits: true, listed: true });
   });
 
   test("the supervisor's work stays under its heading after the supervisor session that delegated it is gone", () => {
@@ -102,7 +102,7 @@ describe("the supervisor (ADR-58)", () => {
       proposals: [proposal("p1", { session: "sup", supervisor: true }), proposal("p2", { session: "s1", supervisor: false })],
     });
     expect(attentionCount(data)).toBe(3);
-    expect(summary(data)).toMatchObject({ waitingProposals: 1, waits: true });
+    expect(summary(data)).toMatchObject({ waitingProposals: 1, sessionWaits: true, waits: true });
   });
 
   test("the supervisor is named Supervisor, and its proposals say they come from it", () => {

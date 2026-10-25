@@ -70,7 +70,7 @@ export function SupervisorPanel({
       <SupervisorHeader conn={conn} supervisor={supervisor} onChanged={onChanged} onFold={fold} />
       <DelegatedWork work={supervisor.work} onOpen={onOpenInSessions} />
       {session ? (
-        <SessionTerminal key={session.id} conn={conn} session={session.id} live={isLive(session)} focused={focused} />
+        <SessionTerminal key={session.id} conn={conn} session={session.id} live={isLive(session)} selected={focused} />
       ) : (
         <NoSupervisor />
       )}
@@ -192,7 +192,7 @@ function workName(entry: SessionEntry): string {
 
 /** The supervisor's proposals that wait for your decision, in the header and on the folded strip. */
 function ProposalsWaiting({ count }: { count: number }) {
-  const label = `${countLabel(count, { one: "proposal", other: "proposals" })} waiting for your decision`;
+  const label = `${countLabel(count, { one: "proposal", other: "proposals" })} under the supervisor waiting for your decision`;
   return (
     <Badge variant="outline" className="text-warning" aria-label={label} title={label}>
       {count}

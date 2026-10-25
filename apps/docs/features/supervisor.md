@@ -12,7 +12,7 @@ Talk to one agent above all your repos, pinned on the right of every view, that 
 - One place to describe what you want done across repos, visible next to Home, Repos, Sessions and every other view.
 - An agent that splits the work into task proposals, one per repo, and follows the agents that run them.
 - Everything it delegated, with its state, right under it: in its panel and at the top of "Sessions".
-- A bell on the panel when the supervisor or one of its proposals is waiting for you.
+- A bell on the panel when the supervisor, or a task proposal from it or from the work it delegated, is waiting for you.
 
 ## How it works
 
@@ -42,6 +42,6 @@ The panel can be folded to a narrow strip at the right edge, which keeps a bell 
 - The supervisor coordinates; it is told not to change code itself. Every task it proposes still needs your approval.
 - It sees every session and task, also the ones you started yourself, but it cannot type into other sessions or change Trackwall's settings.
 - Stop ends the supervisor; "Start again" starts a new one in its place. The work it delegated stays under the "Supervisor" heading, also after Trackwall restarts.
-- When the supervisor waits for you, the tray, the system notification and the tray panel call it "Supervisor". The "Sessions" counter leaves it out, since its panel shows it; Alt+J goes to it once nothing else is waiting. It is not on the [Home dashboard](/features/home) either.
+- When the supervisor waits for you, the tray, the system notification and the tray panel call it "Supervisor". The "Sessions" counter leaves it out, since its panel shows it; Alt+J and "Next waiting" go to it once nothing else is waiting. It is not on the [Home dashboard](/features/home) either.
 - The supervisor does not run mise tasks or services itself: it works in no single repo, so it proposes a task in the repo instead.
 - It needs Copilot CLI, like any [session](/features/sessions), and the projects folder to be set.

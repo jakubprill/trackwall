@@ -46,6 +46,11 @@ impl Waiting {
         self.repo.as_deref().unwrap_or(SUPERVISOR)
     }
 
+    /// The title of its notification: "Session in <repo>", or "Supervisor".
+    pub fn titled(&self) -> String {
+        self.repo.as_ref().map_or_else(|| SUPERVISOR.to_owned(), |repo| format!("Session in {repo}"))
+    }
+
     /// The session in a sentence: "a session in <repo>", or "the supervisor".
     fn described(&self) -> String {
         self.repo.as_ref().map_or_else(|| "the supervisor".to_owned(), |repo| format!("a session in {repo}"))

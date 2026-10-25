@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type { Session } from "@trackwall/protocol";
-import { entryId, nextWaiting, nextWaitingShortcut, type SessionEntry } from "../src/lib/session-entries.ts";
+import {
+  entryId,
+  nextWaiting,
+  nextWaitingShortcut,
+  nextWaitingTarget,
+  type SessionEntry,
+  SUPERVISOR_TARGET,
+  type WaitingTarget,
+} from "../src/lib/session-entries.ts";
 import { closeCutsOffTurn, sessionStateLabel } from "../src/lib/session-state.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-23T10:00:00Z", pid: 10 } as const;
@@ -116,21 +124,29 @@ describe("skok do sesji czekającej", () => {
 describe("Alt+J", () => {
   test("opens the next waiting entry after the selected one", () => {
     const list = entries(waiting("a", change("Input")), session("b", change("Working")), waiting("c", change("Approval")));
-    expect(entryIdOf(nextWaitingShortcut(list, list[0], true).open)).toBe("c");
-    expect(entryIdOf(nextWaitingShortcut(list, undefined, false).open)).toBe("a");
+    expect(entryIdOf(nextWaitingShortcut(list, list[0], true, false).open)).toBe("c");
+    expect(entryIdOf(nextWaitingShortcut(list, undefined, false, false).open)).toBe("a");
   });
 
   test("opens task proposals, also outside Sessions", () => {
-    expect(nextWaitingShortcut([proposals], undefined, false)).toEqual({ open: proposals, taken: true });
+    expect(nextWaitingShortcut([proposals], undefined, false, false)).toEqual({ open: proposals, taken: true });
   });
 
   test("in Sessions takes the key also when nothing is waiting, elsewhere leaves it for a text field", () => {
     const list = entries(session("b", change("Working")));
-    expect(nextWaitingShortcut(list, list[0], true)).toEqual({ open: undefined, taken: true });
-    expect(nextWaitingShortcut(list, undefined, false)).toEqual({ open: undefined, taken: false });
+    expect(nextWaitingShortcut(list, list[0], true, false)).toEqual({ open: undefined, taken: true });
+    expect(nextWaitingShortcut(list, undefined, false, false)).toEqual({ open: undefined, taken: false });
+  });
+
+  test("goes to the supervisor once no entry of the list waits, also outside Sessions", () => {
+    const list = entries(waiting("a", change("Input")), session("b", change("Working")));
+    expect(entryIdOf(nextWaitingTarget(list, undefined, true))).toBe("a");
+    expect(nextWaitingTarget(list.slice(1), undefined, true)).toEqual(SUPERVISOR_TARGET);
+    expect(nextWaitingShortcut(list.slice(1), undefined, false, true)).toEqual({ open: SUPERVISOR_TARGET, taken: true });
+    expect(nextWaitingTarget(list.slice(1), undefined, false)).toBeUndefined();
   });
 });
 
-function entryIdOf(entry: SessionEntry | undefined): string | undefined {
-  return entry && entryId(entry);
+function entryIdOf(entry: WaitingTarget | undefined): string | undefined {
+  return entry && entry.kind !== "supervisor" ? entryId(entry) : entry?.kind;
 }

@@ -503,7 +503,7 @@ export const mcpTools = {
       "already running is not started again, and the result is its current run. Returns run: running with runId. Then " +
       `call ${WAIT_FOR_MISE_TASK} to learn the exit code and ${TAIL} for the output (records of this run have its runId). ` +
       "A mise config the user has not trusted gives mise_unavailable: only the user can trust it, in Trackwall; ask them. " +
-      "A session in Trackwall can run only mise tasks of its own repo. Long-running tasks (dev servers) keep running " +
+      "A session in Trackwall can run only mise tasks of its own repo, and the supervisor none. Long-running tasks (dev servers) keep running " +
       "until stopped; stop them when you no longer need them.",
     args: MiseTaskArgs,
     result: MiseTaskRunResult,
@@ -518,7 +518,7 @@ export const mcpTools = {
       "process group is killed. Returns after Trackwall has confirmed that no process of the group is alive " +
       "(run: exited with stoppedByUser: true); stop_unconfirmed when some process survived. A task that has already " +
       "ended returns its run; not_found when it has not been run since Trackwall started. A session in Trackwall can " +
-      "stop only mise tasks of its own repo.",
+      "stop only mise tasks of its own repo, and the supervisor none.",
     args: MiseTaskArgs,
     result: MiseTaskRunResult,
   },
@@ -558,7 +558,7 @@ export const mcpTools = {
       "runId; reason) and, for crashed and unhealthy, errors from its log. settled: false means some are still " +
       "starting: call again with the same arguments to keep waiting (running services are not restarted; a crashed " +
       `one starts again, e.g. after you fixed it). At most ${MAX_SLICE_REPOS} repos. A session in Trackwall can start ` +
-      `only its own repo (dependencies come from the graph). Then use ${CALL_ENDPOINT}; read logs with tail ` +
+      `only its own repo (dependencies come from the graph), and the supervisor none. Then use ${CALL_ENDPOINT}; read logs with tail ` +
       `(miseTask ${SERVICE_MISE_TASK}) and ${GET_ERRORS}. Stop what you started with stop_service when you are done.`,
     args: z
       .object({
@@ -577,7 +577,7 @@ export const mcpTools = {
     description:
       "Stop a repo's service (its whole process group) and, with dependencies: true, the services the latest " +
       `${START_SERVICE} of this repo started (not those that were already running or that another started slice uses). ` +
-      "Returns the stopped services. A session in Trackwall can stop only its own repo's service.",
+      "Returns the stopped services. A session in Trackwall can stop only its own repo's service, and the supervisor none.",
     args: z
       .object({
         repo: RepoArg,

@@ -155,7 +155,7 @@ function SessionTile({
         // The question lies over the terminal instead of pushing it down, so that it does not resize the PTY mid-turn.
         <div className="relative flex min-h-0 flex-1 flex-col">
           <SessionCloseConfirmation close={close} className="absolute inset-x-0 top-0 z-10" />
-          <SessionTerminal conn={conn} session={session.id} live={isLive(session)} focused={selected} />
+          <SessionTerminal conn={conn} session={session.id} live={isLive(session)} selected={selected} />
         </div>
       )}
       {entry.kind === "proposals" && (

@@ -4,11 +4,11 @@ import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { FolderDrop } from "@/components/FolderDrop";
 import { Loading } from "@/components/Loading";
-import { KeyboardInSupervisor } from "@/components/SessionTerminal";
 import { SupervisorPanel } from "@/components/SupervisorPanel";
 import { inDesktopShell, openWindow, reportShown, START_PARAMS, showViewMenu, startFromLocation } from "@/lib/app-window";
 import { DROP_HINT } from "@/lib/dropped-folder";
 import type { DroppedPaths } from "@/lib/file-drop";
+import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
 import { IS_MAC } from "@/lib/platform";
 import { entrySelection, findEntry, nextWaitingShortcut, type SessionSelection } from "@/lib/session-entries";
 import { SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
@@ -106,35 +106,35 @@ export function App() {
     setSupervisorPinned(pinned);
     saveSupervisorPinned(() => window.localStorage, pinned);
   }, []);
-  // Whether the keyboard is in the supervisor panel: then its terminal is the one in front of the user, not the one
-  // selected in Sessions (ADR-47), and Alt+0 puts it there.
-  const [supervisorFocused, setSupervisorFocused] = useState(false);
-  const showSupervisor = () => {
-    pinSupervisor(true);
-    setSupervisorFocused(true);
-  };
   const sessions = useSessions(conn, events, view === "sessions" || view === "home" || supervisorPinned);
   const runningLive = useMemo(() => events?.feed("mise.running.changed"), [events]);
   const tree = useSessionTree(sessions);
   const { rows } = tree;
-  const supervisor = supervisorSummary(sessions.data, rows);
-  // The supervisor has no entry in Sessions: a jump or selection that points at it opens its panel instead.
+  const supervisor = useMemo(() => supervisorSummary(sessions.data, rows), [sessions.data, rows]);
+  // Whether the keyboard is in the supervisor panel: then its terminal is the one in front of the user, not the one
+  // selected in a view (ADR-47). The panel reports focus coming and going; Alt+0 gives the keyboard to its terminal,
+  // so without a supervisor session, where there is no terminal to take it, the keyboard stays where it is.
+  const [supervisorFocused, setSupervisorFocused] = useState(false);
+  const showSupervisor = () => {
+    pinSupervisor(true);
+    if (supervisor.session) setSupervisorFocused(true);
+  };
+  // The supervisor has no entry in Sessions: a jump or selection that points at it opens its panel instead. Any other
+  // takes the keyboard out of the panel, so that the terminal it opens is the one in front.
   const openInSessions = (selection: SessionSelection) => {
     if (selectsSupervisor(sessions.data, selection)) return showSupervisor();
+    setSupervisorFocused(false);
     setView("sessions");
     setSession(selection);
   };
-  // Alt+J (ADR-48) and the global shortcut (ADR-50): the entry after the selected one, like the "Next waiting" button.
+  // Alt+J (ADR-48) and the global shortcut (ADR-50): what comes after the selected entry, like the "Next waiting" button.
   const openNextWaiting = () => {
     const inSessions = view === "sessions";
     const entries = rows.map((r) => r.entry);
-    const { open, taken } = nextWaitingShortcut(entries, inSessions ? findEntry(entries, session) : undefined, inSessions);
-    if (open) openInSessions(entrySelection(open));
-    else if (supervisor.session?.needsAttention) {
-      // The supervisor is not on the list, so it comes last: when nothing else waits, the shortcut goes to its panel.
-      showSupervisor();
-      return true;
-    }
+    const selected = inSessions ? findEntry(entries, session) : undefined;
+    const { open, taken } = nextWaitingShortcut(entries, selected, inSessions, supervisor.sessionWaits);
+    if (open?.kind === "supervisor") showSupervisor();
+    else if (open) openInSessions(entrySelection(open));
     return taken;
   };
   // Jump from the tray, a notification or the tray panel (ADR-26, ADR-39, ADR-50), from the global shortcut (ADR-50)
@@ -183,7 +183,7 @@ export function App() {
             {DROP_HINT}
           </p>
         )}
-        <KeyboardInSupervisor.Provider value={supervisorFocused}>
+        <KeyboardElsewhere.Provider value={supervisorFocused}>
           <main className="hud-grid min-h-0 flex-1 overflow-y-auto">
             {!conn && !error && (
               <div className="p-6">
@@ -237,20 +237,22 @@ export function App() {
               </div>
             )}
           </main>
-        </KeyboardInSupervisor.Provider>
+        </KeyboardElsewhere.Provider>
       </div>
       {conn && (
-        <SupervisorPanel
-          key={epoch}
-          conn={conn}
-          supervisor={supervisor}
-          pinned={supervisorPinned}
-          onPinned={pinSupervisor}
-          focused={supervisorFocused}
-          onFocusedChange={setSupervisorFocused}
-          onOpenInSessions={openInSessions}
-          onChanged={sessions.reload}
-        />
+        <KeyboardElsewhere.Provider value={false}>
+          <SupervisorPanel
+            key={epoch}
+            conn={conn}
+            supervisor={supervisor}
+            pinned={supervisorPinned}
+            onPinned={pinSupervisor}
+            focused={supervisorFocused}
+            onFocusedChange={setSupervisorFocused}
+            onOpenInSessions={openInSessions}
+            onChanged={sessions.reload}
+          />
+        </KeyboardElsewhere.Provider>
       )}
     </div>
   );

@@ -3,10 +3,11 @@ import { isTauri } from "@tauri-apps/api/core";
 import { PTY_CLOSE_NOT_FOUND, type PtyClientMessage, ptySocket } from "@trackwall/protocol";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import type { Connection } from "@/lib/connection";
 import { daemonSocket } from "@/lib/daemon-socket";
 import { DROP_HOVER_RING, FILE_DROP_TARGET, FileDropEvent } from "@/lib/file-drop";
+import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
 import { oncePerFrame } from "@/lib/once-per-frame";
 import { pastedPaths } from "@/lib/pasted-paths";
 import { IS_MAC } from "@/lib/platform";
@@ -19,16 +20,13 @@ import { FocusReporter, terminalInFront } from "@/lib/window-focus";
 
 const RECONNECT_MS = 1000;
 
-/** The keyboard is in the supervisor panel (ADR-58); `App` sets it around the views, not around the panel itself. */
-export const KeyboardInSupervisor = createContext(false);
-
 /**
  * The session terminal of one session (§4.4, ADR-26): xterm.js connected over a WebSocket to the PTY in the daemon. The
  * daemon sends the screen image first, so switching sessions or a dropped connection starts from the current screen,
  * not an empty terminal. Keys and the terminal size go to the session; the PTY takes the size of the last session
  * terminal that reported one, and a window that comes to the front reports its terminals' sizes again, so with the
  * session open in two windows (ADR-49) the one you work in sets it. The window also tells the daemon whether it is in front of the user, which marks the session seen
- * (ADR-47). In the grid (ADR-48) several terminals are open at once; only the `focused` one takes the keyboard and
+ * (ADR-47). In the grid (ADR-48) several terminals are open at once; only the `selected` one takes the keyboard and
  * counts as in front, so a waiting session in another tile keeps waiting until the user selects it. Files dropped on
  * the terminal (ADR-51) are pasted as their paths, as if the user typed them.
  */
@@ -36,16 +34,15 @@ export function SessionTerminal({
   conn,
   session,
   live,
-  focused: selected,
+  selected,
 }: {
   conn: Connection;
   session: string;
   live: boolean;
-  focused: boolean;
+  selected: boolean;
 }) {
-  // While the keyboard is in the supervisor panel (ADR-58), a terminal of the view is not the one in front of the user.
-  const keyboardInSupervisor = useContext(KeyboardInSupervisor);
-  const focused = selected && !keyboardInSupervisor;
+  const keyboardElsewhere = useContext(KeyboardElsewhere);
+  const focused = selected && !keyboardElsewhere;
   const frame = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const term = useRef<Terminal>(undefined);
