@@ -102,6 +102,11 @@ impl Windows {
         self.with(|r| r.focused(label));
     }
 
+    /// The window a click in the menu bar is for: the last focused one, otherwise the main window.
+    pub fn last_focused(&self) -> String {
+        self.with(|r| r.focus_order.last().map_or(MAIN, String::as_str).to_string())
+    }
+
     pub fn session_window(&self) -> String {
         self.with(|r| r.session_window().to_string())
     }
@@ -141,6 +146,11 @@ fn window_url(view: Option<&str>, session_layout: Option<&str>) -> Option<String
         }
     }
     Some(if params.is_empty() { "index.html".into() } else { format!("index.html?{}", params.join("&")) })
+}
+
+/// A window's title: the name of its view, then the app, so windows differ in the taskbar and the Window menu.
+pub fn title(view_name: &str, app_name: &str) -> String {
+    format!("{view_name} – {app_name}")
 }
 
 /// Opens an extra window with `view` under the lowest free label.
@@ -401,6 +411,11 @@ mod tests {
         r.focused("window-2");
         r.closed("window-2");
         assert_eq!(r.session_window(), "main");
+    }
+
+    #[test]
+    fn a_window_title_is_its_view_name_and_the_app() {
+        assert_eq!(title("Sessions", "Trackwall"), "Sessions – Trackwall");
     }
 
     #[test]
