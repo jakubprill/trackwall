@@ -5,13 +5,13 @@ import { RunState } from "./procs.ts";
 import { RepoId } from "./workspace.ts";
 
 /**
- * Kontrakt modułu `mise` (§4, ADR-20): taski mise repo z workspace i ich uruchomienia. Każda akcja to
- * `POST /api/mise/<akcja>`. Klient wskazuje task nazwą z listy; komendę składa daemon (§1.2).
+ * Contract of the `mise` module (§4, ADR-20): mise tasks of the workspace repos and their runs. Every action is
+ * `POST /api/mise/<action>`. The client names a mise task from the list; the daemon builds the command (§1.2).
  */
 
 /**
- * Nazwa taska mise taka, jaką zwraca `mise tasks ls` (np. `dev`, `build:ui`). Daemon i tak uruchamia tylko task
- * z aktualnej listy repo; schemat odrzuca to, co mise wziąłby za opcję albo czego nie da się pokazać.
+ * A mise task name as `mise tasks ls` returns it (for example `dev`, `build:ui`). The daemon runs only a mise task from the
+ * repo's current list anyway; the schema rejects what mise would take for an option or what cannot be shown.
  */
 export const MiseTaskName = z
   .string()
@@ -24,26 +24,26 @@ export type MiseTaskName = z.infer<typeof MiseTaskName>;
 export const MiseTask = z.object({
   name: MiseTaskName,
   description: z.string(),
-  /** Ostatnie uruchomienie w tym działaniu daemona; `null`, gdy task nie był uruchamiany. */
+  /** The last run since the daemon started; `null` when the mise task was not run. */
   run: RunState.nullable(),
 });
 export type MiseTask = z.infer<typeof MiseTask>;
 
 /**
- * Powód, dla którego mise nie podał listy, i taski, które mimo to działają (uruchomione wcześniej): bez nich błąd
- * w `mise.toml` w trakcie pracy odebrałby możliwość zatrzymania serwera z UI.
+ * The reason mise did not give the list, and the mise tasks that run anyway (started earlier): without them an error in
+ * `mise.toml` during work would take away stopping the server from the UI.
  */
 const NoList = { message: z.string(), running: z.array(MiseTask) };
 
-/** Taski repo albo powód, dla którego mise ich nie podał. */
+/** The repo's mise tasks, or the reason mise did not list them. */
 export const MiseTasks = z.discriminatedUnion("kind", [
-  /** Repo bez konfiguracji mise ma pustą listę. Task, który zniknął z konfiguracji w trakcie działania, zostaje do zatrzymania. */
+  /** A repo without a mise config has an empty list. A mise task that left the config while running stays, so it can be stopped. */
   z.object({ kind: z.literal("ok"), tasks: z.array(MiseTask) }),
-  /** Nie ma programu `mise` w `PATH` daemona. */
+  /** There is no `mise` program in the daemon's `PATH`. */
   z.object({ kind: z.literal("not_installed"), ...NoList }),
-  /** mise nie czyta konfiguracji repo, dopóki użytkownik jej nie zaufa (`mise trust`, akcja `trust`). */
+  /** mise does not read the repo's config until the user trusts it (`mise trust`, the `trust` action). */
   z.object({ kind: z.literal("untrusted"), ...NoList }),
-  /** Inny błąd mise, np. składnia `mise.toml`, albo przekroczony limit czasu; komunikat z mise. */
+  /** Another mise error, for example `mise.toml` syntax, or a timeout; the message comes from mise. */
   z.object({ kind: z.literal("error"), ...NoList }),
 ]);
 export type MiseTasks = z.infer<typeof MiseTasks>;
@@ -64,15 +64,15 @@ const MiseTaskRequest = z.object({ repo: RepoId, task: TaskId.nullable().default
 
 export const miseApi = {
   tasks: endpoint("tasks", z.object({ repo: RepoId }).strict(), MiseTasks),
-  /** Działające taski wszystkich repo, bez uruchamiania mise: tani do częstego odpytywania (pulpit, ADR-33). */
+  /** Running mise tasks of all repos, without running mise: cheap to poll often (dashboard, ADR-33). */
   running: endpoint("running", z.object({}).strict(), z.array(RunningMiseTask)),
   /**
    * Starts a mise task in a process group (`mise run <task>` in the repo root, or in the worktree of `task`, ADR-59);
    * a task already running returns its state.
    */
   start: endpoint("start", MiseTaskRequest, RunState),
-  /** Wraca po potwierdzeniu, że żaden proces grupy nie żyje; zakończony już task zwraca jego stan. */
+  /** Returns after confirming that no process of the group is alive; a mise task that already ended returns its state. */
   stop: endpoint("stop", MiseTaskRequest, RunState),
-  /** `mise trust` w korzeniu repo: zgoda użytkownika na konfigurację mise repo. Tylko z UI, nigdy z MCP (§8). */
+  /** `mise trust` in the repo root: the user's consent to the repo's mise config. Only from the UI, never from MCP (§8). */
   trust: endpoint("trust", z.object({ repo: RepoId }).strict(), MiseTasks),
 };

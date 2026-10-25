@@ -5,89 +5,89 @@ import { ConsumedHttp, Dto, ProvidedApp, ProvidedEndpoint } from "./http.ts";
 import { RepoId } from "./workspace.ts";
 
 /**
- * Kontrakt modułu `cards` (§4.6, ADR-25): karta repo, czyli fakty wyciągnięte deterministycznie z plików buildu
- * i konfiguracji w ostatnim commicie, oraz tagi repo policzone z karty i z reguł w `workspace.yaml`. Każda akcja to
- * `POST /api/cards/<akcja>`. Bez LLM: każde pole ma dowód (plik i linię).
+ * Contract of the `cards` module (§4.6, ADR-25): the repo card, that is facts extracted deterministically from build and
+ * configuration files in the last commit, and repo tags computed from the card and from the rules in `workspace.yaml`.
+ * Every action is `POST /api/cards/<action>`. No LLM: every field has evidence (file and line).
  */
 
 /**
- * System budowania albo menedżer paczek, którego plik buildu jest w repo. `npm`, `pnpm`, `yarn` i `bun` rozróżnia
- * pole `packageManager` albo plik blokady w katalogu z `package.json`.
+ * A build system or package manager whose build file is in the repo. `npm`, `pnpm`, `yarn` and `bun` are told apart by
+ * the `packageManager` field or the lockfile in the directory with `package.json`.
  */
 export const BuildTool = z.enum(["maven", "gradle", "npm", "pnpm", "yarn", "bun"]);
 export type BuildTool = z.infer<typeof BuildTool>;
 
-/** Plik buildu, który należy do buildu repo: korzeń i moduły albo paczki z niego wymienione. */
+/** A build file that belongs to the repo's build: the root, and the modules or packages it lists. */
 export const BuildFile = z.object({
   path: z.string(),
   tool: BuildTool,
-  /** Nazwa z pliku (`artifactId`, `name` z `package.json`, nazwa projektu Gradle); `null`, gdy jej nie ma. */
+  /** The name from the file (`artifactId`, `name` from `package.json`, the Gradle project name); `null` when there is none. */
   name: z.string().nullable(),
-  /** Plik buildu, który wymienia ten jako moduł albo paczkę workspace; `null` dla korzenia buildu. */
+  /** The build file that lists this one as a module or workspace package; `null` for the build root. */
   memberOf: z.string().nullable(),
 });
 export type BuildFile = z.infer<typeof BuildFile>;
 
 /**
- * Przestrzeń nazw paczek: współrzędne Maven (`grupa:artefakt`, także z Gradle), nazwy npm i identyfikatory wtyczek
- * Gradle. Krawędzie grafu łączą to, co repo udostępnia, z tym, czego używa inne, w tej samej przestrzeni.
+ * Package namespace: Maven coordinates (`group:artifact`, also from Gradle), npm names and Gradle plugin ids. Graph
+ * edges join what a repo provides with what another uses, within the same namespace.
  */
 export const PackageEcosystem = z.enum(["maven", "npm", "gradle-plugin"]);
 export type PackageEcosystem = z.infer<typeof PackageEcosystem>;
 
-/** Paczka, którą repo buduje i którą inne repo może wziąć jako zależność. */
+/** A package the repo builds and another repo can take as a dependency. */
 export const ProvidedPackage = z.object({
   kind: z.literal("package"),
   ecosystem: PackageEcosystem,
   name: z.string(),
-  /** Wersja z pliku buildu po podstawieniu właściwości; `null`, gdy plik jej nie podaje. */
+  /** The version from the build file after substituting properties; `null` when the file does not give one. */
   version: z.string().nullable(),
   evidence: Evidence,
 });
 export type ProvidedPackage = z.infer<typeof ProvidedPackage>;
 
-/** Paczka spoza repo, której repo używa: zależność, rodzic Maven, BOM, wtyczka buildu. */
+/** A package from outside the repo that the repo uses: a dependency, a Maven parent, a BOM, a build plugin. */
 export const ConsumedPackage = ProvidedPackage.extend({
   /**
-   * Ten sam typ co w `ProvidedPackage`, inne znaczenie: wersja tak, jak stoi w pliku (zakres npm, właściwość Maven,
-   * której nie dało się podstawić); `null` bez wersji.
+   * The same type as in `ProvidedPackage`, a different meaning: the version as it stands in the file (an npm range, a Maven
+   * property that could not be substituted); `null` without a version.
    */
   version: z.string().nullable(),
   /**
-   * Rodzaj użycia z pliku: zakres Maven (`compile`, `test`, `import`…), `parent`, `plugin`, konfiguracja Gradle
-   * (`implementation`…) albo pole `package.json` (`dependencies`, `devDependencies`…).
+   * The kind of use from the file: a Maven scope (`compile`, `test`, `import`…), `parent`, `plugin`, a Gradle
+   * configuration (`implementation`…) or a `package.json` field (`dependencies`, `devDependencies`…).
    */
   scope: z.string(),
 });
 export type ConsumedPackage = z.infer<typeof ConsumedPackage>;
 
-/** Co repo udostępnia: paczki, aplikacje Spring Boot i ich endpointy HTTP (ADR-30); potem topiki (§4.6). */
+/** What the repo provides: packages, Spring Boot applications and their HTTP endpoints (ADR-30); topics later (§4.6). */
 export const Provided = z.discriminatedUnion("kind", [ProvidedPackage, ProvidedApp, ProvidedEndpoint]);
 export type Provided = z.infer<typeof Provided>;
 
-/** Czego repo używa: paczki i klienci HTTP (ADR-30); potem topiki (§4.6). */
+/** What the repo uses: packages and HTTP clients (ADR-30); topics later (§4.6). */
 export const Consumed = z.discriminatedUnion("kind", [ConsumedPackage, ConsumedHttp]);
 export type Consumed = z.infer<typeof Consumed>;
 
-/** Wersja narzędzia, której repo wymaga: z konfiguracji mise albo z pliku, który podaje ją po swojemu. */
+/** A tool version the repo requires: from the mise config or from a file that gives it in its own way. */
 export const ToolRequirement = z.object({
-  /** Nazwa narzędzia tak, jak zna ją mise (`java`, `node`, `pnpm`, `maven`…). */
+  /** The tool name as mise knows it (`java`, `node`, `pnpm`, `maven`…). */
   tool: z.string(),
   version: z.string(),
   /**
-   * `mise`: `[tools]` w konfiguracji mise albo `.tool-versions`, które mise czyta wprost. `hint`: wersja z innego
-   * pliku (`.nvmrc`, `engines.node`, `maven.compiler.release`…), którą mise może, ale nie musi brać pod uwagę.
+   * `mise`: `[tools]` in the mise config or `.tool-versions`, which mise reads directly. `hint`: a version from another
+   * file (`.nvmrc`, `engines.node`, `maven.compiler.release`…) that mise may or may not take into account.
    */
   source: z.enum(["mise", "hint"]),
   evidence: Evidence,
 });
 export type ToolRequirement = z.infer<typeof ToolRequirement>;
 
-/** Task mise zapisany w commicie: wpis `[tasks]` konfiguracji mise w korzeniu repo albo plik w katalogu tasków mise. */
+/** A mise task saved in the commit: a `[tasks]` entry of the mise config in the repo root or a file in the mise task directory. */
 export const DeclaredMiseTask = z.object({
   /**
-   * Nazwa z konfiguracji albo ścieżka pliku w katalogu tasków z `:` (`mise-tasks/db/reset` to `db:reset`, `_default`
-   * to nazwa katalogu); rozszerzeń, które mise może pominąć, karta nie skraca.
+   * The name from the config, or the file path in the mise task directory with `:` (`mise-tasks/db/reset` is `db:reset`,
+   * `_default` is the directory name); the card does not shorten extensions mise may drop.
    */
   name: z.string(),
   evidence: Evidence,
@@ -95,21 +95,22 @@ export const DeclaredMiseTask = z.object({
 export type DeclaredMiseTask = z.infer<typeof DeclaredMiseTask>;
 
 /**
- * Konfiguracja mise repo z commita (ADR-34): pliki konfiguracji mise w korzeniu i zapisane taski. Bez tasków repo nie ma
- * na czym uruchomić komendy zbiorczej ani taska z UI, więc dostaje tag `no-mise`. Taski z konfiguracji globalnej
- * użytkownika i z plików w `task_config.includes` nie są tu liczone; pełną listę daje `mise tasks ls` (§4.7).
+ * The repo's mise config from the commit (ADR-34): the mise config files in the root and the saved tasks. Without mise
+ * tasks a repo has nothing to run the batch command or a mise task from the UI on, so it gets the tag `no-mise`. mise tasks
+ * from the user's global config and from files in `task_config.includes` are not counted here; `mise tasks ls` gives
+ * the full list (§4.7).
  */
 export const MiseSetup = z.object({
   configFiles: z.array(z.string()),
   tasks: z.array(DeclaredMiseTask),
-  /** `false`, gdy któregoś pliku konfiguracji karta nie przeczytała (limity): wtedy nie wiadomo, czy repo ma taski. */
+  /** `false` when the card did not read one of the config files (limits): then it is unknown whether the repo has mise tasks. */
   complete: z.boolean(),
 });
 export type MiseSetup = z.infer<typeof MiseSetup>;
 
 /**
- * Mechanizm wykryty w repo: framework, sposób komunikacji albo wdrożenia. Spis, bez oceny: mówi, że repo go używa,
- * a dowody mówią skąd to wiadomo.
+ * A mechanism detected in the repo: a framework, a way of communicating or deploying. An inventory, not a judgement: it
+ * says the repo uses it, and the evidence says how that is known.
  */
 export const MechanismId = z.enum([
   "spring-boot",
@@ -134,38 +135,38 @@ export const MechanismId = z.enum([
 export type MechanismId = z.infer<typeof MechanismId>;
 
 export const MechanismEvidence = Evidence.extend({
-  /** Co w tym miejscu wskazuje mechanizm, np. `org.springframework.cloud:spring-cloud-starter-openfeign`. */
+  /** What points to the mechanism at this spot, for example `org.springframework.cloud:spring-cloud-starter-openfeign`. */
   detail: z.string(),
 });
 export type MechanismEvidence = z.infer<typeof MechanismEvidence>;
 
 export const Mechanism = z.object({
   id: MechanismId,
-  /** Najwyżej kilka pierwszych dowodów; jeden wystarcza, żeby mechanizm był na karcie. */
+  /** At most the first few pieces of evidence; one is enough for the mechanism to be on the card. */
   evidence: z.array(MechanismEvidence).min(1),
 });
 export type Mechanism = z.infer<typeof Mechanism>;
 
-/** Plik buildu albo konfiguracji, którego ekstraktor nie umiał przeczytać; reszta karty powstaje bez niego. */
+/** A build or configuration file the extractor could not read; the rest of the card is made without it. */
 export const CardProblem = z.object({ path: z.string(), message: z.string() });
 export type CardProblem = z.infer<typeof CardProblem>;
 
 /**
- * Karta repo dla jednego commita. Zależy tylko od drzewa commita, więc daemon liczy ją raz na commit i trzyma
- * w pamięci podręcznej (ADR-25).
+ * The repo card for one commit. It depends only on the commit's tree, so the daemon computes it once per commit and
+ * keeps it in a cache (ADR-25).
  */
 export const RepoCard = z.object({
-  /** Pełny hash commita, z którego czytano pliki. */
+  /** The full hash of the commit the files were read from. */
   commit: z.string(),
   buildFiles: z.array(BuildFile),
   /**
-   * Paczki z repo (bez prywatnych paczek npm, `"private": true`, których nikt spoza repo nie zainstaluje), aplikacje
-   * Spring Boot i endpointy HTTP.
+   * Packages from the repo (without private npm packages, `"private": true`, which nobody outside the repo installs),
+   * Spring Boot applications and HTTP endpoints.
    */
   provides: z.array(Provided),
-  /** Paczki spoza repo, każda raz (pierwsze wystąpienie; paczki z tego samego repo pominięte), i klienci HTTP. */
+  /** Packages from outside the repo, each once (first occurrence; packages from the same repo left out), and HTTP clients. */
   consumes: z.array(Consumed),
-  /** DTO endpointów HTTP z repo, w kolejności odkrycia od endpointów (ADR-38). */
+  /** DTOs of the repo's HTTP endpoints, in the order found from the endpoints (ADR-38). */
   dtos: z.array(Dto),
   tools: z.array(ToolRequirement),
   mise: MiseSetup,
@@ -174,7 +175,7 @@ export const RepoCard = z.object({
 });
 export type RepoCard = z.infer<typeof RepoCard>;
 
-/** Nazwa tagu: małe litery, cyfry i `-`, jak `frontend` albo `core-api`; w UI z `#` z przodu. */
+/** A tag name: lowercase letters, digits and `-`, like `frontend` or `core-api`; shown in the UI with a leading `#`. */
 export const TagName = z
   .string()
   .min(1)
@@ -182,31 +183,31 @@ export const TagName = z
   .regex(/^[a-z0-9][a-z0-9-]*$/, "tag name: lowercase letters, digits and '-', not starting with '-'");
 export type TagName = z.infer<typeof TagName>;
 
-/** Tag repo bez tasków mise w commicie (ADR-34); UI wyróżnia go na liście repo, bo w takim repo nie ma czego uruchomić. */
+/** The tag of a repo without mise tasks in the commit (ADR-34); the UI marks it in the repo list, because such a repo has nothing to run. */
 export const NO_MISE_TAG = "no-mise";
 
-/** Tag repo z powodem, dla którego repo go dostało (zdanie dla człowieka, np. „zależność react w package.json”). */
+/** A repo tag with the reason the repo got it (a sentence for a person, for example "react dependency in package.json"). */
 export const RepoTag = z.object({ name: TagName, reason: z.string() });
 export type RepoTag = z.infer<typeof RepoTag>;
 
 /**
- * Reguły tagów z `workspace.yaml` (`repoTags`): tag i wzorce, z których wystarczy jeden pasujący do identyfikatora
- * repo albo adresu repo zdalnego. `*` to dowolny ciąg bez `/`, `**` także z `/`, np. `core-api: ["*-core",
- * "gitlab.example.com/core/**"]`. Tak firmowe nazwy zespołów i grup zostają w konfiguracji użytkownika (ADR-7).
+ * Tag rules from `workspace.yaml` (`repoTags`): a tag and patterns, one of which has to match the repo identifier or
+ * the repo's remote address. `*` is any string without `/`, `**` also with `/`, for example `core-api: ["*-core",
+ * "gitlab.example.com/core/**"]`. This keeps company team and group names in the user's configuration (ADR-7).
  */
 export const RepoTagRules = z.record(TagName, z.array(z.string().min(1).max(300)).min(1));
 export type RepoTagRules = z.infer<typeof RepoTagRules>;
 
 export const RepoCardResult = z.object({
   repo: RepoId,
-  /** `null` w repo bez commitów: nie ma z czego czytać. */
+  /** `null` in a repo without commits: there is nothing to read from. */
   card: RepoCard.nullable(),
-  /** Tagi z karty i z reguł `repoTags`, po nazwie. */
+  /** Tags from the card and from the `repoTags` rules, by name. */
   tags: z.array(RepoTag),
 });
 export type RepoCardResult = z.infer<typeof RepoCardResult>;
 
-/** Tagi jednego repo z listy albo powód, dla którego ich nie ma (git nie czyta repo). */
+/** The tags of one repo in the list, or the reason there are none (git cannot read the repo). */
 export const RepoTags = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("ok"), repo: RepoId, tags: z.array(RepoTag) }),
   z.object({ kind: z.literal("unavailable"), repo: RepoId, message: z.string() }),
@@ -218,8 +219,8 @@ function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string,
 }
 
 export const cardsApi = {
-  /** Karta repo z ostatniego commita; pierwsze pytanie o commit czyta pliki z gita, następne biorą ją z pamięci. */
+  /** The repo card from the last commit; the first request for a commit reads the files from git, later ones take it from the cache. */
   card: endpoint("card", z.object({ repo: RepoId }).strict(), RepoCardResult),
-  /** Tagi każdego repo z folderu z projektami, w kolejności listy repo. */
+  /** The tags of every repo in the projects folder, in the order of the repo list. */
   tags: endpoint("tags", z.object({}).strict(), z.array(RepoTags)),
 };

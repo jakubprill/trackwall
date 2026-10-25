@@ -3,34 +3,34 @@ import type { Endpoint } from "./api.ts";
 import { RepoId } from "./workspace.ts";
 
 /**
- * Kontrakt modułu `batch` (§4.8, ADR-27): komenda zbiorcza, czyli te same kroki na wielu repo naraz, z wynikiem
- * każdego kroku w każdym repo. Klient wybiera repo po identyfikatorach i kroki z listy; komendy składa daemon (§1.2).
- * Trzymana tylko w pamięci daemona, jak synchronizacja.
+ * Contract of the `batch` module (§4.8, ADR-27): the batch command, that is the same steps on many repos at once, with the
+ * result of every step in every repo. The client picks repos by identifier and steps from the list; the daemon builds the
+ * commands (§1.2). Kept only in the daemon's memory, like sync.
  */
 
 /**
- * Krok komendy zbiorczej, w kolejności wykonania w repo: synchronizacja (ADR-21), narzędzia z konfiguracji mise
- * repo (`mise install`), zależności (task mise `setup`) i build (task mise `build`).
+ * A step of the batch command, in the order it runs in a repo: sync (ADR-21), tools from the repo's mise config
+ * (`mise install`), dependencies (the mise task `setup`) and build (the mise task `build`).
  */
 export const BatchStep = z.enum(["sync", "tools", "setup", "build"]);
 export type BatchStep = z.infer<typeof BatchStep>;
 
-/** Kolejność kroków w repo, niezależnie od kolejności w żądaniu: build po zależnościach, zależności po narzędziach. */
+/** The order of steps in a repo, whatever the order in the request: build after dependencies, dependencies after tools. */
 export const BATCH_STEPS: readonly BatchStep[] = BatchStep.options;
 
 export const BatchStepState = z.discriminatedUnion("state", [
   z.object({ state: z.literal("waiting") }),
   z.object({ state: z.literal("running") }),
-  /** `detail`: wynik synchronizacji (gałąź i liczba nowych commitów); przy krokach mise `null`. */
+  /** `detail`: the sync result (branch and number of new commits); `null` for mise steps. */
   z.object({ state: z.literal("done"), detail: z.string().nullable() }),
   /**
-   * Krok nie miał czego zrobić albo nie mógł: synchronizacja pominięta z powodem (repo i tak idzie dalej), repo bez
-   * taska mise albo wcześniejszy krok tego repo zakończył się błędem.
+   * The step had nothing to do or could not run: sync skipped with a reason (the repo carries on anyway), a repo without
+   * the mise task, or an earlier step of this repo ended with an error.
    */
   z.object({ state: z.literal("skipped"), message: z.string() }),
-  /** `lastLines`: koniec wyjścia procesu, gdy krok był procesem; komunikat gita albo mise ma tylko `message`. */
+  /** `lastLines`: the end of the process output when the step was a process; a git or mise message has only `message`. */
   z.object({ state: z.literal("failed"), message: z.string(), lastLines: z.array(z.string()) }),
-  /** Przerwany przez użytkownika (przerwanie komendy, stop taska w szczegółach repo albo wyjście daemona). */
+  /** Cancelled by the user (cancelling the command, stopping the mise task in the repo details, or the daemon exiting). */
   z.object({ state: z.literal("cancelled") }),
 ]);
 export type BatchStepState = z.infer<typeof BatchStepState>;
@@ -39,10 +39,10 @@ export const BatchStepResult = z.intersection(z.object({ step: BatchStep }), Bat
 export type BatchStepResult = z.infer<typeof BatchStepResult>;
 
 export const BatchRepo = z.object({
-  /** Identyfikator repo w chwili startu (ADR-18: może się zmienić razem z nazwą katalogu). */
+  /** The repo identifier at start (ADR-18: it can change together with the directory name). */
   repo: RepoId,
   path: z.string(),
-  /** Wybrane kroki w kolejności `BATCH_STEPS`. */
+  /** The chosen steps in the order of `BATCH_STEPS`. */
   steps: z.array(BatchStepResult),
 });
 export type BatchRepo = z.infer<typeof BatchRepo>;
@@ -50,11 +50,11 @@ export type BatchRepo = z.infer<typeof BatchRepo>;
 export const BatchRun = z.object({
   /** ISO 8601. */
   startedAt: z.string(),
-  /** ISO 8601; `null`, dopóki któreś repo czeka albo trwa. */
+  /** ISO 8601; `null` while some repo is waiting or running. */
   finishedAt: z.string().nullable(),
-  /** Użytkownik przerwał komendę: kroki, które nie zaczęły się przed przerwaniem, są `cancelled`. */
+  /** The user cancelled the command: steps that had not started before the cancel are `cancelled`. */
   cancelled: z.boolean(),
-  /** Wybrane repo w kolejności z żądania. */
+  /** The chosen repos in the order of the request. */
   repos: z.array(BatchRepo),
 });
 export type BatchRun = z.infer<typeof BatchRun>;
@@ -65,7 +65,7 @@ function unique<T>(items: readonly T[]): boolean {
 
 export const BatchRequest = z
   .object({
-    /** Repo do objęcia komendą; wybór (ręcznie, później po tagach) robi klient. */
+    /** Repos the command covers; the client makes the choice (by hand, later by tags). */
     repos: z.array(RepoId).min(1, "choose at least one repo").refine(unique, "a repo appears twice in the list"),
     steps: z.array(BatchStep).min(1, "choose at least one step").refine(unique, "a step appears twice in the list"),
   })
@@ -77,13 +77,13 @@ function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string,
 }
 
 export const batchApi = {
-  /** Zaczyna komendę zbiorczą w tle i od razu ją zwraca; gdy inna trwa, `bad_request`. Postęp przez `run`. */
+  /** Starts the batch command in the background and returns it at once; while another runs, `bad_request`. Progress through `run`. */
   start: endpoint("start", BatchRequest, BatchRun),
-  /** Ostatnia komenda zbiorcza od startu daemona; `null`, gdy jej nie było. */
+  /** The last batch command since the daemon started; `null` when there was none. */
   run: endpoint("run", z.object({}).strict(), BatchRun.nullable()),
   /**
-   * Przerywa trwającą komendę: repo, które czekają, i kroki, które się nie zaczęły, nie ruszą, a działające taski mise
-   * są zatrzymywane jak stopem ze szczegółów repo. Trwającego kroku synchronizacji nie da się przerwać, kończy się sam.
+   * Cancels a running command: repos that are waiting and steps that have not started will not start, and running mise
+   * tasks are stopped like a stop from the repo details. A running sync step cannot be cancelled; it finishes on its own.
    */
   cancel: endpoint("cancel", z.object({}).strict(), BatchRun.nullable()),
 };

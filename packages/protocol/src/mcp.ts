@@ -27,44 +27,44 @@ import { SyncRepo } from "./sync.ts";
 import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
 
 /**
- * Kontrakt narzędzi MCP daemona (§5.3, ADR-24): nazwa, opis dla agenta, wejście i wynik każdego narzędzia w jednym
- * obiekcie `McpTool`, tak jak `Endpoint` dla API. Daemon ogłasza z nich `tools/list` i sprawdza nimi argumenty oraz
- * `structuredContent`, a testy, UI i klienty biorą z nich nazwy i parsują odpowiedź. Narzędzia czytają, a te
- * z `readOnly: false` zgłaszają propozycję albo podsumowanie zadania (ADR-39; zadanie startuje dopiero po zatwierdzeniu
- * w UI) albo uruchamiają i zatrzymują taski mise z zaufanej konfiguracji repo (ADR-41). Nazwy narzędzi, pól i opisy
- * po angielsku (ADR-32).
+ * Contract of the daemon's MCP tools (§5.3, ADR-24): the name, the description for the agent, the input and the result of
+ * every tool in one `McpTool` object, like `Endpoint` for the API. The daemon announces `tools/list` from them and checks
+ * arguments and `structuredContent` with them, and tests, the UI and clients take names from them and parse responses.
+ * The tools read; those with `readOnly: false` submit a task proposal or summary (ADR-39; a task starts only after
+ * approval in the UI) or run and stop mise tasks from a repo's trusted config (ADR-41). Tool names, fields and
+ * descriptions are in English (ADR-32).
  */
 
-/** Nazwa serwera MCP w `initialize` i w konfiguracji Copilot CLI (`copilot mcp add trackwall …`). */
+/** The MCP server name in `initialize` and in the Copilot CLI config (`copilot mcp add trackwall …`). */
 export const MCP_SERVER_NAME = "trackwall";
 
 /**
- * Wpis serwera MCP Trackwall w formacie konfiguracji MCP Copilot CLI (`mcp-config.json`, `--additional-mcp-config`):
- * lokalny serwer uruchamiany komendą mostu stdio (`mcpStdioCommand`), ze wszystkimi narzędziami.
+ * The Trackwall MCP server entry in the Copilot CLI MCP config format (`mcp-config.json`, `--additional-mcp-config`):
+ * a local server started with the stdio bridge command (`mcpStdioCommand`), with all tools.
  */
 export function copilotMcpServers(mcpStdioCommand: readonly string[]) {
   const [command, ...args] = mcpStdioCommand;
   return { mcpServers: { [MCP_SERVER_NAME]: { type: "local", command, args, tools: ["*"] } } };
 }
 
-/** Wynik repo w ostatniej synchronizacji i kiedy ta synchronizacja trwała. */
+/** The repo's result in the last sync and when that sync ran. */
 const LastSync = z.object({
   /** ISO 8601. */
   startedAt: z.string(),
-  /** ISO 8601; `null`, dopóki synchronizacja trwa. */
+  /** ISO 8601; `null` while the sync is running. */
   finishedAt: z.string().nullable(),
   result: SyncRepo,
 });
 
 /**
- * Repo z listy (`Repo`) dla agenta: wynik w ostatniej synchronizacji od startu daemona (`null`, gdy go w niej nie
- * było) i nazwy tagów repo (ADR-25).
+ * A repo from the list (`Repo`) for the agent: its result in the last sync since the daemon started (`null` when it was
+ * not in it) and the names of the repo's tags (ADR-25).
  */
 export const AgentRepo = Repo.extend({ lastSync: LastSync.nullable(), tags: z.array(TagName) });
 export type AgentRepo = z.infer<typeof AgentRepo>;
 
 export const ListReposResult = z.object({
-  /** Pełna ścieżka folderu z projektami; `null`, dopóki użytkownik go nie ustawi, a wtedy lista jest pusta. */
+  /** The full path of the projects folder; `null` until the user sets it, and then the list is empty. */
   projectsDir: z.string().nullable(),
   repos: z.array(AgentRepo),
 });
@@ -72,11 +72,11 @@ export type ListReposResult = z.infer<typeof ListReposResult>;
 
 export const GetRepoResult = z.object({
   repo: AgentRepo,
-  /** README z commita HEAD, przycięte dla kontekstu agenta; `null`, gdy repo go nie ma. */
+  /** The README from the HEAD commit, cut for the agent's context; `null` when the repo has none. */
   readme: RepoOverview.shape.readme,
-  /** Ostatnie commity, od najnowszego. */
+  /** The latest commits, newest first. */
   commits: z.array(Commit),
-  /** Taski mise repo albo powód, dla którego mise ich nie podał (`not_installed`, `untrusted`, `error`). */
+  /** The repo's mise tasks, or the reason mise did not list them (`not_installed`, `untrusted`, `error`). */
   miseTasks: MiseTasks,
 });
 export type GetRepoResult = z.infer<typeof GetRepoResult>;
@@ -84,9 +84,9 @@ export type GetRepoResult = z.infer<typeof GetRepoResult>;
 const [RunningSession, StoppingSession, ExitedSession] = RunState.options;
 
 /**
- * Sesja dla agenta: to samo co `Session`, ale zakończona grupa procesów bez ostatnich linii ekranu: są
- * maskowane tylko wartościami sekretów ze środowiska procesu (§4.2), a agent wypisuje w terminalu także to, co przeczytał
- * z plików albo dostał w poleceniu, więc ekran jednej sesji nie trafia do innej (§8, ADR-36).
+ * A session for the agent: the same as `Session`, but an ended process group comes without the last screen lines: they
+ * are masked only with secret values from the process environment (§4.2), and an agent also prints in the terminal what
+ * it read from files or got in its prompt, so one session's screen does not reach another (§8, ADR-36).
  */
 export const AgentSession = Session.extend({
   run: z.discriminatedUnion("kind", [RunningSession, StoppingSession, ExitedSession.omit({ lastLines: true })]),
@@ -94,24 +94,24 @@ export const AgentSession = Session.extend({
 export type AgentSession = z.infer<typeof AgentSession>;
 
 export const ListSessionsResult = z.object({
-  /** Sesje od najnowszej, także zakończone, dopóki użytkownik ich nie zamknie. */
+  /** Sessions, newest first, ended ones too, until the user closes them. */
   sessions: z.array(AgentSession),
-  /** Zadania od najnowszego; sesja zadania ma jego identyfikator w `Session.task`. */
+  /** Tasks, newest first; a task's session has its id in `Session.task`. */
   tasks: z.array(Task),
-  /** Propozycje zadań czekające na decyzję użytkownika (ADR-39). */
+  /** Task proposals waiting for the user's decision (ADR-39). */
   proposals: z.array(TaskProposal),
-  /** Sesja, która woła narzędzie (po tokenie sesji); `null` dla agenta spoza Trackwall. */
+  /** The session calling the tool (by its session token); `null` for an agent outside Trackwall. */
   caller: SessionId.nullable(),
 });
 export type ListSessionsResult = z.infer<typeof ListSessionsResult>;
 
 export const GetSessionResult = z.object({
   session: AgentSession,
-  /** Zadanie sesji; `null` dla sesji w korzeniu repo. */
+  /** The session's task; `null` for a session in the repo root. */
   task: Task.nullable(),
-  /** Zmiany zadania względem commita bazowego; `null` dla sesji w korzeniu repo i gdy nie dało się ich policzyć. */
+  /** The task's changes against its base commit; `null` for a session in the repo root and when they could not be computed. */
   changes: TaskChangesSummary.nullable(),
-  /** Dlaczego zmian zadania nie ma (`<kod>: <komunikat>`, np. worktree usunięty ręcznie); `null`, gdy są albo sesja nie ma zadania. */
+  /** Why the task's changes are missing (`<code>: <message>`, for example a worktree removed by hand); `null` when they are there or the session has no task. */
   changesError: z.string().nullable(),
 });
 export type GetSessionResult = z.infer<typeof GetSessionResult>;
@@ -123,32 +123,32 @@ export const ReportResultResult = z.object({ task: Task });
 export type ReportResultResult = z.infer<typeof ReportResultResult>;
 
 /**
- * Co zastało czekanie (`wait_for_session`, ADR-39). Czekanie trwa tylko w `proposal_pending`, `starting` i `working`,
- * a te stany w wyniku znaczą, że minął limit czasu; reszta kończy je od razu.
+ * What the wait found (`wait_for_session`, ADR-39). Waiting lasts only in `proposal_pending`, `starting` and `working`,
+ * and these states in the result mean the time limit passed; the rest end it at once.
  */
 export const WaitStatus = z.enum([
-  /** Propozycja czeka na decyzję użytkownika. */
+  /** The proposal is waiting for the user's decision. */
   "proposal_pending",
-  /** Użytkownik odrzucił propozycję. */
+  /** The user rejected the proposal. */
   "proposal_rejected",
-  /** Zadanie istnieje, a jego sesja jeszcze się uruchamia. */
+  /** The task exists, and its session is still starting. */
   "starting",
-  /** Sesja pracuje (albo jeszcze nie zgłosiła stanu). */
+  /** The session is working (or has not reported a state yet). */
   "working",
-  /** Sesja nie odpowiada (`Stale`). */
+  /** The session does not respond (`Stale`). */
   "stale",
-  /** Sesja czeka na użytkownika (`needsAttention`): skończyła turę, prosi o zgodę albo o akceptację planu. */
+  /** The session is waiting for the user (`needsAttention`): it finished a turn, asks for permission or for a plan approval. */
   "needs_attention",
-  /** Proces sesji się zakończył. */
+  /** The session's process has ended. */
   "exited",
-  /** Zadanie nie ma sesji (np. po restarcie Trackwall); użytkownik może je wznowić w UI. */
+  /** The task has no session (for example after a Trackwall restart); the user can resume it in the UI. */
   "no_session",
 ]);
 export type WaitStatus = z.infer<typeof WaitStatus>;
 
 export const WaitForSessionResult = z.object({
   status: WaitStatus,
-  /** Propozycja, gdy czekanie dotyczyło zadania, którego użytkownik jeszcze nie zatwierdził. */
+  /** The proposal, when the wait was about a task the user has not approved yet. */
   proposal: TaskProposal.nullable(),
   task: Task.nullable(),
   session: AgentSession.nullable(),
@@ -157,7 +157,7 @@ export const WaitForSessionResult = z.object({
 });
 export type WaitForSessionResult = z.infer<typeof WaitForSessionResult>;
 
-/** Najdłuższe czekanie w jednym wywołaniu: poniżej minuty, żeby klient MCP nie przerwał wywołania swoim limitem czasu. */
+/** The longest wait in one call: under a minute, so that the MCP client does not cut the call with its own time limit. */
 export const WAIT_MAX_SECONDS = 55;
 
 /** How long one waiting call waits (`wait_for_session`, `wait_for_mise_task`). */
@@ -193,7 +193,7 @@ export type ListRunningMiseTasksResult = z.infer<typeof ListRunningMiseTasksResu
 
 interface McpToolBase<Args extends z.ZodObject, Result extends z.ZodObject> {
   name: string;
-  /** Opis dla modelu agenta: co zwraca i kiedy go użyć. */
+  /** A description for the agent's model: what it returns and when to use it. */
   description: string;
   args: Args;
   result: Result;

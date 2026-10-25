@@ -2,74 +2,75 @@ import { z } from "zod";
 import { Evidence } from "./evidence.ts";
 
 /**
- * Fakty HTTP na karcie repo (§4.6, ADR-30): aplikacje Spring Boot, endpointy, które udostępniają, i klienci HTTP,
- * którymi repo woła inne aplikacje, wyczytane z kodu Javy i Kotlina, `application*.yml` / `.properties` z profilami
- * oraz plików `.env` i proxy frontendów. Graf łączy klientów z aplikacjami i endpointami innych repo.
+ * HTTP facts on the repo card (§4.6, ADR-30): Spring Boot applications, the endpoints they provide, and the HTTP clients
+ * a repo calls other applications with, read from Java and Kotlin code, `application*.yml` / `.properties` with profiles,
+ * and `.env` files and frontend proxies. The graph joins clients with applications and endpoints of other repos.
  */
 
 export const HttpMethod = z.enum(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
 export type HttpMethod = z.infer<typeof HttpMethod>;
 
 /**
- * Aplikacja Spring Boot w repo: moduł z `spring.application.name` w `src/main/resources/application*` albo
- * `bootstrap*`. Pod tą nazwą wołają ją klienci przez discovery (Feign `name`, `lb://nazwa`, nazwa w DNS
- * klastra Kubernetes).
+ * A Spring Boot application in the repo: a module with `spring.application.name` in `src/main/resources/application*` or
+ * `bootstrap*`. Clients call it by this name through discovery (Feign `name`, `lb://name`, a name in the Kubernetes
+ * cluster DNS).
  */
 export const ProvidedApp = z.object({
   kind: z.literal("app"),
   name: z.string(),
-  /** `server.port` z profilu domyślnego; `null` bez wpisu (karta nie zgaduje domyślnego 8080). */
+  /** `server.port` from the default profile; `null` without an entry (the card does not guess the default 8080). */
   port: z.number().int().min(0).max(65535).nullable(),
-  /** Katalog modułu w repo (`""` dla korzenia), w którym leżą `src/main/resources` i kod tej aplikacji. */
+  /** The module's directory in the repo (`""` for the root), holding `src/main/resources` and this application's code. */
   module: z.string(),
   evidence: Evidence,
 });
 export type ProvidedApp = z.infer<typeof ProvidedApp>;
 
-/** Endpoint HTTP z kontrolera Spring (`@RestController`, `@Controller` z `@*Mapping`). */
+/** An HTTP endpoint from a Spring controller (`@RestController`, `@Controller` with `@*Mapping`). */
 export const ProvidedEndpoint = z.object({
   kind: z.literal("endpoint"),
-  /** `null`: `@RequestMapping` bez `method`, czyli każda metoda. */
+  /** `null`: `@RequestMapping` without `method`, that is any method. */
   method: HttpMethod.nullable(),
   /**
-   * Pełna ścieżka: ścieżka kontekstu aplikacji (`server.servlet.context-path`), prefiks klasy i ścieżka metody, ze
-   * zmiennymi jak w kodzie (`/api/orders/{id}`). Stała, której nie da się odczytać, zostaje jako `<Klasa.NAZWA>`.
+   * The full path: the application's context path (`server.servlet.context-path`), the class prefix and the method path,
+   * with variables as in the code (`/api/orders/{id}`). A constant that cannot be read stays as `<Class.NAME>`.
    */
   path: z.string(),
-  /** Nazwa aplikacji modułu, w którym leży kontroler; `null`, gdy moduł jej nie podaje. */
+  /** The application name of the module the controller is in; `null` when the module does not give one. */
   app: z.string().nullable(),
-  /** `Klasa.metoda` kontrolera. */
+  /** The controller's `Class.method`. */
   handler: z.string(),
   /**
-   * Typ ciała żądania (parametr z `@RequestBody`) w zapisie typu (`CreateOrder`, `List<Line>`); `null` bez ciała albo
-   * gdy drzewo składni pliku nie powstało (ADR-38). Zapis typu to tekst z kodu bez adnotacji, ze spacją tylko przed
-   * słowem po słowie albo po `?` (`List<? extends Line>`); dłuższy niż 256 znaków przycięty z „…”.
+   * The request body type (the parameter with `@RequestBody`) in type notation (`CreateOrder`, `List<Line>`); `null`
+   * without a body or when the file's syntax tree could not be built (ADR-38). Type notation is the text from the code
+   * without annotations, with a space only between words or after `?` (`List<? extends Line>`); longer than 256
+   * characters it is cut with "…".
    */
   request: z.string().nullable(),
   /**
-   * Typ odpowiedzi: typ zwracany bez opakowań, które nie zmieniają treści (`ResponseEntity<T>`, `Mono<T>`,
-   * `Optional<T>`…), w zapisie typu jak `request`; `null` bez treści (`void`, `Unit`, `ResponseEntity<Void>`,
-   * `ResponseEntity<*>`, samo `ResponseEntity`), bez jawnego typu (funkcja Kotlina z wyrażeniem) albo bez drzewa
-   * składni (ADR-38).
+   * The response type: the return type without wrappers that do not change the content (`ResponseEntity<T>`, `Mono<T>`,
+   * `Optional<T>`…), in type notation like `request`; `null` without content (`void`, `Unit`, `ResponseEntity<Void>`,
+   * `ResponseEntity<*>`, a bare `ResponseEntity`), without an explicit type (a Kotlin expression function) or without a
+   * syntax tree (ADR-38).
    */
   response: z.string().nullable(),
   evidence: Evidence,
 });
 export type ProvidedEndpoint = z.infer<typeof ProvidedEndpoint>;
 
-/** Pole DTO: nazwa i typ w zapisie typu jak `ProvidedEndpoint.request` (`List<Line>`, `String?`). */
+/** A DTO field: name and type in type notation like `ProvidedEndpoint.request` (`List<Line>`, `String?`). */
 export const DtoField = z.object({ name: z.string(), type: z.string() });
 export type DtoField = z.infer<typeof DtoField>;
 
 /**
- * DTO (ADR-38): typ z repo, który jest ciałem żądania albo odpowiedzią endpointu HTTP, wprost albo przez pole innego
- * DTO. Rekord ma pola z nagłówka, `data class` z konstruktora i z ciała, klasa pola instancji (bez `static`, także
- * te, do których Lombok dopisuje akcesory), enum stałe; najwyżej 200 pól albo stałych.
- * Typ bez pól albo stałych nie jest DTO.
+ * A DTO (ADR-38): a type from the repo that is the request body or response of an HTTP endpoint, directly or through a
+ * field of another DTO. A record has the fields from its header, a `data class` from its constructor and body, a class
+ * its instance fields (without `static`, including those Lombok adds accessors to), an enum its constants; at most 200
+ * fields or constants. A type without fields or constants is not a DTO.
  */
 export const Dto = z.discriminatedUnion("kind", [
   z.object({
-    /** Prosta nazwa typu; typ zagnieżdżony też tylko swoją nazwą (`Inner`, nie `Outer.Inner`). */
+    /** The simple type name; a nested type also just by its own name (`Inner`, not `Outer.Inner`). */
     name: z.string(),
     kind: z.enum(["record", "data-class", "class"]),
     fields: z.array(DtoField),
@@ -80,83 +81,84 @@ export const Dto = z.discriminatedUnion("kind", [
 export type Dto = z.infer<typeof Dto>;
 
 /**
- * Skąd jest klient HTTP: interfejs `@FeignClient`, interfejs `@HttpExchange` (Spring 6), wywołania `WebClient`,
- * `RestClient` albo `RestTemplate` w klasie, adres w konfiguracji Spring (`config`), zmienna w `.env` frontendu
- * (`env`) albo cel proxy serwera deweloperskiego frontendu (`proxy`).
+ * Where an HTTP client comes from: an `@FeignClient` interface, an `@HttpExchange` interface (Spring 6), `WebClient`,
+ * `RestClient` or `RestTemplate` calls in a class, an address in the Spring configuration (`config`), a variable in a
+ * frontend's `.env` (`env`) or the proxy target of a frontend dev server (`proxy`).
  */
 export const HttpClientVia = z.enum(["feign", "http-interface", "webclient", "rest-client", "rest-template", "config", "env", "proxy"]);
 export type HttpClientVia = z.infer<typeof HttpClientVia>;
 
-/** Jedno wywołanie klienta: metoda i ścieżka bez adresu bazowego (`/orders/{id}`). */
+/** One client call: the method and the path without the base address (`/orders/{id}`). */
 export const HttpCall = z.object({
-  /** `null`, gdy kod nie mówi, jaką metodą woła. */
+  /** `null` when the code does not say which method it calls with. */
   method: HttpMethod.nullable(),
-  /** Ścieżka względem adresu klienta, ze zmiennymi `{…}`; część złożona w kodzie zmienną to `{}`. */
+  /** The path relative to the client address, with `{…}` variables; a part built from a variable in code is `{}`. */
   path: z.string(),
   evidence: Evidence,
 });
 export type HttpCall = z.infer<typeof HttpCall>;
 
-/** Klient HTTP: do kogo repo woła (nazwa aplikacji albo adres) i, gdy kod to mówi, jakie wywołania. */
+/** An HTTP client: whom the repo calls (an application name or an address) and, when the code says, which calls. */
 export const ConsumedHttp = z.object({
   kind: z.literal("http"),
   via: HttpClientVia,
-  /** Nazwa klienta dla człowieka: interfejs Feign, klasa z wywołaniami, klucz konfiguracji albo zmienna `.env`. */
+  /** The client name for a person: a Feign interface, a class with calls, a configuration key or a `.env` variable. */
   name: z.string(),
-  /** Nazwa aplikacji w discovery: Feign `name`/`value`, host z `lb://`; `null`, gdy klient woła adres. */
+  /** The application name in discovery: Feign `name`/`value`, the host from `lb://`; `null` when the client calls an address. */
   app: z.string().nullable(),
-  /** Adres bazowy po rozwinięciu `${…}` z konfiguracji (`http://orders:8080/api`); nierozwinięty zostaje jak w pliku. */
+  /** The base address after expanding `${…}` from the configuration (`http://orders:8080/api`); unexpanded it stays as in the file. */
   url: z.string().nullable(),
   /**
-   * Profile Spring, w których klient ma ten adres: `default` to konfiguracja bez profilu, inny profil jest tu tylko,
-   * gdy zmienia adres. Pusty dla klienta bez konfiguracji (frontend, adres wpisany w kod).
+   * The Spring profiles in which the client has this address: `default` is the configuration without a profile; another
+   * profile is here only when it changes the address. Empty for a client without configuration (a frontend, an address
+   * written in code).
    */
   profiles: z.array(z.string()),
-  /** Wpis konfiguracji, z którego jest adres (`application-prod.yml:12`); `null`, gdy adres jest w kodzie albo go nie ma. */
+  /** The configuration entry the address comes from (`application-prod.yml:12`); `null` when the address is in code or missing. */
   urlSource: Evidence.nullable(),
   calls: z.array(HttpCall),
   evidence: Evidence,
 });
 export type ConsumedHttp = z.infer<typeof ConsumedHttp>;
 
-/** Adres HTTP rozłożony na części: tyle, ile graf potrzebuje, żeby dopasować go do aplikacji z innego repo. */
+/** An HTTP address split into parts: as much as the graph needs to match it to an application of another repo. */
 export interface HttpUrl {
-  /** `http`, `https`, `ws`, `wss` albo `lb` (load balancer Spring Cloud: host to nazwa aplikacji w discovery). */
+  /** `http`, `https`, `ws`, `wss` or `lb` (Spring Cloud load balancer: the host is the application name in discovery). */
   scheme: string;
-  /** Host małymi literami. */
+  /** The host in lowercase. */
   host: string;
   port: number | null;
-  /** Ścieżka bez zapytania, `""` bez ścieżki. */
+  /** The path without the query, `""` without a path. */
   path: string;
 }
 
-/** Dłuższy tekst nie jest adresem z konfiguracji, a wyrażenia niżej i tak go nie dotkną. */
+/** Longer text is not an address from configuration, and the expressions below would not touch it anyway. */
 const MAX_URL_LENGTH = 2048;
 const SCHEME = /^[a-z][a-z0-9+.-]{0,20}:\/\//i;
 const HTTP_SCHEMES = new Set(["http", "https", "ws", "wss", "lb"]);
 const HOST_PORT = /^(\[[^\]\s]{1,64}\]|[^:[\]\s]+)(?::(\d{1,5}))?$/;
 /**
- * Człon ścieżki, który wygląda na token (klucz webhooka, identyfikator z hasłem): co najmniej 20 liter i cyfr bez
- * łączników, w tym co najmniej trzy cyfry. Nazwa w kebab-case (`customer-service-v2`) i metoda
- * (`getOrdersByCustomerId2`) nim nie są.
+ * A path segment that looks like a token (a webhook key, an id with a secret): at least 20 letters and digits without
+ * hyphens, including at least three digits. A kebab-case name (`customer-service-v2`) and a method
+ * (`getOrdersByCustomerId2`) are not.
  */
 const OPAQUE_SEGMENT = /^(?=(?:\D*\d){3})(?=[^A-Za-z]*[A-Za-z])\w{20,}$/;
 
-/** Adres rozłożony raz, jedną regułą dla `parseHttpUrl` i `withoutCredentials`. */
+/** An address split once, by one rule for `parseHttpUrl` and `withoutCredentials`. */
 interface UrlParts {
-  /** Schemat z `://`, np. `http://`. */
+  /** The scheme with `://`, for example `http://`. */
   scheme: string;
-  /** Czy adres ma użytkownika (i hasło) przed hostem. */
+  /** Whether the address has a user (and password) before the host. */
   userInfo: boolean;
-  /** Host i port, bez użytkownika. */
+  /** Host and port, without the user. */
   authority: string;
-  /** Ścieżka bez zapytania i fragmentu, `""` bez ścieżki. */
+  /** The path without the query and fragment, `""` without a path. */
   path: string;
 }
 
 /**
- * Użytkownik i hasło kończą się na ostatnim `@` przed ścieżką, bo hasło może mieć `@`, `?` i `#`; `@` w zapytaniu
- * bez `/` (`http://host?email=a@b`) nie jest użytkownikiem, bo przed `?` nie ma `:` hasła.
+ * The user and password end at the last `@` before the path, because a password can contain `@`, `?` and `#`; an `@` in
+ * a query without `/` (`http://host?email=a@b`) is not a user, because there is no password `:` before the `?`.
  */
 function urlParts(text: string): UrlParts | undefined {
   const scheme = SCHEME.exec(text)?.[0];
@@ -176,9 +178,9 @@ function urlParts(text: string): UrlParts | undefined {
 }
 
 /**
- * Koniec części `user:hasło@host:port` w `rest` (adres bez schematu). Zwykle to pierwszy `/`, ale hasło może mieć `/`
- * (`u:p/ss@host`): gdy przed pierwszym `/` nie ma hosta z portem, a dalej (przed zapytaniem) jest `@`, to `@` kończy
- * hasło, inaczej reszta hasła trafiłaby do ścieżki na karcie.
+ * The end of the `user:password@host:port` part in `rest` (an address without the scheme). Usually it is the first `/`,
+ * but a password can contain `/` (`u:p/ss@host`): when there is no host with a port before the first `/`, and an `@`
+ * follows (before the query), that `@` ends the password; otherwise the rest of the password would land in the path on the card.
  */
 function authorityEnd(rest: string): number {
   const end = rest.search(/[/\s]/);
@@ -192,19 +194,19 @@ function authorityEnd(rest: string): number {
 }
 
 /**
- * Adres bez użytkownika, hasła, zapytania i członów ścieżki wyglądających na token (`http://ja:tajne@host/api?key=x`
- * → `http://***@host/api`, `/services/T00/B00/XXXXSECRET1234567890` → `/services/T00/B00/***`): adres z `.env` albo
- * `application.yml` trafia na kartę, do UI i do agenta, a sekret nie może (§8).
+ * The address without the user, password, query and path segments that look like tokens (`http://me:secret@host/api?key=x`
+ * → `http://***@host/api`, `/services/T00/B00/XXXXSECRET1234567890` → `/services/T00/B00/***`): an address from `.env` or
+ * `application.yml` reaches the card, the UI and the agent, and a secret must not (§8).
  */
 export function withoutCredentials(url: string): string {
   const parts = url.length > MAX_URL_LENGTH ? undefined : urlParts(url);
   if (parts === undefined) return maskPath(url.split(/[?#]/)[0] ?? "");
-  // Część przed ścieżką, która nie jest hostem z portem, to resztka hasła (z `?`, `#` albo spacją), więc nie trafia na kartę.
+  // A part before the path that is not a host with a port is the rest of a password (with `?`, `#` or a space), so it does not reach the card.
   if (!HOST_PORT.test(withoutPlaceholders(parts.authority))) return `${parts.scheme}***`;
   return `${parts.scheme}${parts.userInfo ? "***@" : ""}${parts.authority}${maskPath(parts.path)}`;
 }
 
-/** Tekst z `${…}` zastąpionym jednym znakiem: nierozwinięty klucz (`localhost:${PORT}`) może stać w miejscu hosta i portu. */
+/** Text with `${…}` replaced by a single character: an unexpanded key (`localhost:${PORT}`) can stand in place of the host and port. */
 function withoutPlaceholders(text: string): string {
   return text.replace(/\$\{[^}]{0,256}\}/g, "0");
 }
@@ -216,7 +218,7 @@ function maskPath(path: string): string {
     .join("/");
 }
 
-/** Adres HTTP z tekstu; `undefined` dla innego tekstu i dla hosta z nierozwiniętym `${…}`. */
+/** An HTTP address from text; `undefined` for other text and for a host with an unexpanded `${…}`. */
 export function parseHttpUrl(text: string): HttpUrl | undefined {
   if (text.length > MAX_URL_LENGTH) return undefined;
   const parts = urlParts(text.trim());
@@ -227,19 +229,19 @@ export function parseHttpUrl(text: string): HttpUrl | undefined {
   return { scheme, host: host.toLowerCase(), port: port ? Number(port) : null, path: parts.path };
 }
 
-/** Nazwa aplikacji z adresu `lb://nazwa` (load balancer Spring Cloud); `null` dla innego adresu. */
+/** The application name from an `lb://name` address (Spring Cloud load balancer); `null` for other addresses. */
 export function lbAppName(url: string): string | null {
   const parsed = parseHttpUrl(url);
   return parsed?.scheme === "lb" ? parsed.host : null;
 }
 
-/** Ścieżki sklejone w jedną, z jednym `/` między częściami i bez zapytania: `/api` + `orders/` + `/{id}` → `/api/orders/{id}`. */
+/** Paths joined into one, with one `/` between parts and without a query: `/api` + `orders/` + `/{id}` → `/api/orders/{id}`. */
 export function joinHttpPath(...parts: readonly string[]): string {
   const segments = parts.flatMap((p) => (p.split("?")[0] ?? "").split("/")).filter((s) => s !== "");
   return `/${segments.join("/")}`;
 }
 
-/** Człony ścieżki po złożeniu (`/api//orders/` → `["api", "orders"]`), do porównań `httpSegmentsMatch`. */
+/** Path segments after joining (`/api//orders/` → `["api", "orders"]`), for comparisons in `httpSegmentsMatch`. */
 export function httpPathSegments(path: string): string[] {
   return joinHttpPath(path)
     .split("/")
@@ -248,14 +250,14 @@ export function httpPathSegments(path: string): string[] {
 }
 
 /**
- * Czy ścieżka wywołania pasuje do ścieżki endpointu: człon po członie, zmienna (`{id}`, `{}`, `*`) z każdej strony
- * pasuje do dowolnego członu, `**` w endpoincie do reszty ścieżki, a nieodczytana stała (`<Klasa.NAZWA>`) tylko do tej samej.
+ * Whether a call path matches an endpoint path: segment by segment, a variable (`{id}`, `{}`, `*`) on either side matches
+ * any segment, `**` in the endpoint matches the rest of the path, and an unread constant (`<Class.NAME>`) only the same one.
  */
 export function httpPathMatches(call: string, endpoint: string): boolean {
   return httpSegmentsMatch(httpPathSegments(call), httpPathSegments(endpoint));
 }
 
-/** `httpPathMatches` na członach policzonych raz (`httpPathSegments`), gdy jedną ścieżkę porównuje się z wieloma. */
+/** `httpPathMatches` on segments computed once (`httpPathSegments`), when one path is compared with many. */
 export function httpSegmentsMatch(call: readonly string[], endpoint: readonly string[]): boolean {
   for (let i = 0; i < endpoint.length; i++) {
     const segment = endpoint[i] ?? "";
@@ -274,7 +276,7 @@ function isVariable(segment: string): boolean {
   return segment === "*" || (segment.startsWith("{") && segment.endsWith("}"));
 }
 
-/** Czy metody wywołania i endpointu się zgadzają; `null` z którejś strony to każda metoda. */
+/** Whether the methods of the call and the endpoint agree; `null` on either side means any method. */
 export function httpMethodMatches(call: HttpMethod | null, endpoint: HttpMethod | null): boolean {
   return call === null || endpoint === null || call === endpoint;
 }

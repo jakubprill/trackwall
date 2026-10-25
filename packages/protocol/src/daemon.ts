@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { apiResult } from "./api.ts";
 
-/** Nazwa nagłówka i pliku odkrywania daemona; jedno miejsce dla daemona, UI, Tauri i CLI. */
+/** The name of the daemon's header and discovery file; one place for the daemon, UI, Tauri and CLI. */
 export const DAEMON_FILE = "daemon.json";
 export const TRACKWALL_HOME_ENV = "TRACKWALL_HOME";
 
-/** `~/.trackwall/daemon.json`, zapisywany przez daemon przy starcie (§5.1). */
+/** `~/.trackwall/daemon.json`, written by the daemon at startup (§5.1). */
 export const DaemonFile = z.object({
   pid: z.number().int().positive(),
   port: z.number().int().min(1).max(65535),
@@ -15,7 +15,7 @@ export const DaemonFile = z.object({
 });
 export type DaemonFile = z.infer<typeof DaemonFile>;
 
-/** `GET /api/health`: publiczne, bez tokenu, tylko tyle, ile trzeba do odkrycia daemona. */
+/** `GET /api/health`: public, without the token, only as much as discovering the daemon needs. */
 export const Health = z.object({
   status: z.literal("ok"),
   version: z.string(),
@@ -23,7 +23,7 @@ export const Health = z.object({
 export type Health = z.infer<typeof Health>;
 export const HealthResult = apiResult(Health);
 
-/** `GET /api/daemon/info`: szczegóły procesu daemona, wymaga tokenu. */
+/** `GET /api/daemon/info`: details of the daemon process, needs the token. */
 export const DaemonInfo = z.object({
   version: z.string(),
   pid: z.number().int(),
@@ -35,13 +35,13 @@ export const DaemonInfo = z.object({
   launchedBy: z.enum(["desktop", "manual"]),
   home: z.string(),
   /**
-   * Program i argumenty mostu stdio do serwera MCP tego daemona (`trackwall-daemon mcp-stdio`, §5.3), gotowe do
-   * konfiguracji MCP CLI agenta: pełna ścieżka binarki, a przy uruchomieniu ze źródeł runtime i skrypt.
+   * The program and arguments of the stdio bridge to this daemon's MCP server (`trackwall-daemon mcp-stdio`, §5.3), ready
+   * for an agent CLI's MCP config: the full path of the binary, and when run from source, the runtime and the script.
    */
   mcpStdioCommand: z.array(z.string()).min(1),
 });
 export type DaemonInfo = z.infer<typeof DaemonInfo>;
 export const DaemonInfoResult = apiResult(DaemonInfo);
 
-/** `POST /api/daemon/shutdown`: łagodne zakończenie (wyjście z traya). */
+/** `POST /api/daemon/shutdown`: graceful exit (quit from the tray). */
 export const ShutdownResult = apiResult(z.object({ stopping: z.literal(true) }));
