@@ -18,22 +18,23 @@ import type { StoredTask, TaskFile } from "./task-file.ts";
 import { type MiseSnapshot, miseConfigChanges, miseConfigDigest, readMiseConfig, reviewMiseConfig } from "./task-mise-config.ts";
 
 /**
- * Zadania agentów (§4.4, ADR-31): polecenie dla Copilot CLI w osobnym worktree na nowej gałęzi od gałęzi domyślnej
- * repo, więc kilka zadań w jednym repo nie wchodzi sobie w drogę ani w katalog roboczy użytkownika. Zadanie
- * przeżywa restart daemona (`tasks.json`), a jego sesja nie; worktree i gałąź znikają tylko przy zakończeniu zadania,
- * a zmiany, które by przy tym przepadły, tylko po potwierdzeniu użytkownika.
+ * Agent tasks (§4.4, ADR-31): a prompt for Copilot CLI in its own worktree on a new branch from the repo's default
+ * branch, so several tasks in one repo do not get in each other's way or into the user's working directory. A task
+ * survives a daemon restart (`tasks.json`), and its session does not; the worktree and branch disappear only when the
+ * task is ended, and changes that would be lost then only after the user confirms.
  */
 
-// Typy niżej powtarzają kształt typów z `vcs` (`WorktreeBase`, `WorktreeBranch`, `PendingWork`) zamiast je
-// importować, bo moduł nie importuje sąsiedniego modułu (§4); zgodność sprawdza kompilator tam, gdzie `facade.ts` podaje `Vcs` jako `TasksVcs` (zależności `Agents`).
+// The types below repeat the shape of the types from `vcs` (`WorktreeBase`, `WorktreeBranch`, `PendingWork`) instead of
+// importing them, because a module does not import a neighbouring module (§4); the compiler checks they match where
+// `facade.ts` passes `Vcs` as `TasksVcs` (the dependencies of `Agents`).
 
-/** Skąd zadanie wychodzi: gałąź domyślna (`null` przy odłączonym HEAD) i commit bazowy. */
+/** Where a task starts from: the default branch (`null` with a detached HEAD) and the base commit. */
 interface TaskBase {
   branch: string | null;
   commit: string;
 }
 
-/** Gałąź zadania w jej worktree, z commitem bazowym. */
+/** The task branch in its worktree, with the base commit. */
 interface TaskWork {
   repoDir: string;
   worktree: string;
@@ -41,7 +42,7 @@ interface TaskWork {
   base: string;
 }
 
-/** Co przepadłoby przy zakończeniu zadania (`PendingWork` w `vcs`). */
+/** What would be lost when ending a task (`PendingWork` in `vcs`). */
 interface TaskPendingWork {
   uncommitted: number;
   strayCommits: number;
@@ -49,7 +50,7 @@ interface TaskPendingWork {
   unregisteredDir: boolean;
 }
 
-/** Czego zadania potrzebują od `vcs` (worktree i gałęzie, ADR-31); podłączane w fasadzie. */
+/** What tasks need from `vcs` (worktrees and branches, ADR-31); wired in the facade. */
 export interface TasksVcs {
   defaultBase(dir: string): Promise<TaskBase>;
   addWorktree(repoDir: string, path: string, branch: string, commit: string): Promise<void>;
@@ -59,13 +60,13 @@ export interface TasksVcs {
   worktreeChanges(dir: string, base: string, maxPatchBytes: number): Promise<TaskChanges>;
 }
 
-/** Sesje Copilot CLI z `Agents`, w których działają zadania. */
+/** Copilot CLI sessions from `Agents`, in which tasks run. */
 interface TaskSessions {
-  /** Copilot CLI w worktree zadania z argumentami zadania (polecenie, wtedy `promptOnStart`, albo wznowienie). */
+  /** Copilot CLI in the task's worktree with the task's arguments (the prompt, then `promptOnStart`, or a resume). */
   launch(spec: { repo: string; cwd: string; task: string; args: readonly string[]; promptOnStart: boolean }): Promise<Session>;
-  /** Sesje zadania od najnowszej. */
+  /** The task's sessions, newest first. */
   of(task: string): Session[];
-  /** Usuwa zakończoną sesję z listy. */
+  /** Removes an ended session from the list. */
   close(session: string): void;
 }
 
@@ -76,20 +77,20 @@ export interface AgentTasksDeps {
   file: TaskFile;
   /** Some process group still works in this directory (`procs.liveIn`): a mise task in the worktree locks its files on Windows. */
   liveIn: (dir: string) => boolean;
-  /** Katalog worktree zadań w katalogu stanu; poza folderem z projektami, więc lista repo ich nie widzi. */
+  /** The task worktrees directory in the state directory; outside the projects folder, so the repo list does not see them. */
   worktreesDir: string;
   openEditor: (dir: string) => void;
   log: (msg: string) => void;
 }
 
-/** Skąd zadanie: z formularza (bez tytułu i zgłaszającego) albo z zatwierdzonej propozycji (ADR-39), której bierze identyfikator. */
+/** Where a task comes from: the form (without a title and a proposer) or an approved proposal (ADR-39), whose identifier it takes. */
 export interface TaskOrigin {
   id: string;
   title: string | null;
   proposedBy: ProposedBy | null;
 }
 
-/** Zadanie z pliku z worktree, który z niego wynika. */
+/** A task from the file with the worktree that follows from it. */
 type KnownTask = StoredTask & TaskWork;
 
 /**
@@ -100,13 +101,13 @@ const SHARED_FILES_CONCURRENCY = 3;
 
 export class AgentTasks {
   readonly #deps: AgentTasksDeps;
-  /** Od najnowszego. */
+  /** Newest first. */
   #tasks: KnownTask[];
-  /** Zadania, na których trwa akcja (start, wznowienie, zakończenie); druga naraz to `bad_request`. */
+  /** Tasks with an action in progress (start, resume, end); a second one at the same time is `bad_request`. */
   readonly #busy = new Set<string>();
-  /** Zadania w trakcie zakończenia: liczenie zmian odmawia, bo worktree zaraz zniknie. */
+  /** Tasks being ended: computing changes refuses, because the worktree is about to disappear. */
   readonly #removing = new Set<string>();
-  /** Trwające liczenia zmian zadania (kilka okien naraz): zakończenie czeka, aż git przestanie czytać worktree. */
+  /** The task's change computations in progress (several windows at once): ending waits until git stops reading the worktree. */
   readonly #reading = new Map<string, Set<Promise<unknown>>>();
 
   constructor(deps: AgentTasksDeps) {
@@ -119,8 +120,8 @@ export class AgentTasks {
   }
 
   /**
-   * Worktree na nowej gałęzi od gałęzi domyślnej i Copilot CLI w nim z poleceniem jako pierwszą wiadomością; gałąź
-   * nazywa tytuł, a bez niego polecenie.
+   * A worktree on a new branch from the default branch and Copilot CLI in it with the prompt as its first message; the
+   * title names the branch, and without one the prompt.
    */
   async create(repo: string, prompt: string, { id, title, proposedBy }: TaskOrigin): Promise<Task> {
     const repoDir = await this.#deps.repos.repoPath(repo);
@@ -144,13 +145,13 @@ export class AgentTasks {
       await asRepoUnavailable(repo, this.#deps.vcs.addWorktree(repoDir, task.worktree, task.branch, task.base));
       // The mise config of the fresh worktree is the base commit's, from the repo whose config the user trusted (ADR-59).
       task.trustedMiseConfig = await this.#initialMiseConfig(task);
-      // Zapis przed startem sesji: worktree już jest na dysku i nie może zniknąć z listy, gdy daemon padnie.
+      // Saved before the session starts: the worktree is already on disk and must not disappear from the list if the daemon crashes.
       this.#save([task, ...this.#tasks]);
       try {
-        // `=` zamiast osobnego argumentu, żeby polecenie zaczynające się od `-` nie było opcją Copilot CLI.
+        // `=` instead of a separate argument, so that a prompt starting with `-` is not a Copilot CLI option.
         await this.#launch(task, [`--session-id=${id}`, `--interactive=${prompt}`], true);
       } catch (err) {
-        // Nieudane sprzątanie zostawia zadanie na liście, żeby użytkownik mógł je zakończyć sam.
+        // A failed cleanup leaves the task on the list, so that the user can end it themselves.
         await this.#whileRemoving(id, () => this.#discard(task, false)).then(
           () => this.#save(this.#tasks.filter((t) => t.id !== id)),
           (e: unknown) => this.#deps.log(`cleaning up task ${id}: ${messageOf(e)}`),
@@ -161,7 +162,7 @@ export class AgentTasks {
     });
   }
 
-  /** Nowa sesja zadania bez działającej sesji; Copilot CLI wznawia rozmowę zadania, bo ma ona UUID zadania. */
+  /** A new session for a task without a running session; Copilot CLI resumes the task's conversation, because it has the task's UUID. */
   resume(id: string): Promise<Task> {
     const task = this.#get(id);
     return this.#exclusive(id, async () => {
@@ -172,23 +173,23 @@ export class AgentTasks {
     });
   }
 
-  /** Zadanie po identyfikatorze (`not_found`, gdy go nie ma). */
+  /** A task by identifier (`not_found` when it does not exist). */
   task(id: string): Task {
     return view(this.#get(id));
   }
 
-  /** Zadanie po identyfikatorze albo `undefined`, gdy go nie ma (czekanie na propozycję, która jeszcze nie jest zadaniem). */
+  /** A task by identifier or `undefined` when it does not exist (waiting for a proposal that is not a task yet). */
   find(id: string): Task | undefined {
     const task = this.#tasks.find((t) => t.id === id);
     return task && view(task);
   }
 
-  /** Trwa akcja na zadaniu (start, wznowienie, zakończenie), np. sesja nowego zadania jeszcze się uruchamia. */
+  /** An action on the task is in progress (start, resume, end), e.g. the session of a new task is still starting. */
   busy(id: string): boolean {
     return this.#busy.has(id);
   }
 
-  /** Podsumowanie od sesji zadania (`report_result`, ADR-39); kolejne zastępuje poprzednie i przeżywa restart daemona. */
+  /** A summary from the task session (`report_result`, ADR-39); a later one replaces the earlier one and survives a daemon restart. */
   setSummary(id: string, text: string): Task {
     const summarized = { ...this.#get(id), summary: { text, reportedAt: new Date().toISOString() } };
     this.#save(this.#tasks.map((t) => (t.id === id ? summarized : t)));
@@ -200,8 +201,8 @@ export class AgentTasks {
   }
 
   /**
-   * Zmiany bez diffu, z najwyżej `TASK_SUMMARY_MAX_FILES` plikami, dla kontekstu agenta (narzędzie MCP `get_session`);
-   * agent, który chce treści, czyta worktree sam.
+   * Changes without the diff, with at most `TASK_SUMMARY_MAX_FILES` files, for the agent's context (the MCP tool
+   * `get_session`); an agent that wants the content reads the worktree itself.
    */
   async summary(id: string): Promise<TaskChangesSummary> {
     const { files, commits, uncommitted } = await this.#readChanges(id, 0);
@@ -294,9 +295,9 @@ export class AgentTasks {
   }
 
   /**
-   * Zakończenie zadania: usuwa worktree, a bez `keepBranch` także gałąź. Niezacommitowane pliki i commity spoza
-   * gałęzi, a przy usuwaniu gałęzi także commity zadania, przepadają tylko z `discardChanges`; inaczej
-   * `unsaved_changes` z tym, co by przepadło.
+   * Ending a task: removes the worktree, and without `keepBranch` also the branch. Uncommitted files and commits outside
+   * the branch, and when removing the branch also the task's commits, are lost only with `discardChanges`; otherwise
+   * `unsaved_changes` with what would be lost.
    */
   remove(id: string, keepBranch: boolean, discardChanges: boolean): Promise<void> {
     const task = this.#get(id);
@@ -316,7 +317,7 @@ export class AgentTasks {
     });
   }
 
-  /** `job` kasujący worktree dopiero, gdy git przestał go czytać; nowe liczenie zmian w tym czasie odmawia. */
+  /** A `job` that deletes the worktree only once git has stopped reading it; a new change computation meanwhile refuses. */
   async #whileRemoving(id: string, job: () => Promise<void>): Promise<void> {
     this.#removing.add(id);
     try {
@@ -339,7 +340,7 @@ export class AgentTasks {
     if (lost.length > 0) throw new DomainError("unsaved_changes", `ending the task would delete: ${lost.join(", ")}`);
   }
 
-  /** Worktree (z niezacommitowanymi i ignorowanymi plikami) i, bez `keepBranch`, gałąź. */
+  /** The worktree (with uncommitted and ignored files) and, without `keepBranch`, the branch. */
   async #discard(task: KnownTask, keepBranch: boolean): Promise<void> {
     await asRepoUnavailable(task.branch, this.#deps.vcs.removeWorktree(task.repoDir, task.worktree));
     if (!keepBranch) await asRepoUnavailable(task.branch, this.#deps.vcs.deleteBranch(task.repoDir, task.branch));
@@ -359,13 +360,13 @@ export class AgentTasks {
     await this.#deps.sessions.launch({ repo: task.repo, cwd: task.worktree, task: task.id, args, promptOnStart });
   }
 
-  /** Działająca sesja pisze w worktree i trzyma jego pliki (na Windowsie blokuje usunięcie), więc najpierw stop. */
+  /** A running session writes in the worktree and holds its files (on Windows it blocks deletion), so stop it first. */
   #refuseRunning(task: KnownTask, action: string): void {
     if (this.#deps.sessions.of(task.id).some((s) => s.run.kind !== "exited"))
       throw new DomainError("bad_request", `task ${task.branch} has a running session; stop it before ${action}`);
   }
 
-  /** Zakończone sesje zadania znikają z listy. */
+  /** The task's ended sessions disappear from the list. */
   #closeSessions(task: KnownTask): void {
     for (const session of this.#deps.sessions.of(task.id)) this.#deps.sessions.close(session.id);
   }
@@ -407,7 +408,7 @@ function view({ repoDir: _, trustedMiseConfig: __, ...task }: KnownTask): Task {
   return task;
 }
 
-/** Błąd gita w repo albo worktree zadania jako `repo_unavailable` z komunikatem gita. */
+/** A git error in the repo or the task's worktree as `repo_unavailable` with git's message. */
 function asRepoUnavailable<T>(label: string, work: Promise<T>): Promise<T> {
   return work.catch((err: unknown) => {
     throw new DomainError("repo_unavailable", `${label}: ${messageOf(err)}`);

@@ -12,63 +12,63 @@ afterAll(async () => {
   for (const cleanup of cleanups) await cleanup();
 });
 
-describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziwy PTY, atrapa Copilot CLI)", () => {
-  test("sesja startuje w katalogu repo z serwerem MCP Trackwall, stan idzie za hookami, a /exit kończy ją jako Done", async () => {
+describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real PTY, fake Copilot CLI)", () => {
+  test("a session starts in the repo directory with the Trackwall MCP server, the state follows the hooks, and /exit ends it as Done", async () => {
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
-    const { agents, procs, home } = makeAgents({ sklep: repoDir });
+    const { agents, procs, home } = makeAgents({ shop: repoDir });
     cleanups.push(() => procs.stopAll());
 
-    const started = await agents.start("sklep");
-    expect(started).toMatchObject({ repo: "sklep", run: { kind: "running" } });
+    const started = await agents.start("shop");
+    expect(started).toMatchObject({ repo: "shop", run: { kind: "running" } });
 
     const waiting = await waitFor(agents, started.id, (s) => s.state?.reason === "hook sessionStart", "sessionStart");
     expect(waiting.state).toMatchObject({ state: "Input", source: "hook" });
     expect(waiting.needsAttention).toBe(true);
 
     const window = viewer(agents, started.id);
-    await waitFor(agents, started.id, () => window.text().includes("Witaj w atrapie"), "obraz ekranu");
+    await waitFor(agents, started.id, () => window.text().includes("Welcome to the fake"), "screen image");
     expect(window.unwrappedText()).toContain(repoDir);
     expect(window.text()).toContain("MCP: trackwall");
     // Session instructions with the session's role come from the session directory, not from the repo (ADR-46).
     expect(window.text()).toContain("Instructions: trackwall.instructions.md");
     const instructions = readFileSync(join(home, "sessions", started.id, "instructions", "trackwall.instructions.md"), "utf8");
-    expect(instructions).toContain("You are a main session in the root of the repo `sklep`");
+    expect(instructions).toContain("You are a main session in the root of the repo `shop`");
     expect(readdirSync(repoDir)).toEqual([]);
-    // Most stdio sesji dostaje plik z tokenem tej sesji, po którym serwer MCP wie, kto woła (ADR-39).
+    // The session's stdio bridge gets the file with this session's token, by which the MCP server knows who is calling (ADR-39).
     const tokenFile = join(home, "sessions", started.id, "session-token");
     const mcpConfig = readFileSync(join(home, "sessions", started.id, "mcp-config.json"), "utf8");
     expect(JSON.parse(mcpConfig).mcpServers.trackwall.args).toEqual(["mcp-stdio", "--session-token-file", tokenFile]);
     expect(agents.callerSession(readFileSync(tokenFile, "utf8"))).toBe(started.id);
-    expect(agents.callerSession("inny token")).toBeUndefined();
+    expect(agents.callerSession("another token")).toBeUndefined();
 
-    window.attachment.input("napraw test\r");
-    const approval = await waitFor(agents, started.id, (s) => s.state?.state === "Approval", "prośba o zgodę");
+    window.attachment.input("fix the test\r");
+    const approval = await waitFor(agents, started.id, (s) => s.state?.state === "Approval", "approval request");
     expect(approval.state).toMatchObject({ source: "hook", reason: "hook notification permission_prompt" });
-    expect(approval.windowTitle).toBe("Praca nad: napraw test");
-    expect(window.text()).toContain("Zezwolić na bash?");
+    expect(approval.windowTitle).toBe("Working on: fix the test");
+    expect(window.text()).toContain("Allow bash?");
 
     window.attachment.input("y\r");
-    await waitFor(agents, started.id, (s) => s.state?.reason === "hook agentStop", "koniec tury");
+    await waitFor(agents, started.id, (s) => s.state?.reason === "hook agentStop", "end of turn");
 
     window.attachment.input("/exit\r");
-    const done = await waitFor(agents, started.id, (s) => s.run.kind === "exited", "koniec sesji");
+    const done = await waitFor(agents, started.id, (s) => s.run.kind === "exited", "end of session");
     expect(done.state).toMatchObject({ state: "Done", source: "hook" });
     expect(done.needsAttention).toBe(false);
     window.attachment.detach();
   }, 60_000);
 
-  test("Esc przy prośbie o zgodę kończy czekanie na zgodę, choć Copilot CLI nie wysyła wtedy hooka", async () => {
+  test("Esc at an approval request ends waiting for approval, although Copilot CLI sends no hook then", async () => {
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
-    const { agents, procs } = makeAgents({ sklep: repoDir });
+    const { agents, procs } = makeAgents({ shop: repoDir });
     cleanups.push(() => procs.stopAll());
-    const started = await agents.start("sklep");
+    const started = await agents.start("shop");
     const window = viewer(agents, started.id);
-    await waitFor(agents, started.id, () => window.text().includes("Witaj"), "ekran powitalny");
-    window.attachment.input("napraw test\r");
-    await waitFor(agents, started.id, (s) => s.state?.state === "Approval", "prośba o zgodę");
+    await waitFor(agents, started.id, () => window.text().includes("Welcome"), "welcome screen");
+    window.attachment.input("fix the test\r");
+    await waitFor(agents, started.id, (s) => s.state?.state === "Approval", "approval request");
 
     window.attachment.input("\u001b");
-    const stopped = await waitFor(agents, started.id, (s) => s.state?.source === "keyboard", "stan z klawisza");
+    const stopped = await waitFor(agents, started.id, (s) => s.state?.source === "keyboard", "state from the key");
     expect(stopped.state).toMatchObject({ state: "Input", confidence: "medium", reason: "key escape" });
     // The Esc the user typed means they see the session, so it is idle, not waiting for you (ADR-47).
     expect(stopped.needsAttention).toBe(false);
@@ -76,32 +76,32 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
     await agents.stop(started.id);
   }, 60_000);
 
-  test("okno podłączone później dostaje obraz ekranu z tym, co sesja już wypisała", async () => {
+  test("a terminal connected later gets the screen image with what the session has already printed", async () => {
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
-    const { agents, procs } = makeAgents({ sklep: repoDir });
+    const { agents, procs } = makeAgents({ shop: repoDir });
     cleanups.push(() => procs.stopAll());
-    const started = await agents.start("sklep");
+    const started = await agents.start("shop");
     const first = viewer(agents, started.id);
-    await waitFor(agents, started.id, () => first.text().includes("Witaj"), "ekran powitalny");
-    first.attachment.input("pierwsza linia\r");
-    await waitFor(agents, started.id, (s) => s.state?.state === "Approval", "prośba o zgodę");
+    await waitFor(agents, started.id, () => first.text().includes("Welcome"), "welcome screen");
+    first.attachment.input("first line\r");
+    await waitFor(agents, started.id, (s) => s.state?.state === "Approval", "approval request");
     first.attachment.detach();
 
     const late = viewer(agents, started.id);
-    await waitFor(agents, started.id, () => late.text().includes("Zezwolić na bash?"), "obraz ekranu dla nowego okna");
-    expect(late.text()).toContain("Witaj w atrapie");
+    await waitFor(agents, started.id, () => late.text().includes("Allow bash?"), "screen image for the new terminal");
+    expect(late.text()).toContain("Welcome to the fake");
     late.attachment.detach();
     await agents.stop(started.id);
   }, 60_000);
 
-  test("stop zatrzymuje całą grupę z procesem pomocnika, a zamknięcie usuwa sesję, jej pliki i okna", async () => {
+  test("stop stops the whole group with the helper process, and closing removes the session, its files and terminals", async () => {
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
-    const { agents, home } = makeAgents({ sklep: repoDir });
-    const started = await agents.start("sklep");
+    const { agents, home } = makeAgents({ shop: repoDir });
+    const started = await agents.start("shop");
     const window = viewer(agents, started.id);
-    window.attachment.input("uruchom pomocnika\r");
-    await waitFor(agents, started.id, () => /PID pomocnika: \d+/.test(window.text()), "proces pomocnika");
-    const helperPid = Number(/PID pomocnika: (\d+)/.exec(window.text())?.[1]);
+    window.attachment.input("start the helper\r");
+    await waitFor(agents, started.id, () => /helper PID: \d+/.test(window.text()), "helper process");
+    const helperPid = Number(/helper PID: (\d+)/.exec(window.text())?.[1]);
     expect(isAlive(helperPid)).toBe(true);
     expect(() => agents.dismiss(started.id)).toThrow("the session is still running");
 
@@ -150,13 +150,13 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
 
   test("what the supervisor proposes is marked as the supervisor's, and what another session proposes is not", async () => {
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
-    const { agents, procs } = makeAgents({ sklep: repoDir }, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
+    const { agents, procs } = makeAgents({ shop: repoDir }, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
     cleanups.push(() => procs.stopAll());
     const supervisor = await agents.startSupervisor();
-    const session = await agents.start("sklep");
+    const session = await agents.start("shop");
 
-    const fromSupervisor = await agents.propose(supervisor.id, { repo: "sklep", title: "Fix the cart", prompt: "Fix the cart total" });
-    const fromSession = await agents.propose(session.id, { repo: "sklep", title: "Add a test", prompt: "Add a cart test" });
+    const fromSupervisor = await agents.propose(supervisor.id, { repo: "shop", title: "Fix the cart", prompt: "Fix the cart total" });
+    const fromSession = await agents.propose(session.id, { repo: "shop", title: "Add a test", prompt: "Add a cart test" });
     expect(fromSupervisor.proposedBy).toEqual({ session: supervisor.id, supervisor: true });
     expect(fromSession.proposedBy).toEqual({ session: session.id, supervisor: false });
     await agents.stop(supervisor.id);
@@ -165,10 +165,10 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
 
   test("a new supervisor replaces the ended one: the ended one is closed with its files, its proposals stay", async () => {
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
-    const { agents, procs, home } = makeAgents({ sklep: repoDir }, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
+    const { agents, procs, home } = makeAgents({ shop: repoDir }, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
     cleanups.push(() => procs.stopAll());
     const first = await agents.startSupervisor();
-    const proposal = await agents.propose(first.id, { repo: "sklep", title: "Fix the cart", prompt: "Fix the cart total" });
+    const proposal = await agents.propose(first.id, { repo: "shop", title: "Fix the cart", prompt: "Fix the cart total" });
     await agents.stop(first.id);
 
     const next = await agents.startSupervisor();
@@ -198,14 +198,14 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
     expect(agents.sessions().sessions).toEqual([]);
   });
 
-  test("brak Copilot CLI i nieznane repo to błędy z kodem, bez procesu", async () => {
+  test("a missing Copilot CLI and an unknown repo are errors with a code, without a process", async () => {
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
-    const { agents } = makeAgents({ sklep: repoDir });
-    await expect(agents.start("inne")).rejects.toMatchObject({ code: "not_found" });
+    const { agents } = makeAgents({ shop: repoDir });
+    await expect(agents.start("other")).rejects.toMatchObject({ code: "not_found" });
 
     const missing = new Agents({
       procs: {
-        startTerminal: () => Promise.reject(new Error("nie powinien startować")),
+        startTerminal: () => Promise.reject(new Error("should not start")),
         state: () => undefined,
         stop: async () => undefined,
         liveIn: () => false,
@@ -213,15 +213,15 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
       repos: { repoPath: async () => repoDir, projectsDir: async () => repoDir },
       vcs: new Vcs(),
       home: mkdtempSync(join(tmpdir(), "trackwall-agents-")),
-      copilot: ["copilot-ktorego-nie-ma"],
+      copilot: ["copilot-that-does-not-exist"],
       version: "0.0.0-test",
       env: async () => ({ PATH: repoDir }),
-      hookCommand: () => ({ exec: "nieuzywane", args: [] }),
-      sessionMcpCommand: () => ["nieuzywane"],
+      hookCommand: () => ({ exec: "unused", args: [] }),
+      sessionMcpCommand: () => ["unused"],
       openEditor: () => {},
       log: () => {},
     });
-    await expect(missing.start("sklep")).rejects.toMatchObject({ code: "agent_unavailable" });
+    await expect(missing.start("shop")).rejects.toMatchObject({ code: "agent_unavailable" });
     expect(missing.sessions().sessions).toEqual([]);
   });
 });

@@ -14,7 +14,7 @@ beforeAll(async () => {
 
 afterAll(() => daemon.stop());
 
-/** Klient terminala: zbiera obraz ekranu i wyjście jako tekst. */
+/** A terminal client: collects the screen image and output as text. */
 function connect(session: string, protocols: string[], headers: Record<string, string> = {}) {
   const ws = new WebSocket(`ws://127.0.0.1:${daemon.api.port}/ws/pty/${session}`, protocols, { headers });
   let text = "";
@@ -33,12 +33,12 @@ function connect(session: string, protocols: string[], headers: Record<string, s
 async function until(check: () => boolean | Promise<boolean>, what: string): Promise<void> {
   const deadline = Date.now() + 15_000;
   while (!(await check())) {
-    if (Date.now() > deadline) throw new Error(`nie doczekano się: ${what}`);
+    if (Date.now() > deadline) throw new Error(`gave up waiting for: ${what}`);
     await new Promise((r) => setTimeout(r, 50));
   }
 }
 
-describe.skipIf(process.versions.bun === undefined)("terminal sesji przez WebSocket", () => {
+describe.skipIf(process.versions.bun === undefined)("session terminal over WebSocket", () => {
   test("a window in front of the user marks the waiting session seen, and the session no longer waits for you", async () => {
     const session = await daemon.post(agentsApi.start, { repo: "sklep" });
     const current = async () => (await daemon.post(agentsApi.sessions, {})).sessions.find((s) => s.id === session.id);
@@ -54,26 +54,26 @@ describe.skipIf(process.versions.bun === undefined)("terminal sesji przez WebSoc
     await daemon.post(agentsApi.stop, { session: session.id });
   }, 60_000);
 
-  test("okno dostaje ekran sesji, a klawisze i rozmiar trafiają do Copilot CLI", async () => {
+  test("the terminal gets the session screen, and keys and size reach Copilot CLI", async () => {
     const session = await daemon.post(agentsApi.start, { repo: "sklep" });
     const client = connect(session.id, [PTY_SUBPROTOCOL, `bearer.${TOKEN}`]);
     await client.opened;
     expect(client.ws.protocol).toBe(PTY_SUBPROTOCOL);
-    await until(() => client.text().includes("Witaj w atrapie"), "ekran powitalny");
+    await until(() => client.text().includes("Welcome to the fake"), "welcome screen");
 
     client.ws.send(JSON.stringify({ type: "resize", cols: 100, rows: 40 }));
-    client.ws.send(JSON.stringify({ type: "input", data: "napraw build\r" }));
-    await until(() => client.text().includes("Zezwolić na bash?"), "prośba o zgodę na ekranie");
+    client.ws.send(JSON.stringify({ type: "input", data: "fix the build\r" }));
+    await until(() => client.text().includes("Allow bash?"), "approval request on the screen");
     await until(async () => {
       const list = await daemon.post(agentsApi.sessions, {});
       return list.sessions.find((s) => s.id === session.id)?.state?.state === "Approval";
-    }, "stan Approval z hooka");
+    }, "Approval state from the hook");
 
     client.ws.close();
     await daemon.post(agentsApi.stop, { session: session.id });
   }, 60_000);
 
-  test("bez tokenu, z obcym Origin albo do nieznanej sesji połączenie jest odrzucane", async () => {
+  test("without a token, with a foreign Origin or to an unknown session the connection is refused", async () => {
     const session = "00000000-0000-4000-8000-000000000000";
     await expect(connect(session, [PTY_SUBPROTOCOL]).opened).rejects.toThrow("status 401");
     await expect(connect(session, [PTY_SUBPROTOCOL, `bearer.${"x".repeat(43)}`]).opened).rejects.toThrow("status 401");
@@ -81,13 +81,13 @@ describe.skipIf(process.versions.bun === undefined)("terminal sesji przez WebSoc
     await expect(connect(session, [PTY_SUBPROTOCOL, `bearer.${TOKEN}`], { origin: "https://evil.example" }).opened).rejects.toThrow(
       "status 403",
     );
-    expect(await connect("nie-uuid", [PTY_SUBPROTOCOL, `bearer.${TOKEN}`]).closed).toBe(PTY_CLOSE_NOT_FOUND);
+    expect(await connect("not-a-uuid", [PTY_SUBPROTOCOL, `bearer.${TOKEN}`]).closed).toBe(PTY_CLOSE_NOT_FOUND);
 
     const unknown = connect(session, [PTY_SUBPROTOCOL, `bearer.${TOKEN}`]);
     expect(await unknown.closed).toBe(PTY_CLOSE_NOT_FOUND);
   });
 
-  test("żądanie z adresem, którego nie da się sparsować, dostaje 404, a daemon działa dalej", async () => {
+  test("a request with an address that cannot be parsed gets 404, and the daemon keeps running", async () => {
     const response = await new Promise<string>((resolve, reject) => {
       const socket = createConnection(daemon.api.port, "127.0.0.1", () => {
         socket.write(

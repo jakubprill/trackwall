@@ -28,29 +28,32 @@ import { AgentTasks, type TasksVcs } from "./tasks.ts";
 import type { ScreenViewer } from "./terminal-screen.ts";
 
 /**
- * Moduł `agents` (§4.4, ADR-26): sesje Copilot CLI uruchamiane z UI w repo z folderu z projektami, kilka naraz.
- * Każda sesja to Copilot CLI w PTY należącym do daemona, w grupie procesów modułu `procs`, z wtyczką sesji, której
- * hooki zgłaszają stan (ADR-17). Komendę składa daemon; z zewnątrz przychodzi tylko identyfikator repo (§1.2).
- * Sesje żyją w pamięci daemona: wyjście daemona zatrzymuje je razem z innymi grupami procesów. Sesja może należeć
- * do zadania (ADR-31, `tasks.ts`): działa wtedy w worktree zadania, a zadanie przeżywa daemona. Sesja może też
- * proponować zadania, zgłaszać podsumowanie swojego zadania i czekać na inną sesję (ADR-39): serwer MCP poznaje ją
- * po tokenie sesji, a zadanie z propozycji startuje dopiero po zatwierdzeniu przez użytkownika. One session, the
+ * The `agents` module (§4.4, ADR-26): Copilot CLI sessions started from the UI in a repo from the projects folder, several
+ * at once. Every session is Copilot CLI in a PTY owned by the daemon, in a process group of the `procs` module, with a
+ * session plugin whose hooks report the state (ADR-17). The daemon builds the command; only a repo identifier comes from
+ * outside (§1.2). Sessions live in daemon memory: the daemon's exit stops them together with the other process groups. A
+ * session can belong to a task (ADR-31, `tasks.ts`): it then runs in the task's worktree, and the task outlives the
+ * daemon. A session can also propose tasks, report the summary of its task and wait for another session (ADR-39): the
+ * MCP server recognises it by its session token, and a task from a proposal starts only after the user approves it. One session, the
  * supervisor (ADR-58), runs in the projects folder instead of a repo, above all the others.
  */
 
-/** Rozmiar PTY, zanim okno terminala zgłosi swój. */
+/** The PTY size before a session terminal reports its own. */
 const INITIAL_COLS = 120;
 const INITIAL_ROWS = 30;
-/** Jak często sesje czytają rekordy hooków i sprawdzają koniec procesu. */
+/** How often sessions read hook records and check for the end of the process. */
 const TICK_MS = 200;
-/** Konfiguracja MCP sesji w katalogu sesji; plik zamiast JSON w argumencie, żeby cudzysłowy JSON-u nie zależały od cytowania argumentów na Windowsie. */
+/**
+ * The session's MCP configuration in the session directory; a file instead of JSON in an argument, so that JSON's quotes
+ * do not depend on argument quoting on Windows.
+ */
 const MCP_CONFIG_FILE = "mcp-config.json";
-/** Token sesji w katalogu sesji, który most stdio sesji czyta i wysyła do serwera MCP (ADR-39). */
+/** The session token in the session directory, which the session's stdio bridge reads and sends to the MCP server (ADR-39). */
 const SESSION_TOKEN_FILENAME = "session-token";
 const TASKS_FILE = "tasks.json";
 const WORKTREES_DIR = "worktrees";
 
-/** Czego `agents` potrzebuje od `procs`; podłączane w fasadzie. */
+/** What `agents` needs from `procs`; wired in the facade. */
 interface AgentsProcs {
   startTerminal(spec: {
     owner: string;
@@ -78,32 +81,35 @@ interface AgentsRepos {
 export interface AgentsDeps {
   procs: AgentsProcs;
   repos: AgentsRepos;
-  /** Worktree i gałęzie zadań (ADR-31). */
+  /** Task worktrees and branches (ADR-31). */
   vcs: TasksVcs;
   /**
-   * Katalog stanu daemona; sesje trzymają swoje pliki w `sessions/<sesja>/`, zadania listę w `tasks.json`, a swoje
-   * worktree w `worktrees/<repo>/`.
+   * The daemon's state directory; sessions keep their files in `sessions/<session>/`, tasks keep their list in `tasks.json`
+   * and their worktrees in `worktrees/<repo>/`.
    */
   home: string;
-  /** Program Copilot CLI (nazwa z `PATH` albo pełna ścieżka) z argumentami przed argumentami sesji; w daemonie `["copilot"]`. */
+  /**
+   * The Copilot CLI program (a name from `PATH` or a full path) with arguments before the session's arguments;
+   * `["copilot"]` in the daemon.
+   */
   copilot: readonly string[];
   /** The daemon's version, which every session learns from its session instructions. */
   version: string;
-  /** Środowisko procesów użytkownika (`PATH` z powłoki logowania na macOS). */
+  /** The environment of user processes (`PATH` from the login shell on macOS). */
   env: () => Promise<NodeJS.ProcessEnv>;
-  /** Program hooka wtyczki sesji dla zdarzenia: daemon z podkomendą `copilot-hook` (bez `cwd`, ustala je moduł). */
+  /** The session plugin's hook program for an event: the daemon with the `copilot-hook` subcommand (without `cwd`, the module sets it). */
   hookCommand: (event: CopilotHookEvent, hooksFile: string) => Omit<HookCommand, "cwd">;
   /**
-   * Most stdio do serwera MCP daemona (§5.3) z plikiem tokenu sesji (ADR-39): każda sesja dostaje serwer `trackwall`
-   * przez `--additional-mcp-config`, a serwer wie po tokenie, która sesja woła.
+   * The stdio bridge to the daemon's MCP server (§5.3) with the session token file (ADR-39): every session gets the
+   * `trackwall` server through `--additional-mcp-config`, and the server knows from the token which session is calling.
    */
   sessionMcpCommand: (tokenFile: string) => readonly string[];
-  /** Otwiera katalog w VS Code (worktree zadania). */
+  /** Opens a directory in VS Code (a task's worktree). */
   openEditor: (dir: string) => void;
   log: (msg: string) => void;
 }
 
-/** Na co czeka `wait_for_session`: sesja albo zadanie (także propozycja, która ma stać się zadaniem). */
+/** What `wait_for_session` waits for: a session or a task (also a proposal that is about to become a task). */
 export type WaitTarget = { session: string } | { task: string };
 
 export class Agents {
@@ -139,12 +145,12 @@ export class Agents {
 
   sessions(): SessionList {
     const tasks = this.#tasks.list();
-    // Zatwierdzana propozycja, z której jest już zadanie, jest tylko zadaniem: UI i `list_sessions` widzą jeden obiekt.
+    // A proposal being approved that is already a task is only a task: the UI and `list_sessions` see one object.
     const proposals = this.#proposals.list().filter((p) => !tasks.some((t) => t.id === p.id));
     return { sessions: this.#views(), tasks, proposals, worktreesDir: this.#worktreesDir };
   }
 
-  /** Jedna sesja z listy (`not_found`, gdy jej nie ma albo użytkownik ją zamknął). */
+  /** One listed session (`not_found` when it does not exist or the user closed it). */
   session(id: string): Session {
     return this.#view(this.#get(id));
   }
@@ -178,12 +184,12 @@ export class Agents {
     return started;
   }
 
-  /** Sesja, której token sesji przyszedł z mostu stdio; `undefined` dla nieznanego tokenu. */
+  /** The session whose session token came from the stdio bridge; `undefined` for an unknown token. */
   callerSession(token: string): string | undefined {
     return this.#tokens.session(token);
   }
 
-  /** Propozycja zadania od sesji `caller` (`null`: agent spoza Trackwall) w repo z folderu z projektami (ADR-39). */
+  /** A task proposal from session `caller` (`null`: an agent outside Trackwall) in a repo from the projects folder (ADR-39). */
   async propose(caller: string | null, proposal: { repo: string; title: string; prompt: string }): Promise<TaskProposal> {
     await this.#deps.repos.repoPath(proposal.repo);
     const supervisor = caller !== null && isSupervisor(this.session(caller));
@@ -191,9 +197,9 @@ export class Agents {
   }
 
   /**
-   * Zadanie z propozycji, z poleceniem poprawionym przez użytkownika. Propozycja zostaje na liście, dopóki nie ma
-   * zadania z jej identyfikatorem, ale drugie zatwierdzenie to `not_found`; znów czeka na decyzję, gdy zadanie nie
-   * powstało. Zadanie, które zostało po nieudanym sprzątaniu, użytkownik kończy sam, więc wtedy propozycja znika.
+   * A task from a proposal, with the prompt edited by the user. The proposal stays on the list until there is a task with
+   * its identifier, but a second approval is `not_found`; it waits for a decision again when the task was not created. A
+   * task left behind by a failed cleanup is ended by the user, so the proposal then disappears.
    */
   async approveProposal(id: string, prompt: string): Promise<Task> {
     const { repo, title, proposedBy } = this.#proposals.take(id);
@@ -208,14 +214,14 @@ export class Agents {
     this.#proposals.reject(id, reason ?? null);
   }
 
-  /** Podsumowanie od sesji `caller` do jej własnego zadania (`report_result`). */
+  /** A summary from session `caller` for its own task (`report_result`). */
   reportSummary(caller: string | null, text: string): Task {
     const task = caller === null ? null : this.session(caller).task;
     if (task === null) throw new DomainError("bad_request", "only a session that runs a task in Trackwall can report a result");
     return this.#tasks.setSummary(task, text);
   }
 
-  /** Czeka, aż sesja albo zadanie będzie wymagać kogoś, najwyżej `timeoutMs`; na własną sesję czekać nie można. */
+  /** Waits until a session or task needs someone, at most `timeoutMs`; a session cannot wait for itself. */
   waitFor(caller: string | null, target: WaitTarget, timeoutMs: number, signal: AbortSignal): Promise<WaitOutcome> {
     const first = this.#waitOutcome(target);
     if (caller !== null && first.session?.id === caller) throw new DomainError("bad_request", "a session cannot wait for itself");
@@ -250,7 +256,7 @@ export class Agents {
     return this.#tasks.resume(id);
   }
 
-  /** Zadanie po identyfikatorze (`not_found`, gdy go nie ma albo użytkownik je zakończył). */
+  /** A task by identifier (`not_found` when it does not exist or the user ended it). */
   task(id: string): Task {
     return this.#tasks.task(id);
   }
@@ -264,7 +270,7 @@ export class Agents {
     return this.#tasks.sharedFiles(id);
   }
 
-  /** Zmiany zadania bez diffu, dla agenta (narzędzie MCP `get_session`). */
+  /** A task's changes without the diff, for an agent (the MCP tool `get_session`). */
   taskChangesSummary(id: string): Promise<TaskChangesSummary> {
     return this.#tasks.summary(id);
   }
@@ -293,8 +299,8 @@ export class Agents {
   }
 
   /**
-   * Copilot CLI w `cwd` (korzeń repo albo worktree zadania `task`) z argumentami przed argumentami sesji;
-   * `promptOnStart`, gdy argumenty niosą pierwszą wiadomość (`--interactive`), więc sesja od startu pracuje.
+   * Copilot CLI in `cwd` (the repo root or the worktree of task `task`) with arguments before the session's arguments;
+   * `promptOnStart` when the arguments carry the first message (`--interactive`), so the session works from the start.
    */
   async #launch({ repo, cwd, task, args, promptOnStart }: LaunchSpec): Promise<Session> {
     const env = { ...(await this.#deps.env()), TERM: "xterm-256color", COLORTERM: "truecolor" };
@@ -349,18 +355,18 @@ export class Agents {
     return this.#view(session);
   }
 
-  /** Zamyka zakończoną sesję: znika z listy, a jej pliki z katalogu stanu. Zadanie sesji zostaje. */
+  /** Closes an ended session: it disappears from the list, and its files from the state directory. The session's task stays. */
   dismiss(id: string): SessionList {
     this.#close(id);
     return this.sessions();
   }
 
-  /** Okno terminala sesji: najpierw obraz ekranu, potem wyjście na bieżąco, a `onClosed`, gdy sesja zniknie. */
+  /** A session terminal: first the screen image, then live output, and `onClosed` when the session disappears. */
   attach(id: string, viewer: ScreenViewer, onSnapshot: (snapshot: string) => void, onClosed: () => void): SessionWindow {
     return this.#get(id).attach(viewer, onSnapshot, onClosed);
   }
 
-  /** Start daemona: pliki sesji z poprzedniego działania (sesje nie przeżywają daemona). */
+  /** Daemon start: session files from the previous run (sessions do not outlive the daemon). */
   sweepLeftovers(): void {
     try {
       rmSync(join(this.#deps.home, "sessions"), { recursive: true, force: true });
@@ -369,7 +375,7 @@ export class Agents {
     }
   }
 
-  /** Wyjście daemona: procesy zatrzymuje `procs.stopAll`, tu kończy się tylko obserwowanie. */
+  /** Daemon exit: `procs.stopAll` stops the processes, here only the observing ends. */
   close(): void {
     clearInterval(this.#timer);
     this.#timer = undefined;
@@ -386,7 +392,7 @@ export class Agents {
     this.#removeDir(id);
   }
 
-  /** Sesje od najnowszej. */
+  /** Sessions, newest first. */
   #views(): Session[] {
     return [...this.#sessions.values()].flatMap((s) => this.#fresh(s) ?? []).reverse();
   }
@@ -445,7 +451,7 @@ export class Agents {
     return session;
   }
 
-  /** Stan sesji po przeczytaniu nowych rekordów hooków i końca procesu. */
+  /** The session's state after reading new hook records and the end of the process. */
   #fresh(session: LiveSession): Session | undefined {
     session.tick();
     return session.view();
@@ -480,7 +486,7 @@ interface LaunchSpec {
   promptOnStart: boolean;
 }
 
-/** Katalog nowej sesji i to, co z niego wynika dla `LiveSession`. */
+/** The directory of a new session and what follows from it for `LiveSession`. */
 interface SessionFiles {
   id: string;
   repo: string | null;
@@ -496,7 +502,7 @@ interface PreparedSession {
   instructionsDir: string | null;
 }
 
-/** Klucz właściciela grupy w `procs`; tylko budowany, nigdy rozbierany z powrotem. */
+/** The group owner key in `procs`; only ever built, never taken apart again. */
 function owner(id: string): string {
   return `agent:${id}`;
 }

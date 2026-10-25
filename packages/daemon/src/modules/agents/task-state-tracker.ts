@@ -1,40 +1,41 @@
 import type { TaskStateChange, TaskStateSource } from "@trackwall/protocol";
 
 /**
- * Łączy sygnały detektorów stanu jednej sesji zadania w jeden stan (§4.4). Zasady:
+ * Combines the signals of one task session's state detectors into one state (§4.4). The rules:
  *
- * - Najlepsze źródło, które się odezwało, wygrywa: po pierwszym hooku sekwencje terminala i ekran nie zmieniają
- *   już stanu, bo hook wie więcej. Dopóki hook milczy (np. nie działa na danym systemie), stan idzie ze słabszych.
- *   Wyjątek: słabsze źródło może zakończyć `Working`. Gdy hook końca tury nie przyjdzie (zgubiony, przekroczony
- *   czas hooka, przerwana tura), sesja nie wisi w `Working`, a potem w `Stale`, choć czeka na człowieka.
- * - Klawisz człowieka (`keyboard`) przechodzi zawsze, bo mówi o tym, czego hooki nie zgłaszają: odpowiedzi na prośbę
- *   o zgodę i przerwaniu tury. Detektor klawiszy sam wybiera, w jakim stanie klawisz coś znaczy (`copilot-keys.ts`).
- * - `Stale` tylko z `Working`: brak wyjścia i sygnałów przez próg. Czekanie na człowieka nie jest zawieszeniem.
- *   Czas i powód `Stale` zależą tylko od ostatniej aktywności i progu, nie od tego, jak często woła się `tick`,
- *   więc na żywo i przy odtwarzaniu nagrania wychodzi to samo. Każde wyjście po `Stale` wraca do stanu sprzed niego.
- * - Zakończenie procesu jest ostateczne; potem nic nie zmienia stanu. Kod wyjścia rozstrzyga `Done` albo `Error`,
- *   chyba że detektor zgłosił już koniec sesji (`endsSession`), bo mówi więcej niż kod.
+ * - The best source that has spoken wins: after the first hook, terminal sequences and the screen no longer change the
+ *   state, because the hook knows more. While the hook is silent (e.g. it does not work on a given system), the state
+ *   comes from the weaker ones. Exception: a weaker source can end `Working`. When the end-of-turn hook does not come
+ *   (lost, hook timeout exceeded, interrupted turn), the session does not hang in `Working` and then in `Stale` although
+ *   it is waiting for a human.
+ * - A human's key (`keyboard`) always gets through, because it tells what hooks do not report: an answer to an approval
+ *   request and an interrupted turn. The key detector itself decides in which state a key means something (`copilot-keys.ts`).
+ * - `Stale` only from `Working`: no output and no signals for the threshold. Waiting for a human is not hanging. The time
+ *   and reason of `Stale` depend only on the last activity and the threshold, not on how often `tick` is called, so a live
+ *   session and a replayed recording give the same result. Any output after `Stale` returns to the state before it.
+ * - The end of the process is final; nothing changes the state afterwards. The exit code decides `Done` or `Error`,
+ *   unless a detector has already reported the end of the session (`endsSession`), because that says more than the code.
  */
 
 const DETECTOR_RANK = { screen: 1, osc: 2, hook: 3 } as const satisfies Partial<Record<TaskStateSource, number>>;
 
-/** Źródła sygnałów detektorów obserwujących sesję; `keyboard`, `timeout` i `exit` mają własne metody. */
+/** Signal sources of the detectors observing a session; `keyboard`, `timeout` and `exit` have their own methods. */
 type DetectorSource = keyof typeof DETECTOR_RANK;
 
 export type StateSignal = Omit<TaskStateChange, "at" | "source"> & {
   source: DetectorSource;
-  /** Sygnał końca sesji (np. hook `sessionEnd`); kod wyjścia procesu go już nie zmienia. */
+  /** An end-of-session signal (e.g. the `sessionEnd` hook); the process exit code no longer changes it. */
   endsSession?: true;
 };
 
-/** Klawisz człowieka w terminalu sesji (`copilot-keys.ts`). */
+/** A human's key in the session terminal (`copilot-keys.ts`). */
 export type KeyboardSignal = Omit<TaskStateChange, "at" | "source"> & { source: "keyboard" };
 
 type TrackedState = Omit<TaskStateChange, "at">;
 
 export interface TaskStateTrackerOptions {
   now: () => number;
-  /** Po tylu milisekundach bez wyjścia i sygnałów `Working` przechodzi w `Stale`. */
+  /** After this many milliseconds without output and signals `Working` turns into `Stale`. */
   staleAfterMs: number;
 }
 
@@ -58,7 +59,7 @@ export class TaskStateTracker {
     return this.#current;
   }
 
-  /** Sygnał detektora; zwraca zmianę, gdy stan, źródło albo pewność są inne niż dotąd. */
+  /** A detector signal; returns a change when the state, source or confidence differs from before. */
   signal({ endsSession, ...s }: StateSignal): TaskStateChange | undefined {
     const rank = DETECTOR_RANK[s.source];
     const endsWork = this.#current?.state === "Working" && s.state !== "Working";
@@ -69,21 +70,21 @@ export class TaskStateTracker {
     return this.#set(s, this.#lastActivity);
   }
 
-  /** Klawisz człowieka: bez rangi źródeł, bo mówi o tym, czego hooki nie zgłaszają. */
+  /** A human's key: without source ranking, because it tells what hooks do not report. */
   keyboard(s: KeyboardSignal): TaskStateChange | undefined {
     if (this.#exited) return undefined;
     this.#lastActivity = this.#now();
     return this.#set(s, this.#lastActivity);
   }
 
-  /** Sesja coś wypisała. */
+  /** The session printed something. */
   activity(): TaskStateChange | undefined {
     this.#lastActivity = this.#now();
     if (this.#exited || this.#current?.state !== "Stale" || !this.#beforeStale) return undefined;
     return this.#set(this.#beforeStale, this.#lastActivity);
   }
 
-  /** Wywoływane cyklicznie; zwraca zmianę na `Stale`, gdy minął próg. */
+  /** Called periodically; returns a change to `Stale` when the threshold has passed. */
   tick(): TaskStateChange | undefined {
     const current = this.#current;
     if (this.#exited || current?.state !== "Working") return undefined;
@@ -95,7 +96,7 @@ export class TaskStateTracker {
     return this.#set({ state: "Stale", source: "timeout", confidence: "medium", reason }, staleAt);
   }
 
-  /** Proces sesji się zakończył. */
+  /** The session's process has ended. */
   exit(code: number): TaskStateChange | undefined {
     if (this.#exited) return undefined;
     this.#exited = true;

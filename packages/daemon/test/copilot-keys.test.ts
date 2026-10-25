@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { sessionKey, stateFromKey } from "../src/modules/agents/copilot-keys.ts";
 
-describe("klawisze w terminalu sesji Copilot CLI", () => {
-  test("liczy się tylko pojedynczy Enter, Esc albo Ctrl+C; tekst, wklejka i strzałki nie są klawiszem odpowiedzi", () => {
+describe("keys in the Copilot CLI session terminal", () => {
+  test("only a single Enter, Esc or Ctrl+C counts; text, a paste and arrows are not an answer key", () => {
     expect(sessionKey("\r")).toBe("enter");
     expect(sessionKey("\u001b")).toBe("escape");
     expect(sessionKey("\u0003")).toBe("interrupt");
@@ -16,7 +16,7 @@ describe("klawisze w terminalu sesji Copilot CLI", () => {
     expect(sessionKey("__proto__")).toBeUndefined();
   });
 
-  test("Enter albo cyfra przy prośbie o zgodę albo o zatwierdzenie planu to praca z pewnością medium", () => {
+  test("Enter or a digit at an approval request or a plan approval is work with medium confidence", () => {
     expect(stateFromKey("enter", "Approval")).toEqual({ state: "Working", source: "keyboard", confidence: "medium", reason: "key enter" });
     expect(stateFromKey("enter", "Plan")).toMatchObject({ state: "Working" });
     expect(stateFromKey("choice", "Approval")).toEqual({
@@ -27,14 +27,14 @@ describe("klawisze w terminalu sesji Copilot CLI", () => {
     });
   });
 
-  test("Esc i Ctrl+C w trakcie pracy, także zawieszonej, albo przy prośbie o zgodę przerywają turę, więc sesja czeka na Ciebie", () => {
+  test("Esc and Ctrl+C during work, also hung work, or at an approval request interrupt the turn, so the session is waiting for you", () => {
     expect(stateFromKey("escape", "Approval")).toEqual({ state: "Input", source: "keyboard", confidence: "medium", reason: "key escape" });
     expect(stateFromKey("escape", "Working")).toMatchObject({ state: "Input" });
     expect(stateFromKey("interrupt", "Working")).toMatchObject({ state: "Input", reason: "key interrupt" });
     expect(stateFromKey("escape", "Stale")).toMatchObject({ state: "Input" });
   });
 
-  test("Enter i cyfra przy wpisywaniu promptu albo komendy nie zmieniają stanu, bo turę zgłasza hook, a komenda w rodzaju /model nie ma hooka", () => {
+  test("Enter and a digit while typing a prompt or a command do not change the state, because a hook reports the turn, and a command like /model has no hook", () => {
     expect(stateFromKey("enter", "Input")).toBeUndefined();
     expect(stateFromKey("enter", "Working")).toBeUndefined();
     expect(stateFromKey("choice", "Input")).toBeUndefined();

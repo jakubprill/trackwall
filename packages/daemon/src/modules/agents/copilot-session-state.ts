@@ -7,7 +7,7 @@ import { CopilotScreen } from "./copilot-screen.ts";
 import { OscParser } from "./osc-parser.ts";
 import { type StateSignal, TaskStateTracker, type TaskStateTrackerOptions } from "./task-state-tracker.ts";
 
-/** `sessionStart` sesji, która startuje z poleceniem (`promptOnStart`). */
+/** The `sessionStart` of a session that starts with a prompt (`promptOnStart`). */
 const SESSION_START_WITH_PROMPT: StateSignal = {
   state: "Working",
   source: "hook",
@@ -16,22 +16,22 @@ const SESSION_START_WITH_PROMPT: StateSignal = {
 };
 
 /**
- * Komunikat o przerwanej turze liczy się tylko tyle po odpowiedzi klawiszem: ten sam tekst wraca na ekran przy
- * przerysowaniu historii, np. po zmianie rozmiaru.
+ * The interrupted turn message counts only this long after an answer with a key: the same text comes back on the screen
+ * when the history is redrawn, e.g. after a resize.
  */
 const CANCEL_AFTER_ANSWER_MS = 10_000;
 
 /**
- * Stan jednej sesji Copilot CLI (§4.4): wyjście PTY, rekordy hooków i klawisze człowieka wchodzą, zmiany stanu
- * wychodzą. Ten sam obiekt liczy stan na żywo i przy odtwarzaniu nagrania, więc test na nagraniu sprawdza to,
- * co działa w sesji.
+ * The state of one Copilot CLI session (§4.4): PTY output, hook records and a human's keys go in, state changes come
+ * out. The same object computes the state live and when replaying a recording, so a test on a recording checks what
+ * runs in the session.
  */
 export interface CopilotSessionStateOptions extends TaskStateTrackerOptions {
   /**
-   * Sesja startuje z poleceniem jako pierwszą wiadomością (`--interactive`, sesja nowego zadania, ADR-31), więc
-   * `sessionStart` znaczy początek pracy nad poleceniem, a nie czekanie na Ciebie. Bez tego sesja zadania przez chwilę
-   * między `sessionStart` a `userPromptSubmitted` czekałaby na Ciebie, a `wait_for_session` (ADR-39) kończyłby
-   * czekanie, zanim agent zacznie.
+   * The session starts with the prompt as its first message (`--interactive`, the session of a new task, ADR-31), so
+   * `sessionStart` means the start of work on the prompt, not waiting for you. Without this a task session would be
+   * waiting for you for a moment between `sessionStart` and `userPromptSubmitted`, and `wait_for_session` (ADR-39) would
+   * end the wait before the agent starts.
    */
   promptOnStart: boolean;
 }
@@ -41,10 +41,10 @@ export class CopilotSessionState {
   readonly #screen = new CopilotScreen();
   readonly #tracker: TaskStateTracker;
   readonly #now: () => number;
-  /** Pierwszy `sessionStart` jeszcze nie przyszedł; tylko on niesie polecenie, a `/clear` albo `/resume` w sesji już nie. */
+  /** The first `sessionStart` has not come yet; only it carries the prompt, `/clear` or `/resume` in the session no longer do. */
   #promptPending: boolean;
   #windowTitle: string | undefined;
-  /** Czas ostatniego klawisza sesji, który zmienił stan (odpowiedź na prośbę albo przerwanie). */
+  /** The time of the last session key that changed the state (an answer to a request or an interruption). */
   #lastAnswerAt = Number.NEGATIVE_INFINITY;
 
   constructor(o: CopilotSessionStateOptions) {
@@ -53,14 +53,14 @@ export class CopilotSessionState {
     this.#promptPending = o.promptOnStart;
   }
 
-  /** Ostatni tytuł okna ustawiony przez Copilot CLI: nad czym agent pracuje. */
+  /** The last window title set by Copilot CLI: what the agent is working on. */
   get windowTitle(): string | undefined {
     return this.#windowTitle;
   }
 
   /**
-   * Każde wejście i koniec procesu najpierw sprawdza próg `Stale`. Odtwarzanie nie ma cyklicznego `tick`,
-   * więc dzięki temu daje tę samą kolejność zmian co sesja na żywo.
+   * Every input and the end of the process first check the `Stale` threshold. The replay has no periodic `tick`, so this
+   * way it gives the same order of changes as the live session.
    */
   output(data: string): TaskStateChange[] {
     const changes = [this.#tracker.tick(), this.#tracker.activity()];
@@ -81,9 +81,9 @@ export class CopilotSessionState {
     return [this.#tracker.tick(), signal && this.#tracker.signal(signal)].filter((c) => c !== undefined);
   }
 
-  /** Klawisz, który człowiek wysłał do terminala sesji (`sessionKey`). */
+  /** A key a human sent to the session terminal (`sessionKey`). */
   key(key: SessionKey): TaskStateChange[] {
-    // Najpierw próg `Stale`: na żywo cykliczny `tick` mógł go już ustawić, a klawisz liczy się ze stanu po nim.
+    // The `Stale` threshold first: live, the periodic `tick` may already have set it, and the key counts from the state after it.
     const stale = this.#tracker.tick();
     const signal = stateFromKey(key, this.#tracker.current?.state);
     if (!signal) return [stale].filter((c) => c !== undefined);
