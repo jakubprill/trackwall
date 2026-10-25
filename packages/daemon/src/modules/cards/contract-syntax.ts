@@ -2,62 +2,62 @@ import type { Dto } from "@trackwall/protocol";
 import type { Node } from "web-tree-sitter";
 
 /**
- * Co plik Javy albo Kotlina mówi o kontraktach endpointów (ADR-38), odczytane z drzewa składni (`contract-java.ts`,
- * `contract-kotlin.ts`): deklaracje typów, które mogą być DTO, i typy ciała żądania i odpowiedzi metod. Same wartości,
- * bez węzłów, bo drzewo jest zwalniane po odczycie (`syntax-tree.ts`).
+ * What a Java or Kotlin file says about endpoint contracts (ADR-38), read from the syntax tree (`contract-java.ts`,
+ * `contract-kotlin.ts`): type declarations that may be DTOs, and the request and response body types of methods. Plain
+ * values without nodes, because the tree is freed after reading (`syntax-tree.ts`).
  */
 export interface SourceSyntax {
   types: TypeDeclaration[];
-  /** Metody i funkcje pliku w kolejności w kodzie, także z typów zagnieżdżonych. */
+  /** The file's methods and functions in code order, also from nested types. */
   methods: MethodContract[];
 }
 
 type WithoutEvidence<T> = T extends unknown ? Omit<T, "evidence"> : never;
 
-/** DTO bez dowodu (ścieżkę zna dopiero karta) z linią nazwy typu. */
+/** A DTO without evidence (only the card knows the path) with the line of the type name. */
 export type TypeDeclaration = WithoutEvidence<Dto> & { line: number };
 
 export interface MethodContract {
   name: string;
-  /** Linie (od 1) od pierwszej adnotacji do końca ciała: w nich leży linia mapowania endpointu. */
+  /** Lines (from 1) from the first annotation to the end of the body: the endpoint's mapping line lies within them. */
   startLine: number;
   endLine: number;
-  /** Typ parametru z `@RequestBody` w zapisie typu (`typeText`). */
+  /** The type of the `@RequestBody` parameter in type notation (`typeText`). */
   request: string | null;
-  /** Typ zwracany w zapisie typu, z opakowaniami (`ResponseEntity<OrderDto>`). */
+  /** The return type in type notation, with wrappers (`ResponseEntity<OrderDto>`). */
   returns: string | null;
 }
 
-/** Linia (od 1), w której zaczyna się węzeł. */
+/** The line (from 1) where the node starts. */
 export function lineOf(node: Node): number {
   return node.startPosition.row + 1;
 }
 
-/** Linie metody `node` dla `MethodContract`. */
+/** The lines of method `node` for `MethodContract`. */
 export function linesOf(node: Node): Pick<MethodContract, "startLine" | "endLine"> {
   return { startLine: lineOf(node), endLine: node.endPosition.row + 1 };
 }
 
-/** Ostatni człon nazwy kwalifikowanej (`RequestBody` z `org.springframework...RequestBody`). */
+/** The last part of a qualified name (`RequestBody` from `org.springframework...RequestBody`). */
 export function simpleName(name: string): string {
   return name.slice(name.lastIndexOf(".") + 1);
 }
 
-/** Węzły adnotacji obu gramatyk: w zapisie typu (`List<@Valid Line>`) nie są częścią typu. */
+/** Annotation nodes of both grammars: in type notation (`List<@Valid Line>`) they are not part of the type. */
 const ANNOTATIONS = new Set(["annotation", "marker_annotation"]);
 const WORD_CHAR = /[\w$]/;
 
 /**
- * Zapis typu z węzła: tekst liści bez adnotacji i komentarzy, ze spacją tylko przed słowem po słowie albo po `?`
- * wildcardu Javy (`List<? extends Line>`, `Map<String,Line>`), więc ten sam typ ma ten sam zapis niezależnie od
- * formatowania kodu. Jedno przejście po liściach (typ z repo może mieć setki tysięcy argumentów), stos zamiast
- * rekurencji, bo typ może być zagnieżdżony głębiej, niż sięga stos wywołań.
+ * Type notation from a node: the text of the leaves without annotations and comments, with a space only between two words
+ * or after the `?` of a Java wildcard (`List<? extends Line>`, `Map<String,Line>`), so the same type has the same
+ * notation regardless of code formatting. One pass over the leaves (a type from a repo can have hundreds of thousands of
+ * arguments), a stack instead of recursion, because a type can be nested deeper than the call stack reaches.
  */
 export function typeText(node: Node): string {
   const parts: string[] = [];
   let wordEnded = false;
   for (const text of leafTexts(node)) {
-    // Brakujący token (`MISSING`) jest pusty i nie rozdziela słów.
+    // A missing token (`MISSING`) is empty and does not separate words.
     if (text === "") continue;
     if (wordEnded && WORD_CHAR.test(text[0] ?? "")) parts.push(" ");
     parts.push(text);
@@ -67,7 +67,7 @@ export function typeText(node: Node): string {
   return parts.join("");
 }
 
-/** Tekst liści węzła w kolejności w kodzie, bez adnotacji i komentarzy. */
+/** The text of a node's leaves in code order, without annotations and comments. */
 function* leafTexts(node: Node): Generator<string> {
   const stack = [node];
   for (let n = stack.pop(); n !== undefined; n = stack.pop()) {

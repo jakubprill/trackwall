@@ -5,13 +5,13 @@ import { normalizeKey } from "./spring-config.ts";
 import { EXCHANGE_MAPPINGS, httpClients, type Mapping, mappingOf, REQUEST_MAPPINGS, type SpringModule } from "./spring-module.ts";
 
 /**
- * Klienci HTTP z interfejsów (§4.6, ADR-30): `@FeignClient` (nazwa aplikacji z `name`/`value`, adres z `url` albo
- * z `spring.cloud.openfeign.client.config.<klient>.url`, prefiks z `path` i z `@RequestMapping` interfejsu) oraz
- * interfejsy `@HttpExchange` Spring 6 (adres bazowy ustawia kod konfiguracji, więc tu tylko ścieżki). Wywołania to
- * metody z mapowaniami.
+ * HTTP clients from interfaces (§4.6, ADR-30): `@FeignClient` (app name from `name`/`value`, address from `url` or
+ * from `spring.cloud.openfeign.client.config.<client>.url`, prefix from `path` and from the interface's `@RequestMapping`)
+ * and Spring 6 `@HttpExchange` interfaces (configuration code sets the base address, so only paths here). The calls are
+ * the methods with mappings.
  */
 
-/** Klucze adresu klienta Feign w konfiguracji: Spring Cloud OpenFeign 4 i starsze `feign.client`. */
+/** Configuration keys of a Feign client's address: Spring Cloud OpenFeign 4 and the older `feign.client`. */
 const FEIGN_URL_KEYS = ["spring.cloud.openfeign.client.config.{}.url", "feign.client.config.{}.url"];
 
 export function declarativeClients(file: JavaFile, module: SpringModule, lookup: Lookup): ConsumedHttp[] {
@@ -35,14 +35,14 @@ function feignClient(type: JavaType, file: JavaFile, module: SpringModule, looku
   return httpClients(module, urlText, { via: "feign", name: type.name, app, calls, evidence });
 }
 
-/** `${…}` klucza adresu klienta Feign w konfiguracji, gdy któryś profil go ma; `undefined` bez wpisu. */
+/** The `${…}` of a Feign client's address key in the configuration when some profile has it; `undefined` without an entry. */
 function configuredUrl(module: SpringModule, client: string | null | undefined): string | undefined {
   if (!client) return undefined;
   const key = FEIGN_URL_KEYS.map((k) => k.replace("{}", client)).find((k) => module.config.keys().has(normalizeKey(k)));
   return key && `\${${key}}`;
 }
 
-/** Interfejs HTTP Spring 6: `@HttpExchange` na interfejsie albo `@GetExchange`… na metodach. */
+/** A Spring 6 HTTP interface: `@HttpExchange` on the interface or `@GetExchange`… on its methods. */
 function httpInterface(type: JavaType, file: JavaFile, module: SpringModule, lookup: Lookup): ConsumedHttp[] {
   const classLevel = mappingOf(type.annotations, EXCHANGE_MAPPINGS, lookup);
   const base = classLevel?.paths[0] ?? "";

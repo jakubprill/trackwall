@@ -4,13 +4,13 @@ import { stemOf } from "./repo-path.ts";
 import type { RepoSnapshot } from "./snapshot.ts";
 
 /**
- * Odczyt commita dla ekstraktorów: lista plików (`ls-tree`), pliki źródłowe wybrane wyszukiwaniem treści
- * (`git grep`, ADR-30) i treść plików wybranych przez `reads` razem ze źródłowymi jednym `cat-file --batch`, bez
- * katalogu roboczego (ADR-14), więc karta opisuje dokładnie ten commit. Czego nie przeczytał w limitach, trafia do
- * `problems` migawki, więc niepełna karta mówi, czego jej brakuje.
+ * Reading a commit for the extractors: the file list (`ls-tree`), source files chosen by a content search (`git grep`,
+ * ADR-30) and the content of the files chosen by `reads` together with the source files in one `cat-file --batch`,
+ * without the working directory (ADR-14), so the card describes exactly this commit. Whatever it did not read within the
+ * limits goes to the commit snapshot's `problems`, so an incomplete card says what it lacks.
  */
 
-/** Czego `cards` potrzebuje od `vcs` do odczytu commita; podłączane w fasadzie. */
+/** What `cards` needs from `vcs` to read a commit; wired in the facade. */
 export interface SnapshotVcs {
   commitFiles(dir: string, commit: string, maxBytes: number): Promise<{ files: TreeEntry[]; truncated: boolean }>;
   readFiles(dir: string, commit: string, paths: readonly string[], maxBytes: number): Promise<Map<string, Buffer>>;
@@ -23,34 +23,34 @@ export interface SnapshotVcs {
   ): Promise<{ paths: string[]; truncated: boolean }>;
 }
 
-/** Pliki źródłowe do przeczytania: pasujące do `globs` i `accepts`, z treścią pasującą do wyrażenia ERE `pattern`. */
+/** Source files to read: matching `globs` and `accepts`, with content matching the ERE expression `pattern`. */
 export interface SourceSelection {
   pattern: string;
   globs: readonly string[];
   accepts: (path: string) => boolean;
   /**
-   * Nazwy typów, które plik źródłowy wymienia (ADR-38). Odczyt dociąga pliki źródłowe o tych nazwach (`OrderDto.java`,
-   * `OrderDto.kt`), w kolejnych rundach także nazwy z nich, bo DTO z kontraktu endpointu zwykle nie ma adnotacji,
-   * po której wyszukiwanie by go znalazło.
+   * The type names a source file mentions (ADR-38). The read fetches the source files with those names (`OrderDto.java`,
+   * `OrderDto.kt`), in further rounds also the names from them, because a DTO from an endpoint contract usually has no
+   * annotation the search would find it by.
    */
   referencedTypes: (text: string) => Iterable<string>;
 }
 
-/** Katalogi z zależnościami skopiowanymi do repo: ich pliki nie są częścią repo ani dla buildów, ani dla mechanizmów. */
+/** Directories with dependencies copied into the repo: their files are not part of the repo, for builds or for mechanisms. */
 const SKIPPED_DIRS = new Set(["node_modules", "bower_components"]);
-/** Lista plików repo z setkami tysięcy plików; więcej to i tak nie repo z kodem aplikacji. */
+/** A repo file list with hundreds of thousands of files; more is not a repo with app code anyway. */
 const MAX_LIST_BYTES = 64 * 1024 * 1024;
-/** Plik buildu większy niż to jest wygenerowany albo nie jest plikiem buildu. */
+/** A build file larger than this is generated or is not a build file. */
 const MAX_FILE_BYTES = 1024 * 1024;
 const MAX_FILES = 2000;
-/** Plików źródłowych z wyszukiwania: kontrolery i klienci HTTP to ułamek kodu, więc tyle mieści się nawet w dużym monorepo. */
+/** Source files from the search: controllers and HTTP clients are a fraction of the code, so this fits even in a large monorepo. */
 const MAX_SOURCE_FILES = 3000;
-/** Lista nazw z `git grep`: 3000 ścieżek po 300 znaków to niecały 1 MB. */
+/** The name list from `git grep`: 3000 paths of 300 characters is under 1 MB. */
 const MAX_GREP_BYTES = 4 * 1024 * 1024;
 const MAX_READ_BYTES = 64 * 1024 * 1024;
-/** Rundy dociągania plików typów: kontroler → DTO → typ pola → typ pola zagnieżdżonego. */
+/** Rounds of fetching type files: controller → DTO → field type → nested field type. */
 const RELATED_ROUNDS = 3;
-/** Plików dociągniętych po nazwach typów razem ze wszystkich rund. */
+/** Files fetched by type names, across all rounds together. */
 const MAX_RELATED_FILES = 3000;
 
 export async function readSnapshot(
@@ -79,7 +79,7 @@ export async function readSnapshot(
   return { commit, paths: files.map((f) => f.path), text: (path) => reader.texts.get(path), typeFiles, problems };
 }
 
-/** Odczyt plików commita w kolejnych porcjach ze wspólnym limitem `MAX_READ_BYTES`. */
+/** Reading the commit's files in successive batches with the shared `MAX_READ_BYTES` limit. */
 class BudgetedReader {
   readonly texts = new Map<string, string>();
   private bytes = 0;
@@ -93,7 +93,7 @@ class BudgetedReader {
     this.commit = commit;
   }
 
-  /** Czyta `paths`, a pliki, które nie zmieściły się w limicie, zwraca; problem dla każdego z nich zapisuje wołający. */
+  /** Reads `paths` and returns the files that did not fit in the limit; the caller records a problem for each of them. */
   async read(paths: readonly string[]): Promise<string[]> {
     const left = MAX_READ_BYTES - this.bytes;
     const contents =
@@ -113,10 +113,10 @@ class BudgetedReader {
 }
 
 /**
- * Pliki źródłowe o nazwach typów, które wymieniają już przeczytane pliki źródłowe, w `RELATED_ROUNDS` rundach; zwraca
- * przeczytane. Nazwa pliku to jedyne, co odczyt wie o typie bez parsowania; typ z pliku o innej nazwie (kilka
- * `data class` w jednym pliku Kotlina) zostaje bez pól, chyba że ten plik i tak był czytany. Pliki są zgadywane po
- * nazwach, więc te, które nie zmieściły się w limitach, dają jeden problem, a nie problem na plik.
+ * Source files named after the types the already read source files mention, in `RELATED_ROUNDS` rounds; returns those
+ * read. The file name is all the read knows about a type without parsing; a type from a file with another name (several
+ * `data class` in one Kotlin file) stays without fields, unless that file was read anyway. The files are guessed by
+ * name, so those that did not fit in the limits give one problem, not a problem per file.
  */
 async function readTypeFiles(
   reader: BudgetedReader,
@@ -125,7 +125,7 @@ async function readTypeFiles(
   requested: ReadonlySet<string>,
   problems: CardProblem[],
 ): Promise<Set<string>> {
-  // Plik z wyszukiwania, którego pierwszy odczyt nie zmieścił, nie wraca jako plik typu: ekstraktor Spring by go pominął.
+  // A file from the search that did not fit in the first read does not come back as a type file: the Spring extractor would skip it.
   const byType = sourcesByTypeName(files, sources, requested);
   const typeFiles = new Set<string>();
   let fresh = [...reader.texts.keys()].filter(sources.accepts);
@@ -147,7 +147,7 @@ async function readTypeFiles(
   return typeFiles;
 }
 
-/** Pliki źródłowe, które można przeczytać, po nazwie typu z nazwy pliku, bez `excluded`. */
+/** Source files that can be read, by the type name from the file name, without `excluded`. */
 function sourcesByTypeName(files: readonly TreeEntry[], sources: SourceSelection, excluded: ReadonlySet<string>): Map<string, string[]> {
   const byType = new Map<string, string[]>();
   for (const f of files.filter((f) => sources.accepts(f.path) && isReadable(f) && !excluded.has(f.path))) {
@@ -158,7 +158,7 @@ function sourcesByTypeName(files: readonly TreeEntry[], sources: SourceSelection
   return byType;
 }
 
-/** Jeszcze nieprzeczytane pliki typów, które wymieniają pliki `paths`. */
+/** Type files not read yet that the files `paths` mention. */
 function referencedFiles(
   paths: readonly string[],
   reader: BudgetedReader,
@@ -173,8 +173,8 @@ function referencedFiles(
 }
 
 /**
- * Pliki źródłowe z wyszukiwania treści w commicie; repo bez żadnego pliku pasującego do `accepts` nie uruchamia
- * `git grep` wcale.
+ * Source files from the content search in the commit; a repo without any file matching `accepts` does not run
+ * `git grep` at all.
  */
 async function sourceFiles(
   vcs: SnapshotVcs,
@@ -190,7 +190,7 @@ async function sourceFiles(
   try {
     found = await vcs.grepFiles(dir, commit, sources.pattern, sources.globs, MAX_GREP_BYTES);
   } catch (err) {
-    // Błąd wyszukiwania (np. limit czasu w ogromnym repo) zabiera tylko fakty z kodu, nie karta z plików buildu.
+    // A search error (e.g. a timeout in a huge repo) takes away only the facts from code, not the card from build files.
     problems.push({ path: "", message: `searching for files with controllers and HTTP clients failed: ${messageOf(err)}` });
     return [];
   }
@@ -203,12 +203,12 @@ async function sourceFiles(
   return matched.slice(0, MAX_SOURCE_FILES);
 }
 
-/** Plik do przeczytania: w limicie rozmiaru i bez znaków sterujących, bo ścieżki idą do gita liniami. */
+/** A file to read: within the size limit and without control characters, because paths go to git line by line. */
 function isReadable(file: TreeEntry): boolean {
   return (file.size ?? 0) <= MAX_FILE_BYTES && ![...file.path].some((c) => c < " ");
 }
 
-/** Tekst bez BOM i z `\n` zamiast `\r\n`, żeby wyrażenia i numery linii działały tak samo dla plików z Windowsa. */
+/** Text without a BOM and with `\n` instead of `\r\n`, so that expressions and line numbers work the same for files from Windows. */
 function toText(content: Buffer): string {
   return content.toString("utf8").replace(/^﻿/, "").replaceAll("\r\n", "\n");
 }

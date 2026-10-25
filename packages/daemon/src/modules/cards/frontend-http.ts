@@ -5,24 +5,24 @@ import { baseName, dirOf, inDir } from "./repo-path.ts";
 import { type Extracted, emptyExtracted, keyLines, type RepoSnapshot } from "./snapshot.ts";
 
 /**
- * Adresy backendu we frontendzie (§4.6, ADR-30): zmienne z adresem HTTP w plikach `.env*` obok `package.json`
- * (`VITE_API_URL`, `NEXT_PUBLIC_…`), pole `proxy` w `package.json` (Create React App) i adresy w konfiguracji proxy
- * serwera deweloperskiego (`vite.config.*`, `webpack.config.*`, `vue.config.js`, `next.config.*`, `proxy.conf.*`,
- * `setupProxy.js`). Konfiguracji JS nie wykonuje: adres to napis w cudzysłowie w linii pliku.
+ * Backend addresses in a frontend (§4.6, ADR-30): variables with an HTTP address in `.env*` files next to `package.json`
+ * (`VITE_API_URL`, `NEXT_PUBLIC_…`), the `proxy` field in `package.json` (Create React App) and addresses in the dev
+ * server's proxy configuration (`vite.config.*`, `webpack.config.*`, `vue.config.js`, `next.config.*`, `proxy.conf.*`,
+ * `setupProxy.js`). It does not run JS configuration: an address is a quoted string on a line of the file.
  */
 
 const ENV_FILE = /^\.env(\.[\w.-]+)?$/;
 const PROXY_FILES =
   /^(vite\.config\.[cm]?[jt]s|webpack\.config\.[cm]?[jt]s|vue\.config\.[cm]?js|next\.config\.[cm]?[jt]s|proxy\.conf(ig)?\.(json|[cm]?js)|setupProxy\.[jt]s)$/;
-/** `KLUCZ=wartość`, z `export` z przodu albo bez. */
+/** `KEY=value`, with or without `export` in front. */
 const ENV_LINE = /^\s*(?:export\s+)?([A-Za-z_][\w.-]*)\s*=(.*)$/;
-/** Adres HTTP w cudzysłowie; klasa znaków bez cudzysłowów i limit długości, bo linia jest z repo. */
+/** A quoted HTTP address; a character class without quotes and a length limit, because the line comes from the repo. */
 const QUOTED_URL = /["'`](https?:\/\/[^"'`\s]{1,500})["'`]/g;
-/** Dłuższa linia to wygenerowany kod, nie konfiguracja. */
+/** A longer line is generated code, not configuration. */
 const MAX_LINE_LENGTH = 2000;
 const PackageProxy = z.object({ proxy: z.string() });
 
-/** Pliki, które ten ekstraktor czyta, do wyboru plików z commita (`package.json` czyta też ekstraktor npm). */
+/** The files this extractor reads, for choosing files from the commit (`package.json` is also read by the npm extractor). */
 export function readsFrontendHttpFile(path: string): boolean {
   const name = baseName(path);
   return ENV_FILE.test(name) || PROXY_FILES.test(name);
@@ -50,7 +50,7 @@ function envClients(path: string, text: string): ConsumedHttp[] {
   });
 }
 
-/** Wartość `.env` bez cudzysłowów i bez komentarza `#` po spacji. */
+/** A `.env` value without quotes and without a `#` comment after a space. */
 function unquote(raw: string): string {
   const value = raw.trim();
   const quote = value[0];
@@ -74,7 +74,7 @@ function packageProxy(snapshot: RepoSnapshot, path: string): ConsumedHttp[] {
   try {
     proxy = PackageProxy.safeParse(JSON.parse(text)).data?.proxy;
   } catch {
-    // Zły JSON zgłasza już ekstraktor npm jako problem karty.
+    // The npm extractor already reports bad JSON as a card problem.
     return [];
   }
   if (!proxy || !parseHttpUrl(proxy)) return [];

@@ -4,8 +4,8 @@ import { messageOf } from "../../infra/errors.ts";
 import type { ProblemSink, RepoSnapshot } from "./snapshot.ts";
 
 /**
- * Katalog wersji Gradle (`gradle/libs.versions.toml`, §4.6): aliasy bibliotek i wtyczek, do których skrypty odwołują
- * się przez `libs.…`. Plik jest z repo, więc wchodzi przez schemat zod.
+ * The Gradle version catalog (`gradle/libs.versions.toml`, §4.6): library and plugin aliases that scripts refer to
+ * through `libs.…`. The file comes from the repo, so it goes through a zod schema.
  */
 
 interface CatalogEntry {
@@ -18,7 +18,7 @@ export interface Catalog {
   plugins: Map<string, CatalogEntry>;
 }
 
-/** Wersja w katalogu: napis, odwołanie do `[versions]` albo wersja bogata (`strictly`, `require`, `prefer`). */
+/** A version in the catalog: a string, a reference to `[versions]` or a rich version (`strictly`, `require`, `prefer`). */
 const CatalogVersion = z.union([
   z.string(),
   z.object({ ref: z.string() }),
@@ -31,7 +31,7 @@ const CatalogLibrary = z.union([
   z.object({ group: z.string(), name: z.string(), version: CatalogVersion.optional() }),
 ]);
 const CatalogPlugin = z.union([z.string(), z.object({ id: z.string(), version: CatalogVersion.optional() })]);
-/** `gradle/libs.versions.toml`; wpis w nieznanej postaci jest pomijany bez utraty reszty. */
+/** `gradle/libs.versions.toml`; an entry in an unknown form is skipped without losing the rest. */
 const VersionCatalog = z.object({
   versions: z.record(z.string(), z.string().catch("")).catch({}),
   libraries: z.record(z.string(), CatalogLibrary.nullable().catch(null)).catch({}),
@@ -40,8 +40,8 @@ const VersionCatalog = z.object({
 type VersionCatalog = z.infer<typeof VersionCatalog>;
 
 /**
- * Katalog wersji Gradle: biblioteki (`module = "g:a"`, `group` + `name` albo `"g:a:v"`) i wtyczki (`id` albo
- * `"id:wersja"`), z wersją wprost albo z `version.ref` do `[versions]`.
+ * The Gradle version catalog: libraries (`module = "g:a"`, `group` + `name` or `"g:a:v"`) and plugins (`id` or
+ * `"id:version"`), with the version given directly or with `version.ref` to `[versions]`.
  */
 export function readCatalog(snapshot: RepoSnapshot, path: string, out: ProblemSink): Catalog {
   const catalog: Catalog = { libraries: new Map(), plugins: new Map() };
@@ -69,7 +69,7 @@ export function readCatalog(snapshot: RepoSnapshot, path: string, out: ProblemSi
 function catalogVersion(v: CatalogVersion | undefined, versions: Readonly<Record<string, string>>): string | null {
   if (v === undefined) return null;
   if (typeof v === "string") return v;
-  // `Object.hasOwn`: `ref = "constructor"` z repo nie może sięgnąć do prototypu obiektu.
+  // `Object.hasOwn`: `ref = "constructor"` from the repo must not reach the object's prototype.
   if ("ref" in v) return Object.hasOwn(versions, v.ref) ? versions[v.ref] || null : null;
   return v.strictly ?? v.require ?? v.prefer ?? null;
 }
@@ -95,7 +95,7 @@ function libraryEntry(
   return { name: module, version: version(entry.version) };
 }
 
-/** Klucz aliasu katalogu tak, jak Gradle tworzy akcesor: `spring-boot-web`, `spring_boot.web` i `spring.boot.web` to to samo. */
+/** A catalog alias key the way Gradle builds the accessor: `spring-boot-web`, `spring_boot.web` and `spring.boot.web` are the same. */
 export function alias(name: string): string {
   return name.replace(/[-_]/g, ".").toLowerCase();
 }

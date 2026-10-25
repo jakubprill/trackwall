@@ -1,14 +1,14 @@
 /**
- * Rozwijanie `${klucz}` i `${klucz:domyślna}` tak jak Spring (§4.6, ADR-30): wartość z widoku konfiguracji profilu,
- * a bez niej domyślna po dwukropku (także zagnieżdżona, `${a:${b:c}}`). Klucz, którego nie ma i który nie ma domyślnej
- * (zwykle zmienna środowiskowa, `${ORDERS_URL}`), zostaje w tekście. Wartości są z repo (§8): głębokość i długość
- * wyniku są ograniczone, a każdy klucz liczy się raz na rozwinięcie.
+ * Expanding `${key}` and `${key:default}` the way Spring does (§4.6, ADR-30): the value from the profile's configuration
+ * view, and without it the default after the colon (also nested, `${a:${b:c}}`). A key that is missing and has no
+ * default (usually an environment variable, `${ORDERS_URL}`) stays in the text. The values come from the repo (§8): the
+ * depth and length of the result are limited, and every key is resolved once per expansion.
  */
 
 const MAX_DEPTH = 10;
 const MAX_LENGTH = 4096;
 
-/** Wpis konfiguracji, z którego pochodzi wartość: dowód rozwiniętego tekstu. */
+/** The configuration entry a value comes from: evidence for the expanded text. */
 export interface PlaceholderSource {
   value: string;
   path: string;
@@ -17,7 +17,7 @@ export interface PlaceholderSource {
 
 export interface Resolved {
   value: string;
-  /** Pierwszy wpis konfiguracji, z którego wzięto wartość; `undefined`, gdy tekst nie miał rozwiniętego klucza. */
+  /** The first configuration entry a value was taken from; `undefined` when the text had no expanded key. */
   source: PlaceholderSource | undefined;
 }
 
@@ -53,7 +53,7 @@ class Resolver {
     return { value, source };
   }
 
-  /** Jeden `${…}` bez nawiasów; `undefined`, gdy klucza nie ma i nie ma domyślnej. */
+  /** One `${…}` without its braces; `undefined` when the key is missing and there is no default. */
   private placeholder(inner: string, depth: number): Resolved | undefined {
     const colon = topLevelColon(inner);
     const key = colon < 0 ? inner : inner.slice(0, colon);
@@ -65,7 +65,7 @@ class Resolver {
   private key(key: string, depth: number): Resolved | undefined {
     if (this.memo.has(key)) return this.memo.get(key);
     const entry = this.get(key);
-    // Na czas liczenia klucz jest „brakiem”: cykl `a: ${a}` kończy się na nim, nie na limicie głębokości.
+    // While it is being resolved the key counts as “missing”: the cycle `a: ${a}` ends on it, not on the depth limit.
     this.memo.set(key, undefined);
     const resolved = entry && { value: this.resolve(entry.value, depth + 1).value, source: entry };
     this.memo.set(key, resolved);
@@ -73,7 +73,7 @@ class Resolver {
   }
 }
 
-/** Indeks `}` zamykającego `${` otwarty przed `from`; `-1`, gdy go nie ma. */
+/** The index of the `}` closing a `${` opened before `from`; `-1` when there is none. */
 function closingBrace(text: string, from: number): number {
   let depth = 1;
   for (let i = from; i < text.length; i++) {
@@ -83,7 +83,7 @@ function closingBrace(text: string, from: number): number {
   return -1;
 }
 
-/** Dwukropek oddzielający domyślną, poza zagnieżdżonym `${…}`; `-1`, gdy go nie ma. */
+/** The colon that separates the default, outside a nested `${…}`; `-1` when there is none. */
 function topLevelColon(inner: string): number {
   let depth = 0;
   for (let i = 0; i < inner.length; i++) {

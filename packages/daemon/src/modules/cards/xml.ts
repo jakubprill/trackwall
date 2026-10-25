@@ -1,21 +1,21 @@
 /**
- * Najmniejszy parser XML, jakiego potrzebuje `pom.xml`: elementy z tekstem i numerem linii, bez atrybutów, przestrzeni
- * nazw i DTD. Komentarze, instrukcje przetwarzania i `<!DOCTYPE>` są pomijane, `CDATA` i encje dają tekst. Własny,
- * bo biblioteki XML nie podają linii, a karta potrzebuje dowodu z linią (§4.6).
+ * The smallest XML parser `pom.xml` needs: elements with text and a line number, without attributes, namespaces and
+ * DTD. Comments, processing instructions and `<!DOCTYPE>` are skipped, `CDATA` and entities give text. Our own, because
+ * XML libraries do not give lines, and the card needs evidence with a line (§4.6).
  */
 
 export interface XmlElement {
   name: string;
-  /** Numer linii znacznika otwierającego, od 1. */
+  /** The line number of the opening tag, from 1. */
   line: number;
   children: XmlElement[];
-  /** Tekst bezpośrednio w elemencie, bez białych znaków na brzegach. */
+  /** The text directly in the element, without whitespace at the edges. */
   text: string;
 }
 
 const ENTITIES: Record<string, string> = { lt: "<", gt: ">", amp: "&", quot: '"', apos: "'" };
 
-/** Korzeń dokumentu; rzuca błąd z linią, gdy dokument nie jest poprawnym XML w tym zakresie. */
+/** The document root; throws an error with the line when the document is not valid XML within this scope. */
 export function parseXml(src: string): XmlElement {
   return new XmlParser(src).parse();
 }
@@ -41,7 +41,7 @@ class XmlParser {
     return this.root;
   }
 
-  /** Tekst do następnego `<`, potem komentarz, deklaracja, `CDATA` albo znacznik. */
+  /** Text up to the next `<`, then a comment, a declaration, `CDATA` or a tag. */
   private step(): void {
     const lt = this.src.indexOf("<", this.pos);
     const top = this.stack.at(-1);
@@ -86,19 +86,19 @@ export function child(el: XmlElement | undefined, name: string): XmlElement | un
   return el?.children.find((c) => c.name === name);
 }
 
-/** Dzieci o nazwie `name` w elemencie `path` (np. `children(pom, "dependencies", "dependency")`). */
+/** Children named `name` in element `path` (e.g. `children(pom, "dependencies", "dependency")`). */
 export function children(el: XmlElement | undefined, container: string, name: string): XmlElement[] {
   return child(el, container)?.children.filter((c) => c.name === name) ?? [];
 }
 
-/** Tekst dziecka `name`; `undefined`, gdy go nie ma albo jest pusty. */
+/** The text of child `name`; `undefined` when it is missing or empty. */
 export function childText(el: XmlElement | undefined, name: string): string | undefined {
   return child(el, name)?.text || undefined;
 }
 
 /**
- * Komentarz, instrukcja przetwarzania, deklaracja albo `CDATA` od pozycji `lt`; zwraca pozycję za nimi, a `lt`, gdy
- * to zwykły znacznik. Treść `CDATA` trafia do tekstu elementu bez dekodowania encji (stąd znacznik ochronny).
+ * A comment, processing instruction, declaration or `CDATA` from position `lt`; returns the position after it, and `lt`
+ * when it is a plain tag. `CDATA` content goes into the element's text without decoding entities (hence the guard marker).
  */
 function skipMarkup(src: string, lt: number, top: { raw: string } | undefined): number {
   const skip = (open: string, close: string) => {
@@ -127,7 +127,7 @@ function decode(raw: string): string {
   });
 }
 
-/** Numer linii pozycji w tekście; pozycje rosną, więc licznik idzie tylko do przodu. */
+/** The line number of a position in the text; positions grow, so the counter only moves forward. */
 function lineCounter(src: string): (pos: number) => number {
   let line = 1;
   let counted = 0;

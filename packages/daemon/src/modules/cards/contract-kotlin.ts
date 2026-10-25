@@ -3,8 +3,8 @@ import type { Node } from "web-tree-sitter";
 import { lineOf, linesOf, type SourceSyntax, simpleName, type TypeDeclaration, typeText } from "./contract-syntax.ts";
 
 /**
- * Deklaracje typów i kontrakty funkcji z drzewa składni pliku Kotlina (ADR-38). Gramatyka nie nazywa pól typu
- * w parametrach i funkcjach, więc typ to nazwany węzeł za dwukropkiem.
+ * Type declarations and function contracts from the syntax tree of a Kotlin file (ADR-38). The grammar does not name
+ * type fields in parameters and functions, so the type is the named node after the colon.
  */
 export function readKotlinSyntax(root: Node): SourceSyntax {
   const types = root.descendantsOfType("class_declaration").flatMap(kotlinType);
@@ -28,7 +28,7 @@ function kotlinType(node: Node): TypeDeclaration[] {
   }
   const data = modifiers.includes("data");
   const fields = [...constructorProperties(node, data), ...bodyProperties(node)];
-  // Typ bez właściwości (serwis z zależnościami w konstruktorze, wyjątek) nie niesie danych, więc nie jest DTO.
+  // A type without properties (a service with dependencies in its constructor, an exception) carries no data, so it is not a DTO.
   return fields.length > 0 ? [{ ...declared, kind: data ? "data-class" : "class", fields }] : [];
 }
 
@@ -37,7 +37,7 @@ function classModifiers(node: Node): string[] {
   return (modifiers?.namedChildren ?? []).filter((c) => c.type === "class_modifier").map((c) => c.text);
 }
 
-/** Parametry konstruktora głównego, które są właściwościami (`val`/`var`); w `data class` wszystkie. */
+/** Primary constructor parameters that are properties (`val`/`var`); in a `data class` all of them. */
 function constructorProperties(node: Node, data: boolean): DtoField[] {
   const parameters = node.namedChildren
     .find((c) => c.type === "primary_constructor")
@@ -47,7 +47,7 @@ function constructorProperties(node: Node, data: boolean): DtoField[] {
     .flatMap(namedTyped);
 }
 
-/** Właściwości zadeklarowane wprost w ciele klasy (bez tych z funkcji i `companion object`). */
+/** Properties declared directly in the class body (without those from functions and `companion object`). */
 function bodyProperties(node: Node): DtoField[] {
   const body = node.namedChildren.find((c) => c.type === "class_body");
   return (body?.namedChildren ?? [])
@@ -58,7 +58,7 @@ function bodyProperties(node: Node): DtoField[] {
     });
 }
 
-/** Węzeł z nazwą (pierwszy identyfikator) i typem za dwukropkiem; bez jawnego typu nie ma pola do pokazania. */
+/** A node with a name (the first identifier) and a type after the colon; without an explicit type there is no field to show. */
 function namedTyped(node: Node): DtoField[] {
   const name = node.namedChildren.find((c) => c.type === "identifier");
   const type = typeAfterColon(node);
@@ -76,7 +76,7 @@ function enumEntries(body: Node | undefined): string[] {
     .flatMap((e) => e.namedChildren.find((c) => c.type === "identifier")?.text ?? []);
 }
 
-/** Typ parametru, przed którym stoi `@RequestBody`; adnotacje parametru są w gramatyce osobnym węzłem przed nim. */
+/** The type of the parameter preceded by `@RequestBody`; parameter annotations are a separate node before it in the grammar. */
 function requestBody(fn: Node): string | null {
   let annotated = false;
   for (const child of fn.namedChildren.find((c) => c.type === "function_value_parameters")?.namedChildren ?? []) {
@@ -92,7 +92,7 @@ function requestBody(fn: Node): string | null {
 
 function annotationNames(modifiers: Node): string[] {
   return modifiers.descendantsOfType("annotation").flatMap((a) => {
-    // `@RequestBody` to `user_type`, `@RequestBody(required = false)` to `constructor_invocation` z `user_type` w środku.
+    // `@RequestBody` is a `user_type`, `@RequestBody(required = false)` is a `constructor_invocation` with a `user_type` inside.
     const type =
       a.namedChildren.find((c) => c.type === "user_type") ??
       a.namedChildren.find((c) => c.type === "constructor_invocation")?.namedChildren.find((c) => c.type === "user_type");

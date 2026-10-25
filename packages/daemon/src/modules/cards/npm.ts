@@ -7,21 +7,21 @@ import { baseName, dirOf, inDir, isUnder, rootFiles } from "./repo-path.ts";
 import { type Extracted, emptyExtracted, keyLines, type RepoSnapshot } from "./snapshot.ts";
 
 /**
- * Ekstraktor npm (§4.6): `package.json` korzeni i paczek workspace (`workspaces` w `package.json` albo
- * `pnpm-workspace.yaml`). Daje nazwę i wersję paczki (udostępniane, chyba że `"private": true`), zależności z pól
- * `dependencies`, `devDependencies`, `peerDependencies` i `optionalDependencies`, menedżer paczek i wymagane wersje
- * Node i menedżera.
+ * The npm extractor (§4.6): the `package.json` of the roots and of workspace packages (`workspaces` in `package.json` or
+ * `pnpm-workspace.yaml`). Gives the package name and version (provided, unless `"private": true`), dependencies from the
+ * `dependencies`, `devDependencies`, `peerDependencies` and `optionalDependencies` fields, the package manager and the
+ * required Node and manager versions.
  */
 
 const PACKAGE_JSON = "package.json";
 const PNPM_WORKSPACE = "pnpm-workspace.yaml";
-/** Pliki, które ten ekstraktor czyta, do wyboru plików z commita. */
+/** The files this extractor reads, for choosing files from the commit. */
 export function readsNpmFile(path: string): boolean {
   const name = baseName(path);
   return name === PACKAGE_JSON || name === PNPM_WORKSPACE;
 }
 const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"] as const;
-/** Plik blokady w katalogu korzenia mówi, którym menedżerem instaluje się zależności, gdy `packageManager` milczy. */
+/** A lock file in the root directory says which manager installs the dependencies when `packageManager` is silent. */
 const LOCKFILES: [string, BuildTool][] = [
   ["pnpm-lock.yaml", "pnpm"],
   ["yarn.lock", "yarn"],
@@ -32,7 +32,7 @@ const LOCKFILES: [string, BuildTool][] = [
 const MANAGERS = new Set<string>(["npm", "pnpm", "yarn", "bun"]);
 
 const Dependencies = z.record(z.string(), z.string()).optional().catch(undefined);
-/** Pola `package.json`, których używamy; zły typ jednego pola nie zabiera reszty. */
+/** The `package.json` fields we use; a wrong type of one field does not take away the rest. */
 const PackageJson = z.object({
   name: z.string().optional().catch(undefined),
   version: z.string().optional().catch(undefined),
@@ -57,7 +57,7 @@ const PnpmWorkspace = z.object({ packages: z.array(z.string()).optional() });
 interface Manifest {
   path: string;
   json: PackageJson;
-  /** Linia pierwszego wystąpienia każdego klucza JSON, do dowodów. */
+  /** The line of the first occurrence of every JSON key, for evidence. */
   keys: Map<string, number>;
   memberOf: string | null;
   tool: BuildTool;
@@ -83,7 +83,7 @@ export function extractNpm(snapshot: RepoSnapshot): Extracted {
   return out;
 }
 
-/** `package.json` korzeni i ich paczek workspace; paczka dziedziczy menedżer po korzeniu. */
+/** The `package.json` of the roots and their workspace packages; a package inherits the manager from its root. */
 function readManifests(snapshot: RepoSnapshot, out: Extracted): Manifest[] {
   const all = snapshot.paths.filter((p) => baseName(p) === PACKAGE_JSON);
   const manifests: Manifest[] = [];
@@ -114,7 +114,7 @@ function readManifest(snapshot: RepoSnapshot, path: string, out: Extracted): Pac
   return undefined;
 }
 
-/** `package.json` paczek workspace korzenia: wzorce z `workspaces` albo `pnpm-workspace.yaml`, `!` wyklucza. */
+/** The `package.json` of a root's workspace packages: patterns from `workspaces` or `pnpm-workspace.yaml`, `!` excludes. */
 function workspaceMembers(snapshot: RepoSnapshot, root: string, json: PackageJson, all: readonly string[], out: Extracted): string[] {
   const dir = dirOf(root);
   const patterns = json.workspaces ?? pnpmWorkspaces(snapshot, inDir(dir, PNPM_WORKSPACE), out);
@@ -128,8 +128,8 @@ function workspaceMembers(snapshot: RepoSnapshot, root: string, json: PackageJso
 }
 
 /**
- * Wzorzec workspace bez `./` z przodu i `/` na końcu, jak go piszą ludzie. Pętla zamiast `/\/+$/`: wzorzec jest
- * z repo, a to wyrażenie cofa się kwadratowo na długim ciągu ukośników w środku.
+ * A workspace pattern without a leading `./` and a trailing `/`, the way people write it. A loop instead of `/\/+$/`: the
+ * pattern comes from the repo, and that expression backtracks quadratically on a long run of slashes in the middle.
  */
 function clean(pattern: string): string {
   let end = pattern.length;
@@ -137,7 +137,7 @@ function clean(pattern: string): string {
   return pattern.slice(0, end).replace(/^\.\//, "");
 }
 
-/** Klucz JSON w cudzysłowie, za nim `:`; w jednej linii może być ich wiele (zminifikowany `package.json`). */
+/** A quoted JSON key followed by `:`; one line can hold many (a minified `package.json`). */
 export const JSON_KEY = /"([^"\\]*)"\s*:/g;
 
 function keyEvidence(m: Manifest, key: string): Evidence {
@@ -175,7 +175,7 @@ function dependencies(m: Manifest): ConsumedPackage[] {
   );
 }
 
-/** `engines.node` i menedżer z `packageManager` (`pnpm@10.28.0`); mise nie czyta ich sam, więc to podpowiedzi. */
+/** `engines.node` and the manager from `packageManager` (`pnpm@10.28.0`); mise does not read them itself, so they are hints. */
 function tools(m: Manifest): ToolRequirement[] {
   const found: ToolRequirement[] = [];
   const node = m.json.engines?.node;
@@ -184,7 +184,7 @@ function tools(m: Manifest): ToolRequirement[] {
   if (manager && version && MANAGERS.has(manager))
     found.push({
       tool: manager,
-      // Wersja bywa z dopiskiem skrótu (`pnpm@9.1.0+sha512.…`).
+      // A version sometimes has a hash suffix (`pnpm@9.1.0+sha512.…`).
       version: version.split("+")[0] ?? version,
       source: "hint",
       evidence: keyEvidence(m, "packageManager"),

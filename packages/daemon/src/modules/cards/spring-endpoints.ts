@@ -4,13 +4,16 @@ import { annotationNamed, type JavaFile, type JavaMethod, type JavaType } from "
 import { type Mapping, mappingOf, REQUEST_MAPPINGS, type SpringModule } from "./spring-module.ts";
 
 /**
- * Endpointy HTTP z kontrolerów Spring (§4.6, ADR-30): klasa z `@RestController` albo `@Controller`, prefiks
- * z `@RequestMapping` klasy i metody z `@GetMapping`, `@PostMapping`… Mapowania z interfejsu, który kontroler
- * implementuje (styl „API first”, interfejs wygenerowany albo wspólny), liczą się jak własne, chyba że kontroler
- * mapuje metodę o tej samej nazwie sam. Pełna ścieżka zaczyna się od ścieżki kontekstu aplikacji.
+ * HTTP endpoints from Spring controllers (§4.6, ADR-30): a class with `@RestController` or `@Controller`, the prefix from
+ * the class's `@RequestMapping` and methods with `@GetMapping`, `@PostMapping`… Mappings from an interface the controller
+ * implements (the "API first" style, a generated or shared interface) count as its own, unless the controller maps a
+ * method with the same name itself. The full path starts with the app's context path.
  */
 
-/** Najwięcej ścieżek z jednej metody (iloczyn ścieżek klasy, metody i metod HTTP): tablica z repo nie urośnie bez końca. */
+/**
+ * At most this many paths from one method (the product of class paths, method paths and HTTP methods): an array from
+ * the repo does not grow without end.
+ */
 const MAX_PER_METHOD = 20;
 
 export function springEndpoints(file: JavaFile, module: SpringModule, lookup: Lookup): ProvidedEndpoint[] {
@@ -42,13 +45,13 @@ function controller(type: JavaType, file: JavaFile, module: SpringModule, lookup
 interface MethodMapping {
   prefix: Mapping | undefined;
   mapping: Mapping;
-  /** Plik metody: kontrolera albo interfejsu, z którego ją dziedziczy. */
+  /** The method's file: the controller's or that of the interface it inherits the method from. */
   path: string;
 }
 
 function endpointsOf(type: JavaType, method: JavaMethod, m: MethodMapping, module: SpringModule): ProvidedEndpoint[] {
   const prefixes = m.prefix?.paths ?? [""];
-  // `/items` i `/items/` to po złączeniu ta sama ścieżka: jeden endpoint, nie dwa.
+  // `/items` and `/items/` are the same path once joined: one endpoint, not two.
   const found = new Map<string, ProvidedEndpoint>();
   for (const prefix of prefixes)
     for (const path of m.mapping.paths)
@@ -60,7 +63,7 @@ function endpointsOf(type: JavaType, method: JavaMethod, m: MethodMapping, modul
           path: full,
           app: module.app,
           handler: `${type.name}.${method.name}`,
-          // Typy kontraktu dopisuje `endpoint-contracts.ts` z drzewa składni (ADR-38); tokeny ich nie znają.
+          // `endpoint-contracts.ts` adds the contract types from the syntax tree (ADR-38); the tokens do not know them.
           request: null,
           response: null,
           evidence: { path: m.path, line: m.mapping.line },
