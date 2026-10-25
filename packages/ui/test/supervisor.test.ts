@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Session, SessionList, Task, TaskProposal } from "@trackwall/protocol";
 import { entryId, proposerLabel, sessionRows } from "../src/lib/session-entries.ts";
 import { attentionCount, sessionTitle } from "../src/lib/session-state.ts";
-import { selectsSupervisor, supervisorSummary } from "../src/lib/supervisor.ts";
+import { selectsSupervisor, showingTakesKeyboard, supervisorSummary } from "../src/lib/supervisor.ts";
 import { readSupervisorPinned, saveSupervisorPinned } from "../src/lib/supervisor-pin.ts";
 
 function session(id: string, repo: string | null, run: Session["run"]["kind"] = "running"): Session {
@@ -91,6 +91,11 @@ describe("the supervisor (ADR-58)", () => {
     expect(selectsSupervisor(data, { kind: "session", id: "s1" })).toBe(false);
     expect(selectsSupervisor(data, { kind: "task", id: "sup" })).toBe(false);
     expect(selectsSupervisor(undefined, { kind: "session", id: "sup" })).toBe(false);
+  });
+
+  test("Alt+0 gives the keyboard to the supervisor's terminal, and without a supervisor session leaves it in the view", () => {
+    expect(showingTakesKeyboard(summary(list({ sessions: [session("sup", null, "exited")] })))).toBe(true);
+    expect(showingTakesKeyboard(summary(list({ sessions: [session("s1", "shop")] })))).toBe(false);
   });
 
   test("the supervisor waits in its panel, so the Sessions count leaves it out but counts its proposals", () => {

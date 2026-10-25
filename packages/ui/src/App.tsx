@@ -14,7 +14,7 @@ import { entrySelection, findEntry, nextWaitingShortcut, type SessionSelection }
 import { SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
 import { sessionShortcut } from "@/lib/session-shortcut";
 import { attentionCount } from "@/lib/session-state";
-import { selectsSupervisor, supervisorSummary } from "@/lib/supervisor";
+import { selectsSupervisor, showingTakesKeyboard, supervisorSummary } from "@/lib/supervisor";
 import { readSupervisorPinned, saveSupervisorPinned } from "@/lib/supervisor-pin";
 import { useAppMenu } from "@/lib/use-app-menu";
 import { useConnection } from "@/lib/use-connection";
@@ -112,12 +112,11 @@ export function App() {
   const { rows } = tree;
   const supervisor = useMemo(() => supervisorSummary(sessions.data, rows), [sessions.data, rows]);
   // Whether the keyboard is in the supervisor panel: then its terminal is the one in front of the user, not the one
-  // selected in a view (ADR-47). The panel reports focus coming and going; Alt+0 gives the keyboard to its terminal,
-  // so without a supervisor session, where there is no terminal to take it, the keyboard stays where it is.
+  // selected in a view (ADR-47). The panel reports focus coming and going; Alt+0 gives the keyboard to its terminal.
   const [supervisorFocused, setSupervisorFocused] = useState(false);
   const showSupervisor = () => {
     pinSupervisor(true);
-    if (supervisor.session) setSupervisorFocused(true);
+    if (showingTakesKeyboard(supervisor)) setSupervisorFocused(true);
   };
   // The supervisor has no entry in Sessions: a jump or selection that points at it opens its panel instead. Any other
   // takes the keyboard out of the panel, so that the terminal it opens is the one in front.

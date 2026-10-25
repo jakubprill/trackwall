@@ -1,6 +1,6 @@
 import { agentsApi, countLabel } from "@trackwall/protocol";
 import { BellRing, Crown, PanelRightClose, PanelRightOpen, Play, Square } from "lucide-react";
-import type { FocusEvent } from "react";
+import { type FocusEvent, useEffect, useRef } from "react";
 import { SessionTerminal } from "@/components/SessionTerminal";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +52,16 @@ export function SupervisorPanel({
   onChanged: () => void;
 }) {
   const { session } = supervisor;
+  const panel = useRef<HTMLElement>(null);
+  // Focus that lands anywhere outside the panel takes the keyboard out of it. A blur would say the same, but none
+  // comes when the focused terminal is removed (a reconnect, a supervisor gone after a daemon restart).
+  useEffect(() => {
+    const moved = (event: Event) => {
+      if (!(event.target instanceof Node && panel.current?.contains(event.target))) onFocusedChange(false);
+    };
+    document.addEventListener("focusin", moved);
+    return () => document.removeEventListener("focusin", moved);
+  }, [onFocusedChange]);
   if (!pinned) return <FoldedSupervisor supervisor={supervisor} onUnfold={() => onPinned(true)} />;
   const leave = (event: FocusEvent) => {
     if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) onFocusedChange(false);
@@ -62,6 +72,7 @@ export function SupervisorPanel({
   };
   return (
     <aside
+      ref={panel}
       aria-label={SUPERVISOR}
       className="bg-card flex w-supervisor min-w-0 shrink-0 flex-col border-l"
       onFocus={() => onFocusedChange(true)}

@@ -239,8 +239,9 @@ export type WaitingTarget = SessionEntry | typeof SUPERVISOR_TARGET;
 export const SUPERVISOR_TARGET = { kind: "supervisor" } as const;
 
 /**
- * The next thing waiting for you: the entry after the current one (`nextWaiting`), otherwise the supervisor when the
- * supervisor session itself waits. It is not on the list, so it comes after every entry.
+ * The next thing waiting for you: the entry after the current one (`nextWaiting`, which goes round the list), and the
+ * supervisor only when nothing on the list waits but the supervisor session itself does. Its panel is in view and has
+ * its own bell, so the shortcut does not stop there while the list still holds work.
  */
 export function nextWaitingTarget(
   entries: readonly SessionEntry[],

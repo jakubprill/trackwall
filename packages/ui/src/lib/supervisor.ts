@@ -44,6 +44,14 @@ export function supervisorSummary(list: SessionList | undefined, rows: readonly 
   };
 }
 
+/**
+ * Showing the panel (Alt+0, a jump to the supervisor) gives its terminal the keyboard. Without a supervisor session
+ * there is no terminal to take it, so the keyboard stays where it is, and the terminal selected in a view stays in front.
+ */
+export function showingTakesKeyboard(supervisor: SupervisorSummary): boolean {
+  return supervisor.session !== undefined;
+}
+
 /** The selection points at a supervisor session, which opens in its panel instead of the Sessions view. */
 export function selectsSupervisor(list: SessionList | undefined, selection: SessionSelection): boolean {
   if (selection?.kind !== "session") return false;
