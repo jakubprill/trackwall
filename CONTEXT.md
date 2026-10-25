@@ -73,6 +73,10 @@ _Avoid_: project
 One directory on the user's disk, set in `workspace.yaml` or in the settings. Each of its direct subdirectories with `.git` is a repo of the workspace (ADR-18); a repo is added by cloning it into this folder.
 _Avoid_: workspace directory, root, folder (without qualification)
 
+**Dropped folder** (`DroppedFolder`, action `dropped-folder`, UI `FolderDrop`; in Polish *upuszczony folder*):
+A folder or file dropped on the Trackwall window outside a session terminal, described by the daemon: a listed repo (or a folder inside one), the projects folder, a repo elsewhere, a hidden repo, a folder with repos, a folder without repos or a file (ADR-51). It never adds a repo by itself; it can only lead to a new projects folder.
+_Avoid_: imported repo, added repo
+
 **Repo host** (`RepoHost`, `repoHosts` in `workspace.yaml`):
 GitLab or GitHub with a host name (`gitlab.example.com`), from which Trackwall searches for repos and clones them into the projects folder through a logged-in `glab` or `gh` (ADR-19).
 _Avoid_: remote (that is the name of a remote in git, for example `origin`), server, source (that is a log term)

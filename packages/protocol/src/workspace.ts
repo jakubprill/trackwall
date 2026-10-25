@@ -141,6 +141,25 @@ export const RemoteRepoList = z.object({
 });
 export type RemoteRepoList = z.infer<typeof RemoteRepoList>;
 
+/**
+ * What a folder dropped on the window means for the repo list (ADR-51): a listed repo (or a folder inside one), the
+ * projects folder itself, a git repo somewhere else, a folder with repos directly inside it, which can become the
+ * projects folder, a repo whose name starts with a dot, a folder without any repos, or a file. Repo counts use the
+ * same rule as the list (ADR-18): direct subfolders with `.git`, without those starting with a dot.
+ */
+export const DroppedFolder = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("listed-repo"), repo: RepoId }),
+  z.object({ kind: z.literal("projects-dir") }),
+  /** `parent` is the folder that holds the repo; `parentRepos` counts the repos in it. */
+  z.object({ kind: z.literal("repo-elsewhere"), path: z.string(), parent: z.string(), parentRepos: z.number().int().nonnegative() }),
+  z.object({ kind: z.literal("folder-with-repos"), path: z.string(), repos: z.number().int().positive() }),
+  /** A git repo whose name starts with a dot, which the list skips wherever it is (ADR-18). */
+  z.object({ kind: z.literal("hidden-repo"), path: z.string() }),
+  z.object({ kind: z.literal("no-repos"), path: z.string() }),
+  z.object({ kind: z.literal("file"), path: z.string() }),
+]);
+export type DroppedFolder = z.infer<typeof DroppedFolder>;
+
 function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
   return { path: `/api/workspace/${action}`, request, data };
 }
@@ -168,6 +187,10 @@ export const workspaceApi = {
   openLink: endpoint("open-link", z.object({ url: ExternalLink }).strict(), Done),
   /** Otwiera `vscode://` w systemie; daemon nie wie, czy coś obsłużyło adres. */
   openEditor: endpoint("open-editor", RepoRequest, Done),
+  /** Opens the repo folder in Explorer, Finder or the Linux file manager (ADR-51); like `openEditor`, without waiting for it. */
+  openFolder: endpoint("open-folder", RepoRequest, Done),
+  /** Says what a folder dropped on the window is (ADR-51); `path` is a full path on the user's disk, read and never saved. */
+  droppedFolder: endpoint("dropped-folder", z.object({ path: z.string().min(1).max(4096) }).strict(), DroppedFolder),
   /**
    * Hostingi, z których można sklonować repo do folderu z projektami (ADR-19), w kolejności z `workspace.yaml`.
    * Osobno od `settings`, bo zły wpis w jednym kluczu nie może blokować poprawiania drugiego.

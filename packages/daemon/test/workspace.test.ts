@@ -21,6 +21,7 @@ async function workspaceWithProjectsDir() {
     vcs: new Vcs(),
     hosting: fakeHosting().hosting,
     openEditor: (dir) => opened.push(dir),
+    openFolder: () => {},
   });
   await workspace.setProjectsDir(projects);
   return { workspace, file, projects, opened };
@@ -85,6 +86,7 @@ describe("workspace", () => {
       vcs: new Vcs(),
       hosting: fakeHosting().hosting,
       openEditor: () => {},
+      openFolder: () => {},
     });
 
     expect(await workspace.list()).toEqual({ projectsDir: null, repos: [] });
@@ -135,6 +137,7 @@ describe("workspace", () => {
       vcs: new Vcs(),
       hosting: fakeHosting().hosting,
       openEditor: () => {},
+      openFolder: () => {},
     });
     mkdirSync(join(outer, "Projects", "puste", ".git"), { recursive: true });
     await workspace.setProjectsDir(join(outer, "Projects"));

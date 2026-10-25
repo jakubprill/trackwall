@@ -1,5 +1,5 @@
 import { type Repo, type RepoOverview, workspaceApi } from "@trackwall/protocol";
-import { Code } from "lucide-react";
+import { Code, FolderOpen } from "lucide-react";
 import { lazy, type ReactNode, Suspense, useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { TRUNCATED_NOTE } from "@/lib/format";
+import { FILE_MANAGER } from "@/lib/platform";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { PlainReadme, ReadmeFallback } from "./ReadmeFallback.tsx";
 import { RepoCardView } from "./RepoCardView.tsx";
@@ -49,7 +50,7 @@ export function RepoDetail({ conn, repo }: { conn: Connection; repo: Repo }) {
           <p className="text-muted-foreground font-mono text-xs break-all">{repo.path}</p>
           {repo.remote && <p className="text-muted-foreground font-mono text-xs break-all">{repo.remote}</p>}
         </div>
-        <OpenEditor conn={conn} repo={repo} />
+        <RepoActions conn={conn} repo={repo} />
       </header>
       {status.kind === "unavailable" ? (
         <p className="text-destructive text-sm whitespace-pre-wrap">The repo is unavailable: {status.message}</p>
@@ -75,18 +76,24 @@ function Loaded({ remote, children }: { remote: RemoteHandle<RepoOverview>; chil
   return children(remote.data);
 }
 
-function OpenEditor({ conn, repo }: { conn: Connection; repo: Repo }) {
+/** Opens the repo in VS Code or in the system's folder app (ADR-51); the daemon does it, so it works in the browser too. */
+function RepoActions({ conn, repo }: { conn: Connection; repo: Repo }) {
   const [error, setError] = useState<string>();
-  const open = () => {
+  const open = (endpoint: typeof workspaceApi.openEditor | typeof workspaceApi.openFolder) => {
     setError(undefined);
-    post(conn, workspaceApi.openEditor, { repo: repo.id }).catch((err: unknown) => setError(errorMessage(err)));
+    post(conn, endpoint, { repo: repo.id }).catch((err: unknown) => setError(errorMessage(err)));
   };
 
   return (
     <div className="flex flex-col items-end gap-2">
-      <Button variant="outline" size="sm" onClick={open} disabled={repo.status.kind !== "ok"}>
-        <Code /> Open in VS Code
-      </Button>
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={() => open(workspaceApi.openFolder)}>
+          <FolderOpen /> Show in {FILE_MANAGER}
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => open(workspaceApi.openEditor)} disabled={repo.status.kind !== "ok"}>
+          <Code /> Open in VS Code
+        </Button>
+      </div>
       {error && <p className="text-destructive text-xs">{error}</p>}
     </div>
   );

@@ -1,2 +1,14 @@
-/** WKWebView i Safari podają `Macintosh` w user agencie, WebView2 na Windowsie nie. */
-export const IS_MAC = navigator.userAgent.includes("Mac");
+/** The system from the user agent: WKWebView and Safari say `Macintosh`, WebView2 says `Windows`. */
+export function systemOf(userAgent: string): "windows" | "mac" | "other" {
+  if (userAgent.includes("Windows")) return "windows";
+  if (userAgent.includes("Mac")) return "mac";
+  return "other";
+}
+
+const SYSTEM = systemOf(navigator.userAgent);
+
+export const IS_MAC = SYSTEM === "mac";
+export const IS_WINDOWS = SYSTEM === "windows";
+
+/** The system app that shows folders, as its button names it (ADR-51). */
+export const FILE_MANAGER = { windows: "Explorer", mac: "Finder", other: "the file manager" }[SYSTEM];

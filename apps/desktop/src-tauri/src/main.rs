@@ -7,6 +7,7 @@ mod app_menu;
 mod attention;
 mod daemon;
 mod daemon_state;
+mod folder_picker;
 mod global_shortcut;
 mod jump;
 mod link;
@@ -106,6 +107,7 @@ fn main() {
     let builder = builder.menu(app_menu::build);
     let app = builder
         .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(windows::STATE_FLAGS).build())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(Arc::clone(&state))
@@ -120,7 +122,8 @@ fn main() {
             window_shows,
             jump::take_jump,
             link::open_link,
-            open_from_tray_panel
+            open_from_tray_panel,
+            folder_picker::pick_projects_folder
         ])
         .setup(move |app| {
             state.start();

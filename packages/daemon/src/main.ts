@@ -9,8 +9,8 @@ import { createFacade, type Facade, runCopilotHook } from "./facade.ts";
 import { COPILOT_HOOK_COMMAND, type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./infra/args.ts";
 import { newToken, probeRunningDaemon, removeDaemonFile, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
 import { trackwallHome } from "./infra/home.ts";
-import { openBrowser } from "./infra/open-browser.ts";
 import { selfCommand } from "./infra/self-command.ts";
+import { openBrowser, openFolder } from "./infra/system-open.ts";
 import { userEnv } from "./infra/user-env.ts";
 import { VERSION } from "./infra/version.ts";
 import { createMcpEndpoint } from "./mcp/endpoint.ts";
@@ -58,6 +58,7 @@ async function main(args: DaemonArgs): Promise<void> {
     facade = createFacade({
       home,
       openUrl: openBrowser,
+      openFolder,
       miseCommand: ["mise"],
       copilotCommand: ["copilot"],
       hookCommand: (event, hooksFile) => selfCommand([COPILOT_HOOK_COMMAND, event, hooksFile]),

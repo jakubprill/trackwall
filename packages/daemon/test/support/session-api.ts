@@ -36,6 +36,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
   const facade = createFacade({
     home,
     openUrl: () => {},
+    openFolder: () => {},
     miseCommand: options.miseCommand,
     copilotCommand: [process.execPath, fakeCopilot],
     hookCommand: (event, hooksFile) => ({ exec: process.execPath, args: ["--no-env-file", daemonMain, "copilot-hook", event, hooksFile] }),
