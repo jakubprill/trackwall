@@ -273,7 +273,7 @@ CLI agenta działające w PTY należącym do daemona, w korzeniu repo albo w wor
 _Unikaj_: sesja POSIX (to pojęcie z grupy procesów), okno (to okno terminala w UI)
 
 **Waiting for you** (`Session.needsAttention`, `SessionAttention`; Polish *czeka na Ciebie*):
-A running session in `Approval` or `Plan`, or in `Input` the user has not seen yet (ADR-47): the agent will not move on without a human, and the human does not know yet. The daemon computes it; the UI (the counter on the activity bar, which also counts task proposals waiting for a decision, ADR-39; "Next waiting") and the tray (the "Waiting: <repo>" menu, the flashing window) only read the field.
+A running session in `Approval` or `Plan`, or in `Input` the user has not seen yet (ADR-47): the agent will not move on without a human, and the human does not know yet. The daemon computes it; the UI (the counter on the activity bar, which also counts task proposals waiting for a decision, ADR-39; "Next waiting") and the tray (the "Waiting: <repo>" menu, the flashing window, the system notification and the tray panel, ADR-50) only read the field.
 
 **Seen** (`SessionAttention.focus`, `typed`; the `focus` frame of `PtyClientMessage`):
 The user has seen the session's current `Input`: a session terminal was focused and visible, or the user typed into the session, after the state began.
@@ -296,7 +296,11 @@ Several session terminals side by side in the Sessions view, one tile per list e
 _Avoid_: split, dashboard (that is Home)
 
 **Session shortcut** (`SessionShortcut`; Alt+1…9, Alt+J):
-Alt (⌥ on macOS) + digit selects the entry at that position in the Sessions list; Alt+J opens the next session that is waiting for you, also from other views. A shortcut never reaches the session terminal.
+Alt (⌥ on macOS) + digit selects the entry at that position in the Sessions list; Alt+J opens the next session that is waiting for you, also from other views. A shortcut never reaches the session terminal. Win+Alt+J (⌃⌥J on macOS) is the global shortcut that does what Alt+J does from any app (ADR-50).
+
+**Tray panel** (`TrayPanel`, window `tray-panel`):
+The small window next to the tray icon, opened by a left click on it, with the task proposals and the sessions waiting for you (ADR-50). A click opens the entry in the main window.
+_Avoid_: popup, tray menu (that is the menu on a right click)
 
 **Obraz ekranu** (`TerminalScreen`):
 Stan ekranu sesji, który daemon trzyma w emulatorze terminala bez okna i wysyła oknu terminala przy podłączeniu, zanim pójdzie dalsze wyjście.

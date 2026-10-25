@@ -41,6 +41,11 @@ export function jsonVersion(path: string): string {
   return parseFile(path, JsonManifest, JSON.parse).version;
 }
 
+/** The app identifier from tauri.conf.json, which is also the AppUserModelID of its notifications on Windows (ADR-50). */
+export function tauriIdentifier(): string {
+  return parseFile(join(TAURI_DIR, "tauri.conf.json"), z.object({ identifier: z.string() }), JSON.parse).identifier;
+}
+
 /** `[package].version` z Cargo.toml. */
 export function cargoVersion(path: string): string {
   return parseFile(path, CargoManifest, Bun.TOML.parse).package.version;
