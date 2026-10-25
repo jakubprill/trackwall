@@ -79,7 +79,7 @@ export async function workingTreeChanges(
   dir: string,
   base: string,
   maxPatchBytes: number,
-  paths: readonly string[] = [],
+  paths: readonly string[],
 ): Promise<WorkingTreeChanges> {
   const out = (await git(dir, ["rev-parse", "--git-path", "index", "--show-object-format"])).stdout.toString("utf8").trim();
   const [indexPath, objectFormat] = out.split(/\r?\n/);
@@ -130,15 +130,15 @@ function wholeLines({ stdout, truncated }: RunOutput): Buffer {
  * roboczym i tak czyta ich treść i tryb z dysku, a `update-index --index-info`, w przeciwieństwie do
  * `add --intent-to-add`, nie zapisuje bloba do `.git/objects`. Zwraca, czy lista nowych plików była ucięta.
  */
-async function addUntracked(dir: string, index: string, emptyBlob: string, pathspecs: readonly string[]): Promise<boolean> {
-  const listed = await git(dir, ["ls-files", "--others", "--exclude-standard", "-z", "--", ...pathspecs], {
+async function addUntracked(dir: string, index: string, emptyBlob: string, paths: readonly string[]): Promise<boolean> {
+  const listed = await git(dir, ["ls-files", "--others", "--exclude-standard", "-z", "--", ...paths], {
     indexFile: index,
     timeoutMs: CHANGES_TIMEOUT_MS,
   });
-  const paths = parseNulTerminated(listed.stdout);
+  const entries = parseNulTerminated(listed.stdout);
   const fileHeader = Buffer.from(`100644 ${emptyBlob}\t`);
-  const files = paths.filter((path) => path.at(-1) !== SLASH).map((path) => Buffer.concat([fileHeader, path, NUL]));
-  const repos = paths.filter((path) => path.at(-1) === SLASH).map((path) => path.subarray(0, -1));
+  const files = entries.filter((path) => path.at(-1) !== SLASH).map((path) => Buffer.concat([fileHeader, path, NUL]));
+  const repos = entries.filter((path) => path.at(-1) === SLASH).map((path) => path.subarray(0, -1));
   const submodules = await mapLimit(repos, SUBMODULE_CONCURRENCY, (repo) => submoduleEntry(dir, repo, emptyBlob.length));
   const indexInfo = Buffer.concat([...files, ...submodules.filter((entry) => entry !== undefined)]);
   if (indexInfo.length > 0)

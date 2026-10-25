@@ -194,7 +194,7 @@ const runs: ToolRuns = {
       },
     );
   },
-  getTaskChanges: (facade, { task, paths, maxPatchBytes }) => facade.agents.agentTaskChanges(task, paths, maxPatchBytes),
+  getTaskChanges: (facade, { task, paths, maxPatchBytes }) => facade.agents.agentTaskChanges(task, maxPatchBytes, paths),
   proposeTask: async (facade, proposal, { caller }) => ({ proposal: await facade.agents.propose(caller, proposal) }),
   reportResult: async (facade, { summary }, { caller }) => ({ task: facade.agents.reportSummary(caller, summary) }),
   waitForSession: async (facade, { session, task, timeoutSeconds }, { caller, signal }) => {

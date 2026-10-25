@@ -30,6 +30,10 @@ export const CodePathspec = z
   .max(300)
   .refine((p) => printable(p, false), "pathspec: no control characters");
 
+/** Most pathspecs in one query (`search_code`, `get_task_changes`). */
+export const CODE_PATHSPECS_MAX = 20;
+export const CodePathspecs = z.array(CodePathspec).max(CODE_PATHSPECS_MAX);
+
 /** What to search for and where in one repo; the `search_code` tool adds the choice of repos and the match limit. */
 export const CodeQuery = z.object({
   /** One line: git would split a pattern with a newline into several, and one of them may match every line. */
@@ -42,7 +46,7 @@ export const CodeQuery = z.object({
   regex: z.boolean(),
   ignoreCase: z.boolean(),
   /** An empty list means the whole commit tree. */
-  paths: z.array(CodePathspec).max(20),
+  paths: CodePathspecs,
   /** Context lines before and after a match. */
   context: z.number().int().min(0).max(CODE_SEARCH_MAX_CONTEXT),
 });

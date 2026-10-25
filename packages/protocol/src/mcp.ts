@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   AGENT_PATCH_DEFAULT_BYTES,
   AGENT_PATCH_MAX_BYTES,
+  AGENT_PATCH_MIN_BYTES,
   AgentTaskChanges,
   Session,
   SessionId,
@@ -19,7 +20,7 @@ import {
   visibleText,
 } from "./agents.ts";
 import { RepoCardResult, TagName } from "./cards.ts";
-import { CODE_SEARCH_LINE_MAX_CHARS, CODE_SEARCH_MAX_MATCHES, CodePathspec, CodeQuery, SearchCodeResult } from "./code-search.ts";
+import { CODE_SEARCH_LINE_MAX_CHARS, CODE_SEARCH_MAX_MATCHES, CodePathspecs, CodeQuery, SearchCodeResult } from "./code-search.ts";
 import { FindEndpointResult, MAX_FOUND_ENDPOINTS, MAX_SUBGRAPH_DEPTH, Subgraph, WhoCallsResult } from "./graph.ts";
 import { HttpMethod } from "./http.ts";
 import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErrors, LogTail } from "./logs.ts";
@@ -461,15 +462,13 @@ export const mcpTools = {
     args: z
       .object({
         task: TaskId.describe(`task id from ${LIST_SESSIONS} or ${GET_SESSION} (the task field)`),
-        paths: z
-          .array(CodePathspec)
-          .max(20)
-          .default([])
-          .describe('only these paths (git pathspecs), e.g. ["src/main/", ":!*.lock"]; default the whole worktree'),
+        paths: CodePathspecs.default([]).describe(
+          'only these paths (git pathspecs), e.g. ["src/main/", ":!*.lock"]; default the whole worktree',
+        ),
         maxPatchBytes: z
           .number()
           .int()
-          .min(1000)
+          .min(AGENT_PATCH_MIN_BYTES)
           .max(AGENT_PATCH_MAX_BYTES)
           .default(AGENT_PATCH_DEFAULT_BYTES)
           .describe(`most bytes of patch, default ${AGENT_PATCH_DEFAULT_BYTES}, up to ${AGENT_PATCH_MAX_BYTES}`),

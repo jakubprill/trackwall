@@ -198,7 +198,7 @@ export class AgentTasks {
   }
 
   changes(id: string): Promise<TaskChanges> {
-    return this.#readChanges(id, PATCH_MAX_BYTES);
+    return this.#readChanges(id, PATCH_MAX_BYTES, []);
   }
 
   /**
@@ -206,17 +206,17 @@ export class AgentTasks {
    * agent, który chce treści, czyta worktree sam.
    */
   async summary(id: string): Promise<TaskChangesSummary> {
-    const { files, commits, uncommitted } = await this.#readChanges(id, 0);
-    return { ...summaryFiles(files), commits, uncommitted };
+    const { files, commits, uncommitted } = await this.#readChanges(id, 0, []);
+    return { ...capFiles(files), commits, uncommitted };
   }
 
   /**
    * The changes with their diff for an agent (MCP tool `get_task_changes`), so a session that handed out the task can
    * review it: only under `paths` (git pathspecs; none is the whole worktree), with the diff cut within `maxPatchBytes`.
    */
-  async agentChanges(id: string, paths: readonly string[], maxPatchBytes: number): Promise<AgentTaskChanges> {
+  async agentChanges(id: string, maxPatchBytes: number, paths: readonly string[]): Promise<AgentTaskChanges> {
     const { files, ...rest } = await this.#readChanges(id, maxPatchBytes, paths);
-    return { ...rest, ...summaryFiles(files) };
+    return { ...rest, ...capFiles(files) };
   }
 
   /**
@@ -227,7 +227,7 @@ export class AgentTasks {
    */
   async sharedFiles(id: string): Promise<TaskSharedFiles[]> {
     const own = this.#get(id);
-    const changed = new Set((await this.#readChanges(id, 0)).files.map((f) => f.path));
+    const changed = new Set((await this.#readChanges(id, 0, [])).files.map((f) => f.path));
     const others = this.#tasks.filter((t) => t.repo === own.repo && t.id !== id);
     const theirs = await mapLimit(others, SHARED_FILES_CONCURRENCY, async (other) => ({
       task: other.id,
@@ -239,14 +239,14 @@ export class AgentTasks {
   /** Paths changed in a task, or none when its changes cannot be read for a known reason (`DomainError`). */
   async #tryChangedPaths(id: string): Promise<string[]> {
     try {
-      return (await this.#readChanges(id, 0)).files.map((f) => f.path);
+      return (await this.#readChanges(id, 0, [])).files.map((f) => f.path);
     } catch (err) {
       if (err instanceof DomainError) return [];
       throw err;
     }
   }
 
-  #readChanges(id: string, maxPatchBytes: number, paths: readonly string[] = []): Promise<TaskChanges> {
+  #readChanges(id: string, maxPatchBytes: number, paths: readonly string[]): Promise<TaskChanges> {
     if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is already being ended");
     const task = this.#existingWorktree(id);
     const reading = asRepoUnavailable(task.branch, this.#deps.vcs.worktreeChanges(task.worktree, task.base, maxPatchBytes, paths));
@@ -418,7 +418,7 @@ export class AgentTasks {
  * At most `TASK_SUMMARY_MAX_FILES` files for an agent's context. A file list git cut short has tens of thousands of
  * entries, so `filesTruncated` covers it too.
  */
-function summaryFiles(files: ChangedFile[]): { files: ChangedFile[]; filesTruncated: boolean } {
+function capFiles(files: ChangedFile[]): { files: ChangedFile[]; filesTruncated: boolean } {
   return { files: files.slice(0, TASK_SUMMARY_MAX_FILES), filesTruncated: files.length > TASK_SUMMARY_MAX_FILES };
 }
 

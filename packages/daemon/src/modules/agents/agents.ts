@@ -271,8 +271,8 @@ export class Agents {
   }
 
   /** A task's changes with their diff for an agent (MCP tool `get_task_changes`), under `paths`, the diff cut within `maxPatchBytes`. */
-  agentTaskChanges(id: string, paths: readonly string[], maxPatchBytes: number): Promise<AgentTaskChanges> {
-    return this.#tasks.agentChanges(id, paths, maxPatchBytes);
+  agentTaskChanges(id: string, maxPatchBytes: number, paths: readonly string[]): Promise<AgentTaskChanges> {
+    return this.#tasks.agentChanges(id, maxPatchBytes, paths);
   }
 
   openTaskEditor(id: string): void {
