@@ -13,6 +13,7 @@ import { Services } from "./modules/services/services.ts";
 import { TestReports } from "./modules/test-results/test-reports.ts";
 import { HOSTING_CLIS, Hosting } from "./modules/vcs/hosting.ts";
 import { Vcs } from "./modules/vcs/vcs.ts";
+import { Verifications } from "./modules/verification/verifications.ts";
 import { RepoWatch } from "./modules/workspace/repo-watch.ts";
 import { Workspace } from "./modules/workspace/workspace.ts";
 import { WorkspaceFile } from "./modules/workspace/workspace-file.ts";
@@ -36,6 +37,7 @@ export interface Facade {
   batch: Batch;
   services: Services;
   testReports: TestReports;
+  verifications: Verifications;
   /**
    * Opens a link from a README in the system (ADR-35): an `http` or `https` address checked by the `ExternalLink` schema.
    * It belongs to no module, because it concerns neither a repo nor the daemon's state.
@@ -119,5 +121,20 @@ export function createFacade(o: FacadeOptions): Facade {
   const taskPort = (repo: string, task: string) => agents.taskOfRepo(task, repo).port;
   const services = new Services({ mise, logs, graph, cards, taskPort, env: o.userEnv, ...SERVICE_TIMING });
   const testReports = new TestReports({ repos: workspace, tasks: agents, logs, env: o.userEnv });
-  return { workspace, repoWatch, cards, graph, mise, procs, logs, batch, agents, services, testReports, openLink: o.openUrl };
+  const verifications = new Verifications({ tasks: agents, mise, testReports, logs, log: o.log });
+  return {
+    workspace,
+    repoWatch,
+    cards,
+    graph,
+    mise,
+    procs,
+    logs,
+    batch,
+    agents,
+    services,
+    testReports,
+    verifications,
+    openLink: o.openUrl,
+  };
 }

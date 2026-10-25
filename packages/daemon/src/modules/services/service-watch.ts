@@ -1,4 +1,5 @@
 import {
+  type ExitedRun,
   LOG_TAIL_MAX,
   type LogTail,
   type LogTailRequest,
@@ -144,7 +145,7 @@ export class ServiceWatch {
     return run.kind === "running";
   }
 
-  private end(run: Extract<RunState, { kind: "exited" }>): void {
+  private end(run: ExitedRun): void {
     if (run.stoppedByUser) this.set("stopped", null);
     else this.set("crashed", `the process exited ${run.signal ? `on signal ${run.signal}` : `with code ${run.exitCode}`}`);
     this.address = null;

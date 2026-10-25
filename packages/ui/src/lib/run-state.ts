@@ -1,4 +1,4 @@
-import type { RunState } from "@trackwall/protocol";
+import type { ExitedRun, RunState } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 
 /** Running mise tasks come live from the events WebSocket; polled only while it is not connected (Home, task panel). */
@@ -18,7 +18,7 @@ export function runStateLabel(run: RunState | null): { tone?: StatusTone; label:
 }
 
 /** The last output lines are shown only when the mise task ended on its own and not with code 0. */
-export function showsLastLines(run: RunState | null): run is Extract<RunState, { kind: "exited" }> {
+export function showsLastLines(run: RunState | null): run is ExitedRun {
   return run?.kind === "exited" && !run.stoppedByUser && run.exitCode !== 0 && run.lastLines.length > 0;
 }
 

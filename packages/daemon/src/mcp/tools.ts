@@ -21,7 +21,7 @@ import { DomainError } from "../infra/errors.ts";
  * `propose_task` (a proposal, which only the user turns into a task in the UI) and `report_result` (the summary of the
  * session's own task) write anything, ADR-39, and `get_review_comments` marks the user's review comments read (ADR-62);
  * only `run_mise_task` and `stop_mise_task` start and stop processes: a mise task from the current list of the repo's
- * trusted configuration, like the button in the UI (ADR-41).
+ * trusted configuration, like the button in the UI (ADR-41), and `verify_task` runs the mise task `test` the same way (ADR-64).
  */
 
 /**
@@ -37,6 +37,7 @@ const RECENT_COMMITS = 10;
  */
 const MISE_TASK_ACTION = "run and stop only mise tasks";
 const SERVICE_ACTION = "start and stop only the service";
+const VERIFY_ACTION = "verify only the tasks";
 
 export interface ToolContext {
   facade: Facade;
@@ -188,14 +189,15 @@ const runs: ToolRuns = {
   },
   getSession: async (facade, { session: id }) => {
     const session = agentSession(facade.agents.session(id));
-    if (session.task === null) return { session, task: null, changes: null, changesError: null };
+    if (session.task === null) return { session, task: null, changes: null, changesError: null, verification: null };
     const task = facade.agents.task(session.task);
+    const verification = facade.verifications.get(task.id);
     // The session and the task exist even when the changes cannot be computed (worktree deleted by hand, ending in progress).
     return facade.agents.taskChangesSummary(task.id).then(
-      (changes) => ({ session, task, changes, changesError: null }),
+      (changes) => ({ session, task, changes, changesError: null, verification }),
       (err: unknown) => {
         if (!(err instanceof DomainError)) throw err;
-        return { session, task, changes: null, changesError: `${err.code}: ${err.message}` };
+        return { session, task, changes: null, changesError: `${err.code}: ${err.message}`, verification };
       },
     );
   },
@@ -220,6 +222,11 @@ const runs: ToolRuns = {
     run: await facade.mise.waitForEnd(miseTarget(facade, repo, task), miseTask, timeoutSeconds * 1000, signal),
   }),
   listRunningMiseTasks: async (facade) => ({ miseTasks: facade.mise.running() }),
+  verifyTask: async (facade, { repo, task, runId, timeoutSeconds }, { caller, signal }) => {
+    assertCallerMayVerify(facade, caller, task);
+    callerTarget(facade, caller, repo, task, VERIFY_ACTION);
+    return { verification: await facade.verifications.verify(task, runId, timeoutSeconds * 1000, signal) };
+  },
   startService: async (facade, { repo, task, dependencies, timeoutSeconds }, { caller }) => {
     // Only the root comes from the session; its dependencies come from the graph, so they may be other repos.
     const target = callerTarget(facade, caller, repo, task, SERVICE_ACTION);
@@ -260,6 +267,7 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.stopMiseTask, runs.stopMiseTask),
   defineTool(mcpTools.waitForMiseTask, runs.waitForMiseTask),
   defineTool(mcpTools.listRunningMiseTasks, runs.listRunningMiseTasks),
+  defineTool(mcpTools.verifyTask, runs.verifyTask),
   defineTool(mcpTools.startService, runs.startService),
   defineTool(mcpTools.stopService, runs.stopService),
   defineTool(mcpTools.listServices, runs.listServices),
@@ -302,6 +310,22 @@ function callerTarget(facade: Facade, caller: string | null, repo: string, task:
   if (task !== undefined && own !== null && task !== own)
     throw new DomainError("bad_request", `a session of task ${own} can ${action} of its own worktree, not of that of task ${task}`);
   return miseTarget(facade, repo, task);
+}
+
+/**
+ * Who may verify a task (ADR-64), before the repo gate of `callerTarget`, with messages that fit verifying: the
+ * supervisor reads the verdict instead of running tests, and a task session verifies its own task only.
+ */
+function assertCallerMayVerify(facade: Facade, caller: string | null, task: string): void {
+  if (caller === null) return;
+  const session = facade.agents.session(caller);
+  if (session.repo === null)
+    throw new DomainError(
+      "bad_request",
+      `the supervisor runs no tests; read task ${task}'s verification with get_session, or ask its session to verify it`,
+    );
+  if (session.task !== null && session.task !== task)
+    throw new DomainError("bad_request", `a task session can verify only its own task ${session.task}, not task ${task}`);
 }
 
 /** The repo root, or the worktree of a task of that repo (`bad_request` for a task of another repo, ADR-59). */

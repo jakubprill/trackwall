@@ -31,6 +31,7 @@ import { ReviewComment } from "./review.ts";
 import { CallEndpointRequest, CallEndpointResult, MAX_SLICE_REPOS, SERVICE_MISE_TASK, Service, ServiceSlice } from "./services.ts";
 import { SyncRepo } from "./sync.ts";
 import { TEST_RESULTS_MAX_FAILURES, TestResults } from "./test-results.ts";
+import { VERIFICATION_MAX_ERRORS, VERIFICATION_MAX_FAILURES, VERIFY_MISE_TASK, Verification } from "./verification.ts";
 import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
 
 /**
@@ -120,6 +121,8 @@ export const GetSessionResult = z.object({
   changes: TaskChangesSummary.nullable(),
   /** Why the task's changes are missing (`<code>: <message>`, for example a worktree removed by hand); `null` when they are there or the session has no task. */
   changesError: z.string().nullable(),
+  /** The task's last verification (ADR-64); `null` without a task or before the first one. */
+  verification: Verification.nullable(),
 });
 export type GetSessionResult = z.infer<typeof GetSessionResult>;
 
@@ -202,6 +205,10 @@ export const ListRunningMiseTasksResult = z.object({
 });
 export type ListRunningMiseTasksResult = z.infer<typeof ListRunningMiseTasksResult>;
 
+/** A task's verification after `verify_task` (ADR-64). */
+export const VerifyTaskResult = z.object({ verification: Verification });
+export type VerifyTaskResult = z.infer<typeof VerifyTaskResult>;
+
 interface McpToolBase<Args extends z.ZodObject, Result extends z.ZodObject> {
   name: string;
   /** A description for the agent's model: what it returns and when to use it. */
@@ -261,6 +268,7 @@ const START_SERVICE = "start_service";
 const CALL_ENDPOINT = "call_endpoint";
 const GET_ERRORS = "get_errors";
 const GET_TEST_RESULTS = "get_test_results";
+const VERIFY_TASK = "verify_task";
 
 export const mcpTools = {
   listRepos: {
@@ -482,7 +490,8 @@ export const mcpTools = {
       `worktree against the base commit: changed files with added and deleted lines (at most ${TASK_SUMMARY_MAX_FILES}, filesTruncated: ` +
       "true when there were more), commits on the task branch and the number of uncommitted entries, without the diff " +
       `itself; ${GET_TASK_CHANGES} adds the diff. changes: null with changesError when they cannot be computed ` +
-      "(e.g. the worktree was deleted or the task is being ended).",
+      `(e.g. the worktree was deleted or the task is being ended). verification is the task's last ${VERIFY_TASK} result ` +
+      "(passed, failed with the first failed tests and errors, running, cancelled), null before the first one.",
     args: z.object({ session: SessionId.describe(`session id from ${LIST_SESSIONS} (the id field)`) }).strict(),
     result: GetSessionResult,
   },
@@ -636,6 +645,37 @@ export const mcpTools = {
       `UI or with ${RUN_MISE_TASK}: repo, task (the task whose worktree it runs in, null in the repo root), mise task name and run (runId, start time, pid). Cheap: it does not ask mise.`,
     args: z.object({}).strict(),
     result: ListRunningMiseTasksResult,
+  },
+  verifyTask: {
+    name: VERIFY_TASK,
+    readOnly: false,
+    destructive: true,
+    auditArgs: ["repo", "task"] as const,
+    description:
+      `Verify a task's changes: run the repo's mise task ${VERIFY_MISE_TASK} in the task's worktree and sum it up in one verdict, ` +
+      "the same as the Verify button in the task's panel, where the user sees the result. Waits up to timeoutSeconds; " +
+      "while the verification is still running (state: running), call it again with the same task and its runId to keep " +
+      `waiting for that run; it is never started twice, and a ${VERIFY_MISE_TASK} you already started with ${RUN_MISE_TASK} is joined. ` +
+      "Without runId a call after the verdict starts a new verification: call it so after every fix. state is passed " +
+      `(exit code 0 and no failed test in the JUnit reports the run wrote), failed (message says why; failures has the first ` +
+      `${VERIFICATION_MAX_FAILURES} failed tests and errors the first ${VERIFICATION_MAX_ERRORS} errors of the run's log, ` +
+      `${GET_TEST_RESULTS} and ${GET_ERRORS} have the rest) or cancelled (the user stopped it). tests: null or reports: 0 ` +
+      `means the run wrote no JUnit reports. not_found when the worktree has no mise task ${VERIFY_MISE_TASK}; ` +
+      "mise_unavailable when its mise config is not trusted (the user trusts it in the task's panel). A task session " +
+      "verifies only its own task, a session in a repo root only tasks of its repo, and the supervisor none: it reads " +
+      `the result in ${GET_SESSION}.`,
+    args: z
+      .object({
+        repo: RepoArg,
+        task: TaskId.describe(`id of a task of this repo (from ${LIST_SESSIONS}; a task session finds its own in its instructions)`),
+        runId: z
+          .string()
+          .optional()
+          .describe("runId of a verification this tool returned running: wait for that one, also when it has finished meanwhile"),
+        timeoutSeconds: WaitTimeoutArg,
+      })
+      .strict(),
+    result: VerifyTaskResult,
   },
   startService: {
     name: START_SERVICE,

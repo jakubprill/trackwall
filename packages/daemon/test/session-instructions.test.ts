@@ -17,6 +17,10 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).toContain(
       "Build and test your changes with run_mise_task and task `1b4e28ba-2fa1-11d2-883f-0016d3cca427`: it runs the repo's mise tasks in this worktree",
     );
+    expect(text).toContain(
+      "Before you report that you are done, call verify_task with repo `shop` and task `1b4e28ba-2fa1-11d2-883f-0016d3cca427`",
+    );
+    expect(text).toContain("If the repo has no mise task test, do not add one");
     expect(text).toContain(MCP_INSTRUCTIONS);
   });
 

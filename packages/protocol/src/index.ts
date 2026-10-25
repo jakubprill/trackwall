@@ -24,4 +24,5 @@ export * from "./sockets.ts";
 export * from "./sync.ts";
 export * from "./task-state.ts";
 export * from "./test-results.ts";
+export * from "./verification.ts";
 export * from "./workspace.ts";

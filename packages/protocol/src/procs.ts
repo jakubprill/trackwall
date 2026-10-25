@@ -30,3 +30,5 @@ export const RunState = z.discriminatedUnion("kind", [
   }),
 ]);
 export type RunState = z.infer<typeof RunState>;
+/** A run whose group has ended. */
+export type ExitedRun = Extract<RunState, { kind: "exited" }>;

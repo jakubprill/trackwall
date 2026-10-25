@@ -32,6 +32,7 @@ const {
   stopMiseTask,
   waitForMiseTask,
   listRunningMiseTasks,
+  verifyTask,
   startService,
   stopService,
   listServices,
@@ -65,6 +66,9 @@ export const MCP_INSTRUCTIONS = [
     `${getTestResults.name} then tells which tests failed and why, from the build's JUnit reports (pass the run's startedAt as since); ` +
     `${listRunningMiseTasks.name} shows what already runs. Stop long-running tasks with ${stopMiseTask.name} when ` +
     "you no longer need them.",
+  `- Check that a task's changes pass: ${verifyTask.name} runs the repo's mise task test in the task's worktree and ` +
+    "returns one verdict with the first failed tests and log errors; the user sees the same result in the task's panel. " +
+    "Call it after your last change, before you report the result.",
   `- Try a change against the running system: ${startService.name} starts a repo's service (its mise task dev) with ` +
     `the services it calls, dependencies first, and waits until its port answers; ${callEndpoint.name} sends an HTTP ` +
     "request to it and returns the response with the errors every service logged meanwhile, so a failure downstream " +

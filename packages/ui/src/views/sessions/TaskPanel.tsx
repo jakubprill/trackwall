@@ -13,12 +13,14 @@ import { proposerLabel, taskName } from "@/lib/session-entries";
 import { isLive, sessionStateLabel } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
 import { useTaskReview } from "@/lib/use-task-review";
+import { useTaskVerification } from "@/lib/use-task-verification";
 import { SharedFiles } from "./SharedFiles.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
 import { TaskIncludedFiles } from "./TaskIncludedFiles.tsx";
 import { TaskMiseConfig } from "./TaskMiseConfig.tsx";
 import { TaskMiseRuns } from "./TaskMiseRuns.tsx";
 import { TaskRemoval } from "./TaskRemoval.tsx";
+import { TaskVerification, VerifyButton } from "./TaskVerification.tsx";
 
 type TaskTab = "terminal" | "changes";
 
@@ -29,7 +31,8 @@ type TaskTab = "terminal" | "changes";
  * The warnings about files another task also changes (ADR-44) and about a changed mise config of the worktree (ADR-59)
  * sit above the summary, and the mise tasks the agent runs in the worktree below it. The header shows the task port, and
  * the files copied from the repo root into the worktree come first (ADR-61). The review comments written in the
- * "Changes" tab live here, so that switching tabs keeps them (ADR-62).
+ * "Changes" tab live here, so that switching tabs keeps them (ADR-62). The Verify button in the header runs the
+ * task's tests, and the verdict sits below the summary (ADR-64).
  */
 export function TaskPanel({
   conn,
@@ -60,6 +63,7 @@ export function TaskPanel({
   const [removing, setRemoving] = useState(false);
   const review = useTaskReview(conn, task.id);
   const confirmingRemoval = removing && !liveSession;
+  const verification = useTaskVerification(conn, task.id, confirmingRemoval);
   const resume = useAction(
     () => post(conn, agentsApi.resumeTask, { task: task.id }),
     () => {
@@ -107,6 +111,7 @@ export function TaskPanel({
           </span>
         </div>
         {error && <span className="text-destructive max-w-xs truncate text-xs">{error}</span>}
+        <VerifyButton state={verification} disabled={confirmingRemoval} />
         <Button variant="outline" size="sm" onClick={openEditor.run} disabled={openEditor.pending}>
           <Code /> VS Code
         </Button>
@@ -128,7 +133,14 @@ export function TaskPanel({
       <SharedFiles conn={conn} task={task.id} tasks={tasks} paused={confirmingRemoval} onOpenTask={onOpenTask} />
       <TaskMiseConfig conn={conn} task={task.id} paused={confirmingRemoval} />
       {task.summary && <TaskSummary summary={task.summary} />}
-      <TaskMiseRuns conn={conn} task={task.id} live={runningLive} paused={confirmingRemoval} />
+      <TaskVerification conn={conn} state={verification} />
+      <TaskMiseRuns
+        conn={conn}
+        task={task.id}
+        live={runningLive}
+        paused={confirmingRemoval}
+        shownElsewhere={verification.runningMiseTask}
+      />
       <div className="px-4">
         <TabBar tabs={tabs} active={shown} onSelect={setTab} />
       </div>
