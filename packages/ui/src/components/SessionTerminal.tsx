@@ -1,9 +1,10 @@
 import "@xterm/xterm/css/xterm.css";
 import { isTauri } from "@tauri-apps/api/core";
-import { PTY_CLOSE_NOT_FOUND, type PtyClientMessage, ptySocket } from "@trackwall/protocol";
+import { PTY_CLOSE_NOT_FOUND, type PtyClientMessage, ptySocket, workspaceApi } from "@trackwall/protocol";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { useContext, useEffect, useRef, useState } from "react";
+import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { daemonSocket } from "@/lib/daemon-socket";
 import { DROP_HOVER_RING, FILE_DROP_TARGET, FileDropEvent } from "@/lib/file-drop";
@@ -12,7 +13,7 @@ import { oncePerFrame } from "@/lib/once-per-frame";
 import { pastedPaths } from "@/lib/pasted-paths";
 import { IS_MAC } from "@/lib/platform";
 import { copiesSelection } from "@/lib/terminal-copy";
-import { trackwallLinkProvider } from "@/lib/terminal-links";
+import { hyperlinkHandler, trackwallLinkProvider } from "@/lib/terminal-links";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { terminalTheme } from "@/lib/terminal-theme";
 import { cn } from "@/lib/utils";
@@ -61,6 +62,11 @@ export function SessionTerminal({
     const fit = new FitAddon();
     terminal.loadAddon(fit);
     const links = isTauri() ? terminal.registerLinkProvider(trackwallLinkProvider(terminal, IS_MAC)) : undefined;
+    if (isTauri()) {
+      terminal.options.linkHandler = hyperlinkHandler(IS_MAC, (url) => {
+        post(conn, workspaceApi.openLink, { url }).catch((err: unknown) => setNotice(`Could not open the link: ${errorMessage(err)}`));
+      });
+    }
     terminal.open(element);
     fit.fit();
     term.current = terminal;

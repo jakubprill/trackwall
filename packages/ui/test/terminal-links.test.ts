@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { findTrackwallLinks, opensLink, type TerminalRow } from "../src/lib/terminal-links.ts";
+import type { IBufferLine, ILink, Terminal } from "@xterm/xterm";
+import { findTrackwallLinks, hyperlinkTarget, opensLink, type TerminalRow, trackwallLinkProvider } from "../src/lib/terminal-links.ts";
 
 const TASK = "0b7e3a52-5c1f-4c55-9a4e-2f1d7c3b9e10";
 const row = (text: string, wrapped = false): TerminalRow => ({ text, wrapped });
@@ -7,7 +8,7 @@ const texts = (rows: TerminalRow[]) => findTrackwallLinks(rows).map((l) => l.tex
 
 test("a trackwall link in an agent's answer is found with its first and last character", () => {
   expect(findTrackwallLinks([row("Open trackwall://repo/orders-api to see it.")])).toEqual([
-    { text: "trackwall://repo/orders-api", start: { row: 0, index: 5 }, end: { row: 0, index: 31 } },
+    { text: "trackwall://repo/orders-api", parts: [{ row: 0, start: 5, end: 31 }] },
   ]);
   expect(texts([row(`(trackwall://task/${TASK}), done`)])).toEqual([`trackwall://task/${TASK}`]);
 });
@@ -26,20 +27,49 @@ test("a repo id that ends on an underscore or a hyphen is kept whole", () => {
 test("a task link that Copilot CLI broke into two indented rows is joined into one", () => {
   const rows = [row("  ● Task started: trackwall://task/0b7e3a52-5c1f-4c55"), row("    -9a4e-2f1d7c3b9e10. Waiting for it.")];
   expect(findTrackwallLinks(rows)).toEqual([
-    { text: `trackwall://task/${TASK}`, start: { row: 0, index: 18 }, end: { row: 1, index: 21 } },
+    {
+      text: `trackwall://task/${TASK}`,
+      parts: [
+        { row: 0, start: 18, end: 52 },
+        { row: 1, start: 4, end: 21 },
+      ],
+    },
   ]);
+});
+
+test("a link that Copilot CLI broke inside its scheme, kind or right after the kind is joined too", () => {
+  expect(texts([row("  Open trackwall://ta  │"), row(`    sk/${TASK} now │`)])).toEqual([`trackwall://task/${TASK}`]);
+  expect(texts([row("  x trackwall://task/"), row(`    ${TASK}`)])).toEqual([`trackwall://task/${TASK}`]);
+  expect(texts([row("  see trackwall://repo/"), row("    orders-api")])).toEqual(["trackwall://repo/orders-api"]);
+});
+
+test("an empty row ends a cut link instead of joining it with what comes after", () => {
+  expect(texts([row("  x trackwall://task/0b7e3a52-5c1f-4c55"), row("   "), row("    -9a4e-2f1d7c3b9e10")])).toEqual([]);
 });
 
 test("a link that xterm wrapped onto the next row is joined, also across three rows", () => {
   expect(texts([row("Open trackwall://repo/orders-a"), row("pi now", true)])).toEqual(["trackwall://repo/orders-api"]);
-  expect(texts([row("x trackwall://task/0b7e3a52-"), row("5c1f-4c55-9a4e-", true), row("2f1d7c3b9e10 ok", true)])).toEqual([
-    `trackwall://task/${TASK}`,
+  expect(findTrackwallLinks([row("x trackwall://task/0b7e3a52-"), row("5c1f-4c55-9a4e-", true), row("2f1d7c3b9e10 ok", true)])).toEqual([
+    {
+      text: `trackwall://task/${TASK}`,
+      parts: [
+        { row: 0, start: 2, end: 27 },
+        { row: 1, start: 0, end: 14 },
+        { row: 2, start: 0, end: 11 },
+      ],
+    },
   ]);
+});
+
+test("a space or border that xterm wrapped after a link is not dropped, so the next word stays apart", () => {
+  expect(texts([row("Open trackwall://repo/orders "), row("and more", true)])).toEqual(["trackwall://repo/orders"]);
+  expect(texts([row("a trackwall://repo/x |"), row("yz", true)])).toEqual(["trackwall://repo/x"]);
 });
 
 test("a task link whose UUID stays cut is left out, so a click never opens a shorter id", () => {
   expect(texts([row("trackwall://task/0b7e3a52-5c1f")])).toEqual([]);
   expect(texts([row("trackwall://task/0b7e3a52-5c1f"), row("  and then more text")])).toEqual([]);
+  expect(texts([row("x trackwall://task/0b7e3a52"), row("  deadbeefdeadbeefdeadbeefdeadbeef0 is")])).toEqual([]);
 });
 
 test("a repo link at the end of a row is not joined with the next, unwrapped row", () => {
@@ -60,4 +90,38 @@ test("a link opens on Ctrl+click on Windows and Cmd+click on macOS, not on a pla
   expect(opensLink({ ctrlKey: false, metaKey: true }, true)).toBe(true);
   expect(opensLink({ ctrlKey: true, metaKey: false }, true)).toBe(false);
   expect(opensLink({ ctrlKey: false, metaKey: false }, false)).toBe(false);
+});
+
+test("a hyperlink whose label is other text opens a Trackwall link in the window and a web address in the browser", () => {
+  // Copilot CLI shows the Markdown link `[sesja nadzorująca](trackwall://session/…)` as this hyperlink.
+  expect(hyperlinkTarget(`trackwall://session/${TASK}`)).toEqual({ kind: "trackwall", url: `trackwall://session/${TASK}` });
+  expect(hyperlinkTarget("https://example.com/docs")).toEqual({ kind: "external", url: "https://example.com/docs" });
+  expect(hyperlinkTarget("file:///etc/passwd")).toBeUndefined();
+  expect(hyperlinkTarget("javascript:alert(1)")).toBeUndefined();
+});
+
+/** A terminal with these rows, numbered from 1 like the rows `provideLinks` asks for. */
+function fakeTerminal(rows: TerminalRow[]): Terminal {
+  const line = (r: TerminalRow) => ({ translateToString: () => r.text, isWrapped: r.wrapped }) as IBufferLine;
+  return { buffer: { active: { getLine: (i: number) => (rows[i] ? line(rows[i]) : undefined) } } } as unknown as Terminal;
+}
+
+function linksOn(terminal: Terminal, y: number): Pick<ILink, "text" | "range">[] {
+  let links: ILink[] | undefined;
+  trackwallLinkProvider(terminal, false).provideLinks(y, (found) => {
+    links = found;
+  });
+  return (links ?? []).map(({ text, range }) => ({ text, range }));
+}
+
+test("a link split over two rows is underlined on each row over its own characters only, once", () => {
+  const terminal = fakeTerminal([
+    row("Before"),
+    row("  ● Task started: trackwall://task/0b7e3a52-5c1f-4c55 │"),
+    row("    -9a4e-2f1d7c3b9e10. Waiting.                      │"),
+  ]);
+  const link = `trackwall://task/${TASK}`;
+  expect(linksOn(terminal, 1)).toEqual([]);
+  expect(linksOn(terminal, 2)).toEqual([{ text: link, range: { start: { x: 19, y: 2 }, end: { x: 53, y: 2 } } }]);
+  expect(linksOn(terminal, 3)).toEqual([{ text: link, range: { start: { x: 5, y: 3 }, end: { x: 22, y: 3 } } }]);
 });
