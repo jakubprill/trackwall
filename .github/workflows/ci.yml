@@ -3,6 +3,7 @@ name: CI
 # The repo is public, so standard runners have no minute limit (ADR-22). Every PR and push to main runs:
 # - lint, rustfmt, typecheck, tests and the documentation site build on Linux, plus the dependency audit;
 # - tests on Windows and macOS;
+# - the contract tests with the real Copilot CLI on all three systems (ADR-67);
 # - the daemon build and the Tauri portable build on Windows and macOS (clippy, cargo test, sidecar smoke test);
 # - the aggregate `CI ok` job, the only check to require in main branch protection.
 # Jobs run in parallel: a run takes as long as the longest job (the Windows build), not the sum.
@@ -103,6 +104,32 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
       - run: pnpm test
 
+  # The real Copilot CLI of the pinned version in BYOK mode against a scripted model (ADR-67): no account and no secret.
+  # The binary (113–130 MB packed) is cached under the version, which lives only in scripts/copilot-cli.ts.
+  contract:
+    name: contract with Copilot CLI (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: packages/daemon/node_modules/.cache/copilot-cli
+          key: copilot-cli-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/daemon/scripts/copilot-cli.ts') }}
+      - run: pnpm test:contract
+
   # The build is the longest step of a run, so it has its own job next to `test`, not after it.
   desktop:
     name: build, portable (${{ matrix.os }})
@@ -153,7 +180,7 @@ jobs:
   # cancelled dependency gives a red result.
   ci-ok:
     name: CI ok
-    needs: [check, audit, test, desktop]
+    needs: [check, audit, test, contract, desktop]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

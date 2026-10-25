@@ -58,6 +58,9 @@ const TICK_MS = 200;
 const MCP_CONFIG_FILE = "mcp-config.json";
 /** The session token in the session directory, which the session's stdio bridge reads and sends to the MCP server (ADR-39). */
 const SESSION_TOKEN_FILENAME = "session-token";
+/** The hook records the session plugin's hook processes append to (`HookTail` reads them). */
+const HOOKS_FILENAME = "hooks.jsonl";
+const SESSIONS_DIR = "sessions";
 const TASKS_FILE = "tasks.json";
 /**
  * What the daemon types into a task's session when the user sends a review (ADR-62): fixed text on one line, without
@@ -67,6 +70,16 @@ const REVIEW_PROMPT =
   `The user sent a review of your changes in Trackwall: call ${mcpTools.getReviewComments.name} ` +
   `(the ${MCP_SERVER_NAME} MCP server) and address every comment.`;
 const WORKTREES_DIR = "worktrees";
+
+/** A session's directory in the state directory: its plugin, MCP configuration, token and hook records. */
+function sessionDir(home: string, id: string): string {
+  return join(home, SESSIONS_DIR, id);
+}
+
+/** A session's `hooks.jsonl`. */
+export function sessionHooksFile(home: string, id: string): string {
+  return join(sessionDir(home, id), HOOKS_FILENAME);
+}
 
 /** What `agents` needs from `procs`; wired in the facade. */
 interface AgentsProcs {
@@ -377,7 +390,7 @@ export class Agents {
     if (!program) throw new DomainError("agent_unavailable", `Copilot CLI (${name}) not found in PATH`);
     const permissions = this.#deps.repos.toolPermissions(repo);
     const id = randomUUID();
-    const dir = this.#sessionDir(id);
+    const dir = sessionDir(this.#deps.home, id);
     const token = this.#tokens.issue(id);
     let prepared: PreparedSession;
     try {
@@ -450,7 +463,7 @@ export class Agents {
   /** Daemon start: session files from the previous run (sessions do not outlive the daemon). */
   sweepLeftovers(): void {
     try {
-      rmSync(join(this.#deps.home, "sessions"), { recursive: true, force: true });
+      rmSync(join(this.#deps.home, SESSIONS_DIR), { recursive: true, force: true });
     } catch (err) {
       this.#deps.log(`cleaning up the session directory: ${String(err)}`);
     }
@@ -484,7 +497,7 @@ export class Agents {
    */
   #prepare({ id, repo, task, dir, token, promptOnStart }: SessionFiles): PreparedSession {
     const pluginDir = join(dir, "plugin");
-    const hooksFile = join(dir, "hooks.jsonl");
+    const hooksFile = join(dir, HOOKS_FILENAME);
     const tokenFile = join(dir, SESSION_TOKEN_FILENAME);
     mkdirSync(dir, { recursive: true });
     writeFileSync(hooksFile, "");
@@ -544,13 +557,9 @@ export class Agents {
     return view;
   }
 
-  #sessionDir(id: string): string {
-    return join(this.#deps.home, "sessions", id);
-  }
-
   #removeDir(id: string): void {
     try {
-      rmSync(this.#sessionDir(id), { recursive: true, force: true });
+      rmSync(sessionDir(this.#deps.home, id), { recursive: true, force: true });
     } catch (err) {
       this.#deps.log(`removing session files ${id}: ${String(err)}`);
     }

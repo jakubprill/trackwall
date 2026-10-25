@@ -14,7 +14,7 @@ Repo layout, running from source and tools for people who develop Trackwall. Pro
 | Path | What it is |
 |---|---|
 | `packages/protocol` | types and zod schemas shared by the daemon, the UI and the CLI; the docs site takes its address from it |
-| `packages/daemon` | the daemon (Bun, Node-compatible code), built into a single binary; `src/modules/` are the modules from §4 of the architecture, `src/api/` and `src/mcp/` the transports, `src/platform/` system APIs, `src/infra/` the rest of the infrastructure; the root of `src/` holds only `main.ts` and `facade.ts` |
+| `packages/daemon` | the daemon (Bun, Node-compatible code), built into a single binary; `src/modules/` are the modules from §4 of the architecture, `src/api/` and `src/mcp/` the transports, `src/platform/` system APIs, `src/infra/` the rest of the infrastructure; the root of `src/` holds only `main.ts` and `facade.ts`; `test/` the tests of `pnpm test` (Copilot CLI there is a fake), `contract/` the contract tests with the real Copilot CLI (ADR-67) |
 | `packages/ui` | React + Tailwind + shadcn/ui, Vite; `src/views/<view identifier>/` are the views from the bar on the left (`home`, `repos`, `sessions`, `graph` for Overview, `daemon`, `settings`) and `tray-panel`, the page of the tray panel window (ADR-50), `src/components/` shared components, `src/lib/` logic without React and hooks; the root of `src/` holds only `main.tsx`, `App.tsx` and `index.css` |
 | `packages/scene` | the 3D dashboard scene on Pawn (`@pawnjs/core` from npm): view model, "Orbit" layout, models |
 | `apps/docs` | the feature documentation site (VitePress, ADR-56): `guide/` and one page per feature in `features/` written from `TEMPLATE.md`, the sidebar (and the groups of "All features") in `.vitepress/sidebar.ts`, the Trackwall look in `.vitepress/theme/`; the screenshots in `public/screenshots/`, taken by `scripts/screenshots.ts` from the demo daemon; the build also writes `llms.txt`, `llms-full.txt` and a Markdown copy of every page for AI tools; `.github/workflows/pages.yml` publishes it on GitHub Pages |
@@ -34,9 +34,16 @@ pnpm dev                       # daemon (bun --watch, state in .trackwall-dev/) 
 pnpm --filter @trackwall/desktop dev   # the same in a Tauri window (state in ~/.trackwall-dev, separate from the release)
 pnpm lint                      # Biome and knip (pnpm format fixes formatting)
 pnpm test                      # tests of every package
+pnpm test:contract             # the daemon with the real Copilot CLI (pinned version, downloaded once) against a scripted model; no account
 pnpm --filter @trackwall/docs dev     # the documentation site under /trackwall/ (Vite prints the address; 5174 when `pnpm dev` holds 5173)
 pnpm --filter @trackwall/docs build   # the site into apps/docs/dist; fails on a broken link between pages
 ```
+
+### Contract tests with the real Copilot CLI
+
+`pnpm test:contract` runs `packages/daemon/contract/*.contract.ts` (ADR-67). It downloads the native Copilot CLI binary of the version in `packages/daemon/scripts/copilot-cli.ts` from the npm registry (checked against the registry's sha512, kept in `packages/daemon/node_modules/.cache/copilot-cli`) and starts it from the daemon as a real session would, in BYOK mode: `COPILOT_OFFLINE=true` and `COPILOT_PROVIDER_BASE_URL` pointing at `contract/support/scripted-model.ts`, an OpenAI-compatible endpoint on 127.0.0.1 that gives the replies the test queued (`model.reply(...)`) and keeps every request. So no account, no network after the download and no model costs. Copilot CLI gets its own `COPILOT_HOME` in the test's state directory, which trusts the test folders. CI runs them on Linux, Windows and macOS in every PR.
+
+A contract test checks what the daemon relies on from Copilot CLI, not Trackwall's features: hook events and their payload fields, the approval dialog as the daemon reads it from the screen, `--allow-tool`/`--deny-tool`, MCP tools through the session's stdio bridge, the session instructions in the prompt, flags like `--interactive=`. Feature tests stay in `test/` with the fake. When a contract test fails after raising `COPILOT_CLI_VERSION`, update the fake (`test/fixtures/fake-copilot-session.ts`) to the new behaviour in the same PR.
 
 The daemon alone with the UI in the browser, without Tauri:
 

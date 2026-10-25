@@ -13,7 +13,8 @@
     "build": "bun scripts/build.ts",
     "demo": "bun scripts/demo.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "bun test"
+    "test": "bun test",
+    "test:contract": "bun scripts/contract.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.3.1",

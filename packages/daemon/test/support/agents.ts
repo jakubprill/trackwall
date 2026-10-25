@@ -62,8 +62,14 @@ export function makeAgents(
   return { home, procs, agents, opened };
 }
 
-export async function waitFor(agents: Agents, id: string, check: (s: Session) => boolean, what: string): Promise<Session> {
-  const until = Date.now() + 20_000;
+export async function waitFor(
+  agents: Agents,
+  id: string,
+  check: (s: Session) => boolean,
+  what: string,
+  timeoutMs = 20_000,
+): Promise<Session> {
+  const until = Date.now() + timeoutMs;
   for (;;) {
     const session = agents.sessions().sessions.find((s) => s.id === id);
     if (session && check(session)) return session;

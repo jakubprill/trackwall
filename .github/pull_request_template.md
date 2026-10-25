@@ -22,7 +22,7 @@ To check manually:
 
 <!-- Full wording of the points: AGENTS.md, section "Definition of done". -->
 
-- [ ] 1. A test at the cheapest level (bug fix: a test that fails without it)
+- [ ] 1. A test at the cheapest level (bug fix: a test that fails without it); what the daemon relies on from Copilot CLI has a contract test (`pnpm test:contract`)
 - [ ] 2. System-dependent code has a test in the Windows + macOS matrix (CI on the PR, `CI ok` check); the rest listed above as "to check manually"
 - [ ] 3. The commands from AGENTS.md pass locally
 - [ ] 4. Documentation updated in this PR
