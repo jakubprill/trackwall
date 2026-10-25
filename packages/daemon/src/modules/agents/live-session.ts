@@ -262,6 +262,8 @@ export class LiveSession {
     // A stop by the user is an intended end, not a session error, even though the process ends with a signal.
     // Finished first, so the `Error` a failed exit gives is reported as the exit, not also as an error.
     this.#finished = true;
+    // The last hooks may have been written between the read above and the end the process state shows.
+    this.#readHooks();
     this.#report(this.#state.exit(run.stoppedByUser ? 0 : (run.exitCode ?? 1)));
     this.#hooks.close();
     this.#onEvent({ kind: "exited", exitCode: run.exitCode, stoppedByUser: run.stoppedByUser });
