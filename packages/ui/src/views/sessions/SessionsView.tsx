@@ -23,6 +23,7 @@ import {
   type SessionSelection,
   type StartedEntry,
   selectedProposal,
+  selectionAfterClose,
   sessionRows,
 } from "@/lib/session-entries";
 import { gridPage, SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
@@ -30,9 +31,11 @@ import { ariaSessionShortcut, SHORTCUT_POSITIONS, sessionShortcut, sessionShortc
 import { attentionCount, isLive, PROPOSAL_STATUS, sessionStateLabel } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
 import { actionIsNewer, type RemoteHandle, useRemote } from "@/lib/use-remote";
+import { useSessionClose } from "@/lib/use-session-close";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { cn } from "@/lib/utils";
 import { ProposalInbox } from "./ProposalInbox.tsx";
+import { SessionCloseButton, SessionCloseConfirmation } from "./SessionClose.tsx";
 import { SessionGrid } from "./SessionGrid.tsx";
 import { SessionTerminal } from "./SessionTerminal.tsx";
 import { TaskLine } from "./TaskLine.tsx";
@@ -71,11 +74,18 @@ export function SessionsView({
   const entries = rows.map((r) => r.entry);
   const current = findEntry(entries, selected);
   const next = nextWaiting(entries, current);
-  // A decision on proposals ends after a while; it reads the selection of that moment, not of the render that began it.
-  const latestSelection = useRef(selected);
-  latestSelection.current = selected;
-  const currentSelection = useCallback(() => latestSelection.current, []);
   const waiting = attentionCount(sessions.data);
+  // A stop can take seconds, and a decision on proposals a while, and the user may select another entry meanwhile, so
+  // both decide on the selection as it is when they end. `entries` comes from the render of the click (the action keeps
+  // that `onDone`), so it still holds the closed entry even when a refreshed list without it arrived before the close ended.
+  const latestSelected = useRef(selected);
+  latestSelected.current = selected;
+  const currentSelection = useCallback(() => latestSelected.current, []);
+  const sessionClosed = (entry: SessionEntry) => {
+    const afterClose = selectionAfterClose(entries, latestSelected.current, entry);
+    if (afterClose !== "keep") onSelect(afterClose);
+    sessions.reload();
+  };
   // Taken also with no entry at that position, so that the key never reaches a session terminal by accident.
   useWindowShortcuts(
     (event) => {
@@ -124,10 +134,12 @@ export function SessionsView({
           {rows.map((row, i) => (
             <SessionListItem
               key={entryId(row.entry)}
+              conn={conn}
               row={row}
               position={i + 1}
               active={current !== undefined && entryId(row.entry) === entryId(current)}
               onSelect={() => onSelect(entrySelection(row.entry))}
+              onSessionClosed={() => sessionClosed(row.entry)}
             />
           ))}
         </nav>
@@ -162,6 +174,7 @@ export function SessionsView({
             sessions={list}
             tasks={tasks}
             onChanged={sessions.reload}
+            onSessionClosed={sessionClosed}
             onTaskRemoved={(task) => {
               setRemoved({ task, afterLoad: sessions.sentLoads() });
               onSelect(undefined);
@@ -192,15 +205,19 @@ const INDENT = ["", "ml-4", "ml-8", "ml-12"] as const;
  * A session or task that delegated work has a “main” badge with the number of entries under it.
  */
 function SessionListItem({
+  conn,
   row,
   position,
   active,
   onSelect,
+  onSessionClosed,
 }: {
+  conn: Connection;
   row: SessionRow;
   position: number;
   active: boolean;
   onSelect: () => void;
+  onSessionClosed: () => void;
 }) {
   const { entry, depth } = row;
   return (
@@ -208,55 +225,81 @@ function SessionListItem({
       {entry.kind === "proposals" ? (
         <ProposalsListItem entry={entry} position={position} active={active} onSelect={onSelect} />
       ) : (
-        <StartedListItem entry={entry} delegated={row.children} position={position} active={active} onSelect={onSelect} />
+        <StartedListItem
+          conn={conn}
+          entry={entry}
+          delegated={row.children}
+          position={position}
+          active={active}
+          onSelect={onSelect}
+          onSessionClosed={onSessionClosed}
+        />
       )}
     </div>
   );
 }
 
+/** A session or task row; the X that closes its session shows on hover, on keyboard focus and on the selected row. */
 function StartedListItem({
+  conn,
   entry,
   delegated,
   position,
   active,
   onSelect,
+  onSessionClosed,
 }: {
+  conn: Connection;
   entry: StartedEntry;
   /** Tasks and proposals directly under this entry. */
   delegated: number;
   position: number;
   active: boolean;
   onSelect: () => void;
+  onSessionClosed: () => void;
 }) {
   const { session } = entry;
   const task = entry.kind === "task" ? entry.task : undefined;
+  const close = useSessionClose(conn, session, onSessionClosed);
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-current={active || undefined}
-      aria-keyshortcuts={ariaSessionShortcut({ kind: "position", position })}
-      className={cn(
-        "flex w-full items-start gap-3 rounded-md border border-transparent px-2 py-2 text-left transition-colors hover:bg-accent",
-        active && "bg-accent border-primary/25 hud-active-edge",
-      )}
-    >
-      <PositionLabel position={position} />
-      <span className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-sm font-medium">{task?.repo ?? session?.repo}</span>
-          {delegated > 0 && (
-            <Badge
-              aria-label={`main session, ${countLabel(delegated, { one: "task or proposal", other: "tasks and proposals" })} under it`}
-            >{`main · ${delegated}`}</Badge>
-          )}
-          {session?.needsAttention && <BellRing className="text-warning size-3.5 shrink-0" aria-label="waiting for you" />}
+    <div className="group relative">
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-current={active || undefined}
+        aria-keyshortcuts={ariaSessionShortcut({ kind: "position", position })}
+        className={cn(
+          "flex w-full items-start gap-3 rounded-md border border-transparent py-2 pr-8 pl-2 text-left transition-colors hover:bg-accent",
+          active && "bg-accent border-primary/25 hud-active-edge",
+        )}
+      >
+        <PositionLabel position={position} />
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-sm font-medium">{task?.repo ?? session?.repo}</span>
+            {delegated > 0 && (
+              <Badge
+                aria-label={`main session, ${countLabel(delegated, { one: "task or proposal", other: "tasks and proposals" })} under it`}
+              >{`main · ${delegated}`}</Badge>
+            )}
+            {session?.needsAttention && <BellRing className="text-warning size-3.5 shrink-0" aria-label="waiting for you" />}
+          </span>
+          {task && <TaskLine task={task} />}
+          <span className="text-muted-foreground text-xs">{session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}</span>
+          {session?.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
         </span>
-        {task && <TaskLine task={task} />}
-        <span className="text-muted-foreground text-xs">{session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}</span>
-        {session?.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
-      </span>
-    </button>
+      </button>
+      {session && (
+        <SessionCloseButton
+          close={close}
+          className={cn(
+            "absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+            (active || close.confirming) && "opacity-100",
+          )}
+        />
+      )}
+      <SessionCloseConfirmation close={close} />
+    </div>
   );
 }
 
@@ -330,6 +373,7 @@ function SelectedEntry({
   sessions,
   tasks,
   onChanged,
+  onSessionClosed,
   onTaskRemoved,
 }: {
   conn: Connection;
@@ -345,6 +389,7 @@ function SelectedEntry({
   /** The tasks on the list, for the task panel's shared-files warning. */
   tasks: readonly Task[];
   onChanged: () => void;
+  onSessionClosed: (entry: SessionEntry) => void;
   onTaskRemoved: (task: string) => void;
 }) {
   if (layout === "1")
@@ -360,6 +405,7 @@ function SelectedEntry({
           tasks={tasks}
           onSelect={onSelect}
           onChanged={onChanged}
+          onSessionClosed={onSessionClosed}
           onTaskRemoved={onTaskRemoved}
         />
       </>
@@ -390,6 +436,7 @@ function SelectedEntry({
         onChanged={onChanged}
         onNavigate={onSelect}
         currentSelection={currentSelection}
+        onSessionClosed={onSessionClosed}
       />
     </>
   );
@@ -405,6 +452,7 @@ function EntryPanel({
   tasks,
   onSelect,
   onChanged,
+  onSessionClosed,
   onTaskRemoved,
 }: {
   conn: Connection;
@@ -416,6 +464,7 @@ function EntryPanel({
   tasks: readonly Task[];
   onSelect: (selection: SessionSelection) => void;
   onChanged: () => void;
+  onSessionClosed: (entry: SessionEntry) => void;
   onTaskRemoved: (task: string) => void;
 }) {
   if (entry.kind === "proposals")
@@ -447,7 +496,13 @@ function EntryPanel({
       />
     );
   return (
-    <SessionPanel key={entry.session.id} conn={conn} session={entry.session} onChanged={onChanged} onClosed={() => onSelect(undefined)} />
+    <SessionPanel
+      key={entry.session.id}
+      conn={conn}
+      session={entry.session}
+      onChanged={onChanged}
+      onClosed={() => onSessionClosed(entry)}
+    />
   );
 }
 
@@ -484,7 +539,7 @@ function LayoutBar({ layout, onLayout, summary }: { layout: SessionLayout; onLay
   );
 }
 
-/** Nagłówek wybranej sesji (repo, stan, nad czym pracuje, przyciski) i jej terminal. */
+/** The header of the selected session (repo, state, what it works on, buttons) and its terminal. Close of an ended session is the X's close (`useSessionClose`). */
 function SessionPanel({
   conn,
   session,
@@ -498,14 +553,8 @@ function SessionPanel({
 }) {
   const live = isLive(session);
   const stop = useAction(() => post(conn, agentsApi.stop, { session: session.id }), onChanged);
-  const dismiss = useAction(
-    () => post(conn, agentsApi.dismiss, { session: session.id }),
-    () => {
-      onClosed();
-      onChanged();
-    },
-  );
-  const action = live ? stop : dismiss;
+  const close = useSessionClose(conn, session, onClosed);
+  const error = live ? stop.error : close.error;
   return (
     <>
       <header className="flex items-center gap-4 border-b px-4 py-2">
@@ -519,13 +568,13 @@ function SessionPanel({
           </span>
           {session.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
         </div>
-        {action.error && <span className="text-destructive max-w-xs truncate text-xs">{action.error}</span>}
+        {error && <span className="text-destructive max-w-xs truncate text-xs">{error}</span>}
         {live ? (
           <Button variant="outline" size="sm" onClick={stop.run} disabled={stop.pending || session.run.kind === "stopping"}>
             <Square /> Stop
           </Button>
         ) : (
-          <Button variant="outline" size="sm" onClick={dismiss.run} disabled={dismiss.pending}>
+          <Button variant="outline" size="sm" onClick={close.request} disabled={close.pending}>
             <X /> Close
           </Button>
         )}

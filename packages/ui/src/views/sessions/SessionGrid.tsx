@@ -9,8 +9,10 @@ import { entryId, entrySession, proposalsName, type SessionEntry, type SessionSe
 import { type GridPage, gridShape } from "@/lib/session-grid";
 import { sessionShortcutLabel } from "@/lib/session-shortcut";
 import { isLive, PROPOSAL_STATUS, sessionStateLabel } from "@/lib/session-state";
+import { useSessionClose } from "@/lib/use-session-close";
 import { cn } from "@/lib/utils";
 import { ProposalTile } from "./ProposalTile.tsx";
+import { SessionCloseButton, SessionCloseConfirmation } from "./SessionClose.tsx";
 import { SessionTerminal } from "./SessionTerminal.tsx";
 import { TaskLine } from "./TaskLine.tsx";
 
@@ -18,7 +20,8 @@ import { TaskLine } from "./TaskLine.tsx";
  * A page of the Sessions list as a grid of terminals (ADR-48). The selected tile has the accent ring and the keyboard,
  * a session that is waiting for you has the warning frame (also when selected). Clicking a tile or into its terminal
  * selects it; a task without a session has no terminal, so its tile only leads to the full panel, and task proposals
- * (ADR-39) show their prompts with “Start task” and “Reject…” (ADR-55). Tiles appear once
+ * (ADR-39) show their prompts with “Start task” and “Reject…” (ADR-55). A tile with a session also closes it
+ * (`useSessionClose`). Tiles appear once
  * the area is measured, so that no terminal reports a size to its session from a layout that is about to change.
  */
 export function SessionGrid({
@@ -31,6 +34,7 @@ export function SessionGrid({
   onChanged,
   onNavigate,
   currentSelection,
+  onSessionClosed,
 }: {
   conn: Connection;
   page: GridPage<SessionEntry>;
@@ -42,6 +46,7 @@ export function SessionGrid({
   onChanged: () => void;
   onNavigate: (selection: SessionSelection) => void;
   currentSelection: () => SessionSelection;
+  onSessionClosed: (entry: SessionEntry) => void;
 }) {
   const area = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ width: number; height: number }>();
@@ -76,6 +81,7 @@ export function SessionGrid({
             onChanged={onChanged}
             onNavigate={onNavigate}
             currentSelection={currentSelection}
+            onSessionClosed={() => onSessionClosed(entry)}
           />
         ))}
     </div>
@@ -93,6 +99,7 @@ function SessionTile({
   onChanged,
   onNavigate,
   currentSelection,
+  onSessionClosed,
 }: {
   conn: Connection;
   entry: SessionEntry;
@@ -104,8 +111,10 @@ function SessionTile({
   onChanged: () => void;
   onNavigate: (selection: SessionSelection) => void;
   currentSelection: () => SessionSelection;
+  onSessionClosed: () => void;
 }) {
   const session = entrySession(entry);
+  const close = useSessionClose(conn, session, onSessionClosed);
   const tile = useRef<HTMLDivElement>(null);
   // A selected tile without a terminal takes the keyboard itself, so that keys stop going to the terminal selected before.
   useEffect(() => {
@@ -140,8 +149,15 @@ function SessionTile({
         <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={onOpenAlone} aria-label="Open alone">
           <Maximize2 />
         </Button>
+        {session && <SessionCloseButton close={close} />}
       </header>
-      {session && <SessionTerminal conn={conn} session={session.id} live={isLive(session)} focused={selected} />}
+      {session && (
+        // The question lies over the terminal instead of pushing it down, so that it does not resize the PTY mid-turn.
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <SessionCloseConfirmation close={close} className="absolute inset-x-0 top-0 z-10" />
+          <SessionTerminal conn={conn} session={session.id} live={isLive(session)} focused={selected} />
+        </div>
+      )}
       {entry.kind === "proposals" && (
         <ProposalTile
           conn={conn}
