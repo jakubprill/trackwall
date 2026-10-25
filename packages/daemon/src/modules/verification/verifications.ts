@@ -3,7 +3,7 @@ import {
   type ExitedRun,
   LOG_BUFFER_RECORDS,
   type LogErrors,
-  type LogErrorsRequest,
+  type LogErrorsQuery,
   type MiseTarget,
   type RunState,
   type TestResults,
@@ -44,7 +44,7 @@ interface VerificationTestReports {
 
 /** What the module needs from `logs`: the errors of the run's log. */
 interface VerificationLogs {
-  errors(request: LogErrorsRequest): LogErrors;
+  errors(query: LogErrorsQuery): LogErrors;
 }
 
 export interface VerificationsDeps {
@@ -221,10 +221,15 @@ function runningVerification({ repo, task }: TaskTarget, run: RunState): Verific
 function verdictMessage(end: ExitedRun, failedTests: number, tests: Verification["tests"]): string | null {
   if (end.exitCode === null) return `mise task ${VERIFY_MISE_TASK} was ended by signal ${end.signal}`;
   if (end.exitCode !== 0) return `mise task ${VERIFY_MISE_TASK} exited with code ${end.exitCode}`;
-  if (tests && tests.unreadReports > 0)
-    return `${countLabel(tests.unreadReports, { one: "test report", other: "test reports" })} could not be read, so failed tests may be missing`;
-  if (failedTests > 0)
-    return `${countLabel(failedTests, { one: "test", other: "tests" })} failed in the test reports, although mise task ${VERIFY_MISE_TASK} exited with code 0`;
+  const unread =
+    tests && tests.unreadReports > 0
+      ? `${countLabel(tests.unreadReports, { one: "test report", other: "test reports" })} could not be read, so failed tests may be missing`
+      : null;
+  if (failedTests > 0) {
+    const failed = `${countLabel(failedTests, { one: "test", other: "tests" })} failed in the test reports, although mise task ${VERIFY_MISE_TASK} exited with code 0`;
+    return unread ? `${failed}; ${unread}` : failed;
+  }
+  if (unread) return unread;
   if (tests && tests.reports === 0 && tests.earlierReports > 0)
     return `the run wrote no test reports; ${tests.earlierReports} from earlier runs were left out (tests up to date?)`;
   if (tests && tests.reports === 0) return "the run wrote no JUnit test reports";

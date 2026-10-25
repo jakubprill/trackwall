@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { LogError, LogErrorsRequest, MiseTarget, RunState, TestFailure, TestResults } from "@trackwall/protocol";
+import type { LogError, LogErrorsQuery, MiseTarget, RunState, TestFailure, TestResults } from "@trackwall/protocol";
 import { DomainError } from "../src/infra/errors.ts";
 import { Verifications } from "../src/modules/verification/verifications.ts";
 import { waitUntil } from "../src/platform/process-group.ts";
@@ -84,7 +84,7 @@ function setup({
   let runs = 0;
   let current: { run: RunState; finish: (state: RunState) => void; ended: Promise<RunState> } | undefined;
   const readSince: (string | undefined)[] = [];
-  const errorRequests: LogErrorsRequest[] = [];
+  const errorRequests: LogErrorsQuery[] = [];
   const mise = {
     start: async (target: MiseTarget, miseTask: string) => {
       calls.push(`start ${target.repo}/${target.task}/${miseTask}`);
@@ -307,6 +307,15 @@ describe("verification of a task", () => {
     expect(calls).toEqual(["start shop/t1/test"]);
     await expect(verifications.verify("t1", "run-0", 5000, new AbortController().signal)).rejects.toThrow(
       "has no verification of run run-0",
+    );
+  });
+  test("the message names both the failed tests and the reports that could not be read", async () => {
+    const { verifications, end } = setup({ reports: results([CART_SUM], { unread: 2 }) });
+    await verifications.start("t1");
+
+    await end(0);
+    expect(verifications.get("t1")?.message).toBe(
+      "1 test failed in the test reports, although mise task test exited with code 0; 2 test reports could not be read, so failed tests may be missing",
     );
   });
 });

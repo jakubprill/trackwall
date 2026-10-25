@@ -322,7 +322,7 @@ function assertCallerMayVerify(facade: Facade, caller: string | null, task: stri
   if (session.repo === null)
     throw new DomainError(
       "bad_request",
-      `the supervisor runs no tests; read task ${task}'s verification with get_session, or ask its session to verify it`,
+      `the supervisor runs no tests; read task ${task}'s verification with ${mcpTools.getSession.name}, or ask its session to verify it`,
     );
   if (session.task !== null && session.task !== task)
     throw new DomainError("bad_request", `a task session can verify only its own task ${session.task}, not task ${task}`);
