@@ -375,7 +375,8 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
     const restarted = makeAgents({ sklep: dir }, home);
     expect(await restarted.agents.taskMiseConfig(task.id)).toMatchObject({
       neverTrusted: true,
-      changes: [{ path: "mise.toml", change: "added", content: '[tasks.test]\nrun = "gradle test"\n' }],
+      // The worktree's checkout may have CRLF line endings on Windows (core.autocrlf).
+      changes: [{ path: "mise.toml", change: "added", content: expect.stringContaining('run = "gradle test"') }],
     });
     restarted.agents.close();
   }, 60_000);
