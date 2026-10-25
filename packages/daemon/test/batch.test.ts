@@ -12,6 +12,13 @@ import { RuntimeFile } from "../src/modules/procs/runtime-file.ts";
 import { groupPlatform } from "../src/platform/group-platform.ts";
 import { type GroupPlatform, isAlive, waitUntil } from "../src/platform/process-group.ts";
 
+/** These tests run mise tasks in repo roots only, never in a task worktree (ADR-59). */
+const NO_TASKS = {
+  trustedTaskWorktree: async () => {
+    throw new Error("no task worktree in this test");
+  },
+};
+
 const FAKE_MISE = [process.execPath, join(import.meta.dir, "fixtures", "fake-mise.ts")];
 const TIMEOUT = 30_000;
 
@@ -44,7 +51,7 @@ function setup(
     platform: platform.then((p) => ({ ...p, graceMs: 300 })),
     log: () => {},
   });
-  const mise = new Mise({ procs, repos: { repoPath }, command: FAKE_MISE, env: async () => process.env });
+  const mise = new Mise({ procs, repos: { repoPath }, tasks: NO_TASKS, command: FAKE_MISE, env: async () => process.env });
   const batch = new Batch({ workspace: { repoPath, syncRepo: sync }, mise, log: () => {} });
   return { batch, mise, procs, logs, home, dirs, dir: (id: string) => dirs.get(id) ?? "" };
 }
@@ -247,7 +254,7 @@ describe("komenda zbiorcza", () => {
     "build uruchomiony wcześniej ze szczegółów repo nie startuje drugi raz, a jego stop ze szczegółów repo kończy krok jako przerwany",
     async () => {
       const { batch, mise, procs, dir } = setup({ web: { tasks: [BUILD] } });
-      const fromCard = await mise.start("web", "build");
+      const fromCard = await mise.start({ repo: "web", task: null }, "build");
       // Komenda czeka na koniec grupy przez `procs.ended`; dopiero wtedy wiadomo, że dołączyła do taska ze szczegółów repo.
       const waitsForEnd = procs.ended.bind(procs);
       const joined = new Promise<void>((resolve) => {
@@ -259,7 +266,7 @@ describe("komenda zbiorcza", () => {
 
       await batch.start({ repos: ["web"], steps: ["build"] });
       await joined;
-      await mise.stop("web", "build");
+      await mise.stop({ repo: "web", task: null }, "build");
       const run = await finished(batch);
 
       expect(calls(dir("web"))).toEqual(["run build"]);

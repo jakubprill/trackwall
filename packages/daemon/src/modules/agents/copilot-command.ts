@@ -1,7 +1,7 @@
 import { statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { delimiter, dirname, extname, isAbsolute, join } from "node:path";
-import { envKey } from "./env-key.ts";
+import { envKey } from "../../infra/env-key.ts";
 
 /**
  * Program Copilot CLI (§4.4): pełna ścieżka pliku, który da się uruchomić bez powłoki. `npm install -g` daje na

@@ -25,7 +25,7 @@ Select a repo and open its "mise tasks" tab: it lists the repo's tasks as `mise 
 
 Values of environment variables with secret-looking names (`*_TOKEN`, `*_PASSWORD`, `*_SECRET` and similar) are replaced with `***` before they reach the log.
 
-mise asks you to trust a repo's configuration before it runs its tasks. When it has not been trusted yet, the tab offers a button for it. Only a trusted repo's tasks can also be run by agents through the [MCP server](/features/mcp); those runs show in the same tab, with their log, and you can stop them here.
+mise asks you to trust a repo's configuration before it runs its tasks. When it has not been trusted yet, the tab offers a button for it. Only a trusted repo's tasks can also be run by agents through the [MCP server](/features/mcp); those runs show in the same tab, with their log, and you can stop them here. A task's agent runs its mise tasks in the task's worktree instead, so they test its changes; those runs show in the task's panel in "Sessions" (see [Agent tasks](/features/tasks)).
 
 ## Use it
 
@@ -37,5 +37,5 @@ mise asks you to trust a repo's configuration before it runs its tasks. When it 
 ## Good to know
 
 - On macOS the `PATH` from your login shell is enough.
-- The full log of every task is kept in `~/.trackwall/logs/mise-task/<repo>/<task>.jsonl`, at most 10 MB plus one previous file. Characters other than lowercase letters, digits, `_` and `-` in the name are written as `%XX`: the task `build:ui` is `build%3Aui.jsonl`.
+- The full log of every task is kept in `~/.trackwall/logs/mise-task/<repo>/<task>.jsonl`, at most 10 MB plus one previous file. Characters other than lowercase letters, digits, `_` and `-` in the name are written as `%XX`: the task `build:ui` is `build%3Aui.jsonl`. A run in a task's worktree is kept in `~/.trackwall/logs/task-mise-task/<task>/<mise task>.jsonl`.
 - A repo with a mise task called `dev` also gets a [Services](/features/services) panel at the top of this tab.

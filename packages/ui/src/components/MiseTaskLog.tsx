@@ -1,4 +1,4 @@
-import { LOG_BUFFER_RECORDS, type LogRecord } from "@trackwall/protocol";
+import { LOG_BUFFER_RECORDS, type LogRecord, type LogSource } from "@trackwall/protocol";
 import { memo, useLayoutEffect, useRef } from "react";
 import type { Connection } from "@/lib/connection";
 import { logLevelClass, startsRun } from "@/lib/log-tail";
@@ -9,11 +9,12 @@ import { cn } from "@/lib/utils";
 const FOLLOW_SLACK_PX = 24;
 
 /**
- * Log taska mise na żywo (§4.2, ADR-28): linie bez kolorów ANSI, kolor z poziomu rekordu, stderr oznaczony z boku.
- * Lista idzie za nowymi liniami, dopóki użytkownik nie przewinie jej w górę.
+ * A mise task's live log (§4.2, ADR-28): lines without ANSI colours, coloured by the record's level, stderr marked at
+ * the side. The list follows new lines until the user scrolls it up. `source` is a repo root's mise task or one run in
+ * a task worktree (ADR-59).
  */
-export function MiseTaskLog({ conn, repo, miseTask }: { conn: Connection; repo: string; miseTask: string }) {
-  const log = useLogTail(conn, { kind: "mise-task", repo, miseTask });
+export function MiseTaskLog({ conn, source }: { conn: Connection; source: LogSource }) {
+  const log = useLogTail(conn, source);
   const records = log.data?.records;
   const box = useRef<HTMLDivElement>(null);
   const follow = useRef(true);

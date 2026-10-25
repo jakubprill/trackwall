@@ -208,6 +208,7 @@ describe.skipIf(process.versions.bun === undefined)("sesje Copilot CLI (prawdziw
         startTerminal: () => Promise.reject(new Error("nie powinien startować")),
         state: () => undefined,
         stop: async () => undefined,
+        liveIn: () => false,
       },
       repos: { repoPath: async () => repoDir, projectsDir: async () => repoDir },
       vcs: new Vcs(),

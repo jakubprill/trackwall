@@ -102,7 +102,7 @@ describe("migawka pulpitu", () => {
       repos: [repo("api")],
       sessions: [session("s1", "api"), session("s2", "gone")],
       graph: undefined,
-      running: [{ repo: "api", miseTask: "dev", run: running }],
+      running: [{ repo: "api", task: null, miseTask: "dev", run: running }],
       daemonRunning: false,
     });
 

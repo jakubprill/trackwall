@@ -1,6 +1,9 @@
 import type { RunState } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 
+/** Running mise tasks come live from the events WebSocket; polled only while it is not connected (Home, task panel). */
+export const RUNNING_MISE_POLL_MS = 3000;
+
 /**
  * Stan uruchomienia (`RunState`, §4.1) w jednej linii; dziś pokazują go taski mise, później serwisy. Ton ma tylko to, co wymaga uwagi albo działa;
  * task nieuruchamiany i zatrzymany przez użytkownika są bez tonu (zwykły tekst).

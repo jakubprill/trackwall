@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import type { ServerResponse } from "node:http";
-import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { extname, join, relative, resolve, sep } from "node:path";
+import { isInside } from "../infra/path-inside.ts";
 
 const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -32,8 +33,7 @@ export function serveStatic(dir: string, urlPath: string, res: ServerResponse): 
     return;
   }
   let file = resolve(root, `.${decoded}`);
-  const rel = relative(root, file);
-  if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+  if (!isInside(root, file)) {
     notFound(res);
     return;
   }
