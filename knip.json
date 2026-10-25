@@ -4,6 +4,9 @@
     "packages/daemon": {
       "entry": ["test/fixtures/*.ts", "scripts/copilot-record.ts"],
       "ignore": ["test/fixtures/spring/**"]
+    },
+    "apps/docs": {
+      "entry": ["features/*.data.ts"]
     }
   },
   "ignoreIssues": {

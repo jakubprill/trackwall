@@ -1,17 +1,47 @@
+---
+title: Navigation and windows
+description: Move between views with the keyboard, and spread Trackwall over several windows and monitors.
+---
+
 # Navigation and windows
 
-Move between views with the bar on the left and spread views over several windows and monitors.
+Move between views with the keyboard, and spread Trackwall over several windows and monitors.
 
-Views are switched by the bar at the left edge of the window, as in VS Code: Home (Ctrl+1), Repos (Ctrl+2), Sessions (Ctrl+3) and Overview (Ctrl+4) at the top, Daemon (Ctrl+9) and Settings (Ctrl+,) at the bottom; on macOS ⌘ instead of Ctrl. A tooltip on hovering over the icon shows the view's name and shortcut.
+## What you get
 
-## Several windows
+- Every view one key away.
+- Any view in its own window, for example the session grid on one monitor and "Repos" on another.
+- Windows that come back where you left them when Trackwall starts again.
 
-A view can open in a new window, for example the session grid on one monitor and Home or Repos on another. Right-click a view icon and choose "Open in new window", press Ctrl+Shift + the view's digit (Ctrl+Shift+3 opens Sessions; on macOS ⌥⌘3, because ⌘⇧3 takes a screenshot), press Ctrl+Shift+N (⌘⇧N) for the current view (Settings opens in a new window only this way or from the menu), or choose "New window" in the tray. Every window has the view bar, switches views on its own (Ctrl + digit and Alt + digit work in the window you are in) and shows the same sessions and repos live.
+## How it works
 
-A window opens on the monitor, at the size and position where the window in its place was last time; if that monitor is unplugged, it opens at the default position. When you start Trackwall again, the extra windows that were open when you quit come back on their monitors with the same view and session layout; a window you closed yourself does not. Closing an extra window closes it, while the main window still hides to the tray. "Waiting: &lt;repo&gt;" in the tray opens the session in the window that shows Sessions, so the window on the other monitor keeps its view.
+The bar at the left edge of the window switches views, as in VS Code: "Home", "Repos", "Sessions" and "Overview" at the top, "Daemon" and "Settings" at the bottom. Hover over an icon to see the view's name and key.
 
-With the same session open in two windows, the window you work in sets the terminal size. Each window's title names its view ("Sessions – Trackwall"), so windows differ in the taskbar. On macOS the menu bar has the views in View (⌘1…⌘4, ⌘9), Settings… (⌘,) in the Trackwall menu, and Window with New Window (⌘⇧N, the current view of the window you are in) and the list of open windows.
+Any view can open in a new window: right-click its icon and choose "Open in new window", press Ctrl+Shift with the view's digit, or choose "New window" in the tray. Every window has its own view bar, switches views on its own and shows the same sessions and repos live. Each window's title names its view ("Sessions – Trackwall"), so you can tell them apart in the taskbar.
 
-## Decisions
+A window opens on the monitor, at the size and position its predecessor had. When you start Trackwall again, the extra windows that were open when you quit come back on their monitors with the same view and session layout. A window you closed yourself stays closed.
 
-Why it works this way: ADR-49 in [§12 of the architecture document](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief).
+## Use it
+
+1. Press Ctrl+1 … Ctrl+4 to switch views (⌘ on macOS).
+2. Press Ctrl+Shift+3 to open "Sessions" in a new window, and drag it to your other monitor.
+
+## Shortcuts
+
+| Keys (Windows) | Keys (macOS) | What happens |
+|---|---|---|
+| Ctrl+1, Ctrl+2, Ctrl+3, Ctrl+4 | ⌘1, ⌘2, ⌘3, ⌘4 | Home, Repos, Sessions, Overview. |
+| Ctrl+9 | ⌘9 | Daemon. |
+| Ctrl+, | ⌘, | Settings. |
+| Ctrl+Shift+digit | ⌥⌘digit | Open that view in a new window. |
+| Ctrl+Shift+N | ⌘⇧N | Open the current view in a new window. |
+
+## Good to know
+
+- On macOS the new-window keys use ⌥⌘, because ⌘⇧3 takes a screenshot.
+- Settings opens in a new window only with Ctrl+Shift+N or from the menu.
+- Closing an extra window closes it; the main window hides to the tray.
+- "Waiting: orders-api" in the tray opens the session in the window that shows "Sessions", so your other windows keep their view.
+- With the same session open in two windows, the window you type in sets the terminal size.
+- If a window's monitor is unplugged, the window opens at the default position.
+- On macOS the menu bar has the views under View, Settings… under Trackwall, and New Window and the list of open windows under Window.

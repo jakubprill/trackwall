@@ -1,11 +1,34 @@
+---
+title: Connection graph
+description: See which repo uses which, through shared packages and HTTP calls, with the line that proves it.
+---
+
 # Connection graph
 
-See which repo uses which, through packages and HTTP clients.
+See which repo uses which, through shared packages and HTTP calls, with the line that proves it.
 
-The "Overview" view (Ctrl+4) draws the repos from the folder as a graph (ADR-29): a line leads from a repo that uses a package to the repo that builds it (Maven coordinates, also from Gradle, and npm names from the cards), and from a repo whose HTTP client calls another repo's app or endpoints (by app name, host, port on `localhost` or paths; ADR-30), from frontends on the left to libraries on the right. Every connection has a confidence: certain, almost certain, likely or possible. Clicking a repo shows in the panel on the right what it uses and who uses it, with evidence (file and line).
+## What you get
 
-Connections the cards do not see are added by hand under the `graph` key in `~/.trackwall/workspace.yaml`: `packages` assigns a package to a repo (`com.example:orders-client: orders-api`), `apps` an app name or an address host to a repo (`orders.internal.example.com: orders-api`), and `edges` adds a connection with a description (`- { from: shop-web, to: orders-bff, note: HTTP /api/orders }`); a repo is given by its identifier or its `host/path` address.
+- A map of your projects folder: which repo uses another repo's package and which one calls another repo's endpoints.
+- Frontends on the left, gateways and backends in the middle, libraries on the right.
+- For every connection, how sure Trackwall is and the file and line that prove it.
+- A place to add the connections Trackwall cannot see.
 
-## Decisions
+## How it works
 
-Why it works this way: ADR-29, ADR-30 in [§12 of the architecture document](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief).
+Open "Overview" and Trackwall draws your repos as a graph, built from their [repo cards](/features/repo-card). A line goes from a repo that uses a package to the repo that builds it (Maven, Gradle or npm), and from a repo whose HTTP client calls another repo's app or endpoints, matched by app name, host, `localhost` port or path.
+
+Every connection has a confidence: certain, almost certain, likely or possible. Click a repo and the panel on the right lists what it uses and who uses it, each with its evidence.
+
+Some connections do not show in the code, for example an address that only exists in your deployment. Add those by hand in `~/.trackwall/workspace.yaml`, and they appear in the graph like the others.
+
+## Use it
+
+1. Open "Overview" (Ctrl+4, ⌘4 on macOS).
+2. Click a repo to see what it uses and who uses it.
+3. Add a missing connection under `graph` in `~/.trackwall/workspace.yaml` (below).
+
+## Good to know
+
+- Under `graph`, `packages` assigns a package to a repo (`com.example:orders-client: orders-api`), `apps` assigns an app name or a host (`orders.internal.example.com: orders-api`), and `edges` adds a connection with a note (`- { from: shop-web, to: orders-bff, note: HTTP /api/orders }`). A repo is named by its identifier or its `host/path` address.
+- Agents read the same graph through the [MCP server](/features/mcp) (`who_calls`, `subgraph_for`, `find_endpoint`).

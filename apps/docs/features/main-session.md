@@ -1,13 +1,38 @@
+---
+title: Main session and task proposals
+description: Let one agent plan work and hand it to other agents, while you approve every task before it starts.
+---
+
 # Main session and task proposals
 
-Let one agent commission work to other agents, with you approving each task.
+Let one agent plan work and hand it to other agents, while you approve every task before it starts.
 
-A Copilot CLI session with the Trackwall MCP server (in the "Sessions" view or in your terminal, for example in the projects folder) can commission work to another agent like a coordinator that opens threads (ADR-39). The `propose_task` tool submits a task proposal with a title and a prompt; the "Sessions" view shows it as "waiting for your decision", and the view bar counts it together with the sessions that are waiting. A proposal from a listed session, and the task made from it, sit indented under that session (or under the task whose session delegated it), and the main session has a "main" badge with the number of items under it; a proposal from an agent outside Trackwall or from a closed session is at the top level.
+## What you get
 
-Proposals also show in the "Needs you" queue on the Home dashboard (a click opens it in "Sessions") and in the tray menu ("Proposal: &lt;repo&gt; · &lt;title&gt;"); a new proposal flashes the window in the taskbar or bounces the Dock icon like a session that started waiting, and the tray tooltip counts proposals together with sessions. The proposals of one session are one entry on the list (ADR-55). When selected, it shows who proposed them and each proposal with its whole prompt, which opens to be read and edited; "Start task" turns one into an ordinary task (worktree, branch from the title, a session with the prompt), and with several you tick the ones you want (a proposal can be ticked once you have opened it) and press "Start N selected". A proposal for a repo that already has tasks says so. "Reject…" asks for an optional reason, which the main session gets back from `wait_for_session`, so it can propose differently. Until then nothing starts. After a decision the next proposal of that session opens. In the session grid a tile with proposals shows their prompts with "Start task" and "Reject…", and "Next waiting" and Alt+J also go to proposals. The "main" badge counts each proposal.
+- A main session that splits a larger job into tasks and proposes them, each with a title and a prompt.
+- Every proposal waiting for your decision: read it, edit the prompt, start it or reject it with a reason.
+- Several proposals started with one press; they start one after another.
+- The main session following its tasks to the end and reading their summaries and changes.
 
-A task session finishes its work with the `report_result` tool, and its summary is shown above the task's tabs ("Summary"). The main session waits for the result with the `wait_for_session` tool (it returns when the session ends its turn, asks for approval, reports an error, stops responding or ends, or when the proposal is rejected) and reads the changes through `get_session`. Proposals live only until Trackwall quits (at most 20 at once), summaries stay with the task. Every Trackwall session has its own session token, by which the MCP server knows who is calling; an agent outside Trackwall proposes as "agent outside Trackwall", but does not report summaries. The prompt and title of a proposal and the summary cannot contain invisible characters, so that what you read before "Start task" is the whole prompt.
+## How it works
 
-## Decisions
+Any Copilot CLI session connected to Trackwall can act as a main session, whether it runs in "Sessions" or in your own terminal. When it calls `propose_task`, the proposal appears in "Sessions" as "waiting for your decision", is counted with the waiting sessions on the view bar, shows in the "Needs you" queue on the [Home dashboard](/features/home) and in the tray menu, and flashes the taskbar icon.
 
-Why it works this way: ADR-39, ADR-55 in [§12 of the architecture document](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief).
+All proposals of one session are one entry, indented under that session, which gets a "main" badge with the number of items under it. Select the entry to see who proposed them and each proposal with its full prompt; open a proposal to read and edit it. "Start task" turns it into an ordinary [agent task](/features/tasks). With several proposals, tick the ones you want and press "Start N selected"; a proposal can be ticked once you have opened it. "Reject…" asks for an optional reason, which goes back to the main session so it can propose something else. Nothing starts until you decide.
+
+A task's agent finishes with a summary, shown above the task's tabs. The main session waits for its tasks and reads their summaries and changes, so it can plan the next step.
+
+## Use it
+
+1. Start a session in "Sessions" (or run `copilot` with the Trackwall MCP server in your projects folder).
+2. Describe the larger job and ask the agent to split it into task proposals.
+3. Open the proposals, edit the prompts if needed, and start the ones you want.
+4. Let the main session collect the results.
+
+## Good to know
+
+- A proposal for a repo that already has tasks says so.
+- In the session grid, a tile with proposals shows their prompts with "Start task" and "Reject…"; "Next waiting" and Alt+J go to proposals too.
+- Proposals last until Trackwall quits, at most 20 at a time; summaries stay with their tasks.
+- A proposal from an agent outside Trackwall is marked "agent outside Trackwall" and listed at the top level, like a proposal from a session you have closed. Such an agent can propose tasks, but cannot report a task's summary.
+- Prompts, titles and summaries cannot contain invisible characters, so what you read before "Start task" is the whole prompt.

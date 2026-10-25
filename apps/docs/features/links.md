@@ -1,11 +1,30 @@
+---
+title: trackwall:// links
+description: Links that open a repo, session or task in Trackwall, from an agent's answer or anywhere else.
+---
+
 # trackwall:// links
 
-Links that open a repo, session or task in Trackwall.
+Links that open a repo, session or task in Trackwall, from an agent's answer or anywhere else.
 
-`trackwall://repo/<repo id>`, `trackwall://session/<session id>` and `trackwall://task/<task id>` open the Trackwall window at that repo (in "Repos"), session or task (in "Sessions"; a task link also opens a task proposal), and start Trackwall if it is not running (ADR-52). Agents with the Trackwall MCP server know the format, so a session can point you at a repo or a task in its answer; in a session terminal in Trackwall, Ctrl+click (Cmd+click on macOS) opens such a link. A link only shows something: it never starts, stops or approves anything, and a link Trackwall does not recognise just shows the window.
+## What you get
 
-On macOS the system registers the scheme once you have started the app; on Windows the portable `trackwall.exe` registers it for your user at every start, so after moving the folder links work again once you have started Trackwall from the new place, and with two copies the one started last gets the links. `pnpm dev` does not register links.
+- A link to any repo, session or task that opens it in Trackwall.
+- Agents that point you to the right place in their answers.
+- Links that only show: they never start, stop or approve anything.
 
-## Decisions
+## How it works
 
-Why it works this way: ADR-52 in [§12 of the architecture document](https://github.com/jakubprill/trackwall/blob/main/docs/architecture.md#12-decisions-adrs-in-brief).
+`trackwall://repo/<repo id>` opens the repo in "Repos"; `trackwall://session/<session id>` and `trackwall://task/<task id>` open the session or task in "Sessions" (a task link also opens a task proposal). If Trackwall is not running, the link starts it.
+
+Agents connected to the [MCP server](/features/mcp) know the format, so a session can put such a link in its answer. In a session terminal inside Trackwall, Ctrl+click (Cmd+click on macOS) opens it. A link Trackwall does not recognise just brings its window forward.
+
+## Use it
+
+1. Start Trackwall once, so the system knows the links.
+2. Ctrl+click a `trackwall://` link in a session, or open one from anywhere else.
+
+## Good to know
+
+- On macOS the system learns the links the first time you start the app.
+- On Windows the portable `trackwall.exe` registers the links for your user every time it starts. After moving the folder, start Trackwall once from the new place; with two copies, the one started last gets the links.
