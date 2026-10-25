@@ -83,6 +83,11 @@ const SHOTS: Record<string, (page: Page) => Promise<void>> = {
     await page.getByText("2 task proposals").click();
     await settle(page);
   },
+  "task-messages": async (page) => {
+    await page.keyboard.press("Control+3");
+    await page.getByText("Tell the customer about a retried payment").first().click();
+    await settle(page);
+  },
   tasks: async (page) => {
     await page.keyboard.press("Control+3");
     await page.getByText("pricing", { exact: true }).first().click();

@@ -153,6 +153,7 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
       sessions: [],
       tasks: [task],
       proposals: [],
+      messages: [],
       worktreesDir: join(first.home, "worktrees"),
     });
 

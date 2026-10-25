@@ -5,6 +5,7 @@ import {
   entrySelection,
   findEntry,
   proposerLabel,
+  proposerName,
   selectionAfterClose,
   selectionAfterRemoval,
   sessionRows,
@@ -67,6 +68,7 @@ describe("Sessions view entries", () => {
       ],
       tasks: [task("t2", "2026-10-23T11:30:00Z"), task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
+      messages: [],
       worktreesDir: "/home/me/.trackwall/worktrees",
     };
     expect(rowEntries(list).map((e) => (e.kind === "task" ? `task ${e.task.id} ${e.session?.id}` : `session ${entryId(e)}`))).toEqual([
@@ -81,6 +83,7 @@ describe("Sessions view entries", () => {
       sessions: [session("s1", "2026-10-23T12:00:00Z"), session("s2", "2026-10-23T11:00:00Z"), session("s3", "2026-10-23T10:00:00Z")],
       tasks: [],
       proposals: [],
+      messages: [],
       worktreesDir: "/home/me/.trackwall/worktrees",
     });
     const [s1, s2, s3] = entries;
@@ -95,6 +98,7 @@ describe("Sessions view entries", () => {
       sessions: [session("s1", "2026-10-23T12:00:00Z", "t1"), session("s2", "2026-10-23T11:00:00Z")],
       tasks: [task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
+      messages: [],
       worktreesDir: "/home/me/.trackwall/worktrees",
     });
     const [taskEntry, s2] = entries;
@@ -110,6 +114,7 @@ describe("Sessions view entries", () => {
       sessions: [],
       tasks: [task("t1", "2026-10-23T12:00:00Z"), task("t2", "2026-10-23T11:00:00Z")],
       proposals: [],
+      messages: [],
       worktreesDir: "/home/me/.trackwall/worktrees",
     });
     const [t1, t2] = entries;
@@ -124,6 +129,7 @@ describe("Sessions view entries", () => {
       sessions: [session("s1", "2026-10-23T12:00:00Z", "t1")],
       tasks: [task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
+      messages: [],
       worktreesDir: "/home/me/.trackwall/worktrees",
     });
     expect(findEntry(entries, { kind: "session", id: "s1" })).toMatchObject({ kind: "task", task: { id: "t1" } });
@@ -137,6 +143,7 @@ describe("Sessions view entries", () => {
       sessions: [session("s1", "2026-10-23T12:00:00Z", "t1")],
       tasks: [task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
+      messages: [],
       worktreesDir: "/home/me/.trackwall/worktrees",
     });
     if (!entry) throw new Error("no entry");
@@ -148,6 +155,7 @@ describe("Sessions view entries", () => {
       sessions: [session("s1", "2026-10-23T12:00:00Z")],
       tasks: [task("t1", "2026-10-23T13:00:00Z")],
       proposals: [proposal("p2", "2026-10-23T11:00:00Z"), proposal("p1", "2026-10-23T10:00:00Z")],
+      messages: [],
       worktreesDir: "/home/me/.trackwall/worktrees",
     });
     expect(entries.map((e) => `${e.kind} ${entryId(e)}`)).toEqual(["proposals proposals:outside", "task t1", "session s1"]);
@@ -164,6 +172,7 @@ describe("Sessions view entries", () => {
         proposal("p2", "2026-10-23T11:00:00Z", "s1"),
         proposal("p1", "2026-10-23T10:00:00Z", "s1"),
       ],
+      messages: [],
       worktreesDir: "/w",
     });
     expect(entries.map((e) => (e.kind === "proposals" ? `${e.proposer}: ${e.proposals.map((p) => p.id).join(" ")}` : entryId(e)))).toEqual([
@@ -186,6 +195,7 @@ describe("Sessions view entries", () => {
       sessions: [],
       tasks: [task("t0", "2026-10-23T14:00:00Z"), task("p1", "2026-10-23T13:00:00Z")],
       proposals: [],
+      messages: [],
       worktreesDir: "/home/me/.trackwall/worktrees",
     });
     expect(findEntry(entries, { kind: "proposal", id: "p1" })).toMatchObject({ kind: "task", task: { id: "p1" } });
@@ -198,7 +208,7 @@ describe("Sessions view entries", () => {
       tasks: [],
       proposals: [proposal("p1", "2026-10-23T10:00:00Z")],
     };
-    expect(attentionCount({ ...list, worktreesDir: "/w" })).toBe(2);
+    expect(attentionCount({ ...list, messages: [], worktreesDir: "/w" })).toBe(2);
     expect(attentionCount(undefined)).toBe(0);
   });
 
@@ -207,6 +217,7 @@ describe("Sessions view entries", () => {
       sessions: [session("s2", "2026-10-23T12:00:00Z"), session("s1", "2026-10-23T10:00:00Z")],
       tasks: [delegated("t1", "2026-10-23T11:00:00Z", "s1"), task("t2", "2026-10-23T09:00:00Z")],
       proposals: [proposal("p1", "2026-10-23T11:30:00Z", "s1")],
+      messages: [],
       worktreesDir: "/w",
     };
     expect(shape(list)).toEqual(["session s2 @0", "session s1 @0", "proposals proposals:s1 @1", "task t1 @1", "task t2 @0"]);
@@ -218,6 +229,7 @@ describe("Sessions view entries", () => {
       sessions: [session("s1", "2026-10-23T08:00:00Z")],
       tasks: [delegated("p1", "2026-10-23T12:00:00Z", "s1"), task("t0", "2026-10-23T13:00:00Z")],
       proposals: [],
+      messages: [],
       worktreesDir: "/w",
     });
     expect(findEntry(entries, { kind: "proposals", proposer: "s1" })).toMatchObject({ kind: "task", task: { id: "p1" } });
@@ -226,7 +238,13 @@ describe("Sessions view entries", () => {
 
   test("a gone group of an agent outside Trackwall gives way to its task, not to a task typed in the form", () => {
     const outside: Task = { ...task("p1", "2026-10-23T12:00:00Z"), proposedBy: { session: null, supervisor: false } };
-    const entries = rowEntries({ sessions: [], tasks: [task("t0", "2026-10-23T13:00:00Z"), outside], proposals: [], worktreesDir: "/w" });
+    const entries = rowEntries({
+      sessions: [],
+      tasks: [task("t0", "2026-10-23T13:00:00Z"), outside],
+      proposals: [],
+      messages: [],
+      worktreesDir: "/w",
+    });
     expect(findEntry(entries, { kind: "proposals", proposer: null })).toMatchObject({ kind: "task", task: { id: "p1" } });
   });
 
@@ -235,6 +253,7 @@ describe("Sessions view entries", () => {
       sessions: [session("s1", "2026-10-23T10:00:00Z")],
       tasks: [delegated("t1", "2026-10-23T11:00:00Z", "s1")],
       proposals: [proposal("p2", "2026-10-23T11:40:00Z", "s1"), proposal("p1", "2026-10-23T11:30:00Z", "s1")],
+      messages: [],
       worktreesDir: "/w",
     };
     expect(sessionRows(list).find((r) => entryId(r.entry) === "s1")?.children).toBe(3);
@@ -245,6 +264,7 @@ describe("Sessions view entries", () => {
       sessions: [session("s2", "2026-10-23T12:00:00Z", "t1"), session("s1", "2026-10-23T10:00:00Z", "t1")],
       tasks: [delegated("t2", "2026-10-23T11:00:00Z", "s1"), task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
+      messages: [],
       worktreesDir: "/w",
     };
     expect(shape(list)).toEqual(["task t1 @0", "task t2 @1"]);
@@ -255,6 +275,7 @@ describe("Sessions view entries", () => {
       sessions: [session("s1", "2026-10-23T10:00:00Z")],
       tasks: [delegated("t1", "2026-10-23T11:00:00Z", "closed")],
       proposals: [proposal("p1", "2026-10-23T09:00:00Z")],
+      messages: [],
       worktreesDir: "/w",
     };
     expect(shape(list)).toEqual(["proposals proposals:outside @0", "task t1 @0", "session s1 @0"]);
@@ -265,6 +286,7 @@ describe("Sessions view entries", () => {
       sessions: [session("s2", "2026-10-23T12:00:00Z", "t2"), session("s1", "2026-10-23T11:00:00Z", "t1")],
       tasks: [delegated("t2", "2026-10-23T10:00:00Z", "s1"), delegated("t1", "2026-10-23T09:00:00Z", "s2")],
       proposals: [],
+      messages: [],
       worktreesDir: "/w",
     };
     expect(shape(list)).toEqual(["task t2 @0", "task t1 @1"]);
@@ -277,5 +299,11 @@ describe("Sessions view entries", () => {
     expect(proposerLabel({ session: "s1", supervisor: false }, sessions)).toBe("proposed by the session in shop (Sprint plan)");
     expect(proposerLabel({ session: "s9", supervisor: false }, sessions)).toBe("proposed by a session that is no longer listed");
     expect(proposerLabel({ session: null, supervisor: false }, sessions)).toBe("proposed by an agent outside Trackwall");
+  });
+
+  test("a task message names its sender the same way, the supervisor by its role", () => {
+    const sessions = [{ ...session("s1", "2026-10-23T12:00:00Z"), windowTitle: "Sprint plan" }];
+    expect(`from ${proposerName({ session: "s1", supervisor: false }, sessions)}`).toBe("from the session in shop (Sprint plan)");
+    expect(`from ${proposerName({ session: "s2", supervisor: true }, sessions)}`).toBe("from the supervisor");
   });
 });

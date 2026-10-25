@@ -6,6 +6,7 @@ import {
   type SessionList,
   TASK_PROMPT_MAX,
   type Task,
+  type TaskMessage,
   workspaceApi,
 } from "@trackwall/protocol";
 import { BellRing, Crown, GitBranch, Lightbulb, Play, Plus, Square, X } from "lucide-react";
@@ -211,6 +212,7 @@ export function SessionsView({
             onSelect={onSelect}
             sessions={list}
             tasks={tasks}
+            messages={sessions.data?.messages ?? []}
             runningLive={runningLive}
             onChanged={sessions.reload}
             onSessionClosed={sessionClosed}
@@ -437,6 +439,7 @@ function SelectedEntry({
   onSelect,
   sessions,
   tasks,
+  messages,
   runningLive,
   onChanged,
   onSessionClosed,
@@ -454,6 +457,8 @@ function SelectedEntry({
   sessions: readonly Session[];
   /** The tasks on the list, for the task panel's shared-files warning. */
   tasks: readonly Task[];
+  /** The messages proposers sent the tasks' sessions (ADR-68), for the task panel. */
+  messages: readonly TaskMessage[];
   /** Pushes of the running mise tasks, for the mise tasks a task's agent runs in its worktree. */
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
   onChanged: () => void;
@@ -471,6 +476,7 @@ function SelectedEntry({
           currentSelection={currentSelection}
           sessions={sessions}
           tasks={tasks}
+          messages={messages}
           runningLive={runningLive}
           onSelect={onSelect}
           onChanged={onChanged}
@@ -520,6 +526,7 @@ function EntryPanel({
   currentSelection,
   sessions,
   tasks,
+  messages,
   runningLive,
   onSelect,
   onChanged,
@@ -533,6 +540,8 @@ function EntryPanel({
   sessions: readonly Session[];
   /** The tasks on the list, for the task panel's shared-files warning and the same-repo hint of proposals. */
   tasks: readonly Task[];
+  /** The messages proposers sent the tasks' sessions (ADR-68), for the task panel. */
+  messages: readonly TaskMessage[];
   /** Pushes of the running mise tasks, for the mise tasks a task's agent runs in its worktree. */
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
   onSelect: (selection: SessionSelection) => void;
@@ -563,6 +572,7 @@ function EntryPanel({
         session={entry.session}
         sessions={sessions}
         tasks={tasks}
+        messages={messages.filter((m) => m.task === entry.task.id)}
         runningLive={runningLive}
         onChanged={onChanged}
         onRemoved={() => onTaskRemoved(entry.task.id)}

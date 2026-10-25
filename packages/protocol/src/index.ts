@@ -23,6 +23,7 @@ export * from "./services.ts";
 export * from "./sockets.ts";
 export * from "./sync.ts";
 export * from "./task-state.ts";
+export * from "./task-updates.ts";
 export * from "./test-results.ts";
 export * from "./verification.ts";
 export * from "./workspace.ts";

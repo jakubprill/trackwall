@@ -290,12 +290,24 @@ Files that both this task and another task of the same repo change, each compare
 _Avoid_: overlap, collision, conflict (a conflict is only the result of a merge)
 
 **Review** (`send-review`, `SendReviewResult`; "Send N comments to the agent" in the UI):
-The review comments the user sends to a task's agent together, from the task's "Changes" tab (ADR-62). The daemon asks the task's session to read them as soon as it waits for input (`ReviewDelivery`: `typed`, `queued`, `on_resume`).
+The review comments the user sends to a task's agent together, from the task's "Changes" tab (ADR-62). The daemon asks the task's session to read them as soon as it waits for input (`PromptDelivery`: `typed`, `queued`, `on_resume`).
 _Avoid_: code review (that is the pre-PR review in `AGENTS.md`), feedback
 
 **Review comment** (`ReviewComment`, `ReviewSide`, MCP tool `get_review_comments`):
 What the user writes on one line of a task's changes for its agent: the file, the side (`new` for an added or unchanged line, `old` for a removed one), the line number, the line's code and the text. Queued in daemon memory until the task's session reads it with `get_review_comments`, which marks it read (ADR-62).
 _Avoid_: note, remark, comment on a pull request (Trackwall opens none)
+
+**Proposer** (`Task.proposedBy`, `proposerOf` in `task-updates.ts`):
+The session that proposed a task: a main session, or for the supervisor's work whichever supervisor runs now. Only the proposer sends the task's session task messages, and only it gets the task's task updates (ADR-68).
+_Avoid_: parent, owner, manager
+
+**Task message** (`TaskMessage`, MCP tools `send_message` and `get_messages`; "Messages" in the task panel):
+Text a task's proposer sends to the task's session: a correction, an answer, a change elsewhere to follow. The daemon asks the task's session to read it the way it asks for a review, and the task's agent reads it with `get_messages`. At most 5 to a task until the user takes part again (ADR-68).
+_Avoid_: note, comment (that is a review comment), chat
+
+**Task update** (`TaskUpdate`, MCP tool `get_updates`):
+What the daemon saw happen to delegated work, for the proposer: a turn that ended, an error, the end of the session, a reported result, a verification verdict, a rejected proposal. The daemon asks the proposer to read it, so the supervisor or a main session does not poll (ADR-68).
+_Avoid_: event (that is a `/ws` event), notification (that is a system notification), status
 
 **Main session** (`proposedBy` of a task and a proposal):
 A session or supervising agent that talks to the user and commissions work to other agents with task proposals, then waits for their sessions (`wait_for_session`) and reads the summaries, like a coordinator with threads in Claude (ADR-39). It is a role, not a separate kind of session: any Trackwall session or an agent outside Trackwall (`proposedBy.session: null`); the supervisor is the main session above all repos (ADR-58). In the Sessions view its tasks and proposals sit indented under it, and it carries a "main" badge with their count.

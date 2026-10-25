@@ -27,6 +27,9 @@ const {
   proposeTask,
   reportResult,
   getReviewComments,
+  sendMessage,
+  getMessages,
+  getUpdates,
   waitForSession,
   runMiseTask,
   stopMiseTask,
@@ -75,15 +78,18 @@ export const MCP_INSTRUCTIONS = [
     `shows too. With task, the service runs from that task's worktree on the task port, next to the one from the repo root. ` +
     `${listServices.name} shows the services and their ports; stop what you started with ${stopService.name}.`,
   `- Hand work to another agent, e.g. a change in another repo: ${proposeTask.name} with a prompt that stands on its own; ` +
-    `the user approves, edits or rejects it in Trackwall. Then call ${waitForSession.name} with the task id: it returns ` +
-    "when the proposal is rejected (with the user's reason, if they gave one) or the task's session needs someone (finished " +
-    "its turn, asks for approval, hit an error), goes " +
-    `stale or exits; when it times out (still pending, starting or working), call it again. ${getSession.name} shows ` +
+    "the user approves, edits or rejects it in Trackwall. Then end your turn: when the task's session finishes a turn, " +
+    "reports its result, gets a verification verdict, errs or exits, or the user rejects the proposal, Trackwall asks you " +
+    `to call ${getUpdates.name}, which says what happened. To steer the task (a correction, an answer to its question, ` +
+    `a change elsewhere it must follow), send its session a message with ${sendMessage.name}. To wait inside a turn ` +
+    `instead, ${waitForSession.name} with the task id returns when the proposal is rejected or the task's session needs ` +
+    `someone, goes stale or exits; when it times out (still pending, starting or working), call it again. ${getSession.name} shows ` +
     `the task's changed files and ${getTaskChanges.name} their diff (narrow it with paths): review it before you tell the ` +
     "user the work is done. Propose related tasks together, so the user can review them as one plan.",
   `- ${listSessions.name} shows the Copilot CLI sessions and tasks Trackwall runs (caller is your own session); a session ` +
     `that runs a task ends its work with ${reportResult.name}. When the user sends a review of its changes, Trackwall asks ` +
-    `it to call ${getReviewComments.name}, which returns the comments to address.`,
+    `it to call ${getReviewComments.name}, which returns the comments to address; when the session that proposed the task ` +
+    `sends a message, Trackwall asks it to call ${getMessages.name}.`,
   `- Point the user at a repo, session or task in your answer with a link: ${trackwallLink("repo", "<repo id>")}, ` +
     `${trackwallLink("session", "<session id>")} or ${trackwallLink("task", "<task id>")} (also for a task proposal) ` +
     "opens it in Trackwall when clicked. A link only shows it, it never runs anything.",

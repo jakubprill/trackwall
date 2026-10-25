@@ -19,7 +19,9 @@ import { DomainError } from "../infra/errors.ts";
  * The daemon's MCP tools (§5.3, ADR-24): each is a thin mapping onto the facade, so the agent sees the same state as the UI
  * (§1.1). None changes the configuration or a repo (§8), and none starts a session, answers in one or stops one. Only
  * `propose_task` (a proposal, which only the user turns into a task in the UI) and `report_result` (the summary of the
- * session's own task) write anything, ADR-39, and `get_review_comments` marks the user's review comments read (ADR-62);
+ * session's own task) write anything, ADR-39, `get_review_comments` marks the user's review comments read (ADR-62),
+ * `send_message` queues text for the session of a task the caller proposed, and `get_messages` and `get_updates` mark
+ * what they return read (ADR-68);
  * only `run_mise_task` and `stop_mise_task` start and stop processes: a mise task from the current list of the repo's
  * trusted configuration, like the button in the UI (ADR-41), and `verify_task` runs the mise task `test` the same way (ADR-64).
  */
@@ -205,6 +207,11 @@ const runs: ToolRuns = {
   proposeTask: async (facade, proposal, { caller }) => ({ proposal: await facade.agents.propose(caller, proposal) }),
   reportResult: async (facade, { summary }, { caller }) => ({ task: facade.agents.reportSummary(caller, summary) }),
   getReviewComments: async (facade, _args, { caller }) => ({ comments: facade.agents.takeReviewComments(caller) }),
+  sendMessage: async (facade, { task, text }, { caller }) => facade.agents.sendMessage(caller, task, text),
+  getMessages: async (facade, _args, { caller }) => ({
+    messages: facade.agents.takeMessages(caller).map(({ readAt: _, ...message }) => message),
+  }),
+  getUpdates: async (facade, _args, { caller }) => facade.agents.takeUpdates(caller),
   waitForSession: async (facade, { session, task, timeoutSeconds }, { caller, signal }) => {
     // The tool's schema lets through exactly one of them; the second check gives the type without a cast.
     const target = session !== undefined ? { session } : task !== undefined ? { task } : undefined;
@@ -262,6 +269,9 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.proposeTask, runs.proposeTask),
   defineTool(mcpTools.reportResult, runs.reportResult),
   defineTool(mcpTools.getReviewComments, runs.getReviewComments),
+  defineTool(mcpTools.sendMessage, runs.sendMessage),
+  defineTool(mcpTools.getMessages, runs.getMessages),
+  defineTool(mcpTools.getUpdates, runs.getUpdates),
   defineTool(mcpTools.waitForSession, runs.waitForSession),
   defineTool(mcpTools.runMiseTask, runs.runMiseTask),
   defineTool(mcpTools.stopMiseTask, runs.stopMiseTask),

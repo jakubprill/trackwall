@@ -1,4 +1,4 @@
-import { REVIEW_LINE_CODE_MAX, type ReviewComment, type ReviewDelivery } from "@trackwall/protocol";
+import { type PromptDelivery, REVIEW_LINE_CODE_MAX, type ReviewComment } from "@trackwall/protocol";
 import type { DiffAnchor } from "./diff-lines.ts";
 
 /**
@@ -27,7 +27,7 @@ export function lineComment(anchor: DiffAnchor, diffText: string, text: string):
 }
 
 /** What the user is told after sending: when the agent gets the review. */
-export function deliveryMessage(delivery: ReviewDelivery): string {
+export function deliveryMessage(delivery: PromptDelivery): string {
   switch (delivery) {
     case "typed":
       return "Sent: the agent is reading your review.";

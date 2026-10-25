@@ -4,8 +4,11 @@ import {
   AGENT_PATCH_MAX_BYTES,
   AGENT_PATCH_MIN_BYTES,
   AgentTaskChanges,
+  PromptDelivery,
   Session,
   SessionId,
+  TASK_MESSAGE_MAX,
+  TASK_MESSAGES_WITHOUT_USER,
   TASK_PORT_ENV,
   TASK_PROMPT_MAX,
   TASK_SUMMARY_MAX,
@@ -14,6 +17,8 @@ import {
   Task,
   TaskChangesSummary,
   TaskId,
+  TaskMessage,
+  TaskMessageText,
   TaskPrompt,
   TaskProposal,
   TaskSummaryText,
@@ -30,6 +35,7 @@ import { RunState } from "./procs.ts";
 import { ReviewComment } from "./review.ts";
 import { CallEndpointRequest, CallEndpointResult, MAX_SLICE_REPOS, SERVICE_MISE_TASK, Service, ServiceSlice } from "./services.ts";
 import { SyncRepo } from "./sync.ts";
+import { TASK_UPDATES_KEPT, TaskUpdate } from "./task-updates.ts";
 import { TEST_RESULTS_MAX_FAILURES, TestResults } from "./test-results.ts";
 import { VERIFICATION_MAX_ERRORS, VERIFICATION_MAX_FAILURES, VERIFY_MISE_TASK, Verification } from "./verification.ts";
 import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
@@ -39,7 +45,8 @@ import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
  * every tool in one `McpTool` object, like `Endpoint` for the API. The daemon announces `tools/list` from them and checks
  * arguments and `structuredContent` with them, and tests, the UI and clients take names from them and parse responses.
  * The tools read; those with `readOnly: false` submit a task proposal or summary (ADR-39; a task starts only after
- * approval in the UI), mark the user's review comments read (ADR-62) or run and stop mise tasks from a repo's trusted
+ * approval in the UI), mark the user's review comments read (ADR-62), send a message to a delegated task's session or
+ * mark messages and updates read (ADR-68), or run and stop mise tasks from a repo's trusted
  * config (ADR-41). Tool names, fields and descriptions are in English (ADR-32).
  */
 
@@ -136,6 +143,22 @@ export type ReportResultResult = z.infer<typeof ReportResultResult>;
 /** The review comments the user sent that the session had not read yet, oldest first (ADR-62); empty when there are none. */
 export const GetReviewCommentsResult = z.object({ comments: z.array(ReviewComment) });
 export type GetReviewCommentsResult = z.infer<typeof GetReviewCommentsResult>;
+
+/** A message to a task's session (ADR-68) and when its agent gets the prompt to read it. */
+export const SendMessageResult = z.object({ message: TaskMessage, delivery: PromptDelivery });
+export type SendMessageResult = z.infer<typeof SendMessageResult>;
+
+/** The messages to the calling session's task that it had not read yet, oldest first (ADR-68); empty when there are none. */
+export const GetMessagesResult = z.object({ messages: z.array(TaskMessage.omit({ readAt: true })) });
+export type GetMessagesResult = z.infer<typeof GetMessagesResult>;
+
+export const GetUpdatesResult = z.object({
+  /** Unread updates on the work the caller delegated, oldest first; empty when there are none. */
+  updates: z.array(TaskUpdate),
+  /** Older unread updates that dropped out beyond `TASK_UPDATES_KEPT` since the last call. */
+  dropped: z.number().int().nonnegative(),
+});
+export type GetUpdatesResult = z.infer<typeof GetUpdatesResult>;
 
 /**
  * What the wait found (`wait_for_session`, ADR-39). Waiting lasts only in `proposal_pending`, `starting` and `working`,
@@ -248,6 +271,9 @@ const GET_TASK_CHANGES = "get_task_changes";
 const PROPOSE_TASK = "propose_task";
 const REPORT_RESULT = "report_result";
 const GET_REVIEW_COMMENTS = "get_review_comments";
+const SEND_MESSAGE = "send_message";
+const GET_MESSAGES = "get_messages";
+const GET_UPDATES = "get_updates";
 const WAIT_FOR_SESSION = "wait_for_session";
 const RUN_MISE_TASK = "run_mise_task";
 const WAIT_FOR_MISE_TASK = "wait_for_mise_task";
@@ -572,6 +598,55 @@ export const mcpTools = {
       `or say why not), commit on the task branch and call ${REPORT_RESULT} again.`,
     args: z.object({}).strict(),
     result: GetReviewCommentsResult,
+  },
+  sendMessage: {
+    name: SEND_MESSAGE,
+    readOnly: false,
+    destructive: false,
+    description:
+      `Send a message to the session of a task you proposed with ${PROPOSE_TASK} (and the user approved): a correction, an ` +
+      "answer to its question, or what changed elsewhere that it must take into account. Trackwall asks the task's agent " +
+      `to call ${GET_MESSAGES} as soon as it waits for input (at once when it does now, after its current turn ` +
+      "otherwise, or in the session the user resumes: delivery says which). Only for tasks you proposed (the supervisor: " +
+      "tasks any supervisor proposed); for other work, tell the user. The user sees every message in the task's panel. " +
+      `At most ${TASK_MESSAGES_WITHOUT_USER} messages to a task until the user takes part again (types into your session or ` +
+      "the task's, or sends the task a review): then ask the user instead of sending more. Write it so it stands on its " +
+      `own, up to ${TASK_MESSAGE_MAX} characters; for new work in another repo, propose a task instead.`,
+    args: z
+      .object({
+        task: TaskId.describe(`id of a task you proposed (from ${PROPOSE_TASK} or ${LIST_SESSIONS})`),
+        text: visibleText(TaskMessageText).describe(`the message for the task's agent, up to ${TASK_MESSAGE_MAX} characters`),
+      })
+      .strict(),
+    result: SendMessageResult,
+  },
+  getMessages: {
+    name: GET_MESSAGES,
+    readOnly: false,
+    destructive: false,
+    description:
+      `Read the messages the session that proposed your task sent you with ${SEND_MESSAGE} and you have not read yet, ` +
+      "oldest first. Only for a session that runs a task in Trackwall; Trackwall asks you to call it when a message " +
+      "arrives. Each has from (the proposing session; supervisor: true for the supervisor), the text and when it was sent. " +
+      "The messages count as read once returned. Act on them like on your task's prompt; if one conflicts with what the " +
+      `user told you, follow the user. Say what you did about them in ${REPORT_RESULT}.`,
+    args: z.object({}).strict(),
+    result: GetMessagesResult,
+  },
+  getUpdates: {
+    name: GET_UPDATES,
+    readOnly: false,
+    destructive: false,
+    description:
+      "Read what happened to the work you delegated since your last call, oldest first: for each task you proposed (the " +
+      "supervisor: any supervisor proposed), turn_ended (its session finished a turn and waits; read its summary and " +
+      `${GET_SESSION}), error, exited, result_reported (with the summary), verified (passed, failed or cancelled with ` +
+      "a message), and proposal_rejected (with the user's reason). A turn the user drove themselves in the task's session " +
+      "is left out. Trackwall asks you to call it when an update arrives, so instead of polling, end your turn and wait. " +
+      `Updates count as read once returned; at most ${TASK_UPDATES_KEPT} wait, and dropped counts older ones that fell out. ` +
+      `React with ${SEND_MESSAGE}, a new ${PROPOSE_TASK}, or by telling the user.`,
+    args: z.object({}).strict(),
+    result: GetUpdatesResult,
   },
   waitForSession: {
     name: WAIT_FOR_SESSION,

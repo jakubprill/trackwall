@@ -2,7 +2,7 @@ import { z } from "zod";
 import { Done, type Endpoint } from "./api.ts";
 import { WorkingTreeChanges } from "./changes.ts";
 import { RunState } from "./procs.ts";
-import { REVIEW_COMMENTS_MAX, ReviewComment, SendReviewResult } from "./review.ts";
+import { REVIEW_COMMENTS_MAX, ReviewComment } from "./review.ts";
 import { TaskStateChange } from "./task-state.ts";
 import { CommitHash, RepoId } from "./workspace.ts";
 
@@ -219,6 +219,52 @@ export const TaskProposal = z.object({
 export type TaskProposal = z.infer<typeof TaskProposal>;
 
 /**
+ * A task message (ADR-68): text the session that delegated a task (its proposer: a main session, the supervisor or an
+ * agent outside Trackwall) sends to the task's session with the MCP tool `send_message`, which the task's agent reads
+ * with `get_messages`. Like a review (ADR-62), the daemon only types a fixed prompt into the session and the text comes
+ * from the tool. Kept only in daemon memory, the last `TASK_MESSAGES_KEPT` of a task, so the task panel shows them.
+ */
+export const TASK_MESSAGE_MAX = 4000;
+/** Messages kept per task, read ones included; while this many are unread, a new one is refused. */
+export const TASK_MESSAGES_KEPT = 20;
+/**
+ * Messages to one task since the user last took part (typed into the sender's or the task's session, or sent the task
+ * a review): two agents cannot keep each other busy for longer without the user.
+ */
+export const TASK_MESSAGES_WITHOUT_USER = 5;
+export const TaskMessageText = z.string().trim().min(1).max(TASK_MESSAGE_MAX);
+
+export const TaskMessage = z.object({
+  id: z.uuid(),
+  task: TaskId,
+  /** Who sent it, as on a proposal: the session by its session token, `supervisor` for the supervisor (ADR-58). */
+  from: ProposedBy,
+  text: z.string(),
+  /** ISO 8601. */
+  sentAt: z.string(),
+  /** ISO 8601, when the task's agent read it with `get_messages`; `null` while unread. */
+  readAt: z.string().nullable(),
+});
+export type TaskMessage = z.infer<typeof TaskMessage>;
+
+/**
+ * When a task's session gets the daemon's prompt to read a review (ADR-62) or a message (ADR-68): `typed`, the prompt
+ * went into the session's input box (now, or a moment ago for something earlier the session has not taken yet);
+ * `queued`, the session is not in its input box (working, asking for approval or a question, interrupted with Esc, the
+ * user typing), and the prompt goes in when it next ends a turn; `on_resume`, the task has no running session, and the
+ * prompt goes to the session the user resumes.
+ */
+export const PromptDelivery = z.enum(["typed", "queued", "on_resume"]);
+export type PromptDelivery = z.infer<typeof PromptDelivery>;
+
+export const SendReviewResult = z.object({
+  delivery: PromptDelivery,
+  /** Comments the agent has not read yet, this review's included. */
+  unread: z.number().int().positive(),
+});
+export type SendReviewResult = z.infer<typeof SendReviewResult>;
+
+/**
  * Newest sessions first; ended sessions stay on the list until the user closes them (`dismiss`).
  * Tasks (newest first) stay until the user ends them, also after a daemon restart; a task's session is the newest
  * session with its `Session.task` (after a daemon restart, none).
@@ -228,6 +274,8 @@ export const SessionList = z.object({
   tasks: z.array(Task),
   /** Task proposals waiting for the user's decision, newest first. */
   proposals: z.array(TaskProposal),
+  /** The messages kept for the tasks on the list (ADR-68), oldest first. */
+  messages: z.array(TaskMessage),
   /** The directory of task worktrees; the UI suggests it for Copilot CLI's trusted folders, because trust covers subdirectories. */
   worktreesDir: z.string(),
 });

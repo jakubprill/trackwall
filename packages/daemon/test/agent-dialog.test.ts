@@ -91,6 +91,8 @@ async function sessionShowing(name: string, notificationType: string) {
     hooksFile,
     promptOnStart: false,
     run: () => ({ kind: "running", runId: "r1", startedAt: "2026-10-25T12:00:00.000Z", pid: 1 }),
+    prompt: () => undefined,
+    onUserText: () => {},
   });
   sessions.push(session);
   const written: string[] = [];

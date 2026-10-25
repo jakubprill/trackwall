@@ -32,6 +32,7 @@ test("the tray panel lists the task proposals and only the sessions that wait fo
     sessions: [session("a", true), session("b", false), session("c", true)],
     tasks: [],
     proposals: [proposal],
+    messages: [],
     worktreesDir: "worktrees",
   };
   const entries = trayPanelEntries(list);
@@ -53,6 +54,7 @@ test("sessions asking for approval come first, apart from the other waiting sess
     sessions: [session("a", true, question), session("b", true, approval), session("c", true)],
     tasks: [],
     proposals: [proposal],
+    messages: [],
     worktreesDir: "worktrees",
   };
   const entries = trayPanelEntries(list);

@@ -83,7 +83,7 @@ beforeAll(async () => {
 afterAll(() => api.close());
 
 describe("MCP server over Streamable HTTP", () => {
-  test("announces the repo, card, log, graph, code search, session, mise task, verification and service tools, with the ones that run, stop or call repo code as destructive", async () => {
+  test("announces the repo, card, log, graph, code search, session, coordination, mise task, verification and service tools, with the ones that run, stop or call repo code as destructive", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual([
@@ -103,6 +103,9 @@ describe("MCP server over Streamable HTTP", () => {
       "propose_task",
       "report_result",
       "get_review_comments",
+      "send_message",
+      "get_messages",
+      "get_updates",
       "wait_for_session",
       "run_mise_task",
       "stop_mise_task",
@@ -121,6 +124,9 @@ describe("MCP server over Streamable HTTP", () => {
       "propose_task",
       "report_result",
       "get_review_comments",
+      "send_message",
+      "get_messages",
+      "get_updates",
       "run_mise_task",
       "stop_mise_task",
       "verify_task",
@@ -128,7 +134,8 @@ describe("MCP server over Streamable HTTP", () => {
       "stop_service",
       "call_endpoint",
     ]);
-    // A proposal and a summary only write text for a human, and reading review comments marks them read; running a
+    // A proposal and a summary only write text for a human, a message only text for another agent, and reading review
+    // comments, messages and updates marks them read; running a
     // mise task executes repo code, and stopping one can kill a process the user started from the UI; so do starting
     // and stopping a service and verifying a task (which runs its tests), and a request to a service can change its data.
     expect(tools.filter((t) => t.annotations?.destructiveHint !== false).map((t) => t.name)).toEqual([

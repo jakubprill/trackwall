@@ -15,6 +15,7 @@ Let one agent plan work and hand it to other agents, while you approve every tas
 - Every proposal waiting for your decision: read it, edit the prompt, start it or reject it with a reason.
 - Several proposals started with one press; they start one after another.
 - The main session following its tasks to the end and reading their summaries and changes.
+- The main session woken up when a task moves, and able to send the task's agent a message.
 
 ## How it works
 
@@ -22,7 +23,9 @@ Any Copilot CLI session connected to Trackwall can act as a main session, whethe
 
 All proposals of one session are one entry, indented under that session, which gets a "main" badge with the number of items under it. Select the entry to see who proposed them and each proposal with its full prompt; open a proposal to read and edit it. "Start task" turns it into an ordinary [agent task](/features/tasks). With several proposals, tick the ones you want and press "Start N selected"; a proposal can be ticked once you have opened it. "Reject…" asks for an optional reason, which goes back to the main session so it can propose something else. Nothing starts until you decide.
 
-A task's agent finishes with a summary, shown above the task's tabs. The main session waits for its tasks and reads their summaries and changes, down to the diff of the files it cares about, so it can check the work and plan the next step.
+A task's agent finishes with a summary, shown above the task's tabs. The main session does not need to keep asking about its tasks: when a task's agent finishes a turn, reports its result, gets a verification verdict, errs or stops, or when you reject a proposal, Trackwall types one line into the main session asking it to read what happened, once it waits for input. It then reads the summaries and changes, down to the diff of the files it cares about, so it can check the work and plan the next step.
+
+To steer a running task, the main session sends its agent a message: a correction, an answer to the agent's question, or what changed in another repo. The task's agent is asked to read it the same way, once it waits for input, or when you resume the task. The messages appear in the task's panel under "Messages", with who sent them and whether the agent has read them yet.
 
 ## Use it
 
@@ -37,4 +40,8 @@ A task's agent finishes with a summary, shown above the task's tabs. The main se
 - In the session grid, a tile with proposals shows their prompts with "Start task" and "Reject…"; "Next waiting" and Alt+J go to proposals too.
 - Proposals last until Trackwall quits, at most 20 at a time; summaries stay with their tasks.
 - A proposal from an agent outside Trackwall is marked "agent outside Trackwall" and listed at the top level, like a proposal from a session you have closed. Such an agent can propose tasks, but cannot report a task's summary.
-- Prompts, titles and summaries cannot contain invisible characters, so what you read before "Start task" is the whole prompt.
+- Prompts, titles, summaries and messages cannot contain invisible characters, so what you read is the whole text.
+- A session sends messages only to the tasks it proposed. A task you typed yourself, or one another session proposed, takes no messages from it.
+- After five messages to a task without you, the main session has to ask you before it sends more. Typing anything into the main session or the task, or sending the task a review, counts as you taking part.
+- A turn you drive yourself by typing in the task's terminal does not wake the main session, since you are handling it. Neither does a task asking for approval: that is for you, in the tray panel.
+- Messages and updates last until Trackwall quits; up to 20 messages per task are kept.

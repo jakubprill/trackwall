@@ -46,6 +46,8 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 | `list_sessions`, `get_session`, `get_task_changes` | The sessions and tasks in "Sessions", with state, repo, a task's changed files and their diff, and its last verification. |
 | `propose_task`, `wait_for_session`, `report_result` | Propose a task, wait up to 55 s for a session or task to need someone, report a task's summary. |
 | `get_review_comments` | The comments you sent on lines of a task's changes, for that task's agent; see [Agent tasks](/features/tasks). |
+| `send_message`, `get_messages` | A message from the session that proposed a task to that task's agent, and the agent reading it; see [Main session and task proposals](/features/main-session). |
+| `get_updates` | What happened to the tasks a session proposed since it last asked: a finished turn, a reported result, a verification verdict, an error or end, a rejected proposal. |
 
 ## Good to know
 
