@@ -24,12 +24,24 @@ export async function stopDaemon(home: string, facade: Facade | undefined, api: 
 
 /**
  * A stop that runs once, however many signals, `POST /api/daemon/shutdown` requests and failures ask for it, and then
- * ends the process with the exit code of the first one.
+ * ends the process with the exit code of the first one (1 when the stop itself fails).
  */
-export function shutdownOnce(stop: (reason: string) => Promise<void>): (reason: string, exitCode?: number) => Promise<void> {
+export function shutdownOnce(
+  stop: (reason: string) => Promise<void>,
+  exit: (code: number) => void = process.exit,
+): (reason: string, exitCode?: number) => Promise<void> {
   let stopping: Promise<void> | undefined;
   return (reason, exitCode = 0) => {
-    stopping ??= stop(reason).then(() => process.exit(exitCode));
+    // A stop that fails still ends the process, with a failure code, so a half-stopped daemon does not linger.
+    stopping ??= stop(reason)
+      .then(
+        () => exitCode,
+        (err: unknown) => {
+          process.stderr.write(`stopping failed: ${err instanceof Error ? err.message : String(err)}\n`);
+          return 1;
+        },
+      )
+      .then(exit);
     return stopping;
   };
 }

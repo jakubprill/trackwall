@@ -1,11 +1,19 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { selfCommand } from "../src/infra/self-command.ts";
+import { z } from "zod";
+import { RUNTIMES } from "./support/runtimes.ts";
 
-test("from source the command runs src/main.ts with the subcommand, whatever script started the process", () => {
-  const { exec, args } = selfCommand(["mcp-stdio", "--home", "state"]);
+const DAEMON = join(import.meta.dir, "..");
+const Command = z.object({ exec: z.string(), args: z.array(z.string()) });
 
-  expect(exec).toBe(process.execPath);
-  expect(args.slice(-4)).toEqual([join(import.meta.dir, "..", "src", "main.ts"), "mcp-stdio", "--home", "state"]);
-  expect(process.argv[1]).not.toBe(args.at(-4));
+describe.each(RUNTIMES)("under %s", (_name, runtime) => {
+  test("from source the command runs src/main.ts with the subcommand, whatever script started the process", () => {
+    const [exec = "", ...flags] = runtime;
+    const printed = spawnSync(exec, [...flags, join("test", "fixtures", "print-self-command.ts")], { cwd: DAEMON, encoding: "utf8" });
+
+    const { args } = Command.parse(JSON.parse(printed.stdout));
+
+    expect(args.slice(-2)).toEqual([join(DAEMON, "src", "main.ts"), "mcp-stdio"]);
+  });
 });
