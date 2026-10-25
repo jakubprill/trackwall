@@ -63,14 +63,14 @@ From the version with the updater on (ADR-53), Trackwall checks `latest.json` of
 - **macOS**: the bundle is replaced in place (`/Applications/Trackwall.app`); a bundle the user cannot write asks for an administrator password.
 - **Proxy**: the download takes the proxy from the system settings and from `HTTPS_PROXY`. A proxy with Windows sign-in or one that replaces certificates can stop it; then "Settings > Updates" shows the error and the manual update still works.
 
-**Trying an update before it is the latest.** Tag a pre-release (`v0.3.1-rc.1`), wait for its release, and start the installed previous version from a terminal with the pre-release's manifest:
+**Trying an update before it is the latest.** Tag a pre-release (`v0.4.1-rc.1`), wait for its release, and start the installed previous version from a terminal with the pre-release's manifest:
 
 ```sh
-TRACKWALL_UPDATE_ENDPOINT=https://github.com/jakubprill/trackwall/releases/download/v0.3.1-rc.1/latest.json /Applications/Trackwall.app/Contents/MacOS/trackwall
+TRACKWALL_UPDATE_ENDPOINT=https://github.com/jakubprill/trackwall/releases/download/v0.4.1-rc.1/latest.json /Applications/Trackwall.app/Contents/MacOS/trackwall
 ```
 
 ```powershell
-$env:TRACKWALL_UPDATE_ENDPOINT = "https://github.com/jakubprill/trackwall/releases/download/v0.3.1-rc.1/latest.json"
+$env:TRACKWALL_UPDATE_ENDPOINT = "https://github.com/jakubprill/trackwall/releases/download/v0.4.1-rc.1/latest.json"
 & "$env:LOCALAPPDATA\Programs\Trackwall\trackwall.exe"
 ```
 
