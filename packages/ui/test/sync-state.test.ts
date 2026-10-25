@@ -52,9 +52,9 @@ describe("sync in the UI", () => {
       "main moved 2 commits forward to origin/main. Files in the working directory were updated.",
     );
     expect(
-      syncMessage({ ...target, state: "updated", ...ff, commits: 1, workingTree: { branch: "funkcja", changed: 2, untracked: 0 } }),
+      syncMessage({ ...target, state: "updated", ...ff, commits: 1, workingTree: { branch: "feature", changed: 2, untracked: 0 } }),
     ).toBe(
-      "main moved 1 commit forward to origin/main. The working directory is on funkcja, so files in the working directory did not change. Uncommitted files stay as they are: 2 changed.",
+      "main moved 1 commit forward to origin/main. The working directory is on feature, so files in the working directory did not change. Uncommitted files stay as they are: 2 changed.",
     );
     expect(syncMessage({ ...target, state: "up-to-date", ...ff, workingTree: { branch: "main", changed: 3, untracked: 1 } })).toBe(
       "main already matches origin/main. Uncommitted files stay as they are: 3 changed, 1 new.",

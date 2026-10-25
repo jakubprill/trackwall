@@ -25,7 +25,7 @@ function fakeSockets() {
 
 function makeEvents(sockets: ReturnType<typeof fakeSockets>) {
   return new DaemonEvents({
-    conn: { baseUrl: "http://127.0.0.1:4100", token: "sekret" },
+    conn: { baseUrl: "http://127.0.0.1:4100", token: "secret" },
     location: { protocol: "tauri:", host: "localhost" },
     openSocket: sockets.openSocket,
   });
@@ -36,7 +36,7 @@ describe("daemon events in the UI", () => {
     const sockets = fakeSockets();
     const events = makeEvents(sockets);
     expect(sockets.opened.map(({ url, protocols }) => ({ url, protocols }))).toEqual([
-      { url: "ws://127.0.0.1:4100/ws", protocols: ["trackwall.events", "bearer.sekret"] },
+      { url: "ws://127.0.0.1:4100/ws", protocols: ["trackwall.events", "bearer.secret"] },
     ]);
     const feed = events.feed("sessions.changed");
     const received: SessionList[] = [];

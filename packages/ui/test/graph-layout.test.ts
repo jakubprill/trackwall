@@ -24,8 +24,8 @@ describe("layoutGraph", () => {
   });
 
   test("a repo without edges takes no column and goes to isolated in list order", () => {
-    const layout = layoutGraph(["z-samotne", "a", "b", "a-samotne"], [edge("a", "b")]);
-    expect(layout.isolated).toEqual(["z-samotne", "a-samotne"]);
+    const layout = layoutGraph(["z-alone", "a", "b", "a-alone"], [edge("a", "b")]);
+    expect(layout.isolated).toEqual(["z-alone", "a-alone"]);
     expect(columns(layout)).toEqual([["a"], ["b"]]);
   });
 
@@ -51,9 +51,9 @@ describe("layoutGraph", () => {
 
 describe("edgePairs and neighbourhood", () => {
   test("the edges of one repo pair are one line", () => {
-    const pairs = edgePairs([edge("a", "b", "x"), edge("a", "b", "opis", "manual"), edge("b", "c")]);
+    const pairs = edgePairs([edge("a", "b", "x"), edge("a", "b", "description", "manual"), edge("b", "c")]);
     expect(pairs.map((p) => [p.from, p.to, p.edges.map((e) => e.key)])).toEqual([
-      ["a", "b", ["x", "opis"]],
+      ["a", "b", ["x", "description"]],
       ["b", "c", ["b->c"]],
     ]);
   });

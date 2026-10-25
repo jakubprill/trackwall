@@ -103,7 +103,7 @@ describe("Sessions view entries", () => {
     });
     expect(findEntry(entries, { kind: "session", id: "s1" })).toMatchObject({ kind: "task", task: { id: "t1" } });
     expect(findEntry(entries, { kind: "new" })).toBeUndefined();
-    expect(findEntry(entries, { kind: "task", id: "nieznane" })).toBe(entries[0]);
+    expect(findEntry(entries, { kind: "task", id: "unknown" })).toBe(entries[0]);
     expect(findEntry(entries, undefined)).toBe(entries[0]);
   });
 
@@ -228,7 +228,7 @@ describe("Sessions view entries", () => {
   test("a task from a session no longer listed and a proposal from an agent outside Trackwall are at the top level", () => {
     const list = {
       sessions: [session("s1", "2026-10-23T10:00:00Z")],
-      tasks: [delegated("t1", "2026-10-23T11:00:00Z", "zamknieta")],
+      tasks: [delegated("t1", "2026-10-23T11:00:00Z", "closed")],
       proposals: [proposal("p1", "2026-10-23T09:00:00Z")],
       worktreesDir: "/w",
     };
