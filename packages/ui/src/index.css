@@ -70,6 +70,8 @@
   --tracking-hud: 0.12em;
   --spacing-activity-bar: 3rem;
   --spacing-sidebar: 18rem;
+  /* The pinned supervisor panel (ADR-58): wide enough for Copilot CLI's prompt and tables, about 80 terminal columns. */
+  --spacing-supervisor: 40rem;
   --shadow-glow-primary: 0 0 8px var(--primary);
   --shadow-glow-success: 0 0 6px var(--success);
   --shadow-glow-warning: 0 0 6px var(--warning);

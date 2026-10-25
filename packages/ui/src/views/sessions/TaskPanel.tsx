@@ -1,6 +1,7 @@
 import { agentsApi, type Session, type Task } from "@trackwall/protocol";
 import { Code, GitBranch, Play, Square, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { SessionTerminal } from "@/components/SessionTerminal";
 import { StatusLabel } from "@/components/StatusLabel";
 import { TabBar } from "@/components/TabBar";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,6 @@ import { relativeTime } from "@/lib/format";
 import { proposerLabel, taskName } from "@/lib/session-entries";
 import { isLive, sessionStateLabel } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
-import { SessionTerminal } from "./SessionTerminal.tsx";
 import { SharedFiles } from "./SharedFiles.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
 import { TaskRemoval } from "./TaskRemoval.tsx";
@@ -111,7 +111,7 @@ export function TaskPanel({
         <TabBar tabs={tabs} active={shown} onSelect={setTab} />
       </div>
       {shown === "terminal" && session && (
-        <SessionTerminal key={session.id} conn={conn} session={session.id} live={liveSession !== undefined} focused />
+        <SessionTerminal key={session.id} conn={conn} session={session.id} live={liveSession !== undefined} selected />
       )}
       {shown === "changes" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">

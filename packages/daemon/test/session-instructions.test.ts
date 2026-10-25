@@ -34,6 +34,18 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).not.toContain("Work only in this worktree");
   });
 
+  test("the supervisor in the projects folder coordinates through proposals and does not get the task rules", () => {
+    const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
+    writeSessionInstructions(sessionDir, "0.3.0", { repo: null, task: null });
+    const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
+    expect(text).toContain("The user sees this session in the supervisor panel on the right of every Trackwall view");
+    expect(text).toContain("You are the supervisor: the one session above all others, in the projects folder");
+    expect(text).toContain("You coordinate, you do not change code: hand each piece of work to an agent with propose_task");
+    expect(text).not.toContain("main session in the root");
+    expect(text).not.toContain("Work only in this worktree");
+    expect(text).toContain(MCP_INSTRUCTIONS);
+  });
+
   test("a session directory with a comma in its path gets no file, because the variable splits on commas", () => {
     const sessionDir = join(mkdtempSync(join(tmpdir(), "trackwall-instructions-")), "a,b");
     expect(writeSessionInstructions(sessionDir, "0.3.0", { repo: "shop", task: null })).toBeNull();

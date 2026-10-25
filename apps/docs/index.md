@@ -23,6 +23,9 @@ features:
   - title: Connection graph
     details: See which repo uses which, through shared packages and HTTP calls, with the line that proves it.
     link: /features/graph
+  - title: Supervisor
+    details: Talk to one agent above all your repos, pinned on the right of every view, that plans the work and hands it to other agents.
+    link: /features/supervisor
   - title: Copilot CLI sessions
     details: Run several Copilot CLI agents side by side, each in its own repo, and always know which one is waiting for you.
     link: /features/sessions

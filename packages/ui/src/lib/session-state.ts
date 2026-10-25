@@ -1,4 +1,4 @@
-import type { Session, SessionList, TaskStateChange } from "@trackwall/protocol";
+import { isSupervisor, type Session, type SessionList, type TaskStateChange } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 
 /**
@@ -70,18 +70,29 @@ function runningStateLabel(state: TaskStateChange, needsAttention: boolean, idle
   return { tone: "ok", label: likely };
 }
 
-/** A session's name in a list: the repo, and the window title that tells two sessions of one repo apart. */
-export function sessionTitle(session: Session): string {
-  return session.windowTitle ? `${session.repo} · ${session.windowTitle}` : session.repo;
+/** What the UI calls the session above all repos (ADR-58), wherever a session is named by its place. */
+export const SUPERVISOR = "Supervisor";
+
+/** Where a session works: its repo, or the supervisor, which has none (ADR-58). */
+export function sessionPlace(session: Pick<Session, "repo">): string {
+  return session.repo ?? SUPERVISOR;
 }
 
+/** A session's name in a list: the repo, and the window title that tells two sessions of one repo apart. */
+export function sessionTitle(session: Session): string {
+  const place = sessionPlace(session);
+  return session.windowTitle ? `${place} · ${session.windowTitle}` : place;
+}
+
+/** The supervisor is left out: it waits in its own panel, which shows that itself, not in the Sessions list (ADR-58). */
 function waitingCount(sessions: readonly Session[]): number {
-  return sessions.filter((s) => s.needsAttention).length;
+  return sessions.filter((s) => s.needsAttention && !isSupervisor(s)).length;
 }
 
 /**
  * On the view bar and the "Next waiting" button: the sessions waiting for you and the task proposals waiting for a
- * decision (ADR-39), each proposal counted, although Alt+J stops once at the group of one session (ADR-55).
+ * decision (ADR-39), each proposal counted, although Alt+J stops once at the group of one session (ADR-55). The
+ * supervisor's proposals count too, since they are entries of the list.
  */
 export function attentionCount(list: SessionList | undefined): number {
   return list ? waitingCount(list.sessions) + list.proposals.length : 0;

@@ -11,7 +11,7 @@ Every Copilot CLI session you start in Trackwall knows from its first message wh
 
 - Agents that know they run in Trackwall, and in which version, without you explaining it.
 - Agents that reach for the right Trackwall tool first, like the repo card instead of reading build files.
-- A clear role for each session: a session in a repo hands larger work over, a task session stays in its worktree.
+- A clear role for each session: the [supervisor](/features/supervisor) coordinates, a session in a repo hands larger work over, a task session stays in its worktree.
 - Agents that look up a Trackwall feature in this documentation instead of guessing.
 - No changes to your repos or to your Copilot CLI settings.
 
@@ -19,7 +19,7 @@ Every Copilot CLI session you start in Trackwall knows from its first message wh
 
 When you start a session in "Sessions", Trackwall gives Copilot CLI a short instruction file before the agent reads your first message. It says that Trackwall started the session, which Trackwall version that is, and that you watch the session in "Sessions" and hear from Trackwall when the agent ends its turn or asks for approval.
 
-The file then gives the session its role. A session in a repo works in your own working copy and hands larger or parallel work over as a [task proposal](/features/main-session). A session of an [agent task](/features/tasks) works only in the task's worktree, does not push and finishes with a summary for you.
+The file then gives the session its role. The [supervisor](/features/supervisor) plans work across your repos and hands every piece over as a task proposal instead of changing code itself; it is told it sits in the supervisor panel rather than in "Sessions". A session in a repo works in your own working copy and hands larger or parallel work over as a [task proposal](/features/main-session). A session of an [agent task](/features/tasks) works only in the task's worktree, does not push and finishes with a summary for you.
 
 Last comes the guide to the [MCP server](/features/mcp): what each tool is for and in which order to use them, how to point you at a repo, session or task with a [trackwall:// link](/features/links), and the address of this documentation with its `llms.txt` index for AI tools. A session you start yourself outside Trackwall gets this guide only as described in [Connect Copilot CLI](/guide/connect-copilot-cli).
 

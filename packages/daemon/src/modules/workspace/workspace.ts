@@ -250,6 +250,13 @@ export class Workspace {
     return (await this.entry(id)).path;
   }
 
+  /** The projects folder itself, where the supervisor runs (ADR-58); `bad_request` while it is not set. */
+  async projectsDir(): Promise<string> {
+    const projectsDir = this.deps.file.projectsDir();
+    if (projectsDir === null) throw new DomainError("bad_request", "set the projects folder first");
+    return projectsDir;
+  }
+
   /** Repo z folderu z projektami (identyfikator i korzeń), dla modułów, które czytają każde repo (`cards`). */
   async repoEntries(): Promise<RepoEntry[]> {
     return (await this.entries()).entries;

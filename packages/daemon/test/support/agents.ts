@@ -18,9 +18,14 @@ const daemonMain = join(import.meta.dir, "..", "..", "src", "main.ts");
 /**
  * Sesje z prawdziwym PTY, grupą procesów, prawdziwym gitem i hookami przez podkomendę `copilot-hook` daemona;
  * Copilot CLI to atrapa. `repos` to repo z folderu z projektami: identyfikator → katalog. `home` podany z zewnątrz
- * udaje restart daemona z tym samym katalogiem stanu.
+ * udaje restart daemona z tym samym katalogiem stanu. `projectsDir` is where the supervisor runs; `null` is an unset
+ * projects folder.
  */
-export function makeAgents(repos: Record<string, string>, home = mkdtempSync(join(tmpdir(), "trackwall-agents-"))) {
+export function makeAgents(
+  repos: Record<string, string>,
+  home = mkdtempSync(join(tmpdir(), "trackwall-agents-")),
+  projectsDir: string | null = null,
+) {
   const procs = new ProcessGroups({
     logs: new Logs({ dir: join(home, "logs"), maxFileBytes: 1024 * 1024, log: () => {} }),
     runtime: new RuntimeFile(join(home, "runtime.json")),
@@ -36,6 +41,10 @@ export function makeAgents(repos: Record<string, string>, home = mkdtempSync(joi
         const dir = repos[id];
         if (dir === undefined) throw new DomainError("not_found", `nie ma repo ${id}`);
         return dir;
+      },
+      projectsDir: async () => {
+        if (projectsDir === null) throw new DomainError("bad_request", "set the projects folder first");
+        return projectsDir;
       },
     },
     vcs: new Vcs(),

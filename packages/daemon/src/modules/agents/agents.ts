@@ -3,6 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   copilotMcpServers,
+  isSupervisor,
   type RunState,
   type Session,
   type SessionList,
@@ -32,7 +33,8 @@ import type { ScreenViewer } from "./terminal-screen.ts";
  * Sesje żyją w pamięci daemona: wyjście daemona zatrzymuje je razem z innymi grupami procesów. Sesja może należeć
  * do zadania (ADR-31, `tasks.ts`): działa wtedy w worktree zadania, a zadanie przeżywa daemona. Sesja może też
  * proponować zadania, zgłaszać podsumowanie swojego zadania i czekać na inną sesję (ADR-39): serwer MCP poznaje ją
- * po tokenie sesji, a zadanie z propozycji startuje dopiero po zatwierdzeniu przez użytkownika.
+ * po tokenie sesji, a zadanie z propozycji startuje dopiero po zatwierdzeniu przez użytkownika. One session, the
+ * supervisor (ADR-58), runs in the projects folder instead of a repo, above all the others.
  */
 
 /** Rozmiar PTY, zanim okno terminala zgłosi swój. */
@@ -62,9 +64,13 @@ interface AgentsProcs {
   stop(owner: string): Promise<RunState | undefined>;
 }
 
-/** Czego `agents` potrzebuje od `workspace`: korzeń repo po identyfikatorze (`not_found`, gdy repo nie ma). */
+/**
+ * What `agents` needs from `workspace`: a repo root by its id (`not_found` without such a repo) and the projects folder
+ * the supervisor runs in (`bad_request` while it is not set).
+ */
 interface AgentsRepos {
   repoPath(id: string): Promise<string>;
+  projectsDir(): Promise<string>;
 }
 
 export interface AgentsDeps {
@@ -105,6 +111,8 @@ export class Agents {
   readonly #tasks: AgentTasks;
   readonly #proposals = new TaskProposals();
   readonly #worktreesDir: string;
+  /** The supervisor start under way, so that two requests at once start one supervisor, not two (ADR-58). */
+  #supervisorStart: Promise<Session> | undefined;
   #timer: NodeJS.Timeout | undefined;
 
   constructor(deps: AgentsDeps) {
@@ -142,6 +150,31 @@ export class Agents {
     return this.#launch({ repo, cwd: await this.#deps.repos.repoPath(repo), task: null, args: [], promptOnStart: false });
   }
 
+  /**
+   * The supervisor (ADR-58): Copilot CLI in the projects folder, above the sessions of all repos. At most one runs at a
+   * time: while one is starting or runs, this returns it. A new one replaces the ended ones, which are closed once it
+   * has started, so a failed start keeps the last screen; the work they delegated stays, marked as the supervisor's
+   * (`ProposedBy.supervisor`).
+   */
+  async startSupervisor(): Promise<Session> {
+    if (this.#supervisorStart) return this.#supervisorStart;
+    const running = this.#views().find((s) => isSupervisor(s) && s.run.kind !== "exited");
+    if (running) return running;
+    this.#supervisorStart = this.#replaceSupervisor().finally(() => {
+      this.#supervisorStart = undefined;
+    });
+    return this.#supervisorStart;
+  }
+
+  async #replaceSupervisor(): Promise<Session> {
+    const ended = this.#views().filter(isSupervisor);
+    const cwd = await this.#deps.repos.projectsDir();
+    const started = await this.#launch({ repo: null, cwd, task: null, args: [], promptOnStart: false });
+    // One of them may have been dismissed during the start; the start has still succeeded.
+    for (const old of ended) if (this.#sessions.has(old.id)) this.#close(old.id);
+    return started;
+  }
+
   /** Sesja, której token sesji przyszedł z mostu stdio; `undefined` dla nieznanego tokenu. */
   callerSession(token: string): string | undefined {
     return this.#tokens.session(token);
@@ -150,7 +183,8 @@ export class Agents {
   /** Propozycja zadania od sesji `caller` (`null`: agent spoza Trackwall) w repo z folderu z projektami (ADR-39). */
   async propose(caller: string | null, proposal: { repo: string; title: string; prompt: string }): Promise<TaskProposal> {
     await this.#deps.repos.repoPath(proposal.repo);
-    return this.#proposals.add({ ...proposal, proposedBy: { session: caller } });
+    const supervisor = caller !== null && isSupervisor(this.session(caller));
+    return this.#proposals.add({ ...proposal, proposedBy: { session: caller, supervisor } });
   }
 
   /**
@@ -418,9 +452,10 @@ export class Agents {
   }
 }
 
-/** Co uruchamia `#launch`: Copilot CLI w katalogu repo albo worktree zadania. */
+/** What `#launch` starts: Copilot CLI in a repo root, in a task's worktree, or the supervisor in the projects folder. */
 interface LaunchSpec {
-  repo: string;
+  /** `null` for the supervisor. */
+  repo: string | null;
   cwd: string;
   task: string | null;
   args: readonly string[];
@@ -430,7 +465,7 @@ interface LaunchSpec {
 /** Katalog nowej sesji i to, co z niego wynika dla `LiveSession`. */
 interface SessionFiles {
   id: string;
-  repo: string;
+  repo: string | null;
   task: string | null;
   dir: string;
   token: string;
@@ -448,7 +483,8 @@ function owner(id: string): string {
   return `agent:${id}`;
 }
 
-function domainError(repo: string, err: unknown): unknown {
+function domainError(repo: string | null, err: unknown): unknown {
   if (!(err instanceof SpawnFailure)) return err;
-  return new DomainError(err.reason === "cwd_invalid" ? "repo_unavailable" : "agent_unavailable", `${repo}: ${err.message}`);
+  const place = repo ?? "the projects folder";
+  return new DomainError(err.reason === "cwd_invalid" ? "repo_unavailable" : "agent_unavailable", `${place}: ${err.message}`);
 }
