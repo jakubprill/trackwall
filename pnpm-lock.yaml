@@ -9,6 +9,8 @@ overrides:
   vitepress>vite: 6.4.5
   '@types/markdown-it': 14.1.2
 
+packageExtensionsChecksum: sha256-uEhUBmbELeqRuYj6Hqz6y6Lof2IpCZp/dWJq4eC/kdI=
+
 importers:
 
   .:
@@ -57,7 +59,7 @@ importers:
         version: 1.6.4(@algolia/client-search@5.60.0)(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.33.0)(postcss@8.5.31)(search-insights@2.17.3)(typescript@5.9.3)(yaml@2.9.1)
       vitepress-plugin-llms:
         specifier: 1.14.0
-        version: 1.14.0
+        version: 1.14.0(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.9.1)
       vue:
         specifier: 3.5.44
         version: 3.5.44(typescript@5.9.3)
@@ -5705,7 +5707,7 @@ snapshots:
       jiti: 2.7.0
       yaml: 2.9.1
 
-  vitepress-plugin-llms@1.14.0:
+  vitepress-plugin-llms@1.14.0(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.9.1):
     dependencies:
       '@11ty/gray-matter': 2.1.0
       markdown-it: 14.3.3
@@ -5721,8 +5723,20 @@ snapshots:
       tokenx: 1.6.0
       unist-util-remove: 4.0.0
       unist-util-visit: 5.1.0
+      vite: 6.4.5(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.9.1)
     transitivePeerDependencies:
+      - '@types/node'
+      - jiti
+      - less
+      - lightningcss
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
       - supports-color
+      - terser
+      - tsx
+      - yaml
 
   vitepress@1.6.4(@algolia/client-search@5.60.0)(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.33.0)(postcss@8.5.31)(search-insights@2.17.3)(typescript@5.9.3)(yaml@2.9.1):
     dependencies:
