@@ -132,7 +132,7 @@ export class Services {
    * the start goes on in the background. A service that already runs is not started again, so calling again waits
    * further; a crashed one starts again. A repo without the mise task `dev` is `not_found`, before anything starts.
    * With `task`, the service runs from that task's worktree (ADR-61) and its dependencies from their repo roots; a
-   * task that is not in `repo` is `not_found` before anything starts.
+   * task that is not in `repo` is refused before anything starts (`agents.taskOfRepo`).
    */
   async start({ repo, task, dependencies, waitMs }: StartServiceRequest): Promise<ServiceSlice> {
     const root: MiseTarget = { repo, task };
@@ -329,7 +329,11 @@ export class Services {
 
   /** The service of a task the user ended (ADR-61) once it neither runs nor starts: nothing can start it again. */
   private forgettable(target: MiseTarget): boolean {
-    if (target.task === null || this.liveRun(target) || this.starting.has(miseTargetKey(target)) || this.wanted(target)) return false;
+    const key = miseTargetKey(target);
+    if (target.task === null || this.liveRun(target) || this.starting.has(key) || this.wanted(target)) return false;
+    // The slice is the only record of the dependencies it started: kept while one of them runs, so a stop can reach them.
+    const slice = this.slices.get(key);
+    if (slice && this.startedDependencies(slice).some((t) => this.liveRun(t))) return false;
     return this.knownTaskPort(target.repo, target.task) === null;
   }
 

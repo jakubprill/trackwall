@@ -21,6 +21,8 @@ const MAX_FILES = 100;
 const MAX_BYTES = 10 * 1024 * 1024;
 /** Listing untracked files walks the working directory, `node_modules` included. */
 const LIST_TIMEOUT_MS = 60_000;
+/** Git's refusal to check a path whose directory is a link in the worktree (`pathspec '…' is beyond a symbolic link`). */
+const BEYOND_LINK = "beyond a symbolic link";
 
 type Matches = { kind: "ok"; paths: string[]; leftOut: string[] } | { kind: "too_many"; count: number | null };
 
@@ -59,7 +61,7 @@ async function copyOne(repoDir: string, worktree: string, path: string, budget: 
   const info = await lstat(join(repoDir, ...parts));
   if (!info.isFile()) return "not a regular file (a link or a special file)";
   if (info.size > budget) return `the files together would be more than ${MAX_BYTES / 1024 / 1024} MB`;
-  if (!(await realDirectories(worktree, parts.slice(0, -1)))) return "its directory in the worktree is a link";
+  if (!(await realDirectories(worktree, parts.slice(0, -1)))) return "its directory in the worktree is a link or a file";
   await copyFile(join(repoDir, ...parts), join(worktree, ...parts), constants.COPYFILE_EXCL);
   return { bytes: info.size };
 }
@@ -92,10 +94,13 @@ async function ignoredMatches(repoDir: string, worktree: string, includeFile: st
   });
   const matches = split(listed.stdout);
   // A pattern such as `*` that matches a whole build directory: not worth checking path by path.
-  if (listed.truncated || matches.length > 10 * MAX_FILES) return { kind: "too_many", count: null };
+  if (listed.truncated) return { kind: "too_many", count: null };
   const ignored = await checkIgnore(repoDir, matches);
   if (ignored.length > MAX_FILES) return { kind: "too_many", count: ignored.length };
-  const inWorktree = await checkIgnore(worktree, ignored).catch(() => null);
+  const inWorktree = await checkIgnore(worktree, ignored).catch((err: unknown) => {
+    if (messageOf(err).includes(BEYOND_LINK)) return null;
+    throw err;
+  });
   if (inWorktree === null) return eachInWorktree(worktree, ignored);
   const kept = new Set(inWorktree);
   return {
@@ -113,7 +118,10 @@ async function eachInWorktree(worktree: string, ignored: readonly string[]): Pro
   const paths: string[] = [];
   const leftOut: string[] = [];
   for (const path of ignored) {
-    const checked = await checkIgnore(worktree, [path]).catch((err: unknown) => messageOf(err));
+    const checked = await checkIgnore(worktree, [path]).catch((err: unknown) => {
+      if (messageOf(err).includes(BEYOND_LINK)) return messageOf(err);
+      throw err;
+    });
     if (typeof checked === "string") leftOut.push(`${path}: ${checked}`);
     else if (checked.length > 0) paths.push(path);
     else leftOut.push(notIgnoredInWorktree(path));
@@ -130,6 +138,7 @@ async function checkIgnore(dir: string, paths: readonly string[]): Promise<strin
   if (paths.length === 0) return [];
   // Exit code 1: none of them is ignored.
   const ignored = await git(dir, ["check-ignore", "-z", "--stdin"], { stdin: `${paths.join("\0")}\0`, okExitCodes: [0, 1] });
+  if (ignored.truncated) throw new Error(`git check-ignore listed more than it can return for ${paths.length} files`);
   return split(ignored.stdout);
 }
 

@@ -157,7 +157,7 @@ const runs: ToolRuns = {
     // The repo and the task must exist (`not_found` as in tail): a typo in an id must not look like "no errors". A
     // mise task without output has no log yet, so an unknown mise task name gives no errors, as an empty log in tail.
     if (repo !== undefined) await facade.workspace.repo(repo);
-    if (task !== undefined) assertTaskOfRepo(facade, task, repo);
+    if (task !== undefined) facade.agents.taskOfRepo(task, repo);
     return facade.logs.errors({ repo, task, ...query });
   },
   getTestResults: (facade, { repo, task, since }) => facade.testReports.results(miseTarget(facade, repo, task), since),
@@ -304,13 +304,8 @@ function callerTarget(facade: Facade, caller: string | null, repo: string, task:
 /** The repo root, or the worktree of a task of that repo (`bad_request` for a task of another repo, ADR-59). */
 function miseTarget(facade: Facade, repo: string, task: string | undefined): MiseTarget {
   if (task === undefined) return { repo, task: null };
-  assertTaskOfRepo(facade, task, repo);
-  return { repo, task };
-}
-
-/** A task named next to a repo belongs to it (`not_found` for an unknown or ended task, `bad_request` for another repo's). */
-function assertTaskOfRepo(facade: Facade, task: string, repo: string | undefined): void {
   facade.agents.taskOfRepo(task, repo);
+  return { repo, task };
 }
 
 /** A session without the last screen lines of an ended group: one session's screen does not reach another (§8, ADR-36). */
