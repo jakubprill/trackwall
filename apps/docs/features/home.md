@@ -7,6 +7,8 @@ description: See your whole environment in one 3D view, with everything that nee
 
 See your whole environment in one 3D view, with everything that needs you in one queue.
 
+![Home: the 3D dashboard of twenty repos and their connections, with the sessions waiting for you on the left](/screenshots/home.png)
+
 ## What you get
 
 - Trackwall, your sessions and your repos in one living picture.

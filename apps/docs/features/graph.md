@@ -7,6 +7,8 @@ description: See which repo uses which, through shared packages and HTTP calls, 
 
 See which repo uses which, through shared packages and HTTP calls, with the line that proves it.
 
+![The connection graph of twenty repos, with orders-api selected and its connections listed on the right](/screenshots/overview.png)
+
 ## What you get
 
 - A map of your projects folder: which repo uses another repo's package and which one calls another repo's endpoints.

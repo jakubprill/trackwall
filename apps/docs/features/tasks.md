@@ -7,6 +7,8 @@ description: Give an agent a task on its own branch and worktree, and review its
 
 Give an agent a task on its own branch and worktree, and review its changes before anything lands.
 
+![An agent task in pricing, working on its own branch](/screenshots/tasks.png)
+
 ## What you get
 
 - A task for an agent in two fields: a repo and a prompt.
