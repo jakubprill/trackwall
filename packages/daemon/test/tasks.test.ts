@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 import type { Agents } from "../src/modules/agents/agents.ts";
 import { TASK_BRANCH_PREFIX } from "../src/modules/agents/task-branch.ts";
 import { makeAgents, viewer, waitFor } from "./support/agents.ts";
@@ -368,7 +369,7 @@ describe.skipIf(process.versions.bun === undefined)("zadania agenta w worktree (
     const task = await agents.createTask("sklep", "dodaj test");
     agents.close();
     const file = join(home, "tasks.json");
-    const saved = JSON.parse(readFileSync(file, "utf8")) as { tasks: Record<string, unknown>[] };
+    const saved = z.object({ tasks: z.array(z.record(z.string(), z.unknown())) }).parse(JSON.parse(readFileSync(file, "utf8")));
     writeFileSync(file, JSON.stringify({ ...saved, tasks: saved.tasks.map(({ trustedMiseConfig: _, ...t }) => t) }));
 
     const restarted = makeAgents({ sklep: dir }, home);

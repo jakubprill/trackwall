@@ -195,7 +195,10 @@ export type MiseConfigChange = z.infer<typeof MiseConfigChange>;
  * created, or as the user trusted them later. mise tasks run in the worktree only without changes.
  */
 export const TaskMiseConfig = z.object({
-  /** No config of this worktree was ever trusted (a task from an older Trackwall): every mise file is a change. */
+  /**
+   * No config of this worktree was ever trusted (a task from an older Trackwall, or one whose config could not be read
+   * when it was created): every mise file is a change.
+   */
   neverTrusted: z.boolean(),
   /** Sorted by path; empty when the worktree has the trusted mise config. */
   changes: z.array(MiseConfigChange),

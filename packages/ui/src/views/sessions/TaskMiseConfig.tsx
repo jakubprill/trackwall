@@ -1,9 +1,10 @@
 import { agentsApi, type TaskMiseConfig as Config, countLabel, type MiseConfigChange } from "@trackwall/protocol";
 import { ShieldAlert } from "lucide-react";
-import { useCallback, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { changedSinceShown, shownMiseConfig } from "@/lib/mise-config-review";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 
@@ -16,52 +17,69 @@ const CHANGE_LABEL: Record<MiseConfigChange["change"], string> = { added: "added
  * The warning above a task's tabs when the agent changed the mise config of its worktree (ADR-59): Trackwall runs no
  * mise task there until the user trusts the config they read here. The panel keeps showing the version it first
  * showed, and a newer one only after the user asks for it, so the trust always names (by its digest) the text on
- * screen, not one that arrived with a poll a moment before the click. A failed check shows nothing, like the shared
+ * screen, not one that arrived with a poll a moment before the click (`shownMiseConfig`). A config Trackwall cannot
+ * check (a link out of the worktree, too many files) shows why; another failed check shows nothing, like the shared
  * files warning.
  */
 export function TaskMiseConfig({ conn, task, paused }: { conn: Connection; task: string; paused: boolean }) {
   const load = useCallback(() => post(conn, agentsApi.taskMiseConfig, { task }), [conn, task]);
   const remote = useRemote(paused ? undefined : load, { pollMs: POLL_MS });
   const [shown, setShown] = useState<Config>();
+  const [trustedDigest, setTrustedDigest] = useState<string>();
   const trust = useAction(
     (digest: string) => post(conn, agentsApi.trustTaskMiseConfig, { task, digest }),
-    () => {
-      setShown(undefined);
+    (result) => {
+      setTrustedDigest(result.digest);
       remote.reload();
     },
   );
   const latest = remote.error ? undefined : remote.data;
-  // Pinning during render (React's "adjusting state when a prop changes"): the first version with changes stays on
-  // screen, and a config without changes (trusted, or reverted by the agent) ends the warning.
-  if (latest?.changes.length === 0 && shown) setShown(undefined);
-  if (latest && latest.changes.length > 0 && !shown) setShown(latest);
-  const config = shown ?? latest;
-  if (!config || config.changes.length === 0 || latest?.changes.length === 0) return null;
-  const changedAgain = latest !== undefined && latest.digest !== config.digest;
+  // Adjusting state during render, as React documents for state derived from props: no extra render with stale text.
+  const next = shownMiseConfig(shown, latest, trustedDigest);
+  if (next !== shown) setShown(next);
+  if (remote.errorCode === "mise_unavailable") return <Warning title="mise tasks cannot run in this worktree">{remote.error}</Warning>;
+  if (!next) return null;
+  const changedAgain = changedSinceShown(next, latest);
   return (
-    <section aria-label="Changed mise config" className="border-warning/40 bg-warning/10 flex items-start gap-3 border-b px-4 py-3">
+    <Warning
+      title={heading(next)}
+      action={
+        <Button variant="outline" size="sm" onClick={() => trust.run(next.digest)} disabled={trust.pending || changedAgain}>
+          Trust this config
+        </Button>
+      }
+    >
+      {next.changes.map((c) => (
+        <ChangedFile key={c.path} change={c} />
+      ))}
+      <p className="text-muted-foreground text-xs">
+        mise tasks do not run in this worktree until you trust it. Read the files first: a mise config can run any command.
+      </p>
+      {changedAgain && latest && (
+        <div className="flex items-center gap-2">
+          <p className="text-warning text-xs">The agent changed the mise config again since this was shown.</p>
+          <Button variant="ghost" size="sm" onClick={() => setShown(latest)}>
+            Show the new version
+          </Button>
+        </div>
+      )}
+      {trust.error && <p className="text-destructive text-xs">{trust.error}</p>}
+    </Warning>
+  );
+}
+
+function Warning({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+  return (
+    <section
+      aria-label="mise config of this worktree"
+      className="border-warning/40 bg-warning/10 flex items-start gap-3 border-b px-4 py-3"
+    >
       <ShieldAlert className="text-warning mt-0.5 size-4 shrink-0" aria-hidden />
       <div className="flex min-w-0 flex-1 flex-col gap-2">
-        <p className="text-sm font-medium">{heading(config)}</p>
-        {config.changes.map((c) => (
-          <ChangedFile key={c.path} change={c} />
-        ))}
-        <p className="text-muted-foreground text-xs">
-          mise tasks do not run in this worktree until you trust it. Read the files first: a mise config can run any command.
-        </p>
-        {changedAgain && (
-          <div className="flex items-center gap-2">
-            <p className="text-warning text-xs">The agent changed the mise config again since this was shown.</p>
-            <Button variant="ghost" size="sm" onClick={() => setShown(latest)}>
-              Show the new version
-            </Button>
-          </div>
-        )}
-        {trust.error && <p className="text-destructive text-xs">{trust.error}</p>}
+        <p className="text-sm font-medium">{title}</p>
+        {children}
       </div>
-      <Button variant="outline" size="sm" onClick={() => trust.run(config.digest)} disabled={trust.pending || changedAgain}>
-        Trust this config
-      </Button>
+      {action}
     </section>
   );
 }

@@ -8,6 +8,7 @@ import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { daemonAnswered, homeHasObject, homeModel } from "@/lib/home-model";
 import { listNeedsSettings, REPO_LIST_POLL_MS } from "@/lib/repo-status";
+import { RUNNING_MISE_POLL_MS } from "@/lib/run-state";
 import type { SessionSelection } from "@/lib/session-entries";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { HomeDetails } from "./HomeDetails.tsx";
@@ -27,8 +28,6 @@ const HomeCanvas = lazy(() => import("./HomeCanvas.tsx").then((m) => ({ default:
 
 /** Graf liczy się z kart wszystkich repo, a zmienia się z commitami, więc rzadko. */
 const GRAPH_POLL_MS = 30_000;
-/** Działające taski mise przychodzą na żywo z WebSocketu zdarzeń; odpytywane tylko bez jego połączenia. */
-const RUNNING_POLL_MS = 3000;
 
 export function HomeView({
   conn,
@@ -59,7 +58,7 @@ export function HomeView({
   );
   const running = useRemote(
     useCallback(() => post(conn, miseApi.running, {}), [conn]),
-    { pollMs: RUNNING_POLL_MS, live: runningLive },
+    { pollMs: RUNNING_MISE_POLL_MS, live: runningLive },
   );
   const [selected, setSelected] = useState<HomeKey | null>(null);
   const [hovered, setHovered] = useState<HomeKey | null>(null);

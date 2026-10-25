@@ -15,7 +15,7 @@ import { DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
-import { type MiseSnapshot, miseConfigChanges, miseConfigDigest, readMiseConfig, shownContent } from "./task-mise-config.ts";
+import { type MiseSnapshot, miseConfigChanges, miseConfigDigest, readMiseConfig, reviewMiseConfig } from "./task-mise-config.ts";
 
 /**
  * Zadania agentów (§4.4, ADR-31): polecenie dla Copilot CLI w osobnym worktree na nowej gałęzi od gałęzi domyślnej
@@ -251,17 +251,9 @@ export class AgentTasks {
   }
 
   /** The worktree's mise config against the trusted one (ADR-59), with the text of each changed file for the user to read. */
-  async miseConfig(id: string): Promise<TaskMiseConfig> {
+  miseConfig(id: string): Promise<TaskMiseConfig> {
     const task = this.#existingWorktree(id);
-    const current = await readMiseConfig(task.worktree);
-    const changes = miseConfigChanges(task.trustedMiseConfig ?? {}, current);
-    return {
-      neverTrusted: task.trustedMiseConfig === null,
-      changes: await Promise.all(
-        changes.map(async (c) => ({ ...c, content: c.change === "removed" ? null : await shownContent(task.worktree, c.path) })),
-      ),
-      digest: miseConfigDigest(current),
-    };
+    return reviewMiseConfig(task.worktree, task.trustedMiseConfig);
   }
 
   /**

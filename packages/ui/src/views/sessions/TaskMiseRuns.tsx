@@ -7,11 +7,9 @@ import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { relativeTime } from "@/lib/format";
+import { RUNNING_MISE_POLL_MS } from "@/lib/run-state";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
-
-/** Running mise tasks come live from the events WebSocket; polled only while it is not connected, as on Home. */
-const POLL_MS = 3000;
 
 /**
  * The mise tasks running in a task's worktree (ADR-59), started by its agent over MCP: the user watches their log and
@@ -29,7 +27,7 @@ export function TaskMiseRuns({
   paused: boolean;
 }) {
   const load = useCallback(() => post(conn, miseApi.running, {}), [conn]);
-  const remote = useRemote(paused ? undefined : load, { pollMs: POLL_MS, live });
+  const remote = useRemote(paused ? undefined : load, { pollMs: RUNNING_MISE_POLL_MS, live });
   const runs = (remote.data ?? []).filter((r) => r.task === task);
   if (runs.length === 0) return null;
   return (

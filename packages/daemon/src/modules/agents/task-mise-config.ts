@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import type { Dirent } from "node:fs";
-import { lstat, readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
-import type { MiseConfigChange } from "@trackwall/protocol";
+import { lstat, readdir, readFile, realpath, stat } from "node:fs/promises";
+import { isAbsolute, join, relative, sep } from "node:path";
+import type { MiseConfigChange, TaskMiseConfig } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 
 /**
@@ -34,25 +34,47 @@ const MAX_SHOWN_BYTES = 64 * 1024;
 
 interface Walk {
   readonly root: string;
-  readonly files: Map<string, string>;
+  /** The real path of the root, which a symbolic link must stay under. */
+  readonly realRoot: string;
+  readonly files: Map<string, Buffer>;
   bytes: number;
 }
 
-export async function readMiseConfig(worktree: string): Promise<MiseSnapshot> {
-  const walk: Walk = { root: worktree, files: new Map(), bytes: 0 };
+/** The mise files of a worktree with their content, sorted by path. */
+async function readMiseFiles(worktree: string): Promise<Map<string, Buffer>> {
+  const walk: Walk = { root: worktree, realRoot: await realpath(worktree), files: new Map(), bytes: 0 };
   await addMatching(walk, [], (name) => CONFIG_NAME.test(name) || ROOT_FILE.test(name));
   for (const dir of await dirsNamed(walk, [], [".config"])) await addMatching(walk, dir, (name) => CONFIG_NAME.test(name));
   for (const names of MISE_DIRS) for (const dir of await dirsNamed(walk, [], names)) await addTree(walk, dir);
-  return Object.fromEntries([...walk.files].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  return new Map([...walk.files].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 }
 
-/** A changed file of the config, before its content is read for the user (`shownContent`). */
-export type MiseFileChange = Omit<MiseConfigChange, "content">;
+export async function readMiseConfig(worktree: string): Promise<MiseSnapshot> {
+  return snapshotOf(await readMiseFiles(worktree));
+}
+
+/**
+ * The worktree's mise config against `trusted` (`null`: never trusted), for the user to review: the text of each changed
+ * file comes from the same read as the digest, so the digest the user trusts names the text they read.
+ */
+export async function reviewMiseConfig(worktree: string, trusted: MiseSnapshot | null): Promise<TaskMiseConfig> {
+  const files = await readMiseFiles(worktree);
+  const current = snapshotOf(files);
+  const changes = miseConfigChanges(trusted ?? {}, current).map((c): MiseConfigChange => {
+    const content = files.get(c.path);
+    return { ...c, content: content === undefined || content.length > MAX_SHOWN_BYTES ? null : content.toString("utf8") };
+  });
+  return { neverTrusted: trusted === null, changes, digest: miseConfigDigest(current) };
+}
+
+function snapshotOf(files: Map<string, Buffer>): MiseSnapshot {
+  return Object.fromEntries([...files].map(([path, content]) => [path, sha256(content)]));
+}
 
 /** What differs in `current` from `trusted`, sorted by path. */
-export function miseConfigChanges(trusted: MiseSnapshot, current: MiseSnapshot): MiseFileChange[] {
+export function miseConfigChanges(trusted: MiseSnapshot, current: MiseSnapshot): Omit<MiseConfigChange, "content">[] {
   const paths = [...new Set([...Object.keys(trusted), ...Object.keys(current)])].sort();
-  return paths.flatMap((path): MiseFileChange[] => {
+  return paths.flatMap((path): Omit<MiseConfigChange, "content">[] => {
     const before = trusted[path];
     const now = current[path];
     if (before === now) return [];
@@ -60,21 +82,6 @@ export function miseConfigChanges(trusted: MiseSnapshot, current: MiseSnapshot):
     if (now === undefined) return [{ path, change: "removed" }];
     return [{ path, change: "modified" }];
   });
-}
-
-/**
- * The text of a file the user is asked to trust, so that they trust what they read and not only a file name; `null`
- * for a file too long to show or no longer there.
- */
-export async function shownContent(worktree: string, path: string): Promise<string | null> {
-  const full = join(worktree, ...path.split("/"));
-  try {
-    if ((await lstat(full)).size > MAX_SHOWN_BYTES) return null;
-    return await readFile(full, "utf8");
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw err;
-  }
 }
 
 /** One hash of a whole snapshot, so the UI can name the config the user saw (`trust-task-mise-config`). */
@@ -98,7 +105,7 @@ async function dirsNamed(walk: Walk, dir: readonly string[], names: readonly str
   const found: string[][] = [];
   for (const entry of await entries(join(walk.root, ...dir))) {
     if (entry.name.toLowerCase() !== next) continue;
-    if (entry.isSymbolicLink()) throw symlink([...dir, entry.name]);
+    if (entry.isSymbolicLink()) throw unchecked([...dir, entry.name], "a linked directory");
     if (entry.isDirectory()) found.push(...(await dirsNamed(walk, [...dir, entry.name], deeper)));
   }
   return found;
@@ -112,19 +119,30 @@ async function addTree(walk: Walk, dir: readonly string[]): Promise<void> {
 }
 
 /**
- * A symbolic link is refused: mise follows it, so its target is the config, and a target can change outside the
- * checked files or lie outside the worktree. The size is checked before the read, so a huge file is not read every poll.
+ * mise follows a symbolic link, so a linked file counts by the content of its target, and only a target inside the
+ * worktree (a repo that keeps `mise.toml` in a subdirectory); one outside could change unseen or be any file of the
+ * user. Only regular files are read (a FIFO would block the read for good), and the size is checked before the read,
+ * so a huge file is not read every poll.
  */
 async function addFile(walk: Walk, path: readonly string[]): Promise<void> {
   if (walk.files.size >= MAX_FILES) throw tooLarge(`more than ${MAX_FILES} files`);
   const key = path.join("/");
   if (key.length > MAX_MISE_PATH) throw tooLarge(`a path longer than ${MAX_MISE_PATH} characters`);
-  const full = join(walk.root, ...path);
-  const stat = await lstat(full);
-  if (stat.isSymbolicLink()) throw symlink(path);
-  walk.bytes += stat.size;
+  let full = join(walk.root, ...path);
+  if ((await lstat(full)).isSymbolicLink()) {
+    full = await realpath(full);
+    if (!inside(walk.realRoot, full)) throw unchecked(path, "a symbolic link out of the worktree");
+  }
+  const info = await stat(full);
+  if (!info.isFile()) throw unchecked(path, "something other than a file");
+  walk.bytes += info.size;
   if (walk.bytes > MAX_BYTES) throw tooLarge(`more than ${MAX_BYTES / 1024 / 1024} MB`);
-  walk.files.set(key, sha256(await readFile(full)));
+  walk.files.set(key, await readFile(full));
+}
+
+function inside(root: string, path: string): boolean {
+  const rel = relative(root, path);
+  return rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
 /** Entries of a directory; a missing one (or a file in its place) has none. */
@@ -142,10 +160,10 @@ function tooLarge(what: string): DomainError {
   return new DomainError("mise_unavailable", `the mise config of the task worktree has ${what}, which Trackwall does not check`);
 }
 
-function symlink(path: readonly string[]): DomainError {
+function unchecked(path: readonly string[], what: string): DomainError {
   return new DomainError(
     "mise_unavailable",
-    `the mise config of the task worktree has a symbolic link (${path.join("/")}), which Trackwall does not check`,
+    `the mise config of the task worktree has ${what} (${path.join("/")}), which Trackwall does not check`,
   );
 }
 
