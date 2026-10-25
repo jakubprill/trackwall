@@ -8,7 +8,7 @@
  * On Windows `.exe` is appended when it is missing, so the same command works on both systems.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { apiResult, cardsApi, DaemonInfoResult, HealthResult, MCP_SERVER_NAME, workspaceApi } from "@trackwall/protocol";
@@ -103,6 +103,12 @@ const endpoint = card?.provides.find((p) => p.kind === "endpoint");
 const contract = `${endpoint?.kind === "endpoint" ? `${endpoint.request} -> ${endpoint.response}` : "no endpoint"}; DTO: ${card?.dtos.map((d) => d.name).join(", ")}`;
 if (contract !== "OrderDto -> OrderDto; DTO: OrderDto") throw new Error(`repo card: ${contract}; ${JSON.stringify(result)}`);
 console.log(`repo card: ${contract}`);
+
+// The Windows app update renames the running daemon exe (ADR-53); Windows allows that only if the process did not
+// open its own exe without delete sharing, which this checks for the Bun-compiled binary.
+renameSync(bin, `${bin}.renamed-by-smoke`);
+renameSync(`${bin}.renamed-by-smoke`, bin);
+console.log("running binary renamed and put back");
 
 await get("/api/daemon/shutdown", "POST");
 const code = await Promise.race([proc.exited, Bun.sleep(10_000).then(() => "timeout")]);

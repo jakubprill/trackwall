@@ -1,0 +1,35 @@
+---
+title: App updates
+description: Trackwall tells you when a new version is out and installs it with one click, checked against the release signature.
+---
+
+# App updates
+
+Trackwall tells you when a new version is out and installs it with one click, checked against the release signature.
+
+## What you get
+
+- A strip above the views when a newer version of Trackwall is released.
+- "Update and restart": download, install and restart in one click, with the download progress on screen.
+- Only updates signed by the Trackwall release key are installed.
+- Nothing installs or restarts until you click.
+
+## How it works
+
+Shortly after it starts, and then every few hours, the main window checks the latest release on GitHub. When there is a newer version, a strip above the views says "Trackwall `<version>` is available", with "Update and restart" and "Later". "Later" hides the strip until a newer version comes out or Trackwall starts again.
+
+"Update and restart" downloads the update and shows how far it got. Trackwall checks the signature before it changes anything, replaces its own files and starts again in the new version. The restart stops the services and Copilot CLI sessions that run in Trackwall, which is why it waits for your click.
+
+"Settings > Updates" shows the version you run, what the last check found and "Check for updates". An extra window checks only from there.
+
+## Use it
+
+1. When the strip appears, finish or stop what runs in Trackwall.
+2. Click "Update and restart".
+
+## Good to know
+
+- On Windows the update replaces the files of the Trackwall folder and leaves your own files there alone. The old files stay in `.update` inside it until the next start removes them. The folder must be one you can write to, as `%LOCALAPPDATA%\Programs\Trackwall` is.
+- On macOS the app in `/Applications` is replaced in place; if you cannot write to it, macOS asks for an administrator password.
+- The download goes through the proxy from the system settings or `HTTPS_PROXY`. A proxy that asks for Windows sign-in or replaces certificates can stop it; "Settings > Updates" then shows the error, and the [manual update](/guide/install#update) still works.
+- The browser mode (`trackwall-daemon --ui`) has no updates.

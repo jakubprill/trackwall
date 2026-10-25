@@ -17,6 +17,10 @@ mod saved_windows;
 mod tray_panel;
 #[cfg(windows)]
 mod win_text;
+// Tested on every system, used only on Windows (ADR-53).
+#[cfg_attr(not(windows), allow(dead_code))]
+mod portable_update;
+mod updates;
 mod window_effect;
 mod windows;
 
@@ -110,11 +114,13 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Arc::clone(&state))
         .manage(PanelState::default())
         .manage(WindowEffects::default())
         .manage(Windows::default())
         .manage(jump::PendingJump::default())
+        .manage(updates::Updates::default())
         .invoke_handler(tauri::generate_handler![
             daemon_connection,
             retry_daemon,
@@ -123,10 +129,17 @@ fn main() {
             jump::take_jump,
             link::open_link,
             open_from_tray_panel,
-            folder_picker::pick_projects_folder
+            folder_picker::pick_projects_folder,
+            updates::check_update,
+            updates::install_update
         ])
         .setup(move |app| {
             state.start();
+            // Files of the version this one replaced (ADR-53); in the background, because they are freed only once it exits.
+            #[cfg(windows)]
+            if let Ok(dir) = portable_update::app_dir() {
+                std::thread::spawn(move || portable_update::clean_up(&dir));
+            }
             let window = app.get_webview_window(windows::MAIN).ok_or("missing window main from tauri.conf.json")?;
             app.state::<WindowEffects>().apply(&window);
             build_tray(app.handle())?;
@@ -171,6 +184,7 @@ fn main() {
         // Cmd+Q and "Quit" from the Dock on macOS (and, according to the tao code, the end of a Windows session too) end the
         // event loop bypassing `ExitRequested` and the tray. Without this the daemon was left orphaned. After "Quit" from
         // the tray the daemon is already stopped.
+        // The restart after an update (ADR-53) comes this way too, so the new shell never finds the old daemon running.
         RunEvent::Exit => {
             // The event loop has already stopped: without hiding them, the window and tray would hang frozen until the stop finishes.
             hide_shell(handle);
