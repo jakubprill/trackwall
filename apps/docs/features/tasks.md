@@ -27,7 +27,7 @@ When another task in the same repo changes some of the same files, a warning abo
 
 The agent builds and tests its changes by running the repo's mise tasks in the task's worktree. While one runs, it shows above the task's tabs with "Log" and "Stop". Trackwall runs them only with the mise configuration you have agreed to: the one the worktree started with. If the agent changes a mise file (`mise.toml`, `.tool-versions`, a file task), a warning above the tabs lists the changed files, each of which you can open to read, and no mise task runs in the worktree until you have read them and press "Trust this config". If the agent changes them again while the warning is open, it says so and shows the new version only when you ask, so you always trust what you read.
 
-"Resume" starts Copilot CLI again with the task's conversation. "End task" removes the worktree and keeps the branch, or removes both; if that would lose changes, Trackwall asks first. A task cannot be ended while a mise task runs in its worktree: stop it first.
+"Resume" starts Copilot CLI again with the task's conversation. "End task" (also the X of a task without a session in the Sessions list and grid) removes the worktree and keeps the branch, or removes both; if that would lose changes, Trackwall asks first. A task cannot be ended while a mise task runs in its worktree: stop it first.
 
 ## Use it
 
