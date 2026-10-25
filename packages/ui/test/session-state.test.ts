@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Session } from "@trackwall/protocol";
-import { nextWaiting, nextWaitingShortcut, sessionStateLabel, waitingCount } from "../src/lib/session-state.ts";
+import { closeCutsOffTurn, nextWaiting, nextWaitingShortcut, sessionStateLabel, waitingCount } from "../src/lib/session-state.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-23T10:00:00Z", pid: 10 } as const;
 
@@ -44,6 +44,26 @@ describe("stan sesji w jednej linii", () => {
     expect(sessionStateLabel(session("a", change("Done"), exited(1)))).toEqual({ label: "finished" });
     expect(sessionStateLabel(session("a", change("Input"), exited(1)))).toEqual({ tone: "error", label: "error" });
     expect(sessionStateLabel(session("a", change("Error"), exited(0)))).toEqual({ tone: "error", label: "error" });
+  });
+});
+
+describe("closing a session", () => {
+  test("asks first while the agent is working or asking for approval of a step or a plan", () => {
+    expect(closeCutsOffTurn(session("a", change("Working")))).toBe(true);
+    expect(closeCutsOffTurn(waiting("a", change("Approval")))).toBe(true);
+    expect(closeCutsOffTurn(waiting("a", change("Plan")))).toBe(true);
+  });
+
+  test("closes at once when the agent waits for a prompt, is idle or in an unknown state", () => {
+    expect(closeCutsOffTurn(waiting("a", change("Input")))).toBe(false);
+    expect(closeCutsOffTurn(session("a", change("Input")))).toBe(false);
+    expect(closeCutsOffTurn(session("a", change("Stale")))).toBe(false);
+    expect(closeCutsOffTurn(session("a", null))).toBe(false);
+  });
+
+  test("closes at once when the session is already stopping or has ended", () => {
+    expect(closeCutsOffTurn(session("a", change("Working"), { kind: "stopping", runId: "r", startedAt: "", pid: 10 }))).toBe(false);
+    expect(closeCutsOffTurn(session("a", change("Working"), exited(1)))).toBe(false);
   });
 });
 

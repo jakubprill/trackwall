@@ -36,6 +36,18 @@ export function isLive(session: Session): boolean {
   return session.run.kind !== "exited";
 }
 
+/** States in which the agent is in the middle of a turn: working, or asking for approval of a step or a plan. */
+const MID_TURN_STATES: ReadonlySet<TaskStateChange["state"]> = new Set(["Working", "Approval", "Plan"]);
+
+/**
+ * Closing the session would cut the agent off in the middle of a turn, so the Close button asks first. An idle
+ * session, one that waits for your next prompt, one in an unknown state and one that is already stopping or has ended close
+ * at once.
+ */
+export function closeCutsOffTurn(session: Session): boolean {
+  return session.run.kind === "running" && session.state !== null && MID_TURN_STATES.has(session.state.state);
+}
+
 export function sessionStateLabel(session: Session): { tone?: StatusTone; label: string } {
   const { run, state } = session;
   if (run.kind === "stopping") return { tone: "warning", label: "stopping" };

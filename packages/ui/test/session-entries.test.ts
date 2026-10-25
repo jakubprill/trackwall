@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Session, Task, TaskProposal } from "@trackwall/protocol";
-import { entryId, entrySelection, findEntry, proposerLabel, sessionRows } from "../src/lib/session-entries.ts";
+import { entryId, entrySelection, findEntry, proposerLabel, selectionAfterClose, sessionRows } from "../src/lib/session-entries.ts";
 import { attentionCount } from "../src/lib/session-state.ts";
 
 function session(id: string, startedAt: string, task: string | null = null): Session {
@@ -63,6 +63,35 @@ describe("pozycje widoku Sesje", () => {
       "zadanie t2 undefined",
       "sesja s2",
     ]);
+  });
+
+  test("closing the selected session selects the next entry, and the previous one after the last", () => {
+    const entries = rowEntries({
+      sessions: [session("s1", "2026-10-23T12:00:00Z"), session("s2", "2026-10-23T11:00:00Z"), session("s3", "2026-10-23T10:00:00Z")],
+      tasks: [],
+      proposals: [],
+      worktreesDir: "/home/ja/.trackwall/worktrees",
+    });
+    const [s1, s2, s3] = entries;
+    if (!s1 || !s2 || !s3) throw new Error("expected three entries");
+    expect(selectionAfterClose(entries, { kind: "session", id: "s2" }, s2)).toEqual({ kind: "session", id: "s3" });
+    expect(selectionAfterClose(entries, { kind: "session", id: "s3" }, s3)).toEqual({ kind: "session", id: "s2" });
+    expect(selectionAfterClose([s1], { kind: "session", id: "s1" }, s1)).toBeUndefined();
+  });
+
+  test("closing a session that is not selected, or a task's session, keeps the selection", () => {
+    const entries = rowEntries({
+      sessions: [session("s1", "2026-10-23T12:00:00Z", "t1"), session("s2", "2026-10-23T11:00:00Z")],
+      tasks: [task("t1", "2026-10-23T09:00:00Z")],
+      proposals: [],
+      worktreesDir: "/home/ja/.trackwall/worktrees",
+    });
+    const [taskEntry, s2] = entries;
+    if (!taskEntry || !s2) throw new Error("expected two entries");
+    expect(taskEntry.kind).toBe("task");
+    expect(selectionAfterClose(entries, { kind: "task", id: "t1" }, s2)).toBe("keep");
+    expect(selectionAfterClose(entries, { kind: "session", id: "s1" }, taskEntry)).toBe("keep");
+    expect(selectionAfterClose(entries, undefined, s2)).toBe("keep");
   });
 
   test("wybór sesji zadania (z traya albo „Następna czekająca”) wskazuje jej zadanie", () => {
