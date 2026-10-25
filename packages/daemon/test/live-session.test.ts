@@ -227,4 +227,36 @@ describe("a prompt the daemon types into a session (a review, ADR-62)", () => {
 
     expect(written).toEqual(["read the review", "read the review"]);
   });
+
+  test("a background shell finishing does not take the session out of its input box", () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    endTurn(session, hooksFile);
+    appendFileSync(
+      hooksFile,
+      `${JSON.stringify({ event: "notification", receivedAt: 0, payload: { notification_type: "shell_completed" }, omitted: [] })}\n`,
+    );
+
+    expect(session.typePrompt("read the review")).toBe("typed");
+    expect(written).toEqual(["read the review"]);
+  });
+
+  test("waits for text the user typed during the turn and has not sent, and for a turn that started again in the same read", () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+    session.input("next, rename foo");
+    session.typePrompt("read the review");
+    endTurn(session, hooksFile);
+    expect(written).toEqual(["next, rename foo"]);
+
+    for (const event of ["userPromptSubmitted", "agentStop", "userPromptSubmitted"])
+      appendFileSync(hooksFile, `${JSON.stringify({ event, receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+
+    expect(written).toEqual(["next, rename foo"]);
+  });
 });

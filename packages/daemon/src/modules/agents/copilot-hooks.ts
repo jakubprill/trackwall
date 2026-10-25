@@ -10,12 +10,14 @@ import type { StateSignal } from "./task-state-tracker.ts";
  */
 
 /**
- * Copilot CLI waits in its input box after this hook record: the start of the session and the end of a turn. Every
- * other record (a question dialog, an approval, work) leaves it, and so does a key the user types. Only in the input
- * box can the daemon type a prompt for the user (ADR-62); the state alone does not tell, since a question dialog, a
- * guess from the screen and the user's Esc give `Input` too.
+ * Whether Copilot CLI waits in its input box after this hook record: yes after the start of the session and the end
+ * of a turn, no after any other record that changes the state (a question dialog, an approval, work), and `undefined`
+ * for a record that changes nothing (a background shell finished). Only in the input box can the daemon type a prompt
+ * for the user (ADR-62); the state alone does not tell, since a question dialog, a guess from the screen and the
+ * user's Esc give `Input` too, and the tracker drops an `Input` that follows another.
  */
-export function opensPromptBox(record: CopilotHookRecord): boolean {
+export function inPromptBoxAfter(record: CopilotHookRecord): boolean | undefined {
+  if (stateFromHook(record) === undefined) return undefined;
   return record.event === "sessionStart" || record.event === "agentStop";
 }
 

@@ -1,5 +1,5 @@
-import type { RunState, Session, TaskStateChange } from "@trackwall/protocol";
-import { opensPromptBox } from "./copilot-hooks.ts";
+import type { RunState, Session, TaskState, TaskStateChange } from "@trackwall/protocol";
+import { inPromptBoxAfter } from "./copilot-hooks.ts";
 import { sessionKey } from "./copilot-keys.ts";
 import { CopilotSessionState } from "./copilot-session-state.ts";
 import { HookTail } from "./hook-tail.ts";
@@ -49,6 +49,15 @@ function typedByUser(data: string): boolean {
   return data === "\u001b" || !data.startsWith("\u001b");
 }
 
+/**
+ * Text the user put into the input box: typed, or pasted (xterm.js sends a bracketed paste, which starts with ESC), but
+ * not Esc and not an answer in an approval or plan dialog, which leave nothing there.
+ */
+function writesText(data: string, state: TaskState | undefined): boolean {
+  if (state === "Approval" || state === "Plan") return false;
+  return !data.startsWith("\u001b") || data.startsWith("\u001b[200~");
+}
+
 export interface LiveSessionOptions {
   id: string;
   /** `null` for the supervisor in the projects folder (ADR-58). */
@@ -85,8 +94,10 @@ export class LiveSession {
    * leaves `Input`, that is until Copilot CLI has taken it.
    */
   #prompt: { text: string; typedAt: number | null } | undefined;
-  /** The last hook record left Copilot CLI in its input box, and the user has not typed since (`opensPromptBox`). */
+  /** The last hook record that changed the state left Copilot CLI in its input box (`inPromptBoxAfter`). */
   #inPromptBox = false;
+  /** The user typed or pasted since their last message was submitted, so the input box may hold their unsent text. */
+  #userDraft = false;
   #submitTimer: NodeJS.Timeout | undefined;
 
   constructor(o: LiveSessionOptions) {
@@ -114,10 +125,11 @@ export class LiveSession {
   input(data: string): void {
     if (this.#finished || !this.#terminal) return;
     this.#terminal.write(data);
-    if (typedByUser(data)) this.#inPromptBox = false;
     // Input counts from the state after the hooks already in `hooks.jsonl`, not after the last read cycle: a key
     // answers the prompt that is already there, and typing marks seen the end of a turn that has already been written.
     this.#readHooks();
+    // After the hooks already written, so that an end of a turn read now does not let a prompt join the user's text.
+    if (writesText(data, this.#last?.state)) this.#userDraft = true;
     const key = sessionKey(data);
     if (key) this.#report(this.#state.key(key));
     // After the key's own state change, so that the `Input` an Esc causes counts as seen.
@@ -173,6 +185,7 @@ export class LiveSession {
     if (this.#finished) return false;
     this.#readHooks();
     this.#report([this.#state.tick()]);
+    this.#typePrompt();
     const run = this.#run();
     if (run?.kind !== "exited") return true;
     // A stop by the user is an intended end, not a session error, even though the process ends with a signal.
@@ -208,7 +221,8 @@ export class LiveSession {
 
   #readHooks(): void {
     for (const record of this.#hooks.read()) {
-      this.#inPromptBox = opensPromptBox(record);
+      this.#inPromptBox = inPromptBoxAfter(record) ?? this.#inPromptBox;
+      if (record.event === "userPromptSubmitted") this.#userDraft = false;
       this.#report(this.#state.hook(record));
     }
   }
@@ -218,22 +232,19 @@ export class LiveSession {
       if (!change) continue;
       this.#attention.changed(this.#last?.state, change.state);
       this.#last = change;
+      // Copilot CLI took the typed prompt: the turn it started is the session's, and the next prompt is a new one.
+      if (this.#prompt?.typedAt != null && change.state !== "Input") this.#prompt = undefined;
     }
-    this.#typePrompt();
   }
 
-  /** The queued prompt goes into the PTY in the input box; Enter follows after `SUBMIT_DELAY_MS`. */
+  /** The queued prompt goes into the PTY in an empty input box; Enter follows after `SUBMIT_DELAY_MS`. */
   #typePrompt(): void {
     const terminal = this.#terminal;
     const prompt = this.#prompt;
-    if (!prompt || this.#finished || !terminal) return;
-    if (prompt.typedAt !== null) {
-      // Copilot CLI took the prompt: the turn it started is the session's, and the next prompt is a new one.
-      if (this.#last?.state !== "Input") this.#prompt = undefined;
-      return;
-    }
+    // Decided once after a batch of hook records, so a turn that ended and started again in one read gets nothing.
     // `Input` too, since a task's first `sessionStart` starts the turn of its prompt.
-    if (!this.#inPromptBox || this.#last?.state !== "Input") return;
+    if (!prompt || prompt.typedAt !== null || this.#finished || !terminal) return;
+    if (!this.#inPromptBox || this.#userDraft || this.#last?.state !== "Input") return;
     prompt.typedAt = Date.now();
     terminal.write(prompt.text);
     this.#submitTimer = setTimeout(() => {
