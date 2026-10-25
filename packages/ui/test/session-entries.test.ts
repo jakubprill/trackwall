@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type { Session, Task, TaskProposal } from "@trackwall/protocol";
-import { entryId, entrySelection, findEntry, proposerLabel, selectionAfterClose, sessionRows } from "../src/lib/session-entries.ts";
+import {
+  entryId,
+  entrySelection,
+  findEntry,
+  proposerLabel,
+  selectionAfterClose,
+  selectionAfterRemoval,
+  sessionRows,
+} from "../src/lib/session-entries.ts";
 import { attentionCount } from "../src/lib/session-state.ts";
 
 function session(id: string, startedAt: string, task: string | null = null): Session {
@@ -94,6 +102,20 @@ describe("Sessions view entries", () => {
     expect(selectionAfterClose(entries, { kind: "task", id: "t1" }, s2)).toBe("keep");
     expect(selectionAfterClose(entries, { kind: "session", id: "s1" }, taskEntry)).toBe("keep");
     expect(selectionAfterClose(entries, undefined, s2)).toBe("keep");
+  });
+
+  test("ending the selected task selects its neighbour, and ending another task keeps the selection", () => {
+    const entries = rowEntries({
+      sessions: [],
+      tasks: [task("t1", "2026-10-23T12:00:00Z"), task("t2", "2026-10-23T11:00:00Z")],
+      proposals: [],
+      worktreesDir: "/home/me/.trackwall/worktrees",
+    });
+    const [t1, t2] = entries;
+    if (!t1 || !t2) throw new Error("expected two entries");
+    expect(selectionAfterRemoval(entries, { kind: "task", id: "t1" }, t1)).toEqual({ kind: "task", id: "t2" });
+    expect(selectionAfterRemoval(entries, { kind: "task", id: "t2" }, t2)).toEqual({ kind: "task", id: "t1" });
+    expect(selectionAfterRemoval(entries, { kind: "task", id: "t2" }, t1)).toBe("keep");
   });
 
   test("selecting a task's session (from the tray or “Next waiting”) points to its task", () => {

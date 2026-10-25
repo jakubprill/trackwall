@@ -12,6 +12,10 @@ _Avoid_: backend, server (without qualification)
 The Tauri app: windows, tray, starting and supervising the daemon as a sidecar, the WebView2 check. It contains no domain logic.
 _Avoid_: app (when only Tauri is meant)
 
+**App update** (`updates.rs`, `UpdateCheck`; in the UI *update*):
+A newer version of Trackwall from GitHub Releases, installed by the shell after the user's click and followed by a restart (ADR-53). Its **update package** is the archive the updater downloads and checks against the signature: the release zip on Windows (`portable_update.rs`), `.app.tar.gz` on macOS; the **update manifest** is `latest.json` in the release.
+_Avoid_: upgrade, sync (that is the repo synchronization)
+
 **View** (`View`):
 A screen of the app in the UI (Home, Repos, Sessions, Overview, Daemon, Settings), switched with the view bar (`ActivityBar`) at the left edge of the window or with a shortcut.
 _Avoid_: tab (for a whole screen)
@@ -326,7 +330,7 @@ In the Sessions view the switch is labelled just "Layout".
 _Avoid_: view (that is a screen of the app), mode
 
 **Session grid** (`SessionGrid`, tile):
-Several session terminals side by side in the Sessions view, one tile per list entry, on pages of the list. The tile of the selected entry has the accent ring and takes the keyboard; a tile that is waiting for you has the warning frame. A tile, like a list row, has an X that closes its session: "Close session" in the UI is `stop` and then `dismiss` in the API.
+Several session terminals side by side in the Sessions view, one tile per list entry, on pages of the list. The tile of the selected entry has the accent ring and takes the keyboard; a tile that is waiting for you has the warning frame. A tile, like a list row, has an X that closes its session: "Close session" in the UI is `stop` and then `dismiss` in the API. On a task without a session the X is "End task".
 _Avoid_: split, dashboard (that is Home)
 
 **Session shortcut** (`SessionShortcut`; Alt+1…9, Alt+0, Alt+J):

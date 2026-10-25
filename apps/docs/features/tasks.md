@@ -31,7 +31,7 @@ A new worktree has only the files git tracks, so local config that is ignored by
 
 Every task also gets a port of its own, shown in the task's header. Every mise task that runs in the worktree gets it in `SERVER_PORT` and `PORT`, so the agent can start the repo's [service](/features/services) from the worktree without taking the port of the one you run from the repo.
 
-"Resume" starts Copilot CLI again with the task's conversation. "End task" removes the worktree and keeps the branch, or removes both; if that would lose changes, Trackwall asks first. A task cannot be ended while a mise task runs in its worktree: stop it first.
+"Resume" starts Copilot CLI again with the task's conversation. "End task" (also the X of a task without a session in the Sessions list and grid) removes the worktree and keeps the branch, or removes both; if that would lose changes, Trackwall asks first. A task cannot be ended while a mise task runs in its worktree: stop it first.
 
 ## Use it
 

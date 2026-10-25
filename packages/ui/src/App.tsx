@@ -5,6 +5,7 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { FolderDrop } from "@/components/FolderDrop";
 import { Loading } from "@/components/Loading";
 import { SupervisorPanel } from "@/components/SupervisorPanel";
+import { UpdateBanner } from "@/components/UpdateBanner";
 import { inDesktopShell, openWindow, reportShown, START_PARAMS, showViewMenu, startFromLocation } from "@/lib/app-window";
 import { DROP_HINT } from "@/lib/dropped-folder";
 import type { DroppedPaths } from "@/lib/file-drop";
@@ -17,6 +18,7 @@ import { attentionCount } from "@/lib/session-state";
 import { selectsSupervisor, showingTakesKeyboard, supervisorSummary } from "@/lib/supervisor";
 import { readSupervisorPinned, saveSupervisorPinned } from "@/lib/supervisor-pin";
 import { useAppMenu } from "@/lib/use-app-menu";
+import { useAppUpdate } from "@/lib/use-app-update";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
 import { useFileDrop } from "@/lib/use-file-drop";
@@ -60,6 +62,7 @@ export function App() {
     () => startFromLocation(window.location.search, START_PARAMS.sessionLayout, SESSION_LAYOUTS) ?? "1",
   );
   const { conn, epoch, error, retry } = useConnection();
+  const appUpdate = useAppUpdate();
   // A folder dropped outside a session (ADR-51); `seq` mounts a new bar for every drop, also of the same folder. A drop
   // without a daemon connection is ignored, rather than answered whenever the connection comes back.
   const [dropped, setDropped] = useState<{ paths: DroppedPaths; seq: number }>();
@@ -165,6 +168,7 @@ export function App() {
         badges={{ sessions: attentionCount(sessions.data) }}
       />
       <div className="flex min-w-0 flex-1 flex-col">
+        {appUpdate && <UpdateBanner handle={appUpdate} />}
         {error && <ErrorBanner message={error} action={{ label: "Try again", onClick: retry }} />}
         {windowError && <ErrorBanner message={windowError} action={{ label: "Dismiss", onClick: () => setWindowError(undefined) }} />}
         {conn && dropped && (
@@ -233,7 +237,7 @@ export function App() {
             )}
             {conn && view === "settings" && (
               <div className="flex justify-center p-6">
-                <SettingsView key={epoch} conn={conn} onRetry={retry} onSaved={() => setView("repos")} />
+                <SettingsView key={epoch} conn={conn} update={appUpdate} onRetry={retry} onSaved={() => setView("repos")} />
               </div>
             )}
           </main>

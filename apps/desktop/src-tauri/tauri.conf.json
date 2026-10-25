@@ -48,6 +48,11 @@
       "desktop": {
         "schemes": ["trackwall"]
       }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNGQTJGOENCOUI0RkMyNjIKUldSaXdrK2J5L2lpUDB0YzlVUnRKaTQxdk5jeHZUb0ZPM2tKSEFZVkc1V0dkUXM4Z0lWcEpYYlgK",
+      "endpoints": ["https://github.com/jakubprill/trackwall/releases/latest/download/latest.json"],
+      "requireSignedVersion": true
     }
   },
   "bundle": {
