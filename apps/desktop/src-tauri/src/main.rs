@@ -11,6 +11,7 @@ mod jump;
 mod link;
 mod lock;
 mod notification;
+mod saved_windows;
 mod tray_panel;
 #[cfg(windows)]
 mod win_text;
@@ -51,10 +52,13 @@ async fn open_window(app: AppHandle, view: String) -> Result<(), String> {
     windows::open(&app, Some(&view))
 }
 
-/// The window shows the Sessions view or stopped showing it; the tray sends sessions to such a window.
+/// What the window shows (its view and session layout): the tray sends sessions to a window that shows Sessions, and
+/// extra windows come back with it at the next start.
 #[tauri::command]
-fn window_shows_sessions(window: Window, windows: tauri::State<'_, Windows>, shows: bool) {
-    windows.shows_sessions(window.label(), shows);
+fn window_shows(window: Window, view: String, session_layout: String) -> Result<(), String> {
+    let shown = saved_windows::Shown::new(&view, &session_layout).ok_or("not a view or session layout id")?;
+    windows::shows(window.app_handle(), window.label(), shown);
+    Ok(())
 }
 
 /// A click in the tray panel (ADR-50): hides the panel and jumps to the entry, or shows the main window for "Open
@@ -106,7 +110,7 @@ fn main() {
             daemon_connection,
             retry_daemon,
             open_window,
-            window_shows_sessions,
+            window_shows,
             jump::take_jump,
             link::open_link,
             open_from_tray_panel
@@ -116,6 +120,7 @@ fn main() {
             let window = app.get_webview_window(windows::MAIN).ok_or("missing window main from tauri.conf.json")?;
             app.state::<WindowEffects>().apply(&window);
             build_tray(app.handle())?;
+            windows::restore(app.handle());
             notification::init(app.handle());
             global_shortcut::register(app.handle());
             attention::watch(app.handle().clone(), Arc::clone(&state), TRAY_ID);
@@ -136,6 +141,7 @@ fn main() {
                 api.prevent_close();
                 let _ = window.hide();
             }
+            WindowEvent::CloseRequested { .. } => windows::closed_by_user(window.app_handle(), window.label()),
             WindowEvent::Focused(true) => window.state::<Windows>().focused(window.label()),
             WindowEvent::Destroyed => windows::closed(window.app_handle(), window.label()),
             _ => {}
