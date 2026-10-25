@@ -1,33 +1,33 @@
 import { copilotMcpServers, MCP_SERVER_NAME } from "@trackwall/protocol";
 
 /**
- * Podłączenie serwera MCP Trackwall do Copilot CLI (§5.3, ADR-24): komenda `copilot mcp add`, która dopisuje wpis do
- * `~/.copilot/mcp-config.json`, i sam wpis do wklejenia ręcznie. Most stdio (`mcpStdioCommand`) podaje daemon.
+ * Connecting the Trackwall MCP server to Copilot CLI (§5.3, ADR-24): the `copilot mcp add` command, which adds an entry
+ * to `~/.copilot/mcp-config.json`, and the entry itself to paste by hand. The daemon gives the stdio bridge (`mcpStdioCommand`).
  */
 
-/** Komenda dla powłoki użytkownika: PowerShell na Windowsie, sh/zsh na macOS. */
+/** The command for the user's shell: PowerShell on Windows, sh/zsh on macOS. */
 export function copilotMcpAddCommand(mcpStdioCommand: readonly string[], platform: string): string {
   const quote = platform === "win32" ? quotePowerShell : quotePosix;
   return ["copilot", "mcp", "add", MCP_SERVER_NAME, "--", ...mcpStdioCommand].map(quote).join(" ");
 }
 
-/** Plik konfiguracji MCP Copilot CLI w katalogu domowym użytkownika, zapisany tak, jak zna go jego system. */
+/** The Copilot CLI MCP config file in the user's home directory, written the way their system knows it. */
 export function copilotMcpConfigPath(platform: string): string {
   return platform === "win32" ? "%USERPROFILE%\\.copilot\\mcp-config.json" : "~/.copilot/mcp-config.json";
 }
 
-/** Ten sam wpis w formacie `mcp-config.json`. */
+/** The same entry in the `mcp-config.json` format. */
 export function copilotMcpConfig(mcpStdioCommand: readonly string[]): string {
   return JSON.stringify(copilotMcpServers(mcpStdioCommand), null, 2);
 }
 
-/** Argument bez znaków specjalnych zostaje jak jest; inny w apostrofach, w których powłoka nic nie rozwija. */
+/** An argument without special characters stays as it is; any other goes in single quotes, inside which the shell expands nothing. */
 const PLAIN_POSIX = /^[\w@%+=:,./\\-]+$/;
 /**
- * PowerShell ma więcej znaków specjalnych w trybie argumentów: `,` buduje tablicę, a `@` na początku to splatting.
- * Argument zaczynający się od `-` też idzie w apostrofach: gołe `--` PowerShell bierze za koniec parametrów i nie
- * przekazuje go skryptowi (`copilot.ps1` z `npm install -g`), a Windows PowerShell 5.1 dzieli argumenty programów
- * w rodzaju `--config=C:\x.toml` na kropce.
+ * PowerShell has more special characters in argument mode: `,` builds an array, and a leading `@` is splatting.
+ * An argument starting with `-` also goes in single quotes: PowerShell takes a bare `--` for the end of parameters and
+ * does not pass it to the script (`copilot.ps1` from `npm install -g`), and Windows PowerShell 5.1 splits program
+ * arguments such as `--config=C:\x.toml` at the dot.
  */
 const PLAIN_POWERSHELL = /^[\w%+=:./\\][\w%+=:./\\-]*$/;
 
@@ -36,6 +36,6 @@ function quotePosix(arg: string): string {
 }
 
 function quotePowerShell(arg: string): string {
-  // PowerShell kończy napis także na apostrofach typograficznych (U+2018, U+2019), więc i je podwaja.
+  // PowerShell also ends a string at typographic apostrophes (U+2018, U+2019), so they are doubled too.
   return PLAIN_POWERSHELL.test(arg) ? arg : `'${arg.replace(/['\u2018\u2019]/g, "$&$&")}'`;
 }

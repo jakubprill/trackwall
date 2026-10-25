@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-/** Nagłówek powierzchni: podpis HUD (wersaliki) albo ścieżka w repo, pokazana dosłownie i w całości w podpowiedzi. */
+/** A surface's header: a HUD caption (capitals) or a path in the repo, shown literally and in full in the tooltip. */
 type Heading = { label: string; path?: never } | { path: string; label?: never } | { label?: never; path?: never };
 
 /**
- * Szklana powierzchnia: wspólna ramka dla list, podglądów, kafelków i paneli, żeby każdy widok miał
- * te same krawędzie, odstępy i przezroczystość (ADR-11, ADR-16). `meta` stoi po prawej w nagłówku,
- * `note` to przypis pod treścią (np. że plik jest ucięty).
+ * A glass surface: a shared frame for lists, previews, tiles and panels, so that every view has the same edges, spacing
+ * and transparency (ADR-11, ADR-16). `meta` stands on the right in the header, `note` is a footnote under the content
+ * (for example that the file is cut).
  */
 export function Surface({ label, path, meta, note, children }: Heading & { meta?: ReactNode; note?: string; children: ReactNode }) {
   const heading = label ?? path;

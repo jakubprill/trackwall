@@ -9,8 +9,8 @@ import { type SyncProgress, syncMessage, syncProgress, syncRepoTone } from "@/li
 import type { SyncRunHandle } from "@/lib/use-sync-run";
 
 /**
- * Synchronizacja wszystkich repo (ADR-21): przycisk, postęp i wynik każdego repo z pełnym komunikatem (także dla
- * aktualnego, ADR-34), bo w wierszu listy repo mieści się tylko krótki tekst.
+ * Sync of all repos (ADR-21): the button, progress and the result of every repo with the full message (also for an
+ * up-to-date one, ADR-34), because a row of the repo list fits only a short text.
  */
 export function SyncView({ sync, canSync }: { sync: SyncRunHandle; canSync: boolean }) {
   const { run } = sync;
@@ -49,7 +49,7 @@ export function SyncView({ sync, canSync }: { sync: SyncRunHandle; canSync: bool
   );
 }
 
-/** Pod ścieżką folderu na liście repo: start synchronizacji i przejście do jej wyników; start od razu je pokazuje. */
+/** Under the folder path in the repo list: starting the sync and the way to its results; a start shows them at once. */
 export function SyncBar({ sync, onShow }: { sync: SyncRunHandle; onShow: () => void }) {
   return (
     <div className="flex flex-wrap items-center gap-2 px-4 pb-3">

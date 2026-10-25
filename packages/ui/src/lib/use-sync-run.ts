@@ -6,7 +6,7 @@ import { type BackgroundRunHandle, useBackgroundRun } from "./use-background-run
 
 export type SyncRunHandle = BackgroundRunHandle<SyncRun> & { start: () => void };
 
-/** Ostatnia synchronizacja folderu z projektami (ADR-21) i jej start; `onFinished` jak w `useBackgroundRun`. */
+/** The last sync of the projects folder (ADR-21) and its start; `onFinished` as in `useBackgroundRun`. */
 export function useSyncRun(conn: Connection, onFinished: () => void): SyncRunHandle {
   const load = useCallback(() => post(conn, workspaceApi.syncRun, {}), [conn]);
   const { act, ...handle } = useBackgroundRun(load, onFinished);

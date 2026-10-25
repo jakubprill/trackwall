@@ -10,8 +10,8 @@ import { useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
 
 /**
- * Drzewo plików z ostatniego commita (daemon czyta HEAD, nie katalog roboczy, ADR-14) i podgląd wybranego pliku.
- * Zmiana `head` (nowy commit) pobiera katalog i plik od nowa, zostawiając poprzednie do czasu odpowiedzi.
+ * The file tree from the last commit (the daemon reads HEAD, not the working directory, ADR-14) and a preview of the
+ * selected file. A change of `head` (a new commit) fetches the directory and the file anew, keeping the previous ones until the response.
  */
 export function RepoFiles({ conn, repo, head }: { conn: Connection; repo: string; head: string }) {
   const [dir, setDir] = useState("");

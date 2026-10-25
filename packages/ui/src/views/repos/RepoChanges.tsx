@@ -9,9 +9,9 @@ import { REPO_LIST_POLL_MS } from "@/lib/repo-status";
 import { useRemote } from "@/lib/use-remote";
 
 /**
- * Zakładka „Changes” repo (ADR-34): pliki i diff katalogu roboczego względem HEAD, z nowymi plikami, tylko do
- * przeczytania. Odpytywana tak często jak lista repo (następne pytanie po odpowiedzi, więc wolny git w dużym repo nie
- * piętrzy pytań), bo to zmiany użytkownika, a nie agenta, i od nowa po nowym commicie (`refreshKey`: HEAD).
+ * A repo's "Changes" tab (ADR-34): the files and diff of the working directory against HEAD, with new files, read-only.
+ * Polled as often as the repo list (the next request after the response, so a slow git in a big repo does not pile up
+ * requests), because these are the user's changes, not an agent's, and anew after a new commit (`refreshKey`: HEAD).
  */
 export function RepoChanges({ conn, repo, refreshKey }: { conn: Connection; repo: string; refreshKey: string }) {
   const load = useCallback(() => post(conn, workspaceApi.changes, { repo }), [conn, repo]);

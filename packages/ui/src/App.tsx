@@ -31,7 +31,7 @@ import { ReposView } from "@/views/repos/ReposView";
 import { SessionsView } from "@/views/sessions/SessionsView";
 import { SettingsView } from "@/views/settings/SettingsView";
 
-/** Kolejność i skróty paska widoków; „Home” jest pierwszy (ADR-33), następne widoki pracy dostają kolejne cyfry. */
+/** Order and shortcuts of the view bar; "Home" is first (ADR-33), the next work views get the next digits. */
 // The macOS menu bar has the same ids, labels and shortcuts (`app_menu.rs`); `apps/desktop/test/shell-events.test.ts`
 // compares them and reads each entry's keys in this order.
 const VIEWS = [
@@ -46,7 +46,7 @@ type View = (typeof VIEWS)[number]["id"];
 const VIEW_IDS = VIEWS.map((v) => v.id);
 
 export function App() {
-  // Repo otwarte z pulpitu należy do przejścia, nie do widoku: każde inne przejście do „Repos” zaczyna bez niego.
+  // A repo opened from the dashboard belongs to the navigation, not to the view: any other navigation to "Repos" starts without it.
   // An extra window starts with the view it was opened with or showed at the last run (ADR-49), the main window with
   // Home. `visit` grows with every opening of a repo, so that Repos is mounted again with it even when it is already open.
   const [{ view, repo, visit }, setNav] = useState<{ view: View; repo?: string; visit: number }>(() => ({

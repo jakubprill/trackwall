@@ -1,9 +1,9 @@
 import type { ITerminalOptions, ITheme } from "@xterm/xterm";
 
 /**
- * Ustawienia okna terminala sesji (ADR-26). Copilot CLI przejmuje mysz, więc zwykłe przeciągnięcie trafia do TUI,
- * a nie zaznacza tekstu. Zaznaczenie wymusza Shift na Windowsie (domyślnie w xterm.js) i Option na macOS, które
- * xterm.js trzeba włączyć osobno. Kopiowanie: Cmd+C na macOS, Ctrl+C z zaznaczeniem na Windowsie (`terminal-copy.ts`).
+ * Settings of the session terminal window (ADR-26). Copilot CLI takes over the mouse, so a plain drag goes to the TUI
+ * instead of selecting text. Selection is forced with Shift on Windows (the xterm.js default) and Option on macOS, which
+ * has to be turned on in xterm.js separately. Copying: Cmd+C on macOS, Ctrl+C with a selection on Windows (`terminal-copy.ts`).
  */
 export function sessionTerminalOptions(theme: ITheme, fontFamily: string): ITerminalOptions {
   return {

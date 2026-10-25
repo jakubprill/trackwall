@@ -21,9 +21,9 @@ import { TaskRemoval } from "./TaskRemoval.tsx";
 type TaskTab = "terminal" | "changes";
 
 /**
- * Wybrane zadanie (ADR-31): tytuł albo polecenie, gałąź i stan sesji w nagłówku, terminal sesji i zmiany w worktree
- * w zakładkach. Zadanie z propozycji mówi, kto je zaproponował, a podsumowanie od sesji zadania (ADR-39) stoi nad
- * zakładkami. Zadanie bez działającej sesji można wznowić albo zakończyć; worktree otwiera się w VS Code zawsze.
+ * The selected task (ADR-31): title or prompt, branch and session state in the header, the session terminal and the
+ * worktree changes in tabs. A task from a proposal says who proposed it, and the summary from the task session (ADR-39)
+ * sits above the tabs. A task without a running session can be resumed or ended; the worktree always opens in VS Code.
  * The warnings about files another task also changes (ADR-44) and about a changed mise config of the worktree (ADR-59)
  * sit above the summary, and the mise tasks the agent runs in the worktree below it.
  */
@@ -41,7 +41,7 @@ export function TaskPanel({
   conn: Connection;
   task: Task;
   session: Session | undefined;
-  /** Wszystkie sesje z listy, żeby nazwać sesję, która zaproponowała zadanie. */
+  /** All sessions from the list, to name the session that proposed the task. */
   sessions: readonly Session[];
   /** All tasks on the list, to name the task that changes the same files. */
   tasks: readonly Task[];
@@ -131,26 +131,26 @@ export function TaskPanel({
   );
 }
 
-/** Tytuł albo polecenie zadania, a przy zadaniu z propozycji także to, kto je zaproponował. */
+/** The task's title or prompt and, for a task from a proposal, who proposed it. */
 function taskSubtitle(task: Task, sessions: readonly Session[]): string {
   const name = taskName(task);
   return task.proposedBy ? `${name} · ${proposerLabel(task.proposedBy, sessions)}` : name;
 }
 
-/** Podsumowanie od sesji zadania (`report_result`) z czasem zgłoszenia. */
+/** The summary from the task session (`report_result`) with the time it was reported. */
 function TaskSummary({ summary }: { summary: NonNullable<Task["summary"]> }) {
   return (
     <section aria-label="Summary from the task session" className="flex flex-col gap-1 border-b px-4 py-3">
       <span className="hud-label">
         Summary <span className="text-muted-foreground font-sans normal-case">{relativeTime(summary.reportedAt, new Date())}</span>
       </span>
-      {/* Najwyżej kilka linii: dłuższe podsumowanie przewija się, a nie ściska terminala sesji pod spodem. */}
+      {/* A few lines at most: a longer summary scrolls instead of squeezing the session terminal below. */}
       <p className="max-h-32 max-w-prose overflow-auto text-sm whitespace-pre-wrap">{summary.text}</p>
     </section>
   );
 }
 
-/** Zatrzymanie działającej sesji zadania; błąd obok przycisku. */
+/** Stopping the task's running session; the error shows next to the button. */
 function StopButton({ conn, session, onStopped }: { conn: Connection; session: Session; onStopped: () => void }) {
   const stop = useAction(() => post(conn, agentsApi.stop, { session: session.id }), onStopped);
   return (

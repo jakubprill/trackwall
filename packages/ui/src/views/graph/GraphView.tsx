@@ -13,8 +13,8 @@ import { GraphCanvas } from "./GraphCanvas.tsx";
 import { GraphNodePanel, GraphSummaryPanel } from "./GraphNodePanel.tsx";
 
 /**
- * Widok „Przegląd” (§4.6, ADR-29): graf połączeń między repo na całą szerokość i panel szczegółów wybranego repo po
- * prawej. Graf liczy daemon z kart repo, więc nowy commit w repo zmienia go przy następnym odpytaniu.
+ * The "Overview" view (§4.6, ADR-29): the graph of connections between repos at full width and the details panel of the
+ * selected repo on the right. The daemon computes the graph from the repo cards, so a new commit in a repo changes it at the next poll.
  */
 const POLL_MS = 30_000;
 
@@ -32,7 +32,7 @@ export function GraphView({ conn }: { conn: Connection }) {
       ),
     [data],
   );
-  // Repo, którego nie ma w odświeżonym grafie (np. usunięty katalog), nie ma panelu; wybór wraca, gdy repo wróci.
+  // A repo missing from the refreshed graph (for example a deleted directory) has no panel; the selection comes back when the repo does.
   const node = data?.nodes.find((n) => n.repo === selected);
   return (
     <div className="grid h-full min-h-0 grid-cols-[1fr_24rem]">

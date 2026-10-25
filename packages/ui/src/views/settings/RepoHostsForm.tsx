@@ -7,10 +7,10 @@ import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { HOST_KIND_LABEL, loginCommand } from "@/lib/repo-hosts";
 
-/** Podpowiedź hosta przy wyborze rodzaju; GitLab firmowy ma własny adres, więc bez wartości. */
+/** Host hint for the chosen kind; a self-hosted GitLab has its own address, so it is only an example. */
 const HOST_HINT: Record<RepoHostKind, string> = { gitlab: "gitlab.example.com", github: "github.com" };
 
-/** Lista hostingów repo (ADR-19): każda zmiana zapisuje całą listę jako `repoHosts` w `workspace.yaml`. */
+/** The list of repo hosts (ADR-19): every change saves the whole list as `repoHosts` in `workspace.yaml`. */
 export function RepoHostsForm({ conn, initial }: { conn: Connection; initial: RepoHost[] }) {
   const [hosts, setHosts] = useState(initial);
   const [kind, setKind] = useState<RepoHostKind>("gitlab");

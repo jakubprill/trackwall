@@ -10,8 +10,8 @@ const TOOL_NAMES = Object.values(mcpTools)
   .join(", ");
 
 /**
- * Jak podłączyć serwer MCP Trackwall do Copilot CLI (§5.3, ADR-24): komenda do skopiowania i ten sam wpis w JSON.
- * UI niczego nie zapisuje w konfiguracji Copilot CLI; robi to `copilot mcp add` po stronie użytkownika.
+ * How to connect the Trackwall MCP server to Copilot CLI (§5.3, ADR-24): a command to copy and the same entry in JSON.
+ * The UI writes nothing into the Copilot CLI config; `copilot mcp add` does that on the user's side.
  */
 export function ConnectCopilot({ info }: { info: DaemonInfo }) {
   const command = copilotMcpAddCommand(info.mcpStdioCommand, info.platform);

@@ -1,9 +1,9 @@
 /**
- * Skróty widoków z paska widoków: Ctrl + klawisz, na macOS ⌘ + klawisz, bez Shift i Alt.
- * Cyfry są rozpoznawane po klawiszu (`code`), bo na AZERTY cyfra bez Shift daje inny znak; z klawiatury numerycznej
- * tylko przy włączonym NumLock, bo bez niego te klawisze to End, PageUp itd. Przecinek po znaku (`key`), bo w innych
- * układach (AZERTY, Dvorak) leży na innym klawiszu, a na jego miejscu bywa litera z własnym skrótem. W układach, w których
- * przecinek wymaga Shift (cyrylica), ustawień nie otworzy skrót, tylko ikona.
+ * View shortcuts from the view bar: Ctrl + key, on macOS ⌘ + key, without Shift and Alt.
+ * Digits are recognised by the key (`code`), because on AZERTY a digit without Shift gives another character; from the
+ * numeric keypad only with NumLock on, because without it those keys are End, PageUp and so on. The comma by the character
+ * (`key`), because in other layouts (AZERTY, Dvorak) it lies on another key, and its place may hold a letter with its own
+ * shortcut. In layouts where the comma needs Shift (Cyrillic), the settings open from the icon, not the shortcut.
  */
 export type ViewShortcut = "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | ",";
 
@@ -68,12 +68,12 @@ function matchesKey(press: KeyPress, shortcut: ViewShortcut): boolean {
     : press.code === `Digit${shortcut}` || (press.code === `Numpad${shortcut}` && press.key === shortcut);
 }
 
-/** Podpis skrótu w konwencji systemu: `⌘1` na macOS, `Ctrl+1` gdzie indziej. */
+/** The shortcut caption in the system's convention: `⌘1` on macOS, `Ctrl+1` elsewhere. */
 export function shortcutLabel(shortcut: ViewShortcut, isMac: boolean): string {
   return isMac ? `⌘${shortcut}` : `Ctrl+${shortcut}`;
 }
 
-/** Wartość `aria-keyshortcuts` (nazwy modyfikatorów z WAI-ARIA). */
+/** The `aria-keyshortcuts` value (modifier names from WAI-ARIA). */
 export function ariaShortcut(shortcut: ViewShortcut, isMac: boolean): string {
   return `${isMac ? "Meta" : "Control"}+${shortcut}`;
 }

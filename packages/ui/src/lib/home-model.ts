@@ -15,15 +15,15 @@ import type { StatusTone } from "./repo-status.ts";
 import { IDLE_LABEL, isIdle, STATE_LABELS, sessionStateLabel } from "./session-state.ts";
 
 /**
- * Migawka pulpitu (ADR-33, §5.5) z odpowiedzi daemona, którymi żyją też inne widoki: lista repo, sesje, graf
- * i działające taski mise. Reguły stanu są te same co na liście repo i w widoku „Sessions”, a warstwa repo to kolumna
- * z „Overview”, więc pulpit nie różni się od nich w niczym, co pokazuje.
+ * The dashboard snapshot (ADR-33, §5.5) from daemon responses other views live on too: the repo list, sessions, the graph
+ * and running mise tasks. The state rules are the same as in the repo list and the "Sessions" view, and a repo's layer is
+ * its column in "Overview", so the dashboard differs from them in nothing it shows.
  */
 
 export interface HomeSources {
   repos: readonly Repo[];
   sessions: readonly Session[];
-  /** `undefined`, dopóki graf się liczy: repo stoją wtedy w jednym łuku bez połączeń. */
+  /** `undefined` while the graph is being computed: the repos then stand in one arc without connections. */
   graph: RepoGraph | undefined;
   running: readonly RunningMiseTask[];
   daemonRunning: boolean;
@@ -50,8 +50,8 @@ export function homeModel({ repos, sessions, graph, running, daemonRunning }: Ho
 }
 
 /**
- * Niedostępne, potem zmiany w katalogu roboczym (jak `repoStatusTone` na liście repo), potem commity do pobrania,
- * których lista repo nie liczy do stanu, a pulpit tak, bo to też praca do zrobienia.
+ * Unavailable, then working directory changes (like `repoStatusTone` in the repo list), then commits to pull, which the
+ * repo list does not count towards the state but the dashboard does, because that is work to do too.
  */
 function repoState(repo: Repo): { state: HomeRepoState; count: number } {
   const { status } = repo;
@@ -61,7 +61,7 @@ function repoState(repo: Repo): { state: HomeRepoState; count: number } {
   return behind > 0 ? { state: "behind", count: behind } : { state: "clean", count: 0 };
 }
 
-/** Stan obiektu pulpitu w jednej linii: ton kropki i tekst. Jedno miejsce dla kolejki, szczegółów, podglądu i etykiet. */
+/** The state of a dashboard object in one line: dot tone and text. One place for the queue, details, preview and labels. */
 export interface HomeStatus {
   tone?: StatusTone;
   label: string;
@@ -69,7 +69,7 @@ export interface HomeStatus {
 
 const REPO_TONES: Record<HomeRepoState, StatusTone> = { clean: "ok", behind: "warning", changed: "warning", unavailable: "error" };
 
-/** Stan repo z pulpitu tymi samymi słowami co lista repo, a przy repo do pobrania z liczbą commitów. */
+/** The repo state on the dashboard in the same words as the repo list, and for a repo to pull with the number of commits. */
 export function homeRepoStatus(repo: HomeRepo): HomeStatus {
   const tone = REPO_TONES[repo.state];
   if (repo.state === "changed") return { tone, label: changesLabel(repo.count) ?? "changed" };
@@ -77,12 +77,12 @@ export function homeRepoStatus(repo: HomeRepo): HomeStatus {
   return { tone, label: repo.state };
 }
 
-/** Commity do pobrania z gałęzi nadrzędnej: „1 commit to pull”, „3 commits to pull”. */
+/** Commits to pull from the upstream branch: "1 commit to pull", "3 commits to pull". */
 export function pullLabel(behind: number): string {
   return `${countLabel(behind, { one: "commit", other: "commits" })} to pull`;
 }
 
-/** Słowa z widoku „Sessions” (`STATE_LABELS`), bez „prawdopodobnie”, bo pulpit pokazuje tylko kategorię. */
+/** The words of the "Sessions" view (`STATE_LABELS`), without "probably", because the dashboard shows only the category. */
 export const HOME_SESSION_STATUS: Record<HomeSessionState, HomeStatus> = {
   working: { tone: "ok", label: STATE_LABELS.Working },
   attention: { tone: "warning", label: STATE_LABELS.Input },
@@ -92,8 +92,9 @@ export const HOME_SESSION_STATUS: Record<HomeSessionState, HomeStatus> = {
 };
 
 /**
- * Daemon działa, dopóki odpowiada: błąd z kodem daemona (np. zły `workspace.yaml`) przyszedł od niego, a bez kodu
- * albo z `bad_response` (np. strona błędu proxy zamiast koperty API) to zerwane połączenie.
+ * The daemon is running as long as it answers: an error with a daemon code (for example a bad `workspace.yaml`) came
+ * from it, and one without a code or with `bad_response` (for example a proxy error page instead of an API envelope) is
+ * a dropped connection.
  */
 export function daemonAnswered(error: string | undefined, errorCode: CallErrorCode | undefined): boolean {
   return error === undefined || (errorCode !== undefined && errorCode !== "bad_response");
@@ -115,7 +116,10 @@ export function homeSessionState(session: Session): HomeSessionState {
   return session.state?.state === "Error" ? "error" : "working";
 }
 
-/** Obiekt pod kluczem jest w migawce; wybór obiektu, który zniknął (zakończona sesja, usunięte repo), przepada. */
+/**
+ * The object under the key is in the dashboard snapshot; a selection of an object that disappeared (an ended session,
+ * a removed repo) is dropped.
+ */
 export function homeHasObject(model: HomeModel, key: HomeKey): boolean {
   const target = parseHomeKey(key);
   if (target?.kind === "repo") return model.repos.some((r) => r.id === target.id);
@@ -123,7 +127,7 @@ export function homeHasObject(model: HomeModel, key: HomeKey): boolean {
   return target?.kind === "daemon";
 }
 
-/** Jedno połączenie na parę repo i rodzaj: kilka dowodów tej samej zależności to na scenie jeden przewód. */
+/** One connection per repo pair and kind: several pieces of evidence for the same dependency are one wire on the scene. */
 function homeLinks(edges: RepoGraph["edges"]): HomeLink[] {
   const links = new Map<string, HomeLink>();
   for (const { from, to, kind } of edges) links.set(JSON.stringify([from, to, kind]), { from, to, kind });

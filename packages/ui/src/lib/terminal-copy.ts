@@ -1,8 +1,8 @@
 /**
- * Kopiowanie z terminala sesji na Windowsie (ADR-26). xterm.js zamienia Ctrl+C na znak przerwania dla programu,
- * a kopiuje tylko na zdarzenie `copy` przeglądarki, którego Ctrl+C w terminalu nie wywołuje. Dlatego tak jak w Windows
- * Terminal: Ctrl+C z zaznaczonym tekstem i Ctrl+Shift+C kopiują zaznaczenie, a Ctrl+C bez zaznaczenia idzie do sesji.
- * Na macOS kopiuje Cmd+C, które xterm.js przepuszcza do przeglądarki, a Ctrl+C zostaje przerwaniem.
+ * Copying from a session terminal on Windows (ADR-26). xterm.js turns Ctrl+C into the interrupt character for the
+ * program and copies only on the browser's `copy` event, which Ctrl+C in the terminal does not trigger. So, as in Windows
+ * Terminal: Ctrl+C with selected text and Ctrl+Shift+C copy the selection, and Ctrl+C without a selection goes to the session.
+ * On macOS Cmd+C copies, which xterm.js passes to the browser, and Ctrl+C stays the interrupt.
  */
 type CopyKey = Pick<KeyboardEvent, "type" | "key" | "ctrlKey" | "altKey" | "metaKey">;
 

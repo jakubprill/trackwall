@@ -19,8 +19,8 @@ import { branchLabel } from "@/lib/repo-status";
 import { sessionPlace, sessionStateLabel } from "@/lib/session-state";
 
 /**
- * Prawy panel pulpitu: szczegóły wybranego obiektu i przycisk, który do niego przechodzi. Bez wyboru pokazuje
- * podsumowanie środowiska, żeby panel nigdy nie był pusty, a pulpit dało się czytać bez sceny 3D.
+ * The dashboard's right panel: details of the selected object and a button that goes to it. Without a selection it shows
+ * a summary of the environment, so that the panel is never empty and the dashboard can be read without the 3D scene.
  */
 export function HomeDetails({
   selected,
@@ -133,7 +133,7 @@ function RepoDetails({
       {repo.status.kind === "ok" && (
         <Field name="Branch">
           <span className="font-mono">{branchLabel(repo.status)}</span>
-          {/* Repo ze zmianami ma stan „changed”, więc commity do pobrania widać dopiero tutaj. */}
+          {/* A repo with changes has the state "changed", so commits to pull show only here. */}
           {homeRepo.state === "changed" && behind > 0 && <span className="text-warning">{` · ${pullLabel(behind)}`}</span>}
         </Field>
       )}
@@ -186,7 +186,7 @@ function Field({ name, children }: { name: string; children: ReactNode }) {
   );
 }
 
-/** Stan środowiska słowami: to samo, co mówi rdzeń sceny i liczby obiektów na niej. */
+/** The environment's state in words: the same as the scene's core and the object counts on it say. */
 function Summary({ model }: { model: HomeModel }) {
   const count = (state: HomeSessionState) => model.sessions.filter((s) => s.state === state).length;
   const rows = [

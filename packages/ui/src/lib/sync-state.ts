@@ -2,9 +2,9 @@ import { countLabel, type SyncRepo, type SyncRun, type SyncSkipReason, type Sync
 import { workingTreeLabel } from "./format.ts";
 import type { StatusTone } from "./repo-status.ts";
 
-/** Synchronizacja w UI (ADR-21): ton i krótki tekst wyniku repo oraz postęp całości; testy w `test/sync-state.test.ts`. */
+/** Sync in the UI (ADR-21): the tone and short text of a repo's result and the overall progress; tests in `test/sync-state.test.ts`. */
 
-/** Krótko, bo stoi w wierszu listy repo; pełne zdanie z daemona jest w panelu synchronizacji. */
+/** Short, because it stands in a row of the repo list; the daemon's full sentence is in the sync panel. */
 const SKIP_LABEL: Record<SyncSkipReason, string> = {
   "no-remote": "no remote",
   "no-default-branch": "no default branch",
@@ -33,9 +33,9 @@ export function syncRepoTone(repo: SyncRepo): { tone: StatusTone; label: string 
 }
 
 /**
- * Pełne zdania o wyniku repo (ADR-34): co stało się z gałęzią domyślną, czy zmieniło to pliki w katalogu roboczym
- * (nie, gdy wybrana jest inna gałąź) i że lokalne zmiany zostały nietknięte. Bez tego „aktualne” repo z czterema
- * zmienionymi plikami wygląda jak synchronizacja, która nic nie zrobiła. Trwające repo nie ma jeszcze czego powiedzieć.
+ * Full sentences about a repo's result (ADR-34): what happened to the default branch, whether that changed files in the
+ * working directory (no when another branch is checked out), and that local changes were left untouched. Without this an
+ * "up to date" repo with four changed files looks like a sync that did nothing. A running repo has nothing to say yet.
  */
 export function syncMessage(repo: SyncRepo): string | undefined {
   switch (repo.state) {
@@ -70,13 +70,13 @@ function checkedOut(tree: SyncWorkingTree): string {
   return tree.branch === null ? "The working directory has a detached HEAD" : `The working directory is on ${tree.branch}`;
 }
 
-/** Bez stanu katalogu roboczego (`git status` po synchronizacji zawiódł) nie ma czego dopowiedzieć. */
+/** Without the working directory state (`git status` after the sync failed) there is nothing to add. */
 function localChanges(tree: SyncWorkingTree | null): string | undefined {
   const label = tree && workingTreeLabel(tree.changed, tree.untracked);
   return label ? `Uncommitted files stay as they are: ${label}` : undefined;
 }
 
-/** Zdania z daemona (`message`) nie mają kropki na końcu, a komunikaty gita mają; stąd kropka tylko tam, gdzie jej brak. */
+/** Sentences from the daemon (`message`) have no full stop at the end, and git messages do; hence a full stop only where it is missing. */
 function sentences(parts: (string | null | undefined)[]): string {
   return parts
     .filter((p) => typeof p === "string")
@@ -87,14 +87,14 @@ function sentences(parts: (string | null | undefined)[]): string {
 export interface SyncBadge {
   tone: StatusTone;
   label: string;
-  /** Zdanie do podpowiedzi; trwające repo go nie ma. */
+  /** The sentence for the tooltip; a running repo has none. */
   message: string | undefined;
 }
 
 /**
- * Wynik pod stanem repo na liście, także „aktualne”, bo bez niego nie widać, że synchronizacja doszła do repo. Wynik
- * z czasem przestaje być prawdą (nowe commity na zdalnym), więc podpowiedź skończonego repo mówi, kiedy synchronizacja
- * się zaczęła.
+ * The result under the repo's state in the list, also "up to date", because without it you cannot see that the sync
+ * reached the repo. A result stops being true over time (new commits on the remote), so the tooltip of a finished repo
+ * says when the sync started.
  */
 export function listSyncBadge(repo: SyncRepo | undefined, syncedAgo: string): SyncBadge | undefined {
   if (!repo) return undefined;
@@ -103,7 +103,7 @@ export function listSyncBadge(repo: SyncRepo | undefined, syncedAgo: string): Sy
 }
 
 export interface SyncProgress {
-  /** Repo z wynikiem (także pominięte i nieudane). */
+  /** Repos with a result (skipped and failed ones too). */
   done: number;
   total: number;
   updated: number;
@@ -125,7 +125,7 @@ export function syncProgress(run: SyncRun): SyncProgress {
   };
 }
 
-/** Wynik repo po ścieżce, nie po identyfikatorze: ten może się zmienić razem z nazwą katalogu (ADR-18). */
+/** A repo's result by path, not by identifier: that can change together with the directory name (ADR-18). */
 export function syncedByPath(run: SyncRun | null | undefined): ReadonlyMap<string, SyncRepo> {
   return new Map((run?.repos ?? []).map((r) => [r.path, r]));
 }

@@ -22,7 +22,7 @@ import { RepoDetail } from "./RepoDetail.tsx";
 import { SyncBar, SyncView } from "./SyncView.tsx";
 import { TagFilter } from "./TagFilter.tsx";
 
-/** Co pokazuje prawa strona: wybrane repo, wyszukiwarkę repo do sklonowania, synchronizację albo komendę zbiorczą. */
+/** What the right side shows: the selected repo, the search for repos to clone, the sync, or the batch command. */
 type Panel = "repo" | "clone" | "sync" | "batch";
 
 export function ReposView({
@@ -32,7 +32,7 @@ export function ReposView({
   onOpenSettings,
 }: {
   conn: Connection;
-  /** Repo wybrane na starcie, np. otwarte z pulpitu w widoku „Home”. */
+  /** The repo selected at start, for example opened from the dashboard in the "Home" view. */
   initialRepo?: string;
   onRetry: () => void;
   onOpenSettings: () => void;
@@ -111,28 +111,28 @@ export function ReposView({
       <section className="min-h-0 min-w-0 overflow-y-auto">
         {panel === "clone" && <CloneView conn={conn} onCloned={list.reload} onOpenSettings={onOpenSettings} />}
         {panel === "sync" && <SyncView sync={sync} canSync={canSync} />}
-        {/* Nowy filtr tagów to nowa grupa repo: panel zaczyna od zaznaczenia wszystkich z niej. */}
+        {/* A new tag filter is a new group of repos: the panel starts with all of them ticked. */}
         {panel === "batch" && <BatchView key={filter.selected.join(",")} batch={batch} repos={repos} />}
         {panel === "repo" && current && <RepoDetail key={current.id} conn={conn} repo={current} />}
-        {/* Bez repo do pokazania lista po lewej mówi, co zrobić; tu zostaje tylko ładowanie. */}
+        {/* With no repos to show, the list on the left says what to do; only the loading stays here. */}
         {!list.data && !list.error && <PanelLoading />}
       </section>
     </div>
   );
 }
 
-/** Filtr po tagach odrzucił wszystkie repo. */
+/** The tag filter rejected all repos. */
 function NoTagMatch({ shown, all }: { shown: number; all: number }) {
   if (shown > 0 || all === 0) return null;
   return <p className="text-muted-foreground px-2 text-sm">No repo has all the selected tags.</p>;
 }
 
-/** Liczba repo w nagłówku; przy filtrze po tagach także ile jest wszystkich. */
+/** The repo count in the header; with a tag filter also how many there are in total. */
 function repoCount(shown: number, all: number): string {
   return shown === all ? twoDigits(all) : `${twoDigits(shown)}/${twoDigits(all)}`;
 }
 
-/** Pod nagłówkiem listy: ścieżka folderu z projektami i akcje na wszystkich jego repo naraz. */
+/** Under the list header: the projects folder path and actions on all its repos at once. */
 function FolderActions({
   projectsDir,
   sync,
@@ -163,7 +163,7 @@ function PanelLoading() {
   );
 }
 
-/** Pusta lista ma dwa powody: folder z projektami nie jest ustawiony albo nie ma w nim repo gita. */
+/** An empty list has two reasons: the projects folder is not set, or it holds no git repos. */
 function EmptyList({ list, onOpenSettings, onClone }: { list: RepoList; onOpenSettings: () => void; onClone: () => void }) {
   if (list.projectsDir === null)
     return (
@@ -193,9 +193,10 @@ function ChangeProjectsDir({ onClick }: { onClick: () => void }) {
 }
 
 /**
- * Wiersz listy w stylu HUD (ADR-16): numer pozycji, nazwa, gałąź oraz kropka i tekst stanu; aktywny ma świecącą kreskę z lewej.
- * Numer to tylko pozycja na liście, nie identyfikator repo. Pod stanem stoi wynik ostatniej synchronizacji (`listSyncBadge`)
- * i tagi repo (powody w podpowiedzi); tag `no-mise` jest napisem ostrzeżenia, bo w takim repo nie ma czego uruchomić (ADR-34).
+ * A list row in HUD style (ADR-16): the item number, name, branch, and the state dot and text; the active one has a
+ * glowing stroke on the left. The number is only the position in the list, not the repo identifier. Under the state
+ * stands the result of the last sync (`listSyncBadge`)
+ * and the repo's tags (reasons in the tooltip); the `no-mise` tag is warning text, because such a repo has nothing to run (ADR-34).
  */
 function RepoListItem({
   repo,

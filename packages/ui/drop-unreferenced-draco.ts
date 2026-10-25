@@ -1,10 +1,10 @@
 import type { Plugin } from "vite";
 
 /**
- * Tylko `vite build`: usuwa z paczki pliki dekodera Draco, do których nie prowadzi żaden kawałek kodu. `DRACOLoader`
- * z three.js (przez loader glTF w Pawn) zgłasza je przez `new URL(..., import.meta.url)`, więc trafiają do `dist`
- * nawet wtedy, gdy sam loader wypadł przy tree-shakingu, a pulpit nie ładuje glTF (ADR-33). Bez tego każda paczka
- * Tauri i portable build wiozłyby około 1,3 MB martwych plików. Plik, do którego coś się odwołuje, zostaje.
+ * Only `vite build`: removes from the bundle the Draco decoder files no chunk of code leads to. three.js's `DRACOLoader`
+ * (through the glTF loader in Pawn) references them with `new URL(..., import.meta.url)`, so they land in `dist` even
+ * when the loader itself was tree-shaken away, and the dashboard loads no glTF (ADR-33). Without this every Tauri bundle
+ * and portable build would carry about 1.3 MB of dead files. A file something refers to stays.
  */
 export function dropUnreferencedDraco(): Plugin {
   return {
@@ -20,7 +20,7 @@ export function dropUnreferencedDraco(): Plugin {
   };
 }
 
-/** Pliki `draco_*` paczki (bez kodu, czyli zasoby), których nazwy nie ma w kodzie żadnego kawałka. */
+/** The bundle's `draco_*` files (not code, so assets) whose names appear in no chunk's code. */
 export function unreferencedDraco(files: readonly { fileName: string; code: string | undefined }[]): string[] {
   const code = files.map((f) => f.code ?? "").join("\n");
   return files

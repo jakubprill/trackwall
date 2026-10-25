@@ -3,60 +3,61 @@ import { type CallErrorCode, errorCode, errorMessage } from "./api.ts";
 import type { LiveFeed } from "./daemon-events.ts";
 import { LoadOrder } from "./load-order.ts";
 
-/** Ostatnie dane i ostatni błąd osobno: błąd odświeżenia nie zabiera widoku, który już coś pokazuje. */
+/** The last data and the last error separately: a refresh error does not take away a view that already shows something. */
 export interface Remote<T> {
   data?: T;
   error?: string;
-  /** `error.code` z daemona, gdy widok musi zareagować na konkretny błąd, a nie tylko go pokazać. */
+  /** `error.code` from the daemon, when the view has to react to a specific error, not just show it. */
   errorCode?: CallErrorCode;
   /**
-   * Numer danych (pytanie w chwili wysłania albo migawka z WebSocketu w chwili przyjścia, `LoadOrder`); razem
-   * z `sentLoads` mówi, czy dane pochodzą sprzed danej chwili (np. akcji), czy po niej.
+   * The data number (the request when it was sent, or a WebSocket snapshot when it arrived, `LoadOrder`); together
+   * with `sentLoads` it tells whether the data comes from before a given moment (for example an action) or after it.
    */
   loadNumber?: number;
 }
 
 export type RemoteHandle<T> = Remote<T> & {
   reload: () => void;
-  /** Ile numerów danych wydano do tej chwili: wysłane pytania i przyjęte migawki. */
+  /** How many data numbers have been issued so far: sent requests and received snapshots. */
   sentLoads: () => number;
 };
 
 export interface RemoteOptions<T> {
   /**
-   * Odpytuj co tyle ms, licząc od poprzedniej odpowiedzi. Funkcja liczy tempo z ostatnich danych w chwili planowania
-   * następnego pytania, więc odpowiedź, która zmienia tempo (np. task ruszył), od razu planuje pytanie w nowym tempie.
+   * Poll every this many ms, counted from the previous response. The function computes the pace from the latest data when
+   * the next request is planned, so a response that changes the pace (for example a mise task started) plans the next
+   * request at the new pace at once.
    */
   pollMs?: number | ((data: T | undefined) => number);
-  /** Zmiana wartości pobiera dane od nowa, zachowując poprzednie do czasu odpowiedzi (np. hash HEAD repo). */
+  /** A change of the value fetches the data anew, keeping the previous data until the response (for example the repo's HEAD hash). */
   refreshKey?: string;
   /**
-   * Te same dane na żywo z WebSocketu zdarzeń (§5.2, ADR-36), stałe między renderami (`useMemo`): każda migawka
-   * zastępuje dane jak odpowiedź, a odpytywanie czeka, dopóki temat jest na żywo. `load` zostaje do pierwszego
-   * pobrania, `reload` i na czas zerwanego połączenia.
+   * The same data live from the events WebSocket (§5.2, ADR-36), stable between renders (`useMemo`): every snapshot
+   * replaces the data like a response, and polling waits while the topic is live. `load` stays for the first fetch,
+   * `reload` and the time the connection is down.
    */
   live?: LiveFeed<T>;
 }
 
 /**
- * Akcja wykonana, gdy wysłano już `afterLoad` pytań (`sentLoads()`), jest nowsza od danych z pytania `loadNumber`:
- * odpowiedź na pytanie wysłane przed nią (także takie, które było w drodze) jeszcze jej nie widzi.
+ * An action done when `afterLoad` requests had already been sent (`sentLoads()`) is newer than the data of request
+ * `loadNumber`: the response to a request sent before it (including one in flight) does not see it yet.
  */
 export function actionIsNewer(afterLoad: number, loadNumber: number | undefined): boolean {
   return (loadNumber ?? 0) <= afterLoad;
 }
 
 /**
- * Dane z daemona dla jednego widoku. Nowe `load` (zmień je przez `useCallback`, gdy zmienia się pytanie) czyści
- * poprzednią odpowiedź; `reload`, `refreshKey` i odpytywanie zachowują ją do czasu nowej. Odpytywanie planuje
- * następne pytanie dopiero po odpowiedzi, więc wolny git nie piętrzy żądań, i czeka, gdy okno jest schowane.
+ * Data from the daemon for one view. A new `load` (change it through `useCallback` when the request changes) clears the
+ * previous response; `reload`, `refreshKey` and polling keep it until the new one. Polling plans the next request only
+ * after the response, so a slow git does not pile up requests, and it waits while the window is hidden.
  */
 export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, refreshKey, live }: RemoteOptions<T> = {}): RemoteHandle<T> {
   const [state, setState] = useState<Remote<T>>({});
   const [generation, setGeneration] = useState(0);
   const previousLoad = useRef(load);
-  // Tempo czytane przy planowaniu następnego pytania, nie w zależnościach efektu: funkcja tworzona przy renderze nie
-  // może wysyłać pytania przy każdym renderze.
+  // The pace is read when the next request is planned, not in the effect's dependencies: a function created on render
+  // must not send a request on every render.
   const pollRef = useRef(pollMs);
   pollRef.current = pollMs;
   const liveRef = useRef(live);
@@ -72,7 +73,7 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
     [order],
   );
 
-  // `generation` i `refreshKey` nie są czytane w efekcie: ich zmiana to prośba o ponowne pobranie.
+  // `generation` and `refreshKey` are not read in the effect: their change is a request to fetch again.
   useEffect(() => {
     if (!load) return;
     const changed = previousLoad.current !== load;
@@ -108,8 +109,8 @@ export function useRemote<T>(load: (() => Promise<T>) | undefined, { pollMs, ref
     };
   }, [load, generation, refreshKey, show, order]);
 
-  // Migawka liczy się jak odpowiedź na pytanie wysłane w chwili jej przyjścia. Migawka odczytana w daemonie tuż przed
-  // akcją, a przyjęta po niej, liczy się jako nowsza od akcji; następna (najwyżej 200 ms później) ją poprawia.
+  // A snapshot counts like a response to a request sent when it arrived. A snapshot read in the daemon just before an
+  // action and received after it counts as newer than the action; the next one (at most 200 ms later) corrects it.
   useEffect(() => live?.subscribe((data) => show(data, order.next())), [live, show, order]);
 
   const reload = useCallback(() => setGeneration((g) => g + 1), []);
