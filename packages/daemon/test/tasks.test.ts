@@ -490,7 +490,7 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
   }, 60_000);
 
   test("an included file the base commit tracks or does not ignore stays out of a new task's worktree", async () => {
-    const dir = makeRepo({ ".gitignore": "", "config/application-local.yml": "db.password: committed\n" }, "shop");
+    const dir = makeRepo({ ".gitignore": "", "config/application-local.yml": "db.password: committed" }, "shop");
     // Only the root ignores them, with an uncommitted .gitignore; the worktree has the base commit's.
     gitIn(dir, "rm", "-q", "--cached", "config/application-local.yml");
     writeFileSync(join(dir, ".gitignore"), ".env\n*-local.yml\n");
@@ -509,7 +509,8 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
         "config/application-local.yml: the task's base commit tracks it or does not ignore it",
       ],
     });
-    expect(readFileSync(join(task.worktree, "config", "application-local.yml"), "utf8")).toBe("db.password: committed\n");
+    // Without a line end: git on Windows checks a committed file out with CRLF.
+    expect(readFileSync(join(task.worktree, "config", "application-local.yml"), "utf8")).toBe("db.password: committed");
     expect(existsSync(join(task.worktree, ".env"))).toBe(false);
   }, 60_000);
 
