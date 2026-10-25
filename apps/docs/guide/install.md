@@ -54,7 +54,9 @@ xattr -dr com.apple.quarantine /Applications/Trackwall.app
 
 ## Update
 
-Your data lives in `~/.trackwall` (on Windows `%USERPROFILE%\.trackwall`), outside the app folder. To update, quit Trackwall from the tray ("Quit", which also stops what runs in the background, so its files can be replaced) and install the new version the same way.
+Trackwall offers new versions itself: see [App updates](/features/updates).
+
+To update by hand, for example when a proxy stops the download: your data lives in `~/.trackwall` (on Windows `%USERPROFILE%\.trackwall`), outside the app folder. Quit Trackwall from the tray ("Quit", which also stops what runs in the background, so its files can be replaced) and install the new version the same way.
 
 ## First start
 
