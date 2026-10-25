@@ -10,16 +10,16 @@ import type { RunOutput } from "./run.ts";
 import { commitCount, uncommittedCount } from "./worktree.ts";
 
 /**
- * Zmiany katalogu roboczego względem commita, z nowymi plikami i bez ignorowanych: worktree zadania względem commita
- * bazowego (ADR-31) i repo z folderu z projektami względem HEAD (ADR-34). Nowe pliki trafiają do indeksu tymczasowego
- * (kopia indeksu katalogu roboczego, żeby git nie liczył od nowa niezmienionych plików) wpisem z hashem pustego bloba,
- * tak jak przy `git add --intent-to-add`, ale bez zapisu tego bloba do `.git/objects`. Liczenie zmian niczego więc nie
- * zapisuje do repo: indeks agenta i użytkownika zostaje nietknięty, a kilka okien naraz nie pisze tego samego obiektu,
- * co na Windowsie kończyło się „Permission denied” (#36). Diff bez zewnętrznych programów diff i `textconv`
- * z konfiguracji repo.
+ * Working directory changes against a commit, with new files and without ignored ones: a task worktree against its base
+ * commit (ADR-31) and a repo from the projects folder against HEAD (ADR-34). New files go into a temporary index
+ * (a copy of the working directory's index, so that git does not recount unchanged files) as an entry with the empty blob hash,
+ * as with `git add --intent-to-add`, but without writing that blob to `.git/objects`. So counting changes writes nothing
+ * to the repo: the agent's and the user's index stay untouched, and several windows at once do not write the same object,
+ * which on Windows ended in "Permission denied" (#36). The diff runs without external diff programs and `textconv`
+ * from the repo configuration.
  */
 
-/** Hash pustego bloba w obu formatach obiektów gita (`git hash-object -t blob /dev/null`). */
+/** The empty blob hash in both git object formats (`git hash-object -t blob /dev/null`). */
 const EMPTY_BLOB = new Map([
   ["sha1", "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"],
   ["sha256", "473a0f4c3be8a93681a267e3b1e9a7dcda1185436fe141f7749120a303721813"],
@@ -29,24 +29,24 @@ const NUL = Buffer.from([0]);
 const SLASH = "/".charCodeAt(0);
 const NEWLINE = "\n".charCodeAt(0);
 
-/** Osadzone repo to po jednym `git rev-parse`; procesy na Windowsie są drogie w starcie i skanowane przez antywirus. */
+/** An embedded repo costs one `git rev-parse` each; processes on Windows are slow to start and scanned by the antivirus. */
 const SUBMODULE_CONCURRENCY = 4;
 
-/** Duże worktree na Windowsie ze skanującym antywirusem potrafią liczyć `git status` kilkanaście sekund. */
+/** Large worktrees on Windows with a scanning antivirus can take a dozen seconds or more for `git status`. */
 const CHANGES_TIMEOUT_MS = 60_000;
 
-/** Bez diffu: same pliki z liczbą linii i liczby commitów (narzędzie MCP `get_session`). */
+/** Without the diff: only files with line counts, and commit counts (the MCP tool `get_session`). */
 const NO_PATCH: RunOutput = { stdout: Buffer.alloc(0), truncated: false };
 
 /**
- * Zmiany worktree zadania razem z liczbą commitów zadania i niezacommitowanych plików. `maxPatchBytes` 0 pomija diff:
- * git nie liczy treści zmian, a `patch` jest pusty.
+ * Task worktree changes together with the number of task commits and uncommitted files. `maxPatchBytes` 0 skips the diff:
+ * git does not compute the change contents, and `patch` is empty.
  *
  * `paths` (git pathspecs) narrows the files and the diff; the commit and uncommitted counts stay those of the whole worktree.
  */
 export async function worktreeChanges(dir: string, base: string, maxPatchBytes: number, paths: readonly string[]): Promise<TaskChanges> {
-  // Do końca każdej: zakończenie zadania czeka na ten odczyt, zanim skasuje worktree, więc odrzucenie jednej części
-  // nie może zostawić gita, który nadal czyta katalog.
+  // Each one to the end: ending a task waits for this read before it deletes the worktree, so rejecting one part
+  // must not leave a git still reading the directory.
   const work = [workingTreeChanges(dir, base, maxPatchBytes, paths), commitCount(dir, base, "HEAD"), uncommittedCount(dir)] as const;
   await Promise.allSettled(work);
   const [changes, commits, uncommitted] = await Promise.all(work);
@@ -91,7 +91,7 @@ export async function workingTreeChanges(
         timeoutMs: CHANGES_TIMEOUT_MS,
         maxBytes,
       });
-    // Wszystkie naraz, ale do końca każdej: indeks tymczasowy można usunąć dopiero, gdy żaden git go nie czyta.
+    // All at once, but each to the end: the temporary index can be removed only when no git reads it.
     const work = [
       diff(["--name-status", "-z"]),
       diff(["--numstat", "-z"]),
@@ -100,14 +100,14 @@ export async function workingTreeChanges(
     await Promise.allSettled(work);
     const [names, stats, patch] = await Promise.all(work);
     return {
-      // Ostatni wpis uciętej listy może mieć niepełną ścieżkę.
+      // The last entry of a cut list may have an incomplete path.
       files: parseChangedFiles(names.stdout.toString("utf8"), stats.stdout.toString("utf8")).slice(0, names.truncated ? -1 : undefined),
       patch: wholeLines(patch).toString("utf8"),
-      // Ucięta lista plików (dziesiątki tysięcy nowych plików bez `.gitignore`) też jest niepełnym wynikiem.
+      // A cut file list (tens of thousands of new files without `.gitignore`) is an incomplete result too.
       truncated: patch.truncated || names.truncated || stats.truncated || untrackedTruncated,
     };
   } finally {
-    // Pozostałość po gicie zabitym po limicie czasu; plik w katalogu tymczasowym nie jest wart przykrycia błędu.
+    // A leftover of a git killed after the time limit; a file in the temp directory is not worth hiding the error for.
     await Promise.all([tmp, `${tmp}.lock`].map((file) => rm(file, { force: true }).catch(() => {})));
   }
 }
@@ -121,9 +121,9 @@ function wholeLines({ stdout, truncated }: RunOutput): Buffer {
 }
 
 /**
- * Nowe pliki katalogu roboczego (bez ignorowanych) jako wpisy indeksu `index` z hashem pustego bloba: `diff` z katalogiem
- * roboczym i tak czyta ich treść i tryb z dysku, a `update-index --index-info`, w przeciwieństwie do
- * `add --intent-to-add`, nie zapisuje bloba do `.git/objects`. Zwraca, czy lista nowych plików była ucięta.
+ * New working directory files (without ignored ones) as entries of index `index` with the empty blob hash: `diff` with the working
+ * directory reads their contents and mode from disk anyway, and `update-index --index-info`, unlike
+ * `add --intent-to-add`, does not write the blob to `.git/objects`. Returns whether the list of new files was cut.
  */
 async function addUntracked(dir: string, index: string, emptyBlob: string, paths: readonly string[]): Promise<boolean> {
   const listed = await git(dir, ["ls-files", "--others", "--exclude-standard", "-z", "--", ...paths], {
@@ -142,9 +142,9 @@ async function addUntracked(dir: string, index: string, emptyBlob: string, paths
 }
 
 /**
- * Katalog z własnym repo (`ls-files` podaje go z `/` na końcu) to wpis submodułu z HEAD tamtego repo, jak przy
- * `git add`. Repo bez commitów albo z hashem innej długości niż w repo zadania (inny format obiektów, SHA-1 w SHA-256)
- * odpada, tak jak pomijało je wcześniej `git add --ignore-errors`: jeden zły wpis odrzuciłby cały `update-index`.
+ * A directory with its own repo (`ls-files` gives it with a trailing `/`) is a submodule entry with that repo's HEAD, as with
+ * `git add`. A repo without commits or with a hash of another length than in the task repo (another object format, SHA-1 in SHA-256)
+ * is dropped, as `git add --ignore-errors` skipped them before: one bad entry would reject the whole `update-index`.
  */
 async function submoduleEntry(dir: string, repo: Buffer, oidLength: number): Promise<Buffer | undefined> {
   const head = await revParse(resolve(dir, repo.toString("utf8")), "HEAD");

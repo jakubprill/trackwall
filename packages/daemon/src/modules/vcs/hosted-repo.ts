@@ -2,26 +2,26 @@ import { type HostedRepo, RemoteRepoName } from "@trackwall/protocol";
 import { z } from "zod";
 
 /**
- * Czym różnią się GitHub i GitLab dla hostingów repo (§4.5, ADR-19): ścieżka API listy, wyszukiwanie, pola
- * odpowiedzi i zmienne środowiskowe `gh` / `glab`. Uruchamianie programów i filtrowanie jest w `hosting.ts`.
+ * How GitHub and GitLab differ as repo hosts (§4.5, ADR-19): the list API path, search, response
+ * fields and the `gh` / `glab` environment variables. Running the programs and filtering is in `hosting.ts`.
  */
 
 export interface HostingApi {
-  /** Ile stron pobrać najwyżej. */
+  /** How many pages to fetch at most. */
   maxPages: number;
-  /** Czy hosting sam przeszuka repo po `query`; inaczej daemon filtruje pobrane strony. */
+  /** Whether the repo host itself searches repos by `query`; otherwise the daemon filters the fetched pages. */
   searchesOnServer(query: string): boolean;
-  /** Ścieżka `<cli> api` dla jednej strony repo, do których użytkownik ma dostęp; `query` tylko, gdy `searchesOnServer`. */
+  /** The `<cli> api` path for one page of repos the user has access to; `query` only when `searchesOnServer`. */
   reposPage(page: number, pageSize: number, query: string): string;
-  /** Strona odpowiedzi API bez zarchiwizowanych repo; `received` to liczba repo na stronie przed odfiltrowaniem. */
+  /** A page of the API response without archived repos; `received` is the number of repos on the page before filtering. */
   parseReposPage(json: unknown): { items: HostedRepo[]; received: number };
-  /** Zmienne środowiskowe: hosting dla `repo clone` i wyłączenie pytań, kolorów i sprawdzania aktualizacji. */
+  /** Environment variables: the repo host for `repo clone`, and turning off prompts, colours and update checks. */
   env(host: string): NodeJS.ProcessEnv;
 }
 
 /**
- * Nazwy, których nie da się bezpiecznie podać `gh` ani `glab` (spoza `RemoteRepoName`), nie trafiają na listę:
- * GitHub i GitLab takich nie tworzą, więc to co najwyżej odpowiedź niezgodna z dokumentacją.
+ * Names that cannot be passed safely to `gh` or `glab` (outside `RemoteRepoName`) do not get onto the list:
+ * GitHub and GitLab do not create such names, so it is at most a response that does not match the documentation.
  */
 function page(all: HostedRepo[]): { items: HostedRepo[]; received: number } {
   return { items: all.filter((r) => RemoteRepoName.safeParse(r.fullName).success), received: all.length };
@@ -38,8 +38,8 @@ const GitHubRepos = z.array(
 );
 
 /**
- * `gh api user/repos`: własne repo, repo współpracownika i repo organizacji, do których użytkownik należy, po nazwie.
- * To API nie ma wyszukiwania, więc daemon pobiera do 1000 repo i filtruje je sam; tyle wystarcza dla repo OSS.
+ * `gh api user/repos`: own repos, collaborator repos and repos of organisations the user belongs to, by name.
+ * This API has no search, so the daemon fetches up to 1000 repos and filters them itself; that is enough for OSS repos.
  */
 export const githubApi: HostingApi = {
   maxPages: 10,
@@ -67,13 +67,13 @@ const GitLabProjects = z.array(
   }),
 );
 
-/** GitLab dopasowuje fragmenty nazw dopiero od 3 znaków; krótsze zapytanie daemon dopasowuje sam na pierwszej stronie. */
+/** GitLab matches name fragments only from 3 characters; the daemon matches a shorter query itself on the first page. */
 const GITLAB_MIN_SEARCH = 3;
 
 /**
- * `glab api projects?membership=true`: projekty, których użytkownik jest członkiem (także przez grupę), od ostatnio
- * zmienianych. Instancja firmowa ma ich tysiące, więc tylko jedna strona, a resztę znajduje wyszukiwanie GitLab
- * po nazwie i ścieżce z grupą (`search_namespaces`).
+ * `glab api projects?membership=true`: projects the user is a member of (also through a group), most recently
+ * changed first. A large self-hosted instance has thousands of them, so only one page, and GitLab search finds the rest
+ * by name and path with the group (`search_namespaces`).
  */
 export const gitlabApi: HostingApi = {
   maxPages: 1,

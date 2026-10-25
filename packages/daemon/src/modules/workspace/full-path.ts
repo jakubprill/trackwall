@@ -1,9 +1,9 @@
 import path, { type PlatformPath } from "node:path";
 
 /**
- * Pełna ścieżka na dysku użytkownika (folder z projektami w `workspace.yaml` i w ustawieniach): na Windowsie
- * z literą dysku albo UNC. `\projekty` jest dla `isAbsolute` pełna, ale wskazuje dysk, z którego akurat
- * uruchomiono daemon; `~` nie jest rozwijane, a względna zależy od katalogu daemona.
+ * A full path on the user's disk (the projects folder in `workspace.yaml` and in the settings): on Windows
+ * with a drive letter or UNC. `\projects` is absolute for `isAbsolute`, but points to the drive the daemon
+ * happened to start from; `~` is not expanded, and a relative path depends on the daemon's directory.
  */
 export function isFullPath(p: string, paths: PlatformPath = path): boolean {
   return paths.isAbsolute(p) && (paths.sep === "/" || paths.parse(p).root.length > 1);

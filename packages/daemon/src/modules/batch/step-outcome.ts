@@ -1,8 +1,8 @@
 import type { BatchStepState, RunState, SyncResult } from "@trackwall/protocol";
 
-/** Wynik kroku komendy zbiorczej (§4.8) z wyniku synchronizacji albo z końca uruchomienia `mise`. */
+/** The outcome of a batch command step (§4.8) from a sync result or from the end of a `mise` run. */
 
-/** Pominięta synchronizacja nie zatrzymuje repo: kolejne kroki działają na tym, co jest lokalnie. */
+/** A skipped sync does not stop the repo: the next steps work on what is there locally. */
 export function syncOutcome(result: SyncResult): BatchStepState {
   switch (result.state) {
     case "updated":
@@ -14,7 +14,7 @@ export function syncOutcome(result: SyncResult): BatchStepState {
   }
 }
 
-/** Stop z UI, przerwanie komendy i wyjście daemona dają `stoppedByUser`, więc to przerwanie, a nie błąd. */
+/** A stop from the UI, a command cancellation and a daemon exit give `stoppedByUser`, so it is a cancellation, not an error. */
 export function runOutcome(run: RunState): BatchStepState {
   if (run.kind !== "exited") throw new Error(`run ${run.runId} is still going (${run.kind})`);
   if (run.stoppedByUser) return { state: "cancelled" };

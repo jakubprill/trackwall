@@ -17,10 +17,10 @@ const project = (path: string) => ({
   last_activity_at: null,
 });
 
-/** Workspace z folderem z projektami, hostingiem GitLab w ustawieniach i atrapą glab. */
+/** A workspace with a projects folder, a GitLab repo host in the settings and a fake glab. */
 async function workspaceWithGitLab(config: FakeHostingConfig = {}) {
   const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
-  const projects = mkdtempSync(join(tmpdir(), "trackwall-projekty-"));
+  const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
   const workspace = new Workspace({
     file: new WorkspaceFile(file),
     vcs: new Vcs(),
@@ -39,12 +39,12 @@ async function finished(workspace: Workspace, fullName: string): Promise<CloneJo
     if (job?.state !== "running") return job;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  throw new Error(`klon ${fullName} nie skończył się w czasie testu`);
+  throw new Error(`the clone of ${fullName} did not finish within the test`);
 }
 
-describe("klonowanie z hostingu do folderu z projektami", () => {
-  test("lista z hostingu mówi, które repo już są w folderze, bez względu na wielkość liter", async () => {
-    const { workspace, projects } = await workspaceWithGitLab({ repos: [project("sklep/Orders-BFF"), project("sklep/web")] });
+describe("cloning from a repo host into the projects folder", () => {
+  test("the repo host list says which repos are already in the folder, regardless of case", async () => {
+    const { workspace, projects } = await workspaceWithGitLab({ repos: [project("shop/Orders-BFF"), project("shop/web")] });
     mkdirSync(join(projects, "orders-bff"));
 
     const list = await workspace.remoteRepos("");
@@ -57,96 +57,96 @@ describe("klonowanie z hostingu do folderu z projektami", () => {
           kind: "ok",
           truncated: false,
           repos: [
-            expect.objectContaining({ fullName: "sklep/Orders-BFF", dir: "Orders-BFF", inProjectsDir: true }),
-            expect.objectContaining({ fullName: "sklep/web", dir: "web", inProjectsDir: false }),
+            expect.objectContaining({ fullName: "shop/Orders-BFF", dir: "Orders-BFF", inProjectsDir: true }),
+            expect.objectContaining({ fullName: "shop/web", dir: "web", inProjectsDir: false }),
           ],
         },
       },
     ]);
   });
 
-  test("hosting, który nie odpowiada, jest niedostępny z komunikatem, a pozostałe działają", async () => {
+  test("a repo host that does not answer is unavailable with a message, and the others work", async () => {
     const { workspace } = await workspaceWithGitLab({
-      repos: [project("sklep/api")],
-      apiErrors: { "gitlab.example.com": "glab: nie jesteś zalogowany" },
+      repos: [project("shop/api")],
+      apiErrors: { "gitlab.example.com": "glab: you are not signed in" },
     });
-    workspace.setRepoHosts([GITLAB, { kind: "gitlab", host: "drugi.example.com" }]);
+    workspace.setRepoHosts([GITLAB, { kind: "gitlab", host: "second.example.com" }]);
 
     const { hosts } = await workspace.remoteRepos("");
 
     expect(hosts.map((h) => [h.host.host, h.listing.kind])).toEqual([
       ["gitlab.example.com", "unavailable"],
-      ["drugi.example.com", "ok"],
+      ["second.example.com", "ok"],
     ]);
-    expect(hosts[0]?.listing).toEqual({ kind: "unavailable", message: "glab: nie jesteś zalogowany" });
+    expect(hosts[0]?.listing).toEqual({ kind: "unavailable", message: "glab: you are not signed in" });
   });
 
-  test("klon trwa w tle, a po nim repo jest na liście z folderu", async () => {
+  test("a clone runs in the background, and after it the repo is on the folder list", async () => {
     const { workspace, projects } = await workspaceWithGitLab({ cloneDelayMs: 200 });
 
-    const started = await workspace.clone(GITLAB, "sklep/zamowienia/orders-bff");
+    const started = await workspace.clone(GITLAB, "shop/orders/orders-bff");
     expect(started).toEqual({
       host: GITLAB,
-      fullName: "sklep/zamowienia/orders-bff",
+      fullName: "shop/orders/orders-bff",
       path: join(projects, "orders-bff"),
       state: "running",
     });
-    // Drugie kliknięcie w trakcie nie zaczyna drugiego klonu.
-    expect(await workspace.clone(GITLAB, "sklep/zamowienia/orders-bff")).toEqual(started);
+    // A second click meanwhile does not start a second clone.
+    expect(await workspace.clone(GITLAB, "shop/orders/orders-bff")).toEqual(started);
 
-    expect(await finished(workspace, "sklep/zamowienia/orders-bff")).toMatchObject({ state: "done" });
+    expect(await finished(workspace, "shop/orders/orders-bff")).toMatchObject({ state: "done" });
     expect((await workspace.list()).repos.map((r) => r.id)).toEqual(["orders-bff"]);
-    await expect(workspace.clone(GITLAB, "sklep/zamowienia/orders-bff")).rejects.toMatchObject({
+    await expect(workspace.clone(GITLAB, "shop/orders/orders-bff")).rejects.toMatchObject({
       code: "bad_request",
       message: "the projects folder already has orders-bff",
     });
   });
 
-  test("nieudany klon zostaje na liście klonowań z komunikatem glab", async () => {
-    const { workspace } = await workspaceWithGitLab({ cloneErrors: { "sklep/api": "fatal: repository not found" } });
+  test("a failed clone stays on the clone list with the glab message", async () => {
+    const { workspace } = await workspaceWithGitLab({ cloneErrors: { "shop/api": "fatal: repository not found" } });
 
-    await workspace.clone(GITLAB, "sklep/api");
+    await workspace.clone(GITLAB, "shop/api");
 
-    expect(await finished(workspace, "sklep/api")).toMatchObject({ state: "failed", message: "fatal: repository not found" });
+    expect(await finished(workspace, "shop/api")).toMatchObject({ state: "failed", message: "fatal: repository not found" });
   });
 
-  test("drugie repo o tej samej nazwie katalogu czeka, aż skończy się pierwsze", async () => {
+  test("a second repo with the same directory name waits until the first one finishes", async () => {
     const { workspace, projects } = await workspaceWithGitLab({ cloneDelayMs: 200 });
-    await workspace.clone(GITLAB, "sklep/api");
+    await workspace.clone(GITLAB, "shop/api");
 
-    await expect(workspace.clone(GITLAB, "magazyn/API")).rejects.toMatchObject({
+    await expect(workspace.clone(GITLAB, "warehouse/API")).rejects.toMatchObject({
       code: "bad_request",
-      message: `sklep/api is already being cloned into ${join(projects, "API")}`,
+      message: `shop/api is already being cloned into ${join(projects, "API")}`,
     });
-    await finished(workspace, "sklep/api");
+    await finished(workspace, "shop/api");
   });
 
-  test("trwający klon do starego folderu z projektami nie blokuje klonu o tej samej nazwie do nowego", async () => {
+  test("a running clone into the old projects folder does not block a clone with the same name into the new one", async () => {
     const { workspace } = await workspaceWithGitLab({ cloneDelayMs: 200 });
-    await workspace.clone(GITLAB, "sklep/api");
-    const nowy = mkdtempSync(join(tmpdir(), "trackwall-projekty-"));
-    await workspace.setProjectsDir(nowy);
+    await workspace.clone(GITLAB, "shop/api");
+    const newDir = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
+    await workspace.setProjectsDir(newDir);
 
-    expect(await workspace.clone(GITLAB, "magazyn/api")).toMatchObject({ path: join(nowy, "api"), state: "running" });
-    expect(workspace.cloneJobs().map((j) => j.fullName)).toEqual(["magazyn/api"]);
-    await finished(workspace, "magazyn/api");
+    expect(await workspace.clone(GITLAB, "warehouse/api")).toMatchObject({ path: join(newDir, "api"), state: "running" });
+    expect(workspace.cloneJobs().map((j) => j.fullName)).toEqual(["warehouse/api"]);
+    await finished(workspace, "warehouse/api");
   });
 
-  test("to samo repo można sklonować znowu do nowego folderu z projektami", async () => {
+  test("the same repo can be cloned again into a new projects folder", async () => {
     const { workspace } = await workspaceWithGitLab();
-    await workspace.clone(GITLAB, "sklep/api");
-    await finished(workspace, "sklep/api");
-    const nowy = mkdtempSync(join(tmpdir(), "trackwall-projekty-"));
-    await workspace.setProjectsDir(nowy);
+    await workspace.clone(GITLAB, "shop/api");
+    await finished(workspace, "shop/api");
+    const newDir = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
+    await workspace.setProjectsDir(newDir);
 
     expect(workspace.cloneJobs()).toEqual([]);
-    expect(await workspace.clone(GITLAB, "sklep/api")).toMatchObject({ path: join(nowy, "api"), state: "running" });
-    expect(await finished(workspace, "sklep/api")).toMatchObject({ path: join(nowy, "api"), state: "done" });
+    expect(await workspace.clone(GITLAB, "shop/api")).toMatchObject({ path: join(newDir, "api"), state: "running" });
+    expect(await finished(workspace, "shop/api")).toMatchObject({ path: join(newDir, "api"), state: "done" });
   });
 
-  test("klon z hostingu spoza ustawień albo bez folderu z projektami jest odrzucany", async () => {
+  test("a clone from a repo host outside the settings or without a projects folder is rejected", async () => {
     const { workspace } = await workspaceWithGitLab();
-    await expect(workspace.clone({ kind: "gitlab", host: "inny.example.com" }, "sklep/api")).rejects.toMatchObject({ code: "bad_request" });
+    await expect(workspace.clone({ kind: "gitlab", host: "other.example.com" }, "shop/api")).rejects.toMatchObject({ code: "bad_request" });
 
     const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
     const bare = new Workspace({
@@ -157,13 +157,13 @@ describe("klonowanie z hostingu do folderu z projektami", () => {
       openFolder: () => {},
     });
     bare.setRepoHosts([GITLAB]);
-    await expect(bare.clone(GITLAB, "sklep/api")).rejects.toMatchObject({
+    await expect(bare.clone(GITLAB, "shop/api")).rejects.toMatchObject({
       code: "bad_request",
       message: "set the projects folder first",
     });
   });
 
-  test("hostingi zapisują się w workspace.yaml jako lista repoHosts", async () => {
+  test("repo hosts are saved in workspace.yaml as the repoHosts list", async () => {
     const { workspace, file } = await workspaceWithGitLab();
 
     expect(workspace.repoHosts()).toEqual([GITLAB]);

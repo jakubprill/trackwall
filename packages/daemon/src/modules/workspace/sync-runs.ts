@@ -4,23 +4,23 @@ import { mapLimit } from "../../infra/map-limit.ts";
 import type { RepoEntry } from "./projects-dir.ts";
 
 /**
- * Synchronizacje folderów z projektami (§4.5, ADR-21), trzymane tylko w pamięci, jak klonowania: wynik i tak widać
- * w stanie repo, a po restarcie daemona nie ma czego wznawiać. Jedna synchronizacja na folder (klucz: pełna ścieżka
- * bez wielkości liter), a naraz trwa co najwyżej jedna, w dowolnym folderze: zmiana folderu w trakcie nie zaczyna
- * drugiej na tych samych repo.
+ * Syncs of projects folders (§4.5, ADR-21), kept only in memory, like clones: the result shows in the repo state
+ * anyway, and after a daemon restart there is nothing to resume. One sync per folder (key: the full path,
+ * case-insensitive), and at most one runs at a time, in any folder: changing the folder in the meantime does not start
+ * a second one on the same repos.
  */
 export class SyncRuns {
   private readonly runs = new Map<string, SyncRun>();
 
-  /** Ostatnia synchronizacja folderu o kluczu `key`. */
+  /** The last sync of the folder with key `key`. */
   last(key: string): SyncRun | undefined {
     const run = this.runs.get(key);
     return run && snapshot(run);
   }
 
   /**
-   * Zaczyna synchronizację `entries` w tle, najwyżej `limit` repo naraz, albo zwraca trwającą w tym folderze; trwająca
-   * w innym folderze to błąd. Wyjątek z `sync` to wynik `failed` tego repo, nie całej synchronizacji.
+   * Starts a sync of `entries` in the background, at most `limit` repos at once, or returns the one running in this folder; one running
+   * in another folder is an error. An exception from `sync` is a `failed` result of that repo, not of the whole sync.
    */
   startOrJoin(key: string, entries: readonly RepoEntry[], limit: number, sync: (entry: RepoEntry) => Promise<SyncResult>): SyncRun {
     const running = [...this.runs].find(([, run]) => run.finishedAt === null);
@@ -51,7 +51,7 @@ export class SyncRuns {
   }
 }
 
-/** Kopia dla wołającego: synchronizacja zmienia się w tle, a wynik ma pokazać jedną chwilę. */
+/** A copy for the caller: the sync changes in the background, and the result should show one moment. */
 function snapshot(run: SyncRun): SyncRun {
   return { ...run, repos: [...run.repos] };
 }
