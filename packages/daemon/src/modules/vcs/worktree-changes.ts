@@ -27,6 +27,7 @@ const EMPTY_BLOB = new Map([
 
 const NUL = Buffer.from([0]);
 const SLASH = "/".charCodeAt(0);
+const NEWLINE = "\n".charCodeAt(0);
 
 /** Osadzone repo to po jednym `git rev-parse`; procesy na Windowsie są drogie w starcie i skanowane przez antywirus. */
 const SUBMODULE_CONCURRENCY = 4;
@@ -40,11 +41,13 @@ const NO_PATCH: RunOutput = { stdout: Buffer.alloc(0), truncated: false };
 /**
  * Zmiany worktree zadania razem z liczbą commitów zadania i niezacommitowanych plików. `maxPatchBytes` 0 pomija diff:
  * git nie liczy treści zmian, a `patch` jest pusty.
+ *
+ * `paths` (git pathspecs) narrows the files and the diff; the commit and uncommitted counts stay those of the whole worktree.
  */
-export async function worktreeChanges(dir: string, base: string, maxPatchBytes: number): Promise<TaskChanges> {
+export async function worktreeChanges(dir: string, base: string, maxPatchBytes: number, paths: readonly string[]): Promise<TaskChanges> {
   // Do końca każdej: zakończenie zadania czeka na ten odczyt, zanim skasuje worktree, więc odrzucenie jednej części
   // nie może zostawić gita, który nadal czyta katalog.
-  const work = [workingTreeChanges(dir, base, maxPatchBytes), commitCount(dir, base, "HEAD"), uncommittedCount(dir)] as const;
+  const work = [workingTreeChanges(dir, base, maxPatchBytes, paths), commitCount(dir, base, "HEAD"), uncommittedCount(dir)] as const;
   await Promise.allSettled(work);
   const [changes, commits, uncommitted] = await Promise.all(work);
   return { ...changes, commits, uncommitted };
@@ -66,8 +69,13 @@ async function copyIndex(index: string, copy: string): Promise<void> {
   }
 }
 
-/** Katalog roboczy `dir` względem `base` (commit albo drzewo). */
-export async function workingTreeChanges(dir: string, base: string, maxPatchBytes: number): Promise<WorkingTreeChanges> {
+/** The working directory `dir` against `base` (a commit or a tree), only under `paths` (git pathspecs; none is the whole tree). */
+export async function workingTreeChanges(
+  dir: string,
+  base: string,
+  maxPatchBytes: number,
+  paths: readonly string[],
+): Promise<WorkingTreeChanges> {
   const out = (await git(dir, ["rev-parse", "--git-path", "index", "--show-object-format"])).stdout.toString("utf8").trim();
   const [indexPath, objectFormat] = out.split(/\r?\n/);
   const emptyBlob = objectFormat === undefined ? undefined : EMPTY_BLOB.get(objectFormat);
@@ -76,9 +84,9 @@ export async function workingTreeChanges(dir: string, base: string, maxPatchByte
   const tmp = resolve(tmpdir(), `trackwall-index-${randomUUID()}`);
   try {
     await copyIndex(index, tmp);
-    const untrackedTruncated = await addUntracked(dir, tmp, emptyBlob);
+    const untrackedTruncated = await addUntracked(dir, tmp, emptyBlob, paths);
     const diff = (args: string[], maxBytes?: number) =>
-      git(dir, ["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", ...args, base, "--"], {
+      git(dir, ["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", ...args, base, "--", ...paths], {
         indexFile: tmp,
         timeoutMs: CHANGES_TIMEOUT_MS,
         maxBytes,
@@ -94,7 +102,7 @@ export async function workingTreeChanges(dir: string, base: string, maxPatchByte
     return {
       // Ostatni wpis uciętej listy może mieć niepełną ścieżkę.
       files: parseChangedFiles(names.stdout.toString("utf8"), stats.stdout.toString("utf8")).slice(0, names.truncated ? -1 : undefined),
-      patch: patch.stdout.toString("utf8"),
+      patch: wholeLines(patch).toString("utf8"),
       // Ucięta lista plików (dziesiątki tysięcy nowych plików bez `.gitignore`) też jest niepełnym wynikiem.
       truncated: patch.truncated || names.truncated || stats.truncated || untrackedTruncated,
     };
@@ -105,19 +113,27 @@ export async function workingTreeChanges(dir: string, base: string, maxPatchByte
 }
 
 /**
+ * A cut diff up to its last whole line: a newline byte is never inside a UTF-8 sequence, so the text has no half
+ * character and no half line for a reader (the "Changes" tab, an agent) to take for the real content.
+ */
+function wholeLines({ stdout, truncated }: RunOutput): Buffer {
+  return truncated ? stdout.subarray(0, stdout.lastIndexOf(NEWLINE) + 1) : stdout;
+}
+
+/**
  * Nowe pliki katalogu roboczego (bez ignorowanych) jako wpisy indeksu `index` z hashem pustego bloba: `diff` z katalogiem
  * roboczym i tak czyta ich treść i tryb z dysku, a `update-index --index-info`, w przeciwieństwie do
  * `add --intent-to-add`, nie zapisuje bloba do `.git/objects`. Zwraca, czy lista nowych plików była ucięta.
  */
-async function addUntracked(dir: string, index: string, emptyBlob: string): Promise<boolean> {
-  const listed = await git(dir, ["ls-files", "--others", "--exclude-standard", "-z"], {
+async function addUntracked(dir: string, index: string, emptyBlob: string, paths: readonly string[]): Promise<boolean> {
+  const listed = await git(dir, ["ls-files", "--others", "--exclude-standard", "-z", "--", ...paths], {
     indexFile: index,
     timeoutMs: CHANGES_TIMEOUT_MS,
   });
-  const paths = parseNulTerminated(listed.stdout);
+  const entries = parseNulTerminated(listed.stdout);
   const fileHeader = Buffer.from(`100644 ${emptyBlob}\t`);
-  const files = paths.filter((path) => path.at(-1) !== SLASH).map((path) => Buffer.concat([fileHeader, path, NUL]));
-  const repos = paths.filter((path) => path.at(-1) === SLASH).map((path) => path.subarray(0, -1));
+  const files = entries.filter((path) => path.at(-1) !== SLASH).map((path) => Buffer.concat([fileHeader, path, NUL]));
+  const repos = entries.filter((path) => path.at(-1) === SLASH).map((path) => path.subarray(0, -1));
   const submodules = await mapLimit(repos, SUBMODULE_CONCURRENCY, (repo) => submoduleEntry(dir, repo, emptyBlob.length));
   const indexInfo = Buffer.concat([...files, ...submodules.filter((entry) => entry !== undefined)]);
   if (indexInfo.length > 0)

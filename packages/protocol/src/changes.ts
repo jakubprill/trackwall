@@ -20,7 +20,7 @@ export const PATCH_MAX_BYTES = 1024 * 1024;
 /** The working directory (with new files, without ignored ones) against a commit. */
 export const WorkingTreeChanges = z.object({
   files: z.array(ChangedFile),
-  /** Unified diff, cut to `PATCH_MAX_BYTES`. */
+  /** The unified diff, cut after its last whole line within the limit (`PATCH_MAX_BYTES` in the UI). */
   patch: z.string(),
   /** The diff or the file list is cut. */
   truncated: z.boolean(),

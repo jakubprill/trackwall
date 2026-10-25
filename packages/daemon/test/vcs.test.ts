@@ -61,7 +61,7 @@ describe("vcs na prawdziwym gicie", () => {
       makeRepo({ "b.txt": "b\n" }, "osadzone-w-innym-formacie", dir, objectFormat === "sha1" ? "sha256" : "sha1");
       const objectsBefore = gitIn(dir, "count-objects", "-v");
 
-      const changes = await vcs.worktreeChanges(dir, base, 1_000_000);
+      const changes = await vcs.worktreeChanges(dir, base, 1_000_000, []);
 
       expect(changes.files.map((f) => f.path)).toEqual(["nowy.md", "osadzone", "pusty.md"]);
       expect(changes.patch).toContain("+x");
@@ -77,7 +77,7 @@ describe("vcs na prawdziwym gicie", () => {
       const base = gitIn(dir, "rev-parse", "HEAD").trim();
       writeFileSync(Buffer.concat([Buffer.from(join(dir, "zly-")), Buffer.from([0xff])]), "x\n");
 
-      const changes = await vcs.worktreeChanges(dir, base, 1_000_000);
+      const changes = await vcs.worktreeChanges(dir, base, 1_000_000, []);
 
       expect(changes.files).toHaveLength(1);
       expect(changes.patch).toContain("+x");
@@ -225,7 +225,7 @@ describe("vcs na prawdziwym gicie", () => {
     writeFileSync(join(dir, "a.txt"), "a = 2\n");
     utimesSync(join(dir, "a.txt"), second, second);
 
-    const changes = await vcs.worktreeChanges(dir, base, 0);
+    const changes = await vcs.worktreeChanges(dir, base, 0, []);
     expect(changes.files).toEqual([{ path: "a.txt", change: "modified", additions: 1, deletions: 1 }]);
     expect(gitIn(dir, "status", "--porcelain")).toBe(" M a.txt\n");
   });
@@ -234,7 +234,7 @@ describe("vcs na prawdziwym gicie", () => {
     const dir = makeRepo({ "a.txt": "a\n" }, "bez-diffu");
     const base = gitIn(dir, "rev-parse", "HEAD").trim();
     writeFileSync(join(dir, "a.txt"), "b\n");
-    const changes = await vcs.worktreeChanges(dir, base, 0);
+    const changes = await vcs.worktreeChanges(dir, base, 0, []);
     expect(changes).toEqual({
       files: [{ path: "a.txt", change: "modified", additions: 1, deletions: 1 }],
       patch: "",

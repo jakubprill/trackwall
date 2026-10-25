@@ -41,7 +41,7 @@ export class Vcs {
    * użytkownika. W repo bez commitów względem pustego drzewa: wtedy każdy plik jest nowy.
    */
   async changes(dir: string, maxPatchBytes: number): Promise<WorkingTreeChanges> {
-    return workingTreeChanges(dir, (await this.headCommit(dir)) ?? (await emptyTree(dir)), maxPatchBytes);
+    return workingTreeChanges(dir, (await this.headCommit(dir)) ?? (await emptyTree(dir)), maxPatchBytes, []);
   }
 
   /** Adres głównego remote (`origin` albo jedyny) jako `host/ścieżka` (ADR-21); `null` bez takiego remote. */

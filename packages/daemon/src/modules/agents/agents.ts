@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  type AgentTaskChanges,
   copilotMcpServers,
   isSupervisor,
   type RunState,
@@ -273,6 +274,11 @@ export class Agents {
   /** A task's changes without the diff, for an agent (the MCP tool `get_session`). */
   taskChangesSummary(id: string): Promise<TaskChangesSummary> {
     return this.#tasks.summary(id);
+  }
+
+  /** A task's changes with their diff for an agent (MCP tool `get_task_changes`), under `paths`, the diff cut within `maxPatchBytes`. */
+  agentTaskChanges(id: string, maxPatchBytes: number, paths: readonly string[]): Promise<AgentTaskChanges> {
+    return this.#tasks.agentChanges(id, maxPatchBytes, paths);
   }
 
   openTaskEditor(id: string): void {

@@ -20,7 +20,7 @@ The supervisor is a Copilot CLI session that runs in your projects folder, not i
 
 Ask it for something larger than one repo, like "add refunds to billing and show their status in the web shop". It looks through your repos and proposes a task for each repo involved. The proposals wait for you in "Sessions", under the "Supervisor" heading at the top of the list, and in "Delegated" in the panel. You read each one, edit the prompt if you want, and start it or reject it with a reason, as with any [task proposal](/features/main-session). Nothing starts without you.
 
-Once a task runs, the supervisor follows its agent, reads its summary and changes, and tells you what came back and what needs your decision. A task's agent can still propose more work of its own; that work sits under the task, inside the supervisor's part of the list.
+Once a task runs, the supervisor follows its agent, reads its summary and reviews its diff, and tells you what came back and what needs your decision. A task's agent can still propose more work of its own; that work sits under the task, inside the supervisor's part of the list.
 
 The panel can be folded to a narrow strip at the right edge, which keeps a bell when something waits for you. The panel stays pinned or folded the next time you open Trackwall.
 
