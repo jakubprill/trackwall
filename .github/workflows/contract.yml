@@ -1,0 +1,50 @@
+name: Contract tests
+
+# The contract tests with the real Copilot CLI in BYOK mode against a scripted model (ADR-67): no account and no secret.
+# Called by ci.yml on every PR with the pinned version, and by nightly.yml with the newest one, so both run the same steps.
+on:
+  workflow_call:
+    inputs:
+      copilot-cli:
+        description: An exact Copilot CLI version (TRACKWALL_COPILOT_CLI); empty for the one pinned in scripts/copilot-cli.ts
+        type: string
+        required: false
+        default: ""
+
+# No permissions by default; the job gets only what it needs.
+permissions: {}
+
+# The same versions as in mise.toml; apps/desktop/test/toolchain.test.ts guards this.
+env:
+  BUN_VERSION: "1.4.4"
+  NODE_VERSION: "22"
+
+jobs:
+  contract:
+    name: contract with Copilot CLI ${{ inputs.copilot-cli || 'pinned' }} (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
+      # The binary (113–130 MB packed) is cached under the pinned version, which lives only in scripts/copilot-cli.ts;
+      # another version is downloaded every time, since a new one would not hit the cache anyway.
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        if: inputs.copilot-cli == ''
+        with:
+          path: packages/daemon/node_modules/.cache/copilot-cli
+          key: copilot-cli-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/daemon/scripts/copilot-cli.ts') }}
+      - run: pnpm test:contract
+        env:
+          TRACKWALL_COPILOT_CLI: ${{ inputs.copilot-cli }}

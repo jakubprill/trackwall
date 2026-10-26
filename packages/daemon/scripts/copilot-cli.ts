@@ -1,7 +1,8 @@
 /**
  * The real Copilot CLI for the contract tests (ADR-67): the native binary of the pinned version for this system, from
  * the npm registry, checked against the registry's sha512 and kept in `node_modules/.cache`. A newer Copilot CLI comes
- * in a PR that changes `COPILOT_CLI_VERSION` and passes the contract tests on it.
+ * in a PR that changes `COPILOT_CLI_VERSION` and passes the contract tests on it. `TRACKWALL_COPILOT_CLI` runs them on
+ * another version without that PR, as the nightly workflow does with the newest one on npm.
  *
  *   bun packages/daemon/scripts/copilot-cli.ts     # downloads it when missing and prints the binary's path
  */
@@ -15,6 +16,26 @@ import { z } from "zod";
 
 /** The Copilot CLI version Trackwall is checked against; a download whose `copilot --version` says otherwise is refused. */
 export const COPILOT_CLI_VERSION = "1.0.103";
+
+/** An exact version that replaces the pinned one in the contract tests (`.github/workflows/contract.yml`, from nightly.yml). */
+const VERSION_ENV = "TRACKWALL_COPILOT_CLI";
+/** The same pattern as in the `version` job of nightly.yml, which `test/copilot-cli.test.ts` holds it to. */
+const EXACT_VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/;
+
+/** The version the contract tests run on: `TRACKWALL_COPILOT_CLI` when set, otherwise the pinned one. */
+export function copilotCliVersion(env: NodeJS.ProcessEnv = process.env): string {
+  const wanted = env[VERSION_ENV];
+  if (wanted === undefined || wanted === "") return COPILOT_CLI_VERSION;
+  if (!EXACT_VERSION.test(wanted)) throw new Error(`${VERSION_ENV}="${wanted}" is not an exact version such as 1.0.104`);
+  return wanted;
+}
+
+/**
+ * Without it the binary hands over to the newest Copilot CLI unpacked on the machine (`~/.copilot/pkg` or the system
+ * cache, by an installed Copilot CLI or a contract run on a newer version), so the version checked would not be the
+ * one that runs. For the version check here and for every session of the contract tests.
+ */
+export const PINNED_COPILOT_ENV = { COPILOT_AUTO_UPDATE: "false" };
 
 const CACHE = fileURLToPath(new URL("../node_modules/.cache/copilot-cli", import.meta.url));
 const REGISTRY = "https://registry.npmjs.org";
@@ -30,23 +51,22 @@ const BINARY = process.platform === "win32" ? "copilot.exe" : "copilot";
 
 /** The binary's path in the cache, downloaded first when it is not there. */
 export async function copilotCli(): Promise<string> {
-  const dir = join(CACHE, COPILOT_CLI_VERSION, `${process.platform}-${process.arch}`);
+  const version = copilotCliVersion();
+  const dir = join(CACHE, version, `${process.platform}-${process.arch}`);
   const binary = join(dir, BINARY);
   if (existsSync(binary)) return binary;
   const name = platformPackage();
-  const tarball = await download(name);
+  const tarball = await download(name, version);
   const file = tarFile(gunzipSync(tarball), `package/${BINARY}`);
   mkdirSync(dir, { recursive: true });
   // Written next to the target and renamed, so that a broken download never leaves a binary that looks complete.
   const partial = `${binary}.partial`;
   writeFileSync(partial, file);
   chmodSync(partial, 0o755);
-  const check = spawnSync(partial, ["--version"], { encoding: "utf8" });
+  const check = spawnSync(partial, ["--version"], { encoding: "utf8", env: { ...process.env, ...PINNED_COPILOT_ENV } });
   if (check.error) throw new Error(`${name}: the downloaded binary does not start (${check.error.message})`);
-  if (!check.stdout.includes(` ${COPILOT_CLI_VERSION}.`)) {
-    throw new Error(
-      `${name} says it is "${check.stdout.trim()}" (exit ${check.status}, ${check.stderr.trim()}), not ${COPILOT_CLI_VERSION}`,
-    );
+  if (!check.stdout.includes(` ${version}.`)) {
+    throw new Error(`${name} says it is "${check.stdout.trim()}" (exit ${check.status}, ${check.stderr.trim()}), not ${version}`);
   }
   rmSync(binary, { force: true });
   renameSync(partial, binary);
@@ -55,9 +75,9 @@ export async function copilotCli(): Promise<string> {
 
 const PackageVersion = z.object({ dist: z.object({ tarball: z.url(), integrity: z.string().startsWith("sha512-") }) });
 
-async function download(name: string): Promise<Buffer> {
-  const metadata = await fetch(`${REGISTRY}/${name}/${COPILOT_CLI_VERSION}`);
-  if (!metadata.ok) throw new Error(`${name}@${COPILOT_CLI_VERSION}: the registry answered ${metadata.status}`);
+async function download(name: string, version: string): Promise<Buffer> {
+  const metadata = await fetch(`${REGISTRY}/${name}/${version}`);
+  if (!metadata.ok) throw new Error(`${name}@${version}: the registry answered ${metadata.status}`);
   const { dist } = PackageVersion.parse(await metadata.json());
   const response = await fetch(dist.tarball);
   if (!response.ok) throw new Error(`${dist.tarball}: ${response.status}`);

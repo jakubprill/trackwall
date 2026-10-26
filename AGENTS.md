@@ -103,7 +103,7 @@ The full description of how to run things is in `docs/development.md`. For the D
 pnpm lint              # Biome (format, lint, import order; pnpm format fixes them) and knip
 pnpm typecheck
 pnpm test              # bun test in every package
-pnpm test:contract     # the daemon with the real Copilot CLI against a scripted model (ADR-67); CI runs it on every PR, run it locally when the change touches sessions, tasks, hooks or MCP
+pnpm test:contract     # the daemon with the real Copilot CLI against a scripted model (ADR-67); CI runs it on every PR and nightly on the newest Copilot CLI (`nightly.yml`), run it locally when the change touches sessions, tasks, hooks or MCP
 
 # when the change touches apps/desktop, the daemon build or packaging (the `desktop` job in CI; cargo fmt also in `check`):
 cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
@@ -117,7 +117,7 @@ pnpm portable
 pnpm --filter @trackwall/docs build
 ```
 
-Tool versions are in `mise.toml` (`mise install`), which also has the `setup`, `dev` and `portable` tasks. The workflows have them in `env`, and the `.github/actions/setup` action installs them in the jobs that build and test (the audit needs only pnpm and Node); a version change goes into `mise.toml` and every workflow that sets it at once (`ci.yml`, `release.yml`, and Node and Bun in `pages.yml`; a test guards this).
+Tool versions are in `mise.toml` (`mise install`), which also has the `setup`, `dev` and `portable` tasks. The workflows have them in `env`, and the `.github/actions/setup` action installs them in the jobs that build and test (the audit needs only pnpm and Node); a version change goes into `mise.toml` and every workflow that sets it at once (`ci.yml`, `release.yml`, and Node and Bun in `pages.yml` and `contract.yml`; a test guards this).
 
 ## Commits and PRs
 

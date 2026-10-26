@@ -104,31 +104,11 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
       - run: pnpm test
 
-  # The real Copilot CLI of the pinned version in BYOK mode against a scripted model (ADR-67): no account and no secret.
-  # The binary (113–130 MB packed) is cached under the version, which lives only in scripts/copilot-cli.ts.
+  # The real Copilot CLI of the pinned version on all three systems (ADR-67); nightly.yml runs the same on the newest one.
   contract:
-    name: contract with Copilot CLI (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
     permissions:
       contents: read
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          bun-version: ${{ env.BUN_VERSION }}
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: packages/daemon/node_modules/.cache/copilot-cli
-          key: copilot-cli-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/daemon/scripts/copilot-cli.ts') }}
-      - run: pnpm test:contract
+    uses: ./.github/workflows/contract.yml
 
   # The build is the longest step of a run, so it has its own job next to `test`, not after it.
   desktop:
