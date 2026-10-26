@@ -1,6 +1,6 @@
 import { TRACKWALL_DOCS_LLMS_URL, TRACKWALL_DOCS_URL } from "./docs-site.ts";
 import { trackwallLink } from "./links.ts";
-import { mcpTools } from "./mcp.ts";
+import { mcpTools, TASK_MESSAGE_USES } from "./mcp.ts";
 
 /**
  * The MCP instruction: how an agent works with Trackwall (ADR-46). The MCP server announces it in `initialize`
@@ -82,8 +82,8 @@ export const MCP_INSTRUCTIONS = [
   `- Hand work to another agent, e.g. a change in another repo: ${proposeTask.name} with a prompt that stands on its own; ` +
     "the user approves, edits or rejects it in Trackwall. In a Trackwall session, then end your turn: when the task's " +
     "session finishes a turn, reports its result, gets a verification verdict, errs or exits, or the user rejects the " +
-    `proposal, Trackwall asks you to call ${getUpdates.name}, which says what happened. To steer the task (a correction, ` +
-    `an answer to its question, a change elsewhere it must follow), send its session a message with ${sendMessage.name}. ` +
+    `proposal, Trackwall asks you to call ${getUpdates.name}, which says what happened. To steer the task (${TASK_MESSAGE_USES}), ` +
+    `send its session a message with ${sendMessage.name}. ` +
     `An agent outside Trackwall gets no updates and sends no messages; it waits with ${waitForSession.name} (a session ` +
     "may too, to wait inside a turn): with the task id it returns when the proposal is rejected or the task's session " +
     `needs someone, goes stale or exits; when it times out (still pending, starting or working), call it again. ${getSession.name} shows ` +

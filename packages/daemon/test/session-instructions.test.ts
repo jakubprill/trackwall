@@ -92,12 +92,32 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).toContain(MCP_INSTRUCTIONS);
   });
 
+  test("the supervisor proposes no task for a request outside one repo, and sends a follow-up to the running task instead of a new one (ADR-81)", () => {
+    const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
+    writeSessionInstructions(sessionDir, "0.5.0", { repo: null, changesCode: false });
+    const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
+    expect(text).toContain(
+      "Before you delegate, work out what the request changes. A task is a new git worktree of one repo on a new branch",
+    );
+    expect(text).toContain("it cannot remove, move or rename its repo, and must not touch other repos or the projects folder around them");
+    expect(text).toContain(
+      "Do not propose a task for such a request (removing a repo or a folder of the projects folder, for example); tell the user what it takes instead.",
+    );
+    expect(text).toContain(
+      "Before you propose a task, read the tasks a supervisor proposed with list_sessions. A follow-up on the same topic in the same repo goes to that task with send_message while the user has not ended it",
+    );
+    expect(text).toContain("a follow-up on a proposal still waiting for the user, or on a task the user started, goes to the user");
+  });
+
   test("a supervisor the user lets change code is told so, and still hands repo changes to tasks (ADR-78)", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
     writeSessionInstructions(sessionDir, "0.4.1", { repo: null, changesCode: true });
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain("You coordinate: hand each piece of work to an agent with propose_task");
     expect(text).toContain("The user lets you run commands and change files yourself; keep that to what they ask you for");
+    expect(text).toContain(
+      "(removing a repo or a folder of the projects folder, for example); do it yourself when the user asked you to, or tell the user",
+    );
     expect(text).not.toContain("you do not change code");
     expect(text).not.toContain("refuses you its shell");
   });

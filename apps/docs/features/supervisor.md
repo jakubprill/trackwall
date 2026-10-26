@@ -52,4 +52,5 @@ The panel can be folded to a narrow strip at the right edge, which keeps a bell 
 - Stop ends the supervisor; "Start again" starts a new one in its place. The work it delegated stays under the "Supervisor" heading, also after Trackwall restarts.
 - When the supervisor waits for you, the tray, the system notification and the tray panel call it "Supervisor". The "Sessions" counter leaves it out, since its panel shows it; Alt+J and "Next waiting" go to it once nothing else is waiting. It is not on the [Home dashboard](/features/home) either.
 - The supervisor does not run mise tasks or services itself: it works in no single repo, so it proposes a task in the repo instead.
+- A task works in a copy of one repo, so the supervisor does not hand it work on the projects folder itself, such as removing a repo; it tells you what that takes instead. A follow-up on a task that is still running goes to that task as a message rather than to a new task, so it ends up on the same branch.
 - It needs Copilot CLI, like any [session](/features/sessions), and the projects folder to be set.
