@@ -140,14 +140,10 @@ export async function waitForTerminal(page: Page, text: string): Promise<void> {
 }
 
 /**
- * Types into the session terminal as the user does: a click to focus it, then the keys. First it waits for the
- * terminal to draw the session's screen, which comes over its socket once it is open: a terminal just mounted (after
- * switching tabs) drops keys until then.
+ * Types into the session terminal as the user does: a click to focus it, then the keys, without waiting for the
+ * session's screen. A terminal just mounted (after switching tabs) holds keys typed before its socket opens.
  */
 export async function typeInTerminal(page: Page, keys: string): Promise<void> {
-  await page.waitForFunction(() => (document.querySelector(".xterm-rows")?.textContent ?? "").trim() !== "", undefined, {
-    timeout: TERMINAL_TIMEOUT_MS,
-  });
   await page.locator(".xterm").click();
   await page.keyboard.type(keys);
 }
