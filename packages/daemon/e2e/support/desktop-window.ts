@@ -16,13 +16,14 @@ const TauriConf = z.object({ app: z.object({ security: z.object({ csp: z.string(
 
 /** The window's origin on Windows (WebView2). */
 const WINDOW_ORIGIN = "http://tauri.localhost";
+const EVENTS_TIMEOUT_MS = 10_000;
 
 /** The window, and what went wrong in it so far: CSP violations, errors nothing caught and errors in the console. */
 export interface DesktopWindow {
   page: Page;
   problems: string[];
   close: () => Promise<void>;
-  /** Settles with the first frame of the daemon's events socket (`/ws`), the snapshot it sends on connecting. */
+  /** Settles with the first frame of the daemon's events socket (`/ws`), the snapshot it sends on connecting; fails after 10 s without one. */
   eventsArrived: Promise<void>;
 }
 
@@ -53,11 +54,12 @@ export async function openDesktopWindow(
   });
   await page.exposeFunction("reportCspViolation", (text: string) => problems.push(`CSP: ${text}`));
   await page.addInitScript(fakeTauri, daemon);
-  const eventsArrived = new Promise<void>((arrived) =>
-    page.on("websocket", (socket) => {
-      if (new URL(socket.url()).pathname === "/ws") socket.once("framereceived", () => arrived());
-    }),
-  );
+  const eventsArrived = page
+    .waitForEvent("websocket", { predicate: (socket) => new URL(socket.url()).pathname === "/ws", timeout: EVENTS_TIMEOUT_MS })
+    .then((socket) => socket.waitForEvent("framereceived", { timeout: EVENTS_TIMEOUT_MS }))
+    .then(() => undefined);
+  // A test that does not wait for the events must not fail on them, nor on the window closing before they came.
+  eventsArrived.catch(() => {});
   await page.goto(`${WINDOW_ORIGIN}/`);
   return { page, problems, eventsArrived, close: () => context.close() };
 }

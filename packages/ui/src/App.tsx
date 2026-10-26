@@ -207,14 +207,14 @@ export function App() {
                 <Loading text="Connecting to the daemon…" />
               </div>
             )}
-            {/* One view that throws keeps the view bar and the other views; switching views mounts a fresh boundary. */}
+            {/* One view that throws keeps the view bar and the other views. The key mounts the view afresh, with a fresh boundary, on
+                a view change, a reconnect (`epoch`) and every opening of a repo (`visit`). */}
             <ErrorBoundary
               key={`${view}:${epoch}:${visit}`}
               fallback={(message, retry) => <ViewFailed message={message} onRetry={retry} />}
             >
               {conn && view === "home" && (
                 <HomeView
-                  key={epoch}
                   conn={conn}
                   runningLive={runningLive}
                   repoWatch={repoWatch}
@@ -227,7 +227,6 @@ export function App() {
               )}
               {conn && view === "repos" && (
                 <ReposView
-                  key={`${epoch}:${visit}`}
                   conn={conn}
                   initialRepo={repo}
                   repoWatch={repoWatch}
@@ -237,7 +236,6 @@ export function App() {
               )}
               {conn && view === "sessions" && (
                 <SessionsView
-                  key={epoch}
                   conn={conn}
                   sessions={sessions}
                   runningLive={runningLive}
@@ -250,15 +248,15 @@ export function App() {
                   onLayout={setSessionLayout}
                 />
               )}
-              {conn && view === "graph" && <GraphView key={epoch} conn={conn} warmupLive={warmupLive} repoWatch={repoWatch} />}
+              {conn && view === "graph" && <GraphView conn={conn} warmupLive={warmupLive} repoWatch={repoWatch} />}
               {conn && view === "daemon" && (
                 <div className="flex justify-center p-6">
-                  <DaemonPanel key={epoch} conn={conn} warmupLive={warmupLive} onRetry={retry} />
+                  <DaemonPanel conn={conn} warmupLive={warmupLive} onRetry={retry} />
                 </div>
               )}
               {conn && view === "settings" && (
                 <div className="flex justify-center p-6">
-                  <SettingsView key={epoch} conn={conn} update={appUpdate} onRetry={retry} onSaved={() => setView("repos")} />
+                  <SettingsView conn={conn} update={appUpdate} onRetry={retry} onSaved={() => setView("repos")} />
                 </div>
               )}
             </ErrorBoundary>

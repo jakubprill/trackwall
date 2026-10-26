@@ -4,16 +4,7 @@ import { join } from "node:path";
 import { useTrackwall } from "./support/trackwall-ui.ts";
 
 const SCENE_TIMEOUT_MS = 20_000;
-const EVENTS_TIMEOUT_MS = 10_000;
 const TEST_TIMEOUT_MS = 40_000;
-
-/** Fails with a message instead of the test's timeout when the events socket sends nothing. */
-function withinTimeout(arrived: Promise<void>): Promise<void> {
-  return Promise.race([
-    arrived,
-    new Promise<void>((_, reject) => setTimeout(() => reject(new Error("no frame from the daemon's /ws")), EVENTS_TIMEOUT_MS)),
-  ]);
-}
 
 describe("the main window under the desktop shell's CSP", () => {
   const trackwall = useTrackwall();
@@ -30,7 +21,7 @@ describe("the main window under the desktop shell's CSP", () => {
       await label.or(page.getByText("The 3D view is unavailable here")).waitFor({ timeout: SCENE_TIMEOUT_MS });
       expect(problems).toEqual([]);
       expect(await label.isVisible()).toBe(true);
-      await withinTimeout(eventsArrived);
+      await eventsArrived;
       expect(problems).toEqual([]);
       await close();
     },
