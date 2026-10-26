@@ -61,7 +61,17 @@ export async function openDesktopWindow(
   // A test that does not wait for the events must not fail on them, nor on the window closing before they came.
   eventsArrived.catch(() => {});
   await page.goto(`${WINDOW_ORIGIN}/`);
-  return { page, problems, eventsArrived, close: () => context.close() };
+  return {
+    page,
+    problems,
+    eventsArrived,
+    close: async () => {
+      // Requests still on their way through the route (a chunk the page asked for at the end) would fail once the
+      // context is gone, after the test, as errors of none of them.
+      await context.unrouteAll({ behavior: "ignoreErrors" });
+      await context.close();
+    },
+  };
 }
 
 /**

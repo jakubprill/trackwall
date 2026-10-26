@@ -39,11 +39,10 @@ describe("the main window under the desktop shell's CSP", () => {
         .getByRole("button", { name: /^Repos/ })
         .click();
       await page.getByText("shop", { exact: true }).first().waitFor({ timeout: SCENE_TIMEOUT_MS });
-      // Only the failed chunk, which the boundary caught: nothing uncaught, nothing refused by the CSP.
-      expect(problems).toEqual([
-        expect.stringContaining("status of 500"),
-        expect.stringContaining("Failed to fetch dynamically imported module"),
-      ]);
+      // The failed chunk, which the boundary caught, is in the console (with its failed request, once or more depending
+      // on the system); nothing went uncaught and nothing was refused by the CSP.
+      expect(problems).toContainEqual(expect.stringContaining("Failed to fetch dynamically imported module"));
+      expect(problems.filter((problem) => !problem.startsWith("console: "))).toEqual([]);
       await close();
     },
     TEST_TIMEOUT_MS,
