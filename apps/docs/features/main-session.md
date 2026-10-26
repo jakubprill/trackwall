@@ -25,7 +25,7 @@ All proposals of one session are one entry, indented under that session, which g
 
 A task's agent finishes with a summary, shown above the task's tabs. The main session does not need to keep asking about its tasks: when a task's agent finishes a turn, reports its result, gets a verification verdict, errs or stops, or when you reject a proposal, Trackwall types one line into the main session asking it to read what happened, once it waits for input. It then reads the summaries and changes, down to the diff of the files it cares about, so it can check the work and plan the next step.
 
-To steer a running task, the main session sends its agent a message: a correction, an answer to the agent's question, or what changed in another repo. The task's agent is asked to read it the same way, once it waits for input, or when you resume the task. The messages appear in the task's panel under "Messages", with who sent them and whether the agent has read them yet.
+To steer a running task, the main session sends its agent a message: a correction, an answer to the agent's question, or what changed in another repo. The task's agent is asked to read it the same way, once it waits for input, or when you resume the task. The agent takes a message as an update of its task: where it differs from the task's prompt, it follows the message, but what you type into the task's terminal or send as a review comes first. The messages appear in the task's panel under "Messages", with who sent them and whether the agent has read them yet.
 
 ![Two messages from the main session in orders-api to its notifications task, the second not read yet](/screenshots/task-messages.png)
 

@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { MCP_INSTRUCTIONS, mcpTools, TASK_PORT_ENV, VERIFY_MISE_TASK } from "@trackwall/protocol";
+import { MCP_INSTRUCTIONS, mcpTools, TASK_MESSAGE_RULE, TASK_PORT_ENV, VERIFY_MISE_TASK } from "@trackwall/protocol";
 import { envKey } from "../../infra/env-key.ts";
 
 /**
@@ -104,6 +104,6 @@ function taskRole(repo: string, task: string): string[] {
     `- Work that belongs to another repo is not yours: propose it with ${mcpTools.proposeTask.name} and say so in your result.`,
     `- Before you report that you are done, call ${mcpTools.verifyTask.name} with repo \`${repo}\` and task \`${task}\`: it runs the repo's mise task ${VERIFY_MISE_TASK} in this worktree, and the user sees its verdict in the task's panel. Fix what fails and call it again. If the repo has no mise task ${VERIFY_MISE_TASK}, do not add one (a changed mise config needs the user's trust); say so in your result.`,
     `- When you are done, or stuck and need the user or the session that proposed the task, call ${mcpTools.reportResult.name}: what you did, what is left and what to check, or the question you need answered. Call it again if the result changes.`,
-    `- When Trackwall asks you to call ${mcpTools.getMessages.name}, the session that proposed your task has written to you: act on its messages as on your prompt, unless they contradict the user.`,
+    `- When Trackwall asks you to call ${mcpTools.getMessages.name}, the session that proposed your task has written to you. ${TASK_MESSAGE_RULE}`,
   ];
 }
