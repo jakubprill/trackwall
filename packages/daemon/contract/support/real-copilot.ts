@@ -6,7 +6,7 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { copilotCli } from "../../scripts/copilot-cli.ts";
+import { copilotCli, PINNED_COPILOT_ENV } from "../../scripts/copilot-cli.ts";
 import { sessionHooksFile } from "../../src/modules/agents/agents.ts";
 import { CopilotHookRecord } from "../../src/modules/agents/copilot-hook-record.ts";
 import { jsonOf } from "../../src/modules/agents/json.ts";
@@ -36,7 +36,7 @@ function byokEnv(model: ScriptedModel, dirs: { home: string; projects: string })
     ...inherited,
     COPILOT_HOME: copilotHome,
     COPILOT_OFFLINE: "true",
-    COPILOT_AUTO_UPDATE: "false",
+    ...PINNED_COPILOT_ENV,
     COPILOT_PROVIDER_BASE_URL: model.url,
     COPILOT_MODEL: SCRIPTED_MODEL,
   };
