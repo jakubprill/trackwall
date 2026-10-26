@@ -457,7 +457,7 @@ export const mcpTools = {
       "package built in this repo; http: a repo's HTTP client calls this repo's app or endpoints; manual: a connection " +
       "entered by the user), a key (package name, app name or address, note), a confidence (exact, high, medium, low) " +
       "and evidence (repo, file, line; for http also call–endpoint pairs). Before changing a repo's API or package, " +
-      "check whom it affects; find_endpoint tells who calls a specific endpoint.",
+      "check whom it affects; find_endpoint tells which endpoints call a specific endpoint.",
     args: z.object({ repo: RepoArg }).strict(),
     result: WhoCallsResult,
   },
@@ -483,7 +483,10 @@ export const mcpTools = {
       "HTTP endpoints from Spring controllers in all repos matching the query: a path starting with / (also a concrete " +
       "one: /api/orders/42 finds /api/orders/{id}) or part of a path, handler name (Class.method) or app name. Each " +
       "with repo, method, full path, request and response types, file and line, plus callers: repos whose HTTP clients call it, with confidence " +
-      `and evidence. At most ${MAX_FOUND_ENDPOINTS} results (truncated: true when there were more).`,
+      "and evidence, each with from: the caller repo's endpoints whose handlers reach that call ([]: none does, e.g. a scheduled job; " +
+      "null: that repo's code was not traced, e.g. it has Kotlin). calls lists the endpoints of other repos this endpoint's handler " +
+      "calls (null when not traced). Follow from and calls repeatedly to see what a change to an endpoint affects. " +
+      `At most ${MAX_FOUND_ENDPOINTS} results (truncated: true when there were more).`,
     args: z
       .object({
         query: z.string().min(1).max(300).describe("path or part of it, e.g. /api/orders/{id}, orders, OrdersController"),

@@ -8,7 +8,7 @@ import { readSnapshot } from "../src/modules/cards/read-snapshot.ts";
 import { loadSyntaxParsers } from "../src/modules/cards/syntax-tree.ts";
 import { extractTools } from "../src/modules/cards/tools.ts";
 import { buildGraph } from "../src/modules/graph/build-graph.ts";
-import { snapshotOf } from "./support/snapshot.ts";
+import { NO_CALL_SOURCES, NO_REACH, snapshotOf } from "./support/snapshot.ts";
 
 const parsers = await loadSyntaxParsers();
 
@@ -71,7 +71,7 @@ describe("repo card with malicious and large files", () => {
 
   test("a path with thousands of repetitions of k8s/ does not block the list of mechanisms", () => {
     const started = performance.now();
-    extractCard(snapshotOf({}, [`${"k8s/".repeat(8000)}x.yaml`, `${"k8s/".repeat(8000)}y.yaml`]), parsers);
+    extractCard(snapshotOf({}, [`${"k8s/".repeat(8000)}x.yaml`, `${"k8s/".repeat(8000)}y.yaml`]), parsers, NO_REACH);
     expect(performance.now() - started).toBeLessThan(1000);
   });
 
@@ -85,15 +85,15 @@ describe("repo card with malicious and large files", () => {
     const vcs = {
       commitFiles: async () => ({
         files: [
-          { name: "pom.xml", path: "pom.xml", kind: "file" as const, size: 10 },
-          { name: "pom.xml", path: "api/pom.xml", kind: "file" as const, size: 10 },
+          { path: "pom.xml", size: 10, oid: "0".repeat(40) },
+          { path: "api/pom.xml", size: 10, oid: "0".repeat(40) },
         ],
         truncated: false,
       }),
       readFiles: async () => new Map([["pom.xml", Buffer.from("<project/>")]]),
       grepFiles: async () => ({ paths: [], truncated: false }),
     };
-    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), (path) => path.endsWith("pom.xml"), CARD_SOURCES);
+    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), (path) => path.endsWith("pom.xml"), CARD_SOURCES, NO_CALL_SOURCES);
     expect(snapshot.text("pom.xml")).toBe("<project/>");
     expect(snapshot.problems).toEqual([
       { code: "files-not-read", path: "api/pom.xml", message: "the file was not read within the 67108864 B commit read limit" },
@@ -111,30 +111,32 @@ describe("repo card with malicious and large files", () => {
       "}",
     ].join("\n");
     const started = performance.now();
-    extractCard(snapshotOf({ "src/main/java/a/Deep.java": java }), parsers);
+    extractCard(snapshotOf({ "src/main/java/a/Deep.java": java }), parsers, NO_REACH);
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
   test("a class with RestTemplate, tens of thousands of unclosed calls and different base addresses does not block the daemon", () => {
     const java = `class C {\n  RestTemplate rest;\n${"x.a(".repeat(50_000)}\n${Array.from({ length: 20_000 }, (_, i) => `b.baseUrl("http://h${i}");`).join("\n")}\n}`;
     const started = performance.now();
-    extractCard(snapshotOf({ "src/main/java/a/C.java": java }), parsers);
+    extractCard(snapshotOf({ "src/main/java/a/C.java": java }), parsers, NO_REACH);
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
   test("thousands of calls nested in a method body and a .uri( chain do not block the daemon", () => {
     const nested = `class C {\n  RestTemplate rest;\n  void f() { ${"x.a(".repeat(20_000)}${")".repeat(20_000)} }\n  void g() { ${"w.get().uri(".repeat(20_000)}${")".repeat(20_000)} }\n}`;
     const started = performance.now();
-    extractCard(snapshotOf({ "src/main/java/a/C.java": nested }), parsers);
+    extractCard(snapshotOf({ "src/main/java/a/C.java": nested }), parsers, NO_REACH);
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
   test("an application.yml with thousands of addresses in one module gives a card with the first 500 and a problem, and 500 addresses give no problem", () => {
     const urls = Array.from({ length: 5_000 }, (_, i) => `url${i}: http://h${i}`).join("\n");
-    const card = extractCard(snapshotOf({ "src/main/resources/application.yml": `${urls}\n` }), parsers);
+    const card = extractCard(snapshotOf({ "src/main/resources/application.yml": `${urls}\n` }), parsers, NO_REACH);
     expect(card.consumes.filter((c) => c.kind === "http")).toHaveLength(500);
     const exactly500 = Array.from({ length: 500 }, (_, i) => `url${i}: http://h${i}`).join("\n");
-    expect(extractCard(snapshotOf({ "src/main/resources/application.yml": `${exactly500}\nplain: v\n` }), parsers).problems).toEqual([]);
+    expect(
+      extractCard(snapshotOf({ "src/main/resources/application.yml": `${exactly500}\nplain: v\n` }), parsers, NO_REACH).problems,
+    ).toEqual([]);
     expect(card.problems).toContainEqual({
       code: "truncated",
       path: "",
@@ -146,7 +148,7 @@ describe("repo card with malicious and large files", () => {
     const calls = Array.from({ length: 30_000 }, (_, i) => `    rest.getForObject("http://h/p${i}", String.class);`).join("\n");
     const java = `class C {\n  RestTemplate rest;\n  void f() {\n${calls}\n  }\n}`;
     const started = performance.now();
-    extractCard(snapshotOf({ "src/main/java/a/C.java": java }), parsers);
+    extractCard(snapshotOf({ "src/main/java/a/C.java": java }), parsers, NO_REACH);
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
@@ -156,7 +158,7 @@ describe("repo card with malicious and large files", () => {
       "\n",
     );
     const started = performance.now();
-    extractCard(snapshotOf({ "src/main/resources/application.yml": `${flat}\n${profiles}\n` }), parsers);
+    extractCard(snapshotOf({ "src/main/resources/application.yml": `${flat}\n${profiles}\n` }), parsers, NO_REACH);
     expect(performance.now() - started).toBeLessThan(2000);
   });
 
@@ -164,8 +166,8 @@ describe("repo card with malicious and large files", () => {
     const vcs = {
       commitFiles: async () => ({
         files: [
-          { name: "pom.xml", path: "pom.xml", kind: "file" as const, size: 10 },
-          { name: "Api.java", path: "src/main/java/Api.java", kind: "file" as const, size: 10 },
+          { path: "pom.xml", size: 10, oid: "0".repeat(40) },
+          { path: "src/main/java/Api.java", size: 10, oid: "0".repeat(40) },
         ],
         truncated: false,
       }),
@@ -174,7 +176,7 @@ describe("repo card with malicious and large files", () => {
         throw new Error("git grep: timed out");
       },
     };
-    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), (path) => path.endsWith("pom.xml"), CARD_SOURCES);
+    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), (path) => path.endsWith("pom.xml"), CARD_SOURCES, NO_CALL_SOURCES);
     expect(snapshot.text("pom.xml")).toBe("<project/>");
     expect(snapshot.problems).toEqual([
       { code: "files-not-read", path: "", message: "searching for files with controllers and HTTP clients failed: git grep: timed out" },
@@ -185,7 +187,7 @@ describe("repo card with malicious and large files", () => {
     const constants = Array.from({ length: 30 }, (_, i) => `static final String C${i} = C${i + 1} + C${i + 1};`).join("\n");
     const java = `@RestController class Api {\n${constants}\nstatic final String C30 = "${"x".repeat(1000)}";\nstatic final String L = L + "/a";\n@GetMapping(C0) void a() {}\n@GetMapping(L) void b() {}\n}`;
     const started = performance.now();
-    const card = extractCard(snapshotOf({ "src/main/java/a/Api.java": java }), parsers);
+    const card = extractCard(snapshotOf({ "src/main/java/a/Api.java": java }), parsers, NO_REACH);
     expect(performance.now() - started).toBeLessThan(1000);
     for (const p of card.provides) if (p.kind === "endpoint") expect(p.path.length).toBeLessThanOrEqual(4096);
   });
@@ -199,6 +201,7 @@ describe("repo card with malicious and large files", () => {
         "src/main/java/a/C.java": `@FeignClient(name = "c", url = "\${k0}") interface C {}`,
       }),
       parsers,
+      NO_REACH,
     );
     expect(performance.now() - started).toBeLessThan(1000);
   });
@@ -207,7 +210,7 @@ describe("repo card with malicious and large files", () => {
     const args = "A,".repeat(40_000);
     const java = `@RestController class Api { @GetMapping("/a") M<${args}A> a() { return null; } }\nclass M { N<${args}D> f; }\nclass D { int x; }`;
     const started = performance.now();
-    const card = extractCard(snapshotOf({ "src/main/java/a/Api.java": java }), parsers);
+    const card = extractCard(snapshotOf({ "src/main/java/a/Api.java": java }), parsers, NO_REACH);
     expect(performance.now() - started).toBeLessThan(2000);
     const endpoint = card.provides.find((p) => p.kind === "endpoint");
     expect(endpoint?.kind === "endpoint" ? endpoint.response?.length : 0).toBe(257);
@@ -220,8 +223,12 @@ describe("repo card with malicious and large files", () => {
       { length: 200 },
       (_, i) => `  void c${i}() { rest.getForObject("/api/r${i % 50}/" + id + "/x${i}", String.class); }`,
     ).join("\n");
-    const api = extractCard(snapshotOf({ "src/main/java/a/Api.java": `@RestController class Api {\n${endpoints}\n}` }), parsers);
-    const client = extractCard(snapshotOf({ "src/main/java/a/Client.java": `class Client {\n  RestTemplate rest;\n${calls}\n}` }), parsers);
+    const api = extractCard(snapshotOf({ "src/main/java/a/Api.java": `@RestController class Api {\n${endpoints}\n}` }), parsers, NO_REACH);
+    const client = extractCard(
+      snapshotOf({ "src/main/java/a/Client.java": `class Client {\n  RestTemplate rest;\n${calls}\n}` }),
+      parsers,
+      NO_REACH,
+    );
     const cards = Array.from({ length: 30 }, (_, i) => ({
       kind: "ok" as const,
       repo: `r${i}`,

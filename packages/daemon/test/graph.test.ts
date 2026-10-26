@@ -36,6 +36,7 @@ function card(p: ProvidedPackage[], c: ConsumedPackage[]): RepoCard {
     tools: [],
     mise: { configFiles: [], tasks: [], complete: true },
     mechanisms: [],
+    reachTraced: false,
     problems: [],
   };
 }

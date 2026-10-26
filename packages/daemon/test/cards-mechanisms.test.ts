@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { extractCard } from "../src/modules/cards/extract-card.ts";
 import { loadSyntaxParsers } from "../src/modules/cards/syntax-tree.ts";
-import { snapshotOf } from "./support/snapshot.ts";
+import { NO_REACH, snapshotOf } from "./support/snapshot.ts";
 
 const parsers = await loadSyntaxParsers();
 
@@ -31,6 +31,7 @@ describe("list of mechanisms", () => {
     const card = extractCard(
       snapshotOf({ "pom.xml": SPRING_BFF_POM }, ["Dockerfile", "deploy/k8s/deployment.yaml", "chart/Chart.yaml", "api/openapi.yaml"]),
       parsers,
+      NO_REACH,
     );
     expect(card.mechanisms.map((m) => [m.id, m.evidence.map((e) => `${e.path}:${e.line ?? "-"} ${e.detail}`)])).toEqual([
       [

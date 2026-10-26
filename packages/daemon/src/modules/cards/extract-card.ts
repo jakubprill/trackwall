@@ -1,5 +1,7 @@
-import type { Consumed, Provided, RepoCard } from "@trackwall/protocol";
+import type { Consumed, ConsumedHttp, Provided, RepoCard } from "@trackwall/protocol";
+import type { CallFiles } from "./call-files.ts";
 import { extractContracts } from "./endpoint-contracts.ts";
+import { withReaches } from "./endpoint-reach.ts";
 import { extractFrontendHttp, readsFrontendHttpFile } from "./frontend-http.ts";
 import { extractGradle, readsGradleFile } from "./gradle.ts";
 import { referencedTypeNames } from "./java-tokens.ts";
@@ -18,8 +20,9 @@ import { extractTools, readsToolFile } from "./tools.ts";
 /**
  * The repo card from one commit (§4.6, ADR-25, ADR-30): build system extractors, then tools from their build
  * directories, configuration and mise tasks (ADR-34), HTTP facts (Spring and frontend) with endpoint contracts and DTOs
- * (ADR-38), and the list of mechanisms from what the repo uses. The same commit gives the same card, unless the parsers
- * did not produce a syntax tree in time (`CardParsers.complete`).
+ * (ADR-38), the client calls each endpoint reaches from the call files (ADR-82), and the list of mechanisms from what
+ * the repo uses. The same commit gives the same card, unless the parsers did not produce a syntax tree in time
+ * (`CardParsers.complete`, `CallFiles.complete`).
  */
 
 /** A build system extractor together with the choice of files it reads, so that a new one cannot forget the other. */
@@ -51,7 +54,10 @@ export const CARD_SOURCES: SourceSelection = {
   referencedTypes: referencedTypeNames,
 };
 
-export function extractCard(snapshot: RepoSnapshot, parsers: SyntaxParsers): RepoCard {
+/** The source files the endpoint reach reads (ADR-82): every Java and Kotlin file of app code, not only those from the search. */
+export const CALL_SOURCES = isJvmSource;
+
+export function extractCard(snapshot: RepoSnapshot, parsers: SyntaxParsers, calls: CallFiles): RepoCard {
   const mise = extractMiseSetup(snapshot);
   const builds = BUILD_EXTRACTORS.map((e) => e.extract(snapshot));
   const buildDirs = builds.flatMap((b) => b.buildFiles.map((f) => dirOf(f.path)));
@@ -67,19 +73,21 @@ export function extractCard(snapshot: RepoSnapshot, parsers: SyntaxParsers): Rep
     all.flatMap((e) => e.provides),
     parsers,
   );
+  const clients = consumes.filter((c): c is ConsumedHttp => c.kind === "http");
   return {
     commit: snapshot.commit,
     buildFiles: all.flatMap((e) => e.buildFiles),
-    provides: contracts.provides,
+    provides: withReaches(contracts.provides, clients, calls.files),
     consumes,
     dtos: contracts.dtos,
+    reachTraced: calls.files !== null,
     tools: all.flatMap((e) => e.tools),
     mise: mise.mise,
     mechanisms: detectMechanisms(
       consumes.filter((c) => c.kind === "package"),
       snapshot.paths,
     ),
-    problems: [...snapshot.problems, ...all.flatMap((e) => e.problems), ...mise.problems, ...contracts.problems],
+    problems: [...snapshot.problems, ...all.flatMap((e) => e.problems), ...mise.problems, ...contracts.problems, ...calls.problems],
   };
 }
 
