@@ -79,9 +79,32 @@ export const EndpointReach = z.object({
 });
 export type EndpointReach = z.infer<typeof EndpointReach>;
 
-/** An HTTP endpoint from a Spring controller (`@RestController`, `@Controller` with `@*Mapping`). */
+/**
+ * Where an endpoint on the card comes from: `code` is a mapping in a Spring controller, `openapi` an operation of an
+ * OpenAPI (or Swagger 2) spec in the repo that no mapping in the code matches, e.g. because the interface with the
+ * mappings is generated from the spec during the build and is not in the repo (ADR-87).
+ */
+export const EndpointSource = z.enum(["code", "openapi"]);
+export type EndpointSource = z.infer<typeof EndpointSource>;
+
+/** The operation of an OpenAPI spec in the repo that describes an endpoint (ADR-87). */
+export const OpenApiOperation = z.object({
+  /** `operationId`; `null` without one. */
+  id: z.string().nullable(),
+  /** `summary`, or without it the first line of `description`, cut to 200 characters; `null` without either. */
+  summary: z.string().nullable(),
+  /** The spec file and the line of the operation (its HTTP method key). */
+  evidence: Evidence,
+});
+export type OpenApiOperation = z.infer<typeof OpenApiOperation>;
+
+/**
+ * An HTTP endpoint from a Spring controller (`@RestController`, `@Controller` with `@*Mapping`) or from an OpenAPI spec in
+ * the repo (ADR-87).
+ */
 export const ProvidedEndpoint = z.object({
   kind: z.literal("endpoint"),
+  source: EndpointSource,
   /** `null`: `@RequestMapping` without `method`, that is any method. */
   method: HttpMethod.nullable(),
   /**
@@ -91,11 +114,15 @@ export const ProvidedEndpoint = z.object({
   path: z.string(),
   /** The application name of the module the controller is in; `null` when the module does not give one. */
   app: z.string().nullable(),
-  /** The controller's `Class.method`. */
-  handler: z.string(),
+  /**
+   * The controller's `Class.method`. For an endpoint from a spec, the controller method named like the `operationId`
+   * (as the OpenAPI generator names the interface method it implements); `null` when the repo has no such method, or several.
+   */
+  handler: z.string().nullable(),
   /**
    * The request body type (the parameter with `@RequestBody`) in type notation (`CreateOrder`, `List<Line>`); `null`
-   * without a body or when the file's syntax tree could not be built (ADR-38). Type notation is the text from the code
+   * without a body or when the file's syntax tree could not be built (ADR-38). For an endpoint from a spec, the schema
+   * name of the JSON body (`CreateOrder`, `List<Line>`, `string`). Type notation is the text from the code
    * without annotations, with a space only between words or after `?` (`List<? extends Line>`); longer than 256
    * characters it is cut with "…".
    */
@@ -104,7 +131,7 @@ export const ProvidedEndpoint = z.object({
    * The response type: the return type without wrappers that do not change the content (`ResponseEntity<T>`, `Mono<T>`,
    * `Optional<T>`…), in type notation like `request`; `null` without content (`void`, `Unit`, `ResponseEntity<Void>`,
    * `ResponseEntity<*>`, a bare `ResponseEntity`), without an explicit type (a Kotlin expression function) or without a
-   * syntax tree (ADR-38).
+   * syntax tree (ADR-38). For an endpoint from a spec, the schema of the first 2xx response, like `request`.
    */
   response: z.string().nullable(),
   /**
@@ -113,6 +140,9 @@ export const ProvidedEndpoint = z.object({
    * repo. `null` when the card could not trace (`RepoCard.reachTraced`) or the call graph has no method for the handler.
    */
   reaches: z.array(EndpointReach).nullable(),
+  /** The OpenAPI operation describing this endpoint (ADR-87); `null` when no spec in the repo does. */
+  operation: OpenApiOperation.nullable(),
+  /** The mapping in the code; for an endpoint from a spec, the operation in the spec. */
   evidence: Evidence,
 });
 export type ProvidedEndpoint = z.infer<typeof ProvidedEndpoint>;

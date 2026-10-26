@@ -196,7 +196,11 @@ A Spring Boot application from the repo card: the module's `spring.application.n
 _Avoid_: service, microservice (for a fact from the card)
 
 **HTTP endpoint** (`ProvidedEndpoint`, `kind: "endpoint"` on the card):
-A method and full path (context path, controller prefix, method path) from a Spring controller, with the handler `Class.method`. A `null` method is any method (`@RequestMapping` without `method`). It has a request type (`request`, the parameter with `@RequestBody`) and a response type (`response`, the return type without `ResponseEntity`, `Mono` and similar wrappers), `null` when there is none or it was not read (ADR-38).
+A method and full path (context path, controller prefix, method path) from a Spring controller, with the handler `Class.method`, or an operation of an OpenAPI spec in the repo that no mapping in the code matches (`source: "openapi"`, ADR-87), whose handler is the controller method named like its `operationId` or `null`. A `null` method is any method (`@RequestMapping` without `method`). It has a request type (`request`, the parameter with `@RequestBody`) and a response type (`response`, the return type without `ResponseEntity`, `Mono` and similar wrappers), `null` when there is none or it was not read (ADR-38).
+
+**OpenAPI spec** (`readOpenApiSpec`, `withOpenApi`; `ProvidedEndpoint.operation`, `OpenApiOperation`):
+An OpenAPI 3 or Swagger 2 file in the repo, found by its `openapi` or `swagger` key whatever its name, that describes the repo's own API; a spec the build generates a client from describes another app and is not read for endpoints (ADR-87). Its operation (`operationId`, summary, file and line) is on the endpoint it describes. In product texts "OpenAPI spec" and, for an endpoint only in a spec, "OpenAPI".
+_Avoid_: swagger (for both versions), contract (that is the request and response types)
 
 **Endpoint contract** (`ProvidedEndpoint.request` and `response`, computed by `extractContracts`):
 The request type and response type of an HTTP endpoint (`ProvidedEndpoint.request`, `response`) together, from the method that contains the endpoint's mapping (ADR-38). In product texts "request and response types".

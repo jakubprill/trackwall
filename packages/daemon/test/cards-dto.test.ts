@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ProvidedEndpoint, RepoCard } from "@trackwall/protocol";
 import { extractContracts, responseType } from "../src/modules/cards/endpoint-contracts.ts";
-import { CARD_SOURCES, extractCard } from "../src/modules/cards/extract-card.ts";
+import { CARD_DOCUMENTS, CARD_SOURCES, extractCard } from "../src/modules/cards/extract-card.ts";
 import { readSnapshot } from "../src/modules/cards/read-snapshot.ts";
 import { loadSyntaxParsers, unavailableParsers, withParseBudget } from "../src/modules/cards/syntax-tree.ts";
 import { NO_CALL_SOURCES, NO_REACH, snapshotOf } from "./support/snapshot.ts";
@@ -278,7 +278,7 @@ describe("reading the type files the HTTP code mentions", () => {
       },
       grepFiles: async () => ({ paths: ["src/main/java/a/Api.java"], truncated: false }),
     };
-    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES, NO_CALL_SOURCES);
+    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES, NO_CALL_SOURCES, CARD_DOCUMENTS);
     expect(requested).toEqual([
       ["src/main/java/a/Api.java"],
       ["src/main/java/a/OrderDto.java"],
@@ -304,7 +304,7 @@ describe("reading the type files the HTTP code mentions", () => {
         ),
       grepFiles: async () => ({ paths: ["src/main/java/a/Api.java"], truncated: false }),
     };
-    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES, NO_CALL_SOURCES);
+    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES, NO_CALL_SOURCES, CARD_DOCUMENTS);
     expect(snapshot.problems).toEqual([
       {
         code: "files-not-read",
@@ -343,7 +343,7 @@ describe("reading the type files the HTTP code mentions", () => {
       },
       grepFiles: async () => ({ paths, truncated: false }),
     };
-    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES, NO_CALL_SOURCES);
+    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES, NO_CALL_SOURCES, CARD_DOCUMENTS);
     expect([...snapshot.typeFiles]).toEqual([]);
     expect(snapshot.problems).toEqual([
       {

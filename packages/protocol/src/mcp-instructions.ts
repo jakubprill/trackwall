@@ -63,6 +63,9 @@ export const MCP_INSTRUCTIONS = [
     `shows which endpoints of other repos call an endpoint and which it calls, ${whoCalls.name} which repos depend on a repo, ` +
     `${subgraphFor.name} its neighbourhood. ` +
     "Connections with low or medium confidence are hints: confirm them in the code. Name the affected repos in your result.",
+  `- Look for an endpoint with ${findEndpoint.name} first: pass the path or URL as you have it, or words for what it does. ` +
+    `When it finds nothing, the repo may build its routes in a way the cards do not read: ${searchCode.name} for a fixed ` +
+    "part of the path, then open the controller or the OpenAPI spec it finds.",
   `- Diagnose a failure: ${getErrors.name} gives the errors from the logs of all mise tasks with their stack traces and ` +
     `root cause; ${tail.name} reads the log of one mise task (${getRepo.name} lists them), from an error on with sinceSeq ` +
     "one less than its seq. In both, pass nextSeq as sinceSeq to get only what is new.",

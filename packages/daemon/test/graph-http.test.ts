@@ -58,6 +58,7 @@ function app(name: string, port: number | null = null): ProvidedApp {
 function endpoint(path: string, method: ProvidedEndpoint["method"] = "GET"): ProvidedEndpoint {
   return {
     kind: "endpoint",
+    source: "code",
     method,
     path,
     app: null,
@@ -65,6 +66,7 @@ function endpoint(path: string, method: ProvidedEndpoint["method"] = "GET"): Pro
     request: null,
     response: null,
     reaches: null,
+    operation: null,
     evidence: { path: "src/main/java/Api.java", line: 10 },
   };
 }
@@ -355,7 +357,7 @@ describe("the graph and find_endpoint on real git", () => {
   // Several repos with commits and two card computations on real git take longer than the default 5 s on Windows in CI.
   const REAL_GIT_TIMEOUT = 30_000;
 
-  async function setup() {
+  async function setup(extra: readonly string[] = []) {
     const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
     const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
     const vcs = new Vcs();
@@ -367,7 +369,7 @@ describe("the graph and find_endpoint on real git", () => {
       openFolder: () => {},
     });
     await workspace.setProjectsDir(projects);
-    for (const name of SHOP) makeRepo(fixtureFiles(name), name, projects);
+    for (const name of [...SHOP, ...extra]) makeRepo(fixtureFiles(name), name, projects);
     const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(join(home, "cards"), () => {}), log: () => {} });
     return { home, projects, cards, graph: new Graph({ cards, workspace }), workspace };
   }
@@ -399,7 +401,7 @@ describe("the graph and find_endpoint on real git", () => {
     "find_endpoint tells which endpoints of a caller reach the call and which endpoints an endpoint calls (ADR-82)",
     async () => {
       const { graph } = await setup();
-      const ref = (e: { method: string | null; path: string; handler: string }) => `${e.method} ${e.path} ${e.handler}`;
+      const ref = (e: { method: string | null; path: string; handler: string | null }) => `${e.method} ${e.path} ${e.handler}`;
       const [get] = (await graph.findEndpoint("/api/orders/42", "GET")).endpoints;
       expect(get?.callers.map((c) => [c.repo, c.from?.map(ref) ?? null])).toEqual([
         ["legacy-reports", ["GET /reports/orders/{id} ReportsController.order"]],
@@ -434,6 +436,31 @@ describe("the graph and find_endpoint on real git", () => {
       expect(await paths("payments-SERVICE")).toEqual(["POST /api/payments/{orderId}"]);
       expect(await paths("ordersController.cancel")).toEqual(["PUT /api/orders/{id}/cancel"]);
       expect(await paths("/api/orders")).toEqual(["POST /api/orders", "GET /api/orders/{id}", "PUT /api/orders/{id}/cancel"]);
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "find_endpoint finds endpoints from an OpenAPI spec by the end of their path, a whole address and words, best match first (ADR-87)",
+    async () => {
+      const { graph } = await setup(["catalog"]);
+      const found = async (query: string) =>
+        (await graph.findEndpoint(query, undefined)).endpoints.map(
+          (e) => `${e.match} ${e.repo} ${e.method} ${e.path} ${e.source} ${e.handler}`,
+        );
+      // The agent knows the path without the context path.
+      expect(await found("/api/products/42")).toEqual([
+        "path-end catalog GET /catalog/api/products/{productId} openapi ProductsController.getProduct",
+      ]);
+      expect(await found("GET http://localhost:8083/catalog/api/products/42/stock?warehouse=1")).toEqual([
+        "path catalog GET /catalog/api/products/{productId}/stock openapi ProductsController.getProductStock",
+      ]);
+      // Words from the operation summary; the mapped endpoint in the code has the summary too.
+      expect(await found("product categories")).toEqual([
+        "text catalog GET /catalog/api/categories code CategoriesController.listCategories",
+      ]);
+      // The client spec in catalog is not an orders endpoint.
+      expect((await found("/api/orders/42")).map((e) => e.split(" ")[1])).toEqual(["orders-api"]);
     },
     REAL_GIT_TIMEOUT,
   );

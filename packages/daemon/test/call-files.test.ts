@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { CallReads, readCallFiles } from "../src/modules/cards/call-files.ts";
-import { CALL_SOURCES, CARD_SOURCES } from "../src/modules/cards/extract-card.ts";
+import { CALL_SOURCES, CARD_DOCUMENTS, CARD_SOURCES } from "../src/modules/cards/extract-card.ts";
 import { type CallSelection, readSnapshot, type SnapshotVcs } from "../src/modules/cards/read-snapshot.ts";
 import { loadSyntaxParsers, type SyntaxParsers } from "../src/modules/cards/syntax-tree.ts";
 
@@ -85,7 +85,7 @@ describe("reading call files for the endpoint reach (ADR-82)", () => {
     };
     const keptRead = { pkg: "a", imports: new Map(), wildcards: [], types: [] };
     const calls: CallSelection = { accepts: CALL_SOURCES, kept: (oid) => (oid === "kept" ? keptRead : undefined) };
-    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES, calls);
+    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES, calls, CARD_DOCUMENTS);
 
     expect(fetched).toEqual([["src/main/java/a/Api.java"], ["src/main/java/a/Service.java"]]);
     expect(snapshot.callSources).toEqual([
@@ -105,7 +105,7 @@ describe("reading call files for the endpoint reach (ADR-82)", () => {
       grepFiles: async () => ({ paths: [], truncated: false }),
     };
     const calls: CallSelection = { accepts: CALL_SOURCES, kept: () => undefined };
-    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES, calls);
+    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES, calls, CARD_DOCUMENTS);
     expect(snapshot.callSources).toBeNull();
     expect(snapshot.problems).toEqual([
       {
@@ -127,7 +127,7 @@ describe("reading call files for the endpoint reach (ADR-82)", () => {
       accepts: CALL_SOURCES,
       kept: () => ({ pkg: "a", imports: new Map(), wildcards: [], types: [] }),
     };
-    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES, everyReadKept);
+    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES, everyReadKept, CARD_DOCUMENTS);
     expect(snapshot.callSources).toBeNull();
     expect(snapshot.problems).toEqual([
       {

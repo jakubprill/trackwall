@@ -31,11 +31,19 @@ export interface SnapshotVcs {
   ): Promise<{ paths: string[]; truncated: boolean }>;
 }
 
-/** Source files to read: matching `globs` and `accepts`, with content matching the ERE expression `pattern`. */
-export interface SourceSelection {
+/** Files to read by content: matching `globs` and `accepts`, with content matching the ERE expression `pattern`. */
+export interface ContentSearch {
   pattern: string;
   globs: readonly string[];
   accepts: (path: string) => boolean;
+  /** At most this many files from the search; more is a card problem. */
+  max: number;
+  /** What the files hold, for a person (`controllers or HTTP clients`), in the problems of the search. */
+  holding: string;
+}
+
+/** Source files to read by content, and the files named after the types they mention. */
+export interface SourceSelection extends ContentSearch {
   /**
    * The type names a source file mentions (ADR-38). The read fetches the source files with those names (`OrderDto.java`,
    * `OrderDto.kt`), in further rounds also the names from them, because a DTO from an endpoint contract usually has no
@@ -62,8 +70,6 @@ const MAX_LIST_BYTES = 64 * 1024 * 1024;
 /** A build file larger than this is generated or is not a build file. */
 const MAX_FILE_BYTES = 1024 * 1024;
 const MAX_FILES = 2000;
-/** Source files from the search: controllers and HTTP clients are a fraction of the code, so this fits even in a large monorepo. */
-const MAX_SOURCE_FILES = 3000;
 /** The name list from `git grep`: 3000 paths of 300 characters is under 1 MB. */
 const MAX_GREP_BYTES = 4 * 1024 * 1024;
 const MAX_READ_BYTES = 64 * 1024 * 1024;
@@ -74,6 +80,11 @@ const MAX_RELATED_FILES = 3000;
 /** Source files for the endpoint reach: a large monolith has a few thousand; more is generated code. */
 const MAX_CALL_SOURCES = 20_000;
 
+/**
+ * `reads` chooses the build and configuration files by path, `documents` further files by content, read together with
+ * them (OpenAPI specs under any name, ADR-87), `sources` the source files for the HTTP facts and `calls` those for the
+ * endpoint reach.
+ */
 export async function readSnapshot(
   vcs: SnapshotVcs,
   dir: string,
@@ -81,6 +92,7 @@ export async function readSnapshot(
   reads: (path: string) => boolean,
   sources: SourceSelection,
   calls: CallSelection,
+  documents: ContentSearch,
 ): Promise<RepoSnapshot> {
   const problems: CardProblem[] = [];
   const listed = await vcs.commitFiles(dir, commit, MAX_LIST_BYTES);
@@ -98,7 +110,10 @@ export async function readSnapshot(
       path: "",
       message: `the repo has ${wanted.length} build files; the card reads the first ${MAX_FILES}`,
     });
-  const requested = [...wanted.slice(0, MAX_FILES), ...(await sourceFiles(vcs, dir, commit, files, sources, problems))];
+  const searched = await searchFiles(vcs, dir, commit, files, documents, problems);
+  const requested = [
+    ...new Set([...wanted.slice(0, MAX_FILES), ...searched, ...(await searchFiles(vcs, dir, commit, files, sources, problems))]),
+  ];
   const reader = new BudgetedReader(vcs, dir, commit);
   for (const path of await reader.read(requested))
     problems.push({ code: "files-not-read", path, message: `the file was not read within the ${MAX_READ_BYTES} B commit read limit` });
@@ -272,39 +287,38 @@ function referencedFiles(
 }
 
 /**
- * Source files from the content search in the commit; a repo without any file matching `accepts` does not run
- * `git grep` at all.
+ * Files from a content search in the commit; a repo without any file matching `accepts` does not run `git grep` at all.
  */
-async function sourceFiles(
+async function searchFiles(
   vcs: SnapshotVcs,
   dir: string,
   commit: string,
   files: readonly CommitFile[],
-  sources: SourceSelection,
+  search: ContentSearch,
   problems: CardProblem[],
 ): Promise<string[]> {
-  const candidates = new Map(files.filter((f) => sources.accepts(f.path) && isReadable(f)).map((f) => [f.path, f]));
+  const candidates = new Map(files.filter((f) => search.accepts(f.path) && isReadable(f)).map((f) => [f.path, f]));
   if (candidates.size === 0) return [];
   let found: { paths: string[]; truncated: boolean };
   try {
-    found = await vcs.grepFiles(dir, commit, sources.pattern, sources.globs, MAX_GREP_BYTES);
+    found = await vcs.grepFiles(dir, commit, search.pattern, search.globs, MAX_GREP_BYTES);
   } catch (err) {
     // A search error (e.g. a timeout in a huge repo) takes away only the facts from code, not the card from build files.
     problems.push({
       code: "files-not-read",
       path: "",
-      message: `searching for files with controllers and HTTP clients failed: ${messageOf(err)}`,
+      message: `searching for files with ${search.holding} failed: ${messageOf(err)}`,
     });
     return [];
   }
   const matched = found.paths.filter((p) => candidates.has(p));
-  if (found.truncated || matched.length > MAX_SOURCE_FILES)
+  if (found.truncated || matched.length > search.max)
     problems.push({
       code: "files-not-read",
       path: "",
-      message: `the repo has more than ${MAX_SOURCE_FILES} files with controllers or HTTP clients; the card reads the first ones`,
+      message: `the repo has more than ${search.max} files with ${search.holding}; the card reads the first ones`,
     });
-  return matched.slice(0, MAX_SOURCE_FILES);
+  return matched.slice(0, search.max);
 }
 
 /** A file to read: within the size limit and without control characters, because paths go to git line by line. */

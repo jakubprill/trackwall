@@ -205,17 +205,22 @@ function Endpoints({ endpoints }: { endpoints: ProvidedEndpoint[] }) {
   return (
     <Surface label="HTTP endpoints" meta={endpoints.length}>
       {endpoints.length === 0 ? (
-        <Empty>No @RestController or @Controller controllers found.</Empty>
+        <Empty>No @RestController or @Controller controllers or OpenAPI specs found.</Empty>
       ) : (
         <ul className="divide-y">
           {endpoints.map((e) => (
             <Row key={`${e.method} ${e.path} ${evidenceLabel(e.evidence)}`}>
               <Badge variant="secondary">{e.method ?? "any"}</Badge>
-              <span className="min-w-0 flex-1 truncate font-mono text-xs" title={e.path}>
+              <span className="min-w-0 flex-1 truncate font-mono text-xs" title={e.operation?.summary ?? e.path}>
                 {e.path}
               </span>
+              {e.source === "openapi" && (
+                <Badge variant="outline" title="From an OpenAPI spec in the repo, without a mapping in the code">
+                  OpenAPI
+                </Badge>
+              )}
               {(e.request !== null || e.response !== null) && <Contract endpoint={e} />}
-              <span className="text-muted-foreground max-w-48 truncate font-mono text-xs">{e.handler}</span>
+              {e.handler !== null && <span className="text-muted-foreground max-w-48 truncate font-mono text-xs">{e.handler}</span>}
               <Evidence label={evidenceLabel(e.evidence)} />
             </Row>
           ))}
