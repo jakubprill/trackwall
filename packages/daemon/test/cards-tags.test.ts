@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { RepoCard } from "@trackwall/protocol";
 import { globMatcher } from "../src/infra/glob.ts";
-import { extractCard } from "../src/modules/cards/extract-card.ts";
+import { CARD_SOURCES, extractCard, readsCardFile } from "../src/modules/cards/extract-card.ts";
+import { readSnapshot } from "../src/modules/cards/read-snapshot.ts";
 import { loadSyntaxParsers } from "../src/modules/cards/syntax-tree.ts";
 import { repoTags } from "../src/modules/cards/tags.ts";
 import { snapshotOf } from "./support/snapshot.ts";
@@ -131,6 +132,37 @@ describe("mise configuration and the no-mise tag", () => {
     expect(noMise({}, [".mise/tasks/build"])).toBeUndefined();
     // A config file the card did not read (limits) may have mise tasks, so there is no tag.
     expect(noMise({}, ["mise.toml"])).toBeUndefined();
+  });
+
+  test("a failed source file search does not hide no-mise, because the mise configuration was read in full", async () => {
+    const vcs = {
+      commitFiles: async () => ({
+        files: [
+          { name: "mise.toml", path: "mise.toml", kind: "file" as const, size: 20 },
+          { name: "Api.java", path: "src/main/java/Api.java", kind: "file" as const, size: 10 },
+        ],
+        truncated: false,
+      }),
+      readFiles: async () => new Map([["mise.toml", Buffer.from('[tools]\njava = "21"\n')]]),
+      grepFiles: async () => {
+        throw new Error("git grep: timed out");
+      },
+    };
+    const card = extractCard(await readSnapshot(vcs, "/repo", "a".repeat(40), readsCardFile, CARD_SOURCES), parsers);
+    expect(card.problems.map((p) => `${p.code} ${p.path}`)).toEqual(["files-not-read "]);
+    expect(card.mise.complete).toBe(true);
+    expect(repoTags(card, { id: "app", remote: null }, {}).find((t) => t.name === "no-mise")?.reason).toBe("mise.toml declares no tasks");
+  });
+
+  test("a cut commit file list hides no-mise, because a mise task file may be in the part not listed", async () => {
+    const vcs = {
+      commitFiles: async () => ({ files: [{ name: "mise.toml", path: "mise.toml", kind: "file" as const, size: 20 }], truncated: true }),
+      readFiles: async () => new Map([["mise.toml", Buffer.from('[tools]\njava = "21"\n')]]),
+      grepFiles: async () => ({ paths: [], truncated: false }),
+    };
+    const card = extractCard(await readSnapshot(vcs, "/repo", "a".repeat(40), readsCardFile, CARD_SOURCES), parsers);
+    expect(card.mise.complete).toBe(false);
+    expect(repoTags(card, { id: "app", remote: null }, {}).find((t) => t.name === "no-mise")).toBeUndefined();
   });
 
   test("the no-mise reason points to mise.toml before other files, and a bad file from conf.d is a card problem", () => {
