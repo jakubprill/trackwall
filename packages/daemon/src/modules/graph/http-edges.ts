@@ -54,7 +54,7 @@ function callEvidence(from: string, target: HttpTarget): EdgeEvidence[] {
     {
       repo: target.repo,
       ...m.endpoint.evidence,
-      detail: `handles ${methodLabel(m.endpoint.method)} ${m.endpoint.path} (${m.endpoint.handler})`,
+      detail: `handles ${methodLabel(m.endpoint.method)} ${m.endpoint.path}${m.endpoint.handler === null ? "" : ` (${m.endpoint.handler})`}`,
     },
   ]);
 }

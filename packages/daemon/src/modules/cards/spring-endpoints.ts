@@ -7,7 +7,8 @@ import { type Mapping, mappingOf, REQUEST_MAPPINGS, type SpringModule } from "./
  * HTTP endpoints from Spring controllers (§4.6, ADR-30): a class with `@RestController` or `@Controller`, the prefix from
  * the class's `@RequestMapping` and methods with `@GetMapping`, `@PostMapping`… Mappings from an interface the controller
  * implements (the "API first" style, a generated or shared interface) count as its own, unless the controller maps a
- * method with the same name itself. The full path starts with the app's context path.
+ * method with the same name itself. The full path starts with the app's context path, and `${…}` in a mapping is expanded
+ * from the module's configuration like an address (`@RequestMapping("${api.prefix:/api}/orders")`, ADR-87).
  */
 
 /**
@@ -56,9 +57,10 @@ function endpointsOf(type: JavaType, method: JavaMethod, m: MethodMapping, modul
   for (const prefix of prefixes)
     for (const path of m.mapping.paths)
       for (const httpMethod of m.mapping.methods) {
-        const full = joinHttpPath(module.contextPath, prefix, path);
+        const full = joinHttpPath(module.contextPath, module.config.resolve(prefix).value, module.config.resolve(path).value);
         found.set(`${httpMethod} ${full}`, {
           kind: "endpoint",
+          source: "code",
           method: httpMethod,
           path: full,
           app: module.app,
@@ -68,6 +70,8 @@ function endpointsOf(type: JavaType, method: JavaMethod, m: MethodMapping, modul
           response: null,
           // `endpoint-reach.ts` adds the calls the handler reaches once the card knows all clients (ADR-82).
           reaches: null,
+          // `openapi-endpoints.ts` adds the operation when a spec in the repo describes the endpoint (ADR-87).
+          operation: null,
           evidence: { path: m.path, line: m.mapping.line },
         });
       }

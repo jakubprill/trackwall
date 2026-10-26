@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: catalog
+server:
+  port: 8083
+  servlet:
+    context-path: /catalog
+catalog:
+  api-prefix: /api

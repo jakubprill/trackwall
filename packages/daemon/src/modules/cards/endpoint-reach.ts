@@ -91,13 +91,16 @@ function ownCalls(graph: CallGraph, sites: readonly EndpointReach[]): number[][]
 }
 
 /**
- * The method indexes of an endpoint's handler (`Class.method`); `undefined` when the files do not have it. The overload
- * whose lines hold the mapping, and all overloads when the mapping is elsewhere (an API interface the controller implements).
+ * The method indexes of an endpoint's handler (`Class.method`); `undefined` when the files do not have it or the endpoint
+ * has none (an OpenAPI operation without a controller method, ADR-87). The overload whose lines hold the mapping, and all
+ * overloads when the mapping is elsewhere (an API interface the controller implements, an OpenAPI spec).
  */
 function handlerMethods(endpoint: ProvidedEndpoint, graph: CallGraph): number[] | undefined {
-  const dot = endpoint.handler.lastIndexOf(".");
-  const controller = graph.types.named(endpoint.handler.slice(0, dot), endpoint.evidence.path);
-  const methods = controller ? graph.types.declared(controller, endpoint.handler.slice(dot + 1), -1) : [];
+  const { handler } = endpoint;
+  if (handler === null) return undefined;
+  const dot = handler.lastIndexOf(".");
+  const controller = graph.types.named(handler.slice(0, dot), endpoint.evidence.path);
+  const methods = controller ? graph.types.declared(controller, handler.slice(dot + 1), -1) : [];
   const line = endpoint.evidence.line ?? -1;
   const mapped = methods.filter(
     (m) => m.owner.file.path === endpoint.evidence.path && line >= m.method.startLine && line <= m.method.endLine,

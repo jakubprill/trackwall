@@ -150,6 +150,21 @@ describe("Spring endpoints", () => {
     expect(endpoints(c)).toEqual([]);
   });
 
+  test(`\${…} in a mapping is expanded from the module's configuration, with a default after the colon, and an unknown key stays as text (ADR-87)`, () => {
+    const c = card({
+      "src/main/resources/application.yml": "api:\n  prefix: /api/v2\n",
+      "src/main/java/a/Orders.java": `@RestController @RequestMapping("\${api.prefix}/orders")
+class Orders { @GetMapping("/{id}") Order get() {} }`,
+      "src/main/java/a/Generated.java": `@RestController @RequestMapping("\${openapi.shop.base-path:/shop}")
+class Generated { @GetMapping("/items") Item items() {} @GetMapping("\${UNKNOWN}/x") Item x() {} }`,
+    });
+    expect(endpoints(c)).toEqual([
+      "GET /api/v2/orders/{id} Orders.get:2",
+      "GET /shop/items Generated.items:2",
+      `GET /shop/\${UNKNOWN}/x Generated.x:2`,
+    ]);
+  });
+
   test("@RequestMapping without a method is an endpoint for every method, and a class without @Controller has no endpoints", () => {
     const c = card({
       "src/main/java/a/Any.java": '@Controller\nclass Any {\n  @RequestMapping("/any")\n  String any() { return ""; }\n}\n',

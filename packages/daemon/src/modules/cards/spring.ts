@@ -21,9 +21,10 @@ import type { JvmLanguage } from "./syntax-tree.ts";
 /**
  * The expression (ERE for `git grep`) the commit read uses to choose source files to read: mapping annotations, HTTP
  * clients and constants with a path. A file without any of them gives the extractor no facts, so it is not worth reading.
+ * `ApiDelegate` brings in the classes implementing a delegate generated from an OpenAPI spec, which handle its operations (ADR-87).
  */
 export const JVM_SOURCE_PATTERN =
-  '@(RestController|Controller|RequestMapping|GetMapping|PostMapping|PutMapping|PatchMapping|DeleteMapping|FeignClient|HttpExchange|GetExchange|PostExchange|PutExchange|PatchExchange|DeleteExchange)|WebClient|RestClient|RestTemplate|(final|const val)[[:space:]].*=[[:space:]]*"/';
+  '@(RestController|Controller|RequestMapping|GetMapping|PostMapping|PutMapping|PatchMapping|DeleteMapping|FeignClient|HttpExchange|GetExchange|PostExchange|PutExchange|PatchExchange|DeleteExchange)|WebClient|RestClient|RestTemplate|ApiDelegate|(final|const val)[[:space:]].*=[[:space:]]*"/';
 /** The source file extensions the extractor reads. */
 export const JVM_SOURCE_GLOBS = ["*.java", "*.kt"];
 
@@ -76,8 +77,13 @@ export function extractSpring(snapshot: RepoSnapshot): SpringFacts {
 }
 
 function springModule(config: ModuleConfig, types: TypeIndex): SpringModule {
+  return { config, ...appOf(config), types };
+}
+
+/** The module's app name and context path (`server.servlet.context-path`, `spring.webflux.base-path`). */
+export function appOf(config: ModuleConfig): Pick<SpringModule, "app" | "contextPath"> {
   const contextPath = config.value("server.servlet.context-path") ?? config.value("spring.webflux.base-path") ?? "";
-  return { config, app: config.value("spring.application.name") || null, contextPath, types };
+  return { app: config.value("spring.application.name") || null, contextPath };
 }
 
 function providedApp(module: SpringModule): ProvidedApp | undefined {

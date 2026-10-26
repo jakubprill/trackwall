@@ -17,7 +17,7 @@ import { writeFileAtomic } from "../../infra/atomic-write.ts";
  * The extractor version saved with a card. A change to what an extractor takes from the same files must bump it,
  * or old cards on disk keep the old result.
  */
-const EXTRACTOR_VERSION = 7;
+const EXTRACTOR_VERSION = 8;
 /** This many card files stay on disk; older ones (by write time) are deleted at daemon start. */
 const MAX_FILES = 2000;
 /** This many cards stay in daemon memory; older ones drop out in the order they were added. */

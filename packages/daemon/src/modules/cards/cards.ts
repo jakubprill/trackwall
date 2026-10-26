@@ -4,7 +4,7 @@ import { mapLimit } from "../../infra/map-limit.ts";
 import { CallReads, readCallFiles } from "./call-files.ts";
 import type { CardCache } from "./card-cache.ts";
 import { CardWarmup, type WarmupRepo } from "./card-warmup.ts";
-import { CALL_SOURCES, CARD_SOURCES, extractCard, readsCardFile } from "./extract-card.ts";
+import { CALL_SOURCES, CARD_DOCUMENTS, CARD_SOURCES, extractCard, readsCardFile } from "./extract-card.ts";
 import { localMiseTasks } from "./local-mise.ts";
 import { readSnapshot, type SnapshotVcs } from "./read-snapshot.ts";
 import { CARD_PARSE_BUDGET_MS, loadSyntaxParsers, type SyntaxParsers, unavailableParsers, withParseBudget } from "./syntax-tree.ts";
@@ -131,7 +131,7 @@ export class Cards {
     if (commit === null) return null;
     return this.deps.cache.getOrCompute(commit, async () => {
       const known = { accepts: CALL_SOURCES, kept: (oid: string) => this.callReads.get(oid) };
-      const snapshot = await readSnapshot(this.deps.vcs, dir, commit, readsCardFile, CARD_SOURCES, known);
+      const snapshot = await readSnapshot(this.deps.vcs, dir, commit, readsCardFile, CARD_SOURCES, known, CARD_DOCUMENTS);
       const syntax = await syntaxParsersOrUnavailable();
       const calls = await readCallFiles(snapshot.callSources, syntax, this.callReads);
       const parsers = withParseBudget(syntax, CARD_PARSE_BUDGET_MS);

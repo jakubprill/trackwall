@@ -484,16 +484,24 @@ export const mcpTools = {
     name: "find_endpoint",
     readOnly: true,
     description:
-      "HTTP endpoints from Spring controllers in all repos matching the query: a path starting with / (also a concrete " +
-      "one: /api/orders/42 finds /api/orders/{id}) or part of a path, handler name (Class.method) or app name. Each " +
-      "with repo, method, full path, request and response types, file and line, plus callers: repos whose HTTP clients call it, with confidence " +
+      "HTTP endpoints from Spring controllers and OpenAPI specs in all repos matching the query: a path, also a concrete " +
+      "one (/api/orders/42 finds /api/orders/{id}), a whole URL or METHOD /path, matched as the whole path or its end " +
+      "(without the context path or with a gateway prefix); or words, each found in the path, handler (Class.method), app " +
+      "name or OpenAPI operationId and summary. Best match first, with match: path, path-end or text. Each " +
+      "with repo, method, full path, source (code, or openapi: only in a spec, e.g. its interface is generated during the " +
+      "build; handler is the controller method named like the operationId, null when none), operation (operationId, " +
+      "summary, spec file and line), request and response types, file and line, plus callers: repos whose HTTP clients call it, with confidence " +
       "and evidence, each with from: the caller repo's endpoints whose handlers reach that call ([]: none does, e.g. a scheduled job; " +
       "null: that repo's code was not traced, e.g. it has Kotlin). calls lists the endpoints of other repos this endpoint's handler " +
       "calls (null when not traced). Follow from and calls repeatedly to see what a change to an endpoint affects. " +
       `At most ${MAX_FOUND_ENDPOINTS} results (truncated: true when there were more).`,
     args: z
       .object({
-        query: z.string().min(1).max(300).describe("path or part of it, e.g. /api/orders/{id}, orders, OrdersController"),
+        query: z
+          .string()
+          .min(1)
+          .max(300)
+          .describe("path, URL or words, e.g. /api/orders/42, GET https://host/api/orders, OrdersController, cancel order"),
         method: HttpMethod.optional().describe("only endpoints of this HTTP method (and those without a method)"),
       })
       .strict(),
