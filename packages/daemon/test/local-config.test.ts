@@ -38,6 +38,7 @@ async function setup(projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"
   return { projects, store, facade, logged, backUp, storeLog, storeCommits };
 }
 
+const REAL_GIT_TIMEOUT = 120_000;
 const TASKS = '[tasks.build]\nrun = "mvn -q package"\n';
 const FAKE_SSH = join(import.meta.dir, "fixtures", "fake-ssh.ts");
 const BACKUPS_REMOTE = "ssh://git@backups.example.com/me/backups.git";
@@ -113,19 +114,24 @@ describe("the local config store", () => {
     ]);
   });
 
-  test("a pass with nothing changed starts no git process, in a folder of 20 repos", async () => {
-    const { projects, backUp, storeCommits } = await setup();
-    for (let i = 0; i < 20; i++)
-      writeFileSync(join(makeRepo({ "pom.xml": "<project/>" }, `repo-${i}`, projects), "mise.local.toml"), TASKS);
-    await backUp();
-    expect(storeCommits()).toBe(1);
+  test(
+    "a pass with nothing changed starts no git process, in a folder of 20 repos",
+    async () => {
+      const { projects, backUp, storeCommits } = await setup();
+      for (let i = 0; i < 20; i++)
+        writeFileSync(join(makeRepo({ "pom.xml": "<project/>" }, `repo-${i}`, projects), "mise.local.toml"), TASKS);
+      await backUp();
+      expect(storeCommits()).toBe(1);
 
-    const before = gitProcessesStarted();
-    await backUp();
-    await backUp();
+      const before = gitProcessesStarted();
+      await backUp();
+      await backUp();
 
-    expect(gitProcessesStarted() - before).toBe(0);
-  });
+      expect(gitProcessesStarted() - before).toBe(0);
+    },
+    // Making 20 repos takes a hundred git processes, which on a Windows runner is longer than the default 5 s.
+    REAL_GIT_TIMEOUT,
+  );
 
   test("a file deleted from the repo stays in the store, and Restore brings it back and has git ignore it", async () => {
     const { projects, facade, backUp } = await setup();
