@@ -74,15 +74,20 @@ export class MergeRequests {
     return { task: id, push, project, lookup, targetBranch: task.baseBranch };
   }
 
-  /** Pushes the task branch at the user's request: never forced, and refused while it has no commits. */
+  /** Pushes the task branch at the user's request: never forced, refused while it has no commits or a remote on no known repo host. */
   async push(id: string): Promise<TaskMergeRequest> {
     const task = this.#deps.tasks.task(id);
     if (this.#pushing.has(id)) throw new DomainError("bad_request", `branch ${task.branch} is already being pushed`);
     this.#pushing.add(id);
     try {
-      const { commits } = await this.#deps.tasks.taskChangesSummary(id);
+      const [{ commits }, project] = await Promise.all([
+        this.#deps.tasks.taskChangesSummary(id),
+        asRepoUnavailable(task, this.#deps.vcs.hostedProject(task.worktree, this.#deps.repoHosts())),
+      ]);
       if (commits === 0)
         throw new DomainError("bad_request", `branch ${task.branch} has no commits yet; ask the agent to commit its changes`);
+      // Only to a repo host the user named (or GitHub), the one the panel shows: never to a path or host the agent set.
+      if (!project) throw unknownHost(task);
       await asRepoUnavailable(task, this.#deps.vcs.pushBranch(task.worktree, task.branch));
     } finally {
       this.#pushing.delete(id);
@@ -98,11 +103,7 @@ export class MergeRequests {
   async openForm(draft: MergeRequestDraft): Promise<void> {
     const task = this.#deps.tasks.task(draft.task);
     const state = await this.get(draft.task);
-    if (!state.project)
-      throw new DomainError(
-        "bad_request",
-        `the main remote of ${task.repo} is not on GitHub or on a repo host from the settings; add its repo host in Settings`,
-      );
+    if (!state.project) throw unknownHost(task);
     if (!state.push?.published || state.push.unpushed > 0)
       throw new DomainError("bad_request", `push branch ${task.branch} first, so the merge request has every commit`);
     if (state.lookup?.kind === "found" && state.lookup.mergeRequest.state === "open")
@@ -130,6 +131,13 @@ export class MergeRequests {
     this.#lookups.set(key, { at: now, lookup });
     return lookup;
   }
+}
+
+function unknownHost(task: Task): DomainError {
+  return new DomainError(
+    "bad_request",
+    `the main remote of ${task.repo} is not on GitHub or on a repo host from the settings; add its repo host in Settings`,
+  );
 }
 
 /** A git error in the task's worktree as `repo_unavailable` with git's message. */

@@ -31,18 +31,27 @@ export async function branchOnRemote(dir: string, branch: string, base: string):
 }
 
 /**
- * Pushes `branch` to the main remote. Refused when the remote pushes elsewhere than it fetches from (`pushurl`,
- * `pushInsteadOf`): the user approved the repo host the panel names. Git updates the remote-tracking branch itself, so
- * the next read sees the push.
+ * Pushes `branch` to the main remote. Refused unless every address git would push to (`pushurl`s, or every `url` without
+ * one, after `pushInsteadOf`) is the address it fetches from, over HTTPS or SSH: the user approved the repo host the panel
+ * names, and a local path, `ext::` or `git://` would let configuration run a program or reach a repo the agent wrote.
+ * Git updates the remote-tracking branch itself, so the next read sees the push.
  */
 export async function pushBranch(dir: string, branch: string): Promise<void> {
   const config = await readConfig(dir);
   const remote = mainRemote(config);
   if (!remote) throw new Error("the repo has neither an origin remote nor a single other remote");
-  const pushUrl = (await git(dir, ["remote", "get-url", "--push", "--", remote.name])).stdout.toString("utf8").trim();
-  if (address(pushUrl) !== address(remote.url))
+  const fetchesFrom = networkAddress(remote.url);
+  if (fetchesFrom === undefined)
+    throw new Error(`${remote.name} is not an HTTPS or SSH address of a repo host; Trackwall pushes only to one`);
+  const { stdout } = await git(dir, ["remote", "get-url", "--push", "--all", "--", remote.name]);
+  const pushesTo = stdout
+    .toString("utf8")
+    .split("\n")
+    .filter((line) => line.trim() !== "");
+  const elsewhere = pushesTo.map((url) => networkAddress(url.trim()) ?? "a local or unusual address").find((to) => to !== fetchesFrom);
+  if (elsewhere !== undefined)
     throw new Error(
-      `${remote.name} pushes to ${address(pushUrl)}, not to ${address(remote.url)} it fetches from; Trackwall pushes only where it fetches from`,
+      `${remote.name} pushes to ${elsewhere}, not to ${fetchesFrom} it fetches from; Trackwall pushes only where it fetches from`,
     );
   const ref = `refs/heads/${branch}`;
   // Hooks run from `core.hooksPath`, which may point into the worktree (`.husky`): not only `pre-push`, which
@@ -52,7 +61,7 @@ export async function pushBranch(dir: string, branch: string): Promise<void> {
     await git(dir, ["push", "--no-follow-tags", "--no-recurse-submodules", "--", remote.name, `${ref}:${ref}`], {
       timeoutMs: PUSH_TIMEOUT_MS,
       network: { sshCommand: config.sshCommand },
-      config: [`core.hooksPath=${noHooks}`, `remote.${remote.name}.receivepack=git-receive-pack`],
+      config: [`core.hooksPath=${noHooks}`, `remote.${remote.name}.receivepack=git-receive-pack`, "push.gpgSign=false"],
     });
   } finally {
     rmSync(noHooks, { recursive: true, force: true });
@@ -60,9 +69,11 @@ export async function pushBranch(dir: string, branch: string): Promise<void> {
 }
 
 /**
- * A remote address compared and shown as `host/path`, so SSH and HTTPS spellings of one repo match and a token in a URL
- * never reaches a message; a local path as written.
+ * An HTTPS or SSH (also scp-style) address as `host/path`, so both spellings of one repo match and a token in a URL never
+ * reaches a message; `undefined` for anything else: a local path, `file://`, `git://`, `http://`, `ext::`.
  */
-function address(url: string): string {
-  return remoteAddress(url) ?? url;
+function networkAddress(url: string): string | undefined {
+  const scheme = /^([A-Za-z][A-Za-z0-9+.-]*):\/\//.exec(url)?.[1]?.toLowerCase();
+  if (scheme !== undefined && scheme !== "https" && scheme !== "ssh") return undefined;
+  return remoteAddress(url);
 }

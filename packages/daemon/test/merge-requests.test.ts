@@ -9,17 +9,19 @@ import { startSessionApi } from "./support/session-api.ts";
 
 const TOKEN = "m".repeat(43);
 const GITLAB_MRS = "projects/shop%2Fshop/merge_requests";
+const FAKE_SSH = join(import.meta.dir, "fixtures", "fake-ssh.ts");
+const ORDERS_REMOTE = "ssh://git@gitlab.example.com/shop/orders.git";
 
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
-/** The bare repo `orders` pushes to. */
+/** The bare repo `orders` pushes to, through the fake ssh. */
 let bare: string;
 const opened: string[] = [];
 const hosting = fakeHostingClis({ apiResponses: { [GITLAB_MRS]: [] } });
 
 /**
  * Two repos: `shop` has its remote on a GitLab from the settings, which the test cannot push to, so a push there is
- * simulated by setting the remote-tracking branch; `orders` has a bare repo on disk as its remote, so its pushes really
- * land somewhere they can be checked.
+ * simulated by setting the remote-tracking branch; `orders` has an SSH address on the same GitLab, and a fake ssh
+ * (`core.sshCommand`) takes its pushes to a bare repo on disk, so they really land somewhere they can be checked.
  */
 beforeAll(async () => {
   daemon = await startSessionApi(TOKEN, {
@@ -32,10 +34,14 @@ beforeAll(async () => {
     openUrl: (url) => opened.push(url),
   });
   gitIn(join(daemon.projects, "shop"), "remote", "add", "origin", "https://gitlab.example.com/shop/shop.git");
-  bare = join(mkdtempSync(join(tmpdir(), "trackwall-remote-")), "orders.git");
+  const sshRoot = mkdtempSync(join(tmpdir(), "trackwall-remote-"));
+  bare = join(sshRoot, "shop", "orders.git");
   gitIn(daemon.projects, "init", "-q", "--bare", bare);
   const orders = join(daemon.projects, "orders");
-  gitIn(orders, "remote", "add", "origin", bare);
+  gitIn(orders, "remote", "add", "origin", ORDERS_REMOTE);
+  const quoted = (path: string) => `"${path.replaceAll("\\", "/")}"`;
+  gitIn(orders, "config", "core.sshCommand", [process.execPath, FAKE_SSH, sshRoot].map(quoted).join(" "));
+  gitIn(orders, "config", "ssh.variant", "simple");
   gitIn(orders, "push", "-q", "origin", "main");
   daemon.facade.workspace.setRepoHosts([{ kind: "gitlab", host: "gitlab.example.com" }]);
 });
@@ -133,20 +139,30 @@ describe.skipIf(process.versions.bun === undefined)("a merge request from a task
 });
 
 describe.skipIf(process.versions.bun === undefined)("pushing a task branch (real git, fake Copilot CLI)", () => {
-  test("pushes the branch where the remote fetches from, and a remote on no known repo host gets no form", async () => {
+  test("pushes the branch to the repo host it fetches from", async () => {
     const task = await taskWithCommit("orders", "Add an order note");
 
     const pushed = await daemon.post(mergeRequestsApi.push, { task: task.id });
 
     expect(pushed).toMatchObject({
-      project: null,
-      lookup: null,
+      project: { kind: "gitlab", host: "gitlab.example.com", path: "shop/orders" },
+      lookup: { kind: "none" },
       push: { remote: "origin", commits: 1, published: true, unpushed: 0, behind: 0 },
     });
     expect(gitIn(bare, "log", "-1", "--format=%s", task.branch).trim()).toBe("Add an order note");
-    await expect(daemon.post(mergeRequestsApi.openForm, { task: task.id, title: "Note", description: "" })).rejects.toThrow(
-      "the main remote of orders is not on GitHub or on a repo host from the settings",
-    );
+  }, 60_000);
+
+  test("a remote on no known repo host is not pushed to, and gets no form", async () => {
+    const task = await taskWithCommit("orders", "Unknown host");
+    daemon.facade.workspace.setRepoHosts([]);
+    try {
+      const unknown = "the main remote of orders is not on GitHub or on a repo host from the settings";
+      await expect(daemon.post(mergeRequestsApi.push, { task: task.id })).rejects.toThrow(unknown);
+      await expect(daemon.post(mergeRequestsApi.openForm, { task: task.id, title: "Note", description: "" })).rejects.toThrow(unknown);
+    } finally {
+      daemon.facade.workspace.setRepoHosts([{ kind: "gitlab", host: "gitlab.example.com" }]);
+    }
+    expect(gitIn(bare, "branch", "--list", task.branch).trim()).toBe("");
   }, 60_000);
 
   test("a branch without commits is not pushed", async () => {
@@ -194,18 +210,44 @@ describe.skipIf(process.versions.bun === undefined)("pushing a task branch (real
     expect(existsSync(marker)).toBe(false);
   }, 60_000);
 
-  test("a push address other than where the remote fetches from is refused", async () => {
+  test("a push address the agent could set, other than where the remote fetches from, is refused", async () => {
     const task = await taskWithCommit("orders", "Push elsewhere");
     const elsewhere = join(mkdtempSync(join(tmpdir(), "trackwall-elsewhere-")), "orders.git");
     gitIn(daemon.projects, "init", "-q", "--bare", elsewhere);
-    gitIn(task.worktree, "config", "remote.origin.pushurl", elsewhere);
-    try {
-      await expect(daemon.post(mergeRequestsApi.push, { task: task.id })).rejects.toThrow(
-        `origin pushes to ${elsewhere}, not to ${bare} it fetches from`,
-      );
-    } finally {
-      gitIn(task.worktree, "config", "--unset", "remote.origin.pushurl");
-    }
+    const refused = async (key: string, value: string, message: string) => {
+      gitIn(task.worktree, "config", "--add", key, value);
+      try {
+        await expect(daemon.post(mergeRequestsApi.push, { task: task.id })).rejects.toThrow(message);
+      } finally {
+        gitIn(task.worktree, "config", "--unset", "--fixed-value", key, value);
+      }
+    };
+
+    await refused("remote.origin.pushurl", elsewhere, "origin pushes to a local or unusual address, not to gitlab.example.com/shop/orders");
+    // A second address: git pushes to every `url` of a remote without a `pushurl`.
+    await refused("remote.origin.url", "ssh://git@evil.example.com/shop/orders.git", "origin pushes to evil.example.com/shop/orders");
+
     expect(gitIn(elsewhere, "branch", "--list", task.branch).trim()).toBe("");
+    expect(gitIn(bare, "branch", "--list", task.branch).trim()).toBe("");
+  }, 60_000);
+
+  test("a remote that is a local path, a command or plain git:// is never pushed to", async () => {
+    const task = await taskWithCommit("orders", "Local remote");
+    const unknown = "the main remote of orders is not on GitHub or on a repo host from the settings";
+    const cases: [string, string][] = [
+      [bare, unknown],
+      ["ext::sh -c touch% /tmp/trackwall-ext-ran", unknown],
+      // `git://` names the same project, but connects through `core.gitProxy`, a program the repo's config can name.
+      ["git://gitlab.example.com/shop/orders.git", "origin is not an HTTPS or SSH address of a repo host"],
+    ];
+    for (const [url, message] of cases) {
+      gitIn(task.worktree, "remote", "set-url", "origin", url);
+      try {
+        await expect(daemon.post(mergeRequestsApi.push, { task: task.id })).rejects.toThrow(message);
+      } finally {
+        gitIn(task.worktree, "remote", "set-url", "origin", ORDERS_REMOTE);
+      }
+    }
+    expect(gitIn(bare, "branch", "--list", task.branch).trim()).toBe("");
   }, 60_000);
 });
