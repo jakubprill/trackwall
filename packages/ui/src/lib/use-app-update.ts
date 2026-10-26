@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { errorMessage } from "./api.ts";
 import { inDesktopShell, isMainWindow } from "./app-window.ts";
-import { type AppUpdate, checkUpdate, installUpdate, listenToUpdateProgress, nextUpdate } from "./updates.ts";
+import { type AppUpdate, cancelUpdate, checkUpdate, installUpdate, listenToUpdateProgress, nextUpdate } from "./updates.ts";
 
 /** The first check waits for the app to settle; then once in a while, because the app runs for days in the tray. */
 const FIRST_CHECK_MS = 10_000;
@@ -11,6 +11,7 @@ export interface AppUpdateHandle {
   update: AppUpdate;
   check: () => void;
   install: (version: string) => void;
+  cancel: () => void;
   /** The version the user put off with "Later"; the strip comes back for a newer one or after a restart. */
   dismissed?: string;
   dismiss: (version: string) => void;
@@ -39,8 +40,8 @@ export function useAppUpdate(): AppUpdateHandle | undefined {
   const install = useCallback((version: string) => {
     if (installing.current) return;
     installing.current = true;
-    dispatch({ kind: "install-started", version });
-    const stop = listenToUpdateProgress((progress) => dispatch({ kind: "progress", progress }));
+    dispatch({ kind: "install-started", version, at: Date.now() });
+    const stop = listenToUpdateProgress((progress) => dispatch({ kind: "progress", progress, at: Date.now() }));
     installUpdate(version)
       .catch((err: unknown) => dispatch({ kind: "install-failed", message: errorMessage(err) }))
       .finally(() => {
@@ -48,6 +49,9 @@ export function useAppUpdate(): AppUpdateHandle | undefined {
         installing.current = false;
       });
   }, []);
+
+  // A failed cancel leaves the install running, which the view keeps showing; there is nothing more to tell.
+  const cancel = useCallback(() => void cancelUpdate().catch(() => {}), []);
 
   useEffect(() => {
     // One periodic check per app, not per window (ADR-49).
@@ -60,5 +64,5 @@ export function useAppUpdate(): AppUpdateHandle | undefined {
     };
   }, [check]);
 
-  return tauri ? { update, check, install, dismissed, dismiss } : undefined;
+  return tauri ? { update, check, install, cancel, dismissed, dismiss } : undefined;
 }
