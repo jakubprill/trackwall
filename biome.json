@@ -160,6 +160,7 @@
                       "!../../infra/xml.ts",
                       "!../../infra/glob.ts",
                       "!../../infra/wait-limit.ts",
+                      "!../../infra/file-key.ts",
                       "!../../platform/**"
                     ],
                     "message": "A module does not import another module; declare the interface you need, and the facade (src/facade.ts) passes the module in (AGENTS.md, §4). A module may take from outside only the listed infrastructure files and src/platform/; a module is a flat directory."

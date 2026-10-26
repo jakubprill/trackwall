@@ -8,6 +8,7 @@ import type { Connection } from "@/lib/connection";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 import { useRemote } from "@/lib/use-remote";
 import { FolderForm } from "./FolderForm.tsx";
+import { LocalConfigStoreSurface } from "./LocalConfigStoreSurface.tsx";
 import { RepoHostsForm } from "./RepoHostsForm.tsx";
 import { StartAtSignInSurface } from "./StartAtSignInSurface.tsx";
 import { UpdatesSurface } from "./UpdatesSurface.tsx";
@@ -99,6 +100,7 @@ export function SettingsView({
           </div>
         </Surface>
       )}
+      <LocalConfigStoreSurface conn={conn} />
       <RepoHostsSurface conn={conn} />
       <StartAtSignInSurface />
       <UpdatesSurface handle={update} />

@@ -134,7 +134,7 @@ function notIgnoredInWorktree(path: string): string {
 }
 
 /** The paths the ignore rules of `dir` ignore; a path its index tracks is never ignored. */
-async function checkIgnore(dir: string, paths: readonly string[]): Promise<string[]> {
+export async function checkIgnore(dir: string, paths: readonly string[]): Promise<string[]> {
   if (paths.length === 0) return [];
   // Exit code 1: none of them is ignored.
   const ignored = await git(dir, ["check-ignore", "-z", "--stdin"], { stdin: `${paths.join("\0")}\0`, okExitCodes: [0, 1] });

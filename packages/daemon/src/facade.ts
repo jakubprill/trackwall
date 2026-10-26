@@ -8,6 +8,7 @@ import { Cards } from "./modules/cards/cards.ts";
 import { DayStart } from "./modules/day-start/day-start.ts";
 import { DayStartFile } from "./modules/day-start/day-start-file.ts";
 import { Graph } from "./modules/graph/graph.ts";
+import { LocalConfig } from "./modules/local-config/local-config.ts";
 import { Logs } from "./modules/logs/logs.ts";
 import { MergeRequests } from "./modules/merge-requests/merge-requests.ts";
 import { Mise } from "./modules/mise/mise.ts";
@@ -34,6 +35,8 @@ export interface Facade {
   repoWatch: RepoWatch;
   cards: Cards;
   graph: Graph;
+  /** The local config files of the repos, backed up into the local config store every few seconds (ADR-86); `main.ts` starts it. */
+  localConfig: LocalConfig;
   mise: Mise;
   procs: ProcessGroups;
   logs: Logs;
@@ -115,6 +118,7 @@ export function createFacade(o: FacadeOptions): Facade {
   const cards = new Cards({ vcs, repos: workspace, cache, log: o.log });
   // A new repo or one whose HEAD moved gets its card in the background, so the next graph does not wait for it (ADR-63).
   const repoWatch = new RepoWatch({ repos: workspace, vcs, onHeadMoved: (repos) => cards.warmUp(repos), log: o.log });
+  const localConfig = new LocalConfig({ repos: workspace, vcs, log: o.log });
   const agents = new Agents({
     procs,
     repos: workspace,
@@ -161,6 +165,7 @@ export function createFacade(o: FacadeOptions): Facade {
     repoWatch,
     cards,
     graph,
+    localConfig,
     mise,
     procs,
     logs,

@@ -11,6 +11,7 @@ import {
   graphApi,
   HealthResult,
   LogTail,
+  localConfigApi,
   logsApi,
   miseApi,
   RepoGraph,
@@ -173,11 +174,12 @@ describe("api", () => {
 describe("api workspace", () => {
   const post = (path: string, body: string) => authed(path, { method: "POST", headers: { "content-type": "application/json" }, body });
 
-  test("every action of the workspace, cards, graph, mise and batch contracts has a route in the daemon", () => {
+  test("every action of the workspace, cards, graph, local config, mise and batch contracts has a route in the daemon", () => {
     const endpoints = [
       ...Object.values(workspaceApi),
       ...Object.values(cardsApi),
       ...Object.values(graphApi),
+      ...Object.values(localConfigApi),
       ...Object.values(miseApi),
       ...Object.values(batchApi),
     ];
