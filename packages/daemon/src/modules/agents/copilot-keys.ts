@@ -34,6 +34,11 @@ const ANSWERS: ReadonlySet<SessionKey> = new Set(["enter", "choice"]);
  */
 const STOPPED_BY_ESCAPE: ReadonlySet<TaskState> = new Set(["Working", "Stale", "Approval", "Plan"]);
 
+/** Whether `key` selects an answer in a dialog (Enter or a digit), unlike Esc and Ctrl+C, which stop the turn. */
+export function answersDialog(key: SessionKey): boolean {
+  return ANSWERS.has(key);
+}
+
 export function sessionKey(data: string): SessionKey | undefined {
   return KEYS.get(data);
 }
