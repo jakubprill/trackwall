@@ -604,8 +604,8 @@ const LAYOUT_LABELS: Record<SessionLayout, string> = { "1": "1", "2": "2", "4": 
 function LayoutBar({ layout, onLayout, summary }: { layout: SessionLayout; onLayout: (layout: SessionLayout) => void; summary?: string }) {
   return (
     <div className="flex items-center gap-3 border-b px-4 py-1.5">
-      <span className="hud-label">Layout</span>
-      <fieldset aria-label="Layout" className="flex overflow-hidden rounded-md border">
+      <span className="hud-label shrink-0">Layout</span>
+      <fieldset aria-label="Layout" className="flex shrink-0 overflow-hidden rounded-md border">
         {SESSION_LAYOUTS.map((option) => (
           <button
             key={option}
@@ -622,7 +622,7 @@ function LayoutBar({ layout, onLayout, summary }: { layout: SessionLayout; onLay
         ))}
       </fieldset>
       {summary && <span className="text-muted-foreground text-xs">{summary}</span>}
-      <span className="text-muted-foreground ml-auto font-mono text-2xs">
+      <span className="text-muted-foreground ml-auto min-w-0 truncate font-mono text-2xs">
         {`${sessionShortcutLabel({ kind: "position", position: 1 }, IS_MAC)}…${SHORTCUT_POSITIONS} select · ${sessionShortcutLabel(NEXT_WAITING, IS_MAC)} next waiting`}
       </span>
     </div>

@@ -1,0 +1,45 @@
+ [Current]  Sessions   Issues   Pull requests   Gists
+
+  ╭─╮╭─╮
+  ╰─╯╰─╯  Copilot v1.0.103 uses AI.
+  █ ▘▝ █  Check for mistakes.
+   ▔▔▔▔
+
+ ● Tip: /app
+   └ Prefer a visual workspace? Try out the GitHub Copilot desktop app
+      https://github.com/features/ai/github-app
+
+ ! Model "trackwall-scripted-model" is not in the built-in catalog. Using defaults for: prompt
+   tokens (COPILOT_PROVIDER_MAX_PROMPT_TOKENS), output tokens
+   (COPILOT_PROVIDER_MAX_OUTPUT_TOKENS). Run  copilot help providers  for configuration details.
+
+ ❯ go                                                                                        08:11
+
+ ○ verify_task (MCP: trackwall) · task: "abc", note: "echo line-0 echo line-1 echo line-2 echo li…
+
+
+
+
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ verify_task                                                                                      │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────── │
+│ ╭──────────────────────────────────────────────────────────────────────────────────────────────╮ │
+│ │ {                                                                                            │ │
+│ │   "task": "abc",                                                                             │ │
+│ │   "note": "echo line-0\necho line-1\necho line-2\necho line-3\necho line-4\necho             │ │
+│ │ line-5\necho line-6\necho line-7\necho line-8\necho line-9\necho line-10\necho line-11\necho │ │
+│ │  line-12\necho line-13\necho line-14\necho line-15\necho line-16\necho line-17\necho         │ │
+│ │ line-18\necho line-19",                                                                      │ │
+│ │   "timeoutSeconds": 55                                                                       │ │
+│ │ }                                                                                            │ │
+│ ╰──────────────────────────────────────────────────────────────────────────────────────────────╯ │
+│                                                                                                  │
+│ Do you want to use this tool?                                                                    │
+│                                                                                                  │
+│ ❯ 1. Yes                                                                                         │
+│   2. Yes, and don't ask again for tool "verify_task" from "trackwall" in this repo               │
+│   (/projects/shop)                                                          │
+│   3. No, and tell Copilot what to do differently (Esc to stop)                                   │
+│                                                                                                  │
+│ ↑/↓ to navigate · enter to select · esc to cancel                                                │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
