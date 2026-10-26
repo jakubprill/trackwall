@@ -4,6 +4,7 @@ name: CI
 # - lint, rustfmt, typecheck, tests and the documentation site build on Linux, plus the dependency audit;
 # - tests on Windows and macOS;
 # - the contract tests with the real Copilot CLI on all three systems (ADR-67);
+# - the E2E tests of the UI in Chromium on all three systems (ADR-70);
 # - the daemon build and the Tauri portable build on Windows and macOS (clippy, cargo test, sidecar smoke test);
 # - the aggregate `CI ok` job, the only check to require in main branch protection.
 # Jobs run in parallel: a run takes as long as the longest job (the Windows build), not the sum.
@@ -110,6 +111,31 @@ jobs:
       contents: read
     uses: ./.github/workflows/contract.yml
 
+  # Three paths through the built UI in Chromium from Playwright, on the daemon with the fake Copilot CLI (ADR-70). On all
+  # three systems, because the fake's screen reaches the browser through the PTY, which is ConPTY on Windows.
+  e2e:
+    name: e2e (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
+      # Only the headless shell, which a headless launch uses; on Linux also the system libraries it needs.
+      - name: Chromium for Playwright
+        run: pnpm --filter @trackwall/daemon exec playwright install ${{ runner.os == 'Linux' && '--with-deps' || '' }} --only-shell chromium
+      - run: pnpm test:e2e
+
   # The build is the longest step of a run, so it has its own job next to `test`, not after it.
   desktop:
     name: build, portable (${{ matrix.os }})
@@ -160,7 +186,7 @@ jobs:
   # cancelled dependency gives a red result.
   ci-ok:
     name: CI ok
-    needs: [check, audit, test, contract, desktop]
+    needs: [check, audit, test, contract, e2e, desktop]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

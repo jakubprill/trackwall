@@ -25,6 +25,8 @@ interface SessionApiOptions {
   log?: (msg: string) => void;
   /** Copilot CLI and the environment of its sessions, made for the test's directories; the fake by default. */
   copilot?: CopilotUnderTest;
+  /** The built UI the API serves, for a test in a browser (`e2e/`); none by default. */
+  uiDir?: string;
 }
 
 interface CopilotUnderTest {
@@ -62,6 +64,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
   const api = await startApi({
     token,
     version: "1",
+    uiDir: options.uiDir,
     info: () => {
       throw new Error("unused");
     },

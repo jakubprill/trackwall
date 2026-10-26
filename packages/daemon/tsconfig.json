@@ -7,5 +7,5 @@
     "types": ["bun", "node"],
     "erasableSyntaxOnly": true
   },
-  "include": ["src", "test", "scripts", "contract"]
+  "include": ["src", "test", "scripts", "contract", "e2e"]
 }
