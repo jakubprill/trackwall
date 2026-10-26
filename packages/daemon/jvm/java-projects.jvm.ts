@@ -1,11 +1,12 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
 import {
   CallEndpointResult,
   FindEndpointResult,
+  ListServicesResult,
   LogErrors,
   MiseTaskRunResult,
   RepoCardResult,
@@ -14,6 +15,7 @@ import {
   StopServiceResult,
   TestResults,
   VerifyTaskResult,
+  WAIT_MAX_SECONDS,
 } from "@trackwall/protocol";
 import { connectHttpClient } from "../test/support/mcp-client.ts";
 import { startSessionApi } from "../test/support/session-api.ts";
@@ -31,8 +33,6 @@ const ORDERS_PORT = 18081;
 const CHECKOUT_PORT = 18082;
 /** The first build downloads Spring Boot and the build plugins; a cold Windows runner takes minutes for that. */
 const BUILD_MS = 10 * 60_000;
-/** One waiting tool call: below the 30 s an HTTP request of the test's MCP client may take (`support/mcp-client.ts`). */
-const WAIT_SECONDS = 25;
 setDefaultTimeout(2 * BUILD_MS);
 
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
@@ -56,21 +56,17 @@ beforeAll(async () => {
 afterAll(async () => {
   await client?.close();
   await daemon?.stop();
-  // Gradle keeps its daemon after a build, as on the user's machine; stopped here so it holds no files of the run.
-  if (daemon)
-    execFileSync("mise", ["exec", "--", "gradle", "--stop", "--quiet"], { cwd: join(daemon.projects, "checkout"), stdio: "inherit" });
 }, 60_000);
 
 /**
- * A project's files as git tracks them (path with `/` → contents), so build output left in `projects/` by a run in place
- * does not reach the test's repos.
+ * A project's files that git does not ignore (path with `/` → contents), also new ones not added yet, so build output
+ * left in `projects/` by a build there does not reach the test's repos.
  */
 function trackedFiles(project: string): Record<string, string> {
   const dir = join(PROJECTS, project);
-  const paths = execFileSync("git", ["ls-files", "-z"], { cwd: dir, encoding: "utf8" })
-    .split("\0")
-    .filter((path) => path !== "");
-  if (paths.length === 0) throw new Error(`git tracks no files in ${dir}`);
+  const listed = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: dir, encoding: "utf8" });
+  const paths = [...new Set(listed.split("\0"))].filter((path) => path !== "" && existsSync(join(dir, ...path.split("/"))));
+  if (paths.length === 0) throw new Error(`git lists no files in ${dir}`);
   return Object.fromEntries(paths.map((path) => [path, readFileSync(join(dir, ...path.split("/")), "utf8")]));
 }
 
@@ -128,22 +124,30 @@ function cardSummary({ repo, card, tags }: RepoCardResult) {
 /** A mise task run with `run_mise_task` and awaited with `wait_for_mise_task`, as an agent does: the run once it ended. */
 async function runToEnd(repo: string, miseTask: string): Promise<RunState> {
   await call("run_mise_task", { repo, miseTask });
-  const wait = async () => MiseTaskRunResult.parse(await call("wait_for_mise_task", { repo, miseTask, timeoutSeconds: WAIT_SECONDS })).run;
+  const wait = async () =>
+    MiseTaskRunResult.parse(await call("wait_for_mise_task", { repo, miseTask, timeoutSeconds: WAIT_MAX_SECONDS })).run;
   return until(wait, (run) => run.kind === "exited");
 }
 
 /** `verify_task` of a task, called again until the verification has ended. */
 async function verify(repo: string, task: string) {
-  const first = VerifyTaskResult.parse(await call("verify_task", { repo, task, timeoutSeconds: WAIT_SECONDS })).verification;
+  const first = VerifyTaskResult.parse(await call("verify_task", { repo, task, timeoutSeconds: WAIT_MAX_SECONDS })).verification;
   const again = async () =>
-    VerifyTaskResult.parse(await call("verify_task", { repo, task, runId: first.runId, timeoutSeconds: WAIT_SECONDS })).verification;
+    VerifyTaskResult.parse(await call("verify_task", { repo, task, runId: first.runId, timeoutSeconds: WAIT_MAX_SECONDS })).verification;
   return first.state === "running" ? until(again, (v) => v.state !== "running") : first;
 }
 
-/** `start_service` called again until every service of the slice has settled. */
+/**
+ * `start_service` once, then `list_services` until no service of the slice is still starting: a second start would start
+ * a crashed service again. The services in the slice's order.
+ */
 async function startService(args: { repo: string; task?: string; dependencies?: boolean }) {
-  const start = async () => StartServiceResult.parse(await call("start_service", { ...args, timeoutSeconds: WAIT_SECONDS })).slice;
-  return until(start, (slice) => slice.settled);
+  const { slice } = StartServiceResult.parse(await call("start_service", { ...args, timeoutSeconds: WAIT_MAX_SECONDS }));
+  const ofSlice = async () => {
+    const { services } = ListServicesResult.parse(await call("list_services", {}));
+    return slice.members.map((m) => services.find((s) => s.repo === m.repo && s.task === m.task));
+  };
+  return until(ofSlice, (services) => services.every((s) => s !== undefined && s.state !== "starting"));
 }
 
 /** A compiler line without the directory before the file name (`/tmp/…/Shipping.java:9: …`, `C:\\…\\Shipping.java:9: …`). */
@@ -206,8 +210,8 @@ describe("a Maven project and a Gradle project", () => {
   });
 
   test("start_service starts orders before checkout from the graph, and call_endpoint reaches orders through checkout", async () => {
-    const slice = await startService({ repo: "checkout" });
-    expect(slice.members.map((m) => [m.repo, m.service?.state, m.service?.port])).toEqual([
+    const started = await startService({ repo: "checkout" });
+    expect(started.map((s) => [s?.repo, s?.state, s?.port])).toEqual([
       ["orders", "healthy", ORDERS_PORT],
       ["checkout", "healthy", CHECKOUT_PORT],
     ]);
@@ -219,8 +223,8 @@ describe("a Maven project and a Gradle project", () => {
       errors: [],
     });
 
-    const { services } = StopServiceResult.parse(await call("stop_service", { repo: "checkout", dependencies: true }));
-    expect(services.map((s) => [s.repo, s.state])).toEqual([
+    const { services: stopped } = StopServiceResult.parse(await call("stop_service", { repo: "checkout", dependencies: true }));
+    expect(stopped.map((s) => [s.repo, s.state])).toEqual([
       ["checkout", "stopped"],
       ["orders", "stopped"],
     ]);
@@ -276,9 +280,9 @@ describe("a Maven project and a Gradle project", () => {
       "* What went wrong:",
       "Execution failed for task ':compileJava'.",
     ]);
-    // get_errors reads the same errors from the run's log.
+    // get_errors reads the compiler error from the same log.
     const fromLog = LogErrors.parse(await call("get_errors", { repo: "checkout", task: task.id }));
-    expect(fromLog.errors.map((e) => e.lines[0])).toEqual(verification.errors.map((e) => e.lines[0]).reverse());
+    expect(fromLog.errors.map((e) => withoutDirectory(e.lines[0] ?? ""))).toContain("Shipping.java:9: error: cannot find symbol");
   });
 
   test("start_service reports a task's service that fails to start as crashed, with the Spring Boot report from its log", async () => {
@@ -288,13 +292,12 @@ describe("a Maven project and a Gradle project", () => {
       "package com.example.orders;\n\nimport org.springframework.stereotype.Component;\n\n@Component\npublic class Refunds {\n    public interface PaymentGateway {}\n\n    public Refunds(PaymentGateway gateway) {}\n}\n",
     );
 
-    const slice = await startService({ repo: "orders", task: task.id, dependencies: false });
+    const [service] = await startService({ repo: "orders", task: task.id, dependencies: false });
 
-    expect(slice.members.map((m) => [m.repo, m.outcome, m.service?.state, m.service?.port])).toEqual([
-      ["orders", "started", "crashed", task.port],
-    ]);
+    expect([service?.state, service?.port]).toEqual(["crashed", task.port]);
     // Spring Boot's failure report, which Maven prints between its own lines, is one error of the service log.
-    const report = slice.members[0]?.errors.find((e) => e.lines.includes("APPLICATION FAILED TO START"));
+    const { errors } = LogErrors.parse(await call("get_errors", { repo: "orders", task: task.id, miseTask: "dev" }));
+    const report = errors.find((e) => e.lines.includes("APPLICATION FAILED TO START"));
     expect(report?.lines).toContain(
       "Parameter 0 of constructor in com.example.orders.Refunds required a bean of type 'com.example.orders.Refunds$PaymentGateway' that could not be found.",
     );

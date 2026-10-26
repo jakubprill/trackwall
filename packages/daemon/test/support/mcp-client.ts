@@ -1,4 +1,5 @@
 import { Client, StreamableHTTPClientTransport, type VersionNegotiationOptions } from "@modelcontextprotocol/client";
+import { WAIT_MAX_SECONDS } from "@trackwall/protocol";
 import { loopbackRequest } from "../../src/infra/loopback.ts";
 import { MCP_PATH } from "../../src/mcp/endpoint.ts";
 
@@ -30,7 +31,8 @@ function loopbackFetch(port: number) {
       method: init?.method ?? "GET",
       headers,
       body: typeof init?.body === "string" ? init.body : undefined,
-      timeoutMs: 30_000,
+      // Above the longest wait a tool may be asked for, so a waiting call ends on its own time limit, not this one.
+      timeoutMs: (WAIT_MAX_SECONDS + 5) * 1000,
     });
     const responseHeaders = new Headers();
     for (const [name, value] of Object.entries(res.headers)) if (typeof value === "string") responseHeaders.set(name, value);

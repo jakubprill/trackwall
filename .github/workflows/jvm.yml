@@ -3,28 +3,17 @@ name: Java build tests
 # The daemon on real Spring Boot projects built by real Maven and Gradle through real mise (ADR-72): cards, the graph,
 # services, test reports, task verification and log errors (`pnpm test:jvm`, packages/daemon/jvm/). Outside `CI ok`:
 # a run downloads a JDK and the Spring Boot dependencies, and a new release of a build tool must not block every PR.
-# Every night from nightly.yml, which opens an issue when it fails on main; on a PR only when it touches code the tests
-# go through (the modules that read Java builds, the ones that run them, the MCP tools, the protocol and the test's
-# support code), so its author sees the result before the merge; by hand from Actions.
+# Every night from nightly.yml, which opens an issue when it fails on main; on a PR only when it touches the daemon, the
+# protocol or the dependencies, which the tests go through end to end, so its author sees the result before the merge;
+# by hand from Actions.
 on:
   workflow_call:
   workflow_dispatch:
   pull_request:
     paths:
-      - packages/daemon/jvm/**
-      - packages/daemon/src/modules/agents/**
-      - packages/daemon/src/modules/cards/**
-      - packages/daemon/src/modules/graph/**
-      - packages/daemon/src/modules/logs/**
-      - packages/daemon/src/modules/mise/**
-      - packages/daemon/src/modules/procs/**
-      - packages/daemon/src/modules/services/**
-      - packages/daemon/src/modules/test-results/**
-      - packages/daemon/src/modules/verification/**
-      - packages/daemon/src/mcp/**
-      - packages/daemon/test/support/**
-      - packages/daemon/package.json
+      - packages/daemon/**
       - packages/protocol/src/**
+      - pnpm-lock.yaml
       - .github/actions/setup/**
       - .github/workflows/jvm.yml
 
@@ -42,12 +31,6 @@ env:
   BUN_VERSION: "1.4.4"
   NODE_VERSION: "22"
   MISE_VERSION: "2026.10.19"
-  # What the cache step keeps: the JDK, Maven and Gradle mise installs (Linux and macOS, Windows) and the dependencies.
-  CACHE_PATHS: |
-    ~/.local/share/mise
-    ~/AppData/Local/mise
-    ~/.m2/repository
-    ~/.gradle/caches
 
 jobs:
   jvm:
@@ -98,21 +81,18 @@ jobs:
           fi
           echo "$RUNNER_TEMP/mise-bin" >> "$GITHUB_PATH"
       - run: mise --version
-      # Keyed by the projects' build files, restored from an older key after a version bump, and saved also after a failed
-      # run (the test stops Gradle's daemon first), so a cold run that fails does not leave the next one cold too.
-      - uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        id: cache
+      # Keyed by the projects' build files and saved only after a passing run (a failed or cancelled one may hold half a
+      # download); a version bump starts a new cache, so old JDKs and dependencies do not pile up in it.
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          path: ${{ env.CACHE_PATHS }}
-          key: jvm-${{ runner.os }}-${{ runner.arch }}-${{ env.MISE_VERSION }}-${{ hashFiles('packages/daemon/jvm/projects/**/mise.toml', 'packages/daemon/jvm/projects/**/pom.xml', 'packages/daemon/jvm/projects/**/*.gradle.kts') }}
-          restore-keys: jvm-${{ runner.os }}-${{ runner.arch }}-${{ env.MISE_VERSION }}-
+          path: |
+            ~/.local/share/mise
+            ~/AppData/Local/mise
+            ~/.m2/repository
+            ~/.gradle/caches
+          key: jvm-${{ runner.os }}-${{ runner.arch }}-${{ env.MISE_VERSION }}-${{ hashFiles('packages/daemon/jvm/projects/**/mise.toml', 'packages/daemon/jvm/projects/**/pom.xml', 'packages/daemon/jvm/projects/**/*.gradle.kts', 'packages/daemon/jvm/projects/**/gradle.properties') }}
       - run: pnpm test:jvm
         env:
           # mise reads tool versions from GitHub; without a token the runners' shared addresses hit the rate limit. The
           # token can only read this repo and ends with the job.
           MISE_GITHUB_TOKEN: ${{ github.token }}
-      - uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        if: always() && steps.cache.outputs.cache-hit != 'true'
-        with:
-          path: ${{ env.CACHE_PATHS }}
-          key: ${{ steps.cache.outputs.cache-primary-key }}
