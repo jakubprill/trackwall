@@ -34,9 +34,10 @@ The "mise tasks" tab of a repo shows a "Local config" section with each file's s
 
 ## Good to know
 
-- Only `mise.local.toml` and `.worktreeinclude` are backed up, and only real files of up to 1 MB, never a link.
+- Only `mise.local.toml` and `.worktreeinclude` are backed up, and only real files of up to 256 KB, never a link.
 - Values in `[env]` of `mise.local.toml` go into the store and to its remote. Keep secrets out of the file, or keep the remote private.
 - The store's commits are made by "Trackwall", without your git hooks and signing.
-- When another computer pushed to the remote first, the push fails and "Settings" says so. Pull and merge in the store yourself; Trackwall never pulls or forces a push.
+- When another computer pushed to the remote first, the push fails and "Settings" says so. Pull in the store yourself; Trackwall never pulls or forces a push. After a pull, each computer's own file wins: where it differs, Trackwall commits it on top, and the other version stays in the history.
+- Trackwall checks the store before it uses it. If its `.git/config` has a setting git did not write itself, such as a filter, the backup stops and "Settings" names the setting to remove.
 - Restore never overwrites a file: a repo that already has its own `mise.local.toml` keeps it, and the next backup takes that one, with the old version kept in the store's history.
 - A repo whose only mise tasks are in `mise.local.toml` does not get the `no-mise` [tag](/features/repo-card).

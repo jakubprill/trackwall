@@ -10,7 +10,7 @@ import type {
   TreeEntry,
   WorkingTreeChanges,
 } from "@trackwall/protocol";
-import { backupRemote, commitBackups, ensureBackupRepo, pushBackups } from "./backup-repo.ts";
+import { backupRemote, commitBackups, ensureBackupRepo, pushBackups, storeHead } from "./backup-repo.ts";
 import { branchOnRemote, pushBranch } from "./branch-push.ts";
 import { CommitMemo } from "./commit-memo.ts";
 import {
@@ -145,6 +145,7 @@ export class Vcs {
   readonly ensureBackupRepo = ensureBackupRepo;
   readonly commitBackups = commitBackups;
   readonly backupRemote = backupRemote;
+  readonly storeHead = storeHead;
   readonly pushBackups = pushBackups;
 
   // `git grep` over a commit's objects (`grep.ts`): source files for cards (ADR-30) and code search (ADR-40).

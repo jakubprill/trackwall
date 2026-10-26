@@ -17,6 +17,9 @@ export const LOCAL_CONFIG_FILES = [MISE_LOCAL_CONFIG_FILE, WORKTREE_INCLUDE_FILE
 export const LocalConfigFileName = z.enum(LOCAL_CONFIG_FILES);
 export type LocalConfigFileName = z.infer<typeof LocalConfigFileName>;
 
+/** A local config file is a few lines; a bigger one is not backed up, so a file rewritten in a loop cannot fill the store. */
+export const MAX_LOCAL_CONFIG_BYTES = 256 * 1024;
+
 /** The folder in the projects folder that holds the local config store; the repo list skips it, like every name with a dot. */
 export const LOCAL_CONFIG_STORE_DIR = ".trackwall-local";
 
@@ -29,9 +32,9 @@ export const LocalConfigFileState = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("absent"), file: LocalConfigFileName }),
   /** The repo's commits have the file: it is not local config, so the store leaves it alone. */
   z.object({ kind: z.literal("tracked"), file: LocalConfigFileName }),
-  /** The store has the same content as the repo. */
+  /** The store's last backup has the same content as the repo. */
   z.object({ kind: z.literal("backed_up"), file: LocalConfigFileName, ignored: z.boolean() }),
-  /** The repo's file is newer than the store's, or the store has none yet: the next backup takes it. */
+  /** The repo's file differs from the store's last backup, or the store has none yet: the next backup takes it, as the repo's file wins. */
   z.object({ kind: z.literal("pending"), file: LocalConfigFileName, ignored: z.boolean() }),
   /** Only the store has the file, for example after a new clone: it can be restored. */
   z.object({ kind: z.literal("missing"), file: LocalConfigFileName }),

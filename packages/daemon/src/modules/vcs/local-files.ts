@@ -1,4 +1,4 @@
-import { appendFile, mkdir } from "node:fs/promises";
+import { appendFile, lstat, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { git } from "./git.ts";
 import { gitDirs, readIfExists } from "./git-dir.ts";
@@ -36,6 +36,9 @@ export async function excludeLocally(dir: string, paths: readonly string[]): Pro
   if (!dirs) throw new Error(`${dir} has no git directory`);
   const info = join(dirs.commonDir, "info");
   const exclude = join(info, "exclude");
+  // A link in place of either would send the lines into any file on the disk.
+  for (const path of [info, exclude])
+    if ((await lstat(path).catch(() => undefined))?.isSymbolicLink()) throw new Error(`${path} is a link`);
   const text = await readIfExists(exclude);
   const lines = new Set(text.split(/\r?\n/).map((line) => line.trim()));
   const missing = paths.map((path) => `/${path}`).filter((pattern) => !lines.has(pattern));

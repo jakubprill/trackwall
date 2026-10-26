@@ -1,5 +1,5 @@
-import { constants } from "node:fs";
-import { copyFile, mkdir, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { lstat, mkdir, rename, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import {
   type Commit,
@@ -9,24 +9,28 @@ import {
   type LocalConfigFileState,
   type LocalConfigPush,
   type LocalConfigStore,
+  MAX_LOCAL_CONFIG_BYTES,
   type RepoLocalConfig,
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { fileKey } from "../../infra/file-key.ts";
-import { lstatIfExists, readLocalConfigFile } from "./repo-files.ts";
+import { readRegularFile } from "../../infra/regular-file.ts";
 
 /**
  * The `local-config` module (§4.13, ADR-86): the files a repo keeps outside git on purpose (`LOCAL_CONFIG_FILES`), backed
  * up into the local config store, `.trackwall-local` in the projects folder, as `<repo folder>/<file>`. The store is a git
- * repo the daemon commits to and, when it has a remote, pushes, so a file the user or an agent overwrote can be found in
- * its history and a new computer clones it. Every few seconds the daemon compares each repo's files by `stat`, reads only
- * the changed ones and copies a file whose content differs from the store's. A file that disappears from a repo stays in
- * the store, which is what makes the backup worth having: a new clone gets it back with "Restore". A file the repo's
- * commits have is not local config and is left alone.
+ * repo the daemon commits to and, when it has a remote, pushes, so every version is in its history and a new computer
+ * clones it. The store's last commit is the backup: every few seconds the daemon compares each repo's files by `stat`,
+ * reads only the changed ones and commits those whose content differs from the last commit's. The repo's file wins: a
+ * store that changed under the daemon (a pull, a projects folder moved) is compared again in full, and a file that differs
+ * is committed on top. A file that disappears from a repo stays in the store, which is what makes the backup worth
+ * having: a new clone gets it back with "Restore". A file the repo's commits have is not local config and is left alone.
  */
 
 /** How often the repos' files are compared: a saved file is in the store within this time plus a commit. */
 const CHECK_MS = 5000;
+/** How long after a failed push the next one is tried: a remote that is down is not asked every few seconds. */
+const PUSH_RETRY_MS = 60_000;
 
 /** What `local-config` needs from `workspace`; wired in the facade. */
 interface LocalConfigRepos {
@@ -42,7 +46,9 @@ interface LocalConfigVcs {
   ignoredPaths(dir: string, paths: readonly string[]): Promise<Set<string>>;
   excludeLocally(dir: string, paths: readonly string[]): Promise<void>;
   ensureBackupRepo(dir: string): Promise<void>;
-  commitBackups(dir: string, paths: readonly string[], message: string): Promise<boolean>;
+  commitBackups(dir: string, files: readonly { path: string; content: Buffer }[], message: string): Promise<boolean>;
+  storeHead(dir: string): Promise<string | null>;
+  readFiles(dir: string, commit: string, paths: readonly string[], maxBytes: number): Promise<Map<string, Buffer>>;
   backupRemote(dir: string): Promise<string | null>;
   pushBackups(dir: string): Promise<boolean>;
   log(dir: string, limit: number): Promise<Commit[]>;
@@ -52,27 +58,32 @@ export interface LocalConfigDeps {
   repos: LocalConfigRepos;
   vcs: LocalConfigVcs;
   log: (msg: string) => void;
+  /** `PUSH_RETRY_MS` in the daemon; shorter in tests. */
+  pushRetryMs?: number;
 }
 
-/** A file copied into the store: the repo folder's name and the file. */
-interface Copied {
-  repo: string;
+/** A repo's local config file that changed since the last comparison, with what was read. */
+interface Changed {
+  dir: string;
   file: LocalConfigFileName;
+  key: string;
+  content: Buffer;
 }
 
 export class LocalConfig {
   readonly #deps: LocalConfigDeps;
   /** The file key of every repo file at the last comparison, by full path; `null` for a missing file. */
   readonly #seen = new Map<string, string | null>();
-  /** Files copied into the store whose commit failed; the next backup commits them with its own. */
-  #uncommitted: Copied[] = [];
-  /** The store's commits and pushes, one after another: two at once fight over `index.lock`. */
-  #storeWork: Promise<unknown> = Promise.resolve();
+  /** The store and its last commit the comparisons in `#seen` were made against. */
+  #compared: { store: string; head: string | null } | undefined;
   #timer: NodeJS.Timeout | undefined;
   /** A slow drive must not stack comparisons: the next one starts only after the previous one ended. */
   #checking: Promise<void> | undefined;
   #problem: string | null = null;
   #push: LocalConfigPush = { kind: "none" };
+  /** A commit not pushed yet; at the start too, since the last run may have ended before its push. */
+  #unpushed = true;
+  #pushing: Promise<void> | undefined;
 
   constructor(deps: LocalConfigDeps) {
     this.#deps = deps;
@@ -99,28 +110,25 @@ export class LocalConfig {
     return this.#checking;
   }
 
-  /** Resolves once the store's commits and pushes started so far have ended, whatever their result. */
+  /** Resolves once a running push has ended, whatever its result. */
   async settled(): Promise<void> {
-    await this.#storeWork.catch(() => {});
+    await this.#pushing;
   }
 
   async store(): Promise<LocalConfigStore> {
     const dir = await this.#storeDir();
-    if (dir === null) return { dir, lastBackup: null, remote: null, push: this.#push, problem: this.#problem };
-    const isRepo = (await lstatIfExists(join(dir, ".git"))) !== undefined;
-    const [lastBackup, remote] = isRepo ? await Promise.all([this.#lastBackup(dir), this.#deps.vcs.backupRemote(dir)]) : [null, null];
-    return { dir, lastBackup, remote, push: this.#push, problem: this.#problem };
+    const base = { push: this.#push, problem: this.#problem };
+    if (dir === null) return { dir, lastBackup: null, remote: null, ...base };
+    const head = await this.#deps.vcs.storeHead(dir);
+    const [lastBackup] = head === null ? [] : await this.#deps.vcs.log(dir, 1);
+    return { dir, lastBackup: lastBackup ?? null, remote: await this.#deps.vcs.backupRemote(dir), ...base };
   }
 
   async repo(id: string): Promise<RepoLocalConfig> {
     const dir = await this.#deps.repos.repoPath(id);
-    const store = await this.#storeDir();
+    const inStore = await this.#backups(dir);
     const read = await Promise.all(
-      LOCAL_CONFIG_FILES.map(async (file) => ({
-        file,
-        inRepo: await readLocalConfigFile(join(dir, file)),
-        inStore: store === null ? undefined : await readLocalConfigFile(storePath(store, dir, file)),
-      })),
+      LOCAL_CONFIG_FILES.map(async (file) => ({ file, inRepo: await readRegularFile(join(dir, file), MAX_LOCAL_CONFIG_BYTES) })),
     );
     const present = read.filter((f) => f.inRepo !== undefined).map((f) => f.file);
     const tracked = await this.#deps.vcs.trackedPaths(dir, present);
@@ -128,29 +136,27 @@ export class LocalConfig {
       dir,
       present.filter((file) => !tracked.has(file)),
     );
-    const files = read.map(({ file, inRepo, inStore }): LocalConfigFileState => {
-      if (inRepo === undefined) return inStore === undefined ? { kind: "absent", file } : { kind: "missing", file };
+    const files = read.map(({ file, inRepo }): LocalConfigFileState => {
+      const backup = inStore.get(file);
+      if (inRepo === undefined) return backup === undefined ? { kind: "absent", file } : { kind: "missing", file };
       if (tracked.has(file)) return { kind: "tracked", file };
-      const kind = inStore?.equals(inRepo) ? "backed_up" : "pending";
-      return { kind, file, ignored: ignored.has(file) };
+      return { kind: backup?.equals(inRepo) ? "backed_up" : "pending", file, ignored: ignored.has(file) };
     });
     return { repo: id, files };
   }
 
   /**
-   * Copies the files only the store has into the repo root, never over a file that appeared meanwhile, and has git ignore
-   * them in this clone, so the restored files do not end up in a commit.
+   * Writes the files only the store's last backup has into the repo root, never over a file that appeared meanwhile,
+   * and has git ignore them in this clone, so the restored files do not end up in a commit.
    */
   async restore(id: string): Promise<RepoLocalConfig> {
     const dir = await this.#deps.repos.repoPath(id);
-    const store = await this.#storeDir();
-    if (store === null) throw new DomainError("bad_request", "set the projects folder first");
-    const missing = (await this.repo(id)).files.filter((f) => f.kind === "missing").map((f) => f.file);
+    const inStore = await this.#backups(dir);
+    const missing = (await this.repo(id)).files.flatMap((f) => (f.kind === "missing" ? [f.file] : []));
     if (missing.length === 0) throw new DomainError("bad_request", `${id}: the local config store has nothing this repo lacks`);
     for (const file of missing) {
-      // Read first, so a link planted in the store is refused instead of followed.
-      await readLocalConfigFile(storePath(store, dir, file));
-      await copyFile(storePath(store, dir, file), join(dir, file), constants.COPYFILE_EXCL);
+      const content = inStore.get(file);
+      if (content) await writeFile(join(dir, file), content, { flag: "wx" });
     }
     await this.#ignoreUnignored(dir, missing);
     return this.repo(id);
@@ -164,6 +170,21 @@ export class LocalConfig {
     return this.repo(id);
   }
 
+  /** The repo's files in the store's last commit, by file name. */
+  async #backups(dir: string): Promise<Map<LocalConfigFileName, Buffer>> {
+    const store = await this.#storeDir();
+    const head = store === null ? null : await this.#deps.vcs.storeHead(store);
+    if (store === null || head === null) return new Map();
+    const paths = LOCAL_CONFIG_FILES.map((file) => storePath(dir, file));
+    const read = await this.#deps.vcs.readFiles(store, head, paths, readLimit(paths.length));
+    const backups = new Map<LocalConfigFileName, Buffer>();
+    for (const file of LOCAL_CONFIG_FILES) {
+      const content = read.get(storePath(dir, file));
+      if (content) backups.set(file, content);
+    }
+    return backups;
+  }
+
   async #ignoreUnignored(dir: string, files: readonly string[]): Promise<void> {
     const ignored = await this.#deps.vcs.ignoredPaths(dir, files);
     const unignored = files.filter((file) => !ignored.has(file));
@@ -172,108 +193,117 @@ export class LocalConfig {
 
   /** From a timer an exception would be an unhandled rejection, which ends the process under Node. */
   #tick(): void {
-    this.backUp().catch((err: unknown) => this.#fail(messageOf(err)));
+    this.backUp().catch((err: unknown) => this.#setProblems([messageOf(err)]));
   }
 
-  /** A problem is logged once, not every few seconds, and shown with the store until a backup finishes. */
-  #fail(message: string): void {
-    if (this.#problem !== message) this.#deps.log(`local config backup: ${message}`);
+  /** A problem is logged once, not every few seconds, and shown with the store until a backup has none. */
+  #setProblems(problems: readonly string[]): void {
+    const message = problems.length === 0 ? null : problems.join("; ");
+    if (message !== null && message !== this.#problem) this.#deps.log(`local config backup: ${message}`);
     this.#problem = message;
   }
 
   async #backUp(): Promise<void> {
     const store = await this.#storeDir();
     if (store === null) return;
-    const copied: Copied[] = [];
+    const head = await this.#deps.vcs.storeHead(store);
+    if (this.#compared?.store !== store || this.#compared.head !== head) this.#seen.clear();
+    this.#compared = { store, head };
     const problems: string[] = [];
+    const changed: Changed[] = [];
     for (const entry of await this.#deps.repos.repoEntries()) {
       try {
-        copied.push(...(await this.#backUpRepo(store, entry.path)));
+        changed.push(...(await this.#changedFiles(entry.path)));
       } catch (err) {
         problems.push(`${entry.id}: ${messageOf(err)}`);
       }
     }
-    const toCommit = [...this.#uncommitted, ...copied];
-    if (toCommit.length > 0) await this.#commit(store, toCommit);
-    if (problems.length > 0) return this.#fail(problems.join("; "));
-    this.#problem = null;
+    try {
+      await this.#commit(store, head, changed, problems);
+    } catch (err) {
+      problems.push(messageOf(err));
+    }
+    this.#setProblems(problems);
+    this.#pushIfDue(store);
   }
 
-  /** The repo's local config files that changed since the last comparison and differ from the store, copied into it. */
-  async #backUpRepo(store: string, dir: string): Promise<Copied[]> {
-    const changed: { file: LocalConfigFileName; key: string; content: Buffer }[] = [];
+  /** The repo's local config files whose key changed since the last comparison; a missing one is noted and left out. */
+  async #changedFiles(dir: string): Promise<Changed[]> {
+    const changed: Changed[] = [];
     for (const file of LOCAL_CONFIG_FILES) {
       const path = join(dir, file);
-      const info = await lstatIfExists(path);
+      const info = await lstat(path).catch((err: NodeJS.ErrnoException) => {
+        if (err.code === "ENOENT") return undefined;
+        throw err;
+      });
       const key = info ? fileKey(info) : null;
       if (this.#seen.has(path) && this.#seen.get(path) === key) continue;
-      const content = await readLocalConfigFile(path);
-      const inStore = await readLocalConfigFile(storePath(store, dir, file));
-      if (key === null || content === undefined || inStore?.equals(content)) this.#seen.set(path, key);
-      else changed.push({ file, key, content });
+      const content = await readRegularFile(path, MAX_LOCAL_CONFIG_BYTES);
+      if (key === null || content === undefined) this.#seen.set(path, null);
+      else changed.push({ dir, file, key, content });
     }
-    if (changed.length === 0) return [];
-    const tracked = await this.#deps.vcs.trackedPaths(
-      dir,
-      changed.map((c) => c.file),
-    );
-    const copied: Copied[] = [];
-    for (const { file, key, content } of changed) {
-      if (!tracked.has(file)) {
-        await this.#writeToStore(store, dir, file, content);
-        copied.push({ repo: basename(dir), file });
-      }
-      this.#seen.set(join(dir, file), key);
-    }
-    return copied;
+    return changed;
   }
 
-  /** The repo's folder in the store must be a real folder: a link would send the copy anywhere on the disk. */
-  async #writeToStore(store: string, dir: string, file: LocalConfigFileName, content: Buffer): Promise<void> {
-    const folder = join(store, basename(dir));
-    const info = await lstatIfExists(folder);
-    if (info && !info.isDirectory()) throw new Error(`${folder} in the local config store is not a folder`);
-    await mkdir(folder, { recursive: true });
-    await writeFile(join(folder, file), content);
-  }
-
-  /** Commits the copied files and pushes them in the background; a failed commit is retried with the next backup. */
-  async #commit(store: string, files: Copied[]): Promise<void> {
-    const work = this.#onStore(async () => {
+  /**
+   * Commits the changed files whose content differs from the last commit and that the repo does not track, then writes
+   * them into the store's folder for the user to browse. A file is marked as compared only once its commit is made, so a
+   * failed commit is tried again with the next backup.
+   */
+  async #commit(store: string, head: string | null, changed: readonly Changed[], problems: string[]): Promise<void> {
+    if (changed.length === 0) return;
+    const paths = changed.map((c) => storePath(c.dir, c.file));
+    const inStore = head === null ? new Map<string, Buffer>() : await this.#deps.vcs.readFiles(store, head, paths, readLimit(paths.length));
+    const differing = changed.filter((c) => !inStore.get(storePath(c.dir, c.file))?.equals(c.content));
+    const toBackUp = await this.#untracked(differing);
+    if (toBackUp.length > 0) {
       await this.#deps.vcs.ensureBackupRepo(store);
-      const paths = [...new Set(files.map((f) => `${f.repo}/${f.file}`))];
-      await this.#deps.vcs.commitBackups(store, paths, backupMessage(files));
-    });
-    try {
-      await work;
-      this.#uncommitted = [];
-    } catch (err) {
-      this.#uncommitted = files;
-      throw err;
+      const files = toBackUp.map((c) => ({ path: storePath(c.dir, c.file), content: c.content }));
+      if (await this.#deps.vcs.commitBackups(store, files, backupMessage(toBackUp))) this.#unpushed = true;
+      this.#compared = { store, head: await this.#deps.vcs.storeHead(store) };
+      for (const file of files) await writeStoreCopy(store, file.path, file.content).catch((err: unknown) => problems.push(messageOf(err)));
     }
-    void this.#onStore(() => this.#pushStore(store));
+    for (const c of changed) this.#seen.set(join(c.dir, c.file), c.key);
+  }
+
+  /** The files whose repo does not track them, asking git once per repo. */
+  async #untracked(changed: readonly Changed[]): Promise<Changed[]> {
+    const byRepo = new Map<string, Changed[]>();
+    for (const c of changed) byRepo.set(c.dir, [...(byRepo.get(c.dir) ?? []), c]);
+    const untracked: Changed[] = [];
+    for (const [dir, files] of byRepo) {
+      const tracked = await this.#deps.vcs.trackedPaths(
+        dir,
+        files.map((c) => c.file),
+      );
+      untracked.push(...files.filter((c) => !tracked.has(c.file)));
+    }
+    return untracked;
+  }
+
+  /** One push at a time, in the background, so a hanging remote never holds up the next backup. */
+  #pushIfDue(store: string): void {
+    if (!this.#unpushed || this.#pushing) return;
+    const retryMs = this.#deps.pushRetryMs ?? PUSH_RETRY_MS;
+    if (this.#push.kind === "failed" && Date.now() - Date.parse(this.#push.at) < retryMs) return;
+    this.#unpushed = false;
+    this.#pushing = this.#pushStore(store).finally(() => {
+      this.#pushing = undefined;
+    });
   }
 
   async #pushStore(store: string): Promise<void> {
     const at = new Date().toISOString();
     try {
+      if ((await this.#deps.vcs.storeHead(store)) === null) return;
+      await this.#deps.vcs.ensureBackupRepo(store);
       if (await this.#deps.vcs.pushBackups(store)) this.#push = { kind: "ok", at };
     } catch (err) {
       const message = messageOf(err);
       if (this.#push.kind !== "failed" || this.#push.message !== message) this.#deps.log(`local config push: ${message}`);
       this.#push = { kind: "failed", at, message };
+      this.#unpushed = true;
     }
-  }
-
-  #onStore<T>(job: () => Promise<T>): Promise<T> {
-    const result = this.#storeWork.catch(() => {}).then(job);
-    this.#storeWork = result;
-    return result;
-  }
-
-  async #lastBackup(store: string): Promise<Commit | null> {
-    const [last] = await this.#deps.vcs.log(store, 1);
-    return last ?? null;
   }
 
   async #storeDir(): Promise<string | null> {
@@ -286,15 +316,34 @@ export class LocalConfig {
   }
 }
 
-/** A repo's file in the store: under the name of the repo's folder, which stays the same when its identifier gets a suffix. */
-function storePath(store: string, dir: string, file: LocalConfigFileName): string {
-  return join(store, basename(dir), file);
+/** A repo's file in the store, with `/`: under the name of the repo's folder, which stays when its identifier gets a suffix. */
+function storePath(dir: string, file: LocalConfigFileName): string {
+  return `${basename(dir)}/${file}`;
+}
+
+/** Room for `count` files at the size limit and `cat-file`'s header lines. */
+function readLimit(count: number): number {
+  return count * (MAX_LOCAL_CONFIG_BYTES + 128);
+}
+
+/**
+ * The copy in the store's folder for the user to browse; the commit already holds the content. Written to a new file and
+ * renamed over the old one, and only in a real folder, never through a link planted in the store.
+ */
+async function writeStoreCopy(store: string, path: string, content: Buffer): Promise<void> {
+  const [repo = "", file = ""] = path.split("/");
+  const folder = join(store, repo);
+  await mkdir(folder, { recursive: true });
+  if (!(await lstat(folder)).isDirectory()) throw new Error(`${folder} in the local config store is not a folder`);
+  const temp = join(folder, `.${file}.${randomUUID()}.tmp`);
+  await writeFile(temp, content, { flag: "wx" });
+  await rename(temp, join(folder, file));
 }
 
 /** `Back up orders-api: mise.local.toml; web: .worktreeinclude, mise.local.toml` */
-function backupMessage(files: readonly Copied[]): string {
+function backupMessage(files: readonly Changed[]): string {
   const byRepo = new Map<string, Set<string>>();
-  for (const { repo, file } of files) byRepo.set(repo, (byRepo.get(repo) ?? new Set()).add(file));
+  for (const { dir, file } of files) byRepo.set(basename(dir), (byRepo.get(basename(dir)) ?? new Set()).add(file));
   const parts = [...byRepo].map(([repo, names]) => `${repo}: ${[...names].sort().join(", ")}`);
   return `Back up ${parts.sort().join("; ")}`;
 }
