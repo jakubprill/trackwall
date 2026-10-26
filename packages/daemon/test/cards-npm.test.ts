@@ -66,11 +66,11 @@ describe("npm extractor", () => {
     ]);
   });
 
-  test("bad JSON is a card problem, and a field of the wrong type is skipped without losing the rest", () => {
+  test("bad JSON is an invalid-file card problem, and a field of the wrong type is skipped without losing the rest", () => {
     const out = extractNpm(
       snapshotOf({ "a/package.json": "{ not json", "b/package.json": JSON.stringify({ name: "b", version: 3, dependencies: { x: "1" } }) }),
     );
-    expect(out.problems.map((p) => p.path)).toEqual(["a/package.json"]);
+    expect(out.problems.map((p) => `${p.code} ${p.path}`)).toEqual(["file-invalid a/package.json"]);
     expect(out.provides.map((p) => [p.name, p.version])).toEqual([["b", null]]);
     expect(out.consumes.map((c) => c.name)).toEqual(["x"]);
   });

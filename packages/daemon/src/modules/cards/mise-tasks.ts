@@ -60,7 +60,7 @@ function tomlTasks(path: string, text: string, problems: CardProblem[]): Declare
   try {
     parsed = parseToml(text);
   } catch (err) {
-    if (!MISE_CONFIG_FILES.includes(path)) problems.push({ path, message: messageOf(err) });
+    if (!MISE_CONFIG_FILES.includes(path)) problems.push({ code: "file-invalid", path, message: messageOf(err) });
     return [];
   }
   const config = MiseTasksConfig.safeParse(parsed);

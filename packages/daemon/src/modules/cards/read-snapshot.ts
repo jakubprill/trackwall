@@ -64,17 +64,22 @@ export async function readSnapshot(
   const listed = await vcs.commitFiles(dir, commit, MAX_LIST_BYTES);
   if (listed.truncated)
     problems.push({
+      code: "files-not-read",
       path: "",
       message: `the commit's file list is longer than ${MAX_LIST_BYTES} B; the card describes only its beginning`,
     });
   const files = listed.files.filter((f) => !f.path.split("/").some((segment) => SKIPPED_DIRS.has(segment)));
   const wanted = files.filter((f) => reads(f.path) && isReadable(f)).map((f) => f.path);
   if (wanted.length > MAX_FILES)
-    problems.push({ path: "", message: `the repo has ${wanted.length} build files; the card reads the first ${MAX_FILES}` });
+    problems.push({
+      code: "files-not-read",
+      path: "",
+      message: `the repo has ${wanted.length} build files; the card reads the first ${MAX_FILES}`,
+    });
   const requested = [...wanted.slice(0, MAX_FILES), ...(await sourceFiles(vcs, dir, commit, files, sources, problems))];
   const reader = new BudgetedReader(vcs, dir, commit);
   for (const path of await reader.read(requested))
-    problems.push({ path, message: `the file was not read within the ${MAX_READ_BYTES} B commit read limit` });
+    problems.push({ code: "files-not-read", path, message: `the file was not read within the ${MAX_READ_BYTES} B commit read limit` });
   const typeFiles = await readTypeFiles(reader, files, sources, new Set(requested), problems);
   return { commit, paths: files.map((f) => f.path), text: (path) => reader.texts.get(path), typeFiles, problems };
 }
@@ -141,6 +146,7 @@ async function readTypeFiles(
   }
   if (skipped.size > 0)
     problems.push({
+      code: "files-not-read",
       path: "",
       message: `${skipped.size} type files referenced from HTTP code were not read (at most ${MAX_RELATED_FILES} files within the ${MAX_READ_BYTES} B commit read limit); their DTOs are missing`,
     });
@@ -191,12 +197,17 @@ async function sourceFiles(
     found = await vcs.grepFiles(dir, commit, sources.pattern, sources.globs, MAX_GREP_BYTES);
   } catch (err) {
     // A search error (e.g. a timeout in a huge repo) takes away only the facts from code, not the card from build files.
-    problems.push({ path: "", message: `searching for files with controllers and HTTP clients failed: ${messageOf(err)}` });
+    problems.push({
+      code: "files-not-read",
+      path: "",
+      message: `searching for files with controllers and HTTP clients failed: ${messageOf(err)}`,
+    });
     return [];
   }
   const matched = found.paths.filter((p) => candidates.has(p));
   if (found.truncated || matched.length > MAX_SOURCE_FILES)
     problems.push({
+      code: "files-not-read",
       path: "",
       message: `the repo has more than ${MAX_SOURCE_FILES} files with controllers or HTTP clients; the card reads the first ones`,
     });

@@ -28,8 +28,9 @@ describe("required tools", () => {
     ]);
   });
 
-  test("a bad mise.toml is a card problem", () => {
-    expect(extractTools(snapshotOf({ "mise.toml": "[tools\n" }), []).problems.map((p) => p.path)).toEqual(["mise.toml"]);
+  test("a bad mise.toml is an invalid-file card problem", () => {
+    const { problems } = extractTools(snapshotOf({ "mise.toml": "[tools\n" }), []);
+    expect(problems.map((p) => `${p.code} ${p.path}`)).toEqual(["file-invalid mise.toml"]);
   });
 
   test("a [tools] entry in an unknown form is skipped without losing the rest", () => {

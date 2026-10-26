@@ -171,7 +171,7 @@ describe("Maven extractor", () => {
   test("a damaged pom is a card problem, not an error", () => {
     const out = extractMaven(snapshotOf({ "pom.xml": "<project><artifactId>x</project>" }));
     expect(out.provides).toEqual([]);
-    expect(out.problems).toEqual([{ path: "pom.xml", message: "mismatched tag </project> on line 1" }]);
+    expect(out.problems).toEqual([{ code: "file-invalid", path: "pom.xml", message: "mismatched tag </project> on line 1" }]);
   });
 
   test("parents looped through relativePath do not hang the extractor", () => {

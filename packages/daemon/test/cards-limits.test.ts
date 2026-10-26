@@ -95,7 +95,9 @@ describe("repo card with malicious and large files", () => {
     };
     const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), (path) => path.endsWith("pom.xml"), CARD_SOURCES);
     expect(snapshot.text("pom.xml")).toBe("<project/>");
-    expect(snapshot.problems).toEqual([{ path: "api/pom.xml", message: "the file was not read within the 67108864 B commit read limit" }]);
+    expect(snapshot.problems).toEqual([
+      { code: "files-not-read", path: "api/pom.xml", message: "the file was not read within the 67108864 B commit read limit" },
+    ]);
   });
 
   test("a Java file with thousands of nested brackets, unclosed strings and annotations does not block the daemon", () => {
@@ -134,6 +136,7 @@ describe("repo card with malicious and large files", () => {
     const exactly500 = Array.from({ length: 500 }, (_, i) => `url${i}: http://h${i}`).join("\n");
     expect(extractCard(snapshotOf({ "src/main/resources/application.yml": `${exactly500}\nplain: v\n` }), parsers).problems).toEqual([]);
     expect(card.problems).toContainEqual({
+      code: "truncated",
       path: "",
       message: "the module has more than 500 addresses in its config; the card shows the first ones",
     });
@@ -174,7 +177,7 @@ describe("repo card with malicious and large files", () => {
     const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), (path) => path.endsWith("pom.xml"), CARD_SOURCES);
     expect(snapshot.text("pom.xml")).toBe("<project/>");
     expect(snapshot.problems).toEqual([
-      { path: "", message: "searching for files with controllers and HTTP clients failed: git grep: timed out" },
+      { code: "files-not-read", path: "", message: "searching for files with controllers and HTTP clients failed: git grep: timed out" },
     ]);
   });
 

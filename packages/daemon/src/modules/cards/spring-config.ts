@@ -120,6 +120,7 @@ export function readSpringConfigs(snapshot: RepoSnapshot, out: ProblemSink): Map
       const config = new ModuleConfig(module, docs);
       if (config.skippedProfiles > 0)
         out.problems.push({
+          code: "truncated",
           path: module,
           message: `profiles skipped over the limit of ${MAX_PROFILES} in this module: ${config.skippedProfiles} (the last ones by name)`,
         });
@@ -157,7 +158,7 @@ function readConfigFile(path: string, text: string, out: ProblemSink): ConfigDoc
       return profiles === undefined ? [] : [{ profiles, entries }];
     });
   } catch (err) {
-    out.problems.push({ path, message: messageOf(err) });
+    out.problems.push({ code: "file-invalid", path, message: messageOf(err) });
     return [];
   }
 }
