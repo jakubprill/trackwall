@@ -387,22 +387,24 @@ describe("a prompt the daemon types into a session (a review, ADR-62, or a messa
     expect(written).toEqual(["read the review", "\r", "read the review"]);
   });
 
-  test("asks again after 20 s without an input box on the screen, and goes in once the empty box is back", async () => {
+  test("a prompt that shows up in the input box only after a busy screen still gets its Enter", async () => {
     const { session, hooksFile } = runningSession();
     const written: string[] = [];
     session.connect({ write: (data) => written.push(data), resize: () => {} });
     await endTurnAtBox(session, hooksFile);
     session.askToRead();
+    await new Promise((r) => setTimeout(r, 200));
     await showScreen(session, "────\r\n❯ \r\n────\r\n ◉ Working · read the review\r\n");
-    later(21_000, () => session.tick());
-    expect(written).toEqual(["read the review"]);
+    later(30_000, () => session.tick());
+    expect(written).toEqual(["read the review", "\r"]);
 
-    await showScreen(session, PROMPT_BOX);
+    await showScreen(session, "────\r\n❯ read the review\r\n────\r\n Interactive · / commands\r\n");
+    later(31_000, () => session.tick());
 
-    expect(written).toEqual(["read the review", "read the review"]);
+    expect(written).toEqual(["read the review", "\r", "\r"]);
   });
 
-  test("waits while Copilot CLI shows no input box, whatever the time", async () => {
+  test("waits while Copilot CLI shows no input box", async () => {
     const { session, hooksFile } = runningSession();
     const written: string[] = [];
     session.connect({ write: (data) => written.push(data), resize: () => {} });

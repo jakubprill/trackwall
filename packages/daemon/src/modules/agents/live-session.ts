@@ -34,12 +34,6 @@ const SUBMIT_DELAY_MS = 100;
 const DELIVERY_RETRIES = 2;
 
 /**
- * How long a typed prompt not taken counts as on its way while the screen shows no input box (Copilot CLI busy with
- * something no hook reported): then it is asked for again and goes in once the empty box is back.
- */
-const NO_BOX_WAIT_MS = 4 * RETYPE_AFTER_MS;
-
-/**
  * How long the input box must stay empty after the user's last text before their draft counts as gone (ADR-68): text
  * they cleared with Ctrl+C or a slash command, or text Copilot CLI took into a running turn, sends no
  * `userPromptSubmitted`. Long enough for a key the user just pressed to reach the screen.
@@ -451,20 +445,17 @@ export class LiveSession {
    * A typed prompt the session has not taken after `RETYPE_AFTER_MS` (ADR-68): still in the input box, it gets Enter
    * again; gone from an empty box, it was lost and is typed again, read anew. After `DELIVERY_RETRIES` tries the daemon
    * gives up until the next `askToRead`; text in the box that is not the prompt (or a prompt given up on in it) is
-   * left alone, and the prompt goes in once the box is empty. While the screen shows no box (Copilot CLI busy) it waits,
-   * at most `NO_BOX_WAIT_MS`. The user's own text is never submitted.
+   * left alone, and the prompt goes in once the box is empty. While the screen shows no box (Copilot CLI busy, or still
+   * holding keys it has not drawn) it waits, so a prompt that shows up in the box later still gets its Enter. The user's
+   * own text is never submitted.
    */
   #followTypedPrompt(): void {
     const typed = this.#promptTyped;
     const terminal = this.#terminal;
     if (!typed || !terminal || this.#finished || this.#userDraft) return;
-    const waited = Date.now() - typed.at;
-    if (waited <= RETYPE_AFTER_MS) return;
+    if (Date.now() - typed.at <= RETYPE_AFTER_MS) return;
     const box = this.#box();
-    if (box === undefined) {
-      if (waited > NO_BOX_WAIT_MS) this.#askAgain();
-      return;
-    }
+    if (box === undefined) return;
     const text = this.#promptText();
     if (text === undefined) this.#promptTyped = undefined;
     else if (box !== "" && (typed.retries >= DELIVERY_RETRIES || !holdsPrompt(box, typed.text))) this.#askAgain();
