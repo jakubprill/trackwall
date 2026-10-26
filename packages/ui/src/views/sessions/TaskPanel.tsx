@@ -12,11 +12,13 @@ import { relativeTime } from "@/lib/format";
 import { proposerLabel, taskName } from "@/lib/session-entries";
 import { isLive, sessionStateLabel } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
+import { useTaskMergeRequest } from "@/lib/use-task-merge-request";
 import { useTaskReview } from "@/lib/use-task-review";
 import { useTaskVerification } from "@/lib/use-task-verification";
 import { SharedFiles } from "./SharedFiles.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
 import { TaskIncludedFiles } from "./TaskIncludedFiles.tsx";
+import { TaskMergeRequest } from "./TaskMergeRequest.tsx";
 import { TaskMessages } from "./TaskMessages.tsx";
 import { TaskMiseConfig } from "./TaskMiseConfig.tsx";
 import { TaskMiseRuns } from "./TaskMiseRuns.tsx";
@@ -33,8 +35,9 @@ type TaskTab = "terminal" | "changes";
  * sit above the summary, and the mise tasks the agent runs in the worktree below it. The header shows the task port, and
  * the files copied from the repo root into the worktree come first (ADR-61). The review comments written in the
  * "Changes" tab live here, so that switching tabs keeps them (ADR-62). The Verify button in the header runs the
- * task's tests, and the verdict sits below the summary (ADR-64). The messages the task's proposer sent its session sit
- * above the summary (ADR-68).
+ * task's tests, and the verdict sits below the summary (ADR-64), followed by the task's way to a merge request: its push,
+ * the repo host's form and the merge request with its pipeline (ADR-77). The messages the task's proposer sent its
+ * session sit above the summary (ADR-68).
  */
 export function TaskPanel({
   conn,
@@ -69,6 +72,7 @@ export function TaskPanel({
   const review = useTaskReview(conn, task.id);
   const confirmingRemoval = removing && !liveSession;
   const verification = useTaskVerification(conn, task.id, confirmingRemoval);
+  const mergeRequest = useTaskMergeRequest(conn, task.id, confirmingRemoval);
   const resume = useAction(
     () => post(conn, agentsApi.resumeTask, { task: task.id }),
     () => {
@@ -147,6 +151,7 @@ export function TaskPanel({
         <TaskMessages messages={messages} sessions={sessions} />
         {task.summary && <TaskSummary summary={task.summary} />}
         <TaskVerification conn={conn} state={verification} />
+        <TaskMergeRequest conn={conn} task={task} verification={verification.verification} state={mergeRequest} />
         <TaskMiseRuns
           conn={conn}
           task={task.id}

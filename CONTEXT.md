@@ -307,7 +307,15 @@ _Avoid_: code review (that is the pre-PR review in `AGENTS.md`), feedback
 
 **Review comment** (`ReviewComment`, `ReviewSide`, MCP tool `get_review_comments`):
 What the user writes on one line of a task's changes for its agent: the file, the side (`new` for an added or unchanged line, `old` for a removed one), the line number, the line's code and the text. Queued in daemon memory until the task's session reads it with `get_review_comments`, which marks it read (ADR-62).
-_Avoid_: note, remark, comment on a pull request (Trackwall opens none)
+_Avoid_: note, remark, comment on a merge request (that lives on the repo host)
+
+**Merge request** (`MergeRequest`, module `merge-requests`, `mergeRequestsApi`; the "Merge request" section of the task panel):
+The request on the repo host to merge a task branch into the task's base branch, on GitHub called a pull request. Trackwall pushes the task branch at the user's request and opens the repo host's form for it with a title and description from the task; the user creates it there, and the task panel follows it, found by the task branch as its source branch (ADR-77).
+_Avoid_: pull request (except for GitHub's own pages), PR, MR in product texts
+
+**Pipeline** (`Pipeline`, `PipelineState`):
+What ran on a merge request's last commit, as one state: GitLab's pipeline, or GitHub's check runs and commit statuses summed up worst first (ADR-77).
+_Avoid_: CI, build (a build is a mise task), checks
 
 **Proposer** (`Task.proposedBy`, `proposerOf` in `proposer.ts`):
 The session that proposed a task: a main session, or for the supervisor's work whichever supervisor runs now. Only the proposer sends the task's session task messages (a session in Trackwall; an agent outside Trackwall sends none), and only it gets the task's task updates (ADR-68).

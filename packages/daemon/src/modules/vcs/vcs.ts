@@ -1,6 +1,16 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import type { Commit, FileContent, RepoStatusOk, SyncResult, TreeEntry, WorkingTreeChanges } from "@trackwall/protocol";
+import type {
+  Commit,
+  FileContent,
+  HostedProject,
+  RepoHost,
+  RepoStatusOk,
+  SyncResult,
+  TreeEntry,
+  WorkingTreeChanges,
+} from "@trackwall/protocol";
+import { branchOnRemote, pushBranch } from "./branch-push.ts";
 import {
   type BranchTip,
   type CommitRange,
@@ -14,6 +24,7 @@ import { git } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { type GitState, GitStateReader } from "./git-state.ts";
 import { grep, grepFiles } from "./grep.ts";
+import { hostedProject } from "./hosted-project.ts";
 import { KeyedQueue } from "./keyed-queue.ts";
 import { type GitObject, isBinary, LOG_FORMAT, parseBlobs, parseLog, parseObjects, parseStatus, parseTree } from "./parse.ts";
 import { pathKey } from "./path-key.ts";
@@ -28,8 +39,9 @@ import { copyIncludedFiles } from "./worktree-include.ts";
  * It reads repo contents from the objects of the HEAD commit (ADR-14), so a path cannot point to a file outside the repo,
  * and browsing does not depend on what lies in the working directory; only the repo state and its changes read the
  * working directory (`changes`, ADR-34). Only two things change anything: `sync` (ADR-21), i.e. fetch, a fast-forward
- * of the default branch and an update of the working directory when that branch is checked out, and agent task worktrees
- * (ADR-31): a new branch with a worktree, its removal and the removal of the branch.
+ * of the default branch and an update of the working directory when that branch is checked out, agent task worktrees
+ * (ADR-31): a new branch with a worktree, its removal and the removal of the branch, and the push of a task branch at the
+ * user's request (ADR-77).
  */
 export class Vcs {
   /**
@@ -72,11 +84,31 @@ export class Vcs {
   }
 
   /**
+   * The main remote as a project on GitHub or on one of `hosts` from the settings (ADR-77); `null` without a main remote
+   * or on another host.
+   */
+  async hostedProject(dir: string, hosts: readonly RepoHost[]): Promise<HostedProject | null> {
+    const address = await this.remote(dir);
+    return address === null ? null : hostedProject(address, hosts);
+  }
+
+  /**
    * Fetch and fast-forward of the default branch (ADR-21); a skip reason is a result, and a git error an exception. Repos
    * with the same `.git` directory sync one after another.
    */
   async sync(dir: string): Promise<SyncResult> {
     return this.syncing.run(await this.commonDir(dir), () => syncRepo(dir));
+  }
+
+  /** A task branch against the main remote's branch of the same name, from refs only (ADR-77); `null` without a main remote. */
+  readonly branchOnRemote = branchOnRemote;
+
+  /**
+   * Pushes a task branch to the main remote (ADR-77), in the same queue as sync: a fetch and a push in one `.git` both
+   * write the remote-tracking refs.
+   */
+  async pushBranch(dir: string, branch: string): Promise<void> {
+    return this.syncing.run(await this.commonDir(dir), () => pushBranch(dir, branch));
   }
 
   // `git grep` over a commit's objects (`grep.ts`): source files for cards (ADR-30) and code search (ADR-40).

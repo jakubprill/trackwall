@@ -49,6 +49,8 @@ type GitOptions = Pick<RunOptions, "maxBytes" | "stdin" | "okExitCodes"> & {
   network?: GitNetwork;
   /** An index instead of the repo index (`GIT_INDEX_FILE`): task changes counted without touching the index the agent uses. */
   indexFile?: string;
+  /** `-c key=value` for this command only, over the repo's own configuration (a push without the repo's hooks, ADR-77). */
+  config?: readonly string[];
 };
 
 /** `core.sshCommand` from the repo and user configuration for a command that connects to a server. */
@@ -57,7 +59,8 @@ export type GitNetwork = { sshCommand: string | undefined };
 export async function git(repoDir: string, args: readonly string[], opts: GitOptions = {}): Promise<RunOutput> {
   const ceiling = await ceilingFor(repoDir);
   const { maxBytes, stdin, okExitCodes } = opts;
-  return runProgram("git", [...NO_REPO_COMMANDS, ...PLATFORM_CONFIG, "-C", repoDir, ...args], {
+  const config = (opts.config ?? []).flatMap((entry) => ["-c", entry]);
+  return runProgram("git", [...NO_REPO_COMMANDS, ...PLATFORM_CONFIG, ...config, "-C", repoDir, ...args], {
     maxBytes,
     stdin,
     okExitCodes,
