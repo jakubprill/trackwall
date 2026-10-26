@@ -17,7 +17,7 @@ import { makeRepo } from "./git-repo.ts";
 const fakeCopilot = join(import.meta.dir, "..", "fixtures", "fake-copilot-session.ts");
 
 /** Projects-folder repos and the `mise` program for a test that needs something other than the single repo `shop`. */
-interface SessionApiOptions {
+export interface SessionApiOptions {
   /** Repo name and its files in the first commit. */
   repos: Record<string, Record<string, string>>;
   miseCommand: readonly string[];
@@ -25,6 +25,8 @@ interface SessionApiOptions {
   log?: (msg: string) => void;
   /** Copilot CLI and the environment of its sessions, made for the test's directories; the fake by default. */
   copilot?: CopilotUnderTest;
+  /** The built UI the API serves, for a test in a browser (`e2e/`); none by default. */
+  uiDir?: string;
 }
 
 interface CopilotUnderTest {
@@ -62,6 +64,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
   const api = await startApi({
     token,
     version: "1",
+    uiDir: options.uiDir,
     info: () => {
       throw new Error("unused");
     },

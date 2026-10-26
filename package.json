@@ -16,7 +16,8 @@
     "format": "biome check --write .",
     "test": "pnpm -r test",
     "test:contract": "pnpm --filter @trackwall/daemon test:contract",
-    "test:jvm": "pnpm --filter @trackwall/daemon test:jvm"
+    "test:jvm": "pnpm --filter @trackwall/daemon test:jvm",
+    "test:e2e": "pnpm --filter @trackwall/ui build && pnpm --filter @trackwall/daemon test:e2e"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.2",

@@ -5,20 +5,10 @@
  *
  *   pnpm test:contract
  */
-import { spawnSync } from "node:child_process";
-import { readdirSync } from "node:fs";
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { copilotCli, copilotCliVersion } from "./copilot-cli.ts";
-
-const CONTRACT_DIR = fileURLToPath(new URL("../contract", import.meta.url));
+import { runTestFiles } from "./run-test-files.ts";
 
 const binary = await copilotCli();
 process.stdout.write(`Copilot CLI ${copilotCliVersion()}: ${binary}\n`);
-// `bun test` takes a path as a file to run only when it starts with ./ or /; the files are not named *.test.ts on purpose.
-const files = readdirSync(CONTRACT_DIR)
-  .filter((name) => name.endsWith(".contract.ts"))
-  .map((name) => join(CONTRACT_DIR, name));
-if (files.length === 0) throw new Error(`no *.contract.ts in ${CONTRACT_DIR}`);
-const run = spawnSync(process.execPath, ["test", ...files, ...process.argv.slice(2)], { stdio: "inherit" });
-process.exit(run.status ?? 1);
+process.exit(runTestFiles(fileURLToPath(new URL("../contract", import.meta.url)), ".contract.ts", process.argv.slice(2)));
