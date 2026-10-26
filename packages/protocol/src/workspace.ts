@@ -156,6 +156,8 @@ export const WorkspaceSettings = z.object({
   projectsDir: ProjectsDir,
   /** `worktreesDir` from `workspace.yaml` (ADR-84): where new task worktrees go; `null` for the default. */
   worktreesDir: z.string().nullable(),
+  /** Why `worktreesDir` in `workspace.yaml` cannot be read (`worktreesDir` is then `null`); saving a folder or the default fixes it. */
+  worktreesDirProblem: z.string().nullable(),
   /** The default task worktrees folder, `.trackwall-worktrees` in the projects folder; `null` while that is not set. */
   defaultWorktreesDir: z.string().nullable(),
   /** The full path of `workspace.yaml`, so that the user knows which file to edit by hand. */

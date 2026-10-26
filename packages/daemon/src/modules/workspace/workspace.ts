@@ -107,9 +107,12 @@ export class Workspace {
 
   settings(): WorkspaceSettings {
     const projectsDir = this.deps.file.projectsDir();
+    // A bad `worktreesDir` typed by hand must not take away the projects folder form, and saving a folder fixes it.
+    const worktreesDir = configOrProblem(() => this.deps.file.worktreesDir(), null);
     return {
       projectsDir,
-      worktreesDir: this.deps.file.worktreesDir(),
+      worktreesDir: worktreesDir.value,
+      worktreesDirProblem: worktreesDir.problem,
       defaultWorktreesDir: projectsDir === null ? null : defaultWorktreesDir(projectsDir),
       configFile: this.configFile(),
     };
@@ -298,9 +301,7 @@ export class Workspace {
   async worktreesDir(): Promise<string> {
     const projectsDir = await this.projectsDir();
     const dir = this.deps.file.worktreesDir() ?? defaultWorktreesDir(projectsDir);
-    await checkWorktreesDir(dir, projectsDir).catch((err: unknown) => {
-      throw new DomainError("bad_request", `${messageOf(err)}; change the task worktrees folder in Settings`);
-    });
+    await checkWorktreesDir(dir, projectsDir);
     return dir;
   }
 

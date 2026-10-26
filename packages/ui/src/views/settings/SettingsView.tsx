@@ -69,21 +69,6 @@ export function SettingsView({
           )}
         </div>
       </Surface>
-      {/* A bad `worktreesDir` typed by hand also fails the settings; going back to the default or saving a folder fixes it. */}
-      {settings.errorCode === "invalid_config" && (
-        <Surface label="Task worktrees folder">
-          <div className="p-4">
-            <FolderForm
-              label="Full path to the task worktrees folder"
-              placeholder="Full path, or Use default"
-              configKey="worktreesDir"
-              initialPath=""
-              save={(path) => saveWorktreesDir(path)}
-              reset={() => saveWorktreesDir(null)}
-            />
-          </div>
-        </Surface>
-      )}
       {settings.data && (
         <Surface label="Task worktrees folder">
           <div className="flex flex-col gap-4 p-4">
@@ -100,9 +85,12 @@ export function SettingsView({
               initialPath={settings.data.worktreesDir ?? ""}
               configFile={settings.data.configFile}
               save={(path) => saveWorktreesDir(path)}
-              reset={settings.data.worktreesDir === null ? undefined : () => saveWorktreesDir(null)}
+              reset={settings.data.worktreesDir === null && !settings.data.worktreesDirProblem ? undefined : () => saveWorktreesDir(null)}
             />
-            {settings.data.worktreesDir === null && settings.data.defaultWorktreesDir && (
+            {settings.data.worktreesDirProblem && (
+              <p className="text-destructive text-xs break-words">{settings.data.worktreesDirProblem}</p>
+            )}
+            {settings.data.worktreesDir === null && !settings.data.worktreesDirProblem && settings.data.defaultWorktreesDir && (
               <p className="text-muted-foreground text-xs break-all">
                 Empty: new tasks use <span className="font-mono">{settings.data.defaultWorktreesDir}</span>, which the Repos view does not
                 list.

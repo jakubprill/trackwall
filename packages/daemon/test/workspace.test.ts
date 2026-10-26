@@ -90,7 +90,13 @@ describe("workspace", () => {
     });
 
     expect(await workspace.list()).toEqual({ projectsDir: null, repos: [] });
-    expect(workspace.settings()).toEqual({ projectsDir: null, worktreesDir: null, defaultWorktreesDir: null, configFile: file });
+    expect(workspace.settings()).toEqual({
+      projectsDir: null,
+      worktreesDir: null,
+      worktreesDirProblem: null,
+      defaultWorktreesDir: null,
+      configFile: file,
+    });
     await expect(workspace.overview("api")).rejects.toMatchObject({ code: "not_found" });
     await expect(workspace.projectsDir()).rejects.toMatchObject({ code: "bad_request", message: "set the projects folder first" });
   });
@@ -100,6 +106,7 @@ describe("workspace", () => {
     expect(workspace.settings()).toEqual({
       projectsDir: projects,
       worktreesDir: null,
+      worktreesDirProblem: null,
       defaultWorktreesDir: join(projects, ".trackwall-worktrees"),
       configFile: file,
     });
@@ -294,11 +301,11 @@ describe("the task worktrees folder (ADR-84)", () => {
 
     await expect(workspace.setWorktreesDir(projects)).rejects.toMatchObject({
       code: "bad_request",
-      message: `${projects} is the projects folder; choose a folder outside the repos`,
+      message: `${projects} is the projects folder; choose a task worktrees folder outside the repos in Settings`,
     });
     await expect(workspace.setWorktreesDir(join(web, "tmp"))).rejects.toMatchObject({
       code: "bad_request",
-      message: `${join(web, "tmp")} lies in the repo ${web}; choose a folder outside the repos`,
+      message: `${join(web, "tmp")} lies in the repo ${web}; choose a task worktrees folder outside the repos in Settings`,
     });
     await expect(workspace.setWorktreesDir("relative/path")).rejects.toMatchObject({ code: "bad_request" });
     await expect(workspace.setWorktreesDir(join(projects, "missing"))).rejects.toMatchObject({ code: "bad_request" });
@@ -327,9 +334,7 @@ describe("the task worktrees folder (ADR-84)", () => {
 
     await expect(workspace.worktreesDir()).rejects.toMatchObject({
       code: "bad_request",
-      message: expect.stringContaining(
-        `lies in the repo ${api}; choose a folder outside the repos; change the task worktrees folder in Settings`,
-      ),
+      message: expect.stringContaining(`lies in the repo ${api}; choose a task worktrees folder outside the repos in Settings`),
     });
   });
 
@@ -354,9 +359,9 @@ describe("the task worktrees folder (ADR-84)", () => {
       code: "invalid_config",
       message: expect.stringContaining("worktreesDir"),
     });
-    // Settings fail with it, and going back to the default from the Settings view fixes the file.
-    expect(() => workspace.settings()).toThrow(expect.objectContaining({ code: "invalid_config" }));
-    expect(await workspace.setWorktreesDir(null)).toMatchObject({ worktreesDir: null });
+    // Settings show it next to the default instead of failing, and going back to the default fixes the file.
+    expect(workspace.settings()).toMatchObject({ worktreesDir: null, worktreesDirProblem: expect.stringContaining("worktreesDir") });
+    expect(await workspace.setWorktreesDir(null)).toMatchObject({ worktreesDir: null, worktreesDirProblem: null });
   });
 });
 

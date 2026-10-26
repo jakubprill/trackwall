@@ -23,14 +23,19 @@ export function defaultWorktreesDir(projectsDir: string): string {
 export async function checkWorktreesDir(dir: string, projectsDir: string | null): Promise<void> {
   if (projectsDir === null) return;
   const inside = relative(projectsDir, dir);
-  if (inside === "") throw new DomainError("bad_request", `${dir} is the projects folder; choose a folder outside the repos`);
+  if (inside === "")
+    throw new DomainError("bad_request", `${dir} is the projects folder; choose a task worktrees folder outside the repos in Settings`);
   // A folder holding the projects folder would put the worktrees of a repo named like the projects folder right in it.
   if (isInside(relative(dir, projectsDir)))
-    throw new DomainError("bad_request", `${dir} holds the projects folder ${projectsDir}; choose a folder outside it`);
+    throw new DomainError(
+      "bad_request",
+      `${dir} holds the projects folder ${projectsDir}; choose a task worktrees folder outside it in Settings`,
+    );
   if (!isInside(inside)) return;
   const [child = ""] = inside.split(sep);
   const repo = join(projectsDir, child);
-  if (await hasGit(repo)) throw new DomainError("bad_request", `${dir} lies in the repo ${repo}; choose a folder outside the repos`);
+  if (await hasGit(repo))
+    throw new DomainError("bad_request", `${dir} lies in the repo ${repo}; choose a task worktrees folder outside the repos in Settings`);
 }
 
 /** Whether a `relative` result goes down, not up or to another drive; a name such as `..notes` is still inside. */
