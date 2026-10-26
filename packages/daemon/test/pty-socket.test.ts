@@ -63,7 +63,7 @@ describe.skipIf(process.versions.bun === undefined)("session terminal over WebSo
 
     client.ws.send(JSON.stringify({ type: "resize", cols: 100, rows: 40 }));
     client.ws.send(JSON.stringify({ type: "input", data: "fix the build\r" }));
-    await until(() => client.text().includes("Allow bash?"), "approval request on the screen");
+    await until(() => client.text().includes("Do you want to run this command?"), "approval request on the screen");
     await until(async () => {
       const list = await daemon.post(agentsApi.sessions, {});
       return list.sessions.find((s) => s.id === session.id)?.state?.state === "Approval";

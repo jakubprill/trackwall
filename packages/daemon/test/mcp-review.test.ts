@@ -67,13 +67,13 @@ describe.skipIf(process.versions.bun === undefined)("a review from the Changes t
     // The fake ends a turn after a line and an approval.
     window.attachment.input("start\r");
     await waitFor(daemon.facade.agents, session, (s) => s.state?.state === "Approval", "the approval request");
-    window.attachment.input("y\r");
+    window.attachment.input("1");
     await waitFor(daemon.facade.agents, session, () => window.unwrappedText().includes(TYPED_REVIEW), "the typed review prompt");
 
     const client = await clientOfSession(session);
     expect(await reviewComments(client)).toEqual([README_COMMENT, LOGIN_COMMENT]);
     expect(await reviewComments(client)).toEqual([]);
-    window.attachment.input("y\r");
+    window.attachment.input("1");
     window.attachment.detach();
     await daemon.facade.agents.stop(session);
     await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
@@ -102,10 +102,10 @@ describe.skipIf(process.versions.bun === undefined)("a review from the Changes t
 
     // The session now waits for input after its turn, so the next review goes in at once.
     await waitFor(daemon.facade.agents, resumed, (s) => s.state?.state === "Approval", "the review turn's approval request");
-    window.attachment.input("y\r");
+    window.attachment.input("1");
     await waitFor(daemon.facade.agents, resumed, (s) => s.state?.reason === "hook agentStop", "the end of the turn");
     expect(await daemon.post(agentsApi.sendReview, { task: task.id, comments: [LOGIN_COMMENT] })).toEqual({ delivery: "typed", unread: 1 });
-    window.attachment.input("y\r");
+    window.attachment.input("1");
     window.attachment.detach();
     await daemon.facade.agents.stop(resumed);
     await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });

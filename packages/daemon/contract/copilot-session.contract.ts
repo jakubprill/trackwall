@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
 import { inboxPrompt } from "../src/modules/agents/inbox-prompt.ts";
 import { viewer, waitFor } from "../test/support/agents.ts";
+import { RECORDED_COLS, RECORDED_ROWS } from "../test/support/copilot-recorded.ts";
 import { hookRecords, startRealCopilotDaemon } from "./support/real-copilot.ts";
+import { type Recorder, startRecorder } from "./support/recorder.ts";
 import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
 
 // The contract with the real Copilot CLI (ADR-67): what the daemon relies on, checked on the pinned version with a
@@ -12,12 +14,14 @@ import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./sup
 
 let model: ScriptedModel;
 let daemon: Awaited<ReturnType<typeof startRealCopilotDaemon>>;
+let recorder: Recorder;
 /** The terminal of each session a test started, detached after the test. */
 const windows = new Map<string, ReturnType<typeof viewer>>();
 
 beforeAll(async () => {
   model = await startScriptedModel();
   daemon = await startRealCopilotDaemon(model);
+  recorder = startRecorder(daemon);
 });
 
 // The tests share one daemon and one model: a test must take every reply it queued and leave no refused request.
@@ -28,6 +32,7 @@ afterEach(() => {
 });
 
 afterAll(async () => {
+  recorder.finish();
   await daemon.stop();
   await model.close();
 });
@@ -55,6 +60,8 @@ async function startSession() {
   const started = await agents.start("shop");
   const window = viewer(agents, started.id);
   windows.set(started.id, window);
+  // The size the recording is taken in (`RECORDED_COLS`), so the screen compares with it.
+  window.attachment.resize(RECORDED_COLS, RECORDED_ROWS);
   // Copilot CLI shows "1 MCP server" in its loading line only for a moment, so it is looked for in the whole output;
   // without blanks, because ConPTY on Windows replaces runs of blanks with cursor moves.
   const loaded = () => window.unwrappedText().replace(/\s/g, "").includes("1MCPserver");
@@ -79,6 +86,7 @@ describe("a session of the real Copilot CLI", () => {
     expect(ready.state).toMatchObject({ state: "Input", source: "screen", reason: "screen input box before the first prompt" });
     expect(ready.needsAttention).toBe(true);
     expect(hookRecords(daemon.home, id)).toEqual([]);
+    await recorder.promptBox(window);
 
     model.reply({ text: "The shop repo has only a README." });
     const typedAt = Date.now();
@@ -90,14 +98,12 @@ describe("a session of the real Copilot CLI", () => {
     const records = hookRecords(daemon.home, id);
     expect(records.map((r) => r.event)).toEqual(["sessionStart", "userPromptSubmitted", "agentStop"]);
     expect(records[0]?.receivedAt).toBeGreaterThanOrEqual(typedAt);
-    // The payload fields the detectors read, and the names of the others: a new or renamed field shows up here.
-    expect(records.map((r) => ({ event: r.event, fields: Object.keys(r.payload).sort(), omitted: r.omitted.sort() }))).toEqual([
-      { event: "sessionStart", fields: ["sessionId", "source", "timestamp"], omitted: ["cwd", "initialPrompt"] },
-      { event: "userPromptSubmitted", fields: ["sessionId", "timestamp"], omitted: ["cwd", "prompt"] },
-      { event: "agentStop", fields: ["sessionId", "stopReason", "timestamp"], omitted: ["cwd", "stop_hook_active", "transcriptPath"] },
-    ]);
+    // The payload fields the detectors read, and the names of the others, are in the recording: a new or renamed field
+    // shows up there.
     expect(records[0]?.payload.source).toBe("new");
     expect(records[2]?.payload.stopReason).toBe("end_turn");
+    recorder.turn(records);
+    recorder.titles(window, "what is in this repo?");
   });
 
   test("a shell command asks for approval as a permission_prompt notification, the daemon reads the dialog, and its answer runs it", async () => {
@@ -113,6 +119,7 @@ describe("a session of the real Copilot CLI", () => {
     // checked among the options: for a PowerShell command on Windows the dialog came with "Yes" alone.
     const { dialog } = approval;
     if (dialog?.kind !== "approval") throw new Error(`no approval dialog: ${JSON.stringify(dialog)}`);
+    const dialogBox = await recorder.dialogBox(windowOf(id));
     expect(dialog).toMatchObject({ title: "Create a file", question: "Do you want to run this command?" });
     expect(dialog.detail.join(" ")).toContain("made-by-agent.txt");
     expect(dialog.options[0]).toEqual({ key: "1", label: "Yes" });
@@ -125,6 +132,7 @@ describe("a session of the real Copilot CLI", () => {
     const records = hookRecords(daemon.home, id);
     expect(records.map((r) => r.event)).toEqual(["sessionStart", "userPromptSubmitted", "notification", "postToolUse", "agentStop"]);
     expect(records[2]?.payload).toMatchObject({ notification_type: "permission_prompt" });
+    recorder.approval(records, dialogBox);
   });
 
   test("a deny rule from toolPermissions reaches Copilot CLI as --deny-tool, which refuses the command without asking", async () => {
@@ -178,6 +186,8 @@ describe("a session of the real Copilot CLI", () => {
     window.attachment.input("/exit\r");
     const done = await waitFor(agents, id, (s) => s.run.kind === "exited", "end of session", SESSION_MS);
     expect(done.state).toMatchObject({ state: "Done", source: "hook", reason: "hook sessionEnd user_exit" });
+    const records = hookRecords(daemon.home, id);
+    recorder.exit(records.slice(records.findIndex((r) => r.event === "agentStop") + 1));
   });
 });
 

@@ -45,10 +45,10 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     window.attachment.input("fix the test\r");
     const approval = await waitFor(agents, started.id, (s) => s.state?.state === "Approval", "approval request");
     expect(approval.state).toMatchObject({ source: "hook", reason: "hook notification permission_prompt" });
-    expect(approval.windowTitle).toBe("Working on: fix the test");
-    expect(window.text()).toContain("Allow bash?");
+    expect(approval.windowTitle).toBe("fix the test - GitHub Copilot");
+    expect(window.text()).toContain("Do you want to run this command?");
 
-    window.attachment.input("y\r");
+    window.attachment.input("1");
     await waitFor(agents, started.id, (s) => s.state?.reason === "hook agentStop", "end of turn");
 
     window.attachment.input("/exit\r");
@@ -89,7 +89,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     first.attachment.detach();
 
     const late = viewer(agents, started.id);
-    await waitFor(agents, started.id, () => late.text().includes("Allow bash?"), "screen image for the new terminal");
+    await waitFor(agents, started.id, () => late.text().includes("Do you want to run this command?"), "screen image for the new terminal");
     expect(late.text()).toContain("Welcome to the fake");
     late.attachment.detach();
     await agents.stop(started.id);
