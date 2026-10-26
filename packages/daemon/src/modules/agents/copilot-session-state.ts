@@ -33,6 +33,12 @@ export const RETYPE_AFTER_MS = 5000;
 const CANCEL_AFTER_ANSWER_MS = 10_000;
 
 /**
+ * While other approval requests still wait after an answer (ADR-66), the message counts only this soon after the key,
+ * which it follows at once: later the same text may be output of the approved tool, and it would end waiting for the rest.
+ */
+const CANCEL_WHILE_WAITING_MS = 2000;
+
+/**
  * The state of one Copilot CLI session (§4.4): PTY output, hook records and a human's keys go in, state changes come
  * out. The same object computes the state live and when replaying a recording, so a test on a recording checks what
  * runs in the session. The screen image (`screen`) comes only live: a recording has none, so its replay of a new session
@@ -76,6 +82,11 @@ export class CopilotSessionState {
    * then shows their dialogs one at a time (ADR-66), so answering one leaves the session waiting while others remain.
    */
   #approvalsAsked = 0;
+  /**
+   * One of the approval requests of the current wait was answered, so the rest still wait although the screen may not
+   * show the next dialog yet when the answered tool's `postToolUse` comes.
+   */
+  #answeredInWait = false;
 
   constructor(o: CopilotSessionStateOptions) {
     this.#tracker = new TaskStateTracker(o);
@@ -101,27 +112,28 @@ export class CopilotSessionState {
       if (signal) changes.push(this.#tracker.signal(signal));
     }
     const cancelled = this.#screen.feed(data);
-    if (cancelled && this.#now() - this.#lastAnswerAt <= CANCEL_AFTER_ANSWER_MS) {
-      // After an answer to one of several approval requests the session is still in `Approval` (ADR-66), which a weaker
-      // source could not end; the message says the user's key ended the turn.
-      const waiting = this.#tracker.current?.state === "Approval";
-      changes.push(waiting ? this.#tracker.causedByKey(cancelled) : this.#tracker.signal(cancelled));
-    }
+    // After an answer to one of several approval requests the session is still in `Approval` (ADR-66), which a weaker
+    // source could not end; the message right after the key says the key ended the turn.
+    const waiting = this.#tracker.current?.state === "Approval";
+    const sinceAnswer = this.#now() - this.#lastAnswerAt;
+    if (cancelled && waiting && sinceAnswer <= CANCEL_WHILE_WAITING_MS) changes.push(this.#tracker.causedByKey(cancelled));
+    else if (cancelled && !waiting && sinceAnswer <= CANCEL_AFTER_ANSWER_MS) changes.push(this.#tracker.signal(cancelled));
     return changes.filter((c) => c !== undefined);
   }
 
   /**
    * `approvalOnScreen` tells whether the screen shows an approval dialog the user has not answered: the `postToolUse`
-   * of a tool that needed no approval, or of one of several approved, does not end waiting for one still on the screen
-   * (ADR-66). A recording has no screen (`NO_SCREEN`).
+   * of a tool that needed no approval does not end waiting for one still on the screen, nor does that of one of several
+   * approved, whose next dialog may not be drawn yet (ADR-66). A recording has no screen (`NO_SCREEN`).
    */
   hook(record: CopilotHookRecord, approvalOnScreen: () => boolean): TaskStateChange[] {
     const waiting = this.#tracker.current?.state === "Approval";
-    const keepsWaiting = record.event === "postToolUse" && waiting && approvalOnScreen();
+    const keepsWaiting = record.event === "postToolUse" && waiting && (this.#answeredInWait || approvalOnScreen());
     // The first `sessionStart`: no hook has changed the state yet.
     const withPrompt = record.event === "sessionStart" && this.#inPromptBox === undefined && this.#promptOnItsWay();
     const signal = keepsWaiting ? undefined : withPrompt ? SESSION_START_WITH_PROMPT : stateFromHook(record);
     if (signal) this.#inPromptBox = !withPrompt && (record.event === "sessionStart" || record.event === "agentStop");
+    if (signal?.state === "Approval" && !waiting) this.#answeredInWait = false;
     if (signal?.state === "Approval") this.#approvalsAsked = waiting ? this.#approvalsAsked + 1 : 1;
     return this.#signal(signal);
   }
@@ -173,6 +185,7 @@ export class CopilotSessionState {
     // An answer to one of several approval requests: the next one's dialog follows, so the session still waits (ADR-66).
     if (current === "Approval" && answersDialog(key) && this.#approvalsAsked > 1) {
       this.#approvalsAsked--;
+      this.#answeredInWait = true;
       return [stale].filter((c) => c !== undefined);
     }
     return [stale, this.#tracker.keyboard(signal)].filter((c) => c !== undefined);

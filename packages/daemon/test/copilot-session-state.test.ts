@@ -39,6 +39,16 @@ describe("approvals of tools the agent called at once (ADR-66)", () => {
     expect(states(session.hook(postToolUse, noDialog))).toEqual(["Working hook postToolUse"]);
   });
 
+  test("the postToolUse of the first approved of two keeps waiting, although the screen does not show the second dialog yet", () => {
+    const session = sessionInTurn();
+    session.hook(approvalRequest, noDialog);
+    session.hook(approvalRequest, noDialog);
+    session.key("choice");
+
+    expect(session.hook(postToolUse, noDialog)).toEqual([]);
+    expect(states(session.key("choice"))).toEqual(["Working key choice"]);
+  });
+
   test("Esc at the first of two approval requests ends the turn, and a later request needs only one answer", () => {
     const session = sessionInTurn();
     session.hook(approvalRequest, noDialog);
