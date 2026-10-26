@@ -78,7 +78,7 @@ function modules() {
     miseCommand: ["mise"],
     copilotCommand: ["copilot"],
     version: "0.0.0-test",
-    hookCommand: () => ({ exec: "true", args: [] }),
+    sessionHook: () => ({ url: "http://127.0.0.1:9/hooks/unused", headers: {} }),
     sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
     hostingClis: HOSTING_CLIS,
     userEnv: async () => process.env,

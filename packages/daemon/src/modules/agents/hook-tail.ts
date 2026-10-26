@@ -1,13 +1,19 @@
-import { closeSync, fstatSync, openSync, readSync } from "node:fs";
+import { appendFileSync, closeSync, fstatSync, openSync, readSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
-import { CopilotHookRecord } from "./copilot-hook-record.ts";
+import { type CopilotHookEvent, CopilotHookRecord, hookRecord } from "./copilot-hook-record.ts";
 import { jsonOf } from "./json.ts";
 
 /**
- * Reads the lines that hook processes append to the session's `hooks.jsonl` (ADR-17), from where it stopped last time.
- * A hook is a separate process Copilot CLI runs, so the file is the only channel to the daemon that does not require
- * giving the hook a token.
+ * The session's `hooks.jsonl` (ADR-17): `appendHookRecord` writes a hook's record, `HookTail` reads the lines from where
+ * it stopped last time. The daemon writes the hooks Copilot CLI POSTs to it (ADR-88), the recording script those of its
+ * own hook program; the file is also the session's log of hooks.
  */
+
+/** Appends the hook record of a hook payload; a payload that is not a JSON object leaves no record. */
+export function appendHookRecord(file: string, event: CopilotHookEvent, payload: string): void {
+  const r = hookRecord(event, payload, Date.now());
+  if (r) appendFileSync(file, `${JSON.stringify(r)}\n`);
+}
 
 const HookLine = jsonOf(CopilotHookRecord);
 

@@ -3,13 +3,13 @@ import { arch, platform } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { EventHub } from "./api/event-hub.ts";
+import { sessionHookRequest } from "./api/hooks.ts";
 import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
-import { createFacade, type Facade, HOSTING_CLIS, runCopilotHook } from "./facade.ts";
-import { COPILOT_HOOK_COMMAND, type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./infra/args.ts";
+import { createFacade, type Facade, HOSTING_CLIS } from "./facade.ts";
+import { type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./infra/args.ts";
 import { newToken, probeRunningDaemon, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
 import { trackwallHome } from "./infra/home.ts";
-import { selfCommand } from "./infra/self-command.ts";
 import { SHUTDOWN_SIGNALS, shutdownOnce, stopDaemon } from "./infra/shutdown.ts";
 import { openBrowser, openFolder } from "./infra/system-open.ts";
 import { userEnv } from "./infra/user-env.ts";
@@ -33,6 +33,11 @@ async function main(args: DaemonArgs): Promise<void> {
   let api: ApiServer | undefined;
   let facade: Facade | undefined;
   let stopWatching = () => {};
+  // Sessions start only through the API, so their hooks always have its port.
+  const apiPort = () => {
+    if (!api) throw new Error("a session started before the API listens");
+    return api.port;
+  };
   const shutdown = shutdownOnce(async (reason) => {
     log(`stopping (${reason})`);
     stopWatching();
@@ -50,7 +55,7 @@ async function main(args: DaemonArgs): Promise<void> {
       miseCommand: ["mise"],
       copilotCommand: ["copilot"],
       version: VERSION,
-      hookCommand: (event, hooksFile) => selfCommand([COPILOT_HOOK_COMMAND, event, hooksFile]),
+      sessionHook: (event, sessionToken) => sessionHookRequest(apiPort(), token, event, sessionToken),
       sessionMcpCommand: (tokenFile) => sessionMcpStdioCommand(home, tokenFile),
       hostingClis: HOSTING_CLIS,
       userEnv,
@@ -146,8 +151,6 @@ try {
 }
 if (commandLine.command === MCP_STDIO_COMMAND) {
   runMcpStdio(trackwallHome(commandLine.home), commandLine.sessionTokenFile);
-} else if (commandLine.command === COPILOT_HOOK_COMMAND) {
-  runHook(commandLine.event, commandLine.hooksFile);
 } else if (commandLine.args.help) {
   process.stdout.write(USAGE);
 } else if (commandLine.args.version) {
@@ -169,12 +172,4 @@ function runMcpStdio(home: string, sessionTokenFile: string | undefined): void {
     log(String(err));
     process.exitCode = 1;
   });
-}
-
-/** The session plugin's hook: payload on stdin, a record to `hooks.jsonl`; nothing on stdout and always exit code 0 (ADR-17). */
-function runHook(event: string | undefined, hooksFile: string | undefined): void {
-  const chunks: Buffer[] = [];
-  process.stdin.on("data", (chunk: Buffer) => chunks.push(chunk));
-  process.stdin.on("error", () => {});
-  process.stdin.on("end", () => runCopilotHook(event, hooksFile, Buffer.concat(chunks).toString("utf8")));
 }

@@ -21,7 +21,7 @@ async function setup(projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"
     miseCommand: ["mise"],
     copilotCommand: ["copilot"],
     version: "0.0.0-test",
-    hookCommand: () => ({ exec: "true", args: [] }),
+    sessionHook: () => ({ url: "http://127.0.0.1:9/hooks/unused", headers: {} }),
     sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
     hostingClis: HOSTING_CLIS,
     userEnv: async () => process.env,
@@ -38,6 +38,7 @@ async function setup(projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"
   return { projects, store, facade, logged, backUp, storeLog, storeCommits };
 }
 
+/** For a test that starts dozens of real git processes, which on a Windows runner take longer than the default 5 s. */
 const REAL_GIT_TIMEOUT = 120_000;
 const TASKS = '[tasks.build]\nrun = "mvn -q package"\n';
 const FAKE_SSH = join(import.meta.dir, "fixtures", "fake-ssh.ts");
@@ -188,38 +189,42 @@ describe("the local config store", () => {
     await expect(facade.localConfig.restore("orders")).rejects.toThrow("the local config store has nothing this repo lacks");
   });
 
-  test("the store pushes each backup to its remote, and a push the remote refuses is shown with the store, never forced", async () => {
-    const { projects, store, facade, backUp } = await setup();
-    const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
-    writeFileSync(join(orders, "mise.local.toml"), TASKS);
-    await backUp();
-    gitIn(store, "remote", "add", "origin", BACKUPS_REMOTE);
-
-    await withBackupsRemote(async (bare) => {
-      gitIn(projects, "init", "-q", "--bare", bare);
-      writeFileSync(join(orders, "mise.local.toml"), `${TASKS}# second\n`);
+  test(
+    "the store pushes each backup to its remote, and a push the remote refuses is shown with the store, never forced",
+    async () => {
+      const { projects, store, facade, backUp } = await setup();
+      const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
+      writeFileSync(join(orders, "mise.local.toml"), TASKS);
       await backUp();
+      gitIn(store, "remote", "add", "origin", BACKUPS_REMOTE);
 
-      expect(gitIn(bare, "log", "--format=%s", "main").trim().split("\n")).toEqual([
-        "Back up orders: mise.local.toml",
-        "Back up orders: mise.local.toml",
-      ]);
-      const pushed = await facade.localConfig.store();
-      expect(pushed).toMatchObject({ dir: store, remote: "backups.example.com/me/backups", push: { kind: "ok" }, problem: null });
-      expect(pushed.lastBackup?.subject).toBe("Back up orders: mise.local.toml");
+      await withBackupsRemote(async (bare) => {
+        gitIn(projects, "init", "-q", "--bare", bare);
+        writeFileSync(join(orders, "mise.local.toml"), `${TASKS}# second\n`);
+        await backUp();
 
-      // Another computer pushed first: the push is refused, never forced.
-      const other = join(mkdtempSync(join(tmpdir(), "trackwall-other-")), "store");
-      gitIn(projects, "clone", "-q", "-b", "main", bare, other);
-      commitFiles(other, { "web/mise.local.toml": TASKS }, "Back up web: mise.local.toml");
-      gitIn(other, "push", "-q", "origin", "main");
-      writeFileSync(join(orders, "mise.local.toml"), `${TASKS}# third\n`);
-      await backUp();
+        expect(gitIn(bare, "log", "--format=%s", "main").trim().split("\n")).toEqual([
+          "Back up orders: mise.local.toml",
+          "Back up orders: mise.local.toml",
+        ]);
+        const pushed = await facade.localConfig.store();
+        expect(pushed).toMatchObject({ dir: store, remote: "backups.example.com/me/backups", push: { kind: "ok" }, problem: null });
+        expect(pushed.lastBackup?.subject).toBe("Back up orders: mise.local.toml");
 
-      expect(await facade.localConfig.store()).toMatchObject({ push: { kind: "failed" } });
-      expect(gitIn(bare, "log", "-1", "--format=%s", "main").trim()).toBe("Back up web: mise.local.toml");
-    });
-  });
+        // Another computer pushed first: the push is refused, never forced.
+        const other = join(mkdtempSync(join(tmpdir(), "trackwall-other-")), "store");
+        gitIn(projects, "clone", "-q", "-b", "main", bare, other);
+        commitFiles(other, { "web/mise.local.toml": TASKS }, "Back up web: mise.local.toml");
+        gitIn(other, "push", "-q", "origin", "main");
+        writeFileSync(join(orders, "mise.local.toml"), `${TASKS}# third\n`);
+        await backUp();
+
+        expect(await facade.localConfig.store()).toMatchObject({ push: { kind: "failed" } });
+        expect(gitIn(bare, "log", "-1", "--format=%s", "main").trim()).toBe("Back up web: mise.local.toml");
+      });
+    },
+    REAL_GIT_TIMEOUT,
+  );
 
   test("a remote in a local or shared folder is never pushed to, so its hooks never run", async () => {
     const { projects, store, facade, backUp } = await setup();
@@ -375,31 +380,35 @@ describe("the local config store", () => {
     expect((await facade.localConfig.store()).problem).toContain("is not a folder");
   });
 
-  test("a failed push is tried again with a later backup, without a new commit", async () => {
-    const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
-    const { facade } = await setup(projects);
-    const vcs = new Vcs();
-    const localConfig = new LocalConfig({ repos: facade.workspace, vcs, log: () => {}, pushRetryMs: 0 });
-    const backUp = async () => {
-      await localConfig.backUp();
-      await localConfig.settled();
-    };
-    const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
-    writeFileSync(join(orders, "mise.local.toml"), TASKS);
-    await backUp();
-    gitIn(join(projects, ".trackwall-local"), "remote", "add", "origin", BACKUPS_REMOTE);
-    await withBackupsRemote(async (bare) => {
-      writeFileSync(join(orders, "mise.local.toml"), `${TASKS}# second\n`);
+  test(
+    "a failed push is tried again with a later backup, without a new commit",
+    async () => {
+      const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
+      const { facade } = await setup(projects);
+      const vcs = new Vcs();
+      const localConfig = new LocalConfig({ repos: facade.workspace, vcs, log: () => {}, pushRetryMs: 0 });
+      const backUp = async () => {
+        await localConfig.backUp();
+        await localConfig.settled();
+      };
+      const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
+      writeFileSync(join(orders, "mise.local.toml"), TASKS);
       await backUp();
-      expect((await localConfig.store()).push.kind).toBe("failed");
+      gitIn(join(projects, ".trackwall-local"), "remote", "add", "origin", BACKUPS_REMOTE);
+      await withBackupsRemote(async (bare) => {
+        writeFileSync(join(orders, "mise.local.toml"), `${TASKS}# second\n`);
+        await backUp();
+        expect((await localConfig.store()).push.kind).toBe("failed");
 
-      gitIn(projects, "init", "-q", "--bare", bare);
-      await backUp();
+        gitIn(projects, "init", "-q", "--bare", bare);
+        await backUp();
 
-      expect((await localConfig.store()).push.kind).toBe("ok");
-      expect(gitIn(bare, "rev-list", "--count", "main").trim()).toBe("2");
-    });
-  });
+        expect((await localConfig.store()).push.kind).toBe("ok");
+        expect(gitIn(bare, "rev-list", "--count", "main").trim()).toBe("2");
+      });
+    },
+    REAL_GIT_TIMEOUT,
+  );
 
   test("without a projects folder there is no store and nothing to back up", async () => {
     const facade = createFacade({
@@ -409,7 +418,7 @@ describe("the local config store", () => {
       miseCommand: ["mise"],
       copilotCommand: ["copilot"],
       version: "0.0.0-test",
-      hookCommand: () => ({ exec: "true", args: [] }),
+      sessionHook: () => ({ url: "http://127.0.0.1:9/hooks/unused", headers: {} }),
       sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
       hostingClis: HOSTING_CLIS,
       userEnv: async () => process.env,
