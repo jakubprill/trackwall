@@ -26,7 +26,7 @@ describe("the Copilot CLI version of the contract tests (ADR-67)", () => {
     }
   });
 
-  test("the nightly workflow lets through the same versions before it puts one into an issue title", () => {
+  test("is checked alike by the nightly workflow before it goes into an issue title", () => {
     const pattern = readFileSync(NIGHTLY, "utf8").match(/\[\[ "\$version" =~ (\S+) \]\]/)?.[1];
     if (pattern === undefined) throw new Error(`no version check in ${NIGHTLY}`);
     const nightly = new RegExp(pattern);
