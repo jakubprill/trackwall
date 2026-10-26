@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { GetReviewCommentsResult } from "@trackwall/protocol";
 import { commitFiles } from "../test/support/git-repo.ts";
-import { sessionRow, showSessions, typeInTerminal, useTrackwall, waitForTerminal } from "./support/trackwall-ui.ts";
+import { showSessions, typeInTerminal, useTrackwall, waitForTerminal } from "./support/trackwall-ui.ts";
 
 const FAKE_MISE = [process.execPath, join(import.meta.dir, "..", "test", "fixtures", "fake-mise.ts")];
 /** The fake mise's `test` (see `test/fixtures/fake-mise.ts`): one failed test in a JUnit report and exit code 1. */
@@ -51,9 +51,9 @@ describe("an agent task, verified and reviewed", () => {
     // The agent finishes its turn: a line, the approval of its command, and the turn ends.
     await page.getByRole("tab", { name: "Terminal" }).click();
     await typeInTerminal(page, "go on\r");
-    // The answer once the list shows the request, as the user sees it: a key the daemon reads before the request is
-    // text typed into the input box, and the review would wait for the user to send it.
-    await sessionRow(page, "shop").getByText("asking for approval").waitFor();
+    // The answer as soon as the dialog is on the screen, before the list may show the request: the fake draws it
+    // before its hook, as a slow hook does on the real binary.
+    await waitForTerminal(page, "Do you want to run this command?");
     await page.keyboard.type("1");
     await waitForTerminal(page, "Thinking about: The user sent a review of your changes in Trackwall");
 

@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import type { AgentDialog, DialogAnswer, RunState, Session, TaskState, TaskStateChange, TaskUpdate } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 import { readAgentDialog, type ScreenDialog } from "./copilot-dialog.ts";
-import { ESCAPE, sessionKey } from "./copilot-keys.ts";
+import type { CopilotHookEvent } from "./copilot-hook-record.ts";
+import { answersDialog, ESCAPE, type SessionKey, sessionKey } from "./copilot-keys.ts";
 import { CopilotSessionState, RETYPE_AFTER_MS } from "./copilot-session-state.ts";
 import { HookTail } from "./hook-tail.ts";
 import { SessionAttention } from "./session-attention.ts";
@@ -137,6 +138,11 @@ export class LiveSession {
   #waits = 0;
   /** The dialog last read, for the screen revision and wait it was read at: the screen is read once per change. */
   #dialogRead: { revision: number; waits: number; kind: AgentDialog["kind"]; dialog: AgentDialog | null } | undefined;
+  /**
+   * The user answered an approval Copilot CLI drew before its hook reached the daemon (ADR-71): when that hook comes,
+   * the answer it already got moves the session on, as the key would have in `Approval`.
+   */
+  #answeredEarly = false;
 
   constructor(o: LiveSessionOptions) {
     this.id = o.id;
@@ -176,13 +182,15 @@ export class LiveSession {
     this.#readHooks();
     // After the hooks already written, so that an end of a turn read now does not let a prompt join the user's text.
     // The answer to the agent's question (on the screen in `Input`, ADR-66) leaves nothing in the input box either.
-    if (writesText(data, this.#last?.state) && this.#dialog() === null) {
+    const key = sessionKey(data);
+    const answersEarly = key !== undefined && this.#answersApprovalOnScreen(key);
+    if (answersEarly) this.#answeredEarly = true;
+    if (writesText(data, this.#last?.state) && this.#dialog() === null && !answersEarly) {
       this.#userDraft = true;
       this.#userDrove = true;
       this.#onUserText();
     }
     if (data === ESCAPE) this.#userDrove = true;
-    const key = sessionKey(data);
     if (key) this.#report(this.#state.key(key));
     // After the key's own state change, so that the `Input` an Esc causes counts as seen.
     if (typedByUser(data)) this.#attention.typed();
@@ -293,7 +301,12 @@ export class LiveSession {
    */
   #dialog(): AgentDialog | null {
     const kind = this.#last ? DIALOG_IN_STATE.get(this.#last.state) : undefined;
-    if (this.#finished || kind === undefined) return null;
+    return kind === undefined ? null : this.#dialogOnScreen(kind);
+  }
+
+  /** The agent dialog of `kind` the screen shows now, whatever the state; read once per screen image and wait. */
+  #dialogOnScreen(kind: AgentDialog["kind"]): AgentDialog | null {
+    if (this.#finished) return null;
     const revision = this.#screen.revision;
     const read = this.#dialogRead;
     if (read?.revision === revision && read.waits === this.#waits && read.kind === kind) return read.dialog;
@@ -301,6 +314,16 @@ export class LiveSession {
     const dialog = found ? { ...found, id: dialogId(this.#waits, found) } : null;
     this.#dialogRead = { revision, waits: this.#waits, kind, dialog };
     return dialog;
+  }
+
+  /**
+   * A digit or Enter in the middle of a turn while Copilot CLI already shows an approval whose hook has not reached the
+   * daemon yet (ADR-71): the state is still `Working`, but the key answers the approval and leaves nothing in the input
+   * box. Only mid-turn, so a message the user starts with a digit in the input box is still their text.
+   */
+  #answersApprovalOnScreen(key: SessionKey): boolean {
+    const state = this.#last?.state;
+    return answersDialog(key) && (state === "Working" || state === "Stale") && this.#dialogOnScreen("approval") !== null;
   }
 
   dispose(): void {
@@ -316,12 +339,24 @@ export class LiveSession {
     for (const record of this.#hooks.read()) {
       if (record.event === "userPromptSubmitted") this.#userDraft = false;
       this.#report(this.#state.hook(record));
+      this.#applyEarlyAnswer(record.event);
       // The end of a turn from its hook, not from the state: a question dialog and an Esc give `Input` mid-turn too.
       if (record.event === "agentStop") {
         if (!this.#userDrove) this.#onEvent({ kind: "turn_ended" });
         this.#userDrove = false;
       }
     }
+  }
+
+  /**
+   * The approval's hook after the user already answered it (ADR-71) would leave the session in `Approval` until the
+   * command ends, so the answer counts now. Any other hook of the turn means the answer went to no approval of record.
+   */
+  #applyEarlyAnswer(event: CopilotHookEvent): void {
+    if (!this.#answeredEarly) return;
+    if (this.#last?.state === "Approval") this.#report(this.#state.key("choice"));
+    else if (event === "notification") return;
+    this.#answeredEarly = false;
   }
 
   /** Until the session has a state, its screen may show the input box of a new session (ADR-69). */
