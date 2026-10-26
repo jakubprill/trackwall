@@ -532,6 +532,97 @@ describe("a prompt the daemon types into a session (a review, ADR-62, or a messa
   });
 });
 
+describe("what waits for a session, given to its agent through the hooks' output (ADR-85)", () => {
+  /** Appends a hook record, as the daemon does when the hook's POST comes, and returns the session's output for it. */
+  function hook(session: LiveSession, hooksFile: string, event: "agentStop" | "postToolUse", payload: object = {}) {
+    appendFileSync(hooksFile, `${JSON.stringify({ event, receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    return session.hookOutput(event, JSON.stringify(payload));
+  }
+
+  test("the end of a turn is blocked with the prompt, which starts the next turn without typing", async () => {
+    const { session, hooksFile, events } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+    expect(session.askToRead()).toBe("queued");
+
+    expect(hook(session, hooksFile, "agentStop")).toEqual({ decision: "block", reason: "read the review" });
+    await showScreen(session, PROMPT_BOX);
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+
+    expect(written).toEqual([]);
+    expect(events).toEqual([{ kind: "turn_ended" }]);
+    expect(session.view()?.state).toMatchObject({ state: "Working" });
+  });
+
+  test("a block Copilot CLI did not act on is typed once the input box is back after 5 s", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+    session.askToRead();
+    expect(hook(session, hooksFile, "agentStop")).toEqual({ decision: "block", reason: "read the review" });
+    await showScreen(session, PROMPT_BOX);
+    expect(written).toEqual([]);
+
+    later(6000, () => session.tick());
+
+    expect(written).toEqual(["read the review"]);
+  });
+
+  test("a turn a block started is not blocked again, and the typed prompt takes over", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+    session.askToRead();
+
+    expect(hook(session, hooksFile, "agentStop", { stop_hook_active: true })).toEqual({});
+    expect(written).toEqual([]);
+    await showScreen(session, PROMPT_BOX);
+    session.tick();
+
+    expect(written).toEqual(["read the review"]);
+  });
+
+  test("a tool's result carries the prompt once per turn, and again for a prompt that changed", () => {
+    let waiting = "read the review";
+    const { session, hooksFile } = runningSession(() => waiting);
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+    session.askToRead();
+
+    expect(hook(session, hooksFile, "postToolUse")).toEqual({ additionalContext: "read the review" });
+    expect(hook(session, hooksFile, "postToolUse")).toEqual({});
+    waiting = "read the review and the message";
+    expect(hook(session, hooksFile, "postToolUse")).toEqual({ additionalContext: "read the review and the message" });
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    expect(hook(session, hooksFile, "postToolUse")).toEqual({ additionalContext: "read the review and the message" });
+  });
+
+  test("nothing asked for, nothing unread any more, or the user's unsent text in the input box gives the empty output", () => {
+    let waiting: string | undefined = "read the updates";
+    const { session, hooksFile } = runningSession(() => waiting);
+    session.connect({ write: () => {}, resize: () => {} });
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+    expect(hook(session, hooksFile, "postToolUse")).toEqual({});
+    expect(hook(session, hooksFile, "agentStop")).toEqual({});
+
+    session.askToRead();
+    waiting = undefined;
+    expect(hook(session, hooksFile, "postToolUse")).toEqual({});
+
+    waiting = "read the review";
+    session.input("also check the");
+    expect(hook(session, hooksFile, "agentStop")).toEqual({});
+  });
+});
+
 describe("text the user puts into a session (ADR-68)", () => {
   test("is reported for typing and pasting, not for an answer to an approval, Esc or a terminal's own answers", () => {
     const { session, hooksFile, typedText } = runningSession();

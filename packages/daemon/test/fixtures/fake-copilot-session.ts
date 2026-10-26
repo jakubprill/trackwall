@@ -74,12 +74,28 @@ const initialPrompt = taskArgs.find((a) => a.startsWith("--interactive="))?.slic
  * get their values; the rest (tool arguments and results, the transcript) an empty string, since the daemon keeps only
  * their names.
  */
-function replay(hooks: readonly ReferenceHook[], prompt = ""): void {
+function replay(hooks: readonly ReferenceHook[], prompt = ""): HookOutputs {
   const values: Record<string, string> = { cwd: process.cwd(), prompt, initialPrompt: initialPrompt ?? "" };
+  const outputs: HookOutputs = [];
   for (const { event, payload, omitted } of hooks) {
-    fire(event, { ...Object.fromEntries(omitted.map((name) => [name, values[name] ?? ""])), ...payload });
+    const extra = event === "agentStop" ? { stop_hook_active: blockedTurn } : {};
+    const fired = fire(event, { ...Object.fromEntries(omitted.map((name) => [name, values[name] ?? ""])), ...payload, ...extra });
+    outputs.push(...fired.map((output) => ({ event, output })));
   }
+  return outputs;
 }
+
+type HookOutputs = { event: string; output: Record<string, unknown> }[];
+
+/**
+ * The hook outputs Copilot CLI acts on (ADR-85): an `agentStop` block starts a new turn with its reason as the user's
+ * message, and `postToolUse` context goes to the model with the tool's result (the fake prints it).
+ */
+const AgentStopBlock = z.object({ decision: z.literal("block"), reason: z.string() });
+const ToolContext = z.object({ additionalContext: z.string() });
+
+/** The turn under way was started by an `agentStop` block, which its own `agentStop` says (`stop_hook_active`). */
+let blockedTurn = false;
 
 /** The reference's turn with an approval, split where the fake waits for the answer: after the approval request. */
 const asked = real.approval.hooks.findIndex((h) => h.event === "notification") + 1;
@@ -127,6 +143,29 @@ function submit(line: string): void {
   replay(real.approval.hooks.slice(2, asked));
 }
 
+/** Acts on the hook outputs of a turn's end: a block starts the next turn at once, without the input box. */
+function endTurn(outputs: HookOutputs): void {
+  for (const { event, output } of outputs) {
+    const context = event === "postToolUse" ? ToolContext.safeParse(output) : undefined;
+    if (context?.success) process.stdout.write(`Tool result context: ${context.data.additionalContext}\r\n`);
+  }
+  const block = outputs.flatMap(({ event, output }) => {
+    const parsed = event === "agentStop" ? AgentStopBlock.safeParse(output) : undefined;
+    return parsed?.success ? [parsed.data.reason] : [];
+  })[0];
+  blockedTurn = block !== undefined;
+  if (block !== undefined) {
+    process.stdout.write(`\r\n❯ ${block}\r\n`);
+    submit(block);
+    return;
+  }
+  redrawing = true;
+  setTimeout(() => {
+    redrawing = false;
+    draw(real.promptBox);
+  }, REDRAW_MS);
+}
+
 /**
  * Copilot CLI sends `agentStop` before it draws the input box again, and keys typed in between are lost (the contract
  * test of a review sent mid-turn shows the gap), so the fake keeps the same gap.
@@ -136,12 +175,7 @@ const REDRAW_MS = 300;
 /** A "Yes" option of the approval: the command runs and the turn ends. */
 function approve(): void {
   awaitingApproval = false;
-  replay(real.approval.hooks.slice(asked));
-  redrawing = true;
-  setTimeout(() => {
-    redrawing = false;
-    draw(real.promptBox);
-  }, REDRAW_MS);
+  endTurn(replay(real.approval.hooks.slice(asked)));
 }
 
 /**
@@ -170,6 +204,7 @@ process.stdin.on("data", (chunk: Buffer) => {
       process.stdout.write("\r\n");
       const line = typed;
       typed = "";
+      blockedTurn = false;
       submit(line);
     } else {
       typed += key;

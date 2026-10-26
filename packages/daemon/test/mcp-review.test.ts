@@ -67,7 +67,11 @@ describe.skipIf(process.versions.bun === undefined)("a review from the Changes t
     window.attachment.input("start\r");
     await waitFor(daemon.facade.agents, session, (s) => s.state?.state === "Approval", "the approval request");
     window.attachment.input("1");
-    await waitFor(daemon.facade.agents, session, () => window.unwrappedText().includes(TYPED_REVIEW), "the typed review prompt");
+    await waitFor(daemon.facade.agents, session, () => window.unwrappedText().includes(TYPED_REVIEW), "the review prompt's turn");
+    // Through the hooks' output, without typing (ADR-85): with the tool's result during the turn, and as the next turn's
+    // message from the agentStop block, which the fake shows in its input line.
+    expect(window.unwrappedText()).toContain("Tool result context: The user sent a review of your changes in Trackwall");
+    expect(window.unwrappedText()).toContain("❯ The user sent a review of your changes in Trackwall");
 
     const client = await clientOfSession(session);
     expect(await reviewComments(client)).toEqual([README_COMMENT, LOGIN_COMMENT]);

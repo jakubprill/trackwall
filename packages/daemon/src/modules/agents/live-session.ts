@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { AgentDialog, DialogAnswer, RunState, Session, TaskState, TaskStateChange, TaskUpdate } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 import { readAgentDialog, type ScreenDialog } from "./copilot-dialog.ts";
+import { type CopilotHookOutput, continuesBlockedTurn } from "./copilot-hook-output.ts";
 import type { CopilotHookEvent } from "./copilot-hook-record.ts";
 import { approvalRequest } from "./copilot-hooks.ts";
 import { answersDialog, ESCAPE, type SessionKey, sessionKey } from "./copilot-keys.ts";
@@ -152,6 +153,8 @@ export class LiveSession {
   #userDraft = false;
   /** When the user last put text into the input box (milliseconds since the epoch). */
   #userTextAt = 0;
+  /** The prompt last given to the agent with a tool's result in this turn (ADR-85), so it is given once per turn. */
+  #contextGiven: string | undefined;
   /** Since when the screen has shown the empty input box without a break, read once per read cycle. */
   #boxEmptySince: number | undefined;
   /** The input box's text read from the screen (`promptBoxText`), for the screen revision it was read at. */
@@ -240,6 +243,33 @@ export class LiveSession {
     this.#promptAsked = true;
     this.#typePrompt();
     return this.#promptAsked ? "queued" : "typed";
+  }
+
+  /**
+   * The output for a hook Copilot CLI just sent (ADR-85), once its record is in `hooks.jsonl`: what waits for the session
+   * (`prompt`) goes to its agent without typing. At the end of a turn, `agentStop` blocks it with the prompt, which starts
+   * the next turn at once, as the typed prompt would after the input box is back (not into the user's draft, and not
+   * twice in a row: then the typed prompt takes over). During a turn, `postToolUse` appends the prompt to a tool's
+   * result, once per turn and prompt, so the agent reads what waits before it ends the turn. Nothing asked for, or nothing
+   * unread any more: `{}`.
+   */
+  hookOutput(event: CopilotHookEvent, payload: string): CopilotHookOutput {
+    this.#readHooks();
+    // Only what `askToRead` asked for: a new supervisor or main session is not handed the updates it found unread.
+    if (this.#finished || !(this.#promptAsked || this.#promptTyped)) return {};
+    const text = this.#promptText();
+    if (text === undefined) return {};
+    if (event === "postToolUse" && text !== this.#contextGiven) {
+      this.#contextGiven = text;
+      return { additionalContext: text };
+    }
+    if (event !== "agentStop" || this.#userDraft || continuesBlockedTurn(payload)) return {};
+    // The prompt is on its way as the next turn's message: the read cycle neither types it nor types it again before
+    // Copilot CLI has had `RETYPE_AFTER_MS` to start that turn, and the turn is the daemon's, not the user's.
+    this.#promptAsked = false;
+    this.#promptTyped = { text, at: Date.now(), retries: 0 };
+    this.#userDrove = false;
+    return { decision: "block", reason: text };
   }
 
   /**
@@ -369,6 +399,7 @@ export class LiveSession {
   #readHooks(): void {
     for (const record of this.#hooks.read()) {
       if (record.event === "userPromptSubmitted") this.#userDraft = false;
+      if (record.event === "userPromptSubmitted" || record.event === "agentStop") this.#contextGiven = undefined;
       this.#notice = approvalRequest(record) ? record.payload.message : undefined;
       this.#report(this.#state.hook(record));
       this.#applyEarlyAnswer(record.event);

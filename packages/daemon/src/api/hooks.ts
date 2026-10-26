@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { CopilotHookEvent } from "../facade.ts";
+import type { CopilotHookEvent, CopilotHookOutput } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
 import { SESSION_TOKEN_HEADER, sessionRequest } from "../mcp/endpoint.ts";
 import { readBody } from "./body.ts";
@@ -24,7 +24,7 @@ export function sessionHookRequest(port: number, token: string, event: CopilotHo
 export async function handleHook(
   req: IncomingMessage,
   res: ServerResponse,
-  receive: (sessionToken: string, event: string, payload: string) => Record<string, never>,
+  receive: (sessionToken: string, event: string, payload: string) => CopilotHookOutput,
 ): Promise<void> {
   if (req.method !== "POST") throw new DomainError("not_found", `no route ${req.method} ${req.url}`);
   const sessionToken = req.headers[SESSION_TOKEN_HEADER];
