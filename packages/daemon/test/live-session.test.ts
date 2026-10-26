@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RunState } from "@trackwall/protocol";
 import { LiveSession, type SessionEvent } from "../src/modules/agents/live-session.ts";
+import { screenProcessed } from "./support/live-session.ts";
 
 const sessions: LiveSession[] = [];
 afterEach(() => {
@@ -144,6 +145,9 @@ function runningSession(
   return { session, hooksFile, typedText, events };
 }
 
+/** The bottom of an idle Copilot CLI: the input box and the footer with hints (ADR-69). */
+const PROMPT_BOX = "────\r\n❯ \r\n────\r\n Interactive · / commands\r\n";
+
 function endTurn(session: LiveSession, hooksFile: string): void {
   appendFileSync(hooksFile, `${JSON.stringify({ event: "agentStop", receivedAt: 0, payload: {}, omitted: [] })}\n`);
   session.tick();
@@ -163,6 +167,69 @@ describe("a prompt the daemon types into a session (a review, ADR-62, or a messa
     expect(written).toEqual(["read the review"]);
     await new Promise((r) => setTimeout(r, 200));
     expect(written).toEqual(["read the review", "\r"]);
+  });
+
+  test("goes into a new session's input box on the screen before its first hook, and that hook then starts work", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    session.output(new TextEncoder().encode(`Welcome\r\n${PROMPT_BOX}`));
+    await screenProcessed(session);
+
+    expect(session.askToRead()).toBe("typed");
+    expect(written).toEqual(["read the review"]);
+    // Not waiting for you while the agent is about to read the review.
+    expect(session.view()).toMatchObject({ state: null, needsAttention: false });
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "sessionStart", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+    expect(session.view()?.state).toMatchObject({ state: "Working", reason: "hook sessionStart with a prompt" });
+  });
+
+  test("a prompt a new session did not take holds back its waiting for you only for 5 s", async () => {
+    const { session } = runningSession();
+    session.connect({ write: () => {}, resize: () => {} });
+    session.output(new TextEncoder().encode(PROMPT_BOX));
+    await screenProcessed(session);
+    expect(session.askToRead()).toBe("typed");
+    session.tick();
+    expect(session.view()?.state).toBeNull();
+
+    setSystemTime(new Date(Date.now() + 6000));
+    try {
+      session.tick();
+    } finally {
+      setSystemTime();
+    }
+
+    expect(session.view()?.state).toMatchObject({ state: "Input", source: "screen" });
+  });
+
+  test("waits in a new session whose screen does not show the input box yet", async () => {
+    const { session } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    session.output(new TextEncoder().encode("────\r\n❯ \r\n────\r\n ◎ Loading: 1 plugin\r\n"));
+    await screenProcessed(session);
+
+    expect(session.askToRead()).toBe("queued");
+    expect(written).toEqual([]);
+    expect(session.view()?.state).toBeNull();
+  });
+
+  test("in a session whose hooks never come, goes in only while the screen shows the input box now, not into a later approval", async () => {
+    const { session } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    session.output(new TextEncoder().encode(PROMPT_BOX));
+    await screenProcessed(session);
+    session.tick();
+    expect(session.view()?.state).toMatchObject({ state: "Input", source: "screen" });
+
+    session.output(new TextEncoder().encode("╭────╮\r\n│ Do you want to run this command? │\r\n│ ❯ 1. Yes │\r\n╰────╯\r\n"));
+    await screenProcessed(session);
+
+    expect(session.askToRead()).toBe("queued");
+    expect(written).toEqual([]);
   });
 
   test("goes in at once while the session waits for input, and does not mark the end of the turn seen", () => {

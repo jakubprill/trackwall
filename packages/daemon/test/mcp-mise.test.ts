@@ -137,8 +137,8 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
         (await call(client, "wait_for_mise_task", { repo: "warehouse", miseTask: "test", timeoutSeconds: 20 })).structuredContent,
       );
       expect(ended.run).toMatchObject({ kind: "exited", runId: own.run.runId, exitCode: 3 });
-      // Stopped only after its sessionStart: killing a process in ConPTY while it starts could crash Bun on Windows.
-      await waitFor(daemon.facade.agents, session.id, (s) => s.state !== null, "sessionStart");
+      // Stopped only after its first state: killing a process in ConPTY while it starts could crash Bun on Windows.
+      await waitFor(daemon.facade.agents, session.id, (s) => s.state !== null, "the first state");
       await daemon.facade.agents.stop(session.id);
     },
     TIMEOUT,
@@ -180,7 +180,7 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
       );
 
       for (const s of sessions) {
-        await waitFor(daemon.facade.agents, s.id, (state) => state.state !== null, "sessionStart");
+        await waitFor(daemon.facade.agents, s.id, (state) => state.state !== null, "the first state");
         await daemon.facade.agents.stop(s.id);
       }
     },
@@ -212,7 +212,7 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
 
       const [session] = daemon.facade.agents.sessions().sessions.filter((s) => s.task === task.id);
       if (!session) throw new Error("the task has no session");
-      await waitFor(daemon.facade.agents, session.id, (state) => state.state !== null, "sessionStart");
+      await waitFor(daemon.facade.agents, session.id, (state) => state.state !== null, "the first state");
       await daemon.facade.agents.stop(session.id);
     },
     TIMEOUT,
@@ -238,7 +238,7 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
           "bad_request: the supervisor works in no repo and runs nothing in one; propose a task in warehouse instead",
         );
       }
-      await waitFor(daemon.facade.agents, supervisor.id, (s) => s.state !== null, "sessionStart");
+      await waitFor(daemon.facade.agents, supervisor.id, (s) => s.state !== null, "the first state");
       await daemon.facade.agents.stop(supervisor.id);
     },
     TIMEOUT,

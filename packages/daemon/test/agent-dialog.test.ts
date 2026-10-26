@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { DomainError } from "../src/infra/errors.ts";
 import { readAgentDialog } from "../src/modules/agents/copilot-dialog.ts";
 import { LiveSession } from "../src/modules/agents/live-session.ts";
+import { screenProcessed } from "./support/live-session.ts";
 
 /** Screens of Copilot CLI 1.0.103 taken from the real binary in tmux (paths replaced, lengths kept). */
 function screen(name: string): string[] {
@@ -35,6 +36,18 @@ describe("an agent dialog read from the session's screen (ADR-66)", () => {
         { key: "2", label: "Yes, and don't ask again for file operations when in this repo (/src/app-repo)" },
       ],
     });
+  });
+
+  test("an approval with Yes as its only digit option, as for a PowerShell command on Windows, gives that one option", () => {
+    const onlyYes = screen("shell-120").filter((l) => !l.includes("2. Yes, and don't ask again"));
+
+    expect(readAgentDialog(onlyYes, "approval")).toMatchObject({ options: [{ key: "1", label: "Yes" }] });
+  });
+
+  test("the screen of a new session waiting for its first prompt has no question dialog", () => {
+    expect(
+      readAgentDialog(readFileSync(join(import.meta.dir, "fixtures", "copilot", "prompt-box-120.txt"), "utf8").split("\n"), "question"),
+    ).toBeUndefined();
   });
 
   test("lines Copilot CLI wrapped in a narrow terminal are joined into the same dialog", () => {
@@ -108,14 +121,7 @@ async function sessionShowing(name: string, notificationType: string, prompt: ()
     session.tick();
   };
   notify(notificationType);
-  // The screen image is ready once the emulator has processed the output.
-  await new Promise<void>((resolve) =>
-    session.attach(
-      () => {},
-      () => resolve(),
-      () => {},
-    ),
-  );
+  await screenProcessed(session);
   return { session, written, notify, hooksFile, typedText };
 }
 

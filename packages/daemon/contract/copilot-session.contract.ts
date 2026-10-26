@@ -74,9 +74,11 @@ describe("a session of the real Copilot CLI", () => {
   test("sessionStart comes only with the first prompt, and a turn ending in text goes working and back to waiting", async () => {
     const { agents } = daemon.facade;
     const { id, window } = await startSession();
-    // Copilot CLI is ready for input, but it has sent no hook yet, so the session has no state.
+    // Copilot CLI is ready for input, but it has sent no hook yet: the daemon reads its input box from the screen (ADR-69).
+    const ready = await waitFor(agents, id, (s) => s.state !== null, "the input box of a new session", SESSION_MS);
+    expect(ready.state).toMatchObject({ state: "Input", source: "screen", reason: "screen input box before the first prompt" });
+    expect(ready.needsAttention).toBe(true);
     expect(hookRecords(daemon.home, id)).toEqual([]);
-    expect(agents.session(id).state).toBeNull();
 
     model.reply({ text: "The shop repo has only a README." });
     const typedAt = Date.now();
@@ -180,18 +182,44 @@ describe("a session of the real Copilot CLI", () => {
 });
 
 describe("an agent task with the real Copilot CLI", () => {
+  /** The newest session of task `id`. */
+  function taskSessionOf(id: string): string {
+    const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === id);
+    if (session === undefined) throw new Error(`task ${id} has no session`);
+    return session.id;
+  }
+
   test("the task's prompt reaches the model as the first message, in the task worktree, without typing", async () => {
     const { agents } = daemon.facade;
     model.reply({ text: "Starting on the login test." });
     const task = await agents.createTask("shop", "add a login test");
-    const session = agents.sessions().sessions.find((s) => s.task === task.id);
-    if (session === undefined) throw new Error("the task has no session");
-    await endOfTurn(session.id);
+    await endOfTurn(taskSessionOf(task.id));
 
     const first = model.requests().at(-1);
     expect(first?.lastUserText).toContain("add a login test");
     // Copilot CLI names its working directory by the real path (macOS: /private/var/… for the temporary /var/…).
     expect(first?.system).toContain(realpathSync.native(task.worktree));
+  });
+
+  test("a review sent to a resumed task session goes into its input box before the user types anything", async () => {
+    const { agents } = daemon.facade;
+    model.reply({ text: "Added the test." });
+    const task = await agents.createTask("shop", "add a checkout test");
+    const first = taskSessionOf(task.id);
+    await endOfTurn(first);
+    await agents.stop(first);
+
+    await agents.resumeTask(task.id);
+    const resumed = taskSessionOf(task.id);
+    await waitFor(agents, resumed, (s) => s.state !== null, "the input box of the resumed session", SESSION_MS);
+    expect(hookRecords(daemon.home, resumed)).toEqual([]);
+    model.reply({ text: "I will read the review." });
+    agents.sendReview(task.id, [{ path: "README.md", side: "new", line: 1, code: "# shop", text: "Say what shop is." }]);
+    await endOfTurn(resumed);
+
+    expect(model.requests().at(-1)?.lastUserText).toContain("sent a review of your changes in Trackwall");
+    expect(hookRecords(daemon.home, resumed).map((r) => r.event)).toEqual(["sessionStart", "userPromptSubmitted", "agentStop"]);
+    await agents.stop(resumed);
   });
 });
 
