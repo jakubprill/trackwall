@@ -189,7 +189,19 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     );
     const instructions = readFileSync(join(home, "sessions", supervisor.id, "instructions", "trackwall.instructions.md"), "utf8");
     expect(instructions).toContain("You are the supervisor");
+    expect(instructions).toContain("Copilot CLI refuses you its shell and the tools that write files");
     window.attachment.detach();
+    await agents.stop(supervisor.id);
+  }, 60_000);
+
+  test("a supervisor the user lets change code is told so in its instructions (ADR-78)", async () => {
+    const projectsDir = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
+    const { agents, procs, home } = makeAgents({}, undefined, projectsDir, undefined, process.env, { changesCode: true });
+    cleanups.push(() => procs.stopAll());
+
+    const supervisor = await agents.startSupervisor();
+    const instructions = readFileSync(join(home, "sessions", supervisor.id, "instructions", "trackwall.instructions.md"), "utf8");
+    expect(instructions).toContain("The user lets you run commands and change files yourself");
     await agents.stop(supervisor.id);
   }, 60_000);
 
@@ -297,7 +309,12 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
         stop: async () => undefined,
         liveIn: () => false,
       },
-      repos: { repoPath: async () => repoDir, projectsDir: async () => repoDir, toolPermissions: () => ({ allow: [], deny: [] }) },
+      repos: {
+        repoPath: async () => repoDir,
+        projectsDir: async () => repoDir,
+        toolPermissions: () => ({ allow: [], deny: [] }),
+        supervisorSettings: () => ({ changesCode: false }),
+      },
       vcs: new Vcs(),
       home: mkdtempSync(join(tmpdir(), "trackwall-agents-")),
       copilot: ["copilot-that-does-not-exist"],

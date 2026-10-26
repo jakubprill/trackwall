@@ -144,6 +144,14 @@ export interface ToolPermissions {
   deny: readonly string[];
 }
 
+/**
+ * `supervisor` in `workspace.yaml` (ADR-78), by hand only. Without `changesCode: true` the supervisor starts with Copilot
+ * CLI's `shell` and `write` tools denied, so it coordinates through Trackwall's tools and reads files, but changes nothing
+ * itself; `true` gives it the tools and the `toolPermissions` rules without `repos`, like before ADR-78.
+ */
+export const SupervisorSettings = z.object({ changesCode: z.boolean().default(false) }).strict();
+export type SupervisorSettings = z.infer<typeof SupervisorSettings>;
+
 export const WorkspaceSettings = z.object({
   projectsDir: ProjectsDir,
   /** The full path of `workspace.yaml`, so that the user knows which file to edit by hand. */

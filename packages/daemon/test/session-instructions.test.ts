@@ -3,12 +3,15 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MCP_INSTRUCTIONS, TASK_MESSAGE_RULE } from "@trackwall/protocol";
-import { withInstructionsDir, writeSessionInstructions } from "../src/modules/agents/session-instructions.ts";
+import { type SessionRole, withInstructionsDir, writeSessionInstructions } from "../src/modules/agents/session-instructions.ts";
 
 describe("Copilot CLI session instructions (ADR-46)", () => {
   test("a task session's file applies to the whole session and carries its role and the MCP instruction", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-    const dir = writeSessionInstructions(sessionDir, "0.3.0", { repo: "shop", task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427" });
+    const dir = writeSessionInstructions(sessionDir, "0.3.0", {
+      repo: "shop",
+      task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427",
+    });
     expect(dir).toBe(join(sessionDir, "instructions"));
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text.startsWith('---\napplyTo: "**"\n---\n# Working in Trackwall\n')).toBe(true);
@@ -42,9 +45,13 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
   });
 
   test("a main session and the supervisor get no messages, so not the rule for weighing them", () => {
-    for (const repo of ["shop", null]) {
+    const roles: SessionRole[] = [
+      { repo: "shop", task: null },
+      { repo: null, changesCode: false },
+    ];
+    for (const role of roles) {
       const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-      writeSessionInstructions(sessionDir, "0.4.1", { repo, task: null });
+      writeSessionInstructions(sessionDir, "0.4.1", role);
       const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
       expect(text).not.toContain(TASK_MESSAGE_RULE);
     }
@@ -68,11 +75,12 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("the supervisor in the projects folder coordinates through proposals and does not get the task rules", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-    writeSessionInstructions(sessionDir, "0.3.0", { repo: null, task: null });
+    writeSessionInstructions(sessionDir, "0.3.0", { repo: null, changesCode: false });
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain("The user sees this session in the supervisor panel on the right of every Trackwall view");
     expect(text).toContain("You are the supervisor: the one session above all others, in the projects folder");
     expect(text).toContain("You coordinate, you do not change code: hand each piece of work to an agent with propose_task");
+    expect(text).toContain("Copilot CLI refuses you its shell and the tools that write files, so do not try them");
     expect(text).toContain("Do not poll the work you delegated: end your turn");
     expect(text).toContain("Steer your tasks with send_message");
     expect(text).toContain("When the user starts their day in Trackwall, your first message asks for a briefing: read get_day_report once");
@@ -82,6 +90,16 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).not.toContain("main session in the root");
     expect(text).not.toContain("Work only in this worktree");
     expect(text).toContain(MCP_INSTRUCTIONS);
+  });
+
+  test("a supervisor the user lets change code is told so, and still hands repo changes to tasks (ADR-78)", () => {
+    const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
+    writeSessionInstructions(sessionDir, "0.4.1", { repo: null, changesCode: true });
+    const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
+    expect(text).toContain("You coordinate: hand each piece of work to an agent with propose_task");
+    expect(text).toContain("The user lets you run commands and change files yourself; keep that to what they ask you for");
+    expect(text).not.toContain("you do not change code");
+    expect(text).not.toContain("refuses you its shell");
   });
 
   test("a session directory with a comma in its path gets no file, because the variable splits on commas", () => {

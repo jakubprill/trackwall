@@ -265,3 +265,17 @@ describe("vscodeUrl", () => {
     expect(vscodeUrl("/Users/jan/repo")).toBe("vscode://file/Users/jan/repo");
   });
 });
+
+describe("the tool permissions of a session from workspace.yaml (ADR-66, ADR-78)", () => {
+  test("the supervisor is denied the shell and file writes, a session in a repo is not, and supervisor.changesCode lifts it", async () => {
+    const { workspace, file } = await workspaceWithProjectsDir();
+    const projectsDir = readFileSync(file, "utf8");
+    writeFileSync(file, `${projectsDir}toolPermissions:\n  - deny: ["shell(git push)"]\n`);
+
+    expect(workspace.toolPermissions(null)).toEqual({ allow: [], deny: ["shell(git push)", "shell", "write"] });
+    expect(workspace.toolPermissions("shop")).toEqual({ allow: [], deny: ["shell(git push)"] });
+
+    writeFileSync(file, `${projectsDir}toolPermissions:\n  - deny: ["shell(git push)"]\nsupervisor:\n  changesCode: true\n`);
+    expect(workspace.toolPermissions(null)).toEqual({ allow: [], deny: ["shell(git push)"] });
+  });
+});
