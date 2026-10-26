@@ -103,7 +103,10 @@ export type DeclaredMiseTask = z.infer<typeof DeclaredMiseTask>;
 export const MiseSetup = z.object({
   configFiles: z.array(z.string()),
   tasks: z.array(DeclaredMiseTask),
-  /** `false` when the card did not read one of the config files (limits): then it is unknown whether the repo has mise tasks. */
+  /**
+   * `false` when the card did not read one of the config files or the commit's file list was cut (limits): then it is
+   * unknown whether the repo has mise tasks.
+   */
   complete: z.boolean(),
 });
 export type MiseSetup = z.infer<typeof MiseSetup>;

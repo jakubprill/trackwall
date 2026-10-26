@@ -31,8 +31,9 @@ export function isMiseConfigFile(path: string): boolean {
 
 /**
  * Config files in the order of `ROOT_CONFIG_FILES`, then `conf.d`, so the reason for the `no-mise` tag points to
- * `mise.toml`, not a random file from git's list. The result is incomplete (`complete: false`) when some file was not read
- * or the commit's file list is truncated (a read problem without a path): then it is unknown whether the repo has mise tasks.
+ * `mise.toml`, not a random file from git's list. The result is incomplete (`complete: false`) when some config file was
+ * not read or the commit's file list is truncated: then it is unknown whether the repo has mise tasks. Other whole-repo
+ * read problems (a failed source file search, type files over the limit) do not touch mise files, so they leave it complete.
  */
 export function extractMiseSetup(snapshot: RepoSnapshot): { mise: MiseSetup; problems: CardProblem[] } {
   const configFiles = snapshot.paths.filter(isMiseConfigFile).sort((a, b) => configRank(a) - configRank(b));
@@ -42,7 +43,7 @@ export function extractMiseSetup(snapshot: RepoSnapshot): { mise: MiseSetup; pro
     return text === undefined ? [] : [{ path, text }];
   });
   const tasks = [...read.flatMap((f) => tomlTasks(f.path, f.text, problems)), ...fileTasks(snapshot.paths)];
-  const complete = read.length === configFiles.length && !snapshot.problems.some((p) => p.path === "");
+  const complete = read.length === configFiles.length && !snapshot.pathsTruncated;
   return { mise: { configFiles, tasks, complete }, problems };
 }
 

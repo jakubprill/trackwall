@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { RepoCard } from "@trackwall/protocol";
 import { globMatcher } from "../src/infra/glob.ts";
-import { extractCard } from "../src/modules/cards/extract-card.ts";
+import { CARD_SOURCES, extractCard, readsCardFile } from "../src/modules/cards/extract-card.ts";
+import { readSnapshot } from "../src/modules/cards/read-snapshot.ts";
 import { loadSyntaxParsers } from "../src/modules/cards/syntax-tree.ts";
 import { repoTags } from "../src/modules/cards/tags.ts";
 import { snapshotOf } from "./support/snapshot.ts";
@@ -131,6 +132,29 @@ describe("mise configuration and the no-mise tag", () => {
     expect(noMise({}, [".mise/tasks/build"])).toBeUndefined();
     // A config file the card did not read (limits) may have mise tasks, so there is no tag.
     expect(noMise({}, ["mise.toml"])).toBeUndefined();
+  });
+
+  test("a failed source file search does not hide no-mise, and a file list cut short does", async () => {
+    const noMiseAfterReading = async (listTruncated: boolean) => {
+      const vcs = {
+        commitFiles: async () => ({
+          files: [
+            { name: "pom.xml", path: "pom.xml", kind: "file" as const, size: 10 },
+            { name: "Api.java", path: "src/main/java/Api.java", kind: "file" as const, size: 10 },
+          ],
+          truncated: listTruncated,
+        }),
+        readFiles: async () => new Map([["pom.xml", Buffer.from("<project/>")]]),
+        grepFiles: async () => {
+          throw new Error("git grep: timed out");
+        },
+      };
+      const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), readsCardFile, CARD_SOURCES);
+      return repoTags(extractCard(snapshot, parsers), { id: "app", remote: null }, {}).find((t) => t.name === "no-mise")?.reason;
+    };
+    expect(await noMiseAfterReading(false)).toBe("no mise config in the repo root");
+    // Past the cut the list may have a mise.toml or a mise task directory.
+    expect(await noMiseAfterReading(true)).toBeUndefined();
   });
 
   test("the no-mise reason points to mise.toml before other files, and a bad file from conf.d is a card problem", () => {
