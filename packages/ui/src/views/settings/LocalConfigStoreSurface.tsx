@@ -23,8 +23,8 @@ export function LocalConfigStoreSurface({ conn }: { conn: Connection }) {
       <div className="flex flex-col gap-3 p-4">
         <p className="text-muted-foreground text-sm">
           Trackwall backs up each repo's mise.local.toml and .worktreeinclude, files you keep out of git, into a git repo in your projects
-          folder, and restores them into a new clone. To keep a copy off this computer, add a remote to that repo with git (git remote add
-          origin …): Trackwall pushes every backup to it.
+          folder, and restores them into a new clone. To keep a copy off this computer, add a private repo on your repo host as its remote
+          with git (git remote add origin &lt;HTTPS or SSH address&gt;): Trackwall pushes every backup to it.
         </p>
         {store.error && <ErrorWithRetry message={store.error} onRetry={store.reload} />}
         {!store.data && !store.error && <Loading />}

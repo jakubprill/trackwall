@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { existingCommit, git, symbolicRef } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
-import { readHeadCommit } from "./head-commit.ts";
+import { readBranchCommit } from "./head-commit.ts";
 import { withoutHooks } from "./no-hooks.ts";
-import { remoteAddress } from "./remote.ts";
+import { networkAddress } from "./remote.ts";
 
 /**
  * A repo the daemon itself writes to (§4.13, ADR-86): the local config store. An agent can write into its folder like
@@ -15,8 +15,9 @@ import { remoteAddress } from "./remote.ts";
  * `receivepack`, an `sshCommand`) or push elsewhere (`pushurl`, `pushInsteadOf`). Commits are built from the content the
  * daemon read, with plumbing and a temporary index (`hash-object --no-filters`, `commit-tree`, `update-ref`), so no
  * filter, attribute or hook runs and the user's own index keeps what they staged; only the backed-up paths are then
- * updated in the index, so `git status` in the store stays clean. Everything runs without hooks and signing, under a fixed
- * identity, because the daemon, not the user, made it.
+ * updated in the index, so `git status` in the store stays clean. Every git command that writes runs without hooks and
+ * signing, under a fixed identity, because the daemon, not the user, made it, and the push goes only to an HTTPS or SSH
+ * address, since hooks on the receiving side are beyond this side's reach.
  */
 
 const IDENTITY = ["user.name=Trackwall", "user.email=trackwall@localhost", "commit.gpgSign=false"];
@@ -66,62 +67,65 @@ export async function ensureBackupRepo(dir: string): Promise<void> {
 }
 
 /**
- * Commits `files` on top of the store's HEAD; `false` when the tree stays the same. Call after `ensureBackupRepo`, and
- * one at a time.
+ * Commits `files` on top of `main`; `false` when the tree stays the same. Call after `ensureBackupRepo`, and one at a
+ * time. The user's index is updated after the commit, only for the backed-up paths; when that fails the commit stands.
  */
 export async function commitBackups(dir: string, files: readonly BackupFile[], message: string): Promise<boolean> {
-  const parent = (await existingCommit(dir, BRANCH)) ?? null;
-  const scratch = await mkdtemp(join(tmpdir(), "trackwall-store-index-"));
-  const indexFile = join(scratch, "index");
-  try {
-    if (parent !== null) await git(dir, ["read-tree", parent], { indexFile });
-    const entries = await Promise.all(files.map(async (f) => ({ path: f.path, oid: await hashBlob(dir, f.content) })));
-    for (const { path, oid } of entries) await git(dir, ["update-index", "--add", "--cacheinfo", `100644,${oid},${path}`], { indexFile });
-    const tree = (await git(dir, ["write-tree"], { indexFile })).stdout.toString("utf8").trim();
-    if (parent !== null && tree === (await treeOf(dir, parent))) return false;
-    await withoutHooks(async (hooksPath) => {
+  // Even `read-tree` and `update-index` run a hook (`post-index-change`), so no command here may see the store's hooks.
+  return withoutHooks(async (hooksPath) => {
+    const config = [hooksPath];
+    const parent = (await existingCommit(dir, BRANCH)) ?? null;
+    const scratch = await mkdtemp(join(tmpdir(), "trackwall-store-index-"));
+    const indexFile = join(scratch, "index");
+    let entries: { path: string; oid: string }[];
+    try {
+      if (parent !== null) await git(dir, ["read-tree", parent], { indexFile, config });
+      entries = await Promise.all(files.map(async (f) => ({ path: f.path, oid: await hashBlob(dir, f.content, config) })));
+      for (const { path, oid } of entries) await git(dir, updateIndex(path, oid), { indexFile, config });
+      const tree = (await git(dir, ["write-tree"], { indexFile, config })).stdout.toString("utf8").trim();
+      if (parent !== null && tree === (await treeOf(dir, parent))) return false;
       const parents = parent === null ? [] : ["-p", parent];
       const made = (await git(dir, ["commit-tree", tree, ...parents, "-m", message], { config: [...IDENTITY, hooksPath] })).stdout;
       // The old value guards against a commit someone else made meanwhile; an empty one means the branch must not exist yet.
-      await git(dir, ["update-ref", "-m", message, BRANCH, made.toString("utf8").trim(), parent ?? ""], { config: [hooksPath] });
-    });
-    for (const { path, oid } of entries) await git(dir, ["update-index", "--add", "--cacheinfo", `100644,${oid},${path}`]);
+      await git(dir, ["update-ref", "-m", message, BRANCH, made.toString("utf8").trim(), parent ?? ""], { config });
+    } finally {
+      await rm(scratch, { recursive: true, force: true });
+    }
+    for (const { path, oid } of entries) await git(dir, updateIndex(path, oid), { config });
     return true;
-  } finally {
-    await rm(scratch, { recursive: true, force: true });
-  }
+  });
 }
 
-/**
- * The commit HEAD points to, read from the git directory's files where they tell for sure (a pass reads it every few
- * seconds); `null` before the first backup. `ensureBackupRepo` keeps HEAD on `main`.
- */
+/** The commit of `main`, read from the git directory's files where they tell for sure (a pass reads it every few seconds); `null` before the first backup. */
 export async function storeHead(dir: string): Promise<string | null> {
   if (!(await isRealGitDir(dir))) return null;
-  const fromFiles = await readHeadCommit(dir).catch(() => undefined);
+  const fromFiles = await readBranchCommit(dir, BRANCH).catch(() => undefined);
   return fromFiles !== undefined ? fromFiles : ((await existingCommit(dir, BRANCH)) ?? null);
 }
 
 /**
- * The main remote as shown to the user: `host/path` for a repo host, the path itself for a local or shared folder, and
- * only the remote's name for anything else, which could carry a command. `null` without a main remote.
+ * The main remote as shown to the user: `host/path` for an HTTPS or SSH address, otherwise only the remote's name, which
+ * the backups are never pushed to (`pushBackups`). `null` without a main remote.
  */
 export async function backupRemote(dir: string): Promise<string | null> {
   if (!(await isRealGitDir(dir))) return null;
   const remote = mainRemote(await readConfig(dir));
   if (!remote) return null;
-  if (remote.url.includes("::")) return remote.name;
-  return remoteAddress(remote.url) ?? remote.url;
+  return networkAddress(remote.url) ?? remote.name;
 }
 
 /**
  * Pushes `main` to the main remote, never forced: a remote another computer pushed to first refuses it. `false` without
- * a main remote. Call after `ensureBackupRepo`, which keeps `pushurl` and other redirections out of the store's config.
+ * a main remote. Only to an HTTPS or SSH address: a local path or a shared folder is a repo an agent may have written,
+ * and its `pre-receive` hook would run as the user, out of reach of `core.hooksPath` here. Call after `ensureBackupRepo`,
+ * which keeps `pushurl` and other redirections out of the store's config.
  */
 export async function pushBackups(dir: string): Promise<boolean> {
   const config = await readConfig(dir);
   const remote = mainRemote(config);
   if (!remote) return false;
+  if (networkAddress(remote.url) === undefined)
+    throw new Error(`${remote.name} is not an HTTPS or SSH address of a repo host; Trackwall pushes the store only to one`);
   await withoutHooks((hooksPath) =>
     git(dir, ["push", "--no-follow-tags", "--no-recurse-submodules", "--", remote.name, `${BRANCH}:${BRANCH}`], {
       timeoutMs: PUSH_TIMEOUT_MS,
@@ -132,8 +136,12 @@ export async function pushBackups(dir: string): Promise<boolean> {
   return true;
 }
 
-async function hashBlob(dir: string, content: Buffer): Promise<string> {
-  return (await git(dir, ["hash-object", "-w", "--no-filters", "--stdin"], { stdin: content })).stdout.toString("utf8").trim();
+function updateIndex(path: string, oid: string): string[] {
+  return ["update-index", "--add", "--cacheinfo", `100644,${oid},${path}`];
+}
+
+async function hashBlob(dir: string, content: Buffer, config: string[]): Promise<string> {
+  return (await git(dir, ["hash-object", "-w", "--no-filters", "--stdin"], { stdin: content, config })).stdout.toString("utf8").trim();
 }
 
 async function treeOf(dir: string, commit: string): Promise<string> {

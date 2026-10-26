@@ -3,7 +3,7 @@ import { countBetween } from "./commit-range.ts";
 import { existingCommit, git } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { withoutHooks } from "./no-hooks.ts";
-import { remoteAddress } from "./remote.ts";
+import { networkAddress } from "./remote.ts";
 
 /**
  * A task branch against the main remote and its push (ADR-77). The read compares only refs, as the last push or fetch
@@ -59,14 +59,4 @@ export async function pushBranch(dir: string, branch: string): Promise<void> {
       config: [hooksPath, `remote.${remote.name}.receivepack=git-receive-pack`, "push.gpgSign=false"],
     }),
   );
-}
-
-/**
- * An HTTPS or SSH (also scp-style) address as `host/path`, so both spellings of one repo match and a token in a URL never
- * reaches a message; `undefined` for anything else: a local path, `file://`, `git://`, `http://`, `ext::`.
- */
-function networkAddress(url: string): string | undefined {
-  const scheme = /^([A-Za-z][A-Za-z0-9+.-]*):\/\//.exec(url)?.[1]?.toLowerCase();
-  if (scheme !== undefined && scheme !== "https" && scheme !== "ssh") return undefined;
-  return remoteAddress(url);
 }

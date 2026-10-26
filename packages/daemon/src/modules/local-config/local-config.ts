@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { lstat, mkdir, rename, writeFile } from "node:fs/promises";
+import { lstat, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import {
   type Commit,
@@ -81,8 +81,8 @@ export class LocalConfig {
   #checking: Promise<void> | undefined;
   #problem: string | null = null;
   #push: LocalConfigPush = { kind: "none" };
-  /** A commit not pushed yet; at the start too, since the last run may have ended before its push. */
-  #unpushed = true;
+  /** The store commit the last push took (or found no remote for); `undefined` at the start, since the last run may have ended before its push. */
+  #pushed: string | undefined;
   #pushing: Promise<void> | undefined;
 
   constructor(deps: LocalConfigDeps) {
@@ -154,11 +154,17 @@ export class LocalConfig {
     const inStore = await this.#backups(dir);
     const missing = (await this.repo(id)).files.flatMap((f) => (f.kind === "missing" ? [f.file] : []));
     if (missing.length === 0) throw new DomainError("bad_request", `${id}: the local config store has nothing this repo lacks`);
-    for (const file of missing) {
-      const content = inStore.get(file);
-      if (content) await writeFile(join(dir, file), content, { flag: "wx" });
+    const written: LocalConfigFileName[] = [];
+    try {
+      try {
+        for (const file of missing) if (await writeNew(join(dir, file), inStore.get(file))) written.push(file);
+      } finally {
+        // A file written before a failure is in the repo all the same, so git must ignore it.
+        await this.#ignoreUnignored(dir, written);
+      }
+    } catch (err) {
+      throw new DomainError("repo_unavailable", `${id}: ${messageOf(err)}`);
     }
-    await this.#ignoreUnignored(dir, missing);
     return this.repo(id);
   }
 
@@ -213,7 +219,7 @@ export class LocalConfig {
     const changed: Changed[] = [];
     for (const entry of await this.#deps.repos.repoEntries()) {
       try {
-        changed.push(...(await this.#changedFiles(entry.path)));
+        changed.push(...(await this.#changedFiles(entry.path, problems)));
       } catch (err) {
         problems.push(`${entry.id}: ${messageOf(err)}`);
       }
@@ -224,25 +230,38 @@ export class LocalConfig {
       problems.push(messageOf(err));
     }
     this.#setProblems(problems);
-    this.#pushIfDue(store);
+    this.#pushIfDue(store, await this.#deps.vcs.storeHead(store));
   }
 
-  /** The repo's local config files whose key changed since the last comparison; a missing one is noted and left out. */
-  async #changedFiles(dir: string): Promise<Changed[]> {
+  /**
+   * The repo's local config files whose key changed since the last comparison; a missing one is noted and left out, and
+   * one that cannot be read is a problem that does not hold up the repo's other file.
+   */
+  async #changedFiles(dir: string, problems: string[]): Promise<Changed[]> {
     const changed: Changed[] = [];
     for (const file of LOCAL_CONFIG_FILES) {
       const path = join(dir, file);
-      const info = await lstat(path).catch((err: NodeJS.ErrnoException) => {
-        if (err.code === "ENOENT") return undefined;
-        throw err;
-      });
-      const key = info ? fileKey(info) : null;
-      if (this.#seen.has(path) && this.#seen.get(path) === key) continue;
-      const content = await readRegularFile(path, MAX_LOCAL_CONFIG_BYTES);
-      if (key === null || content === undefined) this.#seen.set(path, null);
-      else changed.push({ dir, file, key, content });
+      try {
+        const found = await this.#changedFile(path);
+        if (found) changed.push({ dir, file, ...found });
+      } catch (err) {
+        problems.push(`${path}: ${messageOf(err)}`);
+      }
     }
     return changed;
+  }
+
+  async #changedFile(path: string): Promise<{ key: string; content: Buffer } | undefined> {
+    const info = await lstat(path).catch((err: NodeJS.ErrnoException) => {
+      if (err.code === "ENOENT") return undefined;
+      throw err;
+    });
+    const key = info ? fileKey(info) : null;
+    if (this.#seen.has(path) && this.#seen.get(path) === key) return undefined;
+    const content = await readRegularFile(path, MAX_LOCAL_CONFIG_BYTES);
+    if (key !== null && content !== undefined) return { key, content };
+    this.#seen.set(path, null);
+    return undefined;
   }
 
   /**
@@ -259,7 +278,7 @@ export class LocalConfig {
     if (toBackUp.length > 0) {
       await this.#deps.vcs.ensureBackupRepo(store);
       const files = toBackUp.map((c) => ({ path: storePath(c.dir, c.file), content: c.content }));
-      if (await this.#deps.vcs.commitBackups(store, files, backupMessage(toBackUp))) this.#unpushed = true;
+      await this.#deps.vcs.commitBackups(store, files, backupMessage(toBackUp));
       this.#compared = { store, head: await this.#deps.vcs.storeHead(store) };
       for (const file of files) await writeStoreCopy(store, file.path, file.content).catch((err: unknown) => problems.push(messageOf(err)));
     }
@@ -282,27 +301,24 @@ export class LocalConfig {
   }
 
   /** One push at a time, in the background, so a hanging remote never holds up the next backup. */
-  #pushIfDue(store: string): void {
-    if (!this.#unpushed || this.#pushing) return;
+  #pushIfDue(store: string, head: string | null): void {
+    if (head === null || head === this.#pushed || this.#pushing) return;
     const retryMs = this.#deps.pushRetryMs ?? PUSH_RETRY_MS;
     if (this.#push.kind === "failed" && Date.now() - Date.parse(this.#push.at) < retryMs) return;
-    this.#unpushed = false;
-    this.#pushing = this.#pushStore(store).finally(() => {
+    this.#pushing = this.#pushStore(store, head).finally(() => {
       this.#pushing = undefined;
     });
   }
 
-  async #pushStore(store: string): Promise<void> {
-    const at = new Date().toISOString();
+  async #pushStore(store: string, head: string): Promise<void> {
     try {
-      if ((await this.#deps.vcs.storeHead(store)) === null) return;
       await this.#deps.vcs.ensureBackupRepo(store);
-      if (await this.#deps.vcs.pushBackups(store)) this.#push = { kind: "ok", at };
+      if (await this.#deps.vcs.pushBackups(store)) this.#push = { kind: "ok", at: new Date().toISOString() };
+      this.#pushed = head;
     } catch (err) {
       const message = messageOf(err);
       if (this.#push.kind !== "failed" || this.#push.message !== message) this.#deps.log(`local config push: ${message}`);
-      this.#push = { kind: "failed", at, message };
-      this.#unpushed = true;
+      this.#push = { kind: "failed", at: new Date().toISOString(), message };
     }
   }
 
@@ -337,7 +353,23 @@ async function writeStoreCopy(store: string, path: string, content: Buffer): Pro
   if (!(await lstat(folder)).isDirectory()) throw new Error(`${folder} in the local config store is not a folder`);
   const temp = join(folder, `.${file}.${randomUUID()}.tmp`);
   await writeFile(temp, content, { flag: "wx" });
-  await rename(temp, join(folder, file));
+  // On Windows a rename fails while an editor holds the old file open; the next backup of the file writes it again.
+  await rename(temp, join(folder, file)).catch(async (err: unknown) => {
+    await rm(temp, { force: true });
+    throw err;
+  });
+}
+
+/** Writes `content` to a file that must not exist yet; `false` when one appeared meanwhile, which stays as it is. */
+async function writeNew(path: string, content: Buffer | undefined): Promise<boolean> {
+  if (content === undefined) return false;
+  try {
+    await writeFile(path, content, { flag: "wx" });
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw err;
+  }
 }
 
 /** `Back up orders-api: mise.local.toml; web: .worktreeinclude, mise.local.toml` */
