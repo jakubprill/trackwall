@@ -56,7 +56,9 @@ const TAB_BAR = " [Current]  Sessions   Issues   Pull requests   Gists";
 
 /**
  * The approval dialog; in a terminal too short for it, cut above as Copilot CLI draws it (the contract test of a short
- * terminal): a cleared screen with the tab bar, a blank line and the bottom of the box, without its heading.
+ * terminal): a cleared screen with the tab bar, a blank line and the bottom of the box, without its heading. Where the
+ * fake does not learn the terminal's size (Bun under ConPTY keeps the size it started with), the whole box scrolls its
+ * top off a short screen, which leaves the same cut box on it.
  */
 function drawDialog(dialog: readonly string[]): void {
   const rows = process.stdout.rows;

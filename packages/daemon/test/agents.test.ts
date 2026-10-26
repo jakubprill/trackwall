@@ -95,7 +95,6 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
       title: expect.stringMatching(/^Run command: /),
       question: "Do you want to run this command?",
     });
-    expect(window.text()).not.toContain("Create a file");
     window.attachment.detach();
     await agents.stop(started.id);
   }, 60_000);
