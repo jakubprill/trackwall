@@ -14,7 +14,8 @@
     "demo": "bun scripts/demo.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "bun test",
-    "test:contract": "bun scripts/contract.ts"
+    "test:contract": "bun scripts/contract.ts",
+    "test:jvm": "bun test ./jvm/java-projects.jvm.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.3.1",

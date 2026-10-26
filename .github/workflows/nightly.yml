@@ -1,7 +1,9 @@
-name: Nightly Copilot CLI
+name: Nightly
 
-# The contract tests on the newest stable Copilot CLI on npm instead of the pinned one, every night, outside `CI ok`;
-# a failure on main opens an issue for that version (ADR-67, clarification of 2026-10-26; docs/development.md).
+# Every night, outside `CI ok` (docs/development.md):
+# - the contract tests on the newest stable Copilot CLI on npm instead of the pinned one; a failure on main opens an
+#   issue for that version (ADR-67, clarification of 2026-10-26);
+# - the tests with real Java builds (jvm.yml, ADR-72); a failure on main opens one issue, closed by the next green night.
 on:
   schedule:
     # Once a night (UTC), outside the full hour when scheduled runs queue the longest.
@@ -15,7 +17,7 @@ on:
 
 # A manual run while the night's run is going waits for it, so both do not report on the same issue at once.
 concurrency:
-  group: nightly-copilot-cli
+  group: nightly
   cancel-in-progress: false
 
 # No permissions by default; every job gets only what it needs.
@@ -103,4 +105,49 @@ jobs:
           Trackwall is checked against the version pinned in \`packages/daemon/scripts/copilot-cli.ts\`, so a user who updates Copilot CLI may get sessions whose state the daemon misreads. The log of each failed \`contract\` job says what differs and prints the Copilot CLI reference it saw.
 
           To fix: raise \`COPILOT_CLI_VERSION\` to $VERSION in a PR, take the references again and change the daemon and the fake Copilot CLI to the new behaviour, as described in \`docs/development.md\` ("Contract tests with the real Copilot CLI"). This issue closes on the first night the contract tests pass on the newest Copilot CLI.
+          EOF
+
+  jvm:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/jvm.yml
+
+  # The same rules as `report`: only a run of main speaks, and a cancelled or skipped run reports nothing.
+  jvm-report:
+    name: report Java builds
+    needs: jvm
+    if: >-
+      always() && github.ref == 'refs/heads/main'
+      && (needs.jvm.result == 'success' || needs.jvm.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RESULT: ${{ needs.jvm.result }}
+      RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Open, update or close the issue
+        run: |
+          title="Tests with real Java builds fail"
+          number=$(gh issue list --state open --limit 100 --search "\"$title\" in:title" --json number,title \
+            | jq -r --arg title "$title" 'map(select(.title == $title))[0].number // empty')
+          if [ "$RESULT" = success ]; then
+            if [ -n "$number" ]; then
+              gh issue close "$number" --comment "The tests with real Java builds pass again on all three systems: $RUN"
+            fi
+            exit 0
+          fi
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "Still failing: $RUN"
+            exit 0
+          fi
+          gh issue create --title "$title" --body-file - <<EOF
+          The nightly tests with real Java builds fail: $RUN
+
+          They build the Spring Boot projects in \`packages/daemon/jvm/projects\` with real Maven and Gradle through mise and check what Trackwall reads from them: cards, the graph, services, test reports, task verification and log errors. Maven, Gradle, Spring Boot and mise are pinned, so a failure means a change on main broke what the daemon reads from Java builds, or something outside the repo changed (a new Java 21 build, the dependency repositories); the log of each failed \`jvm\` job names the test and what differed.
+
+          To fix: reproduce with \`pnpm test:jvm\` (docs/development.md, "Tests with real Java builds"), fix the daemon and add the new output to the unit tests in \`packages/daemon/test\`. This issue closes on the first night the tests pass again.
           EOF

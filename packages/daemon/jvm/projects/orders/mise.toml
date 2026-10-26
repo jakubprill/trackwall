@@ -1,0 +1,11 @@
+[tools]
+java = "temurin-21"
+maven = "3.9.11"
+
+[tasks.dev]
+description = "Run the app on server.port"
+run = "mvn --batch-mode spring-boot:run"
+
+[tasks.test]
+description = "Unit tests, JUnit reports in target/surefire-reports"
+run = "mvn --batch-mode test"

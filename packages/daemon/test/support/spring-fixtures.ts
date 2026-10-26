@@ -6,10 +6,11 @@ const SPRING_FIXTURES = join(import.meta.dir, "..", "fixtures", "spring");
 
 /**
  * A fixture repo's files as a path in the repo (with `/`, as in git) → contents, in git's order (bytewise by path):
- * the `readdirSync` order depends on the file system, and a card lists clients in file order.
+ * the `readdirSync` order depends on the file system, and a card lists clients in file order. `dir` holds the fixture
+ * repos, the Spring fixtures by default.
  */
-export function fixtureFiles(repo: string): Record<string, string> {
-  const root = join(SPRING_FIXTURES, repo);
+export function fixtureFiles(repo: string, dir = SPRING_FIXTURES): Record<string, string> {
+  const root = join(dir, repo);
   const paths = readdirSync(root, { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile())
     .map((entry) => relative(root, join(entry.parentPath, entry.name)).split(sep).join("/"))
