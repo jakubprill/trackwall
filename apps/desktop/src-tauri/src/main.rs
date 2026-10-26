@@ -138,6 +138,7 @@ fn main() {
             folder_picker::pick_projects_folder,
             updates::check_update,
             updates::install_update,
+            updates::cancel_update,
             autostart::autostart_enabled,
             autostart::set_autostart,
             zoom::zoom_window

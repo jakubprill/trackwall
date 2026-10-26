@@ -1,8 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { type AppUpdate, availableText, installingText, nextUpdate, progressLabel, UpdateCheck } from "../src/lib/updates.ts";
+import {
+  type AppUpdate,
+  availableText,
+  canCancel,
+  downloadedFraction,
+  type Installing,
+  installingText,
+  nextUpdate,
+  progressLabel,
+  stallText,
+  UpdateCheck,
+} from "../src/lib/updates.ts";
 
 const available: AppUpdate = { state: "available", currentVersion: "0.3.0", version: "0.3.1" };
-const installing: AppUpdate = { state: "installing", version: "0.3.1" };
+const installing: Installing = { state: "installing", version: "0.3.1", stage: { stage: "connecting" }, lastDataAt: 0 };
+const MB = 1024 * 1024;
 
 describe("app update state", () => {
   test("a check that finds a newer version offers it", () => {
@@ -45,9 +57,44 @@ describe("app update state", () => {
     });
   });
 
-  test("a failed install keeps its version, so that it can be tried again", () => {
-    const progress = nextUpdate(installing, { kind: "progress", progress: { downloaded: 1, total: 2 } });
-    expect(progress).toEqual({ state: "installing", version: "0.3.1", progress: { downloaded: 1, total: 2 } });
+  test("an install starts by connecting, from the moment of the click", () => {
+    expect(nextUpdate(available, { kind: "install-started", version: "0.3.1", at: 5000 })).toEqual({
+      state: "installing",
+      version: "0.3.1",
+      stage: { stage: "connecting" },
+      lastDataAt: 5000,
+    });
+  });
+
+  test("the download remembers its first report and when the bytes last grew", () => {
+    const first = nextUpdate(installing, { kind: "progress", progress: { stage: "downloading", downloaded: MB, total: 4 * MB }, at: 1000 });
+    expect(first).toEqual({
+      ...installing,
+      stage: { stage: "downloading", downloaded: MB, total: 4 * MB },
+      lastDataAt: 1000,
+      firstData: { at: 1000, downloaded: MB },
+    });
+    const more = nextUpdate(first, { kind: "progress", progress: { stage: "downloading", downloaded: 3 * MB, total: 4 * MB }, at: 2000 });
+    expect(more).toMatchObject({ lastDataAt: 2000, firstData: { at: 1000, downloaded: MB } });
+    const same = nextUpdate(more, { kind: "progress", progress: { stage: "downloading", downloaded: 3 * MB, total: 4 * MB }, at: 9000 });
+    expect(same).toMatchObject({ lastDataAt: 2000 });
+  });
+
+  test("each later stage replaces the download", () => {
+    const verifying = nextUpdate(installing, { kind: "progress", progress: { stage: "verifying" }, at: 7000 });
+    expect(verifying).toMatchObject({ stage: { stage: "verifying" }, lastDataAt: 7000 });
+    expect(nextUpdate(verifying, { kind: "progress", progress: { stage: "restarting" }, at: 8000 })).toMatchObject({
+      stage: { stage: "restarting" },
+    });
+  });
+
+  test("a failed or cancelled install keeps its version, so that it can be tried again", () => {
+    const progress = nextUpdate(installing, { kind: "progress", progress: { stage: "downloading", downloaded: 1, total: 2 }, at: 1 });
+    expect(nextUpdate(progress, { kind: "install-failed", message: "The update was cancelled." })).toEqual({
+      state: "install-failed",
+      version: "0.3.1",
+      message: "The update was cancelled.",
+    });
     expect(nextUpdate(progress, { kind: "install-failed", message: "Download of Trackwall 0.3.1 failed" })).toEqual({
       state: "install-failed",
       version: "0.3.1",
@@ -56,7 +103,7 @@ describe("app update state", () => {
   });
 
   test("progress outside an install is ignored", () => {
-    expect(nextUpdate(available, { kind: "progress", progress: { downloaded: 1, total: 2 } })).toEqual(available);
+    expect(nextUpdate(available, { kind: "progress", progress: { stage: "verifying" }, at: 1 })).toEqual(available);
   });
 });
 
@@ -67,11 +114,40 @@ describe("app update texts", () => {
     );
   });
 
-  test("the install shows the progress once the download has started", () => {
-    expect(installingText({ version: "0.3.1" })).toBe("Installing Trackwall 0.3.1…");
-    expect(installingText({ version: "0.3.1", progress: { downloaded: 12 * 1024 * 1024, total: 40 * 1024 * 1024 } })).toBe(
-      "Installing Trackwall 0.3.1: 12.0 MB of 40.0 MB (30%)",
+  test("each stage of the install has its own line", () => {
+    expect(installingText(installing, 0)).toBe("Connecting to download Trackwall 0.3.1…");
+    expect(installingText({ ...installing, stage: { stage: "verifying" } }, 0)).toBe("Checking the signature of Trackwall 0.3.1…");
+    expect(installingText({ ...installing, stage: { stage: "installing" } }, 0)).toBe("Installing Trackwall 0.3.1…");
+    expect(installingText({ ...installing, stage: { stage: "restarting" } }, 0)).toBe("Restarting into Trackwall 0.3.1…");
+  });
+
+  test("the download shows its size, share and, after a second, its speed, which a stall hides", () => {
+    const downloading: Installing = {
+      ...installing,
+      stage: { stage: "downloading", downloaded: 12 * MB, total: 40 * MB },
+      lastDataAt: 500,
+      firstData: { at: 0, downloaded: 10 * MB },
+    };
+    expect(installingText(downloading, 0)).toBe("Downloading Trackwall 0.3.1: 12.0 MB of 40.0 MB (30%)");
+    expect(installingText({ ...downloading, lastDataAt: 4000 }, 0)).toBe(
+      "Downloading Trackwall 0.3.1: 12.0 MB of 40.0 MB (30%), 512.0 KB/s",
     );
+    expect(installingText({ ...downloading, lastDataAt: 4000 }, 30_000)).toBe("Downloading Trackwall 0.3.1: 12.0 MB of 40.0 MB (30%)");
+    expect(downloadedFraction({ downloaded: 12 * MB, total: 40 * MB })).toBe(0.3);
+    expect(downloadedFraction({ downloaded: 12 * MB, total: null })).toBeUndefined();
+  });
+
+  test("a download silent for 20 s says so, and only the download can be cancelled", () => {
+    const downloading: Installing = { ...installing, stage: { stage: "downloading", downloaded: MB, total: 40 * MB }, lastDataAt: 1000 };
+    expect(stallText(downloading, 20_999)).toBeUndefined();
+    expect(stallText(downloading, 26_000)).toBe(
+      "No data for 25 s. A proxy or firewall may be holding the download back; you can cancel and try again later.",
+    );
+    expect(stallText(installing, 30_000)).toStartWith("No data for 30 s.");
+    expect(canCancel(downloading)).toBe(true);
+    const unpacking: Installing = { ...installing, stage: { stage: "installing" } };
+    expect(canCancel(unpacking)).toBe(false);
+    expect(stallText(unpacking, 60_000)).toBeUndefined();
   });
 
   test("without the total size the progress shows only what has been downloaded", () => {

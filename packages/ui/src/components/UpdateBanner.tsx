@@ -1,15 +1,16 @@
 import type { ReactNode } from "react";
+import { UpdateInstallStatus } from "@/components/UpdateInstallStatus";
 import { Button } from "@/components/ui/button";
-import { availableText, installingText } from "@/lib/updates";
+import { availableText } from "@/lib/updates";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 
 /** Strip above the views while a newer version is available or being installed (ADR-53). */
-export function UpdateBanner({ handle: { update, install, dismissed, dismiss } }: { handle: AppUpdateHandle }) {
+export function UpdateBanner({ handle: { update, install, cancel, dismissed, dismiss } }: { handle: AppUpdateHandle }) {
   switch (update.state) {
     case "installing":
       return (
         <Strip>
-          <p className="min-w-0 flex-1 text-sm">{installingText(update)} The app restarts on its own.</p>
+          <UpdateInstallStatus update={update} cancel={cancel} />
         </Strip>
       );
     case "install-failed":

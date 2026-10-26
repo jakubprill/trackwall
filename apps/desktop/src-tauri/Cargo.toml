@@ -28,6 +28,8 @@ tauri-plugin-dialog = "2"
 zip = { version = "4", default-features = false, features = ["deflate-flate2"] }
 # zip asks flate2 for no backend; without this one the build depends on another crate happening to enable it.
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+# Cancelling the update download (`select!` against a `Notify`, ADR-53); already in the build through Tauri.
+tokio = { version = "1", features = ["sync", "macros"] }
 # The start entry at sign-in (ADR-65), without tauri-plugin-autostart (see autostart.rs).
 auto-launch = "0.6"
 
