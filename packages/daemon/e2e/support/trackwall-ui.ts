@@ -1,3 +1,4 @@
+import { afterAll, beforeAll } from "bun:test";
 import type { Client } from "@modelcontextprotocol/client";
 import { type Browser, chromium, type Locator, type Page } from "playwright";
 import { newToken } from "../../src/infra/discovery.ts";
@@ -8,6 +9,9 @@ import { UI_DIR } from "./ui-dir.ts";
 const VIEWPORT = { width: 1600, height: 1000 };
 const TRAY_PANEL_VIEWPORT = { width: 340, height: 420 };
 const TERMINAL_TIMEOUT_MS = 20_000;
+/** Above the 5 s default of a hook: Chromium and the daemon start slowly on a Windows runner. */
+const START_TIMEOUT_MS = 60_000;
+const STOP_TIMEOUT_MS = 30_000;
 /** xterm.js draws a space in a row as a no-break space. */
 const NO_BREAK_SPACE = String.fromCharCode(0xa0);
 
@@ -16,7 +20,7 @@ const NO_BREAK_SPACE = String.fromCharCode(0xa0);
  * and Chromium from Playwright to look at it (ADR-71). `agentOf` is the MCP client a session's agent has through its
  * bridge. `stop` closes the clients and the browser, then the daemon, also when one of them fails.
  */
-export async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> = ONE_REPO) {
+async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> = ONE_REPO) {
   const token = newToken();
   const browser = await chromium.launch();
   const daemon = await startSessionApi(token, { ...options, uiDir: UI_DIR }).catch(async (err: unknown) => {
@@ -38,7 +42,7 @@ export async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> =
     },
     stop: async () => {
       try {
-        for (const client of clients) await client.close();
+        await Promise.allSettled(clients.map((client) => client.close()));
         await browser.close();
       } finally {
         await daemon.stop();
@@ -48,6 +52,27 @@ export async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> =
 }
 
 export type Trackwall = Awaited<ReturnType<typeof startTrackwall>>;
+
+/**
+ * Starts Trackwall before the tests of the file and stops it after them; call the result in a test for the running
+ * one. The stop waits for a start still under way, so a start that outlives its time limit is stopped too.
+ */
+export function useTrackwall(options?: Omit<SessionApiOptions, "uiDir">): () => Trackwall {
+  let starting: Promise<Trackwall> | undefined;
+  let started: Trackwall | undefined;
+  beforeAll(async () => {
+    starting = startTrackwall(options);
+    started = await starting;
+  }, START_TIMEOUT_MS);
+  afterAll(async () => {
+    const running = await starting?.catch(() => undefined);
+    await running?.stop();
+  }, STOP_TIMEOUT_MS);
+  return () => {
+    if (started === undefined) throw new Error("Trackwall did not start");
+    return started;
+  };
+}
 
 /** Loads the UI with the token in the address, as the daemon prints it, and waits until the UI has taken it from there. */
 async function signIn(page: Page, origin: string, token: string): Promise<void> {
@@ -108,18 +133,21 @@ export async function waitForTerminal(page: Page, text: string): Promise<void> {
     const shows: [string, string] = [text, NO_BREAK_SPACE];
     await page.waitForFunction(terminalShows, shows, { timeout: TERMINAL_TIMEOUT_MS });
   } catch (err) {
-    const shown = (await page.locator(".xterm-rows > div").allTextContents()).join("\n");
+    const rows = await page.locator(".xterm-rows > div").allTextContents();
+    const shown = rows.map((row) => row.replaceAll(NO_BREAK_SPACE, " ").trimEnd()).join("\n");
     throw new Error(`the terminal did not show "${text}"; it shows:\n${shown}`, { cause: err });
   }
 }
 
 /**
  * Types into the session terminal as the user does: a click to focus it, then the keys. First it waits for the
- * terminal to draw the session's screen (the fake's welcome line is its first), which comes over its socket once it is
- * open: a terminal just mounted (after switching tabs) drops keys until then.
+ * terminal to draw the session's screen, which comes over its socket once it is open: a terminal just mounted (after
+ * switching tabs) drops keys until then.
  */
 export async function typeInTerminal(page: Page, keys: string): Promise<void> {
-  await waitForTerminal(page, "Welcome to the fake");
+  await page.waitForFunction(() => (document.querySelector(".xterm-rows")?.textContent ?? "").trim() !== "", undefined, {
+    timeout: TERMINAL_TIMEOUT_MS,
+  });
   await page.locator(".xterm").click();
   await page.keyboard.type(keys);
 }

@@ -63,16 +63,21 @@ const TICK_MS = 200;
  */
 const MCP_CONFIG_FILE = "mcp-config.json";
 /** The session token in the session directory, which the session's stdio bridge reads and sends to the MCP server (ADR-39). */
-export const SESSION_TOKEN_FILENAME = "session-token";
+const SESSION_TOKEN_FILENAME = "session-token";
 /** The hook records the session plugin's hook processes append to (`HookTail` reads them). */
 const HOOKS_FILENAME = "hooks.jsonl";
-export const SESSIONS_DIR = "sessions";
+const SESSIONS_DIR = "sessions";
 const TASKS_FILE = "tasks.json";
 const WORKTREES_DIR = "worktrees";
 
 /** A session's directory in the state directory: its plugin, MCP configuration, token and hook records. */
 function sessionDir(home: string, id: string): string {
   return join(home, SESSIONS_DIR, id);
+}
+
+/** A session's token file, which its stdio bridge reads (ADR-39). */
+export function sessionTokenFile(home: string, id: string): string {
+  return join(sessionDir(home, id), SESSION_TOKEN_FILENAME);
 }
 
 /** A session's `hooks.jsonl`. */

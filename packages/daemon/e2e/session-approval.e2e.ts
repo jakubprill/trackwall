@@ -1,22 +1,11 @@
-import { afterAll, beforeAll, describe, test } from "bun:test";
-import { sessionRow, showSessions, startTrackwall, type Trackwall, typeInTerminal, waitForTerminal } from "./support/trackwall-ui.ts";
+import { describe, test } from "bun:test";
+import { sessionRow, showSessions, typeInTerminal, useTrackwall, waitForTerminal } from "./support/trackwall-ui.ts";
 
-// Unset when the start failed, so `afterAll` stops only what started.
-let trackwall: Trackwall | undefined;
-
-// A limit above the default 5 s: Chromium and the daemon start slowly on a Windows runner.
-beforeAll(async () => {
-  trackwall = await startTrackwall();
-}, 60_000);
-
-afterAll(async () => {
-  await trackwall?.stop();
-}, 30_000);
+const trackwall = useTrackwall();
 
 describe("a session in a repo, answered from the tray panel", () => {
   test("a new session asks for approval of a command, and a click in the tray panel lets its agent finish the turn", async () => {
-    if (trackwall === undefined) throw new Error("Trackwall did not start");
-    const page = await trackwall.open();
+    const page = await trackwall().open();
     await showSessions(page);
     await page.getByRole("button", { name: "Session in the repo, no task" }).click();
 
@@ -24,7 +13,7 @@ describe("a session in a repo, answered from the tray panel", () => {
     await waitForTerminal(page, "Do you want to run this command?");
     await sessionRow(page, "shop").getByText("asking for approval").waitFor();
 
-    const panel = await trackwall.openTrayPanel();
+    const panel = await trackwall().openTrayPanel();
     const waiting = panel.getByRole("list", { name: "Waiting for you" });
     await waiting.getByText("Create a file").waitFor();
     await waiting.getByText("made-by-agent.txt").waitFor();

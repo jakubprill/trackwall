@@ -110,7 +110,7 @@ pnpm lint              # Biome (format, lint, import order; pnpm format fixes th
 pnpm typecheck
 pnpm test              # bun test in every package
 pnpm test:contract     # the daemon with the real Copilot CLI against a scripted model (ADR-67); CI runs it on every PR and nightly on the newest Copilot CLI (`nightly.yml`), run it locally when the change touches sessions, tasks, hooks or MCP
-pnpm test:e2e          # the UI build, then the key paths through it in Chromium on the daemon with the fake Copilot CLI (ADR-71); CI runs it on every PR, run it locally when the change touches the Sessions view, the tray panel, sessions, tasks or their API
+pnpm test:e2e          # the UI build, then the key paths through it in Chromium on the daemon with the fake Copilot CLI (ADR-71); CI runs it on every PR, run it locally when the change touches one of the key paths (Definition of done, point 1)
 
 # when the change touches apps/desktop, the daemon build or packaging (the `desktop` job in CI; cargo fmt also in `check`):
 cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check

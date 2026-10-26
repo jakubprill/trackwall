@@ -1,28 +1,17 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { agentsApi, ProposeTaskResult, WaitForSessionResult } from "@trackwall/protocol";
 import { waitFor } from "../test/support/agents.ts";
-import { sessionList, showSessions, startTrackwall, type Trackwall, waitForTerminal } from "./support/trackwall-ui.ts";
+import { sessionList, showSessions, useTrackwall, waitForTerminal } from "./support/trackwall-ui.ts";
 
-// Unset when the start failed, so `afterAll` stops only what started.
-let trackwall: Trackwall | undefined;
-
-// A limit above the default 5 s: Chromium and the daemon start slowly on a Windows runner.
-beforeAll(async () => {
-  trackwall = await startTrackwall();
-}, 60_000);
-
-afterAll(async () => {
-  await trackwall?.stop();
-}, 30_000);
+const trackwall = useTrackwall();
 
 describe("a task proposal from a main session", () => {
   test("the user edits the prompt of a main session's proposal and starts it, and the main session follows the task with that prompt", async () => {
-    if (trackwall === undefined) throw new Error("Trackwall did not start");
-    const { daemon } = trackwall;
+    const { daemon } = trackwall();
     const main = await daemon.post(agentsApi.start, { repo: "shop" });
     await waitFor(daemon.facade.agents, main.id, (s) => s.state !== null, "the main session's first state");
     // The main session's agent proposes through its MCP bridge, as Copilot CLI calls `propose_task`.
-    const agent = await trackwall.agentOf(main.id);
+    const agent = await trackwall().agentOf(main.id);
     const { proposal } = ProposeTaskResult.parse(
       (
         await agent.callTool({
@@ -32,7 +21,7 @@ describe("a task proposal from a main session", () => {
       ).structuredContent,
     );
 
-    const page = await trackwall.open();
+    const page = await trackwall().open();
     await showSessions(page);
     await sessionList(page)
       .getByRole("button", { name: /Task proposal/ })
