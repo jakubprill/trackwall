@@ -28,6 +28,7 @@ beforeAll(async () => {
       old: { "README.md": "# old\n" },
       billing: { "fake-mise.json": MISE_CONFIG },
       legacy: { "README.md": "# legacy\n" },
+      archive: { "README.md": "# archive\n" },
     },
     miseCommand: FAKE_MISE,
   });
@@ -132,10 +133,29 @@ describe.skipIf(process.versions.bun === undefined)("removing a repo from the pr
     expect(existsSync(join(removedDir(), "billing", "fake-mise.json"))).toBe(true);
   }, 30_000);
 
-  test("removing a repo rejects the other proposals for it, which could no longer start", async () => {
+  test("a repo whose task is still being created, or which another approval is already removing, is not removed", async () => {
+    const creating = daemon.facade.agents.createTask("legacy", "add a test");
     const removal = await proposeRemoval(outside, "legacy", "Unused");
+    await expect(daemon.facade.agents.approveRepoRemoval(removal.id)).rejects.toThrow("a task of legacy is being created");
+    const task = await creating;
+    const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === task.id);
+    if (session) {
+      await waitFor(daemon.facade.agents, session.id, (s) => s.state !== null, "the task's first state");
+      await daemon.facade.agents.stop(session.id);
+    }
+    await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
+
+    const second = await proposeRemoval(outside, "legacy", "Unused, again");
+    const first = daemon.facade.agents.approveRepoRemoval(removal.id);
+    await expect(daemon.facade.agents.approveRepoRemoval(second.id)).rejects.toThrow("legacy is already being removed");
+    await first;
+    expect(daemon.facade.agents.sessions().proposals.map((p) => p.id)).not.toContain(second.id);
+  }, 30_000);
+
+  test("removing a repo rejects the other proposals for it, which could no longer start", async () => {
+    const removal = await proposeRemoval(outside, "archive", "Unused");
     const task = ProposeTaskResult.parse(
-      (await outside.callTool({ name: "propose_task", arguments: { repo: "legacy", title: "Fix", prompt: "fix" } })).structuredContent,
+      (await outside.callTool({ name: "propose_task", arguments: { repo: "archive", title: "Fix", prompt: "fix" } })).structuredContent,
     ).proposal;
 
     await daemon.post(agentsApi.approveRepoRemoval, { proposal: removal.id });

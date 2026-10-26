@@ -324,6 +324,8 @@ export class Agents {
     const repoDir = this.#removalDirs.get(id);
     if (proposal.kind !== "remove_repo" || repoDir === undefined)
       throw new DomainError("bad_request", `proposal ${id} is not a repo removal`);
+    if (this.#proposals.list().some((p) => p.repo === proposal.repo && this.#proposals.approving(p.id)))
+      throw new DomainError("bad_request", `${proposal.repo} is already being removed or a task of it started`);
     this.#assertNothingRunsIn(proposal.repo, repoDir);
     this.#proposals.take(id);
     let movedTo: string;
@@ -344,6 +346,7 @@ export class Agents {
   #assertNothingRunsIn(repo: string, repoDir: string): void {
     const sessions = this.#views().filter((s) => s.repo === repo && s.task === null && s.run.kind !== "exited");
     if (sessions.length > 0) throw new DomainError("bad_request", `stop the sessions in ${repo} first (${sessions.length} running)`);
+    if (this.#tasks.creatingIn(repo)) throw new DomainError("bad_request", `a task of ${repo} is being created; wait for it, then end it`);
     const tasks = this.#tasks.list().filter((t) => t.repo === repo);
     if (tasks.length > 0)
       throw new DomainError("bad_request", `end the tasks of ${repo} first (${tasks.length}): their worktrees belong to the repo`);

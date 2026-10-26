@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CloneJob } from "@trackwall/protocol";
@@ -118,6 +118,18 @@ describe("cloning from a repo host into the projects folder", () => {
       code: "bad_request",
       message: `shop/api is already being cloned into ${join(projects, "API")}`,
     });
+    await finished(workspace, "shop/api");
+  });
+
+  test("a repo being cloned is not removed from the projects folder (ADR-83)", async () => {
+    const { workspace, projects } = await workspaceWithGitLab({ cloneDelayMs: 300 });
+    await workspace.clone(GITLAB, "shop/api");
+    // git makes the folder and its `.git` first, so the repo is listed while the clone still runs.
+    const path = join(projects, "api");
+    mkdirSync(join(path, ".git"), { recursive: true });
+
+    await expect(workspace.removeRepo("api", path, () => {})).rejects.toThrow("api is still being cloned; wait for the clone to end");
+    expect(readdirSync(projects)).toContain("api");
     await finished(workspace, "shop/api");
   });
 
