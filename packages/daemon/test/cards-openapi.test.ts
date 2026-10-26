@@ -191,9 +191,10 @@ openApiGenerate {
     expect(endpoints(c)).toEqual(["openapi GET /api/orders/{id} null null → null getOrder: null @contracts-v2/shop.yml:5"]);
   });
 
-  test("a file of blank lines is checked for a spec key in linear time", () => {
+  test("a file of blank lines, or one long line of blanks, is checked for a spec key in linear time", () => {
     const started = performance.now();
     expect(mayBeSpec(`${"\n".repeat(1_000_000)}x`)).toBe(false);
+    expect(mayBeSpec(`${" ".repeat(1_000_000)}x`)).toBe(false);
     expect(performance.now() - started).toBeLessThan(1000);
   });
 

@@ -47,8 +47,9 @@ const MAX_REF_HOPS = 3;
  */
 const SPEC_KEY_ERE = '^(openapi|swagger)[[:space:]]*:|^[[:space:]]*[{]?[[:space:]]*"(openapi|swagger)"[[:space:]]*:';
 // Blanks within a line only (`[ \t]`, like git grep's line-bound `[[:space:]]`): `\s` with the `m` flag also crosses lines,
-// and a file of blank lines from the repo would backtrack for minutes (§8).
-const SPEC_KEY = /^(openapi|swagger)[ \t]*:|^[ \t]*\{?[ \t]*"(openapi|swagger)"[ \t]*:/m;
+// and a file of blank lines from the repo would backtrack for minutes (§8). The blanks after `{` only follow a `{`, so a
+// long line of blanks has one way to split them.
+const SPEC_KEY = /^(openapi|swagger)[ \t]*:|^[ \t]*(?:\{[ \t]*)?"(openapi|swagger)"[ \t]*:/m;
 const SPEC_GLOBS = ["*.yaml", "*.yml", "*.json"];
 /** At most this many spec candidates from the search: a repo keeps a few specs, more is generated or vendored. */
 const MAX_SPEC_FILES = 200;

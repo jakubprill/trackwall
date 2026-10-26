@@ -4,7 +4,7 @@ import { httpMethodMatches, httpPathMatches, httpUrlPath, joinHttpPath, parseHtt
 describe("HTTP addresses and paths", () => {
   test("the path of an address loses the scheme, host, query and fragment, and a bare path only its query", () => {
     expect(
-      ["https://gateway.example.com:8443/orders/api?x=1", "lb://orders/api", "//cdn.example.com/v1#top", "/api/v1?x", "http://host"].map(
+      ["https://gateway.example.com:8443/orders/api?x=1", "lb://orders/api", "http://u:p/w@host/v1#top", "/api/v1?x", "http://host"].map(
         httpUrlPath,
       ),
     ).toEqual(["/orders/api", "/api", "/v1", "/api/v1", ""]);

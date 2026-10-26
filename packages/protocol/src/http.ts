@@ -289,7 +289,8 @@ export function lbAppName(url: string): string | null {
  * without a scheme and host is a path already and loses only its query (`/api?x` → `/api`).
  */
 export function httpUrlPath(text: string): string {
-  return text.replace(/^([a-z][a-z0-9+.-]{0,20}:)?\/\/[^/?#\s]*/i, "").split(/[?#]/)[0] ?? "";
+  if (text.length > MAX_URL_LENGTH) return "";
+  return urlParts(text)?.path ?? text.split(/[?#]/)[0] ?? "";
 }
 
 /** Paths joined into one, with one `/` between parts and without a query: `/api` + `orders/` + `/{id}` → `/api/orders/{id}`. */
