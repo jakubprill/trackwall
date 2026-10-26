@@ -134,17 +134,13 @@ describe("mise configuration and the no-mise tag", () => {
     expect(noMise({}, ["mise.toml"])).toBeUndefined();
   });
 
-  test("a failed source file search does not hide no-mise, and a file list cut short does", async () => {
-    const noMiseAfterReading = async (listTruncated: boolean) => {
+  test("a failed source file search keeps no-mise, and a file list cut at its limit or a mise.toml past the build file limit drops it", async () => {
+    const file = (path: string) => ({ name: path.split("/").at(-1) ?? path, path, kind: "file" as const, size: 10 });
+    const noMiseAfterReading = async (paths: string[], listTruncated: boolean) => {
       const vcs = {
-        commitFiles: async () => ({
-          files: [
-            { name: "pom.xml", path: "pom.xml", kind: "file" as const, size: 10 },
-            { name: "Api.java", path: "src/main/java/Api.java", kind: "file" as const, size: 10 },
-          ],
-          truncated: listTruncated,
-        }),
-        readFiles: async () => new Map([["pom.xml", Buffer.from("<project/>")]]),
+        commitFiles: async () => ({ files: paths.map(file), truncated: listTruncated }),
+        readFiles: async (_dir: string, _commit: string, wanted: readonly string[]) =>
+          new Map(wanted.map((path) => [path, Buffer.from(path.endsWith("pom.xml") ? "<project/>" : '[tools]\njava = "21"\n')])),
         grepFiles: async () => {
           throw new Error("git grep: timed out");
         },
@@ -152,9 +148,12 @@ describe("mise configuration and the no-mise tag", () => {
       const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), readsCardFile, CARD_SOURCES);
       return repoTags(extractCard(snapshot, parsers), { id: "app", remote: null }, {}).find((t) => t.name === "no-mise")?.reason;
     };
-    expect(await noMiseAfterReading(false)).toBe("no mise config in the repo root");
+    expect(await noMiseAfterReading(["pom.xml", "src/main/java/Api.java"], false)).toBe("no mise config in the repo root");
     // Past the cut the list may have a mise.toml or a mise task directory.
-    expect(await noMiseAfterReading(true)).toBeUndefined();
+    expect(await noMiseAfterReading(["pom.xml", "src/main/java/Api.java"], true)).toBeUndefined();
+    // The card reads the first 2000 build files; the mise.toml after them may declare mise tasks.
+    const poms = Array.from({ length: 2000 }, (_, i) => `m${i}/pom.xml`);
+    expect(await noMiseAfterReading([...poms, "mise.toml"], false)).toBeUndefined();
   });
 
   test("the no-mise reason points to mise.toml before other files, and a bad file from conf.d is a card problem", () => {

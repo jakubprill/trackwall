@@ -18,7 +18,10 @@ export interface RepoSnapshot {
   commit: string;
   /** The commit's files outside dependency directories (`SKIPPED_DIRS` in `read-snapshot.ts`). */
   paths: readonly string[];
-  /** `true` when git's file list was cut at its limit, so `paths` is only its beginning and an absent file may exist. */
+  /**
+   * `true` when git's file list was cut at its limit, so `paths` is only its beginning and an absent file may exist.
+   * `problems` names the same cut for the card; this flag is for extractors that need to know it was the list.
+   */
   pathsTruncated: boolean;
   /** The file's content; `undefined` when it does not exist or was not read (it is neither a build nor a configuration file). */
   text(path: string): string | undefined;
