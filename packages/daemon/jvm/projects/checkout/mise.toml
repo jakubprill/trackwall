@@ -1,0 +1,11 @@
+[tools]
+java = "temurin-21"
+gradle = "8.14.3"
+
+[tasks.dev]
+description = "Run the app on server.port"
+run = "gradle --console=plain bootRun"
+
+[tasks.test]
+description = "Unit tests, JUnit reports in build/test-results/test"
+run = "gradle --console=plain test"

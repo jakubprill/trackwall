@@ -14,6 +14,7 @@ A change is done when it meets every point, not when it compiles:
    - **Logic** (a rule, a parser, a state, a view's logic in `packages/ui/src/lib`): a unit test in the package's `test/` directory (`bun test`).
    - **A daemon flow** (an API action, an MCP tool, a session, task or process): a test in `packages/daemon/test/` through the real facade, a real child process for `procs` and `logs`, real git and the fake Copilot CLI; `cargo test` for the Tauri shell.
    - **Whatever the daemon relies on from Copilot CLI** (a hook event or payload field, a flag or environment variable, a screen pattern such as the approval window, how it loads MCP servers and instructions): a contract test in `packages/daemon/contract/` that runs the real Copilot CLI against a scripted model (`pnpm test:contract`, ADR-67), and the fake Copilot CLI of `test/` gets the same behaviour in the same PR (a difference a contract test finds in existing behaviour is fixed in its own PR and named in §10 of the architecture until then). A feature test with the fake alone proves only that the daemon agrees with the fake.
+   - **Whatever the daemon reads from a Java build** (a Maven, Gradle or Spring Boot log line, where a build tool writes its reports, a build file or Spring code pattern): besides the unit test on a handwritten line or file, a case in the tests with real Java builds in `packages/daemon/jvm/` when a real build shows it (`pnpm test:jvm`, ADR-72); they run nightly and on PRs that touch the daemon (`jvm.yml`, outside `CI ok`), and a red run on the PR is fixed before the merge.
    - **A key path through the UI** (a session and its approval, a task proposal, an agent task with its review; ADR-71): its E2E test in `packages/daemon/e2e/` (`pnpm test:e2e`) keeps passing, and a change to what the user sees or does on that path changes the test with it. Other UI features need no E2E test: their logic gets unit tests and their daemon side flow tests. A new path joins the E2E tests only when it crosses the daemon and a view in a way the tests of either side cannot see.
 
    The PR description names the tests added for each layer, or says why a layer does not apply.
@@ -110,6 +111,7 @@ pnpm lint              # Biome (format, lint, import order; pnpm format fixes th
 pnpm typecheck
 pnpm test              # bun test in every package
 pnpm test:contract     # the daemon with the real Copilot CLI against a scripted model (ADR-67); CI runs it on every PR and nightly on the newest Copilot CLI (`nightly.yml`), run it locally when the change touches sessions, tasks, hooks or MCP
+pnpm test:jvm          # the daemon on real Spring Boot projects built by Maven and Gradle through mise (ADR-72); CI runs it nightly and on PRs that touch the daemon (`jvm.yml`), run it locally when the change touches what the daemon reads from Java builds
 pnpm test:e2e          # the UI build, then the key paths through it in Chromium on the daemon with the fake Copilot CLI (ADR-71); CI runs it on every PR, run it locally when the change touches one of the key paths (Definition of done, point 1)
 
 # when the change touches apps/desktop, the daemon build or packaging (the `desktop` job in CI; cargo fmt also in `check`):
@@ -124,7 +126,7 @@ pnpm portable
 pnpm --filter @trackwall/docs build
 ```
 
-Tool versions are in `mise.toml` (`mise install`), which also has the `setup`, `dev` and `portable` tasks. The workflows have them in `env`, and the `.github/actions/setup` action installs them in the jobs that build and test (the audit needs only pnpm and Node); a version change goes into `mise.toml` and every workflow that sets it at once (`ci.yml`, `release.yml`, and Node and Bun in `pages.yml` and `contract.yml`; a test guards this).
+Tool versions are in `mise.toml` (`mise install`), which also has the `setup`, `dev` and `portable` tasks. The workflows have them in `env`, and the `.github/actions/setup` action installs them in the jobs that build and test (the audit needs only pnpm and Node); a version change goes into `mise.toml` and every workflow that sets it at once (`ci.yml`, `release.yml`, and Node and Bun in `pages.yml`, `contract.yml` and `jvm.yml`; a test guards this).
 
 ## Commits and PRs
 

@@ -25,3 +25,22 @@ updates:
     groups:
       cargo:
         patterns: ["*"]
+
+  # The Spring Boot projects of the tests with real Java builds (ADR-72): a new Spring Boot or plugin version comes in
+  # a PR, on which jvm.yml runs, so the tests follow what users build with. The Maven and Gradle versions are in their
+  # mise.toml, which Dependabot does not read.
+  - package-ecosystem: maven
+    directory: /packages/daemon/jvm/projects/orders
+    schedule:
+      interval: weekly
+    groups:
+      maven:
+        patterns: ["*"]
+
+  - package-ecosystem: gradle
+    directory: /packages/daemon/jvm/projects/checkout
+    schedule:
+      interval: weekly
+    groups:
+      gradle:
+        patterns: ["*"]
