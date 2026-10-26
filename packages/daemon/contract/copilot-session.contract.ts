@@ -2,8 +2,10 @@ import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, te
 import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
+import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
 import { promptBoxOnScreen } from "../src/modules/agents/copilot-prompt-box.ts";
 import { inboxPrompt } from "../src/modules/agents/inbox-prompt.ts";
+import { OscParser } from "../src/modules/agents/osc-parser.ts";
 import { viewer, waitFor } from "../test/support/agents.ts";
 import { REFERENCE_COLS, REFERENCE_ROWS } from "../test/support/copilot-reference.ts";
 import { hookRecords, startRealCopilotDaemon } from "./support/real-copilot.ts";
@@ -127,6 +129,10 @@ describe("a session of the real Copilot CLI", () => {
     expect(records[2]?.payload.stopReason).toBe("end_turn");
     recorder.turn(records);
     recorder.titles(window, "what is in this repo?");
+    // ConPTY on Windows first sets the title to the path of the program it started, which the daemon leaves out.
+    const titles = new OscParser().feed(window.text()).flatMap((osc) => windowTitleFromOsc(osc, null) ?? []);
+    if (process.platform === "win32") expect(titles[0]).toBe(daemon.copilot);
+    expect(done.windowTitle).not.toBe(daemon.copilot);
   });
 
   test("a shell command asks for approval as a permission_prompt notification, the daemon reads the dialog, and its answer runs it", async () => {

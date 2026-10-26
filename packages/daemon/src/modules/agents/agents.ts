@@ -439,7 +439,7 @@ export class Agents {
     const token = this.#tokens.issue(id);
     let prepared: PreparedSession;
     try {
-      prepared = this.#prepare({ id, repo, task, dir, token, promptOnStart });
+      prepared = this.#prepare({ id, repo, task, dir, token, promptOnStart, program });
     } catch (err) {
       this.#tokens.revoke(id);
       rmSync(dir, { recursive: true, force: true });
@@ -543,7 +543,7 @@ export class Agents {
    * The session directory with the session plugin, MCP config, session token, session instructions and an empty
    * `hooks.jsonl`, before Copilot CLI starts.
    */
-  #prepare({ id, repo, task, dir, token, promptOnStart }: SessionFiles): PreparedSession {
+  #prepare({ id, repo, task, dir, token, promptOnStart, program }: SessionFiles): PreparedSession {
     const pluginDir = join(dir, "plugin");
     const hooksFile = join(dir, HOOKS_FILENAME);
     const tokenFile = join(dir, SESSION_TOKEN_FILENAME);
@@ -564,6 +564,7 @@ export class Agents {
       rows: INITIAL_ROWS,
       hooksFile,
       promptOnStart,
+      program,
       run: () => this.#deps.procs.state(owner(id)),
       prompt: () => this.#inboxPrompt({ id, repo, task }),
       onUserText: () => this.#coordination.userTyped({ id, task }),
@@ -652,6 +653,8 @@ interface SessionFiles {
   dir: string;
   token: string;
   promptOnStart: boolean;
+  /** The Copilot CLI program the session starts. */
+  program: string;
 }
 
 /** A prepared session directory: the session and its instructions directory (`null` when it could not be written). */

@@ -46,6 +46,11 @@ export interface CopilotSessionStateOptions extends TaskStateTrackerOptions {
    * agent starts.
    */
   promptOnStart: boolean;
+  /**
+   * The path the session's program was started with, whose window title ConPTY on Windows sets first (`windowTitleFromOsc`);
+   * `null` when not known, as in the replay of a recording.
+   */
+  program: string | null;
 }
 
 export class CopilotSessionState {
@@ -54,6 +59,7 @@ export class CopilotSessionState {
   readonly #tracker: TaskStateTracker;
   readonly #now: () => number;
   readonly #promptOnStart: boolean;
+  readonly #program: string | null;
   /** When the daemon typed a prompt before the first hook (`promptTyped`). */
   #promptTypedAt: number | undefined;
   /**
@@ -69,6 +75,7 @@ export class CopilotSessionState {
     this.#tracker = new TaskStateTracker(o);
     this.#now = o.now;
     this.#promptOnStart = o.promptOnStart;
+    this.#program = o.program;
   }
 
   /** The last window title set by Copilot CLI: what the agent is working on. */
@@ -83,7 +90,7 @@ export class CopilotSessionState {
   output(data: string): TaskStateChange[] {
     const changes = [this.#tracker.tick(), this.#tracker.activity()];
     for (const osc of this.#osc.feed(data)) {
-      this.#windowTitle = windowTitleFromOsc(osc) ?? this.#windowTitle;
+      this.#windowTitle = windowTitleFromOsc(osc, this.#program) ?? this.#windowTitle;
       const signal = stateFromOsc(osc);
       if (signal) changes.push(this.#tracker.signal(signal));
     }

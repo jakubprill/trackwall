@@ -5,7 +5,7 @@ import { COPILOT_CLI_VERSION } from "../scripts/copilot-cli.ts";
 import { readAgentDialog } from "../src/modules/agents/copilot-dialog.ts";
 import { promptBoxOnScreen } from "../src/modules/agents/copilot-prompt-box.ts";
 import { CopilotSessionState } from "../src/modules/agents/copilot-session-state.ts";
-import { anonymize, type ReferenceHook, readReference, referenceFile } from "./support/copilot-reference.ts";
+import { anonymize, PROMPT_PLACEHOLDER, type ReferenceHook, readReference, referenceFile } from "./support/copilot-reference.ts";
 
 const platforms = readdirSync(dirname(referenceFile()))
   .filter((name) => name.endsWith(".json"))
@@ -13,7 +13,7 @@ const platforms = readdirSync(dirname(referenceFile()))
 
 /** The states the daemon gives the reference's hooks of a session without a prompt at its start. */
 function states(hooks: readonly ReferenceHook[]): string[] {
-  const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false });
+  const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program: null });
   return hooks.flatMap(({ event, payload }) => session.hook({ event, receivedAt: 0, payload, omitted: [] })).map((c) => c.state);
 }
 
@@ -57,5 +57,33 @@ describe("paths in a reference", () => {
     expect(anonymize("in this repo (/private/var/folders/x1/.../shop)", [])).toBe("in this repo (/projects/shop)");
     expect(anonymize(String.raw`in this repo (C:\Users\RUNNER~1\...\shop)`, [])).toBe("in this repo (/projects/shop)");
     expect(anonymize("│ repo (/tmp/.../shop)    │", [])).toBe("│ repo (/projects/shop)   │");
+  });
+});
+
+describe("the window title of a Copilot CLI session on Windows", () => {
+  const program = String.raw`C:\Users\dev\AppData\Roaming\npm\node_modules\@github\copilot-win32-x64\copilot.exe`;
+  const osc = (title: string) => `\u001b]0;${title}\u0007`;
+
+  test("is not the program path that ConPTY sets before Copilot CLI sets its own", () => {
+    const [startTitle, turnTitle] = readReference("win32")?.titles ?? [];
+    if (startTitle === undefined || turnTitle === undefined) throw new Error("no window titles in the Windows reference");
+    const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program });
+
+    session.output(osc(program));
+    expect(session.windowTitle).toBeUndefined();
+
+    session.output(osc(startTitle));
+    expect(session.windowTitle).toBe("GitHub Copilot");
+
+    session.output(osc(turnTitle.replaceAll(PROMPT_PLACEHOLDER, "fix the test")));
+    expect(session.windowTitle).toBe("fix the test - GitHub Copilot");
+  });
+
+  test("set by Copilot CLI to any other path stays the session's title", () => {
+    const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program });
+
+    session.output(osc(String.raw`C:\Projects\shop`));
+
+    expect(session.windowTitle).toBe(String.raw`C:\Projects\shop`);
   });
 });
