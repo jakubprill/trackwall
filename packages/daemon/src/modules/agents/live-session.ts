@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import type { AgentDialog, DialogAnswer, RunState, Session, TaskState, TaskStateChange, TaskUpdate } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 import { readAgentDialog, type ScreenDialog } from "./copilot-dialog.ts";
-import type { CopilotHookEvent } from "./copilot-hook-record.ts";
+import { type CopilotHookOutput, hookOutputFor } from "./copilot-hook-output.ts";
+import type { CopilotHookEvent, CopilotHookRecord } from "./copilot-hook-record.ts";
 import { approvalRequest } from "./copilot-hooks.ts";
 import { answersDialog, ESCAPE, type SessionKey, sessionKey } from "./copilot-keys.ts";
 import { promptBoxText } from "./copilot-prompt-box.ts";
@@ -152,6 +153,10 @@ export class LiveSession {
   #userDraft = false;
   /** When the user last put text into the input box (milliseconds since the epoch). */
   #userTextAt = 0;
+  /** The prompt last given to the agent with a tool's result in this turn (ADR-85), so it is given once per turn. */
+  #contextGiven: string | undefined;
+  /** The last turn's end was blocked with the prompt (ADR-85), so the turn under way is the daemon's. */
+  #blockGiven = false;
   /** Since when the screen has shown the empty input box without a break, read once per read cycle. */
   #boxEmptySince: number | undefined;
   /** The input box's text read from the screen (`promptBoxText`), for the screen revision it was read at. */
@@ -240,6 +245,41 @@ export class LiveSession {
     this.#promptAsked = true;
     this.#typePrompt();
     return this.#promptAsked ? "queued" : "typed";
+  }
+
+  /**
+   * The output for a hook Copilot CLI just sent (ADR-85), whose record (`undefined`: none) is already in `hooks.jsonl`:
+   * what `askToRead` asked for goes to the agent without typing (`hookOutputFor`), so a new supervisor or main session
+   * is not handed the updates it found unread. A block is the prompt on its way, like a typed one, and is the daemon's
+   * turn: the turn it ends is not reported as ended. A turn a block started that ends with the prompt still unread
+   * leaves it to the typed prompt once the input box is back. No dialog check as in `#typePrompt`: a block sends no keys.
+   */
+  hookOutput(record: CopilotHookRecord | undefined): CopilotHookOutput {
+    // The hooks file is closed once the exit was seen; a late hook changes nothing.
+    if (this.#finished) return {};
+    const turnEnded = this.#readHooks(record?.event === "agentStop");
+    const blockedTurn = record?.payload.stop_hook_active === true;
+    const asked = this.#promptAsked || this.#promptTyped !== undefined || (blockedTurn && this.#blockGiven);
+    if (record?.event === "agentStop") this.#blockGiven = false;
+    const output =
+      record === undefined || !asked
+        ? {}
+        : hookOutputFor({
+            event: record.event,
+            blockedTurn,
+            prompt: this.#promptText(),
+            contextGiven: this.#contextGiven,
+            userDraft: this.#userDraft,
+          });
+    if ("additionalContext" in output) this.#contextGiven = output.additionalContext;
+    if ("reason" in output) {
+      this.#promptSent(output.reason, 0);
+      this.#blockGiven = true;
+    } else {
+      if (blockedTurn && asked && this.#promptText() !== undefined) this.#promptAsked = true;
+      if (turnEnded) this.#onEvent({ kind: "turn_ended" });
+    }
+    return output;
   }
 
   /**
@@ -366,18 +406,29 @@ export class LiveSession {
     this.#screen.dispose();
   }
 
-  #readHooks(): void {
-    for (const record of this.#hooks.read()) {
-      if (record.event === "userPromptSubmitted") this.#userDraft = false;
-      this.#notice = approvalRequest(record) ? record.payload.message : undefined;
-      this.#report(this.#state.hook(record));
-      this.#applyEarlyAnswer(record.event);
-      // The end of a turn from its hook, not from the state: a question dialog and an Esc give `Input` mid-turn too.
-      if (record.event === "agentStop") {
-        if (!this.#userDrove) this.#onEvent({ kind: "turn_ended" });
-        this.#userDrove = false;
-      }
-    }
+  /**
+   * Reads new hook records. A turn's end goes out as `turn_ended` at once, except the last record's when `holdLastTurnEnd`:
+   * then the result says whether it ended a turn, for `hookOutput` to report after it decided on a block.
+   */
+  #readHooks(holdLastTurnEnd = false): boolean {
+    const records = this.#hooks.read();
+    const last = holdLastTurnEnd ? records.pop() : undefined;
+    for (const record of records) if (this.#readHook(record)) this.#onEvent({ kind: "turn_ended" });
+    return last !== undefined && this.#readHook(last);
+  }
+
+  /** Applies one hook record; true when it ended a turn the user did not drive. */
+  #readHook(record: CopilotHookRecord): boolean {
+    if (record.event === "userPromptSubmitted") this.#userDraft = false;
+    if (record.event === "userPromptSubmitted" || record.event === "agentStop") this.#contextGiven = undefined;
+    this.#notice = approvalRequest(record) ? record.payload.message : undefined;
+    this.#report(this.#state.hook(record));
+    this.#applyEarlyAnswer(record.event);
+    // The end of a turn from its hook, not from the state: a question dialog and an Esc give `Input` mid-turn too.
+    if (record.event !== "agentStop") return false;
+    const ended = !this.#userDrove;
+    this.#userDrove = false;
+    return ended;
   }
 
   /**
@@ -426,13 +477,22 @@ export class LiveSession {
     this.#type(terminal, text, 0);
   }
 
-  /** Types `text` (try number `retries`) with its Enter after `SUBMIT_DELAY_MS`. */
-  #type(terminal: SessionPty, text: string, retries: number): void {
+  /**
+   * The prompt `text` (try number `retries`) is on its way, typed or as a block: it counts until the session leaves
+   * `Input`, and the read cycle looks after it from now (`#followTypedPrompt`).
+   */
+  #promptSent(text: string, retries: number): void {
+    // Before the first hook a block cannot come (no `agentStop` yet), so `promptTyped` acts only for a typed prompt.
     this.#promptAsked = false;
     this.#promptTyped = { text, at: Date.now(), retries };
     this.#state.promptTyped();
     // The daemon starts this turn: an Esc earlier (an interrupt gives no `agentStop`) does not make it the user's.
     this.#userDrove = false;
+  }
+
+  /** Types `text` (try number `retries`) with its Enter after `SUBMIT_DELAY_MS`. */
+  #type(terminal: SessionPty, text: string, retries: number): void {
+    this.#promptSent(text, retries);
     terminal.write(text);
     clearTimeout(this.#submitTimer);
     this.#submitTimer = setTimeout(() => {

@@ -24,9 +24,10 @@
     {
       "event": "agentStop",
       "payload": {
-        "stopReason": "end_turn"
+        "stopReason": "end_turn",
+        "stop_hook_active": false
       },
-      "omitted": ["cwd", "stop_hook_active", "transcriptPath"]
+      "omitted": ["cwd", "transcriptPath"]
     }
   ],
   "approval": {
@@ -62,9 +63,10 @@
       {
         "event": "agentStop",
         "payload": {
-          "stopReason": "end_turn"
+          "stopReason": "end_turn",
+          "stop_hook_active": false
         },
-        "omitted": ["cwd", "stop_hook_active", "transcriptPath"]
+        "omitted": ["cwd", "transcriptPath"]
       }
     ],
     "dialog": [

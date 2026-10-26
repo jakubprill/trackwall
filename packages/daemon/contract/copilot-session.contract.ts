@@ -316,8 +316,8 @@ describe("a review of a task's changes with the real Copilot CLI (ADR-62)", () =
   });
 });
 
-describe("a prompt the daemon types into a working session with the real Copilot CLI (ADR-68)", () => {
-  test("a review sent while the agent works goes in after its turn, once Copilot CLI has drawn the input box again", async () => {
+describe("what waits for a working session, given through the hooks' output with the real Copilot CLI (ADR-85)", () => {
+  test("a review sent while the agent works blocks the end of its turn, and the next turn starts with the prompt without typing", async () => {
     const { agents } = daemon.facade;
     let taskId: string | undefined;
     let delivery: string | undefined;
@@ -346,9 +346,51 @@ describe("a prompt the daemon types into a working session with the real Copilot
 
     expect(delivery).toBe("queued");
     expect(model.requests().at(-1)?.lastUserText).toContain("sent a review of your changes in Trackwall");
+    // The second turn was started by the block, so its end is not blocked again.
+    expect(hookRecords(daemon.home, session.id).map((r) => [r.event, r.payload.stop_hook_active])).toEqual([
+      ["sessionStart", undefined],
+      ["userPromptSubmitted", undefined],
+      ["agentStop", false],
+      ["userPromptSubmitted", undefined],
+      ["agentStop", true],
+    ]);
+    await agents.stop(session.id);
+  });
+
+  test("a review sent while a tool runs reaches the agent with the tool's result, in the same turn", async () => {
+    const { agents } = daemon.facade;
+    let taskId: string | undefined;
+    const review = { path: "README.md", side: "new" as const, line: 1, code: "# shop", text: "Mention the signup page" };
+    model.reply(
+      () => {
+        if (taskId === undefined) throw new Error("the task's first request came before the task was created");
+        agents.sendReview(taskId, [review]);
+        return { tool: copilotToolName(mcpTools.getMessages.name), arguments: {} };
+      },
+      { text: "I will read the review." },
+      { text: "Reading it." },
+    );
+    const task = await agents.createTask("shop", "add a signup test");
+    taskId = task.id;
+    const session = agents.sessions().sessions.find((s) => s.task === task.id);
+    if (session === undefined) throw new Error("the task has no session");
+
+    await waitFor(
+      agents,
+      session.id,
+      () => hookRecords(daemon.home, session.id).filter((r) => r.event === "agentStop").length >= 2,
+      "the turn the review's block starts",
+      SESSION_MS,
+    );
+
+    const [, afterTool, blocked] = model.requests().slice(-3);
+    expect(afterTool?.toolResults.join("\n")).toContain("sent a review of your changes in Trackwall");
+    expect(afterTool?.lastUserText).not.toContain("sent a review of your changes in Trackwall");
+    expect(blocked?.lastUserText).toContain("sent a review of your changes in Trackwall");
     expect(hookRecords(daemon.home, session.id).map((r) => r.event)).toEqual([
       "sessionStart",
       "userPromptSubmitted",
+      "postToolUse",
       "agentStop",
       "userPromptSubmitted",
       "agentStop",

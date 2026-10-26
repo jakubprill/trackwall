@@ -27,6 +27,7 @@ import {
 } from "@trackwall/protocol";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { findCopilot } from "./copilot-command.ts";
+import type { CopilotHookOutput } from "./copilot-hook-output.ts";
 import { CopilotHookEvent } from "./copilot-hook-record.ts";
 import { writeCopilotPlugin } from "./copilot-plugin.ts";
 import { appendHookRecord } from "./hook-tail.ts";
@@ -281,16 +282,17 @@ export class Agents {
 
   /**
    * A hook the plugin of the session with token `sessionToken` POSTed (ADR-88): its record goes to the session's
-   * `hooks.jsonl`, which the session reads as before, and the answer is the hook's output for Copilot CLI, today always
-   * empty (no decision). A payload that is not a JSON object leaves no record, like a broken hook.
+   * `hooks.jsonl`, which the session reads as before, and the answer is the hook's output for Copilot CLI: what waits
+   * for the session at the end of a turn or with a tool's result (`LiveSession.hookOutput`, ADR-85), otherwise empty.
+   * A payload that is not a JSON object leaves no record, like a broken hook.
    */
-  receiveHook(sessionToken: string, event: string, payload: string): Record<string, never> {
+  receiveHook(sessionToken: string, event: string, payload: string): CopilotHookOutput {
     const id = this.#tokens.session(sessionToken);
     if (id === undefined) throw new DomainError("unauthorized", "unknown session token: this Trackwall session has ended");
     const hook = CopilotHookEvent.safeParse(event);
     if (!hook.success) throw new DomainError("not_found", `no hook ${event}`);
-    appendHookRecord(sessionHooksFile(this.#deps.home, id), hook.data, payload);
-    return {};
+    const record = appendHookRecord(sessionHooksFile(this.#deps.home, id), hook.data, payload);
+    return this.#sessions.get(id)?.hookOutput(record) ?? {};
   }
 
   /** A task proposal from session `caller` (`null`: an agent outside Trackwall) in a repo from the projects folder (ADR-39). */

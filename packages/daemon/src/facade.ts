@@ -56,6 +56,7 @@ export interface Facade {
   openLink: (url: string) => void;
 }
 
+export type { CopilotHookOutput } from "./modules/agents/copilot-hook-output.ts";
 export type { CopilotHookEvent } from "./modules/agents/copilot-hook-record.ts";
 export { HOSTING_CLIS } from "./modules/vcs/hosting.ts";
 

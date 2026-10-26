@@ -462,8 +462,12 @@ The instruction file in the session directory that the daemon gives Copilot CLI 
 _Avoid_: system prompt (Copilot CLI builds it itself), repository instructions (those are files in the user's repo)
 
 **Hook record** (`CopilotHookRecord`):
-One call of a hook from the session plugin: the event, the time it was received and only the payload fields needed for the state, and for the rest only their names (without the prompt, tool arguments and results). A line of `hooks.jsonl` and a marker in the recording.
+One call of a hook from the session plugin: the event, the time it was received and only the payload fields needed for the state and the hook output, and for the rest only their names (without the prompt, tool arguments and results). A line of `hooks.jsonl` and a marker in the recording.
 _Avoid_: record (without qualification; that is a log line)
+
+**Hook output** (`CopilotHookOutput`, `hookOutputFor`):
+What the daemon answers a session plugin hook with and Copilot CLI acts on (ADR-85): empty, a block of `agentStop` whose reason becomes the next turn's message, or `additionalContext` of `postToolUse` added to the tool's result. It carries the daemon's prompt about what waits for the session.
+_Avoid_: hook response, hook result
 
 **Window title** (`windowTitle`):
 The title an agent CLI sets with the OSC 0 / 2 sequence; in Copilot CLI it is a description of the current work. Shown next to the state, it is never the state.

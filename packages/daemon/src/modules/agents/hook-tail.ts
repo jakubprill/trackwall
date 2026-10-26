@@ -9,10 +9,11 @@ import { jsonOf } from "./json.ts";
  * own hook program; the file is also the session's log of hooks.
  */
 
-/** Appends the hook record of a hook payload; a payload that is not a JSON object leaves no record. */
-export function appendHookRecord(file: string, event: CopilotHookEvent, payload: string): void {
+/** Appends the hook record of a hook payload and returns it; a payload that is not a JSON object leaves no record. */
+export function appendHookRecord(file: string, event: CopilotHookEvent, payload: string): CopilotHookRecord | undefined {
   const r = hookRecord(event, payload, Date.now());
   if (r) appendFileSync(file, `${JSON.stringify(r)}\n`);
+  return r;
 }
 
 const HookLine = jsonOf(CopilotHookRecord);

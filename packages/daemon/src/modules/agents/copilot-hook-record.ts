@@ -36,6 +36,8 @@ const CopilotHookPayload = z.object({
   source: Text.optional(),
   reason: Text.optional(),
   stopReason: Text.optional(),
+  /** On `agentStop`: the turn it ends was started by a hook's block (ADR-85). */
+  stop_hook_active: z.boolean().optional(),
   toolName: Text.optional(),
   notificationType: Text.optional(),
   notification_type: Text.optional(),
