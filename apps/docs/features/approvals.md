@@ -49,4 +49,5 @@ toolPermissions:
 - If you move the selection in the terminal to "No, and tell Copilot what to do differently", the buttons disappear until the agent asks again, so a click cannot type into the text you are writing there.
 - Answering from outside the terminal is for approvals only. The option "No, and tell Copilot what to do differently" needs text, so it stays in the terminal.
 - Trackwall reads requests in the layout of Copilot CLI 1.0.103. A request it cannot read is still in the terminal and still makes the session "asking for approval", it only has no buttons.
+- A request taller than the session's terminal, such as the arguments of an MCP tool on a small screen, loses its top in the terminal. Trackwall still shows its buttons, with Copilot CLI's short description ("Use MCP tool: …") as the heading and only the part of the request the terminal shows.
 - Agents connected to the [MCP server](/features/mcp) never see these requests and cannot answer them.

@@ -52,9 +52,9 @@ export function SharedFiles({
 function SharedWith({ files, other, onOpen }: { files: TaskSharedFiles["files"]; other: Task; onOpen: () => void }) {
   const rest = files.length - SHOWN_FILES;
   return (
-    <div className="flex items-start gap-3">
+    <div className="flex flex-wrap items-start gap-3">
       <TriangleAlert className="text-warning mt-0.5 size-4 shrink-0" aria-hidden />
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
+      <div className="flex min-w-48 flex-1 flex-col gap-1">
         <p className="text-sm font-medium">
           {`${countLabel(files.length, { one: "file is", other: "files are" })} also changed by the task “${taskName(other)}”`}
         </p>

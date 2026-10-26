@@ -23,7 +23,7 @@ Ask it for something larger than one repo, like "add refunds to billing and show
 
 Once a task runs, the supervisor does not have to keep checking on it. When the task's agent finishes a turn, reports its result, gets a verification verdict, or stops, Trackwall types one line into the supervisor's terminal asking it to look, as soon as the supervisor waits for input. The supervisor then reads the summary, reviews the diff, and tells you what came back and what needs your decision. It can also send the task's agent a message, for example "the BFF now returns `totalCents`, use that", which you see in the task's panel. A task's agent can still propose more work of its own; that work sits under the task, inside the supervisor's part of the list.
 
-The panel can be folded to a narrow strip at the right edge, which keeps a bell when something waits for you. The panel stays pinned or folded the next time you open Trackwall.
+The panel can be folded to a narrow strip at the right edge, which keeps a bell when something waits for you. The panel stays pinned or folded the next time you open Trackwall. In a small window the panel is narrower, and the views next to it narrow their side panels, so a task's terminal and the Home dashboard keep their room.
 
 ## Use it
 

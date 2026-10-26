@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
+import { MCP_SERVER_NAME, mcpTools, TASK_MESSAGE_RULE } from "@trackwall/protocol";
 import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
 import { promptBoxOnScreen } from "../src/modules/agents/copilot-prompt-box.ts";
 import { inboxPrompt } from "../src/modules/agents/inbox-prompt.ts";
@@ -165,6 +165,30 @@ describe("a session of the real Copilot CLI", () => {
     expect(records.map((r) => r.event)).toEqual(["sessionStart", "userPromptSubmitted", "notification", "postToolUse", "agentStop"]);
     expect(records[2]?.payload).toMatchObject({ notification_type: "permission_prompt" });
     recorder.approval(records, dialogBox);
+  });
+
+  test("an MCP tool approval taller than a short terminal loses its heading, and the daemon reads it with the notification's text", async () => {
+    const { agents } = daemon.facade;
+    const { id, window } = await startSession();
+    // A task terminal squeezed by the panels above it (1280×720 at 150%): the JSON arguments do not fit.
+    window.attachment.resize(REFERENCE_COLS, 14);
+    const note = Array.from({ length: 20 }, (_, i) => `step ${i}`).join("\n");
+
+    model.reply({ tool: copilotToolName(mcpTools.verifyTask.name), arguments: { task: "no-such-task", note } });
+    window.attachment.input("verify the task\r");
+    const approval = await waitFor(agents, id, (s) => s.state?.state === "Approval" && s.dialog !== null, "approval dialog", SESSION_MS);
+    const { dialog } = approval;
+    if (dialog?.kind !== "approval") throw new Error(`no approval dialog: ${JSON.stringify(dialog)}`);
+    expect(dialog).toMatchObject({
+      title: `Use MCP tool: ${MCP_SERVER_NAME}/${mcpTools.verifyTask.name}`,
+      question: "Do you want to use this tool?",
+    });
+    expect(dialog.detail[0]).toBe("…");
+    expect(dialog.options[0]).toEqual({ key: "1", label: "Yes" });
+
+    model.reply({ text: "There is no such task." });
+    agents.answerDialog(id, dialog.id, "1");
+    await endOfTurn(id);
   });
 
   test("a deny rule from toolPermissions reaches Copilot CLI as --deny-tool, which refuses the command without asking", async () => {
@@ -348,6 +372,8 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
       expect(requests[readUpdates + 1]?.toolResults.join("\n")).toContain('"kind":"turn_ended"');
       const readMessages = requests.findIndex((r) => r.lastUserText.endsWith(messagesPrompt ?? "-"));
       expect(requests[readMessages + 1]?.toolResults.join("\n")).toContain(JSON.stringify(text).slice(1, -1));
+      // The agent reading the message has the rule that it updates the task over the prompt in its instructions.
+      expect(requests[readMessages]?.system).toContain(TASK_MESSAGE_RULE);
       expect(requests.at(-1)?.lastUserText).toEndWith(updatesPrompt ?? "-");
     },
     7 * SESSION_MS,
