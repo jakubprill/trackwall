@@ -20,10 +20,11 @@ export interface RepoEntry {
 }
 
 /**
- * The full path of the folder to save in `workspace.yaml`; it must exist, so that a typo does not silently give an empty list.
+ * The full path of a folder to save in `workspace.yaml` (the projects folder, the task worktrees folder); it must exist,
+ * so that a typo does not silently give an empty list or a worktree in an unexpected place.
  * Asynchronous, because the chosen folder may lie on a sleeping drive.
  */
-export async function resolveProjectsDir(input: string): Promise<string> {
+export async function resolveFolderSetting(input: string): Promise<string> {
   const { path, isDir } = await statFullPath(input, NOT_FULL_PATH);
   if (!isDir) throw new DomainError("bad_request", `${path} is not a directory`);
   return path;

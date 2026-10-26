@@ -90,14 +90,19 @@ describe("workspace", () => {
     });
 
     expect(await workspace.list()).toEqual({ projectsDir: null, repos: [] });
-    expect(workspace.settings()).toEqual({ projectsDir: null, configFile: file });
+    expect(workspace.settings()).toEqual({ projectsDir: null, worktreesDir: null, defaultWorktreesDir: null, configFile: file });
     await expect(workspace.overview("api")).rejects.toMatchObject({ code: "not_found" });
     await expect(workspace.projectsDir()).rejects.toMatchObject({ code: "bad_request", message: "set the projects folder first" });
   });
 
   test("setting the folder saves the full path in workspace.yaml", async () => {
     const { workspace, file, projects } = await workspaceWithProjectsDir();
-    expect(workspace.settings()).toEqual({ projectsDir: projects, configFile: file });
+    expect(workspace.settings()).toEqual({
+      projectsDir: projects,
+      worktreesDir: null,
+      defaultWorktreesDir: join(projects, ".trackwall-worktrees"),
+      configFile: file,
+    });
     expect(readFileSync(file, "utf8")).toContain(`projectsDir: ${projects}`);
     expect(await workspace.projectsDir()).toBe(projects);
   });
@@ -245,6 +250,96 @@ describe("workspace", () => {
     const dir = makeRepo({ a: "1" }, "api", projects);
     await workspace.openEditor("api");
     expect(opened).toEqual([dir]);
+  });
+});
+
+describe("the task worktrees folder (ADR-84)", () => {
+  test("by default new task worktrees go to .trackwall-worktrees in the projects folder, which the repo list does not show", async () => {
+    const { workspace, projects } = await workspaceWithProjectsDir();
+    makeRepo({ a: "1" }, "web", projects);
+    const worktrees = await workspace.worktreesDir();
+    expect(worktrees).toBe(join(projects, ".trackwall-worktrees"));
+    // A task's worktree as `agents` makes it: `<folder>/<repo>/<branch>`, with a `.git` file.
+    gitIn(join(projects, "web"), "worktree", "add", "-q", "-b", "trackwall/fix-1a2b3c", join(worktrees, "web", "fix-1a2b3c"));
+
+    expect((await workspace.list()).repos.map((r) => r.id)).toEqual(["web"]);
+  });
+
+  test("a chosen folder is saved as worktreesDir, and clearing it goes back to the default and removes the key", async () => {
+    const { workspace, file, projects } = await workspaceWithProjectsDir();
+    const chosen = mkdtempSync(join(tmpdir(), "trackwall-worktrees-"));
+
+    expect(await workspace.setWorktreesDir(chosen)).toMatchObject({ worktreesDir: chosen });
+    expect(readFileSync(file, "utf8")).toContain(`worktreesDir: ${chosen}`);
+    expect(await workspace.worktreesDir()).toBe(chosen);
+
+    expect(await workspace.setWorktreesDir(null)).toMatchObject({ worktreesDir: null });
+    expect(readFileSync(file, "utf8")).not.toContain("worktreesDir");
+    expect(await workspace.worktreesDir()).toBe(join(projects, ".trackwall-worktrees"));
+  });
+
+  test("a folder in the projects folder that is not a repo is accepted, as dev/worktrees next to the repos", async () => {
+    const { workspace, projects } = await workspaceWithProjectsDir();
+    makeRepo({ a: "1" }, "web", projects);
+    mkdirSync(join(projects, "worktrees"));
+
+    expect(await workspace.setWorktreesDir(join(projects, "worktrees"))).toMatchObject({ worktreesDir: join(projects, "worktrees") });
+    expect((await workspace.list()).repos.map((r) => r.id)).toEqual(["web"]);
+  });
+
+  test("the projects folder itself, a folder inside one of its repos, a relative or missing path are bad_request and save nothing", async () => {
+    const { workspace, file, projects } = await workspaceWithProjectsDir();
+    const web = makeRepo({ a: "1" }, "web", projects);
+    mkdirSync(join(web, "tmp"));
+
+    await expect(workspace.setWorktreesDir(projects)).rejects.toMatchObject({
+      code: "bad_request",
+      message: `${projects} is the projects folder; choose a folder outside the repos`,
+    });
+    await expect(workspace.setWorktreesDir(join(web, "tmp"))).rejects.toMatchObject({
+      code: "bad_request",
+      message: `${join(web, "tmp")} lies in the repo ${web}; choose a folder outside the repos`,
+    });
+    await expect(workspace.setWorktreesDir("relative/path")).rejects.toMatchObject({ code: "bad_request" });
+    await expect(workspace.setWorktreesDir(join(projects, "missing"))).rejects.toMatchObject({ code: "bad_request" });
+    expect(readFileSync(file, "utf8")).not.toContain("worktreesDir");
+  });
+
+  test("a saved folder that later lies in a repo, after the projects folder changed, is refused when a task is created", async () => {
+    const { workspace } = await workspaceWithProjectsDir();
+    const other = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
+    const api = makeRepo({ a: "1" }, "api", other);
+    mkdirSync(join(api, "worktrees"));
+    await workspace.setWorktreesDir(join(api, "worktrees"));
+    await workspace.setProjectsDir(other);
+
+    await expect(workspace.worktreesDir()).rejects.toMatchObject({
+      code: "bad_request",
+      message: expect.stringContaining(`lies in the repo ${api}`),
+    });
+  });
+
+  test("without a projects folder there is no default folder for task worktrees", async () => {
+    const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
+    const workspace = new Workspace({
+      file: new WorkspaceFile(file),
+      vcs: new Vcs(),
+      hosting: fakeHosting().hosting,
+      openEditor: () => {},
+      openFolder: () => {},
+    });
+
+    await expect(workspace.worktreesDir()).rejects.toMatchObject({ code: "bad_request", message: "set the projects folder first" });
+  });
+
+  test("a worktreesDir typed by hand that is not a full path is invalid_config naming the key", async () => {
+    const { workspace, file } = await workspaceWithProjectsDir();
+    writeFileSync(file, `${readFileSync(file, "utf8")}worktreesDir: worktrees\n`);
+
+    await expect(workspace.worktreesDir()).rejects.toMatchObject({
+      code: "invalid_config",
+      message: expect.stringContaining("worktreesDir"),
+    });
   });
 });
 

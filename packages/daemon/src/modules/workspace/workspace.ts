@@ -32,10 +32,11 @@ import { mapLimit } from "../../infra/map-limit.ts";
 import { CloneJobs } from "./clone-jobs.ts";
 import { type CodeSearchQuery, type CodeSearchVcs, searchCode } from "./code-search.ts";
 import { describeDroppedFolder } from "./dropped-folder.ts";
-import { dirKey, findRepos, projectsDirUnavailable, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
+import { dirKey, findRepos, projectsDirUnavailable, type RepoEntry, resolveFolderSetting, takenNames } from "./projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";
 import { sessionToolPermissions, supervisorToolPermissions } from "./tool-permissions.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
+import { checkWorktreesDir, defaultWorktreesDir } from "./worktrees-dir.ts";
 
 /**
  * The `workspace` module (§4): repos from the projects folder set in `workspace.yaml` (ADR-18) and their state
@@ -105,11 +106,29 @@ export class Workspace {
   }
 
   settings(): WorkspaceSettings {
-    return { projectsDir: this.deps.file.projectsDir(), configFile: this.configFile() };
+    const projectsDir = this.deps.file.projectsDir();
+    return {
+      projectsDir,
+      worktreesDir: this.deps.file.worktreesDir(),
+      defaultWorktreesDir: projectsDir === null ? null : defaultWorktreesDir(projectsDir),
+      configFile: this.configFile(),
+    };
   }
 
   async setProjectsDir(path: string): Promise<WorkspaceSettings> {
-    this.deps.file.setProjectsDir(await resolveProjectsDir(path));
+    this.deps.file.setProjectsDir(await resolveFolderSetting(path));
+    return this.settings();
+  }
+
+  /** `null` goes back to the default folder; tasks that already exist keep their worktrees where they are (ADR-84). */
+  async setWorktreesDir(path: string | null): Promise<WorkspaceSettings> {
+    if (path === null) {
+      this.deps.file.setWorktreesDir(null);
+      return this.settings();
+    }
+    const dir = await resolveFolderSetting(path);
+    await checkWorktreesDir(dir, this.deps.file.projectsDir());
+    this.deps.file.setWorktreesDir(dir);
     return this.settings();
   }
 
@@ -270,6 +289,17 @@ export class Workspace {
     const projectsDir = this.deps.file.projectsDir();
     if (projectsDir === null) throw new DomainError("bad_request", "set the projects folder first");
     return projectsDir;
+  }
+
+  /**
+   * The folder for a new task's worktree (ADR-84): `worktreesDir` or `.trackwall-worktrees` in the projects folder,
+   * checked again here, because the projects folder may have changed since the setting was saved.
+   */
+  async worktreesDir(): Promise<string> {
+    const projectsDir = await this.projectsDir();
+    const dir = this.deps.file.worktreesDir() ?? defaultWorktreesDir(projectsDir);
+    await checkWorktreesDir(dir, projectsDir);
+    return dir;
   }
 
   /** Repos from the projects folder (identifier and root), for modules that read every repo (`cards`). */

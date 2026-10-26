@@ -1,22 +1,18 @@
-import { isTauri } from "@tauri-apps/api/core";
 import { workspaceApi } from "@trackwall/protocol";
-import { FolderOpen } from "lucide-react";
-import { type FormEvent, useCallback, useState } from "react";
+import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { errorMessage, post } from "@/lib/api";
+import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { pickFolder } from "@/lib/folder-picker";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 import { useRemote } from "@/lib/use-remote";
+import { FolderForm } from "./FolderForm.tsx";
 import { RepoHostsForm } from "./RepoHostsForm.tsx";
 import { StartAtSignInSurface } from "./StartAtSignInSurface.tsx";
 import { UpdatesSurface } from "./UpdatesSurface.tsx";
 
-/** Workspace settings; each one is also a key in `workspace.yaml`, which can be edited by hand (ADR-13, ADR-18). */
+/** Workspace settings; each one is also a key in `workspace.yaml`, which can be edited by hand (ADR-13, ADR-18, ADR-84). */
 export function SettingsView({
   conn,
   update,
@@ -30,6 +26,17 @@ export function SettingsView({
 }) {
   const load = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
   const settings = useRemote(load);
+
+  async function saveProjectsDir(path: string) {
+    await post(conn, workspaceApi.setProjectsDir, { path });
+    settings.reload();
+    onSaved();
+  }
+
+  async function saveWorktreesDir(path: string | null) {
+    await post(conn, workspaceApi.setWorktreesDir, { path });
+    settings.reload();
+  }
 
   return (
     <div className="flex w-full max-w-xl flex-col gap-4">
@@ -49,23 +56,58 @@ export function SettingsView({
           )}
           {!settings.data && !settings.error && <Loading />}
           {settings.data && (
-            <ProjectsDirForm
-              conn={conn}
+            <FolderForm
+              {...PROJECTS_DIR}
               initialPath={settings.data.projectsDir ?? ""}
               configFile={settings.data.configFile}
-              onSaved={onSaved}
+              save={(path) => saveProjectsDir(path)}
             />
           )}
           {/* A bad `projectsDir` typed by hand into `workspace.yaml` is fixed with this very form. */}
-          {settings.errorCode === "invalid_config" && <ProjectsDirForm conn={conn} initialPath="" onSaved={onSaved} />}
+          {settings.errorCode === "invalid_config" && (
+            <FolderForm {...PROJECTS_DIR} initialPath="" save={(path) => saveProjectsDir(path)} />
+          )}
         </div>
       </Surface>
+      {settings.data && (
+        <Surface label="Task worktrees folder">
+          <div className="flex flex-col gap-4 p-4">
+            <p className="text-muted-foreground text-sm">
+              Each agent task works in its own git worktree in this folder. Keep it on the same fast disk as your repos and inside the
+              folders your antivirus skips, or git and builds in a task get slow. Tasks you already have keep their worktrees where they
+              are.
+            </p>
+            <FolderForm
+              key={settings.data.worktreesDir ?? ""}
+              label="Full path to the task worktrees folder"
+              placeholder={settings.data.defaultWorktreesDir ?? "Set the projects folder first"}
+              configKey="worktreesDir"
+              initialPath={settings.data.worktreesDir ?? ""}
+              configFile={settings.data.configFile}
+              save={(path) => saveWorktreesDir(path)}
+              reset={settings.data.worktreesDir === null ? undefined : () => saveWorktreesDir(null)}
+            />
+            {settings.data.worktreesDir === null && settings.data.defaultWorktreesDir && (
+              <p className="text-muted-foreground text-xs break-all">
+                Empty: new tasks use <span className="font-mono">{settings.data.defaultWorktreesDir}</span>, which the Repos view does not
+                list.
+              </p>
+            )}
+          </div>
+        </Surface>
+      )}
       <RepoHostsSurface conn={conn} />
       <StartAtSignInSurface />
       <UpdatesSurface handle={update} />
     </div>
   );
 }
+
+const PROJECTS_DIR = {
+  label: "Full path to the projects folder",
+  placeholder: "C:\\Users\\me\\Projects or /Users/me/Projects",
+  configKey: "projectsDir",
+};
 
 /** Repo hosts (ADR-19) have their own request: a bad `repoHosts` entry does not block the projects folder and vice versa. */
 function RepoHostsSurface({ conn }: { conn: Connection }) {
@@ -85,85 +127,5 @@ function RepoHostsSurface({ conn }: { conn: Connection }) {
         {hosts.errorCode === "invalid_config" && <RepoHostsForm conn={conn} initial={[]} />}
       </div>
     </Surface>
-  );
-}
-
-function ProjectsDirForm({
-  conn,
-  initialPath,
-  configFile,
-  onSaved,
-}: {
-  conn: Connection;
-  initialPath: string;
-  /** Unknown when `workspace.yaml` failed validation. */
-  configFile?: string;
-  onSaved: () => void;
-}) {
-  const [path, setPath] = useState(initialPath);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-
-  async function save(dir: string) {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await post(conn, workspaceApi.setProjectsDir, { path: dir });
-      onSaved();
-    } catch (err) {
-      setError(errorMessage(err));
-      setBusy(false);
-    }
-  }
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    void save(path.trim());
-  }
-
-  /** Only the Tauri window has the system picker (ADR-51). A folder chosen in it is saved at once: choosing it already says what the user wants. */
-  async function browse() {
-    setError(undefined);
-    let picked: string | undefined;
-    try {
-      picked = await pickFolder(path.trim());
-    } catch (err) {
-      return setError(errorMessage(err));
-    }
-    if (picked === undefined) return;
-    setPath(picked);
-    await save(picked);
-  }
-
-  return (
-    <form onSubmit={submit} className="flex flex-col gap-2">
-      <div className="flex gap-2">
-        <Input
-          value={path}
-          onChange={(e) => setPath(e.target.value)}
-          placeholder="C:\Users\me\Projects or /Users/me/Projects"
-          aria-label="Full path to the projects folder"
-          className="font-mono text-xs"
-        />
-        {isTauri() && (
-          <Button type="button" variant="outline" size="sm" onClick={() => void browse()} disabled={busy}>
-            <FolderOpen /> Choose…
-          </Button>
-        )}
-        <Button type="submit" size="sm" disabled={busy || path.trim() === ""}>
-          Save
-        </Button>
-      </div>
-      {error && <p className="text-destructive text-xs break-words">{error}</p>}
-      <p className="text-muted-foreground text-xs break-all">
-        {configFile ? (
-          <>
-            Saved as <span className="font-mono">projectsDir</span> in <span className="font-mono">{configFile}</span>
-          </>
-        ) : (
-          "Fix the YAML syntax error in the file named above; saving here only fixes a bad projectsDir."
-        )}
-      </p>
-    </form>
   );
 }

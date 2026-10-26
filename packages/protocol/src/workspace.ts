@@ -154,6 +154,10 @@ export type SupervisorSettings = z.infer<typeof SupervisorSettings>;
 
 export const WorkspaceSettings = z.object({
   projectsDir: ProjectsDir,
+  /** `worktreesDir` from `workspace.yaml` (ADR-84): where new task worktrees go; `null` for the default. */
+  worktreesDir: z.string().nullable(),
+  /** The default task worktrees folder, `.trackwall-worktrees` in the projects folder; `null` while that is not set. */
+  defaultWorktreesDir: z.string().nullable(),
   /** The full path of `workspace.yaml`, so that the user knows which file to edit by hand. */
   configFile: z.string(),
 });
@@ -227,6 +231,8 @@ export const workspaceApi = {
   settings: endpoint("settings", z.object({}).strict(), WorkspaceSettings),
   /** `path` is the full path of an existing directory on the user's disk; saved in `workspace.yaml`. */
   setProjectsDir: endpoint("set-projects-dir", z.object({ path: z.string().min(1).max(4096) }).strict(), WorkspaceSettings),
+  /** `path` like `setProjectsDir`; `null` removes `worktreesDir` from `workspace.yaml`, so new tasks use the default folder. */
+  setWorktreesDir: endpoint("set-worktrees-dir", z.object({ path: z.string().min(1).max(4096).nullable() }).strict(), WorkspaceSettings),
   overview: endpoint("overview", RepoRequest, RepoOverview),
   tree: endpoint("tree", z.object({ repo: RepoId, path: RepoPath }).strict(), z.array(TreeEntry)),
   file: endpoint(

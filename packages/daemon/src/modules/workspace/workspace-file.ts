@@ -18,7 +18,7 @@ import { isFullPath, NOT_FULL_PATH } from "./full-path.ts";
 /**
  * `workspace.yaml` (§4.5, ADR-13): the workspace configuration, which the user can edit by hand and keep
  * in a private repo. Read on every use, so a manual edit works without restarting the daemon. A write changes
- * only one key (`projectsDir` or `repoHosts`; `repoTags`, `graph`, `toolPermissions`, `dayStart` and `supervisor` only by hand) and keeps comments and the other keys,
+ * only one key (`projectsDir`, `worktreesDir` or `repoHosts`; `repoTags`, `graph`, `toolPermissions`, `dayStart` and `supervisor` only by hand) and keeps comments and the other keys,
  * including the `repos` list from version 0.2.0, which is no longer read (ADR-18): it is the user's file, so removing it is up to them.
  */
 
@@ -29,6 +29,12 @@ import { isFullPath, NOT_FULL_PATH } from "./full-path.ts";
 const Keys = {
   // YAML reads an empty key (`projectsDir:`) as `null`, the same as a missing key.
   projectsDir: z
+    .string()
+    .refine((dir) => isFullPath(dir), NOT_FULL_PATH)
+    .nullish()
+    .transform((dir) => dir ?? null),
+  // Where new task worktrees go (ADR-84); a missing key means `.trackwall-worktrees` in the projects folder.
+  worktreesDir: z
     .string()
     .refine((dir) => isFullPath(dir), NOT_FULL_PATH)
     .nullish()
@@ -58,6 +64,11 @@ export class WorkspaceFile {
   /** The projects folder (ADR-18); `null` until it is set. */
   projectsDir(): string | null {
     return this.get("projectsDir", Keys.projectsDir);
+  }
+
+  /** The task worktrees folder (ADR-84); `null` for the default. */
+  worktreesDir(): string | null {
+    return this.get("worktreesDir", Keys.worktreesDir);
   }
 
   /** Repo hosts in file order (ADR-19). */
@@ -92,6 +103,14 @@ export class WorkspaceFile {
 
   setProjectsDir(dir: string): void {
     this.set("projectsDir", dir);
+  }
+
+  /** `null` removes the key, so that the file says nothing about a setting the user did not choose. */
+  setWorktreesDir(dir: string | null): void {
+    const doc = this.load();
+    if (dir === null) doc.delete("worktreesDir");
+    else doc.set("worktreesDir", dir);
+    this.save(doc);
   }
 
   setRepoHosts(hosts: RepoHost[]): void {

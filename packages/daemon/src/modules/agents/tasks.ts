@@ -79,13 +79,17 @@ interface TaskSessions {
 
 export interface AgentTasksDeps {
   vcs: TasksVcs;
-  repos: { repoPath(id: string): Promise<string> };
+  repos: {
+    repoPath(id: string): Promise<string>;
+    /** The task worktrees folder for a new task (ADR-84). */
+    worktreesDir(): Promise<string>;
+  };
   sessions: TaskSessions;
   file: TaskFile;
   /** Some process group still works in this directory (`procs.liveIn`): a mise task in the worktree locks its files on Windows. */
   liveIn: (dir: string) => boolean;
-  /** The task worktrees directory in the state directory; outside the projects folder, so the repo list does not see them. */
-  worktreesDir: string;
+  /** `worktrees/` in the state directory, where tasks saved before ADR-84 (without `worktreesDir`) have their worktrees. */
+  legacyWorktreesDir: string;
   openEditor: (dir: string) => void;
   log: (msg: string) => void;
 }
@@ -138,10 +142,12 @@ export class AgentTasks {
   async create(repo: string, prompt: string, { id, title, proposedBy }: TaskOrigin): Promise<Task> {
     const repoDir = await this.#deps.repos.repoPath(repo);
     const base = await asRepoUnavailable(repo, this.#deps.vcs.defaultBase(repoDir));
+    const worktreesDir = await this.#deps.repos.worktreesDir();
     const task = this.#known({
       id,
       repo,
       repoDir,
+      worktreesDir,
       prompt,
       branch: `${TASK_BRANCH_PREFIX}${taskSlug(title ?? prompt, id)}`,
       baseBranch: base.branch,
@@ -431,7 +437,7 @@ export class AgentTasks {
   }
 
   #known(task: StoredTask & { port: number }): KnownTask {
-    return { ...task, worktree: taskWorktree(this.#deps.worktreesDir, task.repo, task.branch) };
+    return { ...task, worktree: taskWorktree(task.worktreesDir ?? this.#deps.legacyWorktreesDir, task.repo, task.branch) };
   }
 
   #save(tasks: KnownTask[]): void {
@@ -448,7 +454,7 @@ function capFiles(files: ChangedFile[]): { files: ChangedFile[]; filesTruncated:
   return { files: files.slice(0, TASK_SUMMARY_MAX_FILES), filesTruncated: files.length > TASK_SUMMARY_MAX_FILES };
 }
 
-function view({ repoDir: _, trustedMiseConfig: __, ...task }: KnownTask): Task {
+function view({ repoDir: _, trustedMiseConfig: __, worktreesDir: ___, ...task }: KnownTask): Task {
   return task;
 }
 
