@@ -42,9 +42,11 @@ export function NeedsYouPanel({
   const working = model.sessions.filter((s) => s.state === "working").length;
   if (loading) {
     return (
-      <aside className="bg-card flex min-h-0 flex-col gap-2 border-r px-4 pt-3">
-        <h2 className="hud-label">Needs you</h2>
-        <Loading />
+      <aside className="bg-card flex min-h-0 flex-col border-r">
+        <h2 className="hud-label px-4 pt-3 pb-2">Needs you</h2>
+        <div className="px-4">
+          <Loading />
+        </div>
       </aside>
     );
   }

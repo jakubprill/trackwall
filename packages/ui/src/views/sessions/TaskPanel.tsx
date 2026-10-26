@@ -183,8 +183,7 @@ function TaskSummary({ summary }: { summary: NonNullable<Task["summary"]> }) {
       <span className="hud-label">
         Summary <span className="text-muted-foreground font-sans normal-case">{relativeTime(summary.reportedAt, new Date())}</span>
       </span>
-      {/* A few lines at most: a longer summary scrolls instead of squeezing the session terminal below. */}
-      <p className="max-h-32 max-w-prose overflow-auto text-sm whitespace-pre-wrap">{summary.text}</p>
+      <p className="max-w-prose text-sm whitespace-pre-wrap">{summary.text}</p>
     </section>
   );
 }

@@ -14,8 +14,8 @@ import type { AgentApproval, AgentDialog, AgentDialogOption, AgentQuestion } fro
  *
  * An approval taller than the terminal (the JSON arguments of an MCP tool in a short task terminal) loses its top:
  * Copilot CLI keeps its tab bar on the first line and a blank line under it, and the box below them is cut above. The
- * question, options and footer are still there, so such a box counts when only the tab bar and blank lines are above its
- * left border, which runs unbroken up from the footer; the heading is then gone, and the approval's text from its
+ * question, options and footer are still there, so such a box counts when only the first line (the tab bar, not
+ * checked) and blank lines are above its left border, which runs unbroken up from the footer; the heading is then gone, and the approval's text from its
  * notification hook stands in.
  */
 
@@ -59,17 +59,19 @@ function readApproval(lines: readonly string[], notice: string | undefined): Scr
   if (body[0] !== undefined && body[0].trim() !== "" && BOX_ONLY.test(body[0])) body.shift();
   const paragraphs = split(body);
   const options = readOptions(paragraphs.pop() ?? []);
+  const cutAbove = box.heading === undefined;
   const title = cut((box.heading ?? notice ?? CUT_BOX_TITLE).trim());
   const question = cut(joinWrapped(paragraphs.pop() ?? []));
   if (!title || !question || !options?.length) return undefined;
   const answerable = options.filter((o) => !NEEDS_TEXT.test(o.label));
   // The selection moved to an option that takes text (it may already be taking it), so a digit would not answer.
   if (options.some((o) => o.selected && !answerable.includes(o))) return undefined;
-  const detail = detailLines(paragraphs);
+  // A cut box's detail starts with "…", which takes the place of its last line rather than of the one nearest the question.
+  const detail = detailLines(paragraphs, cutAbove ? MAX_DETAIL_LINES - 1 : MAX_DETAIL_LINES);
   return {
     kind: "approval",
     title,
-    detail: box.heading === undefined ? [CUT_DETAIL, ...detail].slice(0, MAX_DETAIL_LINES) : detail,
+    detail: cutAbove ? [CUT_DETAIL, ...detail] : detail,
     question,
     options: answerable.map(({ key, label }) => ({ key, label })),
   };
@@ -86,19 +88,19 @@ function approvalBox(above: readonly string[]): { heading: string | undefined; b
     const [heading = "", ...body] = above.slice(top + 1).map(insideBox);
     return { heading, body };
   }
-  // Cut above: only the tab bar and blank lines above the box's left border.
+  // Cut above: only the first line (the tab bar) and blank lines above the box's left border.
   const border = above.findLastIndex((l) => !l.startsWith("│")) + 1;
   const cutAbove = above.slice(1, border).every((l) => l.trim() === "");
   return cutAbove ? { heading: undefined, body: above.slice(border).map(insideBox) } : undefined;
 }
 
 /** The paragraphs between the rule and the question, without the inner box around a command. */
-function detailLines(paragraphs: readonly string[][]): string[] {
+function detailLines(paragraphs: readonly string[][], max: number): string[] {
   return paragraphs
     .flatMap((p, i) => (i === 0 ? p : ["", ...p]))
     .map((l) => insideBox(l).trimEnd())
     .filter((l) => l === "" || !BOX_ONLY.test(l))
-    .slice(0, MAX_DETAIL_LINES)
+    .slice(0, max)
     .map(cut);
 }
 

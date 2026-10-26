@@ -53,8 +53,18 @@ const TEXT_RULES: { pattern: RegExp; state: TaskState }[] = [
   { pattern: /\b(idle|question|waiting for (your )?input)\b/i, state: "Input" },
 ];
 
+/** The kind of a notification, under whichever field name Copilot CLI used. */
+function notificationKind(payload: CopilotHookRecord["payload"]): string | undefined {
+  return payload.notificationType ?? payload.notification_type ?? payload.type;
+}
+
+/** An approval request: the notification whose text ("Use MCP tool: …") stands in for the heading of a box cut above (ADR-66). */
+export function approvalRequest(record: CopilotHookRecord): boolean {
+  return record.event === "notification" && notificationKind(record.payload) === "permission_prompt";
+}
+
 function notification(payload: CopilotHookRecord["payload"], reason: string): StateSignal | undefined {
-  const kind = payload.notificationType ?? payload.notification_type ?? payload.type;
+  const kind = notificationKind(payload);
   if (kind !== undefined) {
     const known = Object.hasOwn(KIND_STATES, kind) ? KIND_STATES[kind] : undefined;
     return known && { ...known, source: "hook", reason: `${reason} ${kind}` };
