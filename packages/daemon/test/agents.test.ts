@@ -46,7 +46,9 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const approval = await waitFor(agents, started.id, (s) => s.state?.state === "Approval", "approval request");
     expect(approval.state).toMatchObject({ source: "hook", reason: "hook notification permission_prompt" });
     expect(approval.windowTitle).toBe("fix the test - GitHub Copilot");
-    expect(window.text()).toContain("Do you want to run this command?");
+    // The screen reaches a viewer only once the emulator has processed it (`TerminalScreen`), while the hook's state does
+    // not wait for that, so the dialog is waited for: on macOS CI it once was not there yet.
+    await waitFor(agents, started.id, () => window.text().includes("Do you want to run this command?"), "the dialog on the screen");
 
     window.attachment.input("1");
     await waitFor(agents, started.id, (s) => s.state?.reason === "hook agentStop", "end of turn");

@@ -2,11 +2,13 @@ import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, te
 import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
+import { promptBoxOnScreen } from "../src/modules/agents/copilot-prompt-box.ts";
 import { inboxPrompt } from "../src/modules/agents/inbox-prompt.ts";
 import { viewer, waitFor } from "../test/support/agents.ts";
 import { REFERENCE_COLS, REFERENCE_ROWS } from "../test/support/copilot-reference.ts";
 import { hookRecords, startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { type Recorder, startRecorder } from "./support/recorder.ts";
+import { screenLines } from "./support/screen-lines.ts";
 import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
 
 // The contract with the real Copilot CLI (ADR-67): what the daemon relies on, checked on the pinned version with a
@@ -85,6 +87,15 @@ function windowOf(id: string): ReturnType<typeof viewer> {
   const window = windows.get(id);
   if (window === undefined) throw new Error(`no terminal of session ${id}`);
   return window;
+}
+
+/** Waits until the window's screen ends with Copilot CLI's input box, empty or with text in it. */
+async function untilInputBox(window: ReturnType<typeof viewer>, box: "empty" | "text"): Promise<void> {
+  const until = Date.now() + SESSION_MS;
+  while (promptBoxOnScreen(await screenLines(window)) !== box) {
+    if (Date.now() > until) throw new Error(`gave up waiting for the input box (${box}):\n${(await screenLines(window)).join("\n")}`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
 }
 
 const endOfTurn = (id: string) => waitFor(daemon.facade.agents, id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
@@ -195,7 +206,12 @@ describe("a session of the real Copilot CLI", () => {
     window.attachment.input("hello\r");
     await endOfTurn(id);
 
-    window.attachment.input("/exit\r");
+    // agentStop comes before Copilot CLI shows its input box again, and a line typed in between can be lost (it once was
+    // on macOS), so the command is typed into the box once it is there, and sent once it shows.
+    await untilInputBox(window, "empty");
+    window.attachment.input("/exit");
+    await untilInputBox(window, "text");
+    window.attachment.input("\r");
     const done = await waitFor(agents, id, (s) => s.run.kind === "exited", "end of session", SESSION_MS);
     expect(done.state).toMatchObject({ state: "Done", source: "hook", reason: "hook sessionEnd user_exit" });
     const records = hookRecords(daemon.home, id);
