@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
+import { type AddressInfo, createServer as createTcpServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { GraphEdge, RepoCardResult, RepoGraph } from "@trackwall/protocol";
@@ -10,6 +10,7 @@ import { Logs } from "../src/modules/logs/logs.ts";
 import { Mise } from "../src/modules/mise/mise.ts";
 import { ProcessGroups } from "../src/modules/procs/process-groups.ts";
 import { RuntimeFile } from "../src/modules/procs/runtime-file.ts";
+import { probePort } from "../src/modules/services/port-probe.ts";
 import { Services } from "../src/modules/services/services.ts";
 import { groupPlatform } from "../src/platform/group-platform.ts";
 
@@ -78,7 +79,18 @@ function setup(
     if (taskOf(id).repo !== repo) throw new DomainError("bad_request", `task ${id} is in ${taskOf(id).repo}, not in ${repo}`);
     return taskOf(id).port;
   };
-  const services = new Services({ mise, logs, graph, cards, taskPort, env, intervalMs: 100, startupMs: 1500, settleMs: 300 });
+  const services = new Services({
+    mise,
+    logs,
+    graph,
+    cards,
+    taskPort,
+    env,
+    intervalMs: 100,
+    startupMs: 1500,
+    settleMs: 300,
+    releaseMs: 5000,
+  });
   cleanups.push(() => procs.stopAll());
   return { services, procs, mise, tasks };
 }
@@ -100,6 +112,42 @@ function http(from: string, to: string): GraphEdge {
 }
 
 const DEV = { tasks: [{ name: "dev" }] };
+
+/**
+ * A build daemon like Gradle's, in the test process and so outside every process group: for each client (the fake
+ * service in `dev`) it runs an app on `appPort` and closes it `lingerMs` after the client's connection closes, or when
+ * the test calls `close` (`lingerMs: null`).
+ */
+async function buildDaemon(appPort: number, lingerMs: number | null) {
+  const apps = new Set<Server>();
+  const clients = new Set<Socket>();
+  const closeApp = (app: Server) => {
+    apps.delete(app);
+    app.close();
+    app.closeAllConnections();
+  };
+  const daemon = createTcpServer((client) => {
+    clients.add(client);
+    const app = createServer((_, res) => res.end("app"));
+    apps.add(app);
+    app.listen(appPort, "127.0.0.1", () => client.write(String(appPort)));
+    client.on("error", () => {});
+    client.on("close", () => {
+      clients.delete(client);
+      if (lingerMs !== null) setTimeout(() => closeApp(app), lingerMs);
+    });
+  });
+  await new Promise<void>((resolve) => daemon.listen(0, "127.0.0.1", resolve));
+  const close = () => {
+    for (const app of apps) closeApp(app);
+  };
+  cleanups.push(async () => {
+    close();
+    for (const client of clients) client.destroy();
+    await new Promise((resolve) => daemon.close(resolve));
+  });
+  return { port: (daemon.address() as AddressInfo).port, close };
+}
 
 describe("services (real process groups, fake mise and fake service)", () => {
   test(
@@ -253,6 +301,54 @@ describe("services (real process groups, fake mise and fake service)", () => {
         ["api", "stopped"],
       ]);
       expect((await services.list()).find((s) => s.repo === "auth")?.state).toBe("healthy");
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a stop waits for the port of an app a build daemon runs outside the process group to close before it reports stopped",
+    async () => {
+      const port = await freePort();
+      const daemon = await buildDaemon(port, 1500);
+      const { services } = setup({ web: { ...DEV, servers: { dev: { buildDaemon: daemon.port } } } }, { cardPorts: { web: port } });
+      const started = await services.start({ repo: "web", task: null, dependencies: false, waitMs: 20_000 });
+      expect(started.members[0]?.service).toMatchObject({ state: "healthy", port });
+
+      const stopped = await services.stop({ repo: "web", task: null, dependencies: false });
+
+      expect(stopped.map((s) => [s.repo, s.state, s.reason])).toEqual([["web", "stopped", null]]);
+      expect(await probePort(port)).toBeNull();
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a stop whose port still answers after the wait reports the service stopping with why, and a stop after the port closed reports it stopped",
+    async () => {
+      const port = await freePort();
+      const daemon = await buildDaemon(port, null);
+      const { services } = setup({ web: { ...DEV, servers: { dev: { buildDaemon: daemon.port } } } }, { cardPorts: { web: port } });
+      await services.start({ repo: "web", task: null, dependencies: false, waitMs: 20_000 });
+
+      const stopped = await services.stop({ repo: "web", task: null, dependencies: false });
+
+      expect(stopped.map((s) => [s.state, s.reason])).toEqual([
+        [
+          "stopping",
+          `the process group has ended, but port ${port} still answers: a process outside the service's process group holds it, for example an app Gradle's daemon runs`,
+        ],
+      ]);
+      expect(stopped[0]?.run.kind).toBe("exited");
+      const restart = await services.start({ repo: "web", task: null, dependencies: false, waitMs: 20_000 });
+      expect(restart.members[0]).toMatchObject({
+        outcome: "skipped",
+        problem: `port ${port} (server.port on the card) still answers after the stop of the service of web`,
+      });
+
+      daemon.close();
+      const stoppedAgain = await services.stop({ repo: "web", task: null, dependencies: false });
+      expect(stoppedAgain.map((s) => [s.repo, s.state, s.reason])).toEqual([["web", "stopped", null]]);
+      expect((await services.list()).map((s) => [s.repo, s.state])).toEqual([["web", "stopped"]]);
     },
     TIMEOUT,
   );

@@ -18,9 +18,17 @@ import { RepoId } from "./workspace.ts";
 export const SERVICE_MISE_TASK = "dev";
 
 /**
+ * How long a stop waits, after the process group has ended, for the service's port to close: an app a build tool runs
+ * outside the group (Gradle's daemon runs `bootRun`'s app as its own child) shuts down only after it.
+ */
+export const SERVICE_RELEASE_MS = 15_000;
+
+/**
  * Observed state of a service: `starting` until its port answers (or a Spring Boot app without a web server reports
  * it has started), `healthy` while the port answers, `unhealthy` when it stops answering or never opened within the
- * startup limit, `crashed` when the process group ended by itself, `stopped` after a stop, `stopping` in between.
+ * startup limit, `crashed` when the process group ended by itself, `stopped` after a stop once the port no longer
+ * answers too, `stopping` in between (also while an app a build tool runs outside the group, such as Gradle's daemon's
+ * `bootRun`, still holds the port after the group has ended).
  */
 export const ServiceState = z.enum(["starting", "healthy", "unhealthy", "stopping", "stopped", "crashed"]);
 export type ServiceState = z.infer<typeof ServiceState>;

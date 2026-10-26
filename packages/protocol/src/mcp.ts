@@ -34,7 +34,15 @@ import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErr
 import { MiseTaskName, MiseTasks, RunningMiseTask } from "./mise.ts";
 import { RunState } from "./procs.ts";
 import { ReviewComment } from "./review.ts";
-import { CallEndpointRequest, CallEndpointResult, MAX_SLICE_REPOS, SERVICE_MISE_TASK, Service, ServiceSlice } from "./services.ts";
+import {
+  CallEndpointRequest,
+  CallEndpointResult,
+  MAX_SLICE_REPOS,
+  SERVICE_MISE_TASK,
+  SERVICE_RELEASE_MS,
+  Service,
+  ServiceSlice,
+} from "./services.ts";
 import { SyncRepo } from "./sync.ts";
 import { TASK_UPDATES_KEPT, TaskUpdate } from "./task-updates.ts";
 import { TEST_RESULTS_MAX_FAILURES, TestResults } from "./test-results.ts";
@@ -221,7 +229,7 @@ export const StartServiceResult = z.object({ slice: ServiceSlice });
 export type StartServiceResult = z.infer<typeof StartServiceResult>;
 
 export const StopServiceResult = z.object({
-  /** The services stopped, each `stopped` with its last run. */
+  /** The services stopped, each `stopped` with its last run, or `stopping` with the reason while its port still answers. */
   services: z.array(Service),
 });
 export type StopServiceResult = z.infer<typeof StopServiceResult>;
@@ -817,7 +825,9 @@ export const mcpTools = {
     description:
       "Stop a repo's service (its whole process group), with task the one from that task's worktree, and, with " +
       `dependencies: true, the services the latest ${START_SERVICE} of it started (not those that were already running ` +
-      "or that another started slice uses). Returns the stopped services. A session in Trackwall can stop only its own " +
+      "or that another started slice uses). Returns the stopped services: stopped once the process group has ended and the port " +
+      `no longer answers, or stopping with the reason when the port still answers after ${SERVICE_RELEASE_MS / 1000} s (a process ` +
+      "outside the group, such as an app Gradle's daemon runs, holds it; calling it again checks again). A session in Trackwall can stop only its own " +
       "repo's service, a task session only its own task's or the repo root's, and the supervisor none.",
     args: z
       .object({

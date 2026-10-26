@@ -9,6 +9,7 @@
       "entry": ["features/*.data.ts"]
     }
   },
+  "ignoreBinaries": ["mise"],
   "ignoreIssues": {
     "packages/ui/src/components/ui/*.tsx": ["exports"]
   }

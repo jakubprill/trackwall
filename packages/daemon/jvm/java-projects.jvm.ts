@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { connect } from "node:net";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { Client } from "@modelcontextprotocol/client";
@@ -56,7 +57,14 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await client?.close();
-  await daemon?.stop();
+  // Gradle's daemon, Gradle's default, outlives the builds of the tests; it would hold files in the repos' folders and
+  // in the Gradle cache the CI job saves.
+  try {
+    if (daemon)
+      execFileSync("mise", ["exec", "--", "gradle", "--stop", "--quiet"], { cwd: join(daemon.projects, "checkout"), stdio: "inherit" });
+  } finally {
+    await daemon?.stop();
+  }
 }, 60_000);
 
 /**
@@ -158,6 +166,19 @@ async function startService(args: { repo: string; task?: string; dependencies?: 
   return { slice, services: await until(ofSlice, settled, 1000) };
 }
 
+/** Whether something accepts a TCP connection on `port` on 127.0.0.1 right now. */
+function answers(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = connect({ host: "127.0.0.1", port });
+    const done = (ok: boolean) => {
+      socket.destroy();
+      resolve(ok);
+    };
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+  });
+}
+
 /** A compiler line without the directory before the file name (`/tmp/…/Shipping.java:9: …`, `C:\\…\\Shipping.java:9: …`). */
 function withoutDirectory(line: string): string {
   return line.replace(/^\S*[\\/](?=[^\\/\s]+\.java:\d+:)/, "");
@@ -236,6 +257,9 @@ describe("a Maven project and a Gradle project", () => {
       ["checkout", "stopped"],
       ["orders", "stopped"],
     ]);
+    // `stopped` means the port is free too: Gradle's daemon runs `bootRun`'s app outside the process group of `dev`,
+    // and ends it only after the group is gone.
+    expect(await Promise.all([ORDERS_PORT, CHECKOUT_PORT].map(answers))).toEqual([false, false]);
   });
 
   test("verify_task fails a Maven task whose change breaks a test, with the failed test from the report and the Maven errors", async () => {
