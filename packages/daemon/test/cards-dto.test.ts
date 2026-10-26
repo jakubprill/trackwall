@@ -4,13 +4,13 @@ import { extractContracts, responseType } from "../src/modules/cards/endpoint-co
 import { CARD_SOURCES, extractCard } from "../src/modules/cards/extract-card.ts";
 import { readSnapshot } from "../src/modules/cards/read-snapshot.ts";
 import { loadSyntaxParsers, unavailableParsers, withParseBudget } from "../src/modules/cards/syntax-tree.ts";
-import { snapshotOf } from "./support/snapshot.ts";
+import { NO_CALL_SOURCES, NO_REACH, snapshotOf } from "./support/snapshot.ts";
 import { fixtureFiles } from "./support/spring-fixtures.ts";
 
 const parsers = await loadSyntaxParsers();
 
 function card(files: Record<string, string>): RepoCard {
-  return extractCard(snapshotOf(files), parsers);
+  return extractCard(snapshotOf(files), parsers, NO_REACH);
 }
 
 function contracts(provides: RepoCard["provides"]): string[] {
@@ -143,7 +143,7 @@ describe("endpoint contracts and DTOs", () => {
       "src/main/java/a/B.java": '@RestController class B { @GetMapping("/b") public Dto b() { return null; } }',
     });
     const budgeted = withParseBudget(parsers, 0);
-    const { provides, problems } = extractContracts(snapshot, extractCard(snapshot, parsers).provides, budgeted);
+    const { provides, problems } = extractContracts(snapshot, extractCard(snapshot, parsers, NO_REACH).provides, budgeted);
     expect(contracts(provides)).toEqual(["GET /a - -> -", "GET /b - -> -"]);
     expect(budgeted.complete).toBe(false);
     expect(problems).toEqual([
@@ -164,7 +164,7 @@ describe("endpoint contracts and DTOs", () => {
   });
 
   test("without parsers the card is built without contracts and DTOs, with one problem", () => {
-    const c = extractCard(snapshotOf(fixtureFiles("orders-api")), unavailableParsers("grammar missing"));
+    const c = extractCard(snapshotOf(fixtureFiles("orders-api")), unavailableParsers("grammar missing"), NO_REACH);
     expect(contracts(c.provides)).toEqual(["GET /api/orders/{id} - -> -", "POST /api/orders - -> -", "PUT /api/orders/{id}/cancel - -> -"]);
     expect(c.dtos).toEqual([]);
     expect(c.problems).toEqual([
@@ -260,7 +260,7 @@ describe("endpoint contracts and DTOs", () => {
 
 describe("reading the type files the HTTP code mentions", () => {
   test("the read fetches files named after types from the controller and from them, at most three rounds, without test files", async () => {
-    const source = (path: string) => ({ name: path.split("/").pop() ?? path, path, kind: "file" as const, size: 10 });
+    const source = (path: string) => ({ path, size: 10, oid: "0".repeat(40) });
     const texts: Record<string, string> = {
       "src/main/java/a/Api.java": "@RestController class Api { @GetMapping OrderDto get() { return null; } }",
       "src/main/java/a/OrderDto.java": "record OrderDto(Line line) {}",
@@ -278,7 +278,7 @@ describe("reading the type files the HTTP code mentions", () => {
       },
       grepFiles: async () => ({ paths: ["src/main/java/a/Api.java"], truncated: false }),
     };
-    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES);
+    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES, NO_CALL_SOURCES);
     expect(requested).toEqual([
       ["src/main/java/a/Api.java"],
       ["src/main/java/a/OrderDto.java"],
@@ -291,7 +291,7 @@ describe("reading the type files the HTTP code mentions", () => {
   });
 
   test("type files that did not fit in the read limit give one problem instead of a problem per file", async () => {
-    const source = (path: string) => ({ name: path.split("/").pop() ?? path, path, kind: "file" as const, size: 10 });
+    const source = (path: string) => ({ path, size: 10, oid: "0".repeat(40) });
     const paths = ["src/main/java/a/Api.java", "src/main/java/a/OrderDto.java", "src/main/java/a/Line.java"];
     const vcs = {
       commitFiles: async () => ({ files: paths.map(source), truncated: false }),
@@ -304,7 +304,7 @@ describe("reading the type files the HTTP code mentions", () => {
         ),
       grepFiles: async () => ({ paths: ["src/main/java/a/Api.java"], truncated: false }),
     };
-    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES);
+    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES, NO_CALL_SOURCES);
     expect(snapshot.problems).toEqual([
       {
         code: "files-not-read",
@@ -321,13 +321,13 @@ describe("reading the type files the HTTP code mentions", () => {
       "src/main/java/a/OrderDto.java": '@RestController class OrderDto { String id; @GetMapping("/b") void b() {} }',
     };
     const snapshot = { ...snapshotOf(files), typeFiles: new Set(["src/main/java/a/OrderDto.java"]) };
-    const c = extractCard(snapshot, parsers);
+    const c = extractCard(snapshot, parsers, NO_REACH);
     expect(contracts(c.provides)).toEqual(["GET /a - -> OrderDto"]);
     expect(dtos(c)).toEqual(["class OrderDto(id: String) src/main/java/a/OrderDto.java:1"]);
   });
 
   test("a file from the search that did not fit in the read limit does not come back as a type file", async () => {
-    const source = (path: string) => ({ name: path.split("/").pop() ?? path, path, kind: "file" as const, size: 10 });
+    const source = (path: string) => ({ path, size: 10, oid: "0".repeat(40) });
     const paths = ["src/main/java/a/OrdersController.java", "src/main/java/a/OrdersApi.java"];
     let reads = 0;
     const vcs = {
@@ -343,7 +343,7 @@ describe("reading the type files the HTTP code mentions", () => {
       },
       grepFiles: async () => ({ paths, truncated: false }),
     };
-    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES);
+    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES, NO_CALL_SOURCES);
     expect([...snapshot.typeFiles]).toEqual([]);
     expect(snapshot.problems).toEqual([
       {

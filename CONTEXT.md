@@ -190,6 +190,10 @@ A method and full path (context path, controller prefix, method path) from a Spr
 **Endpoint contract** (`ProvidedEndpoint.request` and `response`, computed by `extractContracts`):
 The request type and response type of an HTTP endpoint (`ProvidedEndpoint.request`, `response`) together, from the method that contains the endpoint's mapping (ADR-38). In product texts "request and response types".
 
+**Endpoint reach** (`ProvidedEndpoint.reaches`, `EndpointReach`, computed by `withReaches`; `RepoCard.reachTraced`):
+The client calls on the same card that an endpoint's handler reaches through the repo's Java code, through any chain of method calls and every implementation of an interface in the repo (ADR-82). "Reaches" means may call: a branch counts. `null` when the card did not trace the repo (Kotlin code, files not read or parsed). In product texts "calls made by this endpoint"; `find_endpoint` shows it as `from` (the endpoints of a caller repo that make a call) and `calls` (the endpoints of other repos an endpoint calls).
+_Avoid_: trace, call path (for the fact on the card)
+
 **DTO** (`Dto`, `RepoCard.dtos`):
 A data type from the repo that an endpoint takes or returns, and the types of its fields: a record, a `data class`, a class with fields (a type without fields is not a DTO) or an enum (the `kind`), with fields and their types or enum constants. It is identified by the type's simple name, without the package (ADR-38).
 _Avoid_: model, entity (for a type from the card)

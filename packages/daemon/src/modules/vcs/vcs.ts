@@ -29,7 +29,18 @@ import { grep, grepFiles } from "./grep.ts";
 import { readHeadCommit } from "./head-commit.ts";
 import { hostedProject } from "./hosted-project.ts";
 import { KeyedQueue } from "./keyed-queue.ts";
-import { type GitObject, isBinary, LOG_FORMAT, parseBlobs, parseLog, parseObjects, parseStatus, parseTree } from "./parse.ts";
+import {
+  type CommitFile,
+  type GitObject,
+  isBinary,
+  LOG_FORMAT,
+  parseBlobs,
+  parseCommitFiles,
+  parseLog,
+  parseObjects,
+  parseStatus,
+  parseTree,
+} from "./parse.ts";
 import { pathKey } from "./path-key.ts";
 import { remoteAddress } from "./remote.ts";
 import { syncRepo } from "./sync.ts";
@@ -222,12 +233,12 @@ export class Vcs {
   }
 
   /**
-   * All files of a commit with their sizes, without directories and submodules; `truncated` when the list exceeded
+   * All files of a commit with their sizes and blob ids, without directories and submodules; `truncated` when the list exceeded
    * `maxBytes` of output (a repo with hundreds of thousands of files) and is incomplete.
    */
-  async commitFiles(dir: string, commit: string, maxBytes: number): Promise<{ files: TreeEntry[]; truncated: boolean }> {
+  async commitFiles(dir: string, commit: string, maxBytes: number): Promise<{ files: CommitFile[]; truncated: boolean }> {
     const { stdout, truncated } = await git(dir, ["ls-tree", "-r", "-z", "--long", commit], { maxBytes });
-    const files = parseTree(stdout.toString("utf8"), "").filter((e) => e.kind === "file");
+    const files = parseCommitFiles(stdout.toString("utf8"));
     // The last record of cut output may be an incomplete path.
     return { files: truncated ? files.slice(0, -1) : files, truncated };
   }

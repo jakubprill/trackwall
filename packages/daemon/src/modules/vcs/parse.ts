@@ -75,6 +75,24 @@ export function parseTree(out: string, dir: string): TreeEntry[] {
   return entries.sort(byKindThenName);
 }
 
+/** A commit's file with its size and blob id, as `git ls-tree -r -z --long <commit>` lists it. */
+export interface CommitFile {
+  path: string;
+  size: number;
+  /** The blob id: the same content has the same id in every commit and repo. */
+  oid: string;
+}
+
+/** Files from `git ls-tree -r -z --long <commit>`, in git's order, without directories and submodules. */
+export function parseCommitFiles(out: string): CommitFile[] {
+  const files: CommitFile[] = [];
+  for (const record of out.split("\0")) {
+    const m = /^\d+ blob ([0-9a-f]+) +(\d+)\t(.+)$/s.exec(record);
+    if (m) files.push({ oid: m[1] ?? "", size: Number(m[2]), path: m[3] ?? "" });
+  }
+  return files;
+}
+
 const KIND_ORDER: Record<TreeEntry["kind"], number> = { dir: 0, submodule: 1, file: 2 };
 
 function byKindThenName(a: TreeEntry, b: TreeEntry): number {

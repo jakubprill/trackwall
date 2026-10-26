@@ -1,9 +1,10 @@
 import type { CardWarmupProgress, RepoCard, RepoCardResult, RepoTag, RepoTagRules, RepoTags } from "@trackwall/protocol";
 import { configOrProblem, DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
+import { CallReads, readCallFiles } from "./call-files.ts";
 import type { CardCache } from "./card-cache.ts";
 import { CardWarmup, type WarmupRepo } from "./card-warmup.ts";
-import { CARD_SOURCES, extractCard, readsCardFile } from "./extract-card.ts";
+import { CALL_SOURCES, CARD_SOURCES, extractCard, readsCardFile } from "./extract-card.ts";
 import { readSnapshot, type SnapshotVcs } from "./read-snapshot.ts";
 import { CARD_PARSE_BUDGET_MS, loadSyntaxParsers, type SyntaxParsers, unavailableParsers, withParseBudget } from "./syntax-tree.ts";
 import { repoTags } from "./tags.ts";
@@ -53,6 +54,8 @@ const TAGS_CONCURRENCY = 4;
 export class Cards {
   private readonly deps: CardsDeps;
   private readonly warmup: CardWarmup;
+  /** Source files already parsed for the endpoint reach, by blob id, across the repos and commits (ADR-82). */
+  private readonly callReads = new CallReads();
 
   constructor(deps: CardsDeps) {
     this.deps = deps;
@@ -123,11 +126,14 @@ export class Cards {
     const commit = await this.deps.vcs.headCommit(dir);
     if (commit === null) return null;
     return this.deps.cache.getOrCompute(commit, async () => {
-      const snapshot = await readSnapshot(this.deps.vcs, dir, commit, readsCardFile, CARD_SOURCES);
-      const parsers = withParseBudget(await syntaxParsersOrUnavailable(), CARD_PARSE_BUDGET_MS);
-      const card = extractCard(snapshot, parsers);
+      const known = { accepts: CALL_SOURCES, kept: (oid: string) => this.callReads.get(oid) };
+      const snapshot = await readSnapshot(this.deps.vcs, dir, commit, readsCardFile, CARD_SOURCES, known);
+      const syntax = await syntaxParsersOrUnavailable();
+      const calls = await readCallFiles(snapshot.callSources, syntax, this.callReads);
+      const parsers = withParseBudget(syntax, CARD_PARSE_BUDGET_MS);
+      const card = extractCard(snapshot, parsers, calls);
       // A card without some syntax trees (time, no parser) depends on the moment of computing, so it does not go to disk.
-      return { card, persist: parsers.complete };
+      return { card, persist: parsers.complete && calls.complete };
     });
   }
 }

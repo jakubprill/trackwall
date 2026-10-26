@@ -177,6 +177,13 @@ export const RepoCard = z.object({
   consumes: z.array(Consumed),
   /** DTOs of the repo's HTTP endpoints, in the order found from the endpoints (ADR-38). */
   dtos: z.array(Dto),
+  /**
+   * Whether the card traced which client calls each endpoint reaches (`ProvidedEndpoint.reaches`, ADR-82): `false` when
+   * the repo has Kotlin code, which is not read yet, or not every Java file was read and parsed (then `problems` say
+   * why). A card without endpoints
+   * tells by this whether its client calls come from no endpoint or from code the card did not trace.
+   */
+  reachTraced: z.boolean(),
   tools: z.array(ToolRequirement),
   mise: MiseSetup,
   mechanisms: z.array(Mechanism),
