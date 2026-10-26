@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
 import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
 import { promptBoxOnScreen } from "../src/modules/agents/copilot-prompt-box.ts";
@@ -12,6 +12,9 @@ import { hookRecords, startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { type Recorder, startRecorder } from "./support/recorder.ts";
 import { screenLines } from "./support/screen-lines.ts";
 import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
+import { USER_MCP_ISSUES, USER_MCP_SERVER, USER_MCP_TOOL } from "./support/user-mcp-server.ts";
+
+const USER_MCP_SERVER_SCRIPT = join(import.meta.dir, "support", "user-mcp-server.ts");
 
 // The contract with the real Copilot CLI (ADR-67): what the daemon relies on, checked on the pinned version with a
 // scripted model. A failure here after a Copilot CLI upgrade means the fake in test/fixtures is out of date too.
@@ -349,4 +352,43 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
     },
     7 * SESSION_MS,
   );
+});
+
+describe("the day start with the real Copilot CLI", () => {
+  test("the day start's first message reaches the new supervisor's model as its first prompt, next to the user's own MCP servers, and it reads the day report without an approval request", async () => {
+    const { agents, dayStart } = daemon.facade;
+    // One of the user's own MCP servers in their Copilot CLI config: Trackwall's server is added to it, not instead of it.
+    const userConfig = join(daemon.home, "copilot-home", "mcp-config.json");
+    const server = { type: "local", command: process.execPath, args: [USER_MCP_SERVER_SCRIPT], tools: ["*"] };
+    mkdirSync(dirname(userConfig), { recursive: true });
+    writeFileSync(userConfig, JSON.stringify({ mcpServers: { [USER_MCP_SERVER]: server } }));
+    model.reply(
+      { tool: copilotToolName(mcpTools.getDayReport.name), arguments: {} },
+      { tool: `${USER_MCP_SERVER}-${USER_MCP_TOOL}`, arguments: {} },
+      { text: "Nothing new since your last day start; one open issue." },
+    );
+
+    try {
+      await dayStart.start();
+      const until = Date.now() + SESSION_MS;
+      while (dayStart.run()?.finishedAt === null && Date.now() < until) await new Promise((resolve) => setTimeout(resolve, 100));
+      const run = dayStart.run();
+      expect(run).toMatchObject({ error: null, step: "supervisor" });
+      const supervisor = run?.supervisor;
+      if (!supervisor) throw new Error("the day start started no supervisor");
+      await endOfTurn(supervisor);
+
+      const [first, second, third] = model.requests().slice(-3);
+      expect(first?.lastUserText).toContain(`Start my day. Trackwall has just synced every repo; call ${mcpTools.getDayReport.name}`);
+      expect(first?.system).toContain("You are the supervisor");
+      expect(first?.tools).toContain(copilotToolName(mcpTools.getDayReport.name));
+      expect(first?.tools).toContain(`${USER_MCP_SERVER}-${USER_MCP_TOOL}`);
+      expect(second?.toolResults.join("\n")).toContain('"quietRepos":1');
+      expect(third?.toolResults.join("\n")).toContain(USER_MCP_ISSUES);
+      expect(hookRecords(daemon.home, supervisor).map((r) => r.event)).not.toContain("notification");
+      await agents.stop(supervisor);
+    } finally {
+      rmSync(userConfig, { force: true });
+    }
+  });
 });

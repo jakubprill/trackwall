@@ -27,6 +27,7 @@ import {
 } from "./agents.ts";
 import { RepoCardResult, TagName } from "./cards.ts";
 import { CODE_SEARCH_LINE_MAX_CHARS, CODE_SEARCH_MAX_MATCHES, CodePathspecs, CodeQuery, SearchCodeResult } from "./code-search.ts";
+import { DAY_REPORT_COMMITS, DayReport } from "./day-start.ts";
 import { FindEndpointResult, MAX_FOUND_ENDPOINTS, MAX_SUBGRAPH_DEPTH, Subgraph, WhoCallsResult } from "./graph.ts";
 import { HttpMethod } from "./http.ts";
 import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErrors, LogTail } from "./logs.ts";
@@ -160,6 +161,10 @@ export const GetUpdatesResult = z.object({
   dropped: z.number().int().nonnegative(),
 });
 export type GetUpdatesResult = z.infer<typeof GetUpdatesResult>;
+
+/** The day report of the last day start (ADR-70); `null` before the first one. */
+export const GetDayReportResult = z.object({ report: DayReport.nullable() });
+export type GetDayReportResult = z.infer<typeof GetDayReportResult>;
 
 /**
  * What the wait found (`wait_for_session`, ADR-39). Waiting lasts only in `proposal_pending`, `starting` and `working`,
@@ -522,6 +527,22 @@ export const mcpTools = {
       "(passed, failed with the first failed tests and errors, running, cancelled), null before the first one.",
     args: z.object({ session: SessionId.describe(`session id from ${LIST_SESSIONS} (the id field)`) }).strict(),
     result: GetSessionResult,
+  },
+  getDayReport: {
+    name: "get_day_report",
+    readOnly: true,
+    description:
+      "What changed since the user's previous day start, computed by Trackwall when the user pressed Start my day: it " +
+      "synced every repo first. repos lists only the repos with something to say: commits new on the remote default " +
+      `branch (total, and the newest ${DAY_REPORT_COMMITS} with subject and author), rewritten when the branch was force-pushed, ` +
+      "first-seen for a repo the previous day start did not know, and the repo's sync result (skipped with the reason, " +
+      "e.g. uncommitted changes, or failed with git's message); remote is the project path on the repo host. quietRepos " +
+      "counts the rest. tasks lists every open task with its session state, whether it waits for the user, when it last " +
+      "reported, and behind: how many commits its repo's default branch has that the task's base does not. since: null " +
+      "for the first day start, which has nothing to compare with. The report does not change until the next day start, " +
+      "so call it once. report: null before the first day start.",
+    args: z.object({}).strict(),
+    result: GetDayReportResult,
   },
   getTaskChanges: {
     name: GET_TASK_CHANGES,

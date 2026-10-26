@@ -74,12 +74,18 @@ export async function git(repoDir: string, args: readonly string[], opts: GitOpt
   });
 }
 
-/** The full hash of the commit `ref` points to; `undefined` when there is no such commit. */
+/** The full hash of the commit `ref` points to; `undefined` when there is no such commit or git fails. */
 export async function revParse(dir: string, ref: string): Promise<string | undefined> {
-  return git(dir, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]).then(
-    ({ stdout }) => stdout.toString("utf8").trim(),
-    () => undefined,
-  );
+  return existingCommit(dir, ref).catch(() => undefined);
+}
+
+/**
+ * The full hash of the commit `ref` points to; `undefined` only when git says there is no such commit (`--verify --quiet`
+ * exits with 1). Any other failure (a timeout, a broken repo) throws, where telling it from a missing commit matters.
+ */
+export async function existingCommit(dir: string, ref: string): Promise<string | undefined> {
+  const { stdout } = await git(dir, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], { okExitCodes: [1] });
+  return stdout.toString("utf8").trim() || undefined;
 }
 
 /** The full name of the ref the symbolic ref `ref` points to (e.g. `HEAD`); `undefined` when it is not a symbolic ref. */

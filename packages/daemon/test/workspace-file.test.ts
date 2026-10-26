@@ -84,4 +84,19 @@ describe("workspace.yaml", () => {
     writeFileSync(path, "repoHosts:\n  - { kind: gitlab, host: gitlab.example.com }\n  - { kind: gitlab, host: GitLab.example.com }\n");
     expect(() => new WorkspaceFile(path).repoHosts()).toThrow(expect.objectContaining({ code: "invalid_config" }));
   });
+
+  test("dayStart.prompt is the user's addition to the day start, a missing key is none, and an unknown field is a configuration error of that key", () => {
+    const path = tempFile();
+    expect(new WorkspaceFile(path).dayStartSettings()).toBeNull();
+
+    writeFileSync(path, "dayStart:\n  prompt: |\n    Check my open issues.\n    Then the merge requests waiting for my review.\n");
+    expect(new WorkspaceFile(path).dayStartSettings()).toEqual({
+      prompt: "Check my open issues.\nThen the merge requests waiting for my review.",
+    });
+
+    writeFileSync(path, "dayStart:\n  promt: Check my open issues.\n");
+    expect(() => new WorkspaceFile(path).dayStartSettings()).toThrow(
+      expect.objectContaining({ code: "invalid_config", message: expect.stringContaining("dayStart") }),
+    );
+  });
 });

@@ -213,18 +213,43 @@ export class Agents {
    */
   async startSupervisor(): Promise<Session> {
     if (this.#supervisorStart) return this.#supervisorStart;
-    const running = this.#views().find((s) => isSupervisor(s) && s.run.kind !== "exited");
+    const running = this.#runningSupervisor();
     if (running) return running;
-    this.#supervisorStart = this.#replaceSupervisor().finally(() => {
+    return this.#startNewSupervisor(null);
+  }
+
+  /**
+   * A new supervisor with `firstMessage` as its first message (`--interactive`), so it works from the start: the day start
+   * (ADR-70). While a supervisor starts or runs, `bad_request`: the user stops it first, so no conversation ends without them.
+   */
+  async startSupervisorWith(firstMessage: string): Promise<Session> {
+    this.assertNoSupervisor();
+    return this.#startNewSupervisor(firstMessage);
+  }
+
+  /** `bad_request` while a supervisor starts or runs (ADR-70). */
+  assertNoSupervisor(): void {
+    if (this.#supervisorStart || this.#runningSupervisor())
+      throw new DomainError("bad_request", "the supervisor is running; stop it to start your day with a new one");
+  }
+
+  #runningSupervisor(): Session | undefined {
+    return this.#views().find((s) => isSupervisor(s) && s.run.kind !== "exited");
+  }
+
+  /** `firstMessage` is the first message (`--interactive`) of the new supervisor; `null` for none. */
+  #startNewSupervisor(firstMessage: string | null): Promise<Session> {
+    this.#supervisorStart = this.#replaceSupervisor(firstMessage).finally(() => {
       this.#supervisorStart = undefined;
     });
     return this.#supervisorStart;
   }
 
-  async #replaceSupervisor(): Promise<Session> {
+  async #replaceSupervisor(firstMessage: string | null): Promise<Session> {
     const ended = this.#views().filter(isSupervisor);
     const cwd = await this.#deps.repos.projectsDir();
-    const started = await this.#launch({ repo: null, cwd, task: null, args: [], promptOnStart: false });
+    const args = firstMessage === null ? [] : [`--interactive=${firstMessage}`];
+    const started = await this.#launch({ repo: null, cwd, task: null, args, promptOnStart: firstMessage !== null });
     // One of them may have been dismissed during the start; the start has still succeeded.
     for (const old of ended) if (this.#sessions.has(old.id)) this.#close(old.id);
     return started;
