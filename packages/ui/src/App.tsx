@@ -2,6 +2,8 @@ import { Activity, FolderGit2, Network, Orbit, Settings, SquareTerminal } from "
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { FolderDrop } from "@/components/FolderDrop";
 import { Loading } from "@/components/Loading";
 import { SupervisorPanel } from "@/components/SupervisorPanel";
@@ -205,55 +207,59 @@ export function App() {
                 <Loading text="Connecting to the daemon…" />
               </div>
             )}
-            {conn && view === "home" && (
-              <HomeView
-                key={epoch}
-                conn={conn}
-                runningLive={runningLive}
-                repoWatch={repoWatch}
-                sessions={sessions}
-                onOpenInSessions={openInSessions}
-                onOpenRepo={openRepos}
-                onOpenDaemon={() => setView("daemon")}
-                onOpenSettings={() => setView("settings")}
-              />
-            )}
-            {conn && view === "repos" && (
-              <ReposView
-                key={`${epoch}:${visit}`}
-                conn={conn}
-                initialRepo={repo}
-                repoWatch={repoWatch}
-                onRetry={retry}
-                onOpenSettings={() => setView("settings")}
-              />
-            )}
-            {conn && view === "sessions" && (
-              <SessionsView
-                key={epoch}
-                conn={conn}
-                sessions={sessions}
-                runningLive={runningLive}
-                selected={session}
-                onSelect={openInSessions}
-                onShowSupervisor={showSupervisor}
-                tree={tree}
-                supervisor={supervisor}
-                layout={sessionLayout}
-                onLayout={setSessionLayout}
-              />
-            )}
-            {conn && view === "graph" && <GraphView key={epoch} conn={conn} warmupLive={warmupLive} repoWatch={repoWatch} />}
-            {conn && view === "daemon" && (
-              <div className="flex justify-center p-6">
-                <DaemonPanel key={epoch} conn={conn} warmupLive={warmupLive} onRetry={retry} />
-              </div>
-            )}
-            {conn && view === "settings" && (
-              <div className="flex justify-center p-6">
-                <SettingsView key={epoch} conn={conn} update={appUpdate} onRetry={retry} onSaved={() => setView("repos")} />
-              </div>
-            )}
+            {/* One view that throws keeps the view bar and the other views. The key mounts the view afresh, with a fresh boundary, on
+                a view change, a reconnect (`epoch`) and every opening of a repo (`visit`). */}
+            <ErrorBoundary
+              key={`${view}:${epoch}:${visit}`}
+              fallback={(message, retry) => <ViewFailed message={message} onRetry={retry} />}
+            >
+              {conn && view === "home" && (
+                <HomeView
+                  conn={conn}
+                  runningLive={runningLive}
+                  repoWatch={repoWatch}
+                  sessions={sessions}
+                  onOpenInSessions={openInSessions}
+                  onOpenRepo={openRepos}
+                  onOpenDaemon={() => setView("daemon")}
+                  onOpenSettings={() => setView("settings")}
+                />
+              )}
+              {conn && view === "repos" && (
+                <ReposView
+                  conn={conn}
+                  initialRepo={repo}
+                  repoWatch={repoWatch}
+                  onRetry={retry}
+                  onOpenSettings={() => setView("settings")}
+                />
+              )}
+              {conn && view === "sessions" && (
+                <SessionsView
+                  conn={conn}
+                  sessions={sessions}
+                  runningLive={runningLive}
+                  selected={session}
+                  onSelect={openInSessions}
+                  onShowSupervisor={showSupervisor}
+                  tree={tree}
+                  supervisor={supervisor}
+                  layout={sessionLayout}
+                  onLayout={setSessionLayout}
+                />
+              )}
+              {conn && view === "graph" && <GraphView conn={conn} warmupLive={warmupLive} repoWatch={repoWatch} />}
+              {conn && view === "daemon" && (
+                <div className="flex justify-center p-6">
+                  <DaemonPanel conn={conn} warmupLive={warmupLive} onRetry={retry} />
+                </div>
+              )}
+              {conn && view === "settings" && (
+                <div className="flex justify-center p-6">
+                  <SettingsView conn={conn} update={appUpdate} onRetry={retry} onSaved={() => setView("repos")} />
+                </div>
+              )}
+            </ErrorBoundary>
           </main>
         </KeyboardElsewhere.Provider>
       </div>
@@ -272,6 +278,14 @@ export function App() {
           />
         </KeyboardElsewhere.Provider>
       )}
+    </div>
+  );
+}
+
+function ViewFailed({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="p-6">
+      <ErrorWithRetry message={`This view stopped with an error: ${message}`} onRetry={onRetry} />
     </div>
   );
 }

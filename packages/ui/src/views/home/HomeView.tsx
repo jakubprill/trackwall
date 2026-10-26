@@ -1,6 +1,7 @@
 import { graphApi, miseApi, type RunningMiseTask, type SessionList, workspaceApi } from "@trackwall/protocol";
 import { type HomeKey, parseHomeKey } from "@trackwall/scene/model";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
@@ -26,6 +27,9 @@ import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
  * view bar. Outside the canvas the view takes only `@trackwall/scene/model` from the scene (keys and snapshot types), so
  * that three.js and Pawn stay in the lazily loaded chunk.
  */
+
+/** The scene's own messages are for people developing Trackwall, so a failure shows a general text, as in `HomeCanvas`. */
+const CANVAS_FAILED = "the 3D view failed to load";
 
 const HomeCanvas = lazy(() => import("./HomeCanvas.tsx").then((m) => ({ default: m.HomeCanvas })));
 
@@ -140,22 +144,26 @@ export function HomeView({
             </Button>
           </div>
         ) : (
-          <Suspense
-            fallback={
-              <div className="p-6">
-                <Loading text="Loading the 3D view…" />
-              </div>
-            }
-          >
-            <HomeCanvas
-              model={model}
-              focus={current}
-              onSelect={setSelected}
-              onOpen={open}
-              onHover={setHovered}
-              onUnavailable={unavailableNow}
-            />
-          </Suspense>
+          // A scene that throws (its chunk does not load, the WebView refuses its code) shows the same message as one
+          // without WebGL, instead of taking the whole window down.
+          <ErrorBoundary fallback={() => null} onError={() => unavailableNow(CANVAS_FAILED)}>
+            <Suspense
+              fallback={
+                <div className="p-6">
+                  <Loading text="Loading the 3D view…" />
+                </div>
+              }
+            >
+              <HomeCanvas
+                model={model}
+                focus={current}
+                onSelect={setSelected}
+                onOpen={open}
+                onHover={setHovered}
+                onUnavailable={unavailableNow}
+              />
+            </Suspense>
+          </ErrorBoundary>
         )}
         {!unavailable && hovered && hovered !== current && <HomeHoverCard target={hovered} model={model} />}
         {repos.error && <p className="text-destructive absolute bottom-3 left-3 text-sm">{repos.error}</p>}

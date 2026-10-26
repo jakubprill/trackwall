@@ -1,0 +1,264 @@
+diff --git a/dist/chunk-ZWIGMIL4.js b/dist/chunk-ZWIGMIL4.js
+index feb90a85391fc5c3708a46041893e9dda4c8ff47..a36daa6c15f4ca346d96d3ceaa138d74e2ec7fdb 100644
+--- a/dist/chunk-ZWIGMIL4.js
++++ b/dist/chunk-ZWIGMIL4.js
+@@ -678,40 +678,36 @@ function createStore(schema) {
+ // ../core/src/storage/accessors.ts
+ function createSoASetFunction(schema) {
+   const keys = Object.keys(schema);
+-  const setFunctionBody = keys.map((key) => `if ('${key}' in value) store.${key}[index] = value.${key};`).join("\n    ");
+-  const set = new Function("index", "store", "value", `
+-		${setFunctionBody}
+-	  `);
+-  return set;
++  return (index, store, value) => {
++    for (const key of keys) if (key in value) store[key][index] = value[key];
++  };
+ }
+ function createSoAFastSetFunction(schema) {
+   const keys = Object.keys(schema);
+-  const setFunctionBody = keys.map((key) => `store.${key}[index] = value.${key};`).join("\n    ");
+-  const set = new Function("index", "store", "value", `
+-		${setFunctionBody}
+-	  `);
+-  return set;
++  return (index, store, value) => {
++    for (const key of keys) store[key][index] = value[key];
++  };
+ }
+ function createSoAFastSetChangeFunction(schema) {
+   const keys = Object.keys(schema);
+-  const setFunctionBody = keys.map((key) => `if (store.${key}[index] !== value.${key}) {
+-            store.${key}[index] = value.${key};
+-            changed = true;
+-        }`).join("\n    ");
+-  const set = new Function("index", "store", "value", `
+-        let changed = false;
+-        ${setFunctionBody}
+-        return changed;
+-        `);
+-  return set;
++  return (index, store, value) => {
++    let changed = false;
++    for (const key of keys) {
++      if (store[key][index] !== value[key]) {
++        store[key][index] = value[key];
++        changed = true;
++      }
++    }
++    return changed;
++  };
+ }
+ function createSoAGetFunction(schema) {
+   const keys = Object.keys(schema);
+-  const objectLiteral = `{ ${keys.map((key) => `${key}: store.${key}[index]`).join(", ")} }`;
+-  const get = new Function("index", "store", `
+-        return ${objectLiteral};
+-        `);
+-  return get;
++  return (index, store) => {
++    const value = {};
++    for (const key of keys) value[key] = store[key][index];
++    return value;
++  };
+ }
+ function createAoSSetFunction(_schema) {
+   return (index, store, value) => {
+diff --git a/dist/index.cjs b/dist/index.cjs
+index efa87da67fac554c98a6717b5670ad565ab615ba..2310360915a379eb0c2b4ca8f7c2f7b4b498e9bc 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -1007,40 +1007,36 @@ function createStore(schema) {
+ // ../core/src/storage/accessors.ts
+ function createSoASetFunction(schema) {
+   const keys = Object.keys(schema);
+-  const setFunctionBody = keys.map((key) => `if ('${key}' in value) store.${key}[index] = value.${key};`).join("\n    ");
+-  const set = new Function("index", "store", "value", `
+-		${setFunctionBody}
+-	  `);
+-  return set;
++  return (index, store, value) => {
++    for (const key of keys) if (key in value) store[key][index] = value[key];
++  };
+ }
+ function createSoAFastSetFunction(schema) {
+   const keys = Object.keys(schema);
+-  const setFunctionBody = keys.map((key) => `store.${key}[index] = value.${key};`).join("\n    ");
+-  const set = new Function("index", "store", "value", `
+-		${setFunctionBody}
+-	  `);
+-  return set;
++  return (index, store, value) => {
++    for (const key of keys) store[key][index] = value[key];
++  };
+ }
+ function createSoAFastSetChangeFunction(schema) {
+   const keys = Object.keys(schema);
+-  const setFunctionBody = keys.map((key) => `if (store.${key}[index] !== value.${key}) {
+-            store.${key}[index] = value.${key};
+-            changed = true;
+-        }`).join("\n    ");
+-  const set = new Function("index", "store", "value", `
+-        let changed = false;
+-        ${setFunctionBody}
+-        return changed;
+-        `);
+-  return set;
++  return (index, store, value) => {
++    let changed = false;
++    for (const key of keys) {
++      if (store[key][index] !== value[key]) {
++        store[key][index] = value[key];
++        changed = true;
++      }
++    }
++    return changed;
++  };
+ }
+ function createSoAGetFunction(schema) {
+   const keys = Object.keys(schema);
+-  const objectLiteral = `{ ${keys.map((key) => `${key}: store.${key}[index]`).join(", ")} }`;
+-  const get = new Function("index", "store", `
+-        return ${objectLiteral};
+-        `);
+-  return get;
++  return (index, store) => {
++    const value = {};
++    for (const key of keys) value[key] = store[key][index];
++    return value;
++  };
+ }
+ function createAoSSetFunction(_schema) {
+   return (index, store, value) => {
+diff --git a/dist/react.cjs b/dist/react.cjs
+index 3117293193406a4f608f0179f5fae8d09eb8ce12..ef879931d21f5ddc9c31d4ef9610a13f98bc919d 100644
+--- a/dist/react.cjs
++++ b/dist/react.cjs
+@@ -834,40 +834,36 @@ function createStore(schema) {
+ // ../core/src/storage/accessors.ts
+ function createSoASetFunction(schema) {
+   const keys = Object.keys(schema);
+-  const setFunctionBody = keys.map((key) => `if ('${key}' in value) store.${key}[index] = value.${key};`).join("\n    ");
+-  const set = new Function("index", "store", "value", `
+-		${setFunctionBody}
+-	  `);
+-  return set;
++  return (index, store, value) => {
++    for (const key of keys) if (key in value) store[key][index] = value[key];
++  };
+ }
+ function createSoAFastSetFunction(schema) {
+   const keys = Object.keys(schema);
+-  const setFunctionBody = keys.map((key) => `store.${key}[index] = value.${key};`).join("\n    ");
+-  const set = new Function("index", "store", "value", `
+-		${setFunctionBody}
+-	  `);
+-  return set;
++  return (index, store, value) => {
++    for (const key of keys) store[key][index] = value[key];
++  };
+ }
+ function createSoAFastSetChangeFunction(schema) {
+   const keys = Object.keys(schema);
+-  const setFunctionBody = keys.map((key) => `if (store.${key}[index] !== value.${key}) {
+-            store.${key}[index] = value.${key};
+-            changed = true;
+-        }`).join("\n    ");
+-  const set = new Function("index", "store", "value", `
+-        let changed = false;
+-        ${setFunctionBody}
+-        return changed;
+-        `);
+-  return set;
++  return (index, store, value) => {
++    let changed = false;
++    for (const key of keys) {
++      if (store[key][index] !== value[key]) {
++        store[key][index] = value[key];
++        changed = true;
++      }
++    }
++    return changed;
++  };
+ }
+ function createSoAGetFunction(schema) {
+   const keys = Object.keys(schema);
+-  const objectLiteral = `{ ${keys.map((key) => `${key}: store.${key}[index]`).join(", ")} }`;
+-  const get = new Function("index", "store", `
+-        return ${objectLiteral};
+-        `);
+-  return get;
++  return (index, store) => {
++    const value = {};
++    for (const key of keys) value[key] = store[key][index];
++    return value;
++  };
+ }
+ function createAoSSetFunction(_schema) {
+   return (index, store, value) => {
+diff --git a/react/index.cjs b/react/index.cjs
+index 3117293193406a4f608f0179f5fae8d09eb8ce12..ef879931d21f5ddc9c31d4ef9610a13f98bc919d 100644
+--- a/react/index.cjs
++++ b/react/index.cjs
+@@ -834,40 +834,36 @@ function createStore(schema) {
+ // ../core/src/storage/accessors.ts
+ function createSoASetFunction(schema) {
+   const keys = Object.keys(schema);
+-  const setFunctionBody = keys.map((key) => `if ('${key}' in value) store.${key}[index] = value.${key};`).join("\n    ");
+-  const set = new Function("index", "store", "value", `
+-		${setFunctionBody}
+-	  `);
+-  return set;
++  return (index, store, value) => {
++    for (const key of keys) if (key in value) store[key][index] = value[key];
++  };
+ }
+ function createSoAFastSetFunction(schema) {
+   const keys = Object.keys(schema);
+-  const setFunctionBody = keys.map((key) => `store.${key}[index] = value.${key};`).join("\n    ");
+-  const set = new Function("index", "store", "value", `
+-		${setFunctionBody}
+-	  `);
+-  return set;
++  return (index, store, value) => {
++    for (const key of keys) store[key][index] = value[key];
++  };
+ }
+ function createSoAFastSetChangeFunction(schema) {
+   const keys = Object.keys(schema);
+-  const setFunctionBody = keys.map((key) => `if (store.${key}[index] !== value.${key}) {
+-            store.${key}[index] = value.${key};
+-            changed = true;
+-        }`).join("\n    ");
+-  const set = new Function("index", "store", "value", `
+-        let changed = false;
+-        ${setFunctionBody}
+-        return changed;
+-        `);
+-  return set;
++  return (index, store, value) => {
++    let changed = false;
++    for (const key of keys) {
++      if (store[key][index] !== value[key]) {
++        store[key][index] = value[key];
++        changed = true;
++      }
++    }
++    return changed;
++  };
+ }
+ function createSoAGetFunction(schema) {
+   const keys = Object.keys(schema);
+-  const objectLiteral = `{ ${keys.map((key) => `${key}: store.${key}[index]`).join(", ")} }`;
+-  const get = new Function("index", "store", `
+-        return ${objectLiteral};
+-        `);
+-  return get;
++  return (index, store) => {
++    const value = {};
++    for (const key of keys) value[key] = store[key][index];
++    return value;
++  };
+ }
+ function createAoSSetFunction(_schema) {
+   return (index, store, value) => {

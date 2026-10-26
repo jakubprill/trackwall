@@ -11,6 +11,11 @@ overrides:
 
 packageExtensionsChecksum: sha256-uEhUBmbELeqRuYj6Hqz6y6Lof2IpCZp/dWJq4eC/kdI=
 
+patchedDependencies:
+  koota@0.6.6:
+    hash: 66e45a25be0194f96d6ef4ef9fabfa089437ed7fb44c45e1df5f9f3d6bd7265c
+    path: patches/koota@0.6.6.patch
+
 importers:
 
   .:
@@ -142,13 +147,13 @@ importers:
     dependencies:
       '@pawnjs/core':
         specifier: 0.1.0-alpha.5
-        version: 0.1.0-alpha.5(koota@0.6.6(@types/react@19.3.0)(react@19.3.1))(three@0.186.1)
+        version: 0.1.0-alpha.5(koota@0.6.6(patch_hash=66e45a25be0194f96d6ef4ef9fabfa089437ed7fb44c45e1df5f9f3d6bd7265c)(@types/react@19.3.0)(react@19.3.1))(three@0.186.1)
       '@trackwall/protocol':
         specifier: workspace:*
         version: link:../protocol
       koota:
         specifier: 0.6.6
-        version: 0.6.6(@types/react@19.3.0)(react@19.3.1)
+        version: 0.6.6(patch_hash=66e45a25be0194f96d6ef4ef9fabfa089437ed7fb44c45e1df5f9f3d6bd7265c)(@types/react@19.3.0)(react@19.3.1)
       three:
         specifier: 0.186.1
         version: 0.186.1
@@ -167,7 +172,7 @@ importers:
     dependencies:
       '@pawnjs/core':
         specifier: 0.1.0-alpha.5
-        version: 0.1.0-alpha.5(koota@0.6.6(@types/react@19.3.0)(react@19.3.1))(three@0.186.1)
+        version: 0.1.0-alpha.5(koota@0.6.6(patch_hash=66e45a25be0194f96d6ef4ef9fabfa089437ed7fb44c45e1df5f9f3d6bd7265c)(@types/react@19.3.0)(react@19.3.1))(three@0.186.1)
       '@radix-ui/react-slot':
         specifier: 1.5.0
         version: 1.5.0(@types/react@19.3.0)(react@19.3.1)
@@ -197,7 +202,7 @@ importers:
         version: 2.1.1
       koota:
         specifier: 0.6.6
-        version: 0.6.6(@types/react@19.3.0)(react@19.3.1)
+        version: 0.6.6(patch_hash=66e45a25be0194f96d6ef4ef9fabfa089437ed7fb44c45e1df5f9f3d6bd7265c)(@types/react@19.3.0)(react@19.3.1)
       lucide-react:
         specifier: 1.61.0
         version: 1.61.0(@types/react@19.3.0)(react@19.3.1)
@@ -3487,9 +3492,9 @@ snapshots:
   '@oxc-resolver/binding-win32-x64-msvc@11.24.2':
     optional: true
 
-  '@pawnjs/core@0.1.0-alpha.5(koota@0.6.6(@types/react@19.3.0)(react@19.3.1))(three@0.186.1)':
+  '@pawnjs/core@0.1.0-alpha.5(koota@0.6.6(patch_hash=66e45a25be0194f96d6ef4ef9fabfa089437ed7fb44c45e1df5f9f3d6bd7265c)(@types/react@19.3.0)(react@19.3.1))(three@0.186.1)':
     dependencies:
-      koota: 0.6.6(@types/react@19.3.0)(react@19.3.1)
+      koota: 0.6.6(patch_hash=66e45a25be0194f96d6ef4ef9fabfa089437ed7fb44c45e1df5f9f3d6bd7265c)(@types/react@19.3.0)(react@19.3.1)
       three: 0.186.1
 
   '@radix-ui/react-compose-refs@1.1.5(@types/react@19.3.0)(react@19.3.1)':
@@ -4686,7 +4691,7 @@ snapshots:
       yaml: 2.9.1
       zod: 4.6.7
 
-  koota@0.6.6(@types/react@19.3.0)(react@19.3.1):
+  koota@0.6.6(patch_hash=66e45a25be0194f96d6ef4ef9fabfa089437ed7fb44c45e1df5f9f3d6bd7265c)(@types/react@19.3.0)(react@19.3.1):
     optionalDependencies:
       '@types/react': 19.3.0
       react: 19.3.1
