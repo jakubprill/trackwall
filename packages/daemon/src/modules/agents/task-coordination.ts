@@ -143,6 +143,17 @@ export class TaskCoordination {
     });
   }
 
+  repoRemoved(proposal: { id: string; repo: string; proposedBy: ProposedBy }, movedTo: string): void {
+    this.#notify(proposal.proposedBy, {
+      kind: "repo_removed",
+      task: proposal.id,
+      session: null,
+      repo: proposal.repo,
+      movedTo,
+      at: new Date().toISOString(),
+    });
+  }
+
   /** The user put text into a session: it counts as taking part in the session's exchanges and its task's. */
   userTyped(session: { id: string; task: string | null }): void {
     const now = Date.now();

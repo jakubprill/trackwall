@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ProposedBy, TaskProposal } from "@trackwall/protocol";
+import type { ProposalKind, ProposedBy, TaskProposal } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 
 /**
@@ -30,12 +30,9 @@ export class TaskProposals {
     return [...this.#pending];
   }
 
-  add(proposal: { repo: string; title: string; prompt: string; proposedBy: ProposedBy }): TaskProposal {
+  add(proposal: { kind: ProposalKind; repo: string; title: string; prompt: string; proposedBy: ProposedBy }): TaskProposal {
     if (this.#pending.length >= MAX_PENDING_PROPOSALS) {
-      throw new DomainError(
-        "bad_request",
-        `${MAX_PENDING_PROPOSALS} task proposals are already waiting for the user; wait for their decision`,
-      );
+      throw new DomainError("bad_request", `${MAX_PENDING_PROPOSALS} proposals are already waiting for the user; wait for their decision`);
     }
     const added: TaskProposal = { id: randomUUID(), ...proposal, createdAt: new Date().toISOString() };
     this.#pending = [added, ...this.#pending];
@@ -67,8 +64,8 @@ export class TaskProposals {
   }
 
   /**
-   * The end of approval: with `restore` the proposal waits again (the task was not created), without it it disappears,
-   * because it is a task now.
+   * The end of approval: with `restore` the proposal waits again (its task was not created, or its repo not removed),
+   * without it it disappears, because it is a task now or its repo is gone.
    */
   release(id: string, restore: boolean): void {
     this.#approving.delete(id);

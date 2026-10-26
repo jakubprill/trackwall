@@ -20,6 +20,7 @@ function session(id: string, needsAttention: boolean, dialog: Session["dialog"] 
 
 const proposal: TaskProposal = {
   id: "p1",
+  kind: "task",
   repo: "billing",
   title: "Retry failed invoices",
   prompt: "Retry invoices that failed to send",

@@ -39,6 +39,7 @@ To steer a running task, the main session sends its agent a message: a correctio
 ## Good to know
 
 - A proposal for a repo that already has tasks says so.
+- A main session can also propose removing a repo, shown as "Repo removal" with its reason and a "Remove repo" button instead of a prompt; see the [supervisor](/features/supervisor).
 - In the session grid, a tile with proposals shows their prompts with "Start task" and "Reject…"; "Next waiting" and Alt+J go to proposals too.
 - Proposals last until Trackwall quits, at most 20 at a time; summaries stay with their tasks.
 - A proposal from an agent outside Trackwall is marked "agent outside Trackwall" and listed at the top level, like a proposal from a session you have closed. Such an agent can propose tasks, but cannot report a task's summary, is not woken when its tasks move and cannot send them messages; it has to keep checking on them itself.

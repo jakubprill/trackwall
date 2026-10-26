@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Logs } from "../src/modules/logs/logs.ts";
@@ -63,6 +63,27 @@ async function waitForTree(dir: string, depth: number): Promise<number[]> {
 }
 
 describe("procs", () => {
+  test(
+    "a live group counts as working in its directory and every folder above it, not in a sibling with the same prefix",
+    async () => {
+      const { dir, groups } = setup();
+      const repo = join(dir, "shop");
+      const sub = join(repo, "service");
+      mkdirSync(sub, { recursive: true });
+      await groups.start({ owner: "o", command: [process.execPath, TREE, sub, "0", "1"], cwd: sub, env: process.env, logSource: SOURCE });
+      await waitForTree(sub, 1);
+
+      expect(groups.liveIn(repo)).toBe(true);
+      expect(groups.liveIn(sub)).toBe(true);
+      expect(groups.liveIn(join(dir, "shop-2"))).toBe(false);
+      expect(groups.liveIn(join(sub, "src"))).toBe(false);
+
+      await groups.stop("o");
+      expect(groups.liveIn(repo)).toBe(false);
+    },
+    TIMEOUT,
+  );
+
   test(
     "stop halts the whole group, including grandchildren that ignore a gentle stop, and removes it from runtime.json",
     async () => {

@@ -315,6 +315,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
         worktreesDir: async () => repoDir,
         toolPermissions: () => ({ allow: [], deny: [] }),
         supervisorSettings: () => ({ changesCode: false }),
+        removeRepo: () => Promise.reject(new Error("unused")),
       },
       vcs: new Vcs(),
       home: mkdtempSync(join(tmpdir(), "trackwall-agents-")),

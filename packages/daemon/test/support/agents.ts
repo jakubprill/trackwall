@@ -55,6 +55,7 @@ export function makeAgents(
       worktreesDir: async () => worktreesDir(),
       toolPermissions: () => toolPermissions,
       supervisorSettings: () => supervisor,
+      removeRepo: () => Promise.reject(new Error("unused")),
     },
     vcs: new Vcs(),
     home,

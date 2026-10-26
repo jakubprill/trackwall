@@ -117,6 +117,12 @@ interface AgentsRepos {
   toolPermissions(repo: string | null): ToolPermissions;
   /** `supervisor` from `workspace.yaml` (ADR-78); `invalid_config` for a bad key. */
   supervisorSettings(): SupervisorSettings;
+  /** Moves the repo out of the projects folder (ADR-83) and returns where it went. */
+  /**
+   * Moves repo `id` out of the projects folder (ADR-83) while its folder is still `expectedDir`; `beforeMove` runs right
+   * before the move, with nothing awaited in between, so a check in it still holds when the folder moves.
+   */
+  removeRepo(id: string, expectedDir: string, beforeMove: () => void): Promise<string>;
 }
 
 export interface AgentsDeps {
@@ -159,6 +165,8 @@ export class Agents {
   readonly #tokens = new SessionTokens();
   readonly #tasks: AgentTasks;
   readonly #proposals = new TaskProposals();
+  /** The folder each waiting repo removal names, fixed when it was proposed: approval moves that folder or none (ADR-83). */
+  readonly #removalDirs = new Map<string, string>();
   readonly #reviews = new TaskReviews();
   readonly #coordination: TaskCoordination;
   /** The supervisor start under way, so that two requests at once start one supervisor, not two (ADR-58). */
@@ -267,7 +275,27 @@ export class Agents {
   /** A task proposal from session `caller` (`null`: an agent outside Trackwall) in a repo from the projects folder (ADR-39). */
   async propose(caller: string | null, proposal: { repo: string; title: string; prompt: string }): Promise<TaskProposal> {
     await this.#deps.repos.repoPath(proposal.repo);
-    return this.#proposals.add({ ...proposal, proposedBy: proposedByOf(caller === null ? null : this.session(caller)) });
+    return this.#proposals.add({ kind: "task", ...proposal, proposedBy: proposedByOf(caller === null ? null : this.session(caller)) });
+  }
+
+  /** A proposal to remove a repo from the projects folder (ADR-83), from session `caller` like a task proposal. */
+  async proposeRepoRemoval(caller: string | null, repo: string, reason: string): Promise<TaskProposal> {
+    const session = caller === null ? null : this.session(caller);
+    if (session?.task != null)
+      throw new DomainError(
+        "bad_request",
+        "a task session works in its worktree and proposes no folder actions; tell your proposer instead",
+      );
+    const repoDir = await this.#deps.repos.repoPath(repo);
+    const proposal = this.#proposals.add({
+      kind: "remove_repo",
+      repo,
+      title: `Remove ${repo} from the projects folder`,
+      prompt: reason,
+      proposedBy: proposedByOf(session),
+    });
+    this.#removalDirs.set(proposal.id, repoDir);
+    return proposal;
   }
 
   /**
@@ -276,6 +304,7 @@ export class Agents {
    * task left behind by a failed cleanup is ended by the user, so the proposal then disappears.
    */
   async approveProposal(id: string, prompt: string): Promise<Task> {
+    if (this.#proposals.get(id).kind !== "task") throw new DomainError("bad_request", `proposal ${id} is not a task`);
     const { repo, title, proposedBy } = this.#proposals.take(id);
     try {
       return await this.#tasks.create(repo, prompt, { id, title, proposedBy });
@@ -284,9 +313,50 @@ export class Agents {
     }
   }
 
+  /**
+   * The user approves removing a repo (ADR-83). Refused while anything of the repo would lose its folder: a session in
+   * it, a task (its worktree belongs to the repo's git directory) or a process started there. A refusal leaves the
+   * proposal waiting, so the user ends those and approves again. The other proposals for the repo are rejected with it,
+   * since they could no longer start.
+   */
+  async approveRepoRemoval(id: string): Promise<void> {
+    const proposal = this.#proposals.get(id);
+    const repoDir = this.#removalDirs.get(id);
+    if (proposal.kind !== "remove_repo" || repoDir === undefined)
+      throw new DomainError("bad_request", `proposal ${id} is not a repo removal`);
+    if (this.#proposals.list().some((p) => p.repo === proposal.repo && this.#proposals.approving(p.id)))
+      throw new DomainError("bad_request", `${proposal.repo} is already being removed or a task of it started`);
+    this.#assertNothingRunsIn(proposal.repo, repoDir);
+    this.#proposals.take(id);
+    let movedTo: string;
+    try {
+      movedTo = await this.#deps.repos.removeRepo(proposal.repo, repoDir, () => this.#assertNothingRunsIn(proposal.repo, repoDir));
+    } catch (err) {
+      this.#proposals.release(id, true);
+      throw err;
+    }
+    this.#proposals.release(id, false);
+    this.#removalDirs.delete(id);
+    this.#coordination.repoRemoved(proposal, movedTo);
+    for (const other of this.#proposals.list())
+      if (other.repo === proposal.repo && this.#proposals.find(other.id))
+        this.rejectProposal(other.id, `${proposal.repo} was removed from the projects folder`);
+  }
+
+  #assertNothingRunsIn(repo: string, repoDir: string): void {
+    const sessions = this.#views().filter((s) => s.repo === repo && s.task === null && s.run.kind !== "exited");
+    if (sessions.length > 0) throw new DomainError("bad_request", `stop the sessions in ${repo} first (${sessions.length} running)`);
+    if (this.#tasks.creatingIn(repo)) throw new DomainError("bad_request", `a task of ${repo} is being created; wait for it, then end it`);
+    const tasks = this.#tasks.list().filter((t) => t.repo === repo);
+    if (tasks.length > 0)
+      throw new DomainError("bad_request", `end the tasks of ${repo} first (${tasks.length}): their worktrees belong to the repo`);
+    if (this.#deps.procs.liveIn(repoDir)) throw new DomainError("bad_request", `stop the mise tasks and services running in ${repo} first`);
+  }
+
   rejectProposal(id: string, reason: string | undefined): void {
     const proposal = this.#proposals.get(id);
     this.#proposals.reject(id, reason ?? null);
+    this.#removalDirs.delete(id);
     this.#coordination.proposalRejected(proposal, reason ?? null);
   }
 

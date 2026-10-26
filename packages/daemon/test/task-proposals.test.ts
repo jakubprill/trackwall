@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { MAX_PENDING_PROPOSALS, TaskProposals } from "../src/modules/agents/task-proposals.ts";
 
-const PROPOSAL = { repo: "shop", title: "Add a test", prompt: "add a login test", proposedBy: { session: null, supervisor: false } };
+const PROPOSAL = {
+  kind: "task" as const,
+  repo: "shop",
+  title: "Add a test",
+  prompt: "add a login test",
+  proposedBy: { session: null, supervisor: false },
+};
 
 describe("task proposals", () => {
   test("a proposal being approved stays on the list, but a second approval and a rejection are not_found", () => {

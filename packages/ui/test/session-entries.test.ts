@@ -4,6 +4,8 @@ import {
   entryId,
   entrySelection,
   findEntry,
+  proposalKindLabel,
+  proposalsName,
   proposerLabel,
   proposerName,
   selectionAfterClose,
@@ -45,7 +47,15 @@ function task(id: string, createdAt: string): Task {
 }
 
 function proposal(id: string, createdAt: string, proposer: string | null = null): TaskProposal {
-  return { id, repo: "shop", title: "Add a test", prompt: "add a test", proposedBy: { session: proposer, supervisor: false }, createdAt };
+  return {
+    id,
+    kind: "task",
+    repo: "shop",
+    title: "Add a test",
+    prompt: "add a test",
+    proposedBy: { session: proposer, supervisor: false },
+    createdAt,
+  };
 }
 
 function delegated(id: string, createdAt: string, proposer: string): Task {
@@ -289,5 +299,19 @@ describe("Sessions view entries", () => {
     const sessions = [{ ...session("s1", "2026-10-23T12:00:00Z"), windowTitle: "Sprint plan" }];
     expect(`from ${proposerName({ session: "s1", supervisor: false }, sessions)}`).toBe("from the session in shop (Sprint plan)");
     expect(`from ${proposerName({ session: "s2", supervisor: true }, sessions)}`).toBe("from the supervisor");
+  });
+});
+
+describe("proposal kinds (ADR-83)", () => {
+  test("a single proposal is headed by what it asks for: a task, or removing a repo", () => {
+    expect(proposalKindLabel(proposal("p1", "2026-10-26T10:00:00Z"))).toBe("Task proposal");
+    expect(proposalKindLabel({ ...proposal("p2", "2026-10-26T10:00:00Z"), kind: "remove_repo" })).toBe("Repo removal");
+  });
+
+  test("a group with a repo removal in it is counted as proposals, not as task proposals", () => {
+    const task = proposal("p1", "2026-10-26T10:00:00Z");
+    const removal: TaskProposal = { ...proposal("p2", "2026-10-26T10:00:00Z"), kind: "remove_repo" };
+    expect(proposalsName([task, { ...task, id: "p3" }])).toBe("2 task proposals");
+    expect(proposalsName([task, removal])).toBe("2 proposals");
   });
 });

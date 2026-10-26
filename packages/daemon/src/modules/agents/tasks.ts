@@ -118,6 +118,8 @@ export class AgentTasks {
   readonly #busy = new Set<string>();
   /** Ports of tasks being created, not on the list yet: two tasks created at once must not get the same one. */
   readonly #creatingPorts = new Set<number>();
+  /** Repo to the number of its tasks being created: they are not on the list until their worktree is on disk. */
+  readonly #creatingIn = new Map<string, number>();
   /** Tasks being ended: computing changes refuses, because the worktree is about to disappear. */
   readonly #removing = new Set<string>();
   /** The task's change computations in progress (several windows at once): ending waits until git stops reading the worktree. */
@@ -135,11 +137,25 @@ export class AgentTasks {
     return this.#tasks.map(view);
   }
 
+  /** A task of the repo is being created, so its worktree may be half made (a repo removal waits for it, ADR-83). */
+  creatingIn(repo: string): boolean {
+    return (this.#creatingIn.get(repo) ?? 0) > 0;
+  }
+
   /**
    * A worktree on a new branch from the default branch and Copilot CLI in it with the prompt as its first message; the
    * title names the branch, and without one the prompt.
    */
-  async create(repo: string, prompt: string, { id, title, proposedBy }: TaskOrigin): Promise<Task> {
+  async create(repo: string, prompt: string, origin: TaskOrigin): Promise<Task> {
+    this.#creatingIn.set(repo, (this.#creatingIn.get(repo) ?? 0) + 1);
+    try {
+      return await this.#create(repo, prompt, origin);
+    } finally {
+      this.#creatingIn.set(repo, (this.#creatingIn.get(repo) ?? 1) - 1);
+    }
+  }
+
+  async #create(repo: string, prompt: string, { id, title, proposedBy }: TaskOrigin): Promise<Task> {
     const repoDir = await this.#deps.repos.repoPath(repo);
     const base = await asRepoUnavailable(repo, this.#deps.vcs.defaultBase(repoDir));
     const worktreesDir = await this.#deps.repos.worktreesDir();

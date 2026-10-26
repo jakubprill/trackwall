@@ -33,6 +33,7 @@ import { CloneJobs } from "./clone-jobs.ts";
 import { type CodeSearchQuery, type CodeSearchVcs, searchCode } from "./code-search.ts";
 import { describeDroppedFolder } from "./dropped-folder.ts";
 import { dirKey, findRepos, projectsDirUnavailable, type RepoEntry, resolveFolderSetting, takenNames } from "./projects-dir.ts";
+import { moveRepoOut } from "./repo-removal.ts";
 import { SyncRuns } from "./sync-runs.ts";
 import { sessionToolPermissions, supervisorToolPermissions } from "./tool-permissions.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
@@ -285,6 +286,22 @@ export class Workspace {
   /** The repo root by identifier, for modules that run processes in it (`mise`). */
   async repoPath(id: string): Promise<string> {
     return (await this.entry(id)).path;
+  }
+
+  /**
+   * Moves the repo into the removed repos folder of the projects folder (ADR-83) and returns its new path. Refused when
+   * the identifier now names another folder (the projects folder changed since the proposal) or a clone writes into it.
+   */
+  async removeRepo(id: string, expectedDir: string, beforeMove: () => void): Promise<string> {
+    const entry = await this.entry(id);
+    if (entry.path !== expectedDir)
+      throw new DomainError("bad_request", `${id} is no longer ${expectedDir}; reject this proposal and propose the removal again`);
+    const projectsDir = await this.projectsDir();
+    return moveRepoOut(projectsDir, entry.path, () => {
+      if (this.clones.runningInto(entry.path))
+        throw new DomainError("bad_request", `${id} is still being cloned; wait for the clone to end`);
+      beforeMove();
+    });
   }
 
   /** The projects folder itself, where the supervisor runs (ADR-58); `bad_request` while it is not set. */

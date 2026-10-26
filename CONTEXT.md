@@ -304,6 +304,14 @@ _Avoid_: window title (that is a session's `windowTitle`)
 A task that a session or an agent outside Trackwall submitted through MCP and that waits in the Sessions view for the user's decision: "Start task" turns it into a task with the same identifier, "Reject…" rejects it with an optional rejection reason. Until then nothing starts. It lives only in daemon memory (ADR-39). The proposals of one main session are one entry in the Sessions view, reviewed together (ADR-55).
 _Avoid_: order, request, application
 
+**Folder action** (`propose_folder_action`, `ProposalKind`):
+A change to the projects folder itself that no task can make, because a task works inside one repo's worktree. A session proposes it from a closed list, it waits for the user like a task proposal, and the daemon carries it out on approval (ADR-83). Today the only one is a repo removal.
+_Avoid_: command, operation
+
+**Repo removal** (`TaskProposal.kind: "remove_repo"`, the `approve-repo-removal` action, `REMOVED_REPOS_DIR`):
+The folder action that takes a repo out of the projects folder: "Remove repo" moves its folder into `.trackwall-removed` in the projects folder, where the user can move it back or delete it, once no session, task or process runs in it (ADR-83).
+_Avoid_: delete repo, archive
+
 **Rejection reason** (`reason` of `reject-proposal`, `rejectionReason` of `wait_for_session`):
 What the user writes when rejecting a task proposal, for the session that proposed it, so it can propose the work differently. Optional; up to 1000 characters (ADR-55).
 _Avoid_: comment, feedback

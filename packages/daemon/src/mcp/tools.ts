@@ -206,6 +206,9 @@ const runs: ToolRuns = {
   getDayReport: async (facade) => ({ report: facade.dayStart.report() }),
   getTaskChanges: (facade, { task, paths, maxPatchBytes }) => facade.agents.agentTaskChanges(task, maxPatchBytes, paths),
   proposeTask: async (facade, proposal, { caller }) => ({ proposal: await facade.agents.propose(caller, proposal) }),
+  proposeFolderAction: async (facade, { repo, reason }, { caller }) => ({
+    proposal: await facade.agents.proposeRepoRemoval(caller, repo, reason),
+  }),
   reportResult: async (facade, { summary }, { caller }) => ({ task: facade.agents.reportSummary(caller, summary) }),
   getReviewComments: async (facade, _args, { caller }) => ({ comments: facade.agents.takeReviewComments(caller) }),
   sendMessage: async (facade, { task, text }, { caller }) => facade.agents.sendMessage(caller, task, text),
@@ -269,6 +272,7 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.getDayReport, runs.getDayReport),
   defineTool(mcpTools.getTaskChanges, runs.getTaskChanges),
   defineTool(mcpTools.proposeTask, runs.proposeTask),
+  defineTool(mcpTools.proposeFolderAction, runs.proposeFolderAction),
   defineTool(mcpTools.reportResult, runs.reportResult),
   defineTool(mcpTools.getReviewComments, runs.getReviewComments),
   defineTool(mcpTools.sendMessage, runs.sendMessage),

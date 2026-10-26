@@ -202,15 +202,33 @@ export const Task = z.object({
 export type Task = z.infer<typeof Task>;
 
 /**
+ * What a proposal asks for (ADR-83): `task`, a task in the repo (`propose_task`), or an action on the projects folder
+ * that a task cannot do, because a task is a worktree of one repo (`propose_folder_action`): today `remove_repo`, which
+ * moves the repo out of the projects folder into `REMOVED_REPOS_DIR`.
+ */
+export const ProposalKind = z.enum(["task", "remove_repo"]);
+export type ProposalKind = z.infer<typeof ProposalKind>;
+
+/** The proposer's reason for a folder action, shown to the user in place of a task's prompt. */
+export const FOLDER_ACTION_REASON_MAX = 2000;
+export const FolderActionReason = z.string().trim().min(1).max(FOLDER_ACTION_REASON_MAX);
+
+/** The folder in the projects folder where a removed repo goes (ADR-83); hidden, so the repo list does not see it. */
+export const REMOVED_REPOS_DIR = ".trackwall-removed";
+
+/**
  * A task proposal (ADR-39): a task that a session or an agent outside Trackwall submitted with the MCP tool `propose_task`.
  * Nothing starts until the user approves it in the Sessions view; an approved proposal becomes a task with the same id,
- * a rejected one disappears. It lives only in the daemon's memory, like the session that submitted it.
+ * a rejected one disappears. It lives only in the daemon's memory, like the session that submitted it. Since ADR-83 a
+ * proposal can also be an action on the projects folder (`kind`), approved and rejected in the same place.
  */
 export const TaskProposal = z.object({
   /** The id the task gets once approved. */
   id: TaskId,
+  kind: ProposalKind,
   repo: RepoId,
   title: z.string(),
+  /** The task's prompt; for a folder action, the proposer's reason. */
   prompt: z.string(),
   proposedBy: ProposedBy,
   /** ISO 8601. */
@@ -422,6 +440,11 @@ export const agentsApi = {
    * before the start. A failed start leaves the proposal for another try or a rejection.
    */
   approveProposal: endpoint("approve-proposal", ProposalRequest.extend({ prompt: TaskPrompt }), Task),
+  /**
+   * Approving a proposal to remove a repo (ADR-83): refused while a session, a task or a process runs in the repo; then
+   * the repo moves into `REMOVED_REPOS_DIR` in the projects folder. A refusal leaves the proposal waiting.
+   */
+  approveRepoRemoval: endpoint("approve-repo-removal", ProposalRequest, Done),
   /**
    * Rejects a proposal: it leaves the list, and a session waiting on it gets `proposal_rejected` with the user's reason
    * when they gave one (ADR-55); an empty reason is no reason.

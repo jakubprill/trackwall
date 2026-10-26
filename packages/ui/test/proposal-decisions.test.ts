@@ -6,6 +6,7 @@ import type { ProposalsEntry } from "../src/lib/session-entries.ts";
 function proposal(id: string): TaskProposal {
   return {
     id,
+    kind: "task",
     repo: "billing",
     title: `Task ${id}`,
     prompt: `do ${id}`,
