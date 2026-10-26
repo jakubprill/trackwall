@@ -110,12 +110,13 @@ export class CopilotSessionState {
   /**
    * Whether Copilot CLI waits in its empty input box, where the daemon may type a prompt for the user (ADR-62). The
    * state alone does not tell, since a question dialog, a guess from the screen and the user's Esc give `Input` too.
-   * Before the first hook: while the screen shows the empty box now (ADR-69), not because it once did, since with
-   * hooks that do not work the screen may show an approval by now; never while a prompt is on its way.
+   * The hooks must say so (before the first hook: no prompt on its way, ADR-69) and the screen must show the empty box
+   * now: Copilot CLI 1.0.103 sends `agentStop` before it draws the box again, and text typed in between is lost
+   * (ADR-68); before the first hook, with hooks that do not work, the screen may show an approval by now.
    */
   inPromptBox(lines: () => readonly string[]): boolean {
-    if (this.#inPromptBox !== undefined) return this.#inPromptBox;
-    return !this.#promptOnItsWay() && promptBoxOnScreen(lines()) === "empty";
+    const hooksSay = this.#inPromptBox ?? !this.#promptOnItsWay();
+    return hooksSay && promptBoxOnScreen(lines()) === "empty";
   }
 
   /** The daemon typed a prompt into the session (ADR-62); before the first hook its `sessionStart` then starts work. */

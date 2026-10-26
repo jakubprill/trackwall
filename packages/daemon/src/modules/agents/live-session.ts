@@ -5,6 +5,7 @@ import { readAgentDialog, type ScreenDialog } from "./copilot-dialog.ts";
 import type { CopilotHookEvent } from "./copilot-hook-record.ts";
 import { approvalRequest } from "./copilot-hooks.ts";
 import { answersDialog, ESCAPE, type SessionKey, sessionKey } from "./copilot-keys.ts";
+import { promptBoxText } from "./copilot-prompt-box.ts";
 import { CopilotSessionState, RETYPE_AFTER_MS } from "./copilot-session-state.ts";
 import { HookTail } from "./hook-tail.ts";
 import { SessionAttention } from "./session-attention.ts";
@@ -24,6 +25,20 @@ export const STALE_AFTER_MS = 60_000;
  * one pasted string, in which a carriage return is text and does not submit.
  */
 const SUBMIT_DELAY_MS = 100;
+
+/**
+ * How many times the daemon tries again with a prompt it typed and the session did not take within `RETYPE_AFTER_MS`
+ * (ADR-68): Enter again on text still in the input box (the TUI read the text and its Enter as one paste), or the
+ * prompt typed again into a box it was lost from. After that it gives up until it is asked to read again.
+ */
+const DELIVERY_RETRIES = 2;
+
+/**
+ * How long the input box must stay empty after the user's last text before their draft counts as gone (ADR-68): text
+ * they cleared with Ctrl+C or a slash command, or text Copilot CLI took into a running turn, sends no
+ * `userPromptSubmitted`. Long enough for a key the user just pressed to reach the screen.
+ */
+const USER_DRAFT_SETTLE_MS = 2000;
 
 /** The states in which the session waits for an answer to a dialog, and the kind of dialog that answers it (ADR-66). */
 const DIALOG_IN_STATE: ReadonlyMap<TaskState, AgentDialog["kind"]> = new Map([
@@ -128,10 +143,19 @@ export class LiveSession {
   readonly #closers = new Set<() => void>();
   /** The daemon's prompt was asked for (`askToRead`) and goes in once the session waits in its input box. */
   #promptAsked = false;
-  /** The daemon's prompt typed and not yet taken: it counts until the session leaves `Input`. */
-  #promptTyped: { text: string; at: number } | undefined;
+  /**
+   * The daemon's prompt typed and not yet taken: it counts until the session leaves `Input`. `at` is when it was typed or
+   * last tried again, `retries` how often it was tried again (Enter again or typed again).
+   */
+  #promptTyped: { text: string; at: number; retries: number } | undefined;
   /** The user typed or pasted since their last message was submitted, so the input box may hold their unsent text. */
   #userDraft = false;
+  /** When the user last put text into the input box (milliseconds since the epoch). */
+  #userTextAt = 0;
+  /** Since when the screen has shown the empty input box without a break, read once per read cycle. */
+  #boxEmptySince: number | undefined;
+  /** The input box's text read from the screen (`promptBoxText`), for the screen revision it was read at. */
+  #boxRead: { revision: number; text: string | undefined } | undefined;
   /** The user put text into the input box or pressed Esc since the last end of a turn: the next end is of their turn. */
   #userDrove = false;
   #submitTimer: NodeJS.Timeout | undefined;
@@ -192,6 +216,7 @@ export class LiveSession {
     if (answersEarly) this.#answeredEarly = true;
     if (writesText(data, this.#last?.state) && this.#dialog() === null && !answersEarly) {
       this.#userDraft = true;
+      this.#userTextAt = Date.now();
       this.#userDrove = true;
       this.#onUserText();
     }
@@ -206,14 +231,12 @@ export class LiveSession {
    * moment) at once while the session waits in its input box (`CopilotSessionState.inPromptBox`, ADR-69), otherwise as soon as it does again.
    * Never in the middle of a turn, in an approval or a question dialog, after the user's Esc or into text the user is
    * typing. One prompt at a time: while a typed one has not been taken, a request it already covers (the same text)
-   * changes nothing, since the prompt asks to read everything unread; one it does not cover goes in after the next turn,
-   * and one not taken within `RETYPE_AFTER_MS` is typed again.
+   * changes nothing, since the prompt asks to read everything unread; one it does not cover goes in after the next turn.
+   * A typed prompt not taken within `RETYPE_AFTER_MS` is looked after by `tick` (`#followTypedPrompt`).
    */
   askToRead(): "typed" | "queued" {
     this.#readHooks();
-    const typed = this.#promptTyped;
-    if (typed && Date.now() - typed.at > RETYPE_AFTER_MS) this.#promptTyped = undefined;
-    else if (typed && typed.text === this.#promptText()) return "typed";
+    if (this.#promptTyped && this.#promptTyped.text === this.#promptText()) return "typed";
     this.#promptAsked = true;
     this.#typePrompt();
     return this.#promptAsked ? "queued" : "typed";
@@ -268,6 +291,8 @@ export class LiveSession {
     if (this.#finished) return false;
     this.#readHooks();
     this.#report([this.#state.tick()]);
+    this.#settleUserDraft();
+    this.#followTypedPrompt();
     // A prompt asked for goes into a box that just appeared before the box can say the session waits for you.
     this.#typePrompt();
     this.#readPromptBox();
@@ -398,14 +423,79 @@ export class LiveSession {
     // Everything may have been read meanwhile (the agent called the tool on its own): then there is nothing to ask.
     const text = this.#promptText();
     if (text === undefined) return;
-    this.#promptTyped = { text, at: Date.now() };
+    this.#type(terminal, text, 0);
+  }
+
+  /** Types `text` (try number `retries`) with its Enter after `SUBMIT_DELAY_MS`. */
+  #type(terminal: SessionPty, text: string, retries: number): void {
+    this.#promptAsked = false;
+    this.#promptTyped = { text, at: Date.now(), retries };
     this.#state.promptTyped();
     // The daemon starts this turn: an Esc earlier (an interrupt gives no `agentStop`) does not make it the user's.
     this.#userDrove = false;
     terminal.write(text);
+    clearTimeout(this.#submitTimer);
     this.#submitTimer = setTimeout(() => {
       if (!this.#finished) terminal.write("\r");
     }, SUBMIT_DELAY_MS);
     this.#submitTimer.unref();
   }
+
+  /**
+   * A typed prompt the session has not taken after `RETYPE_AFTER_MS` (ADR-68): still in the input box, it gets Enter
+   * again; gone from an empty box, it was lost and is typed again, read anew. After `DELIVERY_RETRIES` tries the daemon
+   * gives up until the next `askToRead`; text in the box that is not the prompt (or a prompt given up on in it) is
+   * left alone, and the prompt goes in once the box is empty. While the screen shows no box (Copilot CLI busy, or still
+   * holding keys it has not drawn) it waits, so a prompt that shows up in the box later still gets its Enter. The user's
+   * own text is never submitted.
+   */
+  #followTypedPrompt(): void {
+    const typed = this.#promptTyped;
+    const terminal = this.#terminal;
+    if (!typed || !terminal || this.#finished || this.#userDraft) return;
+    if (Date.now() - typed.at <= RETYPE_AFTER_MS) return;
+    const box = this.#box();
+    if (box === undefined) return;
+    const text = this.#promptText();
+    if (text === undefined) this.#promptTyped = undefined;
+    else if (box !== "" && (typed.retries >= DELIVERY_RETRIES || !holdsPrompt(box, typed.text))) this.#askAgain();
+    else if (typed.retries >= DELIVERY_RETRIES) this.#promptTyped = undefined;
+    else if (box !== "") {
+      this.#promptTyped = { ...typed, at: Date.now(), retries: typed.retries + 1 };
+      terminal.write("\r");
+    } else if (this.#dialog() === null) this.#type(terminal, text, typed.retries + 1);
+  }
+
+  /** The typed prompt no longer counts; it goes in again once the session waits in its empty input box. */
+  #askAgain(): void {
+    this.#promptTyped = undefined;
+    this.#promptAsked = true;
+  }
+
+  /**
+   * The user's draft is gone once the input box has stayed empty for `USER_DRAFT_SETTLE_MS`, counted from their last
+   * text: cleared with Ctrl+C, sent as a slash command, or taken into a running turn, none of which sends
+   * `userPromptSubmitted`.
+   */
+  #settleUserDraft(): void {
+    const now = Date.now();
+    if (this.#box() !== "") this.#boxEmptySince = undefined;
+    else this.#boxEmptySince ??= now;
+    const emptySince = this.#boxEmptySince;
+    if (this.#userDraft && emptySince !== undefined && now - Math.max(emptySince, this.#userTextAt) > USER_DRAFT_SETTLE_MS)
+      this.#userDraft = false;
+  }
+
+  /** The input box's text on the screen now (`promptBoxText`), read once per screen image. */
+  #box(): string | undefined {
+    const revision = this.#screen.revision;
+    if (this.#boxRead?.revision !== revision) this.#boxRead = { revision, text: promptBoxText(this.#screen.lines()) };
+    return this.#boxRead.text;
+  }
+}
+
+/** Whether the input box's text is (the start of) the prompt the daemon typed, whatever the wrapping did to blanks. */
+function holdsPrompt(box: string, prompt: string): boolean {
+  const compact = (text: string) => text.replace(/\s/g, "");
+  return compact(prompt).startsWith(compact(box));
 }

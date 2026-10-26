@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { promptBoxOnScreen } from "../src/modules/agents/copilot-prompt-box.ts";
+import { promptBoxOnScreen, promptBoxText } from "../src/modules/agents/copilot-prompt-box.ts";
 import { CopilotSessionState, RETYPE_AFTER_MS } from "../src/modules/agents/copilot-session-state.ts";
 
 /** Screens of Copilot CLI 1.0.103 taken from the real binary in the daemon's emulator (the repo path replaced). */
@@ -17,6 +17,25 @@ describe("Copilot CLI waiting in its input box, read from the screen (ADR-69)", 
     expect(promptBoxOnScreen(box)).toBe("empty");
     expect(promptBoxOnScreen(screen("prompt-box-72"))).toBe("empty");
     expect(promptBoxOnScreen(withText)).toBe("text");
+  });
+
+  test("a text longer than the terminal wraps inside the input box and is read whole, its lines joined", () => {
+    // As Copilot CLI 1.0.103 drew it at 100 columns in a contract test run.
+    const wrapped = [
+      " /src/shop [⎇ main]",
+      "─".repeat(100),
+      "❯ The user sent a review of your changes in Trackwall: call get_review_comments (trackwall MCP",
+      "  server) and address every comment.",
+      "─".repeat(100),
+      " Interactive · Manual Approval · @ files · # issues                        trackwall-scripted-model",
+    ];
+
+    expect(promptBoxText(wrapped)).toBe(
+      "The user sent a review of your changes in Trackwall: call get_review_comments (trackwall MCP server) and address every comment.",
+    );
+    expect(promptBoxOnScreen(wrapped)).toBe("text");
+    expect(promptBoxText(box)).toBe("");
+    expect(promptBoxText(withText)).toBe("read the review");
   });
 
   test("the input box over a status line is not ready: Copilot CLI is still loading, or working, in every frame of its bullet", () => {
@@ -83,7 +102,7 @@ describe("a new session's state from its input box (ADR-69)", () => {
     const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program: null });
 
     expect(summary(session.hook(record("sessionStart")))).toEqual(["Input hook medium hook sessionStart"]);
-    expect(session.inPromptBox(() => [])).toBe(true);
+    expect(session.inPromptBox(() => box)).toBe(true);
   });
 
   test("before the first hook the session is in its input box only while the screen shows the empty box now", () => {
@@ -94,16 +113,19 @@ describe("a new session's state from its input box (ADR-69)", () => {
     expect(session.inPromptBox(() => withText)).toBe(false);
   });
 
-  test("after the first hook the hooks say whether the session is in its input box, whatever the screen shows", () => {
+  test("after the first hook the session is in its input box when the hooks say so and the screen shows the empty box", () => {
     const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program: null });
     session.promptTyped();
     session.hook(record("sessionStart"));
     expect(session.inPromptBox(() => box)).toBe(false);
     session.hook(record("agentStop"));
-    expect(session.inPromptBox(() => screen("dialog-shell-120"))).toBe(true);
+    // agentStop comes before Copilot CLI draws the input box again, and text typed in between is lost (ADR-68).
+    expect(session.inPromptBox(() => screen("prompt-box-working-120"))).toBe(false);
+    expect(session.inPromptBox(() => withText)).toBe(false);
+    expect(session.inPromptBox(() => box)).toBe(true);
     // A typed prompt after the first hook changes nothing, and a later sessionStart (`/clear`) leaves the input box.
     session.promptTyped();
     expect(summary(session.hook(record("sessionStart")))).toEqual(["Input hook medium hook sessionStart"]);
-    expect(session.inPromptBox(() => [])).toBe(true);
+    expect(session.inPromptBox(() => box)).toBe(true);
   });
 });

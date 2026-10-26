@@ -6,7 +6,8 @@
  * welcome screen with the input box and no hook (waiting for you, read from the screen), a line from the user starts a
  * turn with an approval request (the first turn after `sessionStart`, at once with a prompt from `--interactive=`; cut
  * above in a short terminal),
- * a "Yes" option or Enter approves and ends the turn, and `/exit` ends the session. The fake also prints what the tests check
+ * a "Yes" option or Enter approves and ends the turn (the input box comes back a moment after `agentStop`, and keys
+ * typed in that gap are lost, as in Copilot CLI), and `/exit` ends the session. The fake also prints what the tests check
  * (MCP servers, instructions, directory, arguments, the prompt) and, on every turn, starts a helper process (like an
  * agent's tool) and prints its PID, so that the test can check that stopping the session ends the whole group. The
  * helper starts only after input from the user, because on Windows the leader joins the job a moment after the start.
@@ -105,6 +106,8 @@ draw(real.promptBox);
 let started = initialPrompt !== undefined;
 if (started) replay([startHook]);
 let awaitingApproval = false;
+/** Between a turn's end and the input box drawn again, where Copilot CLI drops what is typed (ADR-68). */
+let redrawing = false;
 let typed = "";
 
 function submit(line: string): void {
@@ -124,11 +127,21 @@ function submit(line: string): void {
   replay(real.approval.hooks.slice(2, asked));
 }
 
+/**
+ * Copilot CLI sends `agentStop` before it draws the input box again, and keys typed in between are lost (the contract
+ * test of a review sent mid-turn shows the gap), so the fake keeps the same gap.
+ */
+const REDRAW_MS = 300;
+
 /** A "Yes" option of the approval: the command runs and the turn ends. */
 function approve(): void {
   awaitingApproval = false;
   replay(real.approval.hooks.slice(asked));
-  draw(real.promptBox);
+  redrawing = true;
+  setTimeout(() => {
+    redrawing = false;
+    draw(real.promptBox);
+  }, REDRAW_MS);
 }
 
 /**
@@ -151,6 +164,8 @@ process.stdin.on("data", (chunk: Buffer) => {
   for (const key of typedText(chunk)) {
     if (awaitingApproval) {
       if (APPROVE_KEYS.has(key)) approve();
+    } else if (redrawing) {
+      // lost, as in Copilot CLI
     } else if (key === "\r" || key === "\n") {
       process.stdout.write("\r\n");
       const line = typed;
