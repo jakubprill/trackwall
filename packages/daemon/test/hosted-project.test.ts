@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { hostedProject } from "../src/modules/merge-requests/hosted-project.ts";
+import { hostedProject } from "../src/modules/vcs/hosted-project.ts";
 
 describe("the repo host of a remote", () => {
   test("GitHub needs no entry in the settings", () => {
@@ -28,5 +28,6 @@ describe("the repo host of a remote", () => {
     expect(hostedProject("git.example.org/shop/orders", [{ kind: "gitlab", host: "gitlab.example.com" }])).toBeNull();
     expect(hostedProject("github.com/me/../shop", [])).toBeNull();
     expect(hostedProject("github.com/shop", [])).toBeNull();
+    expect(hostedProject("github.com/me/shop/extra", [])).toBeNull();
   });
 });

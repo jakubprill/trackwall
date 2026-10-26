@@ -1,7 +1,13 @@
-import { type HostedProject, RemoteRepoName, type RepoHost } from "@trackwall/protocol";
+import { type HostedProject, RemoteRepoName, type RepoHost, type RepoHostKind } from "@trackwall/protocol";
 
 /** GitHub needs no entry in the settings: its address is the same for everyone. */
 const GITHUB_HOST = "github.com";
+
+/** GitHub's repos are `owner/repo`; GitLab nests projects in groups and subgroups. */
+const PATH_SEGMENTS: Record<RepoHostKind, (segments: number) => boolean> = {
+  github: (segments) => segments === 2,
+  gitlab: (segments) => segments >= 2,
+};
 
 /**
  * The repo's main remote (`host/path`, ADR-21) as a project on a repo host (ADR-77): a repo host from the settings with the
@@ -15,8 +21,12 @@ export function hostedProject(address: string, hosts: readonly RepoHost[]): Host
   // The path goes into API paths and the form's address, so only the names repo hosts themselves create.
   if (slash < 0 || !RemoteRepoName.safeParse(path).success) return null;
   const configured = hosts.find((h) => withoutPort(h.host) === name);
-  if (configured) return { kind: configured.kind, host: configured.host, path };
-  return name === GITHUB_HOST ? { kind: "github", host: GITHUB_HOST, path } : null;
+  const project: HostedProject | null = configured
+    ? { kind: configured.kind, host: configured.host, path }
+    : name === GITHUB_HOST
+      ? { kind: "github", host: GITHUB_HOST, path }
+      : null;
+  return project && PATH_SEGMENTS[project.kind](path.split("/").length) ? project : null;
 }
 
 function withoutPort(host: string): string {

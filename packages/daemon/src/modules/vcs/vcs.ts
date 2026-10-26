@@ -1,6 +1,15 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import type { Commit, FileContent, RepoStatusOk, SyncResult, TreeEntry, WorkingTreeChanges } from "@trackwall/protocol";
+import type {
+  Commit,
+  FileContent,
+  HostedProject,
+  RepoHost,
+  RepoStatusOk,
+  SyncResult,
+  TreeEntry,
+  WorkingTreeChanges,
+} from "@trackwall/protocol";
 import { branchOnRemote, pushBranch } from "./branch-push.ts";
 import {
   type BranchTip,
@@ -15,6 +24,7 @@ import { git } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { type GitState, GitStateReader } from "./git-state.ts";
 import { grep, grepFiles } from "./grep.ts";
+import { hostedProject } from "./hosted-project.ts";
 import { KeyedQueue } from "./keyed-queue.ts";
 import { type GitObject, isBinary, LOG_FORMAT, parseBlobs, parseLog, parseObjects, parseStatus, parseTree } from "./parse.ts";
 import { pathKey } from "./path-key.ts";
@@ -71,6 +81,15 @@ export class Vcs {
   async remote(dir: string): Promise<string | null> {
     const remote = mainRemote(await readConfig(dir));
     return (remote && remoteAddress(remote.url)) ?? null;
+  }
+
+  /**
+   * The main remote as a project on GitHub or on one of `hosts` from the settings (ADR-77); `null` without a main remote
+   * or on another host.
+   */
+  async hostedProject(dir: string, hosts: readonly RepoHost[]): Promise<HostedProject | null> {
+    const address = await this.remote(dir);
+    return address === null ? null : hostedProject(address, hosts);
   }
 
   /**

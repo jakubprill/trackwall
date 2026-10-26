@@ -1,15 +1,15 @@
 import type {
+  BranchOnRemote,
   HostedProject,
   MergeRequest,
   MergeRequestDraft,
+  MergeRequestForm,
   MergeRequestLookup,
   RepoHost,
   Task,
-  TaskBranchPush,
   TaskMergeRequest,
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
-import { hostedProject } from "./hosted-project.ts";
 
 /**
  * The `merge-requests` module (§4, §4.12, ADR-77): a finished task on its way to a merge request. The user pushes the
@@ -29,17 +29,17 @@ interface MergeRequestTasks {
   taskChangesSummary(id: string): Promise<{ commits: number; uncommitted: number }>;
 }
 
-/** What the module needs from `vcs`: the main remote, the task branch against it, and its push. */
+/** What the module needs from `vcs`: the main remote as a project on a repo host, the task branch against it, and its push. */
 interface MergeRequestVcs {
-  remote(dir: string): Promise<string | null>;
-  branchOnRemote(dir: string, branch: string, base: string): Promise<Omit<TaskBranchPush, "commits" | "uncommitted"> | null>;
+  hostedProject(dir: string, hosts: readonly RepoHost[]): Promise<HostedProject | null>;
+  branchOnRemote(dir: string, branch: string, base: string): Promise<BranchOnRemote | null>;
   pushBranch(dir: string, branch: string): Promise<void>;
 }
 
 /** What the module needs from the repo hosts in `vcs`: the merge request from a branch, and the new merge request form. */
 interface MergeRequestHosting {
   mergeRequest(project: HostedProject, branch: string): Promise<MergeRequest | null>;
-  mergeRequestForm(project: HostedProject, form: { source: string; target: string | null; title: string; description: string }): string;
+  mergeRequestForm(project: HostedProject, form: MergeRequestForm): string;
 }
 
 export interface MergeRequestsDeps {
@@ -64,12 +64,11 @@ export class MergeRequests {
 
   async get(id: string): Promise<TaskMergeRequest> {
     const task = this.#deps.tasks.task(id);
-    const [changes, onRemote, address] = await Promise.all([
+    const [changes, onRemote, project] = await Promise.all([
       this.#deps.tasks.taskChangesSummary(id),
       asRepoUnavailable(task, this.#deps.vcs.branchOnRemote(task.worktree, task.branch, task.base)),
-      asRepoUnavailable(task, this.#deps.vcs.remote(task.worktree)),
+      asRepoUnavailable(task, this.#deps.vcs.hostedProject(task.worktree, this.#deps.repoHosts())),
     ]);
-    const project = address === null ? null : hostedProject(address, this.#deps.repoHosts());
     const push = onRemote && { ...onRemote, commits: changes.commits, uncommitted: changes.uncommitted };
     const lookup = project && push?.published ? await this.#lookup(task, project) : null;
     return { task: id, push, project, lookup, targetBranch: task.baseBranch };
@@ -117,8 +116,10 @@ export class MergeRequests {
   #lookup(task: Task, project: HostedProject): Promise<MergeRequestLookup> {
     const key = task.id;
     const now = Date.now();
+    // Old answers go on every lookup, so ended tasks do not stay in memory.
+    for (const [old, entry] of this.#lookups) if (now - entry.at >= LOOKUP_CACHE_MS) this.#lookups.delete(old);
     const cached = this.#lookups.get(key);
-    if (cached && now - cached.at < LOOKUP_CACHE_MS) return cached.lookup;
+    if (cached) return cached.lookup;
     const lookup = this.#deps.hosting.mergeRequest(project, task.branch).then(
       (mergeRequest): MergeRequestLookup => (mergeRequest ? { kind: "found", mergeRequest } : { kind: "none" }),
       (err: unknown): MergeRequestLookup => {

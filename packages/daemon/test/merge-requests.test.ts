@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mergeRequestsApi } from "@trackwall/protocol";
@@ -11,27 +11,32 @@ const TOKEN = "m".repeat(43);
 const GITLAB_MRS = "projects/shop%2Fshop/merge_requests";
 
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
-let remote: string;
+/** The bare repo `orders` pushes to. */
+let bare: string;
 const opened: string[] = [];
 const hosting = fakeHostingClis({ apiResponses: { [GITLAB_MRS]: [] } });
 
 /**
- * The repo `shop` fetches from a GitLab address and pushes to a bare repo on disk (`pushurl`), so the daemon sees a
- * GitLab remote and a push really lands somewhere it can be checked.
+ * Two repos: `shop` has its remote on a GitLab from the settings, which the test cannot push to, so a push there is
+ * simulated by setting the remote-tracking branch; `orders` has a bare repo on disk as its remote, so its pushes really
+ * land somewhere they can be checked.
  */
 beforeAll(async () => {
   daemon = await startSessionApi(TOKEN, {
-    repos: { shop: { "README.md": "# shop\n", "src/cart.ts": "export const cart = [];\n" } },
+    repos: {
+      shop: { "README.md": "# shop\n", "src/cart.ts": "export const cart = [];\n" },
+      orders: { "README.md": "# orders\n" },
+    },
     miseCommand: ["mise"],
     hostingClis: hosting.clis,
     openUrl: (url) => opened.push(url),
   });
-  remote = join(mkdtempSync(join(tmpdir(), "trackwall-remote-")), "shop.git");
-  gitIn(daemon.projects, "init", "-q", "--bare", remote);
-  const shop = join(daemon.projects, "shop");
-  gitIn(shop, "remote", "add", "origin", "https://gitlab.example.com/shop/shop.git");
-  gitIn(shop, "config", "remote.origin.pushurl", remote);
-  gitIn(shop, "push", "-q", "origin", "main");
+  gitIn(join(daemon.projects, "shop"), "remote", "add", "origin", "https://gitlab.example.com/shop/shop.git");
+  bare = join(mkdtempSync(join(tmpdir(), "trackwall-remote-")), "orders.git");
+  gitIn(daemon.projects, "init", "-q", "--bare", bare);
+  const orders = join(daemon.projects, "orders");
+  gitIn(orders, "remote", "add", "origin", bare);
+  gitIn(orders, "push", "-q", "origin", "main");
   daemon.facade.workspace.setRepoHosts([{ kind: "gitlab", host: "gitlab.example.com" }]);
 });
 
@@ -39,11 +44,18 @@ afterAll(async () => {
   await daemon.stop();
 });
 
-describe.skipIf(process.versions.bun === undefined)("a merge request from a task (real git, fake Copilot CLI and glab)", () => {
-  test("push the task branch, open GitLab's form with the draft, then follow the merge request and its pipeline", async () => {
-    const task = await daemon.facade.agents.createTask("shop", "add a discount");
-    writeFileSync(join(task.worktree, "src", "cart.ts"), "export const cart = [];\nexport const discount = 0.1;\n");
-    gitIn(task.worktree, "commit", "-qam", "Add a discount");
+/** A task with one commit that adds `file`. */
+async function taskWithCommit(repo: string, prompt: string, file = "change.txt") {
+  const task = await daemon.facade.agents.createTask(repo, prompt);
+  writeFileSync(join(task.worktree, file), `${prompt}\n`);
+  gitIn(task.worktree, "add", file);
+  gitIn(task.worktree, "commit", "-qm", prompt);
+  return task;
+}
+
+describe.skipIf(process.versions.bun === undefined)("a merge request from a task on GitLab (fake Copilot CLI and glab)", () => {
+  test("the form opens only once every commit is pushed, with the draft, and then the merge request and its pipeline show", async () => {
+    const task = await taskWithCommit("shop", "Add a discount");
     writeFileSync(join(task.worktree, "notes.md"), "not committed\n");
 
     const before = await daemon.post(mergeRequestsApi.get, { task: task.id });
@@ -58,19 +70,21 @@ describe.skipIf(process.versions.bun === undefined)("a merge request from a task
       `push branch ${task.branch} first`,
     );
 
-    const pushed = await daemon.post(mergeRequestsApi.push, { task: task.id });
-    expect(pushed.push).toEqual({ remote: "origin", commits: 1, published: true, unpushed: 0, behind: 0, uncommitted: 1 });
+    // What a push leaves behind: the remote-tracking branch at the task branch's commit.
+    gitIn(task.worktree, "update-ref", `refs/remotes/origin/${task.branch}`, "HEAD");
+    const pushed = await daemon.post(mergeRequestsApi.get, { task: task.id });
+    expect(pushed.push).toMatchObject({ published: true, unpushed: 0 });
     expect(pushed.lookup).toEqual({ kind: "none" });
-    expect(gitIn(remote, "log", "-1", "--format=%s", task.branch).trim()).toBe("Add a discount");
 
     await daemon.post(mergeRequestsApi.openForm, { task: task.id, title: "Add a discount", description: "Adds 10% off." });
     const form = new URL(opened.at(-1) ?? "");
     expect(`${form.origin}${form.pathname}`).toBe("https://gitlab.example.com/shop/shop/-/merge_requests/new");
     expect(form.searchParams.get("merge_request[source_branch]")).toBe(task.branch);
     expect(form.searchParams.get("merge_request[target_branch]")).toBe("main");
+    expect(form.searchParams.get("merge_request[title]")).toBe("Add a discount");
     expect(form.searchParams.get("merge_request[description]")).toBe("Adds 10% off.");
 
-    // The user created the merge request in the form; the next push or a read after the cache sees it.
+    // The user created the merge request in the form; a task whose answer is not cached yet sees it at once.
     hosting.reconfigure({
       apiResponses: {
         [GITLAB_MRS]: [{ iid: 3 }],
@@ -83,10 +97,10 @@ describe.skipIf(process.versions.bun === undefined)("a merge request from a task
         },
       },
     });
-    gitIn(task.worktree, "commit", "-qam", "Fix the discount", "--allow-empty");
-    const again = await daemon.post(mergeRequestsApi.push, { task: task.id });
-    expect(again.push).toMatchObject({ commits: 2, unpushed: 0 });
-    expect(again.lookup).toEqual({
+    const other = await taskWithCommit("shop", "Another task");
+    gitIn(other.worktree, "update-ref", `refs/remotes/origin/${other.branch}`, "HEAD");
+    const found = await daemon.post(mergeRequestsApi.get, { task: other.id });
+    expect(found.lookup).toEqual({
       kind: "found",
       mergeRequest: {
         number: 3,
@@ -96,57 +110,102 @@ describe.skipIf(process.versions.bun === undefined)("a merge request from a task
         pipeline: { state: "failed", url: "https://gitlab.example.com/shop/shop/-/pipelines/9" },
       },
     });
-    await expect(daemon.post(mergeRequestsApi.openForm, { task: task.id, title: "Again", description: "" })).rejects.toThrow(
+    await expect(daemon.post(mergeRequestsApi.openForm, { task: other.id, title: "Again", description: "" })).rejects.toThrow(
       "already has an open merge request: https://gitlab.example.com/shop/shop/-/merge_requests/3",
     );
     expect(opened).toHaveLength(1);
   }, 60_000);
 
+  test("a description too long for an address is cut in the form, never inside a character", async () => {
+    hosting.reconfigure({ apiResponses: { [GITLAB_MRS]: [] } });
+    const task = await taskWithCommit("shop", "Write long notes");
+    gitIn(task.worktree, "update-ref", `refs/remotes/origin/${task.branch}`, "HEAD");
+
+    await daemon.post(mergeRequestsApi.openForm, { task: task.id, title: "Long notes", description: "Zażółć gęślą jaźń 🦊 ".repeat(190) });
+
+    const url = opened.at(-1) ?? "";
+    expect(url.length).toBeLessThanOrEqual(7000);
+    const description = new URL(url).searchParams.get("merge_request[description]") ?? "";
+    expect(description.startsWith("Zażółć gęślą jaźń 🦊 ")).toBe(true);
+    expect(description.endsWith("…")).toBe(true);
+    expect(description).not.toContain("�");
+  }, 60_000);
+});
+
+describe.skipIf(process.versions.bun === undefined)("pushing a task branch (real git, fake Copilot CLI)", () => {
+  test("pushes the branch where the remote fetches from, and a remote on no known repo host gets no form", async () => {
+    const task = await taskWithCommit("orders", "Add an order note");
+
+    const pushed = await daemon.post(mergeRequestsApi.push, { task: task.id });
+
+    expect(pushed).toMatchObject({
+      project: null,
+      lookup: null,
+      push: { remote: "origin", commits: 1, published: true, unpushed: 0, behind: 0 },
+    });
+    expect(gitIn(bare, "log", "-1", "--format=%s", task.branch).trim()).toBe("Add an order note");
+    await expect(daemon.post(mergeRequestsApi.openForm, { task: task.id, title: "Note", description: "" })).rejects.toThrow(
+      "the main remote of orders is not on GitHub or on a repo host from the settings",
+    );
+  }, 60_000);
+
   test("a branch without commits is not pushed", async () => {
-    const task = await daemon.facade.agents.createTask("shop", "nothing yet");
+    const task = await daemon.facade.agents.createTask("orders", "nothing yet");
 
     await expect(daemon.post(mergeRequestsApi.push, { task: task.id })).rejects.toThrow(
       `branch ${task.branch} has no commits yet; ask the agent to commit its changes`,
     );
-    expect(gitIn(remote, "branch", "--list", task.branch).trim()).toBe("");
+    expect(gitIn(bare, "branch", "--list", task.branch).trim()).toBe("");
   }, 60_000);
 
-  test("a remote that moved on refuses the push, which is never forced, and the panel shows the branch behind", async () => {
-    const task = await daemon.facade.agents.createTask("shop", "change the cart");
-    writeFileSync(join(task.worktree, "src", "cart.ts"), "export const cart = [1];\n");
-    gitIn(task.worktree, "commit", "-qam", "Change the cart");
+  test("a remote that moved on refuses the push, which is never forced, and the branch shows behind", async () => {
+    const task = await taskWithCommit("orders", "Change the order");
     await daemon.post(mergeRequestsApi.push, { task: task.id });
     // Someone else pushes to the task branch, and the task's agent amends its own commit.
-    const other = join(mkdtempSync(join(tmpdir(), "trackwall-other-")), "shop");
-    gitIn(daemon.projects, "clone", "-q", "--branch", task.branch, remote, other);
-    gitIn(other, "commit", "-q", "--allow-empty", "-m", "A colleague's commit");
-    gitIn(other, "push", "-q", "origin", task.branch);
-    gitIn(task.worktree, "commit", "-q", "--amend", "-m", "Change the cart, amended");
+    const colleague = join(mkdtempSync(join(tmpdir(), "trackwall-colleague-")), "orders");
+    gitIn(daemon.projects, "clone", "-q", "--branch", task.branch, bare, colleague);
+    gitIn(colleague, "commit", "-q", "--allow-empty", "-m", "A colleague's commit");
+    gitIn(colleague, "push", "-q", "origin", task.branch);
+    gitIn(task.worktree, "commit", "-q", "--amend", "-m", "Change the order, amended");
 
     await expect(daemon.post(mergeRequestsApi.push, { task: task.id })).rejects.toThrow("rejected");
-    expect(gitIn(remote, "log", "-1", "--format=%s", task.branch).trim()).toBe("A colleague's commit");
-    // A sync would fetch from the GitLab address; the test fetches from the bare repo into the same remote-tracking branch.
-    gitIn(task.worktree, "fetch", "-q", remote, `+refs/heads/${task.branch}:refs/remotes/origin/${task.branch}`);
+    expect(gitIn(bare, "log", "-1", "--format=%s", task.branch).trim()).toBe("A colleague's commit");
+    gitIn(task.worktree, "fetch", "-q", "origin");
     const state = await daemon.post(mergeRequestsApi.get, { task: task.id });
     expect(state.push).toMatchObject({ published: true, unpushed: 1, behind: 2 });
   }, 60_000);
-});
 
-describe.skipIf(process.versions.bun === undefined)("a task whose remote is on no known repo host", () => {
-  test("can be pushed, but the form is refused with what to set", async () => {
-    const task = await daemon.facade.agents.createTask("shop", "remote elsewhere");
-    writeFileSync(join(task.worktree, "a.txt"), "a\n");
-    gitIn(task.worktree, "add", "a.txt");
-    gitIn(task.worktree, "commit", "-qm", "Add a");
-    daemon.facade.workspace.setRepoHosts([]);
+  test("hooks the agent wrote in the worktree do not run, not even when git updates the remote-tracking branch", async () => {
+    const task = await taskWithCommit("orders", "Plant a hook");
+    const marker = join(mkdtempSync(join(tmpdir(), "trackwall-hook-")), "ran");
+    mkdirSync(join(task.worktree, ".hooks"));
+    for (const hook of ["pre-push", "reference-transaction"]) {
+      writeFileSync(join(task.worktree, ".hooks", hook), `#!/bin/sh\necho ${hook} >> "${marker.replaceAll("\\", "/")}"\n`);
+      chmodSync(join(task.worktree, ".hooks", hook), 0o755);
+    }
+    gitIn(task.worktree, "config", "core.hooksPath", ".hooks");
     try {
-      const pushed = await daemon.post(mergeRequestsApi.push, { task: task.id });
-      expect(pushed).toMatchObject({ project: null, lookup: null, push: { published: true } });
-      await expect(daemon.post(mergeRequestsApi.openForm, { task: task.id, title: "Add a", description: "" })).rejects.toThrow(
-        "the main remote of shop is not on GitHub or on a repo host from the settings",
+      await daemon.post(mergeRequestsApi.push, { task: task.id });
+    } finally {
+      gitIn(task.worktree, "config", "--unset", "core.hooksPath");
+    }
+
+    expect(gitIn(bare, "log", "-1", "--format=%s", task.branch).trim()).toBe("Plant a hook");
+    expect(existsSync(marker)).toBe(false);
+  }, 60_000);
+
+  test("a push address other than where the remote fetches from is refused", async () => {
+    const task = await taskWithCommit("orders", "Push elsewhere");
+    const elsewhere = join(mkdtempSync(join(tmpdir(), "trackwall-elsewhere-")), "orders.git");
+    gitIn(daemon.projects, "init", "-q", "--bare", elsewhere);
+    gitIn(task.worktree, "config", "remote.origin.pushurl", elsewhere);
+    try {
+      await expect(daemon.post(mergeRequestsApi.push, { task: task.id })).rejects.toThrow(
+        `origin pushes to ${elsewhere}, not to ${bare} it fetches from`,
       );
     } finally {
-      daemon.facade.workspace.setRepoHosts([{ kind: "gitlab", host: "gitlab.example.com" }]);
+      gitIn(task.worktree, "config", "--unset", "remote.origin.pushurl");
     }
+    expect(gitIn(elsewhere, "branch", "--list", task.branch).trim()).toBe("");
   }, 60_000);
 });

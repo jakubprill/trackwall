@@ -3,6 +3,7 @@ import {
   type HostedProject,
   MERGE_REQUEST_DESCRIPTION_MAX,
   MERGE_REQUEST_TITLE_MAX,
+  type MergeRequestForm,
   type MergeRequestState,
   type PipelineState,
   type Task,
@@ -21,10 +22,7 @@ import { testCountsLabel } from "./verification.ts";
 /** The repo host does not change while the panel is open; a pipeline takes minutes. */
 export const MERGE_REQUEST_POLL_MS = 30_000;
 
-export interface MergeRequestDraftText {
-  title: string;
-  description: string;
-}
+export type MergeRequestDraftText = Pick<MergeRequestForm, "title" | "description">;
 
 /**
  * The draft of the form: the task's title (or the first line of its prompt) and the agent's summary (or the prompt)
@@ -46,8 +44,16 @@ function verificationLine(verification: Verification): string {
   return `Verification in Trackwall: ${verification.state} (mise task ${verification.miseTask}${tests})`;
 }
 
+/** By code points, so a cut never splits an emoji; the daemon's limits count UTF-16 units, which is never fewer. */
 function cut(text: string, max: number): string {
-  return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+  if (text.length <= max) return text;
+  const chars = Array.from(text);
+  let kept = "";
+  for (const char of chars) {
+    if (kept.length + char.length > max - 1) break;
+    kept += char;
+  }
+  return `${kept}…`;
 }
 
 /** `2 commits · 1 not pushed · 3 files not committed`, or the warning that the remote moved on. */

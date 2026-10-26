@@ -22,6 +22,7 @@ const githubPull = (state: "open" | "closed", mergedAt: string | null) => [
 ];
 
 const checkRuns = (...runs: [string, string | null][]) => ({
+  total_count: runs.length,
   check_runs: runs.map(([status, conclusion]) => ({ status, conclusion })),
 });
 const NO_STATUSES = { state: "pending", total_count: 0 };
@@ -132,6 +133,21 @@ describe("the pull request of a task branch on GitHub", () => {
       },
     });
     expect((await failedStatus.hosting.mergeRequest(GITHUB, BRANCH))?.pipeline?.state).toBe("failed");
+  });
+
+  test("checks beyond the pages read count as pending, so an unread failure never shows as a pass", async () => {
+    const { hosting } = fakeHosting({
+      apiResponses: {
+        "repos/me/shop/pulls": githubPull("open", null),
+        [`${GITHUB_COMMIT}/check-runs`]: {
+          total_count: 900,
+          check_runs: Array.from({ length: 100 }, () => ({ status: "completed", conclusion: "success" })),
+        },
+        [`${GITHUB_COMMIT}/status`]: NO_STATUSES,
+      },
+    });
+
+    expect((await hosting.mergeRequest(GITHUB, BRANCH))?.pipeline?.state).toBe("pending");
   });
 
   test("a merged pull request, and no pipeline when nothing ran on its commit", async () => {

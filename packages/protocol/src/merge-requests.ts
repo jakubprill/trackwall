@@ -59,17 +59,21 @@ export type HostedProject = z.infer<typeof HostedProject>;
  * The task branch against the main remote, as the last push or fetch left it: Trackwall does not ask the server on
  * every read, so a push by someone else shows only after the next sync or push.
  */
-export const TaskBranchPush = z.object({
+export const BranchOnRemote = z.object({
   /** The main remote's name (`origin`). */
   remote: z.string(),
-  /** Commits on the task branch since the task's base. */
-  commits: z.number().int().nonnegative(),
   /** The remote has the task branch. */
   published: z.boolean(),
   /** Commits of the task branch the remote's branch does not have; all of them before the first push. */
   unpushed: z.number().int().nonnegative(),
   /** Commits of the remote's branch the task branch does not have: a push would be refused until they are merged in. */
   behind: z.number().int().nonnegative(),
+});
+export type BranchOnRemote = z.infer<typeof BranchOnRemote>;
+
+export const TaskBranchPush = BranchOnRemote.extend({
+  /** Commits on the task branch since the task's base. */
+  commits: z.number().int().nonnegative(),
   /** Files changed in the worktree and not committed: they are not part of a push. */
   uncommitted: z.number().int().nonnegative(),
 });
@@ -109,6 +113,14 @@ export const MergeRequestDraft = z
   .strict();
 export type MergeRequestDraft = z.infer<typeof MergeRequestDraft>;
 
+/** What the repo host's new merge request form is filled in with; `target: null` lets the repo host pick its default branch. */
+export interface MergeRequestForm {
+  source: string;
+  target: string | null;
+  title: string;
+  description: string;
+}
+
 function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
   return { path: `/api/merge-requests/${action}`, request, data };
 }
@@ -117,7 +129,7 @@ export const mergeRequestsApi = {
   /** The task branch against the main remote and the merge request from it; the repo host's answer is reused for a few seconds. */
   get: endpoint("get", TaskRequest, TaskMergeRequest),
   /**
-   * Pushes the task branch to the main remote, without force and without the repo's push hooks. `bad_request` when the
+   * Pushes the task branch to the main remote, without force and without the repo's hooks, and only where the remote fetches from. `bad_request` when the
    * branch has no commits; a refused push (the remote moved on) is `repo_unavailable` with git's message.
    */
   push: endpoint("push", TaskRequest, TaskMergeRequest),

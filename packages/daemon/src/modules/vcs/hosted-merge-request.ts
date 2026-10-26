@@ -1,4 +1,4 @@
-import type { HostedProject, MergeRequest, Pipeline, PipelineState, RepoHostKind } from "@trackwall/protocol";
+import type { HostedProject, MergeRequest, MergeRequestForm, Pipeline, PipelineState, RepoHostKind } from "@trackwall/protocol";
 import { z } from "zod";
 
 /**
@@ -8,18 +8,16 @@ import { z } from "zod";
  * `hosting.ts`, the rest are pure functions.
  */
 
-/** One `<cli> api` call: the response as JSON, checked by the caller's schema. */
-export type HostApi = (path: string) => Promise<unknown>;
+/** One `<cli> api` call, its response checked by `schema`. */
+type HostApi = <T>(path: string, schema: z.ZodType<T>) => Promise<T>;
 
-export interface MergeRequestForm {
-  source: string;
-  /** `null` lets the repo host pick its default branch. */
-  target: string | null;
-  title: string;
-  description: string;
-}
+/**
+ * The longest form address: GitLab behind nginx refuses addresses over 8 KB, and Windows command lines (the browser gets
+ * the address as an argument) end at 32 KB. A description in Polish or with emoji grows up to nine times when escaped.
+ */
+const FORM_URL_MAX = 7000;
 
-export interface MergeRequestHostApi {
+interface MergeRequestHostApi {
   formUrl(project: HostedProject, form: MergeRequestForm): string;
   /** The most recently updated merge request from `branch` in any state; `null` when there is none. */
   find(api: HostApi, project: HostedProject, branch: string): Promise<MergeRequest | null>;
@@ -37,8 +35,14 @@ const GitHubPull = z.object({
 });
 
 const GitHubCheckRuns = z.object({
+  total_count: z.number().int().nonnegative(),
   check_runs: z.array(z.object({ status: z.string(), conclusion: z.string().nullable() })),
 });
+type GitHubCheckRun = z.infer<typeof GitHubCheckRuns>["check_runs"][number];
+
+/** GitHub's largest page of check runs, and how many pages to read: a commit with more checks than that is rare. */
+const CHECK_RUNS_PAGE = 100;
+const CHECK_RUNS_MAX_PAGES = 5;
 
 const GitHubCombinedStatus = z.object({
   state: z.string(),
@@ -65,7 +69,7 @@ function checkRunState(run: { status: string; conclusion: string | null }): Pipe
   }
 }
 
-/** GitHub's combined status of the commit statuses other CI systems set; `pending` while one has not reported. */
+/** GitHub's combined status of the commit statuses other CI systems set; `running` while one has not reported. */
 function statusState(state: string): PipelineState {
   if (state === "success") return "passed";
   if (state === "pending") return "running";
@@ -89,16 +93,14 @@ const githubApi: MergeRequestHostApi = {
   async find(api, project, branch) {
     const owner = project.path.split("/")[0] ?? "";
     const head = encodeURIComponent(`${owner}:${branch}`);
-    const [pull] = z
-      .array(GitHubPull)
-      .parse(await api(`repos/${project.path}/pulls?head=${head}&state=all&sort=updated&direction=desc&per_page=1`));
+    const [pull] = await api(
+      `repos/${project.path}/pulls?head=${head}&state=all&sort=updated&direction=desc&per_page=1`,
+      z.array(GitHubPull),
+    );
     if (!pull) return null;
     const commit = `repos/${project.path}/commits/${pull.head.sha}`;
-    const [runs, status] = await Promise.all([
-      api(`${commit}/check-runs?per_page=100`).then((json) => GitHubCheckRuns.parse(json)),
-      api(`${commit}/status`).then((json) => GitHubCombinedStatus.parse(json)),
-    ]);
-    const states = [...runs.check_runs.map(checkRunState), ...(status.total_count > 0 ? [statusState(status.state)] : [])];
+    const [runs, status] = await Promise.all([checkRuns(api, commit), api(`${commit}/status`, GitHubCombinedStatus)]);
+    const states = [...runs, ...(status.total_count > 0 ? [statusState(status.state)] : [])];
     const state = combinedState(states);
     return {
       number: pull.number,
@@ -109,6 +111,23 @@ const githubApi: MergeRequestHostApi = {
     };
   },
 };
+
+/**
+ * The states of every check run of a commit; a commit with more of them than the pages read gets `pending` for the rest,
+ * so an unread failure never shows as a pass.
+ */
+async function checkRuns(api: HostApi, commit: string): Promise<PipelineState[]> {
+  const runs: GitHubCheckRun[] = [];
+  let total = 0;
+  for (let page = 1; page <= CHECK_RUNS_MAX_PAGES; page++) {
+    const received = await api(`${commit}/check-runs?per_page=${CHECK_RUNS_PAGE}&page=${page}`, GitHubCheckRuns);
+    runs.push(...received.check_runs);
+    total = received.total_count;
+    if (runs.length >= total || received.check_runs.length < CHECK_RUNS_PAGE) break;
+  }
+  const states = runs.map(checkRunState);
+  return runs.length < total ? [...states, "pending"] : states;
+}
 
 const GitLabMergeRequests = z.array(z.object({ iid: z.number().int().positive() }));
 
@@ -157,12 +176,13 @@ const gitlabApi: MergeRequestHostApi = {
   },
   async find(api, project, branch) {
     const base = `projects/${encodeURIComponent(project.path)}/merge_requests`;
-    const [found] = GitLabMergeRequests.parse(
-      await api(`${base}?source_branch=${encodeURIComponent(branch)}&state=all&order_by=updated_at&sort=desc&per_page=1`),
+    const [found] = await api(
+      `${base}?source_branch=${encodeURIComponent(branch)}&state=all&order_by=updated_at&sort=desc&per_page=1`,
+      GitLabMergeRequests,
     );
     if (!found) return null;
     // The list leaves out the pipeline; one merge request carries it.
-    const mr = GitLabMergeRequest.parse(await api(`${base}/${found.iid}`));
+    const mr = await api(`${base}/${found.iid}`, GitLabMergeRequest);
     const pipeline: Pipeline | null = mr.head_pipeline
       ? { state: gitlabPipelineState(mr.head_pipeline.status), url: mr.head_pipeline.web_url }
       : null;
@@ -170,9 +190,35 @@ const gitlabApi: MergeRequestHostApi = {
   },
 };
 
-export const MERGE_REQUEST_APIS: Record<RepoHostKind, MergeRequestHostApi> = { github: githubApi, gitlab: gitlabApi };
+const MERGE_REQUEST_APIS: Record<RepoHostKind, MergeRequestHostApi> = { github: githubApi, gitlab: gitlabApi };
+
+/**
+ * The form's address with as much of the description as fits in `FORM_URL_MAX`; a cut description ends with "…", and
+ * the user adds the rest in the form.
+ */
+export function mergeRequestFormUrl(project: HostedProject, form: MergeRequestForm): string {
+  const url = (description: string) => MERGE_REQUEST_APIS[project.kind].formUrl(project, { ...form, description });
+  const whole = url(form.description);
+  if (whole.length <= FORM_URL_MAX) return whole;
+  // By code points, so a cut never splits an emoji; the longest prefix that fits, found by halving.
+  const chars = Array.from(form.description);
+  const cut = (n: number) => `${chars.slice(0, n).join("")}…`;
+  let fits = 0;
+  let tooLong = chars.length;
+  while (tooLong - fits > 1) {
+    const middle = Math.floor((fits + tooLong) / 2);
+    if (url(cut(middle)).length <= FORM_URL_MAX) fits = middle;
+    else tooLong = middle;
+  }
+  return url(cut(fits));
+}
 
 /** A branch name in a URL path: its `/` stay, as GitHub writes them, and everything else is escaped. */
 function branchPath(branch: string): string {
   return branch.split("/").map(encodeURIComponent).join("/");
+}
+
+/** The most recently updated merge request from `branch` in `project`, in any state; `null` when there is none. */
+export function findMergeRequest(api: HostApi, project: HostedProject, branch: string): Promise<MergeRequest | null> {
+  return MERGE_REQUEST_APIS[project.kind].find(api, project, branch);
 }
