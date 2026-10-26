@@ -92,7 +92,7 @@ export async function dayReport(
     return { repo, remote, tip };
   });
   const tipOf = new Map(tips.map((entry) => [entry.repo.id, entry]));
-  // One pass after the other, so no more than `REPORT_CONCURRENCY` git chains run at once.
+  // One pass after the other: both share the `REPORT_CONCURRENCY` budget of git chains at once.
   const repos = await mapLimit(tips, REPORT_CONCURRENCY, (entry) => repoEntry(vcs, input, entry, log));
   const tasks = await mapLimit(input.tasks, REPORT_CONCURRENCY, (task) => taskEntry(vcs, input.sessions, task, tipOf.get(task.repo), log));
   const heads: Record<string, string> = {};

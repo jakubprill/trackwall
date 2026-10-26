@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { DayStartRun } from "@trackwall/protocol";
-import { dayStartFailure, dayStartLabel } from "../src/lib/day-start.ts";
+import { dayStartFailure, dayStartLabel, startErrorShown } from "../src/lib/day-start.ts";
 
 const run = (fields: Partial<DayStartRun>): DayStartRun => ({
   startedAt: "2026-10-26T07:00:00.000Z",
@@ -38,5 +38,21 @@ describe("the day start in the UI", () => {
   test("a supervisor started after a failed day start hides the failure, so an old message does not come back", () => {
     const failed = run({ step: "supervisor", finishedAt: ended, error: "no Copilot CLI in PATH" });
     expect(dayStartFailure(failed, "2026-10-26T07:05:00.000Z")).toBeUndefined();
+  });
+
+  test("the panel shows the error of the start button pressed last, so an old day start failure stays hidden after a plain start", () => {
+    const failedDay = run({ step: "sync", finishedAt: ended, error: "the sync failed" });
+    const afterPlainStart = {
+      supervisorError: "no Copilot CLI in PATH",
+      dayError: undefined,
+      dayRun: failedDay,
+      supervisorStartedAt: undefined,
+    };
+    expect(startErrorShown({ lastStart: "supervisor", ...afterPlainStart })).toBe("no Copilot CLI in PATH");
+    expect(startErrorShown({ lastStart: "supervisor", ...afterPlainStart, supervisorError: undefined })).toBeUndefined();
+    expect(startErrorShown({ lastStart: "day", ...afterPlainStart })).toBe("Start my day stopped while syncing the repos: the sync failed");
+    expect(startErrorShown({ lastStart: "day", ...afterPlainStart, dayError: "set the projects folder first" })).toBe(
+      "set the projects folder first",
+    );
   });
 });

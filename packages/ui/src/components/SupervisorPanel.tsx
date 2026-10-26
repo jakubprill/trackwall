@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { dayStartFailure, dayStartLabel } from "@/lib/day-start";
+import { dayStartLabel, type StartButton, startErrorShown } from "@/lib/day-start";
 import { IS_MAC } from "@/lib/platform";
 import {
   entryId,
@@ -55,7 +55,7 @@ export function SupervisorPanel({
 }) {
   const { session } = supervisor;
   // Here rather than in the header, which folding the panel unmounts: an old day start failure must not come back then.
-  const lastStart = useState<LastStart>("day");
+  const [lastStart, setLastStart] = useState<StartButton>("day");
   const panel = useRef<HTMLElement>(null);
   // Focus that lands anywhere outside the panel takes the keyboard out of it. A blur would say the same, but none
   // comes when the focused terminal is removed (a reconnect, a supervisor gone after a daemon restart).
@@ -82,7 +82,14 @@ export function SupervisorPanel({
       onFocus={() => onFocusedChange(true)}
       onBlur={leave}
     >
-      <SupervisorHeader conn={conn} supervisor={supervisor} lastStart={lastStart} onChanged={onChanged} onFold={fold} />
+      <SupervisorHeader
+        conn={conn}
+        supervisor={supervisor}
+        lastStart={lastStart}
+        onStart={setLastStart}
+        onChanged={onChanged}
+        onFold={fold}
+      />
       <DelegatedWork work={supervisor.work} onOpen={onOpenInSessions} />
       {session ? (
         <SessionTerminal key={session.id} conn={conn} session={session.id} live={isLive(session)} selected={focused} />
@@ -116,19 +123,19 @@ function FoldedSupervisor({ supervisor, onUnfold }: { supervisor: SupervisorSumm
 }
 
 /** Name, state and what it works on; Stop while it runs, and Start my day or a plain start once it has ended or before the first. */
-/** Which start button the user pressed last, and how to set it. */
-type LastStart = "supervisor" | "day";
-
 function SupervisorHeader({
   conn,
   supervisor,
-  lastStart: [lastStart, setLastStart],
+  lastStart,
+  onStart,
   onChanged,
   onFold,
 }: {
   conn: Connection;
   supervisor: SupervisorSummary;
-  lastStart: [LastStart, (start: LastStart) => void];
+  /** The start button the user pressed last. */
+  lastStart: StartButton;
+  onStart: (button: StartButton) => void;
   onChanged: () => void;
   onFold: () => void;
 }) {
@@ -137,10 +144,13 @@ function SupervisorHeader({
   const stop = useAction((id: string) => post(conn, agentsApi.stop, { session: id }), onChanged);
   const day = useDayStart(conn, onChanged);
   const running = session !== undefined && isLive(session) ? session : undefined;
-  // Only the error of the start the user pressed last: an older one of the other button says nothing about now. The
-  // daemon's record of a failed day start outlives the panel, so `dayStartFailure` also hides it once a supervisor
-  // started after it.
-  const startError = lastStart === "supervisor" ? start.error : (day.error ?? dayStartFailure(day.run, session?.startedAt));
+  const startError = startErrorShown({
+    lastStart,
+    supervisorError: start.error,
+    dayError: day.error,
+    dayRun: day.run,
+    supervisorStartedAt: session?.startedAt,
+  });
   const error = running ? stop.error : startError;
   return (
     <header className="flex flex-col gap-1 border-b px-4 py-2">
@@ -168,7 +178,7 @@ function SupervisorHeader({
               <Button
                 size="sm"
                 onClick={() => {
-                  setLastStart("day");
+                  onStart("day");
                   day.start();
                 }}
                 disabled={day.running || start.pending}
@@ -180,7 +190,7 @@ function SupervisorHeader({
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  setLastStart("supervisor");
+                  onStart("supervisor");
                   start.run();
                 }}
                 disabled={start.pending || day.running}

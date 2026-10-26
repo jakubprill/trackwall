@@ -1,12 +1,13 @@
 import type { Commit } from "@trackwall/protocol";
-import { git, knownDefaultBranch, revParse } from "./git.ts";
+import { existingCommit, git, knownDefaultBranch, revParse } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { LOG_FORMAT, parseLog } from "./parse.ts";
 
 /**
  * What came onto a branch between two commits, for the day report (ADR-70): the remote default branch as the last fetch
- * left it, and the commits from an older commit to a newer one. Only reads refs and objects, never the network. A git
- * error is an exception, so a timeout is never mistaken for a rewritten history.
+ * left it, and the commits from an older commit to a newer one. Only reads refs and objects, never the network. Between
+ * two commits a git error is an exception, so a timeout is never mistaken for a rewritten history; a remote default
+ * branch git cannot read is `null`, like a missing one, which leaves the day start's compared commit as it was.
  */
 
 /** The main remote's default branch, e.g. `origin/main`, and its commit. */
@@ -55,15 +56,6 @@ export async function commitsBetween(dir: string, from: string, to: string, limi
 /** The newest `limit` commits of `commit`'s history, newest first. */
 export function newestCommits(dir: string, commit: string, limit: number): Promise<Commit[]> {
   return log(dir, [commit], limit);
-}
-
-/**
- * The commit `ref` names; `undefined` only when git says there is no such commit (`--verify --quiet` exits with 1).
- * Unlike `revParse`, any other failure (a timeout, a broken repo) throws.
- */
-async function existingCommit(dir: string, ref: string): Promise<string | undefined> {
-  const { stdout } = await git(dir, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], { okExitCodes: [1] });
-  return stdout.toString("utf8").trim() || undefined;
 }
 
 async function log(dir: string, range: readonly string[], limit: number): Promise<Commit[]> {

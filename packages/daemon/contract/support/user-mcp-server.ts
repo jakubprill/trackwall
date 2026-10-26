@@ -11,7 +11,7 @@ export const USER_MCP_TOOL = "list_issues";
 export const USER_MCP_ISSUES = "SHOP-12 Refunds are rounded wrongly";
 
 const Request = z.looseObject({
-  id: z.union([z.string(), z.number()]).optional(),
+  id: z.union([z.string(), z.number(), z.null()]).optional(),
   method: z.string().optional(),
   params: z.looseObject({ protocolVersion: z.string().optional() }).optional(),
 });
@@ -51,7 +51,7 @@ function answerOf(message: Request): { result: unknown } | { error: { code: numb
 function answer(line: string): void {
   const message = Request.parse(JSON.parse(line));
   // A notification has no id and gets no answer.
-  if (message.id === undefined) return;
+  if (message.id === undefined || message.id === null) return;
   process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: message.id, ...answerOf(message) })}\n`);
 }
 

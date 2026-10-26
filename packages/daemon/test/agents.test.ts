@@ -141,23 +141,16 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
     const copilotHome = mkdtempSync(join(tmpdir(), "trackwall-copilot-home-"));
     writeFileSync(join(copilotHome, "mcp-config.json"), JSON.stringify({ mcpServers: { tracker: { command: "tracker-mcp" } } }));
-    const { agents, procs } = makeAgents({ shop: repoDir });
+    const { agents, procs } = makeAgents({ shop: repoDir }, undefined, null, undefined, { ...process.env, COPILOT_HOME: copilotHome });
     cleanups.push(() => procs.stopAll());
 
-    const before = process.env.COPILOT_HOME;
-    process.env.COPILOT_HOME = copilotHome;
-    try {
-      const started = await agents.start("shop");
-      const window = viewer(agents, started.id);
-      await waitFor(agents, started.id, () => window.text().includes("Welcome to the fake"), "screen image");
+    const started = await agents.start("shop");
+    const window = viewer(agents, started.id);
+    await waitFor(agents, started.id, () => window.text().includes("Welcome to the fake"), "screen image");
 
-      expect(window.text()).toContain("MCP: tracker, trackwall");
-      window.attachment.detach();
-      await agents.stop(started.id);
-    } finally {
-      if (before === undefined) delete process.env.COPILOT_HOME;
-      else process.env.COPILOT_HOME = before;
-    }
+    expect(window.text()).toContain("MCP: tracker, trackwall");
+    window.attachment.detach();
+    await agents.stop(started.id);
   }, 60_000);
 
   test("the supervisor starts in the projects folder, with no repo and the supervisor's instructions", async () => {
