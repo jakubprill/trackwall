@@ -76,6 +76,11 @@ export interface ServicesDeps {
   startupMs: number;
   /** How long to keep reading logs after a response, for errors logged after it was sent (500 ms in the daemon). */
   settleMs: number;
+  /**
+   * How long a stop waits, after the process group has ended, for the service's port to close (15 s in the daemon):
+   * an app a build tool runs outside the group (Gradle's daemon) shuts down after it.
+   */
+  releaseMs: number;
 }
 
 /** Errors per crashed or unhealthy member: the cause is usually in the first few. */
@@ -278,14 +283,21 @@ export class Services {
     const watch = await this.adopt(target);
     if (!watch) return null;
     await this.deps.mise.stop(target, SERVICE_MISE_TASK);
-    return watch.refresh();
+    const view = await watch.refresh();
+    if (view.state !== "stopping") return view;
+    const released = new Promise<void>((resolve) => setTimeout(resolve, this.deps.releaseMs).unref());
+    await Promise.race([watch.whenEnded(), released]);
+    return watch.view();
   }
 
   /** Why a port that answers before the start is not this service's. */
   private portTaken(target: MiseTarget, port: number): string {
     const what = target.task === null ? "server.port on the card" : "the task port";
-    const holder = [...this.watches.values()].find((w) => w.view().port === port && this.liveRun(w.target));
-    if (holder) return `port ${port} (${what}) is used by the service of ${where(holder.target)}`;
+    const holders = [...this.watches.values()].filter((w) => w.view().port === port);
+    const running = holders.find((w) => this.liveRun(w.target));
+    if (running) return `port ${port} (${what}) is used by the service of ${where(running.target)}`;
+    const stopping = holders.find((w) => w.view().state === "stopping");
+    if (stopping) return `port ${port} (${what}) still answers after the stop of the service of ${where(stopping.target)}`;
     return `port ${port} (${what}) is already in use by a program Trackwall did not start`;
   }
 

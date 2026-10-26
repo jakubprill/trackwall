@@ -216,7 +216,7 @@ export const StartServiceResult = z.object({ slice: ServiceSlice });
 export type StartServiceResult = z.infer<typeof StartServiceResult>;
 
 export const StopServiceResult = z.object({
-  /** The services stopped, each `stopped` with its last run. */
+  /** The services stopped, each `stopped` with its last run, or `stopping` with the reason while its port still answers. */
   services: z.array(Service),
 });
 export type StopServiceResult = z.infer<typeof StopServiceResult>;
@@ -796,7 +796,9 @@ export const mcpTools = {
     description:
       "Stop a repo's service (its whole process group), with task the one from that task's worktree, and, with " +
       `dependencies: true, the services the latest ${START_SERVICE} of it started (not those that were already running ` +
-      "or that another started slice uses). Returns the stopped services. A session in Trackwall can stop only its own " +
+      "or that another started slice uses). Returns the stopped services: stopped once the process group has ended and the port " +
+      "no longer answers, or stopping with the reason when the port still answers after 15 s (a process outside the group, " +
+      "such as an app Gradle's daemon runs, holds it). A session in Trackwall can stop only its own " +
       "repo's service, a task session only its own task's or the repo root's, and the supervisor none.",
     args: z
       .object({

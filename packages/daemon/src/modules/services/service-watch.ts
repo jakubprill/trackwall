@@ -16,7 +16,10 @@ import { isStartedLine, portFromLine } from "./readiness.ts";
  * Observed state of one run of a service (§4.3, ADR-45), checked in a loop until the process group has ended: the run
  * state from `procs` (through `mise`), new lines of its log (the port, Spring Boot's "Started") and a TCP probe of the
  * port. Nothing is assumed: `healthy` only after the port accepted a connection, `crashed` only after the system
- * confirmed the group ended by itself. One check runs at a time, and nothing changes the state after the end.
+ * confirmed the group ended by itself, `stopped` only after a stop emptied the group and the port no longer answers. A
+ * build tool may run the app outside the group (Gradle's daemon runs `bootRun`'s app as its own child), so the app can
+ * outlive the group for a moment or for good: until its port closes the service stays `stopping`. One check runs at a
+ * time, and nothing changes the state after the end.
  */
 
 export interface WatchDeps {
@@ -64,6 +67,10 @@ export class ServiceWatch {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private inFlight: Promise<void> | undefined;
   private ended = false;
+  private resolveEnded: () => void = () => {};
+  private readonly endedPromise = new Promise<void>((resolve) => {
+    this.resolveEnded = resolve;
+  });
 
   constructor(watched: WatchedRun, deps: WatchDeps) {
     this.target = watched.target;
@@ -94,6 +101,11 @@ export class ServiceWatch {
     return new Promise((resolve) => this.waiters.push(resolve));
   }
 
+  /** Resolves once the watch has ended: its run ended (after a stop, also its port closed), or a newer run replaced it. */
+  whenEnded(): Promise<void> {
+    return this.endedPromise;
+  }
+
   /** Checks now instead of at the next tick (right after a stop, before an endpoint call); joins a check in flight. */
   async refresh(): Promise<Service> {
     // A check in flight may have read the run before the change the caller waits for (a stop), so one more follows.
@@ -107,6 +119,7 @@ export class ServiceWatch {
     this.ended = true;
     clearTimeout(this.timer);
     this.settle();
+    this.resolveEnded();
   }
 
   private schedule(delayMs: number): void {
@@ -125,30 +138,44 @@ export class ServiceWatch {
   }
 
   private async observe(): Promise<void> {
-    if (!this.follow()) return;
+    const run = this.follow();
+    if (run?.kind === "exited") return this.end(run);
+    if (run?.kind !== "running") return;
     this.readLog();
     const outcome = await this.probe();
     // The run may have changed during the probe; then its new state wins over a port that answered just before.
-    if (this.follow()) this.apply(outcome);
+    const after = this.follow();
+    if (after?.kind === "running") this.apply(outcome);
+    else if (after?.kind === "exited") await this.end(after);
   }
 
-  /** Takes the current run: `true` while it is running, otherwise its end, `stopping` or a replaced run is applied. */
-  private follow(): boolean {
+  /** The current run, with `stopping` applied; `undefined` once a newer run replaced it or there is none (the watch ends). */
+  private follow(): RunState | undefined {
     const run = this.deps.run();
     if (this.ended || !run || run.runId !== this.runId) {
       this.dispose();
-      return false;
+      return undefined;
     }
     this.lastRun = run;
-    if (run.kind === "exited") this.end(run);
-    else if (run.kind === "stopping") this.set("stopping", null);
-    return run.kind === "running";
+    if (run.kind === "stopping") this.set("stopping", null);
+    return run;
   }
 
-  private end(run: ExitedRun): void {
-    if (run.stoppedByUser) this.set("stopped", null);
-    else this.set("crashed", `the process exited ${run.signal ? `on signal ${run.signal}` : `with code ${run.exitCode}`}`);
+  /** The run's group has ended: `crashed`, or after a stop `stopped` once nothing answers on the service's port. */
+  private async end(run: ExitedRun): Promise<void> {
     this.address = null;
+    if (!run.stoppedByUser) {
+      this.set("crashed", `the process exited ${run.signal ? `on signal ${run.signal}` : `with code ${run.exitCode}`}`);
+      return this.dispose();
+    }
+    const outcome = await this.probe();
+    if (this.ended) return;
+    if ("port" in outcome) {
+      // Checked again at every tick until the port closes; a new start of the service replaces this watch.
+      const holder = "a process outside the service's process group holds it, such as an app Gradle's daemon runs";
+      return this.set("stopping", `the process group has ended, but port ${outcome.port} still answers: ${holder}`);
+    }
+    this.set("stopped", null);
     this.dispose();
   }
 

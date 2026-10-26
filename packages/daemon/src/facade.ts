@@ -54,7 +54,7 @@ const LOGS_DIR = "logs";
 /** The limit of one source JSONL file; with the previous file after rotation a source takes at most twice that. */
 const LOG_FILE_MAX_BYTES = 10 * 1024 * 1024;
 /** Service readiness (ADR-45): checks twice a second, and five minutes for a start, because Gradle and Maven compile first. */
-const SERVICE_TIMING = { intervalMs: 500, startupMs: 5 * 60 * 1000, settleMs: 500 };
+const SERVICE_TIMING = { intervalMs: 500, startupMs: 5 * 60 * 1000, settleMs: 500, releaseMs: 15_000 };
 
 export interface FacadeOptions {
   /**
