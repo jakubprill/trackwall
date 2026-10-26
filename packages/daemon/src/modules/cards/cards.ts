@@ -4,7 +4,8 @@ import { mapLimit } from "../../infra/map-limit.ts";
 import { CallReads, readCallFiles } from "./call-files.ts";
 import type { CardCache } from "./card-cache.ts";
 import { CardWarmup, type WarmupRepo } from "./card-warmup.ts";
-import { CALL_SOURCES, CARD_SOURCES, extractCard, readsCardFile } from "./extract-card.ts";
+import { CALL_SOURCES, CARD_DOCUMENTS, CARD_SOURCES, extractCard, readsCardFile } from "./extract-card.ts";
+import { localMiseTasks } from "./local-mise.ts";
 import { readSnapshot, type SnapshotVcs } from "./read-snapshot.ts";
 import { CARD_PARSE_BUDGET_MS, loadSyntaxParsers, type SyntaxParsers, unavailableParsers, withParseBudget } from "./syntax-tree.ts";
 import { repoTags } from "./tags.ts";
@@ -115,10 +116,13 @@ export class Cards {
     });
   }
 
-  /** The repo card and its tags, from the remote address (without it only from the identifier) and from the rules. */
+  /**
+   * The repo card and its tags, from the remote address (without it only from the identifier), from the mise tasks of
+   * `mise.local.toml` (ADR-86) and from the rules.
+   */
   private async tagged(id: string, dir: string, rules: RepoTagRules): Promise<TaggedCard> {
-    const [card, remote] = await Promise.all([this.cardOf(dir), this.deps.vcs.remote(dir).catch(() => null)]);
-    return { card, remote, tags: repoTags(card, { id, remote }, rules) };
+    const [card, remote, local] = await Promise.all([this.cardOf(dir), this.deps.vcs.remote(dir).catch(() => null), localMiseTasks(dir)]);
+    return { card, remote, tags: repoTags(card, { id, remote, localMiseTasks: local.length }, rules) };
   }
 
   /** The card of the HEAD commit of the repo in directory `dir`; `null` in a repo without commits. */
@@ -127,7 +131,7 @@ export class Cards {
     if (commit === null) return null;
     return this.deps.cache.getOrCompute(commit, async () => {
       const known = { accepts: CALL_SOURCES, kept: (oid: string) => this.callReads.get(oid) };
-      const snapshot = await readSnapshot(this.deps.vcs, dir, commit, readsCardFile, CARD_SOURCES, known);
+      const snapshot = await readSnapshot(this.deps.vcs, dir, commit, readsCardFile, CARD_SOURCES, known, CARD_DOCUMENTS);
       const syntax = await syntaxParsersOrUnavailable();
       const calls = await readCallFiles(snapshot.callSources, syntax, this.callReads);
       const parsers = withParseBudget(syntax, CARD_PARSE_BUDGET_MS);

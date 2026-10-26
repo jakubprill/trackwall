@@ -4,35 +4,45 @@ import {
   type FoundEndpoint,
   type HttpMethod,
   httpMethodMatches,
-  httpPathMatches,
   MAX_FOUND_ENDPOINTS,
   type ProvidedEndpoint,
 } from "@trackwall/protocol";
 import { EndpointCalls } from "./endpoint-calls.ts";
+import { MATCH_ORDER, matchEndpoint, parseEndpointQuery } from "./endpoint-query.ts";
 import { compare, push } from "./graph-join.ts";
 import type { HttpIndex } from "./http-index.ts";
 
 /**
- * Endpoint search (§4.6, §5.3, ADR-30): endpoints from the cards of all repos matching the query, and the repos whose
- * HTTP clients call them, with the same confidence as an `http` edge. A query starting with `/` is a path (also a concrete one,
- * `/api/orders/42` matches `/api/orders/{id}`) or a fragment of one; anything else is a fragment of a path, handler or app
- * name, case-insensitive. Each caller has the endpoints of its repo that reach the call, and each found endpoint the
- * endpoints of other repos it calls (ADR-82).
+ * Endpoint search (§4.6, §5.3, ADR-30, ADR-87): endpoints from the cards of all repos matching the query
+ * (`endpoint-query.ts`), best match first, and the repos whose HTTP clients call them, with the same confidence as an
+ * `http` edge. Each caller has the endpoints of its repo that reach the call, and each found endpoint the endpoints of
+ * other repos it calls (ADR-82).
  */
 export function findEndpoints(index: HttpIndex, query: string, method: HttpMethod | undefined): FindEndpointResult {
   const wanted = query.trim();
+  const parsed = parseEndpointQuery(wanted);
+  const methodWanted = method ?? parsed.method ?? null;
   const found = index.endpoints
-    .filter(({ endpoint }) => httpMethodMatches(method ?? null, endpoint.method) && matchesQuery(endpoint, wanted))
-    .sort((a, b) => compare(a.repo, b.repo) || compare(a.endpoint.path, b.endpoint.path));
+    .flatMap((e) => {
+      const match = httpMethodMatches(methodWanted, e.endpoint.method) ? matchEndpoint(parsed, e.endpoint, e.segments) : undefined;
+      return match === undefined ? [] : [{ ...e, match }];
+    })
+    .sort(
+      (a, b) =>
+        MATCH_ORDER.indexOf(a.match) - MATCH_ORDER.indexOf(b.match) || compare(a.repo, b.repo) || compare(a.endpoint.path, b.endpoint.path),
+    );
   const shown = found.slice(0, MAX_FOUND_ENDPOINTS);
   const calls = new EndpointCalls(index);
   const callers = callersByEndpoint(index, calls, new Set(shown.map((e) => e.endpoint)));
-  const endpoints: FoundEndpoint[] = shown.map(({ repo, endpoint }) => ({
+  const endpoints: FoundEndpoint[] = shown.map(({ repo, endpoint, match }) => ({
     repo,
+    match,
     app: endpoint.app,
     method: endpoint.method,
     path: endpoint.path,
     handler: endpoint.handler,
+    source: endpoint.source,
+    operation: endpoint.operation,
     request: endpoint.request,
     response: endpoint.response,
     evidence: endpoint.evidence,
@@ -40,12 +50,6 @@ export function findEndpoints(index: HttpIndex, query: string, method: HttpMetho
     calls: calls.calls(repo, endpoint),
   }));
   return { query: wanted, endpoints, truncated: found.length > shown.length };
-}
-
-function matchesQuery(endpoint: ProvidedEndpoint, query: string): boolean {
-  const lower = query.toLowerCase();
-  if (query.startsWith("/") && httpPathMatches(query, endpoint.path)) return true;
-  return [endpoint.path, endpoint.handler, endpoint.app ?? ""].some((text) => text.toLowerCase().includes(lower));
 }
 
 /** The calls of the clients of all repos assigned to endpoints from `wanted` through the clients' targets (`HttpIndex.targets`). */

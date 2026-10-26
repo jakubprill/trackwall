@@ -10,6 +10,7 @@ import type {
   TreeEntry,
   WorkingTreeChanges,
 } from "@trackwall/protocol";
+import { backupRemote, commitBackups, ensureBackupRepo, pushBackups, storeHead } from "./backup-repo.ts";
 import { branchOnRemote, pushBranch } from "./branch-push.ts";
 import { CommitMemo } from "./commit-memo.ts";
 import {
@@ -29,6 +30,7 @@ import { grep, grepFiles } from "./grep.ts";
 import { readHeadCommit } from "./head-commit.ts";
 import { hostedProject } from "./hosted-project.ts";
 import { KeyedQueue } from "./keyed-queue.ts";
+import { excludeLocally, ignoredPaths, trackedPaths } from "./local-files.ts";
 import {
   type CommitFile,
   type GitObject,
@@ -54,8 +56,9 @@ import { copyIncludedFiles } from "./worktree-include.ts";
  * and browsing does not depend on what lies in the working directory; only the repo state and its changes read the
  * working directory (`changes`, ADR-34). Only two things change anything: `sync` (ADR-21), i.e. fetch, a fast-forward
  * of the default branch and an update of the working directory when that branch is checked out, agent task worktrees
- * (ADR-31): a new branch with a worktree, its removal and the removal of the branch, and the push of a task branch at the
- * user's request (ADR-77).
+ * (ADR-31): a new branch with a worktree, its removal and the removal of the branch, the push of a task branch at the
+ * user's request (ADR-77), and for local config (ADR-86) the lines it adds to a repo's `info/exclude` and the commits and
+ * push of the local config store, a repo only the daemon writes to.
  */
 export class Vcs {
   /**
@@ -134,6 +137,16 @@ export class Vcs {
   async pushBranch(dir: string, branch: string): Promise<void> {
     return this.syncing.run(await this.commonDir(dir), () => pushBranch(dir, branch));
   }
+
+  // Local config (ADR-86): what a repo tracks or ignores, ignoring in one clone, and the local config store's commits and push.
+  readonly trackedPaths = trackedPaths;
+  readonly ignoredPaths = ignoredPaths;
+  readonly excludeLocally = excludeLocally;
+  readonly ensureBackupRepo = ensureBackupRepo;
+  readonly commitBackups = commitBackups;
+  readonly backupRemote = backupRemote;
+  readonly storeHead = storeHead;
+  readonly pushBackups = pushBackups;
 
   // `git grep` over a commit's objects (`grep.ts`): source files for cards (ADR-30) and code search (ADR-40).
   readonly grepFiles = grepFiles;

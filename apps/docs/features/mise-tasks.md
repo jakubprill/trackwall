@@ -39,3 +39,4 @@ mise asks you to trust a repo's configuration before it runs its tasks. When it 
 - On macOS the `PATH` from your login shell is enough.
 - The full log of every task is kept in `~/.trackwall/logs/mise-task/<repo>/<task>.jsonl`, at most 10 MB plus one previous file. Characters other than lowercase letters, digits, `_` and `-` in the name are written as `%XX`: the task `build:ui` is `build%3Aui.jsonl`. A run in a task's worktree is kept in `~/.trackwall/logs/task-mise-task/<task>/<mise task>.jsonl`.
 - A repo with a mise task called `dev` also gets a [Services](/features/services) panel at the top of this tab.
+- Tasks only for your computer go in `mise.local.toml`; above the tasks the tab shows its [backup](/features/local-config).

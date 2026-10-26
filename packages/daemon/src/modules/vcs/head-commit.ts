@@ -20,10 +20,20 @@ export async function readHeadCommit(repo: string): Promise<string | null | unde
   const ref = headRefName(head);
   // Other refs may live per worktree in the git directory (`refs/worktree/`, `refs/bisect/`), so git answers for them.
   if (!ref?.startsWith("refs/heads/")) return undefined;
-  if (await statIfExists(join(dirs.commonDir, "reftable"))) return undefined;
-  const loose = (await readIfExists(join(dirs.commonDir, ...ref.split("/")))).trim();
+  return branchCommit(dirs.commonDir, ref);
+}
+
+/** The commit of the branch `ref` (`refs/heads/...`), read the same way; `null` for a branch that does not exist. */
+export async function readBranchCommit(repo: string, ref: string): Promise<string | null | undefined> {
+  const dirs = await gitDirs(repo);
+  return dirs ? branchCommit(dirs.commonDir, ref) : undefined;
+}
+
+async function branchCommit(commonDir: string, ref: string): Promise<string | null | undefined> {
+  if (await statIfExists(join(commonDir, "reftable"))) return undefined;
+  const loose = (await readIfExists(join(commonDir, ...ref.split("/")))).trim();
   if (loose !== "") return OID.test(loose) ? loose : undefined;
-  return packedRef(await readIfExists(join(dirs.commonDir, "packed-refs")), ref) ?? null;
+  return packedRef(await readIfExists(join(commonDir, "packed-refs")), ref) ?? null;
 }
 
 /** `<oid> <ref>` lines of `packed-refs`; `#` header and `^` peeled lines are skipped. */

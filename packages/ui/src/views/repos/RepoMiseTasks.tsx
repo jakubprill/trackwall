@@ -13,6 +13,7 @@ import { relativeTime } from "@/lib/format";
 import { isLive, runStateLabel, showsLastLines } from "@/lib/run-state";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
+import { RepoLocalConfig } from "./RepoLocalConfig.tsx";
 import { RepoService } from "./RepoService.tsx";
 
 /**
@@ -22,15 +23,27 @@ import { RepoService } from "./RepoService.tsx";
 const POLL_LIVE_MS = 2000;
 const POLL_IDLE_MS = 10_000;
 
-/** The repo's mise tasks (ADR-20): the list from `mise tasks ls`, start and stop of the whole process group, the run state. */
+/**
+ * The repo's mise tasks (ADR-20): the list from `mise tasks ls`, start and stop of the whole process group, the run state;
+ * above them the repo's local config files and their backup (ADR-86).
+ */
 export function RepoMiseTasks({ conn, repo }: { conn: Connection; repo: string }) {
   const load = useCallback(() => post(conn, miseApi.tasks, { repo }), [conn, repo]);
   const remote = useRemote(load, { pollMs: pollInterval });
 
-  if (!remote.data) {
-    return remote.error ? <ErrorWithRetry message={remote.error} onRetry={remote.reload} /> : <Loading />;
-  }
-  return <TaskPanel conn={conn} repo={repo} tasks={remote.data} onChange={remote.reload} />;
+  return (
+    <div className="flex flex-col gap-4">
+      {/* A restored mise.local.toml brings its mise tasks, so the list is fetched again at once. */}
+      <RepoLocalConfig conn={conn} repo={repo} onRestored={remote.reload} />
+      {remote.data ? (
+        <TaskPanel conn={conn} repo={repo} tasks={remote.data} onChange={remote.reload} />
+      ) : remote.error ? (
+        <ErrorWithRetry message={remote.error} onRetry={remote.reload} />
+      ) : (
+        <Loading />
+      )}
+    </div>
+  );
 }
 
 function pollInterval(tasks: MiseTasks | undefined): number {
@@ -51,7 +64,8 @@ function TaskPanel({ conn, repo, tasks, onChange }: { conn: Connection; repo: st
   if (tasks.kind === "ok") {
     return tasks.tasks.length === 0 ? (
       <p className="text-muted-foreground text-sm">
-        This repo has no mise tasks. Add them under [tasks] in mise.toml in the repo root to run setup, dev or build from here.
+        This repo has no mise tasks. Add them under [tasks] in mise.toml in the repo root, or in mise.local.toml to keep them out of git, to
+        run setup, dev or build from here.
       </p>
     ) : (
       <div className="flex flex-col gap-4">

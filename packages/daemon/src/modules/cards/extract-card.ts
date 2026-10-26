@@ -9,7 +9,9 @@ import { extractMaven, readsMavenFile } from "./maven.ts";
 import { detectMechanisms } from "./mechanisms.ts";
 import { extractMiseSetup, isMiseConfigFile } from "./mise-tasks.ts";
 import { extractNpm, readsNpmFile } from "./npm.ts";
-import type { SourceSelection } from "./read-snapshot.ts";
+import { withOpenApi } from "./openapi-endpoints.ts";
+import { SPEC_SEARCH } from "./openapi-spec.ts";
+import type { ContentSearch, SourceSelection } from "./read-snapshot.ts";
 import { dirOf } from "./repo-path.ts";
 import type { Extracted, RepoSnapshot } from "./snapshot.ts";
 import { extractSpring, isJvmSource, JVM_SOURCE_GLOBS, JVM_SOURCE_PATTERN } from "./spring.ts";
@@ -20,7 +22,7 @@ import { extractTools, readsToolFile } from "./tools.ts";
 /**
  * The repo card from one commit (§4.6, ADR-25, ADR-30): build system extractors, then tools from their build
  * directories, configuration and mise tasks (ADR-34), HTTP facts (Spring and frontend) with endpoint contracts and DTOs
- * (ADR-38), the client calls each endpoint reaches from the call files (ADR-82), and the list of mechanisms from what
+ * (ADR-38), endpoints from OpenAPI specs (ADR-87), the client calls each endpoint reaches from the call files (ADR-82), and the list of mechanisms from what
  * the repo uses. The same commit gives the same card, unless the parsers did not produce a syntax tree in time
  * (`CardParsers.complete`, `CallFiles.complete`).
  */
@@ -51,8 +53,14 @@ export const CARD_SOURCES: SourceSelection = {
   pattern: JVM_SOURCE_PATTERN,
   globs: JVM_SOURCE_GLOBS,
   accepts: isJvmSource,
+  // Controllers and HTTP clients are a fraction of the code, so this fits even in a large monorepo.
+  max: 3000,
+  holding: "controllers or HTTP clients",
   referencedTypes: referencedTypeNames,
 };
+
+/** Files found by content and read with the build files: OpenAPI specs under any name (ADR-87). */
+export const CARD_DOCUMENTS: ContentSearch = SPEC_SEARCH;
 
 /** The source files the endpoint reach reads (ADR-82): every Java and Kotlin file of app code, not only those from the search. */
 export const CALL_SOURCES = isJvmSource;
@@ -73,11 +81,13 @@ export function extractCard(snapshot: RepoSnapshot, parsers: SyntaxParsers, call
     all.flatMap((e) => e.provides),
     parsers,
   );
+  // After the contracts: an endpoint from a spec has its types from the spec, not from a method's syntax (ADR-87).
+  const openApi = withOpenApi(snapshot, contracts.provides);
   const clients = consumes.filter((c): c is ConsumedHttp => c.kind === "http");
   return {
     commit: snapshot.commit,
     buildFiles: all.flatMap((e) => e.buildFiles),
-    provides: withReaches(contracts.provides, clients, calls.files),
+    provides: withReaches(openApi.provides, clients, calls.files),
     consumes,
     dtos: contracts.dtos,
     reachTraced: calls.files !== null,
@@ -87,7 +97,14 @@ export function extractCard(snapshot: RepoSnapshot, parsers: SyntaxParsers, call
       consumes.filter((c) => c.kind === "package"),
       snapshot.paths,
     ),
-    problems: [...snapshot.problems, ...all.flatMap((e) => e.problems), ...mise.problems, ...contracts.problems, ...calls.problems],
+    problems: [
+      ...snapshot.problems,
+      ...all.flatMap((e) => e.problems),
+      ...mise.problems,
+      ...contracts.problems,
+      ...openApi.problems,
+      ...calls.problems,
+    ],
   };
 }
 

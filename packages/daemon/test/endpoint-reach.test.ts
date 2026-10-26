@@ -320,6 +320,30 @@ public class Api {
     });
   });
 
+  test("an endpoint from an OpenAPI spec reaches the calls of the controller method named like its operationId, and one without such a method has no reach (ADR-87)", () => {
+    const c = card({
+      "pom.xml": "<project><groupId>g</groupId><artifactId>a</artifactId></project>",
+      "openapi.yaml": `openapi: 3.0.3
+paths:
+  /levels/{sku}:
+    get:
+      operationId: get-level
+  /levels:
+    delete:
+      operationId: clearLevels
+`,
+      [`${dir}/clients/StockClient.java`]: STOCK_CLIENT,
+      [`${dir}/LevelsController.java`]: `package com.example.shop;
+import com.example.shop.clients.StockClient;
+@RestController
+public class LevelsController implements LevelsApi {
+  private StockClient stock;
+  @Override public int getLevel(String sku) { return stock.level(sku); }
+}`,
+    });
+    expect(reaches(c)).toEqual({ "GET /levels/{sku}": ["StockClient GET /levels/{sku}"], "DELETE /levels": null });
+  });
+
   test("without call files the card did not trace, and every endpoint is without a reach", () => {
     const c = extractCard(
       snapshotOf({ [`${dir}/Api.java`]: '@RestController public class Api { @GetMapping("/a") public int a() { return 1; } }' }),

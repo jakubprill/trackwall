@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { CARD_SOURCES, extractCard } from "../src/modules/cards/extract-card.ts";
+import { CARD_DOCUMENTS, CARD_SOURCES, extractCard } from "../src/modules/cards/extract-card.ts";
 import { readSnapshot } from "../src/modules/cards/read-snapshot.ts";
 import { loadSyntaxParsers } from "../src/modules/cards/syntax-tree.ts";
 import { NO_CALL_SOURCES, NO_REACH, snapshotOf } from "./support/snapshot.ts";
@@ -35,7 +35,15 @@ describe("card problem codes (ADR-80)", () => {
       readFiles: async () => new Map([["pom.xml", Buffer.from("<project/>")]]),
       grepFiles: async () => ({ paths: [], truncated: false }),
     };
-    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), (path) => path.endsWith("pom.xml"), CARD_SOURCES, NO_CALL_SOURCES);
+    const snapshot = await readSnapshot(
+      vcs,
+      "/repo",
+      "a".repeat(40),
+      (path) => path.endsWith("pom.xml"),
+      CARD_SOURCES,
+      NO_CALL_SOURCES,
+      CARD_DOCUMENTS,
+    );
     expect(snapshot.pathsComplete).toBe(false);
     expect(snapshot.problems).toEqual([
       {
@@ -56,7 +64,15 @@ describe("card problem codes (ADR-80)", () => {
       readFiles: async () => new Map<string, Buffer>(),
       grepFiles: async () => ({ paths: [], truncated: false }),
     };
-    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), (path) => path.endsWith("pom.xml"), CARD_SOURCES, NO_CALL_SOURCES);
+    const snapshot = await readSnapshot(
+      vcs,
+      "/repo",
+      "a".repeat(40),
+      (path) => path.endsWith("pom.xml"),
+      CARD_SOURCES,
+      NO_CALL_SOURCES,
+      CARD_DOCUMENTS,
+    );
     expect(snapshot.problems).toContainEqual({
       code: "files-not-read",
       path: "",

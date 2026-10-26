@@ -1,15 +1,13 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { BranchOnRemote } from "@trackwall/protocol";
 import { countBetween } from "./commit-range.ts";
 import { existingCommit, git } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
-import { remoteAddress } from "./remote.ts";
+import { withoutHooks } from "./no-hooks.ts";
+import { networkAddress } from "./remote.ts";
 
 /**
  * A task branch against the main remote and its push (ADR-77). The read compares only refs, as the last push or fetch
- * left them, without the network. The push is the only write to a server the daemon makes: one branch, by its full
+ * left them, without the network. The push is one of the daemon's two writes to a server (the other is the local config store's, ADR-86): one branch, by its full
  * name on both sides, never forced, so a remote that moved on refuses it and nothing is lost there. The task's agent
  * shares the repo's configuration and writes in the worktree, so the push takes from neither what it could plant: no
  * hooks, no tags or submodules, no other receiving program, and no push address other than the one the panel shows (§8).
@@ -54,26 +52,11 @@ export async function pushBranch(dir: string, branch: string): Promise<void> {
       `${remote.name} pushes to ${elsewhere}, not to ${fetchesFrom} it fetches from; Trackwall pushes only where it fetches from`,
     );
   const ref = `refs/heads/${branch}`;
-  // Hooks run from `core.hooksPath`, which may point into the worktree (`.husky`): not only `pre-push`, which
-  // `--no-verify` skips, but also `reference-transaction` when git updates the remote-tracking branch.
-  const noHooks = mkdtempSync(join(tmpdir(), "trackwall-no-hooks-"));
-  try {
-    await git(dir, ["push", "--no-follow-tags", "--no-recurse-submodules", "--", remote.name, `${ref}:${ref}`], {
+  await withoutHooks((hooksPath) =>
+    git(dir, ["push", "--no-follow-tags", "--no-recurse-submodules", "--", remote.name, `${ref}:${ref}`], {
       timeoutMs: PUSH_TIMEOUT_MS,
       network: { sshCommand: config.sshCommand },
-      config: [`core.hooksPath=${noHooks}`, `remote.${remote.name}.receivepack=git-receive-pack`, "push.gpgSign=false"],
-    });
-  } finally {
-    rmSync(noHooks, { recursive: true, force: true });
-  }
-}
-
-/**
- * An HTTPS or SSH (also scp-style) address as `host/path`, so both spellings of one repo match and a token in a URL never
- * reaches a message; `undefined` for anything else: a local path, `file://`, `git://`, `http://`, `ext::`.
- */
-function networkAddress(url: string): string | undefined {
-  const scheme = /^([A-Za-z][A-Za-z0-9+.-]*):\/\//.exec(url)?.[1]?.toLowerCase();
-  if (scheme !== undefined && scheme !== "https" && scheme !== "ssh") return undefined;
-  return remoteAddress(url);
+      config: [hooksPath, `remote.${remote.name}.receivepack=git-receive-pack`, "push.gpgSign=false"],
+    }),
+  );
 }

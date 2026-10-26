@@ -1,6 +1,7 @@
 import type { Stats } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
+import { fileKey } from "../../infra/file-key.ts";
 
 /**
  * Reading a repo's git directory without a `git` process (§4.5): where its files are, and the reads the repo watch
@@ -52,11 +53,6 @@ export async function readIfExists(path: string): Promise<string> {
     if (isMissing(err)) return "";
     throw err;
   }
-}
-
-/** Size and file identity next to the time: a rename over the file gives a new identity even within one timestamp tick. */
-export function fileKey(info: Stats): string {
-  return `${info.mtimeMs}:${info.size}:${info.ino}`;
 }
 
 export function optionalKey(info: Stats | undefined): string {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { globMatcher } from "../src/infra/glob.ts";
-import { CARD_SOURCES, extractCard } from "../src/modules/cards/extract-card.ts";
+import { CARD_DOCUMENTS, CARD_SOURCES, extractCard } from "../src/modules/cards/extract-card.ts";
 import { extractGradle } from "../src/modules/cards/gradle.ts";
 import { extractMaven } from "../src/modules/cards/maven.ts";
 import { extractNpm } from "../src/modules/cards/npm.ts";
@@ -93,7 +93,15 @@ describe("repo card with malicious and large files", () => {
       readFiles: async () => new Map([["pom.xml", Buffer.from("<project/>")]]),
       grepFiles: async () => ({ paths: [], truncated: false }),
     };
-    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), (path) => path.endsWith("pom.xml"), CARD_SOURCES, NO_CALL_SOURCES);
+    const snapshot = await readSnapshot(
+      vcs,
+      "/repo",
+      "a".repeat(40),
+      (path) => path.endsWith("pom.xml"),
+      CARD_SOURCES,
+      NO_CALL_SOURCES,
+      CARD_DOCUMENTS,
+    );
     expect(snapshot.text("pom.xml")).toBe("<project/>");
     expect(snapshot.problems).toEqual([
       { code: "files-not-read", path: "api/pom.xml", message: "the file was not read within the 67108864 B commit read limit" },
@@ -176,10 +184,18 @@ describe("repo card with malicious and large files", () => {
         throw new Error("git grep: timed out");
       },
     };
-    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), (path) => path.endsWith("pom.xml"), CARD_SOURCES, NO_CALL_SOURCES);
+    const snapshot = await readSnapshot(
+      vcs,
+      "/repo",
+      "a".repeat(40),
+      (path) => path.endsWith("pom.xml"),
+      CARD_SOURCES,
+      NO_CALL_SOURCES,
+      CARD_DOCUMENTS,
+    );
     expect(snapshot.text("pom.xml")).toBe("<project/>");
     expect(snapshot.problems).toEqual([
-      { code: "files-not-read", path: "", message: "searching for files with controllers and HTTP clients failed: git grep: timed out" },
+      { code: "files-not-read", path: "", message: "searching for files with controllers or HTTP clients failed: git grep: timed out" },
     ]);
   });
 

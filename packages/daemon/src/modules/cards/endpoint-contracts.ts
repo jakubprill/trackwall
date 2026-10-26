@@ -65,6 +65,7 @@ export function extractContracts(snapshot: RepoSnapshot, provides: readonly Prov
  * interface the controller implements has a method with the same name).
  */
 function withContract(endpoint: ProvidedEndpoint, syntax: SyntaxOfFiles): ProvidedEndpoint {
+  if (endpoint.handler === null) return endpoint;
   const name = simpleName(endpoint.handler);
   const methods = (syntax.of(endpoint.evidence.path)?.methods ?? []).filter((m) => m.name === name);
   const contract = methodAt(methods, endpoint.evidence.line) ?? methods[0];
