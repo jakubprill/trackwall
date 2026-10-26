@@ -1,7 +1,7 @@
-import type { Stats } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { isAbsolute, join, resolve } from "node:path";
+import { join } from "node:path";
 import { mapLimit } from "../../infra/map-limit.ts";
+import { fileKey, gitDirs, optionalKey, statIfExists } from "./git-dir.ts";
 
 /**
  * The state of a repo's HEAD and refs read from the files in its git directory, without a `git` process (§4.5, ADR-63):
@@ -133,60 +133,4 @@ async function refsKeys(
   if (listedAt - info.mtimeMs > RACY_MS) visited.set(dir, listing);
   const nested = await Promise.all(listing.subdirs.map((name) => refsKeys(join(dir, name), `${path}/${name}`, previous, visited)));
   return [`refs${path} ${info.mtimeMs}`, ...nested.flat()];
-}
-
-/**
- * `undefined` for a file that is not there; any other error (a sharing violation while git renames over the file, an
- * antivirus, a network timeout) throws, so the repo counts as not readable this time instead of as changed.
- */
-async function statIfExists(path: string): Promise<Stats | undefined> {
-  try {
-    return await stat(path);
-  } catch (err) {
-    if (isMissing(err)) return undefined;
-    throw err;
-  }
-}
-
-function isMissing(err: unknown): boolean {
-  const code = (err as NodeJS.ErrnoException).code;
-  return code === "ENOENT" || code === "ENOTDIR";
-}
-
-/** Size and file identity next to the time: a rename over the file gives a new identity even within one timestamp tick. */
-function fileKey(info: Stats): string {
-  return `${info.mtimeMs}:${info.size}:${info.ino}`;
-}
-
-function optionalKey(info: Stats | undefined): string {
-  return info ? fileKey(info) : "-";
-}
-
-/**
- * The git directory of the repo (with `HEAD`) and the common one (with `refs/` and `packed-refs`): both `.git` in a normal
- * clone; in a worktree `.git` is a file with `gitdir: <path>`, and that directory names the common one in `commondir`.
- */
-async function gitDirs(repo: string): Promise<{ gitDir: string; commonDir: string } | null> {
-  const dotGit = join(repo, ".git");
-  const info = await statIfExists(dotGit);
-  if (!info) return null;
-  if (info.isDirectory()) return { gitDir: dotGit, commonDir: dotGit };
-  const pointer = /^gitdir:\s*(.+?)\s*$/m.exec(await readFile(dotGit, "utf8"));
-  if (!pointer?.[1]) return null;
-  const gitDir = relativeTo(repo, pointer[1]);
-  const common = (await readIfExists(join(gitDir, "commondir"))).trim();
-  return { gitDir, commonDir: common ? relativeTo(gitDir, common) : gitDir };
-}
-
-async function readIfExists(path: string): Promise<string> {
-  try {
-    return await readFile(path, "utf8");
-  } catch (err) {
-    if (isMissing(err)) return "";
-    throw err;
-  }
-}
-
-function relativeTo(base: string, path: string): string {
-  return isAbsolute(path) ? path : resolve(base, path);
 }

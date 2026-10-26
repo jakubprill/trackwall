@@ -20,18 +20,23 @@ describe("parseStatus", () => {
       changes: 3,
       untracked: 1,
       upstream: { name: "origin/main", ahead: 2, behind: 3 },
-      hasCommits: true,
+      headOid: "1111111111111111111111111111111111111111",
     });
   });
 
   test("a detached HEAD without a tracked branch", () => {
     const out = ["# branch.oid 1111111111111111111111111111111111111111", "# branch.head (detached)", ""].join("\0");
-    expect(parseStatus(out)).toMatchObject({ branch: null, upstream: null, changes: 0, hasCommits: true });
+    expect(parseStatus(out)).toMatchObject({
+      branch: null,
+      upstream: null,
+      changes: 0,
+      headOid: "1111111111111111111111111111111111111111",
+    });
   });
 
   test("a repo without commits and a tracked branch that does not exist on the remote", () => {
     const out = ["# branch.oid (initial)", "# branch.head main", "# branch.upstream origin/deleted", ""].join("\0");
-    expect(parseStatus(out)).toMatchObject({ branch: "main", upstream: null, hasCommits: false });
+    expect(parseStatus(out)).toMatchObject({ branch: "main", upstream: null, headOid: null });
   });
 });
 

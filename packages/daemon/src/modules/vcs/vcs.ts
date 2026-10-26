@@ -11,6 +11,7 @@ import type {
   WorkingTreeChanges,
 } from "@trackwall/protocol";
 import { branchOnRemote, pushBranch } from "./branch-push.ts";
+import { CommitMemo } from "./commit-memo.ts";
 import {
   type BranchTip,
   type CommitRange,
@@ -20,10 +21,12 @@ import {
   newestCommits,
   remoteDefaultBranch,
 } from "./commit-range.ts";
+import { ConfigMemo } from "./config-memo.ts";
 import { git } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { type GitState, GitStateReader } from "./git-state.ts";
 import { grep, grepFiles } from "./grep.ts";
+import { readHeadCommit } from "./head-commit.ts";
 import { hostedProject } from "./hosted-project.ts";
 import { KeyedQueue } from "./keyed-queue.ts";
 import { type GitObject, isBinary, LOG_FORMAT, parseBlobs, parseLog, parseObjects, parseStatus, parseTree } from "./parse.ts";
@@ -52,6 +55,8 @@ export class Vcs {
   private readonly syncing = new KeyedQueue();
   private readonly worktreeOps = new KeyedQueue();
   private readonly states = new GitStateReader();
+  private readonly headCommits = new CommitMemo();
+  private readonly configs = new ConfigMemo();
 
   /**
    * HEAD and refs of every repo read from the files of its git directory, without a `git` process (ADR-63); `null` for a
@@ -62,11 +67,19 @@ export class Vcs {
     return this.states.readAll(dirs);
   }
 
+  /**
+   * One `git status` per call: the HEAD commit's author, date and subject come from `headCommits` by the hash status gives,
+   * so the repo list starts one process per repo (ADR-79), not two.
+   */
   async status(dir: string): Promise<RepoStatusOk> {
     const { stdout } = await git(dir, ["status", "--porcelain=v2", "--branch", "-z"]);
-    const { hasCommits, ...status } = parseStatus(stdout.toString("utf8"));
-    const [head] = hasCommits ? await this.log(dir, 1) : [];
-    return { ...status, head: head ?? null };
+    const { headOid, ...status } = parseStatus(stdout.toString("utf8"));
+    return { ...status, head: headOid === null ? null : await this.headCommits.get(headOid, () => this.newestCommit(dir, headOid)) };
+  }
+
+  private async newestCommit(dir: string, commit: string): Promise<Commit | null> {
+    const [head] = await newestCommits(dir, commit, 1);
+    return head ?? null;
   }
 
   /**
@@ -79,7 +92,7 @@ export class Vcs {
 
   /** The address of the main remote (`origin` or the only one) as `host/path` (ADR-21); `null` without such a remote. */
   async remote(dir: string): Promise<string | null> {
-    const remote = mainRemote(await readConfig(dir));
+    const remote = mainRemote(await this.configs.get(dir, () => readConfig(dir)));
     return (remote && remoteAddress(remote.url)) ?? null;
   }
 
@@ -200,8 +213,10 @@ export class Vcs {
     return { kind: "text", text: stdout.toString("utf8"), size: object.size, truncated };
   }
 
-  /** The full hash of the HEAD commit; `null` in a repo without commits. */
+  /** The full hash of the HEAD commit; `null` in a repo without commits. From the git directory's files when they tell for sure. */
   async headCommit(dir: string): Promise<string | null> {
+    const fromFiles = await readHeadCommit(dir).catch(() => undefined);
+    if (fromFiles !== undefined) return fromFiles;
     const [head] = await this.objects(dir, ["HEAD"]);
     return head?.type === "commit" ? head.oid : null;
   }
