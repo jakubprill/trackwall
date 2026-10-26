@@ -15,7 +15,8 @@
     "lint": "biome check --error-on-warnings . && knip",
     "format": "biome check --write .",
     "test": "pnpm -r test",
-    "test:contract": "pnpm --filter @trackwall/daemon test:contract"
+    "test:contract": "pnpm --filter @trackwall/daemon test:contract",
+    "test:e2e": "pnpm --filter @trackwall/ui build && pnpm --filter @trackwall/daemon test:e2e"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.2",

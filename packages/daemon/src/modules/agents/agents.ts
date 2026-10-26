@@ -75,6 +75,11 @@ function sessionDir(home: string, id: string): string {
   return join(home, SESSIONS_DIR, id);
 }
 
+/** A session's token file, which its stdio bridge reads (ADR-39). */
+export function sessionTokenFile(home: string, id: string): string {
+  return join(sessionDir(home, id), SESSION_TOKEN_FILENAME);
+}
+
 /** A session's `hooks.jsonl`. */
 export function sessionHooksFile(home: string, id: string): string {
   return join(sessionDir(home, id), HOOKS_FILENAME);

@@ -1,11 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
 import { agentsApi, GetMessagesResult, GetUpdatesResult, ProposeTaskResult, SendMessageResult } from "@trackwall/protocol";
-import { SESSION_TOKEN_HEADER } from "../src/mcp/endpoint.ts";
 import { viewer, waitFor } from "./support/agents.ts";
-import { connectHttpClient } from "./support/mcp-client.ts";
+import { connectHttpClient, connectSessionClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
 
 const TOKEN = "m".repeat(43);
@@ -27,8 +24,7 @@ afterAll(async () => {
 }, 30_000);
 
 async function clientOfSession(session: string): Promise<Client> {
-  const token = readFileSync(join(daemon.home, "sessions", session, "session-token"), "utf8");
-  const client = await connectHttpClient(daemon.api.port, TOKEN, undefined, { [SESSION_TOKEN_HEADER]: token });
+  const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session);
   clients.push(client);
   return client;
 }

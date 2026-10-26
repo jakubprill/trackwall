@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
 import { Client, StreamableHTTPClientTransport, type VersionNegotiationOptions } from "@modelcontextprotocol/client";
 import { loopbackRequest } from "../../src/infra/loopback.ts";
-import { MCP_PATH } from "../../src/mcp/endpoint.ts";
+import { MCP_PATH, SESSION_TOKEN_HEADER } from "../../src/mcp/endpoint.ts";
+import { sessionTokenFile } from "../../src/modules/agents/agents.ts";
 
 /**
  * A real MCP client from the SDK (§10) connected over Streamable HTTP to the daemon on `port`. `fetch` goes through
@@ -37,4 +39,13 @@ function loopbackFetch(port: number) {
     const noBody = res.status === 202 || res.status === 204;
     return new Response(noBody ? null : res.body, { status: res.status, headers: responseHeaders });
   };
+}
+
+/**
+ * The MCP client of a Trackwall session's agent, as its Stdio bridge connects: the daemon token and the session token
+ * from the file in the session directory under `home`.
+ */
+export function connectSessionClient(port: number, token: string, home: string, session: string): Promise<Client> {
+  const sessionToken = readFileSync(sessionTokenFile(home, session), "utf8").trim();
+  return connectHttpClient(port, token, undefined, { [SESSION_TOKEN_HEADER]: sessionToken });
 }
