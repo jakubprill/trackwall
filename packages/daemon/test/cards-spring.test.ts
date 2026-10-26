@@ -217,7 +217,9 @@ describe("Spring HTTP clients", () => {
       "src/main/java/a/Rest.java": `class Rest {\n  RestTemplate rest;\n  void x() { rest.exchange("/api/orders", HttpMethod.POST, new HttpEntity<>(Map.of(${body})), String.class); }\n}\n`,
     });
     expect(summary(c)).toEqual(["rest-template Rest app=null url=null [] {POST /api/orders}"]);
-    expect(c.problems).toEqual([{ path: "", message: "profiles skipped over the limit of 32 in this module: 1 (the last ones by name)" }]);
+    expect(c.problems).toEqual([
+      { code: "truncated", path: "", message: "profiles skipped over the limit of 32 in this module: 1 (the last ones by name)" },
+    ]);
   });
 
   test("a profile file (application-prod.yml) overrides an on-profile document from application.yml, as in Spring Boot", () => {

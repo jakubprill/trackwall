@@ -78,7 +78,7 @@ describe("cards", () => {
     expect(await cache.getOrCompute(commit, () => Promise.reject(new Error("the card is in memory")))).toEqual(card);
     expect(existsSync(join(cardsDir, `${commit}.json`))).toBe(false);
     const restarted = new CardCache(cardsDir, () => {});
-    const recomputed = { ...card, problems: [{ path: "", message: "computed again" }] };
+    const recomputed = { ...card, problems: [{ code: "file-invalid" as const, path: "", message: "computed again" }] };
     expect(await restarted.getOrCompute(commit, async () => ({ card: recomputed, persist: true }))).toEqual(recomputed);
   });
 

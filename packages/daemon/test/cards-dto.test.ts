@@ -130,6 +130,7 @@ describe("endpoint contracts and DTOs", () => {
     expect(contracts(c.provides)).toEqual(["GET /a - -> -"]);
     expect(c.problems).toEqual([
       {
+        code: "parse-incomplete",
         path: "src/main/kotlin/a/Api.kt",
         message: "parsing the file took longer than 1000 ms; its endpoints have no request and response types and its DTOs are missing",
       },
@@ -147,6 +148,7 @@ describe("endpoint contracts and DTOs", () => {
     expect(budgeted.complete).toBe(false);
     expect(problems).toEqual([
       {
+        code: "parse-incomplete",
         path: "",
         message:
           "parsing Java and Kotlin took longer than 0 ms; the remaining endpoints have no request and response types and the DTO list is incomplete",
@@ -167,6 +169,7 @@ describe("endpoint contracts and DTOs", () => {
     expect(c.dtos).toEqual([]);
     expect(c.problems).toEqual([
       {
+        code: "parse-incomplete",
         path: "",
         message:
           "Java and Kotlin parsers could not be loaded (grammar missing); endpoints have no request and response types and the card has no DTOs",
@@ -226,7 +229,7 @@ describe("endpoint contracts and DTOs", () => {
     });
     expect(c.dtos.map((d) => (d.kind === "enum" ? `${d.name}: ${d.values.length}` : d.name))).toEqual(["Many: 200"]);
     expect(c.problems).toEqual([
-      { path: "src/main/java/a/Api.java", message: "Many has more than 200 constants; the card lists the first ones" },
+      { code: "truncated", path: "src/main/java/a/Api.java", message: "Many has more than 200 constants; the card lists the first ones" },
     ]);
   });
 
@@ -249,8 +252,8 @@ describe("endpoint contracts and DTOs", () => {
     const wide = c.dtos[0];
     expect(wide?.kind === "class" ? wide.fields.length : 0).toBe(200);
     expect(c.problems).toEqual([
-      { path: "src/main/java/a/Api.java", message: "Wide has more than 200 fields; the card lists the first ones" },
-      { path: "", message: "some types are longer than 256 characters; the card shows their beginning" },
+      { code: "truncated", path: "src/main/java/a/Api.java", message: "Wide has more than 200 fields; the card lists the first ones" },
+      { code: "truncated", path: "", message: "some types are longer than 256 characters; the card shows their beginning" },
     ]);
   });
 });
@@ -304,6 +307,7 @@ describe("reading the type files the HTTP code mentions", () => {
     const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES);
     expect(snapshot.problems).toEqual([
       {
+        code: "files-not-read",
         path: "",
         message:
           "2 type files referenced from HTTP code were not read (at most 3000 files within the 67108864 B commit read limit); their DTOs are missing",
@@ -342,7 +346,11 @@ describe("reading the type files the HTTP code mentions", () => {
     const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), () => false, CARD_SOURCES);
     expect([...snapshot.typeFiles]).toEqual([]);
     expect(snapshot.problems).toEqual([
-      { path: "src/main/java/a/OrdersApi.java", message: "the file was not read within the 67108864 B commit read limit" },
+      {
+        code: "files-not-read",
+        path: "src/main/java/a/OrdersApi.java",
+        message: "the file was not read within the 67108864 B commit read limit",
+      },
     ]);
   });
 });

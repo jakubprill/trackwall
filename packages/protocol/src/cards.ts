@@ -147,8 +147,17 @@ export const Mechanism = z.object({
 });
 export type Mechanism = z.infer<typeof Mechanism>;
 
-/** A build or configuration file the extractor could not read; the rest of the card is made without it. */
-export const CardProblem = z.object({ path: z.string(), message: z.string() });
+/**
+ * What kind of gap a card problem is (ADR-80), so the UI and MCP can tell a missing file from a cut list without reading
+ * the message: `files-not-read` a file or files the card did not read (read limits, a failed search), `file-invalid` a
+ * file the extractor could not parse, `parse-incomplete` Java or Kotlin without syntax trees (no request and response
+ * types, DTOs missing), `truncated` a list the card keeps only the first part of, or a type only its beginning.
+ */
+export const CardProblemCode = z.enum(["files-not-read", "file-invalid", "parse-incomplete", "truncated"]);
+export type CardProblemCode = z.infer<typeof CardProblemCode>;
+
+/** Something the card could not read or shows only in part; the rest of the card is made without it. `path` is a file or a module directory, empty for the repo root or the whole repo. */
+export const CardProblem = z.object({ code: CardProblemCode, path: z.string(), message: z.string() });
 export type CardProblem = z.infer<typeof CardProblem>;
 
 /**

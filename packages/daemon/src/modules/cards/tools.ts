@@ -64,7 +64,7 @@ export function extractTools(snapshot: RepoSnapshot, buildDirs: readonly string[
     try {
       out.tools.push(...miseTools(path, text));
     } catch (err) {
-      out.problems.push({ path, message: messageOf(err) });
+      out.problems.push({ code: "file-invalid", path, message: messageOf(err) });
     }
   }
   const toolVersions = snapshot.text(TOOL_VERSIONS);

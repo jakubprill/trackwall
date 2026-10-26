@@ -22,6 +22,7 @@ export function configClients(module: SpringModule, codeClients: readonly Consum
       if (!variant.source || !name || usedBy(used, variant.source, variant.value) || !parseHttpUrl(variant.value)) continue;
       if (clients.length >= MAX_CONFIG_CLIENTS) {
         out.problems.push({
+          code: "truncated",
           path: module.config.module,
           message: `the module has more than ${MAX_CONFIG_CLIENTS} addresses in its config; the card shows the first ones`,
         });

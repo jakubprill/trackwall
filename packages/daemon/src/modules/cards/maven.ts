@@ -52,7 +52,7 @@ export function extractMaven(snapshot: RepoSnapshot): Extracted {
     try {
       xml = parseXml(text);
     } catch (err) {
-      out.problems.push({ path, message: messageOf(err) });
+      out.problems.push({ code: "file-invalid", path, message: messageOf(err) });
       return;
     }
     poms.set(path, { path, xml, memberOf });

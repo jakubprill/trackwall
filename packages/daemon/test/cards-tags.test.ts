@@ -144,7 +144,7 @@ describe("mise configuration and the no-mise tag", () => {
     );
     expect(card.mise.configFiles).toEqual(["mise.toml", ".config/mise.toml", "mise/conf.d/broken.toml"]);
     expect(repoTags(card, { id: "app", remote: null }, {}).find((t) => t.name === "no-mise")?.reason).toBe("mise.toml declares no tasks");
-    expect(card.problems.map((p) => p.path)).toEqual(["mise/conf.d/broken.toml"]);
+    expect(card.problems.map((p) => `${p.code} ${p.path}`)).toEqual(["file-invalid mise/conf.d/broken.toml"]);
   });
 });
 

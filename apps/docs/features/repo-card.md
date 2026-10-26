@@ -36,6 +36,7 @@ From the card Trackwall gives each repo tags: `java`, `typescript`, `frontend`, 
 - A card is computed once per commit and kept in `~/.trackwall/cards`, so it opens instantly the next time.
 - You do not have to open anything first: when Trackwall starts, and after every commit, checkout or pull, it computes the missing cards in the background, two repos at a time, the repos you worked in most recently first. "Repo cards" in the "Daemon" view says how far it is ("computing 12 of 80", then "up to date").
 - A card describes the last commit, so a change you have not committed yet is not on it.
+- When a card is missing something, "Incomplete" at its top says what and why: a file not read (the repo is larger than the card reads), an invalid file (a `pom.xml` or `package.json` that does not parse), code not parsed (endpoints without request and response types), or a list cut short.
 - `no-mise` shows as the warning "no mise tasks": the setup and build steps of the [Batch command](/features/batch-command) and the [mise tasks](/features/mise-tasks) tab have nothing to run in that repo.
 - Add your own tags under `repoTags` in `~/.trackwall/workspace.yaml`, as a tag and the repo names or remote addresses it matches: `repoTags: { core-api: ["*-core"] }`. You edit this file by hand.
 - The card is what the [connection graph](/features/graph) and the [MCP server](/features/mcp) build on.

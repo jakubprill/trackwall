@@ -361,6 +361,9 @@ export const mcpTools = {
       "RestTemplate, addresses from application*.yml in every Spring profile, .env and the frontend proxy; with the app " +
       "name or address and the calls). Also required tool versions, detected mechanisms (Spring Boot, Feign, Kafka, " +
       "Eureka, Kubernetes…), the mise config files and mise tasks declared in the commit (mise) and tags with reasons. " +
+      "problems: what the card is missing, each with a code: files-not-read (a read limit or a failed search; facts from " +
+      "those files are missing), file-invalid (a file that could not be parsed), parse-incomplete (Java or Kotlin without " +
+      "request and response types or DTOs), truncated (a list or type cut to its beginning). " +
       "card: null in a repo without commits.",
     args: z.object({ repo: RepoArg }).strict(),
     result: RepoCardResult,

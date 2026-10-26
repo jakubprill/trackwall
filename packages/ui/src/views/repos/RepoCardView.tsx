@@ -19,7 +19,7 @@ import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
 import { Badge } from "@/components/ui/badge";
 import { post } from "@/lib/api";
-import { HTTP_CLIENT_LABELS, MECHANISM_LABELS } from "@/lib/card";
+import { CARD_PROBLEM_LABELS, HTTP_CLIENT_LABELS, MECHANISM_LABELS } from "@/lib/card";
 import type { Connection } from "@/lib/connection";
 import { useRemote } from "@/lib/use-remote";
 
@@ -67,11 +67,12 @@ function CardFacts({ card }: { card: RepoCard }) {
   return (
     <>
       {card.problems.length > 0 && (
-        <Surface label="Could not read" meta={card.problems.length}>
+        <Surface label="Incomplete" meta={card.problems.length}>
           <ul className="divide-y">
             {card.problems.map((p) => (
               <Row key={`${p.path}:${p.message}`}>
-                <span className="text-warning font-mono text-xs">{p.path || "repo"}</span>
+                <span className="text-warning shrink-0 text-xs">{CARD_PROBLEM_LABELS[p.code]}</span>
+                <span className="min-w-0 font-mono text-xs break-all">{p.path || "repo"}</span>
                 <span className="text-muted-foreground min-w-0 text-xs break-words">{p.message}</span>
               </Row>
             ))}
