@@ -26,11 +26,12 @@ test("mise.toml sets the versions of Node, Bun, pnpm and Rust", () => {
   expect(Object.keys(miseTools()).sort()).toEqual(["bun", "node", "pnpm", "rust"]);
 });
 
-/** The versions each workflow sets in `env`; the documentation site builds no Rust. */
+/** The versions each workflow sets in `env`; the documentation site and the nightly contract tests build no Rust. */
 const WORKFLOW_TOOLS = {
   ".github/workflows/ci.yml": { node: "NODE_VERSION", bun: "BUN_VERSION", rust: "RUST_VERSION" },
   ".github/workflows/release.yml": { node: "NODE_VERSION", bun: "BUN_VERSION", rust: "RUST_VERSION" },
   ".github/workflows/pages.yml": { node: "NODE_VERSION", bun: "BUN_VERSION" },
+  ".github/workflows/nightly.yml": { node: "NODE_VERSION", bun: "BUN_VERSION" },
 } satisfies Record<string, Partial<Record<"node" | "bun" | "rust", string>>>;
 
 test("every workflow uses the Node, Bun and Rust versions from mise.toml", () => {

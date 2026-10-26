@@ -8,7 +8,7 @@
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { COPILOT_CLI_VERSION } from "../../scripts/copilot-cli.ts";
+import { copilotCliVersion } from "../../scripts/copilot-cli.ts";
 import { readAgentDialog } from "../../src/modules/agents/copilot-dialog.ts";
 import type { CopilotHookRecord } from "../../src/modules/agents/copilot-hook-record.ts";
 import { windowTitleFromOsc } from "../../src/modules/agents/copilot-osc.ts";
@@ -32,7 +32,7 @@ const PROMPT_BOX_LINES = 4;
 export function startRecorder(daemon: { home: string; projects: string; copilot: string }) {
   const taking = process.env.TRACKWALL_RECORD === "1";
   const known = readReference();
-  const seen: Partial<CopilotReference> = { copilotVersion: COPILOT_CLI_VERSION, platform: process.platform };
+  const seen: Partial<CopilotReference> = { copilotVersion: copilotCliVersion(), platform: process.platform };
   const differences: string[] = [];
   // Copilot CLI names directories by their real path (macOS: /private/var/… for /var/…), and on Windows by the long one.
   const paths = [...new Set([daemon.projects, daemon.home].flatMap((p) => [p, realpathSync.native(p)]))];

@@ -9,12 +9,12 @@ import { spawnSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { COPILOT_CLI_VERSION, copilotCli } from "./copilot-cli.ts";
+import { copilotCli, copilotCliVersion } from "./copilot-cli.ts";
 
 const CONTRACT_DIR = fileURLToPath(new URL("../contract", import.meta.url));
 
 const binary = await copilotCli();
-process.stdout.write(`Copilot CLI ${COPILOT_CLI_VERSION}: ${binary}\n`);
+process.stdout.write(`Copilot CLI ${copilotCliVersion()}: ${binary}\n`);
 // `bun test` takes a path as a file to run only when it starts with ./ or /; the files are not named *.test.ts on purpose.
 const files = readdirSync(CONTRACT_DIR)
   .filter((name) => name.endsWith(".contract.ts"))
