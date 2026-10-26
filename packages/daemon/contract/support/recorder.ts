@@ -48,7 +48,7 @@ async function screenLines(window: Window): Promise<string[]> {
   }
 }
 
-export function startRecorder(daemon: { home: string; projects: string }) {
+export function startRecorder(daemon: { home: string; projects: string; copilot: string }) {
   const recording = process.env.TRACKWALL_RECORD === "1";
   const known = readReference();
   const seen: Partial<CopilotReference> = { copilotVersion: COPILOT_CLI_VERSION, platform: process.platform };
@@ -96,10 +96,12 @@ export function startRecorder(daemon: { home: string; projects: string }) {
 
     exit: (records: readonly CopilotHookRecord[]) => check("exit", hooks(records)),
 
+    /** The titles Copilot CLI set, without the one ConPTY on Windows sets first: the path of the program it started. */
     titles(window: Window, prompt: string): void {
       const titles = new OscParser()
         .feed(window.text())
         .flatMap((osc) => windowTitleFromOsc(osc) ?? [])
+        .filter((t) => t !== daemon.copilot)
         .map((t) => clean(t).replaceAll(prompt, PROMPT_PLACEHOLDER));
       check(
         "titles",

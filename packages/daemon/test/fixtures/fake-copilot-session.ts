@@ -5,7 +5,7 @@
  * the hooks with their payloads, the window titles, the input box and the approval dialog. The flow: a
  * welcome screen with the input box and no hook (waiting for you, read from the screen), a line from the user starts a
  * turn with an approval request (the first turn after `sessionStart`, at once with a prompt from `--interactive=`),
- * `1`, `2` or Enter approves and ends the turn, and `/exit` ends the session. The fake also prints what the tests check
+ * a "Yes" option or Enter approves and ends the turn, and `/exit` ends the session. The fake also prints what the tests check
  * (MCP servers, instructions, directory, arguments, the prompt) and, on every turn, starts a helper process (like an
  * agent's tool) and prints its PID, so that the test can check that stopping the session ends the whole group. The
  * helper starts only after input from the user, because on Windows the leader joins the job a moment after the start.
@@ -97,20 +97,23 @@ function submit(line: string): void {
   replay(real.approval.hooks.slice(2, asked));
 }
 
-/** Option 1 or 2 of the approval: the command runs and the turn ends. */
+/** A "Yes" option of the approval: the command runs and the turn ends. */
 function approve(): void {
   awaitingApproval = false;
   replay(real.approval.hooks.slice(asked));
   draw(real.promptBox);
 }
 
-/** Keys of the approval that run the command: its first two options, and Enter on the selected first one. */
-const APPROVE_KEYS = new Set(["1", "2", "\r", "\n"]);
+/**
+ * Keys of the approval that run the command: the digits of its "Yes" options (on Windows only `1`, since a PowerShell
+ * command has no "don't ask again"), and Enter on the selected first one.
+ */
+const APPROVE_KEYS = new Set(["\r", "\n", ...real.approval.dialog.flatMap((line) => /(\d)\. Yes\b/.exec(line)?.[1] ?? [])]);
 /** A bracketed paste's markers, a focus report and Esc: terminal input around typed text, not text. */
 const TERMINAL_SEQUENCES = ["\x1b[200~", "\x1b[201~", "\x1b[I", "\x1b[O", "\x1b"];
 const typedText = (chunk: Buffer) => TERMINAL_SEQUENCES.reduce((text, seq) => text.replaceAll(seq, ""), chunk.toString("utf8"));
 
-// Keys one by one, as Copilot CLI reads them: a digit answers the approval without Enter. A rejection (`3`, Esc) is not
+// Keys one by one, as Copilot CLI reads them: a digit answers the approval without Enter. A rejection ("No", Esc) is not
 // in the reference, so the fake keeps waiting for an approval.
 process.stdin.setRawMode?.(true);
 process.stdin.on("data", (chunk: Buffer) => {

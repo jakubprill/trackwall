@@ -44,13 +44,17 @@ function byokEnv(model: ScriptedModel, dirs: { home: string; projects: string })
 
 const TOKEN = "c".repeat(43);
 
-/** The daemon API with the real Copilot CLI on a projects folder with the one repo `shop`. */
+/**
+ * The daemon API with the real Copilot CLI on a projects folder with the one repo `shop`, and the path of the Copilot
+ * CLI binary.
+ */
 export async function startRealCopilotDaemon(model: ScriptedModel) {
-  const command = [await copilotCli()];
-  return startSessionApi(TOKEN, {
+  const copilot = await copilotCli();
+  const api = await startSessionApi(TOKEN, {
     ...ONE_REPO,
-    copilot: { command, env: (dirs) => byokEnv(model, dirs) },
+    copilot: { command: [copilot], env: (dirs) => byokEnv(model, dirs) },
   });
+  return { ...api, copilot };
 }
 
 /** The hook records the session plugin wrote for session `id`, in order. */
