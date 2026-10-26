@@ -91,6 +91,8 @@ export interface LiveSessionOptions {
   hooksFile: string;
   /** Copilot CLI got the prompt as its first message (`--interactive`), so it works right after the start. */
   promptOnStart: boolean;
+  /** The Copilot CLI program the session runs, the full path from `findCopilot`. */
+  program: string;
   /** The state of the session's process group in `procs`; `undefined` before the start. */
   run: () => RunState | undefined;
   /**
@@ -144,7 +146,12 @@ export class LiveSession {
     this.#promptText = o.prompt;
     this.#onUserText = o.onUserText;
     this.#onEvent = o.onEvent;
-    this.#state = new CopilotSessionState({ now: Date.now, staleAfterMs: STALE_AFTER_MS, promptOnStart: o.promptOnStart });
+    this.#state = new CopilotSessionState({
+      now: Date.now,
+      staleAfterMs: STALE_AFTER_MS,
+      promptOnStart: o.promptOnStart,
+      program: o.program,
+    });
     this.#screen = new TerminalScreen(o.cols, o.rows);
     this.#hooks = new HookTail(o.hooksFile);
   }

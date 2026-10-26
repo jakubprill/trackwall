@@ -29,7 +29,12 @@ export function stateFromOsc(osc: Osc): StateSignal | undefined {
   }
 }
 
-/** The window title (OSC 0 and 2): Copilot CLI writes there what the agent is working on now (`updateTerminalTitle`). */
-export function windowTitleFromOsc(osc: Osc): string | undefined {
-  return osc.code === "0" || osc.code === "2" ? osc.data : undefined;
+/**
+ * The window title (OSC 0 and 2): Copilot CLI writes there what the agent is working on now (`updateTerminalTitle`).
+ * ConPTY on Windows first sets the title to the path of the program it started (`program`, `null` when not known), before
+ * Copilot CLI sets its own, so that title is not Copilot CLI's and is left out.
+ */
+export function windowTitleFromOsc(osc: Osc, program: string | null): string | undefined {
+  if (osc.code !== "0" && osc.code !== "2") return undefined;
+  return osc.data === program ? undefined : osc.data;
 }

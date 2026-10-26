@@ -117,17 +117,17 @@ describe("Copilot CLI session state from a recording", () => {
 
   test("the first sessionStart of a task session that starts with a prompt is work, and a later one and one in a plain session is waiting for you", () => {
     const record = { event: "sessionStart" as const, receivedAt: 0, payload: {}, omitted: [] };
-    const task = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: true });
+    const task = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: true, program: null });
     expect(task.hook(record).map((c) => `${c.state} ${c.reason}`)).toEqual(["Working hook sessionStart with a prompt"]);
     // `/clear` in a task session: the new conversation has no prompt, so the session is waiting for you.
     expect(task.hook(record).map((c) => `${c.state} ${c.reason}`)).toEqual(["Input hook sessionStart"]);
-    const plain = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false });
+    const plain = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program: null });
     expect(plain.hook(record).map((c) => `${c.state} ${c.reason}`)).toEqual(["Input hook sessionStart"]);
   });
 
   test("the end of the process after the threshold without a periodic check first gives Stale, like replaying the recording", () => {
     let now = 0;
-    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false });
+    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false, program: null });
     session.output("\x1b]9;4;3;0\x07");
 
     now = 61_100;
@@ -136,7 +136,7 @@ describe("Copilot CLI session state from a recording", () => {
 
   test("the interrupted turn message right after a key ends work without a hook, also when split over two output chunks", () => {
     let now = 0;
-    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false });
+    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false, program: null });
     session.hook({ event: "notification", receivedAt: 0, payload: { notification_type: "permission_prompt" }, omitted: [] });
     // Enter on “No, and tell Copilot…”, and Copilot CLI ends the turn instead of waiting for text.
     now = 1_000;
@@ -151,7 +151,7 @@ describe("Copilot CLI session state from a recording", () => {
 
   test("the interrupted turn message without a recent key answer is redrawn screen history and does not change the state", () => {
     let now = 0;
-    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false });
+    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false, program: null });
     session.hook({ event: "notification", receivedAt: 0, payload: { notification_type: "permission_prompt" }, omitted: [] });
     session.key("enter");
     now = 20_000;
@@ -167,7 +167,7 @@ describe("Copilot CLI session state from a recording", () => {
 
   test("Esc after the threshold without a periodic check first gives Stale and then waiting for you, as live", () => {
     let now = 0;
-    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false });
+    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false, program: null });
     session.output("\x1b]9;4;3;0\x07");
 
     now = 61_100;
@@ -179,7 +179,7 @@ describe("Copilot CLI session state from a recording", () => {
 
   test("output after the threshold without a periodic check gives Stale and a return, like replaying the recording", () => {
     let now = 0;
-    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false });
+    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false, program: null });
     session.output("\x1b]9;4;3;0\x07");
 
     now = 61_100;
