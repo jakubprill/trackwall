@@ -9,7 +9,10 @@ import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import {
   DaemonInfoResult,
+  type DayReport,
+  dayStartApi,
   FindEndpointResult,
+  GetDayReportResult,
   GetRepoResult,
   ListReposResult,
   LogErrors,
@@ -99,6 +102,7 @@ describe("MCP server over Streamable HTTP", () => {
       "search_code",
       "list_sessions",
       "get_session",
+      "get_day_report",
       "get_task_changes",
       "propose_task",
       "report_result",
@@ -292,6 +296,36 @@ describe("MCP server over Streamable HTTP", () => {
       writeFileSync(workspaceFile, valid);
       await client.close();
     }
+  });
+
+  test("get_day_report is null before the first day start, then the report the last day start saved, also after a restart", async () => {
+    const client = await connectHttpClient(api.port, TOKEN);
+    const report = async () =>
+      GetDayReportResult.parse((await client.callTool({ name: "get_day_report", arguments: {} })).structuredContent);
+    expect(await report()).toEqual({ report: null });
+    const run = { method: "POST", token: TOKEN, body: "{}", headers: { "content-type": "application/json" } };
+    expect(JSON.parse((await loopbackRequest(api.port, dayStartApi.run.path, run)).body)).toEqual({ ok: true, data: null });
+
+    // What a day start of an earlier daemon left in the state directory.
+    const saved: DayReport = {
+      startedAt: "2026-10-26T07:00:00.000Z",
+      since: "2026-10-23T07:30:00.000Z",
+      repos: [
+        {
+          repo: "orders-bff",
+          remote: "gitlab.example.com/shop/orders-bff",
+          remoteBranch: "origin/main",
+          commits: { kind: "first-seen" },
+          sync: { state: "skipped", reason: "dirty", message: "main is checked out and has uncommitted changes", workingTree: null },
+        },
+      ],
+      quietRepos: 0,
+      tasks: [],
+    };
+    const heads = { [orders]: gitIn(orders, "rev-parse", "HEAD").trim() };
+    writeFileSync(join(home, "day-start.json"), JSON.stringify({ startedAt: saved.startedAt, heads, report: saved }));
+    expect(await report()).toEqual({ report: saved });
+    await client.close();
   });
 
   test("get_repo with an unknown repo returns a tool error with a code, not a protocol error", async () => {

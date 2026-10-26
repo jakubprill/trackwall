@@ -203,6 +203,7 @@ const runs: ToolRuns = {
       },
     );
   },
+  getDayReport: async (facade) => ({ report: facade.dayStart.report() }),
   getTaskChanges: (facade, { task, paths, maxPatchBytes }) => facade.agents.agentTaskChanges(task, maxPatchBytes, paths),
   proposeTask: async (facade, proposal, { caller }) => ({ proposal: await facade.agents.propose(caller, proposal) }),
   reportResult: async (facade, { summary }, { caller }) => ({ task: facade.agents.reportSummary(caller, summary) }),
@@ -265,6 +266,7 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.searchCode, runs.searchCode),
   defineTool(mcpTools.listSessions, runs.listSessions),
   defineTool(mcpTools.getSession, runs.getSession),
+  defineTool(mcpTools.getDayReport, runs.getDayReport),
   defineTool(mcpTools.getTaskChanges, runs.getTaskChanges),
   defineTool(mcpTools.proposeTask, runs.proposeTask),
   defineTool(mcpTools.reportResult, runs.reportResult),
