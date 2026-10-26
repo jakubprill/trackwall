@@ -25,6 +25,14 @@ test("the root of the daemon's src/ holds only the entry points and directories 
 });
 
 test("the root of the UI's src/ holds only entry points, and views have folders named after the view identifier", () => {
-  expect(trackedRootEntries("packages/ui/src")).toEqual(["App.tsx", "components", "index.css", "lib", "main.tsx", "views"]);
+  expect(trackedRootEntries("packages/ui/src")).toEqual([
+    "App.tsx",
+    "components",
+    "index.css",
+    "lib",
+    "main.tsx",
+    "views",
+    "zod-config.ts",
+  ]);
   expect(trackedRootEntries("packages/ui/src/views")).toEqual(["daemon", "graph", "home", "repos", "sessions", "settings", "tray-panel"]);
 });

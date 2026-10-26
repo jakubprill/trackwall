@@ -25,3 +25,9 @@ packageExtensions:
   vitepress-plugin-llms:
     dependencies:
       vite: "6.4.5"
+
+patchedDependencies:
+  # koota (Pawn's ECS) builds its trait accessors with `new Function`, which the Tauri window's CSP refuses, and the Home
+  # scene threw before it drew. The patch makes them closures that do the same. Remove it when koota stops generating code;
+  # the E2E test of the window under its CSP shows whether it does.
+  koota@0.6.6: patches/koota@0.6.6.patch
