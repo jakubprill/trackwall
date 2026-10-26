@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFacade, HOSTING_CLIS } from "../src/facade.ts";
 import { LocalConfig } from "../src/modules/local-config/local-config.ts";
+import { gitProcessesStarted } from "../src/modules/vcs/git.ts";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 
@@ -110,6 +111,19 @@ describe("the local config store", () => {
       { kind: "absent", file: "mise.local.toml" },
       { kind: "tracked", file: ".worktreeinclude" },
     ]);
+  });
+
+  test("a pass with nothing changed starts no git process, in a folder of 20 repos", async () => {
+    const { projects, backUp, storeCommits } = await setup();
+    for (let i = 0; i < 20; i++) writeFileSync(join(makeRepo({ "pom.xml": "<project/>" }, `repo-${i}`, projects), "mise.local.toml"), TASKS);
+    await backUp();
+    expect(storeCommits()).toBe(1);
+
+    const before = gitProcessesStarted();
+    await backUp();
+    await backUp();
+
+    expect(gitProcessesStarted() - before).toBe(0);
   });
 
   test("a file deleted from the repo stays in the store, and Restore brings it back and has git ignore it", async () => {
