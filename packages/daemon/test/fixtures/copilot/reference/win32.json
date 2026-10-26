@@ -1,0 +1,96 @@
+{
+  "copilotVersion": "1.0.103",
+  "platform": "win32",
+  "promptBox": [
+    "────────────────────────────────────────────────────────────────────────────────────────────────────",
+    "❯",
+    "────────────────────────────────────────────────────────────────────────────────────────────────────",
+    " ← open sidebar · Interactive · Manual Approval · / commands               trackwall-scripted-model"
+  ],
+  "titles": ["GitHub Copilot", "{prompt} - GitHub Copilot"],
+  "turn": [
+    {
+      "event": "sessionStart",
+      "payload": {
+        "source": "new"
+      },
+      "omitted": ["cwd", "initialPrompt"]
+    },
+    {
+      "event": "userPromptSubmitted",
+      "payload": {},
+      "omitted": ["cwd", "prompt"]
+    },
+    {
+      "event": "agentStop",
+      "payload": {
+        "stopReason": "end_turn"
+      },
+      "omitted": ["cwd", "stop_hook_active", "transcriptPath"]
+    }
+  ],
+  "approval": {
+    "hooks": [
+      {
+        "event": "sessionStart",
+        "payload": {
+          "source": "new"
+        },
+        "omitted": ["cwd", "initialPrompt"]
+      },
+      {
+        "event": "userPromptSubmitted",
+        "payload": {},
+        "omitted": ["cwd", "prompt"]
+      },
+      {
+        "event": "notification",
+        "payload": {
+          "notification_type": "permission_prompt",
+          "title": "Permission needed",
+          "message": "Run command: New-Item made-by-agent.txt"
+        },
+        "omitted": ["cwd", "hook_event_name"]
+      },
+      {
+        "event": "postToolUse",
+        "payload": {
+          "toolName": "powershell"
+        },
+        "omitted": ["cwd", "toolArgs", "toolResult"]
+      },
+      {
+        "event": "agentStop",
+        "payload": {
+          "stopReason": "end_turn"
+        },
+        "omitted": ["cwd", "stop_hook_active", "transcriptPath"]
+      }
+    ],
+    "dialog": [
+      "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮",
+      "│ Create a file                                                                                    │",
+      "│ ──────────────────────────────────────────────────────────────────────────────────────────────── │",
+      "│ ╭──────────────────────────────────────────────────────────────────────────────────────────────╮ │",
+      "│ │ New-Item made-by-agent.txt                                                                   │ │",
+      "│ ╰──────────────────────────────────────────────────────────────────────────────────────────────╯ │",
+      "│                                                                                                  │",
+      "│ Do you want to run this command?                                                                 │",
+      "│                                                                                                  │",
+      "│ ❯ 1. Yes                                                                                         │",
+      "│   2. No, and tell Copilot what to do differently (Esc to stop)                                   │",
+      "│                                                                                                  │",
+      "│ ↑/↓ to navigate · enter to select · esc to cancel                                                │",
+      "╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+    ]
+  },
+  "exit": [
+    {
+      "event": "sessionEnd",
+      "payload": {
+        "reason": "user_exit"
+      },
+      "omitted": ["cwd"]
+    }
+  ]
+}

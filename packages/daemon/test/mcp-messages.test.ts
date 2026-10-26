@@ -80,7 +80,7 @@ describe.skipIf(process.versions.bun === undefined)(
       const window = viewer(daemon.facade.agents, session);
       window.attachment.input("start\r");
       await waitFor(daemon.facade.agents, session, (s) => s.state?.state === "Approval", "the approval request");
-      window.attachment.input("y\r");
+      window.attachment.input("1");
       await waitFor(daemon.facade.agents, session, () => window.unwrappedText().includes(TYPED_MESSAGE), "the typed message prompt");
 
       const taskClient = await clientOfSession(session);
@@ -91,7 +91,7 @@ describe.skipIf(process.versions.bun === undefined)(
 
       // The turn the daemon's prompt started ends: the proposer is asked to read the update.
       await waitFor(daemon.facade.agents, session, (s) => s.state?.state === "Approval", "the message turn's approval request");
-      window.attachment.input("y\r");
+      window.attachment.input("1");
       await waitFor(daemon.facade.agents, main.id, () => main.window.unwrappedText().includes(TYPED_UPDATES), "the typed updates prompt");
       expect(GetUpdatesResult.parse((await call(main.client, "get_updates")).structuredContent)).toEqual({
         updates: [{ kind: "turn_ended", task: task.id, session, at: expect.any(String) }],

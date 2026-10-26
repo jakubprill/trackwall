@@ -122,7 +122,7 @@ describe.skipIf(process.versions.bun === undefined)("main session over MCP (real
       (await call(mainClient, "wait_for_session", { task: task.id, timeoutSeconds: 10 })).structuredContent,
     );
     expect(needsYou).toMatchObject({ status: "needs_attention", task: { id: task.id }, session: { id: taskSession } });
-    window.attachment.input("y\r");
+    window.attachment.input("1");
     window.attachment.detach();
 
     const reported = ReportResultResult.parse(

@@ -1,0 +1,97 @@
+{
+  "copilotVersion": "1.0.103",
+  "platform": "linux",
+  "promptBox": [
+    "────────────────────────────────────────────────────────────────────────────────────────────────────",
+    "❯",
+    "────────────────────────────────────────────────────────────────────────────────────────────────────",
+    " ← open sidebar · Interactive · Manual Approval · / commands               trackwall-scripted-model"
+  ],
+  "titles": ["GitHub Copilot", "{prompt} - GitHub Copilot"],
+  "turn": [
+    {
+      "event": "sessionStart",
+      "payload": {
+        "source": "new"
+      },
+      "omitted": ["cwd", "initialPrompt"]
+    },
+    {
+      "event": "userPromptSubmitted",
+      "payload": {},
+      "omitted": ["cwd", "prompt"]
+    },
+    {
+      "event": "agentStop",
+      "payload": {
+        "stopReason": "end_turn"
+      },
+      "omitted": ["cwd", "stop_hook_active", "transcriptPath"]
+    }
+  ],
+  "approval": {
+    "hooks": [
+      {
+        "event": "sessionStart",
+        "payload": {
+          "source": "new"
+        },
+        "omitted": ["cwd", "initialPrompt"]
+      },
+      {
+        "event": "userPromptSubmitted",
+        "payload": {},
+        "omitted": ["cwd", "prompt"]
+      },
+      {
+        "event": "notification",
+        "payload": {
+          "notification_type": "permission_prompt",
+          "title": "Permission needed",
+          "message": "Run command: touch made-by-agent.txt"
+        },
+        "omitted": ["cwd", "hook_event_name"]
+      },
+      {
+        "event": "postToolUse",
+        "payload": {
+          "toolName": "bash"
+        },
+        "omitted": ["cwd", "toolArgs", "toolResult"]
+      },
+      {
+        "event": "agentStop",
+        "payload": {
+          "stopReason": "end_turn"
+        },
+        "omitted": ["cwd", "stop_hook_active", "transcriptPath"]
+      }
+    ],
+    "dialog": [
+      "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮",
+      "│ Create a file                                                                                    │",
+      "│ ──────────────────────────────────────────────────────────────────────────────────────────────── │",
+      "│ ╭──────────────────────────────────────────────────────────────────────────────────────────────╮ │",
+      "│ │ touch made-by-agent.txt                                                                      │ │",
+      "│ ╰──────────────────────────────────────────────────────────────────────────────────────────────╯ │",
+      "│                                                                                                  │",
+      "│ Do you want to run this command?                                                                 │",
+      "│                                                                                                  │",
+      "│ ❯ 1. Yes                                                                                         │",
+      "│   2. Yes, and don't ask again for `touch` in this repo (/projects/shop)                          │",
+      "│   3. No, and tell Copilot what to do differently (Esc to stop)                                   │",
+      "│                                                                                                  │",
+      "│ ↑/↓ to navigate · enter to select · esc to cancel                                                │",
+      "╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+    ]
+  },
+  "exit": [
+    {
+      "event": "sessionEnd",
+      "payload": {
+        "reason": "user_exit"
+      },
+      "omitted": ["cwd"]
+    }
+  ]
+}

@@ -1,17 +1,21 @@
 /**
  * An interactive fake Copilot CLI for the daemon's session tests: it runs in a PTY, reads the plugin from `--plugin-dir`
- * and calls its hooks the way Copilot CLI does (the program from `exec` + `args`, a JSON payload on stdin). The flow:
- * a welcome screen with Copilot CLI's input box and footer and no hook (waiting for you, read from the screen, ADR-69),
- * a line from the user starts a turn with an approval request (`notification` `permission_prompt`), the first one after
- * `sessionStart` (at once with a prompt from `--interactive=`), `y` ends the turn (`agentStop`), and `/exit` ends the session (`sessionEnd`).
- * The window title and the progress bar go as OSC sequences, as in Copilot CLI. The first turn starts a helper process
- * (like an agent's tool) and prints its PID, so that the test can check that stopping the session ends the whole group.
- * The helper starts only after input from the user, because on Windows the leader joins the job a moment after the start.
+ * and calls its hooks the way Copilot CLI does (the program from `exec` + `args`, a JSON payload on stdin). What it
+ * sends and draws comes from the Copilot CLI reference of this system (`test/support/copilot-reference.ts`, ADR-67):
+ * the hooks with their payloads, the window titles, the input box and the approval dialog. The flow: a
+ * welcome screen with the input box and no hook (waiting for you, read from the screen), a line from the user starts a
+ * turn with an approval request (the first turn after `sessionStart`, at once with a prompt from `--interactive=`),
+ * a "Yes" option or Enter approves and ends the turn, and `/exit` ends the session. The fake also prints what the tests check
+ * (MCP servers, instructions, directory, arguments, the prompt) and, on every turn, starts a helper process (like an
+ * agent's tool) and prints its PID, so that the test can check that stopping the session ends the whole group. The
+ * helper starts only after input from the user, because on Windows the leader joins the job a moment after the start.
  */
 import { spawn } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { createInterface } from "node:readline";
 import { z } from "zod";
+import { ESCAPE } from "../../src/modules/agents/copilot-keys.ts";
+import { stripAnsi } from "../../src/modules/logs/stream-lines.ts";
+import { PROMPT_PLACEHOLDER, type ReferenceHook, reference } from "../support/copilot-reference.ts";
 import { pluginHooks } from "../support/plugin-hooks.ts";
 
 const fire = pluginHooks(process.argv, "s1");
@@ -33,44 +37,105 @@ const instructionFiles = (process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS ?? "")
  */
 const taskArgs = process.argv.filter((a) => /^--(interactive|resume|session-id|allow-tool|deny-tool)=/.test(a));
 
-process.stdout.write(`\x1b]0;Fake Copilot\x07Welcome to the fake, MCP: ${mcpServers.join(", ")}\r\n`);
+const real = reference();
+const title = (text: string) => process.stdout.write(`\x1b]0;${text}\x07`);
+const draw = (lines: readonly string[]) => process.stdout.write(`${lines.join("\r\n")}\r\n`);
+
+const initialPrompt = taskArgs.find((a) => a.startsWith("--interactive="))?.slice("--interactive=".length);
+
+/**
+ * Fires the reference's hooks with their payloads. Of the fields the reference leaves out, the directory and the prompts
+ * get their values; the rest (tool arguments and results, the transcript) an empty string, since the daemon keeps only
+ * their names.
+ */
+function replay(hooks: readonly ReferenceHook[], prompt = ""): void {
+  const values: Record<string, string> = { cwd: process.cwd(), prompt, initialPrompt: initialPrompt ?? "" };
+  for (const { event, payload, omitted } of hooks) {
+    fire(event, { ...Object.fromEntries(omitted.map((name) => [name, values[name] ?? ""])), ...payload });
+  }
+}
+
+/** The reference's turn with an approval, split where the fake waits for the answer: after the approval request. */
+const asked = real.approval.hooks.findIndex((h) => h.event === "notification") + 1;
+const [firstHook, secondHook] = real.approval.hooks;
+if (firstHook?.event !== "sessionStart" || secondHook?.event !== "userPromptSubmitted" || asked === 0) {
+  throw new Error("the approval turn of the reference does not start with sessionStart and userPromptSubmitted, or asks nothing");
+}
+const startHook: ReferenceHook = firstHook;
+const promptHook: ReferenceHook = secondHook;
+
+const [startTitle, ...turnTitles] = real.titles;
+if (startTitle === undefined) throw new Error("the reference has no window title");
+title(startTitle);
+process.stdout.write(`Welcome to the fake, MCP: ${mcpServers.join(", ")}\r\n`);
 process.stdout.write(`Instructions: ${instructionFiles.join(", ")}\r\n`);
 /** Half the session screen (`INITIAL_COLS` in `agents.ts`, 120 columns). */
 const CWD_LINE_CHARS = 60;
 // The directory in lines shorter than the screen: ConPTY on Windows wraps a longer line its own way, and the test joins the lines.
 process.stdout.write(`Directory:\r\n${process.cwd().replace(new RegExp(`.{${CWD_LINE_CHARS}}`, "g"), "$&\r\n")}\r\n`);
 for (const arg of taskArgs) process.stdout.write(`Argument: ${arg}\r\n`);
-// The bottom of Copilot CLI 1.0.103 waiting for the first prompt (test/fixtures/copilot/prompt-box-72.txt), narrower
-// than the session screen, so that it wraps nowhere.
-const rule = "─".repeat(72);
-process.stdout.write(`${rule}\r\n❯ \r\n${rule}\r\n Interactive · Manual Approval · / commands\r\n`);
+draw(real.promptBox);
 
 // A prompt given at the start (`--interactive=`, a task's session) is the first prompt, so it starts the hooks at once.
-let started = taskArgs.some((a) => a.startsWith("--interactive="));
-if (started) fire("sessionStart", { source: "new" });
+let started = initialPrompt !== undefined;
+if (started) replay([startHook]);
 let awaitingApproval = false;
-const lines = createInterface({ input: process.stdin });
-lines.on("line", (line) => {
+let typed = "";
+
+function submit(line: string): void {
   if (line === "/exit") {
-    fire("sessionEnd", { reason: "user_exit" });
+    replay(real.exit);
     process.exit(0);
   }
-  if (awaitingApproval) {
-    awaitingApproval = false;
-    fire("postToolUse", { toolName: "bash" });
-    process.stdout.write("\x1b]9;4;0;0\x07Done\r\n> ");
-    fire("agentStop", { stopReason: "end_turn" });
-    return;
-  }
   // Copilot CLI starts the session's hooks only with the first prompt (ADR-69).
-  if (!started) fire("sessionStart", { source: "new" });
+  replay(started ? [promptHook] : [startHook, promptHook], line);
   started = true;
-  fire("userPromptSubmitted", { prompt: line });
   const helper = spawn(process.execPath, ["-e", "setTimeout(() => {}, 600000)"], { stdio: "ignore" });
   process.stdout.write(`helper PID: ${helper.pid}\r\n`);
-  process.stdout.write(`\x1b]0;Working on: ${line}\x07\x1b]9;4;3;0\x07Thinking about: ${line}\r\nAllow bash? (y/n) `);
+  for (const turnTitle of turnTitles) title(turnTitle.replaceAll(PROMPT_PLACEHOLDER, line));
+  process.stdout.write(`Thinking about: ${line}\r\n`);
+  draw(real.approval.dialog);
   awaitingApproval = true;
-  fire("notification", { notification_type: "permission_prompt", message: "Allow bash?" });
+  replay(real.approval.hooks.slice(2, asked));
+}
+
+/** A "Yes" option of the approval: the command runs and the turn ends. */
+function approve(): void {
+  awaitingApproval = false;
+  replay(real.approval.hooks.slice(asked));
+  draw(real.promptBox);
+}
+
+/**
+ * Keys of the approval that run the command: the digits of its "Yes" options (on Windows only `1`, since a PowerShell
+ * command has no "don't ask again"), and Enter on the selected first one. Read from the reference's text, not with the
+ * daemon's dialog reader, so that the fake does not agree with the daemon by construction.
+ */
+const APPROVE_KEYS = new Set(["\r", "\n", ...real.approval.dialog.flatMap((line) => /(\d)\. Yes\b/.exec(line)?.[1] ?? [])]);
+
+/**
+ * Typed text without terminal input around it: CSI and OSC sequences (a bracketed paste's markers, a focus report, a
+ * colour reply) and Esc. A sequence split across two reads is not recognised, which the tests never send.
+ */
+const typedText = (chunk: Buffer) => stripAnsi(chunk.toString("utf8")).replaceAll(ESCAPE, "");
+
+// Keys one by one, as Copilot CLI reads them: a digit answers the approval without Enter. A rejection ("No", Esc) is not
+// in the reference, so the fake keeps waiting for an approval.
+process.stdin.setRawMode?.(true);
+process.stdin.on("data", (chunk: Buffer) => {
+  for (const key of typedText(chunk)) {
+    if (awaitingApproval) {
+      if (APPROVE_KEYS.has(key)) approve();
+    } else if (key === "\r" || key === "\n") {
+      process.stdout.write("\r\n");
+      const line = typed;
+      typed = "";
+      submit(line);
+    } else {
+      typed += key;
+      process.stdout.write(key);
+    }
+  }
 });
 // A stop from the UI (SIGTERM to the group) ends the fake like Copilot CLI: without the end-of-session hook.
 process.on("SIGTERM", () => process.exit(143));
