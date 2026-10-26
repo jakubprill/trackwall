@@ -13,7 +13,7 @@ import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
 import { oncePerFrame } from "@/lib/once-per-frame";
 import { pastedPaths } from "@/lib/pasted-paths";
 import { IS_MAC } from "@/lib/platform";
-import { copiesSelection, keepsSelection } from "@/lib/terminal-copy";
+import { copiesSelection, keepsSelection, pastesClipboard } from "@/lib/terminal-copy";
 import { hyperlinkHandler, trackwallLinkProvider } from "@/lib/terminal-links";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { terminalTheme } from "@/lib/terminal-theme";
@@ -142,6 +142,8 @@ export function SessionTerminal({
       else if (taken === "dropped") setNotice(KEYS_DROPPED);
     });
     terminal.attachCustomKeyEventHandler((event) => {
+      // `false` without `preventDefault`: xterm.js leaves the key alone and the browser pastes into its text area.
+      if (pastesClipboard(event, { mac: IS_MAC })) return false;
       if (!copiesSelection(event, { mac: IS_MAC, hasSelection: terminal.hasSelection() })) return true;
       // Without this the browser also runs its own shortcut: Ctrl+Shift+C opens the inspector in Chrome and in WebView2 in dev mode.
       event.preventDefault();
