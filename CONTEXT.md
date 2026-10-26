@@ -146,8 +146,11 @@ _Avoid_: check, CI, validation (that is a schema at the point of entry)
 A fixed string or a regular expression in the files of the latest commit of many repos of the projects folder at once, through `git grep` (ADR-40); a match (`CodeMatch`) is a repo, path, line, column and context lines. It does not see uncommitted changes, just like browsing a repo.
 _Avoid_: grep (the tool underneath), index (there is none)
 
+**Task worktrees folder** (`worktreesDir` in `workspace.yaml` and `tasks.json`):
+The folder new task worktrees go into (ADR-84): the user's setting, or by default `.trackwall-worktrees` in the projects folder, which the repo list skips. Never the projects folder itself or a folder inside one of its repos. Each task keeps the folder it was created in, so changing the setting moves no existing worktree.
+
 **Worktree** (task worktree, `Task.worktree`):
-A separate git working directory for a task, on the task's branch, in `worktrees/<repo>/<branch without prefix>` in the state directory, outside the projects folder (ADR-31). Computed from the repo and branch (`taskWorktree`), not stored in `tasks.json`. Removed only at the user's request and only without a running task session; uncommitted changes are lost only after confirmation.
+A separate git working directory for a task, on the task's branch, in `<task worktrees folder>/<repo>/<branch without prefix>` (ADR-31, ADR-84). Computed from the task's worktrees folder, the repo and the branch (`taskWorktree`), not stored in `tasks.json`; a task saved before ADR-84 has it in `worktrees/` of the state directory. Removed only at the user's request and only without a running task session; uncommitted changes are lost only after confirmation.
 
 **Base commit** (`Task.base`):
 The commit of the default branch from which the task's branch started. The task changes (`TaskChanges`) are the worktree's working directory against it: the task's commits and uncommitted files together.

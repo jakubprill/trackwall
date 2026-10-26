@@ -69,7 +69,8 @@ const SESSION_TOKEN_FILENAME = "session-token";
 const HOOKS_FILENAME = "hooks.jsonl";
 const SESSIONS_DIR = "sessions";
 const TASKS_FILE = "tasks.json";
-const WORKTREES_DIR = "worktrees";
+/** Where task worktrees went before ADR-84; tasks from then keep them there until they end. */
+const LEGACY_WORKTREES_DIR = "worktrees";
 
 /** A session's directory in the state directory: its plugin, MCP configuration, token and hook records. */
 function sessionDir(home: string, id: string): string {
@@ -110,6 +111,8 @@ interface AgentsProcs {
 interface AgentsRepos {
   repoPath(id: string): Promise<string>;
   projectsDir(): Promise<string>;
+  /** The task worktrees folder for a new task (ADR-84). */
+  worktreesDir(): Promise<string>;
   /** The `toolPermissions` patterns for a session in repo `repo` (`null` for the supervisor), ADR-66. */
   toolPermissions(repo: string | null): ToolPermissions;
   /** `supervisor` from `workspace.yaml` (ADR-78); `invalid_config` for a bad key. */
@@ -122,8 +125,8 @@ export interface AgentsDeps {
   /** Task worktrees and branches (ADR-31). */
   vcs: TasksVcs;
   /**
-   * The daemon's state directory; sessions keep their files in `sessions/<session>/`, tasks keep their list in `tasks.json`
-   * and their worktrees in `worktrees/<repo>/`.
+   * The daemon's state directory; sessions keep their files in `sessions/<session>/` and tasks their list in `tasks.json`
+   * (worktrees saved before ADR-84 are in `worktrees/<repo>/`, newer ones in the task worktrees folder of `workspace`).
    */
   home: string;
   /**
@@ -158,21 +161,18 @@ export class Agents {
   readonly #proposals = new TaskProposals();
   readonly #reviews = new TaskReviews();
   readonly #coordination: TaskCoordination;
-  readonly #worktreesDir: string;
   /** The supervisor start under way, so that two requests at once start one supervisor, not two (ADR-58). */
   #supervisorStart: Promise<Session> | undefined;
   #timer: NodeJS.Timeout | undefined;
 
   constructor(deps: AgentsDeps) {
     this.#deps = deps;
-    const worktreesDir = join(deps.home, WORKTREES_DIR);
-    this.#worktreesDir = worktreesDir;
     this.#tasks = new AgentTasks({
       vcs: deps.vcs,
       repos: deps.repos,
       file: new TaskFile(join(deps.home, TASKS_FILE), deps.log),
       liveIn: (dir) => deps.procs.liveIn(dir),
-      worktreesDir,
+      legacyWorktreesDir: join(deps.home, LEGACY_WORKTREES_DIR),
       openEditor: deps.openEditor,
       log: deps.log,
       sessions: {
@@ -197,7 +197,7 @@ export class Agents {
     const tasks = this.#tasks.list();
     // A proposal being approved that is already a task is only a task: the UI and `list_sessions` see one object.
     const proposals = this.#proposals.list().filter((p) => !tasks.some((t) => t.id === p.id));
-    return { sessions: this.#views(), tasks, proposals, messages: this.#coordination.messages(), worktreesDir: this.#worktreesDir };
+    return { sessions: this.#views(), tasks, proposals, messages: this.#coordination.messages() };
   }
 
   /** One listed session (`not_found` when it does not exist or the user closed it). */

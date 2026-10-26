@@ -17,7 +17,7 @@ export const TASK_BRANCH_PREFIX = "trackwall/";
 export const TaskBranch = z
   .string()
   .regex(new RegExp(`^${TASK_BRANCH_PREFIX}[a-z0-9][a-z0-9-]*$`), `task branch: ${TASK_BRANCH_PREFIX} and [a-z0-9-]`);
-/** Short: the worktree directory lies in the state directory, and Windows has a 260-character limit on a file's whole path in a repo. */
+/** Short: the worktree lies in the task worktrees folder, deeper than the repo root, and Windows has a 260-character limit on a file's whole path in a repo. */
 const SLUG_MAX = 32;
 const ID_CHARS = 6;
 
@@ -46,8 +46,8 @@ export function taskSlug(prompt: string, taskId: string): string {
 }
 
 /**
- * A task's worktree: `<worktrees directory>/<repo>/<branch without prefix>`. Computed, not stored, so `tasks.json` cannot
- * point to a directory outside the worktrees directory (the repo identifier and the branch have no path separators).
+ * A task's worktree: `<task worktrees folder>/<repo>/<branch without prefix>` (ADR-84). Computed, not stored, so `tasks.json`
+ * cannot point to a directory outside the task's folder (the repo identifier and the branch have no path separators).
  */
 export function taskWorktree(worktreesDir: string, repo: string, branch: string): string {
   return join(worktreesDir, repo, branch.slice(TASK_BRANCH_PREFIX.length));

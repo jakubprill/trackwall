@@ -8,6 +8,7 @@ const stored = {
   id: "3f2a9c1e-0000-4000-8000-000000000000",
   repo: "shop",
   repoDir: join(tmpdir(), "shop"),
+  worktreesDir: join(tmpdir(), ".trackwall-worktrees"),
   prompt: "fix",
   branch: "trackwall/fix-3f2a9c",
   baseBranch: "main",
@@ -62,6 +63,14 @@ describe("tasks.json", () => {
     ]);
   });
 
+  test("a task saved before the task worktrees folder comes back without one, so its worktree stays in the state directory", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
+    const { worktreesDir: _, ...old } = stored;
+    writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
+
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, worktreesDir: null }]);
+  });
+
   test("a task proposed before the supervisor comes back as not the supervisor's", () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
     const old = { ...stored, proposedBy: { session: stored.proposedBy.session } };
@@ -75,6 +84,7 @@ describe("tasks.json", () => {
     ["a branch with a path separator, because the worktree directory is made from it", { branch: "trackwall/../../documents" }],
     ["a base commit that is not a full hash, because it goes to git diff", { base: "--output=file" }],
     ["a relative repo root", { repoDir: "shop" }],
+    ["a relative task worktrees folder, because the worktree is deleted from it", { worktreesDir: "worktrees" }],
     ["a trusted mise config hash that is not SHA-256", { trustedMiseConfig: { "mise.toml": "not-a-hash" } }],
   ])("a task with %s moves the file aside and does not come back", (_, change) => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
