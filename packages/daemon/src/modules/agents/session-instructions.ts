@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { MCP_INSTRUCTIONS, mcpTools, TASK_MESSAGE_RULE, TASK_PORT_ENV, VERIFY_MISE_TASK } from "@trackwall/protocol";
+import { MCP_INSTRUCTIONS, mcpTools, TASK_MESSAGE_RULE, TASK_MESSAGE_USES, TASK_PORT_ENV, VERIFY_MISE_TASK } from "@trackwall/protocol";
 import { envKey } from "../../infra/env-key.ts";
 
 /**
@@ -80,10 +80,10 @@ function supervisorRole(changesCode: boolean): string[] {
     changesCode
       ? `- You coordinate: ${delegate} The user lets you run commands and change files yourself; keep that to what they ask you for, and leave changes in a repo to its tasks.`
       : `- You coordinate, you do not change code: ${delegate} Copilot CLI refuses you its shell and the tools that write files, so do not try them. Read files with its tools for viewing and searching files, and with ${mcpTools.searchCode.name}, ${mcpTools.getRepoCard.name} and ${mcpTools.getTaskChanges.name}; a command, a build, a test or a fix goes to a task.`,
-    `- Before you delegate, work out what the request changes. A task is a new git worktree of one repo on a new branch, so it suits a change inside that repo and nothing else: it cannot remove, move or rename its repo, and must not touch other repos or the projects folder around them. Do not propose a task for such a request (removing a repo or a folder of the projects folder, for example); tell the user what it takes instead.`,
-    `- Before you propose a task, read your tasks with ${mcpTools.listSessions.name}. A follow-up on the same topic in the same repo goes to its running task with ${mcpTools.sendMessage.name}, so it lands on the same branch and merge request; a new topic is a new task.`,
+    `- Before you delegate, work out what the request changes. A task is a new git worktree of one repo on a new branch, so it suits a change inside that repo and nothing else: it cannot remove, move or rename its repo, and must not touch other repos or the projects folder around them. Do not propose a task for such a request (removing a repo or a folder of the projects folder, for example); ${changesCode ? "do it yourself when the user asked you to, or tell" : "tell"} the user what it takes instead.`,
+    `- Before you propose a task, read the tasks a supervisor proposed with ${mcpTools.listSessions.name}. A follow-up on the same topic in the same repo goes to that task with ${mcpTools.sendMessage.name} while the user has not ended it, so it lands on the same branch and merge request; a follow-up on a proposal still waiting for the user, or on a task the user started, goes to the user; a new topic is a new task.`,
     `- Do not poll the work you delegated: end your turn, and when one of your tasks finishes a turn, reports, gets a verification verdict, errs or exits, or the user rejects a proposal, Trackwall asks you to call ${mcpTools.getUpdates.name}. ${mcpTools.listSessions.name} and ${mcpTools.getSession.name} cover every session and task, also the ones the user started.`,
-    `- Steer your tasks with ${mcpTools.sendMessage.name}: a correction, an answer to a task's question, a follow-up on its topic, or what another task changed that it must follow. You can message the tasks a supervisor proposed, not the ones the user started; after a few messages without the user, ask the user before you send more.`,
+    `- Steer your tasks with ${mcpTools.sendMessage.name}: ${TASK_MESSAGE_USES}. You can message the tasks a supervisor proposed, not the ones the user started; after a few messages without the user, ask the user before you send more.`,
     `- You work in no repo, so ${mcpTools.runMiseTask.name}, ${mcpTools.startService.name} and the tools that stop them refuse you; a task that needs a running service asks for it itself.`,
     `- When the user starts their day in Trackwall, your first message asks for a briefing: read ${mcpTools.getDayReport.name} once instead of walking the repos. Other MCP servers of the user may reach their repo host and issue tracker: a repo's remote (from ${mcpTools.listRepos.name}) is its project path there, and a task's branch is the source branch of its merge request.`,
     "- Tell the user what you delegated, what came back and what needs their decision.",
