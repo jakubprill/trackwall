@@ -56,14 +56,15 @@ async function record(argv: string[]): Promise<number> {
   // Without a terminal (redirected output) or in `script` the size is sometimes 0, and a 0×0 PTY breaks the TUI.
   const size = () => ({ cols: process.stdout.columns || DEFAULT_COLS, rows: process.stdout.rows || DEFAULT_ROWS });
   const { cols, rows } = size();
-  const recording = new Recording(out, { cols, rows });
+  const command = copilotCommand(values.copilot, [...positionals, "--plugin-dir", pluginDir]);
+  const recording = new Recording(out, { cols, rows }, command[0]);
   const hooks = new HookTail(hooksPath);
   const pumpHooks = () => {
     for (const r of hooks.read()) recording.hook(r);
   };
 
   const decoder = new TextDecoder();
-  const proc = Bun.spawn(copilotCommand(values.copilot, [...positionals, "--plugin-dir", pluginDir]), {
+  const proc = Bun.spawn(command, {
     terminal: { cols, rows, data: (_terminal, bytes) => recording.output(bytes, decoder.decode(bytes, { stream: true })) },
   });
   const terminal = proc.terminal;
@@ -136,10 +137,10 @@ class Recording {
    */
   #clock: number;
 
-  constructor(out: string, size: { cols: number; rows: number }) {
+  constructor(out: string, size: { cols: number; rows: number }, program: string) {
     this.#cast = new AsciicastWriter(join(out, "session.cast"), { width: size.cols, height: size.rows });
     this.#clock = this.#cast.startedAt;
-    this.#session = new CopilotSessionState({ now: () => this.#clock, staleAfterMs: STALE_AFTER_MS, promptOnStart: false });
+    this.#session = new CopilotSessionState({ now: () => this.#clock, staleAfterMs: STALE_AFTER_MS, promptOnStart: false, program });
     this.#statesFd = openSync(join(out, "states.jsonl"), "w");
   }
 
@@ -187,7 +188,7 @@ class Recording {
 }
 
 /** The Copilot CLI program with arguments; the same rule as in the daemon (`findCopilot`). */
-function copilotCommand(program: string | undefined, args: string[]): string[] {
+function copilotCommand(program: string | undefined, args: string[]): [string, ...string[]] {
   const found = findCopilot(program ?? "copilot", process.env);
   if (!found)
     throw new Error(`${program ?? "copilot"} not found in PATH (on Windows also copilot.exe next to copilot.cmd); give it with --copilot`);

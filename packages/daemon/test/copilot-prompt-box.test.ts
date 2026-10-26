@@ -41,7 +41,7 @@ describe("a new session's state from its input box (ADR-69)", () => {
   const record = (event: "sessionStart" | "agentStop" | "userPromptSubmitted") => ({ event, receivedAt: 0, payload: {}, omitted: [] });
 
   test("the input box, with or without text, is waiting for you only before the session has a state", () => {
-    const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false });
+    const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program: null });
     expect(summary(session.screen(() => withText))).toEqual(["Input screen medium screen input box before the first prompt"]);
 
     session.hook(record("userPromptSubmitted"));
@@ -49,7 +49,7 @@ describe("a new session's state from its input box (ADR-69)", () => {
   });
 
   test("in a session that starts with a prompt the input box is not waiting for you, and the first sessionStart starts work", () => {
-    const task = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: true });
+    const task = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: true, program: null });
 
     expect(task.screen(() => box)).toEqual([]);
     expect(task.inPromptBox(() => box)).toBe(false);
@@ -58,7 +58,7 @@ describe("a new session's state from its input box (ADR-69)", () => {
 
   test("a prompt the daemon typed before the first hook holds the box back for 5 s", () => {
     let now = 0;
-    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false });
+    const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false, program: null });
     session.promptTyped();
     expect(session.screen(() => box)).toEqual([]);
     expect(session.inPromptBox(() => box)).toBe(false);
@@ -71,7 +71,7 @@ describe("a new session's state from its input box (ADR-69)", () => {
   });
 
   test("the sessionStart of a typed prompt on its way starts work, also after a hook that changed nothing", () => {
-    const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false });
+    const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program: null });
     session.hook({ event: "notification", receivedAt: 0, payload: { notification_type: "agent_idle" }, omitted: [] });
     session.promptTyped();
 
@@ -80,14 +80,14 @@ describe("a new session's state from its input box (ADR-69)", () => {
   });
 
   test("without a known prompt the first sessionStart is waiting for you: /resume or /clear may send it", () => {
-    const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false });
+    const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program: null });
 
     expect(summary(session.hook(record("sessionStart")))).toEqual(["Input hook medium hook sessionStart"]);
     expect(session.inPromptBox(() => [])).toBe(true);
   });
 
   test("before the first hook the session is in its input box only while the screen shows the empty box now", () => {
-    const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false });
+    const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program: null });
 
     expect(session.inPromptBox(() => box)).toBe(true);
     expect(session.inPromptBox(() => screen("dialog-shell-120"))).toBe(false);
@@ -95,7 +95,7 @@ describe("a new session's state from its input box (ADR-69)", () => {
   });
 
   test("after the first hook the hooks say whether the session is in its input box, whatever the screen shows", () => {
-    const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false });
+    const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program: null });
     session.promptTyped();
     session.hook(record("sessionStart"));
     expect(session.inPromptBox(() => box)).toBe(false);

@@ -77,12 +77,11 @@ export function startRecorder(daemon: { home: string; projects: string; copilot:
 
     exit: (records: readonly CopilotHookRecord[]) => check("exit", hooks(records)),
 
-    /** The titles Copilot CLI set, without the one ConPTY on Windows sets first: the path of the program it started. */
+    /** The titles Copilot CLI set, read as the daemon reads them: without the one ConPTY on Windows sets first. */
     titles(window: Window, prompt: string): void {
       const titles = new OscParser()
         .feed(window.text())
-        .flatMap((osc) => windowTitleFromOsc(osc) ?? [])
-        .filter((t) => t !== daemon.copilot)
+        .flatMap((osc) => windowTitleFromOsc(osc, daemon.copilot) ?? [])
         .map((t) => clean(t).replaceAll(prompt, PROMPT_PLACEHOLDER));
       check(
         "titles",

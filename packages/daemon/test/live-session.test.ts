@@ -24,6 +24,7 @@ describe("a Copilot CLI session in the daemon", () => {
       rows: 24,
       hooksFile,
       promptOnStart: false,
+      program: "copilot",
       run: () => ({ kind: "running", runId: "r1", startedAt: "2026-10-24T12:00:00.000Z", pid: 1 }),
       prompt: () => undefined,
       onUserText: () => {},
@@ -134,6 +135,7 @@ function runningSession(
     rows: 24,
     hooksFile,
     promptOnStart: false,
+    program: "copilot",
     run,
     prompt,
     onUserText: () => {
