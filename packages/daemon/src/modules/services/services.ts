@@ -288,8 +288,7 @@ export class Services {
     if (!watch) return null;
     if (live) await this.deps.mise.stop(target, SERVICE_MISE_TASK);
     // The group has ended, but an app a build tool runs outside it (Gradle's daemon) may still hold the port a while.
-    if ((await watch.refresh()).state === "stopping")
-      await waitLimited(watch.released(), this.deps.releaseMs, new AbortController().signal);
+    if ((await watch.refresh()).state === "stopping") await waitLimited(watch.released(), this.deps.releaseMs);
     return watch.view();
   }
 
