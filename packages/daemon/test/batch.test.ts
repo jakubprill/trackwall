@@ -267,6 +267,9 @@ describe("batch command", () => {
 
       await batch.start({ repos: ["web"], steps: ["build"] });
       await joined;
+      // The stop waits until the fake mise runs its tree: a stop right after the spawn kills it before it writes
+      // `calls.log` on a slow runner, and the log would then be empty, not proof of a single start.
+      expect(await waitUntil(() => liveTree(dir("web")).length === 2, 15_000)).toBe(true);
       await mise.stop({ repo: "web", task: null }, "build");
       const run = await finished(batch);
 

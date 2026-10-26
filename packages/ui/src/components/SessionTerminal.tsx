@@ -8,6 +8,7 @@ import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { daemonSocket } from "@/lib/daemon-socket";
 import { DROP_HOVER_RING, FILE_DROP_TARGET, FileDropEvent } from "@/lib/file-drop";
+import { InputBeforeOpen } from "@/lib/input-before-open";
 import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
 import { oncePerFrame } from "@/lib/once-per-frame";
 import { pastedPaths } from "@/lib/pasted-paths";
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { FocusReporter, terminalInFront } from "@/lib/window-focus";
 
 const RECONNECT_MS = 1000;
+const KEYS_DROPPED = "The terminal was still connecting to the session, so some of the keys you typed were dropped.";
 
 /**
  * The session terminal of one session (§4.4, ADR-26): xterm.js connected over a WebSocket to the PTY in the daemon. The
@@ -29,7 +31,8 @@ const RECONNECT_MS = 1000;
  * session open in two windows (ADR-49) the one you work in sets it. The window also tells the daemon whether it is in front of the user, which marks the session seen
  * (ADR-47). In the grid (ADR-48) several terminals are open at once; only the `selected` one takes the keyboard and
  * counts as in front, so a waiting session in another tile keeps waiting until the user selects it. Files dropped on
- * the terminal (ADR-51) are pasted as their paths, as if the user typed them.
+ * the terminal (ADR-51) are pasted as their paths, as if the user typed them. Keys typed before the first connection
+ * opens wait for it (`InputBeforeOpen`).
  */
 export function SessionTerminal({
   conn,
@@ -82,6 +85,7 @@ export function SessionTerminal({
     let socket: WebSocket | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let disposed = false;
+    const early = new InputBeforeOpen();
     const send = (message: PtyClientMessage) => {
       if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
     };
@@ -104,8 +108,10 @@ export function SessionTerminal({
       ws.binaryType = "arraybuffer";
       socket = ws;
       ws.onopen = () => {
-        setNotice(undefined);
+        const held = early.open();
+        setNotice(held.dropped ? KEYS_DROPPED : undefined);
         sendSize();
+        for (const data of held.keys) send({ type: "input", data });
         focus.connected();
       };
       ws.onmessage = (event: MessageEvent<ArrayBuffer | string>) => {
@@ -120,13 +126,21 @@ export function SessionTerminal({
       ws.onclose = (event) => {
         if (disposed) return;
         if (event.code === PTY_CLOSE_NOT_FOUND) return setNotice("This session no longer exists in the daemon.");
-        setNotice("Lost the connection to the session terminal; reconnecting…");
+        setNotice(
+          early.fail()
+            ? "Could not connect to the session terminal, so the keys you typed were dropped; reconnecting…"
+            : "Lost the connection to the session terminal; reconnecting…",
+        );
         timer = setTimeout(connect, RECONNECT_MS);
       };
     };
     connect();
 
-    const input = terminal.onData((data) => send({ type: "input", data }));
+    const input = terminal.onData((data) => {
+      const taken = early.take(data);
+      if (taken === "send") send({ type: "input", data });
+      else if (taken === "dropped") setNotice(KEYS_DROPPED);
+    });
     terminal.attachCustomKeyEventHandler((event) => {
       if (!copiesSelection(event, { mac: IS_MAC, hasSelection: terminal.hasSelection() })) return true;
       // Without this the browser also runs its own shortcut: Ctrl+Shift+C opens the inspector in Chrome and in WebView2 in dev mode.
