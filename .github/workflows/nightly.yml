@@ -1,11 +1,7 @@
 name: Nightly Copilot CLI
 
-# The contract tests (ADR-67) on the newest stable Copilot CLI on npm instead of the pinned one, on Linux, Windows and
-# macOS, every night. Copilot CLI ships almost every working day, so a version that changes a hook, a payload field or
-# the approval dialog shows up here before anyone raises COPILOT_CLI_VERSION in packages/daemon/scripts/copilot-cli.ts.
-# A failure opens an issue for that version (or comments on the open one), and a green run on the newest version closes
-# the open ones. Each failed `contract` job log prints the Copilot CLI reference it saw, which the PR raising the
-# version starts from (docs/development.md). Not part of `CI ok`: a new Copilot CLI must not turn every PR red.
+# The contract tests on the newest stable Copilot CLI on npm instead of the pinned one, every night, outside `CI ok`;
+# a failure on main opens an issue for that version (ADR-67, clarification of 2026-10-26; docs/development.md).
 on:
   schedule:
     # Once a night (UTC), outside the full hour when scheduled runs queue the longest.
@@ -25,13 +21,9 @@ concurrency:
 # No permissions by default; every job gets only what it needs.
 permissions: {}
 
-# The same versions as in mise.toml; apps/desktop/test/toolchain.test.ts guards this.
-env:
-  BUN_VERSION: "1.4.4"
-  NODE_VERSION: "22"
-
 jobs:
   # Once for all systems, so that a release published during the run does not test different versions side by side.
+  # A run that cannot resolve the version (the registry down) only fails, without an issue: no version is to blame.
   version:
     name: newest Copilot CLI
     runs-on: ubuntu-latest
@@ -44,7 +36,8 @@ jobs:
           WANTED: ${{ inputs.copilot-cli }}
         run: |
           version="${WANTED:-$(curl -fsS https://registry.npmjs.org/-/package/@github/copilot/dist-tags | jq -r .latest)}"
-          # The version comes from the registry or a person and goes into an issue title, so only an exact version passes.
+          # Checked here and not only by copilotCliVersion() in scripts/copilot-cli.ts (keep the two patterns alike),
+          # because the version goes into an issue title in `report`, which checks nothing out.
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
             echo "::error::not an exact Copilot CLI version: $version"
             exit 1
@@ -52,35 +45,22 @@ jobs:
           echo "Copilot CLI $version"
           echo "copilot-cli=$version" >> "$GITHUB_OUTPUT"
 
-  # The same steps as the `contract` job of ci.yml, without the cache: a new version would not hit it anyway.
   contract:
-    name: contract with Copilot CLI ${{ needs.version.outputs.copilot-cli }} (${{ matrix.os }})
     needs: version
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
     permissions:
       contents: read
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          bun-version: ${{ env.BUN_VERSION }}
-      - run: pnpm test:contract
-        env:
-          TRACKWALL_COPILOT_CLI: ${{ needs.version.outputs.copilot-cli }}
+    uses: ./.github/workflows/contract.yml
+    with:
+      copilot-cli: ${{ needs.version.outputs.copilot-cli }}
 
-  # One open issue per failing version; a cancelled or skipped run reports nothing.
+  # Only a run of main speaks for Trackwall: a manual run of a branch would close or open issues for code not in main.
+  # A cancelled or skipped run reports nothing.
   report:
     name: report
     needs: [version, contract]
-    if: always() && (needs.contract.result == 'success' || needs.contract.result == 'failure')
+    if: >-
+      always() && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+      && (needs.contract.result == 'success' || needs.contract.result == 'failure')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -100,9 +80,14 @@ jobs:
           title="$prefix $VERSION"
           open=$(gh issue list --state open --limit 100 --search "\"$prefix\" in:title" --json number,title)
           if [ "$RESULT" = success ]; then
-            filter='.[] | select(.title | startswith($prefix)) | .number'
-            [ "$NEWEST" = true ] || filter='.[] | select(.title == $title) | .number'
-            for number in $(jq -r --arg prefix "$prefix " --arg title "$title" "$filter" <<< "$open"); do
+            if [ "$NEWEST" = true ]; then
+              # Issues of stable versions only (none is newer than the newest one); an issue of a prerelease tested by
+              # hand, or one a person wrote, stays open.
+              close=$(jq -r --arg prefix "$prefix" '.[] | select(.title | test("^" + $prefix + " [0-9]+\\.[0-9]+\\.[0-9]+$")) | .number' <<< "$open")
+            else
+              close=$(jq -r --arg title "$title" '.[] | select(.title == $title) | .number' <<< "$open")
+            fi
+            for number in $close; do
               gh issue close "$number" --comment "The contract tests pass on Copilot CLI $VERSION on all three systems: $RUN"
             done
             exit 0

@@ -19,6 +19,7 @@ export const COPILOT_CLI_VERSION = "1.0.103";
 
 /** An exact version that replaces the pinned one in the contract tests (`.github/workflows/nightly.yml`). */
 const VERSION_ENV = "TRACKWALL_COPILOT_CLI";
+/** The same pattern as in the `version` job of nightly.yml; keep the two alike. */
 const EXACT_VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/;
 
 /** The version the contract tests run on: `TRACKWALL_COPILOT_CLI` when set, otherwise the pinned one. */
@@ -42,7 +43,8 @@ function platformPackage(): string {
 const BINARY = process.platform === "win32" ? "copilot.exe" : "copilot";
 
 /** The binary's path in the cache, downloaded first when it is not there. */
-export async function copilotCli(version = copilotCliVersion()): Promise<string> {
+export async function copilotCli(): Promise<string> {
+  const version = copilotCliVersion();
   const dir = join(CACHE, version, `${process.platform}-${process.arch}`);
   const binary = join(dir, BINARY);
   if (existsSync(binary)) return binary;

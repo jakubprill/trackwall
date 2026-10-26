@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { REPO } from "../scripts/lib.ts";
@@ -26,13 +26,19 @@ test("mise.toml sets the versions of Node, Bun, pnpm and Rust", () => {
   expect(Object.keys(miseTools()).sort()).toEqual(["bun", "node", "pnpm", "rust"]);
 });
 
-/** The versions each workflow sets in `env`; the documentation site and the nightly contract tests build no Rust. */
+/** The versions each workflow sets in `env`; the documentation site and the contract tests build no Rust, the nightly workflow only calls contract.yml. */
 const WORKFLOW_TOOLS = {
   ".github/workflows/ci.yml": { node: "NODE_VERSION", bun: "BUN_VERSION", rust: "RUST_VERSION" },
   ".github/workflows/release.yml": { node: "NODE_VERSION", bun: "BUN_VERSION", rust: "RUST_VERSION" },
   ".github/workflows/pages.yml": { node: "NODE_VERSION", bun: "BUN_VERSION" },
-  ".github/workflows/nightly.yml": { node: "NODE_VERSION", bun: "BUN_VERSION" },
+  ".github/workflows/contract.yml": { node: "NODE_VERSION", bun: "BUN_VERSION" },
+  ".github/workflows/nightly.yml": {},
 } satisfies Record<string, Partial<Record<"node" | "bun" | "rust", string>>>;
+
+test("every workflow in .github/workflows is checked for its tool versions", () => {
+  const workflows = readdirSync(join(REPO, ".github/workflows")).map((name) => `.github/workflows/${name}`);
+  expect(workflows.sort()).toEqual(Object.keys(WORKFLOW_TOOLS).sort());
+});
 
 test("every workflow uses the Node, Bun and Rust versions from mise.toml", () => {
   const tools = miseTools();
