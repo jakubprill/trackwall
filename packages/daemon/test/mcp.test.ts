@@ -322,7 +322,7 @@ describe("MCP server over Streamable HTTP", () => {
       quietRepos: 0,
       tasks: [],
     };
-    const heads = { "orders-bff": gitIn(orders, "rev-parse", "HEAD").trim() };
+    const heads = { [orders]: gitIn(orders, "rev-parse", "HEAD").trim() };
     writeFileSync(join(home, "day-start.json"), JSON.stringify({ startedAt: saved.startedAt, heads, report: saved }));
     expect(await report()).toEqual({ report: saved });
     await client.close();

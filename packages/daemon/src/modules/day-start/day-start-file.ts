@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { CommitHash, DayReport, RepoId } from "@trackwall/protocol";
+import { CommitHash, DayReport } from "@trackwall/protocol";
 import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
 
@@ -12,7 +12,8 @@ import { writeFileAtomic } from "../../infra/atomic-write.ts";
 const DayStartState = z.object({
   /** ISO 8601. */
   startedAt: z.iso.datetime(),
-  heads: z.record(RepoId, CommitHash),
+  /** By repo root, as the sync joins its results (ADR-18). */
+  heads: z.record(z.string(), CommitHash),
   report: DayReport,
 });
 export type DayStartState = z.infer<typeof DayStartState>;

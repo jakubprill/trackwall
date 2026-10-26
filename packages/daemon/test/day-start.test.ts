@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type DayStartRun, mcpTools, type Session, type Task } from "@trackwall/protocol";
 import { DomainError } from "../src/infra/errors.ts";
+import { dayReport } from "../src/modules/day-start/day-report.ts";
 import { DayStart } from "../src/modules/day-start/day-start.ts";
 import { DayStartFile } from "../src/modules/day-start/day-start-file.ts";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
@@ -83,7 +84,7 @@ async function finished(dayStart: DayStart): Promise<DayStartRun> {
 
 /** A day start run to its end, which must have started the supervisor. */
 async function startDay(dayStart: DayStart): Promise<DayStartRun> {
-  dayStart.start();
+  await dayStart.start();
   const run = await finished(dayStart);
   expect(run.error).toBeNull();
   return run;
@@ -292,7 +293,7 @@ describe("the day start", () => {
     const { dayStart, workspace, cloned } = setup({ supervisorRuns: true });
     cloned("api");
 
-    expect(() => dayStart.start()).toThrow("the supervisor is running; stop it to start your day with a new one");
+    await expect(dayStart.start()).rejects.toThrow("the supervisor is running; stop it to start your day with a new one");
     expect(workspace.syncRun()).toBeNull();
     expect(dayStart.run()).toBeNull();
   });
@@ -303,8 +304,7 @@ describe("the day start", () => {
       const { dayStart, cloned, firstMessages } = setup();
       cloned("api");
 
-      const first = dayStart.start();
-      const second = dayStart.start();
+      const [first, second] = await Promise.all([dayStart.start(), dayStart.start()]);
       expect(second.startedAt).toBe(first.startedAt);
       await finished(dayStart);
       expect(firstMessages).toHaveLength(1);
@@ -321,7 +321,7 @@ describe("the day start", () => {
       expect(good.firstMessages[0]).toEndWith("each, so I can ask for the ones I want.\n\nCheck my open issues in the tracker.");
 
       const bad = setup({ workspaceYaml: "dayStart:\n  prompt: ''\n" });
-      expect(() => bad.dayStart.start()).toThrow(/dayStart/);
+      await expect(bad.dayStart.start()).rejects.toThrow(/dayStart/);
     },
     GIT_HEAVY_MS,
   );
@@ -332,7 +332,7 @@ describe("the day start", () => {
       const { dayStart, cloned } = setup({ supervisorFails: "no Copilot CLI in PATH" });
       cloned("api");
 
-      dayStart.start();
+      await dayStart.start();
       const run = await finished(dayStart);
 
       expect(run).toMatchObject({ step: "supervisor", error: "no Copilot CLI in PATH", supervisor: null });
@@ -358,4 +358,60 @@ describe("the day start", () => {
     },
     GIT_HEAVY_MS,
   );
+});
+
+describe("the day report", () => {
+  test("a repo whose branch cannot be read this time keeps the commit from before, so what lands meanwhile is not lost", async () => {
+    const api = { id: "api", path: "/projects/api" };
+    const vcs = {
+      remote: async () => null,
+      remoteDefaultBranch: async () => {
+        throw new Error("git config: bad config line 3");
+      },
+      isAncestor: async () => true,
+      countBetween: async () => 0,
+      commitsBetween: async () => ({ total: 0, commits: [] }),
+      newestCommits: async () => [],
+    };
+    const old = "a".repeat(40);
+    const logged: string[] = [];
+    const sync = { startedAt: "2026-10-26T07:00:00.000Z", finishedAt: "2026-10-26T07:00:05.000Z", repos: [] };
+    const previous = { startedAt: "2026-10-25T07:00:00.000Z", heads: { "/projects/api": old, "/projects/gone": "b".repeat(40) } };
+
+    const { report, heads } = await dayReport(
+      vcs,
+      { startedAt: sync.startedAt, previous, repos: [api], sync, tasks: [], sessions: [] },
+      (msg) => logged.push(msg),
+    );
+
+    expect(heads).toEqual({ "/projects/api": old });
+    expect(report.repos).toEqual([]);
+    expect(logged).toEqual(["day report: api: Error: git config: bad config line 3"]);
+  });
+
+  test("a repo whose new commits cannot be read keeps the commit from before, and a directory named like an Object property has no saved commit", async () => {
+    const tip = "c".repeat(40);
+    const repos = [
+      { id: "api", path: "/projects/api" },
+      { id: "constructor", path: "constructor" },
+    ];
+    const vcs = {
+      remote: async () => null,
+      remoteDefaultBranch: async () => ({ name: "origin/main", commit: tip }),
+      isAncestor: async () => true,
+      countBetween: async () => 0,
+      commitsBetween: async () => {
+        throw new Error("git rev-list: timed out after 15000 ms");
+      },
+      newestCommits: async () => [],
+    };
+    const old = "a".repeat(40);
+    const sync = { startedAt: "2026-10-26T07:00:00.000Z", finishedAt: "2026-10-26T07:00:05.000Z", repos: [] };
+    const previous = { startedAt: "2026-10-25T07:00:00.000Z", heads: { "/projects/api": old } };
+
+    const { report, heads } = await dayReport(vcs, { startedAt: sync.startedAt, previous, repos, sync, tasks: [], sessions: [] }, () => {});
+
+    expect(heads).toEqual({ "/projects/api": old, constructor: tip });
+    expect(report.repos.map((r) => [r.repo, r.commits?.kind])).toEqual([["constructor", "first-seen"]]);
+  });
 });

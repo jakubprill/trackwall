@@ -5,11 +5,11 @@ import {
   type DayReportCommits,
   type DayReportRepo,
   type DayReportTask,
-  type Repo,
   type Session,
   SyncOutcome,
   type SyncRepo,
   type SyncRun,
+  TASK_TITLE_MAX,
   type Task,
 } from "@trackwall/protocol";
 import { mapLimit } from "../../infra/map-limit.ts";
@@ -22,27 +22,51 @@ import { mapLimit } from "../../infra/map-limit.ts";
 
 /** Repos read at once: each is a few short git processes. */
 const REPORT_CONCURRENCY = 4;
-/** A task typed in the UI has no title; the report names it by the start of its prompt. */
-const TASK_TITLE_CHARS = 80;
 /**
  * A repo without a remote is a deliberate local repo and its sync is skipped every day for the same reason, so that
  * alone does not make it news.
  */
 const QUIET_SYNC_STATES: ReadonlySet<SyncOutcome["state"]> = new Set(["updated", "up-to-date"]);
 
-/** What the report reads from git (`vcs`, wired in the facade). */
+/** The main remote's default branch (`origin/main`) and its commit. */
+interface BranchTip {
+  name: string;
+  commit: string;
+}
+
+/** What the report reads from git (`vcs`, wired in the facade; a module declares what it uses on its own side, §4). */
 export interface ReportVcs {
-  remoteDefaultBranch(dir: string): Promise<{ name: string; commit: string } | null>;
+  /** The remote address without scheme (`Repo.remote`). */
+  remote(dir: string): Promise<string | null>;
+  remoteDefaultBranch(dir: string): Promise<BranchTip | null>;
   isAncestor(dir: string, ancestor: string, commit: string): Promise<boolean>;
-  commitsBetween(dir: string, from: string | null, to: string, limit: number): Promise<{ total: number; commits: Commit[] } | undefined>;
+  countBetween(dir: string, from: string, to: string): Promise<number | undefined>;
+  commitsBetween(dir: string, from: string, to: string, limit: number): Promise<{ total: number; commits: Commit[] } | undefined>;
+  newestCommits(dir: string, commit: string, limit: number): Promise<Commit[]>;
+}
+
+/** A repo of the projects folder: its identifier and root. */
+interface ReportRepo {
+  id: string;
+  path: string;
+}
+
+/** A repo with its remote address and its remote default branch now; `tip: null` when unknown or unreadable. */
+interface RepoTip {
+  repo: ReportRepo;
+  remote: string | null;
+  tip: BranchTip | null;
 }
 
 export interface ReportInput {
   /** ISO 8601, when this day start began. */
   startedAt: string;
-  /** The last day start's time and the commit of each repo's remote default branch then; `null` before the first. */
+  /**
+   * The last day start's time and the commit of each repo's remote default branch then, by repo root (a path, like the
+   * sync result: the projects folder can change, and an id can pass to another directory, ADR-18); `null` before the first.
+   */
   previous: { startedAt: string; heads: Readonly<Record<string, string>> } | null;
-  repos: readonly Repo[];
+  repos: readonly ReportRepo[];
   /** This day start's sync, finished. */
   sync: SyncRun;
   tasks: readonly Task[];
@@ -50,56 +74,66 @@ export interface ReportInput {
   sessions: readonly Session[];
 }
 
-/** The report, and the commit of each repo's remote default branch now, which the next day start compares with. */
+/** The report, and the commit of each repo's remote default branch now by repo root, which the next day start compares with. */
 export async function dayReport(
   vcs: ReportVcs,
   input: ReportInput,
   log: (msg: string) => void,
 ): Promise<{ report: DayReport; heads: Record<string, string> }> {
-  const tips = await mapLimit(input.repos, REPORT_CONCURRENCY, (repo) =>
-    vcs.remoteDefaultBranch(repo.path).catch((err: unknown) => {
-      log(`day report: ${repo.id}: ${String(err)}`);
-      return null;
-    }),
-  );
-  const tipOf = new Map(input.repos.map((repo, i) => [repo.id, { repo, tip: tips[i] ?? null }]));
-  const repos = await mapLimit(input.repos, REPORT_CONCURRENCY, (repo) =>
-    repoEntry(vcs, input, repo, tipOf.get(repo.id)?.tip ?? null, log),
-  );
-  const tasks = await mapLimit(input.tasks, REPORT_CONCURRENCY, (task) => taskEntry(vcs, input.sessions, task, tipOf.get(task.repo), log));
-  const heads: Record<string, string> = {};
-  for (const [id, { tip }] of tipOf) if (tip !== null) heads[id] = tip.commit;
-  const news = repos.filter((entry) => !isQuiet(entry));
-  return {
-    report: {
-      startedAt: input.startedAt,
-      since: input.previous?.startedAt ?? null,
-      repos: news,
-      quietRepos: repos.length - news.length,
-      tasks,
-    },
-    heads,
+  const failed = (repo: ReportRepo) => (err: unknown) => {
+    log(`day report: ${repo.id}: ${String(err)}`);
+    return null;
   };
+  const tips: RepoTip[] = await mapLimit(input.repos, REPORT_CONCURRENCY, async (repo) => {
+    const [remote, tip] = await Promise.all([
+      vcs.remote(repo.path).catch(failed(repo)),
+      vcs.remoteDefaultBranch(repo.path).catch(failed(repo)),
+    ]);
+    return { repo, remote, tip };
+  });
+  const tipOf = new Map(tips.map((entry) => [entry.repo.id, entry]));
+  const [repos, tasks] = await Promise.all([
+    mapLimit(tips, REPORT_CONCURRENCY, (entry) => repoEntry(vcs, input, entry, log)),
+    mapLimit(input.tasks, REPORT_CONCURRENCY, (task) => taskEntry(vcs, input.sessions, task, tipOf.get(task.repo), log)),
+  ]);
+  const heads: Record<string, string> = {};
+  for (const { head, repo } of repos) if (head !== undefined) heads[repo] = head;
+  const entries = repos.map((r) => r.entry);
+  return { report: { startedAt: input.startedAt, since: input.previous?.startedAt ?? null, ...quietCounted(entries), tasks }, heads };
 }
 
+/** The repos with something to say, and how many of the rest. */
+function quietCounted(repos: readonly DayReportRepo[]): Pick<DayReport, "repos" | "quietRepos"> {
+  const news = repos.filter((entry) => !isQuiet(entry));
+  return { repos: news, quietRepos: repos.length - news.length };
+}
+
+/**
+ * A repo's report entry, and the commit the next day start compares it with (`head`, by repo root): its tip now, or,
+ * when the tip or its commits could not be read this time, the one from before, so what lands meanwhile is reported
+ * next time rather than lost.
+ */
 async function repoEntry(
   vcs: ReportVcs,
   input: ReportInput,
-  repo: Repo,
-  tip: { name: string; commit: string } | null,
+  { repo, remote, tip }: RepoTip,
   log: (msg: string) => void,
-): Promise<DayReportRepo> {
-  // A repo joins its sync result by path, because the id can change together with the directory name (ADR-18).
+): Promise<{ entry: DayReportRepo; repo: string; head: string | undefined }> {
+  // `Object.hasOwn`: a directory named like an `Object` property (`constructor`) is no saved commit.
+  const previousHead = input.previous && Object.hasOwn(input.previous.heads, repo.path) ? input.previous.heads[repo.path] : undefined;
   const synced = input.sync.repos.find((r) => r.path === repo.path);
   const sync = synced === undefined ? null : syncOutcome(synced);
-  const commits =
-    tip === null || input.previous === null
-      ? null
-      : await newCommits(vcs, repo.path, input.previous.heads[repo.id], tip.commit).catch((err: unknown) => {
-          log(`day report: ${repo.id}: ${String(err)}`);
-          return null;
-        });
-  return { repo: repo.id, remote: repo.remote, remoteBranch: tip?.name ?? null, commits, sync };
+  let commits: DayReportCommits | null = null;
+  let head = tip?.commit ?? previousHead;
+  if (tip !== null && input.previous !== null) {
+    try {
+      commits = await newCommits(vcs, repo.path, previousHead, tip.commit);
+    } catch (err) {
+      log(`day report: ${repo.id}: ${String(err)}`);
+      head = previousHead;
+    }
+  }
+  return { entry: { repo: repo.id, remote, remoteBranch: tip?.name ?? null, commits, sync }, repo: repo.path, head };
 }
 
 /**
@@ -116,8 +150,7 @@ async function newCommits(vcs: ReportVcs, dir: string, previous: string | undefi
   if (previous === undefined) return { kind: "first-seen" };
   if (previous === tip) return null;
   if (!(await vcs.isAncestor(dir, previous, tip))) {
-    const newest = await vcs.commitsBetween(dir, null, tip, DAY_REPORT_COMMITS);
-    return { kind: "rewritten", commits: newest?.commits ?? [] };
+    return { kind: "rewritten", commits: await vcs.newestCommits(dir, tip, DAY_REPORT_COMMITS) };
   }
   const range = await vcs.commitsBetween(dir, previous, tip, DAY_REPORT_COMMITS);
   if (range === undefined || range.total === 0) return null;
@@ -134,15 +167,16 @@ async function taskEntry(
   vcs: ReportVcs,
   sessions: readonly Session[],
   task: Task,
-  repo: { repo: Repo; tip: { commit: string } | null } | undefined,
+  repo: RepoTip | undefined,
   log: (msg: string) => void,
 ): Promise<DayReportTask> {
   const session = sessions.find((s) => s.task === task.id && s.run.kind !== "exited");
+  const tip = repo?.tip ?? null;
   const behind =
-    repo?.tip == null
+    repo === undefined || tip === null
       ? null
-      : await vcs.commitsBetween(repo.repo.path, task.base, repo.tip.commit, 0).then(
-          (range) => range?.total ?? null,
+      : await vcs.countBetween(repo.repo.path, task.base, tip.commit).then(
+          (count) => count ?? null,
           (err: unknown) => {
             log(`day report: task ${task.id}: ${String(err)}`);
             return null;
@@ -160,7 +194,8 @@ async function taskEntry(
   };
 }
 
+/** A task typed in the UI has no title; the report names it by the start of its prompt, as long as a title may be. */
 function promptStart(prompt: string): string {
   const line = prompt.trim().split("\n")[0] ?? "";
-  return line.length > TASK_TITLE_CHARS ? `${line.slice(0, TASK_TITLE_CHARS - 1)}…` : line;
+  return line.length > TASK_TITLE_MAX ? `${line.slice(0, TASK_TITLE_MAX - 1)}…` : line;
 }

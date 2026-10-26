@@ -23,13 +23,20 @@ describe("the day start in the UI", () => {
   });
 
   test("a day start that stopped says in which step and why; a running or successful one says nothing", () => {
-    expect(dayStartFailure(run({ step: "supervisor", finishedAt: ended, error: "no Copilot CLI in PATH" }))).toBe(
+    const failed = run({ step: "supervisor", finishedAt: ended, error: "no Copilot CLI in PATH" });
+    expect(dayStartFailure(failed, undefined)).toBe("Start my day stopped while starting the supervisor: no Copilot CLI in PATH");
+    // A supervisor from before the day start does not hide it.
+    expect(dayStartFailure(failed, "2026-10-25T16:00:00.000Z")).toBe(
       "Start my day stopped while starting the supervisor: no Copilot CLI in PATH",
     );
-    expect(dayStartFailure(run({ step: "sync", error: "set the projects folder first" }))).toBeUndefined();
-    expect(
-      dayStartFailure(run({ step: "supervisor", finishedAt: ended, supervisor: "8a6e0c7e-3b0f-4a43-9d0e-6e7fd0a0c001" })),
-    ).toBeUndefined();
-    expect(dayStartFailure(null)).toBeUndefined();
+    expect(dayStartFailure(run({ step: "sync", error: "set the projects folder first" }), undefined)).toBeUndefined();
+    const succeeded = run({ step: "supervisor", finishedAt: ended, supervisor: "8a6e0c7e-3b0f-4a43-9d0e-6e7fd0a0c001" });
+    expect(dayStartFailure(succeeded, undefined)).toBeUndefined();
+    expect(dayStartFailure(null, undefined)).toBeUndefined();
+  });
+
+  test("a supervisor started after a failed day start hides the failure, so an old message does not come back", () => {
+    const failed = run({ step: "supervisor", finishedAt: ended, error: "no Copilot CLI in PATH" });
+    expect(dayStartFailure(failed, "2026-10-26T07:05:00.000Z")).toBeUndefined();
   });
 });

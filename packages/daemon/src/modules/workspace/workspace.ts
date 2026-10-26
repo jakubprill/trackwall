@@ -289,12 +289,12 @@ export class Workspace {
     return sessionToolPermissions(this.deps.file.toolPermissionRules(), repo);
   }
 
-  /** Package aliases and manual graph edges from `workspace.yaml` (ADR-29). */
   /** The user's addition to the day start's first message (`dayStart` in `workspace.yaml`, ADR-70); `null` without one. */
   dayStartSettings(): DayStartSettings | null {
     return this.deps.file.dayStartSettings();
   }
 
+  /** Package aliases and manual graph edges from `workspace.yaml` (ADR-29). */
   graphConfig(): GraphConfig {
     return this.deps.file.graphConfig();
   }

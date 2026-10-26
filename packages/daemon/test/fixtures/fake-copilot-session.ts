@@ -12,6 +12,7 @@
  */
 import { spawn } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { z } from "zod";
 import { ESCAPE } from "../../src/modules/agents/copilot-keys.ts";
 import { stripAnsi } from "../../src/modules/logs/stream-lines.ts";
@@ -20,10 +21,18 @@ import { pluginHooks } from "../support/plugin-hooks.ts";
 
 const fire = pluginHooks(process.argv, "s1");
 
-/** MCP servers from `--additional-mcp-config @<file>`, as in Copilot CLI; the fake only prints their names. */
+/**
+ * MCP servers from the user's `$COPILOT_HOME/mcp-config.json` and then from `--additional-mcp-config @<file>`, which
+ * adds to them, as in Copilot CLI (the contract test of ADR-70); the fake only prints their names.
+ */
 const McpConfig = z.object({ mcpServers: z.record(z.string(), z.object({ command: z.string() })) });
+const serversIn = (file: string) => Object.keys(McpConfig.parse(JSON.parse(readFileSync(file, "utf8"))).mcpServers);
+const userMcpConfig = process.env.COPILOT_HOME ? join(process.env.COPILOT_HOME, "mcp-config.json") : "";
 const mcpArg = process.argv[process.argv.indexOf("--additional-mcp-config") + 1] ?? "";
-const mcpServers = mcpArg.startsWith("@") ? Object.keys(McpConfig.parse(JSON.parse(readFileSync(mcpArg.slice(1), "utf8"))).mcpServers) : [];
+const mcpServers = [
+  ...(userMcpConfig !== "" && existsSync(userMcpConfig) ? serversIn(userMcpConfig) : []),
+  ...(mcpArg.startsWith("@") ? serversIn(mcpArg.slice(1)) : []),
+];
 
 /** Instruction files from the `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` directories (comma-separated), as in Copilot CLI; the fake prints their names. */
 const instructionFiles = (process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS ?? "")

@@ -13,8 +13,7 @@ const TRACKWALL_PART = [
   `Start my day. Trackwall has just synced every repo; call ${mcpTools.getDayReport.name} for what changed since my previous day start.`,
   "Then brief me in a few short lines: what changed that matters, what waits for me (tasks that need me, repos the sync " +
     "could not update), and which tasks are stale or far behind their repo's default branch.",
-  "If you have tools for the repo host or the issue tracker, check them too: a repo's remote is its project path on the " +
-    "repo host, and a task's branch is the source branch of its merge request.",
+  "If you have tools for the repo host or the issue tracker, check them too.",
   `Propose at most ${DAY_START_PROPOSALS} tasks with ${mcpTools.proposeTask.name}, only where the repo is clear; list the ` +
     "rest with a number each, so I can ask for the ones I want.",
 ].join(" ");

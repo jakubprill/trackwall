@@ -1,14 +1,5 @@
-import type {
-  DayReport,
-  DayStartRun,
-  DayStartSettings,
-  RepoList,
-  Session,
-  SessionList,
-  SyncRun,
-  WorkspaceSettings,
-} from "@trackwall/protocol";
-import { DomainError, messageOf } from "../../infra/errors.ts";
+import type { DayReport, DayStartRun, DayStartSettings, Session, SessionList, SyncRun } from "@trackwall/protocol";
+import { messageOf } from "../../infra/errors.ts";
 import { dayReport, type ReportVcs } from "./day-report.ts";
 import type { DayStartFile } from "./day-start-file.ts";
 import { dayStartFirstMessage } from "./first-message.ts";
@@ -22,8 +13,10 @@ import { dayStartFirstMessage } from "./first-message.ts";
 
 /** What the day start needs from `workspace`: the repos, their sync awaited to the end, and the user's prompt. */
 interface DayStartWorkspace {
-  settings(): WorkspaceSettings;
-  list(): Promise<RepoList>;
+  /** `bad_request` while the projects folder is not set. */
+  projectsDir(): Promise<string>;
+  /** The repos of the projects folder: identifier and root. */
+  repoEntries(): Promise<{ id: string; path: string }[]>;
   syncAndWait(): Promise<SyncRun>;
   /** `invalid_config` for a bad `dayStart` key. */
   dayStartSettings(): DayStartSettings | null;
@@ -57,11 +50,13 @@ export class DayStart {
    * Starts a day start in the background, or returns the running one. Refused before anything runs while a supervisor
    * runs, the projects folder is not set or `dayStart` in `workspace.yaml` is invalid, so the button says why at once.
    */
-  start(): DayStartRun {
+  async start(): Promise<DayStartRun> {
     if (this.#run?.finishedAt === null) return { ...this.#run };
     this.#deps.agents.assertNoSupervisor();
     const settings = this.#deps.workspace.dayStartSettings();
-    if (this.#deps.workspace.settings().projectsDir === null) throw new DomainError("bad_request", "set the projects folder first");
+    await this.#deps.workspace.projectsDir();
+    // Checked again after the `await`: a second click may have started one meanwhile.
+    if (this.#run?.finishedAt === null) return { ...this.#run };
     const run: DayStartRun = { startedAt: new Date().toISOString(), finishedAt: null, step: "sync", error: null, supervisor: null };
     this.#run = run;
     void this.#steps(run, settings?.prompt ?? null)
@@ -88,7 +83,7 @@ export class DayStart {
   async #steps(run: DayStartRun, userPrompt: string | null): Promise<void> {
     const sync = await this.#deps.workspace.syncAndWait();
     run.step = "report";
-    const { repos } = await this.#deps.workspace.list();
+    const repos = await this.#deps.workspace.repoEntries();
     const { sessions, tasks } = this.#deps.agents.sessions();
     const previous = this.#deps.file.read();
     const input = { startedAt: run.startedAt, previous, repos, sync, tasks, sessions };

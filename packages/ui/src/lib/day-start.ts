@@ -15,9 +15,13 @@ export function dayStartLabel(run: DayStartRun | null | undefined): string {
   return run?.finishedAt === null ? STEP_LABEL[run.step] : DAY_START_LABEL;
 }
 
-/** Why the last day start stopped; `undefined` while it runs and after one that started the supervisor. */
-export function dayStartFailure(run: DayStartRun | null | undefined): string | undefined {
+/**
+ * Why the last day start stopped; `undefined` while it runs, after one that started the supervisor, and once a
+ * supervisor started after it (`supervisorStartedAt`), whose own state the panel shows instead.
+ */
+export function dayStartFailure(run: DayStartRun | null | undefined, supervisorStartedAt: string | undefined): string | undefined {
   if (!run || run.finishedAt === null || run.error === null) return undefined;
+  if (supervisorStartedAt !== undefined && Date.parse(supervisorStartedAt) >= Date.parse(run.finishedAt)) return undefined;
   return `Start my day stopped while ${STEP_DOING[run.step]}: ${run.error}`;
 }
 

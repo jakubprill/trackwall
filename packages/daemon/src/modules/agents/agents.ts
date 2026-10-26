@@ -215,7 +215,7 @@ export class Agents {
     if (this.#supervisorStart) return this.#supervisorStart;
     const running = this.#runningSupervisor();
     if (running) return running;
-    return this.#startNewSupervisor(undefined);
+    return this.#startNewSupervisor({ args: [], promptOnStart: false });
   }
 
   /**
@@ -224,7 +224,7 @@ export class Agents {
    */
   async startSupervisorWith(firstMessage: string): Promise<Session> {
     this.assertNoSupervisor();
-    return this.#startNewSupervisor(firstMessage);
+    return this.#startNewSupervisor({ args: [`--interactive=${firstMessage}`], promptOnStart: true });
   }
 
   /** `bad_request` while a supervisor starts or runs (ADR-70). */
@@ -237,18 +237,17 @@ export class Agents {
     return this.#views().find((s) => isSupervisor(s) && s.run.kind !== "exited");
   }
 
-  #startNewSupervisor(firstMessage: string | undefined): Promise<Session> {
-    this.#supervisorStart = this.#replaceSupervisor(firstMessage).finally(() => {
+  #startNewSupervisor(launch: Pick<LaunchSpec, "args" | "promptOnStart">): Promise<Session> {
+    this.#supervisorStart = this.#replaceSupervisor(launch).finally(() => {
       this.#supervisorStart = undefined;
     });
     return this.#supervisorStart;
   }
 
-  async #replaceSupervisor(firstMessage: string | undefined): Promise<Session> {
+  async #replaceSupervisor(launch: Pick<LaunchSpec, "args" | "promptOnStart">): Promise<Session> {
     const ended = this.#views().filter(isSupervisor);
     const cwd = await this.#deps.repos.projectsDir();
-    const args = firstMessage === undefined ? [] : [`--interactive=${firstMessage}`];
-    const started = await this.#launch({ repo: null, cwd, task: null, args, promptOnStart: firstMessage !== undefined });
+    const started = await this.#launch({ repo: null, cwd, task: null, ...launch });
     // One of them may have been dismissed during the start; the start has still succeeded.
     for (const old of ended) if (this.#sessions.has(old.id)) this.#close(old.id);
     return started;

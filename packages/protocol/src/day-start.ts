@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SessionId, TASK_PROMPT_MAX, TaskId } from "./agents.ts";
+import { SessionId, TaskId, TaskPrompt } from "./agents.ts";
 import type { Endpoint } from "./api.ts";
 import { SyncOutcome } from "./sync.ts";
 import { TaskState } from "./task-state.ts";
@@ -62,9 +62,9 @@ export type DayReportTask = z.infer<typeof DayReportTask>;
 
 export const DayReport = z.object({
   /** ISO 8601, when this day start began. */
-  startedAt: z.string(),
+  startedAt: z.iso.datetime(),
   /** ISO 8601, when the previous day start began; `null` for the first one, which has nothing to compare with. */
-  since: z.string().nullable(),
+  since: z.iso.datetime().nullable(),
   repos: z.array(DayReportRepo),
   /** Repos of the projects folder with nothing new and a sync that brought them up to date. */
   quietRepos: z.number().int().nonnegative(),
@@ -79,9 +79,9 @@ export type DayStartStep = z.infer<typeof DayStartStep>;
 /** A day start in the daemon's memory, like a sync (ADR-21): the step it is in, or the one it ended in. */
 export const DayStartRun = z.object({
   /** ISO 8601. */
-  startedAt: z.string(),
+  startedAt: z.iso.datetime(),
   /** ISO 8601; `null` while it runs. */
-  finishedAt: z.string().nullable(),
+  finishedAt: z.iso.datetime().nullable(),
   step: DayStartStep,
   /** Why it stopped before starting the supervisor; `null` while it runs and after a start that succeeded. */
   error: z.string().nullable(),
@@ -92,9 +92,9 @@ export type DayStartRun = z.infer<typeof DayStartRun>;
 
 /**
  * `dayStart` in `workspace.yaml`, by hand only: `prompt` is added to the day start's first message after Trackwall's own,
- * for what only the user knows (an issue tracker query, a group on the repo host), so it stays out of the repo (ADR-7).
+ * for what only the user knows (an issue tracker query, a group on the repo host), so it stays out of the repo (ADR-7). As long as a task's prompt, since both go into one `--interactive=` argument.
  */
-export const DayStartSettings = z.object({ prompt: z.string().trim().min(1).max(TASK_PROMPT_MAX) }).strict();
+export const DayStartSettings = z.object({ prompt: TaskPrompt }).strict();
 export type DayStartSettings = z.infer<typeof DayStartSettings>;
 
 function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {

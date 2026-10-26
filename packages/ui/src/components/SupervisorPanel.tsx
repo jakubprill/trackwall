@@ -1,6 +1,6 @@
 import { agentsApi, countLabel } from "@trackwall/protocol";
 import { BellRing, Crown, PanelRightClose, PanelRightOpen, Play, Square, Sunrise } from "lucide-react";
-import { type FocusEvent, useEffect, useRef } from "react";
+import { type FocusEvent, useEffect, useRef, useState } from "react";
 import { SessionTerminal } from "@/components/SessionTerminal";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Badge } from "@/components/ui/badge";
@@ -130,7 +130,10 @@ function SupervisorHeader({
   const stop = useAction((id: string) => post(conn, agentsApi.stop, { session: id }), onChanged);
   const day = useDayStart(conn, onChanged);
   const running = session !== undefined && isLive(session) ? session : undefined;
-  const error = running ? stop.error : (start.error ?? day.error ?? dayStartFailure(day.run));
+  // Only the error of the start the user pressed last: an older one of the other button says nothing about now.
+  const [lastStart, setLastStart] = useState<"supervisor" | "day">("day");
+  const startError = lastStart === "supervisor" ? start.error : (day.error ?? dayStartFailure(day.run, session?.startedAt));
+  const error = running ? stop.error : startError;
   return (
     <header className="flex flex-col gap-1 border-b px-4 py-2">
       <div className="flex min-w-0 items-center gap-3">
@@ -154,10 +157,26 @@ function SupervisorHeader({
             </Button>
           ) : (
             <>
-              <Button size="sm" onClick={day.start} disabled={day.running || start.pending} title="Sync every repo and get a briefing">
+              <Button
+                size="sm"
+                onClick={() => {
+                  setLastStart("day");
+                  day.start();
+                }}
+                disabled={day.running || start.pending}
+                title="Sync every repo and get a briefing"
+              >
                 <Sunrise /> {dayStartLabel(day.run)}
               </Button>
-              <Button variant="outline" size="sm" onClick={() => start.run()} disabled={start.pending || day.running}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setLastStart("supervisor");
+                  start.run();
+                }}
+                disabled={start.pending || day.running}
+              >
                 <Play /> {session ? "Start again" : "Start supervisor"}
               </Button>
             </>
