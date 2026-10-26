@@ -371,6 +371,37 @@ describe("a prompt the daemon types into a session (a review, ADR-62, or a messa
     expect(written).toEqual(["read the review", "\r", "\r", "\r"]);
   });
 
+  test("leaves text in the input box that is not its prompt alone, and goes in once the box is empty", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    await endTurnAtBox(session, hooksFile);
+    expect(session.askToRead()).toBe("typed");
+    await new Promise((r) => setTimeout(r, 200));
+    await showScreen(session, "────\r\n❯ an older message\r\n────\r\n Interactive · / commands\r\n");
+
+    later(6000, () => session.tick());
+    expect(written).toEqual(["read the review", "\r"]);
+    await showScreen(session, PROMPT_BOX);
+
+    expect(written).toEqual(["read the review", "\r", "read the review"]);
+  });
+
+  test("asks again after 20 s without an input box on the screen, and goes in once the empty box is back", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    await endTurnAtBox(session, hooksFile);
+    session.askToRead();
+    await showScreen(session, "────\r\n❯ \r\n────\r\n ◉ Working · read the review\r\n");
+    later(21_000, () => session.tick());
+    expect(written).toEqual(["read the review"]);
+
+    await showScreen(session, PROMPT_BOX);
+
+    expect(written).toEqual(["read the review", "read the review"]);
+  });
+
   test("waits while Copilot CLI shows no input box, whatever the time", async () => {
     const { session, hooksFile } = runningSession();
     const written: string[] = [];
@@ -398,6 +429,23 @@ describe("a prompt the daemon types into a session (a review, ADR-62, or a messa
     later(3000, () => session.tick());
 
     expect(written).toEqual(["also check the", "\u0003", "read the review"]);
+  });
+
+  test("a draft counts as gone only after the input box stayed empty for 2 s without a break", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    await endTurnAtBox(session, hooksFile);
+    session.input("x");
+    session.askToRead();
+    await showScreen(session, "────\r\n❯ x\r\n────\r\n Interactive · / commands\r\n");
+    later(3000, () => session.tick());
+    await showScreen(session, PROMPT_BOX);
+    expect(written).toEqual(["x"]);
+
+    later(6000, () => session.tick());
+
+    expect(written).toEqual(["x", "read the review"]);
   });
 
   test("text the user is still typing holds the prompt back however long it stays in the input box", async () => {

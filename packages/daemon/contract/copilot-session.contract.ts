@@ -5,14 +5,13 @@ import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
 import { MCP_SERVER_NAME, mcpTools, TASK_MESSAGE_RULE } from "@trackwall/protocol";
 import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
-import { promptBoxOnScreen } from "../src/modules/agents/copilot-prompt-box.ts";
 import { inboxPrompt } from "../src/modules/agents/inbox-prompt.ts";
 import { OscParser } from "../src/modules/agents/osc-parser.ts";
 import { viewer, waitFor } from "../test/support/agents.ts";
 import { REFERENCE_COLS, REFERENCE_ROWS } from "../test/support/copilot-reference.ts";
+import { untilInputBox } from "../test/support/screen-lines.ts";
 import { hookRecords, startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { type Recorder, startRecorder } from "./support/recorder.ts";
-import { screenLines } from "./support/screen-lines.ts";
 import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
 import { USER_MCP_ISSUES, USER_MCP_SERVER, USER_MCP_TOOL } from "./support/user-mcp-server.ts";
 
@@ -93,15 +92,6 @@ function windowOf(id: string): ReturnType<typeof viewer> {
   const window = windows.get(id);
   if (window === undefined) throw new Error(`no terminal of session ${id}`);
   return window;
-}
-
-/** Waits until the window's screen ends with Copilot CLI's input box, empty or with text in it. */
-async function untilInputBox(window: ReturnType<typeof viewer>, box: "empty" | "text"): Promise<void> {
-  const until = Date.now() + SESSION_MS;
-  while (promptBoxOnScreen(await screenLines(window)) !== box) {
-    if (Date.now() > until) throw new Error(`gave up waiting for the input box (${box}):\n${(await screenLines(window)).join("\n")}`);
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
 }
 
 const endOfTurn = (id: string) => waitFor(daemon.facade.agents, id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
@@ -303,6 +293,11 @@ describe("a review of a task's changes with the real Copilot CLI (ADR-62)", () =
     const session = agents.sessions().sessions.find((s) => s.task === task.id);
     if (session === undefined) throw new Error("the task has no session");
     await endOfTurn(session.id);
+    // The daemon types only once Copilot CLI has drawn its input box again after agentStop (ADR-68).
+    const window = viewer(agents, session.id);
+    windows.set(session.id, window);
+    window.attachment.resize(REFERENCE_COLS, REFERENCE_ROWS);
+    await untilInputBox(window, "empty");
 
     model.reply({ tool: copilotToolName(mcpTools.getReviewComments.name), arguments: {} }, { text: "Renamed it." });
     const review = { path: "README.md", side: "new" as const, line: 1, code: "# shop", text: "Call it @login-test" };

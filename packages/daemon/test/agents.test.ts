@@ -6,6 +6,7 @@ import { Agents } from "../src/modules/agents/agents.ts";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
 import { isAlive } from "../src/platform/process-group.ts";
 import { makeAgents, viewer, waitFor } from "./support/agents.ts";
+import { untilInputBox } from "./support/screen-lines.ts";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterAll(async () => {
@@ -62,6 +63,8 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
 
     window.attachment.input("1");
     await waitFor(agents, started.id, (s) => s.state?.reason === "hook agentStop", "end of turn");
+    // Keys typed before the input box is drawn again are lost, as in Copilot CLI (ADR-68).
+    await untilInputBox(window, "empty");
 
     window.attachment.input("/exit\r");
     const done = await waitFor(agents, started.id, (s) => s.run.kind === "exited", "end of session");

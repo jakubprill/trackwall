@@ -22,7 +22,7 @@ import {
   readReference,
   referenceFile,
 } from "../../test/support/copilot-reference.ts";
-import { screenLines } from "./screen-lines.ts";
+import { screenLines } from "../../test/support/screen-lines.ts";
 
 type Window = ReturnType<typeof viewer>;
 

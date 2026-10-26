@@ -23,17 +23,38 @@ const PROMPT_BOX: StateSignal = {
   reason: "screen input box before the first prompt",
 };
 
+/** How many lines a wrapped input box may take: the daemon's longest prompt in a narrow terminal fits. */
+const MAX_BOX_LINES = 12;
+
 /**
- * The input box at the bottom of the visible lines (top to bottom) of an idle Copilot CLI: `empty`, with `text` in it
- * (the user's, or a prompt not taken), or `undefined` when the screen does not end with the box over the hints footer.
+ * The input box at the bottom of the visible lines (top to bottom) of an idle Copilot CLI: the text in it (`""` when
+ * empty, the user's or a prompt not taken, its wrapped lines joined with single spaces), or `undefined` when the screen
+ * does not end with the box over the hints footer. A text longer than the terminal is wrapped inside the box, its next
+ * lines indented under the first.
  */
-export function promptBoxOnScreen(lines: readonly string[]): "empty" | "text" | undefined {
+export function promptBoxText(lines: readonly string[]): string | undefined {
   const shown = lines.map((l) => l.trim());
   while (shown.at(-1) === "") shown.pop();
-  // A screen of fewer lines leaves the first names empty (no rule), or only the footer (three lines ending in a rule).
-  const [top = "", box = "", bottom = "", footer = ""] = shown.slice(-4);
-  if (!RULE.test(top) || !box.startsWith("❯") || !RULE.test(bottom) || footer === "" || STATUS.test(footer)) return undefined;
-  return box === "❯" ? "empty" : "text";
+  const footer = shown.at(-1) ?? "";
+  if (footer === "" || STATUS.test(footer) || !RULE.test(shown.at(-2) ?? "")) return undefined;
+  for (let first = shown.length - 3; first >= Math.max(1, shown.length - 2 - MAX_BOX_LINES); first--) {
+    const line = shown.at(first) ?? "";
+    if (RULE.test(line)) return undefined;
+    if (!line.startsWith("❯")) continue;
+    if (!RULE.test(shown.at(first - 1) ?? "")) return undefined;
+    return [line.slice(1), ...shown.slice(first + 1, -2)]
+      .map((part) => part.trim())
+      .filter((part) => part !== "")
+      .join(" ");
+  }
+  return undefined;
+}
+
+/** The input box at the bottom of the screen: `empty`, with `text` in it, or `undefined` (`promptBoxText`). */
+export function promptBoxOnScreen(lines: readonly string[]): "empty" | "text" | undefined {
+  const text = promptBoxText(lines);
+  if (text === undefined) return undefined;
+  return text === "" ? "empty" : "text";
 }
 
 /** An idle Copilot CLI is waiting for you whether or not its box holds text. */
