@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import type { Client } from "@modelcontextprotocol/client";
 import {
   CallEndpointResult,
@@ -17,14 +18,14 @@ import {
   VerifyTaskResult,
   WAIT_MAX_SECONDS,
 } from "@trackwall/protocol";
-import { connectHttpClient } from "../test/support/mcp-client.ts";
+import { connectHttpClient, MCP_CALL_LIMIT_MS } from "../test/support/mcp-client.ts";
 import { startSessionApi } from "../test/support/session-api.ts";
 
 // What Trackwall reads from Java builds, checked on real Spring Boot projects built by real Maven and Gradle through
 // real mise (ADR-72, docs/development.md, "Tests with real Java builds"): the card, the graph, services, test reports,
 // the verification of a task and log errors. The unit tests check the same features on handwritten files and logs; a
 // failure here means a real build tool writes something those files no longer show. Run by `jvm.yml` every night and
-// on PRs that touch the code it covers, not in `pnpm test`, since a run needs network and minutes the first time.
+// on PRs that touch the daemon, not in `pnpm test`, since a run needs network and minutes the first time.
 
 const PROJECTS = join(import.meta.dir, "projects");
 const TOKEN = "j".repeat(43);
@@ -59,14 +60,15 @@ afterAll(async () => {
 }, 60_000);
 
 /**
- * A project's files that git does not ignore (path with `/` → contents), also new ones not added yet, so build output
- * left in `projects/` by a build there does not reach the test's repos.
+ * A project's files as git tracks them (path with `/` → contents), so build output or other local files in `projects/`
+ * do not reach the test's repos; a new file counts once it is added to git.
  */
 function trackedFiles(project: string): Record<string, string> {
   const dir = join(PROJECTS, project);
-  const listed = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: dir, encoding: "utf8" });
-  const paths = [...new Set(listed.split("\0"))].filter((path) => path !== "" && existsSync(join(dir, ...path.split("/"))));
-  if (paths.length === 0) throw new Error(`git lists no files in ${dir}`);
+  const paths = execFileSync("git", ["ls-files", "-z"], { cwd: dir, encoding: "utf8" })
+    .split("\0")
+    .filter((path) => path !== "" && existsSync(join(dir, ...path.split("/"))));
+  if (paths.length === 0) throw new Error(`git tracks no files in ${dir}`);
   return Object.fromEntries(paths.map((path) => [path, readFileSync(join(dir, ...path.split("/")), "utf8")]));
 }
 
@@ -81,16 +83,19 @@ function changeLine(file: string, from: string, to: string): void {
 }
 
 async function call(name: string, args: Record<string, unknown>) {
-  const result = await client.callTool({ name, arguments: args });
+  const result = await client.callTool({ name, arguments: args }, { timeout: MCP_CALL_LIMIT_MS });
   if (result.isError) throw new Error(`${name}: ${JSON.stringify(result.content)}`);
   return result.structuredContent;
 }
 
-/** A waiting tool call (`wait_for_mise_task`, `verify_task`, `start_service`) made again until `done` or `BUILD_MS`. */
-async function until<T>(next: () => Promise<T>, done: (result: T) => boolean): Promise<T> {
+/** A tool call made again, `pauseMs` apart, until `done` or `BUILD_MS`. */
+async function until<T>(next: () => Promise<T>, done: (result: T) => boolean, pauseMs = 0): Promise<T> {
   const deadline = Date.now() + BUILD_MS;
   let result = await next();
-  while (!done(result) && Date.now() < deadline) result = await next();
+  while (!done(result) && Date.now() < deadline) {
+    await sleep(pauseMs);
+    result = await next();
+  }
   return result;
 }
 
@@ -138,16 +143,19 @@ async function verify(repo: string, task: string) {
 }
 
 /**
- * `start_service` once, then `list_services` until no service of the slice is still starting: a second start would start
- * a crashed service again. The services in the slice's order.
+ * `start_service` once (a second start would start a crashed service again), then `list_services` every second until
+ * no service of the slice is still starting: the first answer and each member's service as it settled (`null` for a
+ * member the slice skipped).
  */
 async function startService(args: { repo: string; task?: string; dependencies?: boolean }) {
   const { slice } = StartServiceResult.parse(await call("start_service", { ...args, timeoutSeconds: WAIT_MAX_SECONDS }));
   const ofSlice = async () => {
     const { services } = ListServicesResult.parse(await call("list_services", {}));
-    return slice.members.map((m) => services.find((s) => s.repo === m.repo && s.task === m.task));
+    return slice.members.map((m) => services.find((s) => s.repo === m.repo && s.task === m.task) ?? null);
   };
-  return until(ofSlice, (services) => services.every((s) => s !== undefined && s.state !== "starting"));
+  const settled = (services: Awaited<ReturnType<typeof ofSlice>>) =>
+    services.every((s, i) => (s === null ? slice.members[i]?.outcome === "skipped" : s.state !== "starting"));
+  return { slice, services: await until(ofSlice, settled, 1000) };
 }
 
 /** A compiler line without the directory before the file name (`/tmp/…/Shipping.java:9: …`, `C:\\…\\Shipping.java:9: …`). */
@@ -210,7 +218,7 @@ describe("a Maven project and a Gradle project", () => {
   });
 
   test("start_service starts orders before checkout from the graph, and call_endpoint reaches orders through checkout", async () => {
-    const started = await startService({ repo: "checkout" });
+    const { services: started } = await startService({ repo: "checkout" });
     expect(started.map((s) => [s?.repo, s?.state, s?.port])).toEqual([
       ["orders", "healthy", ORDERS_PORT],
       ["checkout", "healthy", CHECKOUT_PORT],
@@ -280,9 +288,10 @@ describe("a Maven project and a Gradle project", () => {
       "* What went wrong:",
       "Execution failed for task ':compileJava'.",
     ]);
-    // get_errors reads the compiler error from the same log.
+    // get_errors reads the same errors from the run's log, the most recent first.
     const fromLog = LogErrors.parse(await call("get_errors", { repo: "checkout", task: task.id }));
-    expect(fromLog.errors.map((e) => withoutDirectory(e.lines[0] ?? ""))).toContain("Shipping.java:9: error: cannot find symbol");
+    const ofRun = fromLog.errors.filter((e) => e.runId === verification.runId).reverse();
+    expect(ofRun.map((e) => e.lines)).toEqual(verification.errors.map((e) => e.lines));
   });
 
   test("start_service reports a task's service that fails to start as crashed, with the Spring Boot report from its log", async () => {
@@ -292,9 +301,10 @@ describe("a Maven project and a Gradle project", () => {
       "package com.example.orders;\n\nimport org.springframework.stereotype.Component;\n\n@Component\npublic class Refunds {\n    public interface PaymentGateway {}\n\n    public Refunds(PaymentGateway gateway) {}\n}\n",
     );
 
-    const [service] = await startService({ repo: "orders", task: task.id, dependencies: false });
+    const { slice, services } = await startService({ repo: "orders", task: task.id, dependencies: false });
 
-    expect([service?.state, service?.port]).toEqual(["crashed", task.port]);
+    expect(slice.members.map((m) => [m.repo, m.outcome])).toEqual([["orders", "started"]]);
+    expect(services.map((s) => [s?.state, s?.port])).toEqual([["crashed", task.port]]);
     // Spring Boot's failure report, which Maven prints between its own lines, is one error of the service log.
     const { errors } = LogErrors.parse(await call("get_errors", { repo: "orders", task: task.id, miseTask: "dev" }));
     const report = errors.find((e) => e.lines.includes("APPLICATION FAILED TO START"));
