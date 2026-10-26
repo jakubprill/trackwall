@@ -80,6 +80,31 @@ describe("an agent dialog read from the session's screen (ADR-66)", () => {
     expect(readAgentDialog(indented, "approval")).toBeUndefined();
   });
 
+  test("an approval taller than the terminal, cut above its heading, is read with the notification's text as its heading", () => {
+    const full = readAgentDialog(screen("mcp-45"), "approval");
+    const cut = readAgentDialog(screen("mcp-cut-14"), "approval", "Use MCP tool: trackwall/verify_task");
+
+    expect(full).toMatchObject({ title: "verify_task" });
+    expect(cut).toEqual({
+      kind: "approval",
+      title: "Use MCP tool: trackwall/verify_task",
+      detail: ["…", "}"],
+      question: "Do you want to use this tool?",
+      options: full?.kind === "approval" ? full.options : [],
+    });
+  });
+
+  test("a cut approval without a notification's text gets a plain heading", () => {
+    expect(readAgentDialog(screen("mcp-cut-14"), "approval")).toMatchObject({ title: "Approval request" });
+  });
+
+  test("a box cut above counts only with nothing but the tab bar and blank lines above it", () => {
+    const lines = screen("mcp-cut-14");
+    const withOutput = lines.map((l, i) => (i === 1 ? " ● The agent's output" : l));
+
+    expect(readAgentDialog(withOutput, "approval")).toBeUndefined();
+  });
+
   test("a screen without a dialog, or with a numbered list that is not one, gives none", () => {
     expect(readAgentDialog(["❯ write the file", " ● done", "", "❯"], "approval")).toBeUndefined();
     expect(readAgentDialog(["╭────╮", "│ Plan │", "│ 1. Read the code │", "│ 2. Fix it │", "╰────╯"], "approval")).toBeUndefined();
@@ -91,8 +116,13 @@ afterEach(() => {
   for (const s of sessions.splice(0)) s.dispose();
 });
 
-/** A session in a 120×30 terminal whose screen shows `name` and whose last hook record is `notification`. */
-async function sessionShowing(name: string, notificationType: string, prompt: () => string | undefined = () => undefined) {
+/** A session in a 120×30 terminal (or `terminal`) whose screen shows `name` and whose last hook record is `notification`. */
+async function sessionShowing(
+  name: string,
+  notificationType: string,
+  prompt: () => string | undefined = () => undefined,
+  terminal: { cols: number; rows: number; message?: string } = { cols: 120, rows: 30 },
+) {
   const typedText = { count: 0 };
   const hooksFile = join(mkdtempSync(join(tmpdir(), "trackwall-dialog-")), "hooks.jsonl");
   writeFileSync(hooksFile, "");
@@ -100,8 +130,8 @@ async function sessionShowing(name: string, notificationType: string, prompt: ()
     id: "s1",
     repo: "shop",
     task: null,
-    cols: 120,
-    rows: 30,
+    cols: terminal.cols,
+    rows: terminal.rows,
     hooksFile,
     promptOnStart: false,
     program: "copilot",
@@ -117,7 +147,12 @@ async function sessionShowing(name: string, notificationType: string, prompt: ()
   session.connect({ write: (data) => written.push(data), resize: () => {} });
   session.output(new TextEncoder().encode(screen(name).join("\r\n")));
   const notify = (type: string) => {
-    const notification = { event: "notification", receivedAt: 0, payload: { notification_type: type }, omitted: [] };
+    const notification = {
+      event: "notification",
+      receivedAt: 0,
+      payload: { notification_type: type, message: terminal.message },
+      omitted: [],
+    };
     appendFileSync(hooksFile, `${JSON.stringify(notification)}\n`);
     session.tick();
   };
@@ -146,6 +181,21 @@ describe("answering an agent dialog from outside the terminal (ADR-66)", () => {
 
     expect(written).toEqual(["2"]);
     expect(session.view()).toMatchObject({ state: { state: "Working", source: "keyboard" }, dialog: null });
+  });
+
+  test("an approval cut above in a short terminal shows with the text of its notification as the heading", async () => {
+    const terminal = { cols: 100, rows: 14, message: "Use MCP tool: trackwall/verify_task" };
+    const { session, written } = await sessionShowing("mcp-cut-14", "permission_prompt", undefined, terminal);
+    const dialog = session.view()?.dialog;
+    expect(dialog).toMatchObject({
+      kind: "approval",
+      title: "Use MCP tool: trackwall/verify_task",
+      question: "Do you want to use this tool?",
+    });
+
+    session.answerDialog(dialog?.id ?? "", "1");
+
+    expect(written).toEqual(["1"]);
   });
 
   test("stop types Esc, which ends the agent's turn", async () => {

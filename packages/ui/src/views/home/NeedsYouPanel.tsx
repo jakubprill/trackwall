@@ -2,6 +2,7 @@ import type { Session, TaskProposal } from "@trackwall/protocol";
 import { type HomeKey, type HomeModel, repoKey, sessionKey } from "@trackwall/scene/model";
 import { Lightbulb } from "lucide-react";
 import type { ReactNode } from "react";
+import { Loading } from "@/components/Loading";
 import { QueueItem } from "@/components/QueueItem";
 import { StatusLabel } from "@/components/StatusLabel";
 import { twoDigits } from "@/lib/format";
@@ -13,9 +14,11 @@ import { PROPOSAL_STATUS, sessionStateLabel, sessionTitle } from "@/lib/session-
  * The queue on the left of the dashboard: first sessions that are waiting for you or ended with an error, then task
  * proposals (ADR-39), then repos that are not clean. Sessions and repos are the same objects as the labels on the scene,
  * so the dashboard also works without WebGL. Proposals are not on the scene, and the decision (with an edited prompt)
- * is made in the Sessions view, so a click on a proposal opens it there right away.
+ * is made in the Sessions view, so a click on a proposal opens it there right away. Until the lists arrive it says it
+ * is loading, rather than counts of zero.
  */
 export function NeedsYouPanel({
+  loading,
   model,
   sessions,
   proposals,
@@ -24,6 +27,8 @@ export function NeedsYouPanel({
   onOpen,
   onOpenProposal,
 }: {
+  /** The repo or session list has not arrived yet. */
+  loading: boolean;
   model: HomeModel;
   sessions: ReadonlyMap<string, Session>;
   proposals: readonly TaskProposal[];
@@ -35,6 +40,14 @@ export function NeedsYouPanel({
   const urgent = model.sessions.filter((s) => s.state === "attention" || s.state === "error");
   const repos = model.repos.filter((r) => r.state !== "clean");
   const working = model.sessions.filter((s) => s.state === "working").length;
+  if (loading) {
+    return (
+      <aside className="bg-card flex min-h-0 flex-col gap-2 border-r px-4 pt-3">
+        <h2 className="hud-label">Needs you</h2>
+        <Loading />
+      </aside>
+    );
+  }
 
   return (
     <aside className="bg-card flex min-h-0 flex-col border-r">

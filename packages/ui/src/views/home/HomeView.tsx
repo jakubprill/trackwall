@@ -93,6 +93,8 @@ export function HomeView({
   useEffect(() => {
     if (loaded && selected && !current) setSelected(null);
   }, [loaded, selected, current]);
+  // Until both lists arrive the panels say so, instead of counts of zero that look like an empty environment.
+  const loading = !loaded && !repos.error && !sessions.error;
   const unavailableNow = useCallback((reason: string) => {
     setHovered(null);
     setUnavailable(reason);
@@ -127,6 +129,7 @@ export function HomeView({
   return (
     <div className="grid h-full min-h-0 grid-cols-[var(--spacing-sidebar)_1fr_var(--spacing-sidebar)]">
       <NeedsYouPanel
+        loading={loading}
         model={model}
         sessions={lookup.sessions}
         proposals={sessions.data?.proposals ?? []}
@@ -170,6 +173,7 @@ export function HomeView({
       </div>
       <HomeDetails
         conn={conn}
+        loading={loading}
         selected={current}
         model={model}
         repos={lookup.repos}

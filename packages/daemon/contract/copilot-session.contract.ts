@@ -167,6 +167,30 @@ describe("a session of the real Copilot CLI", () => {
     recorder.approval(records, dialogBox);
   });
 
+  test("an MCP tool approval taller than a short terminal loses its heading, and the daemon reads it with the notification's text", async () => {
+    const { agents } = daemon.facade;
+    const { id, window } = await startSession();
+    // A task terminal squeezed by the panels above it (1280×720 at 150%): the JSON arguments do not fit.
+    window.attachment.resize(REFERENCE_COLS, 14);
+    const note = Array.from({ length: 20 }, (_, i) => `step ${i}`).join("\n");
+
+    model.reply({ tool: copilotToolName(mcpTools.verifyTask.name), arguments: { task: "no-such-task", note } });
+    window.attachment.input("verify the task\r");
+    const approval = await waitFor(agents, id, (s) => s.state?.state === "Approval" && s.dialog !== null, "approval dialog", SESSION_MS);
+    const { dialog } = approval;
+    if (dialog?.kind !== "approval") throw new Error(`no approval dialog: ${JSON.stringify(dialog)}`);
+    expect(dialog).toMatchObject({
+      title: `Use MCP tool: ${MCP_SERVER_NAME}/${mcpTools.verifyTask.name}`,
+      question: "Do you want to use this tool?",
+    });
+    expect(dialog.detail[0]).toBe("…");
+    expect(dialog.options[0]).toEqual({ key: "1", label: "Yes" });
+
+    model.reply({ text: "There is no such task." });
+    agents.answerDialog(id, dialog.id, "1");
+    await endOfTurn(id);
+  });
+
   test("a deny rule from toolPermissions reaches Copilot CLI as --deny-tool, which refuses the command without asking", async () => {
     const { agents } = daemon.facade;
     const workspaceFile = join(daemon.home, "workspace.yaml");

@@ -138,6 +138,8 @@ export class LiveSession {
   #waits = 0;
   /** The dialog last read, for the screen revision and wait it was read at: the screen is read once per change. */
   #dialogRead: { revision: number; waits: number; kind: AgentDialog["kind"]; dialog: AgentDialog | null } | undefined;
+  /** The text of the last hook if it was a notification ("Use MCP tool: …"): the heading of an approval box cut above. */
+  #notice: string | undefined;
   /**
    * The user answered an approval Copilot CLI drew before its hook reached the daemon (ADR-71): when that hook comes,
    * the answer it already got moves the session on, as the key would have in `Approval`.
@@ -310,7 +312,7 @@ export class LiveSession {
     const revision = this.#screen.revision;
     const read = this.#dialogRead;
     if (read?.revision === revision && read.waits === this.#waits && read.kind === kind) return read.dialog;
-    const found = readAgentDialog(this.#screen.lines(), kind);
+    const found = readAgentDialog(this.#screen.lines(), kind, this.#notice);
     const dialog = found ? { ...found, id: dialogId(this.#waits, found) } : null;
     this.#dialogRead = { revision, waits: this.#waits, kind, dialog };
     return dialog;
@@ -338,6 +340,7 @@ export class LiveSession {
   #readHooks(): void {
     for (const record of this.#hooks.read()) {
       if (record.event === "userPromptSubmitted") this.#userDraft = false;
+      this.#notice = record.event === "notification" ? record.payload.message : undefined;
       this.#report(this.#state.hook(record));
       this.#applyEarlyAnswer(record.event);
       // The end of a turn from its hook, not from the state: a question dialog and an Esc give `Input` mid-turn too.

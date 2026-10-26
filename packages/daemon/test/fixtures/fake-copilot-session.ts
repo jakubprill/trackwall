@@ -4,7 +4,8 @@
  * sends and draws comes from the Copilot CLI reference of this system (`test/support/copilot-reference.ts`, ADR-67):
  * the hooks with their payloads, the window titles, the input box and the approval dialog. The flow: a
  * welcome screen with the input box and no hook (waiting for you, read from the screen), a line from the user starts a
- * turn with an approval request (the first turn after `sessionStart`, at once with a prompt from `--interactive=`),
+ * turn with an approval request (the first turn after `sessionStart`, at once with a prompt from `--interactive=`; cut
+ * above in a short terminal),
  * a "Yes" option or Enter approves and ends the turn, and `/exit` ends the session. The fake also prints what the tests check
  * (MCP servers, instructions, directory, arguments, the prompt) and, on every turn, starts a helper process (like an
  * agent's tool) and prints its PID, so that the test can check that stopping the session ends the whole group. The
@@ -49,6 +50,19 @@ const taskArgs = process.argv.filter((a) => /^--(interactive|resume|session-id|a
 const real = reference();
 const title = (text: string) => process.stdout.write(`\x1b]0;${text}\x07`);
 const draw = (lines: readonly string[]) => process.stdout.write(`${lines.join("\r\n")}\r\n`);
+
+/** Copilot CLI's tab bar, which stays on the first line above an approval box cut by a short terminal. */
+const TAB_BAR = " [Current]  Sessions   Issues   Pull requests   Gists";
+
+/**
+ * The approval dialog; in a terminal too short for it, cut above as Copilot CLI draws it (the contract test of a short
+ * terminal): a cleared screen with the tab bar, a blank line and the bottom of the box, without its heading.
+ */
+function drawDialog(dialog: readonly string[]): void {
+  const rows = process.stdout.rows;
+  if (rows === undefined || dialog.length + 2 <= rows) draw(dialog);
+  else process.stdout.write(`\x1b[2J\x1b[H${[TAB_BAR, "", ...dialog.slice(-(rows - 2))].join("\r\n")}`);
+}
 
 const initialPrompt = taskArgs.find((a) => a.startsWith("--interactive="))?.slice("--interactive=".length);
 
@@ -103,7 +117,7 @@ function submit(line: string): void {
   process.stdout.write(`helper PID: ${helper.pid}\r\n`);
   for (const turnTitle of turnTitles) title(turnTitle.replaceAll(PROMPT_PLACEHOLDER, line));
   process.stdout.write(`Thinking about: ${line}\r\n`);
-  draw(real.approval.dialog);
+  drawDialog(real.approval.dialog);
   awaitingApproval = true;
   replay(real.approval.hooks.slice(2, asked));
 }

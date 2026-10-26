@@ -79,6 +79,27 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     await agents.stop(started.id);
   }, 60_000);
 
+  test("an approval cut above by a short terminal is read with the text of its notification as the heading", async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
+    const { agents, procs } = makeAgents({ shop: repoDir });
+    cleanups.push(() => procs.stopAll());
+    const started = await agents.start("shop");
+    const window = viewer(agents, started.id);
+    await waitFor(agents, started.id, () => window.text().includes("Welcome"), "welcome screen");
+    window.attachment.resize(100, 10);
+    window.attachment.input("fix the test\r");
+
+    const approval = await waitFor(agents, started.id, (s) => s.dialog !== null, "the approval dialog");
+    expect(approval.dialog).toMatchObject({
+      kind: "approval",
+      title: expect.stringMatching(/^Run command: /),
+      question: "Do you want to run this command?",
+    });
+    expect(window.text()).not.toContain("Create a file");
+    window.attachment.detach();
+    await agents.stop(started.id);
+  }, 60_000);
+
   test("a terminal connected later gets the screen image with what the session has already printed", async () => {
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
     const { agents, procs } = makeAgents({ shop: repoDir });

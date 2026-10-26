@@ -91,10 +91,12 @@ export function TaskPanel({
 
   return (
     <>
-      <header className="flex items-center gap-4 border-b px-4 py-2">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      {/* In a narrow column (the supervisor panel pinned on a small screen) the buttons wrap under the task. */}
+      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-2">
+        <div className="flex min-w-60 flex-1 flex-col gap-0.5">
           <span className="flex min-w-0 items-center gap-3">
-            <span className="truncate text-sm font-medium">{task.repo}</span>
+            {/* The branch, longer and repeating the task, gives way first. */}
+            <span className="max-w-1/2 shrink-0 truncate text-sm font-medium">{task.repo}</span>
             <span className="text-muted-foreground flex min-w-0 items-center gap-1 font-mono text-xs">
               <GitBranch className="size-3 shrink-0" aria-label="branch" />
               <span className="truncate">{task.branch}</span>
@@ -116,37 +118,43 @@ export function TaskPanel({
           </span>
         </div>
         {error && <span className="text-destructive max-w-xs truncate text-xs">{error}</span>}
-        <VerifyButton state={verification} disabled={confirmingRemoval} />
-        <Button variant="outline" size="sm" onClick={openEditor.run} disabled={openEditor.pending}>
-          <Code /> VS Code
-        </Button>
-        {liveSession ? (
-          <StopButton conn={conn} session={liveSession} onStopped={onChanged} />
-        ) : (
-          <>
-            <Button variant="outline" size="sm" onClick={resume.run} disabled={resume.pending || removing}>
-              <Play /> Resume
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setRemoving(true)} disabled={removing}>
-              <Trash2 /> End task
-            </Button>
-          </>
-        )}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <VerifyButton state={verification} disabled={confirmingRemoval} />
+          <Button variant="outline" size="sm" onClick={openEditor.run} disabled={openEditor.pending}>
+            <Code /> VS Code
+          </Button>
+          {liveSession ? (
+            <StopButton conn={conn} session={liveSession} onStopped={onChanged} />
+          ) : (
+            <>
+              <Button variant="outline" size="sm" onClick={resume.run} disabled={resume.pending || removing}>
+                <Play /> Resume
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setRemoving(true)} disabled={removing}>
+                <Trash2 /> End task
+              </Button>
+            </>
+          )}
+        </div>
       </header>
       {confirmingRemoval && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
-      <TaskIncludedFiles included={task.included} />
-      <SharedFiles conn={conn} task={task.id} tasks={tasks} paused={confirmingRemoval} onOpenTask={onOpenTask} />
-      <TaskMiseConfig conn={conn} task={task.id} paused={confirmingRemoval} />
-      <TaskMessages messages={messages} sessions={sessions} />
-      {task.summary && <TaskSummary summary={task.summary} />}
-      <TaskVerification conn={conn} state={verification} />
-      <TaskMiseRuns
-        conn={conn}
-        task={task.id}
-        live={runningLive}
-        paused={confirmingRemoval}
-        shownElsewhere={verification.runningMiseTask}
-      />
+      {/* At most a third of the panel, scrolling beyond it: on a small screen the sections would leave the terminal a few
+          lines, and Copilot CLI cuts a dialog taller than its terminal. */}
+      <section aria-label="Task details" className="max-h-1/3 shrink-0 overflow-y-auto">
+        <TaskIncludedFiles included={task.included} />
+        <SharedFiles conn={conn} task={task.id} tasks={tasks} paused={confirmingRemoval} onOpenTask={onOpenTask} />
+        <TaskMiseConfig conn={conn} task={task.id} paused={confirmingRemoval} />
+        <TaskMessages messages={messages} sessions={sessions} />
+        {task.summary && <TaskSummary summary={task.summary} />}
+        <TaskVerification conn={conn} state={verification} />
+        <TaskMiseRuns
+          conn={conn}
+          task={task.id}
+          live={runningLive}
+          paused={confirmingRemoval}
+          shownElsewhere={verification.runningMiseTask}
+        />
+      </section>
       <div className="px-4">
         <TabBar tabs={tabs} active={shown} onSelect={setTab} />
       </div>
