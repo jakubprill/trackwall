@@ -26,9 +26,9 @@ import {
 } from "@trackwall/protocol";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { findCopilot } from "./copilot-command.ts";
-import { appendHookRecord } from "./copilot-hook-command.ts";
 import { CopilotHookEvent } from "./copilot-hook-record.ts";
 import { type HttpHook, writeCopilotPlugin } from "./copilot-plugin.ts";
+import { appendHookRecord } from "./hook-tail.ts";
 import { inboxPrompt } from "./inbox-prompt.ts";
 import { LiveSession, type SessionPty, type SessionWindow } from "./live-session.ts";
 import { proposedByOf, proposerKeyOf, SUPERVISOR } from "./proposer.ts";

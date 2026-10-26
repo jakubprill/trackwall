@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { CopilotHookEvent } from "../facade.ts";
+import { DomainError } from "../infra/errors.ts";
 import { SESSION_TOKEN_HEADER } from "../mcp/endpoint.ts";
 import { readBody } from "./body.ts";
 
@@ -22,16 +23,19 @@ export function sessionHookRequest(port: number, token: string, event: CopilotHo
   };
 }
 
-/** `POST /hooks/<event>` with the daemon token already checked; the answer is the bare hook output, not an `ApiResult`. */
+/** `/hooks/<event>` with the daemon token already checked; the answer is the bare hook output, not an `ApiResult`. */
 export async function handleHook(
   req: IncomingMessage,
   res: ServerResponse,
   receive: (sessionToken: string, event: string, payload: string) => Record<string, never>,
 ): Promise<void> {
+  if (req.method !== "POST") throw new DomainError("not_found", `no route ${req.method} ${req.url}`);
   const sessionToken = req.headers[SESSION_TOKEN_HEADER];
+  // Before the body, which can be large: a hook from outside a session is refused without reading it.
+  if (typeof sessionToken !== "string") throw new DomainError("unauthorized", "missing session token");
   const event = new URL(req.url ?? "/", "http://127.0.0.1").pathname.slice(HOOKS_PATH.length);
   const payload = (await readBody(req, MAX_HOOK_BYTES)).toString("utf8");
-  const output = receive(typeof sessionToken === "string" ? sessionToken : "", event, payload);
+  const output = receive(sessionToken, event, payload);
   res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
   res.end(JSON.stringify(output));
 }

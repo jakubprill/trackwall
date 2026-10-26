@@ -133,9 +133,8 @@ async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, 
 function protectedRoute(req: IncomingMessage, res: ServerResponse, path: string, o: ApiOptions): (() => Promise<void> | void) | undefined {
   if (path.startsWith("/api/")) return () => handleApi(req, res, path, o);
   if (path === MCP_PATH) return () => handleMcp(req, res, o);
-  if (!path.startsWith(HOOKS_PATH)) return undefined;
-  if (req.method !== "POST") return () => fail(res, "not_found", `no route ${req.method} ${path}`);
-  return () => handleHook(req, res, (...args) => o.facade.agents.receiveHook(...args));
+  if (path.startsWith(HOOKS_PATH)) return () => handleHook(req, res, (...args) => o.facade.agents.receiveHook(...args));
+  return undefined;
 }
 
 /** `/api/*` routes with the token, already checked. */

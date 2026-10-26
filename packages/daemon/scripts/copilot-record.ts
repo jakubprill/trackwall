@@ -20,13 +20,12 @@ import type { TaskStateChange } from "@trackwall/protocol";
 import { trackwallHome } from "../src/infra/home.ts";
 import { AsciicastWriter, parseAsciicast } from "../src/modules/agents/asciicast.ts";
 import { findCopilot } from "../src/modules/agents/copilot-command.ts";
-import { runCopilotHook } from "../src/modules/agents/copilot-hook-command.ts";
-import type { CopilotHookRecord } from "../src/modules/agents/copilot-hook-record.ts";
+import { CopilotHookEvent, type CopilotHookRecord } from "../src/modules/agents/copilot-hook-record.ts";
 import { type SessionKey, sessionKey } from "../src/modules/agents/copilot-keys.ts";
 import { writeCopilotPlugin } from "../src/modules/agents/copilot-plugin.ts";
 import { encodeMarker, replayCopilotRecording, type StatesLine } from "../src/modules/agents/copilot-recording.ts";
 import { CopilotSessionState } from "../src/modules/agents/copilot-session-state.ts";
-import { HookTail } from "../src/modules/agents/hook-tail.ts";
+import { appendHookRecord, HookTail } from "../src/modules/agents/hook-tail.ts";
 import { STALE_AFTER_MS } from "../src/modules/agents/live-session.ts";
 
 const HOOK_POLL_MS = 200;
@@ -115,10 +114,19 @@ function replay(argv: string[]): void {
   printChanges(replayCopilotRecording(cast, { staleAfterMs: STALE_AFTER_MS }));
 }
 
-/** Called by Copilot CLI for every event; the same hook record as the daemon writes (`appendHookRecord`). */
+/**
+ * Called by Copilot CLI for every event, with the payload on stdin; the same hook record as the daemon writes. An error
+ * is swallowed and nothing goes to stdout: a state hook must not stop the agent or give it a decision, and a lost record
+ * only means a worse state.
+ */
 async function hook(argv: string[]): Promise<void> {
-  const [event, log] = argv;
-  runCopilotHook(event, log, await Bun.stdin.text());
+  const [eventArg, log] = argv;
+  try {
+    const event = CopilotHookEvent.safeParse(eventArg);
+    if (event.success && log) appendHookRecord(log, event.data, await Bun.stdin.text());
+  } catch {
+    // see the function's comment
+  }
 }
 
 /**

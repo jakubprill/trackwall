@@ -1,5 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
 import { MCP_SERVER_NAME, mcpTools, TASK_MESSAGE_RULE } from "@trackwall/protocol";
 import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
@@ -66,8 +68,8 @@ function shellCall(request: ModelRequest, command: { bash: string; powershell: s
 }
 
 /**
- * How long a session may take to start and to finish a turn: a cold ~170 MB binary that Windows Defender scans, the MCP
- * stdio bridge and the hooks running from source.
+ * How long a session may take to start and to finish a turn: a cold ~170 MB binary that Windows Defender scans and the MCP
+ * stdio bridge running from source.
  */
 const SESSION_MS = 60_000;
 // A test waits for at most three such steps; its own limit is above their sum, so a slow step fails on its own message.
@@ -447,6 +449,45 @@ describe("the day start with the real Copilot CLI", () => {
       await agents.stop(supervisor);
     } finally {
       rmSync(userConfig, { force: true });
+    }
+  });
+});
+
+describe("session plugin hooks over HTTP with the real Copilot CLI (ADR-88)", () => {
+  test("a hook the daemon answers with an error does not hold up the turn: Copilot CLI goes on to the model and to the end of the turn", async () => {
+    // A stand-in for a daemon that cannot take the hooks: it answers every POST with 500 and keeps the event of each.
+    const refused: string[] = [];
+    const standIn = createServer((req, res) => {
+      refused.push(req.url ?? "");
+      req.resume();
+      res.writeHead(500);
+      res.end();
+    });
+    await new Promise<void>((resolve) => standIn.listen(0, "127.0.0.1", resolve));
+    const port = (standIn.address() as AddressInfo).port;
+    const broken = await startRealCopilotDaemon(model, {
+      sessionHook: (event) => ({ url: `http://127.0.0.1:${port}/hooks/${event}`, headers: {} }),
+    });
+    try {
+      const { agents } = broken.facade;
+      const started = await agents.start("shop");
+      const window = viewer(agents, started.id);
+      window.attachment.resize(REFERENCE_COLS, REFERENCE_ROWS);
+      await untilInputBox(window, "empty");
+      model.reply({ text: "The shop repo has only a README." });
+
+      window.attachment.input("what is in this repo?\r");
+      const until = Date.now() + SESSION_MS;
+      while (!refused.includes("/hooks/agentStop") && Date.now() < until) await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(refused).toEqual(["/hooks/sessionStart", "/hooks/userPromptSubmitted", "/hooks/agentStop"]);
+      expect(model.requests().at(-1)?.lastUserText).toEndWith("what is in this repo?");
+      expect(hookRecords(broken.home, started.id)).toEqual([]);
+      window.attachment.detach();
+      await agents.stop(started.id);
+    } finally {
+      await broken.stop();
+      standIn.close();
     }
   });
 });

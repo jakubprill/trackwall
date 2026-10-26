@@ -89,7 +89,7 @@ export interface LiveSessionOptions {
   task: string | null;
   cols: number;
   rows: number;
-  /** The session's `hooks.jsonl`, which the session plugin's hook processes append to. */
+  /** The session's `hooks.jsonl`, where the daemon appends the hooks the session plugin POSTs (ADR-88). */
   hooksFile: string;
   /** Copilot CLI got the prompt as its first message (`--interactive`), so it works right after the start. */
   promptOnStart: boolean;

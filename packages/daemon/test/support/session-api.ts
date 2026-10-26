@@ -6,7 +6,7 @@ import type { z } from "zod";
 import { EventHub } from "../../src/api/event-hub.ts";
 import { sessionHookRequest } from "../../src/api/hooks.ts";
 import { startApi } from "../../src/api/server.ts";
-import { createFacade, HOSTING_CLIS } from "../../src/facade.ts";
+import { createFacade, type FacadeOptions, HOSTING_CLIS } from "../../src/facade.ts";
 import { writeDaemonFile } from "../../src/infra/discovery.ts";
 import { loopbackRequest } from "../../src/infra/loopback.ts";
 import { createMcpEndpoint } from "../../src/mcp/endpoint.ts";
@@ -25,6 +25,8 @@ export interface SessionApiOptions {
   log?: (msg: string) => void;
   /** Copilot CLI and the environment of its sessions, made for the test's directories; the fake by default. */
   copilot?: CopilotUnderTest;
+  /** Where the session plugin's hooks go instead of this daemon's hook route, for a test of a failing hook. */
+  sessionHook?: FacadeOptions["sessionHook"];
   /** The built UI the API serves, for a test in a browser (`e2e/`); none by default. */
   uiDir?: string;
   /** `gh` and `glab`; the real programs by default, which a test that reaches a repo host replaces with the fake. */
@@ -60,7 +62,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
     miseCommand: options.miseCommand,
     copilotCommand: copilot.command,
     version: "0.0.0-test",
-    sessionHook: (event, sessionToken) => sessionHookRequest(api.port, token, event, sessionToken),
+    sessionHook: options.sessionHook ?? ((event, sessionToken) => sessionHookRequest(api.port, token, event, sessionToken)),
     sessionMcpCommand: (tokenFile) => sessionMcpStdioCommand(home, tokenFile),
     hostingClis: options.hostingClis ?? HOSTING_CLIS,
     userEnv: async () => copilot.env({ home, projects }),

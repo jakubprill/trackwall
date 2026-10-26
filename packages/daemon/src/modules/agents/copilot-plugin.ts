@@ -34,7 +34,7 @@ export interface HttpHook {
   headers: Record<string, string>;
 }
 
-export type PluginHook = HookCommand | HttpHook;
+type PluginHook = HookCommand | HttpHook;
 
 /** A state hook must answer at once; waiting longer only slows the agent down. */
 const HOOK_TIMEOUT_SEC = 5;
@@ -44,5 +44,6 @@ export function writeCopilotPlugin(dir: string, hook: (event: CopilotHookEvent) 
   const manifest = { name: COPILOT_PLUGIN_NAME, version: "0.0.0", description: "Trackwall: task session state" };
   const hooks = Object.fromEntries(COPILOT_HOOK_EVENTS.map((event) => [event, [{ ...hook(event), timeoutSec: HOOK_TIMEOUT_SEC }]]));
   writeFileSync(join(dir, "plugin.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-  writeFileSync(join(dir, "hooks.json"), `${JSON.stringify({ version: 1, hooks }, null, 2)}\n`);
+  // User-only like the session token file: an HTTP hook's headers carry the daemon token and the session token (§8).
+  writeFileSync(join(dir, "hooks.json"), `${JSON.stringify({ version: 1, hooks }, null, 2)}\n`, { mode: 0o600 });
 }
