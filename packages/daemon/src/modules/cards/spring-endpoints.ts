@@ -66,6 +66,8 @@ function endpointsOf(type: JavaType, method: JavaMethod, m: MethodMapping, modul
           // `endpoint-contracts.ts` adds the contract types from the syntax tree (ADR-38); the tokens do not know them.
           request: null,
           response: null,
+          // `endpoint-reach.ts` adds the calls the handler reaches once the card knows all clients (ADR-82).
+          reaches: null,
           evidence: { path: m.path, line: m.mapping.line },
         });
       }

@@ -207,12 +207,18 @@ describe("a Maven project and a Gradle project", () => {
     ]);
   });
 
-  test("find_endpoint finds the orders endpoint with checkout as its caller", async () => {
+  test("find_endpoint finds the orders endpoint with checkout as its caller, and the checkout endpoint that makes the call", async () => {
     const found = FindEndpointResult.parse(await call("find_endpoint", { query: "/api/orders/{id}", method: "GET" }));
 
-    expect(found.endpoints.map((e) => [e.repo, e.method, e.path, e.response, e.callers.map((c) => [c.repo, c.via])])).toEqual([
-      ["orders", "GET", "/api/orders/{id}", "OrderDto", [["checkout", "rest-client"]]],
-    ]);
+    expect(
+      found.endpoints.map((e) => [
+        e.repo,
+        e.method,
+        e.path,
+        e.response,
+        e.callers.map((c) => [c.repo, c.via, c.from?.map((f) => f.handler)]),
+      ]),
+    ).toEqual([["orders", "GET", "/api/orders/{id}", "OrderDto", [["checkout", "rest-client", ["CheckoutController.checkout"]]]]]);
   });
 
   test("run_mise_task runs mvn test and gradle test, and get_test_results reads the reports each one wrote", async () => {

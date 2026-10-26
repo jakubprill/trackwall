@@ -71,6 +71,7 @@ describe("cards", () => {
       tools: [],
       mise: { configFiles: [], tasks: [], complete: true },
       mechanisms: [],
+      reachTraced: false,
       problems: [],
     };
     const cache = new CardCache(cardsDir, () => {});

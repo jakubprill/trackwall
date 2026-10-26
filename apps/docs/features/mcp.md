@@ -36,7 +36,7 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 | `search_code` | Text or a regular expression in all repos at once, narrowed by repo, tag or path, with line and context. |
 | `who_calls` | Who uses a repo, through packages and HTTP, with evidence. |
 | `subgraph_for` | The part of the connection graph around a repo. |
-| `find_endpoint` | An HTTP endpoint by path or name, with its types and the repos that call it. |
+| `find_endpoint` | An HTTP endpoint by path or name, with its types, the repos and endpoints that call it, and the endpoints it calls. |
 | `run_mise_task`, `wait_for_mise_task`, `stop_mise_task`, `list_running_mise_tasks` | Run a repo's mise task, wait up to 55 s for it, stop it, list what runs. With `task`, in that task's worktree. |
 | `tail` | A mise task's log from a cursor, with secrets replaced by `***`; with `task`, the run in that task's worktree. |
 | `get_errors` | Errors from the mise task logs, newest first: error lines, compiler errors, exceptions with stack traces, Spring and Gradle failure reports; repeats counted once. With `minLevel: warn`, warnings too. |

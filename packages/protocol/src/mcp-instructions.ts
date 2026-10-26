@@ -59,7 +59,8 @@ export const MCP_INSTRUCTIONS = [
   `- Find code across repos: ${searchCode.name} searches the latest commit of many repos at once, not uncommitted ` +
     "changes (narrow with tags, repos and paths); prefer it to walking directories one repo at a time.",
   `- Before you change an endpoint, a DTO, a package or a config address, check whom it affects: ${findEndpoint.name} ` +
-    `shows who calls an endpoint, ${whoCalls.name} which repos depend on a repo, ${subgraphFor.name} its neighbourhood. ` +
+    `shows which endpoints of other repos call an endpoint and which it calls, ${whoCalls.name} which repos depend on a repo, ` +
+    `${subgraphFor.name} its neighbourhood. ` +
     "Connections with low or medium confidence are hints: confirm them in the code. Name the affected repos in your result.",
   `- Diagnose a failure: ${getErrors.name} gives the errors from the logs of all mise tasks with their stack traces and ` +
     `root cause; ${tail.name} reads the log of one mise task (${getRepo.name} lists them), from an error on with sinceSeq ` +
