@@ -115,7 +115,8 @@ describe("the local config store", () => {
 
   test("a pass with nothing changed starts no git process, in a folder of 20 repos", async () => {
     const { projects, backUp, storeCommits } = await setup();
-    for (let i = 0; i < 20; i++) writeFileSync(join(makeRepo({ "pom.xml": "<project/>" }, `repo-${i}`, projects), "mise.local.toml"), TASKS);
+    for (let i = 0; i < 20; i++)
+      writeFileSync(join(makeRepo({ "pom.xml": "<project/>" }, `repo-${i}`, projects), "mise.local.toml"), TASKS);
     await backUp();
     expect(storeCommits()).toBe(1);
 
