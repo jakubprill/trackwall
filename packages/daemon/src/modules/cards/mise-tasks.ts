@@ -56,7 +56,7 @@ function configRank(path: string): number {
  * The `[tasks]` keys; a file that is not valid TOML gives no mise tasks. A card problem is reported here only for files
  * `tools.ts` does not read, so that the same bad file is not on the card twice.
  */
-function tomlTasks(path: string, text: string, problems: CardProblem[]): DeclaredMiseTask[] {
+export function tomlTasks(path: string, text: string, problems: CardProblem[]): DeclaredMiseTask[] {
   let parsed: unknown;
   try {
     parsed = parseToml(text);

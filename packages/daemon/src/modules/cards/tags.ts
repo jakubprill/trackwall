@@ -20,6 +20,8 @@ import { dirOf } from "./repo-path.ts";
 export interface TaggedRepo {
   id: string;
   remote: string | null;
+  /** How many mise tasks the repo's `mise.local.toml` declares in the working directory (ADR-86): the commit never has them. */
+  localMiseTasks: number;
 }
 
 const FRONTEND: MechanismId[] = ["react", "angular", "vue", "svelte"];
@@ -56,18 +58,18 @@ function cardTags(card: RepoCard, repo: TaggedRepo): [string, string][] {
     tags.push(["library", `provides ${packages[0]?.name} and has no app framework or deployment files`]);
   const monorepo = monorepoReason(card);
   if (monorepo) tags.push(["monorepo", monorepo]);
-  const noMise = noMiseReason(card);
+  const noMise = noMiseReason(card, repo);
   if (noMise) tags.push([NO_MISE_TAG, noMise]);
   return tags;
 }
 
 /**
- * `no-mise`: a repo without mise tasks in the commit (ADR-34), so neither the `setup` and `build` steps of the batch
- * command nor the "mise tasks" tab have anything to run in it. A negative tag, because such a repo has to be found with
- * a filter to give it a `mise.toml`.
+ * `no-mise`: a repo without mise tasks in the commit (ADR-34) or in its `mise.local.toml` (ADR-86), so neither the `setup`
+ * and `build` steps of the batch command nor the "mise tasks" tab have anything to run in it. A negative tag, because
+ * such a repo has to be found with a filter to give it mise tasks.
  */
-function noMiseReason(card: RepoCard): string | undefined {
-  if (card.mise.tasks.length > 0 || !card.mise.complete) return undefined;
+function noMiseReason(card: RepoCard, repo: TaggedRepo): string | undefined {
+  if (card.mise.tasks.length > 0 || repo.localMiseTasks > 0 || !card.mise.complete) return undefined;
   const [config] = card.mise.configFiles;
   return config ? `${config} declares no tasks` : "no mise config in the repo root";
 }

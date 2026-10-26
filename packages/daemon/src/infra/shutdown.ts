@@ -12,10 +12,11 @@ export const SHUTDOWN_SIGNALS: readonly NodeJS.Signals[] =
  */
 export async function stopDaemon(home: string, facade: Facade | undefined, api: ApiServer | undefined): Promise<void> {
   // Process groups before the API closes, so the UI sees "stopping" and not a dropped connection. The batch command
-  // first, so no further repo tries to start while the rest stops, and with it the repo watch and the card warm-up, whose
+  // first, so no further repo tries to start while the rest stops, and with it the repo watch, the local config backup and the card warm-up, whose
   // card parsing runs on this thread and would hold up the stop.
   facade?.batch.close();
   facade?.repoWatch.close();
+  facade?.localConfig.close();
   facade?.cards.close();
   await facade?.procs.stopAll();
   facade?.agents.close();

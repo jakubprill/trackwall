@@ -1,7 +1,8 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { fileKey } from "../../infra/file-key.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
-import { fileKey, gitDirs, headRefName, optionalKey, statIfExists } from "./git-dir.ts";
+import { gitDirs, headRefName, optionalKey, statIfExists } from "./git-dir.ts";
 
 /**
  * The state of a repo's HEAD and refs read from the files in its git directory, without a `git` process (§4.5, ADR-63):
