@@ -255,12 +255,14 @@ export class LiveSession {
    * leaves it to the typed prompt once the input box is back. No dialog check as in `#typePrompt`: a block sends no keys.
    */
   hookOutput(record: CopilotHookRecord | undefined): CopilotHookOutput {
+    // The hooks file is closed once the exit was seen; a late hook changes nothing.
+    if (this.#finished) return {};
     const turnEnded = this.#readHooks(record?.event === "agentStop");
     const blockedTurn = record?.payload.stop_hook_active === true;
     const asked = this.#promptAsked || this.#promptTyped !== undefined || (blockedTurn && this.#blockGiven);
     if (record?.event === "agentStop") this.#blockGiven = false;
     const output =
-      record === undefined || this.#finished || !asked
+      record === undefined || !asked
         ? {}
         : hookOutputFor({
             event: record.event,
@@ -480,6 +482,7 @@ export class LiveSession {
    * `Input`, and the read cycle looks after it from now (`#followTypedPrompt`).
    */
   #promptSent(text: string, retries: number): void {
+    // Before the first hook a block cannot come (no `agentStop` yet), so `promptTyped` acts only for a typed prompt.
     this.#promptAsked = false;
     this.#promptTyped = { text, at: Date.now(), retries };
     this.#state.promptTyped();
