@@ -4,6 +4,7 @@ import { type Browser, chromium, type Locator, type Page } from "playwright";
 import { newToken } from "../../src/infra/discovery.ts";
 import { connectSessionClient } from "../../test/support/mcp-client.ts";
 import { ONE_REPO, type SessionApiOptions, startSessionApi } from "../../test/support/session-api.ts";
+import { openDesktopWindow } from "./desktop-window.ts";
 import { UI_DIR } from "./ui-dir.ts";
 
 const VIEWPORT = { width: 1600, height: 1000 };
@@ -22,7 +23,9 @@ const NO_BREAK_SPACE = String.fromCharCode(0xa0);
  */
 async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> = ONE_REPO) {
   const token = newToken();
-  const browser = await chromium.launch();
+  // WebGL on SwiftShader, which a runner without a GPU needs and Chromium no longer falls back to by itself: without it
+  // Home shows no 3D scene, and the scene's code never runs.
+  const browser = await chromium.launch({ args: ["--enable-unsafe-swiftshader"] });
   const daemon = await startSessionApi(token, { ...options, uiDir: UI_DIR }).catch(async (err: unknown) => {
     await browser.close();
     throw err;
@@ -33,6 +36,8 @@ async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> = ONE_RE
     daemon,
     /** The main window as the Tauri shell opens it, on Home. */
     open: () => openMainWindow(browser, origin, token),
+    /** The main window as the Tauri shell shows it: under the window's origin and CSP, connected through the shell. */
+    openDesktopWindow: () => openDesktopWindow(browser, { baseUrl: origin, token }, VIEWPORT),
     /** The tray panel (ADR-50): the same UI under `#tray-panel`, at the size of its window. */
     openTrayPanel: () => openTrayPanel(browser, origin, token),
     agentOf: async (session: string) => {
