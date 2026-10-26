@@ -127,7 +127,8 @@ export function HomeView({
   }
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[var(--spacing-sidebar)_1fr_var(--spacing-sidebar)]">
+    // On a small window (1280 wide with the supervisor panel pinned) the side panels give way before the scene does.
+    <div className="grid h-full min-h-0 grid-cols-[minmax(12rem,var(--spacing-sidebar))_minmax(20rem,1fr)_minmax(12rem,var(--spacing-sidebar))]">
       <NeedsYouPanel
         loading={loading}
         model={model}

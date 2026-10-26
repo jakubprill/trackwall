@@ -1,4 +1,4 @@
-import { describe, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { SMALL_SCREEN, showSessions, typeInTerminal, useTrackwall, waitForTerminal } from "./support/trackwall-ui.ts";
 
@@ -20,7 +20,7 @@ const trackwall = useTrackwall({
   miseCommand: FAKE_MISE,
 });
 
-describe("an agent task on a small screen", () => {
+describe("a small screen", () => {
   test("with a summary and a verdict above it, the task's terminal still shows the whole approval dialog, answered from the tray panel", async () => {
     const { daemon } = trackwall();
     const page = await trackwall().open(SMALL_SCREEN);
@@ -50,4 +50,14 @@ describe("an agent task on a small screen", () => {
     await waiting.getByRole("button", { name: "Yes", exact: true }).click();
     await panel.getByText("Nothing is waiting for you.").waitFor();
   }, 90_000);
+
+  test("Home with the supervisor panel pinned keeps the 3D scene wide enough to read", async () => {
+    const page = await trackwall().open(SMALL_SCREEN);
+    await page.getByRole("button", { name: /Pin the supervisor panel open/ }).click();
+    const canvas = page.locator("canvas").first();
+    await canvas.waitFor();
+
+    const box = await canvas.boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThanOrEqual(320);
+  }, 60_000);
 });
