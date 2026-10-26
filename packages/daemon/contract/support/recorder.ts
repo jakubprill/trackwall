@@ -1,12 +1,13 @@
 /**
- * The recording of the real Copilot CLI (`test/support/copilot-recorded.ts`, ADR-69) taken and checked by the contract
- * tests: each test hands over what it saw, which is compared with this system's recording, or, with
- * `TRACKWALL_RECORD=1`, written as the new recording when all tests are done. A missing recording or a difference
- * prints the whole recording seen, so one from a CI system can be taken from its log.
+ * The Copilot CLI reference (`test/support/copilot-reference.ts`, ADR-67) taken and checked by the contract tests: each
+ * test hands over what it saw, and `finish()` compares it with this system's reference once all tests are done, or,
+ * with `TRACKWALL_RECORD=1`, writes it as the new reference. Nothing throws in the middle of a test, so a missing
+ * reference or a difference still lets every test hand over its part, and `finish()` prints all that was seen; the
+ * reference of a CI system is taken from its log that way.
  */
-import { expect } from "bun:test";
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { COPILOT_CLI_VERSION } from "../../scripts/copilot-cli.ts";
 import { readAgentDialog } from "../../src/modules/agents/copilot-dialog.ts";
 import type { CopilotHookRecord } from "../../src/modules/agents/copilot-hook-record.ts";
@@ -16,14 +17,14 @@ import { TerminalScreen } from "../../src/modules/agents/terminal-screen.ts";
 import type { viewer } from "../../test/support/agents.ts";
 import {
   anonymize,
-  CopilotRecorded,
+  CopilotReference,
   PROMPT_PLACEHOLDER,
-  RECORDED_COLS,
-  RECORDED_ROWS,
-  type RecordedHook,
-  readRecorded,
-  recordedFile,
-} from "../../test/support/copilot-recorded.ts";
+  REFERENCE_COLS,
+  REFERENCE_ROWS,
+  type ReferenceHook,
+  readReference,
+  referenceFile,
+} from "../../test/support/copilot-reference.ts";
 
 type Window = ReturnType<typeof viewer>;
 
@@ -32,7 +33,7 @@ const PROMPT_BOX_LINES = 4;
 
 /** The window's screen as Copilot CLI drew it in the recording's size, once the emulator has processed all output. */
 async function screenLines(window: Window): Promise<string[]> {
-  const screen = new TerminalScreen(RECORDED_COLS, RECORDED_ROWS);
+  const screen = new TerminalScreen(REFERENCE_COLS, REFERENCE_ROWS);
   try {
     screen.write(new TextEncoder().encode(window.text()));
     await new Promise<void>((resolve) =>
@@ -49,14 +50,14 @@ async function screenLines(window: Window): Promise<string[]> {
 
 export function startRecorder(daemon: { home: string; projects: string }) {
   const recording = process.env.TRACKWALL_RECORD === "1";
-  const known = readRecorded();
-  const seen: Partial<CopilotRecorded> = { copilotVersion: COPILOT_CLI_VERSION, platform: process.platform };
-  let differs = false;
+  const known = readReference();
+  const seen: Partial<CopilotReference> = { copilotVersion: COPILOT_CLI_VERSION, platform: process.platform };
+  const differences: string[] = [];
   // Copilot CLI names directories by their real path (macOS: /private/var/… for /var/…), and on Windows by the long one.
   const paths = [...new Set([daemon.projects, daemon.home].flatMap((p) => [p, realpathSync.native(p)]))];
   const clean = (text: string) => anonymize(text, paths);
 
-  function hooks(records: readonly CopilotHookRecord[]): RecordedHook[] {
+  function hooks(records: readonly CopilotHookRecord[]): ReferenceHook[] {
     return records.map(({ event, payload, omitted }) => {
       const { sessionId: _, timestamp: __, ...kept } = payload;
       const cleaned = Object.fromEntries(Object.entries(kept).map(([k, v]) => [k, typeof v === "string" ? clean(v) : v]));
@@ -64,21 +65,11 @@ export function startRecorder(daemon: { home: string; projects: string }) {
     });
   }
 
-  /** Compares one part with the recording (or keeps it for writing); `compare` maps both sides first. */
-  function check<K extends keyof CopilotRecorded>(key: K, value: CopilotRecorded[K], compare = (v: CopilotRecorded[K]): unknown => v) {
+  /** Keeps one part and notes whether it differs from the reference; `compare` maps both sides first. */
+  function check<K extends keyof CopilotReference>(key: K, value: CopilotReference[K], compare = (v: CopilotReference[K]): unknown => v) {
     seen[key] = value;
-    if (recording) return;
-    if (known === undefined) {
-      differs = true;
-      throw new Error(
-        `no Copilot CLI recording for ${process.platform} (${recordedFile()}); TRACKWALL_RECORD=1 pnpm test:contract takes it`,
-      );
-    }
-    try {
-      expect(compare(value)).toEqual(compare(known[key]));
-    } catch (err) {
-      differs = true;
-      throw err;
+    if (known !== undefined && !isDeepStrictEqual(compare(value), compare(known[key]))) {
+      differences.push(`${key}: expected ${JSON.stringify(known[key])}, seen ${JSON.stringify(value)}`);
     }
   }
 
@@ -116,16 +107,25 @@ export function startRecorder(daemon: { home: string; projects: string }) {
       );
     },
 
-    /** Writes the recording (`TRACKWALL_RECORD=1`), or prints the one seen when it differs. */
+    /**
+     * Writes the reference (`TRACKWALL_RECORD=1`; `pnpm format` then gives it the repo's JSON style), or, when there is
+     * none or the session differed from it, prints what was seen and throws.
+     */
     finish(): void {
-      const complete = CopilotRecorded.safeParse(seen);
+      const complete = CopilotReference.safeParse(seen);
       if (recording) {
-        if (!complete.success) throw new Error(`the recording is incomplete: ${complete.error.message}`);
-        mkdirSync(dirname(recordedFile()), { recursive: true });
-        writeFileSync(recordedFile(), `${JSON.stringify(complete.data, null, 2)}\n`);
-      } else if (differs && complete.success) {
-        process.stdout.write(`Copilot CLI recording seen on ${process.platform}:\n${JSON.stringify(complete.data, null, 2)}\n`);
+        if (!complete.success) throw new Error(`the reference is incomplete: ${complete.error.message}`);
+        mkdirSync(dirname(referenceFile()), { recursive: true });
+        writeFileSync(referenceFile(), `${JSON.stringify(complete.data, null, 2)}\n`);
+        return;
       }
+      if (known !== undefined && differences.length === 0) return;
+      process.stdout.write(`Copilot CLI reference seen on ${process.platform}:\n${JSON.stringify(seen, null, 2)}\n`);
+      throw new Error(
+        known === undefined
+          ? `no Copilot CLI reference for ${process.platform} (${referenceFile()}); TRACKWALL_RECORD=1 pnpm test:contract takes it`
+          : `the session differs from the Copilot CLI reference (${referenceFile()}):\n${differences.join("\n")}`,
+      );
     },
   };
 }

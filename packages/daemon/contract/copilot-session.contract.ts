@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
 import { inboxPrompt } from "../src/modules/agents/inbox-prompt.ts";
 import { viewer, waitFor } from "../test/support/agents.ts";
-import { RECORDED_COLS, RECORDED_ROWS } from "../test/support/copilot-recorded.ts";
+import { REFERENCE_COLS, REFERENCE_ROWS } from "../test/support/copilot-reference.ts";
 import { hookRecords, startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { type Recorder, startRecorder } from "./support/recorder.ts";
 import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
@@ -31,10 +31,14 @@ afterEach(() => {
   expect(model.takeLeftovers()).toEqual({ problems: [], unusedReplies: 0 });
 });
 
+// The reference is checked last, after the sessions are stopped, so a difference does not leave Copilot CLI running.
 afterAll(async () => {
-  recorder.finish();
-  await daemon.stop();
-  await model.close();
+  try {
+    await daemon.stop();
+    await model.close();
+  } finally {
+    recorder.finish();
+  }
 });
 
 /** A tool of the Trackwall MCP server as Copilot CLI names it to the model: the server's key, a dash, the tool. */
@@ -60,8 +64,8 @@ async function startSession() {
   const started = await agents.start("shop");
   const window = viewer(agents, started.id);
   windows.set(started.id, window);
-  // The size the recording is taken in (`RECORDED_COLS`), so the screen compares with it.
-  window.attachment.resize(RECORDED_COLS, RECORDED_ROWS);
+  // The size the reference is taken in (`REFERENCE_COLS`), so the screen compares with it.
+  window.attachment.resize(REFERENCE_COLS, REFERENCE_ROWS);
   // Copilot CLI shows "1 MCP server" in its loading line only for a moment, so it is looked for in the whole output;
   // without blanks, because ConPTY on Windows replaces runs of blanks with cursor moves.
   const loaded = () => window.unwrappedText().replace(/\s/g, "").includes("1MCPserver");
@@ -81,7 +85,7 @@ describe("a session of the real Copilot CLI", () => {
   test("sessionStart comes only with the first prompt, and a turn ending in text goes working and back to waiting", async () => {
     const { agents } = daemon.facade;
     const { id, window } = await startSession();
-    // Copilot CLI is ready for input, but it has sent no hook yet: the daemon reads its input box from the screen (ADR-69).
+    // Copilot CLI is ready for input, but it has sent no hook yet: the daemon reads its input box from the screen (ADR-67).
     const ready = await waitFor(agents, id, (s) => s.state !== null, "the input box of a new session", SESSION_MS);
     expect(ready.state).toMatchObject({ state: "Input", source: "screen", reason: "screen input box before the first prompt" });
     expect(ready.needsAttention).toBe(true);
@@ -98,7 +102,7 @@ describe("a session of the real Copilot CLI", () => {
     const records = hookRecords(daemon.home, id);
     expect(records.map((r) => r.event)).toEqual(["sessionStart", "userPromptSubmitted", "agentStop"]);
     expect(records[0]?.receivedAt).toBeGreaterThanOrEqual(typedAt);
-    // The payload fields the detectors read, and the names of the others, are in the recording: a new or renamed field
+    // The payload fields the detectors read, and the names of the others, are in the reference: a new or renamed field
     // shows up there.
     expect(records[0]?.payload.source).toBe("new");
     expect(records[2]?.payload.stopReason).toBe("end_turn");
