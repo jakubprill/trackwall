@@ -15,6 +15,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "bun test",
     "test:contract": "bun scripts/contract.ts",
+    "test:jvm": "bun test ./jvm/java-projects.jvm.ts",
     "test:e2e": "bun scripts/e2e.ts"
   },
   "dependencies": {

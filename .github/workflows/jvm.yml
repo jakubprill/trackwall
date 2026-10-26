@@ -1,0 +1,99 @@
+name: Java build tests
+
+# The daemon on real Spring Boot projects built by real Maven and Gradle through real mise (ADR-72): cards, the graph,
+# services, test reports, task verification and log errors (`pnpm test:jvm`, packages/daemon/jvm/). Outside `CI ok`:
+# a run downloads a JDK and the Spring Boot dependencies, and a new release of a build tool must not block every PR.
+# Every night from nightly.yml, which opens an issue when it fails on main; on a PR only when it touches the daemon, the
+# protocol or the dependencies, which the tests go through end to end, so its author sees the result before the merge;
+# by hand from Actions.
+on:
+  workflow_call:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - packages/daemon/**
+      - packages/protocol/src/**
+      - package.json
+      - pnpm-lock.yaml
+      - .github/actions/setup/**
+      - .github/workflows/jvm.yml
+
+# On a PR a new push cancels the previous run; a call from nightly.yml runs in the nightly workflow's own group.
+concurrency:
+  group: jvm-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+# No permissions by default; the job gets only what it needs.
+permissions: {}
+
+# Node and Bun as in mise.toml (apps/desktop/test/toolchain.test.ts guards this). mise is the one the tests run, so it is
+# pinned here; the JDK, Maven and Gradle come from the projects' own mise.toml, as in a user's workspace.
+env:
+  BUN_VERSION: "1.4.4"
+  NODE_VERSION: "22"
+  MISE_VERSION: "2026.10.19"
+
+jobs:
+  jvm:
+    name: Java builds (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
+      # The release binary of the pinned version, checked against the release's SHASUMS256.txt: a few lines instead of
+      # another action to pin and keep up to date. mise is not in mise.toml, which holds the tools of Trackwall itself.
+      - name: Install mise ${{ env.MISE_VERSION }}
+        shell: bash
+        run: |
+          case "$RUNNER_OS-$RUNNER_ARCH" in
+            Linux-X64) asset="mise-v$MISE_VERSION-linux-x64" ;;
+            macOS-ARM64) asset="mise-v$MISE_VERSION-macos-arm64" ;;
+            Windows-X64) asset="mise-v$MISE_VERSION-windows-x64.zip" ;;
+            *) echo "::error::no mise build for $RUNNER_OS-$RUNNER_ARCH"; exit 1 ;;
+          esac
+          base="https://github.com/jdx/mise/releases/download/v$MISE_VERSION"
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "$base/$asset"
+          expected=$(curl -fsSL "$base/SHASUMS256.txt" | awk -v name="$asset" '$2 == name || $2 == "./" name { print $1 }')
+          if command -v sha256sum > /dev/null; then actual=$(sha256sum "$asset" | cut -d' ' -f1); else actual=$(shasum -a 256 "$asset" | cut -d' ' -f1); fi
+          if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
+            echo "::error::$asset: sha256 $actual, SHASUMS256.txt says '$expected'"
+            exit 1
+          fi
+          mkdir -p mise-bin
+          if [ "$RUNNER_OS" = Windows ]; then
+            unzip -q "$asset" -d mise-unzipped
+            mv mise-unzipped/mise/bin/mise.exe mise-bin/
+          else
+            mv "$asset" mise-bin/mise
+            chmod +x mise-bin/mise
+          fi
+          echo "$RUNNER_TEMP/mise-bin" >> "$GITHUB_PATH"
+      - run: mise --version
+      # Keyed by the projects' build files and saved only after a passing run (a failed or cancelled one may hold half a
+      # download); a version bump starts a new cache, so old JDKs and dependencies do not pile up in it.
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.local/share/mise
+            ~/AppData/Local/mise
+            ~/.m2/repository
+            ~/.gradle/caches
+          key: jvm-${{ runner.os }}-${{ runner.arch }}-${{ env.MISE_VERSION }}-${{ hashFiles('packages/daemon/jvm/projects/**/mise.toml', 'packages/daemon/jvm/projects/**/pom.xml', 'packages/daemon/jvm/projects/**/*.gradle.kts', 'packages/daemon/jvm/projects/**/gradle.properties') }}
+      - run: pnpm test:jvm
+        env:
+          # mise reads tool versions from GitHub; without a token the runners' shared addresses hit the rate limit. The
+          # token can only read this repo and ends with the job.
+          MISE_GITHUB_TOKEN: ${{ github.token }}
