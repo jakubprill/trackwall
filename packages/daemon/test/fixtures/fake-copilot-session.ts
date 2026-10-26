@@ -1,8 +1,9 @@
 /**
  * An interactive fake Copilot CLI for the daemon's session tests: it runs in a PTY, reads the plugin from `--plugin-dir`
  * and calls its hooks the way Copilot CLI does (the program from `exec` + `args`, a JSON payload on stdin). The flow:
- * a welcome screen and `sessionStart` (waiting for you), a line from the user starts a turn with an approval request
- * (`notification` `permission_prompt`), `y` ends the turn (`agentStop`), and `/exit` ends the session (`sessionEnd`).
+ * a welcome screen with Copilot CLI's input box and footer and no hook (waiting for you, read from the screen, ADR-69),
+ * a line from the user starts a turn with an approval request (`notification` `permission_prompt`), the first one after
+ * `sessionStart` (at once with a prompt from `--interactive=`), `y` ends the turn (`agentStop`), and `/exit` ends the session (`sessionEnd`).
  * The window title and the progress bar go as OSC sequences, as in Copilot CLI. The first turn starts a helper process
  * (like an agent's tool) and prints its PID, so that the test can check that stopping the session ends the whole group.
  * The helper starts only after input from the user, because on Windows the leader joins the job a moment after the start.
@@ -39,9 +40,14 @@ const CWD_LINE_CHARS = 60;
 // The directory in lines shorter than the screen: ConPTY on Windows wraps a longer line its own way, and the test joins the lines.
 process.stdout.write(`Directory:\r\n${process.cwd().replace(new RegExp(`.{${CWD_LINE_CHARS}}`, "g"), "$&\r\n")}\r\n`);
 for (const arg of taskArgs) process.stdout.write(`Argument: ${arg}\r\n`);
-process.stdout.write("> ");
-fire("sessionStart", { source: "new" });
+// The bottom of Copilot CLI 1.0.103 waiting for the first prompt (test/fixtures/copilot/prompt-box-72.txt), narrower
+// than the session screen, so that it wraps nowhere.
+const rule = "─".repeat(72);
+process.stdout.write(`${rule}\r\n❯ \r\n${rule}\r\n Interactive · Manual Approval · / commands\r\n`);
 
+// A prompt given at the start (`--interactive=`, a task's session) is the first prompt, so it starts the hooks at once.
+let started = taskArgs.some((a) => a.startsWith("--interactive="));
+if (started) fire("sessionStart", { source: "new" });
 let awaitingApproval = false;
 const lines = createInterface({ input: process.stdin });
 lines.on("line", (line) => {
@@ -56,6 +62,9 @@ lines.on("line", (line) => {
     fire("agentStop", { stopReason: "end_turn" });
     return;
   }
+  // Copilot CLI starts the session's hooks only with the first prompt (ADR-69).
+  if (!started) fire("sessionStart", { source: "new" });
+  started = true;
   fire("userPromptSubmitted", { prompt: line });
   const helper = spawn(process.execPath, ["-e", "setTimeout(() => {}, 600000)"], { stdio: "ignore" });
   process.stdout.write(`helper PID: ${helper.pid}\r\n`);

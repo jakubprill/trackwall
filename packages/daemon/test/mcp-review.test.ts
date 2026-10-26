@@ -82,7 +82,7 @@ describe.skipIf(process.versions.bun === undefined)("a review from the Changes t
   test("a review of a task without a running session goes to the session the user resumes", async () => {
     const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "add a license" });
     const first = taskSession(task.id);
-    await waitFor(daemon.facade.agents, first, (s) => s.state !== null, "sessionStart");
+    await waitFor(daemon.facade.agents, first, (s) => s.state !== null, "the first state");
     await daemon.facade.agents.stop(first);
 
     expect(await daemon.post(agentsApi.sendReview, { task: task.id, comments: [LOGIN_COMMENT] })).toEqual({
@@ -120,7 +120,7 @@ describe.skipIf(process.versions.bun === undefined)("a review from the Changes t
     await expect(
       daemon.post(agentsApi.sendReview, { task: "00000000-0000-4000-8000-000000000000", comments: [LOGIN_COMMENT] }),
     ).rejects.toThrow("00000000-0000-4000-8000-000000000000");
-    await waitFor(daemon.facade.agents, root.id, (s) => s.state !== null, "sessionStart");
+    await waitFor(daemon.facade.agents, root.id, (s) => s.state !== null, "the first state");
     await daemon.facade.agents.stop(root.id);
   }, 30_000);
 });

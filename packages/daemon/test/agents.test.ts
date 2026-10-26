@@ -21,8 +21,9 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const started = await agents.start("shop");
     expect(started).toMatchObject({ repo: "shop", run: { kind: "running" } });
 
-    const waiting = await waitFor(agents, started.id, (s) => s.state?.reason === "hook sessionStart", "sessionStart");
-    expect(waiting.state).toMatchObject({ state: "Input", source: "hook" });
+    // Copilot CLI sends no hook before the first prompt, so its input box on the screen says it waits for you (ADR-69).
+    const waiting = await waitFor(agents, started.id, (s) => s.state !== null, "input box");
+    expect(waiting.state).toMatchObject({ state: "Input", source: "screen", reason: "screen input box before the first prompt" });
     expect(waiting.needsAttention).toBe(true);
 
     const window = viewer(agents, started.id);

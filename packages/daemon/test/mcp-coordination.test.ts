@@ -43,11 +43,12 @@ async function clientOfSession(session: string): Promise<Client> {
 }
 
 /**
- * Stops a session only after its `sessionStart`: killing a process in ConPTY during its start could hang or crash Bun
+ * Stops a session only after its first state (its input box or the hook of its prompt), when the fake Copilot CLI is up
+ * and has drawn its screen: killing a process in ConPTY during its start could hang or crash Bun
  * on Windows (a segfault in `bun test`).
  */
 async function stopStarted(session: string): Promise<void> {
-  await waitFor(daemon.facade.agents, session, (s) => s.state !== null, "sessionStart");
+  await waitFor(daemon.facade.agents, session, (s) => s.state !== null, "the first state");
   await daemon.facade.agents.stop(session);
 }
 
