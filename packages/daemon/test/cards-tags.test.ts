@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { RepoCard } from "@trackwall/protocol";
 import { globMatcher } from "../src/infra/glob.ts";
 import { extractCard } from "../src/modules/cards/extract-card.ts";
+import type { RepoSnapshot } from "../src/modules/cards/snapshot.ts";
 import { loadSyntaxParsers } from "../src/modules/cards/syntax-tree.ts";
 import { repoTags } from "../src/modules/cards/tags.ts";
 import { snapshotOf } from "./support/snapshot.ts";
@@ -131,6 +132,18 @@ describe("mise configuration and the no-mise tag", () => {
     expect(noMise({}, [".mise/tasks/build"])).toBeUndefined();
     // A config file the card did not read (limits) may have mise tasks, so there is no tag.
     expect(noMise({}, ["mise.toml"])).toBeUndefined();
+  });
+
+  test("source files the card did not read (a failed search) do not hide no-mise, and a truncated file list does", () => {
+    const noMise = (snapshot: RepoSnapshot) =>
+      repoTags(extractCard(snapshot, parsers), { id: "app", remote: null }, {}).find((t) => t.name === "no-mise")?.reason;
+    const searchFailed = {
+      ...snapshotOf({ "mise.toml": '[tools]\njava = "21"\n' }),
+      problems: [{ code: "files-not-read" as const, path: "", message: "searching for files with controllers and HTTP clients failed" }],
+    };
+    expect(noMise(searchFailed)).toBe("mise.toml declares no tasks");
+    // The list may end before mise.toml or a mise task directory, so it is unknown whether the repo has mise tasks.
+    expect(noMise({ ...snapshotOf({}), pathsComplete: false })).toBeUndefined();
   });
 
   test("the no-mise reason points to mise.toml before other files, and a bad file from conf.d is a card problem", () => {

@@ -28,6 +28,23 @@ describe("card problem codes (ADR-80)", () => {
     ]);
   });
 
+  test("a commit file list git cut at its limit is a card problem and marks the snapshot's paths incomplete", async () => {
+    const vcs = {
+      commitFiles: async () => ({ files: [{ name: "pom.xml", path: "pom.xml", kind: "file" as const, size: 10 }], truncated: true }),
+      readFiles: async () => new Map([["pom.xml", Buffer.from("<project/>")]]),
+      grepFiles: async () => ({ paths: [], truncated: false }),
+    };
+    const snapshot = await readSnapshot(vcs, "/repo", "a".repeat(40), (path) => path.endsWith("pom.xml"), CARD_SOURCES);
+    expect(snapshot.pathsComplete).toBe(false);
+    expect(snapshot.problems).toEqual([
+      {
+        code: "files-not-read",
+        path: "",
+        message: "the commit's file list is longer than 67108864 B; the card describes only its beginning",
+      },
+    ]);
+  });
+
   test("more build files than the card reads is files-not-read for the whole repo", async () => {
     const poms = Array.from({ length: 2001 }, (_, i) => `m${i}/pom.xml`);
     const vcs = {
