@@ -350,3 +350,26 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
     7 * SESSION_MS,
   );
 });
+
+describe("the day start with the real Copilot CLI", () => {
+  test("the day start's first message reaches the new supervisor's model as its first prompt, and it reads the day report without an approval request", async () => {
+    const { agents, dayStart } = daemon.facade;
+    model.reply({ tool: copilotToolName(mcpTools.getDayReport.name), arguments: {} }, { text: "Nothing new since your last day start." });
+
+    dayStart.start();
+    const until = Date.now() + SESSION_MS;
+    while (dayStart.run()?.finishedAt === null && Date.now() < until) await new Promise((resolve) => setTimeout(resolve, 100));
+    const run = dayStart.run();
+    expect(run).toMatchObject({ error: null, step: "supervisor" });
+    const supervisor = run?.supervisor;
+    if (!supervisor) throw new Error("the day start started no supervisor");
+    await endOfTurn(supervisor);
+
+    const [first, second] = model.requests().slice(-2);
+    expect(first?.lastUserText).toContain(`Start my day. Trackwall has just synced every repo; call ${mcpTools.getDayReport.name}`);
+    expect(first?.system).toContain("You are the supervisor");
+    expect(second?.toolResults.join("\n")).toContain('"quietRepos":1');
+    expect(hookRecords(daemon.home, supervisor).map((r) => r.event)).not.toContain("notification");
+    await agents.stop(supervisor);
+  });
+});

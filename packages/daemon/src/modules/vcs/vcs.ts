@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Commit, FileContent, RepoStatusOk, SyncResult, TreeEntry, WorkingTreeChanges } from "@trackwall/protocol";
+import { commitsBetween, isAncestor, remoteDefaultBranch } from "./commit-range.ts";
 import { git } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { type GitState, GitStateReader } from "./git-state.ts";
@@ -114,6 +115,21 @@ export class Vcs {
   async log(dir: string, limit: number): Promise<Commit[]> {
     const { stdout } = await git(dir, ["log", "-z", "--ignore-missing", `--max-count=${limit}`, LOG_FORMAT, "HEAD", "--"]);
     return parseLog(stdout.toString("utf8"));
+  }
+
+  /** The main remote's default branch as the last fetch left it (`origin/main`) and its commit; `null` when unknown (ADR-70). */
+  remoteDefaultBranch(dir: string): Promise<{ name: string; commit: string } | null> {
+    return remoteDefaultBranch(dir);
+  }
+
+  /** Whether `ancestor` is in the history of `commit` (`false` for a commit the repo does not have). */
+  isAncestor(dir: string, ancestor: string, commit: string): Promise<boolean> {
+    return isAncestor(dir, ancestor, commit);
+  }
+
+  /** The commits on `to` that `from` does not have: their number and the newest `limit`; `undefined` when `from` is unknown. */
+  commitsBetween(dir: string, from: string | null, to: string, limit: number): Promise<{ total: number; commits: Commit[] } | undefined> {
+    return commitsBetween(dir, from, to, limit);
   }
 
   /** The contents of directory `path` in HEAD; `undefined` when there is no such directory. An empty root in a repo without commits. */

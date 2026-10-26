@@ -50,6 +50,10 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).toContain("You coordinate, you do not change code: hand each piece of work to an agent with propose_task");
     expect(text).toContain("Do not poll the work you delegated: end your turn");
     expect(text).toContain("Steer your tasks with send_message");
+    expect(text).toContain("When the user starts their day in Trackwall, your first message asks for a briefing: read get_day_report once");
+    expect(text).toContain(
+      "a repo's remote (from list_repos) is its project path there, and a task's branch is the source branch of its merge request",
+    );
     expect(text).not.toContain("main session in the root");
     expect(text).not.toContain("Work only in this worktree");
     expect(text).toContain(MCP_INSTRUCTIONS);

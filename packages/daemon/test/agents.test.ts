@@ -199,6 +199,37 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     await agents.stop(next.id);
   }, 60_000);
 
+  test("a supervisor with a first message gets it as its first prompt and works from the start, and replaces the ended one", async () => {
+    const { agents, procs } = makeAgents({}, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
+    cleanups.push(() => procs.stopAll());
+    const ended = await agents.startSupervisor();
+    await agents.stop(ended.id);
+
+    const supervisor = await agents.startSupervisorWith("Start my day.\n\nCheck my issues.");
+    const window = viewer(agents, supervisor.id);
+    await waitFor(agents, supervisor.id, () => window.text().includes("--interactive="), "the first message on the screen");
+    expect(window.unwrappedText()).toContain("Argument: --interactive=Start my day.");
+    expect(agents.sessions().sessions.map((s) => s.id)).toEqual([supervisor.id]);
+    // The first message is on its way, so the session works rather than waiting for input (ADR-69).
+    await waitFor(agents, supervisor.id, (s) => s.state?.state === "Working" || s.state?.state === "Approval", "the first turn");
+    window.attachment.detach();
+    await agents.stop(supervisor.id);
+  }, 60_000);
+
+  test("a supervisor with a first message is refused while a supervisor starts or runs, so no conversation ends without the user", async () => {
+    const { agents, procs } = makeAgents({}, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
+    cleanups.push(() => procs.stopAll());
+
+    const starting = agents.startSupervisor();
+    const refusal = "the supervisor is running; stop it to start your day with a new one";
+    expect(() => agents.assertNoSupervisor()).toThrow(refusal);
+    const running = await starting;
+    await expect(agents.startSupervisorWith("Start my day.")).rejects.toThrow(refusal);
+    expect(agents.sessions().sessions.map((s) => s.id)).toEqual([running.id]);
+    await agents.stop(running.id);
+    expect(() => agents.assertNoSupervisor()).not.toThrow();
+  }, 60_000);
+
   test("a supervisor start succeeds even when the ended supervisor is dismissed while it starts", async () => {
     const { agents, procs } = makeAgents({}, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
     cleanups.push(() => procs.stopAll());

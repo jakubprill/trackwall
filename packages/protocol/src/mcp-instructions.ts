@@ -23,6 +23,7 @@ const {
   findEndpoint,
   listSessions,
   getSession,
+  getDayReport,
   getTaskChanges,
   proposeTask,
   reportResult,
@@ -87,6 +88,9 @@ export const MCP_INSTRUCTIONS = [
     `needs someone, goes stale or exits; when it times out (still pending, starting or working), call it again. ${getSession.name} shows ` +
     `the task's changed files and ${getTaskChanges.name} their diff (narrow it with paths): review it before you tell the ` +
     "user the work is done. Propose related tasks together, so the user can review them as one plan.",
+  `- Catch up after a break: ${getDayReport.name} says what changed since the user's previous day start (new commits ` +
+    "on each repo's default branch, repos the sync could not update, open tasks and how far behind they are), computed " +
+    "once when the user started their day; read it instead of walking every repo.",
   `- ${listSessions.name} shows the Copilot CLI sessions and tasks Trackwall runs (caller is your own session); a session ` +
     `that runs a task ends its work with ${reportResult.name}. When the user sends a review of its changes, Trackwall asks ` +
     `it to call ${getReviewComments.name}, which returns the comments to address; when the session that proposed the task ` +

@@ -11,6 +11,8 @@ import type { RepoEntry } from "./projects-dir.ts";
  */
 export class SyncRuns {
   private readonly runs = new Map<string, SyncRun>();
+  /** The end of each folder's last sync, for whoever has to wait for it (the day start, ADR-70). */
+  private readonly ends = new Map<string, Promise<unknown>>();
 
   /** The last sync of the folder with key `key`. */
   last(key: string): SyncRun | undefined {
@@ -29,6 +31,20 @@ export class SyncRuns {
     return snapshot(this.start(key, entries, limit, sync));
   }
 
+  /** Like `startOrJoin`, and resolves once that sync has finished, with its results. */
+  async startOrJoinAndWait(
+    key: string,
+    entries: readonly RepoEntry[],
+    limit: number,
+    sync: (entry: RepoEntry) => Promise<SyncResult>,
+  ): Promise<SyncRun> {
+    this.startOrJoin(key, entries, limit, sync);
+    await this.ends.get(key);
+    const run = this.runs.get(key);
+    if (!run) throw new Error(`no sync of ${key} after its start`);
+    return snapshot(run);
+  }
+
   private start(key: string, entries: readonly RepoEntry[], limit: number, sync: (entry: RepoEntry) => Promise<SyncResult>): SyncRun {
     const run: SyncRun = {
       startedAt: new Date().toISOString(),
@@ -36,7 +52,7 @@ export class SyncRuns {
       repos: entries.map((e) => ({ repo: e.id, path: e.path, state: "waiting" })),
     };
     this.runs.set(key, run);
-    void mapLimit(entries, limit, async (entry, i) => {
+    const end = mapLimit(entries, limit, async (entry, i) => {
       const target = { repo: entry.id, path: entry.path };
       run.repos[i] = { ...target, state: "running" };
       try {
@@ -47,6 +63,7 @@ export class SyncRuns {
     }).finally(() => {
       run.finishedAt = new Date().toISOString();
     });
+    this.ends.set(key, end);
     return run;
   }
 }

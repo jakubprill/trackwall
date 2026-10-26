@@ -2,6 +2,7 @@ import { dirname, join } from "node:path";
 import {
   type CloneJob,
   type Commit,
+  type DayStartSettings,
   type DroppedFolder,
   type FileContent,
   type GraphConfig,
@@ -171,10 +172,21 @@ export class Workspace {
    * starting a new one. A repo that is being cloned is skipped: its directory is not a ready repo yet.
    */
   async sync(): Promise<SyncRun> {
+    const { key, targets } = await this.syncTargets();
+    return this.syncs.startOrJoin(key, targets, SYNC_CONCURRENCY, (entry) => this.deps.vcs.sync(entry.path));
+  }
+
+  /** The same sync as `sync`, resolved once every repo has its result (the day start, ADR-70). */
+  async syncAndWait(): Promise<SyncRun> {
+    const { key, targets } = await this.syncTargets();
+    return this.syncs.startOrJoinAndWait(key, targets, SYNC_CONCURRENCY, (entry) => this.deps.vcs.sync(entry.path));
+  }
+
+  /** The sync key of the projects folder and its repos, without a repo that is being cloned. */
+  private async syncTargets(): Promise<{ key: string; targets: RepoEntry[] }> {
     const { projectsDir, entries } = await this.entries();
     if (projectsDir === null) throw new DomainError("bad_request", "set the projects folder first");
-    const targets = entries.filter((entry) => !this.clones.runningInto(entry.path));
-    return this.syncs.startOrJoin(dirKey(projectsDir), targets, SYNC_CONCURRENCY, (entry) => this.deps.vcs.sync(entry.path));
+    return { key: dirKey(projectsDir), targets: entries.filter((entry) => !this.clones.runningInto(entry.path)) };
   }
 
   /**
@@ -278,6 +290,11 @@ export class Workspace {
   }
 
   /** Package aliases and manual graph edges from `workspace.yaml` (ADR-29). */
+  /** The user's addition to the day start's first message (`dayStart` in `workspace.yaml`, ADR-70); `null` without one. */
+  dayStartSettings(): DayStartSettings | null {
+    return this.deps.file.dayStartSettings();
+  }
+
   graphConfig(): GraphConfig {
     return this.deps.file.graphConfig();
   }
