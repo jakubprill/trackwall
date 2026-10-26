@@ -63,6 +63,8 @@ describe.skipIf(process.versions.bun === undefined)("a review from the Changes t
 
     expect(sent).toEqual({ delivery: "queued", unread: 2 });
     const window = viewer(daemon.facade.agents, session);
+    // The screen image reaches a new viewer asynchronously, so the check waits for it before looking for what is not there.
+    await waitFor(daemon.facade.agents, session, () => window.text().includes("--interactive="), "the screen image");
     expect(window.unwrappedText()).not.toContain(TYPED_REVIEW);
     // The fake ends a turn after a line and an approval.
     window.attachment.input("start\r");
