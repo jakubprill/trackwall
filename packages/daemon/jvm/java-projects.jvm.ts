@@ -1,10 +1,12 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
 import {
   CallEndpointResult,
   FindEndpointResult,
+  LogErrors,
   MiseTaskRunResult,
   RepoCardResult,
   type RunState,
@@ -15,13 +17,12 @@ import {
 } from "@trackwall/protocol";
 import { connectHttpClient } from "../test/support/mcp-client.ts";
 import { startSessionApi } from "../test/support/session-api.ts";
-import { fixtureFiles } from "../test/support/spring-fixtures.ts";
 
 // What Trackwall reads from Java builds, checked on real Spring Boot projects built by real Maven and Gradle through
-// real mise (docs/development.md, "Tests with real Java builds"): the card, the graph, services, test reports, the
-// verification of a task and log errors. The unit tests check the same features on handwritten files and logs; a
-// failure here means a real build tool writes something those files no longer show. Run every night by
-// `nightly.yml`, not in `pnpm test`, since a run needs a JDK, network for the dependencies and several minutes.
+// real mise (ADR-72, docs/development.md, "Tests with real Java builds"): the card, the graph, services, test reports,
+// the verification of a task and log errors. The unit tests check the same features on handwritten files and logs; a
+// failure here means a real build tool writes something those files no longer show. Run by `jvm.yml` every night and
+// on PRs that touch the code it covers, not in `pnpm test`, since a run needs network and minutes the first time.
 
 const PROJECTS = join(import.meta.dir, "projects");
 const TOKEN = "j".repeat(43);
@@ -30,6 +31,8 @@ const ORDERS_PORT = 18081;
 const CHECKOUT_PORT = 18082;
 /** The first build downloads Spring Boot and the build plugins; a cold Windows runner takes minutes for that. */
 const BUILD_MS = 10 * 60_000;
+/** One waiting tool call: below the 30 s an HTTP request of the test's MCP client may take (`support/mcp-client.ts`). */
+const WAIT_SECONDS = 25;
 setDefaultTimeout(2 * BUILD_MS);
 
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
@@ -37,7 +40,7 @@ let client: Client;
 
 beforeAll(async () => {
   daemon = await startSessionApi(TOKEN, {
-    repos: { orders: fixtureFiles("orders", PROJECTS), checkout: fixtureFiles("checkout", PROJECTS) },
+    repos: { orders: trackedFiles("orders"), checkout: trackedFiles("checkout") },
     miseCommand: ["mise"],
   });
   client = await connectHttpClient(daemon.api.port, TOKEN);
@@ -53,12 +56,46 @@ beforeAll(async () => {
 afterAll(async () => {
   await client?.close();
   await daemon?.stop();
+  // Gradle keeps its daemon after a build, as on the user's machine; stopped here so it holds no files of the run.
+  if (daemon)
+    execFileSync("mise", ["exec", "--", "gradle", "--stop", "--quiet"], { cwd: join(daemon.projects, "checkout"), stdio: "inherit" });
 }, 60_000);
+
+/**
+ * A project's files as git tracks them (path with `/` → contents), so build output left in `projects/` by a run in place
+ * does not reach the test's repos.
+ */
+function trackedFiles(project: string): Record<string, string> {
+  const dir = join(PROJECTS, project);
+  const paths = execFileSync("git", ["ls-files", "-z"], { cwd: dir, encoding: "utf8" })
+    .split("\0")
+    .filter((path) => path !== "");
+  if (paths.length === 0) throw new Error(`git tracks no files in ${dir}`);
+  return Object.fromEntries(paths.map((path) => [path, readFileSync(join(dir, ...path.split("/")), "utf8")]));
+}
+
+/** Replaces the one line `from` of a file in a task's worktree with `to`: the task's change, shown as the line it edits. */
+function changeLine(file: string, from: string, to: string): void {
+  const source = readFileSync(file, "utf8");
+  const lines = source.split("\n");
+  const at = lines.findIndex((line) => line.trim() === from);
+  if (at < 0) throw new Error(`no line "${from}" in ${file}`);
+  lines[at] = lines[at]?.replace(from, to) ?? to;
+  writeFileSync(file, lines.join("\n"));
+}
 
 async function call(name: string, args: Record<string, unknown>) {
   const result = await client.callTool({ name, arguments: args });
   if (result.isError) throw new Error(`${name}: ${JSON.stringify(result.content)}`);
   return result.structuredContent;
+}
+
+/** A waiting tool call (`wait_for_mise_task`, `verify_task`, `start_service`) made again until `done` or `BUILD_MS`. */
+async function until<T>(next: () => Promise<T>, done: (result: T) => boolean): Promise<T> {
+  const deadline = Date.now() + BUILD_MS;
+  let result = await next();
+  while (!done(result) && Date.now() < deadline) result = await next();
+  return result;
 }
 
 /** The run ended with `code`; otherwise the failure shows the end of its output. */
@@ -90,22 +127,23 @@ function cardSummary({ repo, card, tags }: RepoCardResult) {
 
 /** A mise task run with `run_mise_task` and awaited with `wait_for_mise_task`, as an agent does: the run once it ended. */
 async function runToEnd(repo: string, miseTask: string): Promise<RunState> {
-  let { run } = MiseTaskRunResult.parse(await call("run_mise_task", { repo, miseTask }));
-  const deadline = Date.now() + BUILD_MS;
-  while (run.kind !== "exited" && Date.now() < deadline) {
-    ({ run } = MiseTaskRunResult.parse(await call("wait_for_mise_task", { repo, miseTask, timeoutSeconds: 55 })));
-  }
-  return run;
+  await call("run_mise_task", { repo, miseTask });
+  const wait = async () => MiseTaskRunResult.parse(await call("wait_for_mise_task", { repo, miseTask, timeoutSeconds: WAIT_SECONDS })).run;
+  return until(wait, (run) => run.kind === "exited");
 }
 
-/** `verify_task` called again with the run's id until the verification ends: one call waits at most 55 s. */
+/** `verify_task` of a task, called again until the verification has ended. */
 async function verify(repo: string, task: string) {
-  let { verification } = VerifyTaskResult.parse(await call("verify_task", { repo, task, timeoutSeconds: 55 }));
-  const deadline = Date.now() + BUILD_MS;
-  while (verification.state === "running" && Date.now() < deadline) {
-    ({ verification } = VerifyTaskResult.parse(await call("verify_task", { repo, task, runId: verification.runId, timeoutSeconds: 55 })));
-  }
-  return verification;
+  const first = VerifyTaskResult.parse(await call("verify_task", { repo, task, timeoutSeconds: WAIT_SECONDS })).verification;
+  const again = async () =>
+    VerifyTaskResult.parse(await call("verify_task", { repo, task, runId: first.runId, timeoutSeconds: WAIT_SECONDS })).verification;
+  return first.state === "running" ? until(again, (v) => v.state !== "running") : first;
+}
+
+/** `start_service` called again until every service of the slice has settled. */
+async function startService(args: { repo: string; task?: string; dependencies?: boolean }) {
+  const start = async () => StartServiceResult.parse(await call("start_service", { ...args, timeoutSeconds: WAIT_SECONDS })).slice;
+  return until(start, (slice) => slice.settled);
 }
 
 /** A compiler line without the directory before the file name (`/tmp/…/Shipping.java:9: …`, `C:\\…\\Shipping.java:9: …`). */
@@ -168,11 +206,7 @@ describe("a Maven project and a Gradle project", () => {
   });
 
   test("start_service starts orders before checkout from the graph, and call_endpoint reaches orders through checkout", async () => {
-    let slice = StartServiceResult.parse(await call("start_service", { repo: "checkout", timeoutSeconds: 55 })).slice;
-    const deadline = Date.now() + BUILD_MS;
-    while (!slice.settled && Date.now() < deadline) {
-      slice = StartServiceResult.parse(await call("start_service", { repo: "checkout", timeoutSeconds: 55 })).slice;
-    }
+    const slice = await startService({ repo: "checkout" });
     expect(slice.members.map((m) => [m.repo, m.service?.state, m.service?.port])).toEqual([
       ["orders", "healthy", ORDERS_PORT],
       ["checkout", "healthy", CHECKOUT_PORT],
@@ -194,9 +228,10 @@ describe("a Maven project and a Gradle project", () => {
 
   test("verify_task fails a Maven task whose change breaks a test, with the failed test from the report and the Maven errors", async () => {
     const task = await daemon.facade.agents.createTask("orders", "charge per item");
-    writeFileSync(
+    changeLine(
       join(task.worktree, "src", "main", "java", "com", "example", "orders", "Pricing.java"),
-      "package com.example.orders;\n\npublic final class Pricing {\n    private Pricing() {}\n\n    public static int total(int quantity, int unitPrice) {\n        return quantity * (unitPrice + 1);\n    }\n}\n",
+      "return quantity * unitPrice;",
+      "return quantity * (unitPrice + 1);",
     );
 
     const verification = await verify("orders", task.id);
@@ -215,9 +250,11 @@ describe("a Maven project and a Gradle project", () => {
 
   test("verify_task fails a Gradle task that does not compile, with the compiler error from the Gradle log", async () => {
     const task = await daemon.facade.agents.createTask("checkout", "rename the shipping rate");
-    writeFileSync(
+    // The constant renamed where it is declared, not where `withShipping` uses it (line 9).
+    changeLine(
       join(task.worktree, "src", "main", "java", "com", "example", "checkout", "Shipping.java"),
-      "package com.example.checkout;\n\npublic final class Shipping {\n    static final int RATE = 5;\n\n    private Shipping() {}\n\n    public static int withShipping(int total) {\n        return total + FLAT_RATE;\n    }\n}\n",
+      "static final int FLAT_RATE = 5;",
+      "static final int RATE = 5;",
     );
 
     const verification = await verify("checkout", task.id);
@@ -239,5 +276,27 @@ describe("a Maven project and a Gradle project", () => {
       "* What went wrong:",
       "Execution failed for task ':compileJava'.",
     ]);
+    // get_errors reads the same errors from the run's log.
+    const fromLog = LogErrors.parse(await call("get_errors", { repo: "checkout", task: task.id }));
+    expect(fromLog.errors.map((e) => e.lines[0])).toEqual(verification.errors.map((e) => e.lines[0]).reverse());
+  });
+
+  test("start_service reports a task's service that fails to start as crashed, with the Spring Boot report from its log", async () => {
+    const task = await daemon.facade.agents.createTask("orders", "add refunds");
+    writeFileSync(
+      join(task.worktree, "src", "main", "java", "com", "example", "orders", "Refunds.java"),
+      "package com.example.orders;\n\nimport org.springframework.stereotype.Component;\n\n@Component\npublic class Refunds {\n    public interface PaymentGateway {}\n\n    public Refunds(PaymentGateway gateway) {}\n}\n",
+    );
+
+    const slice = await startService({ repo: "orders", task: task.id, dependencies: false });
+
+    expect(slice.members.map((m) => [m.repo, m.outcome, m.service?.state, m.service?.port])).toEqual([
+      ["orders", "started", "crashed", task.port],
+    ]);
+    // Spring Boot's failure report, which Maven prints between its own lines, is one error of the service log.
+    const report = slice.members[0]?.errors.find((e) => e.lines.includes("APPLICATION FAILED TO START"));
+    expect(report?.lines).toContain(
+      "Parameter 0 of constructor in com.example.orders.Refunds required a bean of type 'com.example.orders.Refunds$PaymentGateway' that could not be found.",
+    );
   });
 });

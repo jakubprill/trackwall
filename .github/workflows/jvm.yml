@@ -3,19 +3,29 @@ name: Java build tests
 # The daemon on real Spring Boot projects built by real Maven and Gradle through real mise (ADR-72): cards, the graph,
 # services, test reports, task verification and log errors (`pnpm test:jvm`, packages/daemon/jvm/). Outside `CI ok`:
 # a run downloads a JDK and the Spring Boot dependencies, and a new release of a build tool must not block every PR.
-# Every night from nightly.yml, which opens an issue when it fails on main; on a PR only when it touches the code that
-# reads Java builds, so its author sees the result before the merge.
+# Every night from nightly.yml, which opens an issue when it fails on main; on a PR only when it touches code the tests
+# go through (the modules that read Java builds, the ones that run them, the MCP tools, the protocol and the test's
+# support code), so its author sees the result before the merge; by hand from Actions.
 on:
   workflow_call:
+  workflow_dispatch:
   pull_request:
     paths:
       - packages/daemon/jvm/**
+      - packages/daemon/src/modules/agents/**
       - packages/daemon/src/modules/cards/**
       - packages/daemon/src/modules/graph/**
       - packages/daemon/src/modules/logs/**
+      - packages/daemon/src/modules/mise/**
+      - packages/daemon/src/modules/procs/**
       - packages/daemon/src/modules/services/**
       - packages/daemon/src/modules/test-results/**
       - packages/daemon/src/modules/verification/**
+      - packages/daemon/src/mcp/**
+      - packages/daemon/test/support/**
+      - packages/daemon/package.json
+      - packages/protocol/src/**
+      - .github/actions/setup/**
       - .github/workflows/jvm.yml
 
 # On a PR a new push cancels the previous run; a call from nightly.yml runs in the nightly workflow's own group.
@@ -32,6 +42,12 @@ env:
   BUN_VERSION: "1.4.4"
   NODE_VERSION: "22"
   MISE_VERSION: "2026.10.19"
+  # What the cache step keeps: the JDK, Maven and Gradle mise installs (Linux and macOS, Windows) and the dependencies.
+  CACHE_PATHS: |
+    ~/.local/share/mise
+    ~/AppData/Local/mise
+    ~/.m2/repository
+    ~/.gradle/caches
 
 jobs:
   jvm:
@@ -52,7 +68,8 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           bun-version: ${{ env.BUN_VERSION }}
-      # The release binary, checked against the release's SHASUMS256.txt; no third-party action gets the token.
+      # The release binary of the pinned version, checked against the release's SHASUMS256.txt: a few lines instead of
+      # another action to pin and keep up to date. mise is not in mise.toml, which holds the tools of Trackwall itself.
       - name: Install mise ${{ env.MISE_VERSION }}
         shell: bash
         run: |
@@ -81,17 +98,21 @@ jobs:
           fi
           echo "$RUNNER_TEMP/mise-bin" >> "$GITHUB_PATH"
       - run: mise --version
-      # The JDK, Maven and Gradle mise installs and the dependencies the builds download, under the projects' build files.
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      # Keyed by the projects' build files, restored from an older key after a version bump, and saved also after a failed
+      # run (the test stops Gradle's daemon first), so a cold run that fails does not leave the next one cold too.
+      - uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        id: cache
         with:
-          path: |
-            ~/.local/share/mise
-            ~/AppData/Local/mise
-            ~/.m2/repository
-            ~/.gradle/caches
-            ~/.gradle/wrapper
+          path: ${{ env.CACHE_PATHS }}
           key: jvm-${{ runner.os }}-${{ runner.arch }}-${{ env.MISE_VERSION }}-${{ hashFiles('packages/daemon/jvm/projects/**/mise.toml', 'packages/daemon/jvm/projects/**/pom.xml', 'packages/daemon/jvm/projects/**/*.gradle.kts') }}
+          restore-keys: jvm-${{ runner.os }}-${{ runner.arch }}-${{ env.MISE_VERSION }}-
       - run: pnpm test:jvm
         env:
-          # mise reads tool versions from GitHub; without a token the runners' shared addresses hit the rate limit.
+          # mise reads tool versions from GitHub; without a token the runners' shared addresses hit the rate limit. The
+          # token can only read this repo and ends with the job.
           MISE_GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        if: always() && steps.cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ env.CACHE_PATHS }}
+          key: ${{ steps.cache.outputs.cache-primary-key }}

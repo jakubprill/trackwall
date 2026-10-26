@@ -2,7 +2,7 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
     "packages/daemon": {
-      "entry": ["test/fixtures/*.ts", "scripts/copilot-record.ts", "scripts/demo/copilot.ts", "contract/*.contract.ts", "jvm/*.jvm.ts"],
+      "entry": ["test/fixtures/*.ts", "scripts/copilot-record.ts", "scripts/demo/copilot.ts", "contract/*.contract.ts"],
       "ignore": ["test/fixtures/spring/**"]
     },
     "apps/docs": {
@@ -11,5 +11,6 @@
   },
   "ignoreIssues": {
     "packages/ui/src/components/ui/*.tsx": ["exports"]
-  }
+  },
+  "ignoreBinaries": ["mise"]
 }

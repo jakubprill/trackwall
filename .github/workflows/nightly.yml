@@ -107,7 +107,9 @@ jobs:
           To fix: raise \`COPILOT_CLI_VERSION\` to $VERSION in a PR, take the references again and change the daemon and the fake Copilot CLI to the new behaviour, as described in \`docs/development.md\` ("Contract tests with the real Copilot CLI"). This issue closes on the first night the contract tests pass on the newest Copilot CLI.
           EOF
 
+  # Not on a manual run for one Copilot CLI version, which is about the contract tests only.
   jvm:
+    if: inputs.copilot-cli == ''
     permissions:
       contents: read
     uses: ./.github/workflows/jvm.yml
