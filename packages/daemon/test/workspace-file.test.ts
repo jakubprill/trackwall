@@ -99,4 +99,16 @@ describe("workspace.yaml", () => {
       expect.objectContaining({ code: "invalid_config", message: expect.stringContaining("dayStart") }),
     );
   });
+  test("supervisor.changesCode lets the supervisor change code, a missing key does not, and a misspelt field is a configuration error of that key", () => {
+    const path = tempFile();
+    expect(new WorkspaceFile(path).supervisorSettings()).toEqual({ changesCode: false });
+
+    writeFileSync(path, "supervisor:\n  changesCode: true\n");
+    expect(new WorkspaceFile(path).supervisorSettings()).toEqual({ changesCode: true });
+
+    writeFileSync(path, "supervisor:\n  changeCode: true\n");
+    expect(() => new WorkspaceFile(path).supervisorSettings()).toThrow(
+      expect.objectContaining({ code: "invalid_config", message: expect.stringContaining("supervisor") }),
+    );
+  });
 });

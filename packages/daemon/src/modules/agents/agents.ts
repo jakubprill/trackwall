@@ -12,6 +12,7 @@ import {
   type SendReviewResult,
   type Session,
   type SessionList,
+  type SupervisorSettings,
   type Task,
   type TaskChanges,
   type TaskChangesSummary,
@@ -30,7 +31,7 @@ import { type HookCommand, writeCopilotPlugin } from "./copilot-plugin.ts";
 import { inboxPrompt } from "./inbox-prompt.ts";
 import { LiveSession, type SessionPty, type SessionWindow } from "./live-session.ts";
 import { proposedByOf, proposerKeyOf, SUPERVISOR } from "./proposer.ts";
-import { withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
+import { type SessionRole, withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
 import { TaskCoordination } from "./task-coordination.ts";
@@ -103,13 +104,16 @@ interface AgentsProcs {
 
 /**
  * What `agents` needs from `workspace`: a repo root by its id (`not_found` without such a repo), the projects folder
- * the supervisor runs in (`bad_request` while it is not set) and the tool permissions a session starts with.
+ * the supervisor runs in (`bad_request` while it is not set), the tool permissions a session starts with and the
+ * supervisor settings.
  */
 interface AgentsRepos {
   repoPath(id: string): Promise<string>;
   projectsDir(): Promise<string>;
   /** The `toolPermissions` patterns for a session in repo `repo` (`null` for the supervisor), ADR-66. */
   toolPermissions(repo: string | null): ToolPermissions;
+  /** `supervisor` from `workspace.yaml` (ADR-78); `invalid_config` for a bad key. */
+  supervisorSettings(): SupervisorSettings;
 }
 
 export interface AgentsDeps {
@@ -459,12 +463,13 @@ export class Agents {
     const program = findCopilot(name, env);
     if (!program) throw new DomainError("agent_unavailable", `Copilot CLI (${name}) not found in PATH`);
     const permissions = this.#deps.repos.toolPermissions(repo);
+    const role: SessionRole = repo === null ? { repo, changesCode: this.#deps.repos.supervisorSettings().changesCode } : { repo, task };
     const id = randomUUID();
     const dir = sessionDir(this.#deps.home, id);
     const token = this.#tokens.issue(id);
     let prepared: PreparedSession;
     try {
-      prepared = this.#prepare({ id, repo, task, dir, token, promptOnStart, program });
+      prepared = this.#prepare({ id, role, task, dir, token, promptOnStart, program });
     } catch (err) {
       this.#tokens.revoke(id);
       rmSync(dir, { recursive: true, force: true });
@@ -568,7 +573,8 @@ export class Agents {
    * The session directory with the session plugin, MCP config, session token, session instructions and an empty
    * `hooks.jsonl`, before Copilot CLI starts.
    */
-  #prepare({ id, repo, task, dir, token, promptOnStart, program }: SessionFiles): PreparedSession {
+  #prepare({ id, role, task, dir, token, promptOnStart, program }: SessionFiles): PreparedSession {
+    const { repo } = role;
     const pluginDir = join(dir, "plugin");
     const hooksFile = join(dir, HOOKS_FILENAME);
     const tokenFile = join(dir, SESSION_TOKEN_FILENAME);
@@ -578,7 +584,7 @@ export class Agents {
     const mcpConfig = copilotMcpServers(this.#deps.sessionMcpCommand(tokenFile));
     writeFileSync(join(dir, MCP_CONFIG_FILE), JSON.stringify(mcpConfig, null, 2));
     writeCopilotPlugin(pluginDir, (event) => ({ ...this.#deps.hookCommand(event, hooksFile), cwd: pluginDir }));
-    const instructionsDir = writeSessionInstructions(dir, this.#deps.version, { repo, task });
+    const instructionsDir = writeSessionInstructions(dir, this.#deps.version, role);
     if (instructionsDir === null)
       this.#deps.log(`session ${id} starts without Trackwall instructions: the session directory path has a comma`);
     const session = new LiveSession({
@@ -673,7 +679,7 @@ interface LaunchSpec {
 /** The directory of a new session and what follows from it for `LiveSession`. */
 interface SessionFiles {
   id: string;
-  repo: string | null;
+  role: SessionRole;
   task: string | null;
   dir: string;
   token: string;

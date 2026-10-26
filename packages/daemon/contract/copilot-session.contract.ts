@@ -380,6 +380,38 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
   );
 });
 
+describe("the supervisor with the real Copilot CLI", () => {
+  test("Copilot CLI refuses the supervisor its shell and its file-writing tools without asking, and the projects folder stays as it was (ADR-78)", async () => {
+    const { agents } = daemon.facade;
+    const supervisor = await agents.startSupervisor();
+    const window = viewer(agents, supervisor.id);
+    windows.set(supervisor.id, window);
+    window.attachment.resize(REFERENCE_COLS, REFERENCE_ROWS);
+    const loaded = () => window.unwrappedText().replace(/\s/g, "").includes("1MCPserver");
+    await waitFor(agents, supervisor.id, loaded, "Copilot CLI with the MCP servers loaded", SESSION_MS);
+    model.reply(
+      (request) => shellCall(request, { bash: "touch by-shell.txt", powershell: "New-Item by-shell.txt" }),
+      (request) => {
+        expect(request.tools).toContain("create");
+        return { tool: "create", arguments: { path: join(daemon.projects, "by-create.txt"), file_text: "x" } };
+      },
+      { text: "Both were refused." },
+    );
+
+    window.attachment.input("make two files\r");
+    await endOfTurn(supervisor.id);
+
+    const [, second, third] = model.requests().slice(-3);
+    expect(second?.toolResults.join("\n")).toContain("denied");
+    expect(third?.toolResults.join("\n")).toContain("denied");
+    expect(existsSync(join(daemon.projects, "by-shell.txt"))).toBe(false);
+    expect(existsSync(join(daemon.projects, "by-create.txt"))).toBe(false);
+    expect(hookRecords(daemon.home, supervisor.id).map((r) => r.event)).not.toContain("notification");
+    expect(agents.session(supervisor.id).dialog).toBeNull();
+    await agents.stop(supervisor.id);
+  });
+});
+
 describe("the day start with the real Copilot CLI", () => {
   test("the day start's first message reaches the new supervisor's model as its first prompt, next to the user's own MCP servers, and it reads the day report without an approval request", async () => {
     const { agents, dayStart } = daemon.facade;

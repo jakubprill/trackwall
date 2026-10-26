@@ -1,4 +1,4 @@
-import type { ToolPermissionRules, ToolPermissions } from "@trackwall/protocol";
+import type { SupervisorSettings, ToolPermissionRules, ToolPermissions } from "@trackwall/protocol";
 import { globMatcher } from "../../infra/glob.ts";
 
 /**
@@ -15,4 +15,17 @@ export function sessionToolPermissions(rules: ToolPermissionRules, repo: string 
     allow: [...new Set(applies.flatMap((rule) => rule.allow))],
     deny: [...new Set(applies.flatMap((rule) => rule.deny))],
   };
+}
+
+/**
+ * Copilot CLI's tool kinds that change files: `shell` (every command, since a command can write anything) and `write`
+ * (its file tools). The supervisor does not get them unless `supervisor.changesCode` (ADR-78): it hands changes to task
+ * sessions, whose work the user reviews in a worktree. A denial wins over every approval, also the user's own rules.
+ */
+const CODE_CHANGING_TOOLS = ["shell", "write"];
+
+/** The supervisor's tool permissions: the rules without `repos`, and without the code-changing tools unless `changesCode`. */
+export function supervisorToolPermissions(rules: ToolPermissionRules, { changesCode }: SupervisorSettings): ToolPermissions {
+  const own = sessionToolPermissions(rules, null);
+  return changesCode ? own : { allow: own.allow, deny: [...new Set([...own.deny, ...CODE_CHANGING_TOOLS])] };
 }
