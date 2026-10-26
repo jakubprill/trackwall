@@ -62,7 +62,7 @@ export type GitNetwork = { sshCommand: string | undefined };
  * Short git calls running at once in the whole daemon (§4.5, ADR-79). Every view and module reads many repos in parallel,
  * and where an antivirus scans each process start, dozens of starts at once take the machine and the daemon's event loop
  * with them, so that even `/api/health` answers late. A call waits for a slot before its time limit starts. Network
- * commands (a fetch takes minutes) take no slot, so they cannot starve the reads.
+ * commands (a fetch takes minutes) and local ones with a longer limit take no slot, so they cannot starve the reads.
  */
 const LOCAL_CALL_SLOTS = new Slots(6);
 
@@ -97,7 +97,9 @@ export async function git(repoDir: string, args: readonly string[], opts: GitOpt
       timeoutMs: opts.timeoutMs ?? TIMEOUT_MS,
     });
   };
-  return opts.network ? call() : LOCAL_CALL_SLOTS.run(call);
+  // A long command (a worktree, a search) would hold a slot for minutes and the views would wait behind it again.
+  const short = !opts.network && (opts.timeoutMs ?? TIMEOUT_MS) <= TIMEOUT_MS;
+  return short ? LOCAL_CALL_SLOTS.run(call) : call();
 }
 
 /** The full hash of the commit `ref` points to; `undefined` when there is no such commit or git fails. */

@@ -1,12 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { gitDirs, readIfExists, statIfExists } from "./git-dir.ts";
+import { gitDirs, headRefName, readIfExists, statIfExists } from "./git-dir.ts";
 
 /**
  * The HEAD commit read from the files of the git directory, without a `git` process (§4.5, ADR-79): `HEAD`, then the loose
  * file of the branch it names, then `packed-refs`. The card cache is keyed by this commit, so the graph and the tags of
  * repos whose cards are cached start no process at all. Whatever this reading does not cover for sure (the reftable
- * backend, a symbolic ref inside a ref) is `undefined`, and the caller asks git instead.
+ * backend, a symbolic ref inside a ref, a HEAD outside `refs/heads/`) is `undefined`, and the caller asks git instead.
  */
 
 const OID = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
@@ -17,9 +17,9 @@ export async function readHeadCommit(repo: string): Promise<string | null | unde
   if (!dirs) return undefined;
   const head = (await readFile(join(dirs.gitDir, "HEAD"), "utf8")).trim();
   if (OID.test(head)) return head;
-  const ref = /^ref:\s*(refs\/\S+)$/.exec(head)?.[1];
-  // `HEAD` comes from the repo, so its ref must not lead out of the git directory (a `\` is a separator on Windows).
-  if (!ref || ref.includes("\\") || ref.split("/").includes("..")) return undefined;
+  const ref = headRefName(head);
+  // Other refs may live per worktree in the git directory (`refs/worktree/`, `refs/bisect/`), so git answers for them.
+  if (!ref?.startsWith("refs/heads/")) return undefined;
   if (await statIfExists(join(dirs.commonDir, "reftable"))) return undefined;
   const loose = (await readIfExists(join(dirs.commonDir, ...ref.split("/")))).trim();
   if (loose !== "") return OID.test(loose) ? loose : undefined;

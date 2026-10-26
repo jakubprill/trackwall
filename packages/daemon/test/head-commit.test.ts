@@ -73,6 +73,13 @@ describe("readHeadCommit", () => {
     expect(await readHeadCommit(repo)).toBeUndefined();
   });
 
+  test("a HEAD outside refs/heads/ is left to git, since such refs may live in the worktree's own git directory", async () => {
+    const repo = makeRepo({ "a.txt": "a" });
+    gitIn(repo, "update-ref", "refs/worktree/mine", "HEAD");
+    gitIn(repo, "symbolic-ref", "HEAD", "refs/worktree/mine");
+    expect(await readHeadCommit(repo)).toBeUndefined();
+  });
+
   test("a directory without a git directory is left to git", async () => {
     expect(await readHeadCommit(mkdtempSync(join(tmpdir(), "trackwall-plain-")))).toBeUndefined();
   });

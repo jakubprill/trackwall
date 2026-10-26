@@ -1,7 +1,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { mapLimit } from "../../infra/map-limit.ts";
-import { fileKey, gitDirs, optionalKey, statIfExists } from "./git-dir.ts";
+import { fileKey, gitDirs, headRefName, optionalKey, statIfExists } from "./git-dir.ts";
 
 /**
  * The state of a repo's HEAD and refs read from the files in its git directory, without a `git` process (§4.5, ADR-63):
@@ -101,8 +101,7 @@ async function readRepo(repo: string, cache: RepoCache, previousDirs: ReadonlyMa
 async function headRef(file: string, key: string, cache: RepoCache): Promise<string | null> {
   if (cache.headRef?.key === key) return cache.headRef.ref;
   const text = await readFile(file, "utf8");
-  const match = /^ref:\s*(refs\/\S+)\s*$/.exec(text);
-  const ref = match?.[1] && !match[1].split("/").includes("..") ? match[1] : null;
+  const ref = headRefName(text) ?? null;
   cache.headRef = { key, ref };
   return ref;
 }

@@ -25,6 +25,15 @@ export async function gitDirs(repo: string): Promise<{ gitDir: string; commonDir
   return { gitDir, commonDir: common ? relativeTo(gitDir, common) : gitDir };
 }
 
+/**
+ * `refs/…` from the text of `HEAD` (`ref: refs/heads/main`); `undefined` for a detached HEAD or a ref that could lead out of
+ * the git directory: `HEAD` comes from the repo, and `\\` is a separator on Windows.
+ */
+export function headRefName(text: string): string | undefined {
+  const ref = /^ref:\s*(refs\/\S+)$/.exec(text.trim())?.[1];
+  return ref && !ref.includes("\\") && !ref.split("/").includes("..") ? ref : undefined;
+}
+
 /** `undefined` for a file that is not there. */
 export async function statIfExists(path: string): Promise<Stats | undefined> {
   try {
