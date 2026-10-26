@@ -11,11 +11,11 @@ Give an agent a task on its own branch and worktree, and review its changes befo
 
 ## What you get
 
-- A task for an agent in two fields, a repo and a prompt, that survives a restart of Trackwall, ready to resume.
-- A fresh branch and a separate working copy for every task, so several agents can work in one repo at once and your own working copy stays untouched.
+- A task for an agent in two fields, a repo and a prompt, on a fresh branch and a separate working copy, so several agents can work in one repo at once, your own working copy stays untouched, and the task survives a restart of Trackwall.
 - The task's changes live: files, diff and commits against the default branch, with a warning when two tasks in one repo change the same files.
 - Comments on the lines of that diff, sent to the agent as one review, so it fixes what you pointed at without you retyping file names and lines into its terminal.
 - A worktree ready to run: the task's builds and tests run there, where you can watch and stop them, with your local config files (`.env`, a local profile) copied in and a port of its own, so the agent can also start the service it changed next to yours, and one "Verify" button that runs the task's tests there and shows whether they pass.
+- A merge request in two clicks: push the task's branch, then open GitLab's or GitHub's form with the title and the agent's summary filled in, and follow the merge request and its pipeline from the task.
 
 ## How it works
 
@@ -33,6 +33,8 @@ The agent builds and tests its changes by running the repo's mise tasks in the t
 
 To check the task's changes yourself, press "Verify" in the task's header. Trackwall runs the repo's mise task `test` in the worktree and, when it ends, shows a "Verification" section below the summary: passed or failed, why it failed (such as the mise task's exit code), how many tests ran, failed and were skipped, and the first failed tests with their messages and the first errors from the run's log. "Log" opens the whole output, and "Cancel" stops a run in progress. The agent gets the same verdict: Trackwall asks it to verify its task before it reports that it is done, so a finished task usually shows its verdict already. A verification passes when the mise task exits with code 0 and no test in the reports the run wrote failed; a report Trackwall cannot read counts as a failure, since it may hide one.
 
+When the task is done, the "Merge request" section below the verification takes it to your repo host. It shows once the task has a commit: the branch's commits, how many are not pushed yet, and files the agent has not committed (they are not part of a push). "Push" pushes the task's branch to the repo's remote. "Open merge request" shows a title (the task's title, or the first line of its prompt) and a description (the agent's summary and the verdict of the last verification) for you to edit; "Open in GitLab" (or GitHub) opens the repo host's new merge request page in your browser with the branches and those two fields filled in, and you create the merge request there, with the reviewers, labels and template your project uses. From then on the section shows the merge request's number and title, whether it is open, merged or closed, and its pipeline (passed, failed, running), each a link to the repo host. When the agent commits again after a review, press "Push" again; the merge request picks up the new commits.
+
 A new worktree has only the files git tracks, so local config that is ignored by git is missing there. List those files in a `.worktreeinclude` file in the repo, with the same patterns as `.gitignore` (for example `.env` and `src/main/resources/application-local.yml`), and Trackwall copies them from the repo into every new task's worktree. Only files git ignores are copied, so the list never overwrites a file of the repo, and the agent does not commit them by accident. The task panel lists the files it copied and anything it left out.
 
 Every task also gets a port of its own, shown in the task's header. Every mise task that runs in the worktree gets it in `SERVER_PORT` and `PORT`, so the agent can start the repo's [service](/features/services) from the worktree without taking the port of the one you run from the repo.
@@ -46,7 +48,8 @@ Every task also gets a port of its own, shown in the task's header. Every mise t
 3. Watch the agent in the terminal and its work in "Changes".
 4. Press "Verify" to see whether its tests pass.
 5. Comment on the lines you want changed and press "Send N comments to the agent"; repeat until you are happy.
-6. Review the changes in VS Code, then push the branch yourself or end the task.
+6. Review the changes in VS Code, then press "Push" and "Open merge request", and create the merge request in your browser.
+7. Once it is merged, end the task.
 
 ## Good to know
 
@@ -61,6 +64,10 @@ Every task also gets a port of its own, shown in the task's header. Every mise t
 - Trusting a mise configuration covers the commands it defines, not the code they run: tests and build scripts the agent changed run as written. Review the changes as you would before merging.
 - Copilot CLI asks to trust every new folder. To stop it asking for every task, add the `worktrees` folder (the new task form shows its full path) to `trustedFolders` in `~/.copilot/config.json`.
 - Trackwall tells a task's agent to stay in its worktree, commit on its branch and not push unless your prompt asks for it. This is an instruction to the agent, not a lock: the branch is yours to push.
+- "Push" uses your own git sign-in, as a push in a terminal would. It never forces: if the remote's branch has commits the task does not (a colleague pushed, or the agent amended a pushed commit), the push is refused with git's message, and the section says how many commits the remote has. It runs none of the repo's git hooks, because the agent could change them in the worktree; your repo host's pipeline runs the checks instead. It pushes only over HTTPS or SSH to a repo host it knows (GitHub, or one from Settings), and only to the address the remote fetches from: if the repo's git config sends pushes somewhere else, Trackwall refuses and says where. A repo that stores files in Git LFS cannot be pushed from here yet.
+- Trackwall creates nothing on your repo host: the merge request is created by you, in the repo host's form. It finds the merge request by the task's branch, so one you or anyone else opened for that branch shows too.
+- The merge request and pipeline come from `glab` (GitLab) or `gh` (GitHub), signed in as for [cloning a repo](/features/repos); without them, "Push" and the form still work and the section says why it cannot show the merge request. GitHub works at `github.com` without settings; a GitLab or GitHub Enterprise remote needs its repo host in Settings. The section refreshes every 30 seconds while the task is open.
+- The description is at most 4000 characters, and less when it has many accented letters or emoji, because the browser carries it in the page's address; a longer summary is cut with "…", and you can add the rest in the form.
 - "Verify" needs a mise task named `test` in the repo; without one, Trackwall says so and runs nothing. If the agent is already running `test`, "Verify" waits for that run instead of starting another. The test counts come from the JUnit reports the run wrote (Maven, Gradle, jest-junit, Vitest); a run that wrote none, for example because Gradle found the tests up to date, passes on its exit code alone, and the section says so.
 - The sections above the task's terminal (included files, warnings, messages, summary, verification, mise tasks) take at most a third of the panel and scroll when they need more, so the terminal keeps room on a small screen.
 - The verdict is about the changes as they were when the run started; it does not change when the agent edits files afterwards. Trackwall keeps only the last verification of each task, until it restarts.

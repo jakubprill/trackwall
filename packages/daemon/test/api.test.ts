@@ -20,7 +20,7 @@ import {
 import { EventHub } from "../src/api/event-hub.ts";
 import { postRoutes } from "../src/api/routes.ts";
 import { type ApiServer, startApi } from "../src/api/server.ts";
-import { createFacade } from "../src/facade.ts";
+import { createFacade, HOSTING_CLIS } from "../src/facade.ts";
 import { type LoopbackOptions, loopbackRequest } from "../src/infra/loopback.ts";
 import { createMcpEndpoint } from "../src/mcp/endpoint.ts";
 import { makeRepo } from "./support/git-repo.ts";
@@ -79,6 +79,7 @@ function modules() {
     version: "0.0.0-test",
     hookCommand: () => ({ exec: "true", args: [] }),
     sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
+    hostingClis: HOSTING_CLIS,
     userEnv: async () => process.env,
     log: () => {},
   });

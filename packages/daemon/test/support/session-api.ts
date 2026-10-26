@@ -5,13 +5,14 @@ import { ApiEnvelope, type Endpoint } from "@trackwall/protocol";
 import type { z } from "zod";
 import { EventHub } from "../../src/api/event-hub.ts";
 import { startApi } from "../../src/api/server.ts";
-import { createFacade } from "../../src/facade.ts";
+import { createFacade, HOSTING_CLIS } from "../../src/facade.ts";
 import { COPILOT_HOOK_COMMAND } from "../../src/infra/args.ts";
 import { writeDaemonFile } from "../../src/infra/discovery.ts";
 import { loopbackRequest } from "../../src/infra/loopback.ts";
 import { selfCommand } from "../../src/infra/self-command.ts";
 import { createMcpEndpoint } from "../../src/mcp/endpoint.ts";
 import { sessionMcpStdioCommand } from "../../src/mcp/stdio-command.ts";
+import type { HostingClis } from "../../src/modules/vcs/hosting.ts";
 import { makeRepo } from "./git-repo.ts";
 
 const fakeCopilot = join(import.meta.dir, "..", "fixtures", "fake-copilot-session.ts");
@@ -27,6 +28,10 @@ export interface SessionApiOptions {
   copilot?: CopilotUnderTest;
   /** The built UI the API serves, for a test in a browser (`e2e/`); none by default. */
   uiDir?: string;
+  /** `gh` and `glab`; the real programs by default, which a test that reaches a repo host replaces with the fake. */
+  hostingClis?: HostingClis;
+  /** Addresses the daemon asks the system to open; dropped without it. */
+  openUrl?: (url: string) => void;
 }
 
 interface CopilotUnderTest {
@@ -51,13 +56,14 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
   const copilot = options.copilot ?? FAKE_COPILOT;
   const facade = createFacade({
     home,
-    openUrl: () => {},
+    openUrl: options.openUrl ?? (() => {}),
     openFolder: () => {},
     miseCommand: options.miseCommand,
     copilotCommand: copilot.command,
     version: "0.0.0-test",
     hookCommand: (event, hooksFile) => selfCommand([COPILOT_HOOK_COMMAND, event, hooksFile]),
     sessionMcpCommand: (tokenFile) => sessionMcpStdioCommand(home, tokenFile),
+    hostingClis: options.hostingClis ?? HOSTING_CLIS,
     userEnv: async () => copilot.env({ home, projects }),
     log: options.log ?? (() => {}),
   });
