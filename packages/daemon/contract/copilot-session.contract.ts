@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
+import { MCP_SERVER_NAME, mcpTools, TASK_MESSAGE_RULE } from "@trackwall/protocol";
 import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
 import { promptBoxOnScreen } from "../src/modules/agents/copilot-prompt-box.ts";
 import { inboxPrompt } from "../src/modules/agents/inbox-prompt.ts";
@@ -348,6 +348,8 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
       expect(requests[readUpdates + 1]?.toolResults.join("\n")).toContain('"kind":"turn_ended"');
       const readMessages = requests.findIndex((r) => r.lastUserText.endsWith(messagesPrompt ?? "-"));
       expect(requests[readMessages + 1]?.toolResults.join("\n")).toContain(JSON.stringify(text).slice(1, -1));
+      // The agent reading the message has the rule that it updates the task over the prompt in its instructions.
+      expect(requests[readMessages]?.system).toContain(TASK_MESSAGE_RULE);
       expect(requests.at(-1)?.lastUserText).toEndWith(updatesPrompt ?? "-");
     },
     7 * SESSION_MS,

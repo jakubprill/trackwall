@@ -8,7 +8,7 @@ import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
 
 const SERVER = `(the ${MCP_SERVER_NAME} MCP server)`;
 const REVIEW = `The user sent a review of your changes in Trackwall: call ${mcpTools.getReviewComments.name} ${SERVER} and address every comment.`;
-const MESSAGES = `The session that proposed your task sent you a message in Trackwall: call ${mcpTools.getMessages.name} ${SERVER} and act on it.`;
+const MESSAGES = `The session that proposed your task sent you a message in Trackwall: call ${mcpTools.getMessages.name} ${SERVER} and follow it as an update of your task.`;
 const UPDATES = `There is news about the work you delegated in Trackwall: call ${mcpTools.getUpdates.name} ${SERVER} and act on it.`;
 
 /** What waits unread for one session. */
