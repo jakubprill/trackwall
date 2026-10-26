@@ -81,7 +81,14 @@ export async function readSnapshot(
   for (const path of await reader.read(requested))
     problems.push({ code: "files-not-read", path, message: `the file was not read within the ${MAX_READ_BYTES} B commit read limit` });
   const typeFiles = await readTypeFiles(reader, files, sources, new Set(requested), problems);
-  return { commit, paths: files.map((f) => f.path), text: (path) => reader.texts.get(path), typeFiles, problems };
+  return {
+    commit,
+    paths: files.map((f) => f.path),
+    pathsTruncated: listed.truncated,
+    text: (path) => reader.texts.get(path),
+    typeFiles,
+    problems,
+  };
 }
 
 /** Reading the commit's files in successive batches with the shared `MAX_READ_BYTES` limit. */

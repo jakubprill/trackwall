@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { RepoCard } from "@trackwall/protocol";
 import { globMatcher } from "../src/infra/glob.ts";
-import { extractCard } from "../src/modules/cards/extract-card.ts";
+import { CARD_SOURCES, extractCard, readsCardFile } from "../src/modules/cards/extract-card.ts";
+import { readSnapshot } from "../src/modules/cards/read-snapshot.ts";
 import { loadSyntaxParsers } from "../src/modules/cards/syntax-tree.ts";
 import { repoTags } from "../src/modules/cards/tags.ts";
 import { snapshotOf } from "./support/snapshot.ts";
@@ -145,6 +146,36 @@ describe("mise configuration and the no-mise tag", () => {
     expect(card.mise.configFiles).toEqual(["mise.toml", ".config/mise.toml", "mise/conf.d/broken.toml"]);
     expect(repoTags(card, { id: "app", remote: null }, {}).find((t) => t.name === "no-mise")?.reason).toBe("mise.toml declares no tasks");
     expect(card.problems.map((p) => `${p.code} ${p.path}`)).toEqual(["file-invalid mise/conf.d/broken.toml"]);
+  });
+
+  test("a failed or truncated source file search keeps no-mise, and a commit file list cut at its limit takes it away", async () => {
+    const noMise = async (vcs: { listTruncated: boolean; grep: () => Promise<{ paths: string[]; truncated: boolean }> }) => {
+      const snapshot = await readSnapshot(
+        {
+          commitFiles: async () => ({
+            files: [
+              { name: "mise.toml", path: "mise.toml", kind: "file" as const, size: 20 },
+              { name: "Api.java", path: "src/main/java/Api.java", kind: "file" as const, size: 10 },
+            ],
+            truncated: vcs.listTruncated,
+          }),
+          readFiles: async () => new Map([["mise.toml", Buffer.from('[tools]\njava = "21"\n')]]),
+          grepFiles: vcs.grep,
+        },
+        "/repo",
+        "a".repeat(40),
+        readsCardFile,
+        CARD_SOURCES,
+      );
+      return repoTags(extractCard(snapshot, parsers), { id: "app", remote: null }, {}).find((t) => t.name === "no-mise")?.reason;
+    };
+    const failedGrep = async () => {
+      throw new Error("git grep: timed out");
+    };
+    expect(await noMise({ listTruncated: false, grep: failedGrep })).toBe("mise.toml declares no tasks");
+    expect(await noMise({ listTruncated: false, grep: async () => ({ paths: [], truncated: true }) })).toBe("mise.toml declares no tasks");
+    // Past the end of the list there may be a mise task directory or another config file.
+    expect(await noMise({ listTruncated: true, grep: async () => ({ paths: [], truncated: false }) })).toBeUndefined();
   });
 });
 
