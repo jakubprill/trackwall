@@ -46,8 +46,8 @@ export function taskSlug(prompt: string, taskId: string): string {
 }
 
 /**
- * A task's worktree: `<worktrees directory>/<repo>/<branch without prefix>`. Computed, not stored, so `tasks.json` cannot
- * point to a directory outside the worktrees directory (the repo identifier and the branch have no path separators).
+ * A task's worktree: `<task worktrees folder>/<repo>/<branch without prefix>` (ADR-84). Computed, not stored, so `tasks.json`
+ * cannot point to a directory outside the task's folder (the repo identifier and the branch have no path separators).
  */
 export function taskWorktree(worktreesDir: string, repo: string, branch: string): string {
   return join(worktreesDir, repo, branch.slice(TASK_BRANCH_PREFIX.length));

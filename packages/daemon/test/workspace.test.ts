@@ -305,6 +305,18 @@ describe("the task worktrees folder (ADR-84)", () => {
     expect(readFileSync(file, "utf8")).not.toContain("worktreesDir");
   });
 
+  test("a folder that holds the projects folder is bad_request, but a folder in it whose name starts with two dots is not", async () => {
+    const { workspace, projects } = await workspaceWithProjectsDir();
+    const parent = join(projects, "..");
+    mkdirSync(join(projects, "..worktrees"));
+
+    await expect(workspace.setWorktreesDir(parent)).rejects.toMatchObject({
+      code: "bad_request",
+      message: expect.stringContaining(`holds the projects folder ${projects}`),
+    });
+    expect(await workspace.setWorktreesDir(join(projects, "..worktrees"))).toMatchObject({ worktreesDir: join(projects, "..worktrees") });
+  });
+
   test("a saved folder that later lies in a repo, after the projects folder changed, is refused when a task is created", async () => {
     const { workspace } = await workspaceWithProjectsDir();
     const other = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
@@ -315,7 +327,9 @@ describe("the task worktrees folder (ADR-84)", () => {
 
     await expect(workspace.worktreesDir()).rejects.toMatchObject({
       code: "bad_request",
-      message: expect.stringContaining(`lies in the repo ${api}`),
+      message: expect.stringContaining(
+        `lies in the repo ${api}; choose a folder outside the repos; change the task worktrees folder in Settings`,
+      ),
     });
   });
 
@@ -340,6 +354,9 @@ describe("the task worktrees folder (ADR-84)", () => {
       code: "invalid_config",
       message: expect.stringContaining("worktreesDir"),
     });
+    // Settings fail with it, and going back to the default from the Settings view fixes the file.
+    expect(() => workspace.settings()).toThrow(expect.objectContaining({ code: "invalid_config" }));
+    expect(await workspace.setWorktreesDir(null)).toMatchObject({ worktreesDir: null });
   });
 });
 

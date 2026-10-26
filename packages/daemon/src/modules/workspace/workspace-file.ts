@@ -107,10 +107,7 @@ export class WorkspaceFile {
 
   /** `null` removes the key, so that the file says nothing about a setting the user did not choose. */
   setWorktreesDir(dir: string | null): void {
-    const doc = this.load();
-    if (dir === null) doc.delete("worktreesDir");
-    else doc.set("worktreesDir", dir);
-    this.save(doc);
+    this.set("worktreesDir", dir);
   }
 
   setRepoHosts(hosts: RepoHost[]): void {
@@ -125,9 +122,11 @@ export class WorkspaceFile {
     return parsed.data;
   }
 
+  /** `null` removes the key. */
   private set(key: Key, value: unknown): void {
     const doc = this.load();
-    doc.set(key, value);
+    if (value === null) doc.delete(key);
+    else doc.set(key, value);
     this.save(doc);
   }
 

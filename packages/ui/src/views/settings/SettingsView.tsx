@@ -69,6 +69,21 @@ export function SettingsView({
           )}
         </div>
       </Surface>
+      {/* A bad `worktreesDir` typed by hand also fails the settings; going back to the default or saving a folder fixes it. */}
+      {settings.errorCode === "invalid_config" && (
+        <Surface label="Task worktrees folder">
+          <div className="p-4">
+            <FolderForm
+              label="Full path to the task worktrees folder"
+              placeholder="Full path, or Use default"
+              configKey="worktreesDir"
+              initialPath=""
+              save={(path) => saveWorktreesDir(path)}
+              reset={() => saveWorktreesDir(null)}
+            />
+          </div>
+        </Surface>
+      )}
       {settings.data && (
         <Surface label="Task worktrees folder">
           <div className="flex flex-col gap-4 p-4">

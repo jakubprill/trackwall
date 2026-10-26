@@ -24,8 +24,16 @@ export async function checkWorktreesDir(dir: string, projectsDir: string | null)
   if (projectsDir === null) return;
   const inside = relative(projectsDir, dir);
   if (inside === "") throw new DomainError("bad_request", `${dir} is the projects folder; choose a folder outside the repos`);
-  if (inside.startsWith("..") || isAbsolute(inside)) return;
+  // A folder holding the projects folder would put the worktrees of a repo named like the projects folder right in it.
+  if (isInside(relative(dir, projectsDir)))
+    throw new DomainError("bad_request", `${dir} holds the projects folder ${projectsDir}; choose a folder outside it`);
+  if (!isInside(inside)) return;
   const [child = ""] = inside.split(sep);
   const repo = join(projectsDir, child);
   if (await hasGit(repo)) throw new DomainError("bad_request", `${dir} lies in the repo ${repo}; choose a folder outside the repos`);
+}
+
+/** Whether a `relative` result goes down, not up or to another drive; a name such as `..notes` is still inside. */
+function isInside(rel: string): boolean {
+  return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }

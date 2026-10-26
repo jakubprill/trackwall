@@ -122,14 +122,14 @@ export class Workspace {
 
   /** `null` goes back to the default folder; tasks that already exist keep their worktrees where they are (ADR-84). */
   async setWorktreesDir(path: string | null): Promise<WorkspaceSettings> {
-    if (path === null) {
-      this.deps.file.setWorktreesDir(null);
-      return this.settings();
-    }
+    this.deps.file.setWorktreesDir(path === null ? null : await this.checkedWorktreesDir(path));
+    return this.settings();
+  }
+
+  private async checkedWorktreesDir(path: string): Promise<string> {
     const dir = await resolveFolderSetting(path);
     await checkWorktreesDir(dir, this.deps.file.projectsDir());
-    this.deps.file.setWorktreesDir(dir);
-    return this.settings();
+    return dir;
   }
 
   /**
@@ -298,7 +298,9 @@ export class Workspace {
   async worktreesDir(): Promise<string> {
     const projectsDir = await this.projectsDir();
     const dir = this.deps.file.worktreesDir() ?? defaultWorktreesDir(projectsDir);
-    await checkWorktreesDir(dir, projectsDir);
+    await checkWorktreesDir(dir, projectsDir).catch((err: unknown) => {
+      throw new DomainError("bad_request", `${messageOf(err)}; change the task worktrees folder in Settings`);
+    });
     return dir;
   }
 

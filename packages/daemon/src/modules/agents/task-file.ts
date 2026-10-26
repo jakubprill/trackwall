@@ -36,7 +36,7 @@ export const StoredTask = Task.omit({ worktree: true }).extend({
    * The task worktrees folder the task's worktree went into (ADR-84), so that changing the setting does not lose the
    * worktrees of existing tasks. `null` in a task saved by an older version: its worktree is in `worktrees/` of the state directory.
    */
-  worktreesDir: z.string().refine(isAbsolute, "task worktrees folder must be a full path").nullable().default(null),
+  worktreesDir: z.string().max(4096).refine(isAbsolute, "task worktrees folder must be a full path").nullable().default(null),
   /** The root of the repo in the projects folder the task came from: git keeps the worktree registry and the branch there. */
   repoDir: z.string().refine(isAbsolute, "repo root must be a full path"),
 });
