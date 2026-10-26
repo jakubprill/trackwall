@@ -9,8 +9,7 @@ import { startApi } from "../../src/api/server.ts";
 import { createFacade, type FacadeOptions, HOSTING_CLIS } from "../../src/facade.ts";
 import { writeDaemonFile } from "../../src/infra/discovery.ts";
 import { loopbackRequest } from "../../src/infra/loopback.ts";
-import { createMcpEndpoint } from "../../src/mcp/endpoint.ts";
-import { sessionMcpStdioCommand } from "../../src/mcp/stdio-command.ts";
+import { createMcpEndpoint, sessionMcpRequest } from "../../src/mcp/endpoint.ts";
 import type { HostingClis } from "../../src/modules/vcs/hosting.ts";
 import { makeRepo } from "./git-repo.ts";
 
@@ -46,8 +45,8 @@ export const ONE_REPO: SessionApiOptions = { repos: { shop: { "README.md": "# sh
 
 /**
  * The daemon API with a real facade and Copilot CLI (by default the fake) in a PTY, on a projects folder with the repos from
- * `options` (by default one repo, `shop`): what `main.ts` gives to `startApi`, with its hook and MCP stdio bridge commands and
- * a `daemon.json`, so a session's bridge reaches this API. `stop` stops the sessions and mise tasks and closes the API.
+ * `options` (by default one repo, `shop`): what `main.ts` gives to `startApi`, with its hook and MCP addresses and
+ * a `daemon.json`, so a session's hooks and MCP requests reach this API. `stop` stops the sessions and mise tasks and closes the API.
  */
 export async function startSessionApi(token: string, options: SessionApiOptions = ONE_REPO) {
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
@@ -63,7 +62,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
     copilotCommand: copilot.command,
     version: "0.0.0-test",
     sessionHook: options.sessionHook ?? ((event, sessionToken) => sessionHookRequest(api.port, token, event, sessionToken)),
-    sessionMcpCommand: (tokenFile) => sessionMcpStdioCommand(home, tokenFile),
+    sessionMcpServer: (sessionToken) => sessionMcpRequest(api.port, token, sessionToken),
     hostingClis: options.hostingClis ?? HOSTING_CLIS,
     userEnv: async () => copilot.env({ home, projects }),
     log: options.log ?? (() => {}),

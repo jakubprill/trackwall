@@ -12,9 +12,8 @@ export interface DaemonArgs {
 }
 
 export const USAGE = `trackwall-daemon [options]
-trackwall-daemon mcp-stdio [--home <dir>] [--session-token-file <file>]
-                   stdio bridge to the MCP server of the running daemon (for Copilot CLI);
-                   a Trackwall session passes the file with its session token
+trackwall-daemon mcp-stdio [--home <dir>]
+                   stdio bridge to the MCP server of the running daemon (for Copilot CLI)
 
   --ui             open the UI in the default browser (mode without Tauri)
   --ui-dir <dir>   directory of the built UI (default: ./ui next to the binary)
@@ -72,28 +71,16 @@ function toInt(value: string | undefined, name: string): number {
 
 /** The `trackwall-daemon` subcommand that starts the Stdio bridge to `/mcp` (§5.3). */
 export const MCP_STDIO_COMMAND = "mcp-stdio";
-/**
- * The Stdio bridge option with the session token file (ADR-39): the daemon gives it in the MCP configuration of each of its sessions
- * so that the MCP server knows which session calls. A path instead of the token itself, because other users of the system see
- * process arguments.
- */
-const SESSION_TOKEN_FILE_KEY = "session-token-file";
-export const SESSION_TOKEN_FILE_OPTION = `--${SESSION_TOKEN_FILE_KEY}`;
-/**
- * The command line: the daemon or the Stdio bridge (`mcp-stdio [--home <dir>] [--session-token-file <file>]`), which has
- * only the state directory and the session token to set.
- */
-export type CommandLine =
-  | { command: "daemon"; args: DaemonArgs }
-  | { command: typeof MCP_STDIO_COMMAND; home?: string; sessionTokenFile?: string };
+/** The command line: the daemon or the Stdio bridge (`mcp-stdio [--home <dir>]`), which has only the state directory to set. */
+export type CommandLine = { command: "daemon"; args: DaemonArgs } | { command: typeof MCP_STDIO_COMMAND; home?: string };
 
 export function parseCommandLine(argv: string[]): CommandLine {
   if (argv[0] !== MCP_STDIO_COMMAND) return { command: "daemon", args: parseDaemonArgs(argv) };
   const { values } = parseArgs({
     args: argv.slice(1),
-    options: { home: { type: "string" }, [SESSION_TOKEN_FILE_KEY]: { type: "string" } },
+    options: { home: { type: "string" } },
     strict: true,
     allowPositionals: false,
   });
-  return { command: MCP_STDIO_COMMAND, home: values.home, sessionTokenFile: values[SESSION_TOKEN_FILE_KEY] };
+  return { command: MCP_STDIO_COMMAND, home: values.home };
 }

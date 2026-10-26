@@ -68,8 +68,7 @@ function shellCall(request: ModelRequest, command: { bash: string; powershell: s
 }
 
 /**
- * How long a session may take to start and to finish a turn: a cold ~170 MB binary that Windows Defender scans and the MCP
- * stdio bridge running from source.
+ * How long a session may take to start and to finish a turn: a cold ~170 MB binary that Windows Defender scans.
  */
 const SESSION_MS = 60_000;
 // A test waits for at most three such steps; its own limit is above their sum, so a slow step fails on its own message.
@@ -214,7 +213,7 @@ describe("a session of the real Copilot CLI", () => {
     }
   });
 
-  test("the agent gets every Trackwall MCP tool through the session's stdio bridge and the session instructions in its prompt", async () => {
+  test("the agent gets every Trackwall MCP tool over HTTP from the daemon and the session instructions in its prompt", async () => {
     const { id, window } = await startSession();
 
     model.reply({ tool: copilotToolName(mcpTools.listRepos.name), arguments: {} }, { text: "There is one repo." });
@@ -488,6 +487,48 @@ describe("session plugin hooks over HTTP with the real Copilot CLI (ADR-88)", ()
     } finally {
       await broken.stop();
       standIn.close();
+    }
+  });
+});
+
+describe("the daemon's MCP server with the real Copilot CLI behind the user's proxy (ADR-89)", () => {
+  test("with HTTP_PROXY set and no NO_PROXY the session still reaches the MCP server, the hooks and the model on 127.0.0.1", async () => {
+    // A proxy that answers nothing: whatever Copilot CLI sends through it fails.
+    const deadProxy = "http://127.0.0.1:9";
+    const proxied = await startRealCopilotDaemon(
+      model,
+      {},
+      {
+        HTTP_PROXY: deadProxy,
+        http_proxy: deadProxy,
+        HTTPS_PROXY: deadProxy,
+        https_proxy: deadProxy,
+        NO_PROXY: undefined,
+        no_proxy: undefined,
+      },
+    );
+    try {
+      const { agents } = proxied.facade;
+      const started = await agents.start("shop");
+      const window = viewer(agents, started.id);
+      window.attachment.resize(REFERENCE_COLS, REFERENCE_ROWS);
+      await untilInputBox(window, "empty");
+      model.reply({ tool: copilotToolName(mcpTools.listRepos.name), arguments: {} }, { text: "There is one repo." });
+
+      window.attachment.input("which repos are there?\r");
+      await waitFor(agents, started.id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
+
+      expect(model.requests().at(-1)?.toolResults.join("\n")).toContain('"id":"shop"');
+      expect(hookRecords(proxied.home, started.id).map((r) => r.event)).toEqual([
+        "sessionStart",
+        "userPromptSubmitted",
+        "postToolUse",
+        "agentStop",
+      ]);
+      window.attachment.detach();
+      await agents.stop(started.id);
+    } finally {
+      await proxied.stop();
     }
   });
 });

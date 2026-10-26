@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agents } from "../src/modules/agents/agents.ts";
@@ -35,12 +35,22 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const instructions = readFileSync(join(home, "sessions", started.id, "instructions", "trackwall.instructions.md"), "utf8");
     expect(instructions).toContain("You are a main session in the root of the repo `shop`");
     expect(readdirSync(repoDir)).toEqual([]);
-    // The session's stdio bridge gets the file with this session's token, by which the MCP server knows who is calling (ADR-39).
-    const tokenFile = join(home, "sessions", started.id, "session-token");
-    const mcpConfig = readFileSync(join(home, "sessions", started.id, "mcp-config.json"), "utf8");
-    expect(JSON.parse(mcpConfig).mcpServers.trackwall.args).toEqual(["mcp-stdio", "--session-token-file", tokenFile]);
-    expect(agents.callerSession(readFileSync(tokenFile, "utf8"))).toBe(started.id);
+    // The session reaches the MCP server over HTTP with this session's token, by which the server knows who is calling (ADR-39, ADR-89).
+    const mcpConfig = JSON.parse(readFileSync(join(home, "sessions", started.id, "mcp-config.json"), "utf8"));
+    const sessionToken = mcpConfig.mcpServers.trackwall.headers["x-trackwall-session-token"];
+    expect(mcpConfig.mcpServers.trackwall).toEqual({
+      type: "http",
+      url: "http://127.0.0.1:9/mcp",
+      headers: { "x-trackwall-session-token": sessionToken },
+      tools: ["*"],
+    });
+    expect(agents.callerSession(sessionToken)).toBe(started.id);
     expect(agents.callerSession("another token")).toBeUndefined();
+    // Both files carry the daemon token and the session token, so only the user reads them (§8; Windows has no mode bits).
+    if (process.platform !== "win32") {
+      expect(statSync(join(home, "sessions", started.id, "mcp-config.json")).mode & 0o777).toBe(0o600);
+      expect(statSync(join(home, "sessions", started.id, "plugin", "hooks.json")).mode & 0o777).toBe(0o600);
+    }
 
     window.attachment.input("fix the test\r");
     const approval = await waitFor(agents, started.id, (s) => s.state?.state === "Approval", "approval request");
@@ -323,7 +333,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
       version: "0.0.0-test",
       env: async () => ({ PATH: repoDir }),
       sessionHook: () => ({ url: "http://127.0.0.1:9/hooks/unused", headers: {} }),
-      sessionMcpCommand: () => ["unused"],
+      sessionMcpServer: () => ({ url: "http://127.0.0.1:9/mcp", headers: {} }),
       openEditor: () => {},
       log: () => {},
     });

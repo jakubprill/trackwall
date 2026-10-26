@@ -75,6 +75,20 @@ export function copilotMcpServers(mcpStdioCommand: readonly string[]) {
   return { mcpServers: { [MCP_SERVER_NAME]: { type: "local", command, args, tools: ["*"] } } };
 }
 
+/** An address on the daemon with the headers a request to it carries (a Trackwall session's MCP server and hooks). */
+export interface HttpEndpoint {
+  url: string;
+  headers: Record<string, string>;
+}
+
+/**
+ * The same entry for a Trackwall session (ADR-89): the daemon's `/mcp` over HTTP with the tokens in the headers, so
+ * Copilot CLI starts no bridge process for it.
+ */
+export function copilotHttpMcpServers(server: HttpEndpoint) {
+  return { mcpServers: { [MCP_SERVER_NAME]: { type: "http", ...server, tools: ["*"] } } };
+}
+
 /** The repo's result in the last sync and when that sync ran. */
 const LastSync = z.object({
   /** ISO 8601. */

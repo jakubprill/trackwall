@@ -1,8 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
 
 /**
- * Session tokens (ADR-39): every Copilot CLI session gets a random token in a file in its session directory, and its
- * stdio bridge sends it with every MCP request, so the MCP server knows which session is calling. The daemon keeps only
+ * Session tokens (ADR-39): every Copilot CLI session gets a random token, which its MCP config (ADR-89) and its hooks
+ * (ADR-88) send as a header with every request, so the MCP server knows which session is calling. The daemon keeps only
  * SHA-256 hashes: reading the daemon's memory does not give a token, and a lookup by hash does not leak the token
  * through comparison timing.
  */

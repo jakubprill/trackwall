@@ -79,7 +79,7 @@ function modules() {
     copilotCommand: ["copilot"],
     version: "0.0.0-test",
     sessionHook: () => ({ url: "http://127.0.0.1:9/hooks/unused", headers: {} }),
-    sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
+    sessionMcpServer: (sessionToken) => ({ url: "http://127.0.0.1:9/mcp", headers: { "x-trackwall-session-token": sessionToken } }),
     hostingClis: HOSTING_CLIS,
     userEnv: async () => process.env,
     log: () => {},

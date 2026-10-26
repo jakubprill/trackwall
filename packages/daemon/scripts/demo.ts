@@ -19,8 +19,8 @@ import { createFacade, HOSTING_CLIS } from "../src/facade.ts";
 import { newToken, writeDaemonFile } from "../src/infra/discovery.ts";
 import { SHUTDOWN_SIGNALS, shutdownOnce, stopDaemon } from "../src/infra/shutdown.ts";
 import { userEnv } from "../src/infra/user-env.ts";
-import { createMcpEndpoint } from "../src/mcp/endpoint.ts";
-import { mcpStdioCommand, sessionMcpStdioCommand } from "../src/mcp/stdio-command.ts";
+import { createMcpEndpoint, sessionMcpRequest } from "../src/mcp/endpoint.ts";
+import { mcpStdioCommand } from "../src/mcp/stdio-command.ts";
 import { runtimeInfo } from "../src/platform/runtime.ts";
 import { TURNS } from "./demo/turns.ts";
 import { createDemoWorkspace, DEMO_REPOS, writePricingTaskChanges } from "./demo/workspace.ts";
@@ -49,7 +49,7 @@ const facade = createFacade({
   copilotCommand: [process.execPath, here("demo/copilot.ts")],
   version: VERSION,
   sessionHook: (event, sessionToken) => sessionHookRequest(api.port, token, event, sessionToken),
-  sessionMcpCommand: (tokenFile) => sessionMcpStdioCommand(home, tokenFile),
+  sessionMcpServer: (sessionToken) => sessionMcpRequest(api.port, token, sessionToken),
   hostingClis: HOSTING_CLIS,
   userEnv,
   log,

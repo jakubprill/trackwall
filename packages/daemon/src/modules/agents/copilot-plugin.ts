@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { HttpEndpoint } from "@trackwall/protocol";
 import { COPILOT_HOOK_EVENTS, type CopilotHookEvent } from "./copilot-hook-record.ts";
 
 /**
@@ -28,10 +29,8 @@ interface HookCommand {
  * an antivirus would add to every event. Copilot CLI sends it to `127.0.0.1` only with `COPILOT_HOOK_ALLOW_LOCALHOST=1`
  * in its environment and drops it silently otherwise.
  */
-export interface HttpHook {
+interface HttpHook extends HttpEndpoint {
   type: "http";
-  url: string;
-  headers: Record<string, string>;
 }
 
 type PluginHook = HookCommand | HttpHook;
@@ -44,6 +43,6 @@ export function writeCopilotPlugin(dir: string, hook: (event: CopilotHookEvent) 
   const manifest = { name: COPILOT_PLUGIN_NAME, version: "0.0.0", description: "Trackwall: task session state" };
   const hooks = Object.fromEntries(COPILOT_HOOK_EVENTS.map((event) => [event, [{ ...hook(event), timeoutSec: HOOK_TIMEOUT_SEC }]]));
   writeFileSync(join(dir, "plugin.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-  // User-only like the session token file: an HTTP hook's headers carry the daemon token and the session token (§8).
+  // User-only like the session's `mcp-config.json`: an HTTP hook's headers carry the daemon token and the session token (§8).
   writeFileSync(join(dir, "hooks.json"), `${JSON.stringify({ version: 1, hooks }, null, 2)}\n`, { mode: 0o600 });
 }

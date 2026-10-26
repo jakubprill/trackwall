@@ -75,8 +75,8 @@ _Avoid_: command, action (those are API and CLI terms)
 The process an agent CLI starts as a local MCP server; it passes messages from stdin to the MCP server of the running daemon, with the port and token from `daemon.json`.
 _Avoid_: proxy, thin client (without qualification)
 
-**Session token** (`session-token` in the session directory, the `x-trackwall-session-token` header, `callerSession`):
-A random token of every Trackwall session next to the daemon token, which its stdio bridge sends to the MCP server; by it the daemon knows which session is calling and, for example, stores a summary only in that session's task (ADR-39, §8). An agent outside Trackwall does not have it.
+**Session token** (the `x-trackwall-session-token` header in the session's `mcp-config.json` and `hooks.json`, `callerSession`):
+A random token of every Trackwall session next to the daemon token, which its Copilot CLI sends to the MCP server and with its hooks (ADR-88, ADR-89); by it the daemon knows which session is calling and, for example, stores a summary only in that session's task (ADR-39, §8). An agent outside Trackwall does not have it.
 _Avoid_: task token (an earlier plan; every session has a token, also in a repo root)
 
 ## Workspace and knowledge
