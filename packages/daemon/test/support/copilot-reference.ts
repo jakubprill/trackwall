@@ -85,6 +85,9 @@ export function anonymize(line: string, paths: readonly string[]): string {
   for (const path of [...paths].sort((a, b) => b.length - a.length)) out = out.replaceAll(path, REFERENCE_PROJECTS);
   out = out.replace(SHORTENED_PATH, (_, last: string) => `${REFERENCE_PROJECTS}/${last}`);
   const border = BOX_RIGHT.exec(out);
-  if (border === null || out.length >= line.length) return out;
-  return `${out.slice(0, border.index)}${" ".repeat(line.length - out.length)}${out.slice(border.index)}`;
+  if (border === null || out.length === line.length) return out;
+  // The blanks before the border make up for the difference, as far as there are blanks to take.
+  const text = out.slice(0, border.index);
+  const right = out.slice(border.index).trimStart();
+  return `${text}${" ".repeat(Math.max(1, line.length - text.length - right.length))}${right}`;
 }

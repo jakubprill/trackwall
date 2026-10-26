@@ -31,7 +31,7 @@ type Window = ReturnType<typeof viewer>;
 /** The input box, its two rules and the footer. */
 const PROMPT_BOX_LINES = 4;
 
-/** The window's screen as Copilot CLI drew it in the recording's size, once the emulator has processed all output. */
+/** The window's screen as Copilot CLI drew it in the reference's size, once the emulator has processed all output. */
 async function screenLines(window: Window): Promise<string[]> {
   const screen = new TerminalScreen(REFERENCE_COLS, REFERENCE_ROWS);
   try {
@@ -49,7 +49,7 @@ async function screenLines(window: Window): Promise<string[]> {
 }
 
 export function startRecorder(daemon: { home: string; projects: string; copilot: string }) {
-  const recording = process.env.TRACKWALL_RECORD === "1";
+  const taking = process.env.TRACKWALL_RECORD === "1";
   const known = readReference();
   const seen: Partial<CopilotReference> = { copilotVersion: COPILOT_CLI_VERSION, platform: process.platform };
   const differences: string[] = [];
@@ -115,7 +115,7 @@ export function startRecorder(daemon: { home: string; projects: string; copilot:
      */
     finish(): void {
       const complete = CopilotReference.safeParse(seen);
-      if (recording) {
+      if (taking) {
         if (!complete.success) throw new Error(`the reference is incomplete: ${complete.error.message}`);
         mkdirSync(dirname(referenceFile()), { recursive: true });
         writeFileSync(referenceFile(), `${JSON.stringify(complete.data, null, 2)}\n`);
@@ -123,10 +123,12 @@ export function startRecorder(daemon: { home: string; projects: string; copilot:
       }
       if (known !== undefined && differences.length === 0) return;
       process.stdout.write(`Copilot CLI reference seen on ${process.platform}:\n${JSON.stringify(seen, null, 2)}\n`);
+      // A part a failed test did not hand over is missing from what was printed, which is then no reference to keep.
+      const incomplete = complete.success ? "" : `\nwhat was seen is incomplete, so it is no reference: ${complete.error.message}`;
       throw new Error(
         known === undefined
-          ? `no Copilot CLI reference for ${process.platform} (${referenceFile()}); TRACKWALL_RECORD=1 pnpm test:contract takes it`
-          : `the session differs from the Copilot CLI reference (${referenceFile()}):\n${differences.join("\n")}`,
+          ? `no Copilot CLI reference for ${process.platform} (${referenceFile()}); TRACKWALL_RECORD=1 pnpm test:contract takes it${incomplete}`
+          : `the session differs from the Copilot CLI reference (${referenceFile()}):\n${differences.join("\n")}${incomplete}`,
       );
     },
   };

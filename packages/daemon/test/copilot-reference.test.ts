@@ -56,5 +56,6 @@ describe("paths in a reference", () => {
   test("shortened by Copilot CLI to fit the screen are replaced by the projects folder and the last part", () => {
     expect(anonymize("in this repo (/private/var/folders/x1/.../shop)", [])).toBe("in this repo (/projects/shop)");
     expect(anonymize(String.raw`in this repo (C:\Users\RUNNER~1\...\shop)`, [])).toBe("in this repo (/projects/shop)");
+    expect(anonymize("│ repo (/tmp/.../shop)    │", [])).toBe("│ repo (/projects/shop)   │");
   });
 });

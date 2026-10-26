@@ -13,6 +13,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { z } from "zod";
+import { readAgentDialog } from "../../src/modules/agents/copilot-dialog.ts";
 import { PROMPT_PLACEHOLDER, type ReferenceHook, reference } from "../support/copilot-reference.ts";
 import { pluginHooks } from "../support/plugin-hooks.ts";
 
@@ -85,7 +86,7 @@ function submit(line: string): void {
     replay(real.exit);
     process.exit(0);
   }
-  // Copilot CLI starts the session's hooks only with the first prompt (ADR-67).
+  // Copilot CLI starts the session's hooks only with the first prompt (ADR-69).
   replay(started ? [promptHook] : [startHook, promptHook], line);
   started = true;
   const helper = spawn(process.execPath, ["-e", "setTimeout(() => {}, 600000)"], { stdio: "ignore" });
@@ -105,13 +106,21 @@ function approve(): void {
 }
 
 /**
- * Keys of the approval that run the command: the digits of its "Yes" options (on Windows only `1`, since a PowerShell
- * command has no "don't ask again"), and Enter on the selected first one.
+ * Keys of the approval that run the command: its "Yes" options as the daemon reads them (on Windows only `1`, since a
+ * PowerShell command has no "don't ask again"), and Enter on the selected first one.
  */
-const APPROVE_KEYS = new Set(["\r", "\n", ...real.approval.dialog.flatMap((line) => /(\d)\. Yes\b/.exec(line)?.[1] ?? [])]);
-/** A bracketed paste's markers, a focus report and Esc: terminal input around typed text, not text. */
-const TERMINAL_SEQUENCES = ["\x1b[200~", "\x1b[201~", "\x1b[I", "\x1b[O", "\x1b"];
-const typedText = (chunk: Buffer) => TERMINAL_SEQUENCES.reduce((text, seq) => text.replaceAll(seq, ""), chunk.toString("utf8"));
+const approvalDialog = readAgentDialog(real.approval.dialog, "approval");
+if (approvalDialog?.kind !== "approval") throw new Error("the reference's approval dialog does not read as one");
+const approvalOptions = approvalDialog.options;
+const APPROVE_KEYS = new Set(["\r", "\n", ...approvalOptions.filter((o) => o.label.startsWith("Yes")).map((o) => o.key)]);
+/**
+ * Terminal input around typed text, not text: Esc and the sequences it starts, CSI (a bracketed paste's markers, a focus
+ * report, arrow keys), OSC (a colour reply) and SS3 (arrow keys in application mode).
+ */
+const ESC = String.fromCharCode(27);
+const BEL = String.fromCharCode(7);
+const TERMINAL_SEQUENCE = new RegExp(`${ESC}(?:\\[[0-?]*[ -/]*[@-~]|\\][^${BEL}${ESC}]*(?:${BEL}|${ESC}\\\\)|O.)?`, "g");
+const typedText = (chunk: Buffer) => chunk.toString("utf8").replace(TERMINAL_SEQUENCE, "");
 
 // Keys one by one, as Copilot CLI reads them: a digit answers the approval without Enter. A rejection ("No", Esc) is not
 // in the reference, so the fake keeps waiting for an approval.

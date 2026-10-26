@@ -426,7 +426,7 @@ _Avoid_: intention, intent
 A session's output in the asciicast v2 format with markers for hook records, session keys and the exit code, from which the state can be computed again (`replayCopilotRecording`). Without the content of keyboard input.
 
 **Copilot CLI reference** (`CopilotReference`, `test/fixtures/copilot/reference/<platform>.json`):
-What the real Copilot CLI of the pinned version showed and sent in the contract tests, per system and anonymised: the hooks with their payloads, the window titles, the input box and the approval dialog. The fake Copilot CLI of the tests replays it, and the contract tests compare a live session with it (ADR-67). A test fixture, not part of the product.
+What the real Copilot CLI of the pinned version showed and sent in the contract tests, per system and anonymised: the hooks with their payloads, the window titles, the input box and the approval dialog. The fake Copilot CLI of the tests replays it, and the contract tests compare a live session with it, or take it anew with `TRACKWALL_RECORD=1` (`startRecorder`, ADR-67). A test fixture, not part of the product.
 _Avoid_: recording (that is `session.cast`), snapshot
 
 **Budget**:

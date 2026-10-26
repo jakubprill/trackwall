@@ -31,14 +31,12 @@ afterEach(() => {
   expect(model.takeLeftovers()).toEqual({ problems: [], unusedReplies: 0 });
 });
 
-// The reference is checked last, after the sessions are stopped, so a difference does not leave Copilot CLI running.
+// The reference is checked last, after the sessions are stopped, so a difference does not leave Copilot CLI running;
+// a failure to stop is reported instead of it.
 afterAll(async () => {
-  try {
-    await daemon.stop();
-    await model.close();
-  } finally {
-    recorder.finish();
-  }
+  await daemon.stop();
+  await model.close();
+  recorder.finish();
 });
 
 /** A tool of the Trackwall MCP server as Copilot CLI names it to the model: the server's key, a dash, the tool. */
@@ -85,7 +83,7 @@ describe("a session of the real Copilot CLI", () => {
   test("sessionStart comes only with the first prompt, and a turn ending in text goes working and back to waiting", async () => {
     const { agents } = daemon.facade;
     const { id, window } = await startSession();
-    // Copilot CLI is ready for input, but it has sent no hook yet: the daemon reads its input box from the screen (ADR-67).
+    // Copilot CLI is ready for input, but it has sent no hook yet: the daemon reads its input box from the screen (ADR-69).
     const ready = await waitFor(agents, id, (s) => s.state !== null, "the input box of a new session", SESSION_MS);
     expect(ready.state).toMatchObject({ state: "Input", source: "screen", reason: "screen input box before the first prompt" });
     expect(ready.needsAttention).toBe(true);
