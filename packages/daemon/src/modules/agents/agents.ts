@@ -12,6 +12,7 @@ import {
   type SendReviewResult,
   type Session,
   type SessionList,
+  type SupervisorSettings,
   type Task,
   type TaskChanges,
   type TaskChangesSummary,
@@ -30,7 +31,7 @@ import { type HookCommand, writeCopilotPlugin } from "./copilot-plugin.ts";
 import { inboxPrompt } from "./inbox-prompt.ts";
 import { LiveSession, type SessionPty, type SessionWindow } from "./live-session.ts";
 import { proposedByOf, proposerKeyOf, SUPERVISOR } from "./proposer.ts";
-import { withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
+import { type SessionRole, withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
 import { TaskCoordination } from "./task-coordination.ts";
@@ -103,16 +104,16 @@ interface AgentsProcs {
 
 /**
  * What `agents` needs from `workspace`: a repo root by its id (`not_found` without such a repo), the projects folder
- * the supervisor runs in (`bad_request` while it is not set), the tool permissions a session starts with and whether the
- * supervisor may change code.
+ * the supervisor runs in (`bad_request` while it is not set), the tool permissions a session starts with and the
+ * supervisor settings.
  */
 interface AgentsRepos {
   repoPath(id: string): Promise<string>;
   projectsDir(): Promise<string>;
   /** The `toolPermissions` patterns for a session in repo `repo` (`null` for the supervisor), ADR-66. */
   toolPermissions(repo: string | null): ToolPermissions;
-  /** `supervisor.changesCode` from `workspace.yaml` (ADR-78); `invalid_config` for a bad key. */
-  supervisorChangesCode(): boolean;
+  /** `supervisor` from `workspace.yaml` (ADR-78); `invalid_config` for a bad key. */
+  supervisorSettings(): SupervisorSettings;
 }
 
 export interface AgentsDeps {
@@ -461,14 +462,14 @@ export class Agents {
     const [name = "copilot", ...prefix] = this.#deps.copilot;
     const program = findCopilot(name, env);
     if (!program) throw new DomainError("agent_unavailable", `Copilot CLI (${name}) not found in PATH`);
-    const coordinatesOnly = repo === null && !this.#deps.repos.supervisorChangesCode();
-    const permissions = withCoordinatorDenials(this.#deps.repos.toolPermissions(repo), coordinatesOnly);
+    const permissions = this.#deps.repos.toolPermissions(repo);
+    const role: SessionRole = repo === null ? { repo, changesCode: this.#deps.repos.supervisorSettings().changesCode } : { repo, task };
     const id = randomUUID();
     const dir = sessionDir(this.#deps.home, id);
     const token = this.#tokens.issue(id);
     let prepared: PreparedSession;
     try {
-      prepared = this.#prepare({ id, repo, task, coordinatesOnly, dir, token, promptOnStart, program });
+      prepared = this.#prepare({ id, role, task, dir, token, promptOnStart, program });
     } catch (err) {
       this.#tokens.revoke(id);
       rmSync(dir, { recursive: true, force: true });
@@ -572,7 +573,8 @@ export class Agents {
    * The session directory with the session plugin, MCP config, session token, session instructions and an empty
    * `hooks.jsonl`, before Copilot CLI starts.
    */
-  #prepare({ id, repo, task, coordinatesOnly, dir, token, promptOnStart, program }: SessionFiles): PreparedSession {
+  #prepare({ id, role, task, dir, token, promptOnStart, program }: SessionFiles): PreparedSession {
+    const { repo } = role;
     const pluginDir = join(dir, "plugin");
     const hooksFile = join(dir, HOOKS_FILENAME);
     const tokenFile = join(dir, SESSION_TOKEN_FILENAME);
@@ -582,7 +584,7 @@ export class Agents {
     const mcpConfig = copilotMcpServers(this.#deps.sessionMcpCommand(tokenFile));
     writeFileSync(join(dir, MCP_CONFIG_FILE), JSON.stringify(mcpConfig, null, 2));
     writeCopilotPlugin(pluginDir, (event) => ({ ...this.#deps.hookCommand(event, hooksFile), cwd: pluginDir }));
-    const instructionsDir = writeSessionInstructions(dir, this.#deps.version, { repo, task, coordinatesOnly });
+    const instructionsDir = writeSessionInstructions(dir, this.#deps.version, role);
     if (instructionsDir === null)
       this.#deps.log(`session ${id} starts without Trackwall instructions: the session directory path has a comma`);
     const session = new LiveSession({
@@ -677,10 +679,8 @@ interface LaunchSpec {
 /** The directory of a new session and what follows from it for `LiveSession`. */
 interface SessionFiles {
   id: string;
-  repo: string | null;
+  role: SessionRole;
   task: string | null;
-  /** The supervisor without Copilot CLI's tools that change files (ADR-78). */
-  coordinatesOnly: boolean;
   dir: string;
   token: string;
   promptOnStart: boolean;
@@ -697,18 +697,6 @@ interface PreparedSession {
 /** Copilot CLI's own approval rules (ADR-66); one argument each, with `=`, so a pattern never reads as another option. */
 function toolPermissionArgs(permissions: ToolPermissions): string[] {
   return [...permissions.allow.map((p) => `--allow-tool=${p}`), ...permissions.deny.map((p) => `--deny-tool=${p}`)];
-}
-
-/**
- * Copilot CLI's tool kinds that change files: `shell` (every command, since a command can write anything) and `write`
- * (its file tools). The supervisor does not get them unless `supervisor.changesCode` (ADR-78): it hands changes to task
- * sessions, whose work the user reviews in a worktree. A denial wins over every approval, also the user's own rules.
- */
-const CODE_CHANGING_TOOLS = ["shell", "write"];
-
-function withCoordinatorDenials(permissions: ToolPermissions, coordinatesOnly: boolean): ToolPermissions {
-  if (!coordinatesOnly) return permissions;
-  return { allow: permissions.allow, deny: [...new Set([...permissions.deny, ...CODE_CHANGING_TOOLS])] };
 }
 
 /** The group owner key in `procs`; only ever built, never taken apart again. */

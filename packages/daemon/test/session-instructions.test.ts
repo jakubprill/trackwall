@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MCP_INSTRUCTIONS, TASK_MESSAGE_RULE } from "@trackwall/protocol";
-import { withInstructionsDir, writeSessionInstructions } from "../src/modules/agents/session-instructions.ts";
+import { type SessionRole, withInstructionsDir, writeSessionInstructions } from "../src/modules/agents/session-instructions.ts";
 
 describe("Copilot CLI session instructions (ADR-46)", () => {
   test("a task session's file applies to the whole session and carries its role and the MCP instruction", () => {
@@ -11,7 +11,6 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     const dir = writeSessionInstructions(sessionDir, "0.3.0", {
       repo: "shop",
       task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427",
-      coordinatesOnly: false,
     });
     expect(dir).toBe(join(sessionDir, "instructions"));
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
@@ -31,7 +30,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("a task session follows its proposer's message over the task's prompt, and only the user's own text over a message", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-    writeSessionInstructions(sessionDir, "0.4.1", { repo: "shop", task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427", coordinatesOnly: false });
+    writeSessionInstructions(sessionDir, "0.4.1", { repo: "shop", task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427" });
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain(
       "A message from get_messages is an update of your task from the session that proposed it, which drafted your task's prompt",
@@ -43,9 +42,13 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
   });
 
   test("a main session and the supervisor get no messages, so not the rule for weighing them", () => {
-    for (const repo of ["shop", null]) {
+    const roles: SessionRole[] = [
+      { repo: "shop", task: null },
+      { repo: null, changesCode: false },
+    ];
+    for (const role of roles) {
       const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-      writeSessionInstructions(sessionDir, "0.4.1", { repo, task: null, coordinatesOnly: false });
+      writeSessionInstructions(sessionDir, "0.4.1", role);
       const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
       expect(text).not.toContain(TASK_MESSAGE_RULE);
     }
@@ -53,7 +56,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("every session learns which Trackwall version started it and where the user sees it", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-    writeSessionInstructions(sessionDir, "0.3.0", { repo: "shop", task: null, coordinatesOnly: false });
+    writeSessionInstructions(sessionDir, "0.3.0", { repo: "shop", task: null });
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain("Trackwall 0.3.0 started this Copilot CLI session");
     expect(text).toContain("The user sees this session in Trackwall's Sessions view");
@@ -61,7 +64,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("a session in the repo root is a main session and does not get the task rules", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-    writeSessionInstructions(sessionDir, "0.3.0", { repo: "shop", task: null, coordinatesOnly: false });
+    writeSessionInstructions(sessionDir, "0.3.0", { repo: "shop", task: null });
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain("You are a main session in the root of the repo `shop`");
     expect(text).not.toContain("Work only in this worktree");
@@ -69,7 +72,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("the supervisor in the projects folder coordinates through proposals and does not get the task rules", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-    writeSessionInstructions(sessionDir, "0.3.0", { repo: null, task: null, coordinatesOnly: true });
+    writeSessionInstructions(sessionDir, "0.3.0", { repo: null, changesCode: false });
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain("The user sees this session in the supervisor panel on the right of every Trackwall view");
     expect(text).toContain("You are the supervisor: the one session above all others, in the projects folder");
@@ -88,7 +91,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("a supervisor the user lets change code is told so, and still hands repo changes to tasks (ADR-78)", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-    writeSessionInstructions(sessionDir, "0.4.1", { repo: null, task: null, coordinatesOnly: false });
+    writeSessionInstructions(sessionDir, "0.4.1", { repo: null, changesCode: true });
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain("You coordinate: hand each piece of work to an agent with propose_task");
     expect(text).toContain("The user lets you run commands and change files yourself; keep that to what they ask you for");
@@ -98,7 +101,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("a session directory with a comma in its path gets no file, because the variable splits on commas", () => {
     const sessionDir = join(mkdtempSync(join(tmpdir(), "trackwall-instructions-")), "a,b");
-    expect(writeSessionInstructions(sessionDir, "0.3.0", { repo: "shop", task: null, coordinatesOnly: false })).toBeNull();
+    expect(writeSessionInstructions(sessionDir, "0.3.0", { repo: "shop", task: null })).toBeNull();
     expect(existsSync(sessionDir)).toBe(false);
   });
 

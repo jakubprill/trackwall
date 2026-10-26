@@ -44,7 +44,7 @@ const Keys = {
   // The user's addition to the day start's first message (ADR-70); only by hand, like `repoTags`.
   dayStart: DayStartSettings.nullish().transform((settings) => settings ?? null),
   // Whether the supervisor may change code itself (ADR-78); only by hand, like `repoTags`.
-  supervisor: SupervisorSettings.nullish().transform((settings) => settings ?? SupervisorSettings.parse({})),
+  supervisor: SupervisorSettings.nullish().transform((settings) => settings ?? { changesCode: false }),
 };
 type Key = keyof typeof Keys;
 

@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Session, ToolPermissions } from "@trackwall/protocol";
+import type { Session, SupervisorSettings, ToolPermissions } from "@trackwall/protocol";
 import { DomainError } from "../../src/infra/errors.ts";
 import { Agents } from "../../src/modules/agents/agents.ts";
 import { Logs } from "../../src/modules/logs/logs.ts";
@@ -20,7 +20,7 @@ const daemonMain = join(import.meta.dir, "..", "..", "src", "main.ts");
  * Copilot CLI is a fake. `repos` are the repos of the projects folder: identifier → directory. A `home` passed in
  * simulates a daemon restart with the same state directory. `projectsDir` is where the supervisor runs; `null` is an unset
  * projects folder. `toolPermissions` are the patterns every session gets from the workspace (ADR-66), and
- * `supervisorChangesCode` is `supervisor.changesCode` (ADR-78).
+ * `supervisor` is `supervisor` from the workspace (ADR-78).
  */
 export function makeAgents(
   repos: Record<string, string>,
@@ -28,7 +28,7 @@ export function makeAgents(
   projectsDir: string | null = null,
   toolPermissions: ToolPermissions = { allow: [], deny: [] },
   env: NodeJS.ProcessEnv = process.env,
-  supervisorChangesCode = false,
+  supervisor: SupervisorSettings = { changesCode: false },
 ) {
   const procs = new ProcessGroups({
     logs: new Logs({ dir: join(home, "logs"), maxFileBytes: 1024 * 1024, log: () => {} }),
@@ -51,7 +51,7 @@ export function makeAgents(
         return projectsDir;
       },
       toolPermissions: () => toolPermissions,
-      supervisorChangesCode: () => supervisorChangesCode,
+      supervisorSettings: () => supervisor,
     },
     vcs: new Vcs(),
     home,

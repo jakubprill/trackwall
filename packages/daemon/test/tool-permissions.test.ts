@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { sessionToolPermissions } from "../src/modules/workspace/tool-permissions.ts";
+import { sessionToolPermissions, supervisorToolPermissions } from "../src/modules/workspace/tool-permissions.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 
 /** `workspace.yaml` with this text. */
@@ -36,6 +36,26 @@ describe("tool permission rules from workspace.yaml (ADR-66)", () => {
     const rules = workspaceFile(RULES).toolPermissionRules();
 
     expect(sessionToolPermissions(rules, null)).toEqual({ allow: ["shell(git status)"], deny: [] });
+  });
+
+  test("the supervisor is denied the shell and file writes after the user's own rules, whatever they allow (ADR-78)", () => {
+    const rules = workspaceFile(`toolPermissions:
+  - allow: ["write"]
+    deny: ["shell(git push)"]
+`).toolPermissionRules();
+
+    expect(supervisorToolPermissions(rules, { changesCode: false })).toEqual({
+      allow: ["write"],
+      deny: ["shell(git push)", "shell", "write"],
+    });
+  });
+
+  test("a supervisor the user lets change code gets only the user's own rules (ADR-78)", () => {
+    const rules = workspaceFile(`toolPermissions:
+  - deny: ["shell(git push)"]
+`).toolPermissionRules();
+
+    expect(supervisorToolPermissions(rules, { changesCode: true })).toEqual({ allow: [], deny: ["shell(git push)"] });
   });
 
   test("no key means no rules", () => {

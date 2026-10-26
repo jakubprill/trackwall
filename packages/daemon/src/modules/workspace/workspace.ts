@@ -18,6 +18,7 @@ import {
   type RepoStatusOk,
   type RepoTagRules,
   type SearchCodeResult,
+  type SupervisorSettings,
   type SyncResult,
   type SyncRun,
   sameHost,
@@ -33,7 +34,7 @@ import { type CodeSearchQuery, type CodeSearchVcs, searchCode } from "./code-sea
 import { describeDroppedFolder } from "./dropped-folder.ts";
 import { dirKey, findRepos, projectsDirUnavailable, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";
-import { sessionToolPermissions } from "./tool-permissions.ts";
+import { sessionToolPermissions, supervisorToolPermissions } from "./tool-permissions.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
 
 /**
@@ -286,15 +287,16 @@ export class Workspace {
    * (ADR-66); `invalid_config` for a bad `toolPermissions`, so that no session starts without a denial the user wrote.
    */
   toolPermissions(repo: string | null): ToolPermissions {
-    return sessionToolPermissions(this.deps.file.toolPermissionRules(), repo);
+    const rules = this.deps.file.toolPermissionRules();
+    return repo === null ? supervisorToolPermissions(rules, this.supervisorSettings()) : sessionToolPermissions(rules, repo);
   }
 
   /**
-   * Whether the supervisor may change code itself (`supervisor.changesCode` in `workspace.yaml`, ADR-78);
-   * `invalid_config` for a bad `supervisor`, so that a typo never lifts the denial.
+   * The supervisor settings (`supervisor` in `workspace.yaml`, ADR-78); `invalid_config` for a bad key, so that a typo
+   * never lifts the supervisor's denial.
    */
-  supervisorChangesCode(): boolean {
-    return this.deps.file.supervisorSettings().changesCode;
+  supervisorSettings(): SupervisorSettings {
+    return this.deps.file.supervisorSettings();
   }
 
   /** The user's addition to the day start's first message (`dayStart` in `workspace.yaml`, ADR-70); `null` without one. */
