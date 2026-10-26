@@ -4,7 +4,10 @@ import {
   AGENT_PATCH_MAX_BYTES,
   AGENT_PATCH_MIN_BYTES,
   AgentTaskChanges,
+  FOLDER_ACTION_REASON_MAX,
+  FolderActionReason,
   PromptDelivery,
+  REMOVED_REPOS_DIR,
   Session,
   SessionId,
   TASK_MESSAGE_MAX,
@@ -283,6 +286,7 @@ const LIST_SESSIONS = "list_sessions";
 const GET_SESSION = "get_session";
 const GET_TASK_CHANGES = "get_task_changes";
 const PROPOSE_TASK = "propose_task";
+const PROPOSE_FOLDER_ACTION = "propose_folder_action";
 const REPORT_RESULT = "report_result";
 const GET_REVIEW_COMMENTS = "get_review_comments";
 const SEND_MESSAGE = "send_message";
@@ -627,6 +631,28 @@ export const mcpTools = {
       .strict(),
     result: ProposeTaskResult,
   },
+  proposeFolderAction: {
+    name: PROPOSE_FOLDER_ACTION,
+    readOnly: false,
+    destructive: false,
+    description:
+      "Propose an action on the projects folder that a task cannot do, because a task works in a worktree of one repo. " +
+      "Trackwall shows it to the user next to task proposals, and nothing happens until the user approves it (or " +
+      "rejects it, with a reason). Actions: remove_repo, which moves the repo's folder out of the projects folder into " +
+      `${REMOVED_REPOS_DIR} there (the user can move it back by hand); Trackwall refuses it while a session, a task or a ` +
+      "mise task runs in the repo, so the user ends those first. Give the reason the user asked for it. In a Trackwall " +
+      `session, end your turn: Trackwall asks you to call ${GET_UPDATES} once the user decided.`,
+    args: z
+      .object({
+        action: z.enum(["remove_repo"]).describe("remove_repo: move the repo out of the projects folder"),
+        repo: RepoArg,
+        reason: visibleText(FolderActionReason).describe(
+          `why, in a sentence or two for the user, up to ${FOLDER_ACTION_REASON_MAX} characters`,
+        ),
+      })
+      .strict(),
+    result: ProposeTaskResult,
+  },
   reportResult: {
     name: REPORT_RESULT,
     readOnly: false,
@@ -696,7 +722,8 @@ export const mcpTools = {
       "Read what happened to the work you delegated since your last call, oldest first: for each task you proposed (the " +
       "supervisor: any supervisor proposed), turn_ended (its session finished a turn and waits; read its summary and " +
       `${GET_SESSION}), error, exited, result_reported (with the summary), verified (passed, failed or cancelled with ` +
-      "a message), and proposal_rejected (with the user's reason). A turn the user drove themselves in the task's session " +
+      "a message), proposal_rejected (with the user's reason), and repo_removed (the user approved your " +
+      `${PROPOSE_FOLDER_ACTION}; movedTo is where the repo went). A turn the user drove themselves in the task's session ` +
       "is left out. Trackwall asks you to call it when an update arrives, so instead of polling, end your turn and wait. " +
       `Updates count as read once returned; at most ${TASK_UPDATES_KEPT} wait, and dropped counts older ones that fell out. ` +
       `React with ${SEND_MESSAGE}, a new ${PROPOSE_TASK}, or by telling the user.`,

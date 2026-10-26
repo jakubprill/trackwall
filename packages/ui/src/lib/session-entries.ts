@@ -301,6 +301,11 @@ export function proposalName(proposal: TaskProposal): string {
   return `${proposal.repo} · ${proposal.title}`;
 }
 
+/** What a single proposal asks for, as its heading: a task, or removing a repo from the projects folder (ADR-83). */
+export function proposalKindLabel(proposal: TaskProposal): string {
+  return proposal.kind === "remove_repo" ? "Repo removal" : "Task proposal";
+}
+
 /** The name of a group of proposals (ADR-55): the proposal's name for one, a count for more. */
 export function proposalsName(proposals: ProposalsEntry["proposals"]): string {
   return proposals.length === 1

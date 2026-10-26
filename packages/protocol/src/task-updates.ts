@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { SessionId, TaskId, TaskSummaryText } from "./agents.ts";
 import { VerificationState } from "./verification.ts";
+import { RepoId } from "./workspace.ts";
 
 /**
  * Task updates (ADR-68): what the daemon saw happen to work a session delegated, for that session (the task's
@@ -25,7 +26,8 @@ const UpdateBase = z.object({
  * `turn_ended`: the task's session finished a turn it worked on and waits for input (done, or asking something; its
  * summary and `get_session` say which); `error`: the session reported an error; `exited`: its process ended;
  * `result_reported`: it called `report_result`; `verified`: a verification of the task has a verdict;
- * `proposal_rejected`: the user rejected the proposal, with their reason when they gave one. A turn the user drove by
+ * `proposal_rejected`: the user rejected the proposal, with their reason when they gave one; `repo_removed`: the user
+ * approved a proposal to remove a repo, which is now in `movedTo` (ADR-83; `task` is the proposal's id). A turn the user drove by
  * typing into the task's session gives no `turn_ended`: the user is handling it.
  */
 export const TaskUpdate = z.discriminatedUnion("kind", [
@@ -40,5 +42,6 @@ export const TaskUpdate = z.discriminatedUnion("kind", [
     message: z.string().nullable(),
   }),
   UpdateBase.extend({ kind: z.literal("proposal_rejected"), reason: z.string().nullable() }),
+  UpdateBase.extend({ kind: z.literal("repo_removed"), repo: RepoId, movedTo: z.string() }),
 ]);
 export type TaskUpdate = z.infer<typeof TaskUpdate>;

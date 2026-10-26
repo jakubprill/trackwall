@@ -95,6 +95,7 @@ const proposals: SessionEntry = {
   proposals: [
     {
       id: "p1",
+      kind: "task",
       repo: "billing",
       title: "Add refunds",
       prompt: "add refunds",

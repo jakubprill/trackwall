@@ -29,6 +29,7 @@ import {
   findEntry,
   nextWaitingTarget,
   type ProposalsEntry,
+  proposalKindLabel,
   proposalsName,
   type SessionEntry,
   type SessionRow,
@@ -413,7 +414,7 @@ function ProposalsListItem({
         <span className="flex min-w-0 items-center gap-2">
           <Lightbulb className="text-warning size-3.5 shrink-0" aria-hidden />
           <span className="truncate text-sm font-medium">
-            {entry.proposals.length === 1 ? "Task proposal" : proposalsName(entry.proposals)}
+            {entry.proposals.length === 1 ? proposalKindLabel(entry.proposals[0]) : proposalsName(entry.proposals)}
           </span>
         </span>
         <span className="text-muted-foreground truncate text-xs">

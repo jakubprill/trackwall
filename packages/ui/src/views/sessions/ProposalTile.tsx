@@ -36,6 +36,7 @@ export function ProposalTile({
             pending={decisions.pending}
             canStart
             onStart={() => decisions.start([{ id: p.id, prompt: p.prompt }])}
+            onRemoveRepo={() => decisions.removeRepo(p.id)}
             onReject={(reason) => decisions.reject(p.id, reason)}
           />
           <ProposalError error={decisions.errors.get(p.id)} />

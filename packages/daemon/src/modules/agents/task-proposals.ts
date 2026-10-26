@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ProposedBy, TaskProposal } from "@trackwall/protocol";
+import type { ProposalKind, ProposedBy, TaskProposal } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 
 /**
@@ -30,7 +30,7 @@ export class TaskProposals {
     return [...this.#pending];
   }
 
-  add(proposal: { repo: string; title: string; prompt: string; proposedBy: ProposedBy }): TaskProposal {
+  add(proposal: { kind: ProposalKind; repo: string; title: string; prompt: string; proposedBy: ProposedBy }): TaskProposal {
     if (this.#pending.length >= MAX_PENDING_PROPOSALS) {
       throw new DomainError(
         "bad_request",

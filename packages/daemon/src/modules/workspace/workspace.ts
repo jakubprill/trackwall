@@ -33,6 +33,7 @@ import { CloneJobs } from "./clone-jobs.ts";
 import { type CodeSearchQuery, type CodeSearchVcs, searchCode } from "./code-search.ts";
 import { describeDroppedFolder } from "./dropped-folder.ts";
 import { dirKey, findRepos, projectsDirUnavailable, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
+import { moveRepoOut } from "./repo-removal.ts";
 import { SyncRuns } from "./sync-runs.ts";
 import { sessionToolPermissions, supervisorToolPermissions } from "./tool-permissions.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
@@ -263,6 +264,12 @@ export class Workspace {
   /** The repo root by identifier, for modules that run processes in it (`mise`). */
   async repoPath(id: string): Promise<string> {
     return (await this.entry(id)).path;
+  }
+
+  /** Moves the repo into the removed repos folder of the projects folder (ADR-83) and returns its new path. */
+  async removeRepo(id: string): Promise<string> {
+    const entry = await this.entry(id);
+    return moveRepoOut(await this.projectsDir(), entry.path);
   }
 
   /** The projects folder itself, where the supervisor runs (ADR-58); `bad_request` while it is not set. */

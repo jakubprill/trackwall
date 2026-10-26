@@ -46,13 +46,16 @@ export function useProposalDecisions({
     );
   };
 
-  const reject = (id: string, reason: string) => {
+  /** One decision on one proposal that starts no task: a rejection or an approved folder action (ADR-83). */
+  const decide = (id: string, request: Promise<unknown>) => {
     begin();
-    post(conn, agentsApi.rejectProposal, { proposal: id, reason }).then(
+    request.then(
       () => settle(new Map(), new Set([id]), []),
       (err: unknown) => settle(new Map([[id, errorMessage(err)]]), new Set(), []),
     );
   };
+  const reject = (id: string, reason: string) => decide(id, post(conn, agentsApi.rejectProposal, { proposal: id, reason }));
+  const removeRepo = (id: string) => decide(id, post(conn, agentsApi.approveRepoRemoval, { proposal: id }));
 
-  return { pending, errors, start, reject };
+  return { pending, errors, start, reject, removeRepo };
 }

@@ -5,11 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
-import { type ProposalsEntry, proposalName, proposalsName, proposerLabel, type SessionSelection } from "@/lib/session-entries";
+import {
+  type ProposalsEntry,
+  proposalKindLabel,
+  proposalName,
+  proposalsName,
+  proposerLabel,
+  type SessionSelection,
+} from "@/lib/session-entries";
 import { toggle } from "@/lib/set-toggle";
 import { useProposalDecisions } from "@/lib/use-proposal-decisions";
 import { cn } from "@/lib/utils";
 import { ProposalActions, ProposalError } from "./ProposalActions.tsx";
+import { RepoRemovalNote } from "./RepoRemovalNote.tsx";
 
 /**
  * The task proposals of one main session or of agents outside Trackwall (ADR-39, ADR-55), reviewed together as the plan
@@ -56,14 +64,16 @@ export function ProposalInbox({
   }, [focus]);
   const promptOf = (p: TaskProposal) => prompts.get(p.id) ?? p.prompt;
   const toStart = proposals.filter((p) => ticked.has(p.id));
-  const several = proposals.length > 1;
+  // Ticking and "Start selected" are for tasks; a folder action has its own button (ADR-83).
+  const several = proposals.filter((p) => p.kind === "task").length > 1;
 
   return (
     <div className="flex max-w-3xl flex-col gap-4 p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">
           <h3 className="hud-label flex items-center gap-2">
-            <Lightbulb className="size-3.5" aria-hidden /> {several ? proposalsName(proposals) : "Task proposal"}
+            <Lightbulb className="size-3.5" aria-hidden />{" "}
+            {proposals.length > 1 ? proposalsName(proposals) : proposalKindLabel(proposals[0])}
           </h3>
           <p className="text-muted-foreground text-xs">
             {proposerLabel(proposals[0].proposedBy, sessions)} · {relativeTime(proposals[0].createdAt, new Date())}
@@ -89,7 +99,7 @@ export function ProposalInbox({
           return (
             <li key={p.id} className={cn("bg-card rounded-md border", expanded && "border-primary/40")}>
               <div className="flex items-start gap-3 px-3 py-2">
-                {several && (
+                {several && p.kind === "task" && (
                   <input
                     type="checkbox"
                     className="accent-primary mt-1 size-4 shrink-0"
@@ -119,19 +129,24 @@ export function ProposalInbox({
               </div>
               {expanded && (
                 <div className="flex flex-col gap-3 px-3 pb-3">
-                  <Textarea
-                    aria-label={`Prompt for the agent: ${p.title}`}
-                    value={promptOf(p)}
-                    onChange={(e) => setPrompts(new Map(prompts).set(p.id, e.target.value))}
-                    maxLength={TASK_PROMPT_MAX}
-                    rows={8}
-                  />
+                  {p.kind === "remove_repo" ? (
+                    <RepoRemovalNote proposal={p} />
+                  ) : (
+                    <Textarea
+                      aria-label={`Prompt for the agent: ${p.title}`}
+                      value={promptOf(p)}
+                      onChange={(e) => setPrompts(new Map(prompts).set(p.id, e.target.value))}
+                      maxLength={TASK_PROMPT_MAX}
+                      rows={8}
+                    />
+                  )}
                   <ProposalActions
                     proposal={p}
                     tasks={tasks}
                     pending={decisions.pending}
                     canStart={promptOf(p).trim() !== ""}
                     onStart={() => decisions.start([{ id: p.id, prompt: promptOf(p) }])}
+                    onRemoveRepo={() => decisions.removeRepo(p.id)}
                     onReject={(reason) => decisions.reject(p.id, reason)}
                   />
                 </div>
