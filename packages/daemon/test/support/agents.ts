@@ -19,7 +19,8 @@ const daemonMain = join(import.meta.dir, "..", "..", "src", "main.ts");
  * Sessions with a real PTY, a process group, real git and hooks through the daemon's `copilot-hook` subcommand;
  * Copilot CLI is a fake. `repos` are the repos of the projects folder: identifier → directory. A `home` passed in
  * simulates a daemon restart with the same state directory. `projectsDir` is where the supervisor runs; `null` is an unset
- * projects folder. `toolPermissions` are the patterns every session gets from the workspace (ADR-66).
+ * projects folder. `toolPermissions` are the patterns every session gets from the workspace (ADR-66), and
+ * `supervisorChangesCode` is `supervisor.changesCode` (ADR-78).
  */
 export function makeAgents(
   repos: Record<string, string>,
@@ -27,6 +28,7 @@ export function makeAgents(
   projectsDir: string | null = null,
   toolPermissions: ToolPermissions = { allow: [], deny: [] },
   env: NodeJS.ProcessEnv = process.env,
+  supervisorChangesCode = false,
 ) {
   const procs = new ProcessGroups({
     logs: new Logs({ dir: join(home, "logs"), maxFileBytes: 1024 * 1024, log: () => {} }),
@@ -49,6 +51,7 @@ export function makeAgents(
         return projectsDir;
       },
       toolPermissions: () => toolPermissions,
+      supervisorChangesCode: () => supervisorChangesCode,
     },
     vcs: new Vcs(),
     home,

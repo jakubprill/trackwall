@@ -1,6 +1,14 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { DayStartSettings, GraphConfig, type RepoHost, RepoHosts, RepoTagRules, ToolPermissionRules } from "@trackwall/protocol";
+import {
+  DayStartSettings,
+  GraphConfig,
+  type RepoHost,
+  RepoHosts,
+  RepoTagRules,
+  SupervisorSettings,
+  ToolPermissionRules,
+} from "@trackwall/protocol";
 import { type Document, isMap, parseDocument } from "yaml";
 import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
@@ -10,7 +18,7 @@ import { isFullPath, NOT_FULL_PATH } from "./full-path.ts";
 /**
  * `workspace.yaml` (§4.5, ADR-13): the workspace configuration, which the user can edit by hand and keep
  * in a private repo. Read on every use, so a manual edit works without restarting the daemon. A write changes
- * only one key (`projectsDir` or `repoHosts`; `repoTags`, `graph`, `toolPermissions` and `dayStart` only by hand) and keeps comments and the other keys,
+ * only one key (`projectsDir` or `repoHosts`; `repoTags`, `graph`, `toolPermissions`, `dayStart` and `supervisor` only by hand) and keeps comments and the other keys,
  * including the `repos` list from version 0.2.0, which is no longer read (ADR-18): it is the user's file, so removing it is up to them.
  */
 
@@ -35,6 +43,8 @@ const Keys = {
   toolPermissions: ToolPermissionRules.nullish().transform((rules) => rules ?? []),
   // The user's addition to the day start's first message (ADR-70); only by hand, like `repoTags`.
   dayStart: DayStartSettings.nullish().transform((settings) => settings ?? null),
+  // Whether the supervisor may change code itself (ADR-78); only by hand, like `repoTags`.
+  supervisor: SupervisorSettings.nullish().transform((settings) => settings ?? SupervisorSettings.parse({})),
 };
 type Key = keyof typeof Keys;
 
@@ -73,6 +83,11 @@ export class WorkspaceFile {
   /** The day start settings (`dayStart`, ADR-70); `null` without the key. */
   dayStartSettings(): DayStartSettings | null {
     return this.get("dayStart", Keys.dayStart);
+  }
+
+  /** The supervisor settings (`supervisor`, ADR-78); the defaults without the key. */
+  supervisorSettings(): SupervisorSettings {
+    return this.get("supervisor", Keys.supervisor);
   }
 
   setProjectsDir(dir: string): void {

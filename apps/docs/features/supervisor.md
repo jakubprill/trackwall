@@ -40,7 +40,13 @@ The panel can be folded to a narrow strip at the right edge, which keeps a bell 
 
 ## Good to know
 
-- The supervisor coordinates; it is told not to change code itself. Every task it proposes still needs your approval.
+- The supervisor coordinates and does not change code itself: it cannot run shell commands or write files, so every change goes through a task you approve and review. It still reads your repos. Every task it proposes needs your approval.
+- If you want the supervisor to run commands and edit files itself, add this to `~/.trackwall/workspace.yaml` (you edit this file by hand) and start a new supervisor; it then asks for approval like any other session:
+
+  ```yaml
+  supervisor:
+    changesCode: true
+  ```
 - It sees every session and task, also the ones you started yourself, but it sends messages only to the tasks it proposed, never to sessions you started, and it cannot change Trackwall's settings.
 - After five messages to a task without you, the supervisor has to ask you before it sends more. Typing anything into the supervisor or the task, or sending the task a review, counts as you taking part.
 - Stop ends the supervisor; "Start again" starts a new one in its place. The work it delegated stays under the "Supervisor" heading, also after Trackwall restarts.

@@ -19,11 +19,13 @@ const INSTRUCTIONS_FILE = "trackwall.instructions.md";
 
 /**
  * Who the session is: the supervisor in the projects folder (`repo: null`, ADR-58), a main session in the repo root
- * (`task: null`) or a task session in the task's worktree.
+ * (`task: null`) or a task session in the task's worktree. `coordinatesOnly`: the supervisor starts without Copilot
+ * CLI's shell and file-writing tools (ADR-78).
  */
 export interface SessionRole {
   repo: string | null;
   task: string | null;
+  coordinatesOnly: boolean;
 }
 
 /**
@@ -46,7 +48,8 @@ export function withInstructionsDir(env: NodeJS.ProcessEnv, dir: string): NodeJS
   return { ...env, [key]: own ? `${own},${dir}` : dir };
 }
 
-function sessionInstructions(version: string, { repo, task }: SessionRole): string {
+function sessionInstructions(version: string, role: SessionRole): string {
+  const { repo } = role;
   return [
     // `applyTo: "**"`: the instruction applies to every file, i.e. to the whole session, like `.github/instructions` in a repo.
     "---",
@@ -60,7 +63,7 @@ function sessionInstructions(version: string, { repo, task }: SessionRole): stri
     "",
     "## Your session",
     "",
-    ...sessionRole({ repo, task }),
+    ...sessionRole(role),
     "",
     "## Trackwall tools",
     "",
@@ -69,15 +72,18 @@ function sessionInstructions(version: string, { repo, task }: SessionRole): stri
   ].join("\n");
 }
 
-function sessionRole({ repo, task }: SessionRole): string[] {
-  if (repo === null) return supervisorRole();
+function sessionRole({ repo, task, coordinatesOnly }: SessionRole): string[] {
+  if (repo === null) return supervisorRole(coordinatesOnly);
   return task === null ? repoRole(repo) : taskRole(repo, task);
 }
 
-function supervisorRole(): string[] {
+function supervisorRole(coordinatesOnly: boolean): string[] {
+  const delegate = `hand each piece of work to an agent with ${mcpTools.proposeTask.name}, one proposal per repo with a prompt that stands on its own. The user approves every proposal before it starts, and reviews its changes in the task's own worktree.`;
   return [
     "You are the supervisor: the one session above all others, in the projects folder that holds the user's repos. The user talks to you to plan and follow work across repos.",
-    `- You coordinate, you do not change code: hand each piece of work to an agent with ${mcpTools.proposeTask.name}, one proposal per repo with a prompt that stands on its own. The user approves every proposal before it starts.`,
+    coordinatesOnly
+      ? `- You coordinate, you do not change code: ${delegate} Copilot CLI refuses you its shell and the tools that write files, so do not try them. Read files with its tools for viewing and searching files, and with ${mcpTools.searchCode.name}, ${mcpTools.getRepoCard.name} and ${mcpTools.getTaskChanges.name}; a command, a build, a test or a fix goes to a task.`
+      : `- You coordinate: ${delegate} The user lets you run commands and change files yourself; keep that to what they ask you for, and leave changes in a repo to its tasks.`,
     `- Do not poll the work you delegated: end your turn, and when one of your tasks finishes a turn, reports, gets a verification verdict, errs or exits, or the user rejects a proposal, Trackwall asks you to call ${mcpTools.getUpdates.name}. ${mcpTools.listSessions.name} and ${mcpTools.getSession.name} cover every session and task, also the ones the user started.`,
     `- Steer your tasks with ${mcpTools.sendMessage.name}: a correction, an answer to a task's question, or what another task changed that it must follow. You can message the tasks a supervisor proposed, not the ones the user started; after a few messages without the user, ask the user before you send more.`,
     `- You work in no repo, so ${mcpTools.runMiseTask.name}, ${mcpTools.startService.name} and the tools that stop them refuse you; a task that needs a running service asks for it itself.`,

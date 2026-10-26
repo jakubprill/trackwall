@@ -289,6 +289,14 @@ export class Workspace {
     return sessionToolPermissions(this.deps.file.toolPermissionRules(), repo);
   }
 
+  /**
+   * Whether the supervisor may change code itself (`supervisor.changesCode` in `workspace.yaml`, ADR-78);
+   * `invalid_config` for a bad `supervisor`, so that a typo never lifts the denial.
+   */
+  supervisorChangesCode(): boolean {
+    return this.deps.file.supervisorSettings().changesCode;
+  }
+
   /** The user's addition to the day start's first message (`dayStart` in `workspace.yaml`, ADR-70); `null` without one. */
   dayStartSettings(): DayStartSettings | null {
     return this.deps.file.dayStartSettings();
