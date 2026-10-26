@@ -167,6 +167,90 @@ describe("a session of the real Copilot CLI", () => {
     recorder.approval(records, dialogBox);
   });
 
+  test("two tools called at once ask for both approvals at once, and after the first is answered the session waits for the second", async () => {
+    const { agents } = daemon.facade;
+    const { id } = await startSession();
+    const repoDir = join(daemon.projects, "shop");
+
+    model.reply((request) => ({
+      parallel: [
+        shellCall(request, { bash: "touch first.txt", powershell: "New-Item first.txt" }),
+        shellCall(request, { bash: "touch second.txt", powershell: "New-Item second.txt" }),
+      ],
+    }));
+    windowOf(id).attachment.input("create two files\r");
+    // Copilot CLI asks for both approvals at once, although it shows one dialog at a time; the two hooks run side by side.
+    await waitFor(
+      agents,
+      id,
+      () => hookRecords(daemon.home, id).filter((r) => r.event === "notification").length === 2,
+      "both approval requests",
+      SESSION_MS,
+    );
+    const first = await waitFor(agents, id, (s) => s.dialog?.kind === "approval", "the first approval dialog", SESSION_MS);
+    if (first.dialog?.kind !== "approval") throw new Error("no approval dialog");
+    const [firstFile, secondFile] = first.dialog.detail.join(" ").includes("first.txt")
+      ? ["first.txt", "second.txt"]
+      : ["second.txt", "first.txt"];
+
+    model.reply({ text: "Created both files." });
+    agents.answerDialog(id, first.dialog.id, "1");
+    await waitFor(agents, id, () => existsSync(join(repoDir, firstFile)), "the first command", SESSION_MS);
+    // The first command's postToolUse does not end waiting for the second approval, which the screen shows now.
+    const second = await waitFor(
+      agents,
+      id,
+      () => hookRecords(daemon.home, id).some((r) => r.event === "postToolUse"),
+      "the first command's postToolUse",
+      SESSION_MS,
+    );
+    expect(second.state).toMatchObject({ state: "Approval" });
+    if (second.dialog?.kind !== "approval") throw new Error(`no second approval dialog: ${JSON.stringify(second.dialog)}`);
+    expect(second.dialog.detail.join(" ")).toContain(secondFile);
+    expect(existsSync(join(repoDir, secondFile))).toBe(false);
+
+    agents.answerDialog(id, second.dialog.id, "1");
+    await endOfTurn(id);
+    expect(existsSync(join(repoDir, secondFile))).toBe(true);
+    expect(hookRecords(daemon.home, id).map((r) => r.event)).toEqual([
+      "sessionStart",
+      "userPromptSubmitted",
+      "notification",
+      "notification",
+      "postToolUse",
+      "postToolUse",
+      "agentStop",
+    ]);
+  });
+
+  test("a tool that needs no approval, called together with one that does, does not end waiting for that approval", async () => {
+    const { agents } = daemon.facade;
+    const { id } = await startSession();
+
+    model.reply((request) => ({
+      parallel: [
+        shellCall(request, { bash: "touch third.txt", powershell: "New-Item third.txt" }),
+        { tool: copilotToolName(mcpTools.listRepos.name), arguments: {} },
+      ],
+    }));
+    windowOf(id).attachment.input("create and list\r");
+    const waiting = await waitFor(
+      agents,
+      id,
+      (s) => s.dialog !== null && hookRecords(daemon.home, id).some((r) => r.event === "postToolUse"),
+      "the approval dialog and the other tool's postToolUse",
+      SESSION_MS,
+    );
+    expect(waiting.state).toMatchObject({ state: "Approval" });
+    if (waiting.dialog?.kind !== "approval") throw new Error(`no approval dialog: ${JSON.stringify(waiting.dialog)}`);
+    expect(waiting.dialog.detail.join(" ")).toContain("third.txt");
+
+    model.reply({ text: "Created the file and listed the repos." });
+    agents.answerDialog(id, waiting.dialog.id, "1");
+    await endOfTurn(id);
+    expect(existsSync(join(daemon.projects, "shop", "third.txt"))).toBe(true);
+  });
+
   test("a deny rule from toolPermissions reaches Copilot CLI as --deny-tool, which refuses the command without asking", async () => {
     const { agents } = daemon.facade;
     const workspaceFile = join(daemon.home, "workspace.yaml");

@@ -152,7 +152,8 @@ class Recording {
 
   hook(r: CopilotHookRecord): void {
     this.#clock = this.#cast.marker(encodeMarker({ kind: "hook", record: r }));
-    for (const change of this.#session.hook(r)) this.#report(change);
+    // No screen image, as in the replay of the recording, so both compute the same states.
+    for (const change of this.#session.hook(r, () => false)) this.#report(change);
   }
 
   key(key: SessionKey): void {

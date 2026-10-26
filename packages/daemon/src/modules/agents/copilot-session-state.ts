@@ -1,7 +1,7 @@
 import type { TaskStateChange } from "@trackwall/protocol";
 import type { CopilotHookRecord } from "./copilot-hook-record.ts";
 import { stateFromHook } from "./copilot-hooks.ts";
-import { type SessionKey, stateFromKey } from "./copilot-keys.ts";
+import { answersDialog, type SessionKey, stateFromKey } from "./copilot-keys.ts";
 import { stateFromOsc, windowTitleFromOsc } from "./copilot-osc.ts";
 import { promptBoxOnScreen, stateFromPromptBox } from "./copilot-prompt-box.ts";
 import { CopilotScreen } from "./copilot-screen.ts";
@@ -70,6 +70,12 @@ export class CopilotSessionState {
   #windowTitle: string | undefined;
   /** The time of the last session key that changed the state (an answer to a request or an interruption). */
   #lastAnswerAt = Number.NEGATIVE_INFINITY;
+  /**
+   * Approval requests of the current wait not answered yet. Copilot CLI 1.0.103 asks for the approvals of tools the
+   * agent called at once all together, with a hook each, and then shows their dialogs one at a time (ADR-66), so
+   * answering one leaves the session waiting while others remain.
+   */
+  #approvalsAsked = 0;
 
   constructor(o: CopilotSessionStateOptions) {
     this.#tracker = new TaskStateTracker(o);
@@ -96,14 +102,21 @@ export class CopilotSessionState {
     }
     const cancelled = this.#screen.feed(data);
     if (cancelled && this.#now() - this.#lastAnswerAt <= CANCEL_AFTER_ANSWER_MS) changes.push(this.#tracker.signal(cancelled));
-    return changes.filter((c) => c !== undefined);
+    return this.#counted(changes);
   }
 
-  hook(record: CopilotHookRecord): TaskStateChange[] {
+  /**
+   * `approvalOnScreen` tells whether the screen shows an approval dialog the user has not answered: the `postToolUse`
+   * of a tool that needed no approval, or of one of several approved, does not end waiting for one still on the screen
+   * (ADR-66). A recording has no screen, so its replay passes `() => false`.
+   */
+  hook(record: CopilotHookRecord, approvalOnScreen: () => boolean): TaskStateChange[] {
+    if (record.event === "postToolUse" && this.#tracker.current?.state === "Approval" && approvalOnScreen()) return this.#signal(undefined);
     // The first `sessionStart`: no hook has changed the state yet.
     const withPrompt = record.event === "sessionStart" && this.#inPromptBox === undefined && this.#promptOnItsWay();
     const signal = withPrompt ? SESSION_START_WITH_PROMPT : stateFromHook(record);
     if (signal) this.#inPromptBox = !withPrompt && (record.event === "sessionStart" || record.event === "agentStop");
+    if (signal?.state === "Approval") this.#approvalsAsked++;
     return this.#signal(signal);
   }
 
@@ -140,24 +153,36 @@ export class CopilotSessionState {
   }
 
   #signal(signal: StateSignal | undefined): TaskStateChange[] {
-    return [this.#tracker.tick(), signal && this.#tracker.signal(signal)].filter((c) => c !== undefined);
+    return this.#counted([this.#tracker.tick(), signal && this.#tracker.signal(signal)]);
   }
 
   /** A key a human sent to the session terminal (`sessionKey`). */
   key(key: SessionKey): TaskStateChange[] {
     // The `Stale` threshold first: live, the periodic `tick` may already have set it, and the key counts from the state after it.
     const stale = this.#tracker.tick();
-    const signal = stateFromKey(key, this.#tracker.current?.state);
-    if (!signal) return [stale].filter((c) => c !== undefined);
+    const current = this.#tracker.current?.state;
+    const signal = stateFromKey(key, current);
+    if (!signal) return this.#counted([stale]);
     this.#lastAnswerAt = this.#now();
-    return [stale, this.#tracker.keyboard(signal)].filter((c) => c !== undefined);
+    // An answer to one of several approval requests: the next one's dialog follows, so the session still waits (ADR-66).
+    if (current === "Approval" && answersDialog(key) && this.#approvalsAsked > 1) {
+      this.#approvalsAsked--;
+      return this.#counted([stale]);
+    }
+    return this.#counted([stale, this.#tracker.keyboard(signal)]);
   }
 
   tick(): TaskStateChange | undefined {
-    return this.#tracker.tick();
+    return this.#counted([this.#tracker.tick()])[0];
   }
 
   exit(code: number): TaskStateChange[] {
-    return [this.#tracker.tick(), this.#tracker.exit(code)].filter((c) => c !== undefined);
+    return this.#counted([this.#tracker.tick(), this.#tracker.exit(code)]);
+  }
+
+  /** The changes that happened; a session no longer in `Approval` has no approval request left to answer. */
+  #counted(changes: readonly (TaskStateChange | undefined)[]): TaskStateChange[] {
+    if (this.#tracker.current?.state !== "Approval") this.#approvalsAsked = 0;
+    return changes.filter((c) => c !== undefined);
   }
 }

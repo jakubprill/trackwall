@@ -203,6 +203,53 @@ describe("answering an agent dialog from outside the terminal (ADR-66)", () => {
   });
 });
 
+describe("approvals of tools the agent called at once (ADR-66)", () => {
+  /** Copilot CLI clears the answered dialog and draws the next one in its place. */
+  async function redraw(session: LiveSession, lines: readonly string[]): Promise<void> {
+    session.output(new TextEncoder().encode(`\u001b[2J\u001b[H${lines.join("\r\n")}`));
+    await screenProcessed(session);
+  }
+
+  test("after the first answer the session waits for the second, whose dialog is shown once it is drawn", async () => {
+    const { session, written, notify } = await sessionShowing("shell-120", "permission_prompt");
+    notify("permission_prompt");
+    const first = session.view()?.dialog;
+    expect(first).toMatchObject({ kind: "approval", title: "Write a file" });
+
+    session.answerDialog(first?.id ?? "", "1");
+    // The answered dialog is still on the screen for a moment; it is not offered again, so no answer reaches the next unseen.
+    expect(session.view()).toMatchObject({ state: { state: "Approval" }, dialog: null });
+
+    await redraw(session, screen("create-120"));
+    const second = session.view()?.dialog;
+    expect(second).toMatchObject({ kind: "approval", title: "Create file" });
+    expect(second?.id).not.toBe(first?.id);
+    session.answerDialog(second?.id ?? "", "1");
+
+    expect(written).toEqual(["1", "1"]);
+    expect(session.view()).toMatchObject({ state: { state: "Working", source: "keyboard" }, dialog: null });
+  });
+
+  test("the postToolUse of another tool does not end waiting for an approval still on the screen", async () => {
+    const { session, hooksFile } = await sessionShowing("shell-120", "permission_prompt");
+
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "postToolUse", receivedAt: 0, payload: { toolName: "view" }, omitted: [] })}\n`);
+    session.tick();
+
+    expect(session.view()).toMatchObject({ state: { state: "Approval" }, dialog: { kind: "approval", title: "Write a file" } });
+  });
+
+  test("the postToolUse after the approval left the screen without a key the daemon saw is work, as before", async () => {
+    const { session, hooksFile } = await sessionShowing("shell-120", "permission_prompt");
+    await redraw(session, [" $ Shell Write a file", "   touch /src/app-outside/x.txt"]);
+
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "postToolUse", receivedAt: 0, payload: { toolName: "bash" }, omitted: [] })}\n`);
+    session.tick();
+
+    expect(session.view()).toMatchObject({ state: { state: "Working", reason: "hook postToolUse" }, dialog: null });
+  });
+});
+
 describe("the daemon's prompt and a dialog on the screen (ADR-62, ADR-68)", () => {
   test("is not typed while the screen shows the agent's question, although the hooks put the session in its input box", async () => {
     const { session, written, hooksFile } = await sessionShowing("question-120", "elicitation_dialog", () => "read the message");

@@ -9,8 +9,11 @@ import type { AddressInfo } from "node:net";
 import { z } from "zod";
 import { jsonOf } from "../../src/modules/agents/json.ts";
 
-/** The model's answer to one request: text that ends the turn, or a call of one tool. */
-type ModelReply = { text: string } | { tool: string; arguments: Record<string, unknown> };
+/** A call of one tool. */
+type ToolCall = { tool: string; arguments: Record<string, unknown> };
+
+/** The model's answer to one request: text that ends the turn, a call of one tool, or calls of several at once. */
+type ModelReply = { text: string } | ToolCall | { parallel: ToolCall[] };
 
 const Content = z.union([z.string(), z.array(z.object({ type: z.string(), text: z.string().optional() })), z.null()]);
 const Message = z.object({
@@ -60,20 +63,23 @@ function summarize(request: z.infer<typeof Request>): ModelRequest {
 
 type QueuedReply = ModelReply | ((request: ModelRequest) => ModelReply);
 
+/** The tool calls of a reply that calls tools, each with its own id, in the chat-completions shape. */
+function toolCalls(reply: ToolCall | { parallel: ToolCall[] }, callId: string) {
+  const calls = "parallel" in reply ? reply.parallel : [reply];
+  return calls.map((call, index) => ({
+    index,
+    id: `${callId}_${index}`,
+    type: "function",
+    function: { name: call.tool, arguments: JSON.stringify(call.arguments) },
+  }));
+}
+
 /** The chat-completions answer as a stream of chunks, which is what Copilot CLI asks for. */
 function answer(res: ServerResponse, reply: ModelReply, callId: string): void {
   const { delta, finish } =
     "text" in reply
       ? { delta: { role: "assistant", content: reply.text }, finish: "stop" }
-      : {
-          delta: {
-            role: "assistant",
-            tool_calls: [
-              { index: 0, id: callId, type: "function", function: { name: reply.tool, arguments: JSON.stringify(reply.arguments) } },
-            ],
-          },
-          finish: "tool_calls",
-        };
+      : { delta: { role: "assistant", tool_calls: toolCalls(reply, callId) }, finish: "tool_calls" };
   const base = { id: callId, object: "chat.completion.chunk", created: 0, model: SCRIPTED_MODEL };
   const chunks = [
     { ...base, choices: [{ index: 0, delta, finish_reason: null }] },

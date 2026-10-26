@@ -5,7 +5,10 @@
  * the hooks with their payloads, the window titles, the input box and the approval dialog. The flow: a
  * welcome screen with the input box and no hook (waiting for you, read from the screen), a line from the user starts a
  * turn with an approval request (the first turn after `sessionStart`, at once with a prompt from `--interactive=`),
- * a "Yes" option or Enter approves and ends the turn, and `/exit` ends the session. The fake also prints what the tests check
+ * a "Yes" option or Enter approves and ends the turn, and `/exit` ends the session. The line `PARALLEL_TOOLS_PROMPT` starts
+ * a turn in which the agent calls two such commands at once: as in Copilot CLI (the contract test of ADR-66), both
+ * approval requests come at once, the second dialog follows the first answer, and the first command's `postToolUse`
+ * comes while the second dialog waits. The fake also prints what the tests check
  * (MCP servers, instructions, directory, arguments, the prompt) and, on every turn, starts a helper process (like an
  * agent's tool) and prints its PID, so that the test can check that stopping the session ends the whole group. The
  * helper starts only after input from the user, because on Windows the leader joins the job a moment after the start.
@@ -16,7 +19,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import { ESCAPE } from "../../src/modules/agents/copilot-keys.ts";
 import { stripAnsi } from "../../src/modules/logs/stream-lines.ts";
-import { PROMPT_PLACEHOLDER, type ReferenceHook, reference } from "../support/copilot-reference.ts";
+import { PARALLEL_TOOLS_PROMPT, PROMPT_PLACEHOLDER, type ReferenceHook, reference } from "../support/copilot-reference.ts";
 import { pluginHooks } from "../support/plugin-hooks.ts";
 
 const fire = pluginHooks(process.argv, "s1");
@@ -73,6 +76,16 @@ if (firstHook?.event !== "sessionStart" || secondHook?.event !== "userPromptSubm
 const startHook: ReferenceHook = firstHook;
 const promptHook: ReferenceHook = secondHook;
 
+/**
+ * The second of two commands called at once: the reference's command with another file, in its approval request and
+ * its dialog. Of the same length, so the dialog's box keeps its width.
+ */
+const secondCommand = (text: string) => text.replaceAll("made-by-agent", "made-by-other");
+const secondRequest = real.approval.hooks.slice(2, asked).map((h) => ({
+  ...h,
+  payload: Object.fromEntries(Object.entries(h.payload).map(([k, v]) => [k, typeof v === "string" ? secondCommand(v) : v])),
+}));
+
 const [startTitle, ...turnTitles] = real.titles;
 if (startTitle === undefined) throw new Error("the reference has no window title");
 title(startTitle);
@@ -88,7 +101,8 @@ draw(real.promptBox);
 // A prompt given at the start (`--interactive=`, a task's session) is the first prompt, so it starts the hooks at once.
 let started = initialPrompt !== undefined;
 if (started) replay([startHook]);
-let awaitingApproval = false;
+/** Approval requests of the turn not answered yet. */
+let awaitingApprovals = 0;
 let typed = "";
 
 function submit(line: string): void {
@@ -104,13 +118,19 @@ function submit(line: string): void {
   for (const turnTitle of turnTitles) title(turnTitle.replaceAll(PROMPT_PLACEHOLDER, line));
   process.stdout.write(`Thinking about: ${line}\r\n`);
   draw(real.approval.dialog);
-  awaitingApproval = true;
-  replay(real.approval.hooks.slice(2, asked));
+  const parallel = line === PARALLEL_TOOLS_PROMPT;
+  awaitingApprovals = parallel ? 2 : 1;
+  replay([...real.approval.hooks.slice(2, asked), ...(parallel ? secondRequest : [])]);
 }
 
-/** A "Yes" option of the approval: the command runs and the turn ends. */
+/** A "Yes" option of the approval: the command runs, and the next dialog follows or the turn ends. */
 function approve(): void {
-  awaitingApproval = false;
+  awaitingApprovals--;
+  if (awaitingApprovals > 0) {
+    draw(real.approval.dialog.map(secondCommand));
+    replay(real.approval.hooks.slice(asked, asked + 1));
+    return;
+  }
   replay(real.approval.hooks.slice(asked));
   draw(real.promptBox);
 }
@@ -133,7 +153,7 @@ const typedText = (chunk: Buffer) => stripAnsi(chunk.toString("utf8")).replaceAl
 process.stdin.setRawMode?.(true);
 process.stdin.on("data", (chunk: Buffer) => {
   for (const key of typedText(chunk)) {
-    if (awaitingApproval) {
+    if (awaitingApprovals > 0) {
       if (APPROVE_KEYS.has(key)) approve();
     } else if (key === "\r" || key === "\n") {
       process.stdout.write("\r\n");

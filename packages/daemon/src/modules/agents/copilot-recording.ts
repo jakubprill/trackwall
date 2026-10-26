@@ -49,7 +49,8 @@ export function replayCopilotRecording(cast: Asciicast, o: ReplayOptions): TaskS
     if (code === "o") changes.push(...session.output(data));
     if (code !== "m") continue;
     const marker = decodeMarker(data);
-    if (marker?.kind === "hook") changes.push(...session.hook(marker.record));
+    // A recording keeps no screen image, so no approval dialog is seen on it.
+    if (marker?.kind === "hook") changes.push(...session.hook(marker.record, () => false));
     if (marker?.kind === "key") changes.push(...session.key(marker.key));
     if (marker?.kind === "exit") changes.push(...session.exit(marker.code));
   }

@@ -3,6 +3,7 @@ import type { AgentDialog, DialogAnswer, RunState, Session, TaskState, TaskState
 import { DomainError } from "../../infra/errors.ts";
 import { readAgentDialog, type ScreenDialog } from "./copilot-dialog.ts";
 import type { CopilotHookEvent } from "./copilot-hook-record.ts";
+import { stateFromHook } from "./copilot-hooks.ts";
 import { answersDialog, ESCAPE, type SessionKey, sessionKey } from "./copilot-keys.ts";
 import { CopilotSessionState, RETYPE_AFTER_MS } from "./copilot-session-state.ts";
 import { HookTail } from "./hook-tail.ts";
@@ -143,6 +144,13 @@ export class LiveSession {
    * the answer it already got moves the session on, as the key would have in `Approval`.
    */
   #answeredEarly = false;
+  /**
+   * The approval dialog the user answered last (its text as read), while the screen may still show it: Copilot CLI clears
+   * it a moment after the key, and with several approval requests at once the session stays in `Approval` meanwhile
+   * (ADR-66). Read again, it would get a new id and an answer to it would go to the next dialog, which nobody saw. It is
+   * forgotten once the screen shows anything else, or with the next approval request.
+   */
+  #answeredApproval: string | undefined;
 
   constructor(o: LiveSessionOptions) {
     this.id = o.id;
@@ -191,6 +199,7 @@ export class LiveSession {
       this.#onUserText();
     }
     if (data === ESCAPE) this.#userDrove = true;
+    if (key !== undefined && answersDialog(key) && (answersEarly || this.#last?.state === "Approval")) this.#rememberAnswer();
     if (key) this.#report(this.#state.key(key));
     // After the key's own state change, so that the `Input` an Esc causes counts as seen.
     if (typedByUser(data)) this.#attention.typed();
@@ -263,6 +272,8 @@ export class LiveSession {
     if (this.#finished) return false;
     this.#readHooks();
     this.#report([this.#state.tick()]);
+    // Reading the screen forgets an answered approval it no longer shows.
+    if (this.#answeredApproval !== undefined) this.#dialogOnScreen("approval");
     // A prompt asked for goes into a box that just appeared before the box can say the session waits for you.
     this.#typePrompt();
     this.#readPromptBox();
@@ -304,16 +315,35 @@ export class LiveSession {
     return kind === undefined ? null : this.#dialogOnScreen(kind);
   }
 
-  /** The agent dialog of `kind` the screen shows now, whatever the state; read once per screen image and wait. */
+  /**
+   * The agent dialog of `kind` the screen shows now, whatever the state, and not the approval the user already answered;
+   * read once per screen image and wait.
+   */
   #dialogOnScreen(kind: AgentDialog["kind"]): AgentDialog | null {
     if (this.#finished) return null;
     const revision = this.#screen.revision;
     const read = this.#dialogRead;
     if (read?.revision === revision && read.waits === this.#waits && read.kind === kind) return read.dialog;
     const found = readAgentDialog(this.#screen.lines(), kind);
-    const dialog = found ? { ...found, id: dialogId(this.#waits, found) } : null;
+    const answered = kind === "approval" && found !== undefined && JSON.stringify(found) === this.#answeredApproval;
+    if (kind === "approval" && !answered) this.#answeredApproval = undefined;
+    const dialog = found && !answered ? { ...found, id: dialogId(this.#waits, found) } : null;
     this.#dialogRead = { revision, waits: this.#waits, kind, dialog };
     return dialog;
+  }
+
+  /** The key the user pressed answers the approval on the screen now, which then is no dialog to answer any more. */
+  #rememberAnswer(): void {
+    const answered = this.#dialogOnScreen("approval");
+    if (answered === null) return;
+    const { id: _, ...text } = answered;
+    this.#answeredApproval = JSON.stringify(text);
+    this.#dialogRead = undefined;
+  }
+
+  #forgetAnswer(): void {
+    this.#answeredApproval = undefined;
+    this.#dialogRead = undefined;
   }
 
   /**
@@ -338,7 +368,10 @@ export class LiveSession {
   #readHooks(): void {
     for (const record of this.#hooks.read()) {
       if (record.event === "userPromptSubmitted") this.#userDraft = false;
-      this.#report(this.#state.hook(record));
+      // A request asked after the answer may draw the same text again; the late hook of one answered early (ADR-71) is
+      // the answered one.
+      if (!this.#answeredEarly && stateFromHook(record)?.state === "Approval") this.#forgetAnswer();
+      this.#report(this.#state.hook(record, () => this.#dialogOnScreen("approval") !== null));
       this.#applyEarlyAnswer(record.event);
       // The end of a turn from its hook, not from the state: a question dialog and an Esc give `Input` mid-turn too.
       if (record.event === "agentStop") {

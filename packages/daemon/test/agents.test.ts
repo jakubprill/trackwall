@@ -2,10 +2,11 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Agents } from "../src/modules/agents/agents.ts";
+import { Agents, sessionHooksFile } from "../src/modules/agents/agents.ts";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
 import { isAlive } from "../src/platform/process-group.ts";
 import { makeAgents, viewer, waitFor } from "./support/agents.ts";
+import { PARALLEL_TOOLS_PROMPT } from "./support/copilot-reference.ts";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterAll(async () => {
@@ -75,6 +76,42 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     expect(stopped.state).toMatchObject({ state: "Input", confidence: "medium", reason: "key escape" });
     // The Esc the user typed means they see the session, so it is idle, not waiting for you (ADR-47).
     expect(stopped.needsAttention).toBe(false);
+    window.attachment.detach();
+    await agents.stop(started.id);
+  }, 60_000);
+
+  test("two commands the agent runs at once keep the session waiting until both approvals are answered from outside the terminal (ADR-66)", async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
+    const { agents, procs, home } = makeAgents({ shop: repoDir });
+    cleanups.push(() => procs.stopAll());
+    const started = await agents.start("shop");
+    const window = viewer(agents, started.id);
+    await waitFor(agents, started.id, () => window.text().includes("Welcome"), "welcome screen");
+
+    window.attachment.input(`${PARALLEL_TOOLS_PROMPT}\r`);
+    const first = await waitFor(agents, started.id, (s) => s.dialog?.kind === "approval", "the first approval dialog");
+    if (first.dialog?.kind !== "approval") throw new Error("no approval dialog");
+    expect(first.dialog.detail.join(" ")).toContain("made-by-agent");
+
+    agents.answerDialog(started.id, first.dialog.id, "1");
+    // The fake draws the second dialog and then sends the first command's postToolUse, as Copilot CLI does.
+    await waitFor(
+      agents,
+      started.id,
+      () => readFileSync(sessionHooksFile(home, started.id), "utf8").includes("postToolUse"),
+      "postToolUse",
+    );
+    const second = await waitFor(
+      agents,
+      started.id,
+      (s) => s.dialog?.kind === "approval" && s.dialog.detail.join(" ").includes("made-by-other"),
+      "the second approval dialog",
+    );
+    expect(second.state).toMatchObject({ state: "Approval" });
+    if (second.dialog?.kind !== "approval") throw new Error("no approval dialog");
+
+    agents.answerDialog(started.id, second.dialog.id, "1");
+    await waitFor(agents, started.id, (s) => s.state?.reason === "hook agentStop", "end of turn");
     window.attachment.detach();
     await agents.stop(started.id);
   }, 60_000);

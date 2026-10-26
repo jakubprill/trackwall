@@ -14,7 +14,9 @@ const platforms = readdirSync(dirname(referenceFile()))
 /** The states the daemon gives the reference's hooks of a session without a prompt at its start. */
 function states(hooks: readonly ReferenceHook[]): string[] {
   const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program: null });
-  return hooks.flatMap(({ event, payload }) => session.hook({ event, receivedAt: 0, payload, omitted: [] })).map((c) => c.state);
+  return hooks
+    .flatMap(({ event, payload }) => session.hook({ event, receivedAt: 0, payload, omitted: [] }, () => false))
+    .map((c) => c.state);
 }
 
 describe("the Copilot CLI references that the fake replays (ADR-67)", () => {
