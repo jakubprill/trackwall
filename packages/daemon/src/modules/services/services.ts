@@ -23,6 +23,7 @@ import {
   type StopServiceRequest,
 } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
+import { waitLimited } from "../../infra/wait-limit.ts";
 import { callEndpoint } from "./endpoint-call.ts";
 import { probePort } from "./port-probe.ts";
 import { ServiceWatch, type WatchedRun } from "./service-watch.ts";
@@ -77,8 +78,8 @@ export interface ServicesDeps {
   /** How long to keep reading logs after a response, for errors logged after it was sent (500 ms in the daemon). */
   settleMs: number;
   /**
-   * How long a stop waits, after the process group has ended, for the service's port to close (15 s in the daemon):
-   * an app a build tool runs outside the group (Gradle's daemon) shuts down after it.
+   * How long a stop waits, after the process group has ended, for the service's port to close (`SERVICE_RELEASE_MS`
+   * in the daemon): an app a build tool runs outside the group (Gradle's daemon) shuts down after it.
    */
   releaseMs: number;
 }
@@ -164,13 +165,15 @@ export class Services {
   /**
    * Stops the service of `repo` and, with `dependencies`, the services its starts started, except the ones
    * another running slice uses. A start in progress is cancelled first: no member starts after that, and members whose
-   * start was already under way are stopped once they run. Returns the stopped services.
+   * start was already under way are stopped once they run. Returns the stopped services; a service whose group has
+   * ended while its port still answers is checked again.
    */
   async stop({ repo, task, dependencies }: StopServiceRequest): Promise<Service[]> {
     const root: MiseTarget = { repo, task };
     const slice = this.slices.get(miseTargetKey(root));
     // A root that crashed or was skipped may still have dependencies its start started.
-    if (!slice && !this.liveRun(root)) throw new DomainError("not_found", `the service of ${where(root)} has not been started`);
+    if (!slice && !this.liveRun(root) && !this.releasing(root))
+      throw new DomainError("not_found", `the service of ${where(root)} has not been started`);
     if (slice?.status === "running") slice.status = "cancelled";
     const members = slice ? [...slice.members.keys()] : [miseTargetKey(root)];
     await Promise.all(members.map((key) => this.starting.get(key)));
@@ -280,14 +283,20 @@ export class Services {
   }
 
   private async stopOne(target: MiseTarget): Promise<Service | null> {
-    const watch = await this.adopt(target);
+    const live = await this.adopt(target);
+    const watch = live ?? this.releasing(target);
     if (!watch) return null;
-    await this.deps.mise.stop(target, SERVICE_MISE_TASK);
-    const view = await watch.refresh();
-    if (view.state !== "stopping") return view;
-    const released = new Promise<void>((resolve) => setTimeout(resolve, this.deps.releaseMs).unref());
-    await Promise.race([watch.whenEnded(), released]);
+    if (live) await this.deps.mise.stop(target, SERVICE_MISE_TASK);
+    // The group has ended, but an app a build tool runs outside it (Gradle's daemon) may still hold the port a while.
+    if ((await watch.refresh()).state === "stopping")
+      await waitLimited(watch.released(), this.deps.releaseMs, new AbortController().signal);
     return watch.view();
+  }
+
+  /** The watch of a service whose stop ended its process group while its port still answers (§4.3). */
+  private releasing(target: MiseTarget): ServiceWatch | undefined {
+    const watch = this.watches.get(miseTargetKey(target));
+    return watch && !this.liveRun(target) && watch.view().state === "stopping" ? watch : undefined;
   }
 
   /** Why a port that answers before the start is not this service's. */
@@ -296,7 +305,7 @@ export class Services {
     const holders = [...this.watches.values()].filter((w) => w.view().port === port);
     const running = holders.find((w) => this.liveRun(w.target));
     if (running) return `port ${port} (${what}) is used by the service of ${where(running.target)}`;
-    const stopping = holders.find((w) => w.view().state === "stopping");
+    const stopping = holders.find((w) => this.releasing(w.target) === w);
     if (stopping) return `port ${port} (${what}) still answers after the stop of the service of ${where(stopping.target)}`;
     return `port ${port} (${what}) is already in use by a program Trackwall did not start`;
   }

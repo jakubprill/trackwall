@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
-import { type AddressInfo, connect, createServer as createTcpServer, type Socket } from "node:net";
+import { type AddressInfo, createServer as createTcpServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { GraphEdge, RepoCardResult, RepoGraph } from "@trackwall/protocol";
@@ -10,6 +10,7 @@ import { Logs } from "../src/modules/logs/logs.ts";
 import { Mise } from "../src/modules/mise/mise.ts";
 import { ProcessGroups } from "../src/modules/procs/process-groups.ts";
 import { RuntimeFile } from "../src/modules/procs/runtime-file.ts";
+import { probePort } from "../src/modules/services/port-probe.ts";
 import { Services } from "../src/modules/services/services.ts";
 import { groupPlatform } from "../src/platform/group-platform.ts";
 
@@ -146,19 +147,6 @@ async function buildDaemon(appPort: number, lingerMs: number | null) {
     await new Promise((resolve) => daemon.close(resolve));
   });
   return { port: (daemon.address() as AddressInfo).port, close };
-}
-
-/** Whether something accepts a TCP connection on `port` on 127.0.0.1. */
-function answers(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = connect({ host: "127.0.0.1", port });
-    const done = (ok: boolean) => {
-      socket.destroy();
-      resolve(ok);
-    };
-    socket.once("connect", () => done(true));
-    socket.once("error", () => done(false));
-  });
 }
 
 describe("services (real process groups, fake mise and fake service)", () => {
@@ -329,13 +317,13 @@ describe("services (real process groups, fake mise and fake service)", () => {
       const stopped = await services.stop({ repo: "web", task: null, dependencies: false });
 
       expect(stopped.map((s) => [s.repo, s.state, s.reason])).toEqual([["web", "stopped", null]]);
-      expect(await answers(port)).toBe(false);
+      expect(await probePort(port)).toBeNull();
     },
     TIMEOUT,
   );
 
   test(
-    "a stop whose port still answers after the wait reports the service stopping with why, and stopped once the port closes",
+    "a stop whose port still answers after the wait reports the service stopping with why, and a stop after the port closed reports it stopped",
     async () => {
       const port = await freePort();
       const daemon = await buildDaemon(port, null);
@@ -347,19 +335,20 @@ describe("services (real process groups, fake mise and fake service)", () => {
       expect(stopped.map((s) => [s.state, s.reason])).toEqual([
         [
           "stopping",
-          `the process group has ended, but port ${port} still answers: a process outside the service's process group holds it, such as an app Gradle's daemon runs`,
+          `the process group has ended, but port ${port} still answers: a process outside the service's process group holds it, for example an app Gradle's daemon runs`,
         ],
       ]);
       expect(stopped[0]?.run.kind).toBe("exited");
-      const again = await services.start({ repo: "web", task: null, dependencies: false, waitMs: 20_000 });
-      expect(again.members[0]).toMatchObject({
+      const restart = await services.start({ repo: "web", task: null, dependencies: false, waitMs: 20_000 });
+      expect(restart.members[0]).toMatchObject({
         outcome: "skipped",
         problem: `port ${port} (server.port on the card) still answers after the stop of the service of web`,
       });
 
       daemon.close();
-      await waitFor(async () => (await services.list())[0]?.state === "stopped");
-      expect((await services.list()).map((s) => [s.repo, s.state, s.reason])).toEqual([["web", "stopped", null]]);
+      const stoppedAgain = await services.stop({ repo: "web", task: null, dependencies: false });
+      expect(stoppedAgain.map((s) => [s.repo, s.state, s.reason])).toEqual([["web", "stopped", null]]);
+      expect((await services.list()).map((s) => [s.repo, s.state])).toEqual([["web", "stopped"]]);
     },
     TIMEOUT,
   );

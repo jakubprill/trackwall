@@ -59,9 +59,12 @@ afterAll(async () => {
   await client?.close();
   // Gradle's daemon, Gradle's default, outlives the builds of the tests; it would hold files in the repos' folders and
   // in the Gradle cache the CI job saves.
-  if (daemon)
-    execFileSync("mise", ["exec", "--", "gradle", "--stop", "--quiet"], { cwd: join(daemon.projects, "checkout"), stdio: "inherit" });
-  await daemon?.stop();
+  try {
+    if (daemon)
+      execFileSync("mise", ["exec", "--", "gradle", "--stop", "--quiet"], { cwd: join(daemon.projects, "checkout"), stdio: "inherit" });
+  } finally {
+    await daemon?.stop();
+  }
 }, 60_000);
 
 /**

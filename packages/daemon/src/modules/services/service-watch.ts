@@ -63,14 +63,10 @@ export class ServiceWatch {
   private logPort: number | null = null;
   private started = false;
   private address: ServiceAddress | null = null;
-  private readonly waiters: (() => void)[] = [];
+  private readonly waiters: { done: (state: ServiceState) => boolean; resolve: () => void }[] = [];
   private timer: ReturnType<typeof setTimeout> | undefined;
   private inFlight: Promise<void> | undefined;
   private ended = false;
-  private resolveEnded: () => void = () => {};
-  private readonly endedPromise = new Promise<void>((resolve) => {
-    this.resolveEnded = resolve;
-  });
 
   constructor(watched: WatchedRun, deps: WatchDeps) {
     this.target = watched.target;
@@ -97,13 +93,12 @@ export class ServiceWatch {
 
   /** Resolves once the service is no longer `starting`. */
   settled(): Promise<void> {
-    if (this.state !== "starting") return Promise.resolve();
-    return new Promise((resolve) => this.waiters.push(resolve));
+    return this.until((state) => state !== "starting");
   }
 
-  /** Resolves once the watch has ended: its run ended (after a stop, also its port closed), or a newer run replaced it. */
-  whenEnded(): Promise<void> {
-    return this.endedPromise;
+  /** Resolves once the service is no longer `stopping`: after a stop, once the group has ended and the port closed. */
+  released(): Promise<void> {
+    return this.until((state) => state !== "stopping");
   }
 
   /** Checks now instead of at the next tick (right after a stop, before an endpoint call); joins a check in flight. */
@@ -119,7 +114,6 @@ export class ServiceWatch {
     this.ended = true;
     clearTimeout(this.timer);
     this.settle();
-    this.resolveEnded();
   }
 
   private schedule(delayMs: number): void {
@@ -138,27 +132,24 @@ export class ServiceWatch {
   }
 
   private async observe(): Promise<void> {
-    const run = this.follow();
-    if (run?.kind === "exited") return this.end(run);
-    if (run?.kind !== "running") return;
+    if (!(await this.follow())) return;
     this.readLog();
     const outcome = await this.probe();
     // The run may have changed during the probe; then its new state wins over a port that answered just before.
-    const after = this.follow();
-    if (after?.kind === "running") this.apply(outcome);
-    else if (after?.kind === "exited") await this.end(after);
+    if (await this.follow()) this.apply(outcome);
   }
 
-  /** The current run, with `stopping` applied; `undefined` once a newer run replaced it or there is none (the watch ends). */
-  private follow(): RunState | undefined {
+  /** Takes the current run: `true` while it is running, otherwise its end, `stopping` or a replaced run is applied. */
+  private async follow(): Promise<boolean> {
     const run = this.deps.run();
     if (this.ended || !run || run.runId !== this.runId) {
       this.dispose();
-      return undefined;
+      return false;
     }
     this.lastRun = run;
-    if (run.kind === "stopping") this.set("stopping", null);
-    return run;
+    if (run.kind === "exited") await this.end(run);
+    else if (run.kind === "stopping") this.set("stopping", null);
+    return run.kind === "running";
   }
 
   /** The run's group has ended: `crashed`, or after a stop `stopped` once nothing answers on the service's port. */
@@ -172,7 +163,7 @@ export class ServiceWatch {
     if (this.ended) return;
     if ("port" in outcome) {
       // Checked again at every tick until the port closes; a new start of the service replaces this watch.
-      const holder = "a process outside the service's process group holds it, such as an app Gradle's daemon runs";
+      const holder = "a process outside the service's process group holds it, for example an app Gradle's daemon runs";
       return this.set("stopping", `the process group has ended, but port ${outcome.port} still answers: ${holder}`);
     }
     this.set("stopped", null);
@@ -223,10 +214,20 @@ export class ServiceWatch {
     if (state !== this.state) this.since = new Date().toISOString();
     this.state = state;
     this.reason = reason;
-    if (state !== "starting") this.settle();
+    this.settle();
   }
 
+  /** Resolves the waits whose state has come, and every wait once the watch has ended. */
   private settle(): void {
-    for (const resolve of this.waiters.splice(0)) resolve();
+    for (const waiter of [...this.waiters]) {
+      if (!this.ended && !waiter.done(this.state)) continue;
+      this.waiters.splice(this.waiters.indexOf(waiter), 1);
+      waiter.resolve();
+    }
+  }
+
+  private until(done: (state: ServiceState) => boolean): Promise<void> {
+    if (this.ended || done(this.state)) return Promise.resolve();
+    return new Promise((resolve) => this.waiters.push({ done, resolve }));
   }
 }

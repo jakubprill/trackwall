@@ -23,10 +23,11 @@ const config = JSON.parse(process.argv[2] ?? "{}") as {
 const logStarted = (port: number) =>
   console.log(`INFO o.s.b.w.embedded.tomcat.TomcatWebServer - Tomcat started on port ${port} (http) with context path '/'`);
 
-if (config.buildDaemon !== undefined) {
-  const client = connect({ host: "127.0.0.1", port: config.buildDaemon });
+/** Asks the build daemon for the app and stays connected while it runs. */
+function askBuildDaemon(port: number): void {
+  const client = connect({ host: "127.0.0.1", port });
   client.setEncoding("utf8");
-  client.once("data", (port: string) => logStarted(Number(port)));
+  client.once("data", (appPort: string) => logStarted(Number(appPort)));
   client.once("error", (err) => {
     console.error(`ERROR the build daemon did not answer: ${err.message}`);
     process.exit(1);
@@ -70,12 +71,13 @@ const server = createServer((req, res) => {
   });
 });
 
-setTimeout(() => {
-  if (config.buildDaemon !== undefined) return;
-  server.listen(config.port ?? Number(process.env.SERVER_PORT ?? 0), "127.0.0.1", () => {
-    const address = server.address();
-    const port = typeof address === "object" && address ? address.port : 0;
-    if (!config.quiet) logStarted(port);
-  });
-}, config.delayMs ?? 0);
+if (config.buildDaemon !== undefined) askBuildDaemon(config.buildDaemon);
+else
+  setTimeout(() => {
+    server.listen(config.port ?? Number(process.env.SERVER_PORT ?? 0), "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      if (!config.quiet) logStarted(port);
+    });
+  }, config.delayMs ?? 0);
 for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => process.exit(0));
