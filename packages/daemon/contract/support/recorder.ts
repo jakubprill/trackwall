@@ -13,40 +13,21 @@ import { readAgentDialog } from "../../src/modules/agents/copilot-dialog.ts";
 import type { CopilotHookRecord } from "../../src/modules/agents/copilot-hook-record.ts";
 import { windowTitleFromOsc } from "../../src/modules/agents/copilot-osc.ts";
 import { OscParser } from "../../src/modules/agents/osc-parser.ts";
-import { TerminalScreen } from "../../src/modules/agents/terminal-screen.ts";
 import type { viewer } from "../../test/support/agents.ts";
 import {
   anonymize,
   CopilotReference,
   PROMPT_PLACEHOLDER,
-  REFERENCE_COLS,
-  REFERENCE_ROWS,
   type ReferenceHook,
   readReference,
   referenceFile,
 } from "../../test/support/copilot-reference.ts";
+import { screenLines } from "./screen-lines.ts";
 
 type Window = ReturnType<typeof viewer>;
 
 /** The input box, its two rules and the footer. */
 const PROMPT_BOX_LINES = 4;
-
-/** The window's screen as Copilot CLI drew it in the reference's size, once the emulator has processed all output. */
-async function screenLines(window: Window): Promise<string[]> {
-  const screen = new TerminalScreen(REFERENCE_COLS, REFERENCE_ROWS);
-  try {
-    screen.write(new TextEncoder().encode(window.text()));
-    await new Promise<void>((resolve) =>
-      screen.attach(
-        () => {},
-        () => resolve(),
-      ),
-    );
-    return screen.lines().map((l) => l.trimEnd());
-  } finally {
-    screen.dispose();
-  }
-}
 
 export function startRecorder(daemon: { home: string; projects: string; copilot: string }) {
   const taking = process.env.TRACKWALL_RECORD === "1";
