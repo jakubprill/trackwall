@@ -26,38 +26,6 @@ export const ProvidedApp = z.object({
 });
 export type ProvidedApp = z.infer<typeof ProvidedApp>;
 
-/** An HTTP endpoint from a Spring controller (`@RestController`, `@Controller` with `@*Mapping`). */
-export const ProvidedEndpoint = z.object({
-  kind: z.literal("endpoint"),
-  /** `null`: `@RequestMapping` without `method`, that is any method. */
-  method: HttpMethod.nullable(),
-  /**
-   * The full path: the application's context path (`server.servlet.context-path`), the class prefix and the method path,
-   * with variables as in the code (`/api/orders/{id}`). A constant that cannot be read stays as `<Class.NAME>`.
-   */
-  path: z.string(),
-  /** The application name of the module the controller is in; `null` when the module does not give one. */
-  app: z.string().nullable(),
-  /** The controller's `Class.method`. */
-  handler: z.string(),
-  /**
-   * The request body type (the parameter with `@RequestBody`) in type notation (`CreateOrder`, `List<Line>`); `null`
-   * without a body or when the file's syntax tree could not be built (ADR-38). Type notation is the text from the code
-   * without annotations, with a space only between words or after `?` (`List<? extends Line>`); longer than 256
-   * characters it is cut with "…".
-   */
-  request: z.string().nullable(),
-  /**
-   * The response type: the return type without wrappers that do not change the content (`ResponseEntity<T>`, `Mono<T>`,
-   * `Optional<T>`…), in type notation like `request`; `null` without content (`void`, `Unit`, `ResponseEntity<Void>`,
-   * `ResponseEntity<*>`, a bare `ResponseEntity`), without an explicit type (a Kotlin expression function) or without a
-   * syntax tree (ADR-38).
-   */
-  response: z.string().nullable(),
-  evidence: Evidence,
-});
-export type ProvidedEndpoint = z.infer<typeof ProvidedEndpoint>;
-
 /** A DTO field: name and type in type notation like `ProvidedEndpoint.request` (`List<Line>`, `String?`). */
 export const DtoField = z.object({ name: z.string(), type: z.string() });
 export type DtoField = z.infer<typeof DtoField>;
@@ -97,6 +65,57 @@ export const HttpCall = z.object({
   evidence: Evidence,
 });
 export type HttpCall = z.infer<typeof HttpCall>;
+
+/** A client call an endpoint's handler reaches (ADR-82): the client and the call as on the same card. */
+export const EndpointReach = z.object({
+  via: HttpClientVia,
+  /** The client name from the card (a Feign interface, a class with calls). */
+  client: z.string(),
+  method: HttpMethod.nullable(),
+  /** The call path relative to the client address, as in `HttpCall.path`. */
+  path: z.string(),
+  /** The call's file and line, the same as the `HttpCall.evidence` of the client on the card. */
+  evidence: Evidence,
+});
+export type EndpointReach = z.infer<typeof EndpointReach>;
+
+/** An HTTP endpoint from a Spring controller (`@RestController`, `@Controller` with `@*Mapping`). */
+export const ProvidedEndpoint = z.object({
+  kind: z.literal("endpoint"),
+  /** `null`: `@RequestMapping` without `method`, that is any method. */
+  method: HttpMethod.nullable(),
+  /**
+   * The full path: the application's context path (`server.servlet.context-path`), the class prefix and the method path,
+   * with variables as in the code (`/api/orders/{id}`). A constant that cannot be read stays as `<Class.NAME>`.
+   */
+  path: z.string(),
+  /** The application name of the module the controller is in; `null` when the module does not give one. */
+  app: z.string().nullable(),
+  /** The controller's `Class.method`. */
+  handler: z.string(),
+  /**
+   * The request body type (the parameter with `@RequestBody`) in type notation (`CreateOrder`, `List<Line>`); `null`
+   * without a body or when the file's syntax tree could not be built (ADR-38). Type notation is the text from the code
+   * without annotations, with a space only between words or after `?` (`List<? extends Line>`); longer than 256
+   * characters it is cut with "…".
+   */
+  request: z.string().nullable(),
+  /**
+   * The response type: the return type without wrappers that do not change the content (`ResponseEntity<T>`, `Mono<T>`,
+   * `Optional<T>`…), in type notation like `request`; `null` without content (`void`, `Unit`, `ResponseEntity<Void>`,
+   * `ResponseEntity<*>`, a bare `ResponseEntity`), without an explicit type (a Kotlin expression function) or without a
+   * syntax tree (ADR-38).
+   */
+  response: z.string().nullable(),
+  /**
+   * The HTTP calls of this card's clients that the handler reaches through the repo's Java code (ADR-82): every call
+   * some path of method calls from the handler leads to, also through an interface to each of its implementations in the
+   * repo. `null` when the card could not trace (`RepoCard.reachTraced`) or the call graph has no method for the handler.
+   */
+  reaches: z.array(EndpointReach).nullable(),
+  evidence: Evidence,
+});
+export type ProvidedEndpoint = z.infer<typeof ProvidedEndpoint>;
 
 /** An HTTP client: whom the repo calls (an application name or an address) and, when the code says, which calls. */
 export const ConsumedHttp = z.object({

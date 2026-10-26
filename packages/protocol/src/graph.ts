@@ -148,6 +148,10 @@ export type WhoCallsResult = z.infer<typeof WhoCallsResult>;
 /** The most endpoints in a `find_endpoint` result: more does not fit an agent's context sensibly. */
 export const MAX_FOUND_ENDPOINTS = 50;
 
+/** An endpoint by its method, full path and handler, as on its repo card. */
+export const EndpointRef = z.object({ method: HttpMethod.nullable(), path: z.string(), handler: z.string() });
+export type EndpointRef = z.infer<typeof EndpointRef>;
+
 /** A repo whose HTTP client calls the found endpoint (ADR-30). */
 export const EndpointCaller = z.object({
   repo: RepoId,
@@ -159,8 +163,25 @@ export const EndpointCaller = z.object({
   path: z.string(),
   confidence: EdgeConfidence,
   evidence: Evidence,
+  /**
+   * The caller repo's endpoints whose handlers reach this call (ADR-82): `[]` when none does (a scheduled job, a
+   * listener or startup code makes the call), `null` when the caller's card could not trace or some endpoint of the
+   * caller repo has no reach (`ProvidedEndpoint.reaches`), because that endpoint might make the call.
+   */
+  from: z.array(EndpointRef).nullable(),
 });
 export type EndpointCaller = z.infer<typeof EndpointCaller>;
+
+/** An endpoint of another repo that an endpoint's handler calls (ADR-82), with the confidence of the client's target. */
+export const EndpointCallee = EndpointRef.extend({
+  repo: RepoId,
+  via: HttpClientVia,
+  client: z.string(),
+  confidence: EdgeConfidence,
+  /** The call's file and line in the calling repo. */
+  evidence: Evidence,
+});
+export type EndpointCallee = z.infer<typeof EndpointCallee>;
 
 /** An endpoint from a repo card that matches the query, with the repos that call it. */
 export const FoundEndpoint = z.object({
@@ -174,6 +195,8 @@ export const FoundEndpoint = z.object({
   response: z.string().nullable(),
   evidence: Evidence,
   callers: z.array(EndpointCaller),
+  /** The endpoints of other repos this endpoint's handler calls (ADR-82); `null` when its card could not trace. */
+  calls: z.array(EndpointCallee).nullable(),
 });
 export type FoundEndpoint = z.infer<typeof FoundEndpoint>;
 

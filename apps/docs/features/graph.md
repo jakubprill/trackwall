@@ -34,5 +34,6 @@ Some connections do not show in the code, for example an address that only exist
 
 - Under `graph`, `packages` assigns a package to a repo (`com.example:orders-client: orders-api`), `apps` assigns an app name or a host (`orders.internal.example.com: orders-api`), and `edges` adds a connection with a note (`- { from: shop-web, to: orders-bff, note: HTTP /api/orders }`). A repo is named by its identifier or its `host/path` address.
 - Agents read the same graph through the [MCP server](/features/mcp) (`who_calls`, `subgraph_for`, `find_endpoint`).
+- For Java repos, `find_endpoint` also tells which endpoint makes a call, not only which repo: Trackwall follows the calls from each endpoint's code to the HTTP clients it uses. So an agent can ask what a change to one endpoint affects and follow it from endpoint to endpoint. Calls made by scheduled jobs or event listeners belong to no endpoint, and repos with Kotlin code are not followed yet.
 - A commit, checkout or pull in any repo, or a repo added to the projects folder, redraws the graph within a couple of seconds. A hand edit of `workspace.yaml` shows up within five minutes, or at once with the refresh button.
 - The first graph after a start waits for the cards of every repo; while they are computed, the view says how many are done.

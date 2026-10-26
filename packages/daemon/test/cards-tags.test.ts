@@ -5,7 +5,7 @@ import { extractCard } from "../src/modules/cards/extract-card.ts";
 import type { RepoSnapshot } from "../src/modules/cards/snapshot.ts";
 import { loadSyntaxParsers } from "../src/modules/cards/syntax-tree.ts";
 import { repoTags } from "../src/modules/cards/tags.ts";
-import { snapshotOf } from "./support/snapshot.ts";
+import { NO_REACH, snapshotOf } from "./support/snapshot.ts";
 
 const parsers = await loadSyntaxParsers();
 
@@ -35,7 +35,7 @@ describe("repo tags", () => {
     repoTags(card, { id, remote }, rules).map((t) => `${t.name}: ${t.reason}`);
 
   test("a BFF in Spring: java, backend and bff (from the name), each with a reason", () => {
-    const card = extractCard(snapshotOf({ "pom.xml": SPRING_BFF_POM }), parsers);
+    const card = extractCard(snapshotOf({ "pom.xml": SPRING_BFF_POM }), parsers, NO_REACH);
     expect(tagsOf(card, "orders-bff")).toEqual([
       "backend: spring-boot in pom.xml:2",
       "bff: “bff” in the name orders-bff",
@@ -52,6 +52,7 @@ describe("repo tags", () => {
         "apps/admin/package.json": JSON.stringify({ name: "admin", private: true, dependencies: { vue: "3" } }),
       }),
       parsers,
+      NO_REACH,
     );
     expect(tagsOf(card, "shop")).toEqual([
       "frontend: react in apps/web/package.json:1",
@@ -65,6 +66,7 @@ describe("repo tags", () => {
     const lib = extractCard(
       snapshotOf({ "pom.xml": "<project><groupId>com.example</groupId><artifactId>common-model</artifactId></project>" }),
       parsers,
+      NO_REACH,
     );
     expect(tagsOf(lib, "common-model")).toEqual([
       "java: build file pom.xml",
@@ -75,19 +77,20 @@ describe("repo tags", () => {
     const split = extractCard(
       snapshotOf({ "backend/pom.xml": SPRING_BFF_POM, "frontend/package.json": JSON.stringify({ name: "front", private: true }) }),
       parsers,
+      NO_REACH,
     );
     expect(tagsOf(split, "app")).toContain("monorepo: separate builds in directories backend, frontend");
   });
 
   test("bff only as a separate word, not part of another", () => {
-    const card = extractCard(snapshotOf({ "mise.toml": '[tasks.build]\nrun = "make"\n' }), parsers);
+    const card = extractCard(snapshotOf({ "mise.toml": '[tasks.build]\nrun = "make"\n' }), parsers, NO_REACH);
     expect(tagsOf(card, "bffcore")).toEqual([]);
     expect(tagsOf(card, "web_bff")).toEqual(["bff: “bff” in the name web_bff"]);
   });
 
   test("repoTags rules from workspace.yaml match the identifier or the remote address, ignoring case", () => {
     const rules = { "core-api": ["*-core"], payments: ["gitlab.example.com/Payments/**"] };
-    const card = extractCard(snapshotOf({ "mise.toml": '[tasks.build]\nrun = "make"\n' }), parsers);
+    const card = extractCard(snapshotOf({ "mise.toml": '[tasks.build]\nrun = "make"\n' }), parsers, NO_REACH);
     expect(tagsOf(card, "billing-core", "gitlab.example.com/payments/billing", rules)).toEqual([
       "core-api: repoTags rule in workspace.yaml: *-core",
       "payments: repoTags rule in workspace.yaml: gitlab.example.com/Payments/**",
@@ -108,6 +111,7 @@ describe("mise configuration and the no-mise tag", () => {
         ["mise-tasks/dev", "mise-tasks/db/reset", "mise-tasks/test/_default", "mise-tasks/.gitkeep", "src/mise-tasks/no"],
       ),
       parsers,
+      NO_REACH,
     );
     expect(mise.configFiles).toEqual(["mise.toml", ".config/mise.toml", ".config/mise/conf.d/ci.toml"]);
     expect(mise.complete).toBe(true);
@@ -124,7 +128,8 @@ describe("mise configuration and the no-mise tag", () => {
 
   test("a repo without mise configuration and a repo with a mise.toml without mise tasks get no-mise with a reason, and one with a mise task does not", () => {
     const noMise = (files: Record<string, string>, paths: string[] = []) =>
-      repoTags(extractCard(snapshotOf(files, paths), parsers), { id: "app", remote: null }, {}).find((t) => t.name === "no-mise")?.reason;
+      repoTags(extractCard(snapshotOf(files, paths), parsers, NO_REACH), { id: "app", remote: null }, {}).find((t) => t.name === "no-mise")
+        ?.reason;
     expect(noMise({})).toBe("no mise config in the repo root");
     expect(noMise({ "mise.toml": '[tools]\njava = "21"\n' })).toBe("mise.toml declares no tasks");
     expect(noMise({ "mise.toml": "[tools\n" })).toBe("mise.toml declares no tasks");
@@ -136,7 +141,7 @@ describe("mise configuration and the no-mise tag", () => {
 
   test("source files the card did not read (a failed search) do not hide no-mise, and a truncated file list does", () => {
     const noMise = (snapshot: RepoSnapshot) =>
-      repoTags(extractCard(snapshot, parsers), { id: "app", remote: null }, {}).find((t) => t.name === "no-mise")?.reason;
+      repoTags(extractCard(snapshot, parsers, NO_REACH), { id: "app", remote: null }, {}).find((t) => t.name === "no-mise")?.reason;
     const searchFailed = {
       ...snapshotOf({ "mise.toml": '[tools]\njava = "21"\n' }),
       problems: [{ code: "files-not-read" as const, path: "", message: "searching for files with controllers and HTTP clients failed" }],
@@ -154,6 +159,7 @@ describe("mise configuration and the no-mise tag", () => {
         "mise/conf.d/broken.toml": "[tasks\n",
       }),
       parsers,
+      NO_REACH,
     );
     expect(card.mise.configFiles).toEqual(["mise.toml", ".config/mise.toml", "mise/conf.d/broken.toml"]);
     expect(repoTags(card, { id: "app", remote: null }, {}).find((t) => t.name === "no-mise")?.reason).toBe("mise.toml declares no tasks");
