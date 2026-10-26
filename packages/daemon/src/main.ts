@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { EventHub } from "./api/event-hub.ts";
 import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
-import { createFacade, type Facade, runCopilotHook } from "./facade.ts";
+import { createFacade, type Facade, HOSTING_CLIS, runCopilotHook } from "./facade.ts";
 import { COPILOT_HOOK_COMMAND, type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./infra/args.ts";
 import { newToken, probeRunningDaemon, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
 import { trackwallHome } from "./infra/home.ts";
@@ -52,6 +52,7 @@ async function main(args: DaemonArgs): Promise<void> {
       version: VERSION,
       hookCommand: (event, hooksFile) => selfCommand([COPILOT_HOOK_COMMAND, event, hooksFile]),
       sessionMcpCommand: (tokenFile) => sessionMcpStdioCommand(home, tokenFile),
+      hostingClis: HOSTING_CLIS,
       userEnv,
       log,
     });

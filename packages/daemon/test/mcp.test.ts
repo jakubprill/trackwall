@@ -28,7 +28,7 @@ import {
 import { z } from "zod";
 import { EventHub } from "../src/api/event-hub.ts";
 import { type ApiServer, startApi } from "../src/api/server.ts";
-import { createFacade, type Facade } from "../src/facade.ts";
+import { createFacade, type Facade, HOSTING_CLIS } from "../src/facade.ts";
 import { readDaemonFile, writeDaemonFile } from "../src/infra/discovery.ts";
 import { loopbackRequest } from "../src/infra/loopback.ts";
 import { createMcpEndpoint, MCP_PATH } from "../src/mcp/endpoint.ts";
@@ -66,6 +66,7 @@ beforeAll(async () => {
     version: "0.0.0-test",
     hookCommand: () => ({ exec: "true", args: [] }),
     sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
+    hostingClis: HOSTING_CLIS,
     userEnv: async () => process.env,
     log: () => {},
   });

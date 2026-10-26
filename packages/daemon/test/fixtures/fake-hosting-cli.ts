@@ -15,6 +15,8 @@ const Config = z.object({
   apiErrors: z.record(z.string(), z.string()).default({}),
   /** A raw `api` response instead of pages from `repos`. */
   apiRaw: z.string().optional(),
+  /** `api` responses by the path without its query, for anything other than the repo list (merge requests, checks). */
+  apiResponses: z.record(z.string(), z.unknown()).default({}),
   /** Repos whose clone ends in an error with this message. */
   cloneErrors: z.record(z.string(), z.string()).default({}),
   cloneDelayMs: z.number().default(0),
@@ -36,7 +38,13 @@ if (command === "api") {
     process.stdout.write(config.apiRaw);
     process.exit(0);
   }
-  const query = new URL(args.at(-1) ?? "", "https://host/").searchParams;
+  const path = args.at(-1) ?? "";
+  const response = config.apiResponses[path.split("?")[0] ?? ""];
+  if (response !== undefined) {
+    process.stdout.write(JSON.stringify(response));
+    process.exit(0);
+  }
+  const query = new URL(path, "https://host/").searchParams;
   const page = Number(query.get("page"));
   const perPage = Number(query.get("per_page"));
   process.stdout.write(JSON.stringify(config.repos.slice((page - 1) * perPage, page * perPage)));

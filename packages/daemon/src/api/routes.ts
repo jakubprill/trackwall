@@ -6,6 +6,7 @@ import {
   type Endpoint,
   graphApi,
   logsApi,
+  mergeRequestsApi,
   miseApi,
   servicesApi,
   verificationApi,
@@ -84,6 +85,12 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(verificationApi.start, (f, b) => f.verifications.start(b.task)),
   route(verificationApi.get, (f, b) => f.verifications.get(b.task)),
   route(verificationApi.cancel, (f, b) => f.verifications.cancel(b.task)),
+  route(mergeRequestsApi.get, (f, b) => f.mergeRequests.get(b.task)),
+  route(mergeRequestsApi.push, (f, b) => f.mergeRequests.push(b.task)),
+  route(mergeRequestsApi.openForm, async (f, b) => {
+    await f.mergeRequests.openForm(b);
+    return null;
+  }),
   route(agentsApi.sessions, (f) => f.agents.sessions()),
   route(agentsApi.start, (f, b) => f.agents.start(b.repo)),
   route(agentsApi.startSupervisor, (f) => f.agents.startSupervisor()),

@@ -1,11 +1,21 @@
-import { HOST_CLI, type HostedRepo, hostKey, type RepoHost, type RepoHostKind } from "@trackwall/protocol";
+import {
+  HOST_CLI,
+  type HostedProject,
+  type HostedRepo,
+  hostKey,
+  type MergeRequest,
+  type RepoHost,
+  type RepoHostKind,
+} from "@trackwall/protocol";
+import { z } from "zod";
 import { gitEnv } from "./git.ts";
+import { type HostApi, MERGE_REQUEST_APIS, type MergeRequestForm } from "./hosted-merge-request.ts";
 import { githubApi, gitlabApi, type HostingApi } from "./hosted-repo.ts";
 import { runProgram } from "./run.ts";
 
 /**
- * Repo hosts in the `vcs` module (§4.5, ADR-19): the list of repos available to the user and a clone of the chosen one, through
- * `gh` (GitHub) and `glab` (GitLab). Sign-in and the token belong to those programs (`gh auth login`, `glab auth login`),
+ * Repo hosts in the `vcs` module (§4.5, ADR-19): the list of repos available to the user, a clone of the chosen one and the
+ * merge request of a task branch with its pipeline (ADR-77), through `gh` (GitHub) and `glab` (GitLab). Sign-in and the token belong to those programs (`gh auth login`, `glab auth login`),
  * so Trackwall neither sees nor stores the token, and the clone uses the protocol (SSH or HTTPS) and credentials
  * the user set in them.
  */
@@ -69,6 +79,29 @@ export class Hosting {
     await this.run(host, ["repo", "clone", fullName, dest], CLONE_TIMEOUT_MS);
   }
 
+  /** The address of the repo host's new merge request form with `form` filled in (ADR-77); nothing is sent to the repo host. */
+  mergeRequestForm(project: HostedProject, form: MergeRequestForm): string {
+    return MERGE_REQUEST_APIS[project.kind].formUrl(project, form);
+  }
+
+  /**
+   * The most recently updated merge request from `branch` in `project`, with its pipeline (ADR-77); `null` when there is
+   * none. Only reads: the user creates the merge request in the repo host's form.
+   */
+  async mergeRequest(project: HostedProject, branch: string): Promise<MergeRequest | null> {
+    const host = { kind: project.kind, host: project.host };
+    const api: HostApi = async (path) => {
+      const { stdout } = await this.run(host, ["api", "--hostname", host.host, path], PAGE_TIMEOUT_MS);
+      return JSON.parse(stdout.toString("utf8"));
+    };
+    try {
+      return await MERGE_REQUEST_APIS[project.kind].find(api, project, branch);
+    } catch (err) {
+      if (err instanceof SyntaxError || err instanceof z.ZodError) throw mismatch(host);
+      throw err;
+    }
+  }
+
   /** A failed fetch does not stay in memory, so "Try again" after signing in asks the repo host anew. */
   private fetchCached(host: RepoHost, serverQuery: string): Promise<HostedRepos> {
     const now = Date.now();
@@ -114,8 +147,12 @@ function parsePage(api: HostingApi, text: string, host: RepoHost): ReturnType<Ho
   try {
     return api.parseReposPage(JSON.parse(text));
   } catch {
-    throw new Error(`${HOST_CLI[host.kind]} api returned a response that does not match the ${host.host} API`);
+    throw mismatch(host);
   }
+}
+
+function mismatch(host: RepoHost): Error {
+  return new Error(`${HOST_CLI[host.kind]} api returned a response that does not match the ${host.host} API`);
 }
 
 function matches(repo: HostedRepo, query: string): boolean {

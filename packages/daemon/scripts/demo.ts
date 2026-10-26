@@ -14,7 +14,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { EventHub } from "../src/api/event-hub.ts";
 import { startApi } from "../src/api/server.ts";
-import { createFacade } from "../src/facade.ts";
+import { createFacade, HOSTING_CLIS } from "../src/facade.ts";
 import { COPILOT_HOOK_COMMAND } from "../src/infra/args.ts";
 import { newToken, writeDaemonFile } from "../src/infra/discovery.ts";
 import { selfCommand } from "../src/infra/self-command.ts";
@@ -51,6 +51,7 @@ const facade = createFacade({
   version: VERSION,
   hookCommand: (event, hooksFile) => selfCommand([COPILOT_HOOK_COMMAND, event, hooksFile]),
   sessionMcpCommand: (tokenFile) => sessionMcpStdioCommand(home, tokenFile),
+  hostingClis: HOSTING_CLIS,
   userEnv,
   log,
 });

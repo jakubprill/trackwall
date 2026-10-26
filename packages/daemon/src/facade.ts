@@ -9,12 +9,13 @@ import { DayStart } from "./modules/day-start/day-start.ts";
 import { DayStartFile } from "./modules/day-start/day-start-file.ts";
 import { Graph } from "./modules/graph/graph.ts";
 import { Logs } from "./modules/logs/logs.ts";
+import { MergeRequests } from "./modules/merge-requests/merge-requests.ts";
 import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
 import { Services } from "./modules/services/services.ts";
 import { TestReports } from "./modules/test-results/test-reports.ts";
-import { HOSTING_CLIS, Hosting } from "./modules/vcs/hosting.ts";
+import { Hosting, type HostingClis } from "./modules/vcs/hosting.ts";
 import { Vcs } from "./modules/vcs/vcs.ts";
 import { Verifications } from "./modules/verification/verifications.ts";
 import { RepoWatch } from "./modules/workspace/repo-watch.ts";
@@ -41,6 +42,8 @@ export interface Facade {
   services: Services;
   testReports: TestReports;
   verifications: Verifications;
+  /** A finished task's push, its repo host's merge request form, and the merge request with its pipeline (ADR-77). */
+  mergeRequests: MergeRequests;
   /** "Start my day": sync, the day report, and a new supervisor that reads it (ADR-70). */
   dayStart: DayStart;
   /**
@@ -51,6 +54,7 @@ export interface Facade {
 }
 
 export { runCopilotHook } from "./modules/agents/copilot-hook-command.ts";
+export { HOSTING_CLIS } from "./modules/vcs/hosting.ts";
 
 const WORKSPACE_FILE = "workspace.yaml";
 const RUNTIME_FILE = "runtime.json";
@@ -80,6 +84,8 @@ export interface FacadeOptions {
   hookCommand: AgentsDeps["hookCommand"];
   /** The Stdio bridge to this daemon's MCP server with the session token file (`sessionMcpStdioCommand`), for every Copilot CLI session. */
   sessionMcpCommand: AgentsDeps["sessionMcpCommand"];
+  /** `gh` and `glab` for the repo hosts (`HOSTING_CLIS` in the daemon, a fake in tests). */
+  hostingClis: HostingClis;
   /** The environment of processes started for the user (`userEnv`). */
   userEnv: () => Promise<NodeJS.ProcessEnv>;
   log: (msg: string) => void;
@@ -87,11 +93,12 @@ export interface FacadeOptions {
 
 export function createFacade(o: FacadeOptions): Facade {
   const vcs = new Vcs();
+  const hosting = new Hosting(o.hostingClis);
   const openEditor = (dir: string) => o.openUrl(vscodeUrl(dir));
   const workspace = new Workspace({
     file: new WorkspaceFile(join(o.home, WORKSPACE_FILE)),
     vcs,
-    hosting: new Hosting(HOSTING_CLIS),
+    hosting,
     openEditor,
     openFolder: o.openFolder,
   });
@@ -135,6 +142,13 @@ export function createFacade(o: FacadeOptions): Facade {
     onVerdict: (verification) => agents.verificationFinished(verification),
     log: o.log,
   });
+  const mergeRequests = new MergeRequests({
+    tasks: agents,
+    vcs,
+    hosting,
+    repoHosts: () => workspace.repoHosts(),
+    openUrl: o.openUrl,
+  });
   const dayStart = new DayStart({
     workspace,
     agents,
@@ -155,6 +169,7 @@ export function createFacade(o: FacadeOptions): Facade {
     services,
     testReports,
     verifications,
+    mergeRequests,
     dayStart,
     openLink: o.openUrl,
   };
