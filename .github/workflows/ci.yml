@@ -111,7 +111,7 @@ jobs:
       contents: read
     uses: ./.github/workflows/contract.yml
 
-  # Three paths through the built UI in Chromium from Playwright, on the daemon with the fake Copilot CLI (ADR-71). On all
+  # Four paths through the built UI in Chromium from Playwright, on the daemon with the fake Copilot CLI (ADR-71). On all
   # three systems, because the fake's screen reaches the browser through the PTY, which is ConPTY on Windows.
   e2e:
     name: e2e (${{ matrix.os }})

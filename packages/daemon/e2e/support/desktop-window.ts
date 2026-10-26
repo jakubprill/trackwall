@@ -1,37 +1,27 @@
 import { readFileSync } from "node:fs";
-import { extname, join, relative, resolve } from "node:path";
+import { join } from "node:path";
 import type { Browser, Page } from "playwright";
 import { z } from "zod";
-import { UI_DIR } from "./ui-dir.ts";
 
 /**
  * The UI as the Tauri shell shows it, which the daemon's own page does not: the files under the window's origin with
  * the CSP of `tauri.conf.json`, the daemon on another origin (127.0.0.1 and its port), and the connection from the
  * `daemon_connection` command instead of the address. A CSP the UI breaks (code from strings, a socket to the daemon)
- * passes everywhere else and leaves the release window blank.
+ * passes everywhere else and leaves the release window blank. Close to the window, not the same: Tauri adds hashes of
+ * its own to the CSP when it builds the app, and macOS serves the window from `tauri://localhost`, which Chromium cannot load.
  */
 
 const TAURI_CONF = join(import.meta.dir, "..", "..", "..", "..", "apps", "desktop", "src-tauri", "tauri.conf.json");
 const TauriConf = z.object({ app: z.object({ security: z.object({ csp: z.string() }) }) });
 
-/** The window's origin on Windows (WebView2). On macOS it is `tauri://localhost`, a scheme Chromium cannot load. */
+/** The window's origin on Windows (WebView2). */
 const WINDOW_ORIGIN = "http://tauri.localhost";
 
-const CONTENT_TYPES: Record<string, string> = {
-  ".html": "text/html",
-  ".js": "text/javascript",
-  ".css": "text/css",
-  ".png": "image/png",
-  ".svg": "image/svg+xml",
-  ".woff2": "font/woff2",
-  ".wasm": "application/wasm",
-  ".json": "application/json",
-};
-
-/** The window, and what went wrong in it so far: CSP violations and errors nothing caught. */
+/** The window, and what went wrong in it so far: CSP violations, errors nothing caught and errors in the console. */
 export interface DesktopWindow {
   page: Page;
   problems: string[];
+  close: () => Promise<void>;
   /** Settles with the first frame of the daemon's events socket (`/ws`), the snapshot it sends on connecting. */
   eventsArrived: Promise<void>;
 }
@@ -40,22 +30,27 @@ export async function openDesktopWindow(
   browser: Browser,
   daemon: { baseUrl: string; token: string },
   viewport: { width: number; height: number },
+  /** Files of the UI the window fails to load (a 500), by their path, such as a chunk to show what the UI does without it. */
+  failingFiles?: RegExp,
 ): Promise<DesktopWindow> {
   const csp = TauriConf.parse(JSON.parse(readFileSync(TAURI_CONF, "utf8"))).app.security.csp;
   // Chromium asks before a public page reaches a loopback address, and a page the test serves counts as public; the
   // Tauri window does not ask.
   const context = await browser.newContext({ viewport, colorScheme: "dark", permissions: ["local-network-access"] });
+  // The files come from the daemon under test, which serves the built UI, with the window's CSP added.
   await context.route(`${WINDOW_ORIGIN}/**`, async (route) => {
-    const path = new URL(route.request().url()).pathname;
-    const file = resolve(UI_DIR, `.${path === "/" ? "/index.html" : path}`);
-    if (relative(UI_DIR, file).startsWith("..")) return route.fulfill({ status: 404 });
-    const body = readFileSync(file);
-    const contentType = CONTENT_TYPES[extname(file)] ?? "application/octet-stream";
-    await route.fulfill({ status: 200, body, headers: { "content-type": contentType, "content-security-policy": csp } });
+    const { pathname, search } = new URL(route.request().url());
+    if (failingFiles?.test(pathname)) return route.fulfill({ status: 500 });
+    const response = await route.fetch({ url: `${daemon.baseUrl}${pathname}${search}` });
+    await route.fulfill({ response, headers: { ...response.headers(), "content-security-policy": csp } });
   });
   const page = await context.newPage();
   const problems: string[] = [];
   page.on("pageerror", (err) => problems.push(`uncaught: ${err.message}`));
+  // React reports an error a boundary caught only in the console.
+  page.on("console", (message) => {
+    if (message.type() === "error") problems.push(`console: ${message.text()}`);
+  });
   await page.exposeFunction("reportCspViolation", (text: string) => problems.push(`CSP: ${text}`));
   await page.addInitScript(fakeTauri, daemon);
   const eventsArrived = new Promise<void>((arrived) =>
@@ -64,7 +59,7 @@ export async function openDesktopWindow(
     }),
   );
   await page.goto(`${WINDOW_ORIGIN}/`);
-  return { page, problems, eventsArrived };
+  return { page, problems, eventsArrived, close: () => context.close() };
 }
 
 /**

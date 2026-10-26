@@ -21,8 +21,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, { error?: strin
     return { error: errorMessage(error) };
   }
 
+  // React logs the error itself.
   override componentDidCatch(error: unknown) {
-    console.error(error);
     this.props.onError?.(errorMessage(error));
   }
 

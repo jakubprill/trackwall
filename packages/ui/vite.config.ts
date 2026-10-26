@@ -23,7 +23,7 @@ export default defineConfig({
         codeSplitting: {
           // zod with `zod-config.ts` in one chunk of their own, which every chunk with schemas imports, so the config
           // is set before `@trackwall/protocol` builds its first schema (see `zod-config.ts`).
-          groups: [{ name: "zod", test: /[\\/]node_modules[\\/]zod[\\/]|[\\/]src[\\/]zod-config\.ts$/ }],
+          groups: [{ name: "zod", test: /[\\/]node_modules[\\/]zod[\\/]|[\\/]src[\\/]lib[\\/]zod-config\.ts$/ }],
         },
       },
     },

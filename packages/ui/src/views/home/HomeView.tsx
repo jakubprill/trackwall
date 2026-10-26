@@ -28,6 +28,9 @@ import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
  * that three.js and Pawn stay in the lazily loaded chunk.
  */
 
+/** The scene's own messages are for people developing Trackwall, so a failure shows a general text, as in `HomeCanvas`. */
+const CANVAS_FAILED = "the 3D view failed to load";
+
 const HomeCanvas = lazy(() => import("./HomeCanvas.tsx").then((m) => ({ default: m.HomeCanvas })));
 
 export function HomeView({
@@ -143,7 +146,7 @@ export function HomeView({
         ) : (
           // A scene that throws (its chunk does not load, the WebView refuses its code) shows the same message as one
           // without WebGL, instead of taking the whole window down.
-          <ErrorBoundary fallback={() => null} onError={unavailableNow}>
+          <ErrorBoundary fallback={() => null} onError={() => unavailableNow(CANVAS_FAILED)}>
             <Suspense
               fallback={
                 <div className="p-6">

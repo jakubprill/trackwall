@@ -37,7 +37,7 @@ async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> = ONE_RE
     /** The main window as the Tauri shell opens it, on Home. */
     open: () => openMainWindow(browser, origin, token),
     /** The main window as the Tauri shell shows it: under the window's origin and CSP, connected through the shell. */
-    openDesktopWindow: () => openDesktopWindow(browser, { baseUrl: origin, token }, VIEWPORT),
+    openDesktopWindow: (failingFiles?: RegExp) => openDesktopWindow(browser, { baseUrl: origin, token }, VIEWPORT, failingFiles),
     /** The tray panel (ADR-50): the same UI under `#tray-panel`, at the size of its window. */
     openTrayPanel: () => openTrayPanel(browser, origin, token),
     agentOf: async (session: string) => {

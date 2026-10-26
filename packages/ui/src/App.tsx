@@ -208,7 +208,10 @@ export function App() {
               </div>
             )}
             {/* One view that throws keeps the view bar and the other views; switching views mounts a fresh boundary. */}
-            <ErrorBoundary key={view} fallback={(message, retry) => <ViewFailed message={message} onRetry={retry} />}>
+            <ErrorBoundary
+              key={`${view}:${epoch}:${visit}`}
+              fallback={(message, retry) => <ViewFailed message={message} onRetry={retry} />}
+            >
               {conn && view === "home" && (
                 <HomeView
                   key={epoch}
