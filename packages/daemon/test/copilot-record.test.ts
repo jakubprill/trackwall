@@ -33,11 +33,12 @@ describe("recording a Copilot CLI session (a real PTY and hook processes)", () =
     expect(stdout).toContain("Thinking");
     expect(stderr).toContain("State changes");
     const hookStates = states.filter((s) => s.source === "hook").map((s) => `${s.state} ${s.reason}`);
+    // The fake answers its approval request without a key, so its postToolUse right after is held back (ADR-66) and the
+    // end of the turn comes first.
     expect(hookStates).toEqual([
       "Input hook sessionStart",
       "Working hook userPromptSubmitted",
       "Approval hook notification permission_prompt",
-      "Working hook postToolUse",
       "Input hook agentStop",
       "Done hook sessionEnd user_exit",
     ]);

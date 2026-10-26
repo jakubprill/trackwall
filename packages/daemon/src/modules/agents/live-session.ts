@@ -272,6 +272,7 @@ export class LiveSession {
   tick(): boolean {
     if (this.#finished) return false;
     this.#readHooks();
+    if (this.#last?.state === "Approval" && this.#dialogOnScreen("approval") !== null) this.#state.approvalOnScreen();
     this.#report([this.#state.tick()]);
     if (!this.#finished) this.#dialogs.forgetAnswerOffScreen();
     // A prompt asked for goes into a box that just appeared before the box can say the session waits for you.
@@ -332,7 +333,7 @@ export class LiveSession {
   #readHooks(): void {
     for (const record of this.#hooks.read()) {
       if (record.event === "userPromptSubmitted") this.#userDraft = false;
-      this.#report(this.#state.hook(record, () => this.#dialogOnScreen("approval") !== null));
+      this.#report(this.#state.hook(record));
       this.#applyEarlyAnswer(record.event);
       // The end of a turn from its hook, not from the state: a question dialog and an Esc give `Input` mid-turn too.
       if (record.event === "agentStop") {

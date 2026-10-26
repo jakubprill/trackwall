@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import { appendFileSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -89,6 +89,7 @@ describe("an agent dialog read from the session's screen (ADR-66)", () => {
 const sessions: LiveSession[] = [];
 afterEach(() => {
   for (const s of sessions.splice(0)) s.dispose();
+  setSystemTime();
 });
 
 /** A session in a 120×30 terminal whose screen shows `name` and whose last hook record is `notification`. */
@@ -243,11 +244,28 @@ describe("approvals of tools the agent called at once (ADR-66)", () => {
     expect(session.view()).toMatchObject({ state: { state: "Approval" }, dialog: { kind: "approval", title: "Write a file" } });
   });
 
-  test("the postToolUse after the approval left the screen without a key the daemon saw is work, as before", async () => {
+  test("the postToolUse of another tool that comes before the approval is drawn does not end waiting for it", async () => {
+    const { session, hooksFile } = await sessionShowing("shell-120", "permission_prompt");
+    await redraw(session, [" ⠋ Thinking"]);
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "postToolUse", receivedAt: 0, payload: { toolName: "view" }, omitted: [] })}\n`);
+    session.tick();
+
+    await redraw(session, screen("shell-120"));
+    session.tick();
+    setSystemTime(new Date(Date.now() + 10_000));
+    session.tick();
+
+    expect(session.view()).toMatchObject({ state: { state: "Approval" }, dialog: { kind: "approval", title: "Write a file" } });
+  });
+
+  test("the postToolUse after the approval left the screen without a key the daemon saw is work 3 s later, as before", async () => {
     const { session, hooksFile } = await sessionShowing("shell-120", "permission_prompt");
     await redraw(session, [" $ Shell Write a file", "   touch /src/app-outside/x.txt"]);
-
     appendFileSync(hooksFile, `${JSON.stringify({ event: "postToolUse", receivedAt: 0, payload: { toolName: "bash" }, omitted: [] })}\n`);
+    session.tick();
+    expect(session.view()?.state).toMatchObject({ state: "Approval" });
+
+    setSystemTime(new Date(Date.now() + 3000));
     session.tick();
 
     expect(session.view()).toMatchObject({ state: { state: "Working", reason: "hook postToolUse" }, dialog: null });

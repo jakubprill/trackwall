@@ -24,7 +24,7 @@ import { runCopilotHook } from "../src/modules/agents/copilot-hook-command.ts";
 import type { CopilotHookRecord } from "../src/modules/agents/copilot-hook-record.ts";
 import { type SessionKey, sessionKey } from "../src/modules/agents/copilot-keys.ts";
 import { writeCopilotPlugin } from "../src/modules/agents/copilot-plugin.ts";
-import { encodeMarker, NO_SCREEN, replayCopilotRecording, type StatesLine } from "../src/modules/agents/copilot-recording.ts";
+import { encodeMarker, replayCopilotRecording, type StatesLine } from "../src/modules/agents/copilot-recording.ts";
 import { CopilotSessionState } from "../src/modules/agents/copilot-session-state.ts";
 import { HookTail } from "../src/modules/agents/hook-tail.ts";
 import { STALE_AFTER_MS } from "../src/modules/agents/live-session.ts";
@@ -152,7 +152,7 @@ class Recording {
 
   hook(r: CopilotHookRecord): void {
     this.#clock = this.#cast.marker(encodeMarker({ kind: "hook", record: r }));
-    for (const change of this.#session.hook(r, NO_SCREEN)) this.#report(change);
+    for (const change of this.#session.hook(r)) this.#report(change);
   }
 
   key(key: SessionKey): void {

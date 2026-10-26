@@ -44,7 +44,7 @@ describe("a new session's state from its input box (ADR-69)", () => {
     const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program: null });
     expect(summary(session.screen(() => withText))).toEqual(["Input screen medium screen input box before the first prompt"]);
 
-    session.hook(record("userPromptSubmitted"), () => false);
+    session.hook(record("userPromptSubmitted"));
     expect(session.screen(() => box)).toEqual([]);
   });
 
@@ -53,7 +53,7 @@ describe("a new session's state from its input box (ADR-69)", () => {
 
     expect(task.screen(() => box)).toEqual([]);
     expect(task.inPromptBox(() => box)).toBe(false);
-    expect(summary(task.hook(record("sessionStart"), () => false))).toEqual(["Working hook medium hook sessionStart with a prompt"]);
+    expect(summary(task.hook(record("sessionStart")))).toEqual(["Working hook medium hook sessionStart with a prompt"]);
   });
 
   test("a prompt the daemon typed before the first hook holds the box back for 5 s", () => {
@@ -67,22 +67,22 @@ describe("a new session's state from its input box (ADR-69)", () => {
     expect(session.inPromptBox(() => box)).toBe(true);
     expect(summary(session.screen(() => box))).toEqual(["Input screen medium screen input box before the first prompt"]);
     // A typed prompt no longer on its way does not make the first sessionStart work: `/resume` may send it.
-    expect(summary(session.hook(record("sessionStart"), () => false))).toEqual(["Input hook medium hook sessionStart"]);
+    expect(summary(session.hook(record("sessionStart")))).toEqual(["Input hook medium hook sessionStart"]);
   });
 
   test("the sessionStart of a typed prompt on its way starts work, also after a hook that changed nothing", () => {
     const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program: null });
-    session.hook({ event: "notification", receivedAt: 0, payload: { notification_type: "agent_idle" }, omitted: [] }, () => false);
+    session.hook({ event: "notification", receivedAt: 0, payload: { notification_type: "agent_idle" }, omitted: [] });
     session.promptTyped();
 
     expect(session.screen(() => withText)).toEqual([]);
-    expect(summary(session.hook(record("sessionStart"), () => false))).toEqual(["Working hook medium hook sessionStart with a prompt"]);
+    expect(summary(session.hook(record("sessionStart")))).toEqual(["Working hook medium hook sessionStart with a prompt"]);
   });
 
   test("without a known prompt the first sessionStart is waiting for you: /resume or /clear may send it", () => {
     const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program: null });
 
-    expect(summary(session.hook(record("sessionStart"), () => false))).toEqual(["Input hook medium hook sessionStart"]);
+    expect(summary(session.hook(record("sessionStart")))).toEqual(["Input hook medium hook sessionStart"]);
     expect(session.inPromptBox(() => [])).toBe(true);
   });
 
@@ -97,13 +97,13 @@ describe("a new session's state from its input box (ADR-69)", () => {
   test("after the first hook the hooks say whether the session is in its input box, whatever the screen shows", () => {
     const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program: null });
     session.promptTyped();
-    session.hook(record("sessionStart"), () => false);
+    session.hook(record("sessionStart"));
     expect(session.inPromptBox(() => box)).toBe(false);
-    session.hook(record("agentStop"), () => false);
+    session.hook(record("agentStop"));
     expect(session.inPromptBox(() => screen("dialog-shell-120"))).toBe(true);
     // A typed prompt after the first hook changes nothing, and a later sessionStart (`/clear`) leaves the input box.
     session.promptTyped();
-    expect(summary(session.hook(record("sessionStart"), () => false))).toEqual(["Input hook medium hook sessionStart"]);
+    expect(summary(session.hook(record("sessionStart")))).toEqual(["Input hook medium hook sessionStart"]);
     expect(session.inPromptBox(() => [])).toBe(true);
   });
 });

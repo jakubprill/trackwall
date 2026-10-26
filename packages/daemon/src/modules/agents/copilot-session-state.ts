@@ -39,6 +39,13 @@ const CANCEL_AFTER_ANSWER_MS = 10_000;
 const CANCEL_WHILE_WAITING_MS = 2000;
 
 /**
+ * How long a `postToolUse` that came while an approval request waits is held back (ADR-66): it may be of a tool called
+ * together with the one asking, whose dialog the screen shows a moment later (`approvalOnScreen`), or the request was
+ * answered in a way the daemon did not see, and the work goes on.
+ */
+const HOLD_TOOL_USE_MS = 3000;
+
+/**
  * The state of one Copilot CLI session (§4.4): PTY output, hook records and a human's keys go in, state changes come
  * out. The same object computes the state live and when replaying a recording, so a test on a recording checks what
  * runs in the session. The screen image (`screen`) comes only live: a recording has none, so its replay of a new session
@@ -82,11 +89,8 @@ export class CopilotSessionState {
    * then shows their dialogs one at a time (ADR-66), so answering one leaves the session waiting while others remain.
    */
   #approvalsAsked = 0;
-  /**
-   * One of the approval requests of the current wait was answered, so the rest still wait although the screen may not
-   * show the next dialog yet when the answered tool's `postToolUse` comes.
-   */
-  #answeredInWait = false;
+  /** A `postToolUse` held back while an approval request waits, and when it came. */
+  #heldToolUse: { signal: StateSignal; at: number } | undefined;
 
   constructor(o: CopilotSessionStateOptions) {
     this.#tracker = new TaskStateTracker(o);
@@ -105,7 +109,7 @@ export class CopilotSessionState {
    * way it gives the same order of changes as the live session.
    */
   output(data: string): TaskStateChange[] {
-    const changes = [this.#tracker.tick(), this.#tracker.activity()];
+    const changes = [this.#tick(), this.#tracker.activity()];
     for (const osc of this.#osc.feed(data)) {
       this.#windowTitle = windowTitleFromOsc(osc, this.#program) ?? this.#windowTitle;
       const signal = stateFromOsc(osc);
@@ -122,20 +126,32 @@ export class CopilotSessionState {
   }
 
   /**
-   * `approvalOnScreen` tells whether the screen shows an approval dialog the user has not answered: the `postToolUse`
-   * of a tool that needed no approval does not end waiting for one still on the screen, nor does that of one of several
-   * approved, whose next dialog may not be drawn yet (ADR-66). A recording has no screen (`NO_SCREEN`).
+   * A `postToolUse` while an approval request is not answered is held back for `HOLD_TOOL_USE_MS`: it may be of a tool
+   * called together with the one asking (one that needed no approval, or one of several already approved, ADR-66).
+   * Only an `Approval` guessed from a notification's text, no request of a known kind, ends with it at once as before.
    */
-  hook(record: CopilotHookRecord, approvalOnScreen: () => boolean): TaskStateChange[] {
+  hook(record: CopilotHookRecord): TaskStateChange[] {
     const waiting = this.#tracker.current?.state === "Approval";
-    const keepsWaiting = record.event === "postToolUse" && waiting && (this.#answeredInWait || approvalOnScreen());
+    const keepsWaiting = record.event === "postToolUse" && waiting && this.#approvalsAsked > 0;
     // The first `sessionStart`: no hook has changed the state yet.
     const withPrompt = record.event === "sessionStart" && this.#inPromptBox === undefined && this.#promptOnItsWay();
-    const signal = keepsWaiting ? undefined : withPrompt ? SESSION_START_WITH_PROMPT : stateFromHook(record);
+    const hookSignal = withPrompt ? SESSION_START_WITH_PROMPT : stateFromHook(record);
+    if (keepsWaiting && hookSignal) this.#heldToolUse = { signal: hookSignal, at: this.#now() };
+    else if (hookSignal) this.#heldToolUse = undefined;
+    const signal = keepsWaiting ? undefined : hookSignal;
     if (signal) this.#inPromptBox = !withPrompt && (record.event === "sessionStart" || record.event === "agentStop");
-    if (signal?.state === "Approval" && !waiting) this.#answeredInWait = false;
-    if (signal?.state === "Approval") this.#approvalsAsked = waiting ? this.#approvalsAsked + 1 : 1;
+    // Only a request of a known kind is counted; one guessed from the text may be no dialog at all.
+    const asked = signal?.confidence === "high" ? 1 : 0;
+    if (signal?.state === "Approval") this.#approvalsAsked = (waiting ? this.#approvalsAsked : 0) + asked;
     return this.#signal(signal);
+  }
+
+  /**
+   * The screen shows an approval dialog the user has not answered: a held-back `postToolUse` is of a tool called
+   * together with it, and the session keeps waiting for the answer.
+   */
+  approvalOnScreen(): void {
+    this.#heldToolUse = undefined;
   }
 
   /**
@@ -171,13 +187,13 @@ export class CopilotSessionState {
   }
 
   #signal(signal: StateSignal | undefined): TaskStateChange[] {
-    return [this.#tracker.tick(), signal && this.#tracker.signal(signal)].filter((c) => c !== undefined);
+    return [this.#tick(), signal && this.#tracker.signal(signal)].filter((c) => c !== undefined);
   }
 
   /** A key a human sent to the session terminal (`sessionKey`). */
   key(key: SessionKey): TaskStateChange[] {
     // The `Stale` threshold first: live, the periodic `tick` may already have set it, and the key counts from the state after it.
-    const stale = this.#tracker.tick();
+    const stale = this.#tick();
     const current = this.#tracker.current?.state;
     const signal = stateFromKey(key, current);
     if (!signal) return [stale].filter((c) => c !== undefined);
@@ -185,17 +201,24 @@ export class CopilotSessionState {
     // An answer to one of several approval requests: the next one's dialog follows, so the session still waits (ADR-66).
     if (current === "Approval" && answersDialog(key) && this.#approvalsAsked > 1) {
       this.#approvalsAsked--;
-      this.#answeredInWait = true;
       return [stale].filter((c) => c !== undefined);
     }
     return [stale, this.#tracker.keyboard(signal)].filter((c) => c !== undefined);
   }
 
   tick(): TaskStateChange | undefined {
-    return this.#tracker.tick();
+    return this.#tick();
+  }
+
+  /** The `Stale` threshold, and a held-back `postToolUse` whose approval dialog the screen has not shown. */
+  #tick(): TaskStateChange | undefined {
+    const held = this.#heldToolUse;
+    if (held === undefined || this.#now() - held.at < HOLD_TOOL_USE_MS) return this.#tracker.tick();
+    this.#heldToolUse = undefined;
+    return this.#tracker.current?.state === "Approval" ? this.#tracker.signal(held.signal) : this.#tracker.tick();
   }
 
   exit(code: number): TaskStateChange[] {
-    return [this.#tracker.tick(), this.#tracker.exit(code)].filter((c) => c !== undefined);
+    return [this.#tick(), this.#tracker.exit(code)].filter((c) => c !== undefined);
   }
 }

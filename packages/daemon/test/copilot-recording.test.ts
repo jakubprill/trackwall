@@ -17,6 +17,7 @@ describe("Copilot CLI session state from a recording", () => {
       "Input hook medium hook sessionStart",
       "Working hook high hook userPromptSubmitted",
       "Approval hook high hook notification permission_prompt",
+      "Working keyboard medium key enter",
       "Working hook high hook postToolUse",
       "Input osc low osc 9;4;0",
       "Input hook high hook agentStop",
@@ -118,11 +119,11 @@ describe("Copilot CLI session state from a recording", () => {
   test("the first sessionStart of a task session that starts with a prompt is work, and a later one and one in a plain session is waiting for you", () => {
     const record = { event: "sessionStart" as const, receivedAt: 0, payload: {}, omitted: [] };
     const task = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: true, program: null });
-    expect(task.hook(record, () => false).map((c) => `${c.state} ${c.reason}`)).toEqual(["Working hook sessionStart with a prompt"]);
+    expect(task.hook(record).map((c) => `${c.state} ${c.reason}`)).toEqual(["Working hook sessionStart with a prompt"]);
     // `/clear` in a task session: the new conversation has no prompt, so the session is waiting for you.
-    expect(task.hook(record, () => false).map((c) => `${c.state} ${c.reason}`)).toEqual(["Input hook sessionStart"]);
+    expect(task.hook(record).map((c) => `${c.state} ${c.reason}`)).toEqual(["Input hook sessionStart"]);
     const plain = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program: null });
-    expect(plain.hook(record, () => false).map((c) => `${c.state} ${c.reason}`)).toEqual(["Input hook sessionStart"]);
+    expect(plain.hook(record).map((c) => `${c.state} ${c.reason}`)).toEqual(["Input hook sessionStart"]);
   });
 
   test("the end of the process after the threshold without a periodic check first gives Stale, like replaying the recording", () => {
@@ -137,7 +138,7 @@ describe("Copilot CLI session state from a recording", () => {
   test("the interrupted turn message right after a key ends work without a hook, also when split over two output chunks", () => {
     let now = 0;
     const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false, program: null });
-    session.hook({ event: "notification", receivedAt: 0, payload: { notification_type: "permission_prompt" }, omitted: [] }, () => false);
+    session.hook({ event: "notification", receivedAt: 0, payload: { notification_type: "permission_prompt" }, omitted: [] });
     // Enter on “No, and tell Copilot…”, and Copilot CLI ends the turn instead of waiting for text.
     now = 1_000;
     session.key("enter");
@@ -152,15 +153,15 @@ describe("Copilot CLI session state from a recording", () => {
   test("the interrupted turn message without a recent key answer is redrawn screen history and does not change the state", () => {
     let now = 0;
     const session = new CopilotSessionState({ now: () => now, staleAfterMs: 60_000, promptOnStart: false, program: null });
-    session.hook({ event: "notification", receivedAt: 0, payload: { notification_type: "permission_prompt" }, omitted: [] }, () => false);
+    session.hook({ event: "notification", receivedAt: 0, payload: { notification_type: "permission_prompt" }, omitted: [] });
     session.key("enter");
     now = 20_000;
     expect(session.output(" ● Operation cancelled by user")).toEqual([]);
 
     // An Enter that sends a new prompt is not an answer and opens no dialog.
-    session.hook({ event: "agentStop", receivedAt: 20_000, payload: {}, omitted: [] }, () => false);
+    session.hook({ event: "agentStop", receivedAt: 20_000, payload: {}, omitted: [] });
     session.key("enter");
-    session.hook({ event: "userPromptSubmitted", receivedAt: 20_100, payload: {}, omitted: [] }, () => false);
+    session.hook({ event: "userPromptSubmitted", receivedAt: 20_100, payload: {}, omitted: [] });
     now = 21_000;
     expect(session.output(" ● Operation cancelled by user")).toEqual([]);
   });
