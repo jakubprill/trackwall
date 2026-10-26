@@ -17,3 +17,8 @@ out/
 
 # VitePress cache of apps/docs
 apps/docs/.vitepress/cache/
+
+# Build output of the projects of the tests with real Java builds, when one is built in place (ADR-72).
+packages/daemon/jvm/projects/*/target/
+packages/daemon/jvm/projects/*/build/
+packages/daemon/jvm/projects/*/.gradle/

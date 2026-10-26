@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { Client, StreamableHTTPClientTransport, type VersionNegotiationOptions } from "@modelcontextprotocol/client";
+import { WAIT_MAX_SECONDS } from "@trackwall/protocol";
 import { loopbackRequest } from "../../src/infra/loopback.ts";
 import { MCP_PATH, SESSION_TOKEN_HEADER } from "../../src/mcp/endpoint.ts";
 import { sessionTokenFile } from "../../src/modules/agents/agents.ts";
@@ -24,6 +25,13 @@ export async function connectHttpClient(
   return client;
 }
 
+/**
+ * How long one request may take: the longest wait a tool may be asked for plus the work around it (a service slice is
+ * planned before its wait and its log errors read after it), so a waiting call ends on its own time limit, not this one.
+ * A caller of such a tool passes it to `callTool` too, whose own limit is 60 s.
+ */
+export const MCP_CALL_LIMIT_MS = (WAIT_MAX_SECONDS + 30) * 1000;
+
 function loopbackFetch(port: number) {
   return async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const url = new URL(input instanceof Request ? input.url : input);
@@ -32,7 +40,7 @@ function loopbackFetch(port: number) {
       method: init?.method ?? "GET",
       headers,
       body: typeof init?.body === "string" ? init.body : undefined,
-      timeoutMs: 30_000,
+      timeoutMs: MCP_CALL_LIMIT_MS,
     });
     const responseHeaders = new Headers();
     for (const [name, value] of Object.entries(res.headers)) if (typeof value === "string") responseHeaders.set(name, value);

@@ -10,12 +10,13 @@ import type { RepoEntry } from "./projects-dir.ts";
  * a second one on the same repos.
  */
 export class SyncRuns {
-  private readonly runs = new Map<string, SyncRun>();
+  /** Each folder's last sync, and its end for whoever has to wait for it (the day start, ADR-70). */
+  private readonly runs = new Map<string, { run: SyncRun; end: Promise<unknown> }>();
 
   /** The last sync of the folder with key `key`. */
   last(key: string): SyncRun | undefined {
-    const run = this.runs.get(key);
-    return run && snapshot(run);
+    const entry = this.runs.get(key);
+    return entry && snapshot(entry.run);
   }
 
   /**
@@ -23,20 +24,45 @@ export class SyncRuns {
    * in another folder is an error. An exception from `sync` is a `failed` result of that repo, not of the whole sync.
    */
   startOrJoin(key: string, entries: readonly RepoEntry[], limit: number, sync: (entry: RepoEntry) => Promise<SyncResult>): SyncRun {
-    const running = [...this.runs].find(([, run]) => run.finishedAt === null);
-    if (running?.[0] === key) return snapshot(running[1]);
-    if (running) throw new DomainError("bad_request", "a sync of the previous projects folder is running");
-    return snapshot(this.start(key, entries, limit, sync));
+    return snapshot(this.join(key, entries, limit, sync).run);
   }
 
-  private start(key: string, entries: readonly RepoEntry[], limit: number, sync: (entry: RepoEntry) => Promise<SyncResult>): SyncRun {
+  /** Like `startOrJoin`, and resolves once that sync has finished, with its results. */
+  async startOrJoinAndWait(
+    key: string,
+    entries: readonly RepoEntry[],
+    limit: number,
+    sync: (entry: RepoEntry) => Promise<SyncResult>,
+  ): Promise<SyncRun> {
+    const { run, end } = this.join(key, entries, limit, sync);
+    await end;
+    return snapshot(run);
+  }
+
+  private join(
+    key: string,
+    entries: readonly RepoEntry[],
+    limit: number,
+    sync: (entry: RepoEntry) => Promise<SyncResult>,
+  ): { run: SyncRun; end: Promise<unknown> } {
+    const running = [...this.runs].find(([, entry]) => entry.run.finishedAt === null);
+    if (running?.[0] === key) return running[1];
+    if (running) throw new DomainError("bad_request", "a sync of the previous projects folder is running");
+    return this.start(key, entries, limit, sync);
+  }
+
+  private start(
+    key: string,
+    entries: readonly RepoEntry[],
+    limit: number,
+    sync: (entry: RepoEntry) => Promise<SyncResult>,
+  ): { run: SyncRun; end: Promise<unknown> } {
     const run: SyncRun = {
       startedAt: new Date().toISOString(),
       finishedAt: null,
       repos: entries.map((e) => ({ repo: e.id, path: e.path, state: "waiting" })),
     };
-    this.runs.set(key, run);
-    void mapLimit(entries, limit, async (entry, i) => {
+    const end = mapLimit(entries, limit, async (entry, i) => {
       const target = { repo: entry.id, path: entry.path };
       run.repos[i] = { ...target, state: "running" };
       try {
@@ -47,7 +73,9 @@ export class SyncRuns {
     }).finally(() => {
       run.finishedAt = new Date().toISOString();
     });
-    return run;
+    const started = { run, end };
+    this.runs.set(key, started);
+    return started;
   }
 }
 

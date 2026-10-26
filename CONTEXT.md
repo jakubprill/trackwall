@@ -248,7 +248,7 @@ A repo with its mise task `dev` (`SERVICE_MISE_TASK`), its port and its readines
 _Avoid_: app, microservice (when the entity in Trackwall is meant)
 
 **Service state** (`ServiceState`):
-`stopped`, `starting`, `healthy`, `unhealthy`, `stopping` or `crashed`; always observed, never assumed. In the UI `healthy` reads "ready on port N" and `unhealthy` "not answering".
+`stopped`, `starting`, `healthy`, `unhealthy`, `stopping` or `crashed`; always observed, never assumed. `stopping` lasts until the process group has ended and the port no longer answers, so it also covers an app a build tool runs outside the group (Gradle's daemon) that still holds the port. In the UI `healthy` reads "ready on port N" and `unhealthy` "not answering".
 
 **Slice** (`ServiceSlice`, member `SliceMember`):
 A service with every service it calls at runtime (graph edges `http` and `manual`), started together by `start_service`, dependencies first in waves (ADR-45). A member is `pending`, `started`, `running` (it was already running) or `skipped` with the reason.
@@ -343,8 +343,16 @@ The one Trackwall session above all others: Copilot CLI in the projects folder, 
 _Avoid_: orchestrator, root session, supervising agent (that is an agent outside Trackwall)
 
 **Supervisor panel** (`SupervisorPanel`):
-The column on the right of the main window, in every view, with the supervisor's terminal, its state and the work it delegated, or "Start supervisor" while there is none (ADR-58). Pinned open, or folded to a strip that keeps a bell while the supervisor or a task proposal under it waits for you; Alt+0 pins it open and puts the keyboard in its terminal.
+The column on the right of the main window, in every view, with the supervisor's terminal, its state and the work it delegated, or "Start my day" and "Start supervisor" while there is none (ADR-58, ADR-70). Pinned open, or folded to a strip that keeps a bell while the supervisor or a task proposal under it waits for you; Alt+0 pins it open and puts the keyboard in its terminal.
 _Avoid_: sidebar (that is the list on the left of a view), drawer
+
+**Day start** (`DayStart`, `dayStartApi`, `DayStartRun`, `startSupervisorWith`; "Start my day" in the UI; `dayStart` in `workspace.yaml`):
+The action that begins a working day (ADR-70): a sync of every repo, the day report, and a new supervisor whose first message asks it to brief the user from that report, followed by the user's own `dayStart.prompt`. Refused while a supervisor runs. "Start my day" is the button; in prose and code it is the day start.
+_Avoid_: morning brief, daily standup, briefing (that is what the supervisor writes from the report)
+
+**Day report** (`DayReport`, `get_day_report`, `day-start.json`):
+What the daemon computed at the last day start (ADR-70): commits new on each repo's remote default branch since the previous day start, repos the sync did not update, and the open tasks with how far behind they are. It stays the same until the next day start.
+_Avoid_: digest, changelog, summary (that is a task's `report_result`)
 
 **Supervising agent**:
 An agent CLI (today Copilot CLI) started by the user outside a task, for example in the projects folder, with access to the MCP server. Unlike a task session it has no worktree, budget or session token. A term from the documentation and tool descriptions; in code it has no identifier of its own, because the daemon keeps nothing about it. Not the supervisor, which is a session Trackwall runs (ADR-58).

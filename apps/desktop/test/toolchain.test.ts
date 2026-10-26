@@ -26,12 +26,16 @@ test("mise.toml sets the versions of Node, Bun, pnpm and Rust", () => {
   expect(Object.keys(miseTools()).sort()).toEqual(["bun", "node", "pnpm", "rust"]);
 });
 
-/** The versions each workflow sets in `env`; the documentation site and the contract tests build no Rust, the nightly workflow only calls contract.yml. */
+/**
+ * The versions each workflow sets in `env`; the documentation site, the contract tests and the Java build tests build no
+ * Rust, the nightly workflow only calls contract.yml and jvm.yml.
+ */
 const WORKFLOW_TOOLS = {
   ".github/workflows/ci.yml": { node: "NODE_VERSION", bun: "BUN_VERSION", rust: "RUST_VERSION" },
   ".github/workflows/release.yml": { node: "NODE_VERSION", bun: "BUN_VERSION", rust: "RUST_VERSION" },
   ".github/workflows/pages.yml": { node: "NODE_VERSION", bun: "BUN_VERSION" },
   ".github/workflows/contract.yml": { node: "NODE_VERSION", bun: "BUN_VERSION" },
+  ".github/workflows/jvm.yml": { node: "NODE_VERSION", bun: "BUN_VERSION" },
   ".github/workflows/nightly.yml": {},
 } satisfies Record<string, Partial<Record<"node" | "bun" | "rust", string>>>;
 

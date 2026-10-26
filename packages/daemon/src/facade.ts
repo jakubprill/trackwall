@@ -1,9 +1,12 @@
 import { join } from "node:path";
+import { SERVICE_RELEASE_MS } from "@trackwall/protocol";
 import { vscodeUrl } from "./infra/editor-url.ts";
 import { Agents, type AgentsDeps } from "./modules/agents/agents.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { CardCache } from "./modules/cards/card-cache.ts";
 import { Cards } from "./modules/cards/cards.ts";
+import { DayStart } from "./modules/day-start/day-start.ts";
+import { DayStartFile } from "./modules/day-start/day-start-file.ts";
 import { Graph } from "./modules/graph/graph.ts";
 import { Logs } from "./modules/logs/logs.ts";
 import { Mise } from "./modules/mise/mise.ts";
@@ -38,6 +41,8 @@ export interface Facade {
   services: Services;
   testReports: TestReports;
   verifications: Verifications;
+  /** "Start my day": sync, the day report, and a new supervisor that reads it (ADR-70). */
+  dayStart: DayStart;
   /**
    * Opens a link from a README in the system (ADR-35): an `http` or `https` address checked by the `ExternalLink` schema.
    * It belongs to no module, because it concerns neither a repo nor the daemon's state.
@@ -50,16 +55,17 @@ export { runCopilotHook } from "./modules/agents/copilot-hook-command.ts";
 const WORKSPACE_FILE = "workspace.yaml";
 const RUNTIME_FILE = "runtime.json";
 const CARDS_DIR = "cards";
+const DAY_START_FILE = "day-start.json";
 const LOGS_DIR = "logs";
 /** The limit of one source JSONL file; with the previous file after rotation a source takes at most twice that. */
 const LOG_FILE_MAX_BYTES = 10 * 1024 * 1024;
 /** Service readiness (ADR-45): checks twice a second, and five minutes for a start, because Gradle and Maven compile first. */
-const SERVICE_TIMING = { intervalMs: 500, startupMs: 5 * 60 * 1000, settleMs: 500 };
+const SERVICE_TIMING = { intervalMs: 500, startupMs: 5 * 60 * 1000, settleMs: 500, releaseMs: SERVICE_RELEASE_MS };
 
 export interface FacadeOptions {
   /**
    * The daemon's state directory; it holds `workspace.yaml` (ADR-13), `runtime.json` (§4.1), `logs/` (§4.2) and repo cards
-   * (`cards/`, ADR-25).
+   * (`cards/`, ADR-25) and the last day start (`day-start.json`, ADR-70).
    */
   home: string;
   openUrl: (url: string) => void;
@@ -129,6 +135,13 @@ export function createFacade(o: FacadeOptions): Facade {
     onVerdict: (verification) => agents.verificationFinished(verification),
     log: o.log,
   });
+  const dayStart = new DayStart({
+    workspace,
+    agents,
+    vcs,
+    file: new DayStartFile(join(o.home, DAY_START_FILE), o.log),
+    log: o.log,
+  });
   return {
     workspace,
     repoWatch,
@@ -142,6 +155,7 @@ export function createFacade(o: FacadeOptions): Facade {
     services,
     testReports,
     verifications,
+    dayStart,
     openLink: o.openUrl,
   };
 }

@@ -26,6 +26,7 @@ export function makeAgents(
   home = mkdtempSync(join(tmpdir(), "trackwall-agents-")),
   projectsDir: string | null = null,
   toolPermissions: ToolPermissions = { allow: [], deny: [] },
+  env: NodeJS.ProcessEnv = process.env,
 ) {
   const procs = new ProcessGroups({
     logs: new Logs({ dir: join(home, "logs"), maxFileBytes: 1024 * 1024, log: () => {} }),
@@ -53,7 +54,7 @@ export function makeAgents(
     home,
     copilot: [process.execPath, fakeCopilot],
     version: "0.0.0-test",
-    env: async () => process.env,
+    env: async () => env,
     hookCommand: (event, hooksFile) => ({ exec: process.execPath, args: ["--no-env-file", daemonMain, "copilot-hook", event, hooksFile] }),
     sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
     openEditor: (dir) => opened.push(dir),

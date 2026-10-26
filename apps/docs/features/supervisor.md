@@ -28,7 +28,7 @@ The panel can be folded to a narrow strip at the right edge, which keeps a bell 
 ## Use it
 
 1. Set your projects folder in "Settings", if you have not yet.
-2. Press "Start supervisor" in the panel on the right (or Alt+0 to get there first).
+2. Press "Start supervisor" in the panel on the right (or Alt+0 to get there first), or "Start my day" to begin with a briefing (see [Start my day](/features/start-my-day)).
 3. Tell it what you want done.
 4. Review its proposals in "Sessions" or from "Delegated" in the panel, and start the ones you want.
 

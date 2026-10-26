@@ -32,7 +32,10 @@ export function memberLabel(member: SliceMember, current: Service | null): { ton
   return serviceStateLabel(service);
 }
 
-/** A service whose process group still runs: it has a Stop button, the rest a Start one. */
+/**
+ * A service not yet stopped or crashed: its process group still runs, or a stop still waits for its port to close (a
+ * Stop then checks again). It has a Stop button, the rest a Start one.
+ */
 export function isServiceLive(service: Service | null): boolean {
   return service !== null && service.state !== "stopped" && service.state !== "crashed";
 }
