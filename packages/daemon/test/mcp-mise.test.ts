@@ -4,9 +4,8 @@ import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
 import { agentsApi, ListRunningMiseTasksResult, LogTail, MiseTaskRunResult } from "@trackwall/protocol";
 import { z } from "zod";
-import { SESSION_TOKEN_HEADER } from "../src/mcp/endpoint.ts";
 import { waitFor } from "./support/agents.ts";
-import { connectHttpClient } from "./support/mcp-client.ts";
+import { connectHttpClient, connectSessionClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
 
 const TOKEN = "t".repeat(43);
@@ -124,8 +123,7 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
     "a session runs and stops mise tasks only of its own repo",
     async () => {
       const session = await daemon.facade.agents.start("warehouse");
-      const token = readFileSync(join(daemon.home, "sessions", session.id, "session-token"), "utf8");
-      const client = await connectHttpClient(daemon.api.port, TOKEN, undefined, { [SESSION_TOKEN_HEADER]: token });
+      const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session.id);
       clients.push(client);
 
       expect(errorText(await call(client, "run_mise_task", { repo: "shop", miseTask: "test" }))).toBe(
@@ -152,8 +150,7 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
       const sessions = daemon.facade.agents.sessions().sessions.filter((s) => s.task === own.id || s.task === other.id);
       const session = sessions.find((s) => s.task === own.id);
       if (!session) throw new Error("the task has no session");
-      const token = readFileSync(join(daemon.home, "sessions", session.id, "session-token"), "utf8");
-      const client = await connectHttpClient(daemon.api.port, TOKEN, undefined, { [SESSION_TOKEN_HEADER]: token });
+      const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session.id);
       clients.push(client);
 
       const started = MiseTaskRunResult.parse(
@@ -222,8 +219,7 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
     "the supervisor runs and stops no mise tasks or services: it works in no repo and proposes a task instead",
     async () => {
       const supervisor = await daemon.facade.agents.startSupervisor();
-      const token = readFileSync(join(daemon.home, "sessions", supervisor.id, "session-token"), "utf8");
-      const client = await connectHttpClient(daemon.api.port, TOKEN, undefined, { [SESSION_TOKEN_HEADER]: token });
+      const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, supervisor.id);
       clients.push(client);
 
       expect(errorText(await call(client, "run_mise_task", { repo: "warehouse", miseTask: "test" }))).toBe(

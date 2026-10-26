@@ -63,7 +63,7 @@ const TICK_MS = 200;
  */
 const MCP_CONFIG_FILE = "mcp-config.json";
 /** The session token in the session directory, which the session's stdio bridge reads and sends to the MCP server (ADR-39). */
-const SESSION_TOKEN_FILENAME = "session-token";
+export const SESSION_TOKEN_FILENAME = "session-token";
 /** The hook records the session plugin's hook processes append to (`HookTail` reads them). */
 const HOOKS_FILENAME = "hooks.jsonl";
 const SESSIONS_DIR = "sessions";

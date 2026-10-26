@@ -1,11 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { readFileSync, realpathSync } from "node:fs";
+import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
 import { CallEndpointResult, ListServicesResult, StartServiceResult, StopServiceResult } from "@trackwall/protocol";
 import { z } from "zod";
-import { SESSION_TOKEN_HEADER } from "../src/mcp/endpoint.ts";
-import { connectHttpClient } from "./support/mcp-client.ts";
+import { connectHttpClient, connectSessionClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
 
 const TOKEN = "t".repeat(43);
@@ -89,8 +88,7 @@ describe.skipIf(process.versions.bun === undefined)("services from a Trackwall s
     "a session starts and stops only the service of its own repo",
     async () => {
       const session = await daemon.facade.agents.start("warehouse");
-      const token = readFileSync(join(daemon.home, "sessions", session.id, "session-token"), "utf8");
-      const client = await connectHttpClient(daemon.api.port, TOKEN, undefined, { [SESSION_TOKEN_HEADER]: token });
+      const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session.id);
       clients.push(client);
 
       expect(errorText(await call(client, "start_service", { repo: "shop" }))).toBe(
@@ -108,8 +106,7 @@ describe.skipIf(process.versions.bun === undefined)("services from a Trackwall s
       const other = await daemon.facade.agents.createTask("warehouse", "another task");
       const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === own.id);
       if (!session) throw new Error("the task has no session");
-      const token = readFileSync(join(daemon.home, "sessions", session.id, "session-token"), "utf8");
-      const client = await connectHttpClient(daemon.api.port, TOKEN, undefined, { [SESSION_TOKEN_HEADER]: token });
+      const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session.id);
       clients.push(client);
 
       const { slice } = StartServiceResult.parse(

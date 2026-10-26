@@ -1,11 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
 import { GetSessionResult, VerifyTaskResult, verificationApi } from "@trackwall/protocol";
 import { z } from "zod";
-import { SESSION_TOKEN_HEADER } from "../src/mcp/endpoint.ts";
-import { connectHttpClient } from "./support/mcp-client.ts";
+import { connectHttpClient, connectSessionClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
 
 const TOKEN = "v".repeat(43);
@@ -65,8 +63,7 @@ function errorText(result: Awaited<ReturnType<typeof verify>>): string {
 async function sessionClient(task: string): Promise<{ client: Client; session: string }> {
   const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === task);
   if (!session) throw new Error("the task has no session");
-  const token = readFileSync(join(daemon.home, "sessions", session.id, "session-token"), "utf8");
-  const client = await connectHttpClient(daemon.api.port, TOKEN, undefined, { [SESSION_TOKEN_HEADER]: token });
+  const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session.id);
   clients.push(client);
   return { client, session: session.id };
 }
@@ -130,8 +127,7 @@ describe.skipIf(process.versions.bun === undefined)("verify_task (real worktree 
       );
 
       const supervisor = await daemon.facade.agents.startSupervisor();
-      const token = readFileSync(join(daemon.home, "sessions", supervisor.id, "session-token"), "utf8");
-      const asSupervisor = await connectHttpClient(daemon.api.port, TOKEN, undefined, { [SESSION_TOKEN_HEADER]: token });
+      const asSupervisor = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, supervisor.id);
       clients.push(asSupervisor);
       expect(errorText(await verify(asSupervisor, { repo: "warehouse", task: own.id }))).toBe(
         `bad_request: the supervisor runs no tests; read task ${own.id}'s verification with get_session, or ask its session to verify it`,

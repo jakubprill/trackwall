@@ -1,12 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import type { Client } from "@modelcontextprotocol/client";
 import { GetReviewCommentsResult } from "@trackwall/protocol";
 import { commitFiles } from "../test/support/git-repo.ts";
-import { connectSessionClient } from "../test/support/mcp-client.ts";
-import { sessionRow, startTrackwall, type Trackwall, typeInTerminal, waitForTerminal } from "./support/trackwall-ui.ts";
+import { sessionRow, showSessions, startTrackwall, type Trackwall, typeInTerminal, waitForTerminal } from "./support/trackwall-ui.ts";
 
-const TOKEN = "t".repeat(43);
 const FAKE_MISE = [process.execPath, join(import.meta.dir, "..", "test", "fixtures", "fake-mise.ts")];
 /** The fake mise's `test` (see `test/fixtures/fake-mise.ts`): one failed test in a JUnit report and exit code 1. */
 const SHOP_MISE = JSON.stringify({
@@ -20,11 +17,11 @@ const SHOP_MISE = JSON.stringify({
 });
 const PROMPT = "Fix the cart sum and say in the README how to run shop";
 
-let trackwall: Trackwall;
-const clients: Client[] = [];
+// Unset when the start failed, so `afterAll` stops only what started.
+let trackwall: Trackwall | undefined;
 
 beforeAll(async () => {
-  trackwall = await startTrackwall(TOKEN, {
+  trackwall = await startTrackwall({
     // What the fake mise writes stays out of the task's changes, as a build's output does in a real repo.
     repos: { shop: { "README.md": "# shop\n", "fake-mise.json": SHOP_MISE, ".gitignore": "target/\ncalls.log\n" } },
     miseCommand: FAKE_MISE,
@@ -32,15 +29,15 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const client of clients) await client.close();
-  await trackwall.stop();
+  await trackwall?.stop();
 }, 30_000);
 
 describe("an agent task, verified and reviewed", () => {
   test("the user creates a task, verifies it, comments on a line of its changes, and the agent gets the comment once its turn ends", async () => {
+    if (trackwall === undefined) throw new Error("Trackwall did not start");
     const { daemon } = trackwall;
     const page = await trackwall.open();
-    await page.keyboard.press("Control+3");
+    await showSessions(page);
     await page.getByRole("textbox", { name: "Prompt for the agent" }).fill(PROMPT);
     await page.getByRole("button", { name: "Create task" }).click();
     await waitForTerminal(page, `--interactive=${PROMPT}`);
@@ -72,8 +69,7 @@ describe("an agent task, verified and reviewed", () => {
 
     const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === task.id);
     if (session === undefined) throw new Error("the task has no session");
-    const agent = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session.id);
-    clients.push(agent);
+    const agent = await trackwall.agentOf(session.id);
     const read = GetReviewCommentsResult.parse((await agent.callTool({ name: "get_review_comments", arguments: {} })).structuredContent);
     expect(read.comments).toEqual([
       { path: "README.md", side: "new", line: 3, code: "Run it with `mise run dev`.", text: "Say which port it listens on." },

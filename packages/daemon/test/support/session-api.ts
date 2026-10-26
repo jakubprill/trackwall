@@ -17,7 +17,7 @@ import { makeRepo } from "./git-repo.ts";
 const fakeCopilot = join(import.meta.dir, "..", "fixtures", "fake-copilot-session.ts");
 
 /** Projects-folder repos and the `mise` program for a test that needs something other than the single repo `shop`. */
-interface SessionApiOptions {
+export interface SessionApiOptions {
   /** Repo name and its files in the first commit. */
   repos: Record<string, Record<string, string>>;
   miseCommand: readonly string[];
