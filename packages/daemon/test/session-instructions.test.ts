@@ -92,6 +92,20 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).toContain(MCP_INSTRUCTIONS);
   });
 
+  test("the supervisor proposes no task for a request outside one repo, and sends a follow-up to the running task instead of a new one (ADR-81)", () => {
+    const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
+    writeSessionInstructions(sessionDir, "0.5.0", { repo: null, changesCode: false });
+    const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
+    expect(text).toContain(
+      "Before you delegate, work out what the request changes. A task is a new git worktree of one repo on a new branch",
+    );
+    expect(text).toContain("it cannot remove, move or rename its repo, and must not touch other repos or the projects folder around them");
+    expect(text).toContain("Do not propose a task for such a request (removing a repo or a folder of the projects folder, for example)");
+    expect(text).toContain(
+      "Before you propose a task, read your tasks with list_sessions. A follow-up on the same topic in the same repo goes to its running task with send_message",
+    );
+  });
+
   test("a supervisor the user lets change code is told so, and still hands repo changes to tasks (ADR-78)", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
     writeSessionInstructions(sessionDir, "0.4.1", { repo: null, changesCode: true });
