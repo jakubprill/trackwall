@@ -6,9 +6,10 @@ import { sessionList, showSessions, startTrackwall, type Trackwall, waitForTermi
 // Unset when the start failed, so `afterAll` stops only what started.
 let trackwall: Trackwall | undefined;
 
+// A limit above the default 5 s: Chromium and the daemon start slowly on a Windows runner.
 beforeAll(async () => {
   trackwall = await startTrackwall();
-});
+}, 60_000);
 
 afterAll(async () => {
   await trackwall?.stop();

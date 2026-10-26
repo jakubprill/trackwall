@@ -7,7 +7,7 @@
  */
 import { fileURLToPath } from "node:url";
 import { copilotCli, copilotCliVersion } from "./copilot-cli.ts";
-import { runTestFiles } from "./test-files.ts";
+import { runTestFiles } from "./run-test-files.ts";
 
 const binary = await copilotCli();
 process.stdout.write(`Copilot CLI ${copilotCliVersion()}: ${binary}\n`);

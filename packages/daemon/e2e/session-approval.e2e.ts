@@ -4,9 +4,10 @@ import { sessionRow, showSessions, startTrackwall, type Trackwall, typeInTermina
 // Unset when the start failed, so `afterAll` stops only what started.
 let trackwall: Trackwall | undefined;
 
+// A limit above the default 5 s: Chromium and the daemon start slowly on a Windows runner.
 beforeAll(async () => {
   trackwall = await startTrackwall();
-});
+}, 60_000);
 
 afterAll(async () => {
   await trackwall?.stop();
@@ -29,7 +30,7 @@ describe("a session in a repo, answered from the tray panel", () => {
     await waiting.getByText("made-by-agent.txt").waitFor();
     await waiting.getByRole("button", { name: "Yes", exact: true }).click();
 
-    // The agent goes on and ends its turn. Playwright reports every page as focused, so the main window is in front
+    // The agent goes on and ends its turn (the fake goes on only after a key of a "Yes" option). Playwright reports every page as focused, so the main window is in front
     // and the session the user is looking at is idle, not waiting for them.
     await panel.getByText("Nothing is waiting for you.").waitFor();
     await sessionRow(page, "shop").getByText("idle", { exact: true }).waitFor();

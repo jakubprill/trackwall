@@ -20,13 +20,14 @@ const PROMPT = "Fix the cart sum and say in the README how to run shop";
 // Unset when the start failed, so `afterAll` stops only what started.
 let trackwall: Trackwall | undefined;
 
+// A limit above the default 5 s: Chromium and the daemon start slowly on a Windows runner.
 beforeAll(async () => {
   trackwall = await startTrackwall({
     // What the fake mise writes stays out of the task's changes, as a build's output does in a real repo.
     repos: { shop: { "README.md": "# shop\n", "fake-mise.json": SHOP_MISE, ".gitignore": "target/\ncalls.log\n" } },
     miseCommand: FAKE_MISE,
   });
-});
+}, 60_000);
 
 afterAll(async () => {
   await trackwall?.stop();
