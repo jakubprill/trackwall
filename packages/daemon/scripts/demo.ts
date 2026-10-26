@@ -13,11 +13,10 @@ import { arch, platform } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { EventHub } from "../src/api/event-hub.ts";
+import { sessionHookRequest } from "../src/api/hooks.ts";
 import { startApi } from "../src/api/server.ts";
 import { createFacade, HOSTING_CLIS } from "../src/facade.ts";
-import { COPILOT_HOOK_COMMAND } from "../src/infra/args.ts";
 import { newToken, writeDaemonFile } from "../src/infra/discovery.ts";
-import { selfCommand } from "../src/infra/self-command.ts";
 import { SHUTDOWN_SIGNALS, shutdownOnce, stopDaemon } from "../src/infra/shutdown.ts";
 import { userEnv } from "../src/infra/user-env.ts";
 import { createMcpEndpoint } from "../src/mcp/endpoint.ts";
@@ -49,7 +48,7 @@ const facade = createFacade({
   miseCommand: ["mise"],
   copilotCommand: [process.execPath, here("demo/copilot.ts")],
   version: VERSION,
-  hookCommand: (event, hooksFile) => selfCommand([COPILOT_HOOK_COMMAND, event, hooksFile]),
+  sessionHook: (event, sessionToken) => sessionHookRequest(api.port, token, event, sessionToken),
   sessionMcpCommand: (tokenFile) => sessionMcpStdioCommand(home, tokenFile),
   hostingClis: HOSTING_CLIS,
   userEnv,

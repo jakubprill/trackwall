@@ -4,12 +4,11 @@ import { join } from "node:path";
 import { ApiEnvelope, type Endpoint } from "@trackwall/protocol";
 import type { z } from "zod";
 import { EventHub } from "../../src/api/event-hub.ts";
+import { sessionHookRequest } from "../../src/api/hooks.ts";
 import { startApi } from "../../src/api/server.ts";
 import { createFacade, HOSTING_CLIS } from "../../src/facade.ts";
-import { COPILOT_HOOK_COMMAND } from "../../src/infra/args.ts";
 import { writeDaemonFile } from "../../src/infra/discovery.ts";
 import { loopbackRequest } from "../../src/infra/loopback.ts";
-import { selfCommand } from "../../src/infra/self-command.ts";
 import { createMcpEndpoint } from "../../src/mcp/endpoint.ts";
 import { sessionMcpStdioCommand } from "../../src/mcp/stdio-command.ts";
 import type { HostingClis } from "../../src/modules/vcs/hosting.ts";
@@ -61,7 +60,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
     miseCommand: options.miseCommand,
     copilotCommand: copilot.command,
     version: "0.0.0-test",
-    hookCommand: (event, hooksFile) => selfCommand([COPILOT_HOOK_COMMAND, event, hooksFile]),
+    sessionHook: (event, sessionToken) => sessionHookRequest(api.port, token, event, sessionToken),
     sessionMcpCommand: (tokenFile) => sessionMcpStdioCommand(home, tokenFile),
     hostingClis: options.hostingClis ?? HOSTING_CLIS,
     userEnv: async () => copilot.env({ home, projects }),

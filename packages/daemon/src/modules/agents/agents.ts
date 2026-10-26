@@ -26,8 +26,9 @@ import {
 } from "@trackwall/protocol";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { findCopilot } from "./copilot-command.ts";
-import type { CopilotHookEvent } from "./copilot-hook-record.ts";
-import { type HookCommand, writeCopilotPlugin } from "./copilot-plugin.ts";
+import { appendHookRecord } from "./copilot-hook-command.ts";
+import { CopilotHookEvent } from "./copilot-hook-record.ts";
+import { type HttpHook, writeCopilotPlugin } from "./copilot-plugin.ts";
 import { inboxPrompt } from "./inbox-prompt.ts";
 import { LiveSession, type SessionPty, type SessionWindow } from "./live-session.ts";
 import { proposedByOf, proposerKeyOf, SUPERVISOR } from "./proposer.ts";
@@ -65,9 +66,11 @@ const TICK_MS = 200;
 const MCP_CONFIG_FILE = "mcp-config.json";
 /** The session token in the session directory, which the session's stdio bridge reads and sends to the MCP server (ADR-39). */
 const SESSION_TOKEN_FILENAME = "session-token";
-/** The hook records the session plugin's hook processes append to (`HookTail` reads them). */
+/** The hook records of the hooks the session plugin POSTs to the daemon (ADR-88; `HookTail` reads them). */
 const HOOKS_FILENAME = "hooks.jsonl";
 const SESSIONS_DIR = "sessions";
+/** Without it Copilot CLI silently drops the session plugin's hooks, which POST to the daemon on `127.0.0.1` (ADR-88). */
+const LOOPBACK_HOOKS_ENV = { COPILOT_HOOK_ALLOW_LOCALHOST: "1" };
 const TASKS_FILE = "tasks.json";
 /** Where task worktrees went before ADR-84; tasks from then keep them there until they end. */
 const LEGACY_WORKTREES_DIR = "worktrees";
@@ -144,8 +147,11 @@ export interface AgentsDeps {
   version: string;
   /** The environment of user processes (`PATH` from the login shell on macOS). */
   env: () => Promise<NodeJS.ProcessEnv>;
-  /** The session plugin's hook program for an event: the daemon with the `copilot-hook` subcommand (without `cwd`, the module sets it). */
-  hookCommand: (event: CopilotHookEvent, hooksFile: string) => Omit<HookCommand, "cwd">;
+  /**
+   * Where the session plugin's hook for an event POSTs its payload (ADR-88): the daemon's hook route with the daemon token
+   * and the session token, which `receiveHook` takes; the API's port is known only once it listens.
+   */
+  sessionHook: (event: CopilotHookEvent, sessionToken: string) => Omit<HttpHook, "type">;
   /**
    * The stdio bridge to the daemon's MCP server (§5.3) with the session token file (ADR-39): every session gets the
    * `trackwall` server through `--additional-mcp-config`, and the server knows from the token which session is calling.
@@ -270,6 +276,20 @@ export class Agents {
   /** The session whose session token came from the stdio bridge; `undefined` for an unknown token. */
   callerSession(token: string): string | undefined {
     return this.#tokens.session(token);
+  }
+
+  /**
+   * A hook the plugin of the session with token `sessionToken` POSTed (ADR-88): its record goes to the session's
+   * `hooks.jsonl`, which the session reads as before, and the answer is the hook's output for Copilot CLI, today always
+   * empty (no decision). A payload that is not a JSON object leaves no record, like a broken hook.
+   */
+  receiveHook(sessionToken: string, event: string, payload: string): Record<string, never> {
+    const id = this.#tokens.session(sessionToken);
+    if (id === undefined) throw new DomainError("unauthorized", "unknown session token: this Trackwall session has ended");
+    const hook = CopilotHookEvent.safeParse(event);
+    if (!hook.success) throw new DomainError("not_found", `no hook ${event}`);
+    appendHookRecord(sessionHooksFile(this.#deps.home, id), hook.data, payload);
+    return {};
   }
 
   /** A task proposal from session `caller` (`null`: an agent outside Trackwall) in a repo from the projects folder (ADR-39). */
@@ -528,7 +548,7 @@ export class Agents {
    * `promptOnStart` when the arguments carry the first message (`--interactive`), so the session works from the start.
    */
   async #launch({ repo, cwd, task, args, promptOnStart }: LaunchSpec): Promise<Session> {
-    const env = { ...(await this.#deps.env()), TERM: "xterm-256color", COLORTERM: "truecolor" };
+    const env = { ...(await this.#deps.env()), TERM: "xterm-256color", COLORTERM: "truecolor", ...LOOPBACK_HOOKS_ENV };
     const [name = "copilot", ...prefix] = this.#deps.copilot;
     const program = findCopilot(name, env);
     if (!program) throw new DomainError("agent_unavailable", `Copilot CLI (${name}) not found in PATH`);
@@ -653,7 +673,7 @@ export class Agents {
     writeFileSync(tokenFile, token, { mode: 0o600 });
     const mcpConfig = copilotMcpServers(this.#deps.sessionMcpCommand(tokenFile));
     writeFileSync(join(dir, MCP_CONFIG_FILE), JSON.stringify(mcpConfig, null, 2));
-    writeCopilotPlugin(pluginDir, (event) => ({ ...this.#deps.hookCommand(event, hooksFile), cwd: pluginDir }));
+    writeCopilotPlugin(pluginDir, (event) => ({ type: "http", ...this.#deps.sessionHook(event, token) }));
     const instructionsDir = writeSessionInstructions(dir, this.#deps.version, role);
     if (instructionsDir === null)
       this.#deps.log(`session ${id} starts without Trackwall instructions: the session directory path has a comma`);

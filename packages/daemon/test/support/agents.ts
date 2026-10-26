@@ -11,12 +11,12 @@ import { RuntimeFile } from "../../src/modules/procs/runtime-file.ts";
 import { Vcs } from "../../src/modules/vcs/vcs.ts";
 import { groupPlatform } from "../../src/platform/group-platform.ts";
 import { terminalPlatform } from "../../src/platform/terminal.ts";
+import { hookServerFor } from "./hook-server.ts";
 
 const fakeCopilot = join(import.meta.dir, "..", "fixtures", "fake-copilot-session.ts");
-const daemonMain = join(import.meta.dir, "..", "..", "src", "main.ts");
 
 /**
- * Sessions with a real PTY, a process group, real git and hooks through the daemon's `copilot-hook` subcommand;
+ * Sessions with a real PTY, a process group, real git and the hooks POSTed to the daemon's hook route (ADR-88);
  * Copilot CLI is a fake. `repos` are the repos of the projects folder: identifier → directory. A `home` passed in
  * simulates a daemon restart with the same state directory. `projectsDir` is where the supervisor runs; `null` is an unset
  * projects folder. `toolPermissions` are the patterns every session gets from the workspace (ADR-66), and
@@ -40,7 +40,7 @@ export function makeAgents(
     log: () => {},
   });
   const opened: string[] = [];
-  const agents = new Agents({
+  const agents: Agents = new Agents({
     procs,
     repos: {
       repoPath: async (id) => {
@@ -62,7 +62,7 @@ export function makeAgents(
     copilot: [process.execPath, fakeCopilot],
     version: "0.0.0-test",
     env: async () => env,
-    hookCommand: (event, hooksFile) => ({ exec: process.execPath, args: ["--no-env-file", daemonMain, "copilot-hook", event, hooksFile] }),
+    sessionHook: hookServerFor(() => agents),
     sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
     openEditor: (dir) => opened.push(dir),
     log: () => {},

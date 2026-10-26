@@ -48,6 +48,7 @@ async function record(argv: string[]): Promise<number> {
   const pluginDir = join(out, "plugin");
   const script = fileURLToPath(import.meta.url);
   writeCopilotPlugin(pluginDir, (event) => ({
+    type: "command",
     exec: process.execPath,
     args: ["--no-env-file", script, "hook", event, hooksPath],
     cwd: pluginDir,
@@ -114,7 +115,7 @@ function replay(argv: string[]): void {
   printChanges(replayCopilotRecording(cast, { staleAfterMs: STALE_AFTER_MS }));
 }
 
-/** Called by Copilot CLI for every event; the same hook as in the daemon (`runCopilotHook`). */
+/** Called by Copilot CLI for every event; the same hook record as the daemon writes (`appendHookRecord`). */
 async function hook(argv: string[]): Promise<void> {
   const [event, log] = argv;
   runCopilotHook(event, log, await Bun.stdin.text());

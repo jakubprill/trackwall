@@ -53,7 +53,7 @@ export interface Facade {
   openLink: (url: string) => void;
 }
 
-export { runCopilotHook } from "./modules/agents/copilot-hook-command.ts";
+export type { CopilotHookEvent } from "./modules/agents/copilot-hook-record.ts";
 export { HOSTING_CLIS } from "./modules/vcs/hosting.ts";
 
 const WORKSPACE_FILE = "workspace.yaml";
@@ -80,8 +80,8 @@ export interface FacadeOptions {
   copilotCommand: readonly string[];
   /** The daemon's version (`VERSION`), given to every Copilot CLI session. */
   version: string;
-  /** The session plugin's hook program (`trackwall-daemon copilot-hook …` in the daemon). */
-  hookCommand: AgentsDeps["hookCommand"];
+  /** Where the session plugin's hooks POST to: this daemon's hook route (`sessionHookRequest`, ADR-88). */
+  sessionHook: AgentsDeps["sessionHook"];
   /** The Stdio bridge to this daemon's MCP server with the session token file (`sessionMcpStdioCommand`), for every Copilot CLI session. */
   sessionMcpCommand: AgentsDeps["sessionMcpCommand"];
   /** `gh` and `glab` for the repo hosts (`HOSTING_CLIS` in the daemon, a fake in tests). */
@@ -123,7 +123,7 @@ export function createFacade(o: FacadeOptions): Facade {
     copilot: o.copilotCommand,
     version: o.version,
     env: o.userEnv,
-    hookCommand: o.hookCommand,
+    sessionHook: o.sessionHook,
     sessionMcpCommand: o.sessionMcpCommand,
     openEditor,
     log: o.log,

@@ -15,8 +15,6 @@ export const USAGE = `trackwall-daemon [options]
 trackwall-daemon mcp-stdio [--home <dir>] [--session-token-file <file>]
                    stdio bridge to the MCP server of the running daemon (for Copilot CLI);
                    a Trackwall session passes the file with its session token
-trackwall-daemon copilot-hook <event> <hooks.jsonl>
-                   hook of the Copilot CLI session plugin (run by Copilot CLI, not by a person)
 
   --ui             open the UI in the default browser (mode without Tauri)
   --ui-dir <dir>   directory of the built UI (default: ./ui next to the binary)
@@ -81,22 +79,15 @@ export const MCP_STDIO_COMMAND = "mcp-stdio";
  */
 const SESSION_TOKEN_FILE_KEY = "session-token-file";
 export const SESSION_TOKEN_FILE_OPTION = `--${SESSION_TOKEN_FILE_KEY}`;
-/** The `trackwall-daemon` subcommand that Copilot CLI runs as the session plugin's hook (ADR-17, ADR-26). */
-export const COPILOT_HOOK_COMMAND = "copilot-hook";
-
 /**
- * The command line: the daemon, the Stdio bridge (`mcp-stdio [--home <dir>] [--session-token-file <file>]`), which has
- * only the state directory and the session token to set, or
- * the session plugin's hook (`copilot-hook <event> <hooks.jsonl>`).
+ * The command line: the daemon or the Stdio bridge (`mcp-stdio [--home <dir>] [--session-token-file <file>]`), which has
+ * only the state directory and the session token to set.
  */
 export type CommandLine =
   | { command: "daemon"; args: DaemonArgs }
-  | { command: typeof MCP_STDIO_COMMAND; home?: string; sessionTokenFile?: string }
-  | { command: typeof COPILOT_HOOK_COMMAND; event?: string; hooksFile?: string };
+  | { command: typeof MCP_STDIO_COMMAND; home?: string; sessionTokenFile?: string };
 
-/** The hook does not check arguments: a bad argument only means a missing record, and a hook must not stop the agent with an error. */
 export function parseCommandLine(argv: string[]): CommandLine {
-  if (argv[0] === COPILOT_HOOK_COMMAND) return { command: COPILOT_HOOK_COMMAND, event: argv[1], hooksFile: argv[2] };
   if (argv[0] !== MCP_STDIO_COMMAND) return { command: "daemon", args: parseDaemonArgs(argv) };
   const { values } = parseArgs({
     args: argv.slice(1),
