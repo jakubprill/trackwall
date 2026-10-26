@@ -28,6 +28,8 @@ describe("find_endpoint query (ADR-87)", () => {
     });
     expect(parseEndpointQuery("api/orders/42").segments).toEqual(["api", "orders", "42"]);
     expect(parseEndpointQuery("cancel order")).toEqual({ method: undefined, segments: undefined, words: ["cancel", "order"] });
+    // Before words a method name is a word: "get order status" must not drop the endpoints of other methods.
+    expect(parseEndpointQuery("get order status")).toEqual({ method: undefined, segments: undefined, words: ["get", "order", "status"] });
   });
 
   test("a whole concrete path matches the endpoint path, and its end too: without the context path or with a gateway prefix", () => {

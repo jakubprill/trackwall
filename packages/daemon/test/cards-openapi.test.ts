@@ -105,6 +105,11 @@ openApiGenerate {
     inputSpec.set("$rootDir/specs/orders-api.yaml")
 }`;
     expect(endpoints(card({ "build.gradle.kts": gradle, "specs/orders-api.yaml": ORDERS_SPEC }))).toEqual([]);
+    const throughFile = `openApiGenerate {
+    generatorName.set("java")
+    inputSpec.set(layout.projectDirectory.file("specs/orders-api.yaml").asFile.path)
+}`;
+    expect(endpoints(card({ "build.gradle.kts": throughFile, "specs/orders-api.yaml": ORDERS_SPEC }))).toEqual([]);
     // The same spec with a server generator describes this repo's API.
     expect(endpoints(card({ "pom.xml": pom("spring", "spring-boot", specFile), [specFile]: ORDERS_SPEC }))).toHaveLength(1);
   });
@@ -184,6 +189,35 @@ openApiGenerate {
     ).toEqual([true, true, true, false, false]);
     const c = card({ "contracts-v2/shop.yml": ORDERS_SPEC });
     expect(endpoints(c)).toEqual(["openapi GET /api/orders/{id} null null → null getOrder: null @contracts-v2/shop.yml:5"]);
+  });
+
+  test("a file of blank lines is checked for a spec key in linear time", () => {
+    const started = performance.now();
+    expect(mayBeSpec(`${"\n".repeat(1_000_000)}x`)).toBe(false);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  test("operations sharing an operationId describe the mapped endpoints by path, not by the first handler with that name", () => {
+    const spec = `openapi: 3.0.3
+paths:
+  /orders:
+    get:
+      operationId: list
+      summary: List orders
+  /users:
+    get:
+      operationId: list
+      summary: List users
+`;
+    const c = card({
+      "openapi.yaml": spec,
+      "src/main/java/a/Users.java": '@RestController class Users { @GetMapping("/users") List<User> list() {} }',
+      "src/main/java/a/Orders.java": '@RestController class Orders { @GetMapping("/orders") List<Order> list() {} }',
+    });
+    expect(c.provides.flatMap((p) => (p.kind === "endpoint" ? [`${p.source} ${p.path} ${p.operation?.summary}`] : [])).sort()).toEqual([
+      "code /orders List orders",
+      "code /users List users",
+    ]);
   });
 
   test("a frontend repo without a Java build keeps the specs of the backends it calls, so they give no endpoints", () => {

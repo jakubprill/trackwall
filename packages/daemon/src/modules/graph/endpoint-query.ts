@@ -1,4 +1,11 @@
-import { type EndpointMatch, HttpMethod, httpPathSegments, httpSegmentsMatch, type ProvidedEndpoint } from "@trackwall/protocol";
+import {
+  type EndpointMatch,
+  HttpMethod,
+  httpPathSegments,
+  httpSegmentsMatch,
+  httpUrlPath,
+  type ProvidedEndpoint,
+} from "@trackwall/protocol";
 import { isLiteral } from "./http-index.ts";
 
 /**
@@ -21,14 +28,14 @@ export interface EndpointQuery {
 /** The order of the match kinds, best first; results are sorted by it. */
 export const MATCH_ORDER: readonly EndpointMatch[] = ["path", "path-end", "text"];
 
-const ADDRESS = /^[a-z][a-z0-9+.-]{0,20}:\/\/[^/?#\s]*/i;
-
 export function parseEndpointQuery(text: string): EndpointQuery {
   const parts = text.trim().split(/\s+/);
-  const method = parts.length > 1 ? HttpMethod.safeParse(parts[0]?.toUpperCase()).data : undefined;
+  // A method only in front of a path or address: in words (`get order status`) "get" is a word, not a filter.
+  const [first = "", second = ""] = parts;
+  const method = parts.length === 2 && second.includes("/") ? HttpMethod.safeParse(first.toUpperCase()).data : undefined;
   const rest = method === undefined ? parts : parts.slice(1);
   const only = rest.length === 1 ? (rest[0] ?? "") : "";
-  const path = only.replace(ADDRESS, "").split(/[?#]/)[0] ?? "";
+  const path = httpUrlPath(only);
   const isPath = only.includes("/") && path !== "";
   return {
     method,

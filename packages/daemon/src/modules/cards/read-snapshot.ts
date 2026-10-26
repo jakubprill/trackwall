@@ -110,10 +110,11 @@ export async function readSnapshot(
       path: "",
       message: `the repo has ${wanted.length} build files; the card reads the first ${MAX_FILES}`,
     });
-  const searched = await searchFiles(vcs, dir, commit, files, documents, problems);
-  const requested = [
-    ...new Set([...wanted.slice(0, MAX_FILES), ...searched, ...(await searchFiles(vcs, dir, commit, files, sources, problems))]),
-  ];
+  const [searched, sourced] = await Promise.all([
+    searchFiles(vcs, dir, commit, files, documents, problems),
+    searchFiles(vcs, dir, commit, files, sources, problems),
+  ]);
+  const requested = [...new Set([...wanted.slice(0, MAX_FILES), ...searched, ...sourced])];
   const reader = new BudgetedReader(vcs, dir, commit);
   for (const path of await reader.read(requested))
     problems.push({ code: "files-not-read", path, message: `the file was not read within the ${MAX_READ_BYTES} B commit read limit` });

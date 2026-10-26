@@ -12,11 +12,10 @@ import { ConstantTable } from "./java-expr.ts";
 import { annotationNamed, parseJavaFile } from "./java-source.ts";
 import { generates, type SpecGeneration, specGenerations } from "./openapi-generators.ts";
 import { isSpecCandidate, mayBeSpec, type OpenApiSpec, readOpenApiSpec, type SpecOperation } from "./openapi-spec.ts";
-import { resolvePlaceholders } from "./placeholders.ts";
 import { baseName } from "./repo-path.ts";
 import type { RepoSnapshot } from "./snapshot.ts";
-import { isJvmSource } from "./spring.ts";
-import { type ModuleConfig, moduleOf, readSpringConfigs } from "./spring-config.ts";
+import { appOf, isJvmSource } from "./spring.ts";
+import { ModuleConfig, moduleOf, readSpringConfigs } from "./spring-config.ts";
 import { mappingOf, REQUEST_MAPPINGS } from "./spring-module.ts";
 
 /**
@@ -38,7 +37,7 @@ export interface OpenApiEndpoints {
 interface SpecTarget {
   app: string | null;
   contextPath: string;
-  config: ModuleConfig | undefined;
+  config: ModuleConfig;
 }
 
 interface ReadSpec {
@@ -61,21 +60,39 @@ export function withOpenApi(snapshot: RepoSnapshot, provides: readonly Provided[
   const added = new Map<string, ProvidedEndpoint>();
   for (const read of specs) {
     const target = specTarget(read.module, configs);
+    const ofApp = code.filter((e) => e.app === target.app);
     for (const op of read.spec.operations) {
-      const handler = handlers.handler(op.id, read.module);
-      const full = operationPath(read, target, op, handler);
-      const operation: OpenApiOperation = { id: op.id, summary: op.summary, evidence: { path: read.path, line: op.line } };
-      const mapped = code.find((e) => e.app === target.app && describes(op, full, e));
-      if (mapped) {
-        if (!described.has(mapped)) described.set(mapped, operation);
+      const placed = placeOperation(read, target, op, ofApp, handlers);
+      if (placed.kind === "mapped") {
+        if (!described.has(placed.mapped)) described.set(placed.mapped, placed.operation);
         continue;
       }
-      const key = `${target.app} ${op.method} ${full}`;
-      if (!added.has(key)) added.set(key, specEndpoint(op, full, target, operation, handler?.handler ?? null));
+      const key = `${target.app} ${op.method} ${placed.endpoint.path}`;
+      if (!added.has(key)) added.set(key, placed.endpoint);
     }
   }
   const withOperations = provides.map((p) => (p.kind === "endpoint" ? { ...p, operation: described.get(p) ?? p.operation } : p));
   return { provides: [...withOperations, ...added.values()], problems };
+}
+
+/** The mapped endpoint an operation describes, or the endpoint it becomes when the code maps none. */
+type Placed = { kind: "mapped"; mapped: ProvidedEndpoint; operation: OpenApiOperation } | { kind: "added"; endpoint: ProvidedEndpoint };
+
+function placeOperation(
+  read: ReadSpec,
+  target: SpecTarget,
+  op: SpecOperation,
+  ofApp: readonly ProvidedEndpoint[],
+  handlers: HandlerIndex,
+): Placed {
+  // With `interfaceOnly` the path depends on the handler's class mapping; otherwise the handler is needed only unmapped.
+  const pathHandler = read.generation?.interfaceOnly ? handlers.handler(op.id, read.module) : undefined;
+  const path = operationPath(read, target, op, pathHandler);
+  const operation: OpenApiOperation = { id: op.id, summary: op.summary, evidence: { path: read.path, line: op.line } };
+  const mapped = mappedEndpoint(op, path, ofApp);
+  if (mapped) return { kind: "mapped", mapped, operation };
+  const handler = pathHandler ?? handlers.handler(op.id, read.module);
+  return { kind: "added", endpoint: specEndpoint(op, path, target, operation, handler?.handler ?? null) };
 }
 
 /**
@@ -124,13 +141,10 @@ function readSpec(snapshot: RepoSnapshot, path: string, problems: CardProblem[])
  * repo's only app, when it has exactly one.
  */
 function specTarget(module: string, configs: ReadonlyMap<string, ModuleConfig>): SpecTarget {
-  const withApp = [...configs.values()].filter((c) => c.value("spring.application.name"));
-  const config = configs.get(module) ?? (withApp.length === 1 ? withApp[0] : undefined);
-  return {
-    app: config?.value("spring.application.name") || null,
-    contextPath: config?.value("server.servlet.context-path") ?? config?.value("spring.webflux.base-path") ?? "",
-    config,
-  };
+  const withApp = [...configs.values()].filter((c) => appOf(c).app !== null);
+  // Without a configuration, as in the Spring extractor, an empty one: `${key:default}` still gives the default.
+  const config = configs.get(module) ?? (withApp.length === 1 ? withApp[0] : undefined) ?? new ModuleConfig(module, []);
+  return { ...appOf(config), config };
 }
 
 /**
@@ -141,7 +155,7 @@ function specTarget(module: string, configs: ReadonlyMap<string, ModuleConfig>):
  */
 function operationPath(read: ReadSpec, target: SpecTarget, op: SpecOperation, handler: Handler | undefined): string {
   const { generation, spec } = read;
-  const resolve = (text: string) => resolvePlaceholders(text, (key) => target.config?.entry(key)).value;
+  const resolve = (text: string) => target.config.resolve(text).value;
   if (generation?.interfaceOnly) return joinHttpPath(target.contextPath, resolve(handler?.prefix ?? ""), op.path);
   if (generation === undefined) return withContextPath(target.contextPath, joinHttpPath(spec.basePath, op.path));
   const base = spec.title === null ? spec.basePath : resolve(`\${openapi.${methodName(spec.title)}.base-path:${spec.basePath}}`);
@@ -154,12 +168,22 @@ function withContextPath(contextPath: string, path: string): string {
   return context === "/" || path === context || path.startsWith(`${context}/`) ? path : joinHttpPath(context, path);
 }
 
-/** Whether the operation describes the endpoint mapped in the code: the same method and path, or a handler named like its id. */
-function describes(op: SpecOperation, path: string, endpoint: ProvidedEndpoint): boolean {
-  if (endpoint.method !== null && endpoint.method !== op.method) return false;
-  if (op.id !== null && endpoint.handler?.endsWith(`.${methodName(op.id)}`)) return true;
-  const a = httpPathSegments(path);
-  const b = httpPathSegments(endpoint.path);
+/**
+ * The endpoint mapped in the code that the operation describes: the one with the same method and path (variable names
+ * aside), else the only one whose handler is named like the `operationId` (the spec's base path may differ from the
+ * code's); `undefined` when none is, or several share a name (`list`, `get`), since a name alone cannot tell them apart.
+ */
+function mappedEndpoint(op: SpecOperation, path: string, endpoints: readonly ProvidedEndpoint[]): ProvidedEndpoint | undefined {
+  const candidates = endpoints.filter((e) => e.method === null || e.method === op.method);
+  const segments = httpPathSegments(path);
+  const byPath = candidates.find((e) => samePath(segments, httpPathSegments(e.path)));
+  if (byPath || op.id === null) return byPath;
+  const name = `.${methodName(op.id)}`;
+  const named = candidates.filter((e) => e.handler?.endsWith(name));
+  return named.length === 1 ? named[0] : undefined;
+}
+
+function samePath(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((s, i) => s === b[i] || (isVariable(s) && isVariable(b[i] ?? "")));
 }
 
@@ -201,8 +225,8 @@ export function methodName(operationId: string): string {
 
 /**
  * Controller methods without a mapping of their own, by name: a controller implementing a generated interface (the
- * mappings are in the interface) or a class implementing a generated `…ApiDelegate`. Read only when a spec has an
- * operation without a mapping in the code.
+ * mappings are in the interface) or a class implementing a generated `…ApiDelegate`. Read only when a spec needs a
+ * handler: an operation without a mapping in the code, or an `interfaceOnly` spec whose paths start with its controller's.
  */
 class HandlerIndex {
   private readonly snapshot: RepoSnapshot;
@@ -212,13 +236,14 @@ class HandlerIndex {
     this.snapshot = snapshot;
   }
 
-  /** The handler of the operation; `undefined` without an id, without such a method, or with several in the module. */
+  /**
+   * The handler of the operation in the spec's module; `undefined` without an id, without such a method, or with several.
+   * Another module's method would be another app's handler, and its reach would be looked up by the wrong class.
+   */
   handler(operationId: string | null, module: string): Handler | undefined {
     if (operationId === null) return undefined;
-    const all = this.index().get(methodName(operationId)) ?? [];
-    const inModule = all.filter((h) => h.module === module);
-    const candidates = inModule.length > 0 ? inModule : all;
-    return candidates.length === 1 ? candidates[0] : undefined;
+    const inModule = (this.index().get(methodName(operationId)) ?? []).filter((h) => h.module === module);
+    return inModule.length === 1 ? inModule[0] : undefined;
   }
 
   private index(): Map<string, Handler[]> {

@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { httpMethodMatches, httpPathMatches, joinHttpPath, parseHttpUrl, withoutCredentials } from "../src/http.ts";
+import { httpMethodMatches, httpPathMatches, httpUrlPath, joinHttpPath, parseHttpUrl, withoutCredentials } from "../src/http.ts";
 
 describe("HTTP addresses and paths", () => {
+  test("the path of an address loses the scheme, host, query and fragment, and a bare path only its query", () => {
+    expect(
+      ["https://gateway.example.com:8443/orders/api?x=1", "lb://orders/api", "//cdn.example.com/v1#top", "/api/v1?x", "http://host"].map(
+        httpUrlPath,
+      ),
+    ).toEqual(["/orders/api", "/api", "/v1", "/api/v1", ""]);
+  });
+
   test("an address splits into scheme, lowercase host, port and path without the query", () => {
     expect(parseHttpUrl("HTTP://Orders-API.shop.svc:8080/api/v1?x=1")).toEqual({
       scheme: "http",

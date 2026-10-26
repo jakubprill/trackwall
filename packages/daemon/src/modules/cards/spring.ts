@@ -77,8 +77,13 @@ export function extractSpring(snapshot: RepoSnapshot): SpringFacts {
 }
 
 function springModule(config: ModuleConfig, types: TypeIndex): SpringModule {
+  return { config, ...appOf(config), types };
+}
+
+/** The module's app name and context path (`server.servlet.context-path`, `spring.webflux.base-path`). */
+export function appOf(config: ModuleConfig): Pick<SpringModule, "app" | "contextPath"> {
   const contextPath = config.value("server.servlet.context-path") ?? config.value("spring.webflux.base-path") ?? "";
-  return { config, app: config.value("spring.application.name") || null, contextPath, types };
+  return { app: config.value("spring.application.name") || null, contextPath };
 }
 
 function providedApp(module: SpringModule): ProvidedApp | undefined {

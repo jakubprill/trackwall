@@ -284,6 +284,14 @@ export function lbAppName(url: string): string | null {
   return parsed?.scheme === "lb" ? parsed.host : null;
 }
 
+/**
+ * The path of an address without the scheme, host, query and fragment (`https://host:8080/api/v1?x=1` → `/api/v1`); text
+ * without a scheme and host is a path already and loses only its query (`/api?x` → `/api`).
+ */
+export function httpUrlPath(text: string): string {
+  return text.replace(/^([a-z][a-z0-9+.-]{0,20}:)?\/\/[^/?#\s]*/i, "").split(/[?#]/)[0] ?? "";
+}
+
 /** Paths joined into one, with one `/` between parts and without a query: `/api` + `orders/` + `/{id}` → `/api/orders/{id}`. */
 export function joinHttpPath(...parts: readonly string[]): string {
   const segments = parts.flatMap((p) => (p.split("?")[0] ?? "").split("/")).filter((s) => s !== "");

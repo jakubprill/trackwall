@@ -1,4 +1,4 @@
-import { type HttpMethod, joinHttpPath } from "@trackwall/protocol";
+import { type HttpMethod, httpUrlPath, joinHttpPath } from "@trackwall/protocol";
 import { isMap, isNode, isScalar, isSeq, LineCounter, type Node, parseDocument, type YAMLMap } from "yaml";
 import type { ContentSearch } from "./read-snapshot.ts";
 import { baseName, stemOf } from "./repo-path.ts";
@@ -46,7 +46,9 @@ const MAX_REF_HOPS = 3;
  * test in JavaScript, which skips other YAML files (`application.yml`) before parsing them.
  */
 const SPEC_KEY_ERE = '^(openapi|swagger)[[:space:]]*:|^[[:space:]]*[{]?[[:space:]]*"(openapi|swagger)"[[:space:]]*:';
-const SPEC_KEY = /^(openapi|swagger)\s*:|^\s*\{?\s*"(openapi|swagger)"\s*:/m;
+// Blanks within a line only (`[ \t]`, like git grep's line-bound `[[:space:]]`): `\s` with the `m` flag also crosses lines,
+// and a file of blank lines from the repo would backtrack for minutes (§8).
+const SPEC_KEY = /^(openapi|swagger)[ \t]*:|^[ \t]*\{?[ \t]*"(openapi|swagger)"[ \t]*:/m;
 const SPEC_GLOBS = ["*.yaml", "*.yml", "*.json"];
 /** At most this many spec candidates from the search: a repo keeps a few specs, more is generated or vendored. */
 const MAX_SPEC_FILES = 200;
@@ -126,8 +128,7 @@ function basePath(root: YAMLMap): string {
     const variable = isMap(variables) ? get(variables, name) : undefined;
     return (isMap(variable) ? scalarText(get(variable, "default")) : undefined) ?? whole;
   });
-  const withoutHost = url.replace(/^([a-z][a-z0-9+.-]{0,20}:)?\/\/[^/?#]*/i, "");
-  return withoutHost.split(/[?#]/)[0] ?? "";
+  return httpUrlPath(url);
 }
 
 class SpecReader {

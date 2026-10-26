@@ -31,7 +31,9 @@ const MAVEN_PLUGINS = new Set(["openapi-generator-maven-plugin", "swagger-codege
 const SPRING_CLIENT_LIBRARIES = new Set(["spring-cloud", "spring-http-interface"]);
 /** A Gradle block configuring generation: the plugin's extension or a task of its type. */
 const GRADLE_BLOCK = /\b(?:openApiGenerate|GenerateTask\b[^{}\n]{0,200})\s*\{/g;
-const GRADLE_SETTING = (name: string) => new RegExp(`\\b${name}\\b\\s*(?:\\.set\\s*\\(|=|\\()\\s*["']([^"'\\n]{1,500})["']`);
+/** A setting with a quoted value, also through `file("…")` or `layout.projectDirectory.file("…")`. */
+const GRADLE_SETTING = (name: string) =>
+  new RegExp(`\\b${name}\\b\\s*(?:\\.set\\s*\\(|=|\\()\\s*(?:[\\w.]{0,100}file\\(\\s*)?["']([^"'\\n]{1,500})["']`);
 /** `interfaceOnly` set to true in `configOptions`: `"interfaceOnly" to "true"` (Kotlin), `interfaceOnly: "true"` (Groovy). */
 const GRADLE_INTERFACE_ONLY = /\binterfaceOnly["']?\s*(?:to|:|=)\s*["']?true\b/;
 
