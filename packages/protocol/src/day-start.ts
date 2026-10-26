@@ -92,7 +92,8 @@ export type DayStartRun = z.infer<typeof DayStartRun>;
 
 /**
  * `dayStart` in `workspace.yaml`, by hand only: `prompt` is added to the day start's first message after Trackwall's own,
- * for what only the user knows (an issue tracker query, a group on the repo host), so it stays out of the repo (ADR-7). As long as a task's prompt, since both go into one `--interactive=` argument.
+ * for what only the user knows (an issue tracker query, a group on the repo host), so it stays out of the repo (ADR-7).
+ * As long as a task's prompt, since both go into one `--interactive=` argument.
  */
 export const DayStartSettings = z.object({ prompt: TaskPrompt }).strict();
 export type DayStartSettings = z.infer<typeof DayStartSettings>;

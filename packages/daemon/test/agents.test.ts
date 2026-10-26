@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agents } from "../src/modules/agents/agents.ts";
@@ -135,6 +135,29 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     expect(window.text()).toContain("Argument: --deny-tool=shell(git push)");
     window.attachment.detach();
     await agents.stop(started.id);
+  }, 60_000);
+
+  test("a session keeps the user's own MCP servers from $COPILOT_HOME/mcp-config.json next to Trackwall's (ADR-70)", async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
+    const copilotHome = mkdtempSync(join(tmpdir(), "trackwall-copilot-home-"));
+    writeFileSync(join(copilotHome, "mcp-config.json"), JSON.stringify({ mcpServers: { tracker: { command: "tracker-mcp" } } }));
+    const { agents, procs } = makeAgents({ shop: repoDir });
+    cleanups.push(() => procs.stopAll());
+
+    const before = process.env.COPILOT_HOME;
+    process.env.COPILOT_HOME = copilotHome;
+    try {
+      const started = await agents.start("shop");
+      const window = viewer(agents, started.id);
+      await waitFor(agents, started.id, () => window.text().includes("Welcome to the fake"), "screen image");
+
+      expect(window.text()).toContain("MCP: tracker, trackwall");
+      window.attachment.detach();
+      await agents.stop(started.id);
+    } finally {
+      if (before === undefined) delete process.env.COPILOT_HOME;
+      else process.env.COPILOT_HOME = before;
+    }
   }, 60_000);
 
   test("the supervisor starts in the projects folder, with no repo and the supervisor's instructions", async () => {

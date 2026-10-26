@@ -33,20 +33,20 @@ export async function remoteDefaultBranch(dir: string): Promise<BranchTip | null
 
 /** `ancestor` is in the history of `commit`; `false` also when `ancestor` is not in the repo (gone after a force push and `gc`). */
 export async function isAncestor(dir: string, ancestor: string, commit: string): Promise<boolean> {
-  if ((await revParse(dir, ancestor)) === undefined) return false;
+  if ((await existingCommit(dir, ancestor)) === undefined) return false;
   // Not `merge-base --is-ancestor`: it answers with its exit code, which the runner cannot tell from a git error.
   return (await count(dir, [`^${commit}`, ancestor])) === 0;
 }
 
 /** How many commits `to` has that `from` does not; `undefined` when `from` is not in the repo. */
 export async function countBetween(dir: string, from: string, to: string): Promise<number | undefined> {
-  if ((await revParse(dir, from)) === undefined) return undefined;
+  if ((await existingCommit(dir, from)) === undefined) return undefined;
   return count(dir, [`^${from}`, to]);
 }
 
 /** The commits `to` has that `from` does not, with the newest `limit` of them; `undefined` when `from` is not in the repo. */
 export async function commitsBetween(dir: string, from: string, to: string, limit: number): Promise<CommitRange | undefined> {
-  if ((await revParse(dir, from)) === undefined) return undefined;
+  if ((await existingCommit(dir, from)) === undefined) return undefined;
   const range = [`^${from}`, to];
   const [total, commits] = await Promise.all([count(dir, range), log(dir, range, limit)]);
   return { total, commits };
@@ -55,6 +55,15 @@ export async function commitsBetween(dir: string, from: string, to: string, limi
 /** The newest `limit` commits of `commit`'s history, newest first. */
 export function newestCommits(dir: string, commit: string, limit: number): Promise<Commit[]> {
   return log(dir, [commit], limit);
+}
+
+/**
+ * The commit `ref` names; `undefined` only when git says there is no such commit (`--verify --quiet` exits with 1).
+ * Unlike `revParse`, any other failure (a timeout, a broken repo) throws.
+ */
+async function existingCommit(dir: string, ref: string): Promise<string | undefined> {
+  const { stdout } = await git(dir, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], { okExitCodes: [1] });
+  return stdout.toString("utf8").trim() || undefined;
 }
 
 async function log(dir: string, range: readonly string[], limit: number): Promise<Commit[]> {

@@ -4,12 +4,18 @@
  * nothing but the runtime. Copilot CLI loads it from the user's `mcp-config.json`, next to Trackwall's server.
  */
 import { createInterface } from "node:readline";
+import { z } from "zod";
 
 export const USER_MCP_SERVER = "tracker";
 export const USER_MCP_TOOL = "list_issues";
 export const USER_MCP_ISSUES = "SHOP-12 Refunds are rounded wrongly";
 
-type Request = { id?: unknown; method?: string; params?: { protocolVersion?: string } };
+const Request = z.looseObject({
+  id: z.union([z.string(), z.number()]).optional(),
+  method: z.string().optional(),
+  params: z.looseObject({ protocolVersion: z.string().optional() }).optional(),
+});
+type Request = z.infer<typeof Request>;
 
 /** The answer's `result` or `error` member. */
 function answerOf(message: Request): { result: unknown } | { error: { code: number; message: string } } {
@@ -43,7 +49,7 @@ function answerOf(message: Request): { result: unknown } | { error: { code: numb
 }
 
 function answer(line: string): void {
-  const message: Request = JSON.parse(line);
+  const message = Request.parse(JSON.parse(line));
   // A notification has no id and gets no answer.
   if (message.id === undefined) return;
   process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: message.id, ...answerOf(message) })}\n`);

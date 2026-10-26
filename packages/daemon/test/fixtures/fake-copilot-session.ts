@@ -25,12 +25,12 @@ const fire = pluginHooks(process.argv, "s1");
  * MCP servers from the user's `$COPILOT_HOME/mcp-config.json` and then from `--additional-mcp-config @<file>`, which
  * adds to them, as in Copilot CLI (the contract test of ADR-70); the fake only prints their names.
  */
-const McpConfig = z.object({ mcpServers: z.record(z.string(), z.object({ command: z.string() })) });
+const McpConfig = z.object({ mcpServers: z.record(z.string(), z.unknown()) });
 const serversIn = (file: string) => Object.keys(McpConfig.parse(JSON.parse(readFileSync(file, "utf8"))).mcpServers);
-const userMcpConfig = process.env.COPILOT_HOME ? join(process.env.COPILOT_HOME, "mcp-config.json") : "";
+const userMcpConfig = process.env.COPILOT_HOME ? join(process.env.COPILOT_HOME, "mcp-config.json") : undefined;
 const mcpArg = process.argv[process.argv.indexOf("--additional-mcp-config") + 1] ?? "";
 const mcpServers = [
-  ...(userMcpConfig !== "" && existsSync(userMcpConfig) ? serversIn(userMcpConfig) : []),
+  ...(userMcpConfig !== undefined && existsSync(userMcpConfig) ? serversIn(userMcpConfig) : []),
   ...(mcpArg.startsWith("@") ? serversIn(mcpArg.slice(1)) : []),
 ];
 

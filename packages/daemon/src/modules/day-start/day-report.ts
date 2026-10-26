@@ -92,12 +92,11 @@ export async function dayReport(
     return { repo, remote, tip };
   });
   const tipOf = new Map(tips.map((entry) => [entry.repo.id, entry]));
-  const [repos, tasks] = await Promise.all([
-    mapLimit(tips, REPORT_CONCURRENCY, (entry) => repoEntry(vcs, input, entry, log)),
-    mapLimit(input.tasks, REPORT_CONCURRENCY, (task) => taskEntry(vcs, input.sessions, task, tipOf.get(task.repo), log)),
-  ]);
+  // One pass after the other, so no more than `REPORT_CONCURRENCY` git chains run at once.
+  const repos = await mapLimit(tips, REPORT_CONCURRENCY, (entry) => repoEntry(vcs, input, entry, log));
+  const tasks = await mapLimit(input.tasks, REPORT_CONCURRENCY, (task) => taskEntry(vcs, input.sessions, task, tipOf.get(task.repo), log));
   const heads: Record<string, string> = {};
-  for (const { head, repo } of repos) if (head !== undefined) heads[repo] = head;
+  for (const { head, root } of repos) if (head !== undefined) heads[root] = head;
   const entries = repos.map((r) => r.entry);
   return { report: { startedAt: input.startedAt, since: input.previous?.startedAt ?? null, ...quietCounted(entries), tasks }, heads };
 }
@@ -118,7 +117,7 @@ async function repoEntry(
   input: ReportInput,
   { repo, remote, tip }: RepoTip,
   log: (msg: string) => void,
-): Promise<{ entry: DayReportRepo; repo: string; head: string | undefined }> {
+): Promise<{ entry: DayReportRepo; root: string; head: string | undefined }> {
   // `Object.hasOwn`: a directory named like an `Object` property (`constructor`) is no saved commit.
   const previousHead = input.previous && Object.hasOwn(input.previous.heads, repo.path) ? input.previous.heads[repo.path] : undefined;
   const synced = input.sync.repos.find((r) => r.path === repo.path);
@@ -133,7 +132,7 @@ async function repoEntry(
       head = previousHead;
     }
   }
-  return { entry: { repo: repo.id, remote, remoteBranch: tip?.name ?? null, commits, sync }, repo: repo.path, head };
+  return { entry: { repo: repo.id, remote, remoteBranch: tip?.name ?? null, commits, sync }, root: repo.path, head };
 }
 
 /**
