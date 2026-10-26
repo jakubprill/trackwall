@@ -83,7 +83,7 @@ describe("a new session's state from its input box (ADR-69)", () => {
     const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program: null });
 
     expect(summary(session.hook(record("sessionStart")))).toEqual(["Input hook medium hook sessionStart"]);
-    expect(session.inPromptBox(() => [])).toBe(true);
+    expect(session.inPromptBox(() => box)).toBe(true);
   });
 
   test("before the first hook the session is in its input box only while the screen shows the empty box now", () => {
@@ -94,16 +94,19 @@ describe("a new session's state from its input box (ADR-69)", () => {
     expect(session.inPromptBox(() => withText)).toBe(false);
   });
 
-  test("after the first hook the hooks say whether the session is in its input box, whatever the screen shows", () => {
+  test("after the first hook the session is in its input box when the hooks say so and the screen shows the empty box", () => {
     const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program: null });
     session.promptTyped();
     session.hook(record("sessionStart"));
     expect(session.inPromptBox(() => box)).toBe(false);
     session.hook(record("agentStop"));
-    expect(session.inPromptBox(() => screen("dialog-shell-120"))).toBe(true);
+    // agentStop comes before Copilot CLI draws the input box again, and text typed in between is lost (ADR-68).
+    expect(session.inPromptBox(() => screen("prompt-box-working-120"))).toBe(false);
+    expect(session.inPromptBox(() => withText)).toBe(false);
+    expect(session.inPromptBox(() => box)).toBe(true);
     // A typed prompt after the first hook changes nothing, and a later sessionStart (`/clear`) leaves the input box.
     session.promptTyped();
     expect(summary(session.hook(record("sessionStart")))).toEqual(["Input hook medium hook sessionStart"]);
-    expect(session.inPromptBox(() => [])).toBe(true);
+    expect(session.inPromptBox(() => box)).toBe(true);
   });
 });

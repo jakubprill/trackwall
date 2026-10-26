@@ -155,6 +155,29 @@ function endTurn(session: LiveSession, hooksFile: string): void {
   session.tick();
 }
 
+/** The end of a turn as Copilot CLI shows it: `agentStop`, then the input box drawn again. */
+async function endTurnAtBox(session: LiveSession, hooksFile: string): Promise<void> {
+  endTurn(session, hooksFile);
+  await showScreen(session, PROMPT_BOX);
+}
+
+/** Copilot CLI draws `text` on the session's screen, and the daemon's next read cycle sees it. */
+async function showScreen(session: LiveSession, text: string): Promise<void> {
+  session.output(new TextEncoder().encode(text));
+  await screenProcessed(session);
+  session.tick();
+}
+
+/** Runs `step` with the clock `ms` later. */
+function later<T>(ms: number, step: () => T): T {
+  setSystemTime(new Date(Date.now() + ms));
+  try {
+    return step();
+  } finally {
+    setSystemTime();
+  }
+}
+
 describe("a prompt the daemon types into a session (a review, ADR-62, or a message or update, ADR-68)", () => {
   test("goes in only once the session waits for input, with Enter written separately after the text", async () => {
     const { session, hooksFile } = runningSession();
@@ -165,7 +188,7 @@ describe("a prompt the daemon types into a session (a review, ADR-62, or a messa
     expect(session.askToRead()).toBe("queued");
     expect(written).toEqual([]);
 
-    endTurn(session, hooksFile);
+    await endTurnAtBox(session, hooksFile);
     expect(written).toEqual(["read the review"]);
     await new Promise((r) => setTimeout(r, 200));
     expect(written).toEqual(["read the review", "\r"]);
@@ -187,23 +210,23 @@ describe("a prompt the daemon types into a session (a review, ADR-62, or a messa
     expect(session.view()?.state).toMatchObject({ state: "Working", reason: "hook sessionStart with a prompt" });
   });
 
-  test("a prompt a new session did not take holds back its waiting for you only for 5 s", async () => {
+  test("a prompt a new session does not take holds back its waiting for you only while the daemon tries again, 5 s each", async () => {
     const { session } = runningSession();
-    session.connect({ write: () => {}, resize: () => {} });
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
     session.output(new TextEncoder().encode(PROMPT_BOX));
     await screenProcessed(session);
     expect(session.askToRead()).toBe("typed");
     session.tick();
     expect(session.view()?.state).toBeNull();
 
-    setSystemTime(new Date(Date.now() + 6000));
-    try {
-      session.tick();
-    } finally {
-      setSystemTime();
-    }
+    later(6000, () => session.tick());
+    later(12_000, () => session.tick());
+    expect(session.view()?.state).toBeNull();
+    later(18_000, () => session.tick());
 
-    expect(session.view()?.state).toMatchObject({ state: "Input", source: "screen" });
+    expect(written.filter((data) => data !== "\r")).toEqual(["read the review", "read the review", "read the review"]);
+    expect(later(24_000, () => session.view()?.state)).toMatchObject({ state: "Input", source: "screen" });
   });
 
   test("waits in a new session whose screen does not show the input box yet", async () => {
@@ -234,11 +257,11 @@ describe("a prompt the daemon types into a session (a review, ADR-62, or a messa
     expect(written).toEqual([]);
   });
 
-  test("goes in at once while the session waits for input, and does not mark the end of the turn seen", () => {
+  test("goes in at once while the session waits for input, and does not mark the end of the turn seen", async () => {
     const { session, hooksFile } = runningSession();
     const written: string[] = [];
     session.connect({ write: (data) => written.push(data), resize: () => {} });
-    endTurn(session, hooksFile);
+    await endTurnAtBox(session, hooksFile);
 
     expect(session.askToRead()).toBe("typed");
 
@@ -246,11 +269,11 @@ describe("a prompt the daemon types into a session (a review, ADR-62, or a messa
     expect(session.view()?.needsAttention).toBe(true);
   });
 
-  test("is typed once: a second prompt before Copilot CLI takes the first changes nothing", () => {
+  test("is typed once: a second prompt before Copilot CLI takes the first changes nothing", async () => {
     const { session, hooksFile } = runningSession();
     const written: string[] = [];
     session.connect({ write: (data) => written.push(data), resize: () => {} });
-    endTurn(session, hooksFile);
+    await endTurnAtBox(session, hooksFile);
 
     expect(session.askToRead()).toBe("typed");
     expect(session.askToRead()).toBe("typed");
@@ -258,7 +281,7 @@ describe("a prompt the daemon types into a session (a review, ADR-62, or a messa
     expect(written).toEqual(["read the review"]);
   });
 
-  test("waits after an Esc and for a question dialog, which leave the session in Input but not in its input box", () => {
+  test("waits after an Esc and for a question dialog, which leave the session in Input but not in its input box", async () => {
     const { session, hooksFile } = runningSession();
     const written: string[] = [];
     session.connect({ write: (data) => written.push(data), resize: () => {} });
@@ -273,12 +296,12 @@ describe("a prompt the daemon types into a session (a review, ADR-62, or a messa
     session.tick();
     expect(written).toEqual(["\u001b"]);
 
-    endTurn(session, hooksFile);
+    await endTurnAtBox(session, hooksFile);
 
     expect(written).toEqual(["\u001b", "read the review"]);
   });
 
-  test("waits for a question dialog right after the start, which the state alone does not show", () => {
+  test("waits for a question dialog right after the start, which the state alone does not show", async () => {
     const { session, hooksFile } = runningSession();
     const written: string[] = [];
     session.connect({ write: (data) => written.push(data), resize: () => {} });
@@ -292,39 +315,110 @@ describe("a prompt the daemon types into a session (a review, ADR-62, or a messa
     expect(written).toEqual([]);
   });
 
-  test("waits while the user is typing a message of their own", () => {
+  test("waits while the user is typing a message of their own", async () => {
     const { session, hooksFile } = runningSession();
     const written: string[] = [];
     session.connect({ write: (data) => written.push(data), resize: () => {} });
-    endTurn(session, hooksFile);
+    await endTurnAtBox(session, hooksFile);
     session.input("also check the");
 
     expect(session.askToRead()).toBe("queued");
     expect(written).toEqual(["also check the"]);
   });
 
-  test("is typed again when the session has not taken it after 5 s", () => {
+  test("waits after agentStop until Copilot CLI draws the input box again, since text typed in between is lost", async () => {
     const { session, hooksFile } = runningSession();
     const written: string[] = [];
     session.connect({ write: (data) => written.push(data), resize: () => {} });
-    endTurn(session, hooksFile);
-    session.askToRead();
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+    expect(session.askToRead()).toBe("queued");
 
-    setSystemTime(new Date(Date.now() + 6000));
-    try {
-      expect(session.askToRead()).toBe("typed");
-    } finally {
-      setSystemTime();
-    }
+    endTurn(session, hooksFile);
+    expect(written).toEqual([]);
+
+    await showScreen(session, PROMPT_BOX);
+    expect(written).toEqual(["read the review"]);
+  });
+
+  test("is typed again when it was lost and the input box is still empty after 5 s", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    await endTurnAtBox(session, hooksFile);
+    expect(session.askToRead()).toBe("typed");
+    expect(session.askToRead()).toBe("typed");
+
+    later(6000, () => session.tick());
 
     expect(written).toEqual(["read the review", "read the review"]);
   });
 
-  test("a background shell finishing does not take the session out of its input box", () => {
+  test("gets Enter again when it still sits in the input box after 5 s, at most twice", async () => {
     const { session, hooksFile } = runningSession();
     const written: string[] = [];
     session.connect({ write: (data) => written.push(data), resize: () => {} });
-    endTurn(session, hooksFile);
+    await endTurnAtBox(session, hooksFile);
+    expect(session.askToRead()).toBe("typed");
+    await showScreen(session, "────\r\n❯ read the review\r\n────\r\n Interactive · / commands\r\n");
+    await new Promise((r) => setTimeout(r, 200));
+    expect(written).toEqual(["read the review", "\r"]);
+
+    later(6000, () => session.tick());
+    later(12_000, () => session.tick());
+    later(18_000, () => session.tick());
+
+    expect(written).toEqual(["read the review", "\r", "\r", "\r"]);
+  });
+
+  test("waits while Copilot CLI shows no input box, whatever the time", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    await endTurnAtBox(session, hooksFile);
+    session.askToRead();
+    await showScreen(session, "────\r\n❯ \r\n────\r\n ◉ Working · read the review\r\n");
+
+    later(6000, () => session.tick());
+
+    expect(written).toEqual(["read the review"]);
+  });
+
+  test("a draft the user cleared without sending holds the prompt back only until the input box stays empty for 2 s", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    await endTurnAtBox(session, hooksFile);
+    session.input("also check the");
+    session.input("\u0003");
+    expect(session.askToRead()).toBe("queued");
+    session.tick();
+    expect(written).toEqual(["also check the", "\u0003"]);
+
+    later(3000, () => session.tick());
+
+    expect(written).toEqual(["also check the", "\u0003", "read the review"]);
+  });
+
+  test("text the user is still typing holds the prompt back however long it stays in the input box", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    await endTurnAtBox(session, hooksFile);
+    session.input("also check the");
+    await showScreen(session, "────\r\n❯ also check the\r\n────\r\n Interactive · / commands\r\n");
+    expect(session.askToRead()).toBe("queued");
+
+    later(10_000, () => session.tick());
+
+    expect(written).toEqual(["also check the"]);
+  });
+
+  test("a background shell finishing does not take the session out of its input box", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    await endTurnAtBox(session, hooksFile);
     appendFileSync(
       hooksFile,
       `${JSON.stringify({ event: "notification", receivedAt: 0, payload: { notification_type: "shell_completed" }, omitted: [] })}\n`,
@@ -334,7 +428,7 @@ describe("a prompt the daemon types into a session (a review, ADR-62, or a messa
     expect(written).toEqual(["read the review"]);
   });
 
-  test("waits for text the user typed during the turn and has not sent, and for a turn that started again in the same read", () => {
+  test("waits for text the user typed during the turn and has not sent, and for a turn that started again in the same read", async () => {
     const { session, hooksFile } = runningSession();
     const written: string[] = [];
     session.connect({ write: (data) => written.push(data), resize: () => {} });
@@ -342,7 +436,7 @@ describe("a prompt the daemon types into a session (a review, ADR-62, or a messa
     session.tick();
     session.input("next, rename foo");
     session.askToRead();
-    endTurn(session, hooksFile);
+    await endTurnAtBox(session, hooksFile);
     expect(written).toEqual(["next, rename foo"]);
 
     for (const event of ["userPromptSubmitted", "agentStop", "userPromptSubmitted"])
@@ -352,12 +446,12 @@ describe("a prompt the daemon types into a session (a review, ADR-62, or a messa
     expect(written).toEqual(["next, rename foo"]);
   });
 
-  test("a request the typed prompt does not cover goes in after the turn that prompt starts, with the prompt read then", () => {
+  test("a request the typed prompt does not cover goes in after the turn that prompt starts, with the prompt read then", async () => {
     let waiting = "read the review";
     const { session, hooksFile } = runningSession(() => waiting);
     const written: string[] = [];
     session.connect({ write: (data) => written.push(data), resize: () => {} });
-    endTurn(session, hooksFile);
+    await endTurnAtBox(session, hooksFile);
     expect(session.askToRead()).toBe("typed");
 
     waiting = "read the review and the message";
@@ -365,12 +459,12 @@ describe("a prompt the daemon types into a session (a review, ADR-62, or a messa
     appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
     session.tick();
     waiting = "read the message";
-    endTurn(session, hooksFile);
+    await endTurnAtBox(session, hooksFile);
 
     expect(written).toEqual(["read the review", "read the message"]);
   });
 
-  test("types nothing when everything was read before the session got back to its input box", () => {
+  test("types nothing when everything was read before the session got back to its input box", async () => {
     let waiting: string | undefined = "read the message";
     const { session, hooksFile } = runningSession(() => waiting);
     const written: string[] = [];
@@ -380,7 +474,7 @@ describe("a prompt the daemon types into a session (a review, ADR-62, or a messa
     expect(session.askToRead()).toBe("queued");
 
     waiting = undefined;
-    endTurn(session, hooksFile);
+    await endTurnAtBox(session, hooksFile);
     waiting = "read the message";
     session.tick();
 
@@ -429,7 +523,7 @@ describe("text the user puts into a session (ADR-68)", () => {
     expect(session.view()?.state).toMatchObject({ state: "Working", source: "keyboard" });
 
     appendFileSync(hooksFile, `${JSON.stringify({ event: "postToolUse", receivedAt: 0, payload: {}, omitted: [] })}\n`);
-    endTurn(session, hooksFile);
+    await endTurnAtBox(session, hooksFile);
     expect(session.askToRead()).toBe("typed");
     expect(written).toEqual(["1", "read the review"]);
   });
@@ -480,10 +574,10 @@ describe("what the session's agent did, for its task's proposer (ADR-68)", () =>
     expect(events).toEqual([{ kind: "turn_ended" }, { kind: "turn_ended" }]);
   });
 
-  test("the turn the daemon's prompt starts is not the user's, even after an Esc that ended no turn", () => {
+  test("the turn the daemon's prompt starts is not the user's, even after an Esc that ended no turn", async () => {
     const { session, hooksFile, events } = runningSession();
     session.connect({ write: () => {}, resize: () => {} });
-    endTurn(session, hooksFile);
+    await endTurnAtBox(session, hooksFile);
     session.input("\u001b");
 
     expect(session.askToRead()).toBe("typed");

@@ -321,6 +321,47 @@ describe("a review of a task's changes with the real Copilot CLI (ADR-62)", () =
   });
 });
 
+describe("a prompt the daemon types into a working session with the real Copilot CLI (ADR-68)", () => {
+  test("a review sent while the agent works goes in after its turn, once Copilot CLI has drawn the input box again", async () => {
+    const { agents } = daemon.facade;
+    let taskId: string | undefined;
+    let delivery: string | undefined;
+    const review = { path: "README.md", side: "new" as const, line: 1, code: "# shop", text: "Mention the signup page" };
+    // The review goes out while Copilot CLI waits for the model's answer, so the turn is still running.
+    model.reply(
+      () => {
+        if (taskId === undefined) throw new Error("the task's first request came before the task was created");
+        delivery = agents.sendReview(taskId, [review]).delivery;
+        return { text: "Added the signup test." };
+      },
+      { text: "I will read the review." },
+    );
+    const task = await agents.createTask("shop", "add a signup test");
+    taskId = task.id;
+    const session = agents.sessions().sessions.find((s) => s.task === task.id);
+    if (session === undefined) throw new Error("the task has no session");
+
+    await waitFor(
+      agents,
+      session.id,
+      () => hookRecords(daemon.home, session.id).filter((r) => r.event === "agentStop").length >= 2,
+      "the turn the review starts",
+      SESSION_MS,
+    );
+
+    expect(delivery).toBe("queued");
+    expect(model.requests().at(-1)?.lastUserText).toContain("sent a review of your changes in Trackwall");
+    expect(hookRecords(daemon.home, session.id).map((r) => r.event)).toEqual([
+      "sessionStart",
+      "userPromptSubmitted",
+      "agentStop",
+      "userPromptSubmitted",
+      "agentStop",
+    ]);
+    await agents.stop(session.id);
+  });
+});
+
 describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
   /** Waits until session `id` has ended `turns` turns (its `agentStop` hook records). */
   const turnsEnded = (id: string, turns: number) =>
