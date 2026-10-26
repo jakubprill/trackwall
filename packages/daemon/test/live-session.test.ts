@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
-import { appendFileSync, mkdtempSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RunState } from "@trackwall/protocol";
@@ -407,6 +407,45 @@ describe("text the user puts into a session (ADR-68)", () => {
     session.input("\u001b[200~pasted\u001b[201~");
 
     expect(typedText.count).toBe(2);
+  });
+
+  test("an answer to an approval drawn before its hook is not the user's text, and the late hook does not ask again", async () => {
+    const { session, hooksFile, typedText } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+    const dialog = readFileSync(join(import.meta.dir, "fixtures", "copilot", "dialog-shell-72.txt"), "utf8");
+    session.output(new TextEncoder().encode(dialog.replaceAll("\n", "\r\n")));
+    await screenProcessed(session);
+
+    session.input("1");
+    expect(typedText.count).toBe(0);
+    appendFileSync(
+      hooksFile,
+      `${JSON.stringify({ event: "notification", receivedAt: 0, payload: { notification_type: "permission_prompt" }, omitted: [] })}\n`,
+    );
+    session.tick();
+    expect(session.view()?.state).toMatchObject({ state: "Working", source: "keyboard" });
+
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "postToolUse", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    endTurn(session, hooksFile);
+    expect(session.askToRead()).toBe("typed");
+    expect(written).toEqual(["1", "read the review"]);
+  });
+
+  test("Ctrl+C on an approval drawn before its hook still counts as the user's, as before", async () => {
+    const { session, hooksFile, typedText } = runningSession();
+    session.connect({ write: () => {}, resize: () => {} });
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+    const dialog = readFileSync(join(import.meta.dir, "fixtures", "copilot", "dialog-shell-72.txt"), "utf8");
+    session.output(new TextEncoder().encode(dialog.replaceAll("\n", "\r\n")));
+    await screenProcessed(session);
+
+    session.input("\u0003");
+
+    expect(typedText.count).toBe(1);
   });
 });
 
