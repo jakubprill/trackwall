@@ -3,8 +3,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { agentsApi } from "@trackwall/protocol";
 import { loopbackRequest } from "../src/infra/loopback.ts";
-import { sessionHooksFile, sessionTokenFile } from "../src/modules/agents/agents.ts";
+import { sessionHooksFile } from "../src/modules/agents/agents.ts";
 import { startSessionApi } from "./support/session-api.ts";
+import { sessionToken as tokenOf } from "./support/session-token.ts";
 
 const TOKEN = "h".repeat(43);
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
@@ -22,7 +23,7 @@ function postHook(path: string, headers: Record<string, string>, payload: unknow
 describe.skipIf(process.versions.bun === undefined)("session plugin hooks over HTTP (ADR-88)", () => {
   test("the plugin registers every hook as a POST to the daemon's hook route with the daemon token and the session token", async () => {
     const session = await daemon.post(agentsApi.start, { repo: "shop" });
-    const sessionToken = readFileSync(sessionTokenFile(daemon.home, session.id), "utf8");
+    const sessionToken = tokenOf(daemon.home, session.id);
 
     const hooksJson = JSON.parse(readFileSync(join(daemon.home, "sessions", session.id, "plugin", "hooks.json"), "utf8"));
 
@@ -48,7 +49,7 @@ describe.skipIf(process.versions.bun === undefined)("session plugin hooks over H
 
   test("a hook with both tokens appends its record to the session's hooks.jsonl and answers with an empty hook output", async () => {
     const session = await daemon.post(agentsApi.start, { repo: "shop" });
-    const sessionToken = readFileSync(sessionTokenFile(daemon.home, session.id), "utf8");
+    const sessionToken = tokenOf(daemon.home, session.id);
 
     const res = await postHook(
       "/hooks/agentStop",
@@ -70,7 +71,7 @@ describe.skipIf(process.versions.bun === undefined)("session plugin hooks over H
 
   test("a hook without the daemon token, with an unknown session token or for an unknown event is refused and leaves no record", async () => {
     const session = await daemon.post(agentsApi.start, { repo: "shop" });
-    const sessionToken = readFileSync(sessionTokenFile(daemon.home, session.id), "utf8");
+    const sessionToken = tokenOf(daemon.home, session.id);
     const payload = { sessionId: "s1", timestamp: 1, stopReason: "end_turn" };
 
     const noDaemonToken = await postHook("/hooks/agentStop", { "x-trackwall-session-token": sessionToken }, payload);

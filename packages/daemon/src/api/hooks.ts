@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { CopilotHookEvent } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
-import { SESSION_TOKEN_HEADER } from "../mcp/endpoint.ts";
+import { SESSION_TOKEN_HEADER, sessionRequest } from "../mcp/endpoint.ts";
 import { readBody } from "./body.ts";
 
 /**
@@ -17,10 +17,7 @@ const MAX_HOOK_BYTES = 32 * 1024 * 1024;
 
 /** What the session plugin's hook for `event` sends, for a daemon whose API listens on `port`. */
 export function sessionHookRequest(port: number, token: string, event: CopilotHookEvent, sessionToken: string) {
-  return {
-    url: `http://127.0.0.1:${port}${HOOKS_PATH}${event}`,
-    headers: { authorization: `Bearer ${token}`, [SESSION_TOKEN_HEADER]: sessionToken },
-  };
+  return sessionRequest(port, token, sessionToken, `${HOOKS_PATH}${event}`);
 }
 
 /** `/hooks/<event>` with the daemon token already checked; the answer is the bare hook output, not an `ApiResult`. */

@@ -1,17 +1,16 @@
-import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import type { Readable, Writable } from "node:stream";
 import { z } from "zod";
 import { readDaemonFile } from "../infra/discovery.ts";
 import { type LoopbackResponse, loopbackRequest } from "../infra/loopback.ts";
-import { MCP_PATH, SESSION_TOKEN_HEADER } from "./endpoint.ts";
+import { MCP_PATH } from "./endpoint.ts";
 
 /**
  * The stdio bridge (`trackwall-daemon mcp-stdio`, §5.3, ADR-24): an agent CLI starts it as a local MCP server, and the bridge
  * passes every JSON-RPC message from stdin to `/mcp` of the running daemon and the replies to stdout. It reads the port and
  * token from `daemon.json` on every message, so a daemon restart does not require changing the agent's configuration, and the token
- * never goes into it. In a Trackwall session it also adds the session token from the daemon's file (ADR-39), so that the MCP server
- * knows which session is calling. It knows nothing about the tools itself and does not start the daemon.
+ * never goes into it. It is for an agent outside Trackwall; the daemon's own sessions reach `/mcp` over HTTP with their session
+ * token (ADR-39, ADR-89). It knows nothing about the tools itself and does not start the daemon.
  */
 
 /**
@@ -44,8 +43,6 @@ const ApiErrorBody = z.object({ error: z.object({ message: z.string() }) });
 export interface StdioBridgeOptions {
   /** The daemon's state directory with `daemon.json`. */
   home: string;
-  /** The file with the Trackwall session token (`--session-token-file`); absent for an agent outside Trackwall. */
-  sessionTokenFile?: string;
   input: Readable;
   output: Writable;
   log: (msg: string) => void;
@@ -131,7 +128,6 @@ class DaemonUnavailable extends Error {}
 async function postToDaemon(line: string, o: StdioBridgeOptions, session: Session): Promise<unknown[]> {
   const daemon = readDaemonFile(o.home);
   if (!daemon) throw new DaemonUnavailable(`Trackwall is not running: no daemon.json in ${o.home}. Start the Trackwall app.`);
-  const sessionToken = o.sessionTokenFile === undefined ? undefined : readSessionToken(o.sessionTokenFile);
   let res: LoopbackResponse;
   try {
     res = await loopbackRequest(daemon.port, MCP_PATH, {
@@ -143,7 +139,6 @@ async function postToDaemon(line: string, o: StdioBridgeOptions, session: Sessio
         "content-type": "application/json",
         accept: "application/json, text/event-stream",
         ...(session.protocolVersion && { "mcp-protocol-version": session.protocolVersion }),
-        ...(sessionToken !== undefined && { [SESSION_TOKEN_HEADER]: sessionToken }),
       },
     });
   } catch (err) {
@@ -158,18 +153,6 @@ async function postToDaemon(line: string, o: StdioBridgeOptions, session: Sessio
     );
   }
   return messages;
-}
-
-/**
- * The session token on every message, like `daemon.json`: the file lies in the session directory, which the daemon removes with it.
- * Without the file the bridge does not send the request anonymously, because the session would then look like an agent outside Trackwall.
- */
-function readSessionToken(file: string): string {
-  try {
-    return readFileSync(file, "utf8").trim();
-  } catch (err) {
-    throw new DaemonUnavailable(`cannot read the Trackwall session token from ${file} (${String(err)}); this session has ended`);
-  }
 }
 
 /** The contents of the `data:` fields of every SSE stream event as JSON; events without data (keepalive) are skipped. */

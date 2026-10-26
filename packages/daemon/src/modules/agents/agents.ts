@@ -3,8 +3,9 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   type AgentTaskChanges,
-  copilotMcpServers,
+  copilotHttpMcpServers,
   type DialogAnswer,
+  type HttpEndpoint,
   isSupervisor,
   type ReviewComment,
   type RunState,
@@ -27,10 +28,11 @@ import {
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { findCopilot } from "./copilot-command.ts";
 import { CopilotHookEvent } from "./copilot-hook-record.ts";
-import { type HttpHook, writeCopilotPlugin } from "./copilot-plugin.ts";
+import { writeCopilotPlugin } from "./copilot-plugin.ts";
 import { appendHookRecord } from "./hook-tail.ts";
 import { inboxPrompt } from "./inbox-prompt.ts";
 import { LiveSession, type SessionPty, type SessionWindow } from "./live-session.ts";
+import { withLoopbackNoProxy } from "./no-proxy.ts";
 import { proposedByOf, proposerKeyOf, SUPERVISOR } from "./proposer.ts";
 import { type SessionRole, withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import { SessionTokens } from "./session-tokens.ts";
@@ -64,8 +66,6 @@ const TICK_MS = 200;
  * do not depend on argument quoting on Windows.
  */
 const MCP_CONFIG_FILE = "mcp-config.json";
-/** The session token in the session directory, which the session's stdio bridge reads and sends to the MCP server (ADR-39). */
-const SESSION_TOKEN_FILENAME = "session-token";
 /** The hook records of the hooks the session plugin POSTs to the daemon (ADR-88; `HookTail` reads them). */
 const HOOKS_FILENAME = "hooks.jsonl";
 const SESSIONS_DIR = "sessions";
@@ -80,9 +80,9 @@ function sessionDir(home: string, id: string): string {
   return join(home, SESSIONS_DIR, id);
 }
 
-/** A session's token file, which its stdio bridge reads (ADR-39). */
-export function sessionTokenFile(home: string, id: string): string {
-  return join(sessionDir(home, id), SESSION_TOKEN_FILENAME);
+/** A session's MCP configuration, which names the Trackwall server with the session's tokens (ADR-39, ADR-89). */
+export function sessionMcpConfigFile(home: string, id: string): string {
+  return join(sessionDir(home, id), MCP_CONFIG_FILE);
 }
 
 /** A session's `hooks.jsonl`. */
@@ -151,12 +151,13 @@ export interface AgentsDeps {
    * Where the session plugin's hook for an event POSTs its payload (ADR-88): the daemon's hook route with the daemon token
    * and the session token, which `receiveHook` takes; the API's port is known only once it listens.
    */
-  sessionHook: (event: CopilotHookEvent, sessionToken: string) => Omit<HttpHook, "type">;
+  sessionHook: (event: CopilotHookEvent, sessionToken: string) => HttpEndpoint;
   /**
-   * The stdio bridge to the daemon's MCP server (§5.3) with the session token file (ADR-39): every session gets the
-   * `trackwall` server through `--additional-mcp-config`, and the server knows from the token which session is calling.
+   * The daemon's MCP server (§5.3) over HTTP with the daemon token and the session token (ADR-39, ADR-89): every
+   * session gets the `trackwall` server through `--additional-mcp-config`, and the server knows from the token which
+   * session is calling.
    */
-  sessionMcpCommand: (tokenFile: string) => readonly string[];
+  sessionMcpServer: (sessionToken: string) => HttpEndpoint;
   /** Opens a directory in VS Code (a task's worktree). */
   openEditor: (dir: string) => void;
   log: (msg: string) => void;
@@ -273,7 +274,7 @@ export class Agents {
     return started;
   }
 
-  /** The session whose session token came from the stdio bridge; `undefined` for an unknown token. */
+  /** The session whose session token came with an MCP request; `undefined` for an unknown token. */
   callerSession(token: string): string | undefined {
     return this.#tokens.session(token);
   }
@@ -548,7 +549,8 @@ export class Agents {
    * `promptOnStart` when the arguments carry the first message (`--interactive`), so the session works from the start.
    */
   async #launch({ repo, cwd, task, args, promptOnStart }: LaunchSpec): Promise<Session> {
-    const env = { ...(await this.#deps.env()), TERM: "xterm-256color", COLORTERM: "truecolor", ...LOOPBACK_HOOKS_ENV };
+    // The MCP server and the hooks are the daemon on `127.0.0.1`, which a proxy of the user must not get (ADR-89).
+    const env = withLoopbackNoProxy({ ...(await this.#deps.env()), TERM: "xterm-256color", COLORTERM: "truecolor", ...LOOPBACK_HOOKS_ENV });
     const [name = "copilot", ...prefix] = this.#deps.copilot;
     const program = findCopilot(name, env);
     if (!program) throw new DomainError("agent_unavailable", `Copilot CLI (${name}) not found in PATH`);
@@ -660,19 +662,18 @@ export class Agents {
   }
 
   /**
-   * The session directory with the session plugin, MCP config, session token, session instructions and an empty
+   * The session directory with the session plugin, MCP config, session instructions and an empty
    * `hooks.jsonl`, before Copilot CLI starts.
    */
   #prepare({ id, role, task, dir, token, promptOnStart, program }: SessionFiles): PreparedSession {
     const { repo } = role;
     const pluginDir = join(dir, "plugin");
     const hooksFile = join(dir, HOOKS_FILENAME);
-    const tokenFile = join(dir, SESSION_TOKEN_FILENAME);
     mkdirSync(dir, { recursive: true });
     writeFileSync(hooksFile, "");
-    writeFileSync(tokenFile, token, { mode: 0o600 });
-    const mcpConfig = copilotMcpServers(this.#deps.sessionMcpCommand(tokenFile));
-    writeFileSync(join(dir, MCP_CONFIG_FILE), JSON.stringify(mcpConfig, null, 2));
+    // User-only: the server's headers carry the daemon token and the session token (§8).
+    const mcpConfig = copilotHttpMcpServers(this.#deps.sessionMcpServer(token));
+    writeFileSync(join(dir, MCP_CONFIG_FILE), JSON.stringify(mcpConfig, null, 2), { mode: 0o600 });
     writeCopilotPlugin(pluginDir, (event) => ({ type: "http", ...this.#deps.sessionHook(event, token) }));
     const instructionsDir = writeSessionInstructions(dir, this.#deps.version, role);
     if (instructionsDir === null)

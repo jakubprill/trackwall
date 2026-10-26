@@ -63,7 +63,7 @@ export function makeAgents(
     version: "0.0.0-test",
     env: async () => env,
     sessionHook: hookServerFor(() => agents),
-    sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
+    sessionMcpServer: (sessionToken) => ({ url: "http://127.0.0.1:9/mcp", headers: { "x-trackwall-session-token": sessionToken } }),
     openEditor: (dir) => opened.push(dir),
     log: () => {},
   });

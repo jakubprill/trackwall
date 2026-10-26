@@ -1,14 +1,13 @@
-import { readFileSync } from "node:fs";
 import { Client, StreamableHTTPClientTransport, type VersionNegotiationOptions } from "@modelcontextprotocol/client";
 import { WAIT_MAX_SECONDS } from "@trackwall/protocol";
 import { loopbackRequest } from "../../src/infra/loopback.ts";
 import { MCP_PATH, SESSION_TOKEN_HEADER } from "../../src/mcp/endpoint.ts";
-import { sessionTokenFile } from "../../src/modules/agents/agents.ts";
+import { sessionToken } from "./session-token.ts";
 
 /**
  * A real MCP client from the SDK (§10) connected over Streamable HTTP to the daemon on `port`. `fetch` goes through
  * `loopbackRequest`, because `fetch` in Bun routes 127.0.0.1 through `HTTP_PROXY` (AGENTS.md, Windows first). `headers`
- * adds headers to every request, e.g. the session token, which the Stdio bridge adds in a Trackwall session.
+ * adds headers to every request, e.g. the session token, which a Trackwall session's MCP entry carries.
  */
 export async function connectHttpClient(
   port: number,
@@ -50,10 +49,9 @@ function loopbackFetch(port: number) {
 }
 
 /**
- * The MCP client of a Trackwall session's agent, as its Stdio bridge connects: the daemon token and the session token
- * from the file in the session directory under `home`.
+ * The MCP client of a Trackwall session's agent, as its Copilot CLI connects: the daemon token and the session token
+ * from the session's MCP configuration under `home`.
  */
 export function connectSessionClient(port: number, token: string, home: string, session: string): Promise<Client> {
-  const sessionToken = readFileSync(sessionTokenFile(home, session), "utf8").trim();
-  return connectHttpClient(port, token, undefined, { [SESSION_TOKEN_HEADER]: sessionToken });
+  return connectHttpClient(port, token, undefined, { [SESSION_TOKEN_HEADER]: sessionToken(home, session) });
 }

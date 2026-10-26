@@ -14,9 +14,9 @@ import { SHUTDOWN_SIGNALS, shutdownOnce, stopDaemon } from "./infra/shutdown.ts"
 import { openBrowser, openFolder } from "./infra/system-open.ts";
 import { userEnv } from "./infra/user-env.ts";
 import { VERSION } from "./infra/version.ts";
-import { createMcpEndpoint } from "./mcp/endpoint.ts";
+import { createMcpEndpoint, sessionMcpRequest } from "./mcp/endpoint.ts";
 import { runStdioBridge } from "./mcp/stdio-bridge.ts";
-import { mcpStdioCommand, sessionMcpStdioCommand } from "./mcp/stdio-command.ts";
+import { mcpStdioCommand } from "./mcp/stdio-command.ts";
 import { runtimeInfo } from "./platform/runtime.ts";
 
 /** Exit codes read by Tauri. */
@@ -33,7 +33,7 @@ async function main(args: DaemonArgs): Promise<void> {
   let api: ApiServer | undefined;
   let facade: Facade | undefined;
   let stopWatching = () => {};
-  // Sessions start only through the API, so their hooks always have its port.
+  // Sessions start only through the API, so their hooks and MCP server always have its port.
   const apiPort = () => {
     if (!api) throw new Error("a session started before the API listens");
     return api.port;
@@ -56,7 +56,7 @@ async function main(args: DaemonArgs): Promise<void> {
       copilotCommand: ["copilot"],
       version: VERSION,
       sessionHook: (event, sessionToken) => sessionHookRequest(apiPort(), token, event, sessionToken),
-      sessionMcpCommand: (tokenFile) => sessionMcpStdioCommand(home, tokenFile),
+      sessionMcpServer: (sessionToken) => sessionMcpRequest(apiPort(), token, sessionToken),
       hostingClis: HOSTING_CLIS,
       userEnv,
       log,
@@ -150,7 +150,7 @@ try {
   process.exit(EXIT_USAGE);
 }
 if (commandLine.command === MCP_STDIO_COMMAND) {
-  runMcpStdio(trackwallHome(commandLine.home), commandLine.sessionTokenFile);
+  runMcpStdio(trackwallHome(commandLine.home));
 } else if (commandLine.args.help) {
   process.stdout.write(USAGE);
 } else if (commandLine.args.version) {
@@ -166,9 +166,9 @@ if (commandLine.command === MCP_STDIO_COMMAND) {
  * The Stdio bridge to the running daemon's MCP server. stdout belongs to the MCP protocol, so the bridge's messages go only to
  * stderr; the process ends by itself once stdout is drained (`process.exit` would cut off replies waiting in the pipe buffer).
  */
-function runMcpStdio(home: string, sessionTokenFile: string | undefined): void {
+function runMcpStdio(home: string): void {
   const log = (msg: string) => process.stderr.write(`[mcp-stdio] ${msg}\n`);
-  runStdioBridge({ home, sessionTokenFile, input: process.stdin, output: process.stdout, log }).catch((err: unknown) => {
+  runStdioBridge({ home, input: process.stdin, output: process.stdout, log }).catch((err: unknown) => {
     log(String(err));
     process.exitCode = 1;
   });

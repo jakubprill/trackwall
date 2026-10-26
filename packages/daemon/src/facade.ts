@@ -85,8 +85,8 @@ export interface FacadeOptions {
   version: string;
   /** Where the session plugin's hooks POST to: this daemon's hook route (`sessionHookRequest`, ADR-88). */
   sessionHook: AgentsDeps["sessionHook"];
-  /** The Stdio bridge to this daemon's MCP server with the session token file (`sessionMcpStdioCommand`), for every Copilot CLI session. */
-  sessionMcpCommand: AgentsDeps["sessionMcpCommand"];
+  /** This daemon's MCP server over HTTP with a session's tokens (`sessionMcpRequest`, ADR-89), for every Copilot CLI session. */
+  sessionMcpServer: AgentsDeps["sessionMcpServer"];
   /** `gh` and `glab` for the repo hosts (`HOSTING_CLIS` in the daemon, a fake in tests). */
   hostingClis: HostingClis;
   /** The environment of processes started for the user (`userEnv`). */
@@ -128,7 +128,7 @@ export function createFacade(o: FacadeOptions): Facade {
     version: o.version,
     env: o.userEnv,
     sessionHook: o.sessionHook,
-    sessionMcpCommand: o.sessionMcpCommand,
+    sessionMcpServer: o.sessionMcpServer,
     openEditor,
     log: o.log,
   });
