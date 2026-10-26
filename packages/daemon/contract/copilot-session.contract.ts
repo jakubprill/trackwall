@@ -32,11 +32,21 @@ afterEach(() => {
 });
 
 // The reference is checked last, after the sessions are stopped, so a difference does not leave Copilot CLI running;
-// a failure to stop is reported instead of it.
+// what was seen is printed even when stopping fails, whose error is then the one reported.
 afterAll(async () => {
-  await daemon.stop();
-  await model.close();
-  recorder.finish();
+  let stopError: unknown;
+  await daemon
+    .stop()
+    .then(() => model.close())
+    .catch((err: unknown) => {
+      stopError = err;
+    });
+  try {
+    recorder.finish();
+  } catch (err) {
+    throw stopError ?? err;
+  }
+  if (stopError !== undefined) throw stopError;
 });
 
 /** A tool of the Trackwall MCP server as Copilot CLI names it to the model: the server's key, a dash, the tool. */

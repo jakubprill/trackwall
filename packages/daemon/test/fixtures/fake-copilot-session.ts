@@ -13,7 +13,8 @@
 import { spawn } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { z } from "zod";
-import { readAgentDialog } from "../../src/modules/agents/copilot-dialog.ts";
+import { ESCAPE } from "../../src/modules/agents/copilot-keys.ts";
+import { stripAnsi } from "../../src/modules/logs/stream-lines.ts";
 import { PROMPT_PLACEHOLDER, type ReferenceHook, reference } from "../support/copilot-reference.ts";
 import { pluginHooks } from "../support/plugin-hooks.ts";
 
@@ -106,21 +107,17 @@ function approve(): void {
 }
 
 /**
- * Keys of the approval that run the command: its "Yes" options as the daemon reads them (on Windows only `1`, since a
- * PowerShell command has no "don't ask again"), and Enter on the selected first one.
+ * Keys of the approval that run the command: the digits of its "Yes" options (on Windows only `1`, since a PowerShell
+ * command has no "don't ask again"), and Enter on the selected first one. Read from the reference's text, not with the
+ * daemon's dialog reader, so that the fake does not agree with the daemon by construction.
  */
-const approvalDialog = readAgentDialog(real.approval.dialog, "approval");
-if (approvalDialog?.kind !== "approval") throw new Error("the reference's approval dialog does not read as one");
-const approvalOptions = approvalDialog.options;
-const APPROVE_KEYS = new Set(["\r", "\n", ...approvalOptions.filter((o) => o.label.startsWith("Yes")).map((o) => o.key)]);
+const APPROVE_KEYS = new Set(["\r", "\n", ...real.approval.dialog.flatMap((line) => /(\d)\. Yes\b/.exec(line)?.[1] ?? [])]);
+
 /**
- * Terminal input around typed text, not text: Esc and the sequences it starts, CSI (a bracketed paste's markers, a focus
- * report, arrow keys), OSC (a colour reply) and SS3 (arrow keys in application mode).
+ * Typed text without terminal input around it: CSI and OSC sequences (a bracketed paste's markers, a focus report, a
+ * colour reply) and Esc. A sequence split across two reads is not recognised, which the tests never send.
  */
-const ESC = String.fromCharCode(27);
-const BEL = String.fromCharCode(7);
-const TERMINAL_SEQUENCE = new RegExp(`${ESC}(?:\\[[0-?]*[ -/]*[@-~]|\\][^${BEL}${ESC}]*(?:${BEL}|${ESC}\\\\)|O.)?`, "g");
-const typedText = (chunk: Buffer) => chunk.toString("utf8").replace(TERMINAL_SEQUENCE, "");
+const typedText = (chunk: Buffer) => stripAnsi(chunk.toString("utf8")).replaceAll(ESCAPE, "");
 
 // Keys one by one, as Copilot CLI reads them: a digit answers the approval without Enter. A rejection ("No", Esc) is not
 // in the reference, so the fake keeps waiting for an approval.
