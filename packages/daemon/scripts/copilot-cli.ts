@@ -56,7 +56,10 @@ export async function copilotCli(): Promise<string> {
   const partial = `${binary}.partial`;
   writeFileSync(partial, file);
   chmodSync(partial, 0o755);
-  const check = spawnSync(partial, ["--version"], { encoding: "utf8" });
+  // Without COPILOT_AUTO_UPDATE=false the binary hands over to the newest Copilot CLI unpacked on this machine (in
+  // ~/.copilot/pkg or the system cache, by an installed Copilot CLI or a contract run on a newer version), as the
+  // sessions of the contract tests would without it too.
+  const check = spawnSync(partial, ["--version"], { encoding: "utf8", env: { ...process.env, COPILOT_AUTO_UPDATE: "false" } });
   if (check.error) throw new Error(`${name}: the downloaded binary does not start (${check.error.message})`);
   if (!check.stdout.includes(` ${version}.`)) {
     throw new Error(`${name} says it is "${check.stdout.trim()}" (exit ${check.status}, ${check.stderr.trim()}), not ${version}`);
