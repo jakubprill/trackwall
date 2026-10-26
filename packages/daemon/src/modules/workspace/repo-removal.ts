@@ -10,24 +10,34 @@ import { DomainError } from "../../infra/errors.ts";
  * makes sure nothing of Trackwall runs in the repo; a file another program holds open fails the rename on Windows.
  */
 
-/** Errors of a rename that some program still holds a file or the folder open (Windows), worth a clear message. */
-const HELD_OPEN = new Set(["EPERM", "EBUSY", "EACCES"]);
-
-export async function moveRepoOut(projectsDir: string, repoDir: string): Promise<string> {
+/**
+ * Moves `repoDir` into the removed repos folder and returns where it went. `beforeMove` runs right before the rename,
+ * after everything else is awaited, so its checks still hold when the folder moves.
+ */
+export async function moveRepoOut(projectsDir: string, repoDir: string, beforeMove: () => void): Promise<string> {
   const removedDir = join(projectsDir, REMOVED_REPOS_DIR);
   await mkdir(removedDir, { recursive: true });
   const target = await freeName(removedDir, basename(repoDir));
+  beforeMove();
   try {
     await rename(repoDir, target);
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code ?? "";
-    if (!HELD_OPEN.has(code)) throw err;
-    throw new DomainError(
-      "bad_request",
-      `${repoDir} could not be moved (${code}): a program holds a file in it open, such as an editor, a terminal or a build; close it and approve again`,
-    );
+    throw renameError(err, repoDir, process.platform);
   }
   return target;
+}
+
+/**
+ * On Windows a rename fails with `EBUSY` or `EPERM` while a program holds a file in the folder open, which the user can
+ * fix; any other error, and these on other systems (where they mean permissions), passes through as it is.
+ */
+export function renameError(err: unknown, repoDir: string, platform: NodeJS.Platform): unknown {
+  const code = (err as NodeJS.ErrnoException).code;
+  if (platform !== "win32" || (code !== "EBUSY" && code !== "EPERM")) return err;
+  return new DomainError(
+    "bad_request",
+    `${repoDir} could not be moved (${code}): a program holds a file in it open, such as an editor, a terminal or a build; close it and approve again`,
+  );
 }
 
 /** The repo's name, or with a numbered suffix when a repo of that name was removed before. */

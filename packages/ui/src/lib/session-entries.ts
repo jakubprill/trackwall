@@ -310,7 +310,9 @@ export function proposalKindLabel(proposal: TaskProposal): string {
 export function proposalsName(proposals: ProposalsEntry["proposals"]): string {
   return proposals.length === 1
     ? proposalName(proposals[0])
-    : countLabel(proposals.length, { one: "task proposal", other: "task proposals" });
+    : proposals.every((p) => p.kind === "task")
+      ? countLabel(proposals.length, { one: "task proposal", other: "task proposals" })
+      : countLabel(proposals.length, { one: "proposal", other: "proposals" });
 }
 
 /**

@@ -88,11 +88,14 @@ export function ProposalInbox({
           </Button>
         )}
       </div>
-      <p className="text-muted-foreground max-w-prose text-sm">
-        Nothing runs until you start a task. Trackwall then creates a new branch from the default branch of its repo in a separate worktree
-        and starts Copilot CLI there with the prompt. The prompts come from an agent, so read them before you start; you can edit them
-        {several ? ", and tick a proposal once you have opened it" : ""}.
-      </p>
+      {proposals.some((p) => p.kind === "task") && (
+        <p className="text-muted-foreground max-w-prose text-sm">
+          Nothing runs until you start a task. Trackwall then creates a new branch from the default branch of its repo in a separate
+          worktree and starts Copilot CLI there with the prompt. The prompts come from an agent, so read them before you start; you can edit
+          them
+          {several ? ", and tick a proposal once you have opened it" : ""}.
+        </p>
+      )}
       <ul aria-label="Task proposals" className="flex flex-col gap-2">
         {proposals.map((p) => {
           const expanded = shown === p.id;

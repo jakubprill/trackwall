@@ -115,7 +115,11 @@ interface AgentsRepos {
   /** `supervisor` from `workspace.yaml` (ADR-78); `invalid_config` for a bad key. */
   supervisorSettings(): SupervisorSettings;
   /** Moves the repo out of the projects folder (ADR-83) and returns where it went. */
-  removeRepo(id: string): Promise<string>;
+  /**
+   * Moves repo `id` out of the projects folder (ADR-83) while its folder is still `expectedDir`; `beforeMove` runs right
+   * before the move, with nothing awaited in between, so a check in it still holds when the folder moves.
+   */
+  removeRepo(id: string, expectedDir: string, beforeMove: () => void): Promise<string>;
 }
 
 export interface AgentsDeps {
@@ -158,6 +162,8 @@ export class Agents {
   readonly #tokens = new SessionTokens();
   readonly #tasks: AgentTasks;
   readonly #proposals = new TaskProposals();
+  /** The folder each waiting repo removal names, fixed when it was proposed: approval moves that folder or none (ADR-83). */
+  readonly #removalDirs = new Map<string, string>();
   readonly #reviews = new TaskReviews();
   readonly #coordination: TaskCoordination;
   readonly #worktreesDir: string;
@@ -274,14 +280,22 @@ export class Agents {
 
   /** A proposal to remove a repo from the projects folder (ADR-83), from session `caller` like a task proposal. */
   async proposeRepoRemoval(caller: string | null, repo: string, reason: string): Promise<TaskProposal> {
-    await this.#deps.repos.repoPath(repo);
-    return this.#proposals.add({
+    const session = caller === null ? null : this.session(caller);
+    if (session?.task != null)
+      throw new DomainError(
+        "bad_request",
+        "a task session works in its worktree and proposes no folder actions; tell your proposer instead",
+      );
+    const repoDir = await this.#deps.repos.repoPath(repo);
+    const proposal = this.#proposals.add({
       kind: "remove_repo",
       repo,
       title: `Remove ${repo} from the projects folder`,
       prompt: reason,
-      proposedBy: proposedByOf(caller === null ? null : this.session(caller)),
+      proposedBy: proposedByOf(session),
     });
+    this.#removalDirs.set(proposal.id, repoDir);
+    return proposal;
   }
 
   /**
@@ -302,23 +316,29 @@ export class Agents {
   /**
    * The user approves removing a repo (ADR-83). Refused while anything of the repo would lose its folder: a session in
    * it, a task (its worktree belongs to the repo's git directory) or a process started there. A refusal leaves the
-   * proposal waiting, so the user ends those and approves again.
+   * proposal waiting, so the user ends those and approves again. The other proposals for the repo are rejected with it,
+   * since they could no longer start.
    */
   async approveRepoRemoval(id: string): Promise<void> {
     const proposal = this.#proposals.get(id);
-    if (proposal.kind !== "remove_repo") throw new DomainError("bad_request", `proposal ${id} is not a repo removal`);
-    const repoDir = await this.#deps.repos.repoPath(proposal.repo);
+    const repoDir = this.#removalDirs.get(id);
+    if (proposal.kind !== "remove_repo" || repoDir === undefined)
+      throw new DomainError("bad_request", `proposal ${id} is not a repo removal`);
     this.#assertNothingRunsIn(proposal.repo, repoDir);
     this.#proposals.take(id);
     let movedTo: string;
     try {
-      movedTo = await this.#deps.repos.removeRepo(proposal.repo);
+      movedTo = await this.#deps.repos.removeRepo(proposal.repo, repoDir, () => this.#assertNothingRunsIn(proposal.repo, repoDir));
     } catch (err) {
       this.#proposals.release(id, true);
       throw err;
     }
     this.#proposals.release(id, false);
+    this.#removalDirs.delete(id);
     this.#coordination.repoRemoved(proposal, movedTo);
+    for (const other of this.#proposals.list())
+      if (other.repo === proposal.repo && this.#proposals.find(other.id))
+        this.rejectProposal(other.id, `${proposal.repo} was removed from the projects folder`);
   }
 
   #assertNothingRunsIn(repo: string, repoDir: string): void {
@@ -333,6 +353,7 @@ export class Agents {
   rejectProposal(id: string, reason: string | undefined): void {
     const proposal = this.#proposals.get(id);
     this.#proposals.reject(id, reason ?? null);
+    this.#removalDirs.delete(id);
     this.#coordination.proposalRejected(proposal, reason ?? null);
   }
 

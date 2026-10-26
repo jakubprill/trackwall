@@ -1,13 +1,18 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
 import { agentsApi, GetUpdatesResult, ProposeTaskResult, REMOVED_REPOS_DIR, workspaceApi } from "@trackwall/protocol";
 import { waitFor } from "./support/agents.ts";
+import { makeRepo } from "./support/git-repo.ts";
 import { connectHttpClient, connectSessionClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
 
 const TOKEN = "c".repeat(43);
+const FAKE_MISE = [process.execPath, join(import.meta.dir, "fixtures", "fake-mise.ts")];
+/** Fake mise config (see `fixtures/fake-mise.ts`): `dev` runs until stopped. */
+const MISE_CONFIG = JSON.stringify({ tasks: [{ name: "dev" }] });
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
 /** An agent outside Trackwall: only the daemon token, no session token. */
 let outside: Client;
@@ -21,8 +26,10 @@ beforeAll(async () => {
       docs: { "README.md": "# docs\n" },
       cart: { "README.md": "# cart\n" },
       old: { "README.md": "# old\n" },
+      billing: { "fake-mise.json": MISE_CONFIG },
+      legacy: { "README.md": "# legacy\n" },
     },
-    miseCommand: ["mise"],
+    miseCommand: FAKE_MISE,
   });
   outside = await connectHttpClient(daemon.api.port, TOKEN);
   clients.push(outside);
@@ -73,6 +80,17 @@ describe.skipIf(process.versions.bun === undefined)("removing a repo from the pr
   test("a repo with a task is not removed until the user ends the task, and the proposal keeps waiting", async () => {
     const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "add a test" });
     const proposal = await proposeRemoval(outside, "shop", "Archived");
+    const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === task.id);
+    if (!session) throw new Error("the task has no session");
+    await waitFor(daemon.facade.agents, session.id, (s) => s.state !== null, "the task's first state");
+    const taskClient = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session.id);
+    clients.push(taskClient);
+    const fromTask = await taskClient.callTool({
+      name: "propose_folder_action",
+      arguments: { action: "remove_repo", repo: "web", reason: "the README says so" },
+    });
+    expect(fromTask.isError).toBe(true);
+    expect(JSON.stringify(fromTask.content)).toContain("a task session works in its worktree and proposes no folder actions");
 
     await expect(daemon.post(agentsApi.approveRepoRemoval, { proposal: proposal.id })).rejects.toThrow(
       "end the tasks of shop first (1): their worktrees belong to the repo",
@@ -80,11 +98,7 @@ describe.skipIf(process.versions.bun === undefined)("removing a repo from the pr
     expect(existsSync(join(daemon.projects, "shop"))).toBe(true);
     expect(daemon.facade.agents.sessions().proposals.map((p) => p.id)).toContain(proposal.id);
 
-    const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === task.id);
-    if (session) {
-      await waitFor(daemon.facade.agents, session.id, (s) => s.state !== null, "the task's first state");
-      await daemon.facade.agents.stop(session.id);
-    }
+    await daemon.facade.agents.stop(session.id);
     await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
     await daemon.post(agentsApi.approveRepoRemoval, { proposal: proposal.id });
 
@@ -104,6 +118,31 @@ describe.skipIf(process.versions.bun === undefined)("removing a repo from the pr
     await daemon.post(agentsApi.approveRepoRemoval, { proposal: proposal.id });
     expect(existsSync(join(removedDir(), "cart"))).toBe(true);
   }, 30_000);
+
+  test("a repo with a mise task running in it is not removed until the mise task stops", async () => {
+    await outside.callTool({ name: "run_mise_task", arguments: { repo: "billing", miseTask: "dev" } });
+    const proposal = await proposeRemoval(outside, "billing", "Moved to another team");
+
+    await expect(daemon.post(agentsApi.approveRepoRemoval, { proposal: proposal.id })).rejects.toThrow(
+      "stop the mise tasks and services running in billing first",
+    );
+
+    await outside.callTool({ name: "stop_mise_task", arguments: { repo: "billing", miseTask: "dev" } });
+    await daemon.post(agentsApi.approveRepoRemoval, { proposal: proposal.id });
+    expect(existsSync(join(removedDir(), "billing", "fake-mise.json"))).toBe(true);
+  }, 30_000);
+
+  test("removing a repo rejects the other proposals for it, which could no longer start", async () => {
+    const removal = await proposeRemoval(outside, "legacy", "Unused");
+    const task = ProposeTaskResult.parse(
+      (await outside.callTool({ name: "propose_task", arguments: { repo: "legacy", title: "Fix", prompt: "fix" } })).structuredContent,
+    ).proposal;
+
+    await daemon.post(agentsApi.approveRepoRemoval, { proposal: removal.id });
+
+    expect(daemon.facade.agents.sessions().proposals.map((p) => p.id)).not.toContain(task.id);
+    await expect(daemon.post(agentsApi.approveProposal, { proposal: task.id, prompt: "fix" })).rejects.toThrow("no task proposal");
+  });
 
   test("a repo removed under a name already removed before gets a numbered folder", async () => {
     mkdirSync(join(removedDir(), "old"), { recursive: true });
@@ -130,5 +169,18 @@ describe.skipIf(process.versions.bun === undefined)("removing a repo from the pr
 
     await daemon.post(agentsApi.rejectProposal, { proposal: removal.id });
     await daemon.post(agentsApi.rejectProposal, { proposal: task.id });
+  });
+
+  test("a removal approved after the projects folder changed moves nothing, even when the new folder has a repo of that name", async () => {
+    const proposal = await proposeRemoval(outside, "web", "Not needed any more");
+    const other = mkdtempSync(join(tmpdir(), "trackwall-other-projects-"));
+    makeRepo({ "README.md": "# another web\n" }, "web", other);
+    await daemon.post(workspaceApi.setProjectsDir, { path: other });
+
+    await expect(daemon.post(agentsApi.approveRepoRemoval, { proposal: proposal.id })).rejects.toThrow(
+      "reject this proposal and propose the removal again",
+    );
+    expect(existsSync(join(other, "web", "README.md"))).toBe(true);
+    expect(existsSync(join(daemon.projects, "web", "README.md"))).toBe(true);
   });
 });

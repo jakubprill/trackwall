@@ -266,10 +266,20 @@ export class Workspace {
     return (await this.entry(id)).path;
   }
 
-  /** Moves the repo into the removed repos folder of the projects folder (ADR-83) and returns its new path. */
-  async removeRepo(id: string): Promise<string> {
+  /**
+   * Moves the repo into the removed repos folder of the projects folder (ADR-83) and returns its new path. Refused when
+   * the identifier now names another folder (the projects folder changed since the proposal) or a clone writes into it.
+   */
+  async removeRepo(id: string, expectedDir: string, beforeMove: () => void): Promise<string> {
     const entry = await this.entry(id);
-    return moveRepoOut(await this.projectsDir(), entry.path);
+    if (entry.path !== expectedDir)
+      throw new DomainError("bad_request", `${id} is no longer ${expectedDir}; reject this proposal and propose the removal again`);
+    const projectsDir = await this.projectsDir();
+    return moveRepoOut(projectsDir, entry.path, () => {
+      if (this.clones.runningInto(entry.path))
+        throw new DomainError("bad_request", `${id} is still being cloned; wait for the clone to end`);
+      beforeMove();
+    });
   }
 
   /** The projects folder itself, where the supervisor runs (ADR-58); `bad_request` while it is not set. */

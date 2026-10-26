@@ -4,6 +4,7 @@ import { stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import type { LogSource, LogStream, RunState } from "@trackwall/protocol";
 import { DomainError, SpawnFailure, spawnFailure } from "../../infra/errors.ts";
+import { isInside } from "../../infra/path-inside.ts";
 import { type GroupControl, type GroupLeader, type GroupPlatform, waitUntil } from "../../platform/process-group.ts";
 import type { TerminalPlatform, TerminalProcess } from "../../platform/terminal.ts";
 import type { RuntimeFile, RuntimeGroup } from "./runtime-file.ts";
@@ -162,11 +163,11 @@ export class ProcessGroups {
   }
 
   /**
-   * Some group not confirmed empty works in `dir` (its working directory, compared as given), e.g. a mise task in a task
-   * worktree that would lock the worktree's files on Windows (ADR-59).
+   * Some group not confirmed empty works in `dir` or a folder under it, e.g. a mise task in a task worktree that would
+   * lock the worktree's files on Windows (ADR-59), or a service in a repo the user removes (ADR-83).
    */
   liveIn(dir: string): boolean {
-    return [...this.groups.values()].some((group) => group.phase.kind !== "exited" && group.record.cwd === dir);
+    return [...this.groups.values()].some((group) => group.phase.kind !== "exited" && isInside(dir, group.record.cwd));
   }
 
   /**
