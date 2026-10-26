@@ -16,7 +16,7 @@ To check manually:
 
 ## Pre-PR review
 
-<!-- Rounds: thermo-nuclear, /code-review, mattpocock-skills:code-review. What was fixed, what was rejected and why. -->
+<!-- Thermo-nuclear review (a second round only if the fixes changed logic), /security-review if the change touches a sensitive place. What was fixed, what was rejected and why. -->
 
 ## Definition of done
 
@@ -27,4 +27,4 @@ To check manually:
 - [ ] 3. The commands from AGENTS.md pass locally
 - [ ] 4. Documentation updated in this PR
 - [ ] 5. Nothing company-specific
-- [ ] 6. Pre-PR review until a clean round or three rounds, with what is left described above
+- [ ] 6. Pre-PR review done (AGENTS.md, section "Pre-PR review"), findings fixed or rejected above
