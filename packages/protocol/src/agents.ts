@@ -185,7 +185,7 @@ export const Task = z.object({
   baseBranch: z.string().nullable(),
   /** The base commit: the task's changes are the difference between it and the worktree's working directory. */
   base: CommitHash,
-  /** Full path of the worktree in the state directory (`worktrees/<repo>/<branch without prefix>`). */
+  /** Full path of the worktree: `<task worktrees folder>/<repo>/<branch without prefix>` (ADR-84). */
   worktree: z.string(),
   /** ISO 8601. */
   createdAt: z.string(),
@@ -294,8 +294,6 @@ export const SessionList = z.object({
   proposals: z.array(TaskProposal),
   /** The messages kept for the tasks on the list (ADR-68), oldest first. */
   messages: z.array(TaskMessage),
-  /** The directory of task worktrees; the UI suggests it for Copilot CLI's trusted folders, because trust covers subdirectories. */
-  worktreesDir: z.string(),
 });
 export type SessionList = z.infer<typeof SessionList>;
 

@@ -193,7 +193,6 @@ export function SessionsView({
         {sessions.data && !current && (
           <NewSession
             conn={conn}
-            worktreesDir={sessions.data.worktreesDir}
             onStarted={(selection) => {
               onSelect(selection);
               sessions.reload();
@@ -681,12 +680,10 @@ function SessionPanel({
  */
 function NewSession({
   conn,
-  worktreesDir,
   onStarted,
   onCancel,
 }: {
   conn: Connection;
-  worktreesDir: string;
   onStarted: (selection: SessionSelection) => void;
   onCancel?: () => void;
 }) {
@@ -756,9 +753,9 @@ function NewSession({
             </div>
           )}
           <p className="text-muted-foreground max-w-prose text-xs">
-            Copilot CLI asks you to trust every new folder, including every worktree. To skip that prompt for each task, add{" "}
-            <span className="text-foreground font-mono">{worktreesDir}</span> to <span className="font-mono">trustedFolders</span> in{" "}
-            <span className="font-mono">~/.copilot/config.json</span>; trust covers subfolders.
+            Copilot CLI asks you to trust a folder before it works there. To skip that prompt for every repo and task, add{" "}
+            <span className="text-foreground font-mono">{repos.data.projectsDir}</span> to <span className="font-mono">trustedFolders</span>{" "}
+            in <span className="font-mono">~/.copilot/config.json</span>; trust covers its repos and their task worktrees.
           </p>
         </>
       )}

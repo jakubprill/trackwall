@@ -19,7 +19,7 @@ import { Slots } from "./slots.ts";
 const NO_REPO_COMMANDS = ["-c", "core.fsmonitor=false", "-c", "log.showSignature=false"];
 
 /**
- * On Windows, paths over 260 characters only with `core.longpaths`: task worktrees lie in the state directory (ADR-31), so
+ * On Windows, paths over 260 characters only with `core.longpaths`: task worktrees lie in the task worktrees folder (ADR-84), so
  * repo file paths are longer in them than in the projects folder. The key changes nothing outside Windows.
  */
 const PLATFORM_CONFIG = process.platform === "win32" ? ["-c", "core.longpaths=true"] : [];

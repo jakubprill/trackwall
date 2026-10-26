@@ -20,7 +20,8 @@ const daemonMain = join(import.meta.dir, "..", "..", "src", "main.ts");
  * Copilot CLI is a fake. `repos` are the repos of the projects folder: identifier → directory. A `home` passed in
  * simulates a daemon restart with the same state directory. `projectsDir` is where the supervisor runs; `null` is an unset
  * projects folder. `toolPermissions` are the patterns every session gets from the workspace (ADR-66), and
- * `supervisor` is `supervisor` from the workspace (ADR-78).
+ * `supervisor` is `supervisor` from the workspace (ADR-78). `worktreesDir` is the task worktrees folder the workspace gives
+ * new tasks (ADR-84); by default one in `home`, so that a restarted daemon with the same `home` finds the same folder.
  */
 export function makeAgents(
   repos: Record<string, string>,
@@ -29,6 +30,7 @@ export function makeAgents(
   toolPermissions: ToolPermissions = { allow: [], deny: [] },
   env: NodeJS.ProcessEnv = process.env,
   supervisor: SupervisorSettings = { changesCode: false },
+  worktreesDir: () => string = () => join(home, "task-worktrees"),
 ) {
   const procs = new ProcessGroups({
     logs: new Logs({ dir: join(home, "logs"), maxFileBytes: 1024 * 1024, log: () => {} }),
@@ -50,6 +52,7 @@ export function makeAgents(
         if (projectsDir === null) throw new DomainError("bad_request", "set the projects folder first");
         return projectsDir;
       },
+      worktreesDir: async () => worktreesDir(),
       toolPermissions: () => toolPermissions,
       supervisorSettings: () => supervisor,
       removeRepo: () => Promise.reject(new Error("unused")),

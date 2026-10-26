@@ -6,7 +6,7 @@ import { parseStatus } from "./parse.ts";
 import { pathKey } from "./path-key.ts";
 
 /**
- * Agent task worktrees (§4.4, ADR-31): the task branch in a separate working directory (in the daemon's state directory),
+ * Agent task worktrees (§4.4, ADR-31): the task branch in a separate working directory (in the task worktrees folder, ADR-84),
  * what it starts from, what would be lost on its removal, and the removal itself. Functions get directories; which repo
  * and which worktree is known to the `agents` module. `worktree-changes.ts` counts worktree changes.
  */
@@ -43,7 +43,7 @@ export async function defaultBase(dir: string): Promise<WorktreeBase> {
  * Git creates the branch before the checkout and leaves it when the checkout fails (a busy directory, a filter, the time limit),
  * so a failed attempt cleans up its branch and directory; otherwise a retry with the same branch (approving the same
  * task proposal, ADR-39) would always end in "already exists". A branch that existed before the attempt is left alone.
- * `path` must lie in the daemon's worktree directory, because it is deleted without asking git.
+ * `path` must lie in a task worktrees folder (ADR-84), because it is deleted without asking git.
  */
 export async function addWorktree(repoDir: string, path: string, branch: string, commit: string): Promise<void> {
   if ((await revParse(repoDir, `refs/heads/${branch}`)) !== undefined) throw new Error(`a branch named '${branch}' already exists`);
@@ -67,7 +67,7 @@ export async function addWorktree(repoDir: string, path: string, branch: string,
  * directory, like every unregistered one (`pendingWork` reports it), we delete ourselves, and `prune` clears the
  * registration of a directory removed by hand. Without the repo (moved, a disconnected drive) only the directory
  * deletion remains, and the moved repo's `prune` clears the registration there.
- * `path` must lie in the daemon's worktree directory, because it is deleted without asking git.
+ * `path` must lie in a task worktrees folder (ADR-84), because it is deleted without asking git.
  */
 export async function removeWorktree(repoDir: string, path: string): Promise<void> {
   const repo = existsSync(repoDir);
