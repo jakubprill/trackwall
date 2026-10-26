@@ -8,6 +8,8 @@ import { openDesktopWindow } from "./desktop-window.ts";
 import { UI_DIR } from "./ui-dir.ts";
 
 const VIEWPORT = { width: 1600, height: 1000 };
+/** A small screen: 1920×1080 at 150 % scaling, the window maximised, without the taskbar and the window's title bar. */
+export const SMALL_SCREEN = { width: 1280, height: 650 };
 const TRAY_PANEL_VIEWPORT = { width: 340, height: 420 };
 const TERMINAL_TIMEOUT_MS = 20_000;
 /** Above the 5 s default of a hook: Chromium and the daemon start slowly on a Windows runner. */
@@ -35,7 +37,7 @@ async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> = ONE_RE
   return {
     daemon,
     /** The main window as the Tauri shell opens it, on Home. */
-    open: () => openMainWindow(browser, origin, token),
+    open: (viewport = VIEWPORT) => openMainWindow(browser, origin, token, viewport),
     /** The main window as the Tauri shell shows it: under the window's origin and CSP, connected through the shell. */
     openDesktopWindow: (failingFiles?: RegExp) => openDesktopWindow(browser, { baseUrl: origin, token }, VIEWPORT, failingFiles),
     /** The tray panel (ADR-50): the same UI under `#tray-panel`, at the size of its window. */
@@ -90,8 +92,8 @@ async function signIn(page: Page, origin: string, token: string): Promise<void> 
  * CLI draws: the fake does not redraw when the terminal shrinks, as Copilot CLI does, and its approval dialog wrapped
  * over two rows is no dialog the daemon can read.
  */
-async function openMainWindow(browser: Browser, origin: string, token: string): Promise<Page> {
-  const page = await browser.newPage({ viewport: VIEWPORT, colorScheme: "dark" });
+async function openMainWindow(browser: Browser, origin: string, token: string, viewport: { width: number; height: number }): Promise<Page> {
+  const page = await browser.newPage({ viewport, colorScheme: "dark" });
   await signIn(page, origin, token);
   await page.getByRole("button", { name: "Fold the supervisor panel" }).click();
   return page;

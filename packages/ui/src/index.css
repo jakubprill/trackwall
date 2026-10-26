@@ -11,6 +11,8 @@
  * `--background` has its copy as ACRYLIC_TINT in apps/desktop/src-tauri/src/window_effect.rs.
  */
 :root {
+  /* Native controls follow the dark theme: without it WebView2 on Windows 10 draws white scroll bars in the dark panels. */
+  color-scheme: dark;
   --radius: 0.375rem;
   --background: oklch(0.141 0.005 285.823);
   --foreground: oklch(0.96 0.008 230);
@@ -70,8 +72,9 @@
   --tracking-hud: 0.12em;
   --spacing-activity-bar: 3rem;
   --spacing-sidebar: 18rem;
-  /* The pinned supervisor panel (ADR-58): wide enough for Copilot CLI's prompt and tables, about 80 terminal columns. */
-  --spacing-supervisor: 40rem;
+  /* The pinned supervisor panel (ADR-58): wide enough for Copilot CLI's prompt and tables, about 80 terminal columns;
+     on a small screen (1280 wide at 150%) narrower, so the view next to it keeps room for a task's terminal. */
+  --spacing-supervisor: min(40rem, 36vw);
   --shadow-glow-primary: 0 0 8px var(--primary);
   --shadow-glow-success: 0 0 6px var(--success);
   --shadow-glow-warning: 0 0 6px var(--warning);

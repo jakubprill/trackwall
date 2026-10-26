@@ -1,0 +1,14 @@
+ [Current]  Sessions   Issues   Pull requests   Gists
+
+│ │ }                                                                                            │ │
+│ ╰──────────────────────────────────────────────────────────────────────────────────────────────╯ │
+│                                                                                                  │
+│ Do you want to use this tool?                                                                    │
+│                                                                                                  │
+│ ❯ 1. Yes                                                                                         │
+│   2. Yes, and don't ask again for tool "verify_task" from "trackwall" in this repo               │
+│   (/projects/shop)                                                          │
+│   3. No, and tell Copilot what to do differently (Esc to stop)                                   │
+│                                                                                                  │
+│ ↑/↓ to navigate · enter to select · esc to cancel                                                │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
