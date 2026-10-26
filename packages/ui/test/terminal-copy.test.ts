@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { copiesSelection, keepsSelection } from "../src/lib/terminal-copy.ts";
+import { copiesSelection, keepsSelection, pastesClipboard } from "../src/lib/terminal-copy.ts";
 
 const ctrlC = { type: "keydown", key: "c", ctrlKey: true, altKey: false, metaKey: false };
+const ctrlV = { ...ctrlC, key: "v" };
 
 describe("copying from the session terminal", () => {
   test("on Windows Ctrl+C and Ctrl+Shift+C copy the selection, and Ctrl+C without a selection interrupts the session", () => {
@@ -13,6 +14,20 @@ describe("copying from the session terminal", () => {
 
   test("on macOS Ctrl+C stays an interrupt, because Cmd+C copies", () => {
     expect(copiesSelection(ctrlC, { mac: true, hasSelection: true })).toBe(false);
+  });
+});
+
+describe("pasting into the session terminal", () => {
+  test("outside macOS Ctrl+V and Ctrl+Shift+V paste the clipboard instead of sending Ctrl+V to the session", () => {
+    expect(pastesClipboard(ctrlV, { mac: false })).toBe(true);
+    expect(pastesClipboard({ ...ctrlV, key: "V" }, { mac: false })).toBe(true);
+    expect(pastesClipboard({ ...ctrlV, type: "keyup" }, { mac: false })).toBe(false);
+    expect(pastesClipboard({ ...ctrlV, altKey: true }, { mac: false })).toBe(false);
+    expect(pastesClipboard({ ...ctrlV, ctrlKey: false }, { mac: false })).toBe(false);
+  });
+
+  test("on macOS Ctrl+V stays a key for the session, because Cmd+V pastes", () => {
+    expect(pastesClipboard(ctrlV, { mac: true })).toBe(false);
   });
 });
 
