@@ -80,6 +80,10 @@ function replay(hooks: readonly ReferenceHook[], prompt = ""): HookOutputs {
   for (const { event, payload, omitted } of hooks) {
     const extra = event === "agentStop" ? { stop_hook_active: blockedTurn } : {};
     const fired = fire(event, { ...Object.fromEntries(omitted.map((name) => [name, values[name] ?? ""])), ...payload, ...extra });
+    for (const output of fired) {
+      const context = event === "postToolUse" ? ToolContext.safeParse(output) : undefined;
+      if (context?.success) process.stdout.write(`Tool result context: ${context.data.additionalContext}\r\n`);
+    }
     outputs.push(...fired.map((output) => ({ event, output })));
   }
   return outputs;
@@ -89,7 +93,7 @@ type HookOutputs = { event: string; output: Record<string, unknown> }[];
 
 /**
  * The hook outputs Copilot CLI acts on (ADR-85): an `agentStop` block starts a new turn with its reason as the user's
- * message, and `postToolUse` context goes to the model with the tool's result (the fake prints it).
+ * message, and `postToolUse` context goes to the model with the tool's result (the fake prints it when the hook answers).
  */
 const AgentStopBlock = z.object({ decision: z.literal("block"), reason: z.string() });
 const ToolContext = z.object({ additionalContext: z.string() });
@@ -145,10 +149,6 @@ function submit(line: string): void {
 
 /** Acts on the hook outputs of a turn's end: a block starts the next turn at once, without the input box. */
 function endTurn(outputs: HookOutputs): void {
-  for (const { event, output } of outputs) {
-    const context = event === "postToolUse" ? ToolContext.safeParse(output) : undefined;
-    if (context?.success) process.stdout.write(`Tool result context: ${context.data.additionalContext}\r\n`);
-  }
   const block = outputs.flatMap(({ event, output }) => {
     const parsed = event === "agentStop" ? AgentStopBlock.safeParse(output) : undefined;
     return parsed?.success ? [parsed.data.reason] : [];

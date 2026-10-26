@@ -1,5 +1,4 @@
-import { z } from "zod";
-import { jsonOf } from "./json.ts";
+import type { CopilotHookEvent } from "./copilot-hook-record.ts";
 
 /**
  * What the daemon answers a session hook with (ADR-85), the output types of Copilot CLI 1.0.103's SDK
@@ -9,15 +8,29 @@ import { jsonOf } from "./json.ts";
  */
 export type CopilotHookOutput = Record<string, never> | { decision: "block"; reason: string } | { additionalContext: string };
 
-/** The `agentStop` payload's mark that the turn it ends was started by an earlier block. */
-const AgentStopPayload = jsonOf(z.object({ stop_hook_active: z.boolean().optional() }));
+/** What a session knows when a hook comes, the hook's record already read. */
+export interface HookOutputInput {
+  event: CopilotHookEvent;
+  /** On `agentStop`: the turn it ends was itself started by a block (`stop_hook_active`). */
+  blockedTurn: boolean;
+  /** The prompt asked for (`askToRead`) and still unread, or `undefined`. */
+  prompt: string | undefined;
+  /** The prompt last given with a tool's result in this turn. */
+  contextGiven: string | undefined;
+  /** The input box may hold the user's unsent text. */
+  userDraft: boolean;
+}
 
 /**
- * Whether the turn an `agentStop` ends was itself started by a block: then the daemon does not block again, so an agent
- * that did not read what waits is not kept in a loop of turns (Copilot CLI stops one after about 8 blocks in a row), and
- * the typed prompt takes over.
+ * The hook output for what waits: with a tool's result once per turn and prompt, so the agent reads it before it ends
+ * the turn, and at the end of a turn as a block, which the agent gets even if it ignored the context. Not into the
+ * user's draft (the block would start a turn under it), and not at the end of a turn a block started, so an agent that
+ * does not read what waits is not kept in a loop of turns (Copilot CLI stops one after about 8 blocks in a row).
  */
-export function continuesBlockedTurn(payload: string): boolean {
-  const parsed = AgentStopPayload.safeParse(payload);
-  return parsed.success && parsed.data.stop_hook_active === true;
+export function hookOutputFor(input: HookOutputInput): CopilotHookOutput {
+  const { event, prompt } = input;
+  if (prompt === undefined) return {};
+  if (event === "postToolUse") return prompt === input.contextGiven ? {} : { additionalContext: prompt };
+  if (event === "agentStop" && !input.blockedTurn && !input.userDraft) return { decision: "block", reason: prompt };
+  return {};
 }
