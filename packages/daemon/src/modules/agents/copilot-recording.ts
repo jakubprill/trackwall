@@ -38,6 +38,12 @@ export interface ReplayOptions {
   staleAfterMs: number;
 }
 
+/**
+ * What a recording shows of an approval dialog: nothing, since it keeps no screen image. The recording script computes
+ * its states with it too, so they are the states its replay gives.
+ */
+export const NO_SCREEN = (): boolean => false;
+
 /** State changes in the order they appeared live; time counted from the recording's header. */
 export function replayCopilotRecording(cast: Asciicast, o: ReplayOptions): TaskStateChange[] {
   let now = eventTimeMs(cast.header, 0);
@@ -49,8 +55,7 @@ export function replayCopilotRecording(cast: Asciicast, o: ReplayOptions): TaskS
     if (code === "o") changes.push(...session.output(data));
     if (code !== "m") continue;
     const marker = decodeMarker(data);
-    // A recording keeps no screen image, so no approval dialog is seen on it.
-    if (marker?.kind === "hook") changes.push(...session.hook(marker.record, () => false));
+    if (marker?.kind === "hook") changes.push(...session.hook(marker.record, NO_SCREEN));
     if (marker?.kind === "key") changes.push(...session.key(marker.key));
     if (marker?.kind === "exit") changes.push(...session.exit(marker.code));
   }

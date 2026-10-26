@@ -75,6 +75,10 @@ if (firstHook?.event !== "sessionStart" || secondHook?.event !== "userPromptSubm
 }
 const startHook: ReferenceHook = firstHook;
 const promptHook: ReferenceHook = secondHook;
+/** The approved command's hook, which the first of two commands at once sends while the second dialog waits. */
+const approvedHook = real.approval.hooks[asked];
+if (approvedHook?.event !== "postToolUse") throw new Error("the approval turn of the reference has no postToolUse after the approval");
+const firstToolDone: ReferenceHook = approvedHook;
 
 /**
  * The second of two commands called at once: the reference's command with another file, in its approval request and
@@ -128,7 +132,7 @@ function approve(): void {
   awaitingApprovals--;
   if (awaitingApprovals > 0) {
     draw(real.approval.dialog.map(secondCommand));
-    replay(real.approval.hooks.slice(asked, asked + 1));
+    replay([firstToolDone]);
     return;
   }
   replay(real.approval.hooks.slice(asked));

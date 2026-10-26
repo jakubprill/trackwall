@@ -126,6 +126,12 @@ async function sessionShowing(name: string, notificationType: string, prompt: ()
   return { session, written, notify, hooksFile, typedText };
 }
 
+/** Copilot CLI clears the screen and draws `lines`, e.g. the next dialog in place of the answered one. */
+async function redraw(session: LiveSession, lines: readonly string[]): Promise<void> {
+  session.output(new TextEncoder().encode(`\u001b[2J\u001b[H${lines.join("\r\n")}`));
+  await screenProcessed(session);
+}
+
 function dialogError(answer: () => void): string | undefined {
   try {
     answer();
@@ -171,6 +177,10 @@ describe("answering an agent dialog from outside the terminal (ADR-66)", () => {
     const { session, written, notify } = await sessionShowing("shell-120", "permission_prompt");
     const first = session.view()?.dialog?.id ?? "";
     session.answerDialog(first, "1");
+    // Copilot CLI clears the dialog and runs the command, then draws the same request again.
+    await redraw(session, [" $ Shell Write a file", "   touch /src/app-outside/x.txt"]);
+    session.tick();
+    await redraw(session, screen("shell-120"));
     notify("permission_prompt");
 
     const again = session.view()?.dialog;
@@ -204,12 +214,6 @@ describe("answering an agent dialog from outside the terminal (ADR-66)", () => {
 });
 
 describe("approvals of tools the agent called at once (ADR-66)", () => {
-  /** Copilot CLI clears the answered dialog and draws the next one in its place. */
-  async function redraw(session: LiveSession, lines: readonly string[]): Promise<void> {
-    session.output(new TextEncoder().encode(`\u001b[2J\u001b[H${lines.join("\r\n")}`));
-    await screenProcessed(session);
-  }
-
   test("after the first answer the session waits for the second, whose dialog is shown once it is drawn", async () => {
     const { session, written, notify } = await sessionShowing("shell-120", "permission_prompt");
     notify("permission_prompt");
@@ -247,6 +251,49 @@ describe("approvals of tools the agent called at once (ADR-66)", () => {
     session.tick();
 
     expect(session.view()).toMatchObject({ state: { state: "Working", reason: "hook postToolUse" }, dialog: null });
+  });
+
+  test("the same command asked twice at once gets another id after the first answer, so a second click on the first types nothing", async () => {
+    const { session, written, notify } = await sessionShowing("shell-120", "permission_prompt");
+    notify("permission_prompt");
+    const first = session.view()?.dialog?.id ?? "";
+    session.answerDialog(first, "1");
+    await redraw(session, [" $ Shell Write a file"]);
+    session.tick();
+    await redraw(session, screen("shell-120"));
+
+    expect(session.view()?.dialog?.id).not.toBe(first);
+    expect(dialogError(() => session.answerDialog(first, "1"))).toBe("dialog_changed");
+    expect(written).toEqual(["1"]);
+  });
+
+  test("a digit the approval does not offer answers nothing, so the session still waits for both", async () => {
+    const { session, notify } = await sessionShowing("shell-120", "permission_prompt");
+    notify("permission_prompt");
+    const dialog = session.view()?.dialog;
+
+    session.input("9");
+    expect(session.view()).toMatchObject({ state: { state: "Approval" }, dialog: { id: dialog?.id } });
+    session.answerDialog(dialog?.id ?? "", "1");
+
+    expect(session.view()?.state).toMatchObject({ state: "Approval" });
+  });
+
+  test("two approvals answered before their hooks came are both answered when the hooks come (ADR-71)", async () => {
+    const { session, hooksFile, typedText, written } = await sessionShowing("shell-120", "agent_idle");
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+
+    session.input("1");
+    await redraw(session, screen("create-120"));
+    session.input("1");
+    const request = { event: "notification", receivedAt: 0, payload: { notification_type: "permission_prompt" }, omitted: [] };
+    appendFileSync(hooksFile, `${JSON.stringify(request)}\n${JSON.stringify(request)}\n`);
+    session.tick();
+
+    expect(session.view()?.state).toMatchObject({ state: "Working", source: "keyboard" });
+    expect(typedText.count).toBe(0);
+    expect(written).toEqual(["1", "1"]);
   });
 });
 

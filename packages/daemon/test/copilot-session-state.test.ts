@@ -50,4 +50,13 @@ describe("approvals of tools the agent called at once (ADR-66)", () => {
 
     expect(states(session.key("choice"))).toEqual(["Working key choice"]);
   });
+
+  test("a refusal of the first of two approval requests that cancels the turn ends waiting, although no hook comes", () => {
+    const session = sessionInTurn();
+    session.hook(approvalRequest, noDialog);
+    session.hook(approvalRequest, noDialog);
+    expect(session.key("enter")).toEqual([]);
+
+    expect(states(session.output("\u25cf Operation cancelled by user\r\n"))).toEqual(["Input screen operation cancelled"]);
+  });
 });
