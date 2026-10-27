@@ -10,6 +10,7 @@ mod badge;
 mod clipboard;
 mod daemon;
 mod daemon_state;
+mod error_journal;
 mod folder_picker;
 mod global_shortcut;
 mod json_file;
@@ -99,7 +100,11 @@ fn main() {
         std::process::exit(1);
     }
 
-    let state = Arc::new(DaemonState::new(daemon::trackwall_home()));
+    let home = daemon::trackwall_home();
+    if let Ok(home) = &home {
+        error_journal::init(home);
+    }
+    let state = Arc::new(DaemonState::new(home));
     let builder = tauri::Builder::default();
     // Launching trackwall.exe again shows the existing window instead of a second shell and a second tray icon.
     // Only in a release: the instance id is shared, and `tauri dev` has to run next to the installed app.
@@ -232,7 +237,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<TrayIcons> {
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
                     if let Err(err) = windows::open(&app, None) {
-                        eprintln!("[desktop] opening a window: {err}");
+                        crate::report_error!("opening a window: {err}");
                     }
                 });
             }

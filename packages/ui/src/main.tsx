@@ -7,12 +7,14 @@ import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import { ErrorWithRetry } from "./components/ErrorWithRetry.tsx";
 import "./index.css";
 import { isTrayPanel } from "./lib/tray-panel.ts";
+import { reportUiErrors } from "./lib/ui-error-report.ts";
 import { TrayPanel } from "./views/tray-panel/TrayPanel.tsx";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root in index.html");
+const trayPanel = isTrayPanel(window.location.hash);
 // The last line of defence against a blank window: an error no inner boundary caught leaves a message and a way out.
-createRoot(root).render(
+createRoot(root, reportUiErrors(trayPanel ? "tray-panel" : "window")).render(
   <StrictMode>
     <ErrorBoundary
       fallback={(message) => (
@@ -21,7 +23,7 @@ createRoot(root).render(
         </div>
       )}
     >
-      {isTrayPanel(window.location.hash) ? <TrayPanel /> : <App />}
+      {trayPanel ? <TrayPanel /> : <App />}
     </ErrorBoundary>
   </StrictMode>,
 );

@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { apiResult, CardWarmupProgress, DaemonInfoResult } from "@trackwall/protocol";
+import { apiResult, CardWarmupProgress, DaemonInfoResult, ErrorJournal } from "@trackwall/protocol";
 import { readDaemonFile } from "../src/infra/discovery.ts";
 import { loopbackRequest } from "../src/infra/loopback.ts";
 import { makeRepo } from "./support/git-repo.ts";
@@ -130,6 +132,24 @@ describe.each(RUNTIMES)("daemon process under %s", (name, runtime) => {
       expect(await daemon.exited).toBe(0);
     } finally {
       daemon.kill();
+    }
+  }, 20_000);
+
+  test("a start that fails exits with 1 and leaves its error in the error journal", async () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-failed-start-"));
+    const taken = createServer();
+    await new Promise<void>((resolve) => taken.listen(0, "127.0.0.1", resolve));
+    try {
+      const port = (taken.address() as AddressInfo).port;
+      const env = { ...process.env, TRACKWALL_HOME: home };
+      const daemon = Bun.spawn([...runtime, MAIN, "--port", String(port)], { env, stdout: "ignore", stderr: "pipe" });
+      expect(await daemon.exited).toBe(1);
+      const journal = ErrorJournal.parse(JSON.parse(readFileSync(join(home, "logs", "errors.json"), "utf8")));
+      expect(journal.errors.map((e) => [e.source, e.area, e.count])).toEqual([["daemon", "startup", 1]]);
+      expect(journal.errors[0]?.message).toMatch(/EADDRINUSE|in use/);
+      expect(journal.errors[0]?.message).not.toContain(home);
+    } finally {
+      taken.close();
     }
   }, 20_000);
 
