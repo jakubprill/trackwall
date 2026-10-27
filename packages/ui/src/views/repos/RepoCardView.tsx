@@ -22,9 +22,10 @@ import { post } from "@/lib/api";
 import { CARD_PROBLEM_LABELS, HTTP_CLIENT_LABELS, MECHANISM_LABELS } from "@/lib/card";
 import type { Connection } from "@/lib/connection";
 import { useRemote } from "@/lib/use-remote";
+import { RepoCardGlance } from "./RepoCardGlance.tsx";
 
 /**
- * The "Card" tab (§4.6, ADR-25, ADR-30): facts from the build, configuration and code files in the last commit, each
+ * The "Card" tab (§4.6, ADR-25, ADR-30), with "At a glance" on top (ADR-103): facts from the build, configuration and code files in the last commit, each
  * with evidence (file and line), and the repo's tags with reasons. A new HEAD in the list fetches the card anew.
  */
 export function RepoCardView({ conn, repo, head }: { conn: Connection; repo: string; head: string }) {
@@ -39,6 +40,7 @@ function CardPanel({ result }: { result: RepoCardResult }) {
   const { card, tags } = result;
   return (
     <div className="flex flex-col gap-4">
+      {card && <RepoCardGlance card={card} tags={tags} />}
       <Surface label="Tags" meta={tags.length}>
         {tags.length === 0 ? (
           <Empty>No tags. Add your own tags with the repoTags key in workspace.yaml.</Empty>

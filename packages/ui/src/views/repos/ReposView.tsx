@@ -1,4 +1,12 @@
-import { NO_MISE_TAG, type Repo, type RepoList, type RepoTag, workspaceApi } from "@trackwall/protocol";
+import {
+  NO_MISE_TAG,
+  type Repo,
+  type RepoList,
+  type RepoTag,
+  type RunningMiseTask,
+  type SessionList,
+  workspaceApi,
+} from "@trackwall/protocol";
 import { FolderOpen, Plus, RefreshCw } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -7,14 +15,16 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import type { LiveFeed } from "@/lib/daemon-events";
 import { relativeTime, twoDigits } from "@/lib/format";
 import { branchLabel, listNeedsSettings, repoStatusTone } from "@/lib/repo-status";
 import { REPO_LIST_PACE } from "@/lib/repo-watch";
+import type { SessionSelection } from "@/lib/session-entries";
 import type { SettingsCategory } from "@/lib/settings-categories";
 import { statusTextClass } from "@/lib/status-tone";
 import { listSyncBadge, type SyncBadge, syncedByPath } from "@/lib/sync-state";
 import { type BatchRunHandle, useBatchRun } from "@/lib/use-batch-run";
-import { useRemote } from "@/lib/use-remote";
+import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
 import { type SyncRunHandle, useSyncRun } from "@/lib/use-sync-run";
 import { useTagFilter } from "@/lib/use-tag-filter";
@@ -32,6 +42,9 @@ export function ReposView({
   conn,
   initialRepo,
   repoWatch,
+  sessions,
+  runningLive,
+  onOpenInSessions,
   onRetry,
   onOpenSettings,
 }: {
@@ -40,6 +53,11 @@ export function ReposView({
   initialRepo?: string;
   /** Commits and repos added to the folder (ADR-63): the list is fetched again at once. */
   repoWatch: RepoWatchHandle;
+  /** The sessions, tasks and proposals for the "In this repo" bar (ADR-103); `App` fetches them for the view bar too. */
+  sessions: RemoteHandle<SessionList>;
+  /** Running mise tasks from the events; `undefined` for a moment after a connection change, and polled until then. */
+  runningLive: LiveFeed<RunningMiseTask[]> | undefined;
+  onOpenInSessions: (selection: SessionSelection) => void;
   onRetry: () => void;
   onOpenSettings: (category: SettingsCategory) => void;
 }) {
@@ -121,7 +139,16 @@ export function ReposView({
         {panel === "sync" && <SyncView sync={sync} canSync={canSync} />}
         {/* A new tag filter is a new group of repos: the panel starts with all of them ticked. */}
         {panel === "batch" && <BatchView key={filter.selected.join(",")} batch={batch} repos={repos} />}
-        {panel === "repo" && current && <RepoDetail key={current.id} conn={conn} repo={current} />}
+        {panel === "repo" && current && (
+          <RepoDetail
+            key={current.id}
+            conn={conn}
+            repo={current}
+            sessions={sessions.data}
+            runningLive={runningLive}
+            onOpenInSessions={onOpenInSessions}
+          />
+        )}
         {/* With no repos to show, the list on the left says what to do; only the loading stays here. */}
         {!list.data && !list.error && <PanelLoading />}
       </section>

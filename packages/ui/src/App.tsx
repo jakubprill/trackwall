@@ -121,7 +121,7 @@ export function App() {
     setSupervisorPinned(pinned);
     saveSupervisorPinned(() => window.localStorage, pinned);
   }, []);
-  const sessions = useSessions(conn, events, view === "sessions" || view === "home" || supervisorPinned);
+  const sessions = useSessions(conn, events, view === "sessions" || view === "home" || view === "repos" || supervisorPinned);
   const runningLive = useMemo(() => events?.feed("mise.running.changed"), [events]);
   const repoWatch = useRepoWatch(useMemo(() => events?.feed("repos.changed"), [events]));
   const warmupLive = useMemo(() => events?.feed("cards.warmup.changed"), [events]);
@@ -235,7 +235,16 @@ export function App() {
                 />
               )}
               {conn && view === "repos" && (
-                <ReposView conn={conn} initialRepo={repo} repoWatch={repoWatch} onRetry={retry} onOpenSettings={openSettings} />
+                <ReposView
+                  conn={conn}
+                  initialRepo={repo}
+                  repoWatch={repoWatch}
+                  sessions={sessions}
+                  runningLive={runningLive}
+                  onOpenInSessions={openInSessions}
+                  onRetry={retry}
+                  onOpenSettings={openSettings}
+                />
               )}
               {conn && view === "sessions" && (
                 <SessionsView

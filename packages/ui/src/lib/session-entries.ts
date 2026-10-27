@@ -151,8 +151,8 @@ function entryProposer(entry: SessionEntry): string | null {
   return entry.task.proposedBy?.session ?? null;
 }
 
-/** `SessionList.sessions` goes from the newest. */
-function latestSession(sessions: readonly Session[], task: string): Session | undefined {
+/** A task's current session: `SessionList.sessions` goes from the newest. */
+export function latestSession(sessions: readonly Session[], task: string): Session | undefined {
   return sessions.find((s) => s.task === task);
 }
 
