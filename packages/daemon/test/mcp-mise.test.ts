@@ -16,6 +16,8 @@ const MISE_CONFIG = JSON.stringify({ tasks: [{ name: "dev" }, { name: "test" }],
 const TIMEOUT = 60_000;
 /** The fake's prompt line for the typed notice that the user trusted the mise config (ADR-92). */
 const TYPED_TRUST_NOTICE = "Thinking about: The user trusted the mise config that refused your last run_mise_task";
+/** The fake's prompt line for the typed review prompt. */
+const TYPED_REVIEW = "Thinking about: The user sent a review of your changes in Trackwall";
 
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
 /** An agent outside Trackwall: only the daemon token, no session token. */
@@ -243,6 +245,17 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
       await daemon.post(agentsApi.trustTaskMiseConfig, { task: task.id, digest: seen.digest });
 
       await waitFor(daemon.facade.agents, session.id, () => window.unwrappedText().includes(TYPED_TRUST_NOTICE), "the typed notice");
+      // The turn the notice started ends: the notice was delivered, so the next prompt, for a review, no longer carries it.
+      await waitFor(daemon.facade.agents, session.id, (s) => s.state?.state === "Approval", "the notice turn's approval");
+      window.attachment.input("1");
+      await waitFor(daemon.facade.agents, session.id, (s) => s.state?.reason === "hook agentStop", "the end of the notice turn");
+      await untilInputBox(window, "empty");
+      const review = { path: "mise.toml", side: "new", line: 1, code: "[tasks.test]", text: "Keep it." } as const;
+      await daemon.post(agentsApi.sendReview, { task: task.id, comments: [review] });
+      await waitFor(daemon.facade.agents, session.id, () => window.unwrappedText().includes(TYPED_REVIEW), "the typed review prompt");
+      const afterReview = window.unwrappedText().slice(window.unwrappedText().lastIndexOf(TYPED_REVIEW));
+      expect(afterReview).not.toContain("The user trusted the mise config");
+
       await call(client, "run_mise_task", { repo: "warehouse", task: task.id, miseTask: "test" });
       const ended = MiseTaskRunResult.parse(
         (await call(client, "wait_for_mise_task", { repo: "warehouse", task: task.id, miseTask: "test", timeoutSeconds: 20 }))
