@@ -75,7 +75,7 @@ export class Doctor {
     const outcomes = await Promise.all(
       DoctorCheckId.options.map(async (id) => {
         const outcome = await settle(this.checks[id](ctx));
-        if (!outcome.ok) return { id, ...fail(outcome.message, "The message says what failed; Trackwall's own errors are below.") };
+        if (!outcome.ok) return { id, ...fail(outcome.message, "The check could not run; the message says why.") };
         return outcome.value && { id, ...outcome.value };
       }),
     );
