@@ -156,7 +156,8 @@ export function latestSession(sessions: readonly Session[], task: string): Sessi
   return sessions.find((s) => s.task === task);
 }
 
-function entryTime(entry: StartedEntry): string {
+/** When an entry started, for "most recently started first": a task by its latest session, without one by its creation. */
+export function entryTime(entry: StartedEntry): string {
   if (entry.kind === "session") return entry.session.startedAt;
   return entry.session?.startedAt ?? entry.task.createdAt;
 }

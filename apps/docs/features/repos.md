@@ -24,7 +24,7 @@ Trackwall works with one projects folder: every git repo directly inside it is o
 
 The list and the repo header count your uncommitted work as "3 changed, 1 new". The "Changes" tab, or a click on the "Working tree" tile, shows those files with their diff; you commit or discard them in your editor.
 
-"In this repo", under the header, lists the repo's task proposals, the sessions running in it, its tasks and its running mise tasks, each with its state, whichever tab is open. Click one to go to it: a proposal, session or task opens in "Sessions", a mise task in the "mise tasks" tab.
+"In this repo", under the header, lists the repo's task proposals, the sessions running in it, its tasks and its running mise tasks, each with its state, whichever tab is open. Click one to go to it: a proposal, session or task opens in "Sessions", a mise task in the "mise tasks" tab, and a mise task running in a task opens that task.
 
 "Sync all" fetches every repo and moves its default branch to the remote one when that is a clean fast-forward. A repo with changes on its default branch, or with a branch that has diverged, stays untouched. When the sync is done, a panel says in one sentence per repo what happened: whether the default branch moved, whether your files changed, and how many uncommitted files are left. The same sentence is in the tooltip on the list.
 

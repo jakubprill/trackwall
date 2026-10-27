@@ -1,4 +1,4 @@
-import { miseApi, type Repo, type RepoOverview, type RunningMiseTask, type SessionList, workspaceApi } from "@trackwall/protocol";
+import { type Repo, type RepoOverview, type RunningMiseTask, type SessionList, workspaceApi } from "@trackwall/protocol";
 import { Code, FolderOpen } from "lucide-react";
 import { lazy, type ReactNode, Suspense, useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -13,9 +13,9 @@ import { TRUNCATED_NOTE } from "@/lib/format";
 import { FILE_MANAGER } from "@/lib/platform";
 import { type RepoActivityTarget, repoActivity } from "@/lib/repo-activity";
 import { REPO_TABS, type RepoTab } from "@/lib/repo-tabs";
-import { RUNNING_MISE_POLL_MS } from "@/lib/run-state";
 import type { SessionSelection } from "@/lib/session-entries";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
+import { useRunningMiseTasks } from "@/lib/use-running-mise-tasks";
 import { PlainReadme, ReadmeFallback } from "./ReadmeFallback.tsx";
 import { RepoActivityBar } from "./RepoActivityBar.tsx";
 import { RepoCardView } from "./RepoCardView.tsx";
@@ -44,10 +44,7 @@ export function RepoDetail({
   onOpenInSessions: (selection: SessionSelection) => void;
 }) {
   const [tab, setTab] = useState<RepoTab>(REPO_TABS[0].id);
-  const running = useRemote(
-    useCallback(() => post(conn, miseApi.running, {}), [conn]),
-    { pollMs: RUNNING_MISE_POLL_MS, live: runningLive },
-  );
+  const running = useRunningMiseTasks(conn, runningLive);
   const openActivity = (target: RepoActivityTarget) => {
     if (target.view === "mise") setTab("mise");
     else onOpenInSessions(target.selection);

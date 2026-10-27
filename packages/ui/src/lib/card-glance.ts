@@ -23,7 +23,7 @@ export function cardGlance(card: RepoCard): CardGlance {
   for (const p of card.provides) {
     if (p.kind === "endpoint") endpoints++;
     else if (p.kind === "package") packagesProvided++;
-    else apps.push(p.port === null ? p.name : `${p.name} :${p.port}`);
+    else if (p.kind === "app") apps.push(p.port === null ? p.name : `${p.name} :${p.port}`);
   }
   const clients = card.consumes.filter((c) => c.kind === "http").length;
   const packagesUsed = card.consumes.length - clients;

@@ -24,7 +24,7 @@ import type { SettingsCategory } from "@/lib/settings-categories";
 import { statusTextClass } from "@/lib/status-tone";
 import { listSyncBadge, type SyncBadge, syncedByPath } from "@/lib/sync-state";
 import { type BatchRunHandle, useBatchRun } from "@/lib/use-batch-run";
-import { type RemoteHandle, useRemote } from "@/lib/use-remote";
+import { useRemote } from "@/lib/use-remote";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
 import { type SyncRunHandle, useSyncRun } from "@/lib/use-sync-run";
 import { useTagFilter } from "@/lib/use-tag-filter";
@@ -54,7 +54,7 @@ export function ReposView({
   /** Commits and repos added to the folder (ADR-63): the list is fetched again at once. */
   repoWatch: RepoWatchHandle;
   /** The sessions, tasks and proposals for the "In this repo" bar (ADR-103); `App` fetches them for the view bar too. */
-  sessions: RemoteHandle<SessionList>;
+  sessions: SessionList | undefined;
   /** Running mise tasks from the events; `undefined` for a moment after a connection change, and polled until then. */
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
   onOpenInSessions: (selection: SessionSelection) => void;
@@ -144,7 +144,7 @@ export function ReposView({
             key={current.id}
             conn={conn}
             repo={current}
-            sessions={sessions.data}
+            sessions={sessions}
             runningLive={runningLive}
             onOpenInSessions={onOpenInSessions}
           />

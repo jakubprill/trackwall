@@ -18,7 +18,9 @@ export function RepoCardGlance({ card, tags }: { card: RepoCard; tags: readonly 
               ))}
             </span>
           )}
-          <span className="text-muted-foreground text-xs">{glance.stack.join(" · ") || "nothing recognized"}</span>
+          {(glance.stack.length > 0 || tags.length === 0) && (
+            <span className="text-muted-foreground text-xs">{glance.stack.join(" · ") || "nothing recognized"}</span>
+          )}
         </Fact>
         <Fact label="Apps">
           <span className="font-mono text-sm">{glance.apps.join(", ") || "none"}</span>

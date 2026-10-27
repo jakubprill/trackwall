@@ -100,7 +100,16 @@ describe("what is going on in one repo", () => {
       { view: "mise" },
       { view: "sessions", selection: { kind: "task", id: "t-paging" } },
     ]);
-    expect(items.at(-1)?.name).toBe("test (in a task)");
+    expect(items.at(-1)?.name).toBe("test (in Add paging)");
+  });
+
+  test("sessions and tasks that do not wait are listed most recently started first, whatever their kind", () => {
+    const sessions = list({
+      sessions: [session("s-yesterday", "orders", "Working", { startedAt: "2026-10-26T09:00:00.000Z" })],
+      tasks: [{ ...task("t-new", "orders", "New task"), createdAt: "2026-10-27T09:59:00.000Z" }],
+    });
+
+    expect(repoActivity("orders", sessions, []).map((i) => i.name)).toEqual(["New task", "orders"]);
   });
 
   test("other repos, an ended session in the repo root and the supervisor are left out; a task without a session stays", () => {
