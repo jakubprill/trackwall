@@ -20,6 +20,7 @@ describe("a Copilot CLI session in the daemon", () => {
     const session = new LiveSession({
       id: "s1",
       repo: "shop",
+      supervisor: false,
       task: null,
       cols: 80,
       rows: 24,
@@ -135,6 +136,7 @@ function runningSession(
   const session = new LiveSession({
     id: "s2",
     repo: "shop",
+    supervisor: false,
     task: null,
     cols: 80,
     rows: 24,

@@ -79,6 +79,24 @@ describe.skipIf(process.versions.bun === undefined)("sessions across a daemon re
     expect(await argumentOnScreen(after, resumedTask, "--resume=")).toContain(`Argument: --resume=${task.id}`);
   }, 60_000);
 
+  test("a free session starts again as a free session, next to the supervisor, not in its place (ADR-100)", async () => {
+    const before = await startDaemon();
+    const { agents } = before.facade;
+    const supervisor = await agents.startSupervisor("new");
+    const free = await agents.start(null, "Compare the two APIs");
+    await waitFor(agents, supervisor.id, (s) => s.state !== null, "the supervisor's input box");
+    await waitFor(agents, free.id, (s) => s.state !== null, "the free session's first turn");
+
+    await stopDaemon(before);
+    const after = await startDaemon({ home: before.home, projects: before.projects });
+
+    // The free session had a first message, so Copilot CLI keeps its conversation.
+    expect(await argumentOnScreen(after, free.id, "--resume=")).toContain(`Argument: --resume=${free.id}`);
+    expect(after.facade.agents.session(free.id)).toMatchObject({ repo: null, supervisor: false, run: { kind: "running" } });
+    await argumentOnScreen(after, supervisor.id, "--session-id=");
+    expect(after.facade.agents.session(supervisor.id)).toMatchObject({ repo: null, supervisor: true, run: { kind: "running" } });
+  }, 60_000);
+
   test("a session the user stopped is not started again", async () => {
     const before = await startDaemon();
     const { agents } = before.facade;

@@ -163,8 +163,13 @@ export type DialogAnswer = z.infer<typeof DialogAnswer>;
 
 export const Session = z.object({
   id: SessionId,
-  /** The repo the session works in; `null` for the supervisor, which runs in the projects folder above all repos (ADR-58). */
+  /**
+   * The repo the session works in; `null` in the projects folder above all repos: the supervisor (ADR-58) or a free
+   * session (ADR-100).
+   */
   repo: RepoId.nullable(),
+  /** The supervisor (ADR-58); a session in the projects folder without it is a free session (ADR-100). */
+  supervisor: z.boolean(),
   /** ISO 8601. */
   startedAt: z.string(),
   /** The session's process group: `running`, `stopping`, and after the end the exit code and the last screen lines. */
@@ -185,9 +190,14 @@ export const Session = z.object({
 });
 export type Session = z.infer<typeof Session>;
 
-/** The supervisor (ADR-58) is the session without a repo: it runs in the projects folder, above all repos. */
-export function isSupervisor(session: Pick<Session, "repo">): boolean {
-  return session.repo === null;
+/** The supervisor (ADR-58): it runs in the projects folder, above all repos. */
+export function isSupervisor(session: Pick<Session, "supervisor">): boolean {
+  return session.supervisor;
+}
+
+/** A free session (ADR-100): Copilot CLI in the projects folder that is neither the supervisor nor in a repo. */
+export function isFreeSession(session: Pick<Session, "repo" | "supervisor">): boolean {
+  return session.repo === null && !session.supervisor;
 }
 
 /**
@@ -419,8 +429,11 @@ const ProposalRequest = z.object({ proposal: TaskId }).strict();
 
 export const agentsApi = {
   sessions: endpoint("sessions", z.object({}).strict(), SessionList),
-  /** Starts Copilot CLI in the repo root, with the session plugin (ADR-17). */
-  start: endpoint("start", z.object({ repo: RepoId }).strict(), Session),
+  /**
+   * Starts Copilot CLI with the session plugin (ADR-17) in the repo root, or with `repo: null` a free session in the
+   * projects folder (ADR-100); with `prompt` as its first message, so it works from the start.
+   */
+  start: endpoint("start", z.object({ repo: RepoId.nullable(), prompt: TaskPrompt.optional() }).strict(), Session),
   /**
    * Starts the supervisor (ADR-58): Copilot CLI in the projects folder, above the sessions of all repos. There is at
    * most one running at a time, so while one runs this returns it instead of starting another. Otherwise `conversation`

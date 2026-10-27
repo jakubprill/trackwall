@@ -99,8 +99,9 @@ export type SessionEvent = {
 
 export interface LiveSessionOptions {
   id: string;
-  /** `null` for the supervisor in the projects folder (ADR-58). */
+  /** `null` in the projects folder: the supervisor (ADR-58) or a free session (ADR-100). */
   repo: string | null;
+  supervisor: boolean;
   /** The task in whose worktree the session runs; `null` in the repo root. */
   task: string | null;
   cols: number;
@@ -131,6 +132,7 @@ export interface LiveSessionOptions {
 export class LiveSession {
   readonly id: string;
   readonly repo: string | null;
+  readonly supervisor: boolean;
   readonly task: string | null;
   readonly startedAt = new Date().toISOString();
   readonly #run: () => RunState | undefined;
@@ -187,6 +189,7 @@ export class LiveSession {
   constructor(o: LiveSessionOptions) {
     this.id = o.id;
     this.repo = o.repo;
+    this.supervisor = o.supervisor;
     this.task = o.task;
     this.#run = o.run;
     this.#promptText = o.prompt;
@@ -371,6 +374,7 @@ export class LiveSession {
     return {
       id: this.id,
       repo: this.repo,
+      supervisor: this.supervisor,
       startedAt: this.startedAt,
       run,
       state: this.#last,

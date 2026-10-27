@@ -129,6 +129,7 @@ async function sessionShowing(
   const session = new LiveSession({
     id: "s1",
     repo: "shop",
+    supervisor: false,
     task: null,
     cols: terminal.cols,
     rows: terminal.rows,

@@ -10,7 +10,7 @@ import { IS_MAC } from "@/lib/platform";
 import { entryId, entrySession, proposalsName, type SessionEntry, type SessionSelection } from "@/lib/session-entries";
 import { type GridPage, gridShape } from "@/lib/session-grid";
 import { sessionShortcutLabel } from "@/lib/session-shortcut";
-import { isLive, PROPOSAL_STATUS, sessionStateLabel } from "@/lib/session-state";
+import { isLive, PROPOSAL_STATUS, sessionPlace, sessionStateLabel } from "@/lib/session-state";
 import { useSessionClose } from "@/lib/use-session-close";
 import { useTaskEnding } from "@/lib/use-task-ending";
 import { cn } from "@/lib/utils";
@@ -247,7 +247,7 @@ function TileTitle({ entry }: { entry: SessionEntry }) {
   const task = entry.kind === "task" ? entry.task : undefined;
   return (
     <>
-      <span className="min-w-0 truncate text-xs font-medium">{task?.repo ?? session?.repo}</span>
+      <span className="min-w-0 truncate text-xs font-medium">{task?.repo ?? (session && sessionPlace(session))}</span>
       <span className="text-muted-foreground shrink-0 text-xs">
         {session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}
       </span>

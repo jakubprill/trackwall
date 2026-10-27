@@ -215,12 +215,12 @@ mod tests {
     use super::*;
 
     fn waiting(state: Option<TaskState>) -> Waiting {
-        Waiting { id: "s1".into(), repo: Some("orders-api".into()), state }
+        Waiting { id: "s1".into(), repo: Some("orders-api".into()), supervisor: false, state }
     }
 
     #[test]
     fn a_supervisor_notice_is_titled_supervisor() {
-        let supervisor = Waiting { id: "s0".into(), repo: None, state: Some(TaskState::Input) };
+        let supervisor = Waiting { id: "s0".into(), repo: None, supervisor: true, state: Some(TaskState::Input) };
         assert_eq!(session_notice(&supervisor).title, "Supervisor");
     }
 

@@ -60,7 +60,7 @@ function setup(
       startSupervisorWith: async (firstMessage) => {
         if (o.supervisorFails !== undefined) throw new DomainError("agent_unavailable", o.supervisorFails);
         firstMessages.push(firstMessage);
-        return session({ repo: null });
+        return session({ repo: null, supervisor: true });
       },
     },
   });
@@ -108,6 +108,7 @@ function session(fields: Partial<Session>): Session {
   return {
     id: SESSION_ID,
     repo: "api",
+    supervisor: false,
     startedAt: "2026-10-26T07:00:00.000Z",
     run: { kind: "running", runId: "r1", startedAt: "2026-10-26T07:00:00.000Z", pid: 4242 },
     state: null,

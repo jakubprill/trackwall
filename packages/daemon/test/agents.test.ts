@@ -207,6 +207,53 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     await agents.stop(supervisor.id);
   }, 60_000);
 
+  test("a session in the repo root with a prompt gets it as its first message and works from the start (ADR-100)", async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
+    const { agents, procs } = makeAgents({ shop: repoDir });
+    cleanups.push(() => procs.stopAll());
+
+    const started = await agents.start("shop", "Fix the build");
+    expect(started).toMatchObject({ repo: "shop", supervisor: false, task: null });
+    const window = viewer(agents, started.id);
+    await waitFor(agents, started.id, () => window.text().includes("--interactive="), "the first message on the screen");
+    expect(window.unwrappedText()).toContain(`Argument: --session-id=${started.id}`);
+    expect(window.unwrappedText()).toContain("Argument: --interactive=Fix the build");
+    expect(window.unwrappedText()).toContain(repoDir);
+    await waitFor(agents, started.id, (s) => s.state?.state === "Working" || s.state?.state === "Approval", "the first turn");
+    expect(agents.sessions().tasks).toEqual([]);
+    window.attachment.detach();
+    await agents.stop(started.id);
+  }, 60_000);
+
+  test("free sessions start in the projects folder with their own instructions, next to the supervisor and to each other (ADR-100)", async () => {
+    const projectsDir = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
+    const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
+    const { agents, procs, home } = makeAgents({ shop: repoDir }, undefined, projectsDir);
+    cleanups.push(() => procs.stopAll());
+    const supervisor = await agents.startSupervisor("new");
+
+    const free = await agents.start(null);
+    const another = await agents.start(null, "Compare the two APIs");
+    expect(free).toMatchObject({ repo: null, supervisor: false, task: null, run: { kind: "running" } });
+    expect(another).toMatchObject({ repo: null, supervisor: false, run: { kind: "running" } });
+    const window = viewer(agents, free.id);
+    await waitFor(agents, free.id, () => window.unwrappedText().includes(projectsDir), "the projects folder as the working directory");
+    const instructions = readFileSync(join(home, "sessions", free.id, "instructions", "trackwall.instructions.md"), "utf8");
+    expect(instructions).toContain("You are a free session in the projects folder");
+    expect(instructions).not.toContain("You are the supervisor");
+    // A free session is no supervisor: the supervisor stays the one that runs, and what a free session proposes is its own.
+    expect((await agents.startSupervisor("new")).id).toBe(supervisor.id);
+    const proposal = await agents.propose(free.id, { repo: "shop", title: "Add a test", prompt: "Add a cart test", model: null });
+    expect(proposal.proposedBy).toEqual({ session: free.id, supervisor: false });
+    window.attachment.detach();
+    for (const session of [supervisor, free, another]) await agents.stop(session.id);
+  }, 60_000);
+
+  test("a free session needs the projects folder to be set (ADR-100)", async () => {
+    const { agents } = makeAgents({});
+    await expect(agents.start(null)).rejects.toMatchObject({ code: "bad_request", message: "set the projects folder first" });
+  });
+
   test("a supervisor the user lets change code is told so in its instructions (ADR-78)", async () => {
     const projectsDir = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
     const { agents, procs, home } = makeAgents({}, undefined, projectsDir, undefined, process.env, { changesCode: true });

@@ -18,6 +18,7 @@ import {
   type RepoStatusOk,
   type RepoTagRules,
   type SearchCodeResult,
+  type Session,
   type SupervisorSettings,
   type SyncResult,
   type SyncRun,
@@ -333,12 +334,13 @@ export class Workspace {
   }
 
   /**
-   * The tool permissions of a Copilot CLI session in repo `repo` (`null` for the supervisor) from `workspace.yaml`
-   * (ADR-66); `invalid_config` for a bad `toolPermissions`, so that no session starts without a denial the user wrote.
+   * The tool permissions of a Copilot CLI session in repo `repo` (`null` in the projects folder), or of the supervisor,
+   * from `workspace.yaml` (ADR-66); `invalid_config` for a bad `toolPermissions`, so that no session starts without a
+   * denial the user wrote. A free session (ADR-100) gets the rules without `repos`, without the supervisor's denial.
    */
-  toolPermissions(repo: string | null): ToolPermissions {
+  toolPermissions(session: Pick<Session, "repo" | "supervisor">): ToolPermissions {
     const rules = this.deps.file.toolPermissionRules();
-    return repo === null ? supervisorToolPermissions(rules, this.supervisorSettings()) : sessionToolPermissions(rules, repo);
+    return session.supervisor ? supervisorToolPermissions(rules, this.supervisorSettings()) : sessionToolPermissions(rules, session.repo);
   }
 
   /**

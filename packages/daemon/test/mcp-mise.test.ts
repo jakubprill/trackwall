@@ -329,4 +329,20 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
     },
     TIMEOUT,
   );
+
+  test(
+    "a free session runs no mise tasks of a repo either, and is named as a free session in the refusal (ADR-100)",
+    async () => {
+      const free = await daemon.facade.agents.start(null);
+      const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, free.id);
+      clients.push(client);
+
+      expect(errorText(await call(client, "run_mise_task", { repo: "warehouse", miseTask: "test" }))).toBe(
+        "bad_request: a free session works in no repo and runs nothing in one; propose a task in warehouse instead",
+      );
+      await waitFor(daemon.facade.agents, free.id, (s) => s.state !== null, "the first state");
+      await daemon.facade.agents.stop(free.id);
+    },
+    TIMEOUT,
+  );
 });

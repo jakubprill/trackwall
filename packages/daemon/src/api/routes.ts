@@ -108,7 +108,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     return null;
   }),
   route(agentsApi.sessions, (f) => f.agents.sessions()),
-  route(agentsApi.start, (f, b) => f.agents.start(b.repo)),
+  route(agentsApi.start, (f, b) => f.agents.start(b.repo, b.prompt)),
   route(agentsApi.startSupervisor, (f, b) => f.agents.startSupervisor(b.conversation)),
   route(agentsApi.stop, (f, b) => f.agents.stop(b.session)),
   route(agentsApi.answerDialog, (f, b) => f.agents.answerDialog(b.session, b.dialog, b.answer)),

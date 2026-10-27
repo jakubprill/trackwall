@@ -79,9 +79,13 @@ function runningStateLabel(state: TaskStateChange, needsAttention: boolean, idle
 /** What the UI calls the session above all repos (ADR-58), wherever a session is named by its place. */
 export const SUPERVISOR = "Supervisor";
 
-/** Where a session works: its repo, or the supervisor, which has none (ADR-58). */
-export function sessionPlace(session: Pick<Session, "repo">): string {
-  return session.repo ?? SUPERVISOR;
+/** What the UI calls a session in the projects folder that is not the supervisor (ADR-100). */
+const FREE_SESSION = "Free session";
+
+/** Where a session works: its repo, or for a session in the projects folder the supervisor (ADR-58) or a free session (ADR-100). */
+export function sessionPlace(session: Pick<Session, "repo" | "supervisor">): string {
+  if (session.repo !== null) return session.repo;
+  return session.supervisor ? SUPERVISOR : FREE_SESSION;
 }
 
 /** A session's name in a list: the repo, and the window title that tells two sessions of one repo apart. */

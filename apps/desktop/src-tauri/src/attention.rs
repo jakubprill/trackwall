@@ -35,28 +35,39 @@ const MENU_PROPOSAL_PREFIX: &str = "proposal:";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Waiting {
     pub id: String,
-    /// `None` for the supervisor, the session in the projects folder (ADR-58).
+    /// `None` in the projects folder: the supervisor (ADR-58) or a free session (ADR-100).
     pub repo: Option<String>,
+    pub supervisor: bool,
     pub state: Option<TaskState>,
 }
 
 /// What the UI calls the session above all repos (`SUPERVISOR` in the UI's `session-state.ts`, ADR-58).
 pub const SUPERVISOR: &str = "Supervisor";
+/// What the UI calls a session in the projects folder that is not the supervisor (`FREE_SESSION` in `session-state.ts`, ADR-100).
+pub const FREE_SESSION: &str = "Free session";
 
 impl Waiting {
-    /// Where the session works, for the menu and a notification title: its repo, or the supervisor.
+    /// Where the session works, for the menu and a notification title: its repo, the supervisor or a free session.
     pub fn place(&self) -> &str {
-        self.repo.as_deref().unwrap_or(SUPERVISOR)
+        match &self.repo {
+            Some(repo) => repo,
+            None if self.supervisor => SUPERVISOR,
+            None => FREE_SESSION,
+        }
     }
 
-    /// The title of its notification: "Session in <repo>", or "Supervisor".
+    /// The title of its notification: "Session in <repo>", "Supervisor" or "Free session".
     pub fn titled(&self) -> String {
-        self.repo.as_ref().map_or_else(|| SUPERVISOR.to_owned(), |repo| format!("Session in {repo}"))
+        self.repo.as_ref().map_or_else(|| self.place().to_owned(), |repo| format!("Session in {repo}"))
     }
 
-    /// The session in a sentence: "a session in <repo>", or "the supervisor".
+    /// The session in a sentence: "a session in <repo>", "the supervisor" or "a free session".
     fn described(&self) -> String {
-        self.repo.as_ref().map_or_else(|| "the supervisor".to_owned(), |repo| format!("a session in {repo}"))
+        match &self.repo {
+            Some(repo) => format!("a session in {repo}"),
+            None if self.supervisor => "the supervisor".to_owned(),
+            None => "a free session".to_owned(),
+        }
     }
 }
 
@@ -119,6 +130,7 @@ struct TaskRef {
 struct Session {
     id: String,
     repo: Option<String>,
+    supervisor: bool,
     run: Run,
     state: Option<StateChange>,
     needs_attention: bool,
@@ -142,7 +154,7 @@ pub fn parse_sessions(body: &str) -> Option<Snapshot> {
     for s in reply.data.sessions.into_iter().filter(|s| s.run.kind == "running") {
         let state = s.state.map(|c| c.state);
         if s.needs_attention {
-            waiting.push(Waiting { id: s.id.clone(), repo: s.repo, state });
+            waiting.push(Waiting { id: s.id.clone(), repo: s.repo, supervisor: s.supervisor, state });
         }
         states.insert(s.id, state);
     }
@@ -357,7 +369,7 @@ mod tests {
         let attention = run == "running" && matches!(state, Some("Input" | "Approval" | "Plan"));
         let state = state.map(|s| format!(r#"{{"state":"{s}","source":"hook","confidence":"high","at":"x","reason":"r"}}"#));
         format!(
-            r#"{{"id":"{id}","repo":"repo-{id}","startedAt":"x","run":{{"kind":"{run}"}},"state":{},"windowTitle":null,"needsAttention":{attention}}}"#,
+            r#"{{"id":"{id}","repo":"repo-{id}","supervisor":false,"startedAt":"x","run":{{"kind":"{run}"}},"state":{},"windowTitle":null,"needsAttention":{attention}}}"#,
             state.unwrap_or_else(|| "null".into())
         )
     }
@@ -371,16 +383,25 @@ mod tests {
     }
 
     fn waiting(id: &str, state: TaskState) -> Waiting {
-        Waiting { id: id.into(), repo: Some(format!("repo-{id}")), state: Some(state) }
+        Waiting { id: id.into(), repo: Some(format!("repo-{id}")), supervisor: false, state: Some(state) }
     }
 
     #[test]
     fn the_supervisor_has_no_repo_and_is_named_as_the_supervisor() {
-        let supervisor = r#"{"id":"s","repo":null,"startedAt":"x","run":{"kind":"running"},"state":{"state":"Input","source":"hook","confidence":"high","at":"x","reason":"r"},"windowTitle":null,"needsAttention":true}"#;
+        let supervisor = r#"{"id":"s","repo":null,"supervisor":true,"startedAt":"x","run":{"kind":"running"},"state":{"state":"Input","source":"hook","confidence":"high","at":"x","reason":"r"},"windowTitle":null,"needsAttention":true}"#;
         let now = parse_sessions(&body(supervisor, "")).expect("a valid reply");
-        assert_eq!(now.waiting, vec![Waiting { id: "s".into(), repo: None, state: Some(TaskState::Input) }]);
+        assert_eq!(now.waiting, vec![Waiting { id: "s".into(), repo: None, supervisor: true, state: Some(TaskState::Input) }]);
         assert_eq!(now.waiting[0].place(), "Supervisor");
         assert_eq!(tooltip(&now.waiting, &[]), "Trackwall: the supervisor is waiting for you");
+    }
+
+    #[test]
+    fn a_free_session_has_no_repo_and_is_named_as_a_free_session() {
+        let free = r#"{"id":"f","repo":null,"supervisor":false,"startedAt":"x","run":{"kind":"running"},"state":{"state":"Input","source":"hook","confidence":"high","at":"x","reason":"r"},"windowTitle":null,"needsAttention":true}"#;
+        let now = parse_sessions(&body(free, "")).expect("a valid reply");
+        assert_eq!(now.waiting[0].place(), "Free session");
+        assert_eq!(now.waiting[0].titled(), "Free session");
+        assert_eq!(tooltip(&now.waiting, &[]), "Trackwall: a free session is waiting for you");
     }
 
     #[test]

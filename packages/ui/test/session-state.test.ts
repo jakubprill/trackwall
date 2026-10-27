@@ -9,7 +9,7 @@ import {
   SUPERVISOR_TARGET,
   type WaitingTarget,
 } from "../src/lib/session-entries.ts";
-import { agentsInTurn, closeCutsOffTurn, sessionStateLabel } from "../src/lib/session-state.ts";
+import { agentsInTurn, closeCutsOffTurn, sessionPlace, sessionStateLabel } from "../src/lib/session-state.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-23T10:00:00Z", pid: 10 } as const;
 
@@ -18,6 +18,7 @@ function session(id: string, state: Session["state"], run: Session["run"] = runn
   return {
     id,
     repo: `repo-${id}`,
+    supervisor: false,
     startedAt: "2026-10-23T10:00:00Z",
     run,
     state,
@@ -63,6 +64,14 @@ describe("session state in one line", () => {
     expect(sessionStateLabel(session("a", change("Done"), exited(1)))).toEqual({ label: "finished" });
     expect(sessionStateLabel(session("a", change("Input"), exited(1)))).toEqual({ tone: "error", label: "error" });
     expect(sessionStateLabel(session("a", change("Error"), exited(0)))).toEqual({ tone: "error", label: "error" });
+  });
+});
+
+describe("where a session works", () => {
+  test("a repo, or for a session in the projects folder the supervisor or a free session (ADR-100)", () => {
+    expect(sessionPlace({ repo: "shop", supervisor: false })).toBe("shop");
+    expect(sessionPlace({ repo: null, supervisor: true })).toBe("Supervisor");
+    expect(sessionPlace({ repo: null, supervisor: false })).toBe("Free session");
   });
 });
 
