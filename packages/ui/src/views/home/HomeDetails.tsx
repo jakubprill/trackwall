@@ -56,7 +56,7 @@ export function HomeDetails({
         <Panel title="Daemon" onClose={close}>
           <Summary model={model} />
           <Button size="sm" onClick={() => onOpen(DAEMON_KEY)}>
-            Open Daemon
+            Open Diagnostics
           </Button>
         </Panel>
       );

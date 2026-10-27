@@ -8,7 +8,7 @@ const CLOCK_MS = 1000;
 /**
  * The install of an update as it goes (ADR-53): the stage with the download's size and speed, a bar while the size is
  * known, a note when the download has stalled, and "Cancel" until the package is in. Shown in the strip above the views
- * and in "Settings > Updates".
+ * and in "Settings > App".
  */
 export function UpdateInstallStatus({ update, cancel }: { update: Installing; cancel: () => void }) {
   // Here and not in the app's update state, so that the tick re-renders only this line while an install runs.

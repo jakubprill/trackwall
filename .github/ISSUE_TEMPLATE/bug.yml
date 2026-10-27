@@ -38,7 +38,7 @@ body:
     id: version
     attributes:
       label: Trackwall version
-      description: From the Daemon view (the "Version" row), from the zip file name or, when running from source, the commit hash.
+      description: From Settings > Diagnostics (the "Version" row), from the zip file name or, when running from source, the commit hash.
     validations:
       required: true
   - type: textarea

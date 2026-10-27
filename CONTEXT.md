@@ -17,8 +17,12 @@ A newer version of Trackwall from GitHub Releases, installed by the shell after 
 _Avoid_: upgrade, sync (that is the repo synchronization)
 
 **View** (`View`):
-A screen of the app in the UI (Home, Repos, Sessions, Overview, Daemon, Settings), switched with the view bar (`ActivityBar`) at the left edge of the window or with a shortcut.
+A screen of the app in the UI (Home, Repos, Sessions, Overview, Settings), switched with the view bar (`ActivityBar`) at the left edge of the window or with a shortcut.
 _Avoid_: tab (for a whole screen)
+
+**Settings category** (`SettingsCategory`, `SETTINGS_CATEGORIES`; its sections `SettingsSection`):
+A group of Settings listed on the left of the Settings view: Workspace, Repo hosts, Agents, App and Diagnostics (ADR-102). Each holds a few sections, such as the projects folder or the daemon's state.
+_Avoid_: tab (that is `TabBar`), page
 
 **Tab** (`TabBar`):
 A switch for part of the content inside a view, for example README, Files, Commits and mise tasks in the Repos view.

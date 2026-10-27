@@ -84,17 +84,14 @@ export class Doctor {
 
   private async projectsFolder({ projectsDir }: CheckContext): Promise<Outcome> {
     if (!projectsDir.ok)
-      return fail(
-        `The workspace settings could not be read: ${projectsDir.message}`,
-        'Correct the file named under "Projects folder" above.',
-      );
+      return fail(`The workspace settings could not be read: ${projectsDir.message}`, 'Correct the file named in "Settings > Workspace".');
     const dir = projectsDir.value;
-    if (dir === null) return fail("No projects folder is set.", 'Choose the folder with your repos in "Projects folder" above.');
+    if (dir === null) return fail("No projects folder is set.", 'Choose the folder with your repos in "Settings > Workspace".');
     const isDir = await stat(dir).then(
       (s) => s.isDirectory(),
       () => false,
     );
-    if (!isDir) return fail(`The projects folder ${dir} does not exist.`, "Create it, or choose another folder above.");
+    if (!isDir) return fail(`The projects folder ${dir} does not exist.`, 'Create it, or choose another folder in "Settings > Workspace".');
     return ok(dir);
   }
 

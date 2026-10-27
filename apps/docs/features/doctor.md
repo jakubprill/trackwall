@@ -12,11 +12,11 @@ The doctor in Settings checks what Trackwall needs on your computer and says wha
 - One list of what Trackwall relies on: your projects folder, Git, Copilot CLI, mise, and gh or glab for your repo hosts.
 - For each problem, the step that fixes it, such as the folder to add to Copilot CLI's trusted folders or the login command.
 - A warning when your Copilot CLI is older than the version Trackwall is tested with.
-- A fresh check whenever you open Settings or click "Check again".
+- A fresh check whenever you open "Settings > Diagnostics" or click "Check again".
 
 ## How it works
 
-When you open "Settings", the "Doctor" section runs its checks, which takes a few seconds. Each line shows what was checked, its state ("OK", "Check" or "Problem"), what was found, and what to do when it is not OK. The line above the list says whether everything is in place or how many checks need your attention.
+When you open "Settings > Diagnostics", the "Doctor" section at the top runs its checks, which takes a few seconds. Each line shows what was checked, its state ("OK", "Check" or "Problem"), what was found, and what to do when it is not OK. The line above the list says whether everything is in place or how many checks need your attention.
 
 The checks are:
 
@@ -33,7 +33,7 @@ The doctor only looks. It never changes a setting, installs anything or signs yo
 
 ## Use it
 
-1. Open "Settings" (Ctrl+, or ⌘, on macOS) and scroll to "Doctor".
+1. Open "Settings" (Ctrl+, or ⌘, on macOS) and choose "Diagnostics"; "Doctor" is at the top.
 2. Do what a line that is not "OK" says, for example run `gh auth login --hostname github.com` in a terminal.
 3. Click "Check again" to see the result.
 
