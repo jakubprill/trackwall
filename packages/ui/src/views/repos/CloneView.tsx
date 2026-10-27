@@ -12,6 +12,7 @@ import { type CloneState, cloneState } from "@/lib/clone-state";
 import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
 import { HOST_KIND_LABEL, loginCommand } from "@/lib/repo-hosts";
+import type { SettingsCategory } from "@/lib/settings-categories";
 import { useDebounced } from "@/lib/use-debounced";
 import { useRemote } from "@/lib/use-remote";
 
@@ -24,7 +25,15 @@ const CLONES_POLL_MS = 1500;
  * Adding repos (ADR-19): a search for repos on the repo hosts from the settings and a one-click clone into the projects
  * folder. After the clone the repo appears in the folder's list by itself; `onCloned` only refreshes it at once.
  */
-export function CloneView({ conn, onCloned, onOpenSettings }: { conn: Connection; onCloned: () => void; onOpenSettings: () => void }) {
+export function CloneView({
+  conn,
+  onCloned,
+  onOpenSettings,
+}: {
+  conn: Connection;
+  onCloned: () => void;
+  onOpenSettings: (category: SettingsCategory) => void;
+}) {
   const [query, setQuery] = useState("");
   const debounced = useDebounced(query.trim(), SEARCH_DEBOUNCE_MS);
   const loadRepos = useCallback(() => post(conn, workspaceApi.remoteRepos, { query: debounced }), [conn, debounced]);
@@ -56,12 +65,12 @@ export function CloneView({ conn, onCloned, onOpenSettings }: { conn: Connection
       {remote.error && <ErrorWithRetry message={remote.error} onRetry={remote.reload} />}
       {!remote.data && !remote.error && <Loading text="Asking the hosts…" />}
       {remote.data?.projectsDir === null && (
-        <NeedsSettings text="Choose the projects folder first: cloned repos go there." onOpenSettings={onOpenSettings} />
+        <NeedsSettings text="Choose the projects folder first: cloned repos go there." onOpenSettings={() => onOpenSettings("workspace")} />
       )}
       {hosts?.length === 0 && (
         <NeedsSettings
           text="Add a GitLab host (your instance address) or GitHub in Settings, and you can search its repos here."
-          onOpenSettings={onOpenSettings}
+          onOpenSettings={() => onOpenSettings("repo-hosts")}
         />
       )}
       {hosts?.map((h) => (

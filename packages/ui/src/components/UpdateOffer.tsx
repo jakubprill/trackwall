@@ -18,7 +18,7 @@ const LABELS: Record<OfferAction, string> = {
 
 /**
  * An available update with its buttons (ADR-53, ADR-97, `updateOffer` decides them), in the strip above the views (with
- * "Later" until the user chose to wait for the agents' turns) and in "Settings > Updates".
+ * "Later" until the user chose to wait for the agents' turns) and in "Settings > App".
  */
 export function UpdateOffer({ handle, update, onLater }: { handle: AppUpdateHandle; update: Available; onLater?: () => void }) {
   const { install, agentsInTurn, waitForTurns, cancelWaiting } = handle;
