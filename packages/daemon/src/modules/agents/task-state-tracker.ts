@@ -77,6 +77,16 @@ export class TaskStateTracker {
     return this.#set(s, this.#lastActivity);
   }
 
+  /**
+   * What a human's key caused, seen by a detector (the interrupted turn's message after an answer, `copilot-screen.ts`):
+   * like the key itself, without source ranking.
+   */
+  causedByKey({ endsSession: _, ...s }: StateSignal): TaskStateChange | undefined {
+    if (this.#exited) return undefined;
+    this.#lastActivity = this.#now();
+    return this.#set(s, this.#lastActivity);
+  }
+
   /** The session printed something. */
   activity(): TaskStateChange | undefined {
     this.#lastActivity = this.#now();
