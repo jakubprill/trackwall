@@ -223,6 +223,30 @@ describe("a session of the real Copilot CLI", () => {
     expect(hookRecords(daemon.home, id).map((r) => r.event)).not.toContain("notification");
   });
 
+  // The session terminal in the UI copies this text to the clipboard (`osc52Text` in packages/ui/src/lib/terminal-copy.ts).
+  test("text selected with a mouse drag is copied on Ctrl+C as OSC 52 to the clipboard target, after the primary selection on release", async () => {
+    const { agents } = daemon.facade;
+    const { id, window } = await startSession();
+    const copies = () => new OscParser().feed(window.text()).filter((osc) => osc.code === "52");
+    // SGR mouse reports (mode 1006, which Copilot CLI turns on): press at the start of the banner, below the tab bar on
+    // the first row, drag across it, release.
+    window.attachment.input("\x1b[<0;1;3M");
+    for (let row = 4; row <= 6; row++) window.attachment.input(`\x1b[<32;${REFERENCE_COLS};${row}M`);
+    window.attachment.input(`\x1b[<0;${REFERENCE_COLS};6m`);
+    await waitFor(agents, id, () => copies().length > 0, "the primary selection on mouse release", SESSION_MS);
+    expect(copies().map((osc) => osc.data.split(";")[0])).toEqual(["p!"]);
+
+    window.attachment.input("\x03");
+    await waitFor(agents, id, () => copies().length > 1, "the clipboard copy on Ctrl+C", SESSION_MS);
+    const [target, payload] = copies()[1]?.data.split(";") ?? [];
+    expect(target).toBe("c");
+    const copied = Buffer.from(payload ?? "", "base64").toString("utf8");
+    expect(copied).toContain("Copilot");
+    expect(copied).not.toContain("\x1b");
+    // Ctrl+C with a selection copies; it does not end the session.
+    expect(agents.sessions().sessions.find((s) => s.id === id)?.run.kind).toBe("running");
+  });
+
   test("/exit ends the session with sessionEnd, and the session is Done", async () => {
     const { agents } = daemon.facade;
     const { id, window } = await startSession();

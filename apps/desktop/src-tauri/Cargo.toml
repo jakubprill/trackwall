@@ -24,6 +24,8 @@ tauri-plugin-global-shortcut = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-dialog = "2"
+# Writing text to the clipboard (`copy_text`); without the default `image-data`, which would bring in image decoders.
+arboard = { version = "3", default-features = false }
 # Unpacking the portable Windows update (ADR-53); built on every system so that its tests run everywhere.
 zip = { version = "4", default-features = false, features = ["deflate-flate2"] }
 # zip asks flate2 for no backend; without this one the build depends on another crate happening to enable it.
