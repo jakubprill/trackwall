@@ -5,6 +5,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { useContext, useEffect, useRef, useState } from "react";
 import { errorMessage, post } from "@/lib/api";
+import { copyText } from "@/lib/clipboard";
 import type { Connection } from "@/lib/connection";
 import { daemonSocket } from "@/lib/daemon-socket";
 import { DROP_HOVER_RING, FILE_DROP_TARGET, FileDropEvent } from "@/lib/file-drop";
@@ -13,7 +14,7 @@ import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
 import { oncePerFrame } from "@/lib/once-per-frame";
 import { pastedPaths } from "@/lib/pasted-paths";
 import { IS_MAC } from "@/lib/platform";
-import { copiesSelection, keepsSelection, pastesClipboard } from "@/lib/terminal-copy";
+import { asksProgramToCopy, copiesSelection, keepsSelection, osc52Text, ProgramCopy, pastesClipboard } from "@/lib/terminal-copy";
 import { hyperlinkHandler, trackwallLinkProvider } from "@/lib/terminal-links";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { terminalTheme } from "@/lib/terminal-theme";
@@ -22,6 +23,9 @@ import { FocusReporter, terminalInFront } from "@/lib/window-focus";
 
 const RECONNECT_MS = 1000;
 const KEYS_DROPPED = "The terminal was still connecting to the session, so some of the keys you typed were dropped.";
+const COPY_FAILED = "Could not copy the selection to the clipboard; select the text again.";
+/** OSC 52: the program sets the clipboard (`osc52Text`). */
+const OSC_CLIPBOARD = 52;
 
 /**
  * The session terminal of one session (§4.4, ADR-26): xterm.js connected over a WebSocket to the PTY in the daemon. The
@@ -32,7 +36,8 @@ const KEYS_DROPPED = "The terminal was still connecting to the session, so some 
  * (ADR-47). In the grid (ADR-48) several terminals are open at once; only the `selected` one takes the keyboard and
  * counts as in front, so a waiting session in another tile keeps waiting until the user selects it. Files dropped on
  * the terminal (ADR-51) are pasted as their paths, as if the user typed them. Keys typed before the first connection
- * opens wait for it (`InputBeforeOpen`).
+ * opens wait for it (`InputBeforeOpen`). Text the program copies (OSC 52, how Copilot CLI copies its own selection) goes
+ * to the clipboard only as the answer to the user's Ctrl+C or right click in this terminal (`asksProgramToCopy`).
  */
 export function SessionTerminal({
   conn,
@@ -78,6 +83,17 @@ export function SessionTerminal({
       if (keepsSelection(event, state)) event.stopPropagation();
     };
     element.addEventListener("mousemove", holdMove, { capture: true });
+    const programCopy = new ProgramCopy();
+    const selection = () => ({ mac: IS_MAC, hasSelection: terminal.hasSelection() });
+    const noteClick = (event: PointerEvent) => {
+      if (asksProgramToCopy({ kind: "pointer", button: event.button }, selection())) programCopy.asked(performance.now());
+    };
+    element.addEventListener("pointerdown", noteClick, { capture: true });
+    const copyHandler = terminal.parser.registerOscHandler(OSC_CLIPBOARD, (data) => {
+      const text = osc52Text(data);
+      if (text !== undefined && programCopy.take(performance.now())) copyText(text).catch(() => setNotice(COPY_FAILED));
+      return true;
+    });
     fit.fit();
     term.current = terminal;
     if (takesFocus.current) terminal.focus();
@@ -142,14 +158,15 @@ export function SessionTerminal({
       else if (taken === "dropped") setNotice(KEYS_DROPPED);
     });
     terminal.attachCustomKeyEventHandler((event) => {
+      if (asksProgramToCopy({ kind: "key", key: event }, selection())) programCopy.asked(performance.now());
       // `false` without `preventDefault`: xterm.js leaves the key alone and the browser pastes into its text area.
       if (pastesClipboard(event, { mac: IS_MAC })) return false;
       if (!copiesSelection(event, { mac: IS_MAC, hasSelection: terminal.hasSelection() })) return true;
       // Without this the browser also runs its own shortcut: Ctrl+Shift+C opens the inspector in Chrome and in WebView2 in dev mode.
       event.preventDefault();
-      navigator.clipboard.writeText(terminal.getSelection()).then(
+      copyText(terminal.getSelection()).then(
         () => terminal.clearSelection(),
-        () => setNotice("Could not copy the selection to the clipboard; select the text again."),
+        () => setNotice(COPY_FAILED),
       );
       return false;
     });
@@ -181,6 +198,8 @@ export function SessionTerminal({
       resize.disconnect();
       container.removeEventListener(FileDropEvent.type, takeDrop);
       element.removeEventListener("mousemove", holdMove, { capture: true });
+      element.removeEventListener("pointerdown", noteClick, { capture: true });
+      copyHandler.dispose();
       window.removeEventListener("focus", onWindowFocus);
       window.removeEventListener("blur", sendFocus);
       document.removeEventListener("visibilitychange", sendFocus);

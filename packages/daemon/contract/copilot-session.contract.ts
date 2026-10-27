@@ -237,6 +237,36 @@ describe("a session of the real Copilot CLI", () => {
     expect(hookRecords(daemon.home, id).map((r) => r.event)).not.toContain("notification");
   });
 
+  // The session terminal in the UI copies this text to the clipboard (`osc52Text` in packages/ui/src/lib/terminal-copy.ts).
+  test("text selected with a mouse drag is copied on Ctrl+C as OSC 52 to the clipboard target", async () => {
+    const { agents } = daemon.facade;
+    const { id, window } = await startSession();
+    const copies = () => new OscParser().feed(window.text()).filter((osc) => osc.code === "52");
+    // SGR mouse reports (mode 1006, which Copilot CLI turns on): press at the start of the banner, below the tab bar on
+    // the first row, drag across it, release.
+    window.attachment.input("\x1b[<0;1;3M");
+    for (let row = 4; row <= 6; row++) window.attachment.input(`\x1b[<32;${REFERENCE_COLS};${row}M`);
+    window.attachment.input(`\x1b[<0;${REFERENCE_COLS};6m`);
+    // On release it may already set the primary selection (`p!`, Linux) or the clipboard (macOS); the terminal ignores
+    // those, because the user did not ask for a copy, so only what Ctrl+C sends counts.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const onRelease = copies().length;
+
+    window.attachment.input("\x03");
+    const ctrlC = () =>
+      copies()
+        .slice(onRelease)
+        .find((osc) => osc.data.startsWith("c;"));
+    await waitFor(agents, id, () => ctrlC() !== undefined, "the clipboard copy on Ctrl+C", 10_000).catch((err: unknown) => {
+      throw new Error(`${err}\nsequences on release: ${onRelease}\nscreen: ${JSON.stringify(window.text().slice(-4000))}`);
+    });
+    const copied = Buffer.from(ctrlC()?.data.slice(2) ?? "", "base64").toString("utf8");
+    expect(copied).toContain("Copilot");
+    expect(copied).not.toContain("\x1b");
+    // Ctrl+C with a selection copies; it does not end the session.
+    expect(agents.sessions().sessions.find((s) => s.id === id)?.run.kind).toBe("running");
+  });
+
   test("/exit ends the session with sessionEnd, and the session is Done", async () => {
     const { agents } = daemon.facade;
     const { id, window } = await startSession();

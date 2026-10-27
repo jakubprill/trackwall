@@ -33,6 +33,22 @@ test("a link clicked in a session terminal goes to the command the shell defines
   expect(ui).toBe(shell);
 });
 
+test("the UI copies through the clipboard command the shell defines, which takes text and hands nothing back", () => {
+  const clipboardSource = read("apps/desktop/src-tauri/src/clipboard.rs");
+  const shell = /#\[tauri::command\]\s*pub fn (\w+)\((\w+): String\) -> Result<\(\), String>/.exec(clipboardSource);
+  const ui = read("packages/ui/src/lib/clipboard.ts");
+  expect(shell?.[1]).toBe("copy_text");
+  expect(/const COPY_TEXT_COMMAND = "([^"]+)";/.exec(ui)?.[1]).toBe(shell?.[1]);
+  expect(ui).toContain(`invoke(COPY_TEXT_COMMAND, { ${shell?.[2]} })`);
+});
+
+test("the shell never reads the clipboard", () => {
+  const shell = read("apps/desktop/src-tauri/src/clipboard.rs");
+  expect(shell.match(/#\[tauri::command\]/g)).toHaveLength(1);
+  expect(shell).not.toMatch(/get_text|\.get\(/);
+  expect(read("apps/desktop/src-tauri/src/main.rs").match(/arboard/g)).toBeNull();
+});
+
 test("the shell knows the same link kinds as protocol", () => {
   const parse = /pub fn parse\(([\s\S]*?)\n\}/.exec(linkSource)?.[1] ?? "";
   const kinds = [...parse.matchAll(/"(\w+)" => /g)].map((m) => m[1]);
