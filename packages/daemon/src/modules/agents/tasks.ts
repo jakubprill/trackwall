@@ -101,7 +101,10 @@ export interface AgentTasksDeps {
   log: (msg: string) => void;
 }
 
-/** Where a task comes from: the form (without a title and a proposer) or an approved proposal (ADR-39), whose identifier it takes. */
+/**
+ * Where a task comes from: the form (without a title, a proposer and a model) or an approved proposal (ADR-39), whose
+ * identifier it takes, with the model the user approved (ADR-98).
+ */
 export interface TaskOrigin {
   id: string;
   title: string | null;

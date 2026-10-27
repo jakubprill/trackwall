@@ -208,7 +208,10 @@ const runs: ToolRuns = {
   },
   getDayReport: async (facade) => ({ report: facade.dayStart.report() }),
   getTaskChanges: (facade, { task, paths, maxPatchBytes }) => facade.agents.agentTaskChanges(task, maxPatchBytes, paths),
-  proposeTask: async (facade, proposal, { caller }) => ({ proposal: await facade.agents.propose(caller, proposal) }),
+  proposeTask: async (facade, { model, ...proposal }, { caller }) => ({
+    // Without a model the task runs on Copilot CLI's default (ADR-98).
+    proposal: await facade.agents.propose(caller, { ...proposal, model: model ?? null }),
+  }),
   proposeFolderAction: async (facade, { repo, reason }, { caller }) => ({
     proposal: await facade.agents.proposeRepoRemoval(caller, repo, reason),
   }),

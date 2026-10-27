@@ -501,7 +501,7 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
         { tool: copilotToolName(mcpTools.getUpdates.name), arguments: {} },
         { text: "The task has started." },
       );
-      const proposal = await agents.propose(main.id, { repo: "shop", title: "Add a login test", prompt: "add a login test" });
+      const proposal = await agents.propose(main.id, { repo: "shop", title: "Add a login test", prompt: "add a login test", model: null });
       const task = await agents.approveProposal(proposal.id, "add a login test", null);
       const session = agents.sessions().sessions.find((s) => s.task === task.id);
       if (session === undefined) throw new Error("the task has no session");

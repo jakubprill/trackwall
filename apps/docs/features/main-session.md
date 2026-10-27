@@ -38,7 +38,7 @@ To steer a running task, the main session sends its agent a message: a correctio
 
 ## Good to know
 
-- A proposal can name the Copilot CLI model its task runs on, for example a stronger one for a code review. The model shows in a field under the prompt: change it, or clear it to use Copilot CLI's default. Most proposals leave it empty. The task keeps its model when it is resumed, and its panel shows it next to the task port. A model that your Copilot CLI does not offer shows as an error in the task's terminal; switch it there with `/model`.
+- A proposal can name the Copilot CLI model its task runs on, for example a stronger one for a code review. The model shows in a field under the prompt: change it, or clear it to use Copilot CLI's default. Most proposals leave it empty. The task keeps its model when it is resumed, and its panel shows it next to the task port. Switching the model with `/model` in the task's terminal lasts until the task is resumed, which goes back to the task's model.
 - A proposal for a repo that already has tasks says so.
 - A main session can also propose removing a repo, shown as "Repo removal" with its reason and a "Remove repo" button instead of a prompt; see the [supervisor](/features/supervisor).
 - In the session grid, a tile with proposals shows their prompts with "Start task" and "Reject…"; "Next waiting" and Alt+J go to proposals too.

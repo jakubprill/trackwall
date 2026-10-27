@@ -335,17 +335,9 @@ export class Agents {
   }
 
   /** A task proposal from session `caller` (`null`: an agent outside Trackwall) in a repo from the projects folder (ADR-39). */
-  async propose(
-    caller: string | null,
-    { model, ...proposal }: { repo: string; title: string; prompt: string; model?: string },
-  ): Promise<TaskProposal> {
+  async propose(caller: string | null, proposal: Pick<TaskProposal, "repo" | "title" | "prompt" | "model">): Promise<TaskProposal> {
     await this.#deps.repos.repoPath(proposal.repo);
-    return this.#proposals.add({
-      kind: "task",
-      ...proposal,
-      model: model ?? null,
-      proposedBy: proposedByOf(caller === null ? null : this.session(caller)),
-    });
+    return this.#proposals.add({ kind: "task", ...proposal, proposedBy: proposedByOf(caller === null ? null : this.session(caller)) });
   }
 
   /** A proposal to remove a repo from the projects folder (ADR-83), from session `caller` like a task proposal. */

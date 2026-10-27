@@ -365,7 +365,7 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     const moved = `${dir}-moved`;
     const { agents, procs } = makeAgents({ shop: dir });
     cleanups.push(() => procs.stopAll());
-    const proposal = await agents.propose(null, { repo: "shop", title: "Add logout", prompt: "add logout" });
+    const proposal = await agents.propose(null, { repo: "shop", title: "Add logout", prompt: "add logout", model: null });
 
     renameSync(dir, moved);
     await expect(agents.approveProposal(proposal.id, proposal.prompt, null)).rejects.toMatchObject({ code: "repo_unavailable" });
