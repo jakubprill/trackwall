@@ -51,7 +51,14 @@ function setup(
     platform: platform.then((p) => ({ ...p, graceMs: 300 })),
     log: () => {},
   });
-  const mise = new Mise({ procs, repos: { repoPath }, tasks: NO_TASKS, command: FAKE_MISE, env: async () => process.env });
+  const mise = new Mise({
+    procs,
+    repos: { repoPath },
+    tasks: NO_TASKS,
+    command: FAKE_MISE,
+    env: async () => process.env,
+    onTrusted: () => {},
+  });
   const batch = new Batch({ workspace: { repoPath, syncRepo: sync }, mise, log: () => {} });
   return { batch, mise, procs, logs, home, dirs, dir: (id: string) => dirs.get(id) ?? "" };
 }

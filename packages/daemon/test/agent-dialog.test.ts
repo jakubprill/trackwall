@@ -137,6 +137,7 @@ async function sessionShowing(
     program: "copilot",
     run: () => ({ kind: "running", runId: "r1", startedAt: "2026-10-25T12:00:00.000Z", pid: 1 }),
     prompt,
+    onPromptSent: () => {},
     onUserText: () => {
       typedText.count++;
     },
