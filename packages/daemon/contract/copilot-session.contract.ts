@@ -227,12 +227,15 @@ describe("a session of the real Copilot CLI", () => {
     model.reply({ text: "Created both files." });
     agents.answerDialog(id, first.dialog.id, "1");
     await waitFor(agents, id, () => existsSync(join(repoDir, firstFile)), "the first command", SESSION_MS);
-    // The first command's postToolUse does not end waiting for the second approval, which the screen shows now.
+    // The first command's postToolUse does not end waiting for the second approval. The hook can come before the
+    // emulator has the second dialog (seen on macOS), so the wait goes on until the dialog shows or the session moved on.
     const second = await waitFor(
       agents,
       id,
-      () => hookRecords(daemon.home, id).some((r) => r.event === "postToolUse"),
-      "the first command's postToolUse",
+      (s) =>
+        hookRecords(daemon.home, id).some((r) => r.event === "postToolUse") &&
+        (s.state?.state !== "Approval" || (s.dialog?.kind === "approval" && s.dialog.detail.join(" ").includes(secondFile))),
+      "the first command's postToolUse and the second dialog",
       SESSION_MS,
     );
     expect(second.state).toMatchObject({ state: "Approval" });
