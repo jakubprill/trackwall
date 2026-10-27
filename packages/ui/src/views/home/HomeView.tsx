@@ -1,4 +1,4 @@
-import { graphApi, miseApi, type RunningMiseTask, type SessionList, workspaceApi } from "@trackwall/protocol";
+import { graphApi, type RunningMiseTask, type SessionList, workspaceApi } from "@trackwall/protocol";
 import { type HomeKey, parseHomeKey } from "@trackwall/scene/model";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -10,11 +10,11 @@ import type { LiveFeed } from "@/lib/daemon-events";
 import { daemonAnswered, homeHasObject, homeModel } from "@/lib/home-model";
 import { listNeedsSettings } from "@/lib/repo-status";
 import { GRAPH_PACE, REPO_LIST_PACE } from "@/lib/repo-watch";
-import { RUNNING_MISE_POLL_MS } from "@/lib/run-state";
 import type { SessionSelection } from "@/lib/session-entries";
 import type { SettingsCategory } from "@/lib/settings-categories";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
+import { useRunningMiseTasks } from "@/lib/use-running-mise-tasks";
 import { HomeDetails } from "./HomeDetails.tsx";
 import { HomeHoverCard } from "./HomeHoverCard.tsx";
 import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
@@ -64,10 +64,7 @@ export function HomeView({
     useCallback(() => post(conn, graphApi.graph, {}), [conn]),
     repoWatch.options(GRAPH_PACE),
   );
-  const running = useRemote(
-    useCallback(() => post(conn, miseApi.running, {}), [conn]),
-    { pollMs: RUNNING_MISE_POLL_MS, live: runningLive },
-  );
+  const running = useRunningMiseTasks(conn, runningLive);
   const [selected, setSelected] = useState<HomeKey | null>(null);
   const [hovered, setHovered] = useState<HomeKey | null>(null);
   const [unavailable, setUnavailable] = useState<string>();

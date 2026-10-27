@@ -1,4 +1,4 @@
-import { type Repo, type RepoOverview, workspaceApi } from "@trackwall/protocol";
+import { type Repo, type RepoOverview, type RunningMiseTask, type SessionList, workspaceApi } from "@trackwall/protocol";
 import { Code, FolderOpen } from "lucide-react";
 import { lazy, type ReactNode, Suspense, useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -8,11 +8,16 @@ import { TabBar } from "@/components/TabBar";
 import { Button } from "@/components/ui/button";
 import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import type { LiveFeed } from "@/lib/daemon-events";
 import { TRUNCATED_NOTE } from "@/lib/format";
 import { FILE_MANAGER } from "@/lib/platform";
+import { type RepoActivityTarget, repoActivity } from "@/lib/repo-activity";
 import { REPO_TABS, type RepoTab } from "@/lib/repo-tabs";
+import type { SessionSelection } from "@/lib/session-entries";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
+import { useRunningMiseTasks } from "@/lib/use-running-mise-tasks";
 import { PlainReadme, ReadmeFallback } from "./ReadmeFallback.tsx";
+import { RepoActivityBar } from "./RepoActivityBar.tsx";
 import { RepoCardView } from "./RepoCardView.tsx";
 import { RepoChanges } from "./RepoChanges.tsx";
 import { RepoCommits } from "./RepoCommits.tsx";
@@ -23,8 +28,27 @@ import { RepoStats } from "./RepoStats.tsx";
 /** Streamdown with Mermaid is a few MB, so it goes into a separate file loaded only with the first README. */
 const ReadmeMarkdown = lazy(() => import("./ReadmeMarkdown.tsx").then((m) => ({ default: m.ReadmeMarkdown })));
 
-export function RepoDetail({ conn, repo }: { conn: Connection; repo: Repo }) {
+export function RepoDetail({
+  conn,
+  repo,
+  sessions,
+  runningLive,
+  onOpenInSessions,
+}: {
+  conn: Connection;
+  repo: Repo;
+  /** `undefined` until the first session list arrives: the bar then shows only mise tasks. */
+  sessions: SessionList | undefined;
+  /** Running mise tasks from the events; `undefined` for a moment after a connection change, and polled until then. */
+  runningLive: LiveFeed<RunningMiseTask[]> | undefined;
+  onOpenInSessions: (selection: SessionSelection) => void;
+}) {
   const [tab, setTab] = useState<RepoTab>(REPO_TABS[0].id);
+  const running = useRunningMiseTasks(conn, runningLive);
+  const openActivity = (target: RepoActivityTarget) => {
+    if (target.view === "mise") setTab("mise");
+    else onOpenInSessions(target.selection);
+  };
   const { status } = repo;
   const available = status.kind === "ok";
   // A new commit (for example from a terminal) changes HEAD in the polled list, and that fetches the overview and the tree anew.
@@ -48,6 +72,7 @@ export function RepoDetail({ conn, repo }: { conn: Connection; repo: Repo }) {
       ) : (
         <>
           <RepoStats status={status} onShowChanges={() => setTab("changes")} />
+          <RepoActivityBar items={repoActivity(repo.id, sessions, running.data ?? [])} onOpen={openActivity} />
           <TabBar tabs={REPO_TABS} active={tab} onSelect={setTab} />
           {tab === "card" && <RepoCardView conn={conn} repo={repo.id} head={head} />}
           {tab === "files" && <RepoFiles conn={conn} repo={repo.id} head={head} />}

@@ -235,7 +235,16 @@ export function App() {
                 />
               )}
               {conn && view === "repos" && (
-                <ReposView conn={conn} initialRepo={repo} repoWatch={repoWatch} onRetry={retry} onOpenSettings={openSettings} />
+                <ReposView
+                  conn={conn}
+                  initialRepo={repo}
+                  repoWatch={repoWatch}
+                  sessions={sessions.data}
+                  runningLive={runningLive}
+                  onOpenInSessions={openInSessions}
+                  onRetry={retry}
+                  onOpenSettings={openSettings}
+                />
               )}
               {conn && view === "sessions" && (
                 <SessionsView
