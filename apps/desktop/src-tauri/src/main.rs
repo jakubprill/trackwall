@@ -7,6 +7,7 @@ mod app_menu;
 mod attention;
 mod autostart;
 mod badge;
+mod clipboard;
 mod daemon;
 mod daemon_state;
 mod folder_picker;
@@ -135,6 +136,7 @@ fn main() {
             window_shows,
             jump::take_jump,
             link::open_link,
+            clipboard::copy_text,
             open_from_tray_panel,
             folder_picker::pick_projects_folder,
             updates::check_update,
