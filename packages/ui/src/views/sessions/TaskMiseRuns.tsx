@@ -1,38 +1,19 @@
 import { miseApi, miseTaskLogSource, type RunningMiseTask } from "@trackwall/protocol";
 import { ScrollText, Square } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { MiseTaskLog } from "@/components/MiseTaskLog";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import type { LiveFeed } from "@/lib/daemon-events";
 import { relativeTime } from "@/lib/format";
-import { RUNNING_MISE_POLL_MS } from "@/lib/run-state";
 import { useAction } from "@/lib/use-action";
-import { useRemote } from "@/lib/use-remote";
 
 /**
  * The mise tasks running in a task's worktree (ADR-59), started by its agent over MCP: the user watches their log and
- * stops them here, as the repo's "mise tasks" tab does for the repo root. Hidden while nothing runs. A run the
- * verification section already shows with its log and Cancel (ADR-64) is left out, so it is not listed twice.
+ * stops them here, as the repo's "mise tasks" tab does for the repo root. Hidden while nothing runs. `useTaskDetails`
+ * leaves out a run the verification section already shows with its log and Cancel (ADR-64).
  */
-export function TaskMiseRuns({
-  conn,
-  task,
-  live,
-  paused,
-  shownElsewhere,
-}: {
-  conn: Connection;
-  task: string;
-  live: LiveFeed<RunningMiseTask[]> | undefined;
-  paused: boolean;
-  /** The mise task whose run another section of the panel shows (the running verification's `test`). */
-  shownElsewhere: string | undefined;
-}) {
-  const load = useCallback(() => post(conn, miseApi.running, {}), [conn]);
-  const remote = useRemote(paused ? undefined : load, { pollMs: RUNNING_MISE_POLL_MS, live });
-  const runs = (remote.data ?? []).filter((r) => r.task === task && r.miseTask !== shownElsewhere);
+export function TaskMiseRuns({ conn, runs }: { conn: Connection; runs: readonly RunningMiseTask[] }) {
   if (runs.length === 0) return null;
   return (
     <section aria-label="mise tasks in this worktree" className="flex flex-col gap-2 border-b px-4 py-3">
