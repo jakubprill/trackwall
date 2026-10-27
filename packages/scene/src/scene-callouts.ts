@@ -55,6 +55,8 @@ export class SceneCallouts<K extends string> {
   readonly #views: CalloutViews;
   readonly #host: CalloutHost<K>;
   readonly #callouts = new Map<K, Callout>();
+  /** One point reused for projecting anchors, because this runs every frame. */
+  readonly #anchor = new Vector3();
 
   constructor(views: CalloutViews, host: CalloutHost<K>) {
     this.#views = views;
@@ -91,7 +93,7 @@ export class SceneCallouts<K extends string> {
     const inputs: CalloutInput<K>[] = [];
     for (const [key, callout] of this.#callouts) {
       const position = this.#host.position(key);
-      const anchor = position && this.#views.project(new Vector3(position.x, position.y + callout.label.offset.y, position.z));
+      const anchor = position && this.#views.project(this.#anchor.set(position.x, position.y + callout.label.offset.y, position.z));
       if (!anchor?.visible) continue;
       const { element } = callout.label;
       callout.size ??= element.offsetWidth > 0 ? { width: element.offsetWidth, height: element.offsetHeight } : null;

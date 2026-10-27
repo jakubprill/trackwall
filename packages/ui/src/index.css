@@ -153,7 +153,7 @@
 /* A label on the 3D scene (ADR-104): a plate beside its object with a leader line down to it. The scene places it and sets
    `data-side`, `--callout-run` (the line's horizontal run) and `--callout-rise` (how far the plate's middle stands above the
    object), named in `CALLOUT_VARIABLES` of `packages/scene/src/scene-callouts.ts`; the line, its end dot and the plate's edge
-   take the text colour, which is the state colour. The line starts outside the plate's 2px edge, so its end meets the object. */
+   take the text colour, which is the state colour. The line starts outside the plate's 2px edge and ends at the dot, which is centred on the object. */
 @utility scene-callout {
   margin-top: calc(-1 * var(--callout-rise));
   margin-left: var(--callout-run);
