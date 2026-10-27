@@ -35,24 +35,24 @@
   --grid-line: oklch(0.85 0.04 220 / 4%);
   /*
    * The 16 ANSI colours of the session terminals (`lib/terminal-theme.ts`): Copilot CLI draws its TUI with them, so
-   * they follow the HUD. Red, green, yellow and cyan are the state and accent colours; the rest sit next to them in
-   * lightness and chroma, the bright ones a step lighter.
+   * they follow the HUD. Red, green, yellow and cyan are the state and accent colours, white is muted text; blue and
+   * magenta, Copilot CLI's own accents, lean towards the cyan accent, so the terminal reads as part of the panel.
    */
-  --ansi-black: oklch(0.3 0.014 240);
+  --ansi-black: var(--secondary);
   --ansi-red: var(--destructive);
   --ansi-green: var(--success);
   --ansi-yellow: var(--warning);
-  --ansi-blue: oklch(0.72 0.11 250);
-  --ansi-magenta: oklch(0.74 0.1 300);
+  --ansi-blue: oklch(0.76 0.08 225);
+  --ansi-magenta: oklch(0.78 0.07 255);
   --ansi-cyan: var(--primary);
-  --ansi-white: oklch(0.86 0.01 230);
+  --ansi-white: var(--muted-foreground);
   --ansi-bright-black: oklch(0.58 0.02 240);
   --ansi-bright-red: oklch(0.76 0.15 22);
   --ansi-bright-green: oklch(0.86 0.11 165);
   --ansi-bright-yellow: oklch(0.9 0.1 80);
-  --ansi-bright-blue: oklch(0.82 0.09 250);
-  --ansi-bright-magenta: oklch(0.84 0.08 300);
-  --ansi-bright-cyan: oklch(0.9 0.08 210);
+  --ansi-bright-blue: oklch(0.84 0.07 220);
+  --ansi-bright-magenta: oklch(0.85 0.06 255);
+  --ansi-bright-cyan: var(--primary);
   --ansi-bright-white: var(--foreground);
 }
 
@@ -172,4 +172,10 @@
     background: var(--primary);
     box-shadow: var(--shadow-glow-primary);
   }
+}
+
+/* xterm.css paints the session terminal's viewport black; the terminal is transparent (`lib/terminal-theme.ts`) and takes
+   the surface it sits on. */
+.xterm .xterm-viewport {
+  background-color: transparent;
 }

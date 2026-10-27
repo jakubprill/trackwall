@@ -8,10 +8,14 @@ const INDEX_CSS = readFileSync(join(import.meta.dir, "..", "src", "index.css"), 
 describe("session terminal theme", () => {
   test("the 16 ANSI colours Copilot CLI draws with come from the app's tokens, not xterm.js's default palette", () => {
     const theme = terminalTheme((name) => `value of ${name}`);
-    expect(theme.background).toBe("value of --background");
     expect(Object.keys(ANSI_TOKENS)).toHaveLength(16);
     for (const [colour, token] of Object.entries(ANSI_TOKENS))
       expect({ colour, value: theme[colour as keyof typeof theme] }).toEqual({ colour, value: `value of ${token}` });
+  });
+
+  test("the terminal has no background of its own, so it takes the surface it sits on", () => {
+    expect(terminalTheme(() => "").background).toBe("rgba(0, 0, 0, 0)");
+    expect(INDEX_CSS).toMatch(/\.xterm \.xterm-viewport \{\s*background-color: transparent;/);
   });
 
   test("index.css defines every ANSI token the terminal reads", () => {

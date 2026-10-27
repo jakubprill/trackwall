@@ -228,11 +228,7 @@ export function SessionTerminal({
           The session has ended; the terminal shows what was left on its screen.
         </p>
       )}
-      <div
-        ref={frame}
-        {...{ [FILE_DROP_TARGET]: "" }}
-        className={cn("bg-background relative min-h-0 flex-1 overflow-hidden", DROP_HOVER_RING)}
-      >
+      <div ref={frame} {...{ [FILE_DROP_TARGET]: "" }} className={cn("relative min-h-0 flex-1 overflow-hidden", DROP_HOVER_RING)}>
         <div ref={host} className="absolute inset-2 font-mono" />
       </div>
     </div>

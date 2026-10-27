@@ -13,6 +13,7 @@ export function sessionTerminalOptions(theme: ITheme, fontFamily: string): ITerm
     fontFamily,
     fontSize: 13,
     cursorBlink: true,
+    allowTransparency: true,
     scrollback: 5000,
     allowProposedApi: false,
     macOptionClickForcesSelection: true,
