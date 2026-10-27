@@ -1,7 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { delimiter, dirname, resolve as resolvePath } from "node:path";
+import { type RunOptions, type RunOutput, runProgram } from "../../infra/run-program.ts";
 import { GIT_FROM_PATH, gitProgram, withPathPrefix } from "./git-program.ts";
-import { type RunOptions, type RunOutput, runProgram } from "./run.ts";
 import { Slots } from "./slots.ts";
 
 /**
@@ -103,12 +103,12 @@ export async function git(repoDir: string, args: readonly string[], opts: GitOpt
 }
 
 /** `git --version` of the git the daemon runs: the doctor shows it (ADR-101). */
-export async function gitVersion(): Promise<string> {
+export async function gitVersion(timeoutMs: number): Promise<string> {
   const program = await gitProgram();
   const { stdout } = await runProgram(program.command, ["--version"], {
     label: "git --version",
     env: withPathPrefix(gitEnv(), program.pathPrefix),
-    timeoutMs: TIMEOUT_MS,
+    timeoutMs,
   });
   return stdout.toString("utf8").trim();
 }

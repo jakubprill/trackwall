@@ -1,4 +1,4 @@
-import { type DoctorCheck, doctorApi } from "@trackwall/protocol";
+import { type DoctorCheck, type DoctorStatus, doctorApi } from "@trackwall/protocol";
 import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
@@ -6,7 +6,7 @@ import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { doctorEntry, doctorHeadline } from "@/lib/doctor";
+import { doctorCheckTitle, doctorHeadline, doctorProblemCount, doctorStatusLabel } from "@/lib/doctor";
 import { useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
 
@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 export function DoctorSurface({ conn }: { conn: Connection }) {
   const load = useCallback(() => post(conn, doctorApi.run, {}), [conn]);
   const report = useRemote(load);
-  const problems = report.data?.checks.filter((c) => c.status !== "ok").length;
+  const problems = report.data && doctorProblemCount(report.data);
   return (
     <Surface label="Doctor" meta={problems ? String(problems) : undefined}>
       <div className="flex flex-col gap-3 p-4">
@@ -44,18 +44,17 @@ export function DoctorSurface({ conn }: { conn: Connection }) {
   );
 }
 
-const STATUS_CLASS: Record<DoctorCheck["status"], string> = { ok: "text-success", warn: "text-warning", fail: "text-destructive" };
+const STATUS_CLASS: Record<DoctorStatus, string> = { ok: "text-success", warn: "text-warning", fail: "text-destructive" };
 
 function CheckEntry({ check }: { check: DoctorCheck }) {
-  const entry = doctorEntry(check);
   return (
     <li className="flex min-w-0 flex-col gap-1 border-b pb-3 last:border-b-0 last:pb-0">
       <span className="flex items-baseline gap-2 text-sm">
-        <span className={cn("text-xs font-medium", STATUS_CLASS[check.status])}>{entry.status}</span>
-        <span className="font-medium">{entry.title}</span>
+        <span className={cn("text-xs font-medium", STATUS_CLASS[check.status])}>{doctorStatusLabel(check.status)}</span>
+        <span className="font-medium">{doctorCheckTitle(check.id)}</span>
       </span>
-      <span className="text-muted-foreground text-xs break-words">{entry.summary}</span>
-      {entry.fix && <span className="text-xs break-words">{entry.fix}</span>}
+      <span className="text-muted-foreground text-xs break-words">{check.summary}</span>
+      {check.fix && <span className="text-xs break-words">{check.fix}</span>}
     </li>
   );
 }

@@ -73,8 +73,8 @@ export class Vcs {
   private readonly configs = new ConfigMemo();
 
   /** `git --version` of the git the daemon runs (the doctor, ADR-101). */
-  version(): Promise<string> {
-    return gitVersion();
+  version(timeoutMs: number): Promise<string> {
+    return gitVersion(timeoutMs);
   }
 
   /**

@@ -16,7 +16,7 @@ The doctor in Settings checks what Trackwall needs on your computer and says wha
 
 ## How it works
 
-When you open "Settings", the "Doctor" section runs its checks, which takes a few seconds. Each line shows what was checked, its state ("OK", "Check" or "Missing"), what was found, and what to do when it is not OK. The line above the list says whether everything is in place or how many checks need your attention.
+When you open "Settings", the "Doctor" section runs its checks, which takes a few seconds. Each line shows what was checked, its state ("OK", "Check" or "Problem"), what was found, and what to do when it is not OK. The line above the list says whether everything is in place or how many checks need your attention.
 
 The checks are:
 

@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { win32 } from "node:path";
-import { runProgram } from "./run.ts";
+import { runProgram } from "../../infra/run-program.ts";
 
 /**
  * Which program `git()` starts (§4.5, ADR-79). `git` on `PATH` of Git for Windows is the launcher `cmd\git.exe` (or a

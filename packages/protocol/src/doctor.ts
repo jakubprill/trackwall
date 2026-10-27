@@ -7,12 +7,6 @@ import type { Endpoint } from "./api.ts";
  * only reads; it changes nothing. Every action is `POST /api/doctor/<action>`.
  */
 
-/**
- * The Copilot CLI version Trackwall is checked against (the contract tests, ADR-67); an older one may lack what the daemon
- * relies on. A newer Copilot CLI comes in a PR that raises it and passes the contract tests on it.
- */
-export const TESTED_COPILOT_CLI_VERSION = "1.0.103";
-
 /** What a check is about; one check per item, in this order. */
 export const DoctorCheckId = z.enum([
   "projects-folder",

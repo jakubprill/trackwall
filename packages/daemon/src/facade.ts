@@ -1,8 +1,10 @@
 import { join } from "node:path";
 import { SERVICE_RELEASE_MS } from "@trackwall/protocol";
 import { vscodeUrl } from "./infra/editor-url.ts";
+import { DomainError } from "./infra/errors.ts";
+import { runProgram } from "./infra/run-program.ts";
 import { Agents, type AgentsDeps } from "./modules/agents/agents.ts";
-import { findCopilot } from "./modules/agents/copilot-command.ts";
+import { resolveCopilot } from "./modules/agents/copilot-command.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { CardCache } from "./modules/cards/card-cache.ts";
 import { Cards } from "./modules/cards/cards.ts";
@@ -21,7 +23,6 @@ import { RuntimeFile } from "./modules/procs/runtime-file.ts";
 import { Services } from "./modules/services/services.ts";
 import { TestReports } from "./modules/test-results/test-reports.ts";
 import { Hosting, type HostingClis } from "./modules/vcs/hosting.ts";
-import { runProgram } from "./modules/vcs/run.ts";
 import { Vcs } from "./modules/vcs/vcs.ts";
 import { Verifications } from "./modules/verification/verifications.ts";
 import { RepoWatch } from "./modules/workspace/repo-watch.ts";
@@ -202,12 +203,16 @@ export function createFacade(o: FacadeOptions): Facade {
     env: o.userEnv,
     run: async (command, args, { env, timeoutMs }) =>
       (await runProgram(command, args, { label: `${command} ${args.join(" ")}`, env, timeoutMs })).stdout.toString("utf8"),
-    gitVersion: () => vcs.version(),
-    signedIn: (host) => hosting.signedIn(host),
-    copilot: o.copilotCommand,
-    findCopilot,
+    gitVersion: (timeoutMs) => vcs.version(timeoutMs),
+    signedIn: (host, timeoutMs) => hosting.signedIn(host, timeoutMs),
+    resolveCopilot: (env) => resolveCopilot(o.copilotCommand, env),
     mise: o.miseCommand,
-    projectsDir: () => workspace.projectsDir().catch(() => null),
+    // Not set yet is a state the doctor reports; a broken `workspace.yaml` is an error it shows as one.
+    projectsDir: () =>
+      workspace.projectsDir().catch((err: unknown) => {
+        if (err instanceof DomainError && err.code === "bad_request") return null;
+        throw err;
+      }),
     repoHosts: () => workspace.repoHosts(),
     now: () => new Date(),
   });

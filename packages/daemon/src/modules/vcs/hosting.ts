@@ -8,10 +8,10 @@ import {
   type RepoHost,
   type RepoHostKind,
 } from "@trackwall/protocol";
+import { runProgram } from "../../infra/run-program.ts";
 import { gitEnv } from "./git.ts";
 import { findMergeRequest, mergeRequestFormUrl } from "./hosted-merge-request.ts";
 import { githubApi, gitlabApi, type HostingApi } from "./hosted-repo.ts";
-import { runProgram } from "./run.ts";
 
 /**
  * Repo hosts in the `vcs` module (§4.5, ADR-19): the list of repos available to the user, a clone of the chosen one and the
@@ -39,8 +39,6 @@ const APIS: Record<RepoHostKind, HostingApi> = { github: githubApi, gitlab: gitl
 const PAGE_SIZE = 100;
 /** One API page; taking longer usually means there is no network or the VPN is down. */
 const PAGE_TIMEOUT_MS = 30_000;
-/** `auth status` asks the repo host whether the token works; a short limit, because the doctor waits for it. */
-const AUTH_STATUS_TIMEOUT_MS = 15_000;
 /**
  * How long fetched pages serve later queries: a search filtered in the daemon (GitHub, a short query
  * in GitLab) does not fetch the list on every keystroke, and a new repo on the repo host appears after this time at the latest.
@@ -96,8 +94,8 @@ export class Hosting {
   }
 
   /** Resolves when `gh` or `glab` is signed in to `host` (`auth status` ends with 0); the doctor asks it (ADR-101). */
-  async signedIn(host: RepoHost): Promise<void> {
-    await this.run(host, ["auth", "status", "--hostname", host.host], AUTH_STATUS_TIMEOUT_MS);
+  async signedIn(host: RepoHost, timeoutMs: number): Promise<void> {
+    await this.run(host, ["auth", "status", "--hostname", host.host], timeoutMs);
   }
 
   /** A failed fetch does not stay in memory, so "Try again" after signing in asks the repo host anew. */

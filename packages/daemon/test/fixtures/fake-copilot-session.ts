@@ -12,17 +12,24 @@
  * agent's tool) and prints its PID, so that the test can check that stopping the session ends the whole group. The
  * helper starts only after input from the user, because on Windows the leader joins the job a moment after the start.
  * Like Copilot CLI it keeps a conversation per session id once the session has had a prompt (a marker file in the
- * temporary directory), and refuses `--resume=<id>` of an id without one (ADR-95).
+ * temporary directory), and refuses `--resume=<id>` of an id without one (ADR-95). `--version` alone prints the version.
  */
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
 import { z } from "zod";
 import { ESCAPE } from "../../src/modules/agents/copilot-keys.ts";
 import { stripAnsi } from "../../src/modules/logs/stream-lines.ts";
 import { PROMPT_PLACEHOLDER, type ReferenceHook, reference } from "../support/copilot-reference.ts";
 import { pluginHooks } from "../support/plugin-hooks.ts";
+
+// `--version` answers as Copilot CLI does (`GitHub Copilot CLI 1.0.103.` and a hint), for the doctor (ADR-101).
+if (process.argv[2] === "--version") {
+  process.stdout.write(`GitHub Copilot CLI ${TESTED_COPILOT_CLI_VERSION}.\nRun 'copilot update' to check for updates.\n`);
+  process.exit(0);
+}
 
 const fire = pluginHooks(process.argv, "s1");
 
