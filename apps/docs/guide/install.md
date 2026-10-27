@@ -14,7 +14,7 @@ Trackwall runs on Windows (x64) and macOS (Apple Silicon). Each version on the [
 A browser marks a downloaded file as coming from the internet, and SmartScreen then blocks `trackwall.exe`, often without a "Run anyway" button. Command-line tools do not add that mark. In PowerShell, with the [GitHub CLI](https://cli.github.com) signed in (`gh auth login`), this downloads the version in `$v`, checks its sum and unpacks it to `%LOCALAPPDATA%\Programs\Trackwall`:
 
 ```powershell
-$v = "0.5.3"
+$v = "0.5.4"
 $zip = "trackwall-$v-windows-x64.zip"
 gh release download "v$v" -R jakubprill/trackwall -p $zip -p SHA256SUMS.txt -D $env:TEMP --clobber
 if ($LASTEXITCODE) { throw "gh release download failed" }
@@ -48,7 +48,7 @@ Gatekeeper reports an unsigned app downloaded with a browser as "damaged". Downl
 
 ```sh
 shasum -a 256 -c SHA256SUMS.txt --ignore-missing
-ditto -x -k trackwall-0.5.3-macos-arm64.zip /Applications
+ditto -x -k trackwall-0.5.4-macos-arm64.zip /Applications
 xattr -dr com.apple.quarantine /Applications/Trackwall.app
 ```
 
