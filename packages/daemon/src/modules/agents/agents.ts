@@ -37,6 +37,7 @@ import { LiveSession, type SessionPty, type SessionWindow } from "./live-session
 import { MiseTrustNotices } from "./mise-trust-notices.ts";
 import { withLoopbackNoProxy } from "./no-proxy.ts";
 import { proposedByOf, proposerKeyOf, proposerOf, SUPERVISOR } from "./proposer.ts";
+import { type ResumableSession, ResumableSessions } from "./resumable-sessions.ts";
 import { type SessionRole, withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
@@ -75,6 +76,8 @@ const SESSIONS_DIR = "sessions";
 /** Without it Copilot CLI silently drops the session plugin's hooks, which POST to the daemon on `127.0.0.1` (ADR-88). */
 const LOOPBACK_HOOKS_ENV = { COPILOT_HOOK_ALLOW_LOCALHOST: "1" };
 const TASKS_FILE = "tasks.json";
+/** The sessions that run, for the next daemon to resume (ADR-95). */
+const RESUMABLE_SESSIONS_FILE = "resumable-sessions.json";
 /** Where task worktrees went before ADR-84; tasks from then keep them there until they end. */
 const LEGACY_WORKTREES_DIR = "worktrees";
 
@@ -183,9 +186,13 @@ export class Agents {
   /** The supervisor start under way, so that two requests at once start one supervisor, not two (ADR-58). */
   #supervisorStart: Promise<Session> | undefined;
   #timer: NodeJS.Timeout | undefined;
+  readonly #resumable: ResumableSessions;
+  /** The sessions the previous daemon left running, until `resumeLeftSessions` takes them (ADR-95). */
+  #left: ResumableSession[] = [];
 
   constructor(deps: AgentsDeps) {
     this.#deps = deps;
+    this.#resumable = new ResumableSessions(join(deps.home, RESUMABLE_SESSIONS_FILE), deps.log);
     this.#tasks = new AgentTasks({
       vcs: deps.vcs,
       repos: deps.repos,
@@ -224,8 +231,11 @@ export class Agents {
     return this.#view(this.#get(id));
   }
 
+  /** A main session in the root of `repo`; its id is also Copilot CLI's session id, so a restart can resume it (ADR-95). */
   async start(repo: string): Promise<Session> {
-    return this.#launch({ repo, cwd: await this.#deps.repos.repoPath(repo), task: null, args: [], promptOnStart: false });
+    const id = randomUUID();
+    const cwd = await this.#deps.repos.repoPath(repo);
+    return this.#launch({ id, repo, cwd, task: null, args: [`--session-id=${id}`], promptOnStart: false, hasConversation: false });
   }
 
   /**
@@ -260,19 +270,27 @@ export class Agents {
     return this.#views().find((s) => isSupervisor(s) && s.run.kind !== "exited");
   }
 
-  /** `firstMessage` is the first message (`--interactive`) of the new supervisor; `null` for none. */
+  /**
+   * `firstMessage` is the first message (`--interactive`) of the new supervisor; `null` for none. Its id is also Copilot
+   * CLI's session id, so a restart can resume it (ADR-95).
+   */
   #startNewSupervisor(firstMessage: string | null): Promise<Session> {
-    this.#supervisorStart = this.#replaceSupervisor(firstMessage).finally(() => {
+    const id = randomUUID();
+    const args = [`--session-id=${id}`, ...(firstMessage === null ? [] : [`--interactive=${firstMessage}`])];
+    return this.#startSupervisorAs({ id, args, promptOnStart: firstMessage !== null, hasConversation: firstMessage !== null });
+  }
+
+  #startSupervisorAs(spec: SupervisorLaunch): Promise<Session> {
+    this.#supervisorStart = this.#replaceSupervisor(spec).finally(() => {
       this.#supervisorStart = undefined;
     });
     return this.#supervisorStart;
   }
 
-  async #replaceSupervisor(firstMessage: string | null): Promise<Session> {
+  async #replaceSupervisor(spec: SupervisorLaunch): Promise<Session> {
     const ended = this.#views().filter(isSupervisor);
     const cwd = await this.#deps.repos.projectsDir();
-    const args = firstMessage === null ? [] : [`--interactive=${firstMessage}`];
-    const started = await this.#launch({ repo: null, cwd, task: null, args, promptOnStart: firstMessage !== null });
+    const started = await this.#launch({ ...spec, repo: null, cwd, task: null });
     // One of them may have been dismissed during the start; the start has still succeeded.
     for (const old of ended) if (this.#sessions.has(old.id)) this.#close(old.id);
     return started;
@@ -612,7 +630,7 @@ export class Agents {
    * Copilot CLI in `cwd` (the repo root or the worktree of task `task`) with arguments before the session's arguments;
    * `promptOnStart` when the arguments carry the first message (`--interactive`), so the session works from the start.
    */
-  async #launch({ repo, cwd, task, args, promptOnStart }: LaunchSpec): Promise<Session> {
+  async #launch({ id = randomUUID(), repo, cwd, task, args, promptOnStart, hasConversation }: LaunchSpec): Promise<Session> {
     // The MCP server and the hooks are the daemon on `127.0.0.1`, which a proxy of the user must not get (ADR-89).
     const env = withLoopbackNoProxy({ ...(await this.#deps.env()), TERM: "xterm-256color", COLORTERM: "truecolor", ...LOOPBACK_HOOKS_ENV });
     const [name = "copilot", ...prefix] = this.#deps.copilot;
@@ -620,12 +638,12 @@ export class Agents {
     if (!program) throw new DomainError("agent_unavailable", `Copilot CLI (${name}) not found in PATH`);
     const permissions = this.#deps.repos.toolPermissions(repo);
     const role: SessionRole = repo === null ? { repo, changesCode: this.#deps.repos.supervisorSettings().changesCode } : { repo, task };
-    const id = randomUUID();
+    if (this.#sessions.has(id)) throw new Error(`session ${id} is already listed`);
     const dir = sessionDir(this.#deps.home, id);
     const token = this.#tokens.issue(id);
     let prepared: PreparedSession;
     try {
-      prepared = this.#prepare({ id, role, task, dir, token, promptOnStart, program });
+      prepared = this.#prepare({ id, role, task, dir, token, promptOnStart, hasConversation, program });
     } catch (err) {
       this.#tokens.revoke(id);
       rmSync(dir, { recursive: true, force: true });
@@ -693,13 +711,62 @@ export class Agents {
     return this.#get(id).attach(viewer, onSnapshot, onClosed);
   }
 
-  /** Daemon start: session files from the previous run (sessions do not outlive the daemon). */
+  /**
+   * Daemon start: session files from the previous run (sessions do not outlive the daemon), and the list of the
+   * sessions it left running, which `resumeLeftSessions` resumes once the API listens (ADR-95).
+   */
   sweepLeftovers(): void {
+    this.#left = this.#resumable.read();
     try {
       rmSync(join(this.#deps.home, SESSIONS_DIR), { recursive: true, force: true });
     } catch (err) {
       this.#deps.log(`cleaning up the session directory: ${String(err)}`);
     }
+  }
+
+  /**
+   * Daemon start, once the API listens (the sessions' hooks and MCP server need its port): the sessions that ran when
+   * the previous daemon stopped go on with their conversations (ADR-95). A task's session resumes as Resume does; the
+   * supervisor and a main session start again under their id with `--resume`. One that cannot (its task was ended, its
+   * repo is gone, a supervisor already runs) goes to the log.
+   */
+  async resumeLeftSessions(): Promise<void> {
+    // The supervisor first: the user may start a new one meanwhile, which would leave the old conversation behind.
+    const left = [...this.#left].sort((a, b) => Number(b.repo === null && b.task === null) - Number(a.repo === null && a.task === null));
+    this.#left = [];
+    for (const session of left) {
+      try {
+        await this.#resumeLeft(session);
+        this.#deps.log(
+          `resumed session ${session.session} (${session.task === null ? (session.repo ?? "supervisor") : `task ${session.task}`})`,
+        );
+      } catch (err) {
+        this.#deps.log(`resuming session ${session.session}: ${String(err)}`);
+      }
+    }
+  }
+
+  async #resumeLeft({ session: id, repo, task, hasConversation }: ResumableSession): Promise<void> {
+    if (task !== null) {
+      await this.#tasks.resume(task);
+      return;
+    }
+    // Copilot CLI refuses to resume a session that never had a prompt: that one starts anew under the same id.
+    const args = [hasConversation ? `--resume=${id}` : `--session-id=${id}`];
+    const spec = { id, args, promptOnStart: false, hasConversation };
+    if (repo === null) {
+      if (this.#supervisorStart || this.#runningSupervisor()) throw new Error("a supervisor already runs");
+      await this.#startSupervisorAs(spec);
+      return;
+    }
+    await this.#launch({ ...spec, repo, cwd: await this.#deps.repos.repoPath(repo), task: null });
+  }
+
+  /** Daemon exit, before `procs.stopAll`: the sessions it stops stay in the list for the next daemon to resume (ADR-95). */
+  keepRunningSessionsForResume(): void {
+    // The list of this moment, not of the last check: a session stopped or started since then counts as it is now.
+    this.#followLive([...this.#sessions.values()].filter((s) => this.#deps.procs.state(owner(s.id))?.kind === "running"));
+    this.#resumable.stopFollowing();
   }
 
   /** Daemon exit: `procs.stopAll` stops the processes, here only the observing ends. */
@@ -730,7 +797,7 @@ export class Agents {
    * The session directory with the session plugin, MCP config, session instructions and an empty
    * `hooks.jsonl`, before Copilot CLI starts.
    */
-  #prepare({ id, role, task, dir, token, promptOnStart, program }: SessionFiles): PreparedSession {
+  #prepare({ id, role, task, dir, token, promptOnStart, hasConversation, program }: SessionFiles): PreparedSession {
     const { repo } = role;
     const pluginDir = join(dir, "plugin");
     const hooksFile = join(dir, HOOKS_FILENAME);
@@ -751,6 +818,7 @@ export class Agents {
       rows: INITIAL_ROWS,
       hooksFile,
       promptOnStart,
+      hasConversation,
       program,
       run: () => this.#deps.procs.state(owner(id)),
       prompt: () => this.#inboxPrompt({ id, repo, task }),
@@ -775,16 +843,26 @@ export class Agents {
   }
 
   #tick(): void {
-    let live = 0;
+    const live: LiveSession[] = [];
     for (const session of this.#sessions.values()) {
       try {
-        if (session.tick()) live++;
+        if (session.tick()) live.push(session);
       } catch (err) {
-        live++;
+        live.push(session);
         this.#deps.log(`session ${session.id}: ${String(err)}`);
       }
     }
-    if (live === 0) this.close();
+    this.#followLive(live);
+    if (live.length === 0) this.close();
+  }
+
+  /** The list of running sessions a restart resumes (ADR-95); a failed write is retried at the next tick. */
+  #followLive(live: readonly LiveSession[]): void {
+    try {
+      this.#resumable.follow(live.map(({ id, repo, task, hasConversation }) => ({ session: id, repo, task, hasConversation })));
+    } catch (err) {
+      this.#deps.log(`writing ${RESUMABLE_SESSIONS_FILE}: ${String(err)}`);
+    }
   }
 
   /** The task's newest session while it runs. */
@@ -826,6 +904,10 @@ export class Agents {
 
 /** What `#launch` starts: Copilot CLI in a repo root, in a task's worktree, or the supervisor in the projects folder. */
 interface LaunchSpec {
+  /** The session id; a new one by default. */
+  id?: string;
+  /** Copilot CLI already keeps a conversation under the id: the arguments carry the first message or resume it (ADR-95). */
+  hasConversation: boolean;
   /** `null` for the supervisor. */
   repo: string | null;
   cwd: string;
@@ -842,6 +924,7 @@ interface SessionFiles {
   dir: string;
   token: string;
   promptOnStart: boolean;
+  hasConversation: boolean;
   /** The Copilot CLI program the session starts. */
   program: string;
 }
@@ -867,3 +950,6 @@ function domainError(repo: string | null, err: unknown): unknown {
   const place = repo ?? "the projects folder";
   return new DomainError(err.reason === "cwd_invalid" ? "repo_unavailable" : "agent_unavailable", `${place}: ${err.message}`);
 }
+
+/** A supervisor's start: its id, its arguments and whether they carry its first message or resume its conversation. */
+type SupervisorLaunch = Pick<LaunchSpec, "args" | "promptOnStart" | "hasConversation"> & { id: string };

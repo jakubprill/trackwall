@@ -29,6 +29,8 @@ export interface ModelRequest {
   system: string;
   /** The text of the last message from the user. */
   lastUserText: string;
+  /** The texts of every message from the user, in order: the conversation the model sees. */
+  userTexts: string[];
   /** The tool results since the last assistant message, in order. */
   toolResults: string[];
   /** The tool names the model may call. */
@@ -50,6 +52,7 @@ function summarize(request: z.infer<typeof Request>): ModelRequest {
       .map((m) => text(m.content))
       .join("\n"),
     lastUserText: text(messages.findLast((m) => m.role === "user")?.content),
+    userTexts: messages.filter((m) => m.role === "user").map((m) => text(m.content)),
     toolResults: messages
       .slice(lastAssistant + 1)
       .filter((m) => m.role === "tool")

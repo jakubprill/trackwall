@@ -650,3 +650,36 @@ describe("the daemon's MCP server with the real Copilot CLI behind the user's pr
     }
   });
 });
+
+describe("sessions across a daemon restart with the real Copilot CLI (ADR-95)", () => {
+  test("the supervisor and a main session that ran when the daemon stopped go on with their conversations in the next daemon", async () => {
+    const before = await startRealCopilotDaemon(model);
+    const main = await before.facade.agents.start("shop");
+    const supervisor = await before.facade.agents.startSupervisor();
+    for (const id of [main.id, supervisor.id]) await untilLoaded(id, before);
+    model.reply({ text: "Noted: the code word is TEAL." });
+    openWindow(main.id, before).attachment.input("remember the code word TEAL\r");
+    await waitFor(before.facade.agents, main.id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
+    windowOf(main.id).attachment.detach();
+    windows.delete(main.id);
+
+    await before.stop();
+    const after = await startRealCopilotDaemon(model, { restartOf: { home: before.home, projects: before.projects } });
+    try {
+      // The same ids: the supervisor never had a prompt, and still starts again in its place.
+      for (const id of [main.id, supervisor.id]) await untilLoaded(id, after);
+      expect(after.facade.agents.session(supervisor.id)).toMatchObject({ repo: null, run: { kind: "running" } });
+      model.reply({ text: "The code word is TEAL." });
+      openWindow(main.id, after).attachment.input("what is the code word?\r");
+      await waitFor(after.facade.agents, main.id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
+
+      const userTexts = model.requests().at(-1)?.userTexts ?? [];
+      expect(userTexts.some((t) => t.endsWith("remember the code word TEAL"))).toBe(true);
+      expect(userTexts.at(-1)).toEndWith("what is the code word?");
+    } finally {
+      for (const window of windows.values()) window.attachment.detach();
+      windows.clear();
+      await after.stop();
+    }
+  });
+});

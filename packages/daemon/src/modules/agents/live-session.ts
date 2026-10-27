@@ -109,6 +109,8 @@ export interface LiveSessionOptions {
   hooksFile: string;
   /** Copilot CLI got the prompt as its first message (`--interactive`), so it works right after the start. */
   promptOnStart: boolean;
+  /** Copilot CLI already keeps a conversation under the session's id (a first message, or a resumed conversation; ADR-95). */
+  hasConversation: boolean;
   /** The Copilot CLI program the session runs, the full path from `findCopilot`. */
   program: string;
   /** The state of the session's process group in `procs`; `undefined` before the start. */
@@ -144,6 +146,7 @@ export class LiveSession {
   #last: TaskStateChange | null = null;
   readonly #attention = new SessionAttention();
   #finished = false;
+  #hasConversation: boolean;
   readonly #closers = new Set<() => void>();
   /** The daemon's prompt was asked for (`askToRead`) and goes in once the session waits in its input box. */
   #promptAsked = false;
@@ -190,6 +193,7 @@ export class LiveSession {
     this.#onUserText = o.onUserText;
     this.#onPromptSent = o.onPromptSent;
     this.#onEvent = o.onEvent;
+    this.#hasConversation = o.hasConversation;
     this.#state = new CopilotSessionState({
       now: Date.now,
       staleAfterMs: STALE_AFTER_MS,
@@ -327,6 +331,14 @@ export class LiveSession {
   }
 
   /**
+   * Copilot CLI keeps a conversation under the session's id, so `--resume=<id>` can go on with it (ADR-95): Copilot CLI
+   * keeps none for a session that never had a prompt, and refuses to resume it.
+   */
+  get hasConversation(): boolean {
+    return this.#hasConversation;
+  }
+
+  /**
    * New hook records, the `Stale` threshold and the end of the process; after the end nothing changes the state. Called
    * periodically and before every read of the state, because `procs` sees the end of the process sooner than the cycle.
    * Returns whether the session is alive.
@@ -423,7 +435,10 @@ export class LiveSession {
 
   /** Applies one hook record; true when it ended a turn the user did not drive. */
   #readHook(record: CopilotHookRecord): boolean {
-    if (record.event === "userPromptSubmitted") this.#userDraft = false;
+    if (record.event === "userPromptSubmitted") {
+      this.#userDraft = false;
+      this.#hasConversation = true;
+    }
     if (record.event === "userPromptSubmitted" || record.event === "agentStop") this.#contextGiven = undefined;
     this.#notice = approvalRequest(record) ? record.payload.message : undefined;
     this.#report(this.#state.hook(record));

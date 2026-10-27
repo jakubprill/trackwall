@@ -145,7 +145,10 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     const { dir } = cloneOnFeatureBranch();
     const first = makeAgents({ shop: dir });
     const task = await first.agents.createTask("shop", "fix the build");
-    await first.agents.stop(sessionOf(first.agents, task.id));
+    // Once the first prompt is in, Copilot CLI keeps the task's conversation, which a resume goes on with.
+    const firstSession = sessionOf(first.agents, task.id);
+    await waitFor(first.agents, firstSession, (s) => s.state !== null, "the task prompt's sessionStart");
+    await first.agents.stop(firstSession);
 
     const restarted = makeAgents({ shop: dir }, first.home);
     cleanups.push(() => restarted.procs.stopAll());
