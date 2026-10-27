@@ -1,9 +1,14 @@
-import { type DaemonInfo, mcpTools } from "@trackwall/protocol";
+import { DaemonInfo, mcpTools } from "@trackwall/protocol";
 import { Check, Copy } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { ErrorWithRetry } from "@/components/ErrorWithRetry";
+import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
+import { call } from "@/lib/api";
+import type { Connection } from "@/lib/connection";
 import { copilotMcpAddCommand, copilotMcpConfig, copilotMcpConfigPath } from "@/lib/copilot-mcp";
+import { useRemote } from "@/lib/use-remote";
 
 const TOOL_NAMES = Object.values(mcpTools)
   .map((t) => t.name)
@@ -13,7 +18,18 @@ const TOOL_NAMES = Object.values(mcpTools)
  * How to connect the Trackwall MCP server to Copilot CLI (§5.3, ADR-24): a command to copy and the same entry in JSON.
  * The UI writes nothing into the Copilot CLI config; `copilot mcp add` does that on the user's side.
  */
-export function ConnectCopilot({ info }: { info: DaemonInfo }) {
+export function ConnectCopilotSurface({ conn }: { conn: Connection }) {
+  const load = useCallback(() => call(conn, "/api/daemon/info", DaemonInfo), [conn]);
+  const info = useRemote(load);
+  if (info.data) return <ConnectCopilot info={info.data} />;
+  return (
+    <Surface label="Copilot CLI">
+      <div className="p-4">{info.error ? <ErrorWithRetry message={info.error} onRetry={info.reload} /> : <Loading />}</div>
+    </Surface>
+  );
+}
+
+function ConnectCopilot({ info }: { info: DaemonInfo }) {
   const command = copilotMcpAddCommand(info.mcpStdioCommand, info.platform);
   return (
     <Surface label="Copilot CLI" note="The tools are read-only. Trackwall must be running when Copilot CLI starts.">

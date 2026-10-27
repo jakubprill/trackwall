@@ -23,7 +23,7 @@ Trackwall watches `mise.local.toml` and `.worktreeinclude` in every repo of your
 
 The "mise tasks" tab of a repo shows a "Local config" section with each file's state. In a fresh clone the state is "only in the store", and "Restore from the store" puts the files back. A file git does not ignore shows a warning: anyone working in the repo could commit it, an agent too. "Ignore locally" adds it to the clone's `.git/info/exclude`, which git never pushes. Restore does this by itself.
 
-"Settings" shows where the store is, the last backup, and whether it was pushed. Without a remote the backups stay on this computer. With one, an HTTPS or SSH address of a private repo on a repo host, Trackwall pushes after every backup, and on another computer you clone the store into its projects folder and press "Restore from the store" in each repo.
+"Settings > Workspace" shows where the store is, the last backup, and whether it was pushed. Without a remote the backups stay on this computer. With one, an HTTPS or SSH address of a private repo on a repo host, Trackwall pushes after every backup, and on another computer you clone the store into its projects folder and press "Restore from the store" in each repo.
 
 ## Use it
 

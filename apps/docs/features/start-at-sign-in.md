@@ -15,7 +15,7 @@ Have Trackwall start hidden in the tray when you sign in, so your repos and agen
 
 ## How it works
 
-Tick "Start Trackwall when I sign in" in "Settings > Start at sign-in". From then on, every time you sign in, Trackwall starts with only its tray icon. The daemon starts, watches your projects folder and shows a notification when an agent needs you, as it does with the window open.
+Tick "Start Trackwall when I sign in" in "Settings > App". From then on, every time you sign in, Trackwall starts with only its tray icon. The daemon starts, watches your projects folder and shows a notification when an agent needs you, as it does with the window open.
 
 Open Trackwall from the tray, with a double click on the icon on Windows, or by starting it again. The main window shows, and the extra windows you had open come back on their monitors with their views.
 
@@ -24,7 +24,7 @@ Trackwall keeps no copy of the setting: it adds itself to the system's own list 
 ## Use it
 
 1. Open "Settings" (Ctrl+, or ⌘, on macOS).
-2. Under "Start at sign-in", tick "Start Trackwall when I sign in".
+2. Choose "App", and under "Start at sign-in" tick "Start Trackwall when I sign in".
 3. Sign out and in again: the Trackwall icon is in the tray.
 
 ## Good to know

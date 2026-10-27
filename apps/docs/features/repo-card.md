@@ -34,7 +34,7 @@ From the card Trackwall gives each repo tags: `java`, `typescript`, `frontend`, 
 ## Good to know
 
 - A card is computed once per commit and kept in `~/.trackwall/cards`, so it opens instantly the next time.
-- You do not have to open anything first: when Trackwall starts, and after every commit, checkout or pull, it computes the missing cards in the background, two repos at a time, the repos you worked in most recently first. "Repo cards" in the "Daemon" view says how far it is ("computing 12 of 80", then "up to date").
+- You do not have to open anything first: when Trackwall starts, and after every commit, checkout or pull, it computes the missing cards in the background, two repos at a time, the repos you worked in most recently first. "Repo cards" in "Settings > Diagnostics" says how far it is ("computing 12 of 80", then "up to date").
 - A card describes the last commit, so a change you have not committed yet is not on it.
 - Endpoints also come from OpenAPI specs in Java repos: any YAML or JSON file with an `openapi` or `swagger` key, whatever its name. An endpoint that is only in a spec, for example because its interface is generated during the build, shows the "OpenAPI" badge and the controller method that implements it; hover the path to see the operation's summary. A spec your build uses to generate a client for another service is left out, because those endpoints belong to that service.
 - When a card is missing something, "Incomplete" at its top says what and why: a file not read (the repo is larger than the card reads), an invalid file (a `pom.xml` or `package.json` that does not parse), code not parsed (endpoints without request and response types), or a list cut short.
