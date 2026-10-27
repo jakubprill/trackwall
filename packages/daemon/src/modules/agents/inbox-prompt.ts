@@ -12,7 +12,7 @@ const REVIEW = `The user sent a review of your changes in Trackwall: call ${mcpT
 const MESSAGES = `The session that proposed your task sent you a message in Trackwall: call ${mcpTools.getMessages.name} ${SERVER} and follow it as an update of your task.`;
 const UPDATES = `There is news about the work you delegated in Trackwall: call ${mcpTools.getUpdates.name} ${SERVER} and act on it.`;
 /** The one part with nothing to read: that the user trusted a mise config is the whole news (ADR-92). */
-const MISE_TRUSTED = `The user trusted the mise config that refused your last ${mcpTools.runMiseTask.name}, ${mcpTools.verifyTask.name} or ${mcpTools.startService.name} in Trackwall: run it again if you still need it.`;
+const TRUST_NOTICE = `The user trusted the mise config that refused your last ${mcpTools.runMiseTask.name}, ${mcpTools.verifyTask.name} or ${mcpTools.startService.name} in Trackwall: run it again if you still need it.`;
 
 /** What waits unread for one session. */
 export interface Unread {
@@ -20,12 +20,12 @@ export interface Unread {
   messages: number;
   updates: number;
   /** The user trusted the mise config a run of the session was refused for (ADR-92). */
-  miseTrusted: boolean;
+  trustNotice: boolean;
 }
 
 /** The prompt for what waits, or `undefined` when nothing does. */
-export function inboxPrompt({ reviewComments, messages, updates, miseTrusted }: Unread): string | undefined {
-  const parts = [reviewComments > 0 && REVIEW, messages > 0 && MESSAGES, updates > 0 && UPDATES, miseTrusted && MISE_TRUSTED].filter(
+export function inboxPrompt({ reviewComments, messages, updates, trustNotice }: Unread): string | undefined {
+  const parts = [reviewComments > 0 && REVIEW, messages > 0 && MESSAGES, updates > 0 && UPDATES, trustNotice && TRUST_NOTICE].filter(
     (part) => part !== false,
   );
   return parts.length > 0 ? parts.join(" ") : undefined;

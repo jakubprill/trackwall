@@ -24,6 +24,8 @@ import { DomainError } from "../infra/errors.ts";
  * what they return read (ADR-68);
  * only `run_mise_task` and `stop_mise_task` start and stop processes: a mise task from the current list of the repo's
  * trusted configuration, like the button in the UI (ADR-41), and `verify_task` runs the mise task `test` the same way (ADR-64).
+ * A tool that a session's untrusted mise config can refuse runs inside `agents.runNeedingMiseTrust`, so the session is told
+ * when the user trusts it (ADR-92).
  */
 
 /**

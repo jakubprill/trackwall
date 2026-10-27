@@ -28,6 +28,7 @@ describe("a Copilot CLI session in the daemon", () => {
       program: "copilot",
       run: () => ({ kind: "running", runId: "r1", startedAt: "2026-10-24T12:00:00.000Z", pid: 1 }),
       prompt: () => undefined,
+      onPromptSent: () => {},
       onUserText: () => {},
       onEvent: () => {},
     });
@@ -122,9 +123,11 @@ function runningSession(
   session: LiveSession;
   hooksFile: string;
   typedText: { count: number };
+  promptsSent: { count: number };
   events: SessionEvent[];
 } {
   const typedText = { count: 0 };
+  const promptsSent = { count: 0 };
   const events: SessionEvent[] = [];
   const hooksFile = join(mkdtempSync(join(tmpdir(), "trackwall-session-")), "hooks.jsonl");
   writeFileSync(hooksFile, "");
@@ -139,13 +142,16 @@ function runningSession(
     program: "copilot",
     run,
     prompt,
+    onPromptSent: () => {
+      promptsSent.count++;
+    },
     onUserText: () => {
       typedText.count++;
     },
     onEvent: (event) => events.push(event),
   });
   sessions.push(session);
-  return { session, hooksFile, typedText, events };
+  return { session, hooksFile, typedText, promptsSent, events };
 }
 
 /** The bottom of an idle Copilot CLI: the input box and the footer with hints (ADR-69). */
@@ -608,6 +614,24 @@ describe("what waits for a session, given to its agent through the hooks' output
 
     expect(written).toEqual([]);
     expect(events).toEqual([{ kind: "turn_ended" }]);
+  });
+
+  test("the prompt counts as sent when it blocks the end of a turn or is typed, not when it goes with a tool's result", async () => {
+    const { session, hooksFile, promptsSent, written } = workingSession();
+    session.askToRead();
+
+    hook(session, hooksFile, "postToolUse");
+    expect(promptsSent.count).toBe(0);
+    hook(session, hooksFile, "agentStop");
+    expect(promptsSent.count).toBe(1);
+    hook(session, hooksFile, "userPromptSubmitted");
+    hook(session, hooksFile, "agentStop", { stop_hook_active: true });
+    expect(promptsSent.count).toBe(1);
+    await showScreen(session, PROMPT_BOX);
+    session.tick();
+
+    expect(written).toEqual(["read the review"]);
+    expect(promptsSent.count).toBe(2);
   });
 
   test("a tool's result carries the prompt once per turn, and again for a prompt that changed or in the next turn", () => {

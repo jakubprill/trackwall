@@ -412,7 +412,7 @@ export class Agents {
   /** The prompt for what waits unread for a session: its task's review comments and messages, and its updates. */
   #inboxPrompt(session: { id: string; repo: string | null; task: string | null }): string | undefined {
     const reviewComments = session.task === null ? 0 : this.#reviews.unread(session.task);
-    return inboxPrompt({ reviewComments, ...this.#coordination.unread(session), miseTrusted: this.#miseTrust.waiting(session.id) });
+    return inboxPrompt({ reviewComments, ...this.#coordination.unread(session), trustNotice: this.#miseTrust.waiting(session.id) });
   }
 
   /** The unread review comments of session `caller`'s own task (`get_review_comments`), which now count as read. */
@@ -532,8 +532,9 @@ export class Agents {
 
   /** The user trusts the worktree's mise config they saw (`digest`), only from the UI (ADR-59). */
   async trustTaskMiseConfig(id: string, digest: string): Promise<TaskMiseConfig> {
+    const { repo } = this.task(id);
     const trusted = await this.#tasks.trustMiseConfig(id, digest);
-    this.miseTrusted({ repo: this.task(id).repo, task: id });
+    this.miseTrusted({ repo, task: id });
     return trusted;
   }
 
@@ -544,7 +545,7 @@ export class Agents {
    */
   async runNeedingMiseTrust<T>(caller: string | null, target: MiseTarget, run: () => Promise<T>): Promise<T> {
     if (caller === null) return run();
-    this.#miseTrust.tried(caller);
+    this.#miseTrust.forget(caller);
     try {
       return await run();
     } catch (err) {
@@ -556,17 +557,21 @@ export class Agents {
 
   /**
    * The user trusted the mise config of `target` (ADR-92): the repo root's (`mise trust`) or a task worktree's. Every
-   * running session a run there was refused to is asked to run it again, now or after its turn.
+   * running session a run there was refused to is asked to run it again, now or after its turn. Called inside the
+   * user's trust action, which a session's failure must not fail: the trust is stored by then.
    */
   miseTrusted(target: MiseTarget): void {
     for (const id of this.#miseTrust.trusted(target)) {
       const session = this.#sessions.get(id);
       if (session === undefined || !this.#isRunning(session)) {
-        this.#miseTrust.closed(id);
+        this.#miseTrust.forget(id);
         continue;
       }
-      session.askToRead();
-      this.#miseTrust.asked(id);
+      try {
+        session.askToRead();
+      } catch (err) {
+        this.#deps.log(`session ${id}: telling it the user trusted the mise config: ${String(err)}`);
+      }
     }
   }
 
@@ -692,7 +697,7 @@ export class Agents {
     this.#sessions.delete(id);
     this.#tokens.revoke(id);
     this.#coordination.sessionClosed(session);
-    this.#miseTrust.closed(id);
+    this.#miseTrust.forget(id);
     session.dispose();
     this.#removeDir(id);
   }
@@ -731,6 +736,7 @@ export class Agents {
       run: () => this.#deps.procs.state(owner(id)),
       prompt: () => this.#inboxPrompt({ id, repo, task }),
       onUserText: () => this.#coordination.userTyped({ id, task }),
+      onPromptSent: () => this.#miseTrust.promptSent(id),
       onEvent: (event) => {
         if (event.kind === "turn_ended") this.#miseTrust.turnEnded(id);
         // The session reads its hooks inside the user's key or another session's call: news for the proposer must not fail them.

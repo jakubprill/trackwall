@@ -195,7 +195,7 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
 
       expect(errorText(await call(outside, "run_mise_task", { repo: "warehouse", task: task.id, miseTask: "test" }))).toBe(
         `mise_unavailable: the mise config in the worktree of task ${task.branch} changed since the user trusted it (mise.toml); ` +
-          "only the user can trust it, in the task's panel in Trackwall, and a session in Trackwall is told when they did",
+          "only the user can trust it, in the task's panel in Trackwall, and a session in Trackwall refused for it is told when they do",
       );
       expect(existsSync(join(task.worktree, "calls.log"))).toBe(false);
 

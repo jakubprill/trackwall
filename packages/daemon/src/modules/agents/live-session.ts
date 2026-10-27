@@ -120,6 +120,8 @@ export interface LiveSessionOptions {
   prompt: () => string | undefined;
   /** The user put text into the session's input box (typed or pasted; not an answer to a dialog, not Esc). */
   onUserText: () => void;
+  /** The daemon's prompt, read just before, went to the agent: typed, typed again or as a block (not as context, ADR-85). */
+  onPromptSent: () => void;
   /** Called synchronously, from whichever call read the change (hooks are read on every input and state read). */
   onEvent: (event: SessionEvent) => void;
 }
@@ -132,6 +134,7 @@ export class LiveSession {
   readonly #run: () => RunState | undefined;
   readonly #promptText: () => string | undefined;
   readonly #onUserText: () => void;
+  readonly #onPromptSent: () => void;
   readonly #onEvent: (event: SessionEvent) => void;
   readonly #screen: TerminalScreen;
   readonly #state: CopilotSessionState;
@@ -185,6 +188,7 @@ export class LiveSession {
     this.#run = o.run;
     this.#promptText = o.prompt;
     this.#onUserText = o.onUserText;
+    this.#onPromptSent = o.onPromptSent;
     this.#onEvent = o.onEvent;
     this.#state = new CopilotSessionState({
       now: Date.now,
@@ -488,6 +492,7 @@ export class LiveSession {
     this.#state.promptTyped();
     // The daemon starts this turn: an Esc earlier (an interrupt gives no `agentStop`) does not make it the user's.
     this.#userDrove = false;
+    this.#onPromptSent();
   }
 
   /** Types `text` (try number `retries`) with its Enter after `SUBMIT_DELAY_MS`. */

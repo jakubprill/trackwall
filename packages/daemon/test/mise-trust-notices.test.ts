@@ -40,36 +40,41 @@ describe("notices that the user trusted a mise config a session was refused for"
   test("a session that tries again before the user trusts the config is not told", () => {
     const notices = new MiseTrustNotices();
     notices.refused(ROOT_SESSION, { repo: "shop", task: null });
-    notices.tried(ROOT_SESSION);
+    notices.forget(ROOT_SESSION);
 
     expect(notices.trusted({ repo: "shop", task: null })).toEqual([]);
   });
 
-  test("the notice waits until the end of a turn after the session was asked to read it, or until it tries again", () => {
+  test("the notice waits until the end of the turn after a prompt was sent, so a turn that ended without one keeps it", () => {
     const notices = new MiseTrustNotices();
     notices.refused(ROOT_SESSION, { repo: "shop", task: null });
     notices.trusted({ repo: "shop", task: null });
 
-    // An end of a turn read while the daemon asks is an earlier turn's.
+    // A turn that ended with no prompt sent (one a block started, or with the user's draft in the box) is not the notice's.
     notices.turnEnded(ROOT_SESSION);
     expect(notices.waiting(ROOT_SESSION)).toBe(true);
-    notices.asked(ROOT_SESSION);
+    notices.promptSent(ROOT_SESSION);
     expect(notices.waiting(ROOT_SESSION)).toBe(true);
     notices.turnEnded(ROOT_SESSION);
-    expect(notices.waiting(ROOT_SESSION)).toBe(false);
-
-    notices.refused(ROOT_SESSION, { repo: "shop", task: null });
-    notices.trusted({ repo: "shop", task: null });
-    notices.asked(ROOT_SESSION);
-    notices.tried(ROOT_SESSION);
     expect(notices.waiting(ROOT_SESSION)).toBe(false);
   });
 
-  test("a closed session has nothing waiting", () => {
+  test("a prompt sent before the trust does not count as the notice's", () => {
     const notices = new MiseTrustNotices();
     notices.refused(ROOT_SESSION, { repo: "shop", task: null });
-    notices.closed(ROOT_SESSION);
+    notices.promptSent(ROOT_SESSION);
+    notices.trusted({ repo: "shop", task: null });
+    notices.turnEnded(ROOT_SESSION);
 
-    expect(notices.trusted({ repo: "shop", task: null })).toEqual([]);
+    expect(notices.waiting(ROOT_SESSION)).toBe(true);
+  });
+
+  test("a session that tries again or closes has no notice waiting", () => {
+    const notices = new MiseTrustNotices();
+    notices.refused(ROOT_SESSION, { repo: "shop", task: null });
+    notices.trusted({ repo: "shop", task: null });
+    notices.forget(ROOT_SESSION);
+
+    expect(notices.waiting(ROOT_SESSION)).toBe(false);
   });
 });
