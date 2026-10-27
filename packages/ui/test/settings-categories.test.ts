@@ -11,8 +11,8 @@ describe("Settings categories", () => {
     expect(new Set(sections).size).toBe(sections.length);
   });
 
-  test("the daemon's state is under Diagnostics and connecting Copilot CLI under Agents", () => {
-    expect(settingsCategory("diagnostics").sections).toContain("daemon");
+  test("the daemon's state and Trackwall's errors are under Diagnostics, connecting Copilot CLI under Agents", () => {
+    expect(settingsCategory("diagnostics").sections).toEqual(["daemon", "trackwall-errors"]);
     expect(settingsCategory("agents").sections).toContain("copilot-cli");
   });
 

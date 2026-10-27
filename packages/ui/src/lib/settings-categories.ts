@@ -32,7 +32,7 @@ export const SETTINGS_CATEGORIES = [
     id: "diagnostics",
     label: "Diagnostics",
     description: "Where to look when something does not work.",
-    sections: ["daemon"],
+    sections: ["daemon", "trackwall-errors"],
   },
 ] as const;
 

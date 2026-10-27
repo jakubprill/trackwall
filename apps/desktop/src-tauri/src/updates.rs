@@ -128,7 +128,7 @@ pub async fn install_update(app: AppHandle, updates: State<'_, Updates>, version
         }
     };
     if let Err(err) = download_and_install(&app, &update, &cancel).await {
-        eprintln!("[desktop] update {}: {err}", update.version);
+        crate::report_error!("update {}: {err}", update.version);
         *updates.lock() = Phase::Found(update);
         return Err(err);
     }

@@ -93,14 +93,14 @@ pub fn handle(app: &AppHandle, item_id: &str) {
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || {
                 if let Err(err) = zoom::apply_step(&app, &label, step) {
-                    eprintln!("[desktop] zooming {label}: {err}");
+                    crate::report_error!("zooming {label}: {err}");
                 }
             });
         }
         MenuAction::Page(command) => {
             windows::show_once_loaded(app, &label);
             if let Err(err) = app.emit_to(label.as_str(), APP_MENU_EVENT, command) {
-                eprintln!("[desktop] sending a menu command to {label}: {err}");
+                crate::report_error!("sending a menu command to {label}: {err}");
             }
         }
     }

@@ -220,7 +220,7 @@ fn build_saved(app: &AppHandle, saved: Vec<SavedWindow>) {
             let url = window_url(Some(w.shown.view()), Some(w.shown.session_layout()));
             let opened = url.ok_or_else(|| "not an id".to_string()).and_then(|url| build_while_opening(&app, Some(w.label.clone()), url));
             if let Err(err) = opened {
-                eprintln!("[desktop] reopening {}: {err}", w.label);
+                crate::report_error!("reopening {}: {err}", w.label);
             }
         }
     });
@@ -287,7 +287,7 @@ fn persist(app: &AppHandle, saved: &[SavedWindow]) {
         .ok_or_else(|| std::io::Error::other("no configuration directory"))
         .and_then(|path| json_file::save(&path, &saved));
     if let Err(err) = written {
-        eprintln!("[desktop] saving the open windows: {err}");
+        crate::report_error!("saving the open windows: {err}");
     }
 }
 
@@ -299,7 +299,7 @@ pub fn closed(app: &AppHandle, label: &str) {
     // Labels are reused: a new window with this label must not take a jump meant for the closed one.
     app.state::<PendingJump>().forget(label);
     if let Err(err) = app.save_window_state(STATE_FLAGS) {
-        eprintln!("[desktop] saving the window state: {err}");
+        crate::report_error!("saving the window state: {err}");
     }
 }
 
