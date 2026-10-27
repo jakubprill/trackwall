@@ -90,15 +90,48 @@ describe.skipIf(process.versions.bun === undefined)("resume_task (real PTY and g
     expect((await call(main.client, "resume_task", { task: task.id })).content).toEqual([
       { type: "text", text: `bad_request: task ${task.branch} has a running session; stop it before resuming` },
     ]);
+    const other = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "describe the repo" });
+    await stopSessionOf(other.id);
     const taskClient = await clientOfSession(resumed.session.id);
-    expect((await call(taskClient, "resume_task", { task: task.id })).content).toEqual([
-      { type: "text", text: `bad_request: a task session resumes no other task; ask the user to resume task ${task.id}` },
+    expect((await call(taskClient, "resume_task", { task: other.id })).content).toEqual([
+      { type: "text", text: `bad_request: a task session resumes no task; ask the user to resume task ${other.id}` },
     ]);
 
     window.attachment.detach();
     await daemon.facade.agents.stop(resumed.session.id);
     await daemon.facade.agents.stop(main.id);
     await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
+    await daemon.post(agentsApi.removeTask, { task: other.id, keepBranch: false, discardChanges: true });
+  }, 60_000);
+
+  test("a main session does not resume a task another main session or the supervisor proposed", async () => {
+    const main = await mainSession();
+    const neighbour = await mainSession();
+    const supervisor = await daemon.facade.agents.startSupervisor();
+    const supervisorClient = await clientOfSession(supervisor.id);
+    const proposals = [
+      { client: neighbour.client, title: "Fix login" },
+      { client: supervisorClient, title: "Fix logout" },
+    ];
+    const tasks = [];
+    for (const { client, title } of proposals) {
+      const { proposal } = ProposeTaskResult.parse(
+        (await call(client, "propose_task", { repo: "shop", title, prompt: title })).structuredContent,
+      );
+      const task = await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: title });
+      await stopSessionOf(task.id);
+      tasks.push(task);
+    }
+
+    for (const task of tasks)
+      expect((await call(main.client, "resume_task", { task: task.id })).content).toEqual([
+        { type: "text", text: `bad_request: task ${task.id} was not proposed by this session; ask the user to resume it` },
+      ]);
+
+    await daemon.facade.agents.stop(supervisor.id);
+    await daemon.facade.agents.stop(neighbour.id);
+    await daemon.facade.agents.stop(main.id);
+    for (const task of tasks) await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
   }, 60_000);
 
   test("the supervisor and an agent outside Trackwall resume a task the user started, a main session does not", async () => {

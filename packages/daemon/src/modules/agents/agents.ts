@@ -307,7 +307,7 @@ export class Agents {
   /** A proposal to remove a repo from the projects folder (ADR-83), from session `caller` like a task proposal. */
   async proposeRepoRemoval(caller: string | null, repo: string, reason: string): Promise<TaskProposal> {
     const session = caller === null ? null : this.session(caller);
-    if (session !== null && session.task !== null)
+    if (session?.task != null)
       throw new DomainError(
         "bad_request",
         "a task session works in its worktree and proposes no folder actions; tell your proposer instead",
@@ -490,14 +490,15 @@ export class Agents {
   async resumeTaskFor(caller: string | null, id: string): Promise<{ task: Task; session: Session }> {
     const task = this.#tasks.task(id);
     const session = caller === null ? null : this.session(caller);
-    if (session !== null && session.task !== null)
-      throw new DomainError("bad_request", `a task session resumes no other task; ask the user to resume task ${id}`);
-    if (session && !isSupervisor(session) && proposerOf(task.proposedBy) !== session.id)
+    if (session?.task != null) throw new DomainError("bad_request", `a task session resumes no task; ask the user to resume task ${id}`);
+    if (session && !isSupervisor(session) && proposerOf(task.proposedBy) !== proposerKeyOf(session))
       throw new DomainError("bad_request", `task ${id} was not proposed by this session; ask the user to resume it`);
     const resumed = await this.#tasks.resume(id);
-    const running = this.#runningOfTask(id);
-    if (!running) throw new Error(`task ${id} has no running session after resuming`);
-    return { task: resumed, session: this.#view(running) };
+    // Resuming closes the task's ended sessions, so its only session is the new one, running or (when its agent exited
+    // at once or the user stopped it) already ended.
+    const started = this.#views().find((s) => s.task === id);
+    if (!started) throw new Error(`task ${id} has no session after resuming`);
+    return { task: resumed, session: started };
   }
 
   /** A task by identifier (`not_found` when it does not exist or the user ended it). */
