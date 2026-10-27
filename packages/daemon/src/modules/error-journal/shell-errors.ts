@@ -1,11 +1,13 @@
-import { closeSync, fstatSync, openSync, readSync, renameSync, rmSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, openSync, readSync, renameSync, rmSync } from "node:fs";
 import { z } from "zod";
 
 /**
  * The desktop shell's errors (ADR-94): the shell appends one JSON line per error to `logs/shell-errors.jsonl` in the state
  * directory (`error_journal.rs`), because it has to keep them also when no daemon runs, and the daemon takes them into the
- * journal when the journal is read. The daemon renames the file before reading it, so a line the shell appends meanwhile
- * goes into a new file and is read the next time, never lost and never counted twice.
+ * journal when the journal is read. The daemon renames the file to `shell-errors.taken.jsonl` before reading it, so a line
+ * the shell appends afterwards goes into a new file, read the next time, and no line is counted twice. A line the shell was
+ * writing at the very moment of the rename (both systems allow it, Windows too, since Rust opens files with
+ * `FILE_SHARE_DELETE`) may be cut and is then skipped. A taken file a daemon could not finish (it stopped) is read first.
  */
 
 /** The file's name in the state directory's `logs/`; the shell writes the same name (`SHELL_ERRORS_FILE` in `error_journal.rs`). */
@@ -28,13 +30,18 @@ export type ShellErrorLine = z.infer<typeof ShellErrorLine>;
 
 /** Takes the lines the shell has written since the last call; a line that is not the expected JSON is skipped. */
 export function takeShellErrors(file: string): ShellErrorLine[] {
-  const taken = `${file}.${process.pid}.taken`;
+  const taken = file.replace(/\.jsonl$/, ".taken.jsonl");
+  const left = existsSync(taken) ? readLines(taken) : [];
   try {
     renameSync(file, taken);
   } catch {
-    // No file, or the shell is writing it right now (Windows): the lines wait for the next read.
-    return [];
+    // No file: nothing new from the shell.
+    return left;
   }
+  return [...left, ...readLines(taken)];
+}
+
+function readLines(taken: string): ShellErrorLine[] {
   try {
     const text = readTail(taken);
     return text.split(/\r?\n/).flatMap((line) => {
@@ -46,6 +53,9 @@ export function takeShellErrors(file: string): ShellErrorLine[] {
         return [];
       }
     });
+  } catch {
+    // The file went away meanwhile (another daemon took it): its lines are that daemon's.
+    return [];
   } finally {
     rmSync(taken, { force: true });
   }

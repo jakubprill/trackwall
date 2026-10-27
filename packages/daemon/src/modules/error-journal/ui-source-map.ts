@@ -43,11 +43,21 @@ function urlPath(file: string): string | null {
 const SourceMap = z.object({ sources: z.array(z.string()), mappings: z.string() });
 type SourceMap = z.infer<typeof SourceMap>;
 
+/** The last maps read, by file and modification time: one stack has many frames in the same chunk. */
+const MAP_CACHE_SIZE = 4;
+const mapCache = new Map<string, { mtimeMs: number; map: SourceMap | null }>();
+
 function readMap(file: string): SourceMap | null {
   try {
-    if (statSync(file).size > MAX_MAP_BYTES) return null;
-    const parsed = SourceMap.safeParse(JSON.parse(readFileSync(file, "utf8")));
-    return parsed.success ? parsed.data : null;
+    const { size, mtimeMs } = statSync(file);
+    const cached = mapCache.get(file);
+    if (cached?.mtimeMs === mtimeMs) return cached.map;
+    const parsed = size > MAX_MAP_BYTES ? null : SourceMap.safeParse(JSON.parse(readFileSync(file, "utf8")));
+    const map = parsed?.success ? parsed.data : null;
+    mapCache.delete(file);
+    mapCache.set(file, { mtimeMs, map });
+    for (const key of [...mapCache.keys()].slice(0, Math.max(0, mapCache.size - MAP_CACHE_SIZE))) mapCache.delete(key);
+    return map;
   } catch {
     return null;
   }

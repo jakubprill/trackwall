@@ -6,7 +6,7 @@ import { EventHub } from "./api/event-hub.ts";
 import { sessionHookRequest } from "./api/hooks.ts";
 import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
-import { createFacade, type Facade, HOSTING_CLIS, startupErrorJournal } from "./facade.ts";
+import { createErrorJournal, createFacade, type Facade, HOSTING_CLIS } from "./facade.ts";
 import { type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./infra/args.ts";
 import { newToken, probeRunningDaemon, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
 import { trackwallHome } from "./infra/home.ts";
@@ -31,26 +31,27 @@ async function main(args: DaemonArgs): Promise<void> {
   // An error that ends the daemon goes into the error journal first (ADR-94); before the facade exists, into a journal of its own.
   const fatal = (area: string, err: unknown) => {
     process.stderr.write(`[daemon] ${area}: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
-    const journal = facade?.errorJournal ?? startupErrorJournal(home, VERSION, log);
+    const journal = facade?.errorJournal ?? createErrorJournal({ home, version: VERSION, log });
     journal.recordDaemonError(area, err);
     journal.flush();
   };
   // The daemon still exits, as it did without the handlers: its state after an error nobody caught is not to be trusted.
-  process.on("uncaughtException", (err) => {
-    fatal("uncaught", err);
-    process.exit(1);
-  });
-  process.on("unhandledRejection", (reason) => {
-    fatal("unhandled-rejection", reason);
-    process.exit(1);
-  });
+  // The exit is in `finally`, so a journal that cannot be written does not change how the daemon ends.
+  const fatalExit = (area: string, err: unknown) => {
+    try {
+      fatal(area, err);
+    } finally {
+      process.exit(1);
+    }
+  };
+  process.on("uncaughtException", (err) => fatalExit("uncaught", err));
+  process.on("unhandledRejection", (reason) => fatalExit("unhandled-rejection", reason));
   try {
     await start(args, home, uiDir, startedAt, (created) => {
       facade = created;
     });
   } catch (err) {
-    fatal("startup", err);
-    process.exit(1);
+    fatalExit("startup", err);
   }
 }
 

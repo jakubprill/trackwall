@@ -5,8 +5,8 @@ import { type ErrorJournal as ErrorJournalData, TrackwallError, type TrackwallEr
 import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
 import { messageOf } from "../../infra/errors.ts";
-import { anonymize, type KnownValue } from "./anonymize.ts";
-import { type ErrorJournalWorkspace, systemValues, uniqueValues, workspaceValues } from "./known-values.ts";
+import { anonymize, compileKnownValues, type KnownValue, type KnownValues } from "./anonymize.ts";
+import { type ErrorJournalWorkspace, systemValues, workspaceValues } from "./known-values.ts";
 import { SHELL_ERRORS_FILE, shellFrame, takeShellErrors } from "./shell-errors.ts";
 import { parseStack, repoPath, trackwallFrames } from "./stack-frames.ts";
 import { uiFramePlace } from "./ui-source-map.ts";
@@ -35,10 +35,10 @@ export interface ErrorJournalDeps {
   /** The state directory, Trackwall's own, whose paths stay readable. */
   stateDir: string;
   /** The folder the daemon serves the UI from, with the source maps of its chunks. */
-  uiDir: string | undefined;
+  uiDir?: string;
   version: string;
   /** Absent for the journal of a start that failed before the workspace was read. */
-  workspace: ErrorJournalWorkspace | undefined;
+  workspace?: ErrorJournalWorkspace;
   env: NodeJS.ProcessEnv;
   log: (msg: string) => void;
 }
@@ -57,12 +57,16 @@ export class ErrorJournal {
   private readonly deps: ErrorJournalDeps;
   private readonly file: string;
   private readonly errors = new Map<string, TrackwallError>();
-  private workspaceKnown: KnownValue[] = [];
+  /** The computer's values, read once: they do not change while the daemon runs. */
+  private readonly systemKnown: KnownValue[];
+  private known: KnownValues;
   private writeTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(deps: ErrorJournalDeps) {
     this.deps = deps;
     this.file = join(deps.dir, ERROR_JOURNAL_FILE);
+    this.systemKnown = systemValues(deps.stateDir, deps.env);
+    this.known = compileKnownValues(this.systemKnown);
     for (const error of this.load()) this.errors.set(error.fingerprint, error);
     void this.refreshWorkspaceValues();
   }
@@ -81,7 +85,9 @@ export class ErrorJournal {
     const frames = trackwallFrames(parseStack(report.stack), (frame) => uiFramePlace(frame, this.deps.uiDir));
     const folder = frames[0] ? /^packages\/ui\/src\/(.+)\/[^/]+$/.exec(frames[0].replace(/:\d+$/, ""))?.[1] : undefined;
     const area = `ui:${folder ?? report.page}`;
-    this.record({ source: "ui", area, kind: report.name || "Error", message: report.message, frames, at: now() });
+    // The UI's error name is the page's text: only an identifier is kept.
+    const kind = /^[A-Za-z_$][\w$]{0,60}$/.test(report.name) ? report.name : "Error";
+    this.record({ source: "ui", area, kind, message: report.message, frames, at: now() });
   }
 
   /** The journal with the shell's new errors, newest first, every text anonymized again with what the workspace knows now. */
@@ -98,11 +104,7 @@ export class ErrorJournal {
         at: new Date(line.atMs).toISOString(),
       });
     }
-    const known = this.known();
-    const errors = [...this.errors.values()]
-      .map((error) => ({ ...error, message: anonymize(error.message, known) }))
-      .sort((a, b) => b.lastSeen.localeCompare(a.lastSeen));
-    return { errors };
+    return { errors: [...this.errors.values()].sort((a, b) => b.lastSeen.localeCompare(a.lastSeen)) };
   }
 
   clear(): void {
@@ -116,6 +118,7 @@ export class ErrorJournal {
     clearTimeout(this.writeTimer);
     this.writeTimer = undefined;
     try {
+      this.anonymizeKept();
       mkdirSync(this.deps.dir, { recursive: true });
       writeFileAtomic(this.file, `${JSON.stringify({ errors: [...this.errors.values()] }, null, 2)}\n`);
     } catch (err) {
@@ -123,8 +126,17 @@ export class ErrorJournal {
     }
   }
 
+  /** Never throws: the journal is called from the paths that handle errors, which must not get another one. */
   private record(o: Occurrence): void {
-    const message = anonymize(o.message, this.known());
+    try {
+      this.count(o);
+    } catch (err) {
+      this.deps.log(`failed to record an error in the journal: ${messageOf(err)}`);
+    }
+  }
+
+  private count(o: Occurrence): void {
+    const message = anonymize(o.message, this.known);
     const fingerprint = errorFingerprint(o.source, o.area, o.kind, o.frames[0] ?? null, message);
     const seen = this.errors.get(fingerprint);
     this.errors.set(fingerprint, {
@@ -144,19 +156,42 @@ export class ErrorJournal {
     this.writeTimer.unref?.();
   }
 
-  /** What the workspace knows, read now and kept for the errors before the next read (`record` cannot wait for it). */
+  /**
+   * What the workspace knows, read now and kept for the errors before the next read (`record` cannot wait for it); the
+   * messages kept so far are anonymized again with it.
+   */
   private async refreshWorkspaceValues(): Promise<void> {
-    if (this.deps.workspace) this.workspaceKnown = await workspaceValues(this.deps.workspace);
+    if (!this.deps.workspace) return;
+    this.known = compileKnownValues([...this.systemKnown, ...(await workspaceValues(this.deps.workspace))]);
+    this.anonymizeKept();
+  }
+
+  /**
+   * The kept errors again with what the workspace knows now: one recorded before it was read did not have its names yet.
+   * Its fingerprint follows the new message, so its next occurrence counts on the same error; two that become one merge.
+   */
+  private anonymizeKept(): void {
+    const kept = [...this.errors.values()];
+    this.errors.clear();
+    for (const error of kept) {
+      const message = anonymize(error.message, this.known);
+      const fingerprint = errorFingerprint(error.source, error.area, error.kind, error.frames[0] ?? null, message);
+      const seen = this.errors.get(fingerprint);
+      this.errors.set(fingerprint, {
+        ...error,
+        fingerprint,
+        message,
+        count: error.count + (seen?.count ?? 0),
+        firstSeen: seen && seen.firstSeen < error.firstSeen ? seen.firstSeen : error.firstSeen,
+        lastSeen: seen && seen.lastSeen > error.lastSeen ? seen.lastSeen : error.lastSeen,
+      });
+    }
   }
 
   private prune(): void {
     if (this.errors.size <= MAX_ERRORS) return;
     const oldest = [...this.errors.values()].sort((a, b) => a.lastSeen.localeCompare(b.lastSeen));
     for (const error of oldest.slice(0, this.errors.size - MAX_ERRORS)) this.errors.delete(error.fingerprint);
-  }
-
-  private known(): KnownValue[] {
-    return uniqueValues([...systemValues(this.deps.stateDir, this.deps.env), ...this.workspaceKnown]);
   }
 
   /** A journal that is missing or not the expected JSON starts empty; it holds nothing that cannot be seen again. */
@@ -172,10 +207,11 @@ export class ErrorJournal {
 
 /**
  * The same error twice has the same source, area, kind and top frame; without a frame its message stands in, with the numbers
- * in it (ports, counts, ids) left out, so "port 51234" and "port 51240" are one error.
+ * in it (ports, counts, ids) and what anonymization put in left out, so "port 51234" and "port 51240" are one error, and so
+ * are `<path>` and `<projects>/…` for one folder seen before and after the workspace was read.
  */
 export function errorFingerprint(source: string, area: string, kind: string, topFrame: string | null, message: string): string {
-  const key = [source, area, kind, topFrame ?? message.replace(/\d+/g, "#")].join("\n");
+  const key = [source, area, kind, topFrame ?? message.replace(/<[a-z]+>(?:\/…)?/g, "<>").replace(/\d+/g, "#")].join("\n");
   return createHash("sha256").update(key).digest("hex").slice(0, 12);
 }
 

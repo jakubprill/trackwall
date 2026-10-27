@@ -8,6 +8,7 @@ import { Cards } from "./modules/cards/cards.ts";
 import { DayStart } from "./modules/day-start/day-start.ts";
 import { DayStartFile } from "./modules/day-start/day-start-file.ts";
 import { ErrorJournal } from "./modules/error-journal/error-journal.ts";
+import type { ErrorJournalWorkspace } from "./modules/error-journal/known-values.ts";
 import { Graph } from "./modules/graph/graph.ts";
 import { LocalConfig } from "./modules/local-config/local-config.ts";
 import { Logs } from "./modules/logs/logs.ts";
@@ -101,18 +102,20 @@ export interface FacadeOptions {
 }
 
 /**
- * The error journal of a daemon whose facade does not exist: a start that failed before it, which still leaves its error in
- * the journal the next daemon shows (ADR-94).
+ * The error journal (ADR-94) of the state directory `home`. `createFacade` gives it the workspace and the UI folder; a start
+ * that fails before the facade exists makes one without them, which still leaves its error for the next daemon to show.
  */
-export function startupErrorJournal(home: string, version: string, log: (msg: string) => void): ErrorJournal {
+export function createErrorJournal(
+  o: Pick<FacadeOptions, "home" | "version" | "uiDir" | "log"> & { workspace?: ErrorJournalWorkspace },
+): ErrorJournal {
   return new ErrorJournal({
-    dir: join(home, LOGS_DIR),
-    stateDir: home,
-    uiDir: undefined,
-    version,
-    workspace: undefined,
+    dir: join(o.home, LOGS_DIR),
+    stateDir: o.home,
+    uiDir: o.uiDir,
+    version: o.version,
+    workspace: o.workspace,
     env: process.env,
-    log,
+    log: o.log,
   });
 }
 
@@ -189,15 +192,7 @@ export function createFacade(o: FacadeOptions): Facade {
     file: new DayStartFile(join(o.home, DAY_START_FILE), o.log),
     log: o.log,
   });
-  const errorJournal = new ErrorJournal({
-    dir: join(o.home, LOGS_DIR),
-    stateDir: o.home,
-    uiDir: o.uiDir,
-    version: o.version,
-    workspace,
-    env: process.env,
-    log: o.log,
-  });
+  const errorJournal = createErrorJournal({ ...o, workspace });
   return {
     workspace,
     repoWatch,

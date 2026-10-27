@@ -63,17 +63,6 @@ export async function workspaceValues(workspace: ErrorJournalWorkspace): Promise
   return values;
 }
 
-/** The first value given for a spelling wins, so the more specific label goes first. */
-export function uniqueValues(values: readonly KnownValue[]): KnownValue[] {
-  const seen = new Set<string>();
-  return values.filter((v) => {
-    const key = v.value.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
 function safely(read: () => string): string {
   try {
     return read();

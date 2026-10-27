@@ -122,6 +122,13 @@ describe("error journal", () => {
     for (const frame of error?.frames ?? []) expect(frame).toMatch(/^packages\/daemon\/src\/.+:\d+$/);
   });
 
+  test("a request whose address the daemon cannot parse is one entry under a fixed area, and the daemon keeps answering", async () => {
+    await emptyJournal();
+    const res = await loopbackRequest(api.port, "//", { token: TOKEN });
+    expect(res.status).toBe(500);
+    expect((await journal()).map((e) => [e.source, e.area])).toEqual([["daemon", "api:other"]]);
+  });
+
   test("a request the API refuses is the caller's mistake and stays out of the journal", async () => {
     await emptyJournal();
     expect((await post(workspaceApi.overview.path, { repo: 42 })).status).toBe(400);
@@ -196,6 +203,37 @@ describe("error journal", () => {
     ]);
     expect(existsSync(file)).toBe(false);
     expect((await journal())[0]?.count).toBe(2);
+  });
+
+  test("an error kept from before the workspace was read counts its next occurrence on the same entry", async () => {
+    await emptyJournal();
+    mkdirSync(join(home, "logs"), { recursive: true });
+    writeFileSync(
+      join(home, "logs", "errors.json"),
+      JSON.stringify({
+        errors: [
+          {
+            fingerprint: "000000000000",
+            source: "daemon",
+            area: "startup",
+            kind: "Error",
+            message: "repo orders-bff: rebase failed",
+            frames: [],
+            count: 1,
+            firstSeen: "2026-10-27T10:00:00.000Z",
+            lastSeen: "2026-10-27T10:00:00.000Z",
+            version: "0.0.0-test",
+          },
+        ],
+      }),
+    );
+    const next = newFacade();
+    const again = new Error("repo orders-bff: rebase failed");
+    again.stack = "Error: repo orders-bff: rebase failed";
+    await next.errorJournal.list();
+    next.errorJournal.recordDaemonError("startup", again);
+    expect((await next.errorJournal.list()).errors.map((e) => [e.message, e.count])).toEqual([["repo <repo>: rebase failed", 2]]);
+    await post(errorJournalApi.clear.path);
   });
 
   test("the journal outlives the daemon, and Clear empties it", async () => {

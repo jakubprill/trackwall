@@ -96,7 +96,7 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
         // will come with SQLite.
         const label = ctx.caller === null ? tool.name : `${tool.name} (session ${ctx.caller})`;
         try {
-          const parsed = tool.args.parse(args);
+          const parsed = parseArgs(tool.args, args);
           // A destructive tool (it runs or stops repo code) logs its arguments before acting: until the `audit` table
           // exists, this line says who ran what (ADR-41). Their arguments are identifiers, never free text.
           if (!tool.readOnly && tool.destructive) ctx.log(`${label}: ${JSON.stringify(auditView(parsed, tool.auditArgs))}`);
@@ -112,14 +112,20 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
   };
 }
 
+/** Arguments that fail the tool's schema are the agent's mistake: `bad_request` with what is wrong, as in the API (§5.2). */
+function parseArgs<T extends z.ZodType>(schema: T, args: unknown): z.output<T> {
+  const parsed = schema.safeParse(args);
+  if (!parsed.success) throw new DomainError("bad_request", z.prettifyError(parsed.error));
+  return parsed.data;
+}
+
 /**
  * What the agent reads for a failed tool: an error a module raised on purpose with its code and message, as in the API
- * (§5.2), others without details. Those others are Trackwall's errors and go into the error journal; arguments that fail
- * the tool's schema are the agent's mistake (ADR-94).
+ * (§5.2), others without details. Those others are Trackwall's errors and go into the error journal (ADR-94).
  */
 function toolErrorText(facade: Facade, tool: string, err: unknown): string {
   if (err instanceof DomainError) return `${err.code}: ${err.message}`;
-  if (!(err instanceof z.ZodError)) facade.errorJournal.recordDaemonError(`mcp:${tool}`, err);
+  facade.errorJournal.recordDaemonError(`mcp:${tool}`, err);
   return "internal: daemon error";
 }
 
