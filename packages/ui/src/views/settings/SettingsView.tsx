@@ -73,7 +73,7 @@ function Section({ section, conn, update, warmupLive, onRetry, onSaved }: Settin
     case "repo-hosts":
       return <RepoHostsSurface conn={conn} />;
     case "copilot-cli":
-      return <ConnectCopilotSurface conn={conn} />;
+      return <ConnectCopilotSurface conn={conn} onRetry={onRetry} />;
     case "start-at-sign-in":
       return <StartAtSignInSurface />;
     case "updates":

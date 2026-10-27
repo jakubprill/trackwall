@@ -18,13 +18,25 @@ const TOOL_NAMES = Object.values(mcpTools)
  * How to connect the Trackwall MCP server to Copilot CLI (§5.3, ADR-24): a command to copy and the same entry in JSON.
  * The UI writes nothing into the Copilot CLI config; `copilot mcp add` does that on the user's side.
  */
-export function ConnectCopilotSurface({ conn }: { conn: Connection }) {
+export function ConnectCopilotSurface({ conn, onRetry }: { conn: Connection; onRetry: () => void }) {
   const load = useCallback(() => call(conn, "/api/daemon/info", DaemonInfo), [conn]);
   const info = useRemote(load);
   if (info.data) return <ConnectCopilot info={info.data} />;
   return (
     <Surface label="Copilot CLI">
-      <div className="p-4">{info.error ? <ErrorWithRetry message={info.error} onRetry={info.reload} /> : <Loading />}</div>
+      <div className="p-4">
+        {info.error ? (
+          <ErrorWithRetry
+            message={info.error}
+            onRetry={() => {
+              onRetry();
+              info.reload();
+            }}
+          />
+        ) : (
+          <Loading />
+        )}
+      </div>
     </Surface>
   );
 }

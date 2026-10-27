@@ -12,6 +12,7 @@ import { listNeedsSettings } from "@/lib/repo-status";
 import { GRAPH_PACE, REPO_LIST_PACE } from "@/lib/repo-watch";
 import { RUNNING_MISE_POLL_MS } from "@/lib/run-state";
 import type { SessionSelection } from "@/lib/session-entries";
+import type { SettingsCategory } from "@/lib/settings-categories";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
 import { HomeDetails } from "./HomeDetails.tsx";
@@ -53,7 +54,7 @@ export function HomeView({
   onOpenInSessions: (selection: SessionSelection) => void;
   onOpenRepo: (id: string) => void;
   onOpenDaemon: () => void;
-  onOpenSettings: () => void;
+  onOpenSettings: (category: SettingsCategory) => void;
 }) {
   const repos = useRemote(
     useCallback(() => post(conn, workspaceApi.list, {}), [conn]),
@@ -119,7 +120,7 @@ export function HomeView({
     return (
       <div className="flex flex-col items-start gap-3 p-6">
         <p className="text-sm">{needsSettings ? repos.error : "Choose a projects folder to see your repos and sessions here."}</p>
-        <Button variant="outline" size="sm" onClick={onOpenSettings}>
+        <Button variant="outline" size="sm" onClick={() => onOpenSettings("workspace")}>
           Open Settings
         </Button>
       </div>

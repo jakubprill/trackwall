@@ -54,7 +54,7 @@ export function App() {
   // A repo opened from the dashboard belongs to the navigation, not to the view: any other navigation to "Repos" starts without it;
   // the same holds for the category Settings opens on.
   // An extra window starts with the view it was opened with or showed at the last run (ADR-49), the main window with
-  // Home. `visit` grows with every opening of a repo, so that Repos is mounted again with it even when it is already open.
+  // Home. `visit` grows with every opening of a repo or of a Settings category, so that the view is mounted again with it even when it is already open.
   const [{ view, repo, settingsCategory, visit }, setNav] = useState<{
     view: View;
     repo?: string;
@@ -217,7 +217,7 @@ export function App() {
               </div>
             )}
             {/* One view that throws keeps the view bar and the other views. The key mounts the view afresh, with a fresh boundary, on
-                a view change, a reconnect (`epoch`) and every opening of a repo (`visit`). */}
+                a view change, a reconnect (`epoch`) and every opening of a repo or a Settings category (`visit`). */}
             <ErrorBoundary
               key={`${view}:${epoch}:${visit}`}
               fallback={(message, retry) => <ViewFailed message={message} onRetry={retry} />}
@@ -231,17 +231,11 @@ export function App() {
                   onOpenInSessions={openInSessions}
                   onOpenRepo={openRepos}
                   onOpenDaemon={() => openSettings("diagnostics")}
-                  onOpenSettings={() => openSettings("workspace")}
+                  onOpenSettings={openSettings}
                 />
               )}
               {conn && view === "repos" && (
-                <ReposView
-                  conn={conn}
-                  initialRepo={repo}
-                  repoWatch={repoWatch}
-                  onRetry={retry}
-                  onOpenSettings={() => openSettings("workspace")}
-                />
+                <ReposView conn={conn} initialRepo={repo} repoWatch={repoWatch} onRetry={retry} onOpenSettings={openSettings} />
               )}
               {conn && view === "sessions" && (
                 <SessionsView
