@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { countLabel } from "@trackwall/protocol";
 import { z } from "zod";
 import { formatBytes } from "./format.ts";
 
@@ -73,6 +74,8 @@ export type AppUpdate =
   | { state: "checking" }
   | { state: "latest"; currentVersion: string }
   | { state: "available"; currentVersion: string; version: string }
+  /** The user chose to update once no agent is in the middle of a turn (ADR-97); the install starts then. */
+  | { state: "waiting"; currentVersion: string; version: string }
   | { state: "check-failed"; message: string }
   | Installing
   | { state: "install-failed"; version: string; message: string };
@@ -81,6 +84,8 @@ export type UpdateEvent =
   | { kind: "check-started" }
   | { kind: "checked"; result: UpdateCheck }
   | { kind: "check-failed"; message: string }
+  | { kind: "wait-started" }
+  | { kind: "wait-cancelled" }
   | { kind: "install-started"; version: string; at: number }
   | { kind: "progress"; progress: InstallStage; at: number }
   | { kind: "install-failed"; message: string };
@@ -90,17 +95,18 @@ export type UpdateEvent =
  * found: the strip with "Update and restart" stays through the next periodic check, even one that fails offline.
  */
 export function nextUpdate(update: AppUpdate, event: UpdateEvent): AppUpdate {
-  const keep = update.state === "installing" || update.state === "available";
+  const keep = KEPT_BY_CHECK.has(update.state);
   switch (event.kind) {
     case "check-started":
       return keep ? update : { state: "checking" };
     case "checked":
-      if (update.state === "installing") return update;
-      return event.result.available
-        ? { state: "available", currentVersion: event.result.currentVersion, version: event.result.available }
-        : { state: "latest", currentVersion: event.result.currentVersion };
+      return checked(update, event.result);
     case "check-failed":
       return keep ? update : { state: "check-failed", message: event.message };
+    case "wait-started":
+      return update.state === "available" ? { ...update, state: "waiting" } : update;
+    case "wait-cancelled":
+      return update.state === "waiting" ? { ...update, state: "available" } : update;
     case "install-started":
       return { state: "installing", version: event.version, stage: { stage: "connecting" }, lastDataAt: event.at };
     case "progress":
@@ -110,9 +116,40 @@ export function nextUpdate(update: AppUpdate, event: UpdateEvent): AppUpdate {
   }
 }
 
+/** States a check does not take back: an install, a found update and one waiting for the agents' turns. */
+const KEPT_BY_CHECK: ReadonlySet<AppUpdate["state"]> = new Set(["installing", "available", "waiting"]);
+
+/** A check's result; a newer version found meanwhile does not replace the one being installed or waited for. */
+function checked(update: AppUpdate, result: UpdateCheck): AppUpdate {
+  if (update.state === "installing" || update.state === "waiting") return update;
+  return result.available
+    ? { state: "available", currentVersion: result.currentVersion, version: result.available }
+    : { state: "latest", currentVersion: result.currentVersion };
+}
+
 /** "Trackwall 0.3.1 is available (you have 0.3.0). Restarting stops…" */
 export function availableText(update: { currentVersion: string; version: string }): string {
   return `Trackwall ${update.version} is available (you have ${update.currentVersion}). ${RESTART_WARNING}`;
+}
+
+/**
+ * The version to install now because the update waited for the agents' turns and the last one has ended; `undefined`
+ * otherwise, also while the session list has not loaded (`agentsInTurn` is `undefined`).
+ */
+export function dueAfterTurns(update: AppUpdate, agentsInTurn: number | undefined): string | undefined {
+  return update.state === "waiting" && agentsInTurn === 0 ? update.version : undefined;
+}
+
+/** "2 agents are in the middle of a turn, which the restart cuts off." */
+export function inTurnText(agents: number): string {
+  const count = countLabel(agents, { one: "agent is", other: "agents are" });
+  return `${count} in the middle of a turn, which the restart cuts off.`;
+}
+
+/** "Trackwall 0.3.1 installs once 2 agents finish their turn." */
+export function waitingText(update: { version: string }, agents: number): string {
+  const count = countLabel(agents, { one: "agent finishes its", other: "agents finish their" });
+  return `Trackwall ${update.version} installs once ${count} turn.`;
 }
 
 function nextStage(update: Installing, stage: InstallStage, at: number): Installing {

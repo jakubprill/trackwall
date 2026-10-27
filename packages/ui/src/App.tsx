@@ -16,7 +16,7 @@ import { IS_MAC } from "@/lib/platform";
 import { entrySelection, findEntry, nextWaitingShortcut, type SessionSelection } from "@/lib/session-entries";
 import { SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
 import { sessionShortcut } from "@/lib/session-shortcut";
-import { attentionCount } from "@/lib/session-state";
+import { agentsInTurn, attentionCount } from "@/lib/session-state";
 import { selectsSupervisor, showingTakesKeyboard, supervisorSummary } from "@/lib/supervisor";
 import { readSupervisorPinned, saveSupervisorPinned } from "@/lib/supervisor-pin";
 import { useAppMenu } from "@/lib/use-app-menu";
@@ -66,7 +66,6 @@ export function App() {
     () => startFromLocation(window.location.search, START_PARAMS.sessionLayout, SESSION_LAYOUTS) ?? "1",
   );
   const { conn, epoch, error, retry } = useConnection();
-  const appUpdate = useAppUpdate();
   // A folder dropped outside a session (ADR-51); `seq` mounts a new bar for every drop, also of the same folder. A drop
   // without a daemon connection is ignored, rather than answered whenever the connection comes back.
   const [dropped, setDropped] = useState<{ paths: DroppedPaths; seq: number }>();
@@ -117,6 +116,7 @@ export function App() {
   const runningLive = useMemo(() => events?.feed("mise.running.changed"), [events]);
   const repoWatch = useRepoWatch(useMemo(() => events?.feed("repos.changed"), [events]));
   const warmupLive = useMemo(() => events?.feed("cards.warmup.changed"), [events]);
+  const appUpdate = useAppUpdate(sessions.data && agentsInTurn(sessions.data.sessions));
   const tree = useSessionTree(sessions);
   const { rows } = tree;
   const supervisor = useMemo(() => supervisorSummary(sessions.data, rows), [sessions.data, rows]);

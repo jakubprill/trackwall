@@ -49,6 +49,11 @@ export function closeCutsOffTurn(session: Session): boolean {
   return session.run.kind === "running" && session.state !== null && MID_TURN_STATES.has(session.state.state);
 }
 
+/** How many agents are in the middle of a turn, which an update's restart would cut off (ADR-97). */
+export function agentsInTurn(sessions: readonly Session[]): number {
+  return sessions.filter(closeCutsOffTurn).length;
+}
+
 export function sessionStateLabel(session: Session): { tone?: StatusTone; label: string } {
   const { run, state } = session;
   if (run.kind === "stopping") return { tone: "warning", label: "stopping" };

@@ -1,8 +1,8 @@
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
 import { UpdateInstallStatus } from "@/components/UpdateInstallStatus";
+import { UpdateOffer } from "@/components/UpdateOffer";
 import { Button } from "@/components/ui/button";
-import { availableText } from "@/lib/updates";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 
 /** Updates from GitHub Releases (ADR-53). Without the Tauri window (`trackwall-daemon --ui`) the app is updated by hand. */
@@ -20,7 +20,8 @@ export function UpdatesSurface({ handle }: { handle: AppUpdateHandle | undefined
   );
 }
 
-function UpdateStatus({ handle: { update, check, install, cancel } }: { handle: AppUpdateHandle }) {
+function UpdateStatus({ handle }: { handle: AppUpdateHandle }) {
+  const { update, check, install, cancel } = handle;
   const checkButton = (
     <Button variant="outline" size="sm" onClick={check}>
       Check for updates
@@ -39,13 +40,11 @@ function UpdateStatus({ handle: { update, check, install, cancel } }: { handle: 
         </>
       );
     case "available":
+    case "waiting":
       return (
-        <>
-          <p className="text-sm">{availableText(update)}</p>
-          <Button size="sm" onClick={() => install(update.version)}>
-            Update and restart
-          </Button>
-        </>
+        <div className="flex w-full flex-wrap items-center gap-3">
+          <UpdateOffer handle={handle} />
+        </div>
       );
     case "installing":
       return <UpdateInstallStatus update={update} cancel={cancel} />;

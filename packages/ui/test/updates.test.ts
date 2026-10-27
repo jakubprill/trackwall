@@ -4,12 +4,15 @@ import {
   availableText,
   canCancel,
   downloadedFraction,
+  dueAfterTurns,
   type Installing,
   installingText,
+  inTurnText,
   nextUpdate,
   progressLabel,
   stallText,
   UpdateCheck,
+  waitingText,
 } from "../src/lib/updates.ts";
 
 const available: AppUpdate = { state: "available", currentVersion: "0.3.0", version: "0.3.1" };
@@ -157,5 +160,38 @@ describe("app update texts", () => {
   test("the shell's check result says which newer version is available, or null when this one is the latest", () => {
     expect(UpdateCheck.parse({ currentVersion: "0.3.0", available: "0.3.1" })).toEqual({ currentVersion: "0.3.0", available: "0.3.1" });
     expect(UpdateCheck.parse({ currentVersion: "0.3.1", available: null }).available).toBeNull();
+  });
+});
+
+describe("an update that waits for the agents' turns (ADR-97)", () => {
+  const waiting: AppUpdate = { state: "waiting", currentVersion: "0.3.0", version: "0.3.1" };
+
+  test("the user puts an available update off until the turns end, and can take that back", () => {
+    expect(nextUpdate(available, { kind: "wait-started" })).toEqual(waiting);
+    expect(nextUpdate(waiting, { kind: "wait-cancelled" })).toEqual(available);
+  });
+
+  test("a periodic check keeps the waiting update, even when it finds a newer version", () => {
+    expect(nextUpdate(waiting, { kind: "check-started" })).toEqual(waiting);
+    expect(nextUpdate(waiting, { kind: "checked", result: { currentVersion: "0.3.0", available: "0.3.2" } })).toEqual(waiting);
+    expect(nextUpdate(waiting, { kind: "check-failed", message: "offline" })).toEqual(waiting);
+  });
+
+  test("the update installs once no agent is in the middle of a turn, not before the session list has loaded", () => {
+    expect(dueAfterTurns(waiting, 2)).toBeUndefined();
+    expect(dueAfterTurns(waiting, undefined)).toBeUndefined();
+    expect(dueAfterTurns(waiting, 0)).toBe("0.3.1");
+    expect(dueAfterTurns(available, 0)).toBeUndefined();
+    expect(nextUpdate(waiting, { kind: "install-started", version: "0.3.1", at: 5 })).toMatchObject({
+      state: "installing",
+      version: "0.3.1",
+    });
+  });
+
+  test("the strip says how many agents are in a turn and what the waiting update waits for", () => {
+    expect(inTurnText(1)).toBe("1 agent is in the middle of a turn, which the restart cuts off.");
+    expect(inTurnText(2)).toBe("2 agents are in the middle of a turn, which the restart cuts off.");
+    expect(waitingText({ version: "0.3.1" }, 1)).toBe("Trackwall 0.3.1 installs once 1 agent finishes its turn.");
+    expect(waitingText({ version: "0.3.1" }, 3)).toBe("Trackwall 0.3.1 installs once 3 agents finish their turn.");
   });
 });

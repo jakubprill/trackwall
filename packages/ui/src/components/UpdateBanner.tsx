@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 import { UpdateInstallStatus } from "@/components/UpdateInstallStatus";
+import { UpdateOffer } from "@/components/UpdateOffer";
 import { Button } from "@/components/ui/button";
-import { availableText } from "@/lib/updates";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 
-/** Strip above the views while a newer version is available or being installed (ADR-53). */
-export function UpdateBanner({ handle: { update, install, cancel, dismissed, dismiss } }: { handle: AppUpdateHandle }) {
+/** Strip above the views while a newer version is available, waits for the agents' turns or is being installed (ADR-53). */
+export function UpdateBanner({ handle }: { handle: AppUpdateHandle }) {
+  const { update, install, cancel, dismissed, dismiss } = handle;
   switch (update.state) {
     case "installing":
       return (
@@ -22,17 +23,17 @@ export function UpdateBanner({ handle: { update, install, cancel, dismissed, dis
           </Button>
         </Strip>
       );
+    case "waiting":
+      return (
+        <Strip>
+          <UpdateOffer handle={handle} />
+        </Strip>
+      );
     case "available":
       if (dismissed === update.version) return null;
       return (
         <Strip>
-          <p className="min-w-0 flex-1 text-sm">{availableText(update)}</p>
-          <Button size="sm" onClick={() => install(update.version)}>
-            Update and restart
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => dismiss(update.version)}>
-            Later
-          </Button>
+          <UpdateOffer handle={handle} onLater={() => dismiss(update.version)} />
         </Strip>
       );
     default:
