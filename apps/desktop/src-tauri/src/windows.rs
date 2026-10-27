@@ -8,6 +8,7 @@
 use crate::json_file;
 use crate::jump::PendingJump;
 use crate::lock::lock;
+use crate::repaint;
 use crate::saved_windows::{self, SavedWindow, Shown};
 use crate::window_effect::WindowEffects;
 use std::collections::BTreeMap;
@@ -311,8 +312,7 @@ pub fn show(app: &AppHandle, label: &str) {
     }
     app.state::<WindowEffects>().mark_revealed(label);
     if let Some(window) = app.get_webview_window(label) {
-        let _ = window.unminimize();
-        let _ = window.show();
+        repaint::show(&window);
         let _ = window.set_focus();
     }
 }
