@@ -55,7 +55,7 @@ pub fn install(app_dir: &Path, package: &[u8]) -> Result<(), String> {
         // The empty `new` says the same, so a missing marker only costs a second signal.
         Ok(()) => {
             if let Err(e) = File::create(update.join(DONE_MARKER)) {
-                eprintln!("[desktop] the update is in place, but {} could not be written: {e}", update.join(DONE_MARKER).display());
+                crate::report_error!("the update is in place, but {} could not be written: {e}", update.join(DONE_MARKER).display());
             }
             Ok(())
         }
@@ -83,7 +83,7 @@ pub fn clean_up(app_dir: &Path) {
             match remove_finished(&update) {
                 Ok(()) => return,
                 Err(e) if attempt == CLEAN_UP_ATTEMPTS => {
-                    eprintln!("[desktop] {e}");
+                    crate::report_error!("{e}");
                     return;
                 }
                 Err(_) => {}

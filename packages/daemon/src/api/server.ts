@@ -66,6 +66,8 @@ export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer
     handle(req, res, options, policy).catch((err: unknown) => {
       if (err instanceof DomainError && !res.headersSent) return fail(res, err.code, err.message);
       process.stderr.write(`[api] ${req.method} ${req.url}: ${String(err)}\n`);
+      // Only the path: the query is not used by the API, and the journal names where, not with what (ADR-94).
+      options.facade.errorJournal.recordDaemonError(`api:${new URL(req.url ?? "/", "http://127.0.0.1").pathname}`, err);
       if (!res.headersSent) send(res, 500, { ok: false, error: { code: "internal", message: "internal error" } });
       else res.destroy();
     });

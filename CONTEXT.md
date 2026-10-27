@@ -514,6 +514,13 @@ _Avoid_: console, terminal (that is a task session's PTY)
 A record at `error` (or `warn`) level or an exception header together with the lines that belong to it (stack trace, `Caused by:`, a Spring or Gradle report), from one source, run and stream. The same error repeated in a source is one error with a count (`count`); `exception` is its cause (ADR-42).
 _Avoid_: exception (only one kind of error), problem (that is the repo card and the graph), incident
 
+**Error journal** (`ErrorJournal`, the `error-journal` module, `errorJournalApi`; in the UI *Trackwall errors* in Settings):
+Trackwall's own errors on this computer: the daemon's unexpected errors, the UI's and the desktop shell's, in `logs/errors.json` (ADR-94). Each is a **Trackwall error** (`TrackwallError`): source (`daemon`, `shell`, `ui`), area, kind, anonymized message, frames in Trackwall's code, count. Do not confuse with an error from logs (`LogError`), which comes from the output of the user's processes.
+_Avoid_: crash log, telemetry, bug report (nothing is sent)
+
+**Anonymization** (`anonymize`):
+Replacing what names the computer, its user or their repos in a Trackwall error's message (paths, user and computer names, repo names, hosts, addresses, token shapes) with a label such as `<projects>` or `<host>`, before it is saved (ADR-94). Do not confuse with masking, which hides secret values in process output.
+
 **`seq`**:
 A global, increasing record number for all sources; every daemon run starts from the moment of its start, so numbers do not repeat. The cursor (`sinceSeq` in the API and in MCP tools) works for one source and for the whole workspace; `dropped` says that some records after the cursor were lost.
 

@@ -7,6 +7,7 @@ import { CardCache } from "./modules/cards/card-cache.ts";
 import { Cards } from "./modules/cards/cards.ts";
 import { DayStart } from "./modules/day-start/day-start.ts";
 import { DayStartFile } from "./modules/day-start/day-start-file.ts";
+import { ErrorJournal } from "./modules/error-journal/error-journal.ts";
 import { Graph } from "./modules/graph/graph.ts";
 import { LocalConfig } from "./modules/local-config/local-config.ts";
 import { Logs } from "./modules/logs/logs.ts";
@@ -49,6 +50,8 @@ export interface Facade {
   mergeRequests: MergeRequests;
   /** "Start my day": sync, the day report, and a new supervisor that reads it (ADR-70). */
   dayStart: DayStart;
+  /** Trackwall's own errors from the daemon, the shell and the UI, anonymized, on this computer only (ADR-94). */
+  errorJournal: ErrorJournal;
   /**
    * Opens a link from a README in the system (ADR-35): an `http` or `https` address checked by the `ExternalLink` schema.
    * It belongs to no module, because it concerns neither a repo nor the daemon's state.
@@ -92,7 +95,25 @@ export interface FacadeOptions {
   hostingClis: HostingClis;
   /** The environment of processes started for the user (`userEnv`). */
   userEnv: () => Promise<NodeJS.ProcessEnv>;
+  /** The folder the daemon serves the UI from: the error journal maps the UI's frames with its source maps (ADR-94). */
+  uiDir?: string;
   log: (msg: string) => void;
+}
+
+/**
+ * The error journal of a daemon whose facade does not exist: a start that failed before it, which still leaves its error in
+ * the journal the next daemon shows (ADR-94).
+ */
+export function startupErrorJournal(home: string, version: string, log: (msg: string) => void): ErrorJournal {
+  return new ErrorJournal({
+    dir: join(home, LOGS_DIR),
+    stateDir: home,
+    uiDir: undefined,
+    version,
+    workspace: undefined,
+    env: process.env,
+    log,
+  });
 }
 
 export function createFacade(o: FacadeOptions): Facade {
@@ -168,6 +189,15 @@ export function createFacade(o: FacadeOptions): Facade {
     file: new DayStartFile(join(o.home, DAY_START_FILE), o.log),
     log: o.log,
   });
+  const errorJournal = new ErrorJournal({
+    dir: join(o.home, LOGS_DIR),
+    stateDir: o.home,
+    uiDir: o.uiDir,
+    version: o.version,
+    workspace,
+    env: process.env,
+    log: o.log,
+  });
   return {
     workspace,
     repoWatch,
@@ -184,6 +214,7 @@ export function createFacade(o: FacadeOptions): Facade {
     verifications,
     mergeRequests,
     dayStart,
+    errorJournal,
     openLink: o.openUrl,
   };
 }

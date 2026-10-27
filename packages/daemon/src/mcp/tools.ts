@@ -11,7 +11,7 @@ import {
   type Session,
   type SyncRun,
 } from "@trackwall/protocol";
-import type { z } from "zod";
+import { z } from "zod";
 import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
 
@@ -105,13 +105,22 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
           return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
         } catch (err) {
           ctx.log(`${label}: error in ${Date.now() - started} ms: ${String(err)}`);
-          // An error a module raised on purpose goes to the agent with its code and message, as in the API (§5.2); others without details.
-          const text = err instanceof DomainError ? `${err.code}: ${err.message}` : "internal: daemon error";
-          return { content: [{ type: "text", text }], isError: true };
+          return { content: [{ type: "text", text: toolErrorText(ctx.facade, tool.name, err) }], isError: true };
         }
       },
     );
   };
+}
+
+/**
+ * What the agent reads for a failed tool: an error a module raised on purpose with its code and message, as in the API
+ * (§5.2), others without details. Those others are Trackwall's errors and go into the error journal; arguments that fail
+ * the tool's schema are the agent's mistake (ADR-94).
+ */
+function toolErrorText(facade: Facade, tool: string, err: unknown): string {
+  if (err instanceof DomainError) return `${err.code}: ${err.message}`;
+  if (!(err instanceof z.ZodError)) facade.errorJournal.recordDaemonError(`mcp:${tool}`, err);
+  return "internal: daemon error";
 }
 
 type ToolRuns = { [K in keyof typeof mcpTools]: (typeof mcpTools)[K] extends McpTool<infer A, infer R> ? ToolRun<A, R> : never };

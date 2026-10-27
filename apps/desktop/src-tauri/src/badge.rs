@@ -198,7 +198,7 @@ fn tray_dot(app: &AppHandle, tray_id: &str, icons: &TrayIcons, dot: bool) {
     let Some(tray) = app.tray_by_id(tray_id) else { return };
     // Both at once: a new icon set on its own is drawn as a plain image before it is marked as a template again.
     if let Err(err) = tray.set_icon_with_as_template(Some(icons.icon(dot)), icons.template) {
-        eprintln!("[desktop] changing the tray icon: {err}");
+        crate::report_error!("changing the tray icon: {err}");
     }
 }
 
@@ -207,7 +207,7 @@ fn tray_dot(app: &AppHandle, tray_id: &str, icons: &TrayIcons, dot: bool) {
 fn dock_badge(app: &AppHandle, count: usize) {
     let Some(window) = app.get_webview_window(crate::windows::MAIN) else { return };
     if let Err(err) = window.set_badge_count((count > 0).then(|| i64::try_from(count).unwrap_or(i64::MAX))) {
-        eprintln!("[desktop] setting the Dock badge: {err}");
+        crate::report_error!("setting the Dock badge: {err}");
     }
 }
 
@@ -218,7 +218,7 @@ fn overlays(app: &AppHandle, labels: &[String], count: usize) -> Vec<String> {
     for window in labels.iter().filter_map(|label| app.get_webview_window(label)) {
         match window.set_overlay_icon(overlay(count)) {
             Ok(()) => set.push(window.label().to_string()),
-            Err(err) => eprintln!("[desktop] setting the taskbar overlay of {}: {err}", window.label()),
+            Err(err) => crate::report_error!("setting the taskbar overlay of {}: {err}", window.label()),
         }
     }
     set

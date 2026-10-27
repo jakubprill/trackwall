@@ -6,7 +6,7 @@ import { EventHub } from "./api/event-hub.ts";
 import { sessionHookRequest } from "./api/hooks.ts";
 import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
-import { createFacade, type Facade, HOSTING_CLIS } from "./facade.ts";
+import { createFacade, type Facade, HOSTING_CLIS, startupErrorJournal } from "./facade.ts";
 import { type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./infra/args.ts";
 import { newToken, probeRunningDaemon, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
 import { trackwallHome } from "./infra/home.ts";
@@ -27,7 +27,40 @@ async function main(args: DaemonArgs): Promise<void> {
   const home = trackwallHome(args.home);
   const uiDir = resolveUiDir(args.uiDir);
   const startedAt = new Date().toISOString();
+  let facade: Facade | undefined;
+  // An error that ends the daemon goes into the error journal first (ADR-94); before the facade exists, into a journal of its own.
+  const fatal = (area: string, err: unknown) => {
+    process.stderr.write(`[daemon] ${area}: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
+    const journal = facade?.errorJournal ?? startupErrorJournal(home, VERSION, log);
+    journal.recordDaemonError(area, err);
+    journal.flush();
+  };
+  // The daemon still exits, as it did without the handlers: its state after an error nobody caught is not to be trusted.
+  process.on("uncaughtException", (err) => {
+    fatal("uncaught", err);
+    process.exit(1);
+  });
+  process.on("unhandledRejection", (reason) => {
+    fatal("unhandled-rejection", reason);
+    process.exit(1);
+  });
+  try {
+    await start(args, home, uiDir, startedAt, (created) => {
+      facade = created;
+    });
+  } catch (err) {
+    fatal("startup", err);
+    process.exit(1);
+  }
+}
 
+async function start(
+  args: DaemonArgs,
+  home: string,
+  uiDir: string | undefined,
+  startedAt: string,
+  onFacade: (facade: Facade) => void,
+): Promise<void> {
   // The state needed to stop is declared before the API starts: shutdown can come as an HTTP request
   // or a signal at any moment after the port opens.
   let api: ApiServer | undefined;
@@ -59,8 +92,10 @@ async function main(args: DaemonArgs): Promise<void> {
       sessionMcpServer: (sessionToken) => sessionMcpRequest(apiPort(), token, sessionToken),
       hostingClis: HOSTING_CLIS,
       userEnv,
+      uiDir,
       log,
     });
+    onFacade(facade);
     facade.agents.sweepLeftovers();
     // Under the start lock: a second daemon cannot meanwhile start a group that this one would take for an orphan.
     await facade.procs.sweepOrphans().catch((err: unknown) => log(`cleaning up orphans from runtime.json: ${String(err)}`));
@@ -158,10 +193,7 @@ if (commandLine.command === MCP_STDIO_COMMAND) {
 } else if (commandLine.args.version) {
   process.stdout.write(`${VERSION}\n`);
 } else {
-  main(commandLine.args).catch((err: unknown) => {
-    process.stderr.write(`[daemon] startup error: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
-    process.exit(1);
-  });
+  void main(commandLine.args);
 }
 
 /**

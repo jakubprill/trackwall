@@ -65,7 +65,7 @@ fn nudge(window: &WebviewWindow) {
             window.set_size(original)
         });
         if let Err(err) = resized {
-            eprintln!("[desktop] repainting the window after show: {err}");
+            crate::report_error!("repainting the window after show: {err}");
         }
     });
 }
