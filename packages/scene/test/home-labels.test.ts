@@ -1,9 +1,16 @@
 import { expect, test } from "bun:test";
-import { repoHasLabel, sessionHasLabel } from "../src/home-labels.ts";
+import { repoLabelTone, sessionHasLabel } from "../src/home-labels.ts";
 
-test("only a repo that is not clean has a label", () => {
-  expect(repoHasLabel({ id: "orders-bff", layer: 0, state: "changed", count: 4, runningTask: null })).toBe(true);
-  expect(repoHasLabel({ id: "users-api", layer: 0, state: "clean", count: 0, runningTask: "dev" })).toBe(false);
+test("a repo where something is going on has a full label in both modes", () => {
+  expect(repoLabelTone({ id: "orders-bff", layer: 0, state: "changed", count: 4, runningTask: null }, "needs-you")).toBe("full");
+  expect(repoLabelTone({ id: "orders-bff", layer: 0, state: "behind", count: 1, runningTask: null }, "all")).toBe("full");
+  expect(repoLabelTone({ id: "users-api", layer: 0, state: "clean", count: 0, runningTask: "dev" }, "needs-you")).toBe("full");
+});
+
+test("a clean repo with nothing running has a quiet label only when every repo is named", () => {
+  const quiet = { id: "users-api", layer: 0, state: "clean", count: 0, runningTask: null } as const;
+  expect(repoLabelTone(quiet, "all")).toBe("quiet");
+  expect(repoLabelTone(quiet, "needs-you")).toBeNull();
 });
 
 test("a session has a label only when it is waiting for you or has an error", () => {

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { type ScenePalette, sessionStateColor } from "../src/palette.ts";
+import { repoStateColor, type ScenePalette, sessionStateColor } from "../src/palette.ts";
 
 const palette: ScenePalette = {
   primary: "#000001",
@@ -17,4 +17,9 @@ test("an idle session has the calm colour, a session waiting for you the warning
   expect(sessionStateColor("working", palette)).toBe("#000001");
   expect(sessionStateColor("error", palette)).toBe("#000003");
   expect(sessionStateColor("done", palette)).toBe("#000004");
+});
+
+test("a clean repo has the muted colour, not the idle one, which is nearly the background", () => {
+  expect(repoStateColor("clean", palette)).toBe("#000004");
+  expect(repoStateColor("changed", palette)).toBe("#000002");
 });

@@ -149,3 +149,56 @@
     box-shadow: var(--shadow-glow-primary);
   }
 }
+
+/* A label on the 3D scene (ADR-104): a plate beside its object with a leader line down to it. The scene places it and sets
+   `data-side`, `--callout-run` (the line's horizontal run) and `--callout-rise` (how far the plate's middle stands above the
+   object); the line, its end dot and the plate's edge take the text colour, which is the state colour. */
+@utility scene-callout {
+  --rise: var(--callout-rise, 22px);
+  margin-top: calc(-1 * var(--rise));
+  margin-left: var(--callout-run);
+  padding: 0.25rem 0.5rem;
+  background-color: color-mix(in oklab, var(--background) 85%, transparent);
+  border-left: 2px solid currentColor;
+  font-family: var(--font-mono);
+  line-height: 1.25;
+  white-space: nowrap;
+  pointer-events: none;
+  &::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: 100%;
+    width: var(--callout-run);
+    height: var(--rise);
+    border-top: 1px solid currentColor;
+    border-left: 1px solid currentColor;
+    opacity: 0.7;
+  }
+  &::after {
+    content: "";
+    position: absolute;
+    top: calc(50% + var(--rise) - 2px);
+    right: calc(100% + var(--callout-run) - 2px);
+    width: 4px;
+    height: 4px;
+    border-radius: 9999px;
+    background: currentColor;
+  }
+  &[data-side="left"] {
+    margin-left: calc(-1 * var(--callout-run));
+    border-left: 0;
+    border-right: 2px solid currentColor;
+    text-align: right;
+  }
+  &[data-side="left"]::before {
+    right: auto;
+    left: 100%;
+    border-left: 0;
+    border-right: 1px solid currentColor;
+  }
+  &[data-side="left"]::after {
+    right: auto;
+    left: calc(100% + var(--callout-run) - 2px);
+  }
+}

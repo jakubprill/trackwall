@@ -4,7 +4,8 @@ import type { HomeKey, HomeModel } from "@trackwall/scene/model";
 import { useEffect, useRef } from "react";
 import { errorMessage } from "@/lib/api";
 import { HOME_CAMERA_FOV, HOME_CAMERA_MAX_DISTANCE, homeCameraDistance, homeCameraPosition } from "@/lib/home-camera";
-import { HOME_SESSION_STATUS, type HomeStatus, homeRepoStatus } from "@/lib/home-model";
+import { HOME_SESSION_STATUS, homeRepoStatus } from "@/lib/home-model";
+import { readHomeSceneSettings } from "@/lib/home-scene-settings";
 import { readScenePalette } from "@/lib/scene-palette";
 import { statusTextClass } from "@/lib/status-tone";
 import { cn } from "@/lib/utils";
@@ -58,6 +59,8 @@ export function HomeCanvas(props: HomeCanvasProps) {
     try {
       scene = new HomeScene(engine, {
         palette: readScenePalette(host),
+        // Read once: Settings is another view, so a change reaches the scene the next time Home opens.
+        ...readHomeSceneSettings(() => window.localStorage),
         motion: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
         onSelect: (key) => latest.current.onSelect(key),
         onOpen: (key) => latest.current.onOpen(key),
@@ -157,14 +160,34 @@ function createEngine(host: HTMLElement, onUnavailable: (reason: string) => void
   }
 }
 
-/** The label at an object: just the repo name or the session state, in the style of HUD captions and in the state colour. */
+/**
+ * The label at an object, a callout the scene places beside it (ADR-104): the repo name, and when something is going on
+ * the state and the running mise task, in the state colour; a session's state. The leader line is drawn by `scene-callout`
+ * in the text colour, so it takes the state colour too.
+ */
 function sceneLabel(target: LabelTarget): HTMLElement {
-  const status: HomeStatus = target.kind === "repo" ? homeRepoStatus(target.repo) : HOME_SESSION_STATUS[target.session.state];
   const label = document.createElement("div");
-  label.textContent = target.kind === "repo" ? target.repo.id : status.label;
+  if (target.kind === "session") {
+    const status = HOME_SESSION_STATUS[target.session.state];
+    label.className = cn("scene-callout tracking-hud uppercase", statusTextClass(status.tone));
+    label.textContent = status.label;
+    return label;
+  }
+  const { repo, tone } = target;
+  const status = homeRepoStatus(repo);
   label.className = cn(
-    "bg-background/80 text-foreground pointer-events-none rounded-sm border px-1.5 py-0.5 font-mono text-2xs whitespace-nowrap",
-    statusTextClass(status.tone),
+    "scene-callout text-2xs",
+    tone === "quiet" ? "text-muted-foreground" : statusTextClass(status.tone) || "text-primary",
   );
+  label.append(line(repo.id, tone === "quiet" ? "" : "text-muted-foreground"));
+  if (repo.state !== "clean") label.append(line(status.label, "text-sm"));
+  if (repo.runningTask !== null) label.append(line(`running ${repo.runningTask}`, "text-primary"));
   return label;
+}
+
+function line(text: string, className: string): HTMLElement {
+  const element = document.createElement("div");
+  element.textContent = text;
+  element.className = className;
+  return element;
 }

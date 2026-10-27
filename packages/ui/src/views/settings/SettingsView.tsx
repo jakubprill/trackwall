@@ -9,6 +9,7 @@ import { ConnectCopilotSurface } from "./ConnectCopilotSurface.tsx";
 import { DaemonSurface } from "./DaemonSurface.tsx";
 import { DoctorSurface } from "./DoctorSurface.tsx";
 import { ErrorJournalSurface } from "./ErrorJournalSurface.tsx";
+import { HomeSceneSurface } from "./HomeSceneSurface.tsx";
 import { LocalConfigStoreSurface } from "./LocalConfigStoreSurface.tsx";
 import { RepoHostsSurface } from "./RepoHostsSurface.tsx";
 import { StartAtSignInSurface } from "./StartAtSignInSurface.tsx";
@@ -80,6 +81,8 @@ function Section({ section, conn, update, warmupLive, onRetry, onSaved }: Settin
       return <StartAtSignInSurface />;
     case "updates":
       return <UpdatesSurface handle={update} />;
+    case "home-scene":
+      return <HomeSceneSurface />;
     case "daemon":
       return <DaemonSurface conn={conn} warmupLive={warmupLive} onRetry={onRetry} />;
     case "doctor":
