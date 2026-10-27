@@ -31,6 +31,8 @@ export interface GroupSpec {
   /** The full path of an existing directory: the repo root or a worktree, checked by the caller. */
   cwd: string;
   env: NodeJS.ProcessEnv;
+  /** Values of secrets the group gets elsewhere than `env` (mise `[env]`, ADR-93), masked in its output like those of `env`. */
+  secrets?: readonly string[];
 }
 
 /** A group with the leader on pipes (a mise task): its output goes to the source's log in the `logs` module. */
@@ -61,9 +63,9 @@ interface RunOutput {
 /** What `procs` needs from `logs` (§4.2); wired in the facade. */
 interface ProcsLogs {
   /** Output that goes to the source's log. */
-  open(source: LogSource, runId: string, env: NodeJS.ProcessEnv): RunOutput;
+  open(source: LogSource, runId: string, env: NodeJS.ProcessEnv, secrets?: readonly string[]): RunOutput;
   /** Output only for the state's last lines, masked, without a log: a PTY screen is not log lines (ADR-28). */
-  lastLinesOnly(env: NodeJS.ProcessEnv): RunOutput;
+  lastLinesOnly(env: NodeJS.ProcessEnv, secrets?: readonly string[]): RunOutput;
 }
 
 export interface ProcessGroupsDeps {
@@ -126,7 +128,7 @@ export class ProcessGroups {
     let started = this.starting.get(spec.owner);
     if (!started) {
       started = this.spawnGroup(spec, (cwd, platform, runId) =>
-        launchPiped(spec, cwd, platform.detached, this.deps.logs.open(spec.logSource, runId, spec.env)),
+        launchPiped(spec, cwd, platform.detached, this.deps.logs.open(spec.logSource, runId, spec.env, spec.secrets)),
       )
         .then(({ group }) => stateOf(group))
         .finally(() => this.starting.delete(spec.owner));
@@ -148,7 +150,9 @@ export class ProcessGroups {
     // `starting` is set before the first await, so a second start of the owner meanwhile is refused.
     const started = Promise.resolve(this.deps.terminals).then((terminals) => {
       if (!terminals) throw new SpawnFailure("terminal_unavailable", "this daemon runtime has no PTY (daemon under Node)");
-      return this.spawnGroup(spec, async (cwd) => launchTerminal(terminals, spec, cwd, this.deps.logs.lastLinesOnly(spec.env)));
+      return this.spawnGroup(spec, async (cwd) =>
+        launchTerminal(terminals, spec, cwd, this.deps.logs.lastLinesOnly(spec.env, spec.secrets)),
+      );
     });
     const run = started.then(({ group }) => stateOf(group));
     // The caller receives a start error through `started`; `starting` only lets others wait for the start to finish.

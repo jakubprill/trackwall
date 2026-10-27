@@ -468,6 +468,16 @@ _Avoid_: popup, prompt (that is the text sent to an agent), permission request (
 Patterns of Copilot CLI tools (`shell(git push)`, `write`) a session may use without asking (`allow`) or never (`deny`), for every session or for repos matching `repos`, given to each new session as `--allow-tool` and `--deny-tool` (ADR-66). By hand only.
 _Avoid_: permission (without qualification), allowlist
 
+**Session environment** (`SessionEnvironment`, `Session.environment`, `Mise.sessionEnv`; in the UI *Environment from mise*):
+The variables mise sets where a session works (repo root, a task's worktree, or the projects folder), given to Copilot CLI over the user's environment; the session keeps only their names, and `problem` when mise refused its place (ADR-93).
+_Avoid_: env file, profile
+
+**Secret from mise** (`secretNames`, `SessionEnvironment.secrets`):
+A variable of the session environment that mise redacts (`redact = true`, an age-encrypted value) or whose name looks like a secret; its value is masked, and the agent's tools do not get it unless it is in the agent secrets (ADR-93).
+
+**Agent secrets** (`agentSecrets` in `workspace.yaml`, `SessionEnvironment.agentSecrets`):
+The secrets from mise the agent's shell and local MCP servers get; every other one goes to Copilot CLI's `--secret-env-vars` (ADR-93). By hand only.
+
 **Session plugin** (`writeCopilotPlugin`):
 A directory with `plugin.json` and `hooks.json` that the daemon gives Copilot CLI through `--plugin-dir`, so that hooks report the state of this one session only (ADR-17).
 _Avoid_: plugin (without qualification), hook configuration

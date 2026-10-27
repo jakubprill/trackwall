@@ -1,28 +1,26 @@
+import { isSecretName } from "../../infra/secret-name.ts";
+
 /**
  * Secret masking (§4.2, §8): values the daemon knows are replaced with `***` in a line before it reaches the buffer,
- * the JSONL file and the state's last lines. Today the daemon knows only the environment it starts a process with, so a secret
- * is the value of a variable whose name looks like a secret; secrets injected by the `secrets` module will come in here.
+ * the JSONL file and the state's last lines. A secret is the value of a variable whose name looks like a secret in the
+ * environment the daemon starts a process with, or a value the caller knows the process gets elsewhere (the redacted
+ * variables of mise `[env]`, ADR-93); secrets injected by the `secrets` module will come in here.
  */
 
 const MASK = "***";
-
-/**
- * A variable name segment (between `_` or at the end) that means a secret: `GH_TOKEN`, `DB_PASSWORD`, `JWT_SECRET`,
- * `NPM_AUTH_TOKEN`, `STRIPE_API_KEY`. It does not catch `PWD` (the working directory) or `TOKENIZERS_PARALLELISM`.
- */
-const SECRET_NAME = /(^|_)(TOKEN|SECRET|PASSWORD|PASSWD|PASSPHRASE|APIKEY|API_KEY|PRIVATE_KEY|CREDENTIALS?|PAT)(_|$)/i;
 
 /** Shorter values (`true`, `1`, `dev`) would replace ordinary words throughout the log. */
 const MIN_SECRET_CHARS = 8;
 
 /**
- * The values of variables with secret names. A multi-line value (a PEM key) gives each of its lines
- * separately, because output is masked line by line.
+ * The values of variables with secret names (`isSecretName`), and `known`: values of secrets the process gets from
+ * elsewhere than `env` (mise `[env]`, ADR-93). A multi-line value (a PEM key) gives each of its lines separately,
+ * because output is masked line by line.
  */
-export function secretValues(env: NodeJS.ProcessEnv): string[] {
+export function secretValues(env: NodeJS.ProcessEnv, known: readonly string[] = []): string[] {
   const values = new Set<string>();
-  for (const [name, value] of Object.entries(env)) {
-    if (value === undefined || !SECRET_NAME.test(name)) continue;
+  const named = Object.entries(env).flatMap(([name, value]) => (value !== undefined && isSecretName(name) ? [value] : []));
+  for (const value of [...named, ...known]) {
     for (const part of value.split(/\r?\n/)) if (part.length >= MIN_SECRET_CHARS) values.add(part);
   }
   return [...values];

@@ -128,12 +128,14 @@ export function createFacade(o: FacadeOptions): Facade {
     copilot: o.copilotCommand,
     version: o.version,
     env: o.userEnv,
+    // `mise` needs `agents` for the task worktrees it trusts, so it is made below; a session starts only after both.
+    miseEnv: (place) => mise.sessionEnv(place),
     sessionHook: o.sessionHook,
     sessionMcpServer: o.sessionMcpServer,
     openEditor,
     log: o.log,
   });
-  const mise = new Mise({
+  const mise: Mise = new Mise({
     procs,
     repos: workspace,
     tasks: agents,

@@ -14,6 +14,7 @@ import { isLive, sessionStateLabel } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
 import { useTaskDetails } from "@/lib/use-task-details";
 import { useTaskReview } from "@/lib/use-task-review";
+import { SessionEnvironment } from "./SessionEnvironment.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
 import { scrollToSection, TaskDetails } from "./TaskDetails.tsx";
 import { TaskNoticeStrip } from "./TaskNotices.tsx";
@@ -139,6 +140,7 @@ export function TaskPanel({
           )}
         </div>
       </header>
+      <SessionEnvironment environment={session?.environment} />
       {confirmingRemoval && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
       <TaskNoticeStrip
         notices={details.notices}

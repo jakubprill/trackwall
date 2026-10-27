@@ -26,6 +26,7 @@ function setup(config: object, command: readonly string[] = FAKE_MISE) {
   const repoDir = join(home, "web");
   mkdirSync(repoDir);
   writeFileSync(join(repoDir, "fake-mise.json"), JSON.stringify(config));
+  writeFileSync(join(home, "fake-mise.json"), JSON.stringify({ tasks: [] }));
   const worktree = join(home, "worktrees", "web", "task");
   mkdirSync(worktree, { recursive: true });
   writeFileSync(join(worktree, "fake-mise.json"), JSON.stringify({ ...config, untrusted: true }));
@@ -54,13 +55,15 @@ function setup(config: object, command: readonly string[] = FAKE_MISE) {
       if (id !== "web" || !present) throw new DomainError("not_found", `no repo ${id}`);
       return repoDir;
     },
+    // The projects folder holds the repo and the worktree; its own mise config has no tasks (ADR-93).
+    projectsDir: async () => home,
   };
   /** The repo leaves the projects folder (renamed, deleted, another folder chosen in settings). */
   const removeRepo = () => {
     present = false;
   };
   const mise = new Mise({ procs, repos, tasks, command, env: async () => process.env, onTrusted: () => {} });
-  return { mise, repoDir, worktree, procs, logs, removeRepo, refuseWorktree };
+  return { mise, home, repoDir, worktree, procs, logs, removeRepo, refuseWorktree };
 }
 
 function writeConfig(repoDir: string, config: object): void {
@@ -314,6 +317,84 @@ describe("mise tasks in a task worktree (ADR-59)", () => {
       code: "not_found",
       message: `mise task "dev" in the worktree of task ${TASK} in web has not been run`,
     });
+  });
+});
+
+describe("the environment mise sets (ADR-93)", () => {
+  test(
+    "a mise task's log masks the secrets mise adds from its [env], also one whose name does not say it is a secret",
+    async () => {
+      const { mise, logs } = setup({
+        tasks: [{ name: "deploy" }],
+        exits: { deploy: 0 },
+        prints: { deploy: ["calling with jira-key-from-age and glpat-1234567890", "MAVEN_OPTS is -Xmx2g-plenty"] },
+        env: { JIRA_KEY: "jira-key-from-age", GITLAB_TOKEN: "glpat-1234567890", MAVEN_OPTS: "-Xmx2g-plenty" },
+        redacted: ["JIRA_KEY"],
+      });
+
+      await mise.start({ repo: "web", task: null }, "deploy");
+      const ended = await mise.waitForEnd({ repo: "web", task: null }, "deploy", 20_000, new AbortController().signal);
+
+      const log = logs.tail({ source: { kind: "mise-task", repo: "web", miseTask: "deploy" }, limit: 10 });
+      expect(log.records.map((r) => r.msg)).toEqual(["calling with *** and ***", "MAVEN_OPTS is -Xmx2g-plenty", "[deploy] $ done"]);
+      expect(ended.kind === "exited" && ended.lastLines).toEqual([
+        "calling with *** and ***",
+        "MAVEN_OPTS is -Xmx2g-plenty",
+        "[deploy] $ done",
+      ]);
+    },
+    TIMEOUT,
+  );
+
+  test("a session in a repo root gets the repo's variables, with the redacted ones and those named like secrets as its secrets", async () => {
+    const { mise } = setup({ tasks: [], env: { JIRA_KEY: "k", GITLAB_TOKEN: "t", MAVEN_OPTS: "-Xmx2g" }, redacted: ["JIRA_KEY"] });
+
+    expect(await mise.sessionEnv({ repo: "web", task: null })).toEqual({
+      vars: { JIRA_KEY: "k", GITLAB_TOKEN: "t", MAVEN_OPTS: "-Xmx2g" },
+      secretNames: ["JIRA_KEY", "GITLAB_TOKEN"],
+      problem: null,
+    });
+  });
+
+  test("a session in the projects folder gets its variables, and a missing age key there is the session's problem", async () => {
+    const { mise, home } = setup({ tasks: [] });
+    writeFileSync(join(home, "fake-mise.json"), JSON.stringify({ tasks: [], env: { GITLAB_TOKEN: "t" } }));
+    expect(await mise.sessionEnv({ repo: null, task: null })).toEqual({
+      vars: { GITLAB_TOKEN: "t" },
+      secretNames: ["GITLAB_TOKEN"],
+      problem: null,
+    });
+
+    writeFileSync(
+      join(home, "fake-mise.json"),
+      JSON.stringify({ tasks: [], envError: "[experimental] No age identities found for decryption" }),
+    );
+    expect(await mise.sessionEnv({ repo: null, task: null })).toEqual({
+      vars: {},
+      secretNames: [],
+      problem: "projects folder: mise ERROR [experimental] No age identities found for decryption",
+    });
+  });
+
+  test("a task's session gets its worktree's variables while its mise config is trusted, and the repo root's after a change", async () => {
+    const { mise, worktree, refuseWorktree } = setup({ tasks: [], env: { GITLAB_TOKEN: "root" } });
+    writeFileSync(join(worktree, "fake-mise.json"), JSON.stringify({ tasks: [], untrusted: true, env: { GITLAB_TOKEN: "worktree" } }));
+
+    expect(await mise.sessionEnv({ repo: "web", task: TASK })).toMatchObject({ vars: { GITLAB_TOKEN: "worktree" }, problem: null });
+
+    refuseWorktree(new DomainError("mise_unavailable", "the mise config in the worktree of task t changed (mise.toml)"));
+    expect(await mise.sessionEnv({ repo: "web", task: TASK })).toEqual({
+      vars: { GITLAB_TOKEN: "root" },
+      secretNames: ["GITLAB_TOKEN"],
+      problem: "the mise config in the worktree of task t changed (mise.toml); the session has the environment of the repo root",
+    });
+  });
+
+  test("without a mise program a session gets nothing and no problem", async () => {
+    const { mise } = setup({ tasks: [] }, ["trackwall-no-such-mise"]);
+
+    expect(await mise.sessionEnv({ repo: "web", task: null })).toEqual({ vars: {}, secretNames: [], problem: null });
+    expect(await mise.sessionEnv({ repo: null, task: null })).toEqual({ vars: {}, secretNames: [], problem: null });
   });
 });
 

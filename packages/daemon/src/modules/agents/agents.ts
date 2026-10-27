@@ -13,6 +13,7 @@ import {
   type SendMessageResult,
   type SendReviewResult,
   type Session,
+  type SessionEnvironment,
   type SessionList,
   type SupervisorConversation,
   type SupervisorSettings,
@@ -40,6 +41,14 @@ import { MiseTrustNotices } from "./mise-trust-notices.ts";
 import { withLoopbackNoProxy } from "./no-proxy.ts";
 import { proposedByOf, proposerKeyOf, proposerOf, SUPERVISOR } from "./proposer.ts";
 import { type ResumableSession, ResumableSessions, type ResumeLaunch, resumablePlace, resumeLaunch } from "./resumable-sessions.ts";
+import {
+  hiddenSecrets,
+  miseSecretValues,
+  type SessionMiseEnv,
+  secretEnvVarsArgs,
+  sessionEnvironment,
+  withMiseVars,
+} from "./session-env.ts";
 import { type SessionRole, withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
@@ -106,6 +115,7 @@ interface AgentsProcs {
     command: readonly string[];
     cwd: string;
     env: NodeJS.ProcessEnv;
+    secrets: readonly string[];
     cols: number;
     rows: number;
     onData: (bytes: Uint8Array) => void;
@@ -129,6 +139,8 @@ interface AgentsRepos {
   toolPermissions(session: Pick<Session, "repo" | "supervisor">): ToolPermissions;
   /** `supervisor` from `workspace.yaml` (ADR-78); `invalid_config` for a bad key. */
   supervisorSettings(): SupervisorSettings;
+  /** `agentSecrets` from `workspace.yaml` (ADR-93): the secrets from mise a session's tools get; `invalid_config` for a bad key. */
+  agentSecrets(): readonly string[];
   /** Moves the repo out of the projects folder (ADR-83) and returns where it went. */
   /**
    * Moves repo `id` out of the projects folder (ADR-83) while its folder is still `expectedDir`; `beforeMove` runs right
@@ -156,6 +168,11 @@ export interface AgentsDeps {
   version: string;
   /** The environment of user processes (`PATH` from the login shell on macOS). */
   env: () => Promise<NodeJS.ProcessEnv>;
+  /**
+   * What mise sets for a session in a task's worktree, a repo root (`task: null`) or the projects folder (`repo: null`),
+   * ADR-93; wired to the `mise` module in the facade.
+   */
+  miseEnv: (place: { repo: string | null; task: string | null }) => Promise<SessionMiseEnv>;
   /**
    * Where the session plugin's hook for an event POSTs its payload (ADR-88): the daemon's hook route with the daemon token
    * and the session token, which `receiveHook` takes; the API's port is known only once it listens.
@@ -652,23 +669,53 @@ export class Agents {
   }
 
   /**
+   * What mise sets for a session in its place (ADR-93). A session starts without it rather than not at all: a broken
+   * mise config or a missing projects folder is the session's `problem`, not a failed start.
+   */
+  async #miseEnv(repo: string | null, task: string | null): Promise<SessionMiseEnv> {
+    try {
+      return await this.#deps.miseEnv({ repo, task });
+    } catch (err) {
+      return { vars: {}, secretNames: [], problem: `mise environment: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }
+
+  /**
    * Copilot CLI in `cwd` (the repo root or the worktree of task `task`) with arguments before the session's arguments;
    * `promptOnStart` when the arguments carry the first message (`--interactive`), so the session works from the start.
    */
   async #launch({ id = randomUUID(), repo, supervisor, cwd, task, args, promptOnStart, hasConversation }: LaunchSpec): Promise<Session> {
+    const mise = await this.#miseEnv(repo, task);
     // The MCP server and the hooks are the daemon on `127.0.0.1`, which a proxy of the user must not get (ADR-89).
-    const env = withLoopbackNoProxy({ ...(await this.#deps.env()), TERM: "xterm-256color", COLORTERM: "truecolor", ...LOOPBACK_HOOKS_ENV });
+    const env = withLoopbackNoProxy({
+      ...withMiseVars(await this.#deps.env(), mise.vars),
+      TERM: "xterm-256color",
+      COLORTERM: "truecolor",
+      ...LOOPBACK_HOOKS_ENV,
+    });
     const [name = "copilot", ...prefix] = this.#deps.copilot;
     const program = findCopilot(name, env);
     if (!program) throw new DomainError("agent_unavailable", `Copilot CLI (${name}) not found in PATH`);
     const permissions = this.#deps.repos.toolPermissions({ repo, supervisor });
+    const hidden = hiddenSecrets(mise, this.#deps.repos.agentSecrets());
     const role = this.#role(repo, supervisor, task);
     if (this.#sessions.has(id)) throw new Error(`session ${id} is already listed`);
     const dir = sessionDir(this.#deps.home, id);
     const token = this.#tokens.issue(id);
     let prepared: PreparedSession;
     try {
-      prepared = this.#prepare({ id, role, repo, task, dir, token, promptOnStart, hasConversation, program });
+      prepared = this.#prepare({
+        id,
+        role,
+        repo,
+        task,
+        dir,
+        token,
+        promptOnStart,
+        hasConversation,
+        program,
+        environment: sessionEnvironment(mise, hidden),
+      });
     } catch (err) {
       this.#tokens.revoke(id);
       rmSync(dir, { recursive: true, force: true });
@@ -686,10 +733,12 @@ export class Agents {
           "--additional-mcp-config",
           `@${join(dir, MCP_CONFIG_FILE)}`,
           ...toolPermissionArgs(permissions),
+          ...secretEnvVarsArgs(hidden),
           ...args,
         ],
         cwd,
         env: instructionsDir === null ? env : withInstructionsDir(env, instructionsDir),
+        secrets: miseSecretValues(mise),
         cols: INITIAL_COLS,
         rows: INITIAL_ROWS,
         onData: (bytes) => session.output(bytes),
@@ -826,7 +875,7 @@ export class Agents {
    * The session directory with the session plugin, MCP config, session instructions and an empty
    * `hooks.jsonl`, before Copilot CLI starts.
    */
-  #prepare({ id, role, repo, task, dir, token, promptOnStart, hasConversation, program }: SessionFiles): PreparedSession {
+  #prepare({ id, role, repo, task, dir, token, promptOnStart, hasConversation, program, environment }: SessionFiles): PreparedSession {
     const supervisor = role.kind === "supervisor";
     const pluginDir = join(dir, "plugin");
     const hooksFile = join(dir, HOOKS_FILENAME);
@@ -850,6 +899,7 @@ export class Agents {
       promptOnStart,
       hasConversation,
       program,
+      environment,
       run: () => this.#deps.procs.state(owner(id)),
       prompt: () => this.#inboxPrompt({ id, supervisor, task }),
       onUserText: () => this.#coordination.userTyped({ id, task }),
@@ -976,6 +1026,8 @@ interface SessionFiles {
   hasConversation: boolean;
   /** The Copilot CLI program the session starts. */
   program: string;
+  /** What the session got from mise (ADR-93). */
+  environment: SessionEnvironment;
 }
 
 /** A prepared session directory: the session and its instructions directory (`null` when it could not be written). */

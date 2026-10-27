@@ -160,6 +160,7 @@
                       "!../../infra/xml.ts",
                       "!../../infra/glob.ts",
                       "!../../infra/wait-limit.ts",
+                      "!../../infra/secret-name.ts",
                       "!../../infra/file-key.ts",
                       "!../../infra/regular-file.ts",
                       "!../../platform/**"

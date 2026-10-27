@@ -1,5 +1,6 @@
 import { dirname, join } from "node:path";
 import {
+  type AgentSecrets,
   type CloneJob,
   type Commit,
   type DayStartSettings,
@@ -349,6 +350,14 @@ export class Workspace {
    */
   supervisorSettings(): SupervisorSettings {
     return this.deps.file.supervisorSettings();
+  }
+
+  /**
+   * The secrets from mise that the tools of sessions get (`agentSecrets` in `workspace.yaml`, ADR-93); `invalid_config`
+   * for a bad key, so that a typo never shows a secret to an agent.
+   */
+  agentSecrets(): AgentSecrets {
+    return this.deps.file.agentSecrets();
   }
 
   /** The user's addition to the day start's first message (`dayStart` in `workspace.yaml`, ADR-70); `null` without one. */

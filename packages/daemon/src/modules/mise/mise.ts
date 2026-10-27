@@ -14,8 +14,10 @@ import {
 import { z } from "zod";
 import { envKey } from "../../infra/env-key.ts";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
+import { valuesNamed } from "../../infra/secret-name.ts";
 import { waitLimited } from "../../infra/wait-limit.ts";
-import { type MiseCliResult, runMiseCli } from "./mise-cli.ts";
+import { type MiseCliResult, miseFailure, runMiseCli } from "./mise-cli.ts";
+import { type MiseEnv, readMiseEnv } from "./mise-env.ts";
 
 /**
  * The `mise` module (§4, ADR-20): the mise tasks of workspace repos and their runs. The list comes from `mise tasks ls --json`
@@ -30,15 +32,26 @@ import { type MiseCliResult, runMiseCli } from "./mise-cli.ts";
 
 /** What `mise` needs from `procs`; wired in the facade. */
 interface MiseProcs {
-  start(spec: { owner: string; command: readonly string[]; cwd: string; env: NodeJS.ProcessEnv; logSource: LogSource }): Promise<RunState>;
+  start(spec: {
+    owner: string;
+    command: readonly string[];
+    cwd: string;
+    env: NodeJS.ProcessEnv;
+    secrets: readonly string[];
+    logSource: LogSource;
+  }): Promise<RunState>;
   state(owner: string): RunState | undefined;
   ended(owner: string): Promise<RunState | undefined>;
   stop(owner: string): Promise<RunState | undefined>;
 }
 
-/** What `mise` needs from `workspace`: the repo root by identifier (`not_found` when there is no such repo). */
+/**
+ * What `mise` needs from `workspace`: the repo root by identifier (`not_found` when there is no such repo), and the
+ * projects folder, whose mise config gives the environment of sessions above all repos (ADR-93).
+ */
 interface MiseRepos {
   repoPath(id: string): Promise<string>;
+  projectsDir(): Promise<string>;
 }
 
 /**
@@ -74,10 +87,28 @@ const UNTRUSTED = /not trusted/i;
 /** mise setting with directories whose configs it trusts, separated like `PATH` (`list_by_os_path_separator`). */
 const TRUSTED_PATHS_ENV = "MISE_TRUSTED_CONFIG_PATHS";
 
-/** The directory and environment of a run. */
+/**
+ * The directory and environment of a run, and the values of the secrets mise adds to it from its `[env]`, which the
+ * run's log masks (ADR-93).
+ */
 interface RunPlace {
   dir: string;
   env: NodeJS.ProcessEnv;
+  secrets: readonly string[];
+}
+
+/** Where a session runs (ADR-93): a task's worktree, a repo root (`task: null`), or the projects folder (`repo: null`). */
+export interface SessionPlace {
+  repo: string | null;
+  task: string | null;
+}
+
+/**
+ * The environment mise sets for a session (ADR-93): the variables, the names of the secrets among them, and why the session
+ * got less than its own place gives (`null` when nothing is missing).
+ */
+export interface SessionMiseEnv extends MiseEnv {
+  problem: string | null;
 }
 
 export class Mise {
@@ -214,7 +245,7 @@ export class Mise {
     const dir = await this.deps.repos.repoPath(repo);
     const result = await runMiseCli(this.deps.command, ["trust"], dir, await this.deps.env());
     if (result.kind !== "exited") throw new DomainError("mise_unavailable", result.message);
-    if (result.code !== 0) throw new DomainError("mise_unavailable", failure(result.stderr, result.code));
+    if (result.code !== 0) throw new DomainError("mise_unavailable", miseFailure(result.stderr, result.code));
     const tasks = await this.tasks(repo);
     if (tasks.kind === "ok") this.deps.onTrusted(repo);
     return tasks;
@@ -229,11 +260,62 @@ export class Mise {
   private async place(target: MiseTarget): Promise<RunPlace> {
     const root = await this.deps.repos.repoPath(target.repo);
     const env = await this.deps.env();
-    if (target.task === null) return { dir: root, env };
+    if (target.task === null) return { dir: root, env, secrets: await this.secretsIn(root, env) };
     const listed = await this.list(root, env);
     if (listed.kind !== "ok") throw new DomainError("mise_unavailable", `${target.repo}: ${listed.message}`);
     const { worktree, port } = await this.deps.tasks.trustedTaskWorktree(target.task, target.repo);
-    return { dir: worktree, env: withTaskPort(trustingPath(env, worktree), port) };
+    const worktreeEnv = withTaskPort(trustingPath(env, worktree), port);
+    return { dir: worktree, env: worktreeEnv, secrets: await this.secretsIn(worktree, worktreeEnv) };
+  }
+
+  /** The values of the secrets mise adds to a run in `dir`; none when mise does not give its environment (the run then fails itself). */
+  private async secretsIn(dir: string, env: NodeJS.ProcessEnv): Promise<string[]> {
+    const read = await readMiseEnv(this.deps.command, dir, env);
+    return read.kind === "ok" ? valuesNamed(read.env.vars, read.env.secretNames) : [];
+  }
+
+  /**
+   * The environment mise sets for a session (ADR-93), from the closest place whose mise config mise reads: a task's
+   * worktree while its mise config is the one the user trusted (ADR-59, after the repo root's, as for a run), else the
+   * repo root, else the projects folder. A session in a repo whose own config is not trusted still gets what the projects
+   * folder gives, and the reason it got less is the `problem`. Without mise there is nothing and no problem.
+   */
+  async sessionEnv(place: SessionPlace): Promise<SessionMiseEnv> {
+    const env = await this.deps.env();
+    const problems: string[] = [];
+    if (place.repo !== null) {
+      const root = await readMiseEnv(this.deps.command, await this.deps.repos.repoPath(place.repo), env);
+      if (root.kind === "not_installed") return { vars: {}, secretNames: [], problem: null };
+      if (root.kind === "ok") {
+        if (place.task === null) return { ...root.env, problem: null };
+        const inWorktree = await this.worktreeEnv(place.task, place.repo, env);
+        if (inWorktree.kind === "ok") return { ...inWorktree.env, problem: null };
+        return { ...root.env, problem: `${inWorktree.message}; the session has the environment of the repo root` };
+      }
+      problems.push(`${place.repo}: ${root.message}; the session has the environment of the projects folder`);
+    }
+    const projects = await readMiseEnv(this.deps.command, await this.deps.repos.projectsDir(), env);
+    if (projects.kind === "not_installed") return { vars: {}, secretNames: [], problem: null };
+    if (projects.kind === "error") problems.push(`projects folder: ${projects.message}`);
+    const found = projects.kind === "ok" ? projects.env : { vars: {}, secretNames: [] };
+    return { ...found, problem: problems.length === 0 ? null : problems.join("\n") };
+  }
+
+  /** The environment of a task's worktree, only while its mise config is the trusted one, which mise is told for this call. */
+  private async worktreeEnv(
+    task: string,
+    repo: string,
+    env: NodeJS.ProcessEnv,
+  ): Promise<{ kind: "ok"; env: MiseEnv } | { kind: "error"; message: string }> {
+    let worktree: string;
+    try {
+      ({ worktree } = await this.deps.tasks.trustedTaskWorktree(task, repo));
+    } catch (err) {
+      if (!(err instanceof DomainError)) throw err;
+      return { kind: "error", message: err.message };
+    }
+    const read = await readMiseEnv(this.deps.command, worktree, trustingPath(env, worktree));
+    return read.kind === "ok" ? read : { kind: "error", message: read.kind === "error" ? read.message : "mise is not installed" };
   }
 
   private async hasTask(place: RunPlace, miseTask: string): Promise<boolean> {
@@ -263,6 +345,7 @@ export class Mise {
         command: [...this.deps.command, ...args],
         cwd: place.dir,
         env: place.env,
+        secrets: place.secrets,
         logSource,
       });
     } catch (err) {
@@ -311,7 +394,7 @@ export function parseTaskList(result: MiseCliResult): TaskList {
   if (result.kind === "not_started") return { kind: "not_installed", message: result.message };
   if (result.kind === "failed") return { kind: "error", message: result.message };
   if (result.code !== 0) {
-    const message = failure(result.stderr, result.code);
+    const message = miseFailure(result.stderr, result.code);
     return UNTRUSTED.test(message) ? { kind: "untrusted", message } : { kind: "error", message };
   }
   let json: unknown;
@@ -359,13 +442,4 @@ function withTaskPort(env: NodeJS.ProcessEnv, port: number): NodeJS.ProcessEnv {
 /** The owner of a repo's `mise install` group; a different prefix than mise tasks, because a mise task may be called `install`. */
 function installOwner(repo: string): string {
   return `mise-install:${repo}`;
-}
-
-/** A mise error message without warnings that are not the cause (e.g. a failed check for a new version). */
-function failure(stderr: string, code: number | null): string {
-  const lines = stderr
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l !== "" && !/^mise WARN/.test(l));
-  return lines.join("\n") || `mise exited with code ${code}`;
 }
