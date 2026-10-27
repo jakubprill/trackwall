@@ -169,6 +169,11 @@ export class LiveSession {
    * a hook comes, the answer it already got moves the session on, as the key would have in `Approval`.
    */
   #earlyAnswers = 0;
+  /**
+   * An early answer ended a wait, and no hook but a notification came since: a next wait is for a request that came
+   * at once with that wait's, so their texts stay together (`SessionDialogs.requested`).
+   */
+  #requestsGoOn = false;
 
   constructor(o: LiveSessionOptions) {
     this.id = o.id;
@@ -214,7 +219,7 @@ export class LiveSession {
     // The answer to the agent's question (on the screen in `Input`, ADR-66) leaves nothing in the input box either.
     const key = sessionKey(data);
     const state = this.#last?.state;
-    const midTurn = state === "Working" || state === "Stale";
+    const midTurn = this.#midTurn();
     // A digit or Enter mid-turn into an approval Copilot CLI drew before its hook (ADR-71), answered already or not,
     // leaves nothing in the input box. Only mid-turn, so a message the user starts with a digit is still their text.
     const intoApproval = midTurn && key !== undefined && answersDialog(key) && this.#dialogs.approvalDrawn();
@@ -230,6 +235,12 @@ export class LiveSession {
     if (typedByUser(data)) this.#attention.typed();
   }
 
+  /** The agent works on its turn, where an approval may be on the screen before its hook (ADR-71). */
+  #midTurn(): boolean {
+    const state = this.#last?.state;
+    return state === "Working" || state === "Stale";
+  }
+
   /**
    * Notes a key that selects an option of the approval on the screen, and tells whether the key goes to the state
    * detectors: a digit the approval does not offer answers nothing (it does nothing, or moves the selection to a "No"
@@ -237,7 +248,7 @@ export class LiveSession {
    */
   #keyChangesState(key: SessionKey, data: string): boolean {
     const state = this.#last?.state;
-    const midTurn = state === "Working" || state === "Stale";
+    const midTurn = this.#midTurn();
     const approval = state === "Approval" || midTurn ? this.#dialogOnScreen("approval") : null;
     if (approval === null) return true;
     const answers = selectsOption(approval, key, data);
@@ -434,8 +445,10 @@ export class LiveSession {
       this.#hasConversation = true;
     }
     if (record.event === "userPromptSubmitted" || record.event === "agentStop") this.#contextGiven = undefined;
-    this.#dialogs.noticed(approvalRequest(record) ? record.payload.message : undefined);
+    if (record.event !== "notification") this.#requestsGoOn = false;
     this.#report(this.#state.hook(record));
+    // After the state change, which starts a new wait on the first request.
+    if (approvalRequest(record)) this.#dialogs.requested(record.payload.message);
     this.#applyEarlyAnswer(record.event);
     // The end of a turn from its hook, not from the state: a question dialog and an Esc give `Input` mid-turn too.
     if (record.event !== "agentStop") return false;
@@ -454,6 +467,7 @@ export class LiveSession {
     if (this.#last?.state === "Approval") {
       this.#earlyAnswers--;
       this.#report(this.#state.key("choice"));
+      this.#requestsGoOn = true;
     } else if (event !== "notification") this.#earlyAnswers = 0;
   }
 
@@ -466,7 +480,7 @@ export class LiveSession {
     for (const change of changes) {
       if (!change) continue;
       this.#attention.changed(this.#last?.state, change.state);
-      if (change.state !== this.#last?.state && DIALOG_IN_STATE.has(change.state)) this.#dialogs.waitStarted();
+      if (change.state !== this.#last?.state && DIALOG_IN_STATE.has(change.state)) this.#dialogs.waitStarted(this.#requestsGoOn);
       const wasError = this.#last?.state === "Error";
       this.#last = change;
       if (change.state === "Error" && !wasError && !this.#finished) this.#onEvent({ kind: "error" });

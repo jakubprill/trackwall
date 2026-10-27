@@ -6,8 +6,8 @@ import { Agents, sessionHooksFile } from "../src/modules/agents/agents.ts";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
 import { isAlive } from "../src/platform/process-group.ts";
 import { makeAgents, viewer, waitFor } from "./support/agents.ts";
-import { untilInputBox } from "./support/screen-lines.ts";
 import { PARALLEL_TOOLS_PROMPT } from "./support/copilot-reference.ts";
+import { untilInputBox } from "./support/screen-lines.ts";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterAll(async () => {

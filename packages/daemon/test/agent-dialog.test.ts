@@ -288,6 +288,50 @@ describe("approvals of tools the agent called at once (ADR-66)", () => {
     expect(session.view()).toMatchObject({ state: { state: "Working", source: "keyboard" }, dialog: null });
   });
 
+  test("an answered approval cut above stays answered while its dialog is still on the screen", async () => {
+    const terminal = { cols: 100, rows: 14, message: "Use MCP tool: trackwall/verify_task" };
+    const { session, written, notify, hooksFile } = await sessionShowing("mcp-cut-14", "permission_prompt", undefined, terminal);
+    notify("permission_prompt");
+    const first = session.view()?.dialog;
+    expect(first).toMatchObject({ kind: "approval", title: "Approval request" });
+    session.answerDialog(first?.id ?? "", "1");
+
+    // The answered tool's postToolUse, read while its dialog is still on the screen.
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "postToolUse", receivedAt: 0, payload: { toolName: "view" }, omitted: [] })}\n`);
+    session.tick();
+
+    expect(session.view()).toMatchObject({ state: { state: "Approval" }, dialog: null });
+    expect(written).toEqual(["1"]);
+  });
+
+  test("an approval cut above, with a second request of the same wait, gets a plain heading and keeps its id", async () => {
+    const terminal = { cols: 100, rows: 14, message: "Use MCP tool: trackwall/verify_task" };
+    const { session, hooksFile } = await sessionShowing("mcp-cut-14", "permission_prompt", undefined, terminal);
+    const alone = session.view()?.dialog;
+    expect(alone).toMatchObject({ kind: "approval", title: "Use MCP tool: trackwall/verify_task" });
+
+    // The requests come at once and in either order, so neither text can stand for the heading of the dialog shown.
+    const second = { notification_type: "permission_prompt", message: "Use MCP tool: trackwall/call_endpoint" };
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "notification", receivedAt: 0, payload: second, omitted: [] })}\n`);
+    session.tick();
+
+    const shown = session.view()?.dialog;
+    expect(shown).toMatchObject({ kind: "approval", title: "Approval request" });
+    expect(shown?.id).toBe(alone?.id);
+  });
+
+  test("an approval cut above keeps its heading when another tool's postToolUse comes while it waits", async () => {
+    const terminal = { cols: 100, rows: 14, message: "Use MCP tool: trackwall/verify_task" };
+    const { session, hooksFile } = await sessionShowing("mcp-cut-14", "permission_prompt", undefined, terminal);
+    const before = session.view()?.dialog;
+
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "postToolUse", receivedAt: 0, payload: { toolName: "view" }, omitted: [] })}\n`);
+    session.tick();
+
+    expect(session.view()).toMatchObject({ state: { state: "Approval" }, dialog: { title: "Use MCP tool: trackwall/verify_task" } });
+    expect(session.view()?.dialog?.id).toBe(before?.id);
+  });
+
   test("the postToolUse of another tool does not end waiting for an approval still on the screen", async () => {
     const { session, hooksFile } = await sessionShowing("shell-120", "permission_prompt");
 
@@ -348,6 +392,32 @@ describe("approvals of tools the agent called at once (ADR-66)", () => {
     session.answerDialog(dialog?.id ?? "", "1");
 
     expect(session.view()?.state).toMatchObject({ state: "Approval" });
+  });
+
+  test("a cut approval waiting after an early answer, whose request came at once with the answered one's, gets a plain heading", async () => {
+    const terminal = { cols: 100, rows: 14 };
+    const { session, hooksFile } = await sessionShowing("mcp-cut-14", "agent_idle", undefined, terminal);
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+
+    // The first approval, drawn before its hook, is answered; Copilot CLI draws the second.
+    session.input("1");
+    await redraw(
+      session,
+      screen("mcp-cut-14").map((line) => line.replace("│ │ }", "│ │ ]")),
+    );
+    // Both requests come now, the second one's first: its hook takes the early answer, the first one's waits.
+    const request = (message: string) => ({
+      event: "notification",
+      receivedAt: 0,
+      payload: { notification_type: "permission_prompt", message },
+      omitted: [],
+    });
+    const hooks = [request("Use MCP tool: trackwall/call_endpoint"), request("Use MCP tool: trackwall/verify_task")];
+    appendFileSync(hooksFile, `${hooks.map((h) => JSON.stringify(h)).join("\n")}\n`);
+    session.tick();
+
+    expect(session.view()).toMatchObject({ state: { state: "Approval" }, dialog: { kind: "approval", title: "Approval request" } });
   });
 
   test("two approvals answered before their hooks came are both answered when the hooks come (ADR-71)", async () => {

@@ -14,6 +14,11 @@ import type { SessionKey } from "./copilot-keys.ts";
  * name the next one, which nobody saw. It is forgotten only once the screen shows anything else
  * (`forgetAnswerOffScreen`), so the next dialog with the same text drawn without a change in between has no id, never
  * a wrong one.
+ *
+ * A box cut above in a short terminal has no heading, and the text of its approval request hook stands in (`requested`).
+ * Only while the wait has a single request: several requests come at once and in either order, so their texts cannot be
+ * matched to the dialogs, and a heading naming another command than the one approved would mislead. A dialog's identity
+ * (its id, and whether it is the one answered) leaves the heading out, so a request that comes later does not change it.
  */
 
 /** The screen image the dialogs are read from (`TerminalScreen`). */
@@ -22,20 +27,19 @@ interface DialogScreen {
   lines(): readonly string[];
 }
 
-/** A digest of the dialog's text and of the set of ids it belongs to. */
+/** What identifies a dialog: all its text but the heading, which a box cut above takes from its requests (`requested`). */
+const identity = (dialog: ScreenDialog) => ({ ...dialog, title: "" });
+
+/** A digest of the dialog's identity and of the set of ids it belongs to. */
 function dialogId(ids: number, dialog: ScreenDialog): string {
   return createHash("sha256")
-    .update(JSON.stringify([ids, dialog]))
+    .update(JSON.stringify([ids, identity(dialog)]))
     .digest("hex")
     .slice(0, 16);
 }
 
-/**
- * The same dialog on the screen. The title is left out: a box cut above takes it from the last hook's notice, which a
- * later hook clears, and the answered dialog must stay answered when only that changes.
- */
 function sameDialog(a: ScreenDialog | undefined, b: ScreenDialog | undefined): boolean {
-  return a !== undefined && b !== undefined && isDeepStrictEqual({ ...a, title: "" }, { ...b, title: "" });
+  return a !== undefined && b !== undefined && isDeepStrictEqual(identity(a), identity(b));
 }
 
 /**
@@ -54,21 +58,25 @@ export class SessionDialogs {
   /** The dialog last read, for the screen revision it was read at: the screen is read once per change. */
   #read: { revision: number; kind: AgentDialog["kind"]; notice: string | undefined; found: ScreenDialog | undefined } | undefined;
   #answered: ScreenDialog | undefined;
-  /** The text of the last hook if it was an approval request ("Use MCP tool: …"): the heading of an approval box cut above. */
-  #notice: string | undefined;
+  /** The texts of the wait's approval request hooks ("Use MCP tool: …"); `CopilotSessionState` counts the unanswered ones. */
+  #requests: (string | undefined)[] = [];
 
   constructor(screen: DialogScreen) {
     this.#screen = screen;
   }
 
-  /** The session entered a state that waits for a dialog's answer. */
-  waitStarted(): void {
+  /**
+   * The session entered a state that waits for a dialog's answer. `sameRequests`: it waits again for a request that
+   * came at once with those of the last wait, which an answer given before its hook ended (ADR-71).
+   */
+  waitStarted(sameRequests: boolean): void {
     this.#ids++;
+    if (!sameRequests) this.#requests = [];
   }
 
-  /** The last hook record was the approval request with this text, or `undefined` for any other hook. */
-  noticed(notice: string | undefined): void {
-    this.#notice = notice;
+  /** An approval request hook with this text came, after the state change it gave (`waitStarted`). */
+  requested(text: string | undefined): void {
+    this.#requests.push(text);
   }
 
   /** The dialog of `kind` the screen shows now, unless it is the approval just answered. */
@@ -96,7 +104,7 @@ export class SessionDialogs {
   #readScreen(kind: AgentDialog["kind"]): ScreenDialog | undefined {
     const revision = this.#screen.revision;
     const read = this.#read;
-    const notice = this.#notice;
+    const notice = this.#requests.length === 1 ? this.#requests[0] : undefined;
     if (read?.revision === revision && read.kind === kind && read.notice === notice) return read.found;
     const found = readAgentDialog(this.#screen.lines(), kind, notice);
     this.#read = { revision, kind, notice, found };
