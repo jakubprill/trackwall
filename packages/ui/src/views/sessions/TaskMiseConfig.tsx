@@ -1,15 +1,12 @@
 import { agentsApi, type TaskMiseConfig as Config, countLabel, type MiseConfigChange } from "@trackwall/protocol";
 import { ShieldAlert } from "lucide-react";
-import { type ReactNode, useCallback, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { changedSinceShown, shownMiseConfig } from "@/lib/mise-config-review";
 import { useAction } from "@/lib/use-action";
-import { useRemote } from "@/lib/use-remote";
-
-/** The agent edits the config within seconds of the user's look; a few seconds late is fine for a warning that blocks nothing in the UI. */
-const POLL_MS = 5000;
+import type { TaskDetails } from "@/lib/use-task-details";
 
 const CHANGE_LABEL: Record<MiseConfigChange["change"], string> = { added: "added", modified: "changed", removed: "deleted" };
 
@@ -19,11 +16,9 @@ const CHANGE_LABEL: Record<MiseConfigChange["change"], string> = { added: "added
  * showed, and a newer one only after the user asks for it, so the trust always names (by its digest) the text on
  * screen, not one that arrived with a poll a moment before the click (`shownMiseConfig`). A config Trackwall cannot
  * check (a link out of the worktree, too many files) shows why; another failed check shows nothing, like the shared
- * files warning.
+ * files warning. The data comes from `useTaskDetails`.
  */
-export function TaskMiseConfig({ conn, task, paused }: { conn: Connection; task: string; paused: boolean }) {
-  const load = useCallback(() => post(conn, agentsApi.taskMiseConfig, { task }), [conn, task]);
-  const remote = useRemote(paused ? undefined : load, { pollMs: POLL_MS });
+export function TaskMiseConfig({ conn, task, remote }: { conn: Connection; task: string; remote: TaskDetails["miseConfig"] }) {
   const [shown, setShown] = useState<Config>();
   const [trustedDigest, setTrustedDigest] = useState<string>();
   const trust = useAction(

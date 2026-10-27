@@ -33,6 +33,8 @@ describe("an agent task, verified and reviewed", () => {
     await waitForTerminal(page, `--interactive=${PROMPT}`);
 
     await page.getByRole("button", { name: "Verify" }).click();
+    // The sections above the terminal are folded into one strip of notices until "Details" unfolds them.
+    await page.getByRole("button", { name: "Details" }).click();
     const verification = page.getByRole("region", { name: "Verification" });
     await verification.getByText("1 test · 1 failed").waitFor();
     await verification.getByRole("list", { name: "Failed tests" }).getByText("sums").waitFor();
