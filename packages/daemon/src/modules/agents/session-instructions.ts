@@ -18,11 +18,14 @@ const INSTRUCTIONS_DIR = "instructions";
 const INSTRUCTIONS_FILE = "trackwall.instructions.md";
 
 /**
- * Who the session is: the supervisor in the projects folder (`repo: null`, ADR-58), which may change code only with
- * `supervisor.changesCode` (ADR-78), a free session in the projects folder (`free`, ADR-100), a main session in the
- * repo root (`task: null`) or a task session in the task's worktree.
+ * Who the session is: the supervisor in the projects folder (ADR-58), which may change code only with
+ * `supervisor.changesCode` (ADR-78), a free session in the projects folder (ADR-100), or in a repo a main session in its
+ * root (`task: null`) or a task session in the task's worktree.
  */
-export type SessionRole = { repo: null; changesCode: boolean } | { repo: null; free: true } | { repo: string; task: string | null };
+export type SessionRole =
+  | { kind: "supervisor"; changesCode: boolean }
+  | { kind: "free" }
+  | { kind: "repo"; repo: string; task: string | null };
 
 /**
  * Writes the instructions of a session started by Trackwall `version` to `<sessionDir>/instructions/` and returns that
@@ -45,7 +48,6 @@ export function withInstructionsDir(env: NodeJS.ProcessEnv, dir: string): NodeJS
 }
 
 function sessionInstructions(version: string, role: SessionRole): string {
-  const inPanel = role.repo === null && !("free" in role);
   return [
     // `applyTo: "**"`: the instruction applies to every file, i.e. to the whole session, like `.github/instructions` in a repo.
     "---",
@@ -54,7 +56,7 @@ function sessionInstructions(version: string, role: SessionRole): string {
     "# Working in Trackwall",
     "",
     `Trackwall ${version} started this Copilot CLI session, and its \`trackwall\` MCP server is connected. The user ` +
-      `sees this session ${inPanel ? "in the supervisor panel on the right of every Trackwall view" : "in Trackwall's Sessions view next to their other sessions"}, ` +
+      `sees this session ${role.kind === "supervisor" ? "in the supervisor panel on the right of every Trackwall view" : "in Trackwall's Sessions view next to their other sessions"}, ` +
       "and Trackwall tells them when you end your turn or ask for approval.",
     "",
     "## Your session",
@@ -69,7 +71,8 @@ function sessionInstructions(version: string, role: SessionRole): string {
 }
 
 function sessionRole(role: SessionRole): string[] {
-  if (role.repo === null) return "free" in role ? freeRole() : supervisorRole(role.changesCode);
+  if (role.kind === "supervisor") return supervisorRole(role.changesCode);
+  if (role.kind === "free") return freeRole();
   return role.task === null ? repoRole(role.repo) : taskRole(role.repo, role.task);
 }
 

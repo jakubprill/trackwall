@@ -34,10 +34,20 @@ describe("the list of sessions a restart resumes", () => {
 
   test("a file of a Trackwall before free sessions has no supervisor field, and its session without a repo is the supervisor (ADR-100)", () => {
     const path = newPath();
-    const { supervisor: _, ...older } = SUPERVISOR;
-    writeFileSync(path, JSON.stringify({ sessions: [older] }));
+    const { supervisor: _, ...olderSupervisor } = SUPERVISOR;
+    const { supervisor: __, ...olderMain } = MAIN;
+    writeFileSync(path, JSON.stringify({ sessions: [olderMain, olderSupervisor] }));
 
-    expect(new ResumableSessions(path, () => {}).read()).toEqual([SUPERVISOR]);
+    expect(new ResumableSessions(path, () => {}).read()).toEqual([MAIN, SUPERVISOR]);
+  });
+
+  test("a supervisor with a repo breaks the file, so a hand edit never starts the supervisor in place of a main session", () => {
+    const path = newPath();
+    writeFileSync(path, JSON.stringify({ sessions: [{ ...MAIN, supervisor: true }] }));
+    const log: string[] = [];
+
+    expect(new ResumableSessions(path, (msg) => log.push(msg)).read()).toEqual([]);
+    expect(log[0]).toContain("no session is resumed");
   });
 
   test("without a file there is nothing to resume", () => {

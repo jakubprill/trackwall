@@ -6,10 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { newSessionStart, PROJECTS_FOLDER, sessionsInSameFolder } from "@/lib/new-session";
+import { newSessionStart, sessionsInSameFolder } from "@/lib/new-session";
 import type { SessionSelection } from "@/lib/session-entries";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
+
+/** The place choice's value for the projects folder; a repo id is never empty. */
+const PROJECTS_FOLDER = "";
 
 /**
  * A new task or session (ADR-100): a repo from the projects folder, or the projects folder itself, and a prompt for the
@@ -34,7 +37,8 @@ export function NewSession({
   const [worktree, setWorktree] = useState(true);
   const [prompt, setPrompt] = useState("");
   const chosen = place ?? repos.data?.repos[0]?.id ?? PROJECTS_FOLDER;
-  const start = newSessionStart(chosen, worktree, prompt);
+  const repo = chosen === PROJECTS_FOLDER ? null : chosen;
+  const start = newSessionStart(repo, worktree, prompt);
   const createTask = useAction(
     (repo: string, prompt: string) => post(conn, agentsApi.createTask, { repo, prompt }),
     (task) => onStarted({ kind: "task", id: task.id }),
@@ -75,7 +79,7 @@ export function NewSession({
               ))}
               <option value={PROJECTS_FOLDER}>No repo: the projects folder</option>
             </select>
-            {chosen !== PROJECTS_FOLDER && (
+            {repo !== null && (
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -99,7 +103,7 @@ export function NewSession({
             maxLength={TASK_PROMPT_MAX}
             rows={5}
           />
-          {start.kind === "session" && <WithoutWorktree place={chosen} sessions={sessions} />}
+          {start.kind === "session" && <WithoutWorktree repo={repo} sessions={sessions} />}
           <div className="flex flex-wrap items-center gap-2">
             {start.kind === "session" ? (
               <Button onClick={run} disabled={pending}>
@@ -129,12 +133,12 @@ export function NewSession({
 }
 
 /** What a session without its own worktree gives up, and the agents it would share the working copy with. */
-function WithoutWorktree({ place, sessions }: { place: string; sessions: readonly Session[] }) {
-  const sharing = sessionsInSameFolder(sessions, place).length;
+function WithoutWorktree({ repo, sessions }: { repo: string | null; sessions: readonly Session[] }) {
+  const sharing = sessionsInSameFolder(sessions, repo).length;
   return (
     <div className="text-muted-foreground flex max-w-prose flex-col gap-1 text-xs">
       <p>
-        {place === PROJECTS_FOLDER
+        {repo === null
           ? "A free session works in the projects folder and can change any repo in it."
           : "The agent works in the repo's own working copy, where your editor and services are."}{" "}
         Its changes go straight into your working copies: no Changes tab, review, Verify or merge request, which only a task in its own

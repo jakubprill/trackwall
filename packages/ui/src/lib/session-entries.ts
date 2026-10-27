@@ -329,5 +329,6 @@ export function proposerName(proposedBy: ProposedBy, sessions: readonly Session[
   if (proposedBy.session === null) return "an agent outside Trackwall";
   const session = sessions.find((s) => s.id === proposedBy.session);
   if (!session) return "a session that is no longer listed";
-  return `the session in ${session.repo}${session.windowTitle ? ` (${session.windowTitle})` : ""}`;
+  const who = session.repo === null ? "a free session" : `the session in ${session.repo}`;
+  return `${who}${session.windowTitle ? ` (${session.windowTitle})` : ""}`;
 }

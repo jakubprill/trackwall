@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Session } from "@trackwall/protocol";
-import { newSessionStart, PROJECTS_FOLDER, sessionsInSameFolder } from "../src/lib/new-session.ts";
+import { newSessionStart, sessionsInSameFolder } from "../src/lib/new-session.ts";
 
 function session(id: string, over: Partial<Session>): Session {
   return {
@@ -30,8 +30,8 @@ describe("what the New session form starts (ADR-100)", () => {
   });
 
   test("the projects folder is a free session whatever the worktree choice says, since it has no worktree", () => {
-    expect(newSessionStart(PROJECTS_FOLDER, true, "")).toEqual({ kind: "session", repo: null, prompt: undefined });
-    expect(newSessionStart(PROJECTS_FOLDER, false, "Compare the two APIs")).toEqual({
+    expect(newSessionStart(null, true, "")).toEqual({ kind: "session", repo: null, prompt: undefined });
+    expect(newSessionStart(null, false, "Compare the two APIs")).toEqual({
       kind: "session",
       repo: null,
       prompt: "Compare the two APIs",
@@ -64,6 +64,6 @@ describe("the running sessions a new session without its own worktree would shar
   });
 
   test("in the projects folder: the running free sessions, not the supervisor", () => {
-    expect(sessionsInSameFolder(sessions, PROJECTS_FOLDER).map((s) => s.id)).toEqual(["free"]);
+    expect(sessionsInSameFolder(sessions, null).map((s) => s.id)).toEqual(["free"]);
   });
 });

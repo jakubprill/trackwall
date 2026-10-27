@@ -28,7 +28,7 @@ import {
   type Verification,
 } from "@trackwall/protocol";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
-import { findCopilot } from "./copilot-command.ts";
+import { findCopilot, toolPermissionArgs } from "./copilot-command.ts";
 import type { CopilotHookOutput } from "./copilot-hook-output.ts";
 import { CopilotHookEvent } from "./copilot-hook-record.ts";
 import { writeCopilotPlugin } from "./copilot-plugin.ts";
@@ -39,7 +39,7 @@ import { LiveSession, type SessionPty, type SessionWindow } from "./live-session
 import { MiseTrustNotices } from "./mise-trust-notices.ts";
 import { withLoopbackNoProxy } from "./no-proxy.ts";
 import { proposedByOf, proposerKeyOf, proposerOf, SUPERVISOR } from "./proposer.ts";
-import { type ResumableSession, ResumableSessions } from "./resumable-sessions.ts";
+import { type ResumableSession, ResumableSessions, type ResumeLaunch, resumablePlace, resumeLaunch } from "./resumable-sessions.ts";
 import { type SessionRole, withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
@@ -302,14 +302,14 @@ export class Agents {
     return this.#startSupervisorAs({ id, args, promptOnStart: firstMessage !== null, hasConversation: firstMessage !== null });
   }
 
-  #startSupervisorAs(spec: SupervisorLaunch): Promise<Session> {
+  #startSupervisorAs(spec: ResumeLaunch): Promise<Session> {
     this.#supervisorStart = this.#replaceSupervisor(spec).finally(() => {
       this.#supervisorStart = undefined;
     });
     return this.#supervisorStart;
   }
 
-  async #replaceSupervisor(spec: SupervisorLaunch): Promise<Session> {
+  async #replaceSupervisor(spec: ResumeLaunch): Promise<Session> {
     const ended = this.#views().filter(isSupervisor);
     const cwd = await this.#deps.repos.projectsDir();
     // The ended supervisor whose conversation this one goes on with under its id gives up its place before the start.
@@ -668,7 +668,7 @@ export class Agents {
     const token = this.#tokens.issue(id);
     let prepared: PreparedSession;
     try {
-      prepared = this.#prepare({ id, role, supervisor, task, dir, token, promptOnStart, hasConversation, program });
+      prepared = this.#prepare({ id, role, repo, task, dir, token, promptOnStart, hasConversation, program });
     } catch (err) {
       this.#tokens.revoke(id);
       rmSync(dir, { recursive: true, force: true });
@@ -711,8 +711,8 @@ export class Agents {
   }
 
   #role(repo: string | null, supervisor: boolean, task: string | null): SessionRole {
-    if (repo !== null) return { repo, task };
-    return supervisor ? { repo, changesCode: this.#deps.repos.supervisorSettings().changesCode } : { repo, free: true };
+    if (repo !== null) return { kind: "repo", repo, task };
+    return supervisor ? { kind: "supervisor", changesCode: this.#deps.repos.supervisorSettings().changesCode } : { kind: "free" };
   }
 
   async stop(id: string): Promise<Session> {
@@ -762,14 +762,12 @@ export class Agents {
    */
   async resumeLeftSessions(): Promise<void> {
     // The supervisor first: the user may start a new one meanwhile, which would leave the old conversation behind.
-    const left = [...this.#left].sort((a, b) => Number(isLeftSupervisor(b)) - Number(isLeftSupervisor(a)));
+    const left = [...this.#left].sort((a, b) => Number(b.supervisor) - Number(a.supervisor));
     this.#left = [];
     for (const session of left) {
       try {
         await this.#resumeLeft(session);
-        this.#deps.log(
-          `resumed session ${session.session} (${session.task === null ? (session.repo ?? (isLeftSupervisor(session) ? "supervisor" : "free session")) : `task ${session.task}`})`,
-        );
+        this.#deps.log(`resumed session ${session.session} (${resumablePlace(session)})`);
       } catch (err) {
         this.#deps.log(`resuming session ${session.session}: ${String(err)}`);
       }
@@ -783,7 +781,7 @@ export class Agents {
       return;
     }
     const spec = resumeLaunch({ session: id, hasConversation });
-    if (isLeftSupervisor(left)) {
+    if (left.supervisor) {
       if (this.#supervisorStart || this.#runningSupervisor()) throw new Error("a supervisor already runs");
       await this.#startSupervisorAs(spec);
       return;
@@ -828,8 +826,8 @@ export class Agents {
    * The session directory with the session plugin, MCP config, session instructions and an empty
    * `hooks.jsonl`, before Copilot CLI starts.
    */
-  #prepare({ id, role, supervisor, task, dir, token, promptOnStart, hasConversation, program }: SessionFiles): PreparedSession {
-    const { repo } = role;
+  #prepare({ id, role, repo, task, dir, token, promptOnStart, hasConversation, program }: SessionFiles): PreparedSession {
+    const supervisor = role.kind === "supervisor";
     const pluginDir = join(dir, "plugin");
     const hooksFile = join(dir, HOOKS_FILENAME);
     mkdirSync(dir, { recursive: true });
@@ -970,7 +968,7 @@ interface LaunchSpec {
 interface SessionFiles {
   id: string;
   role: SessionRole;
-  supervisor: boolean;
+  repo: string | null;
   task: string | null;
   dir: string;
   token: string;
@@ -986,11 +984,6 @@ interface PreparedSession {
   instructionsDir: string | null;
 }
 
-/** Copilot CLI's own approval rules (ADR-66); one argument each, with `=`, so a pattern never reads as another option. */
-function toolPermissionArgs(permissions: ToolPermissions): string[] {
-  return [...permissions.allow.map((p) => `--allow-tool=${p}`), ...permissions.deny.map((p) => `--deny-tool=${p}`)];
-}
-
 /** The group owner key in `procs`; only ever built, never taken apart again. */
 function owner(id: string): string {
   return `agent:${id}`;
@@ -1001,19 +994,3 @@ function domainError(repo: string | null, err: unknown): unknown {
   const place = repo ?? "the projects folder";
   return new DomainError(err.reason === "cwd_invalid" ? "repo_unavailable" : "agent_unavailable", `${place}: ${err.message}`);
 }
-
-/**
- * A start that goes on with the conversation Copilot CLI keeps under the session's id (ADR-95, ADR-96). It refuses to
- * resume a session that never had a prompt: that one starts anew under the same id.
- */
-function resumeLaunch({ session: id, hasConversation }: Pick<ResumableSession, "session" | "hasConversation">): SupervisorLaunch {
-  return { id, args: [hasConversation ? `--resume=${id}` : `--session-id=${id}`], promptOnStart: false, hasConversation };
-}
-
-/** A left session without a repo or task that was the supervisor, not a free session (ADR-100). */
-function isLeftSupervisor(left: ResumableSession): boolean {
-  return left.repo === null && left.task === null && left.supervisor;
-}
-
-/** A supervisor's start: its id, its arguments and whether they carry its first message or resume its conversation. */
-type SupervisorLaunch = Pick<LaunchSpec, "args" | "promptOnStart" | "hasConversation"> & { id: string };

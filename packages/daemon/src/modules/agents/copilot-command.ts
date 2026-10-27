@@ -1,6 +1,7 @@
 import { statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { delimiter, dirname, extname, isAbsolute, join } from "node:path";
+import type { ToolPermissions } from "@trackwall/protocol";
 import { envKey } from "../../infra/env-key.ts";
 
 /**
@@ -55,4 +56,9 @@ function isFile(path: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Copilot CLI's own approval rules (ADR-66); one argument each, with `=`, so a pattern never reads as another option. */
+export function toolPermissionArgs(permissions: ToolPermissions): string[] {
+  return [...permissions.allow.map((p) => `--allow-tool=${p}`), ...permissions.deny.map((p) => `--deny-tool=${p}`)];
 }

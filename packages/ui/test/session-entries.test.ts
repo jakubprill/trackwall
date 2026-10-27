@@ -319,6 +319,11 @@ describe("Sessions view entries", () => {
     expect(`from ${proposerName({ session: "s1", supervisor: false }, sessions)}`).toBe("from the session in shop (Sprint plan)");
     expect(`from ${proposerName({ session: "s2", supervisor: true }, sessions)}`).toBe("from the supervisor");
   });
+
+  test("a free session, which has no repo, is named as a free session (ADR-100)", () => {
+    const sessions = [{ ...session("f1", "2026-10-27T12:00:00Z"), repo: null, windowTitle: "API compare" }];
+    expect(proposerLabel({ session: "f1", supervisor: false }, sessions)).toBe("proposed by a free session (API compare)");
+  });
 });
 
 describe("proposal kinds (ADR-83)", () => {
