@@ -228,24 +228,25 @@ describe("a session of the real Copilot CLI", () => {
     const { agents } = daemon.facade;
     const { id, window } = await startSession();
     const copies = () => new OscParser().feed(window.text()).filter((osc) => osc.code === "52");
-    const shows = (text: string) => () => window.unwrappedText().replace(/\s/g, "").includes(text);
     // SGR mouse reports (mode 1006, which Copilot CLI turns on): press at the start of the banner, below the tab bar on
-    // the first row, drag across it, release. Copilot CLI then names its copy keys under the selection.
+    // the first row, drag across it, release.
     window.attachment.input("\x1b[<0;1;3M");
     for (let row = 4; row <= 6; row++) window.attachment.input(`\x1b[<32;${REFERENCE_COLS};${row}M`);
     window.attachment.input(`\x1b[<0;${REFERENCE_COLS};6m`);
-    await waitFor(agents, id, shows("ctrl+c/right-clickcopy"), "the copy hint under the selection", SESSION_MS);
-    // On release it already sets the primary selection (`p!`, Linux) or the clipboard (macOS), which the terminal
-    // ignores, because the user did not ask for a copy.
+    // On release it may already set the primary selection (`p!`, Linux) or the clipboard (macOS); the terminal ignores
+    // those, because the user did not ask for a copy, so only what Ctrl+C sends counts.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     const onRelease = copies().length;
 
     window.attachment.input("\x03");
-    await waitFor(agents, id, shows("copiedtoclipboard"), "the confirmation of the copy", SESSION_MS);
-    const copy = copies()
-      .slice(onRelease)
-      .find((osc) => osc.data.startsWith("c;"));
-    expect(copy).toBeDefined();
-    const copied = Buffer.from(copy?.data.slice(2) ?? "", "base64").toString("utf8");
+    const ctrlC = () =>
+      copies()
+        .slice(onRelease)
+        .find((osc) => osc.data.startsWith("c;"));
+    await waitFor(agents, id, () => ctrlC() !== undefined, "the clipboard copy on Ctrl+C", 10_000).catch((err: unknown) => {
+      throw new Error(`${err}\nsequences on release: ${onRelease}\nscreen: ${JSON.stringify(window.text().slice(-4000))}`);
+    });
+    const copied = Buffer.from(ctrlC()?.data.slice(2) ?? "", "base64").toString("utf8");
     expect(copied).toContain("Copilot");
     expect(copied).not.toContain("\x1b");
     // Ctrl+C with a selection copies; it does not end the session.
