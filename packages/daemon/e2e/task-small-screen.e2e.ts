@@ -71,4 +71,18 @@ describe("a small screen", () => {
     const box = await canvas.boundingBox();
     expect(box?.width ?? 0).toBeGreaterThanOrEqual(320);
   }, 60_000);
+
+  test("Home with the supervisor panel widened still keeps the 3D scene wide enough to read", async () => {
+    const page = await trackwall().open(SMALL_SCREEN);
+    await page.getByRole("button", { name: /Pin the supervisor panel open/ }).click();
+    const panel = page.getByRole("complementary", { name: "Supervisor" });
+    const pinned = await panel.boundingBox();
+    await page.getByRole("button", { name: "Widen the supervisor panel" }).click();
+    await page.getByRole("button", { name: "Narrow the supervisor panel" }).waitFor();
+    const canvas = page.locator("canvas").first();
+    await canvas.waitFor();
+
+    expect((await panel.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(pinned?.width ?? Number.POSITIVE_INFINITY);
+    expect((await canvas.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(320);
+  }, 60_000);
 });

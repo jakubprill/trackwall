@@ -17,7 +17,7 @@ import { IS_MAC } from "@/lib/platform";
 import { asksProgramToCopy, copiesSelection, keepsSelection, osc52Text, ProgramCopy, pastesClipboard } from "@/lib/terminal-copy";
 import { hyperlinkHandler, trackwallLinkProvider } from "@/lib/terminal-links";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
-import { terminalTheme } from "@/lib/terminal-theme";
+import { cssTokens, terminalTheme } from "@/lib/terminal-theme";
 import { cn } from "@/lib/utils";
 import { FocusReporter, terminalInFront } from "@/lib/window-focus";
 
@@ -66,7 +66,9 @@ export function SessionTerminal({
     const element = host.current;
     const container = frame.current;
     if (!element || !container) return;
-    const terminal = new Terminal(sessionTerminalOptions(terminalTheme(document.documentElement), getComputedStyle(element).fontFamily));
+    const terminal = new Terminal(
+      sessionTerminalOptions(terminalTheme(cssTokens(document.documentElement)), getComputedStyle(element).fontFamily),
+    );
     const fit = new FitAddon();
     terminal.loadAddon(fit);
     let links: { dispose: () => void } | undefined;

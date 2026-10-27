@@ -33,6 +33,27 @@
   --input: oklch(0.85 0.04 220 / 18%);
   --ring: oklch(0.82 0.12 210 / 70%);
   --grid-line: oklch(0.85 0.04 220 / 4%);
+  /*
+   * The 16 ANSI colours of the session terminals (`lib/terminal-theme.ts`): Copilot CLI draws its TUI with them, so
+   * they follow the HUD. Red, green, yellow and cyan are the state and accent colours; the rest sit next to them in
+   * lightness and chroma, the bright ones a step lighter.
+   */
+  --ansi-black: oklch(0.3 0.014 240);
+  --ansi-red: var(--destructive);
+  --ansi-green: var(--success);
+  --ansi-yellow: var(--warning);
+  --ansi-blue: oklch(0.72 0.11 250);
+  --ansi-magenta: oklch(0.74 0.1 300);
+  --ansi-cyan: var(--primary);
+  --ansi-white: oklch(0.86 0.01 230);
+  --ansi-bright-black: oklch(0.58 0.02 240);
+  --ansi-bright-red: oklch(0.76 0.15 22);
+  --ansi-bright-green: oklch(0.86 0.11 165);
+  --ansi-bright-yellow: oklch(0.9 0.1 80);
+  --ansi-bright-blue: oklch(0.82 0.09 250);
+  --ansi-bright-magenta: oklch(0.84 0.08 300);
+  --ansi-bright-cyan: oklch(0.9 0.08 210);
+  --ansi-bright-white: var(--foreground);
 }
 
 /*
@@ -75,6 +96,9 @@
   /* The pinned supervisor panel (ADR-58): wide enough for Copilot CLI's prompt and tables, about 80 terminal columns;
      on a small screen (1280 wide at 150%) narrower, so the view next to it keeps room for a task's terminal. */
   --spacing-supervisor: min(40rem, 36vw);
+  /* The widened panel, for reading the supervisor: up to 72rem (about 140 terminal columns), but the view next to it keeps
+     44rem, what Home needs for its scene and a task's terminal for its columns, and it is never narrower than pinned. */
+  --spacing-supervisor-wide: max(var(--spacing-supervisor), min(72rem, calc(100vw - var(--spacing-activity-bar) - 44rem)));
   --shadow-glow-primary: 0 0 8px var(--primary);
   --shadow-glow-success: 0 0 6px var(--success);
   --shadow-glow-warning: 0 0 6px var(--warning);

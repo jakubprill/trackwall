@@ -18,7 +18,7 @@ import { SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
 import { sessionShortcut } from "@/lib/session-shortcut";
 import { agentsInTurn, attentionCount } from "@/lib/session-state";
 import { selectsSupervisor, showingTakesKeyboard, supervisorSummary } from "@/lib/supervisor";
-import { readSupervisorPinned, saveSupervisorPinned } from "@/lib/supervisor-pin";
+import { readSupervisorLayout, type SupervisorLayout, saveSupervisorLayout, unfolded } from "@/lib/supervisor-layout";
 import { useAppMenu } from "@/lib/use-app-menu";
 import { useAppUpdate } from "@/lib/use-app-update";
 import { useConnection } from "@/lib/use-connection";
@@ -106,13 +106,13 @@ export function App() {
     }
   });
   const events = useDaemonEvents(conn);
-  // The supervisor panel (ADR-58) is on the right of every view; pinned, it shows the supervisor's state all the time.
-  const [supervisorPinned, setSupervisorPinned] = useState(() => readSupervisorPinned(() => window.localStorage));
-  const pinSupervisor = useCallback((pinned: boolean) => {
-    setSupervisorPinned(pinned);
-    saveSupervisorPinned(() => window.localStorage, pinned);
+  // The supervisor panel (ADR-58) is on the right of every view; unfolded (pinned or wide), it shows the supervisor's state all the time.
+  const [supervisorLayout, setSupervisorLayout] = useState(() => readSupervisorLayout(() => window.localStorage));
+  const chooseSupervisorLayout = useCallback((layout: SupervisorLayout) => {
+    setSupervisorLayout(layout);
+    saveSupervisorLayout(() => window.localStorage, layout);
   }, []);
-  const sessions = useSessions(conn, events, view === "sessions" || view === "home" || supervisorPinned);
+  const sessions = useSessions(conn, events, view === "sessions" || view === "home" || supervisorLayout !== "folded");
   const runningLive = useMemo(() => events?.feed("mise.running.changed"), [events]);
   const repoWatch = useRepoWatch(useMemo(() => events?.feed("repos.changed"), [events]));
   const warmupLive = useMemo(() => events?.feed("cards.warmup.changed"), [events]);
@@ -124,7 +124,7 @@ export function App() {
   // selected in a view (ADR-47). The panel reports focus coming and going; Alt+0 gives the keyboard to its terminal.
   const [supervisorFocused, setSupervisorFocused] = useState(false);
   const showSupervisor = () => {
-    pinSupervisor(true);
+    chooseSupervisorLayout(unfolded(supervisorLayout));
     if (showingTakesKeyboard(supervisor)) setSupervisorFocused(true);
   };
   // The supervisor has no entry in Sessions: a jump or selection that points at it opens its panel instead. Any other
@@ -269,8 +269,8 @@ export function App() {
             key={epoch}
             conn={conn}
             supervisor={supervisor}
-            pinned={supervisorPinned}
-            onPinned={pinSupervisor}
+            layout={supervisorLayout}
+            onLayout={chooseSupervisorLayout}
             focused={supervisorFocused}
             onFocusedChange={setSupervisorFocused}
             onOpenInSessions={openInSessions}
