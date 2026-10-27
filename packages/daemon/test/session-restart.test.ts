@@ -57,7 +57,7 @@ describe.skipIf(process.versions.bun === undefined)("sessions across a daemon re
     window.attachment.input("start\r");
     await waitFor(agents, main.id, (s) => s.state?.state === "Approval", "the approval request");
     window.attachment.detach();
-    const supervisor = await agents.startSupervisor();
+    const supervisor = await agents.startSupervisor("new");
     const task = await agents.createTask("shop", "fix the build");
     const taskSession = agents.sessions().sessions.find((s) => s.task === task.id)?.id;
     if (taskSession === undefined) throw new Error(`task ${task.id} has no session`);
@@ -142,4 +142,67 @@ describe.skipIf(process.versions.bun === undefined)("sessions across a daemon re
     expect(existsSync(join(before.home, RESUMABLE_FILE))).toBe(false);
     expect(readdirSync(before.home).filter((name) => name.startsWith(`${RESUMABLE_FILE}.broken-`))).toHaveLength(1);
   });
+});
+
+describe.skipIf(process.versions.bun === undefined)("the supervisor's last conversation (real PTY, fake Copilot CLI, ADR-96)", () => {
+  test("Resume goes on with the ended supervisor's conversation under its id, New starts another one", async () => {
+    const daemon = await startDaemon();
+    const { agents } = daemon.facade;
+    const first = await agents.startSupervisor("new");
+    await waitFor(agents, first.id, (s) => s.state?.state === "Input", "sessionStart");
+    expect(agents.sessions().lastSupervisor).toBeNull();
+    const window = viewer(agents, first.id);
+    window.attachment.input("start\r");
+    await waitFor(agents, first.id, () => agents.sessions().lastSupervisor === first.id, "the supervisor's conversation");
+    window.attachment.detach();
+    await agents.stop(first.id);
+
+    const resumed = await agents.startSupervisor("last");
+
+    expect(resumed.id).toBe(first.id);
+    expect(await argumentOnScreen(daemon, first.id, "--resume=")).toContain(`Argument: --resume=${first.id}`);
+    expect(agents.sessions().sessions.map((s) => s.id)).toEqual([first.id]);
+    await agents.stop(first.id);
+    const fresh = await agents.startSupervisor("new");
+    expect(fresh.id).not.toBe(first.id);
+    expect(await argumentOnScreen(daemon, fresh.id, "--session-id=")).toContain(`Argument: --session-id=${fresh.id}`);
+    expect(agents.sessions().sessions.map((s) => s.id)).toEqual([fresh.id]);
+    // The newest supervisor has had no prompt yet, so there is no conversation to go on with.
+    await waitFor(agents, fresh.id, () => agents.sessions().lastSupervisor === null, "no conversation to resume");
+    await agents.stop(fresh.id);
+    const next = await agents.startSupervisor("last");
+    expect(next.id).not.toBe(fresh.id);
+    expect(agents.sessions().sessions.map((s) => s.id)).toEqual([next.id]);
+  }, 60_000);
+
+  test("the conversation of a supervisor the user stopped and closed goes on after the daemon restarts", async () => {
+    const before = await startDaemon();
+    const { agents } = before.facade;
+    const supervisor = await agents.startSupervisor("new");
+    await waitFor(agents, supervisor.id, (s) => s.state?.state === "Input", "sessionStart");
+    const window = viewer(agents, supervisor.id);
+    window.attachment.input("start\r");
+    await waitFor(agents, supervisor.id, () => agents.sessions().lastSupervisor === supervisor.id, "the supervisor's conversation");
+    window.attachment.detach();
+    await agents.stop(supervisor.id);
+    agents.dismiss(supervisor.id);
+    await stopDaemon(before);
+
+    const after = await startDaemon({ home: before.home, projects: before.projects });
+
+    // A supervisor the user stopped does not start again by itself, but its conversation is there to resume.
+    expect(after.facade.agents.sessions()).toMatchObject({ sessions: [], lastSupervisor: supervisor.id });
+    const resumed = await after.facade.agents.startSupervisor("last");
+    expect(resumed.id).toBe(supervisor.id);
+    expect(await argumentOnScreen(after, supervisor.id, "--resume=")).toContain(`Argument: --resume=${supervisor.id}`);
+  }, 60_000);
+
+  test("without a supervisor before, Resume starts a new one", async () => {
+    const daemon = await startDaemon();
+
+    const supervisor = await daemon.facade.agents.startSupervisor("last");
+
+    expect(await argumentOnScreen(daemon, supervisor.id, "--session-id=")).toContain(`Argument: --session-id=${supervisor.id}`);
+    expect(daemon.facade.agents.sessions().sessions.map((s) => s.id)).toEqual([supervisor.id]);
+  }, 60_000);
 });

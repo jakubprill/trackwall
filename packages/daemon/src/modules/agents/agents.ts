@@ -14,6 +14,7 @@ import {
   type SendReviewResult,
   type Session,
   type SessionList,
+  type SupervisorConversation,
   type SupervisorSettings,
   type Task,
   type TaskChanges,
@@ -33,6 +34,7 @@ import { CopilotHookEvent } from "./copilot-hook-record.ts";
 import { writeCopilotPlugin } from "./copilot-plugin.ts";
 import { appendHookRecord } from "./hook-tail.ts";
 import { inboxPrompt } from "./inbox-prompt.ts";
+import { LastSupervisorFile } from "./last-supervisor.ts";
 import { LiveSession, type SessionPty, type SessionWindow } from "./live-session.ts";
 import { MiseTrustNotices } from "./mise-trust-notices.ts";
 import { withLoopbackNoProxy } from "./no-proxy.ts";
@@ -78,6 +80,7 @@ const LOOPBACK_HOOKS_ENV = { COPILOT_HOOK_ALLOW_LOCALHOST: "1" };
 const TASKS_FILE = "tasks.json";
 /** The sessions that run, for the next daemon to resume (ADR-95). */
 const RESUMABLE_SESSIONS_FILE = "resumable-sessions.json";
+const LAST_SUPERVISOR_FILE = "last-supervisor.json";
 /** Where task worktrees went before ADR-84; tasks from then keep them there until they end. */
 const LEGACY_WORKTREES_DIR = "worktrees";
 
@@ -189,10 +192,12 @@ export class Agents {
   readonly #resumable: ResumableSessions;
   /** The sessions the previous daemon left running, until `resumeLeftSessions` takes them (ADR-95). */
   #left: ResumableSession[] = [];
+  readonly #lastSupervisor: LastSupervisorFile;
 
   constructor(deps: AgentsDeps) {
     this.#deps = deps;
     this.#resumable = new ResumableSessions(join(deps.home, RESUMABLE_SESSIONS_FILE), deps.log);
+    this.#lastSupervisor = new LastSupervisorFile(join(deps.home, LAST_SUPERVISOR_FILE), deps.log);
     this.#tasks = new AgentTasks({
       vcs: deps.vcs,
       repos: deps.repos,
@@ -223,7 +228,8 @@ export class Agents {
     const tasks = this.#tasks.list();
     // A proposal being approved that is already a task is only a task: the UI and `list_sessions` see one object.
     const proposals = this.#proposals.list().filter((p) => !tasks.some((t) => t.id === p.id));
-    return { sessions: this.#views(), tasks, proposals, messages: this.#coordination.messages() };
+    const lastSupervisor = this.#resumableSupervisor() ?? null;
+    return { sessions: this.#views(), tasks, proposals, messages: this.#coordination.messages(), lastSupervisor };
   }
 
   /** One listed session (`not_found` when it does not exist or the user closed it). */
@@ -242,13 +248,23 @@ export class Agents {
    * The supervisor (ADR-58): Copilot CLI in the projects folder, above the sessions of all repos. At most one runs at a
    * time: while one is starting or runs, this returns it. A new one replaces the ended ones, which are closed once it
    * has started, so a failed start keeps the last screen; the work they delegated stays, marked as the supervisor's
-   * (`ProposedBy.supervisor`).
+   * (`ProposedBy.supervisor`). With `last` it goes on with the newest supervisor's conversation under its id (ADR-96);
+   * that start closes the ended supervisor first, since an id is listed once, so when it fails the last screen is gone.
    */
-  async startSupervisor(): Promise<Session> {
+  async startSupervisor(conversation: SupervisorConversation): Promise<Session> {
     if (this.#supervisorStart) return this.#supervisorStart;
     const running = this.#runningSupervisor();
     if (running) return running;
-    return this.#startNewSupervisor(null);
+    const last = conversation === "last" ? this.#resumableSupervisor() : undefined;
+    return last === undefined
+      ? this.#startNewSupervisor(null)
+      : this.#startSupervisorAs(resumeLaunch({ session: last, hasConversation: true }));
+  }
+
+  /** The newest supervisor while Copilot CLI keeps its conversation, which a start with `last` goes on with (ADR-96). */
+  #resumableSupervisor(): string | undefined {
+    const last = this.#lastSupervisor.read();
+    return last?.hasConversation ? last.session : undefined;
   }
 
   /**
@@ -290,9 +306,11 @@ export class Agents {
   async #replaceSupervisor(spec: SupervisorLaunch): Promise<Session> {
     const ended = this.#views().filter(isSupervisor);
     const cwd = await this.#deps.repos.projectsDir();
+    // The ended supervisor whose conversation this one goes on with under its id gives up its place before the start.
+    if (this.#sessions.has(spec.id)) this.#close(spec.id);
     const started = await this.#launch({ ...spec, repo: null, cwd, task: null });
     // One of them may have been dismissed during the start; the start has still succeeded.
-    for (const old of ended) if (this.#sessions.has(old.id)) this.#close(old.id);
+    for (const old of ended) if (old.id !== spec.id && this.#sessions.has(old.id)) this.#close(old.id);
     return started;
   }
 
@@ -751,9 +769,7 @@ export class Agents {
       await this.#tasks.resume(task);
       return;
     }
-    // Copilot CLI refuses to resume a session that never had a prompt: that one starts anew under the same id.
-    const args = [hasConversation ? `--resume=${id}` : `--session-id=${id}`];
-    const spec = { id, args, promptOnStart: false, hasConversation };
+    const spec = resumeLaunch({ session: id, hasConversation });
     if (repo === null) {
       if (this.#supervisorStart || this.#runningSupervisor()) throw new Error("a supervisor already runs");
       await this.#startSupervisorAs(spec);
@@ -766,6 +782,7 @@ export class Agents {
   keepRunningSessionsForResume(): void {
     // The list of this moment, not of the last check: a session stopped or started since then counts as it is now.
     this.#followLive([...this.#sessions.values()].filter((s) => this.#deps.procs.state(owner(s.id))?.kind === "running"));
+    this.#followLastSupervisor();
     this.#resumable.stopFollowing();
   }
 
@@ -853,6 +870,7 @@ export class Agents {
       }
     }
     this.#followLive(live);
+    this.#followLastSupervisor();
     if (live.length === 0) this.close();
   }
 
@@ -862,6 +880,17 @@ export class Agents {
       this.#resumable.follow(live.map(({ id, repo, task, hasConversation }) => ({ session: id, repo, task, hasConversation })));
     } catch (err) {
       this.#deps.log(`writing ${RESUMABLE_SESSIONS_FILE}: ${String(err)}`);
+    }
+  }
+
+  /** The newest listed supervisor, which a start with `last` goes on with (ADR-96); a failed write is retried at the next tick. */
+  #followLastSupervisor(): void {
+    const newest = [...this.#sessions.values()].findLast(isSupervisor);
+    if (newest === undefined) return;
+    try {
+      this.#lastSupervisor.follow({ session: newest.id, hasConversation: newest.hasConversation });
+    } catch (err) {
+      this.#deps.log(`writing ${LAST_SUPERVISOR_FILE}: ${String(err)}`);
     }
   }
 
@@ -949,6 +978,14 @@ function domainError(repo: string | null, err: unknown): unknown {
   if (!(err instanceof SpawnFailure)) return err;
   const place = repo ?? "the projects folder";
   return new DomainError(err.reason === "cwd_invalid" ? "repo_unavailable" : "agent_unavailable", `${place}: ${err.message}`);
+}
+
+/**
+ * A start that goes on with the conversation Copilot CLI keeps under the session's id (ADR-95, ADR-96). It refuses to
+ * resume a session that never had a prompt: that one starts anew under the same id.
+ */
+function resumeLaunch({ session: id, hasConversation }: Pick<ResumableSession, "session" | "hasConversation">): SupervisorLaunch {
+  return { id, args: [hasConversation ? `--resume=${id}` : `--session-id=${id}`], promptOnStart: false, hasConversation };
 }
 
 /** A supervisor's start: its id, its arguments and whether they carry its first message or resume its conversation. */

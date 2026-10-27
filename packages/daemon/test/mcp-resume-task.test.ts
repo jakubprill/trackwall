@@ -107,7 +107,7 @@ describe.skipIf(process.versions.bun === undefined)("resume_task (real PTY and g
   test("a main session does not resume a task another main session or the supervisor proposed", async () => {
     const main = await mainSession();
     const neighbour = await mainSession();
-    const supervisor = await daemon.facade.agents.startSupervisor();
+    const supervisor = await daemon.facade.agents.startSupervisor("new");
     const supervisorClient = await clientOfSession(supervisor.id);
     const proposals = [
       { client: neighbour.client, title: "Fix login" },
@@ -144,7 +144,7 @@ describe.skipIf(process.versions.bun === undefined)("resume_task (real PTY and g
     ]);
     expect((await call(main.client, "resume_task", { task: "00000000-0000-4000-8000-000000000000" })).isError).toBe(true);
 
-    const supervisor = await daemon.facade.agents.startSupervisor();
+    const supervisor = await daemon.facade.agents.startSupervisor("new");
     const bySupervisor = ResumeTaskResult.parse(
       (await call(await clientOfSession(supervisor.id), "resume_task", { task: typed.id })).structuredContent,
     );

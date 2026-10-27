@@ -28,7 +28,7 @@ The panel can be folded to a narrow strip at the right edge, which keeps a bell 
 ## Use it
 
 1. Set your projects folder in "Settings", if you have not yet.
-2. Press "Start supervisor" in the panel on the right (or Alt+0 to get there first), or "Start my day" to begin with a briefing (see [Start my day](/features/start-my-day)).
+2. Press "Start supervisor" in the panel on the right (or Alt+0 to get there first), or "Start my day" to begin with a briefing (see [Start my day](/features/start-my-day)). Once you have talked to a supervisor, the panel shows "Resume" and "New" instead: "Resume" goes on with the last conversation, "New" starts a clean one.
 3. Tell it what you want done.
 4. Review its proposals in "Sessions" or from "Delegated" in the panel, and start the ones you want.
 
@@ -50,7 +50,7 @@ The panel can be folded to a narrow strip at the right edge, which keeps a bell 
 - Ask the supervisor to remove a repo you no longer need and it proposes the removal instead of a task. It waits for you with the other proposals; "Remove repo" moves the repo's folder into `.trackwall-removed` in your projects folder, so you can move it back or delete it for good. Trackwall refuses while a session, a task or a running service still uses the repo, and tells you what to stop first.
 - It sees every session and task, also the ones you started yourself, but it sends messages only to the tasks it proposed, never to sessions you started, and it cannot change Trackwall's settings.
 - After five messages to a task without you, the supervisor has to ask you before it sends more. Typing anything into the supervisor or the task, or sending the task a review, counts as you taking part.
-- Stop ends the supervisor; "Start again" starts a new one in its place. The work it delegated stays under the "Supervisor" heading, also after Trackwall restarts.
+- Stop ends the supervisor. "Resume" brings it back with the same conversation, also after you closed it or Trackwall restarted, so it still knows what you worked on; "New" starts a new one in its place. "Start my day" always starts a new one. The work it delegated stays under the "Supervisor" heading, also after Trackwall restarts.
 - After Trackwall restarts or updates, the supervisor and the sessions that were running come back on their own, with their conversations. A task whose session had already ended stays without one: ask the supervisor to continue it, and it resumes the task in its own worktree with the same conversation, as "Resume" does, instead of proposing the work again on a new branch. It does this for tasks you started too, and only when you ask.
 - When the supervisor waits for you, the tray, the system notification and the tray panel call it "Supervisor". The "Sessions" counter leaves it out, since its panel shows it; Alt+J and "Next waiting" go to it once nothing else is waiting. It is not on the [Home dashboard](/features/home) either.
 - The supervisor does not run mise tasks or services itself: it works in no single repo, so it proposes a task in the repo instead.

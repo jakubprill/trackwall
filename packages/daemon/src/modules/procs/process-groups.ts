@@ -137,14 +137,19 @@ export class ProcessGroups {
 
   /**
    * Starts a group whose leader runs in a PTY (§4.4, ADR-26), and returns the terminal for writing and resizing.
-   * The owner must be new: a session in a terminal has no "second start" that would hand back the existing one.
+   * The owner must have no group, or only one that has ended: a session in a terminal has no "second start" that would
+   * hand back the existing one, but goes on under its id once it ended (the supervisor's last conversation, ADR-96).
    */
   async startTerminal(spec: TerminalGroupSpec): Promise<{ run: RunState; terminal: GroupTerminal }> {
     if (this.closing) throw new SpawnFailure("spawn_failed", "the daemon is stopping");
-    if (this.groups.has(spec.owner) || this.starting.has(spec.owner)) throw new Error(`owner ${spec.owner} already has a group`);
-    const terminals = await this.deps.terminals;
-    if (!terminals) throw new SpawnFailure("terminal_unavailable", "this daemon runtime has no PTY (daemon under Node)");
-    const started = this.spawnGroup(spec, async (cwd) => launchTerminal(terminals, spec, cwd, this.deps.logs.lastLinesOnly(spec.env)));
+    const current = this.groups.get(spec.owner);
+    if ((current && current.phase.kind !== "exited") || this.starting.has(spec.owner))
+      throw new Error(`owner ${spec.owner} already has a group`);
+    // `starting` is set before the first await, so a second start of the owner meanwhile is refused.
+    const started = Promise.resolve(this.deps.terminals).then((terminals) => {
+      if (!terminals) throw new SpawnFailure("terminal_unavailable", "this daemon runtime has no PTY (daemon under Node)");
+      return this.spawnGroup(spec, async (cwd) => launchTerminal(terminals, spec, cwd, this.deps.logs.lastLinesOnly(spec.env)));
+    });
     const run = started.then(({ group }) => stateOf(group));
     // The caller receives a start error through `started`; `starting` only lets others wait for the start to finish.
     run.catch(() => {});

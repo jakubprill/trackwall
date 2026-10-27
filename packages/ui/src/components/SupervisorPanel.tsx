@@ -1,5 +1,5 @@
-import { agentsApi, countLabel } from "@trackwall/protocol";
-import { BellRing, Crown, PanelRightClose, PanelRightOpen, Play, Square, Sunrise } from "lucide-react";
+import { agentsApi, countLabel, type SupervisorConversation } from "@trackwall/protocol";
+import { BellRing, Crown, PanelRightClose, PanelRightOpen, Play, Plus, Square, Sunrise } from "lucide-react";
 import { type FocusEvent, useEffect, useRef, useState } from "react";
 import { SessionTerminal } from "@/components/SessionTerminal";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -21,7 +21,7 @@ import {
 } from "@/lib/session-entries";
 import { ariaSessionShortcut, SUPERVISOR_SHORTCUT, sessionShortcutLabel } from "@/lib/session-shortcut";
 import { isLive, PROPOSAL_STATUS, SUPERVISOR, sessionPlace, sessionStateLabel } from "@/lib/session-state";
-import type { SupervisorSummary } from "@/lib/supervisor";
+import { type SupervisorSummary, supervisorStarts } from "@/lib/supervisor";
 import { useAction } from "@/lib/use-action";
 import { useDayStart } from "@/lib/use-day-start";
 import { cn } from "@/lib/utils";
@@ -122,7 +122,10 @@ function FoldedSupervisor({ supervisor, onUnfold }: { supervisor: SupervisorSumm
   );
 }
 
-/** Name, state and what it works on; Stop while it runs, and Start my day or a plain start once it has ended or before the first. */
+/**
+ * Name, state and what it works on; Stop while it runs, and Start my day or a plain start (Resume and New while the last
+ * conversation can go on) once it has ended or before the first.
+ */
 function SupervisorHeader({
   conn,
   supervisor,
@@ -140,7 +143,7 @@ function SupervisorHeader({
   onFold: () => void;
 }) {
   const { session, waitingProposals } = supervisor;
-  const start = useAction(() => post(conn, agentsApi.startSupervisor, {}), onChanged);
+  const start = useAction((conversation: SupervisorConversation) => post(conn, agentsApi.startSupervisor, { conversation }), onChanged);
   const stop = useAction((id: string) => post(conn, agentsApi.stop, { session: id }), onChanged);
   const day = useDayStart(conn, onChanged);
   const running = session !== undefined && isLive(session) ? session : undefined;
@@ -186,17 +189,21 @@ function SupervisorHeader({
               >
                 <Sunrise /> {dayStartLabel(day.run)}
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  onStart("supervisor");
-                  start.run();
-                }}
-                disabled={start.pending || day.running}
-              >
-                <Play /> {session ? "Start again" : "Start supervisor"}
-              </Button>
+              {supervisorStarts(supervisor).map(({ conversation, label, title }) => (
+                <Button
+                  key={conversation}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    onStart("supervisor");
+                    start.run(conversation);
+                  }}
+                  disabled={start.pending || day.running}
+                  title={title}
+                >
+                  {conversation === "new" && supervisor.resumable ? <Plus /> : <Play />} {label}
+                </Button>
+              ))}
             </>
           )}
           <Button variant="ghost" size="icon" onClick={onFold} aria-label="Fold the supervisor panel" title="Fold the panel">
