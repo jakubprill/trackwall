@@ -169,6 +169,10 @@ describe.skipIf(process.versions.bun === undefined)("the supervisor's last conve
     expect(agents.sessions().sessions.map((s) => s.id)).toEqual([fresh.id]);
     // The newest supervisor has had no prompt yet, so there is no conversation to go on with.
     await waitFor(agents, fresh.id, () => agents.sessions().lastSupervisor === null, "no conversation to resume");
+    await agents.stop(fresh.id);
+    const next = await agents.startSupervisor("last");
+    expect(next.id).not.toBe(fresh.id);
+    expect(agents.sessions().sessions.map((s) => s.id)).toEqual([next.id]);
   }, 60_000);
 
   test("the conversation of a supervisor the user stopped and closed goes on after the daemon restarts", async () => {

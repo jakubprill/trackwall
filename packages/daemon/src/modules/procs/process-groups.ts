@@ -145,9 +145,11 @@ export class ProcessGroups {
     const current = this.groups.get(spec.owner);
     if ((current && current.phase.kind !== "exited") || this.starting.has(spec.owner))
       throw new Error(`owner ${spec.owner} already has a group`);
-    const terminals = await this.deps.terminals;
-    if (!terminals) throw new SpawnFailure("terminal_unavailable", "this daemon runtime has no PTY (daemon under Node)");
-    const started = this.spawnGroup(spec, async (cwd) => launchTerminal(terminals, spec, cwd, this.deps.logs.lastLinesOnly(spec.env)));
+    // `starting` is set before the first await, so a second start of the owner meanwhile is refused.
+    const started = Promise.resolve(this.deps.terminals).then((terminals) => {
+      if (!terminals) throw new SpawnFailure("terminal_unavailable", "this daemon runtime has no PTY (daemon under Node)");
+      return this.spawnGroup(spec, async (cwd) => launchTerminal(terminals, spec, cwd, this.deps.logs.lastLinesOnly(spec.env)));
+    });
     const run = started.then(({ group }) => stateOf(group));
     // The caller receives a start error through `started`; `starting` only lets others wait for the start to finish.
     run.catch(() => {});
