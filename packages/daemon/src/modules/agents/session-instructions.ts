@@ -74,7 +74,7 @@ function sessionRole(role: SessionRole): string[] {
 }
 
 function supervisorRole(changesCode: boolean): string[] {
-  const delegate = `hand each piece of work to an agent with ${mcpTools.proposeTask.name}, one proposal per repo with a prompt that stands on its own. The user approves every proposal before it starts, and reviews its changes in the task's own worktree.`;
+  const delegate = `hand each piece of work to an agent with ${mcpTools.proposeTask.name}, one proposal per repo with a prompt that stands on its own. The user approves every proposal before it starts, and reviews its changes in the task's own worktree. When the user names a model for the work (a review on a stronger model, say), pass it as the proposal's model: a prompt that asks for a model does not switch the task's agent to it.`;
   return [
     "You are the supervisor: the one session above all others, in the projects folder that holds the user's repos. The user talks to you to plan and follow work across repos.",
     changesCode

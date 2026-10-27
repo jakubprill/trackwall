@@ -90,7 +90,7 @@ async function setTheScene(): Promise<void> {
   for (const repo of Object.keys(TURNS)) sessions.push(await facade.agents.start(repo));
   const main = sessions[0];
   if (main === undefined) throw new Error("no main session");
-  const propose = (repo: string, title: string, prompt: string) => facade.agents.propose(main.id, { repo, title, prompt });
+  const propose = (repo: string, title: string, prompt: string) => facade.agents.propose(main.id, { repo, title, prompt, model: null });
   const retry = await propose(
     "payments",
     "Retry the payment call",
@@ -111,7 +111,7 @@ async function setTheScene(): Promise<void> {
     "Invoice an order once, however often it is paid",
     "Skip the invoice when billing already has one for the order id.",
   );
-  for (const proposal of [retry, notify]) await facade.agents.approveProposal(proposal.id, proposal.prompt);
+  for (const proposal of [retry, notify]) await facade.agents.approveProposal(proposal.id, proposal.prompt, proposal.model);
   // The main session steers its notifications task (ADR-68): its agent has read the first message, not the second yet.
   facade.agents.sendMessage(
     main.id,

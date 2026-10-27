@@ -70,6 +70,8 @@ function shellCall(request: ModelRequest, command: { bash: string; powershell: s
  * How long a session may take to start and to finish a turn: a cold ~170 MB binary that Windows Defender scans.
  */
 const SESSION_MS = 60_000;
+/** A model other than the scripted model's default (`COPILOT_MODEL`), which only a task's `--model` asks for (ADR-98). */
+const REVIEW_MODEL = "trackwall-review-model";
 // A test waits for at most three such steps; its own limit is above their sum, so a slow step fails on its own message.
 setDefaultTimeout(4 * SESSION_MS);
 
@@ -329,6 +331,35 @@ describe("an agent task with the real Copilot CLI", () => {
   });
 });
 
+describe("a task's model with the real Copilot CLI (ADR-98)", () => {
+  test("a task approved with a model asks the model provider for it, on its first turn and after a resume", async () => {
+    const { agents } = daemon.facade;
+    const proposal = await agents.propose(null, {
+      repo: "shop",
+      title: "Review the login",
+      prompt: "review the login",
+      model: REVIEW_MODEL,
+    });
+    model.reply({ text: "Reviewing the login." });
+    const task = await agents.approveProposal(proposal.id, proposal.prompt, proposal.model);
+    const first = agents.sessions().sessions.find((s) => s.task === task.id);
+    if (first === undefined) throw new Error("the task has no session");
+    await endOfTurn(first.id);
+    expect(model.requests().at(-1)).toMatchObject({ model: REVIEW_MODEL });
+    await agents.stop(first.id);
+
+    await agents.resumeTask(task.id);
+    const resumed = agents.sessions().sessions.find((s) => s.task === task.id);
+    if (resumed === undefined) throw new Error("the resumed task has no session");
+    await waitFor(agents, resumed.id, (s) => s.state !== null, "the input box of the resumed session", SESSION_MS);
+    model.reply({ text: "I will read the review." });
+    agents.sendReview(task.id, [{ path: "README.md", side: "new", line: 1, code: "# shop", text: "Check the login too." }]);
+    await endOfTurn(resumed.id);
+    expect(model.requests().at(-1)).toMatchObject({ model: REVIEW_MODEL });
+    await agents.stop(resumed.id);
+  });
+});
+
 describe("a review of a task's changes with the real Copilot CLI (ADR-62)", () => {
   test("the agent asked to read the review reads the comments without an approval request", async () => {
     const { agents } = daemon.facade;
@@ -470,8 +501,8 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
         { tool: copilotToolName(mcpTools.getUpdates.name), arguments: {} },
         { text: "The task has started." },
       );
-      const proposal = await agents.propose(main.id, { repo: "shop", title: "Add a login test", prompt: "add a login test" });
-      const task = await agents.approveProposal(proposal.id, "add a login test");
+      const proposal = await agents.propose(main.id, { repo: "shop", title: "Add a login test", prompt: "add a login test", model: null });
+      const task = await agents.approveProposal(proposal.id, "add a login test", null);
       const session = agents.sessions().sessions.find((s) => s.task === task.id);
       if (session === undefined) throw new Error("the task has no session");
       await turnsEnded(session.id, 1);

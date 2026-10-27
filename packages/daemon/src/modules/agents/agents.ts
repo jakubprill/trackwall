@@ -335,7 +335,7 @@ export class Agents {
   }
 
   /** A task proposal from session `caller` (`null`: an agent outside Trackwall) in a repo from the projects folder (ADR-39). */
-  async propose(caller: string | null, proposal: { repo: string; title: string; prompt: string }): Promise<TaskProposal> {
+  async propose(caller: string | null, proposal: Pick<TaskProposal, "repo" | "title" | "prompt" | "model">): Promise<TaskProposal> {
     await this.#deps.repos.repoPath(proposal.repo);
     return this.#proposals.add({ kind: "task", ...proposal, proposedBy: proposedByOf(caller === null ? null : this.session(caller)) });
   }
@@ -354,6 +354,7 @@ export class Agents {
       repo,
       title: `Remove ${repo} from the projects folder`,
       prompt: reason,
+      model: null,
       proposedBy: proposedByOf(session),
     });
     this.#removalDirs.set(proposal.id, repoDir);
@@ -361,15 +362,15 @@ export class Agents {
   }
 
   /**
-   * A task from a proposal, with the prompt edited by the user. The proposal stays on the list until there is a task with
+   * A task from a proposal, with the prompt and the model (ADR-98) as the user left them. The proposal stays on the list until there is a task with
    * its identifier, but a second approval is `not_found`; it waits for a decision again when the task was not created. A
    * task left behind by a failed cleanup is ended by the user, so the proposal then disappears.
    */
-  async approveProposal(id: string, prompt: string): Promise<Task> {
+  async approveProposal(id: string, prompt: string, model: string | null): Promise<Task> {
     if (this.#proposals.get(id).kind !== "task") throw new DomainError("bad_request", `proposal ${id} is not a task`);
     const { repo, title, proposedBy } = this.#proposals.take(id);
     try {
-      return await this.#tasks.create(repo, prompt, { id, title, proposedBy });
+      return await this.#tasks.create(repo, prompt, { id, title, proposedBy, model });
     } finally {
       this.#proposals.release(id, this.#tasks.find(id) === undefined);
     }
@@ -511,7 +512,7 @@ export class Agents {
   }
 
   createTask(repo: string, prompt: string): Promise<Task> {
-    return this.#tasks.create(repo, prompt, { id: randomUUID(), title: null, proposedBy: null });
+    return this.#tasks.create(repo, prompt, { id: randomUUID(), title: null, proposedBy: null, model: null });
   }
 
   resumeTask(id: string): Promise<Task> {

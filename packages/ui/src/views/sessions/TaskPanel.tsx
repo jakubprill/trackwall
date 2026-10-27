@@ -1,5 +1,5 @@
 import { agentsApi, type RunningMiseTask, type Session, TASK_PORT_ENV, type Task, type TaskMessage } from "@trackwall/protocol";
-import { Code, GitBranch, Play, Plug, Square, Trash2 } from "lucide-react";
+import { Bot, Code, GitBranch, Play, Plug, Square, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { SessionTerminal } from "@/components/SessionTerminal";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -23,7 +23,7 @@ import { VerifyButton } from "./TaskVerification.tsx";
 type TaskTab = "terminal" | "changes";
 
 /**
- * The selected task (ADR-31): title or prompt, branch, task port and session state in the header, the session terminal
+ * The selected task (ADR-31): title or prompt, branch, task port, its model when it has one (ADR-98) and session state in the header, the session terminal
  * and the worktree changes in tabs. A task from a proposal says who proposed it. A task without a running session can
  * be resumed or ended; the worktree always opens in VS Code, and the Verify button runs the task's tests (ADR-64).
  * What the task has to say above its terminal (`TaskDetails`: warnings, messages, summary, verification, merge
@@ -104,6 +104,12 @@ export function TaskPanel({
               <Plug className="size-3" aria-label="task port" />
               {task.port}
             </span>
+            {task.model !== null && (
+              <span className="text-muted-foreground flex shrink-0 items-center gap-1 font-mono text-xs" title="Copilot CLI model">
+                <Bot className="size-3" aria-label="model" />
+                {task.model}
+              </span>
+            )}
             <span className="text-muted-foreground shrink-0 text-xs">
               {session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}
             </span>

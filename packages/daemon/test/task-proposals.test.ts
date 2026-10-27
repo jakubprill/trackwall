@@ -6,6 +6,7 @@ const PROPOSAL = {
   repo: "shop",
   title: "Add a test",
   prompt: "add a login test",
+  model: null,
   proposedBy: { session: null, supervisor: false },
 };
 

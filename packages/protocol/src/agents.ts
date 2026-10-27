@@ -90,6 +90,21 @@ export function visibleText(text: z.ZodString): z.ZodString {
   });
 }
 
+/**
+ * The Copilot CLI model a task's session runs on (ADR-98), passed as `--model=<id>` when the task starts and whenever it
+ * resumes; `null` for Copilot CLI's own default. The catalog of models depends on the Copilot CLI version and the user's
+ * account, so Trackwall checks only the shape of an id (`claude-opus-5.5`, `gpt-5.5`, `auto`) and Copilot CLI the rest.
+ */
+export const TASK_MODEL_MAX = 64;
+export const TaskModel = z
+  .string()
+  .trim()
+  .min(1)
+  .max(TASK_MODEL_MAX)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, {
+    message: "a model id is letters, digits, dots, dashes and underscores, such as claude-opus-5.5",
+  });
+
 /** A task summary from its session (`report_result`, ADR-39): what it did and what is left, for the session that delegated the task. */
 export const TASK_SUMMARY_MAX = 4000;
 export const TaskSummaryText = z.string().trim().min(1).max(TASK_SUMMARY_MAX);
@@ -200,6 +215,8 @@ export const Task = z.object({
   title: z.string().nullable(),
   /** Where the task came from: an approved proposal (`ProposedBy`), or `null` when the user typed it. */
   proposedBy: ProposedBy.nullable(),
+  /** The model its sessions run on (ADR-98); `null` for Copilot CLI's default. */
+  model: TaskModel.nullable(),
   /** The last summary from the task session (`report_result`); `null` until it has reported one. */
   summary: z.object({ text: z.string(), reportedAt: z.string() }).nullable(),
   /** The task port (ADR-61): `TASK_PORT_ENV` in every mise task run in the worktree, and the port of the task's service. */
@@ -237,6 +254,8 @@ export const TaskProposal = z.object({
   title: z.string(),
   /** The task's prompt; for a folder action, the proposer's reason. */
   prompt: z.string(),
+  /** The model the proposer chose for the task (ADR-98), which the user may change before the start; `null` for the default. */
+  model: TaskModel.nullable(),
   proposedBy: ProposedBy,
   /** ISO 8601. */
   createdAt: z.string(),
@@ -452,7 +471,7 @@ export const agentsApi = {
    * Approving a task proposal (ADR-39): a task with its id, like `create-task`, with the prompt the user may have edited
    * before the start. A failed start leaves the proposal for another try or a rejection.
    */
-  approveProposal: endpoint("approve-proposal", ProposalRequest.extend({ prompt: TaskPrompt }), Task),
+  approveProposal: endpoint("approve-proposal", ProposalRequest.extend({ prompt: TaskPrompt, model: TaskModel.nullable() }), Task),
   /**
    * Approving a proposal to remove a repo (ADR-83): refused while a session, a task or a process runs in the repo; then
    * the repo moves into `REMOVED_REPOS_DIR` in the projects folder. A refusal leaves the proposal waiting.

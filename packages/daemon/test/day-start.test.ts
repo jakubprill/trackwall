@@ -130,6 +130,7 @@ function task(fields: Partial<Task> & Pick<Task, "base">): Task {
     createdAt: "2026-10-25T09:00:00.000Z",
     title: null,
     proposedBy: null,
+    model: null,
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },

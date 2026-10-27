@@ -161,7 +161,9 @@ describe.skipIf(process.versions.bun === undefined)("removing a repo from the pr
     await daemon.post(agentsApi.approveRepoRemoval, { proposal: removal.id });
 
     expect(daemon.facade.agents.sessions().proposals.map((p) => p.id)).not.toContain(task.id);
-    await expect(daemon.post(agentsApi.approveProposal, { proposal: task.id, prompt: "fix" })).rejects.toThrow("no task proposal");
+    await expect(daemon.post(agentsApi.approveProposal, { proposal: task.id, prompt: "fix", model: null })).rejects.toThrow(
+      "no task proposal",
+    );
   });
 
   test("a repo removed under a name already removed before gets a numbered folder", async () => {
@@ -179,7 +181,9 @@ describe.skipIf(process.versions.bun === undefined)("removing a repo from the pr
       (await outside.callTool({ name: "propose_task", arguments: { repo: "web", title: "Fix", prompt: "fix" } })).structuredContent,
     ).proposal;
 
-    await expect(daemon.post(agentsApi.approveProposal, { proposal: removal.id, prompt: "x" })).rejects.toThrow("is not a task");
+    await expect(daemon.post(agentsApi.approveProposal, { proposal: removal.id, prompt: "x", model: null })).rejects.toThrow(
+      "is not a task",
+    );
     await expect(daemon.post(agentsApi.approveRepoRemoval, { proposal: task.id })).rejects.toThrow("is not a repo removal");
     const unknown = await outside.callTool({
       name: "propose_folder_action",

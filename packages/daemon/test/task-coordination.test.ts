@@ -26,6 +26,7 @@ function task(id: string, proposedBy: ProposedBy | null): Task {
     createdAt: "2026-10-25T12:00:00.000Z",
     title: "Fix login",
     proposedBy,
+    model: null,
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },

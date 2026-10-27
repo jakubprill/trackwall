@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
+import { type ProposalStart, typedModel } from "@/lib/proposal-decisions";
 import {
   type ProposalsEntry,
   proposalKindLabel,
@@ -17,11 +18,12 @@ import { toggle } from "@/lib/set-toggle";
 import { useProposalDecisions } from "@/lib/use-proposal-decisions";
 import { cn } from "@/lib/utils";
 import { ProposalActions, ProposalError } from "./ProposalActions.tsx";
+import { ProposalModel } from "./ProposalModel.tsx";
 import { RepoRemovalNote } from "./RepoRemovalNote.tsx";
 
 /**
  * The task proposals of one main session or of agents outside Trackwall (ADR-39, ADR-55), reviewed together as the plan
- * they are: each with its repo, title and prompt, which the user opens to read and may edit before the start. The user
+ * they are: each with its repo, title, prompt and model (ADR-98), which the user opens to read and may edit before the start. The user
  * starts one, or ticks several and starts them together; a proposal can be ticked only once it has been opened, so a
  * prompt from an agent is never started unread. “Reject…” takes an optional reason for the session that proposed it.
  * Until then nothing runs. `focus` is the proposal to open (from the list, the tray, a link or the last decision).
@@ -48,6 +50,7 @@ export function ProposalInbox({
   const { proposals } = group;
   const decisions = useProposalDecisions({ conn, group, onChanged, onSelect, currentSelection });
   const [prompts, setPrompts] = useState<ReadonlyMap<string, string>>(new Map());
+  const [models, setModels] = useState<ReadonlyMap<string, string>>(new Map());
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
   // `null` once the user closed it; an id that is no longer waiting falls back to the first proposal.
   const [open, setOpen] = useState<string | null>(focus ?? proposals[0].id);
@@ -63,6 +66,12 @@ export function ProposalInbox({
     if (focus) setOpen(focus);
   }, [focus]);
   const promptOf = (p: TaskProposal) => prompts.get(p.id) ?? p.prompt;
+  const modelTextOf = (p: TaskProposal) => models.get(p.id) ?? p.model ?? "";
+  /** The start as the user left the proposal, or `undefined` while its prompt is empty or its model not an id. */
+  const startOf = (p: TaskProposal): ProposalStart | undefined => {
+    const model = typedModel(modelTextOf(p));
+    return promptOf(p).trim() === "" || model === undefined ? undefined : { id: p.id, prompt: promptOf(p), model };
+  };
   const toStart = proposals.filter((p) => ticked.has(p.id));
   // Ticking and "Start selected" are for tasks; a folder action has its own button (ADR-83).
   const several = proposals.filter((p) => p.kind === "task").length > 1;
@@ -81,8 +90,8 @@ export function ProposalInbox({
         </div>
         {several && (
           <Button
-            onClick={() => decisions.start(toStart.map((p) => ({ id: p.id, prompt: promptOf(p) })))}
-            disabled={decisions.pending || toStart.length === 0 || toStart.some((p) => promptOf(p).trim() === "")}
+            onClick={() => decisions.start(toStart.flatMap((p) => startOf(p) ?? []))}
+            disabled={decisions.pending || toStart.length === 0 || toStart.some((p) => startOf(p) === undefined)}
           >
             <GitBranch /> {toStart.length === 0 ? "Start selected" : `Start ${toStart.length} selected`}
           </Button>
@@ -135,20 +144,30 @@ export function ProposalInbox({
                   {p.kind === "remove_repo" ? (
                     <RepoRemovalNote proposal={p} />
                   ) : (
-                    <Textarea
-                      aria-label={`Prompt for the agent: ${p.title}`}
-                      value={promptOf(p)}
-                      onChange={(e) => setPrompts(new Map(prompts).set(p.id, e.target.value))}
-                      maxLength={TASK_PROMPT_MAX}
-                      rows={8}
-                    />
+                    <>
+                      <Textarea
+                        aria-label={`Prompt for the agent: ${p.title}`}
+                        value={promptOf(p)}
+                        onChange={(e) => setPrompts(new Map(prompts).set(p.id, e.target.value))}
+                        maxLength={TASK_PROMPT_MAX}
+                        rows={8}
+                      />
+                      <ProposalModel
+                        title={p.title}
+                        value={modelTextOf(p)}
+                        onChange={(value) => setModels(new Map(models).set(p.id, value))}
+                      />
+                    </>
                   )}
                   <ProposalActions
                     proposal={p}
                     tasks={tasks}
                     pending={decisions.pending}
-                    canStart={promptOf(p).trim() !== ""}
-                    onStart={() => decisions.start([{ id: p.id, prompt: promptOf(p) }])}
+                    canStart={startOf(p) !== undefined}
+                    onStart={() => {
+                      const start = startOf(p);
+                      if (start) decisions.start([start]);
+                    }}
                     onRemoveRepo={() => decisions.removeRepo(p.id)}
                     onReject={(reason) => decisions.reject(p.id, reason)}
                   />

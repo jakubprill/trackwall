@@ -22,6 +22,7 @@ import {
   TaskId,
   TaskMessage,
   TaskMessageText,
+  TaskModel,
   TaskPrompt,
   TaskProposal,
   TaskSummaryText,
@@ -654,6 +655,11 @@ export const mcpTools = {
           `short single-line title for the task list, up to ${TASK_TITLE_MAX} characters, e.g. Add email validation to sign-up`,
         ),
         prompt: visibleText(TaskPrompt).describe(`the complete instructions for the agent, up to ${TASK_PROMPT_MAX} characters`),
+        model: TaskModel.optional().describe(
+          "Copilot CLI model id the task's session runs on (its --model), e.g. claude-opus-5.5, gpt-5.5 or auto; pass it " +
+            "whenever the user named a model for the work, written as Copilot CLI's /model lists it. Omitted: Copilot CLI's " +
+            "default model. The user sees it on the proposal and may change it; resuming the task keeps it.",
+        ),
       })
       .strict(),
     result: ProposeTaskResult,

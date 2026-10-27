@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ProposalKind, ProposedBy, TaskProposal } from "@trackwall/protocol";
+import type { TaskProposal } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 
 /**
@@ -30,7 +30,7 @@ export class TaskProposals {
     return [...this.#pending];
   }
 
-  add(proposal: { kind: ProposalKind; repo: string; title: string; prompt: string; proposedBy: ProposedBy }): TaskProposal {
+  add(proposal: Omit<TaskProposal, "id" | "createdAt">): TaskProposal {
     if (this.#pending.length >= MAX_PENDING_PROPOSALS) {
       throw new DomainError("bad_request", `${MAX_PENDING_PROPOSALS} proposals are already waiting for the user; wait for their decision`);
     }

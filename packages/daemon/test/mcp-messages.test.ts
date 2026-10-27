@@ -59,7 +59,7 @@ describe.skipIf(process.versions.bun === undefined)(
       const { proposal } = ProposeTaskResult.parse(
         (await call(main.client, "propose_task", { repo: "shop", title: "Fix login", prompt: "fix login" })).structuredContent,
       );
-      const task = await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: "fix login" });
+      const task = await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: "fix login", model: null });
       const session = taskSession(task.id);
       await waitFor(daemon.facade.agents, session, (s) => s.state?.state === "Working", "the task prompt's turn");
 

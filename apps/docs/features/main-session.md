@@ -12,7 +12,7 @@ Let one agent plan work and hand it to other agents, while you approve every tas
 ## What you get
 
 - A main session that splits a larger job into tasks and proposes them, each with a title and a prompt.
-- Every proposal waiting for your decision: read it, edit the prompt, start it or reject it with a reason.
+- Every proposal waiting for your decision: read it, edit the prompt or the model, start it or reject it with a reason.
 - Several proposals started with one press; they start one after another.
 - The main session following its tasks to the end and reading their summaries and changes.
 - The main session woken up when a task moves, and able to send the task's agent a message.
@@ -38,6 +38,7 @@ To steer a running task, the main session sends its agent a message: a correctio
 
 ## Good to know
 
+- A proposal can name the Copilot CLI model its task runs on, for example a stronger one for a code review. The model shows in a field under the prompt: change it, or clear it to use Copilot CLI's default. Most proposals leave it empty. The task keeps its model when it is resumed, and its panel shows it next to the task port. Switching the model with `/model` in the task's terminal lasts until the task is resumed, which goes back to the task's model.
 - A proposal for a repo that already has tasks says so.
 - A main session can also propose removing a repo, shown as "Repo removal" with its reason and a "Remove repo" button instead of a prompt; see the [supervisor](/features/supervisor).
 - In the session grid, a tile with proposals shows their prompts with "Start task" and "Reject…"; "Next waiting" and Alt+J go to proposals too.

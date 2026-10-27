@@ -18,6 +18,7 @@ const Message = z.object({
   content: Content.optional(),
 });
 const Request = z.object({
+  model: z.string(),
   messages: z.array(Message),
   tools: z.array(z.object({ function: z.object({ name: z.string() }) })).default([]),
   stream: z.boolean().optional(),
@@ -25,6 +26,8 @@ const Request = z.object({
 
 /** One request Copilot CLI sent the model, with the texts the tests ask about. */
 export interface ModelRequest {
+  /** The model Copilot CLI asked for: `COPILOT_MODEL`, or a session's `--model` (ADR-98). */
+  model: string;
   /** The system prompt (with the custom instructions in it). */
   system: string;
   /** The text of the last message from the user. */
@@ -47,6 +50,7 @@ function summarize(request: z.infer<typeof Request>): ModelRequest {
   const { messages } = request;
   const lastAssistant = messages.findLastIndex((m) => m.role === "assistant");
   return {
+    model: request.model,
     system: messages
       .filter((m) => m.role === "system")
       .map((m) => text(m.content))
