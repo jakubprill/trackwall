@@ -23,6 +23,7 @@ import { TaskMessages } from "./TaskMessages.tsx";
 import { TaskMiseConfig } from "./TaskMiseConfig.tsx";
 import { TaskMiseRuns } from "./TaskMiseRuns.tsx";
 import { TaskRemoval } from "./TaskRemoval.tsx";
+import { TaskSummary } from "./TaskSummary.tsx";
 import { TaskVerification, VerifyButton } from "./TaskVerification.tsx";
 
 type TaskTab = "terminal" | "changes";
@@ -179,18 +180,6 @@ export function TaskPanel({
 function taskSubtitle(task: Task, sessions: readonly Session[]): string {
   const name = taskName(task);
   return task.proposedBy ? `${name} · ${proposerLabel(task.proposedBy, sessions)}` : name;
-}
-
-/** The summary from the task session (`report_result`) with the time it was reported. */
-function TaskSummary({ summary }: { summary: NonNullable<Task["summary"]> }) {
-  return (
-    <section aria-label="Summary from the task session" className="flex flex-col gap-1 border-b px-4 py-3">
-      <span className="hud-label">
-        Summary <span className="text-muted-foreground font-sans normal-case">{relativeTime(summary.reportedAt, new Date())}</span>
-      </span>
-      <p className="max-w-prose text-sm whitespace-pre-wrap">{summary.text}</p>
-    </section>
-  );
 }
 
 /** Stopping the task's running session; the error shows next to the button. */

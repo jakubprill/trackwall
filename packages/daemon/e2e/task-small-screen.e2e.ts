@@ -35,7 +35,16 @@ describe("a small screen", () => {
     await agent.callTool({ name: "report_result", arguments: { summary: SUMMARY } });
     await agent.callTool({ name: "run_mise_task", arguments: { repo: "shop", task: session.task, miseTask: "dev" } });
     await page.getByRole("region", { name: "mise tasks in this worktree" }).getByText("dev").waitFor();
-    await page.getByRole("region", { name: "Summary from the task session" }).getByText("Committed on the task branch").waitFor();
+    const summary = page.getByRole("region", { name: "Summary from the task session" });
+    await summary.getByText("Committed on the task branch").waitFor();
+    // Two of the summary's three lines show until it is opened, so that it does not push the terminal down.
+    const closed = await summary.boundingBox();
+    await summary.getByRole("button", { name: "Show all" }).click();
+    const opened = await summary.boundingBox();
+    if (closed === null || opened === null) throw new Error("the summary is not on the screen");
+    expect(opened.height).toBeGreaterThan(closed.height);
+    await summary.getByRole("button", { name: "Show less" }).click();
+    expect((await summary.boundingBox())?.height).toBe(closed.height);
     await page.getByRole("button", { name: "Verify" }).click();
     await page.getByRole("region", { name: "Verification" }).getByText("failed").first().waitFor();
 
