@@ -55,32 +55,30 @@ describe.skipIf(process.versions.bun === undefined)(
     test("a session in a repo root gets its mise variables, its tools only the secrets in agentSecrets, and the daemon masks them all", async () => {
       projectsMise({ env: { SHOP_REGION: "projects-folder" } });
       workspace("agentSecrets: [JIRA_KEY]\n");
-      {
-        const started = await daemon.facade.agents.start("shop");
-        const window = viewer(daemon.facade.agents, started.id);
-        await waitFor(daemon.facade.agents, started.id, () => window.text().includes("Env MAVEN_OPTS"), "the environment on the screen");
+      const started = await daemon.facade.agents.start("shop");
+      const window = viewer(daemon.facade.agents, started.id);
+      await waitFor(daemon.facade.agents, started.id, () => window.text().includes("Env MAVEN_OPTS"), "the environment on the screen");
 
-        // `JIRA_KEY` is a secret only because mise redacts it (an age value), `GITLAB_TOKEN` also by its name.
-        expect(window.text()).toContain("Argument: --secret-env-vars=GITLAB_TOKEN\r");
-        expect(window.text()).toContain("Env GITLAB_TOKEN=(hidden)");
-        expect(window.text()).toContain("Env JIRA_KEY=jira-key-from-age");
-        expect(window.text()).toContain("Env MAVEN_OPTS=-Xmx2g");
-        expect(started.environment).toEqual({
-          variables: ["GITLAB_TOKEN", "JIRA_KEY", "MAVEN_OPTS", "SHOP_REGION"],
-          secrets: ["GITLAB_TOKEN", "JIRA_KEY"],
-          agentSecrets: ["JIRA_KEY"],
-          problem: null,
-        });
-        window.attachment.detach();
+      // `JIRA_KEY` is a secret only because mise redacts it (an age value), `GITLAB_TOKEN` also by its name.
+      expect(window.text()).toContain("Argument: --secret-env-vars=GITLAB_TOKEN\r");
+      expect(window.text()).toContain("Env GITLAB_TOKEN=(hidden)");
+      expect(window.text()).toContain("Env JIRA_KEY=jira-key-from-age");
+      expect(window.text()).toContain("Env MAVEN_OPTS=-Xmx2g");
+      expect(started.environment).toEqual({
+        variables: ["GITLAB_TOKEN", "JIRA_KEY", "MAVEN_OPTS", "SHOP_REGION"],
+        secrets: ["GITLAB_TOKEN", "JIRA_KEY"],
+        agentSecrets: ["JIRA_KEY"],
+        problem: null,
+      });
+      window.attachment.detach();
 
-        await daemon.facade.agents.stop(started.id);
-        const ended = daemon.facade.agents.session(started.id).run;
-        if (ended.kind !== "exited") throw new Error(`the session did not end: ${ended.kind}`);
-        const lastLines = ended.lastLines.join("\n");
-        expect(lastLines).toContain("Env MAVEN_OPTS=-Xmx2g");
-        expect(lastLines).toContain("Env JIRA_KEY=***");
-        expect(lastLines).not.toContain("jira-key-from-age");
-      }
+      await daemon.facade.agents.stop(started.id);
+      const ended = daemon.facade.agents.session(started.id).run;
+      if (ended.kind !== "exited") throw new Error(`the session did not end: ${ended.kind}`);
+      const lastLines = ended.lastLines.join("\n");
+      expect(lastLines).toContain("Env MAVEN_OPTS=-Xmx2g");
+      expect(lastLines).toContain("Env JIRA_KEY=***");
+      expect(lastLines).not.toContain("jira-key-from-age");
     }, 60_000);
 
     test("without agentSecrets every secret is hidden from the session's tools", async () => {

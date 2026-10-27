@@ -7,8 +7,8 @@ import { type MiseCliResult, miseFailure, runMiseCli } from "./mise-cli.ts";
  * and the global one, with age-encrypted values decrypted, as `mise env --json` gives it, so a session gets what the
  * user's terminal gets there. The secrets are the variables mise redacts (`mise env --redacted --json`: `redact = true`,
  * `redactions` and every age value) and those whose names say they are secrets (`isSecretName`). When mise cannot say
- * which ones it redacts, the environment is not used at all: a decrypted value with an ordinary name would otherwise
- * reach the agent's tools unhidden and the logs unmasked.
+ * which ones it redacts, the result is `unredacted`: a session refuses it, since a decrypted value with an ordinary name
+ * would otherwise reach the agent's tools unhidden, and a run masks at least the secret-like names.
  */
 
 /** What mise sets: variable values by name, the names among them that are secrets, and those secrets' values (to mask). */
@@ -26,7 +26,9 @@ export type MiseEnvResult =
   /** There is no `mise` program: nothing to add, and nothing to tell a user who does not use mise. */
   | { kind: "not_installed" }
   /** mise did not give the environment (an untrusted config, a missing age key, a timeout); the message is mise's. */
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string }
+  /** mise gave the environment but not its redactions; the secrets are only the ones named like secrets. */
+  | { kind: "unredacted"; message: string; env: MiseEnv };
 
 const EnvJson = z.record(z.string(), z.string());
 
@@ -38,12 +40,16 @@ export async function readMiseEnv(command: readonly string[], dir: string, env: 
   const vars = parseEnvJson(all);
   if (vars.kind !== "ok") return vars;
   const hidden = parseEnvJson(redacted);
-  if (hidden.kind !== "ok") return hidden;
-  const secretNames = Object.keys(vars.vars).filter((name) => Object.hasOwn(hidden.vars, name) || isSecretName(name));
-  return { kind: "ok", env: { vars: vars.vars, secretNames, secretValues: secretNames.map((name) => vars.vars[name] ?? "") } };
+  const redactedNames = hidden.kind === "ok" ? hidden.vars : {};
+  const secretNames = Object.keys(vars.vars).filter((name) => Object.hasOwn(redactedNames, name) || isSecretName(name));
+  const found = { vars: vars.vars, secretNames, secretValues: secretNames.map((name) => vars.vars[name] ?? "") };
+  if (hidden.kind === "ok") return { kind: "ok", env: found };
+  return { kind: "unredacted", message: hidden.kind === "error" ? hidden.message : "mise did not start", env: found };
 }
 
-function parseEnvJson(result: MiseCliResult): { kind: "ok"; vars: Record<string, string> } | Exclude<MiseEnvResult, { kind: "ok" }> {
+function parseEnvJson(
+  result: MiseCliResult,
+): { kind: "ok"; vars: Record<string, string> } | { kind: "not_installed" } | { kind: "error"; message: string } {
   if (result.kind === "not_started") return { kind: "not_installed" };
   if (result.kind === "failed") return { kind: "error", message: result.message };
   if (result.code !== 0) return { kind: "error", message: miseFailure(result.stderr, result.code) };

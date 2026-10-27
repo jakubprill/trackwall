@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DomainError } from "../src/infra/errors.ts";
@@ -346,6 +346,26 @@ describe("the environment mise sets (ADR-93)", () => {
     TIMEOUT,
   );
 
+  test(
+    "a mise task's log still masks the secret-like names from mise's [env] when mise cannot say what it redacts",
+    async () => {
+      const { mise, logs } = setup({
+        tasks: [{ name: "deploy" }],
+        exits: { deploy: 0 },
+        prints: { deploy: ["calling with glpat-1234567890"] },
+        env: { GITLAB_TOKEN: "glpat-1234567890" },
+        redactedError: "unexpected argument '--redacted' found",
+      });
+
+      await mise.start({ repo: "web", task: null }, "deploy");
+      await mise.waitForEnd({ repo: "web", task: null }, "deploy", 20_000, new AbortController().signal);
+
+      const log = logs.tail({ source: { kind: "mise-task", repo: "web", miseTask: "deploy" }, limit: 10 });
+      expect(log.records.map((r) => r.msg)).toEqual(["calling with ***", "[deploy] $ done"]);
+    },
+    TIMEOUT,
+  );
+
   test("a session in a repo root gets the repo's variables, with the redacted ones and those named like secrets as its secrets", async () => {
     const { mise } = setup({ tasks: [], env: { JIRA_KEY: "k", GITLAB_TOKEN: "t", MAVEN_OPTS: "-Xmx2g" }, redacted: ["JIRA_KEY"] });
 
@@ -407,6 +427,28 @@ describe("the environment mise sets (ADR-93)", () => {
       problem:
         "the root of web: mise ERROR unexpected argument '--redacted' found\nThe session has the environment of the projects folder.",
     });
+  });
+
+  test("a task's session never trusts its worktree's mise config while the repo root's is not trusted", async () => {
+    const { mise, home } = setup({ tasks: [], untrusted: true, env: { GITLAB_TOKEN: "root" } });
+    writeFileSync(join(home, "fake-mise.json"), JSON.stringify({ tasks: [], env: { SHOP_REGION: "eu" } }));
+
+    const env = await mise.sessionEnv({ repo: "web", task: TASK });
+    expect(env.vars).toEqual({ SHOP_REGION: "eu" });
+    expect(env.problem).toStartWith("the root of web: mise ERROR Config files in");
+    expect(env.problem).toEndWith("The session has the environment of the projects folder.");
+  });
+
+  test("a repo folder that is gone is the session's problem, not a missing mise", async () => {
+    const { mise, home } = setup({ tasks: [] });
+    writeFileSync(join(home, "fake-mise.json"), JSON.stringify({ tasks: [], env: { SHOP_REGION: "eu" } }));
+    rmSync(join(home, "web"), { recursive: true });
+
+    const env = await mise.sessionEnv({ repo: "web", task: null });
+    expect(env.vars).toEqual({ SHOP_REGION: "eu" });
+    expect(env.problem).toBe(
+      `the root of web: ${join(home, "web")} does not exist\nThe session has the environment of the projects folder.`,
+    );
   });
 
   test("without a mise program a session gets nothing and no problem", async () => {

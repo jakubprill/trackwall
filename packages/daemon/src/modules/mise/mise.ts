@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { delimiter } from "node:path";
 import {
   type LogSource,
@@ -16,7 +17,7 @@ import { envKey } from "../../infra/env-key.ts";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { waitLimited } from "../../infra/wait-limit.ts";
 import { type MiseCliResult, miseFailure, runMiseCli } from "./mise-cli.ts";
-import { type MiseEnv, type MiseEnvResult, NO_MISE_ENV, readMiseEnv } from "./mise-env.ts";
+import { type MiseEnv, NO_MISE_ENV, readMiseEnv } from "./mise-env.ts";
 
 /**
  * The `mise` module (§4, ADR-20): the mise tasks of workspace repos and their runs. The list comes from `mise tasks ls --json`
@@ -283,46 +284,67 @@ export class Mise {
   /** The values of the secrets mise adds to a run in `dir`; none when mise does not give its environment (the run then fails itself). */
   private async secretsIn(dir: string, env: NodeJS.ProcessEnv): Promise<string[]> {
     const read = await readMiseEnv(this.deps.command, dir, env);
-    return read.kind === "ok" ? read.env.secretValues : [];
+    // A run takes mise's environment whatever mise says about redactions, so its log masks at least the secret-like names.
+    return read.kind === "ok" || read.kind === "unredacted" ? read.env.secretValues : [];
   }
 
   /**
-   * The environment mise sets for a session (ADR-93), from the closest place whose mise config mise reads: a task's
-   * worktree while its mise config is the one the user trusted (ADR-59, after the repo root's, as for a run), else the
-   * repo root, else the projects folder. A session in a repo whose own config is not trusted still gets what the projects
-   * folder gives, and the reason it got less is the `problem`. Without mise there is nothing and no problem.
+   * The environment mise sets for a session (ADR-93). A session in a repo takes the repo root's, and a task's session its
+   * worktree's instead while the root's config is trusted and the worktree's is the one the user trusted (ADR-59), as for
+   * a run; the worktree is never read when the root is refused, since its trust rests on the root's. A refused repo root
+   * falls back to the projects folder, which is also the only place of the supervisor and a free session. Each refused
+   * place is a line of the session's problem. Without mise there is nothing and no problem.
    */
-  /**
-   * The places a session's environment can come from, nearest first (ADR-93): the task's worktree while its mise config is
-   * the trusted one, the repo root, the projects folder. The first place mise gives an environment for wins, and each place
-   * before it is a line of the session's problem, so the user sees why a session has less than its own place gives.
-   */
-  async sessionEnv(place: SessionPlace): Promise<SessionMiseEnv> {
+  async sessionEnv({ repo, task }: SessionPlace): Promise<SessionMiseEnv> {
     const env = await this.deps.env();
     const problems: string[] = [];
-    for (const candidate of this.sessionPlaces(place, env)) {
-      const read = await this.readPlace(candidate);
-      if (read.kind === "not_installed") return { ...NO_MISE_ENV, problem: null };
-      if (read.kind === "ok") return { ...read.env, problem: sessionProblem(problems, candidate.label) };
-      problems.push(`${candidate.label}: ${read.message}`);
+    if (repo !== null) {
+      const inRepo = await this.repoSessionEnv(repo, task, env);
+      if (inRepo.kind === "done") return inRepo.env;
+      problems.push(inRepo.problem);
     }
-    return { ...NO_MISE_ENV, problem: sessionProblem(problems, null) };
+    const projects: EnvPlace = { label: "the projects folder", where: async () => ({ dir: await this.deps.repos.projectsDir(), env }) };
+    const inProjects = await this.readPlace(projects);
+    if (inProjects.kind === "not_installed") return { ...NO_MISE_ENV, problem: null };
+    if (inProjects.kind === "ok") return { ...inProjects.env, problem: sessionProblem(problems, projects.label) };
+    return { ...NO_MISE_ENV, problem: sessionProblem([...problems, `${projects.label}: ${inProjects.message}`], null) };
   }
 
-  private *sessionPlaces({ repo, task }: SessionPlace, env: NodeJS.ProcessEnv): Generator<EnvPlace> {
-    if (repo !== null && task !== null)
-      yield {
-        label: "the task's worktree",
-        where: async () => {
-          const { worktree, port } = await this.deps.tasks.trustedTaskWorktree(task, repo);
-          return { dir: worktree, env: withTaskPort(trustingPath(env, worktree), port) };
-        },
-      };
-    if (repo !== null) yield { label: `the root of ${repo}`, where: async () => ({ dir: await this.deps.repos.repoPath(repo), env }) };
-    yield { label: "the projects folder", where: async () => ({ dir: await this.deps.repos.projectsDir(), env }) };
+  /** A session's environment in its repo: the root's, or the task's worktree's while both are trusted; `refused` falls back. */
+  private async repoSessionEnv(
+    repo: string,
+    task: string | null,
+    env: NodeJS.ProcessEnv,
+  ): Promise<{ kind: "done"; env: SessionMiseEnv } | { kind: "refused"; problem: string }> {
+    const root: EnvPlace = { label: `the root of ${repo}`, where: async () => ({ dir: await this.deps.repos.repoPath(repo), env }) };
+    const inRoot = await this.readPlace(root);
+    if (inRoot.kind === "not_installed") return { kind: "done", env: { ...NO_MISE_ENV, problem: null } };
+    if (inRoot.kind === "error") return { kind: "refused", problem: `${root.label}: ${inRoot.message}` };
+    if (task === null) return { kind: "done", env: { ...inRoot.env, problem: null } };
+    const inWorktree = await this.readPlace(this.worktreePlace(task, repo, env));
+    if (inWorktree.kind === "ok") return { kind: "done", env: { ...inWorktree.env, problem: null } };
+    const message = inWorktree.kind === "error" ? inWorktree.message : "mise did not start there";
+    return { kind: "done", env: { ...inRoot.env, problem: sessionProblem([`the task's worktree: ${message}`], root.label) } };
   }
 
-  private async readPlace(place: EnvPlace): Promise<MiseEnvResult> {
+  private worktreePlace(task: string, repo: string, env: NodeJS.ProcessEnv): EnvPlace {
+    return {
+      label: "the task's worktree",
+      where: async () => {
+        const { worktree, port } = await this.deps.tasks.trustedTaskWorktree(task, repo);
+        return { dir: worktree, env: withTaskPort(trustingPath(env, worktree), port) };
+      },
+    };
+  }
+
+  /**
+   * mise's environment in a place, strict about secrets: a place whose redactions mise cannot give is refused. A refused
+   * place (`DomainError`) and a folder that is gone are errors, so the session falls back instead of looking as if there
+   * were no mise.
+   */
+  private async readPlace(
+    place: EnvPlace,
+  ): Promise<{ kind: "ok"; env: MiseEnv } | { kind: "not_installed" } | { kind: "error"; message: string }> {
     let where: { dir: string; env: NodeJS.ProcessEnv };
     try {
       where = await place.where();
@@ -330,7 +352,9 @@ export class Mise {
       if (!(err instanceof DomainError)) throw err;
       return { kind: "error", message: err.message };
     }
-    return readMiseEnv(this.deps.command, where.dir, where.env);
+    if (!existsSync(where.dir)) return { kind: "error", message: `${where.dir} does not exist` };
+    const read = await readMiseEnv(this.deps.command, where.dir, where.env);
+    return read.kind === "unredacted" ? { kind: "error", message: read.message } : read;
   }
 
   private async hasTask(place: RunPlace, miseTask: string): Promise<boolean> {
