@@ -30,6 +30,7 @@ const {
   reportResult,
   getReviewComments,
   sendMessage,
+  resumeTask,
   getMessages,
   getUpdates,
   waitForSession,
@@ -87,7 +88,9 @@ export const MCP_INSTRUCTIONS = [
     "the user approves, edits or rejects it in Trackwall. In a Trackwall session, then end your turn: when the task's " +
     "session finishes a turn, reports its result, gets a verification verdict, errs or exits, or the user rejects the " +
     `proposal, Trackwall asks you to call ${getUpdates.name}, which says what happened. To steer the task (${TASK_MESSAGE_USES}), ` +
-    `send its session a message with ${sendMessage.name}. ` +
+    `send its session a message with ${sendMessage.name}. When the user asks to continue a task whose session no longer runs ` +
+    `(its agent exited, or Trackwall restarted), ${resumeTask.name} resumes its conversation in its own worktree; a new ` +
+    `${proposeTask.name} would start over on a new branch. ` +
     `An agent outside Trackwall gets no updates and sends no messages; it waits with ${waitForSession.name} (a session ` +
     "may too, to wait inside a turn): with the task id it returns when the proposal is rejected or the task's session " +
     `needs someone, goes stale or exits; when it times out (still pending, starting or working), call it again. ${getSession.name} shows ` +

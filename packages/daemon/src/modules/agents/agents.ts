@@ -36,7 +36,7 @@ import { inboxPrompt } from "./inbox-prompt.ts";
 import { LiveSession, type SessionPty, type SessionWindow } from "./live-session.ts";
 import { MiseTrustNotices } from "./mise-trust-notices.ts";
 import { withLoopbackNoProxy } from "./no-proxy.ts";
-import { proposedByOf, proposerKeyOf, SUPERVISOR } from "./proposer.ts";
+import { proposedByOf, proposerKeyOf, proposerOf, SUPERVISOR } from "./proposer.ts";
 import { type SessionRole, withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
@@ -307,7 +307,7 @@ export class Agents {
   /** A proposal to remove a repo from the projects folder (ADR-83), from session `caller` like a task proposal. */
   async proposeRepoRemoval(caller: string | null, repo: string, reason: string): Promise<TaskProposal> {
     const session = caller === null ? null : this.session(caller);
-    if (session?.task != null)
+    if (session !== null && session.task !== null)
       throw new DomainError(
         "bad_request",
         "a task session works in its worktree and proposes no folder actions; tell your proposer instead",
@@ -480,6 +480,24 @@ export class Agents {
 
   resumeTask(id: string): Promise<Task> {
     return this.#tasks.resume(id);
+  }
+
+  /**
+   * `resume_task` from session `caller` (`null`: an agent outside Trackwall, the user's program, which resumes any task,
+   * ADR-90): the supervisor resumes any task, a main session only the tasks it proposed, a task session none.
+   * Returns the task and its new session.
+   */
+  async resumeTaskFor(caller: string | null, id: string): Promise<{ task: Task; session: Session }> {
+    const task = this.#tasks.task(id);
+    const session = caller === null ? null : this.session(caller);
+    if (session !== null && session.task !== null)
+      throw new DomainError("bad_request", `a task session resumes no other task; ask the user to resume task ${id}`);
+    if (session && !isSupervisor(session) && proposerOf(task.proposedBy) !== session.id)
+      throw new DomainError("bad_request", `task ${id} was not proposed by this session; ask the user to resume it`);
+    const resumed = await this.#tasks.resume(id);
+    const running = this.#runningOfTask(id);
+    if (!running) throw new Error(`task ${id} has no running session after resuming`);
+    return { task: resumed, session: this.#view(running) };
   }
 
   /** A task by identifier (`not_found` when it does not exist or the user ended it). */

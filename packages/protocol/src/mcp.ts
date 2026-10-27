@@ -171,6 +171,10 @@ export type ReportResultResult = z.infer<typeof ReportResultResult>;
 export const GetReviewCommentsResult = z.object({ comments: z.array(ReviewComment) });
 export type GetReviewCommentsResult = z.infer<typeof GetReviewCommentsResult>;
 
+/** A task whose conversation goes on in a new session (ADR-90), and that session. */
+export const ResumeTaskResult = z.object({ task: Task, session: AgentSession });
+export type ResumeTaskResult = z.infer<typeof ResumeTaskResult>;
+
 /** A message to a task's session (ADR-68) and when its agent gets the prompt to read it. */
 export const SendMessageResult = z.object({ message: TaskMessage, delivery: PromptDelivery });
 export type SendMessageResult = z.infer<typeof SendMessageResult>;
@@ -304,6 +308,7 @@ const PROPOSE_FOLDER_ACTION = "propose_folder_action";
 const REPORT_RESULT = "report_result";
 const GET_REVIEW_COMMENTS = "get_review_comments";
 const SEND_MESSAGE = "send_message";
+const RESUME_TASK = "resume_task";
 const GET_MESSAGES = "get_messages";
 const GET_UPDATES = "get_updates";
 const WAIT_FOR_SESSION = "wait_for_session";
@@ -711,7 +716,7 @@ export const mcpTools = {
       "the agent takes it as an update of " +
       "the task's prompt, which it follows over the prompt where the two differ. Trackwall asks the task's agent " +
       `to call ${GET_MESSAGES} as soon as it waits for input (at once when it does now, after its current turn ` +
-      "otherwise, or in the session the user resumes: delivery says which). Only for tasks you proposed (the supervisor: " +
+      "otherwise, or once its session is resumed: delivery says which). Only for tasks you proposed (the supervisor: " +
       "tasks any supervisor proposed); for other work, tell the user. The user sees every message in the task's panel. " +
       `At most ${TASK_MESSAGES_WITHOUT_USER} messages to a task until the user takes part again (types into your session or ` +
       "the task's, or sends the task a review): then ask the user instead of sending more. Write it so it stands on its " +
@@ -723,6 +728,22 @@ export const mcpTools = {
       })
       .strict(),
     result: SendMessageResult,
+  },
+  resumeTask: {
+    name: RESUME_TASK,
+    readOnly: false,
+    // The resumed agent runs commands in the task's worktree, as a task's session does (ADR-90).
+    destructive: true,
+    auditArgs: ["task"] as const,
+    description:
+      "Continue a task whose session no longer runs (its agent exited, or Trackwall restarted): a new Copilot CLI " +
+      "session in the task's own worktree resumes the task's conversation, on the same branch, the same as Resume in the " +
+      `task's panel. Find the task in ${LIST_SESSIONS} (tasks, and sessions with that task whose run ended). Only when the ` +
+      "user asks to continue the task. What waits for it (your messages, the user's review) is read as soon as the session " +
+      "waits for input. The supervisor resumes any task, another session only tasks it proposed, and a task session none. " +
+      "bad_request while the task has a running session or another action on it runs; not_found for an unknown or ended task.",
+    args: z.object({ task: TaskId.describe(`task id from ${LIST_SESSIONS} (the tasks field)`) }).strict(),
+    result: ResumeTaskResult,
   },
   getMessages: {
     name: GET_MESSAGES,

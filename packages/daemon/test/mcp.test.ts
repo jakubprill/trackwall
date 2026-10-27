@@ -110,6 +110,7 @@ describe("MCP server over Streamable HTTP", () => {
       "report_result",
       "get_review_comments",
       "send_message",
+      "resume_task",
       "get_messages",
       "get_updates",
       "wait_for_session",
@@ -131,6 +132,7 @@ describe("MCP server over Streamable HTTP", () => {
       "propose_folder_action",
       "report_result",
       "send_message",
+      "resume_task",
       "run_mise_task",
       "stop_mise_task",
       "verify_task",
@@ -140,8 +142,10 @@ describe("MCP server over Streamable HTTP", () => {
     ]);
     // A proposal (of a task or a folder action) and a summary only write text for a human and a message only text for another agent; running a
     // mise task executes repo code, and stopping one can kill a process the user started from the UI; so do starting
-    // and stopping a service and verifying a task (which runs its tests), and a request to a service can change its data.
+    // and stopping a service and verifying a task (which runs its tests), and a request to a service can change its data;
+    // a resumed task's agent runs commands in its worktree.
     expect(tools.filter((t) => t.annotations?.destructiveHint !== false).map((t) => t.name)).toEqual([
+      "resume_task",
       "run_mise_task",
       "stop_mise_task",
       "verify_task",

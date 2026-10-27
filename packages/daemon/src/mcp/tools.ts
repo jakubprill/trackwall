@@ -17,7 +17,8 @@ import { DomainError } from "../infra/errors.ts";
 
 /**
  * The daemon's MCP tools (§5.3, ADR-24): each is a thin mapping onto the facade, so the agent sees the same state as the UI
- * (§1.1). None changes the configuration or a repo (§8), and none starts a session, answers in one or stops one. Only
+ * (§1.1). None changes the configuration or a repo (§8), none answers in a session or stops one, and only `resume_task`
+ * starts one: a new session of a task the user already approved, in its own worktree (ADR-90). Only
  * `propose_task` (a proposal, which only the user turns into a task in the UI) and `report_result` (the summary of the
  * session's own task) write anything, ADR-39, `get_review_comments` marks the user's review comments read (ADR-62),
  * `send_message` queues text for the session of a task the caller proposed, and `get_messages` and `get_updates` mark
@@ -214,6 +215,10 @@ const runs: ToolRuns = {
   reportResult: async (facade, { summary }, { caller }) => ({ task: facade.agents.reportSummary(caller, summary) }),
   getReviewComments: async (facade, _args, { caller }) => ({ comments: facade.agents.takeReviewComments(caller) }),
   sendMessage: async (facade, { task, text }, { caller }) => facade.agents.sendMessage(caller, task, text),
+  resumeTask: async (facade, { task }, { caller }) => {
+    const resumed = await facade.agents.resumeTaskFor(caller, task);
+    return { task: resumed.task, session: agentSession(resumed.session) };
+  },
   getMessages: async (facade, _args, { caller }) => ({
     messages: facade.agents.takeMessages(caller).map(({ readAt: _, ...message }) => message),
   }),
@@ -281,6 +286,7 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.reportResult, runs.reportResult),
   defineTool(mcpTools.getReviewComments, runs.getReviewComments),
   defineTool(mcpTools.sendMessage, runs.sendMessage),
+  defineTool(mcpTools.resumeTask, runs.resumeTask),
   defineTool(mcpTools.getMessages, runs.getMessages),
   defineTool(mcpTools.getUpdates, runs.getUpdates),
   defineTool(mcpTools.waitForSession, runs.waitForSession),
