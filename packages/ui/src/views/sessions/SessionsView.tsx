@@ -4,20 +4,17 @@ import {
   type RunningMiseTask,
   type Session,
   type SessionList,
-  TASK_PROMPT_MAX,
   type Task,
   type TaskMessage,
-  workspaceApi,
 } from "@trackwall/protocol";
-import { BellRing, Crown, GitBranch, Lightbulb, Play, Plus, Square, X } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { BellRing, Crown, Lightbulb, Plus, Square, X } from "lucide-react";
+import { useCallback, useRef } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { SessionTerminal } from "@/components/SessionTerminal";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
@@ -48,15 +45,16 @@ import {
   sessionShortcut,
   sessionShortcutLabel,
 } from "@/lib/session-shortcut";
-import { attentionCount, isLive, PROPOSAL_STATUS, SUPERVISOR, sessionStateLabel } from "@/lib/session-state";
+import { attentionCount, isLive, PROPOSAL_STATUS, SUPERVISOR, sessionPlace, sessionStateLabel } from "@/lib/session-state";
 import type { SupervisorSummary } from "@/lib/supervisor";
 import { useAction } from "@/lib/use-action";
-import { type RemoteHandle, useRemote } from "@/lib/use-remote";
+import type { RemoteHandle } from "@/lib/use-remote";
 import { useSessionClose } from "@/lib/use-session-close";
 import type { SessionTree } from "@/lib/use-session-tree";
 import { useTaskEnding } from "@/lib/use-task-ending";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { cn } from "@/lib/utils";
+import { NewSession } from "./NewSession.tsx";
 import { ProposalInbox } from "./ProposalInbox.tsx";
 import { EndTaskButton, SessionCloseButton, SessionCloseConfirmation, TaskEnding } from "./SessionClose.tsx";
 import { SessionGrid } from "./SessionGrid.tsx";
@@ -193,6 +191,7 @@ export function SessionsView({
         {sessions.data && !current && (
           <NewSession
             conn={conn}
+            sessions={sessions.data.sessions}
             onStarted={(selection) => {
               onSelect(selection);
               sessions.reload();
@@ -313,7 +312,7 @@ function StartedListItem({
       >
         <PositionLabel position={position} />
         <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <RowName name={task?.repo ?? session?.repo} delegated={delegated} waits={session?.needsAttention === true} />
+          <RowName name={task?.repo ?? (session && sessionPlace(session))} delegated={delegated} waits={session?.needsAttention === true} />
           {task && <TaskLine task={task} />}
           <span className="text-muted-foreground text-xs">{session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}</span>
           {session?.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
@@ -653,7 +652,7 @@ function SessionPanel({
       <header className="flex items-center gap-4 border-b px-4 py-2">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex min-w-0 items-center gap-3">
-            <span className="truncate text-sm font-medium">{session.repo}</span>
+            <span className="truncate text-sm font-medium">{sessionPlace(session)}</span>
             <span className="text-muted-foreground text-xs">
               <StatusLabel {...sessionStateLabel(session)} />
             </span>
@@ -674,95 +673,5 @@ function SessionPanel({
       </header>
       <SessionTerminal conn={conn} session={session.id} live={live} selected />
     </>
-  );
-}
-
-/**
- * A new task or session: a repo from the projects folder and a prompt for the agent. With a prompt it becomes a task
- * in its own worktree (ADR-31), without one a plain session in the repo root (ADR-26).
- */
-function NewSession({
-  conn,
-  onStarted,
-  onCancel,
-}: {
-  conn: Connection;
-  onStarted: (selection: SessionSelection) => void;
-  onCancel?: () => void;
-}) {
-  const load = useCallback(() => post(conn, workspaceApi.list, {}), [conn]);
-  const repos = useRemote(load);
-  const [repo, setRepo] = useState<string>();
-  const [prompt, setPrompt] = useState("");
-  const chosen = repo ?? repos.data?.repos[0]?.id;
-  const createTask = useAction(
-    (repo: string) => post(conn, agentsApi.createTask, { repo, prompt }),
-    (task) => onStarted({ kind: "task", id: task.id }),
-  );
-  const start = useAction(
-    (repo: string) => post(conn, agentsApi.start, { repo }),
-    (session) => onStarted({ kind: "session", id: session.id }),
-  );
-  const pending = createTask.pending || start.pending;
-  const error = createTask.error ?? start.error;
-
-  return (
-    <div className="flex max-w-3xl flex-col gap-4 p-6">
-      <h3 className="hud-label">New task for the agent</h3>
-      <p className="text-muted-foreground max-w-prose text-sm">
-        Trackwall creates a new branch from the default branch of the chosen repo in a separate worktree and starts Copilot CLI there with
-        your prompt, so several tasks in one repo stay out of each other's way. The session runs in a terminal owned by the daemon, also
-        after you close the window, and the Changes tab shows what the agent changes.
-      </p>
-      {repos.error && <ErrorWithRetry message={repos.error} onRetry={repos.reload} />}
-      {repos.data && repos.data.repos.length === 0 && (
-        <p className="text-muted-foreground text-sm">The projects folder has no repos. Set the folder or clone a repo in Repos.</p>
-      )}
-      {repos.data && repos.data.repos.length > 0 && (
-        <>
-          <select
-            aria-label="Repo for the task or session"
-            value={chosen}
-            onChange={(e) => setRepo(e.target.value)}
-            className="border-input bg-card h-9 w-fit min-w-48 rounded-md border px-3 text-sm"
-          >
-            {repos.data.repos.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.id}
-              </option>
-            ))}
-          </select>
-          <Textarea
-            aria-label="Prompt for the agent"
-            placeholder="What the agent should do, e.g. “Add email validation to the sign-up form, with a test”"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            maxLength={TASK_PROMPT_MAX}
-            rows={5}
-          />
-          {chosen && (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button onClick={() => createTask.run(chosen)} disabled={pending || prompt.trim() === ""}>
-                <GitBranch /> Create task
-              </Button>
-              <Button variant="outline" onClick={() => start.run(chosen)} disabled={pending}>
-                <Play /> Session in the repo, no task
-              </Button>
-              {onCancel && (
-                <Button variant="ghost" onClick={onCancel}>
-                  Cancel
-                </Button>
-              )}
-            </div>
-          )}
-          <p className="text-muted-foreground max-w-prose text-xs">
-            Copilot CLI asks you to trust a folder before it works there. To skip that prompt for every repo and task, add{" "}
-            <span className="text-foreground font-mono">{repos.data.projectsDir}</span> to <span className="font-mono">trustedFolders</span>{" "}
-            in <span className="font-mono">~/.copilot/config.json</span>; trust covers its repos and their task worktrees.
-          </p>
-        </>
-      )}
-      {error && <p className="text-destructive text-sm whitespace-pre-wrap">{error}</p>}
-    </div>
   );
 }

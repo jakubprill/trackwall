@@ -7,7 +7,8 @@ describe("a session in a repo, answered from the tray panel", () => {
   test("a new session asks for approval of a command, and a click in the tray panel lets its agent finish the turn", async () => {
     const page = await trackwall().open();
     await showSessions(page);
-    await page.getByRole("button", { name: "Session in the repo, no task" }).click();
+    await page.getByRole("checkbox", { name: "In its own worktree" }).uncheck();
+    await page.getByRole("button", { name: "Start session" }).click();
 
     await typeInTerminal(page, "run the tests\r");
     await waitForTerminal(page, "Do you want to run this command?");

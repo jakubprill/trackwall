@@ -389,10 +389,18 @@ describe("the tool permissions of a session from workspace.yaml (ADR-66, ADR-78)
     const projectsDir = readFileSync(file, "utf8");
     writeFileSync(file, `${projectsDir}toolPermissions:\n  - deny: ["shell(git push)"]\n`);
 
-    expect(workspace.toolPermissions(null)).toEqual({ allow: [], deny: ["shell(git push)", "shell", "write"] });
-    expect(workspace.toolPermissions("shop")).toEqual({ allow: [], deny: ["shell(git push)"] });
+    expect(workspace.toolPermissions({ repo: null, supervisor: true })).toEqual({ allow: [], deny: ["shell(git push)", "shell", "write"] });
+    expect(workspace.toolPermissions({ repo: "shop", supervisor: false })).toEqual({ allow: [], deny: ["shell(git push)"] });
 
     writeFileSync(file, `${projectsDir}toolPermissions:\n  - deny: ["shell(git push)"]\nsupervisor:\n  changesCode: true\n`);
-    expect(workspace.toolPermissions(null)).toEqual({ allow: [], deny: ["shell(git push)"] });
+    expect(workspace.toolPermissions({ repo: null, supervisor: true })).toEqual({ allow: [], deny: ["shell(git push)"] });
+  });
+
+  test("a free session in the projects folder gets the rules without repos and keeps the shell and file writes (ADR-100)", async () => {
+    const { workspace, file } = await workspaceWithProjectsDir();
+    const projectsDir = readFileSync(file, "utf8");
+    writeFileSync(file, `${projectsDir}toolPermissions:\n  - deny: ["shell(git push)"]\n  - repos: ["shop"]\n    deny: ["shell(rm)"]\n`);
+
+    expect(workspace.toolPermissions({ repo: null, supervisor: false })).toEqual({ allow: [], deny: ["shell(git push)"] });
   });
 });

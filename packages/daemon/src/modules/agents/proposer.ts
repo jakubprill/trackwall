@@ -21,6 +21,6 @@ export function proposerOf(proposedBy: ProposedBy | null): string | null {
 }
 
 /** The proposer key a session's own proposals and updates go under. */
-export function proposerKeyOf(session: Pick<Session, "id" | "repo">): string {
+export function proposerKeyOf(session: Pick<Session, "id" | "supervisor">): string {
   return isSupervisor(session) ? SUPERVISOR : session.id;
 }

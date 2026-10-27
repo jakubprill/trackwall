@@ -8,6 +8,7 @@ function session(id: string, needsAttention: boolean, dialog: Session["dialog"] 
   return {
     id,
     repo: `repo-${id}`,
+    supervisor: false,
     startedAt: "2026-10-24T10:00:00Z",
     run: running,
     state: null,

@@ -11,7 +11,7 @@ Run several Copilot CLI agents side by side, each in its own repo, and always kn
 
 ## What you get
 
-- Several Copilot CLI sessions at once, each in a repo from your projects folder, all in one window.
+- Several Copilot CLI sessions at once, all in one window: in a repo's own working copy, or as free sessions in your projects folder, tied to no repo.
 - A state for every session: working, waiting for you, asking for approval or idle.
 - A nudge when an agent needs you: a flashing taskbar icon with the number waiting, a system notification and an entry in the tray.
 - A grid of terminals, so you can watch up to nine agents at once on a wide monitor.
@@ -19,7 +19,9 @@ Run several Copilot CLI agents side by side, each in its own repo, and always kn
 
 ## How it works
 
-Open "Sessions", pick a repo and Copilot CLI starts in a terminal inside Trackwall, already connected to the [Trackwall MCP server](/features/mcp). Start as many sessions as you like; the list on the left shows each one with its repo, its state and what the agent is doing right now.
+Open "Sessions", press "+" and pick where the agent works. With a repo and "In its own worktree" checked, your prompt becomes an [agent task](/features/tasks) on its own branch. Uncheck it and "Start session" opens Copilot CLI in the repo's own folder, the working copy your editor uses; pick "No repo: the projects folder" instead and it opens a free session in your projects folder, which can look at every repo. Either way the prompt is optional: what you write there is the agent's first message, otherwise you type in its terminal. Copilot CLI starts in a terminal inside Trackwall, already connected to the [Trackwall MCP server](/features/mcp). Start as many sessions as you like; the list on the left shows each one with its repo (or "Free session"), its state and what the agent is doing right now.
+
+A session without its own worktree changes your files directly: there is no "Changes" tab, review, "Verify" or merge request, which only a task has. The form says so, and warns you when another session already works in the same folder, because two agents in one working copy change each other's files and switch its branch under each other.
 
 A new session shows "waiting for you" as soon as Copilot CLI is ready for your first message. When an agent finishes its turn, its session shows "waiting for you" again; when it asks for approval of a step or a plan, "asking for approval" or "waiting for plan approval". Either way the counter on the view bar goes up. The session stays waiting until you have looked at it: select it, or type into its terminal, and it becomes "idle". In the grid, only the selected tile counts as looked at. A request for approval keeps waiting until you answer it. "Next waiting" (or Alt+J) takes you straight to the next session that needs you.
 
@@ -33,7 +35,7 @@ Every session also gets short instructions from Trackwall on how to work with yo
 
 1. Install Copilot CLI and sign in to it.
 2. Open "Sessions" (Ctrl+3, ⌘3 on macOS).
-3. Pick a repo and start a session.
+3. Press "+", pick a repo (or "No repo: the projects folder"), uncheck "In its own worktree" and press "Start session".
 4. Work in the terminal as you would in any Copilot CLI session.
 5. When a session waits for you, press Alt+J to jump to it.
 
@@ -51,6 +53,7 @@ Alt+1 … Alt+9, Alt+0 and Alt+J work while a terminal has the focus too, and ar
 ## Good to know
 
 - Copilot CLI must be on your `PATH` as `copilot` and signed in.
+- A free session runs in the projects folder, so the trusted folder you set for Copilot CLI and the antivirus exclusion of that folder cover it. It can change any repo there, and it can hand work over as a [task proposal](/features/main-session), but it does not run a repo's mise tasks or services through Trackwall. Unlike the [supervisor](/features/supervisor), you can run several, and it may run commands and change files.
 - The [supervisor](/features/supervisor) is not one of the numbered entries: its heading tops the list with the work it delegated under it, and selecting it opens its panel on the right.
 - Copilot CLI takes over the mouse in the terminal. Drag over text to select it and press Ctrl+C or right-click to copy it, as the hint under the selection says. You can also drag with Option (macOS) or Shift (Windows) held down, then copy with Cmd+C or Ctrl+C. Ctrl+C without a selection interrupts the agent. Paste with Cmd+V or Ctrl+V (Ctrl+Shift+V works too). While text is selected, links in the session open only after you clear the selection with a click.
 - Drag a file or folder from Explorer or Finder onto a terminal to paste its path, quoted when it has a space.

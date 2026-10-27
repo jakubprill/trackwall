@@ -10,6 +10,7 @@ function session(id: string, repo: string | null, run: Session["run"]["kind"] = 
   return {
     id,
     repo,
+    supervisor: repo === null,
     startedAt,
     run:
       run === "exited"

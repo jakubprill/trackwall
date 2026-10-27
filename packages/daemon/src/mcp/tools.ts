@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import {
   type AgentRepo,
   type AgentSession,
+  isSupervisor,
   type McpTool,
   type MiseTarget,
   mcpTools,
@@ -323,9 +324,13 @@ function hasEveryTag(tags: readonly string[], wanted: readonly string[]): boolea
  */
 function assertCallerRepo(facade: Facade, caller: string | null, repo: string, action: string): void {
   if (caller === null) return;
-  const own = facade.agents.session(caller).repo;
+  const session = facade.agents.session(caller);
+  const own = session.repo;
   if (own === null)
-    throw new DomainError("bad_request", `the supervisor works in no repo and runs nothing in one; propose a task in ${repo} instead`);
+    throw new DomainError(
+      "bad_request",
+      `${inNoRepo(session)} works in no repo and runs nothing in one; propose a task in ${repo} instead`,
+    );
   if (own !== repo) throw new DomainError("bad_request", `a session in ${own} can ${action} of ${own}, not of ${repo}`);
 }
 
@@ -352,10 +357,15 @@ function assertCallerMayVerify(facade: Facade, caller: string | null, task: stri
   if (session.repo === null)
     throw new DomainError(
       "bad_request",
-      `the supervisor runs no tests; read task ${task}'s verification with ${mcpTools.getSession.name}, or ask its session to verify it`,
+      `${inNoRepo(session)} runs no tests; read task ${task}'s verification with ${mcpTools.getSession.name}, or ask its session to verify it`,
     );
   if (session.task !== null && session.task !== task)
     throw new DomainError("bad_request", `a task session can verify only its own task ${session.task}, not task ${task}`);
+}
+
+/** A session in the projects folder as a refusal names it: the supervisor (ADR-58) or a free session (ADR-100). */
+function inNoRepo(session: Session): string {
+  return isSupervisor(session) ? "the supervisor" : "a free session";
 }
 
 /** The repo root, or the worktree of a task of that repo (`bad_request` for a task of another repo, ADR-59). */
