@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
-import { MCP_SERVER_NAME, mcpTools, TASK_MESSAGE_RULE } from "@trackwall/protocol";
+import { MCP_SERVER_NAME, mcpTools, type Session, TASK_MESSAGE_RULE } from "@trackwall/protocol";
 import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
 import { inboxPrompt } from "../src/modules/agents/inbox-prompt.ts";
 import { OscParser } from "../src/modules/agents/osc-parser.ts";
@@ -73,18 +73,32 @@ const SESSION_MS = 60_000;
 // A test waits for at most three such steps; its own limit is above their sum, so a slow step fails on its own message.
 setDefaultTimeout(4 * SESSION_MS);
 
-/** Starts a session in `shop` and waits until Copilot CLI shows its input box with the MCP servers loaded. */
-async function startSession() {
-  const { agents } = daemon.facade;
-  const started = await agents.start("shop");
-  const window = viewer(agents, started.id);
-  windows.set(started.id, window);
-  // The size the reference is taken in (`REFERENCE_COLS`), so the screen compares with it.
+type Daemon = typeof daemon;
+
+/**
+ * Waits until Copilot CLI in session `id` has loaded: its input box is on the screen, which it draws once its loading
+ * line is gone, and the daemon's MCP server has answered its `tools/list`. Not the "1 MCP server" in the loading line:
+ * Copilot CLI draws the line by changed cells and may replace it with the footer without ever drawing that part, and
+ * when it falls back to the older MCP revision (with `initialize`) the line ends before `tools/list` is answered.
+ */
+function untilLoaded(id: string, on: Daemon = daemon) {
+  const loaded = (s: Session) => s.state !== null && on.hasListedTools(id);
+  return waitFor(on.facade.agents, id, loaded, "Copilot CLI with its input box and the Trackwall MCP tools", SESSION_MS);
+}
+
+/** The terminal of session `id`, kept until the end of the test, in the size the reference is taken in. */
+function openWindow(id: string, on: Daemon = daemon) {
+  const window = viewer(on.facade.agents, id);
+  windows.set(id, window);
   window.attachment.resize(REFERENCE_COLS, REFERENCE_ROWS);
-  // Copilot CLI shows "1 MCP server" in its loading line only for a moment, so it is looked for in the whole output;
-  // without blanks, because ConPTY on Windows replaces runs of blanks with cursor moves.
-  const loaded = () => window.unwrappedText().replace(/\s/g, "").includes("1MCPserver");
-  await waitFor(agents, started.id, loaded, "Copilot CLI with the MCP servers loaded", SESSION_MS);
+  return window;
+}
+
+/** Starts a session in `shop` and waits until Copilot CLI has loaded. */
+async function startSession() {
+  const started = await daemon.facade.agents.start("shop");
+  const window = openWindow(started.id);
+  await untilLoaded(started.id);
   return { id: started.id, window };
 }
 
@@ -493,11 +507,8 @@ describe("the supervisor with the real Copilot CLI", () => {
   test("Copilot CLI refuses the supervisor its shell and its file-writing tools without asking, and the projects folder stays as it was (ADR-78)", async () => {
     const { agents } = daemon.facade;
     const supervisor = await agents.startSupervisor();
-    const window = viewer(agents, supervisor.id);
-    windows.set(supervisor.id, window);
-    window.attachment.resize(REFERENCE_COLS, REFERENCE_ROWS);
-    const loaded = () => window.unwrappedText().replace(/\s/g, "").includes("1MCPserver");
-    await waitFor(agents, supervisor.id, loaded, "Copilot CLI with the MCP servers loaded", SESSION_MS);
+    const window = openWindow(supervisor.id);
+    await untilLoaded(supervisor.id);
     model.reply(
       (request) => shellCall(request, { bash: "touch by-shell.txt", powershell: "New-Item by-shell.txt" }),
       (request) => {
@@ -618,9 +629,8 @@ describe("the daemon's MCP server with the real Copilot CLI behind the user's pr
     try {
       const { agents } = proxied.facade;
       const started = await agents.start("shop");
-      const window = viewer(agents, started.id);
-      window.attachment.resize(REFERENCE_COLS, REFERENCE_ROWS);
-      await untilInputBox(window, "empty");
+      const window = openWindow(started.id, proxied);
+      await untilLoaded(started.id, proxied);
       model.reply({ tool: copilotToolName(mcpTools.listRepos.name), arguments: {} }, { text: "There is one repo." });
 
       window.attachment.input("which repos are there?\r");
