@@ -12,6 +12,7 @@ import { loopbackRequest } from "../../src/infra/loopback.ts";
 import { createMcpEndpoint, sessionMcpRequest } from "../../src/mcp/endpoint.ts";
 import type { HostingClis } from "../../src/modules/vcs/hosting.ts";
 import { makeRepo } from "./git-repo.ts";
+import { recordingToolLists } from "./mcp-tool-lists.ts";
 
 const fakeCopilot = join(import.meta.dir, "..", "fixtures", "fake-copilot-session.ts");
 
@@ -46,7 +47,8 @@ export const ONE_REPO: SessionApiOptions = { repos: { shop: { "README.md": "# sh
 /**
  * The daemon API with a real facade and Copilot CLI (by default the fake) in a PTY, on a projects folder with the repos from
  * `options` (by default one repo, `shop`): what `main.ts` gives to `startApi`, with its hook and MCP addresses and
- * a `daemon.json`, so a session's hooks and MCP requests reach this API. `stop` stops the sessions and mise tasks and closes the API.
+ * a `daemon.json`, so a session's hooks and MCP requests reach this API. `stop` stops the sessions and mise tasks and closes the API;
+ * `hasListedTools` tells whether the MCP server has answered a session's `tools/list`.
  */
 export async function startSessionApi(token: string, options: SessionApiOptions = ONE_REPO) {
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
@@ -67,6 +69,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
     userEnv: async () => copilot.env({ home, projects }),
     log: options.log ?? (() => {}),
   });
+  const mcp = recordingToolLists(createMcpEndpoint({ facade, version: "test", log: options.log ?? (() => {}) }));
   const api = await startApi({
     token,
     version: "1",
@@ -76,7 +79,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
     },
     onShutdown: () => {},
     facade,
-    mcp: createMcpEndpoint({ facade, version: "test", log: options.log ?? (() => {}) }),
+    mcp: mcp.endpoint,
     events: new EventHub({ facade, log: () => {} }),
   });
   writeDaemonFile(home, { pid: process.pid, port: api.port, token, startedAt: new Date().toISOString(), version: "0.0.0-test" });
@@ -95,5 +98,5 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
     facade.agents.close();
     await api.close();
   };
-  return { api, facade, home, projects, post, stop };
+  return { api, facade, home, projects, post, stop, hasListedTools: mcp.hasListedTools };
 }
