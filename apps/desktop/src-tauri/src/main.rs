@@ -17,6 +17,7 @@ mod jump;
 mod link;
 mod lock;
 mod notification;
+mod repaint;
 mod saved_windows;
 mod tray_panel;
 #[cfg(windows)]
