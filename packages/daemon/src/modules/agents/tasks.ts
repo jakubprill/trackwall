@@ -70,7 +70,14 @@ export interface TasksVcs {
 /** Copilot CLI sessions from `Agents`, in which tasks run. */
 interface TaskSessions {
   /** Copilot CLI in the task's worktree with the task's arguments (the prompt, then `promptOnStart`, or a resume). */
-  launch(spec: { repo: string; cwd: string; task: string; args: readonly string[]; promptOnStart: boolean }): Promise<Session>;
+  launch(spec: {
+    repo: string;
+    cwd: string;
+    task: string;
+    args: readonly string[];
+    promptOnStart: boolean;
+    hasConversation: boolean;
+  }): Promise<Session>;
   /** The task's sessions, newest first. */
   of(task: string): Session[];
   /** Removes an ended session from the list. */
@@ -415,7 +422,8 @@ export class AgentTasks {
   }
 
   async #launch(task: KnownTask, args: readonly string[], promptOnStart: boolean): Promise<void> {
-    await this.#deps.sessions.launch({ repo: task.repo, cwd: task.worktree, task: task.id, args, promptOnStart });
+    // A task's conversation exists from its first message on, which a resume goes on with.
+    await this.#deps.sessions.launch({ repo: task.repo, cwd: task.worktree, task: task.id, args, promptOnStart, hasConversation: true });
   }
 
   /** A running session writes in the worktree and holds its files (on Windows it blocks deletion), so stop it first. */

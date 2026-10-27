@@ -31,6 +31,11 @@ export interface SessionApiOptions {
   uiDir?: string;
   /** `gh` and `glab`; the real programs by default, which a test that reaches a repo host replaces with the fake. */
   hostingClis?: HostingClis;
+  /**
+   * The state directory and projects folder of a stopped daemon: this one starts in them as the daemon after a restart,
+   * and resumes the sessions that one left running (ADR-95); new ones by default.
+   */
+  restartOf?: { home: string; projects: string };
   /** Addresses the daemon asks the system to open; dropped without it. */
   openUrl?: (url: string) => void;
 }
@@ -51,10 +56,7 @@ export const ONE_REPO: SessionApiOptions = { repos: { shop: { "README.md": "# sh
  * `hasListedTools` tells whether the MCP server has answered a session's `tools/list`.
  */
 export async function startSessionApi(token: string, options: SessionApiOptions = ONE_REPO) {
-  const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
-  for (const [name, files] of Object.entries(options.repos)) makeRepo(files, name, projects);
-  const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
-  writeFileSync(join(home, "workspace.yaml"), `projectsDir: ${JSON.stringify(projects)}\n`);
+  const { home, projects } = options.restartOf ?? newDirs(options.repos);
   const copilot = options.copilot ?? FAKE_COPILOT;
   const facade = createFacade({
     home,
@@ -70,6 +72,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
     log: options.log ?? (() => {}),
   });
   const mcp = recordingToolLists(createMcpEndpoint({ facade, version: "test", log: options.log ?? (() => {}) }));
+  facade.agents.sweepLeftovers();
   const api = await startApi({
     token,
     version: "1",
@@ -82,6 +85,8 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
     mcp: mcp.endpoint,
     events: new EventHub({ facade, log: () => {} }),
   });
+  // As in main.ts: before the API the leftovers of the previous daemon, after it the sessions it left running.
+  void facade.agents.resumeLeftSessions();
   writeDaemonFile(home, { pid: process.pid, port: api.port, token, startedAt: new Date().toISOString(), version: "0.0.0-test" });
   /** An API action with the token; the result checked by the action's schema. */
   async function post<Req extends z.ZodType, Data extends z.ZodType>(
@@ -94,9 +99,19 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
     return endpoint.data.parse(result.data);
   }
   const stop = async () => {
+    facade.agents.keepRunningSessionsForResume();
     await facade.procs.stopAll();
     facade.agents.close();
     await api.close();
   };
   return { api, facade, home, projects, post, stop, hasListedTools: mcp.hasListedTools };
+}
+
+/** A projects folder with `repos` and a state directory whose workspace points to it. */
+function newDirs(repos: SessionApiOptions["repos"]): { home: string; projects: string } {
+  const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
+  for (const [name, files] of Object.entries(repos)) makeRepo(files, name, projects);
+  const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
+  writeFileSync(join(home, "workspace.yaml"), `projectsDir: ${JSON.stringify(projects)}\n`);
+  return { home, projects };
 }

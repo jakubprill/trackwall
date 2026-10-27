@@ -134,6 +134,7 @@ async function sessionShowing(
     rows: terminal.rows,
     hooksFile,
     promptOnStart: false,
+    hasConversation: false,
     program: "copilot",
     run: () => ({ kind: "running", runId: "r1", startedAt: "2026-10-25T12:00:00.000Z", pid: 1 }),
     prompt,

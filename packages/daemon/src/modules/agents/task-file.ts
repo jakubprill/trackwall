@@ -1,8 +1,8 @@
-import { readFileSync, renameSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { noIncludedFiles, Task } from "@trackwall/protocol";
 import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
+import { readStateFile } from "./state-file.ts";
 import { TaskBranch } from "./task-branch.ts";
 import { MAX_MISE_PATH } from "./task-mise-config.ts";
 
@@ -55,34 +55,13 @@ export class TaskFile {
 
   /** A missing file means no tasks. An unreadable file is moved aside (`tasks.json.broken-<time>`), and its tasks go to the log. */
   read(): StoredTask[] {
-    let text: string;
-    try {
-      text = readFileSync(this.#path, "utf8");
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
-      throw err;
-    }
-    const parsed = parse(text);
-    if (typeof parsed !== "string") return parsed;
-    const aside = `${this.#path}.broken-${Date.now()}`;
-    renameSync(this.#path, aside);
-    this.#log(`${this.#path}: ${parsed}; file moved to ${aside}, task worktrees were left on disk`);
-    return [];
+    const file = readStateFile(this.#path, TaskFileSchema, (problem, aside) =>
+      this.#log(`${this.#path}: ${problem}; file moved to ${aside}, task worktrees were left on disk`),
+    );
+    return file?.tasks ?? [];
   }
 
   write(tasks: readonly StoredTask[]): void {
     writeFileAtomic(this.#path, `${JSON.stringify({ tasks }, null, 2)}\n`);
   }
-}
-
-/** The tasks from the file or a description of what is wrong with it. */
-function parse(text: string): StoredTask[] | string {
-  let json: unknown;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    return "not JSON";
-  }
-  const parsed = TaskFileSchema.safeParse(json);
-  return parsed.success ? parsed.data.tasks : z.prettifyError(parsed.error);
 }

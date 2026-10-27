@@ -18,6 +18,8 @@ export async function stopDaemon(home: string, facade: Facade | undefined, api: 
   facade?.repoWatch.close();
   facade?.localConfig.close();
   facade?.cards.close();
+  // Before the groups stop: the sessions that end with the daemon are to be resumed by the next one (ADR-95).
+  facade?.agents.keepRunningSessionsForResume();
   await facade?.procs.stopAll();
   facade?.agents.close();
   removeDaemonFile(home, process.pid);

@@ -15,7 +15,7 @@ Run several Copilot CLI agents side by side, each in its own repo, and always kn
 - A state for every session: working, waiting for you, asking for approval or idle.
 - A nudge when an agent needs you: a flashing taskbar icon with the number waiting, a system notification and an entry in the tray.
 - A grid of terminals, so you can watch up to nine agents at once on a wide monitor.
-- Sessions that keep running when you close the window.
+- Sessions that keep running when you close the window, and come back with their conversations after Trackwall restarts or updates.
 
 ## How it works
 
@@ -55,7 +55,7 @@ Alt+1 … Alt+9, Alt+0 and Alt+J work while a terminal has the focus too, and ar
 - Copilot CLI takes over the mouse in the terminal. Drag over text to select it and press Ctrl+C or right-click to copy it, as the hint under the selection says. You can also drag with Option (macOS) or Shift (Windows) held down, then copy with Cmd+C or Ctrl+C. Ctrl+C without a selection interrupts the agent. Paste with Cmd+V or Ctrl+V (Ctrl+Shift+V works too). While text is selected, links in the session open only after you clear the selection with a click.
 - Drag a file or folder from Explorer or Finder onto a terminal to paste its path, quoted when it has a space.
 - "Stop" ends the session with everything it started; "Close" removes an ended session from the list. The X next to a session does both in one click and asks first while the agent is working. On an [agent task](/features/tasks), the X closes only its session: the task stays on the list; select it and press "Resume" to start a new session in its worktree. Once the task has no session, its X ends the task: it asks, in the tile or under the row, whether to keep the branch and remove the worktree or remove both, and the task leaves the list.
-- Sessions end when Trackwall quits and are not recorded.
+- When Trackwall quits, restarts or updates, its sessions stop, and the next start opens again every session that was running then, the [supervisor](/features/supervisor) and task sessions included, with the same conversation. An agent that was in the middle of a turn waits for you in the reopened session: ask it to go on. Sessions you stopped yourself stay stopped. Sessions are not recorded.
 - Trackwall follows a session's state without starting a program at each step of the agent, so an antivirus that scans every program start does not hold the agent up. Copilot CLI itself loads its package (over 200 MB) from `%LOCALAPPDATA%\copilot\pkg` on Windows at every start. If your antivirus skips only your projects folder, move the package there: run `setx COPILOT_PKG_CACHE_HOME "<projects folder>\.copilot-pkg"`, then Quit Trackwall from the tray and start it again. Copilot CLI unpacks itself there on its next start, and the folder does not show up as a repo.
 - Behind a proxy, Trackwall adds `127.0.0.1` to `NO_PROXY` for its sessions, so the agent reaches Trackwall's tools on your computer directly. Programs the agent runs see that value too.
 - The notifications appear under "Trackwall" in the notification settings of Windows and macOS, where you can turn them off.
