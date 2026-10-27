@@ -13,6 +13,7 @@ export interface FakeHostingConfig {
   apiResponses?: Record<string, unknown>;
   cloneErrors?: Record<string, string>;
   cloneDelayMs?: number;
+  authErrors?: Record<string, string>;
 }
 
 const Call = z.object({ args: z.array(z.string()), env: z.record(z.string(), z.string().optional()) });

@@ -526,6 +526,10 @@ _Avoid_: exception (only one kind of error), problem (that is the repo card and 
 Trackwall's own errors on this computer: the daemon's unexpected errors, the UI's and the desktop shell's, in `logs/errors.json` (ADR-94). Each is a **Trackwall error** (`TrackwallError`): source (`daemon`, `shell`, `ui`), area, kind, anonymized message, frames in Trackwall's code, count. Do not confuse with an error from logs (`LogError`), which comes from the output of the user's processes.
 _Avoid_: crash log, telemetry, bug report (nothing is sent)
 
+**Doctor** (`Doctor`, the `doctor` module, `doctorApi`; in the UI *Doctor* in Settings):
+The checks of what Trackwall needs on this computer: the projects folder, git, Copilot CLI and its trusted folders, mise, `gh` and `glab` signed in to the repo hosts (ADR-101). Each is a **doctor check** (`DoctorCheck`) with a state (`ok`, `warn`, `fail`), what was found and what to do. It only reads.
+_Avoid_: health check (that is `GET /api/health`), diagnostics, setup wizard
+
 **Anonymization** (`anonymize`):
 Replacing what names the computer, its user or their repos in a Trackwall error's message (paths, user and computer names, repo names, hosts, addresses, token shapes) with a label such as `<projects>` or `<host>`, before it is saved (ADR-94). Do not confuse with masking, which hides secret values in process output.
 

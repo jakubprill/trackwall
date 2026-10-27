@@ -3,6 +3,7 @@ import {
   batchApi,
   cardsApi,
   dayStartApi,
+  doctorApi,
   type Endpoint,
   errorJournalApi,
   graphApi,
@@ -71,6 +72,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(cardsApi.tags, (f) => f.cards.tags()),
   route(cardsApi.warmup, (f) => f.cards.warmupProgress()),
   route(graphApi.graph, (f) => f.graph.graph()),
+  route(doctorApi.run, (f) => f.doctor.run()),
   route(errorJournalApi.errors, (f) => f.errorJournal.list()),
   route(errorJournalApi.recordUiError, (f, b) => {
     f.errorJournal.recordUiError(b);

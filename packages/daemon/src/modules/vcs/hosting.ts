@@ -8,10 +8,10 @@ import {
   type RepoHost,
   type RepoHostKind,
 } from "@trackwall/protocol";
+import { runProgram } from "../../infra/run-program.ts";
 import { gitEnv } from "./git.ts";
 import { findMergeRequest, mergeRequestFormUrl } from "./hosted-merge-request.ts";
 import { githubApi, gitlabApi, type HostingApi } from "./hosted-repo.ts";
-import { runProgram } from "./run.ts";
 
 /**
  * Repo hosts in the `vcs` module (§4.5, ADR-19): the list of repos available to the user, a clone of the chosen one and the
@@ -91,6 +91,11 @@ export class Hosting {
   mergeRequest(project: HostedProject, branch: string): Promise<MergeRequest | null> {
     const host = { kind: project.kind, host: project.host };
     return findMergeRequest((path, schema) => this.api(host, path, (json) => schema.parse(json)), project, branch);
+  }
+
+  /** Resolves when `gh` or `glab` is signed in to `host` (`auth status` ends with 0); the doctor asks it (ADR-101). */
+  async signedIn(host: RepoHost, timeoutMs: number): Promise<void> {
+    await this.run(host, ["auth", "status", "--hostname", host.host], timeoutMs);
   }
 
   /** A failed fetch does not stay in memory, so "Try again" after signing in asks the repo host anew. */

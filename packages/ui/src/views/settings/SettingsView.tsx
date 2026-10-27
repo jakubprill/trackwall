@@ -7,6 +7,7 @@ import type { AppUpdateHandle } from "@/lib/use-app-update";
 import { cn } from "@/lib/utils";
 import { ConnectCopilotSurface } from "./ConnectCopilotSurface.tsx";
 import { DaemonSurface } from "./DaemonSurface.tsx";
+import { DoctorSurface } from "./DoctorSurface.tsx";
 import { ErrorJournalSurface } from "./ErrorJournalSurface.tsx";
 import { LocalConfigStoreSurface } from "./LocalConfigStoreSurface.tsx";
 import { RepoHostsSurface } from "./RepoHostsSurface.tsx";
@@ -81,6 +82,8 @@ function Section({ section, conn, update, warmupLive, onRetry, onSaved }: Settin
       return <UpdatesSurface handle={update} />;
     case "daemon":
       return <DaemonSurface conn={conn} warmupLive={warmupLive} onRetry={onRetry} />;
+    case "doctor":
+      return <DoctorSurface conn={conn} />;
     case "trackwall-errors":
       return <ErrorJournalSurface conn={conn} />;
   }

@@ -1,12 +1,16 @@
 import { join } from "node:path";
 import { SERVICE_RELEASE_MS } from "@trackwall/protocol";
 import { vscodeUrl } from "./infra/editor-url.ts";
+import { DomainError } from "./infra/errors.ts";
+import { runProgram } from "./infra/run-program.ts";
 import { Agents, type AgentsDeps } from "./modules/agents/agents.ts";
+import { resolveCopilot } from "./modules/agents/copilot-command.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { CardCache } from "./modules/cards/card-cache.ts";
 import { Cards } from "./modules/cards/cards.ts";
 import { DayStart } from "./modules/day-start/day-start.ts";
 import { DayStartFile } from "./modules/day-start/day-start-file.ts";
+import { Doctor } from "./modules/doctor/doctor.ts";
 import { ErrorJournal } from "./modules/error-journal/error-journal.ts";
 import type { ErrorJournalWorkspace } from "./modules/error-journal/known-values.ts";
 import { Graph } from "./modules/graph/graph.ts";
@@ -53,6 +57,8 @@ export interface Facade {
   dayStart: DayStart;
   /** Trackwall's own errors from the daemon, the shell and the UI, anonymized, on this computer only (ADR-94). */
   errorJournal: ErrorJournal;
+  /** Checks of what Trackwall needs on this computer, each with what to do when it fails (ADR-101). */
+  doctor: Doctor;
   /**
    * Opens a link from a README in the system (ADR-35): an `http` or `https` address checked by the `ExternalLink` schema.
    * It belongs to no module, because it concerns neither a repo nor the daemon's state.
@@ -193,6 +199,23 @@ export function createFacade(o: FacadeOptions): Facade {
     log: o.log,
   });
   const errorJournal = createErrorJournal({ ...o, workspace });
+  const doctor = new Doctor({
+    env: o.userEnv,
+    run: async (command, args, { env, timeoutMs }) =>
+      (await runProgram(command, args, { label: `${command} ${args.join(" ")}`, env, timeoutMs })).stdout.toString("utf8"),
+    gitVersion: (timeoutMs) => vcs.version(timeoutMs),
+    signedIn: (host, timeoutMs) => hosting.signedIn(host, timeoutMs),
+    resolveCopilot: (env) => resolveCopilot(o.copilotCommand, env),
+    mise: o.miseCommand,
+    // Not set yet is a state the doctor reports; a broken `workspace.yaml` is an error it shows as one.
+    projectsDir: () =>
+      workspace.projectsDir().catch((err: unknown) => {
+        if (err instanceof DomainError && err.code === "bad_request") return null;
+        throw err;
+      }),
+    repoHosts: () => workspace.repoHosts(),
+    now: () => new Date(),
+  });
   return {
     workspace,
     repoWatch,
@@ -210,6 +233,7 @@ export function createFacade(o: FacadeOptions): Facade {
     mergeRequests,
     dayStart,
     errorJournal,
+    doctor,
     openLink: o.openUrl,
   };
 }
