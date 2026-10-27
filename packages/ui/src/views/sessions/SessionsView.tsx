@@ -513,6 +513,9 @@ function SelectedEntry({
         currentSelection={currentSelection}
         onSessionClosed={onSessionClosed}
         onTaskRemoved={onTaskRemoved}
+        sessions={sessions}
+        messages={messages}
+        runningLive={runningLive}
       />
     </>
   );

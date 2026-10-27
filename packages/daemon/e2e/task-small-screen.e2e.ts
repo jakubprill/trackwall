@@ -33,6 +33,8 @@ describe("a small screen", () => {
     if (session === undefined) throw new Error("the task has no session");
     const agent = await trackwall().agentOf(session.id);
     await agent.callTool({ name: "report_result", arguments: { summary: SUMMARY } });
+    await page.getByRole("list", { name: "Task notices" }).getByText("Summary").waitFor();
+    await page.getByRole("button", { name: "Details" }).click();
     await agent.callTool({ name: "run_mise_task", arguments: { repo: "shop", task: session.task, miseTask: "dev" } });
     await page.getByRole("region", { name: "mise tasks in this worktree" }).getByText("dev").waitFor();
     const summary = page.getByRole("region", { name: "Summary from the task session" });

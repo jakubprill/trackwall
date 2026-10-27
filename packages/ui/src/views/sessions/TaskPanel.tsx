@@ -1,6 +1,6 @@
 import { agentsApi, type RunningMiseTask, type Session, TASK_PORT_ENV, type Task, type TaskMessage } from "@trackwall/protocol";
 import { Code, GitBranch, Play, Plug, Square, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { SessionTerminal } from "@/components/SessionTerminal";
 import { StatusLabel } from "@/components/StatusLabel";
 import { TabBar } from "@/components/TabBar";
@@ -12,33 +12,23 @@ import { relativeTime } from "@/lib/format";
 import { proposerLabel, taskName } from "@/lib/session-entries";
 import { isLive, sessionStateLabel } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
-import { useTaskMergeRequest } from "@/lib/use-task-merge-request";
+import { useTaskDetails } from "@/lib/use-task-details";
 import { useTaskReview } from "@/lib/use-task-review";
-import { useTaskVerification } from "@/lib/use-task-verification";
-import { SharedFiles } from "./SharedFiles.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
-import { TaskIncludedFiles } from "./TaskIncludedFiles.tsx";
-import { TaskMergeRequest } from "./TaskMergeRequest.tsx";
-import { TaskMessages } from "./TaskMessages.tsx";
-import { TaskMiseConfig } from "./TaskMiseConfig.tsx";
-import { TaskMiseRuns } from "./TaskMiseRuns.tsx";
+import { scrollToSection, TaskDetails } from "./TaskDetails.tsx";
+import { TaskNoticeStrip } from "./TaskNotices.tsx";
 import { TaskRemoval } from "./TaskRemoval.tsx";
-import { TaskSummary } from "./TaskSummary.tsx";
-import { TaskVerification, VerifyButton } from "./TaskVerification.tsx";
+import { VerifyButton } from "./TaskVerification.tsx";
 
 type TaskTab = "terminal" | "changes";
 
 /**
- * The selected task (ADR-31): title or prompt, branch and session state in the header, the session terminal and the
- * worktree changes in tabs. A task from a proposal says who proposed it, and the summary from the task session (ADR-39)
- * sits above the tabs. A task without a running session can be resumed or ended; the worktree always opens in VS Code.
- * The warnings about files another task also changes (ADR-44) and about a changed mise config of the worktree (ADR-59)
- * sit above the summary, and the mise tasks the agent runs in the worktree below it. The header shows the task port, and
- * the files copied from the repo root into the worktree come first (ADR-61). The review comments written in the
- * "Changes" tab live here, so that switching tabs keeps them (ADR-62). The Verify button in the header runs the
- * task's tests, and the verdict sits below the summary (ADR-64), followed by the task's way to a merge request: its push,
- * the repo host's form and the merge request with its pipeline (ADR-77). The messages the task's proposer sent its
- * session sit above the summary (ADR-68).
+ * The selected task (ADR-31): title or prompt, branch, task port and session state in the header, the session terminal
+ * and the worktree changes in tabs. A task from a proposal says who proposed it. A task without a running session can
+ * be resumed or ended; the worktree always opens in VS Code, and the Verify button runs the task's tests (ADR-64).
+ * What the task has to say above its terminal (`TaskDetails`: warnings, messages, summary, verification, merge
+ * request, mise tasks) is folded into one strip of notices that "Details" unfolds (ADR-91), so the terminal keeps the
+ * panel's height. The review comments written in the "Changes" tab live here, so that switching tabs keeps them (ADR-62).
  */
 export function TaskPanel({
   conn,
@@ -72,8 +62,9 @@ export function TaskPanel({
   const [removing, setRemoving] = useState(false);
   const review = useTaskReview(conn, task.id);
   const confirmingRemoval = removing && !liveSession;
-  const verification = useTaskVerification(conn, task.id, confirmingRemoval);
-  const mergeRequest = useTaskMergeRequest(conn, task.id, confirmingRemoval);
+  const details = useTaskDetails({ conn, task, tasks, messages, runningLive, paused: confirmingRemoval });
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const detailsArea = useRef<HTMLElement>(null);
   const resume = useAction(
     () => post(conn, agentsApi.resumeTask, { task: task.id }),
     () => {
@@ -124,7 +115,7 @@ export function TaskPanel({
         </div>
         {error && <span className="text-destructive max-w-xs truncate text-xs">{error}</span>}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <VerifyButton state={verification} disabled={confirmingRemoval} />
+          <VerifyButton state={details.verification} disabled={confirmingRemoval} />
           <Button variant="outline" size="sm" onClick={openEditor.run} disabled={openEditor.pending}>
             <Code /> VS Code
           </Button>
@@ -143,23 +134,21 @@ export function TaskPanel({
         </div>
       </header>
       {confirmingRemoval && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
+      <TaskNoticeStrip
+        notices={details.notices}
+        open={detailsOpen}
+        onToggle={() => setDetailsOpen(!detailsOpen)}
+        onOpen={(section) => {
+          setDetailsOpen(true);
+          scrollToSection(detailsArea.current, section);
+        }}
+      />
       {/* At most a third of the panel, scrolling beyond it: on a small screen the sections would leave the terminal a few
           lines, and Copilot CLI cuts a dialog taller than its terminal. */}
-      <section aria-label="Task details" className="max-h-1/3 shrink-0 overflow-y-auto">
-        <TaskIncludedFiles included={task.included} />
-        <SharedFiles conn={conn} task={task.id} tasks={tasks} paused={confirmingRemoval} onOpenTask={onOpenTask} />
-        <TaskMiseConfig conn={conn} task={task.id} paused={confirmingRemoval} />
-        <TaskMessages messages={messages} sessions={sessions} />
-        {task.summary && <TaskSummary summary={task.summary} />}
-        <TaskVerification conn={conn} state={verification} />
-        <TaskMergeRequest conn={conn} task={task} verification={verification.verification} state={mergeRequest} />
-        <TaskMiseRuns
-          conn={conn}
-          task={task.id}
-          live={runningLive}
-          paused={confirmingRemoval}
-          shownElsewhere={verification.runningMiseTask}
-        />
+      {/* Hidden rather than unmounted when folded, so that a section keeps what the user did in it (the mise config shown
+          for trust, an open log). */}
+      <section ref={detailsArea} hidden={!detailsOpen} aria-label="Task details" className="max-h-1/3 shrink-0 overflow-y-auto">
+        <TaskDetails conn={conn} task={task} details={details} sessions={sessions} onOpenTask={onOpenTask} />
       </section>
       <div className="px-4">
         <TabBar tabs={tabs} active={shown} onSelect={setTab} />
