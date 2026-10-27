@@ -179,9 +179,15 @@ fn sidecar_path() -> Result<PathBuf, String> {
     }
 }
 
+/// The log of the daemon started before the current one, next to `daemon-start.log`.
+const PREVIOUS_START_LOG: &str = "daemon-start.prev.log";
+
 fn spawn_sidecar(home: &Path, log_path: &Path) -> Result<Child, String> {
     let exe = sidecar_path()?;
     fs::create_dir_all(log_path.parent().unwrap_or(home)).map_err(|e| format!("{}: {e}", log_path.display()))?;
+    // The previous daemon's log is kept once: when it ended in a way it could not write into the error journal (killed,
+    // a crash of the runtime), its last lines are still there (ADR-94).
+    let _ = fs::rename(log_path, log_path.with_file_name(PREVIOUS_START_LOG));
     let log = File::create(log_path).map_err(|e| format!("{}: {e}", log_path.display()))?;
     let log_err = log.try_clone().map_err(|e| e.to_string())?;
 

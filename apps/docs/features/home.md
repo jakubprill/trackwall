@@ -22,7 +22,7 @@ See your whole environment in one 3D view, with everything that needs you in one
 
 The "Needs you" queue on the left lists what waits for you: sessions, repos and [task proposals](/features/main-session). A session shows its window title next to the repo, so two sessions of one repo can be told apart. A session whose finished turn you have already seen turns calm grey and leaves the queue.
 
-Click an object to select it and turn the camera to it; the panel on the right shows its details: state, branch, running mise task, the repo's sessions. A session asking for approval shows the request there too, and you can [answer it](/features/approvals) without leaving Home. Double-click, or use "Open repo", "Open session" or "Open Daemon", to go to its view. With nothing selected, the panel summarises the whole environment.
+Click an object to select it and turn the camera to it; the panel on the right shows its details: state, branch, running mise task, the repo's sessions. A session asking for approval shows the request there too, and you can [answer it](/features/approvals) without leaving Home. Double-click, or use "Open repo", "Open session" or "Open Diagnostics", to go to its view; "Open Diagnostics" opens "Settings > Diagnostics". With nothing selected, the panel summarises the whole environment.
 
 ## Use it
 

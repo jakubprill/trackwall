@@ -12,7 +12,7 @@ Once connected, an agent can answer questions like "Which repos are in my projec
 ## Connect
 
 1. Start Trackwall.
-2. Open the "Daemon" view (Ctrl+9) and copy the command shown there. It is ready for your installation and looks like this:
+2. Open "Settings > Agents" (Ctrl+, or ⌘, on macOS) and copy the command shown there. It is ready for your installation and looks like this:
 
    ```sh
    copilot mcp add trackwall -- /Applications/Trackwall.app/Contents/MacOS/trackwall-daemon mcp-stdio                     # macOS
@@ -24,7 +24,7 @@ Once connected, an agent can answer questions like "Which repos are in my projec
 
 ## Good to know
 
-- The command adds a `trackwall` entry to `~/.copilot/mcp-config.json` (on Windows `%USERPROFILE%\.copilot\mcp-config.json`). The "Daemon" view also shows the entry as JSON, in case you prefer to paste it there by hand.
+- The command adds a `trackwall` entry to `~/.copilot/mcp-config.json` (on Windows `%USERPROFILE%\.copilot\mcp-config.json`). "Settings > Agents" also shows the entry as JSON, in case you prefer to paste it there by hand.
 - The entry holds no password or token: it finds the running Trackwall by itself, so it keeps working after a restart.
 - Trackwall must be running before a Copilot CLI session starts, because Copilot CLI connects to its MCP servers when a session starts.
 - Trackwall also tells the agent when to reach for which tool. Sessions started from "Sessions" get this guidance with their [session instructions](/features/session-instructions); in a session you start yourself, Copilot CLI uses it only when started as `copilot --allow-all-mcp-server-instructions`, which accepts it from every connected MCP server.

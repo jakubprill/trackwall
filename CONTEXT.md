@@ -17,8 +17,12 @@ A newer version of Trackwall from GitHub Releases, installed by the shell after 
 _Avoid_: upgrade, sync (that is the repo synchronization)
 
 **View** (`View`):
-A screen of the app in the UI (Home, Repos, Sessions, Overview, Daemon, Settings), switched with the view bar (`ActivityBar`) at the left edge of the window or with a shortcut.
+A screen of the app in the UI (Home, Repos, Sessions, Overview, Settings), switched with the view bar (`ActivityBar`) at the left edge of the window or with a shortcut.
 _Avoid_: tab (for a whole screen)
+
+**Settings category** (`SettingsCategory`, `SETTINGS_CATEGORIES`; its sections `SettingsSection`):
+A group of Settings listed on the left of the Settings view: Workspace, Repo hosts, Agents, App and Diagnostics (ADR-102). Each holds a few sections, such as the projects folder or the daemon's state.
+_Avoid_: tab (that is `TabBar`), page
 
 **Tab** (`TabBar`):
 A switch for part of the content inside a view, for example README, Files, Commits and mise tasks in the Repos view.
@@ -517,6 +521,13 @@ _Avoid_: console, terminal (that is a task session's PTY)
 **Error** (error from logs, `LogError`, MCP tool `get_errors`):
 A record at `error` (or `warn`) level or an exception header together with the lines that belong to it (stack trace, `Caused by:`, a Spring or Gradle report), from one source, run and stream. The same error repeated in a source is one error with a count (`count`); `exception` is its cause (ADR-42).
 _Avoid_: exception (only one kind of error), problem (that is the repo card and the graph), incident
+
+**Error journal** (`ErrorJournal`, the `error-journal` module, `errorJournalApi`; in the UI *Trackwall errors* in Settings):
+Trackwall's own errors on this computer: the daemon's unexpected errors, the UI's and the desktop shell's, in `logs/errors.json` (ADR-94). Each is a **Trackwall error** (`TrackwallError`): source (`daemon`, `shell`, `ui`), area, kind, anonymized message, frames in Trackwall's code, count. Do not confuse with an error from logs (`LogError`), which comes from the output of the user's processes.
+_Avoid_: crash log, telemetry, bug report (nothing is sent)
+
+**Anonymization** (`anonymize`):
+Replacing what names the computer, its user or their repos in a Trackwall error's message (paths, user and computer names, repo names, hosts, addresses, token shapes) with a label such as `<projects>` or `<host>`, before it is saved (ADR-94). Do not confuse with masking, which hides secret values in process output.
 
 **`seq`**:
 A global, increasing record number for all sources; every daemon run starts from the moment of its start, so numbers do not repeat. The cursor (`sinceSeq` in the API and in MCP tools) works for one source and for the whole workspace; `dropped` says that some records after the cursor were lost.

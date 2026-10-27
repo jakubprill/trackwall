@@ -23,7 +23,7 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 
 ## Use it
 
-1. Connect Copilot CLI once, with the command from the "Daemon" view.
+1. Connect Copilot CLI once, with the command from "Settings > Agents".
 2. Ask the agent things like "which repos call orders-api?" or "start the shop with its dependencies and call /api/orders".
 
 ## Tools

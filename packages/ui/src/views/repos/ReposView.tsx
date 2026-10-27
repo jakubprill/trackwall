@@ -10,6 +10,7 @@ import type { Connection } from "@/lib/connection";
 import { relativeTime, twoDigits } from "@/lib/format";
 import { branchLabel, listNeedsSettings, repoStatusTone } from "@/lib/repo-status";
 import { REPO_LIST_PACE } from "@/lib/repo-watch";
+import type { SettingsCategory } from "@/lib/settings-categories";
 import { statusTextClass } from "@/lib/status-tone";
 import { listSyncBadge, type SyncBadge, syncedByPath } from "@/lib/sync-state";
 import { type BatchRunHandle, useBatchRun } from "@/lib/use-batch-run";
@@ -40,7 +41,7 @@ export function ReposView({
   /** Commits and repos added to the folder (ADR-63): the list is fetched again at once. */
   repoWatch: RepoWatchHandle;
   onRetry: () => void;
-  onOpenSettings: () => void;
+  onOpenSettings: (category: SettingsCategory) => void;
 }) {
   const [selected, setSelected] = useState(initialRepo);
   const [panel, setPanel] = useState<Panel>("repo");
@@ -69,7 +70,7 @@ export function ReposView({
             <Button variant="ghost" size="icon" onClick={() => setPanel("clone")} aria-label="Add a repo from GitLab or GitHub">
               <Plus />
             </Button>
-            <Button variant="ghost" size="icon" onClick={onOpenSettings} aria-label="Change the projects folder">
+            <Button variant="ghost" size="icon" onClick={() => onOpenSettings("workspace")} aria-label="Change the projects folder">
               <FolderOpen />
             </Button>
             <Button variant="ghost" size="icon" onClick={list.reload} aria-label="Refresh the repo list">
@@ -91,11 +92,13 @@ export function ReposView({
                   list.reload();
                 }}
               >
-                {needsSettings && <ChangeProjectsDir onClick={onOpenSettings} />}
+                {needsSettings && <ChangeProjectsDir onClick={() => onOpenSettings("workspace")} />}
               </ErrorWithRetry>
             </div>
           )}
-          {list.data && !list.error && <EmptyList list={list.data} onOpenSettings={onOpenSettings} onClone={() => setPanel("clone")} />}
+          {list.data && !list.error && (
+            <EmptyList list={list.data} onOpenSettings={() => onOpenSettings("workspace")} onClone={() => setPanel("clone")} />
+          )}
           <NoTagMatch shown={repos.length} all={allRepos.length} />
           {repos.map((repo, i) => (
             <RepoListItem

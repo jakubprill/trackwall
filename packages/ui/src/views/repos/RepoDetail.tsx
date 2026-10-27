@@ -10,6 +10,7 @@ import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { TRUNCATED_NOTE } from "@/lib/format";
 import { FILE_MANAGER } from "@/lib/platform";
+import { REPO_TABS, type RepoTab } from "@/lib/repo-tabs";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { PlainReadme, ReadmeFallback } from "./ReadmeFallback.tsx";
 import { RepoCardView } from "./RepoCardView.tsx";
@@ -22,18 +23,8 @@ import { RepoStats } from "./RepoStats.tsx";
 /** Streamdown with Mermaid is a few MB, so it goes into a separate file loaded only with the first README. */
 const ReadmeMarkdown = lazy(() => import("./ReadmeMarkdown.tsx").then((m) => ({ default: m.ReadmeMarkdown })));
 
-const TABS = [
-  { id: "readme", label: "README" },
-  { id: "card", label: "Card" },
-  { id: "files", label: "Files" },
-  { id: "commits", label: "Commits" },
-  { id: "changes", label: "Changes" },
-  { id: "mise", label: "mise tasks" },
-] as const;
-type Tab = (typeof TABS)[number]["id"];
-
 export function RepoDetail({ conn, repo }: { conn: Connection; repo: Repo }) {
-  const [tab, setTab] = useState<Tab>("readme");
+  const [tab, setTab] = useState<RepoTab>(REPO_TABS[0].id);
   const { status } = repo;
   const available = status.kind === "ok";
   // A new commit (for example from a terminal) changes HEAD in the polled list, and that fetches the overview and the tree anew.
@@ -57,13 +48,13 @@ export function RepoDetail({ conn, repo }: { conn: Connection; repo: Repo }) {
       ) : (
         <>
           <RepoStats status={status} onShowChanges={() => setTab("changes")} />
-          <TabBar tabs={TABS} active={tab} onSelect={setTab} />
-          {tab === "readme" && <Loaded remote={overview}>{(o) => <Readme conn={conn} readme={o.readme} />}</Loaded>}
-          {tab === "commits" && <Loaded remote={overview}>{(o) => <RepoCommits commits={o.commits} />}</Loaded>}
-          {tab === "changes" && <RepoChanges conn={conn} repo={repo.id} refreshKey={head} />}
+          <TabBar tabs={REPO_TABS} active={tab} onSelect={setTab} />
           {tab === "card" && <RepoCardView conn={conn} repo={repo.id} head={head} />}
           {tab === "files" && <RepoFiles conn={conn} repo={repo.id} head={head} />}
+          {tab === "commits" && <Loaded remote={overview}>{(o) => <RepoCommits commits={o.commits} />}</Loaded>}
+          {tab === "changes" && <RepoChanges conn={conn} repo={repo.id} refreshKey={head} />}
           {tab === "mise" && <RepoMiseTasks conn={conn} repo={repo.id} />}
+          {tab === "readme" && <Loaded remote={overview}>{(o) => <Readme conn={conn} readme={o.readme} />}</Loaded>}
         </>
       )}
     </div>

@@ -4,6 +4,7 @@ import {
   cardsApi,
   dayStartApi,
   type Endpoint,
+  errorJournalApi,
   graphApi,
   localConfigApi,
   logsApi,
@@ -70,6 +71,15 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(cardsApi.tags, (f) => f.cards.tags()),
   route(cardsApi.warmup, (f) => f.cards.warmupProgress()),
   route(graphApi.graph, (f) => f.graph.graph()),
+  route(errorJournalApi.errors, (f) => f.errorJournal.list()),
+  route(errorJournalApi.recordUiError, (f, b) => {
+    f.errorJournal.recordUiError(b);
+    return null;
+  }),
+  route(errorJournalApi.clear, (f) => {
+    f.errorJournal.clear();
+    return null;
+  }),
   route(localConfigApi.store, (f) => f.localConfig.store()),
   route(localConfigApi.repo, (f, b) => f.localConfig.repo(b.repo)),
   route(localConfigApi.restore, (f, b) => f.localConfig.restore(b.repo)),
