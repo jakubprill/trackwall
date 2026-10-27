@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { countLabel } from "@trackwall/protocol";
 import { z } from "zod";
 import { formatBytes } from "./format.ts";
 
@@ -68,11 +69,19 @@ export interface Installing {
   firstData?: { at: number; downloaded: number };
 }
 
+/** A newer version found by the last check; `afterTurns` once the user chose to install it when no agent is in a turn (ADR-97). */
+export interface Available {
+  state: "available";
+  currentVersion: string;
+  version: string;
+  afterTurns: boolean;
+}
+
 export type AppUpdate =
   | { state: "idle" }
   | { state: "checking" }
   | { state: "latest"; currentVersion: string }
-  | { state: "available"; currentVersion: string; version: string }
+  | Available
   | { state: "check-failed"; message: string }
   | Installing
   | { state: "install-failed"; version: string; message: string };
@@ -81,6 +90,8 @@ export type UpdateEvent =
   | { kind: "check-started" }
   | { kind: "checked"; result: UpdateCheck }
   | { kind: "check-failed"; message: string }
+  | { kind: "wait-started" }
+  | { kind: "wait-cancelled" }
   | { kind: "install-started"; version: string; at: number }
   | { kind: "progress"; progress: InstallStage; at: number }
   | { kind: "install-failed"; message: string };
@@ -95,12 +106,12 @@ export function nextUpdate(update: AppUpdate, event: UpdateEvent): AppUpdate {
     case "check-started":
       return keep ? update : { state: "checking" };
     case "checked":
-      if (update.state === "installing") return update;
-      return event.result.available
-        ? { state: "available", currentVersion: event.result.currentVersion, version: event.result.available }
-        : { state: "latest", currentVersion: event.result.currentVersion };
+      return checked(update, event.result);
     case "check-failed":
       return keep ? update : { state: "check-failed", message: event.message };
+    case "wait-started":
+    case "wait-cancelled":
+      return update.state === "available" ? { ...update, afterTurns: event.kind === "wait-started" } : update;
     case "install-started":
       return { state: "installing", version: event.version, stage: { stage: "connecting" }, lastDataAt: event.at };
     case "progress":
@@ -110,9 +121,50 @@ export function nextUpdate(update: AppUpdate, event: UpdateEvent): AppUpdate {
   }
 }
 
+/**
+ * A check's result, which an install under way ignores. The version follows the check, as the shell installs only the
+ * update found last; an update waiting for the agents' turns keeps waiting for the newer one.
+ */
+function checked(update: AppUpdate, result: UpdateCheck): AppUpdate {
+  if (update.state === "installing") return update;
+  const afterTurns = update.state === "available" && update.afterTurns;
+  return result.available
+    ? { state: "available", currentVersion: result.currentVersion, version: result.available, afterTurns }
+    : { state: "latest", currentVersion: result.currentVersion };
+}
+
 /** "Trackwall 0.3.1 is available (you have 0.3.0). Restarting stops…" */
 export function availableText(update: { currentVersion: string; version: string }): string {
   return `Trackwall ${update.version} is available (you have ${update.currentVersion}). ${RESTART_WARNING}`;
+}
+
+/**
+ * The version to install now because the update waited for the agents' turns and the last one has ended; `undefined`
+ * otherwise, also while the session list has not loaded (`agentsInTurn` is `undefined`).
+ */
+export function dueAfterTurns(update: AppUpdate, agentsInTurn: number | undefined): string | undefined {
+  return update.state === "available" && update.afterTurns && agentsInTurn === 0 ? update.version : undefined;
+}
+
+/** A button of the update offer: install now, wait for the agents' turns, or take the waiting back. */
+export type OfferAction = "restart" | "after-turns" | "now" | "cancel-waiting";
+
+/**
+ * What the offer of an available update says and which buttons it has (ADR-53, ADR-97): "Update and restart" while no
+ * agent is in a turn or the session list is not known, "Update after their turn" and "Update now" while one is, and
+ * "Update now" and "Cancel" once the update waits for them.
+ */
+export function updateOffer(update: Available, agentsInTurn: number | undefined): { text: string; actions: OfferAction[] } {
+  if (update.afterTurns) {
+    const agents =
+      agentsInTurn === undefined
+        ? "the agents finish their"
+        : countLabel(agentsInTurn, { one: "agent finishes its", other: "agents finish their" });
+    return { text: `Trackwall ${update.version} installs once ${agents} turn.`, actions: ["now", "cancel-waiting"] };
+  }
+  if (agentsInTurn === undefined || agentsInTurn === 0) return { text: availableText(update), actions: ["restart"] };
+  const agents = countLabel(agentsInTurn, { one: "agent is", other: "agents are" });
+  return { text: `${availableText(update)} ${agents} in the middle of a turn.`, actions: ["after-turns", "now"] };
 }
 
 function nextStage(update: Installing, stage: InstallStage, at: number): Installing {

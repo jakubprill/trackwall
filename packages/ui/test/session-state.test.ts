@@ -9,7 +9,7 @@ import {
   SUPERVISOR_TARGET,
   type WaitingTarget,
 } from "../src/lib/session-entries.ts";
-import { closeCutsOffTurn, sessionStateLabel } from "../src/lib/session-state.ts";
+import { agentsInTurn, closeCutsOffTurn, sessionStateLabel } from "../src/lib/session-state.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-23T10:00:00Z", pid: 10 } as const;
 
@@ -83,6 +83,21 @@ describe("closing a session", () => {
   test("closes at once when the session is already stopping or has ended", () => {
     expect(closeCutsOffTurn(session("a", change("Working"), { kind: "stopping", runId: "r", startedAt: "", pid: 10 }))).toBe(false);
     expect(closeCutsOffTurn(session("a", change("Working"), exited(1)))).toBe(false);
+  });
+});
+
+describe("agents in the middle of a turn, which an update waits for (ADR-97)", () => {
+  test("counts the running agents that work or ask for approval, not those waiting for a prompt or ended", () => {
+    const sessions = [
+      session("a", change("Working")),
+      waiting("b", change("Approval")),
+      waiting("c", change("Input")),
+      session("d", null),
+      session("e", change("Working"), exited(0)),
+    ];
+
+    expect(agentsInTurn(sessions)).toBe(2);
+    expect(agentsInTurn([])).toBe(0);
   });
 });
 
