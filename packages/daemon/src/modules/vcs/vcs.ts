@@ -23,7 +23,7 @@ import {
   remoteDefaultBranch,
 } from "./commit-range.ts";
 import { ConfigMemo } from "./config-memo.ts";
-import { git } from "./git.ts";
+import { git, gitVersion } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { type GitState, GitStateReader } from "./git-state.ts";
 import { grep, grepFiles } from "./grep.ts";
@@ -71,6 +71,11 @@ export class Vcs {
   private readonly states = new GitStateReader();
   private readonly headCommits = new CommitMemo();
   private readonly configs = new ConfigMemo();
+
+  /** `git --version` of the git the daemon runs (the doctor, ADR-101). */
+  version(): Promise<string> {
+    return gitVersion();
+  }
 
   /**
    * HEAD and refs of every repo read from the files of its git directory, without a `git` process (ADR-63); `null` for a

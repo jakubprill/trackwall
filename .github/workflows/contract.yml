@@ -38,13 +38,13 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           bun-version: ${{ env.BUN_VERSION }}
-      # The binary (113–130 MB packed) is cached under the pinned version, which lives only in scripts/copilot-cli.ts;
+      # The binary (113–130 MB packed) is cached under the pinned version, TESTED_COPILOT_CLI_VERSION in protocol's doctor.ts;
       # another version is downloaded every time, since a new one would not hit the cache anyway.
       - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         if: inputs.copilot-cli == ''
         with:
           path: packages/daemon/node_modules/.cache/copilot-cli
-          key: copilot-cli-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/daemon/scripts/copilot-cli.ts') }}
+          key: copilot-cli-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/daemon/scripts/copilot-cli.ts', 'packages/protocol/src/doctor.ts') }}
       - run: pnpm test:contract
         env:
           TRACKWALL_COPILOT_CLI: ${{ inputs.copilot-cli }}

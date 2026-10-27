@@ -2,11 +2,13 @@ import { join } from "node:path";
 import { SERVICE_RELEASE_MS } from "@trackwall/protocol";
 import { vscodeUrl } from "./infra/editor-url.ts";
 import { Agents, type AgentsDeps } from "./modules/agents/agents.ts";
+import { findCopilot } from "./modules/agents/copilot-command.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { CardCache } from "./modules/cards/card-cache.ts";
 import { Cards } from "./modules/cards/cards.ts";
 import { DayStart } from "./modules/day-start/day-start.ts";
 import { DayStartFile } from "./modules/day-start/day-start-file.ts";
+import { Doctor } from "./modules/doctor/doctor.ts";
 import { ErrorJournal } from "./modules/error-journal/error-journal.ts";
 import type { ErrorJournalWorkspace } from "./modules/error-journal/known-values.ts";
 import { Graph } from "./modules/graph/graph.ts";
@@ -19,6 +21,7 @@ import { RuntimeFile } from "./modules/procs/runtime-file.ts";
 import { Services } from "./modules/services/services.ts";
 import { TestReports } from "./modules/test-results/test-reports.ts";
 import { Hosting, type HostingClis } from "./modules/vcs/hosting.ts";
+import { runProgram } from "./modules/vcs/run.ts";
 import { Vcs } from "./modules/vcs/vcs.ts";
 import { Verifications } from "./modules/verification/verifications.ts";
 import { RepoWatch } from "./modules/workspace/repo-watch.ts";
@@ -53,6 +56,8 @@ export interface Facade {
   dayStart: DayStart;
   /** Trackwall's own errors from the daemon, the shell and the UI, anonymized, on this computer only (ADR-94). */
   errorJournal: ErrorJournal;
+  /** Checks of what Trackwall needs on this computer, each with what to do when it fails (ADR-101). */
+  doctor: Doctor;
   /**
    * Opens a link from a README in the system (ADR-35): an `http` or `https` address checked by the `ExternalLink` schema.
    * It belongs to no module, because it concerns neither a repo nor the daemon's state.
@@ -193,6 +198,19 @@ export function createFacade(o: FacadeOptions): Facade {
     log: o.log,
   });
   const errorJournal = createErrorJournal({ ...o, workspace });
+  const doctor = new Doctor({
+    env: o.userEnv,
+    run: async (command, args, { env, timeoutMs }) =>
+      (await runProgram(command, args, { label: `${command} ${args.join(" ")}`, env, timeoutMs })).stdout.toString("utf8"),
+    gitVersion: () => vcs.version(),
+    signedIn: (host) => hosting.signedIn(host),
+    copilot: o.copilotCommand,
+    findCopilot,
+    mise: o.miseCommand,
+    projectsDir: () => workspace.projectsDir().catch(() => null),
+    repoHosts: () => workspace.repoHosts(),
+    now: () => new Date(),
+  });
   return {
     workspace,
     repoWatch,
@@ -210,6 +228,7 @@ export function createFacade(o: FacadeOptions): Facade {
     mergeRequests,
     dayStart,
     errorJournal,
+    doctor,
     openLink: o.openUrl,
   };
 }

@@ -102,6 +102,17 @@ export async function git(repoDir: string, args: readonly string[], opts: GitOpt
   return short ? LOCAL_CALL_SLOTS.run(call) : call();
 }
 
+/** `git --version` of the git the daemon runs: the doctor shows it (ADR-101). */
+export async function gitVersion(): Promise<string> {
+  const program = await gitProgram();
+  const { stdout } = await runProgram(program.command, ["--version"], {
+    label: "git --version",
+    env: withPathPrefix(gitEnv(), program.pathPrefix),
+    timeoutMs: TIMEOUT_MS,
+  });
+  return stdout.toString("utf8").trim();
+}
+
 /** The full hash of the commit `ref` points to; `undefined` when there is no such commit or git fails. */
 export async function revParse(dir: string, ref: string): Promise<string | undefined> {
   return existingCommit(dir, ref).catch(() => undefined);

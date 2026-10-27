@@ -1,7 +1,8 @@
 /**
  * The real Copilot CLI for the contract tests (ADR-67): the native binary of the pinned version for this system, from
  * the npm registry, checked against the registry's sha512 and kept in `node_modules/.cache`. A newer Copilot CLI comes
- * in a PR that changes `COPILOT_CLI_VERSION` and passes the contract tests on it. `TRACKWALL_COPILOT_CLI` runs them on
+ * in a PR that changes `TESTED_COPILOT_CLI_VERSION` (`packages/protocol/src/doctor.ts`, which the doctor compares the
+ * user's Copilot CLI with) and passes the contract tests on it. `TRACKWALL_COPILOT_CLI` runs them on
  * another version without that PR, as the nightly workflow does with the newest one on npm.
  *
  *   bun packages/daemon/scripts/copilot-cli.ts     # downloads it when missing and prints the binary's path
@@ -12,10 +13,11 @@ import { chmodSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } f
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
+import { TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
 import { z } from "zod";
 
 /** The Copilot CLI version Trackwall is checked against; a download whose `copilot --version` says otherwise is refused. */
-export const COPILOT_CLI_VERSION = "1.0.103";
+export const COPILOT_CLI_VERSION = TESTED_COPILOT_CLI_VERSION;
 
 /** An exact version that replaces the pinned one in the contract tests (`.github/workflows/contract.yml`, from nightly.yml). */
 const VERSION_ENV = "TRACKWALL_COPILOT_CLI";

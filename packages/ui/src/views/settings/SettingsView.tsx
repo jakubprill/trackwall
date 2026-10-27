@@ -7,6 +7,7 @@ import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 import { useRemote } from "@/lib/use-remote";
+import { DoctorSurface } from "./DoctorSurface.tsx";
 import { ErrorJournalSurface } from "./ErrorJournalSurface.tsx";
 import { FolderForm } from "./FolderForm.tsx";
 import { LocalConfigStoreSurface } from "./LocalConfigStoreSurface.tsx";
@@ -105,6 +106,7 @@ export function SettingsView({
       <RepoHostsSurface conn={conn} />
       <StartAtSignInSurface />
       <UpdatesSurface handle={update} />
+      <DoctorSurface conn={conn} />
       <ErrorJournalSurface conn={conn} />
     </div>
   );
