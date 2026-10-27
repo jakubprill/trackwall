@@ -270,7 +270,7 @@ export type TaskMessage = z.infer<typeof TaskMessage>;
  * went into the session's input box (now, or a moment ago for something earlier the session has not taken yet);
  * `queued`, the session is not in its input box (working, asking for approval or a question, interrupted with Esc, the
  * user typing), and the prompt goes in when it next ends a turn; `on_resume`, the task has no running session, and the
- * prompt goes to the session the user resumes.
+ * prompt goes to the session that resumes it (the user, or `resume_task`, ADR-90).
  */
 export const PromptDelivery = z.enum(["typed", "queued", "on_resume"]);
 export type PromptDelivery = z.infer<typeof PromptDelivery>;

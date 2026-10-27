@@ -36,7 +36,7 @@ import { inboxPrompt } from "./inbox-prompt.ts";
 import { LiveSession, type SessionPty, type SessionWindow } from "./live-session.ts";
 import { MiseTrustNotices } from "./mise-trust-notices.ts";
 import { withLoopbackNoProxy } from "./no-proxy.ts";
-import { proposedByOf, proposerKeyOf, SUPERVISOR } from "./proposer.ts";
+import { proposedByOf, proposerKeyOf, proposerOf, SUPERVISOR } from "./proposer.ts";
 import { type SessionRole, withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
@@ -480,6 +480,25 @@ export class Agents {
 
   resumeTask(id: string): Promise<Task> {
     return this.#tasks.resume(id);
+  }
+
+  /**
+   * `resume_task` from session `caller` (`null`: an agent outside Trackwall, the user's program, which resumes any task,
+   * ADR-90): the supervisor resumes any task, a main session only the tasks it proposed, a task session none.
+   * Returns the task and its new session.
+   */
+  async resumeTaskFor(caller: string | null, id: string): Promise<{ task: Task; session: Session }> {
+    const task = this.#tasks.task(id);
+    const session = caller === null ? null : this.session(caller);
+    if (session?.task != null) throw new DomainError("bad_request", `a task session resumes no task; ask the user to resume task ${id}`);
+    if (session && !isSupervisor(session) && proposerOf(task.proposedBy) !== proposerKeyOf(session))
+      throw new DomainError("bad_request", `task ${id} was not proposed by this session; ask the user to resume it`);
+    const resumed = await this.#tasks.resume(id);
+    // Resuming closes the task's ended sessions, so its only session is the new one, running or (when its agent exited
+    // at once or the user stopped it) already ended.
+    const started = this.#views().find((s) => s.task === id);
+    if (!started) throw new Error(`task ${id} has no session after resuming`);
+    return { task: resumed, session: started };
   }
 
   /** A task by identifier (`not_found` when it does not exist or the user ended it). */
