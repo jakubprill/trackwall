@@ -152,12 +152,15 @@ export interface ToolPermissions {
 export const SupervisorSettings = z.object({ changesCode: z.boolean().default(false) }).strict();
 export type SupervisorSettings = z.infer<typeof SupervisorSettings>;
 
+/** An environment variable name Copilot CLI's comma-separated `--secret-env-vars` can carry (ADR-93). */
+export const ENV_VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 /**
  * `agentSecrets` in `workspace.yaml` (ADR-93), by hand only: the secrets from mise that the tools of every session get
  * (its shell commands and the MCP servers Copilot CLI starts), e.g. the token of an issue tracker's MCP server. Every
  * other secret mise sets is hidden from them (`--secret-env-vars`), and mise tasks Trackwall runs get them all.
  */
-export const AgentSecrets = z.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/, "an environment variable name, e.g. JIRA_TOKEN")).max(200);
+export const AgentSecrets = z.array(z.string().regex(ENV_VARIABLE_NAME, "an environment variable name, e.g. JIRA_TOKEN")).max(200);
 export type AgentSecrets = z.infer<typeof AgentSecrets>;
 
 export const WorkspaceSettings = z.object({

@@ -388,7 +388,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
       copilot: ["copilot-that-does-not-exist"],
       version: "0.0.0-test",
       env: async () => ({ PATH: repoDir }),
-      miseEnv: async () => ({ vars: {}, secretNames: [], problem: null }),
+      miseEnv: async () => ({ vars: {}, secretNames: [], secretValues: [], problem: null }),
       sessionHook: () => ({ url: "http://127.0.0.1:9/hooks/unused", headers: {} }),
       sessionMcpServer: () => ({ url: "http://127.0.0.1:9/mcp", headers: {} }),
       openEditor: () => {},

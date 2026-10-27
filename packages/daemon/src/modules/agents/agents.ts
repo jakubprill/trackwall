@@ -41,14 +41,7 @@ import { MiseTrustNotices } from "./mise-trust-notices.ts";
 import { withLoopbackNoProxy } from "./no-proxy.ts";
 import { proposedByOf, proposerKeyOf, proposerOf, SUPERVISOR } from "./proposer.ts";
 import { type ResumableSession, ResumableSessions, type ResumeLaunch, resumablePlace, resumeLaunch } from "./resumable-sessions.ts";
-import {
-  hiddenSecrets,
-  miseSecretValues,
-  type SessionMiseEnv,
-  secretEnvVarsArgs,
-  sessionEnvironment,
-  withMiseVars,
-} from "./session-env.ts";
+import { type SessionMiseEnv, sessionMiseLaunch } from "./session-env.ts";
 import { type SessionRole, withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
@@ -168,10 +161,7 @@ export interface AgentsDeps {
   version: string;
   /** The environment of user processes (`PATH` from the login shell on macOS). */
   env: () => Promise<NodeJS.ProcessEnv>;
-  /**
-   * What mise sets for a session in a task's worktree, a repo root (`task: null`) or the projects folder (`repo: null`),
-   * ADR-93; wired to the `mise` module in the facade.
-   */
+  /** What mise sets for a session in its place (ADR-93); a refused place is its `problem`, not a failed start. */
   miseEnv: (place: { repo: string | null; task: string | null }) => Promise<SessionMiseEnv>;
   /**
    * Where the session plugin's hook for an event POSTs its payload (ADR-88): the daemon's hook route with the daemon token
@@ -669,35 +659,19 @@ export class Agents {
   }
 
   /**
-   * What mise sets for a session in its place (ADR-93). A session starts without it rather than not at all: a broken
-   * mise config or a missing projects folder is the session's `problem`, not a failed start.
-   */
-  async #miseEnv(repo: string | null, task: string | null): Promise<SessionMiseEnv> {
-    try {
-      return await this.#deps.miseEnv({ repo, task });
-    } catch (err) {
-      return { vars: {}, secretNames: [], problem: `mise environment: ${err instanceof Error ? err.message : String(err)}` };
-    }
-  }
-
-  /**
    * Copilot CLI in `cwd` (the repo root or the worktree of task `task`) with arguments before the session's arguments;
    * `promptOnStart` when the arguments carry the first message (`--interactive`), so the session works from the start.
    */
   async #launch({ id = randomUUID(), repo, supervisor, cwd, task, args, promptOnStart, hasConversation }: LaunchSpec): Promise<Session> {
-    const mise = await this.#miseEnv(repo, task);
-    // The MCP server and the hooks are the daemon on `127.0.0.1`, which a proxy of the user must not get (ADR-89).
-    const env = withLoopbackNoProxy({
-      ...withMiseVars(await this.#deps.env(), mise.vars),
-      TERM: "xterm-256color",
-      COLORTERM: "truecolor",
-      ...LOOPBACK_HOOKS_ENV,
-    });
+    const userEnv = await this.#deps.env();
     const [name = "copilot", ...prefix] = this.#deps.copilot;
-    const program = findCopilot(name, env);
+    // The user's `PATH`, not mise's: a mise config an agent can change must not choose the program that gets every secret.
+    const program = findCopilot(name, userEnv);
     if (!program) throw new DomainError("agent_unavailable", `Copilot CLI (${name}) not found in PATH`);
     const permissions = this.#deps.repos.toolPermissions({ repo, supervisor });
-    const hidden = hiddenSecrets(mise, this.#deps.repos.agentSecrets());
+    const mise = sessionMiseLaunch(await this.#deps.miseEnv({ repo, task }), userEnv, this.#deps.repos.agentSecrets());
+    // The MCP server and the hooks are the daemon on `127.0.0.1`, which a proxy of the user must not get (ADR-89).
+    const env = withLoopbackNoProxy({ ...mise.env, TERM: "xterm-256color", COLORTERM: "truecolor", ...LOOPBACK_HOOKS_ENV });
     const role = this.#role(repo, supervisor, task);
     if (this.#sessions.has(id)) throw new Error(`session ${id} is already listed`);
     const dir = sessionDir(this.#deps.home, id);
@@ -714,7 +688,7 @@ export class Agents {
         promptOnStart,
         hasConversation,
         program,
-        environment: sessionEnvironment(mise, hidden),
+        environment: mise.environment,
       });
     } catch (err) {
       this.#tokens.revoke(id);
@@ -733,12 +707,12 @@ export class Agents {
           "--additional-mcp-config",
           `@${join(dir, MCP_CONFIG_FILE)}`,
           ...toolPermissionArgs(permissions),
-          ...secretEnvVarsArgs(hidden),
+          ...mise.args,
           ...args,
         ],
         cwd,
         env: instructionsDir === null ? env : withInstructionsDir(env, instructionsDir),
-        secrets: miseSecretValues(mise),
+        secrets: mise.secretValues,
         cols: INITIAL_COLS,
         rows: INITIAL_ROWS,
         onData: (bytes) => session.output(bytes),

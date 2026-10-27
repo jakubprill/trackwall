@@ -6,14 +6,20 @@ import { type MiseCliResult, miseFailure, runMiseCli } from "./mise-cli.ts";
  * The environment mise sets in a directory (ADR-93): the `[env]` of every mise config from the directory up to the root
  * and the global one, with age-encrypted values decrypted, as `mise env --json` gives it, so a session gets what the
  * user's terminal gets there. The secrets are the variables mise redacts (`mise env --redacted --json`: `redact = true`,
- * `redactions` and every age value) and those whose names say they are secrets (`isSecretName`).
+ * `redactions` and every age value) and those whose names say they are secrets (`isSecretName`). When mise cannot say
+ * which ones it redacts, the environment is not used at all: a decrypted value with an ordinary name would otherwise
+ * reach the agent's tools unhidden and the logs unmasked.
  */
 
-/** What mise sets: variable values by name, and the names among them that are secrets. */
+/** What mise sets: variable values by name, the names among them that are secrets, and those secrets' values (to mask). */
 export interface MiseEnv {
   vars: Record<string, string>;
   secretNames: string[];
+  secretValues: string[];
 }
+
+/** The environment of a place where mise sets nothing. */
+export const NO_MISE_ENV: MiseEnv = { vars: {}, secretNames: [], secretValues: [] };
 
 export type MiseEnvResult =
   | { kind: "ok"; env: MiseEnv }
@@ -31,11 +37,10 @@ export async function readMiseEnv(command: readonly string[], dir: string, env: 
   ]);
   const vars = parseEnvJson(all);
   if (vars.kind !== "ok") return vars;
-  // A mise older than `--redacted` still gives the environment; its secrets are then only the ones named like secrets.
   const hidden = parseEnvJson(redacted);
-  const redactedNames = hidden.kind === "ok" ? hidden.vars : {};
-  const secretNames = Object.keys(vars.vars).filter((name) => Object.hasOwn(redactedNames, name) || isSecretName(name));
-  return { kind: "ok", env: { vars: vars.vars, secretNames } };
+  if (hidden.kind !== "ok") return hidden;
+  const secretNames = Object.keys(vars.vars).filter((name) => Object.hasOwn(hidden.vars, name) || isSecretName(name));
+  return { kind: "ok", env: { vars: vars.vars, secretNames, secretValues: secretNames.map((name) => vars.vars[name] ?? "") } };
 }
 
 function parseEnvJson(result: MiseCliResult): { kind: "ok"; vars: Record<string, string> } | Exclude<MiseEnvResult, { kind: "ok" }> {

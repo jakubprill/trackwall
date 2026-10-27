@@ -39,6 +39,11 @@ function runningSessionOf(task: string): Session {
   return session;
 }
 
+/** `workspace.yaml` with the projects folder and the given lines after it. */
+function workspace(lines = ""): void {
+  writeFileSync(join(daemon.home, "workspace.yaml"), `projectsDir: ${JSON.stringify(daemon.projects)}\n${lines}`);
+}
+
 /** The projects folder's own mise config: the `[env]` of `Dev/mise.toml` in the user's words. */
 function projectsMise(config: object): void {
   writeFileSync(join(daemon.projects, "fake-mise.json"), JSON.stringify({ tasks: [], ...config }));
@@ -49,8 +54,8 @@ describe.skipIf(process.versions.bun === undefined)(
   () => {
     test("a session in a repo root gets its mise variables, its tools only the secrets in agentSecrets, and the daemon masks them all", async () => {
       projectsMise({ env: { SHOP_REGION: "projects-folder" } });
-      writeFileSync(join(daemon.home, "workspace.yaml"), `projectsDir: ${JSON.stringify(daemon.projects)}\nagentSecrets: [JIRA_KEY]\n`);
-      try {
+      workspace("agentSecrets: [JIRA_KEY]\n");
+      {
         const started = await daemon.facade.agents.start("shop");
         const window = viewer(daemon.facade.agents, started.id);
         await waitFor(daemon.facade.agents, started.id, () => window.text().includes("Env MAVEN_OPTS"), "the environment on the screen");
@@ -75,12 +80,12 @@ describe.skipIf(process.versions.bun === undefined)(
         expect(lastLines).toContain("Env MAVEN_OPTS=-Xmx2g");
         expect(lastLines).toContain("Env JIRA_KEY=***");
         expect(lastLines).not.toContain("jira-key-from-age");
-      } finally {
-        writeFileSync(join(daemon.home, "workspace.yaml"), `projectsDir: ${JSON.stringify(daemon.projects)}\n`);
       }
     }, 60_000);
 
     test("without agentSecrets every secret is hidden from the session's tools", async () => {
+      projectsMise({ env: { SHOP_REGION: "projects-folder" } });
+      workspace();
       const started = await daemon.facade.agents.start("shop");
       const window = viewer(daemon.facade.agents, started.id);
       await waitFor(daemon.facade.agents, started.id, () => window.text().includes("Env MAVEN_OPTS"), "the environment on the screen");
@@ -96,6 +101,7 @@ describe.skipIf(process.versions.bun === undefined)(
     test("a session in a repo whose mise config is not trusted gets the projects folder's environment and says why", async () => {
       writeFileSync(join(daemon.projects, "shop", "fake-mise.json"), JSON.stringify({ ...SHOP_MISE, untrusted: true }));
       projectsMise({ env: { SHOP_REGION: "projects-folder" } });
+      workspace();
       try {
         const started = await daemon.facade.agents.start("shop");
         const window = viewer(daemon.facade.agents, started.id);
@@ -104,8 +110,8 @@ describe.skipIf(process.versions.bun === undefined)(
         expect(window.text()).toContain("Env SHOP_REGION=projects-folder");
         expect(window.text()).toContain("Env MAVEN_OPTS=(unset)");
         expect(started.environment.variables).toEqual(["SHOP_REGION"]);
-        expect(started.environment.problem).toContain("shop: mise ERROR Config files in");
-        expect(started.environment.problem).toContain("the session has the environment of the projects folder");
+        expect(started.environment.problem).toContain("the root of shop: mise ERROR Config files in");
+        expect(started.environment.problem).toContain("The session has the environment of the projects folder.");
         window.attachment.detach();
         await daemon.facade.agents.stop(started.id);
       } finally {
@@ -114,6 +120,8 @@ describe.skipIf(process.versions.bun === undefined)(
     }, 60_000);
 
     test("a task's session gets its worktree's environment, and the repo root's once the agent changed the worktree's mise config", async () => {
+      projectsMise({ env: { SHOP_REGION: "projects-folder" } });
+      workspace();
       const task = await daemon.facade.agents.createTask("shop", "use the token");
       const first = runningSessionOf(task.id);
       const firstWindow = viewer(daemon.facade.agents, first.id);
@@ -140,7 +148,7 @@ describe.skipIf(process.versions.bun === undefined)(
       await waitFor(daemon.facade.agents, again.id, () => second.text().includes("Env MAVEN_OPTS"), "the environment on the screen");
       expect(second.text()).toContain("Env SHOP_REGION=repo-root");
       expect(again.environment.problem).toContain("mise.toml");
-      expect(again.environment.problem).toContain("the session has the environment of the repo root");
+      expect(again.environment.problem).toContain("The session has the environment of the root of shop.");
       second.attachment.detach();
       await daemon.facade.agents.stop(again.id);
     }, 60_000);

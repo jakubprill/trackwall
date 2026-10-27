@@ -1,23 +1,61 @@
-import type { SessionEnvironment } from "@trackwall/protocol";
+import { ENV_VARIABLE_NAME, type SessionEnvironment } from "@trackwall/protocol";
 import { envKey } from "../../infra/env-key.ts";
-import { valuesNamed } from "../../infra/secret-name.ts";
 
 /**
  * The environment of a session's Copilot CLI with what mise sets in its place (ADR-93), so the agent, its shell and the
- * MCP servers Copilot CLI starts get the variables and tools the user's terminal gets there. Secrets reach those tools
- * only when the user names them in `agentSecrets`; Copilot CLI hides the rest (`--secret-env-vars`), and the daemon masks
- * them all in what it keeps.
+ * MCP servers Copilot CLI starts get the variables and tools the user's terminal gets there. Secrets reach the shell and
+ * the local MCP servers only when the user names them in `agentSecrets`; Copilot CLI removes the rest from their
+ * environment (`--secret-env-vars`, the shell checked by a contract test), and the daemon masks them all in what it keeps.
+ * This keeps a secret from slipping into a command by accident; it does not stop an agent that runs `mise env` itself (§8).
  */
-
-/** A name Copilot CLI's comma-separated list can carry. */
-const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /** What mise sets for a session (`mise` module, wired in the facade). */
 export interface SessionMiseEnv {
   vars: Record<string, string>;
   secretNames: string[];
+  secretValues: string[];
   /** Why the session got less than its place gives; `null` when nothing is missing. */
   problem: string | null;
+}
+
+/** mise's age key in the user's own environment decrypts every secret, so the agent's tools never get it unasked. */
+const AGE_KEY_ENV = "MISE_AGE_KEY";
+
+/** What a session starts with: its environment, Copilot CLI's argument hiding secrets, the values to mask, the names it shows. */
+export interface SessionMiseLaunch {
+  env: NodeJS.ProcessEnv;
+  args: string[];
+  secretValues: string[];
+  environment: SessionEnvironment;
+}
+
+export function sessionMiseLaunch(mise: SessionMiseEnv, userEnv: NodeJS.ProcessEnv, agentSecrets: readonly string[]): SessionMiseLaunch {
+  // A secret Copilot CLI's list cannot name would reach the tools unhidden, so the session goes without it.
+  const unhideable = mise.secretNames.filter((name) => !ENV_VARIABLE_NAME.test(name));
+  const vars = Object.fromEntries(Object.entries(mise.vars).filter(([name]) => !unhideable.includes(name)));
+  const env = withMiseVars(userEnv, vars);
+  const secrets = mise.secretNames.filter((name) => !unhideable.includes(name)).sort();
+  const ageKey = env[envKey(env, AGE_KEY_ENV)] === undefined ? [] : [AGE_KEY_ENV];
+  const hidden = [...new Set([...secrets, ...ageKey])]
+    .filter((name) => !agentSecrets.includes(name))
+    // The spelling Copilot CLI finds in its environment (`Path` on Windows), which may be the user's rather than mise's.
+    .map((name) => envKey(env, name))
+    .sort();
+  const problems = [
+    mise.problem,
+    ...unhideable.map((name) => `${name} from mise is left out: Copilot CLI cannot hide a variable with that name`),
+  ];
+  return {
+    env,
+    args: hidden.length === 0 ? [] : [`--secret-env-vars=${hidden.join(",")}`],
+    secretValues: mise.secretValues,
+    environment: {
+      variables: Object.keys(vars).sort(),
+      secrets,
+      agentSecrets: secrets.filter((name) => agentSecrets.includes(name)),
+      problem: problems.filter((line) => line !== null).join("\n") || null,
+    },
+  };
 }
 
 /** The user's environment with mise's variables over it, each under the user's spelling of its name (`Path` on Windows). */
@@ -25,35 +63,4 @@ export function withMiseVars(env: NodeJS.ProcessEnv, vars: Record<string, string
   const merged = { ...env };
   for (const [name, value] of Object.entries(vars)) merged[envKey(merged, name)] = value;
   return merged;
-}
-
-/**
- * The secrets hidden from the session's tools: mise's secrets except the ones the user gives agents (`agentSecrets`), sorted
- * so the argument does not change between starts. Copilot CLI keeps them out of its shell commands and the MCP servers it
- * starts, not only out of their output (contract test); a name its comma-separated list cannot carry is left out, but
- * the daemon still masks its value. The user's own environment stays as it is.
- */
-export function hiddenSecrets(mise: SessionMiseEnv, agentSecrets: readonly string[]): string[] {
-  return mise.secretNames.filter((name) => !agentSecrets.includes(name) && VARIABLE_NAME.test(name)).sort();
-}
-
-/** Copilot CLI's argument for the hidden secrets (comma-separated names); none without them. */
-export function secretEnvVarsArgs(names: readonly string[]): string[] {
-  return names.length === 0 ? [] : [`--secret-env-vars=${names.join(",")}`];
-}
-
-/** The values of mise's secrets, which the daemon masks in what it keeps of the session's screen. */
-export function miseSecretValues(mise: SessionMiseEnv): string[] {
-  return valuesNamed(mise.vars, mise.secretNames);
-}
-
-/** What the session shows of its environment: names only, never values. */
-export function sessionEnvironment(mise: SessionMiseEnv, hidden: readonly string[]): SessionEnvironment {
-  const secrets = [...mise.secretNames].sort();
-  return {
-    variables: Object.keys(mise.vars).sort(),
-    secrets,
-    agentSecrets: secrets.filter((name) => !hidden.includes(name)),
-    problem: mise.problem,
-  };
 }

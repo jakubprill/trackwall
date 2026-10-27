@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { hiddenSecrets, secretEnvVarsArgs, sessionEnvironment, withMiseVars } from "../src/modules/agents/session-env.ts";
+import { sessionMiseLaunch, withMiseVars } from "../src/modules/agents/session-env.ts";
 
 describe("a session's environment from mise (ADR-93)", () => {
   test("mise's variables go over the user's, and the user's other variables stay", () => {
@@ -16,27 +16,50 @@ describe("a session's environment from mise (ADR-93)", () => {
     });
   });
 
-  test("Copilot CLI hides mise's secrets from the session's tools, except those in agentSecrets, sorted and only names it can list", () => {
-    const mise = {
-      vars: { JIRA_TOKEN: "j", GITLAB_TOKEN: "g", "ODD,NAME": "v" },
-      secretNames: ["JIRA_TOKEN", "GITLAB_TOKEN", "ODD,NAME"],
-      problem: null,
-    };
-    const hidden = hiddenSecrets(mise, ["JIRA_TOKEN"]);
+  test.skipIf(process.platform !== "win32")("on Windows Copilot CLI hides a secret under the user's spelling of its name", () => {
+    const launch = sessionMiseLaunch(
+      { vars: { GITLAB_TOKEN: "glpat-value" }, secretNames: ["GITLAB_TOKEN"], secretValues: ["glpat-value"], problem: null },
+      { Gitlab_Token: "old" },
+      [],
+    );
 
-    expect(hidden).toEqual(["GITLAB_TOKEN"]);
-    expect(secretEnvVarsArgs(hidden)).toEqual(["--secret-env-vars=GITLAB_TOKEN"]);
-    expect(secretEnvVarsArgs([])).toEqual([]);
+    expect(launch.env).toEqual({ Gitlab_Token: "glpat-value" });
+    expect(launch.args).toEqual(["--secret-env-vars=Gitlab_Token"]);
+  });
+
+  test("Copilot CLI hides mise's secrets from the session's tools, except those in agentSecrets, sorted", () => {
+    const launch = sessionMiseLaunch(
+      {
+        vars: { MAVEN_OPTS: "-Xmx2g", JIRA_TOKEN: "jira-value", GITLAB_TOKEN: "glpat-value", DEPLOY_KEY: "deploy-value" },
+        secretNames: ["JIRA_TOKEN", "GITLAB_TOKEN", "DEPLOY_KEY"],
+        secretValues: ["jira-value", "glpat-value", "deploy-value"],
+        problem: null,
+      },
+      { HOME: "/home/someone" },
+      ["JIRA_TOKEN"],
+    );
+
+    expect(launch.args).toEqual(["--secret-env-vars=DEPLOY_KEY,GITLAB_TOKEN"]);
+    expect(launch.env).toEqual({
+      HOME: "/home/someone",
+      MAVEN_OPTS: "-Xmx2g",
+      JIRA_TOKEN: "jira-value",
+      GITLAB_TOKEN: "glpat-value",
+      DEPLOY_KEY: "deploy-value",
+    });
+    expect(launch.secretValues).toEqual(["jira-value", "glpat-value", "deploy-value"]);
   });
 
   test("the session shows the names of mise's variables, its secrets and those its tools get, never their values", () => {
-    const environment = sessionEnvironment(
+    const { environment } = sessionMiseLaunch(
       {
         vars: { MAVEN_OPTS: "-Xmx2g", GITLAB_TOKEN: "glpat-value", JIRA_TOKEN: "jira-value" },
         secretNames: ["JIRA_TOKEN", "GITLAB_TOKEN"],
+        secretValues: ["jira-value", "glpat-value"],
         problem: null,
       },
-      ["GITLAB_TOKEN"],
+      {},
+      ["JIRA_TOKEN"],
     );
 
     expect(environment).toEqual({
@@ -46,5 +69,25 @@ describe("a session's environment from mise (ADR-93)", () => {
       problem: null,
     });
     expect(JSON.stringify(environment)).not.toContain("glpat-value");
+  });
+
+  test("a secret Copilot CLI's list cannot name is left out of the session, and the session says so", () => {
+    const launch = sessionMiseLaunch(
+      { vars: { "ODD,NAME": "odd-value", REGION: "eu" }, secretNames: ["ODD,NAME"], secretValues: ["odd-value"], problem: null },
+      {},
+      [],
+    );
+
+    expect(launch.env).toEqual({ REGION: "eu" });
+    expect(launch.args).toEqual([]);
+    expect(launch.environment.problem).toBe("ODD,NAME from mise is left out: Copilot CLI cannot hide a variable with that name");
+  });
+
+  test("mise's age key in the user's environment is hidden from the session's tools unless agentSecrets names it", () => {
+    const mise = { vars: {}, secretNames: [], secretValues: [], problem: null };
+
+    expect(sessionMiseLaunch(mise, { MISE_AGE_KEY: "AGE-SECRET-KEY-1" }, []).args).toEqual(["--secret-env-vars=MISE_AGE_KEY"]);
+    expect(sessionMiseLaunch(mise, { MISE_AGE_KEY: "AGE-SECRET-KEY-1" }, ["MISE_AGE_KEY"]).args).toEqual([]);
+    expect(sessionMiseLaunch(mise, {}, []).args).toEqual([]);
   });
 });

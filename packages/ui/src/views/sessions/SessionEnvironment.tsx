@@ -33,7 +33,7 @@ export function SessionEnvironment({ environment }: { environment: Environment |
       {lines.problem && (
         <p className="flex min-w-0 items-start gap-2">
           <TriangleAlert className="text-warning mt-0.5 size-3.5 shrink-0" aria-hidden />
-          <span className="text-muted-foreground">{lines.problem}</span>
+          <span className="text-muted-foreground whitespace-pre-line">{lines.problem}</span>
         </p>
       )}
     </section>

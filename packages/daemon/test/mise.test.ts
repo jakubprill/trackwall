@@ -352,6 +352,7 @@ describe("the environment mise sets (ADR-93)", () => {
     expect(await mise.sessionEnv({ repo: "web", task: null })).toEqual({
       vars: { JIRA_KEY: "k", GITLAB_TOKEN: "t", MAVEN_OPTS: "-Xmx2g" },
       secretNames: ["JIRA_KEY", "GITLAB_TOKEN"],
+      secretValues: ["k", "t"],
       problem: null,
     });
   });
@@ -362,6 +363,7 @@ describe("the environment mise sets (ADR-93)", () => {
     expect(await mise.sessionEnv({ repo: null, task: null })).toEqual({
       vars: { GITLAB_TOKEN: "t" },
       secretNames: ["GITLAB_TOKEN"],
+      secretValues: ["t"],
       problem: null,
     });
 
@@ -372,7 +374,9 @@ describe("the environment mise sets (ADR-93)", () => {
     expect(await mise.sessionEnv({ repo: null, task: null })).toEqual({
       vars: {},
       secretNames: [],
-      problem: "projects folder: mise ERROR [experimental] No age identities found for decryption",
+      secretValues: [],
+      problem:
+        "the projects folder: mise ERROR [experimental] No age identities found for decryption\nThe session has no environment from mise.",
     });
   });
 
@@ -386,15 +390,30 @@ describe("the environment mise sets (ADR-93)", () => {
     expect(await mise.sessionEnv({ repo: "web", task: TASK })).toEqual({
       vars: { GITLAB_TOKEN: "root" },
       secretNames: ["GITLAB_TOKEN"],
-      problem: "the mise config in the worktree of task t changed (mise.toml); the session has the environment of the repo root",
+      secretValues: ["root"],
+      problem:
+        "the task's worktree: the mise config in the worktree of task t changed (mise.toml)\nThe session has the environment of the root of web.",
+    });
+  });
+
+  test("when mise cannot say which variables it redacts, the session does not take the environment from that place", async () => {
+    const { mise, home } = setup({ tasks: [], env: { JIRA_KEY: "decrypted" }, redactedError: "unexpected argument '--redacted' found" });
+    writeFileSync(join(home, "fake-mise.json"), JSON.stringify({ tasks: [], env: { SHOP_REGION: "eu" } }));
+
+    expect(await mise.sessionEnv({ repo: "web", task: null })).toEqual({
+      vars: { SHOP_REGION: "eu" },
+      secretNames: [],
+      secretValues: [],
+      problem:
+        "the root of web: mise ERROR unexpected argument '--redacted' found\nThe session has the environment of the projects folder.",
     });
   });
 
   test("without a mise program a session gets nothing and no problem", async () => {
     const { mise } = setup({ tasks: [] }, ["trackwall-no-such-mise"]);
 
-    expect(await mise.sessionEnv({ repo: "web", task: null })).toEqual({ vars: {}, secretNames: [], problem: null });
-    expect(await mise.sessionEnv({ repo: null, task: null })).toEqual({ vars: {}, secretNames: [], problem: null });
+    expect(await mise.sessionEnv({ repo: "web", task: null })).toEqual({ vars: {}, secretNames: [], secretValues: [], problem: null });
+    expect(await mise.sessionEnv({ repo: null, task: null })).toEqual({ vars: {}, secretNames: [], secretValues: [], problem: null });
   });
 });
 
