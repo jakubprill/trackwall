@@ -1,5 +1,6 @@
 import { countLabel } from "@trackwall/protocol";
 import { ChevronDown, ChevronUp, Info, TriangleAlert } from "lucide-react";
+import type { Ref } from "react";
 import type { TaskNotice, TaskNoticeTone, TaskSection } from "@/lib/task-notices";
 import { cn } from "@/lib/utils";
 
@@ -68,7 +69,17 @@ export function TaskNoticeStrip({
 }
 
 /** A grid tile's badge: the number of warnings, or of other notices when there are none. Nothing without notices. */
-export function NoticeBadge({ notices, open, onToggle }: { notices: readonly TaskNotice[]; open: boolean; onToggle: () => void }) {
+export function NoticeBadge({
+  ref,
+  notices,
+  open,
+  onToggle,
+}: {
+  ref: Ref<HTMLButtonElement>;
+  notices: readonly TaskNotice[];
+  open: boolean;
+  onToggle: () => void;
+}) {
   if (notices.length === 0) return null;
   const warnings = notices.filter((n) => n.tone === "warning").length;
   const label =
@@ -77,6 +88,7 @@ export function NoticeBadge({ notices, open, onToggle }: { notices: readonly Tas
       : countLabel(notices.length, { one: "notice", other: "notices" });
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onToggle}
       aria-expanded={open}

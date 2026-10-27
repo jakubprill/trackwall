@@ -145,11 +145,11 @@ export function TaskPanel({
       />
       {/* At most a third of the panel, scrolling beyond it: on a small screen the sections would leave the terminal a few
           lines, and Copilot CLI cuts a dialog taller than its terminal. */}
-      {detailsOpen && (
-        <section ref={detailsArea} aria-label="Task details" className="max-h-1/3 shrink-0 overflow-y-auto">
-          <TaskDetails conn={conn} task={task} details={details} messages={messages} sessions={sessions} onOpenTask={onOpenTask} />
-        </section>
-      )}
+      {/* Hidden rather than unmounted when folded, so that a section keeps what the user did in it (the mise config shown
+          for trust, an open log). */}
+      <section ref={detailsArea} hidden={!detailsOpen} aria-label="Task details" className="max-h-1/3 shrink-0 overflow-y-auto">
+        <TaskDetails conn={conn} task={task} details={details} sessions={sessions} onOpenTask={onOpenTask} />
+      </section>
       <div className="px-4">
         <TabBar tabs={tabs} active={shown} onSelect={setTab} />
       </div>

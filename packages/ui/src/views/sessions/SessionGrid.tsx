@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { ProposalTile } from "./ProposalTile.tsx";
 import { EndTaskButton, SessionCloseButton, SessionCloseConfirmation, TaskEnding } from "./SessionClose.tsx";
 import { TaskLine } from "./TaskLine.tsx";
-import { TaskTileNotices, type TileNotices } from "./TaskTileNotices.tsx";
+import { useTaskTileNotices } from "./TaskTileNotices.tsx";
 
 /**
  * A page of the Sessions list as a grid of terminals (ADR-48). The selected tile has the accent ring and the keyboard,
@@ -80,41 +80,26 @@ export function SessionGrid({
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }}
     >
       {size &&
-        page.tiles.map(({ entry, position }) => {
-          const tile = (notices?: TileNotices) => (
-            <SessionTile
-              key={entryId(entry)}
-              conn={conn}
-              entry={entry}
-              position={position}
-              selected={entryId(entry) === selected}
-              onSelect={() => onSelect(entry)}
-              onOpenAlone={() => onOpenAlone(entry)}
-              tasks={tasks}
-              onChanged={onChanged}
-              onNavigate={onNavigate}
-              currentSelection={currentSelection}
-              onSessionClosed={() => onSessionClosed(entry)}
-              onTaskRemoved={onTaskRemoved}
-              notices={notices}
-            />
-          );
-          if (entry.kind !== "task") return tile();
-          return (
-            <TaskTileNotices
-              key={entryId(entry)}
-              conn={conn}
-              task={entry.task}
-              tasks={tasks}
-              messages={messages.filter((m) => m.task === entry.task.id)}
-              sessions={sessions}
-              runningLive={runningLive}
-              onOpenTask={(id) => onNavigate({ kind: "task", id })}
-            >
-              {tile}
-            </TaskTileNotices>
-          );
-        })}
+        page.tiles.map(({ entry, position }) => (
+          <SessionTile
+            key={entryId(entry)}
+            conn={conn}
+            entry={entry}
+            position={position}
+            selected={entryId(entry) === selected}
+            onSelect={() => onSelect(entry)}
+            onOpenAlone={() => onOpenAlone(entry)}
+            tasks={tasks}
+            onChanged={onChanged}
+            onNavigate={onNavigate}
+            currentSelection={currentSelection}
+            onSessionClosed={() => onSessionClosed(entry)}
+            onTaskRemoved={onTaskRemoved}
+            sessions={sessions}
+            messages={messages}
+            runningLive={runningLive}
+          />
+        ))}
     </div>
   );
 }
@@ -132,7 +117,9 @@ function SessionTile({
   currentSelection,
   onSessionClosed,
   onTaskRemoved,
-  notices,
+  sessions,
+  messages,
+  runningLive,
 }: {
   conn: Connection;
   entry: SessionEntry;
@@ -146,13 +133,26 @@ function SessionTile({
   currentSelection: () => SessionSelection;
   onSessionClosed: () => void;
   onTaskRemoved: (task: string) => void;
-  /** A task tile's badge and overlay (`TaskTileNotices`). */
-  notices: TileNotices | undefined;
+  sessions: readonly Session[];
+  messages: readonly TaskMessage[];
+  runningLive: LiveFeed<RunningMiseTask[]> | undefined;
 }) {
   const session = entrySession(entry);
   const close = useSessionClose(conn, session, onSessionClosed);
   const sessionlessTask = entry.kind === "task" && !session ? entry.task : undefined;
   const ending = useTaskEnding(sessionlessTask !== undefined);
+  const task = entry.kind === "task" ? entry.task : undefined;
+  const notices = useTaskTileNotices({
+    conn,
+    task,
+    tasks,
+    messages: messages.filter((m) => m.task === task?.id),
+    sessions,
+    runningLive,
+    selected,
+    paused: ending.open,
+    onOpenTask: (id) => onNavigate({ kind: "task", id }),
+  });
   const tile = useRef<HTMLDivElement>(null);
   // A selected tile without a terminal takes the keyboard itself, so that keys stop going to the terminal selected before.
   useEffect(() => {
@@ -184,7 +184,7 @@ function SessionTile({
           {sessionShortcutLabel({ kind: "position", position }, IS_MAC) ?? position}
         </span>
         <TileTitle entry={entry} />
-        {notices?.badge}
+        {notices.badge}
         <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={onOpenAlone} aria-label="Open alone">
           <Maximize2 />
         </Button>
@@ -193,7 +193,7 @@ function SessionTile({
       </header>
       {/* The notices lie over the body like the close question, so that they do not resize the PTY. */}
       <div className="relative flex min-h-0 flex-1 flex-col">
-        {notices?.overlay}
+        {notices.overlay}
         {session && (
           // The question lies over the terminal instead of pushing it down, so that it does not resize the PTY mid-turn.
           <div className="relative flex min-h-0 flex-1 flex-col">

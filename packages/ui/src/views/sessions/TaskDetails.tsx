@@ -1,4 +1,4 @@
-import type { Session, Task, TaskMessage } from "@trackwall/protocol";
+import type { Session, Task } from "@trackwall/protocol";
 import type { ReactNode } from "react";
 import type { Connection } from "@/lib/connection";
 import type { TaskSection } from "@/lib/task-notices";
@@ -25,14 +25,12 @@ export function TaskDetails({
   conn,
   task,
   details,
-  messages,
   sessions,
   onOpenTask,
 }: {
   conn: Connection;
   task: Task;
   details: Details;
-  messages: readonly TaskMessage[];
   sessions: readonly Session[];
   onOpenTask: (id: string) => void;
 }) {
@@ -48,7 +46,7 @@ export function TaskDetails({
         <TaskMiseConfig conn={conn} task={task.id} remote={details.miseConfig} />
       </Section>
       <Section id="messages">
-        <TaskMessages messages={messages} sessions={sessions} />
+        <TaskMessages messages={details.messages} sessions={sessions} />
       </Section>
       <Section id="summary">{task.summary && <TaskSummary summary={task.summary} />}</Section>
       <Section id="verification">

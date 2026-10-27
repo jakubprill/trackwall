@@ -34,7 +34,7 @@ describe("a task's notices", () => {
     await overlay.getByRole("region", { name: "mise config of this worktree" }).getByText("added mise.local.toml").waitFor();
     expect(await terminal.boundingBox()).toEqual(before);
     await page.keyboard.press("Escape");
-    await overlay.waitFor({ state: "detached" });
+    await overlay.waitFor({ state: "hidden" });
     expect(await banner.count()).toBe(0);
     await page.getByRole("button", { name: "Task notices: 1 warning" }).waitFor();
 
