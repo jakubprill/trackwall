@@ -445,8 +445,8 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
       await turnsEnded(main.id, 3);
 
       const requests = model.requests();
-      const updatesPrompt = inboxPrompt({ reviewComments: 0, messages: 0, updates: 1 });
-      const messagesPrompt = inboxPrompt({ reviewComments: 0, messages: 1, updates: 0 });
+      const updatesPrompt = inboxPrompt({ reviewComments: 0, messages: 0, updates: 1, trustNotice: false });
+      const messagesPrompt = inboxPrompt({ reviewComments: 0, messages: 1, updates: 0, trustNotice: false });
       const readUpdates = requests.findIndex((r) => r.lastUserText.endsWith(updatesPrompt ?? "-"));
       expect(requests[readUpdates + 1]?.toolResults.join("\n")).toContain('"kind":"turn_ended"');
       const readMessages = requests.findIndex((r) => r.lastUserText.endsWith(messagesPrompt ?? "-"));
