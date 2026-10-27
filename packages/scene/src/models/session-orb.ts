@@ -1,8 +1,8 @@
 import { Group } from "three";
 import type { HomeSession } from "../home-model.ts";
 import { type ScenePalette, sessionStateColor } from "../palette.ts";
+import { addBeacon } from "./beacon.ts";
 import { glow, type HomeVisual, light, sphere } from "./kit.ts";
-import { addBeacon } from "./session-pod.ts";
 
 /**
  * A Copilot session in the `orbs` style (ADR-104): a small glowing sphere in the state colour. A session waiting for you or

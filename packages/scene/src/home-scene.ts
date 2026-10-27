@@ -15,7 +15,6 @@ import {
 } from "@pawnjs/core";
 import type { Entity } from "koota";
 import { QuadraticBezierCurve3, Vector3 } from "three";
-import { CALLOUT_RUN, type CalloutInput, type CalloutPlacement, type CalloutSide, layoutCallouts } from "./callout-layout.ts";
 import { type RepoLabelTone, repoLabelTone, sessionHasLabel } from "./home-labels.ts";
 import {
   DAEMON_KEY,
@@ -42,6 +41,7 @@ import { sessionTrack } from "./models/session-track.ts";
 import { type OrbitLayout, orbitLayout, REPO_RADIUS, SESSION_RADIUS } from "./orbit-layout.ts";
 import { assertScenePalette, type ScenePalette, sessionStateColor } from "./palette.ts";
 import { repoKind } from "./repo-kind.ts";
+import { SceneCallouts } from "./scene-callouts.ts";
 import type { SceneLabelMode, SceneStyle } from "./scene-style.ts";
 
 /**
@@ -82,9 +82,8 @@ export interface HomeSceneOptions {
   onHover?: (key: HomeKey | null) => void;
   /**
    * Label element; without this function the scene adds no labels. The label is a callout beside its object (ADR-104): the
-   * scene sets `data-side` (`left` or `right` of the object) and the CSS variables `--callout-run` (horizontal run of the
-   * leader line) and `--callout-rise` (how far the label's middle stands above the object), both in pixels, and the UI draws
-   * the leader line from them.
+   * scene sets `data-side` (`left` or `right` of the object) and the CSS variables of `CALLOUT_VARIABLES` (the leader
+   * line's horizontal run and how far the label's middle stands above the object), and the UI draws the leader line from them.
    */
   createLabel?: (target: LabelTarget) => HTMLElement;
 }
@@ -107,18 +106,14 @@ const FLOOR_RADIUS = REPO_RADIUS + 2.6;
 
 type RepoBuilder = (look: RepoLook, palette: ScenePalette) => HomeVisual;
 type SessionBuilder = (session: HomeSession, palette: ScenePalette) => HomeVisual;
-const STYLE_MODELS: Record<SceneStyle, { repo: RepoBuilder; session: SessionBuilder }> = {
+interface StyleModels {
+  repo: RepoBuilder;
+  session: SessionBuilder;
+}
+const STYLE_MODELS: Record<SceneStyle, StyleModels> = {
   holo: { repo: repoModel, session: sessionPod },
   orbs: { repo: repoOrb, session: sessionOrb },
 };
-
-/** A label on the scene with where its callout stood in the last frame; the size is measured once, when it is first shown. */
-interface Callout {
-  label: { element: HTMLElement; offset: { y: number } };
-  side: CalloutSide | null;
-  rise: number | null;
-  size: { width: number; height: number } | null;
-}
 
 interface Node {
   signature: string;
@@ -134,12 +129,6 @@ interface Placement {
 }
 
 const ORIGIN: Placement = { position: { x: 0, y: 0, z: 0 } };
-const CENTRE = new Vector3(0, 0, 0);
-
-/** The element's edge that touches the leader line, at its middle: `Labels` puts that point on the object. */
-function calloutAlign(side: CalloutSide): { x: number; y: number } {
-  return { x: side === "right" ? 0 : 1, y: 0.5 };
-}
 
 export class HomeScene {
   readonly #engine: Engine;
@@ -152,9 +141,8 @@ export class HomeScene {
   readonly #sessionRepos = new Map<string, string>();
   /** The last place of each entity. */
   readonly #places = new Map<string, string>();
-  readonly #callouts = new Map<HomeKey, Callout>();
-  /** A reused point for projecting callout anchors, so laying them out allocates nothing per frame but the screen points. */
-  readonly #anchor = new Vector3();
+  readonly #models: StyleModels;
+  readonly #callouts: SceneCallouts<HomeKey>;
   readonly #removeSystems: Array<() => void> = [];
   #focus: HomeKey | null = null;
   #hovered: HomeKey | null = null;
@@ -163,6 +151,15 @@ export class HomeScene {
     assertScenePalette(options.palette);
     this.#engine = engine;
     this.#options = options;
+    this.#models = STYLE_MODELS[options.style];
+    this.#callouts = new SceneCallouts<HomeKey>(engine.views, {
+      position: (key) => this.#entities.get(key)?.get(Position),
+      showLabel: (key, label) => {
+        const entity = this.#entities.get(key);
+        if (entity?.has(Label)) entity.set(Label, label);
+        else entity?.add(Label(label));
+      },
+    });
     this.#entities = new KeyedEntities<string>(engine, { release: (entity, key) => this.#release(entity, key) });
     if (options.motion) {
       this.#removeSystems.push(
@@ -173,7 +170,7 @@ export class HomeScene {
     }
     // Before `Labels`, which then puts each element where its side says.
     if (options.createLabel)
-      this.#removeSystems.push(engine.addSystem(() => this.#placeCallouts(), { phase: "render", order: Labels.ORDER - 1 }));
+      this.#removeSystems.push(engine.addSystem(() => this.#callouts.place(), { phase: "render", order: Labels.ORDER - 1 }));
   }
 
   /** The object's entity, for example to point the camera at it (`CameraRig.focus`). */
@@ -252,7 +249,7 @@ export class HomeScene {
       const key = repoKey(repo.id);
       const look = repoLook(repo, repoKind(repo.layer, model.layerCount));
       const place = { position: { x: at.x, y: 0, z: at.z }, angle: at.angle };
-      this.#put(keep, key, look, place, () => STYLE_MODELS[this.#options.style].repo(look, this.#options.palette));
+      this.#put(keep, key, look, place, () => this.#models.repo(look, this.#options.palette));
       const tone = repoLabelTone(repo, this.#options.labels);
       this.#setLabel(key, tone ? { kind: "repo", key, repo, tone } : null);
     }
@@ -267,9 +264,7 @@ export class HomeScene {
       if (!at || !repoAt) continue;
       this.#sessionRepos.set(session.id, session.repo);
       const key = sessionKey(session.id);
-      this.#put(keep, key, session, { position: { x: at.x, y: SESSION_Y, z: at.z } }, () =>
-        STYLE_MODELS[this.#options.style].session(session, palette),
-      );
+      this.#put(keep, key, session, { position: { x: at.x, y: SESSION_Y, z: at.z } }, () => this.#models.session(session, palette));
       this.#setLabel(key, sessionHasLabel(session) ? { kind: "session", key, session } : null);
       // Wire from the drone to the repo in the session state colour, so an error is visible at the repo too.
       const color = sessionStateColor(session.state, palette);
@@ -372,55 +367,8 @@ export class HomeScene {
     if (node.labelSignature === signature) return;
     node.labelSignature = signature;
     if (entity.has(Label)) entity.remove(Label);
-    this.#callouts.delete(key);
-    if (!target) return;
-    const label = { element: createLabel(target), offset: { y: LABEL_OFFSET[target.kind] } };
-    label.element.style.setProperty("--callout-run", `${CALLOUT_RUN}px`);
-    entity.add(Label({ ...label, align: calloutAlign("right") }));
-    this.#callouts.set(key, { label, side: null, rise: null, size: null });
-  }
-
-  /**
-   * Puts every visible callout beside its object, away from the middle of the ring, and lifts callouts that would cover each
-   * other (`layoutCallouts`). Writes to an element only what changed, because most frames move nothing.
-   */
-  #placeCallouts(): void {
-    const { views } = this.#engine;
-    const canvas = this.#callouts.size > 0 ? views.canvasRect() : null;
-    const centre = canvas && views.project(CENTRE);
-    if (!canvas || !centre) return;
-    const bounds = { left: canvas.left, right: canvas.left + canvas.width };
-    for (const [key, placement] of layoutCallouts(this.#calloutInputs(), centre.x, bounds)) this.#moveCallout(key, placement);
-  }
-
-  /** Callouts whose object is on the screen, with their measured size; one not laid out by the browser yet waits. */
-  #calloutInputs(): CalloutInput<HomeKey>[] {
-    const inputs: CalloutInput<HomeKey>[] = [];
-    for (const [key, callout] of this.#callouts) {
-      const position = this.#entities.get(key)?.get(Position);
-      const anchor = position && this.#engine.views.project(this.#anchor.set(position.x, position.y + callout.label.offset.y, position.z));
-      if (!anchor?.visible) continue;
-      const { element } = callout.label;
-      callout.size ??= element.offsetWidth > 0 ? { width: element.offsetWidth, height: element.offsetHeight } : null;
-      if (callout.size) inputs.push({ key, anchor, ...callout.size, side: callout.side });
-    }
-    return inputs;
-  }
-
-  #moveCallout(key: HomeKey, placement: CalloutPlacement): void {
-    const callout = this.#callouts.get(key);
-    const entity = this.#entities.get(key);
-    if (!callout || !entity) return;
-    if (callout.side !== placement.side) {
-      callout.side = placement.side;
-      callout.label.element.dataset.side = placement.side;
-      entity.set(Label, { ...callout.label, align: calloutAlign(placement.side) });
-    }
-    const rise = Math.round(placement.rise);
-    if (callout.rise !== rise) {
-      callout.rise = rise;
-      callout.label.element.style.setProperty("--callout-rise", `${rise}px`);
-    }
+    this.#callouts.detach(key);
+    if (target) this.#callouts.attach(key, { element: createLabel(target), offset: { y: LABEL_OFFSET[target.kind] } });
   }
 
   #release(entity: Entity, key: string): void {
@@ -428,7 +376,7 @@ export class HomeScene {
     this.#nodes.delete(key);
     this.#links.delete(key);
     this.#places.delete(key);
-    if (isHomeKey(key)) this.#callouts.delete(key);
+    if (isHomeKey(key)) this.#callouts.detach(key);
     for (const off of node?.offs ?? []) off();
     if (node) disposeObject3D(node.visual.object);
     if (key === this.#hovered) this.#hover(null);

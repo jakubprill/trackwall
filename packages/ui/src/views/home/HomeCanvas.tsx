@@ -175,10 +175,10 @@ function sceneLabel(target: LabelTarget): HTMLElement {
   }
   const { repo, tone } = target;
   const status = homeRepoStatus(repo);
-  label.className = cn(
-    "scene-callout text-2xs",
-    tone === "quiet" ? "text-muted-foreground" : statusTextClass(status.tone) || "text-primary",
-  );
+  // A clean repo with a full label has a running task: work going on, in the primary colour like on the scene.
+  const color = tone === "quiet" ? "text-muted-foreground" : repo.state === "clean" ? "text-primary" : statusTextClass(status.tone);
+  label.className = cn("scene-callout text-2xs", color);
+
   label.append(line(repo.id, tone === "quiet" ? "" : "text-muted-foreground"));
   if (repo.state !== "clean") label.append(line(status.label, "text-sm"));
   if (repo.runningTask !== null) label.append(line(`running ${repo.runningTask}`, "text-primary"));

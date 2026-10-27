@@ -154,11 +154,20 @@ export function tickRing<M extends Material>(
 
 /** Side of the glow texture in pixels: it is blurred anyway, so a small one is enough. */
 const GLOW_SIZE = 64;
-let glowTexture: DataTexture | null = null;
+let glowPixels: Uint8Array | null = null;
 
-/** A white spot fading to the edge, computed once; generated in code, so the scene needs no image files and no canvas. */
+/**
+ * A white spot fading to the edge, generated in code, so the scene needs no image files and no canvas. Every glow gets its
+ * own texture, because disposing a model disposes its textures; only the pixels, which nothing frees, are computed once.
+ */
 function glowMap(): DataTexture {
-  if (glowTexture) return glowTexture;
+  glowPixels ??= glowSpot();
+  const texture = new DataTexture(glowPixels, GLOW_SIZE, GLOW_SIZE);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function glowSpot(): Uint8Array {
   const data = new Uint8Array(GLOW_SIZE * GLOW_SIZE * 4);
   for (let y = 0; y < GLOW_SIZE; y++) {
     for (let x = 0; x < GLOW_SIZE; x++) {
@@ -168,9 +177,7 @@ function glowMap(): DataTexture {
       data.set([255, 255, 255, Math.round(255 * fade * fade)], i);
     }
   }
-  glowTexture = new DataTexture(data, GLOW_SIZE, GLOW_SIZE);
-  glowTexture.needsUpdate = true;
-  return glowTexture;
+  return data;
 }
 
 /**

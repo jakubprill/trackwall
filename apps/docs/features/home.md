@@ -12,7 +12,7 @@ See your whole environment in one 3D view, with everything that needs you in one
 ## What you get
 
 - Trackwall, your sessions and your repos in one living picture.
-- A label beside every repo, with what is going on in it: changes, commits to pull, a problem or a running task, and a label on every session waiting for you or with an error.
+- A label beside every repo, with what is going on in it (changes, commits to pull, a problem or a running task), and on every session waiting for you or with an error.
 - Two looks to choose from: holograms, or lighter glowing orbs for a slow graphics card.
 - A "Needs you" queue with every waiting session, repo and task proposal.
 - One click from anything in the picture to its view.
@@ -36,4 +36,4 @@ Click an object to select it and turn the camera to it; the panel on the right s
 - Without WebGL (an old graphics driver, a blocked graphics card), or when the graphics card drops the picture, a message with "Try again" takes the place of the picture; the queue and the details keep working. The same message shows when the 3D view fails for any other reason, and a view that fails shows its error with "Try again" while the bar on the left and the other views keep working.
 - When the projects folder has gone or `workspace.yaml` has an error, the view says so and offers "Open Settings".
 - With reduced motion turned on in your system, the picture stands still.
-- "Settings > App > Home scene" sets how the picture looks on this computer: "Holograms" (each kind of repo in its own shape) or "Orbs" (glowing spheres, lighter for a slow graphics card), and labels on "Every repo" or "Only what needs you". Home uses the change the next time you open it.
+- "Settings > App > Home scene" sets how the picture looks on this computer: "Holograms" (each kind of repo in its own shape) or "Orbs" (glowing spheres, lighter for a slow graphics card), and labels on "Every repo" or "Only what needs you" (the repos and sessions of the "Needs you" queue). Home uses the change the next time you open it.

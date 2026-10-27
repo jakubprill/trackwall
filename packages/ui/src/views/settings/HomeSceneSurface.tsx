@@ -9,11 +9,11 @@ const STYLES: ReadonlyArray<{ value: SceneStyle; label: string; hint: string }> 
 ];
 
 const LABELS: ReadonlyArray<{ value: SceneLabelMode; label: string; hint: string }> = [
-  { value: "all", label: "Every repo", hint: "Every repo is named; the ones with something going on also show what." },
+  { value: "all", label: "Every repo", hint: "Every repo is named, and the ones with something going on also show what." },
   {
     value: "needs-you",
     label: "Only what needs you",
-    hint: "Repos with changes, commits to pull or a running task, and sessions waiting for you.",
+    hint: "Repos with changes or commits to pull, and sessions waiting for you, as in the Needs you list.",
   },
 ];
 

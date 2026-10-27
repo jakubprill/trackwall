@@ -1,7 +1,8 @@
 import { Group } from "three";
 import type { HomeSession } from "../home-model.ts";
 import { type ScenePalette, sessionStateColor } from "../palette.ts";
-import { cylinder, flatRing, glow, type HomeVisual, light, outline, solid, unpickable } from "./kit.ts";
+import { addBeacon } from "./beacon.ts";
+import { cylinder, flatRing, glow, type HomeVisual, light, outline, solid } from "./kit.ts";
 
 /**
  * A Copilot session as a drone in the `holo` style (ADR-33, ADR-104): a hexagonal body with a glow and a ring that spins
@@ -9,9 +10,6 @@ import { cylinder, flatRing, glow, type HomeVisual, light, outline, solid, unpic
  * A session that is waiting for you or ended with an error has a light pillar with a rising ring, visible from anywhere
  * in the scene; it is the only element on the dashboard this loud.
  */
-
-/** Height of the light pillar above the drone. */
-const BEACON_HEIGHT = 2.6;
 
 export function sessionPod(session: HomeSession, palette: ScenePalette): HomeVisual {
   // The scene copies the entity position to the object every frame, so the inner group sways, not the entity's object.
@@ -33,18 +31,5 @@ export function sessionPod(session: HomeSession, palette: ScenePalette): HomeVis
       if (session.state === "working") ring.rotation.z = t * 2.2;
       if (beacon) beacon(t);
     },
-  };
-}
-
-/** A light pillar and a ring that rises along it and fades; returns the animation. */
-export function addBeacon(group: Group, color: string): (elapsed: number) => void {
-  const shaft = unpickable(cylinder([0.045, 0.1], BEACON_HEIGHT, 12, light(color, 0.25), [0, BEACON_HEIGHT / 2 + 0.05, 0]));
-  const rising = flatRing(0.14, 0.012, 24, light(color, 0.9));
-  group.add(shaft, rising);
-  return (t) => {
-    const progress = (t * 0.6) % 1;
-    rising.position.y = 0.1 + progress * (BEACON_HEIGHT - 0.2);
-    rising.material.opacity = 0.9 * (1 - progress);
-    shaft.material.opacity = 0.18 + 0.14 * Math.sin(t * 4);
   };
 }

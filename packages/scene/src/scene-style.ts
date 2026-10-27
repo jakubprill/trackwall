@@ -7,8 +7,8 @@ export const SCENE_STYLES = ["holo", "orbs"] as const;
 export type SceneStyle = (typeof SCENE_STYLES)[number];
 
 /**
- * Which objects have a label (ADR-104): `all` names every repo (a clean one quietly), `needs-you` only the repos where something
- * is going on and the sessions that wait for you or have an error.
+ * Which objects have a label (ADR-104): `all` names every repo (a clean one quietly), `needs-you` only what the "Needs you" queue
+ * lists: repos that are not clean and sessions that wait for you or have an error.
  */
 export const SCENE_LABEL_MODES = ["all", "needs-you"] as const;
 export type SceneLabelMode = (typeof SCENE_LABEL_MODES)[number];

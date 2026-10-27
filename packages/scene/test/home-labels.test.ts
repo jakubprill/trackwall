@@ -1,10 +1,15 @@
 import { expect, test } from "bun:test";
 import { repoLabelTone, sessionHasLabel } from "../src/home-labels.ts";
 
-test("a repo where something is going on has a full label in both modes", () => {
+test("a repo that is not clean has a full label in both modes", () => {
   expect(repoLabelTone({ id: "orders-bff", layer: 0, state: "changed", count: 4, runningTask: null }, "needs-you")).toBe("full");
   expect(repoLabelTone({ id: "orders-bff", layer: 0, state: "behind", count: 1, runningTask: null }, "all")).toBe("full");
-  expect(repoLabelTone({ id: "users-api", layer: 0, state: "clean", count: 0, runningTask: "dev" }, "needs-you")).toBe("full");
+});
+
+test("a clean repo with a running mise task has a full label only when every repo is named, as it is not in the Needs you queue", () => {
+  const running = { id: "users-api", layer: 0, state: "clean", count: 0, runningTask: "dev" } as const;
+  expect(repoLabelTone(running, "all")).toBe("full");
+  expect(repoLabelTone(running, "needs-you")).toBeNull();
 });
 
 test("a clean repo with nothing running has a quiet label only when every repo is named", () => {

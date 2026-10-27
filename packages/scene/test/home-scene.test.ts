@@ -307,7 +307,7 @@ describe("dashboard scene", () => {
     expect(linkOpacities()).toEqual([0.22, 0.22, 0.22]);
   });
 
-  test("with labels for what needs you, repos where something is going on and sessions waiting or with an error get labels", () => {
+  test("with labels for what needs you, repos that are not clean and sessions waiting or with an error get labels", () => {
     const labelled: string[] = [];
     const scene = new HomeScene(engine, {
       palette: PALETTE,
@@ -323,8 +323,8 @@ describe("dashboard scene", () => {
     scene.apply(MODEL);
     scene.apply(structuredClone(MODEL));
 
-    expect(labelled.sort()).toEqual(["repo:orders-api", "repo:payments-api", "repo:web-shop", "session:s1"]);
-    expect(scene.entity("repo:common-dto")?.has(Label)).toBe(false);
+    expect(labelled.sort()).toEqual(["repo:payments-api", "repo:web-shop", "session:s1"]);
+    expect(scene.entity("repo:orders-api")?.has(Label)).toBe(false);
   });
 
   test("with labels for all repos, a clean repo with nothing running gets a quiet label and the rest a full one", () => {
@@ -343,25 +343,6 @@ describe("dashboard scene", () => {
     scene.apply(MODEL);
 
     expect(Object.fromEntries(tones)).toEqual({ "web-shop": "full", "orders-api": "full", "payments-api": "full", "common-dto": "quiet" });
-  });
-
-  test("a label tells the UI how long the callout's leader line runs", () => {
-    const elements: Array<ReturnType<typeof fakeLabelElement>> = [];
-    const scene = new HomeScene(engine, {
-      palette: PALETTE,
-      style: "holo",
-      labels: "needs-you",
-      motion: true,
-      createLabel: () => {
-        const element = fakeLabelElement();
-        elements.push(element);
-        return element;
-      },
-    });
-
-    scene.apply(MODEL);
-
-    expect(elements.map((e) => e.properties.get("--callout-run"))).toEqual(elements.map(() => "28px"));
   });
 
   test("in the orbs style every repo, session and the daemon still get an entity with a model to draw", () => {
