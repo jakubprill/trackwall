@@ -157,6 +157,7 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
       tasks: [task],
       proposals: [],
       messages: [],
+      lastSupervisor: null,
     });
 
     expect(await restarted.agents.resumeTask(task.id)).toEqual(task);

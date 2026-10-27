@@ -389,7 +389,7 @@ The one Trackwall session above all others: Copilot CLI in the projects folder, 
 _Avoid_: orchestrator, root session, supervising agent (that is an agent outside Trackwall)
 
 **Supervisor panel** (`SupervisorPanel`):
-The column on the right of the main window, in every view, with the supervisor's terminal, its state and the work it delegated, or "Start my day" and "Start supervisor" while there is none (ADR-58, ADR-70). Pinned open, or folded to a strip that keeps a bell while the supervisor or a task proposal under it waits for you; Alt+0 pins it open and puts the keyboard in its terminal.
+The column on the right of the main window, in every view, with the supervisor's terminal, its state and the work it delegated, or "Start my day" and "Start supervisor" while there is none, with "Resume" (the last supervisor's conversation, `SessionList.lastSupervisor`) and "New" in place of "Start supervisor" once Copilot CLI keeps one (ADR-58, ADR-70, ADR-96). Pinned open, or folded to a strip that keeps a bell while the supervisor or a task proposal under it waits for you; Alt+0 pins it open and puts the keyboard in its terminal.
 _Avoid_: sidebar (that is the list on the left of a view), drawer
 
 **Day start** (`DayStart`, `dayStartApi`, `DayStartRun`, `startSupervisorWith`; "Start my day" in the UI; `dayStart` in `workspace.yaml`):

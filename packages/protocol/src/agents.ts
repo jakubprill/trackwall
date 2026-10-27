@@ -175,6 +175,13 @@ export function isSupervisor(session: Pick<Session, "repo">): boolean {
   return session.repo === null;
 }
 
+/**
+ * Which conversation a supervisor start goes on with (ADR-96): `last` resumes the newest supervisor's under its id, or
+ * starts a new one when there is none; `new` always starts a new one.
+ */
+export const SupervisorConversation = z.enum(["last", "new"]);
+export type SupervisorConversation = z.infer<typeof SupervisorConversation>;
+
 export const Task = z.object({
   id: TaskId,
   repo: RepoId,
@@ -294,6 +301,11 @@ export const SessionList = z.object({
   proposals: z.array(TaskProposal),
   /** The messages kept for the tasks on the list (ADR-68), oldest first. */
   messages: z.array(TaskMessage),
+  /**
+   * The newest supervisor while it had a prompt, so Copilot CLI keeps its conversation, which a start with `last` goes
+   * on with (ADR-96); also after the daemon restarts and after the user closed it. `null` when there is none.
+   */
+  lastSupervisor: SessionId.nullable(),
 });
 export type SessionList = z.infer<typeof SessionList>;
 
@@ -392,9 +404,10 @@ export const agentsApi = {
   start: endpoint("start", z.object({ repo: RepoId }).strict(), Session),
   /**
    * Starts the supervisor (ADR-58): Copilot CLI in the projects folder, above the sessions of all repos. There is at
-   * most one running at a time, so while one runs this returns it instead of starting another.
+   * most one running at a time, so while one runs this returns it instead of starting another. Otherwise `conversation`
+   * says whether it goes on with the last supervisor's conversation or starts a new one (ADR-96).
    */
-  startSupervisor: endpoint("start-supervisor", z.object({}).strict(), Session),
+  startSupervisor: endpoint("start-supervisor", z.object({ conversation: SupervisorConversation }).strict(), Session),
   /** Returns after confirming that no process of the session is alive; an ended session returns its state. */
   stop: endpoint("stop", SessionRequest, Session),
   /**

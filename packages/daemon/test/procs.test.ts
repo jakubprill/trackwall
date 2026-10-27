@@ -471,6 +471,38 @@ describe.skipIf(process.versions.bun === undefined)("procs with the leader in a 
     TIMEOUT,
   );
 
+  test(
+    "an owner whose terminal group ended starts it again, and one whose group runs does not",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "trackwall-procs-"));
+      const groups = new ProcessGroups({
+        logs: testLogs(),
+        runtime: new RuntimeFile(join(dir, "runtime.json")),
+        platform: groupPlatform(),
+        terminals: terminalPlatform(),
+        log: () => {},
+      });
+      const spec = (code: string) => ({
+        owner: "agent:x",
+        command: [process.execPath, "-e", code],
+        cwd: dir,
+        env: process.env,
+        cols: 80,
+        rows: 24,
+        onData: () => {},
+      });
+      await groups.startTerminal(spec("0"));
+      expect(await waitUntil(() => groups.state("agent:x")?.kind === "exited", 15_000)).toBe(true);
+
+      const again = await groups.startTerminal(spec("setInterval(() => {}, 1000)"));
+
+      expect(again.run.kind).toBe("running");
+      await expect(groups.startTerminal(spec("0"))).rejects.toThrow("owner agent:x already has a group");
+      expect((await groups.stop("agent:x"))?.kind).toBe("exited");
+    },
+    TIMEOUT,
+  );
+
   test("a failed start in a terminal rejects only the call, without an unhandled error in the daemon", async () => {
     const unhandled: unknown[] = [];
     const onUnhandled = (err: unknown) => unhandled.push(err);

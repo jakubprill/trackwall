@@ -79,6 +79,7 @@ describe("Sessions view entries", () => {
       tasks: [task("t2", "2026-10-23T11:30:00Z"), task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
       messages: [],
+      lastSupervisor: null,
     };
     expect(rowEntries(list).map((e) => (e.kind === "task" ? `task ${e.task.id} ${e.session?.id}` : `session ${entryId(e)}`))).toEqual([
       "task t1 s3",
@@ -93,6 +94,7 @@ describe("Sessions view entries", () => {
       tasks: [],
       proposals: [],
       messages: [],
+      lastSupervisor: null,
     });
     const [s1, s2, s3] = entries;
     if (!s1 || !s2 || !s3) throw new Error("expected three entries");
@@ -107,6 +109,7 @@ describe("Sessions view entries", () => {
       tasks: [task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
       messages: [],
+      lastSupervisor: null,
     });
     const [taskEntry, s2] = entries;
     if (!taskEntry || !s2) throw new Error("expected two entries");
@@ -122,6 +125,7 @@ describe("Sessions view entries", () => {
       tasks: [task("t1", "2026-10-23T12:00:00Z"), task("t2", "2026-10-23T11:00:00Z")],
       proposals: [],
       messages: [],
+      lastSupervisor: null,
     });
     const [t1, t2] = entries;
     if (!t1 || !t2) throw new Error("expected two entries");
@@ -136,6 +140,7 @@ describe("Sessions view entries", () => {
       tasks: [task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
       messages: [],
+      lastSupervisor: null,
     });
     expect(findEntry(entries, { kind: "session", id: "s1" })).toMatchObject({ kind: "task", task: { id: "t1" } });
     expect(findEntry(entries, { kind: "new" })).toBeUndefined();
@@ -149,6 +154,7 @@ describe("Sessions view entries", () => {
       tasks: [task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
       messages: [],
+      lastSupervisor: null,
     });
     if (!entry) throw new Error("no entry");
     expect(entrySelection(entry)).toEqual({ kind: "task", id: "t1" });
@@ -160,6 +166,7 @@ describe("Sessions view entries", () => {
       tasks: [task("t1", "2026-10-23T13:00:00Z")],
       proposals: [proposal("p2", "2026-10-23T11:00:00Z"), proposal("p1", "2026-10-23T10:00:00Z")],
       messages: [],
+      lastSupervisor: null,
     });
     expect(entries.map((e) => `${e.kind} ${entryId(e)}`)).toEqual(["proposals proposals:outside", "task t1", "session s1"]);
     expect(findEntry(entries, { kind: "proposal", id: "p1" })).toMatchObject({ kind: "proposals", proposer: null });
@@ -176,6 +183,7 @@ describe("Sessions view entries", () => {
         proposal("p1", "2026-10-23T10:00:00Z", "s1"),
       ],
       messages: [],
+      lastSupervisor: null,
     });
     expect(entries.map((e) => (e.kind === "proposals" ? `${e.proposer}: ${e.proposals.map((p) => p.id).join(" ")}` : entryId(e)))).toEqual([
       "s2",
@@ -198,6 +206,7 @@ describe("Sessions view entries", () => {
       tasks: [task("t0", "2026-10-23T14:00:00Z"), task("p1", "2026-10-23T13:00:00Z")],
       proposals: [],
       messages: [],
+      lastSupervisor: null,
     });
     expect(findEntry(entries, { kind: "proposal", id: "p1" })).toMatchObject({ kind: "task", task: { id: "p1" } });
   });
@@ -209,7 +218,7 @@ describe("Sessions view entries", () => {
       tasks: [],
       proposals: [proposal("p1", "2026-10-23T10:00:00Z")],
     };
-    expect(attentionCount({ ...list, messages: [] })).toBe(2);
+    expect(attentionCount({ ...list, messages: [], lastSupervisor: null })).toBe(2);
     expect(attentionCount(undefined)).toBe(0);
   });
 
@@ -219,6 +228,7 @@ describe("Sessions view entries", () => {
       tasks: [delegated("t1", "2026-10-23T11:00:00Z", "s1"), task("t2", "2026-10-23T09:00:00Z")],
       proposals: [proposal("p1", "2026-10-23T11:30:00Z", "s1")],
       messages: [],
+      lastSupervisor: null,
     };
     expect(shape(list)).toEqual(["session s2 @0", "session s1 @0", "proposals proposals:s1 @1", "task t1 @1", "task t2 @0"]);
     expect(sessionRows(list).find((r) => entryId(r.entry) === "s1")?.children).toBe(2);
@@ -230,6 +240,7 @@ describe("Sessions view entries", () => {
       tasks: [delegated("p1", "2026-10-23T12:00:00Z", "s1"), task("t0", "2026-10-23T13:00:00Z")],
       proposals: [],
       messages: [],
+      lastSupervisor: null,
     });
     expect(findEntry(entries, { kind: "proposals", proposer: "s1" })).toMatchObject({ kind: "task", task: { id: "p1" } });
     expect(findEntry(entries, { kind: "proposals", proposer: "s9" })).toBe(entries[0]);
@@ -242,6 +253,7 @@ describe("Sessions view entries", () => {
       tasks: [task("t0", "2026-10-23T13:00:00Z"), outside],
       proposals: [],
       messages: [],
+      lastSupervisor: null,
     });
     expect(findEntry(entries, { kind: "proposals", proposer: null })).toMatchObject({ kind: "task", task: { id: "p1" } });
   });
@@ -252,6 +264,7 @@ describe("Sessions view entries", () => {
       tasks: [delegated("t1", "2026-10-23T11:00:00Z", "s1")],
       proposals: [proposal("p2", "2026-10-23T11:40:00Z", "s1"), proposal("p1", "2026-10-23T11:30:00Z", "s1")],
       messages: [],
+      lastSupervisor: null,
     };
     expect(sessionRows(list).find((r) => entryId(r.entry) === "s1")?.children).toBe(3);
   });
@@ -262,6 +275,7 @@ describe("Sessions view entries", () => {
       tasks: [delegated("t2", "2026-10-23T11:00:00Z", "s1"), task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
       messages: [],
+      lastSupervisor: null,
     };
     expect(shape(list)).toEqual(["task t1 @0", "task t2 @1"]);
   });
@@ -272,6 +286,7 @@ describe("Sessions view entries", () => {
       tasks: [delegated("t1", "2026-10-23T11:00:00Z", "closed")],
       proposals: [proposal("p1", "2026-10-23T09:00:00Z")],
       messages: [],
+      lastSupervisor: null,
     };
     expect(shape(list)).toEqual(["proposals proposals:outside @0", "task t1 @0", "session s1 @0"]);
   });
@@ -282,6 +297,7 @@ describe("Sessions view entries", () => {
       tasks: [delegated("t2", "2026-10-23T10:00:00Z", "s1"), delegated("t1", "2026-10-23T09:00:00Z", "s2")],
       proposals: [],
       messages: [],
+      lastSupervisor: null,
     };
     expect(shape(list)).toEqual(["task t2 @0", "task t1 @1"]);
     // t1 delegated t2, but t2 is already above it, so t1 has nothing under it and gets no “main” badge.

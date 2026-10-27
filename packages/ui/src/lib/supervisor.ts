@@ -1,4 +1,4 @@
-import { isSupervisor, type Session, type SessionList } from "@trackwall/protocol";
+import { isSupervisor, type Session, type SessionList, type SupervisorConversation } from "@trackwall/protocol";
 import { type SessionRow, type SessionSelection, workCount } from "./session-entries.ts";
 
 /**
@@ -23,6 +23,8 @@ export interface SupervisorSummary {
   waits: boolean;
   /** The list shows the heading: there is a supervisor or work of one. */
   listed: boolean;
+  /** Copilot CLI keeps the conversation of the last supervisor, so a start can go on with it (ADR-96). */
+  resumable: boolean;
 }
 
 export function supervisorSummary(list: SessionList | undefined, rows: readonly SessionRow[]): SupervisorSummary {
@@ -41,7 +43,29 @@ export function supervisorSummary(list: SessionList | undefined, rows: readonly 
     sessionWaits,
     waits: sessionWaits || waitingProposals > 0,
     listed: session !== undefined || work.length > 0,
+    resumable: list?.lastSupervisor != null,
   };
+}
+
+/** A start button of the panel besides Start my day: which conversation it goes on with, and what it says. */
+export interface SupervisorStart {
+  conversation: SupervisorConversation;
+  label: string;
+  title: string;
+}
+
+/**
+ * The panel's start buttons while no supervisor runs: Resume and New while the last supervisor's conversation can go
+ * on (ADR-96), otherwise one start of a new conversation.
+ */
+export function supervisorStarts(supervisor: Pick<SupervisorSummary, "session" | "resumable">): SupervisorStart[] {
+  if (supervisor.resumable)
+    return [
+      { conversation: "last", label: "Resume", title: "Go on with the last supervisor's conversation" },
+      { conversation: "new", label: "New", title: "Start a supervisor with a new conversation" },
+    ];
+  const label = supervisor.session ? "Start again" : "Start supervisor";
+  return [{ conversation: "new", label, title: "Start a supervisor with a new conversation" }];
 }
 
 /**

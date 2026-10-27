@@ -308,7 +308,7 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
   test(
     "the supervisor runs and stops no mise tasks or services: it works in no repo and proposes a task instead",
     async () => {
-      const supervisor = await daemon.facade.agents.startSupervisor();
+      const supervisor = await daemon.facade.agents.startSupervisor("new");
       const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, supervisor.id);
       clients.push(client);
 
