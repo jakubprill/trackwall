@@ -235,7 +235,7 @@ export class Agents {
   async start(repo: string): Promise<Session> {
     const id = randomUUID();
     const cwd = await this.#deps.repos.repoPath(repo);
-    return this.#launch({ id, repo, cwd, task: null, args: [`--session-id=${id}`], promptOnStart: false });
+    return this.#launch({ id, repo, cwd, task: null, args: [`--session-id=${id}`], promptOnStart: false, hasConversation: false });
   }
 
   /**
@@ -277,7 +277,7 @@ export class Agents {
   #startNewSupervisor(firstMessage: string | null): Promise<Session> {
     const id = randomUUID();
     const args = [`--session-id=${id}`, ...(firstMessage === null ? [] : [`--interactive=${firstMessage}`])];
-    return this.#startSupervisorAs({ id, args, promptOnStart: firstMessage !== null });
+    return this.#startSupervisorAs({ id, args, promptOnStart: firstMessage !== null, hasConversation: firstMessage !== null });
   }
 
   #startSupervisorAs(spec: SupervisorLaunch): Promise<Session> {
@@ -630,15 +630,7 @@ export class Agents {
    * Copilot CLI in `cwd` (the repo root or the worktree of task `task`) with arguments before the session's arguments;
    * `promptOnStart` when the arguments carry the first message (`--interactive`), so the session works from the start.
    */
-  async #launch({
-    id = randomUUID(),
-    repo,
-    cwd,
-    task,
-    args,
-    promptOnStart,
-    hasConversation = promptOnStart,
-  }: LaunchSpec): Promise<Session> {
+  async #launch({ id = randomUUID(), repo, cwd, task, args, promptOnStart, hasConversation }: LaunchSpec): Promise<Session> {
     // The MCP server and the hooks are the daemon on `127.0.0.1`, which a proxy of the user must not get (ADR-89).
     const env = withLoopbackNoProxy({ ...(await this.#deps.env()), TERM: "xterm-256color", COLORTERM: "truecolor", ...LOOPBACK_HOOKS_ENV });
     const [name = "copilot", ...prefix] = this.#deps.copilot;
@@ -739,7 +731,8 @@ export class Agents {
    * repo is gone, a supervisor already runs) goes to the log.
    */
   async resumeLeftSessions(): Promise<void> {
-    const left = this.#left;
+    // The supervisor first: the user may start a new one meanwhile, which would leave the old conversation behind.
+    const left = [...this.#left].sort((a, b) => Number(b.repo === null && b.task === null) - Number(a.repo === null && a.task === null));
     this.#left = [];
     for (const session of left) {
       try {
@@ -771,6 +764,8 @@ export class Agents {
 
   /** Daemon exit, before `procs.stopAll`: the sessions it stops stay in the list for the next daemon to resume (ADR-95). */
   keepRunningSessionsForResume(): void {
+    // The list of this moment, not of the last check: a session stopped or started since then counts as it is now.
+    this.#followLive([...this.#sessions.values()].filter((s) => this.#deps.procs.state(owner(s.id))?.kind === "running"));
     this.#resumable.stopFollowing();
   }
 
@@ -911,8 +906,8 @@ export class Agents {
 interface LaunchSpec {
   /** The session id; a new one by default. */
   id?: string;
-  /** Copilot CLI already keeps a conversation under the id (`--resume`, ADR-95); by default when the arguments carry the first message. */
-  hasConversation?: boolean;
+  /** Copilot CLI already keeps a conversation under the id: the arguments carry the first message or resume it (ADR-95). */
+  hasConversation: boolean;
   /** `null` for the supervisor. */
   repo: string | null;
   cwd: string;

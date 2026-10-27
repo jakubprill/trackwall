@@ -331,11 +331,6 @@ export class LiveSession {
   }
 
   /**
-   * New hook records, the `Stale` threshold and the end of the process; after the end nothing changes the state. Called
-   * periodically and before every read of the state, because `procs` sees the end of the process sooner than the cycle.
-   * Returns whether the session is alive.
-   */
-  /**
    * Copilot CLI keeps a conversation under the session's id, so `--resume=<id>` can go on with it (ADR-95): Copilot CLI
    * keeps none for a session that never had a prompt, and refuses to resume it.
    */
@@ -343,6 +338,11 @@ export class LiveSession {
     return this.#hasConversation;
   }
 
+  /**
+   * New hook records, the `Stale` threshold and the end of the process; after the end nothing changes the state. Called
+   * periodically and before every read of the state, because `procs` sees the end of the process sooner than the cycle.
+   * Returns whether the session is alive.
+   */
   tick(): boolean {
     if (this.#finished) return false;
     this.#readHooks();

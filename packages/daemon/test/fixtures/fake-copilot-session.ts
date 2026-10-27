@@ -11,9 +11,12 @@
  * (MCP servers, instructions, directory, arguments, the prompt) and, on every turn, starts a helper process (like an
  * agent's tool) and prints its PID, so that the test can check that stopping the session ends the whole group. The
  * helper starts only after input from the user, because on Windows the leader joins the job a moment after the start.
+ * Like Copilot CLI it keeps a conversation per session id once the session has had a prompt (a marker file in the
+ * temporary directory), and refuses `--resume=<id>` of an id without one (ADR-95).
  */
 import { spawn } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { ESCAPE } from "../../src/modules/agents/copilot-keys.ts";
@@ -68,6 +71,25 @@ function drawDialog(dialog: readonly string[]): void {
 }
 
 const initialPrompt = taskArgs.find((a) => a.startsWith("--interactive="))?.slice("--interactive=".length);
+
+/** The session id from `--session-id=` or `--resume=`, under which the fake keeps the session's conversation. */
+const sessionId = taskArgs.find((a) => /^--(session-id|resume)=/.test(a))?.replace(/^--[a-z-]+=/, "");
+const conversationsDir = join(tmpdir(), "trackwall-fake-copilot-conversations");
+const conversationMarker = sessionId === undefined ? undefined : join(conversationsDir, sessionId);
+
+/** The session has a conversation from its first prompt on: a later `--resume=<id>` goes on with it. */
+function keepConversation(): void {
+  if (conversationMarker === undefined) return;
+  mkdirSync(conversationsDir, { recursive: true });
+  writeFileSync(conversationMarker, "");
+}
+
+const resumes = taskArgs.some((a) => a.startsWith("--resume="));
+if (resumes && conversationMarker !== undefined && !existsSync(conversationMarker)) {
+  // Copilot CLI's own words for an id it keeps no conversation of.
+  process.stdout.write(`Error: No session, task, or name matched '${sessionId}'.\r\n`);
+  process.exit(1);
+}
 
 /**
  * Fires the reference's hooks with their payloads. Of the fields the reference leaves out, the directory and the prompts
@@ -124,7 +146,10 @@ draw(real.promptBox);
 
 // A prompt given at the start (`--interactive=`, a task's session) is the first prompt, so it starts the hooks at once.
 let started = initialPrompt !== undefined;
-if (started) replay([startHook]);
+if (started) {
+  keepConversation();
+  replay([startHook]);
+}
 let awaitingApproval = false;
 /** Between a turn's end and the input box drawn again, where Copilot CLI drops what is typed (ADR-68). */
 let redrawing = false;
@@ -138,6 +163,7 @@ function submit(line: string): void {
   // Copilot CLI starts the session's hooks only with the first prompt (ADR-69).
   replay(started ? [promptHook] : [startHook, promptHook], line);
   started = true;
+  keepConversation();
   const helper = spawn(process.execPath, ["-e", "setTimeout(() => {}, 600000)"], { stdio: "ignore" });
   process.stdout.write(`helper PID: ${helper.pid}\r\n`);
   for (const turnTitle of turnTitles) title(turnTitle.replaceAll(PROMPT_PLACEHOLDER, line));

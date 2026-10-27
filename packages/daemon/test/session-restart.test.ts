@@ -59,7 +59,8 @@ describe.skipIf(process.versions.bun === undefined)("sessions across a daemon re
     window.attachment.detach();
     const supervisor = await agents.startSupervisor();
     const task = await agents.createTask("shop", "fix the build");
-    const taskSession = agents.sessions().sessions.find((s) => s.task === task.id)?.id ?? "";
+    const taskSession = agents.sessions().sessions.find((s) => s.task === task.id)?.id;
+    if (taskSession === undefined) throw new Error(`task ${task.id} has no session`);
     await waitFor(agents, supervisor.id, (s) => s.state !== null, "the supervisor's input box");
     await waitFor(agents, taskSession, (s) => s.state !== null, "the task session's state");
 
@@ -78,7 +79,7 @@ describe.skipIf(process.versions.bun === undefined)("sessions across a daemon re
     expect(await argumentOnScreen(after, resumedTask, "--resume=")).toContain(`Argument: --resume=${task.id}`);
   }, 60_000);
 
-  test("a session the user stopped, or whose agent exited, is not started again", async () => {
+  test("a session the user stopped is not started again", async () => {
     const before = await startDaemon();
     const { agents } = before.facade;
     const stopped = await agents.start("shop");
@@ -101,6 +102,33 @@ describe.skipIf(process.versions.bun === undefined)("sessions across a daemon re
 
     await waitFor(after.facade.agents, running.id, (s) => s.run.kind === "running", "the running session started again");
     expect(after.facade.agents.sessions().sessions.map((s) => s.id)).toEqual([running.id]);
+  }, 60_000);
+
+  test("a session that cannot start again goes to the log, and the others start", async () => {
+    const before = await startDaemon();
+    await stopDaemon(before);
+    const [inGoneRepo, ofEndedTask, main] = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
+    const endedTask = crypto.randomUUID();
+    const sessions = [
+      { session: inGoneRepo, repo: "gone", task: null, hasConversation: true },
+      { session: ofEndedTask, repo: "shop", task: endedTask, hasConversation: true },
+      { session: main, repo: "shop", task: null, hasConversation: false },
+    ];
+    writeFileSync(join(before.home, RESUMABLE_FILE), JSON.stringify({ sessions }));
+    const log: string[] = [];
+
+    const after = await startSessionApi(TOKEN, {
+      repos: {},
+      miseCommand: ["mise"],
+      restartOf: { home: before.home, projects: before.projects },
+      log: (msg) => log.push(msg),
+    });
+    daemons.push(after);
+
+    expect(await argumentOnScreen(after, main, "--session-id=")).toContain(`Argument: --session-id=${main}`);
+    expect(after.facade.agents.sessions().sessions.map((s) => s.id)).toEqual([main]);
+    expect(log.find((line) => line.startsWith(`resuming session ${inGoneRepo}:`))).toContain("gone");
+    expect(log.find((line) => line.startsWith(`resuming session ${ofEndedTask}:`))).toContain(endedTask);
   }, 60_000);
 
   test("a broken list of sessions is moved aside and the next daemon starts without resuming any", async () => {
