@@ -2,10 +2,11 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
-import { agentsApi, ListRunningMiseTasksResult, LogTail, MiseTaskRunResult } from "@trackwall/protocol";
+import { agentsApi, ListRunningMiseTasksResult, LogTail, MiseTaskRunResult, miseApi } from "@trackwall/protocol";
 import { z } from "zod";
-import { waitFor } from "./support/agents.ts";
+import { viewer, waitFor } from "./support/agents.ts";
 import { connectHttpClient, connectSessionClient } from "./support/mcp-client.ts";
+import { untilInputBox } from "./support/screen-lines.ts";
 import { startSessionApi } from "./support/session-api.ts";
 
 const TOKEN = "t".repeat(43);
@@ -13,6 +14,10 @@ const FAKE_MISE = [process.execPath, join(import.meta.dir, "fixtures", "fake-mis
 /** Fake mise config (see `fixtures/fake-mise.ts`): `dev` runs until stopped, `test` exits with code 3. */
 const MISE_CONFIG = JSON.stringify({ tasks: [{ name: "dev" }, { name: "test" }], exits: { test: 3 } });
 const TIMEOUT = 60_000;
+/** The fake's prompt line for the typed notice that the user trusted the mise config (ADR-92). */
+const TYPED_TRUST_NOTICE = "Thinking about: The user trusted the mise config that refused your last run_mise_task";
+/** The fake's prompt line for the typed review prompt. */
+const TYPED_REVIEW = "Thinking about: The user sent a review of your changes in Trackwall";
 
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
 /** An agent outside Trackwall: only the daemon token, no session token. */
@@ -192,7 +197,7 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
 
       expect(errorText(await call(outside, "run_mise_task", { repo: "warehouse", task: task.id, miseTask: "test" }))).toBe(
         `mise_unavailable: the mise config in the worktree of task ${task.branch} changed since the user trusted it (mise.toml); ` +
-          "only the user can trust it, in the task's panel in Trackwall",
+          "only the user can trust it, in the task's panel in Trackwall, and a session in Trackwall refused for it is told when they do",
       );
       expect(existsSync(join(task.worktree, "calls.log"))).toBe(false);
 
@@ -211,6 +216,91 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
       if (!session) throw new Error("the task has no session");
       await waitFor(daemon.facade.agents, session.id, (state) => state.state !== null, "the first state");
       await daemon.facade.agents.stop(session.id);
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a task session refused for the mise config it changed is told when the user trusts it, and runs the mise task then",
+    async () => {
+      const task = await daemon.facade.agents.createTask("warehouse", "change the build");
+      const [session] = daemon.facade.agents.sessions().sessions.filter((s) => s.task === task.id);
+      if (!session) throw new Error("the task has no session");
+      const window = viewer(daemon.facade.agents, session.id);
+      // The fake ends the task prompt's turn after a line and an approval; then the session waits in its empty input box.
+      await waitFor(daemon.facade.agents, session.id, () => window.text().includes("--interactive="), "the screen image");
+      window.attachment.input("start\r");
+      await waitFor(daemon.facade.agents, session.id, (s) => s.state?.state === "Approval", "the task prompt's approval");
+      window.attachment.input("1");
+      await waitFor(daemon.facade.agents, session.id, (s) => s.state?.reason === "hook agentStop", "the end of the turn");
+      await untilInputBox(window, "empty");
+      writeFileSync(join(task.worktree, "mise.toml"), '[tasks.test]\nrun = "anything"\n');
+      const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session.id);
+      clients.push(client);
+
+      expect(errorText(await call(client, "run_mise_task", { repo: "warehouse", task: task.id, miseTask: "test" }))).toStartWith(
+        "mise_unavailable: the mise config in the worktree of task",
+      );
+      const seen = await daemon.post(agentsApi.taskMiseConfig, { task: task.id });
+      await daemon.post(agentsApi.trustTaskMiseConfig, { task: task.id, digest: seen.digest });
+
+      await waitFor(daemon.facade.agents, session.id, () => window.unwrappedText().includes(TYPED_TRUST_NOTICE), "the typed notice");
+      // The turn the notice started ends: the notice was delivered, so the next prompt, for a review, no longer carries it.
+      await waitFor(daemon.facade.agents, session.id, (s) => s.state?.state === "Approval", "the notice turn's approval");
+      window.attachment.input("1");
+      await waitFor(daemon.facade.agents, session.id, (s) => s.state?.reason === "hook agentStop", "the end of the notice turn");
+      await untilInputBox(window, "empty");
+      const review = { path: "mise.toml", side: "new", line: 1, code: "[tasks.test]", text: "Keep it." } as const;
+      await daemon.post(agentsApi.sendReview, { task: task.id, comments: [review] });
+      await waitFor(daemon.facade.agents, session.id, () => window.unwrappedText().includes(TYPED_REVIEW), "the typed review prompt");
+      const afterReview = window.unwrappedText().slice(window.unwrappedText().lastIndexOf(TYPED_REVIEW));
+      expect(afterReview).not.toContain("The user trusted the mise config");
+
+      await call(client, "run_mise_task", { repo: "warehouse", task: task.id, miseTask: "test" });
+      const ended = MiseTaskRunResult.parse(
+        (await call(client, "wait_for_mise_task", { repo: "warehouse", task: task.id, miseTask: "test", timeoutSeconds: 20 }))
+          .structuredContent,
+      );
+      expect(ended.run).toMatchObject({ kind: "exited", exitCode: 3 });
+
+      window.attachment.input("1");
+      window.attachment.detach();
+      await daemon.facade.agents.stop(session.id);
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "trusting the repo root's mise config tells the session it refused, and only that one",
+    async () => {
+      const config = join(daemon.projects, "shop", "fake-mise.json");
+      writeFileSync(config, JSON.stringify({ ...JSON.parse(MISE_CONFIG), untrusted: true }));
+      const refused = await daemon.facade.agents.start("shop");
+      const bystander = await daemon.facade.agents.start("shop");
+      const refusedWindow = viewer(daemon.facade.agents, refused.id);
+      const bystanderWindow = viewer(daemon.facade.agents, bystander.id);
+      await untilInputBox(refusedWindow, "empty");
+      await untilInputBox(bystanderWindow, "empty");
+      const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, refused.id);
+      clients.push(client);
+
+      expect(errorText(await call(client, "run_mise_task", { repo: "shop", miseTask: "test" }))).toStartWith(
+        "mise_unavailable: mise ERROR Config files in",
+      );
+      await daemon.post(miseApi.trust, { repo: "shop" });
+
+      await waitFor(daemon.facade.agents, refused.id, () => refusedWindow.unwrappedText().includes(TYPED_TRUST_NOTICE), "the typed notice");
+      expect(bystanderWindow.unwrappedText()).not.toContain("The user trusted the mise config");
+
+      refusedWindow.attachment.input("1");
+      for (const [session, window] of [
+        [refused, refusedWindow],
+        [bystander, bystanderWindow],
+      ] as const) {
+        window.attachment.detach();
+        await waitFor(daemon.facade.agents, session.id, (s) => s.state !== null, "the first state");
+        await daemon.facade.agents.stop(session.id);
+      }
     },
     TIMEOUT,
   );

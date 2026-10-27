@@ -133,7 +133,14 @@ export function createFacade(o: FacadeOptions): Facade {
     openEditor,
     log: o.log,
   });
-  const mise = new Mise({ procs, repos: workspace, tasks: agents, command: o.miseCommand, env: o.userEnv });
+  const mise = new Mise({
+    procs,
+    repos: workspace,
+    tasks: agents,
+    command: o.miseCommand,
+    env: o.userEnv,
+    onTrusted: (repo) => agents.miseTrusted({ repo, task: null }),
+  });
   const batch = new Batch({ workspace, mise, log: o.log });
   const graph = new Graph({ cards, workspace });
   const taskPort = (repo: string, task: string) => agents.taskOfRepo(task, repo).port;

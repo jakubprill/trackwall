@@ -165,6 +165,9 @@ _Avoid_: copied files, local files
 **Trusted mise config** (`StoredTask.trustedMiseConfig`, `TaskMiseConfig`, actions `task-mise-config` and `trust-task-mise-config`; UI "Trust this config"):
 The mise files of a task's worktree (config files, `.tool-versions`, file tasks) as the user consented to them, kept as hashes in `tasks.json`: as the worktree was created, or as the user trusted them later in the task panel (ADR-59). A mise task runs in the worktree only while its files match; a changed file shows up as a `MiseConfigChange`.
 
+**Trust notice** (`MiseTrustNotices`, `Unread.trustNotice`):
+The sentence in the daemon's prompt that tells a session the user trusted the mise config that refused its last `run_mise_task`, `verify_task` or `start_service`, so it runs it again (ADR-92). The trust is "Trust this config" for a task worktree or mise trust for a repo root, and only a session refused there since its last try gets the notice.
+
 **Local config** (`LOCAL_CONFIG_FILES`, `RepoLocalConfig`, module `local-config`; UI "Local config"):
 The files a repo keeps outside git on purpose, only for this clone: `mise.local.toml` (`MISE_LOCAL_CONFIG_FILE`, mise tasks, tools and variables mise reads on top of `mise.toml`) and `.worktreeinclude` (ADR-86). A file the repo's commits have is not local config. Each file's state against the store is `absent`, `tracked`, `backed_up`, `pending` or `missing` (`LocalConfigFileState`); "Restore from the store" copies a missing file back, and "Ignore locally" adds the files to the clone's `.git/info/exclude`.
 _Avoid_: overlay, local files (that is `.worktreeinclude`'s included files)

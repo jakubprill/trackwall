@@ -25,7 +25,7 @@ Select a repo and open its "mise tasks" tab: it lists the repo's tasks as `mise 
 
 Values of environment variables with secret-looking names (`*_TOKEN`, `*_PASSWORD`, `*_SECRET` and similar) are replaced with `***` before they reach the log.
 
-mise asks you to trust a repo's configuration before it runs its tasks. When it has not been trusted yet, the tab offers a button for it. Only a trusted repo's tasks can also be run by agents through the [MCP server](/features/mcp); those runs show in the same tab, with their log, and you can stop them here. A task's agent runs its mise tasks in the task's worktree instead, so they test its changes; those runs show in the task's panel in "Sessions" (see [Agent tasks](/features/tasks)).
+mise asks you to trust a repo's configuration before it runs its tasks. When it has not been trusted yet, the tab offers a button for it. Only a trusted repo's tasks can also be run by agents through the [MCP server](/features/mcp); those runs show in the same tab, with their log, and you can stop them here. An agent in Trackwall that was turned away because the configuration was not trusted hears when you trust it, and runs its task again. A task's agent runs its mise tasks in the task's worktree instead, so they test its changes; those runs show in the task's panel in "Sessions" (see [Agent tasks](/features/tasks)).
 
 ## Use it
 
