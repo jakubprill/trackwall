@@ -106,6 +106,8 @@ export interface TaskOrigin {
   id: string;
   title: string | null;
   proposedBy: ProposedBy | null;
+  /** The model the task's sessions run on (ADR-98); `null` for Copilot CLI's default. */
+  model: string | null;
 }
 
 /** A task from the file with the worktree that follows from it, and its port (one given when it was read, if it had none). */
@@ -162,7 +164,7 @@ export class AgentTasks {
     }
   }
 
-  async #create(repo: string, prompt: string, { id, title, proposedBy }: TaskOrigin): Promise<Task> {
+  async #create(repo: string, prompt: string, { id, title, proposedBy, model }: TaskOrigin): Promise<Task> {
     const repoDir = await this.#deps.repos.repoPath(repo);
     const base = await asRepoUnavailable(repo, this.#deps.vcs.defaultBase(repoDir));
     const worktreesDir = await this.#deps.repos.worktreesDir();
@@ -178,6 +180,7 @@ export class AgentTasks {
       createdAt: new Date().toISOString(),
       title,
       proposedBy,
+      model,
       summary: null,
       trustedMiseConfig: null,
       port: freeTaskPort([...this.#tasks.map((t) => t.port), ...this.#creatingPorts]),
@@ -422,8 +425,17 @@ export class AgentTasks {
   }
 
   async #launch(task: KnownTask, args: readonly string[], promptOnStart: boolean): Promise<void> {
+    // The model on every start, the first and each resume: Copilot CLI would otherwise resume on its default (ADR-98).
+    const modelArgs = task.model === null ? [] : [`--model=${task.model}`];
     // A task's conversation exists from its first message on, which a resume goes on with.
-    await this.#deps.sessions.launch({ repo: task.repo, cwd: task.worktree, task: task.id, args, promptOnStart, hasConversation: true });
+    await this.#deps.sessions.launch({
+      repo: task.repo,
+      cwd: task.worktree,
+      task: task.id,
+      args: [...modelArgs, ...args],
+      promptOnStart,
+      hasConversation: true,
+    });
   }
 
   /** A running session writes in the worktree and holds its files (on Windows it blocks deletion), so stop it first. */

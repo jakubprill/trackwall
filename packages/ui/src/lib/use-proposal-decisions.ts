@@ -41,9 +41,9 @@ export function useProposalDecisions({
 
   const start = (starts: readonly ProposalStart[]) => {
     begin();
-    void startProposals(starts, (item) => post(conn, agentsApi.approveProposal, { proposal: item.id, prompt: item.prompt })).then(
-      ({ started, failed }) => settle(failed, new Set(started.map((t) => t.id)), started),
-    );
+    void startProposals(starts, (item) =>
+      post(conn, agentsApi.approveProposal, { proposal: item.id, prompt: item.prompt, model: item.model }),
+    ).then(({ started, failed }) => settle(failed, new Set(started.map((t) => t.id)), started));
   };
 
   /** One decision on one proposal that starts no task: a rejection or an approved folder action (ADR-83). */

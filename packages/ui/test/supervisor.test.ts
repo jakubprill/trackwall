@@ -35,6 +35,7 @@ function task(id: string, proposedBy: Task["proposedBy"]): Task {
     createdAt: "2026-10-25T10:05:00Z",
     title: "Fix the cart",
     proposedBy,
+    model: null,
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },
@@ -42,7 +43,16 @@ function task(id: string, proposedBy: Task["proposedBy"]): Task {
 }
 
 function proposal(id: string, proposedBy: TaskProposal["proposedBy"]): TaskProposal {
-  return { id, kind: "task", repo: "billing", title: "Add refunds", prompt: "add refunds", proposedBy, createdAt: "2026-10-25T10:10:00Z" };
+  return {
+    id,
+    kind: "task",
+    repo: "billing",
+    title: "Add refunds",
+    prompt: "add refunds",
+    model: null,
+    proposedBy,
+    createdAt: "2026-10-25T10:10:00Z",
+  };
 }
 
 function list(parts: Partial<SessionList>): SessionList {

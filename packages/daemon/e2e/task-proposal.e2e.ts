@@ -6,7 +6,7 @@ import { sessionList, showSessions, useTrackwall, waitForTerminal } from "./supp
 const trackwall = useTrackwall();
 
 describe("a task proposal from a main session", () => {
-  test("the user edits the prompt of a main session's proposal and starts it, and the main session follows the task with that prompt", async () => {
+  test("the user edits the prompt and the model of a main session's proposal and starts it, and the main session follows the task with them", async () => {
     const { daemon } = trackwall();
     const main = await daemon.post(agentsApi.start, { repo: "shop" });
     await waitFor(daemon.facade.agents, main.id, (s) => s.state !== null, "the main session's first state");
@@ -16,7 +16,7 @@ describe("a task proposal from a main session", () => {
       (
         await agent.callTool({
           name: "propose_task",
-          arguments: { repo: "shop", title: "Add a licence", prompt: "Add an MIT LICENSE file" },
+          arguments: { repo: "shop", title: "Add a licence", prompt: "Add an MIT LICENSE file", model: "claude-opus-5.5" },
         })
       ).structuredContent,
     );
@@ -27,8 +27,12 @@ describe("a task proposal from a main session", () => {
       .getByRole("button", { name: /Task proposal/ })
       .click();
     await page.getByRole("textbox", { name: "Prompt for the agent: Add a licence" }).fill("Add an Apache-2.0 LICENSE file");
+    const model = page.getByRole("textbox", { name: "Model for the agent: Add a licence" });
+    expect(await model.inputValue()).toBe("claude-opus-5.5");
+    await model.fill("gpt-5.5");
     await page.getByRole("button", { name: "Start task" }).click();
 
+    await waitForTerminal(page, "Argument: --model=gpt-5.5");
     await waitForTerminal(page, "Argument: --interactive=Add an Apache-2.0 LICENSE file");
     await sessionList(page)
       .getByRole("button", { name: /Task proposal/ })
@@ -39,6 +43,6 @@ describe("a task proposal from a main session", () => {
     const followed = WaitForSessionResult.parse(
       (await agent.callTool({ name: "wait_for_session", arguments: { task: proposal.id, timeoutSeconds: 1 } })).structuredContent,
     );
-    expect(followed).toMatchObject({ status: "working", task: { prompt: "Add an Apache-2.0 LICENSE file" } });
+    expect(followed).toMatchObject({ status: "working", task: { prompt: "Add an Apache-2.0 LICENSE file", model: "gpt-5.5" } });
   }, 60_000);
 });

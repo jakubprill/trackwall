@@ -100,6 +100,7 @@ const proposals: SessionEntry = {
       title: "Add refunds",
       prompt: "add refunds",
       proposedBy: { session: null, supervisor: false },
+      model: null,
       createdAt: "",
     },
   ],

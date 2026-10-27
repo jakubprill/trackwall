@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Task, TaskProposal } from "@trackwall/protocol";
-import { selectionAfterDecision, showsGroup, startProposals } from "../src/lib/proposal-decisions.ts";
+import { selectionAfterDecision, showsGroup, startProposals, typedModel } from "../src/lib/proposal-decisions.ts";
 import type { ProposalsEntry } from "../src/lib/session-entries.ts";
 
 function proposal(id: string): TaskProposal {
@@ -11,6 +11,7 @@ function proposal(id: string): TaskProposal {
     title: `Task ${id}`,
     prompt: `do ${id}`,
     proposedBy: { session: "main", supervisor: false },
+    model: null,
     createdAt: "2026-10-25T10:00:00Z",
   };
 }
@@ -27,6 +28,7 @@ function task(id: string): Task {
     createdAt: "2026-10-25T10:01:00Z",
     title: `Task ${id}`,
     proposedBy: { session: "main", supervisor: false },
+    model: null,
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },
@@ -38,9 +40,9 @@ describe("starting several task proposals", () => {
     const calls: string[] = [];
     const result = await startProposals(
       [
-        { id: "p1", prompt: "do p1" },
-        { id: "p2", prompt: "do p2" },
-        { id: "p3", prompt: "do p3, edited" },
+        { id: "p1", prompt: "do p1", model: null },
+        { id: "p2", prompt: "do p2", model: null },
+        { id: "p3", prompt: "do p3, edited", model: "claude-opus-5.5" },
       ],
       async ({ id, prompt }) => {
         calls.push(`${id}: ${prompt}`);
@@ -51,6 +53,17 @@ describe("starting several task proposals", () => {
     expect(calls).toEqual(["p1: do p1", "p2: do p2", "p3: do p3, edited"]);
     expect(result.started.map((t) => t.id)).toEqual(["p1", "p3"]);
     expect(result.failed).toEqual(new Map([["p2", "the repo has no default branch"]]));
+  });
+});
+
+describe("the model typed on a task proposal", () => {
+  test("an empty field is Copilot CLI's default, an id is the model, and anything else holds the start", () => {
+    expect(typedModel("")).toBeNull();
+    expect(typedModel("  ")).toBeNull();
+    expect(typedModel(" claude-opus-5.5 ")).toBe("claude-opus-5.5");
+    expect(typedModel("auto")).toBe("auto");
+    expect(typedModel("opus 5.5")).toBeUndefined();
+    expect(typedModel("--yolo")).toBeUndefined();
   });
 });
 

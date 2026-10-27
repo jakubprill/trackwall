@@ -25,6 +25,7 @@ const proposal: TaskProposal = {
   title: "Retry failed invoices",
   prompt: "Retry invoices that failed to send",
   proposedBy: { session: null, supervisor: false },
+  model: null,
   createdAt: "2026-10-24T10:00:00Z",
 };
 

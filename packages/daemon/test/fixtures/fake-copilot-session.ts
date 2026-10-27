@@ -49,7 +49,7 @@ const instructionFiles = (process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS ?? "")
  * Task arguments (`--interactive=`, `--resume=`, `--session-id=`) and tool permissions (`--allow-tool=`, `--deny-tool=`)
  * the fake prints, so that the test sees them.
  */
-const taskArgs = process.argv.filter((a) => /^--(interactive|resume|session-id|allow-tool|deny-tool)=/.test(a));
+const taskArgs = process.argv.filter((a) => /^--(interactive|resume|session-id|model|allow-tool|deny-tool)=/.test(a));
 
 const real = reference();
 const title = (text: string) => process.stdout.write(`\x1b]0;${text}\x07`);

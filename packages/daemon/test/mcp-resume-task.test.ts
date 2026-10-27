@@ -62,7 +62,7 @@ describe.skipIf(process.versions.bun === undefined)("resume_task (real PTY and g
     const { proposal } = ProposeTaskResult.parse(
       (await call(main.client, "propose_task", { repo: "shop", title: "Fix login", prompt: "fix login" })).structuredContent,
     );
-    const task = await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: "fix login" });
+    const task = await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: "fix login", model: null });
     await stopSessionOf(task.id);
     const sent = SendMessageResult.parse(
       (await call(main.client, "send_message", { task: task.id, text: "Keep the old endpoint." })).structuredContent,
@@ -118,7 +118,7 @@ describe.skipIf(process.versions.bun === undefined)("resume_task (real PTY and g
       const { proposal } = ProposeTaskResult.parse(
         (await call(client, "propose_task", { repo: "shop", title, prompt: title })).structuredContent,
       );
-      const task = await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: title });
+      const task = await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: title, model: null });
       await stopSessionOf(task.id);
       tasks.push(task);
     }

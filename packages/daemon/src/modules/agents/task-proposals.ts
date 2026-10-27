@@ -30,7 +30,14 @@ export class TaskProposals {
     return [...this.#pending];
   }
 
-  add(proposal: { kind: ProposalKind; repo: string; title: string; prompt: string; proposedBy: ProposedBy }): TaskProposal {
+  add(proposal: {
+    kind: ProposalKind;
+    repo: string;
+    title: string;
+    prompt: string;
+    model: string | null;
+    proposedBy: ProposedBy;
+  }): TaskProposal {
     if (this.#pending.length >= MAX_PENDING_PROPOSALS) {
       throw new DomainError("bad_request", `${MAX_PENDING_PROPOSALS} proposals are already waiting for the user; wait for their decision`);
     }

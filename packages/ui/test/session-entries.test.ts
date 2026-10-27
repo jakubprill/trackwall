@@ -40,6 +40,7 @@ function task(id: string, createdAt: string): Task {
     createdAt,
     title: null,
     proposedBy: null,
+    model: null,
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },
@@ -54,6 +55,7 @@ function proposal(id: string, createdAt: string, proposer: string | null = null)
     title: "Add a test",
     prompt: "add a test",
     proposedBy: { session: proposer, supervisor: false },
+    model: null,
     createdAt,
   };
 }

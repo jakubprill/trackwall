@@ -20,6 +20,7 @@ const task = (fields: Partial<Task> = {}): Task => ({
   createdAt: "2026-10-26T09:00:00Z",
   title: null,
   proposedBy: null,
+  model: null,
   summary: null,
   port: 41000,
   included: { files: [], problems: [] },
