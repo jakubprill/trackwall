@@ -40,10 +40,9 @@ function UpdateStatus({ handle }: { handle: AppUpdateHandle }) {
         </>
       );
     case "available":
-    case "waiting":
       return (
         <div className="flex w-full flex-wrap items-center gap-3">
-          <UpdateOffer handle={handle} />
+          <UpdateOffer handle={handle} update={update} />
         </div>
       );
     case "installing":

@@ -4,7 +4,7 @@ import { UpdateOffer } from "@/components/UpdateOffer";
 import { Button } from "@/components/ui/button";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 
-/** Strip above the views while a newer version is available, waits for the agents' turns or is being installed (ADR-53). */
+/** Strip above the views while a newer version is available (also waiting for the agents' turns) or being installed (ADR-53). */
 export function UpdateBanner({ handle }: { handle: AppUpdateHandle }) {
   const { update, install, cancel, dismissed, dismiss } = handle;
   switch (update.state) {
@@ -23,17 +23,11 @@ export function UpdateBanner({ handle }: { handle: AppUpdateHandle }) {
           </Button>
         </Strip>
       );
-    case "waiting":
-      return (
-        <Strip>
-          <UpdateOffer handle={handle} />
-        </Strip>
-      );
     case "available":
-      if (dismissed === update.version) return null;
+      if (dismissed === update.version && !update.afterTurns) return null;
       return (
         <Strip>
-          <UpdateOffer handle={handle} onLater={() => dismiss(update.version)} />
+          <UpdateOffer handle={handle} update={update} onLater={() => dismiss(update.version)} />
         </Strip>
       );
     default:

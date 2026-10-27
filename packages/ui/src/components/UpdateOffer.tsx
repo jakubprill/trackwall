@@ -1,51 +1,45 @@
 import { Button } from "@/components/ui/button";
-import { availableText, inTurnText, waitingText } from "@/lib/updates";
+import { type Available, type OfferAction, updateOffer } from "@/lib/updates";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 
+const VARIANTS: Record<OfferAction, "default" | "outline" | "ghost"> = {
+  restart: "default",
+  "after-turns": "default",
+  now: "outline",
+  "cancel-waiting": "ghost",
+};
+
+const LABELS: Record<OfferAction, string> = {
+  restart: "Update and restart",
+  "after-turns": "Update after their turn",
+  now: "Update now",
+  "cancel-waiting": "Cancel",
+};
+
 /**
- * An update that is available or waits for the agents' turns (ADR-53, ADR-97): with no agent in the middle of a turn,
- * "Update and restart"; otherwise "Update after their turn", which installs once the last turn ends, and "Update now".
- * In the strip above the views (with "Later") and in "Settings > Updates".
+ * An available update with its buttons (ADR-53, ADR-97, `updateOffer` decides them), in the strip above the views (with
+ * "Later" until the user chose to wait for the agents' turns) and in "Settings > Updates".
  */
-export function UpdateOffer({ handle, onLater }: { handle: AppUpdateHandle; onLater?: () => void }) {
-  const { update, install, agentsInTurn, waitForTurns, cancelWaiting } = handle;
-  if (update.state === "waiting")
-    return (
-      <>
-        <p className="min-w-0 flex-1 text-sm" aria-live="polite">
-          {waitingText(update, agentsInTurn ?? 0)}
-        </p>
-        <Button variant="outline" size="sm" onClick={() => install(update.version)}>
-          Update now
-        </Button>
-        <Button variant="ghost" size="sm" onClick={cancelWaiting}>
-          Cancel
-        </Button>
-      </>
-    );
-  if (update.state !== "available") return null;
-  const busy = agentsInTurn !== undefined && agentsInTurn > 0;
+export function UpdateOffer({ handle, update, onLater }: { handle: AppUpdateHandle; update: Available; onLater?: () => void }) {
+  const { install, agentsInTurn, waitForTurns, cancelWaiting } = handle;
+  const { text, actions } = updateOffer(update, agentsInTurn);
+  const run: Record<OfferAction, () => void> = {
+    restart: () => install(update.version),
+    "after-turns": waitForTurns,
+    now: () => install(update.version),
+    "cancel-waiting": cancelWaiting,
+  };
   return (
     <>
-      <p className="min-w-0 flex-1 text-sm">
-        {availableText(update)}
-        {busy && ` ${inTurnText(agentsInTurn)}`}
+      <p className="min-w-0 flex-1 text-sm" aria-live="polite">
+        {text}
       </p>
-      {busy ? (
-        <>
-          <Button size="sm" onClick={waitForTurns}>
-            Update after their turn
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => install(update.version)}>
-            Update now
-          </Button>
-        </>
-      ) : (
-        <Button size="sm" onClick={() => install(update.version)}>
-          Update and restart
+      {actions.map((action) => (
+        <Button key={action} variant={VARIANTS[action]} size="sm" onClick={run[action]}>
+          {LABELS[action]}
         </Button>
-      )}
-      {onLater && (
+      ))}
+      {onLater && !update.afterTurns && (
         <Button variant="ghost" size="sm" onClick={onLater}>
           Later
         </Button>
