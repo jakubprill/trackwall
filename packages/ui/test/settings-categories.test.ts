@@ -16,6 +16,10 @@ describe("Settings categories", () => {
     expect(settingsCategory("agents").sections).toContain("copilot-cli");
   });
 
+  test("how Home draws its scene is under App, with the other settings of this computer", () => {
+    expect(settingsCategory("app").sections).toContain("home-scene");
+  });
+
   test("Settings opens on Workspace, with the projects folder first", () => {
     expect(FIRST_SETTINGS_CATEGORY).toBe("workspace");
     expect(settingsCategory(FIRST_SETTINGS_CATEGORY).sections[0]).toBe("folders");

@@ -6,6 +6,7 @@ import {
   Hoverable,
   KeyedEntities,
   Label,
+  Labels,
   Position,
   Rotation,
   Scale,
@@ -14,7 +15,7 @@ import {
 } from "@pawnjs/core";
 import type { Entity } from "koota";
 import { QuadraticBezierCurve3, Vector3 } from "three";
-import { repoHasLabel, sessionHasLabel } from "./home-labels.ts";
+import { type RepoLabelTone, repoLabelTone, sessionHasLabel } from "./home-labels.ts";
 import {
   DAEMON_KEY,
   type HomeKey,
@@ -27,16 +28,21 @@ import {
   repoKey,
   sessionKey,
 } from "./home-model.ts";
-import { daemonCore } from "./models/daemon-core.ts";
+import { coreLook, daemonCore } from "./models/daemon-core.ts";
+import { floorGrid } from "./models/floor-grid.ts";
 import type { HomeVisual } from "./models/kit.ts";
 import { LINK_TUBES, type LinkEmphasis, type LinkVisual, linkTube, TETHER_TUBE } from "./models/link-tube.ts";
-import { repoLook, repoModel } from "./models/repo-model.ts";
+import { type RepoLook, repoLook, repoModel } from "./models/repo-model.ts";
+import { repoOrb } from "./models/repo-orb.ts";
 import { sectorArc } from "./models/sector-arc.ts";
+import { sessionOrb } from "./models/session-orb.ts";
 import { sessionPod } from "./models/session-pod.ts";
 import { sessionTrack } from "./models/session-track.ts";
 import { type OrbitLayout, orbitLayout, REPO_RADIUS, SESSION_RADIUS } from "./orbit-layout.ts";
 import { assertScenePalette, type ScenePalette, sessionStateColor } from "./palette.ts";
 import { repoKind } from "./repo-kind.ts";
+import { SceneCallouts } from "./scene-callouts.ts";
+import type { SceneLabelMode, SceneStyle } from "./scene-style.ts";
 
 /**
  * Dashboard scene on the Pawn engine (ADR-33, §5.5). `apply` takes successive dashboard snapshots and keeps one entity
@@ -45,12 +51,21 @@ import { repoKind } from "./repo-kind.ts";
  * pointer and labels, so the same scene works in a window and in a test without a browser.
  */
 
-/** An object that gets a label; the UI writes its text. */
-export type LabelTarget = { kind: "repo"; key: HomeKey; repo: HomeRepo } | { kind: "session"; key: HomeKey; session: HomeSession };
+/**
+ * An object that gets a label; the UI writes its text. A `quiet` repo label (a clean repo with nothing running) carries only
+ * the name, a `full` one also what is going on.
+ */
+export type LabelTarget =
+  | { kind: "repo"; key: HomeKey; repo: HomeRepo; tone: RepoLabelTone }
+  | { kind: "session"; key: HomeKey; session: HomeSession };
 
 export interface HomeSceneOptions {
   /** Colours as `#rrggbb` (`ScenePalette`); any other notation is an error when the scene is created. */
   palette: ScenePalette;
+  /** How repos and sessions are drawn (ADR-104). Changing it needs a new scene. */
+  style: SceneStyle;
+  /** Which objects have a label (ADR-104). Changing it needs a new scene. */
+  labels: SceneLabelMode;
   /**
    * `false` under `prefers-reduced-motion`: models hold their pose from time 0, and only colour and shape show state.
    * Changing the setting while running needs a new scene.
@@ -65,7 +80,11 @@ export interface HomeSceneOptions {
   onOpen?: (key: HomeKey) => void;
   /** The pointer entered an object or left it (`null`), also when the hovered object vanished from the snapshot. */
   onHover?: (key: HomeKey | null) => void;
-  /** Label element; without this function the scene adds no labels. */
+  /**
+   * Label element; without this function the scene adds no labels. The label is a callout beside its object (ADR-104): the
+   * scene sets `data-side` (`left` or `right` of the object) and the CSS variables of `CALLOUT_VARIABLES` (the leader
+   * line's horizontal run and how far the label's middle stands above the object), and the UI draws the leader line from them.
+   */
   createLabel?: (target: LabelTarget) => HTMLElement;
 }
 
@@ -82,6 +101,19 @@ const LINK_Y = 0.12;
 const LINK_BEND = 0.2;
 const FOCUS_SCALE = 1.12;
 const LABEL_OFFSET: Record<LabelTarget["kind"], number> = { repo: 1.05, session: 0.5 };
+/** The radius of the floor grid: a little past the layer arcs. */
+const FLOOR_RADIUS = REPO_RADIUS + 2.6;
+
+type RepoBuilder = (look: RepoLook, palette: ScenePalette) => HomeVisual;
+type SessionBuilder = (session: HomeSession, palette: ScenePalette) => HomeVisual;
+interface StyleModels {
+  repo: RepoBuilder;
+  session: SessionBuilder;
+}
+const STYLE_MODELS: Record<SceneStyle, StyleModels> = {
+  holo: { repo: repoModel, session: sessionPod },
+  orbs: { repo: repoOrb, session: sessionOrb },
+};
 
 interface Node {
   signature: string;
@@ -109,7 +141,9 @@ export class HomeScene {
   readonly #sessionRepos = new Map<string, string>();
   /** The last place of each entity. */
   readonly #places = new Map<string, string>();
-  readonly #removeSystem: () => void;
+  readonly #models: StyleModels;
+  readonly #callouts: SceneCallouts<HomeKey>;
+  readonly #removeSystems: Array<() => void> = [];
   #focus: HomeKey | null = null;
   #hovered: HomeKey | null = null;
 
@@ -117,12 +151,26 @@ export class HomeScene {
     assertScenePalette(options.palette);
     this.#engine = engine;
     this.#options = options;
+    this.#models = STYLE_MODELS[options.style];
+    this.#callouts = new SceneCallouts<HomeKey>(engine.views, {
+      position: (key) => this.#entities.get(key)?.get(Position),
+      showLabel: (key, label) => {
+        const entity = this.#entities.get(key);
+        if (entity?.has(Label)) entity.set(Label, label);
+        else entity?.add(Label(label));
+      },
+    });
     this.#entities = new KeyedEntities<string>(engine, { release: (entity, key) => this.#release(entity, key) });
-    this.#removeSystem = options.motion
-      ? engine.addSystem(({ elapsed }) => {
+    if (options.motion) {
+      this.#removeSystems.push(
+        engine.addSystem(({ elapsed }) => {
           for (const node of this.#nodes.values()) node.visual.animate?.(elapsed);
-        })
-      : () => {};
+        }),
+      );
+    }
+    // Before `Labels`, which then puts each element where its side says.
+    if (options.createLabel)
+      this.#removeSystems.push(engine.addSystem(() => this.#callouts.place(), { phase: "render", order: Labels.ORDER - 1 }));
   }
 
   /** The object's entity, for example to point the camera at it (`CameraRig.focus`). */
@@ -159,7 +207,8 @@ export class HomeScene {
   }
 
   dispose(): void {
-    this.#removeSystem();
+    for (const remove of this.#removeSystems) remove();
+    this.#callouts.clear();
     // A scene being disposed no longer reports hover or selection, so the UI gets no calls while unmounting.
     this.#hovered = null;
     this.#focus = null;
@@ -184,7 +233,9 @@ export class HomeScene {
 
   #putCenter(keep: Set<string>, model: HomeModel, layout: OrbitLayout): void {
     const { palette } = this.#options;
-    this.#put(keep, DAEMON_KEY, model.daemonRunning, ORIGIN, () => daemonCore(model.daemonRunning, palette));
+    const core = coreLook(model.daemonRunning, model.sessions);
+    this.#put(keep, DAEMON_KEY, core, ORIGIN, () => daemonCore(core, palette));
+    this.#put(keep, "floor", FLOOR_RADIUS, ORIGIN, () => floorGrid(FLOOR_RADIUS, palette));
     this.#put(keep, "track", SESSION_RADIUS, ORIGIN, () => sessionTrack(SESSION_RADIUS, palette));
     for (const [i, sector] of layout.sectors.entries()) {
       this.#put(keep, `sector:${i}`, sector, ORIGIN, () => sectorArc(REPO_RADIUS + 0.7, sector.start, sector.span, palette));
@@ -198,8 +249,9 @@ export class HomeScene {
       const key = repoKey(repo.id);
       const look = repoLook(repo, repoKind(repo.layer, model.layerCount));
       const place = { position: { x: at.x, y: 0, z: at.z }, angle: at.angle };
-      this.#put(keep, key, look, place, () => repoModel(look, this.#options.palette));
-      this.#setLabel(key, repoHasLabel(repo) ? { kind: "repo", key, repo } : null);
+      this.#put(keep, key, look, place, () => this.#models.repo(look, this.#options.palette));
+      const tone = repoLabelTone(repo, this.#options.labels);
+      this.#setLabel(key, tone ? { kind: "repo", key, repo, tone } : null);
     }
   }
 
@@ -212,7 +264,7 @@ export class HomeScene {
       if (!at || !repoAt) continue;
       this.#sessionRepos.set(session.id, session.repo);
       const key = sessionKey(session.id);
-      this.#put(keep, key, session, { position: { x: at.x, y: SESSION_Y, z: at.z } }, () => sessionPod(session, palette));
+      this.#put(keep, key, session, { position: { x: at.x, y: SESSION_Y, z: at.z } }, () => this.#models.session(session, palette));
       this.#setLabel(key, sessionHasLabel(session) ? { kind: "session", key, session } : null);
       // Wire from the drone to the repo in the session state colour, so an error is visible at the repo too.
       const color = sessionStateColor(session.state, palette);
@@ -315,7 +367,8 @@ export class HomeScene {
     if (node.labelSignature === signature) return;
     node.labelSignature = signature;
     if (entity.has(Label)) entity.remove(Label);
-    if (target) entity.add(Label({ element: createLabel(target), offset: { y: LABEL_OFFSET[target.kind] } }));
+    this.#callouts.detach(key);
+    if (target) this.#callouts.attach(key, { element: createLabel(target), offset: { y: LABEL_OFFSET[target.kind] } });
   }
 
   #release(entity: Entity, key: string): void {
@@ -323,6 +376,7 @@ export class HomeScene {
     this.#nodes.delete(key);
     this.#links.delete(key);
     this.#places.delete(key);
+    if (isHomeKey(key)) this.#callouts.detach(key);
     for (const off of node?.offs ?? []) off();
     if (node) disposeObject3D(node.visual.object);
     if (key === this.#hovered) this.#hover(null);

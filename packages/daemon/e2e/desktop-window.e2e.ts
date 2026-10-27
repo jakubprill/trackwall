@@ -12,7 +12,7 @@ describe("the main window under the desktop shell's CSP", () => {
   test(
     "Home draws the 3D scene of the repos and gets the daemon's events, with nothing refused by the CSP",
     async () => {
-      // A repo with a change has a label in the scene (a clean one has none), so the label shows the scene was built.
+      // A repo with a change has a label in the scene, so the label shows the scene was built.
       writeFileSync(join(trackwall().daemon.projects, "shop", "notes.txt"), "to do\n");
       const { page, problems, eventsArrived, close } = await trackwall().openDesktopWindow();
 
