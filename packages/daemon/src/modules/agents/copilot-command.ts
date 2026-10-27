@@ -11,6 +11,17 @@ import { envKey } from "../../infra/env-key.ts";
  * macOS Homebrew gives a plain executable.
  */
 
+/** Copilot CLI as configured (a name from `PATH` or a full path, then arguments) resolved to the program to run. */
+export type ResolvedCopilot = { program: string; args: string[] } | { missing: string; message: string };
+
+/** The one way sessions and the doctor find Copilot CLI (ADR-101), so the doctor's answer is the sessions' answer. */
+export function resolveCopilot(command: readonly string[], env: NodeJS.ProcessEnv): ResolvedCopilot {
+  const [name, ...args] = command;
+  if (name === undefined) throw new Error("the Copilot CLI command is empty");
+  const program = findCopilot(name, env);
+  return program ? { program, args } : { missing: name, message: `Copilot CLI (${name}) not found in PATH` };
+}
+
 /** The program's full path or `undefined` when it is missing; `program` can be a name from `PATH` or a full path. */
 export function findCopilot(program: string, env: NodeJS.ProcessEnv): string | undefined {
   const found = which(program, env);

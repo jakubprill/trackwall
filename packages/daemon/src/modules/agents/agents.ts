@@ -28,7 +28,7 @@ import {
   type Verification,
 } from "@trackwall/protocol";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
-import { findCopilot, toolPermissionArgs } from "./copilot-command.ts";
+import { resolveCopilot, toolPermissionArgs } from "./copilot-command.ts";
 import type { CopilotHookOutput } from "./copilot-hook-output.ts";
 import { CopilotHookEvent } from "./copilot-hook-record.ts";
 import { writeCopilotPlugin } from "./copilot-plugin.ts";
@@ -658,9 +658,9 @@ export class Agents {
   async #launch({ id = randomUUID(), repo, supervisor, cwd, task, args, promptOnStart, hasConversation }: LaunchSpec): Promise<Session> {
     // The MCP server and the hooks are the daemon on `127.0.0.1`, which a proxy of the user must not get (ADR-89).
     const env = withLoopbackNoProxy({ ...(await this.#deps.env()), TERM: "xterm-256color", COLORTERM: "truecolor", ...LOOPBACK_HOOKS_ENV });
-    const [name = "copilot", ...prefix] = this.#deps.copilot;
-    const program = findCopilot(name, env);
-    if (!program) throw new DomainError("agent_unavailable", `Copilot CLI (${name}) not found in PATH`);
+    const copilot = resolveCopilot(this.#deps.copilot, env);
+    if ("missing" in copilot) throw new DomainError("agent_unavailable", copilot.message);
+    const { program, args: prefix } = copilot;
     const permissions = this.#deps.repos.toolPermissions({ repo, supervisor });
     const role = this.#role(repo, supervisor, task);
     if (this.#sessions.has(id)) throw new Error(`session ${id} is already listed`);

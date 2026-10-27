@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import type { TaskChanges, WorkingTreeChanges } from "@trackwall/protocol";
 import { mapLimit } from "../../infra/map-limit.ts";
+import type { RunOutput } from "../../infra/run-program.ts";
 import { git, revParse } from "./git.ts";
 import { parseChangedFiles, parseNulTerminated } from "./parse.ts";
-import type { RunOutput } from "./run.ts";
 import { commitCount, uncommittedCount } from "./worktree.ts";
 
 /**

@@ -1,6 +1,7 @@
 /**
  * Fake `gh` and `glab` for repo hosting tests. The first argument is a JSON file with the test settings; then the
- * arguments as the daemon passes them: `api --hostname <host> <path>` or `repo clone <repo> <directory>`.
+ * arguments as the daemon passes them: `api --hostname <host> <path>`, `auth status --hostname <host>` or
+ * `repo clone <repo> <directory>`.
  * Every call appends to `log` the arguments and the environment variables the daemon is meant to set.
  */
 import { execFileSync } from "node:child_process";
@@ -20,6 +21,8 @@ const Config = z.object({
   /** Repos whose clone ends in an error with this message. */
   cloneErrors: z.record(z.string(), z.string()).default({}),
   cloneDelayMs: z.number().default(0),
+  /** A message on stderr and code 1 for `auth status` with the given `--hostname`; any other host is signed in. */
+  authErrors: z.record(z.string(), z.string()).default({}),
 });
 
 const [configFile, ...args] = process.argv.slice(2);
@@ -48,6 +51,10 @@ if (command === "api") {
   const page = Number(query.get("page"));
   const perPage = Number(query.get("per_page"));
   process.stdout.write(JSON.stringify(config.repos.slice((page - 1) * perPage, page * perPage)));
+} else if (command === "auth" && subcommand === "status") {
+  const authError = config.authErrors[args[3] ?? ""];
+  if (authError) fail(authError);
+  process.stdout.write(`Logged in to ${args[3]}\n`);
 } else if (command === "repo" && subcommand === "clone") {
   const [, , repo, dest] = args;
   if (!repo || !dest) fail("missing repo or directory");
