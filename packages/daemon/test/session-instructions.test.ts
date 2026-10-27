@@ -48,6 +48,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     const roles: SessionRole[] = [
       { repo: "shop", task: null },
       { repo: null, changesCode: false },
+      { repo: null, free: true },
     ];
     for (const role of roles) {
       const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
@@ -121,6 +122,19 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     );
     expect(text).not.toContain("you do not change code");
     expect(text).not.toContain("refuses you its shell");
+  });
+
+  test("a free session in the projects folder works with the user in any repo, without the supervisor's or the task rules (ADR-100)", () => {
+    const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
+    writeSessionInstructions(sessionDir, "0.5.5", { repo: null, free: true });
+    const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
+    expect(text).toContain("The user sees this session in Trackwall's Sessions view");
+    expect(text).toContain("You are a free session in the projects folder that holds the user's repos, not in one repo");
+    expect(text).toContain("nothing you change in them goes through a review in Trackwall: change only what the user asks for");
+    expect(text).toContain("propose it with propose_task, so it runs in its own worktree");
+    expect(text).not.toContain("You are the supervisor");
+    expect(text).not.toContain("Work only in this worktree");
+    expect(text).toContain(MCP_INSTRUCTIONS);
   });
 
   test("a session directory with a comma in its path gets no file, because the variable splits on commas", () => {

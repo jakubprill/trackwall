@@ -125,8 +125,8 @@ interface AgentsRepos {
   projectsDir(): Promise<string>;
   /** The task worktrees folder for a new task (ADR-84). */
   worktreesDir(): Promise<string>;
-  /** The `toolPermissions` patterns for a session in repo `repo` (`null` for the supervisor), ADR-66. */
-  toolPermissions(repo: string | null): ToolPermissions;
+  /** The `toolPermissions` patterns for a session in repo `repo` (`null` in the projects folder) or the supervisor, ADR-66. */
+  toolPermissions(session: Pick<Session, "repo" | "supervisor">): ToolPermissions;
   /** `supervisor` from `workspace.yaml` (ADR-78); `invalid_config` for a bad key. */
   supervisorSettings(): SupervisorSettings;
   /** Moves the repo out of the projects folder (ADR-83) and returns where it went. */
@@ -207,7 +207,7 @@ export class Agents {
       openEditor: deps.openEditor,
       log: deps.log,
       sessions: {
-        launch: (spec) => this.#launch(spec),
+        launch: (spec) => this.#launch({ ...spec, supervisor: false }),
         of: (task) => this.#views().filter((s) => s.task === task),
         close: (id) => this.#close(id),
       },
@@ -237,11 +237,17 @@ export class Agents {
     return this.#view(this.#get(id));
   }
 
-  /** A main session in the root of `repo`; its id is also Copilot CLI's session id, so a restart can resume it (ADR-95). */
-  async start(repo: string): Promise<Session> {
+  /**
+   * A main session in the root of `repo`, or with `repo: null` a free session in the projects folder (ADR-100), with
+   * `prompt` as its first message (`--interactive`) when there is one. Its id is also Copilot CLI's session id, so a
+   * restart can resume it (ADR-95).
+   */
+  async start(repo: string | null, prompt?: string): Promise<Session> {
     const id = randomUUID();
-    const cwd = await this.#deps.repos.repoPath(repo);
-    return this.#launch({ id, repo, cwd, task: null, args: [`--session-id=${id}`], promptOnStart: false, hasConversation: false });
+    const cwd = repo === null ? await this.#deps.repos.projectsDir() : await this.#deps.repos.repoPath(repo);
+    const args = [`--session-id=${id}`, ...(prompt === undefined ? [] : [`--interactive=${prompt}`])];
+    const started = prompt !== undefined;
+    return this.#launch({ id, repo, supervisor: false, cwd, task: null, args, promptOnStart: started, hasConversation: started });
   }
 
   /**
@@ -308,7 +314,7 @@ export class Agents {
     const cwd = await this.#deps.repos.projectsDir();
     // The ended supervisor whose conversation this one goes on with under its id gives up its place before the start.
     if (this.#sessions.has(spec.id)) this.#close(spec.id);
-    const started = await this.#launch({ ...spec, repo: null, cwd, task: null });
+    const started = await this.#launch({ ...spec, repo: null, supervisor: true, cwd, task: null });
     // One of them may have been dismissed during the start; the start has still succeeded.
     for (const old of ended) if (old.id !== spec.id && this.#sessions.has(old.id)) this.#close(old.id);
     return started;
@@ -447,7 +453,7 @@ export class Agents {
   }
 
   /** The prompt for what waits unread for a session: its task's review comments and messages, and its updates. */
-  #inboxPrompt(session: { id: string; repo: string | null; task: string | null }): string | undefined {
+  #inboxPrompt(session: { id: string; supervisor: boolean; task: string | null }): string | undefined {
     const reviewComments = session.task === null ? 0 : this.#reviews.unread(session.task);
     return inboxPrompt({ reviewComments, ...this.#coordination.unread(session), trustNotice: this.#miseTrust.waiting(session.id) });
   }
@@ -649,20 +655,20 @@ export class Agents {
    * Copilot CLI in `cwd` (the repo root or the worktree of task `task`) with arguments before the session's arguments;
    * `promptOnStart` when the arguments carry the first message (`--interactive`), so the session works from the start.
    */
-  async #launch({ id = randomUUID(), repo, cwd, task, args, promptOnStart, hasConversation }: LaunchSpec): Promise<Session> {
+  async #launch({ id = randomUUID(), repo, supervisor, cwd, task, args, promptOnStart, hasConversation }: LaunchSpec): Promise<Session> {
     // The MCP server and the hooks are the daemon on `127.0.0.1`, which a proxy of the user must not get (ADR-89).
     const env = withLoopbackNoProxy({ ...(await this.#deps.env()), TERM: "xterm-256color", COLORTERM: "truecolor", ...LOOPBACK_HOOKS_ENV });
     const [name = "copilot", ...prefix] = this.#deps.copilot;
     const program = findCopilot(name, env);
     if (!program) throw new DomainError("agent_unavailable", `Copilot CLI (${name}) not found in PATH`);
-    const permissions = this.#deps.repos.toolPermissions(repo);
-    const role: SessionRole = repo === null ? { repo, changesCode: this.#deps.repos.supervisorSettings().changesCode } : { repo, task };
+    const permissions = this.#deps.repos.toolPermissions({ repo, supervisor });
+    const role = this.#role(repo, supervisor, task);
     if (this.#sessions.has(id)) throw new Error(`session ${id} is already listed`);
     const dir = sessionDir(this.#deps.home, id);
     const token = this.#tokens.issue(id);
     let prepared: PreparedSession;
     try {
-      prepared = this.#prepare({ id, role, task, dir, token, promptOnStart, hasConversation, program });
+      prepared = this.#prepare({ id, role, supervisor, task, dir, token, promptOnStart, hasConversation, program });
     } catch (err) {
       this.#tokens.revoke(id);
       rmSync(dir, { recursive: true, force: true });
@@ -702,6 +708,11 @@ export class Agents {
     if (task !== null) session.askToRead();
     this.#startTicking();
     return this.#view(session);
+  }
+
+  #role(repo: string | null, supervisor: boolean, task: string | null): SessionRole {
+    if (repo !== null) return { repo, task };
+    return supervisor ? { repo, changesCode: this.#deps.repos.supervisorSettings().changesCode } : { repo, free: true };
   }
 
   async stop(id: string): Promise<Session> {
@@ -746,18 +757,18 @@ export class Agents {
   /**
    * Daemon start, once the API listens (the sessions' hooks and MCP server need its port): the sessions that ran when
    * the previous daemon stopped go on with their conversations (ADR-95). A task's session resumes as Resume does; the
-   * supervisor and a main session start again under their id with `--resume`. One that cannot (its task was ended, its
-   * repo is gone, a supervisor already runs) goes to the log.
+   * supervisor, a free session and a main session start again under their id with `--resume`. One that cannot (its task
+   * was ended, its repo is gone, a supervisor already runs) goes to the log.
    */
   async resumeLeftSessions(): Promise<void> {
     // The supervisor first: the user may start a new one meanwhile, which would leave the old conversation behind.
-    const left = [...this.#left].sort((a, b) => Number(b.repo === null && b.task === null) - Number(a.repo === null && a.task === null));
+    const left = [...this.#left].sort((a, b) => Number(isLeftSupervisor(b)) - Number(isLeftSupervisor(a)));
     this.#left = [];
     for (const session of left) {
       try {
         await this.#resumeLeft(session);
         this.#deps.log(
-          `resumed session ${session.session} (${session.task === null ? (session.repo ?? "supervisor") : `task ${session.task}`})`,
+          `resumed session ${session.session} (${session.task === null ? (session.repo ?? (isLeftSupervisor(session) ? "supervisor" : "free session")) : `task ${session.task}`})`,
         );
       } catch (err) {
         this.#deps.log(`resuming session ${session.session}: ${String(err)}`);
@@ -765,18 +776,20 @@ export class Agents {
     }
   }
 
-  async #resumeLeft({ session: id, repo, task, hasConversation }: ResumableSession): Promise<void> {
+  async #resumeLeft(left: ResumableSession): Promise<void> {
+    const { session: id, repo, task, hasConversation } = left;
     if (task !== null) {
       await this.#tasks.resume(task);
       return;
     }
     const spec = resumeLaunch({ session: id, hasConversation });
-    if (repo === null) {
+    if (isLeftSupervisor(left)) {
       if (this.#supervisorStart || this.#runningSupervisor()) throw new Error("a supervisor already runs");
       await this.#startSupervisorAs(spec);
       return;
     }
-    await this.#launch({ ...spec, repo, cwd: await this.#deps.repos.repoPath(repo), task: null });
+    const cwd = repo === null ? await this.#deps.repos.projectsDir() : await this.#deps.repos.repoPath(repo);
+    await this.#launch({ ...spec, repo, supervisor: false, cwd, task: null });
   }
 
   /** Daemon exit, before `procs.stopAll`: the sessions it stops stay in the list for the next daemon to resume (ADR-95). */
@@ -815,7 +828,7 @@ export class Agents {
    * The session directory with the session plugin, MCP config, session instructions and an empty
    * `hooks.jsonl`, before Copilot CLI starts.
    */
-  #prepare({ id, role, task, dir, token, promptOnStart, hasConversation, program }: SessionFiles): PreparedSession {
+  #prepare({ id, role, supervisor, task, dir, token, promptOnStart, hasConversation, program }: SessionFiles): PreparedSession {
     const { repo } = role;
     const pluginDir = join(dir, "plugin");
     const hooksFile = join(dir, HOOKS_FILENAME);
@@ -831,6 +844,7 @@ export class Agents {
     const session = new LiveSession({
       id,
       repo,
+      supervisor,
       task,
       cols: INITIAL_COLS,
       rows: INITIAL_ROWS,
@@ -839,7 +853,7 @@ export class Agents {
       hasConversation,
       program,
       run: () => this.#deps.procs.state(owner(id)),
-      prompt: () => this.#inboxPrompt({ id, repo, task }),
+      prompt: () => this.#inboxPrompt({ id, supervisor, task }),
       onUserText: () => this.#coordination.userTyped({ id, task }),
       onPromptSent: () => this.#miseTrust.promptSent(id),
       onEvent: (event) => {
@@ -878,7 +892,9 @@ export class Agents {
   /** The list of running sessions a restart resumes (ADR-95); a failed write is retried at the next tick. */
   #followLive(live: readonly LiveSession[]): void {
     try {
-      this.#resumable.follow(live.map(({ id, repo, task, hasConversation }) => ({ session: id, repo, task, hasConversation })));
+      this.#resumable.follow(
+        live.map(({ id, repo, supervisor, task, hasConversation }) => ({ session: id, repo, supervisor, task, hasConversation })),
+      );
     } catch (err) {
       this.#deps.log(`writing ${RESUMABLE_SESSIONS_FILE}: ${String(err)}`);
     }
@@ -932,14 +948,18 @@ export class Agents {
   }
 }
 
-/** What `#launch` starts: Copilot CLI in a repo root, in a task's worktree, or the supervisor in the projects folder. */
+/**
+ * What `#launch` starts: Copilot CLI in a repo root, in a task's worktree, or the supervisor or a free session in the
+ * projects folder.
+ */
 interface LaunchSpec {
   /** The session id; a new one by default. */
   id?: string;
   /** Copilot CLI already keeps a conversation under the id: the arguments carry the first message or resume it (ADR-95). */
   hasConversation: boolean;
-  /** `null` for the supervisor. */
+  /** `null` in the projects folder. */
   repo: string | null;
+  supervisor: boolean;
   cwd: string;
   task: string | null;
   args: readonly string[];
@@ -950,6 +970,7 @@ interface LaunchSpec {
 interface SessionFiles {
   id: string;
   role: SessionRole;
+  supervisor: boolean;
   task: string | null;
   dir: string;
   token: string;
@@ -987,6 +1008,11 @@ function domainError(repo: string | null, err: unknown): unknown {
  */
 function resumeLaunch({ session: id, hasConversation }: Pick<ResumableSession, "session" | "hasConversation">): SupervisorLaunch {
   return { id, args: [hasConversation ? `--resume=${id}` : `--session-id=${id}`], promptOnStart: false, hasConversation };
+}
+
+/** A left session without a repo or task that was the supervisor, not a free session (ADR-100). */
+function isLeftSupervisor(left: ResumableSession): boolean {
+  return left.repo === null && left.task === null && left.supervisor;
 }
 
 /** A supervisor's start: its id, its arguments and whether they carry its first message or resume its conversation. */

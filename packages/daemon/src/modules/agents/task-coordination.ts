@@ -100,7 +100,7 @@ export class TaskCoordination {
   }
 
   /** How many messages wait unread for a session's task, and updates for its own delegated work. */
-  unread(session: Pick<Session, "id" | "repo" | "task">): { messages: number; updates: number } {
+  unread(session: Pick<Session, "id" | "supervisor" | "task">): { messages: number; updates: number } {
     const messages = session.task === null ? 0 : this.#messages.unread(session.task);
     return { messages, updates: this.#updates.unread(proposerKeyOf(session)) };
   }
@@ -167,7 +167,7 @@ export class TaskCoordination {
   }
 
   /** A closed session: its typing and the updates for it (unless it is the supervisor's) go. */
-  sessionClosed(session: Pick<Session, "id" | "repo">): void {
+  sessionClosed(session: Pick<Session, "id" | "supervisor">): void {
     this.#userInSession.delete(session.id);
     const proposer = proposerKeyOf(session);
     if (proposer !== SUPERVISOR) this.#updates.forget(proposer);

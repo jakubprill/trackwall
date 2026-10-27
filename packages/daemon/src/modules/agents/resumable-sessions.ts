@@ -11,11 +11,16 @@ import { readStateFile } from "./state-file.ts";
  * of the last check.
  */
 
-/** One session to resume: the supervisor (`repo: null`), a main session in a repo root, or a task's session. */
+/** One session to resume: the supervisor or a free session (`repo: null`), a main session in a repo root, or a task's session. */
 export const ResumableSession = z.object({
-  /** The Trackwall session id, which a main session and the supervisor also pass to Copilot CLI as its session id. */
+  /** The Trackwall session id, which every session but a task's also passes to Copilot CLI as its session id. */
   session: z.uuid(),
   repo: RepoId.nullable(),
+  /**
+   * The supervisor; read only with `repo: null`, where `false` is a free session (ADR-100). A file of a Trackwall before
+   * free sessions has no such field, and a session without a repo there was the supervisor.
+   */
+  supervisor: z.boolean().default(true),
   task: TaskId.nullable(),
   /** Copilot CLI keeps a conversation under the id (the session had a prompt): it resumes it, otherwise starts anew. */
   hasConversation: z.boolean(),

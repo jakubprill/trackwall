@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ResumableSessions } from "../src/modules/agents/resumable-sessions.ts";
 
-const MAIN = { session: "6f1d0a52-2c41-4a8e-9a3f-0c5a1b2d3e4f", repo: "shop", task: null, hasConversation: true };
-const SUPERVISOR = { session: "0b6c9e1a-7d2f-4c3b-8e5a-9f1d2c3b4a5e", repo: null, task: null, hasConversation: false };
+const MAIN = { session: "6f1d0a52-2c41-4a8e-9a3f-0c5a1b2d3e4f", repo: "shop", supervisor: false, task: null, hasConversation: true };
+const SUPERVISOR = { session: "0b6c9e1a-7d2f-4c3b-8e5a-9f1d2c3b4a5e", repo: null, supervisor: true, task: null, hasConversation: false };
 
 function newPath(): string {
   return join(mkdtempSync(join(tmpdir(), "trackwall-resumable-")), "resumable-sessions.json");
@@ -30,6 +30,14 @@ describe("the list of sessions a restart resumes", () => {
     list.follow([]);
 
     expect(new ResumableSessions(path, () => {}).read()).toEqual([MAIN, SUPERVISOR]);
+  });
+
+  test("a file of a Trackwall before free sessions has no supervisor field, and its session without a repo is the supervisor (ADR-100)", () => {
+    const path = newPath();
+    const { supervisor: _, ...older } = SUPERVISOR;
+    writeFileSync(path, JSON.stringify({ sessions: [older] }));
+
+    expect(new ResumableSessions(path, () => {}).read()).toEqual([SUPERVISOR]);
   });
 
   test("without a file there is nothing to resume", () => {

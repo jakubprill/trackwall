@@ -37,6 +37,7 @@ function view(id: string, taskId: string | null, state: TaskState | null, run: S
   return {
     id,
     repo: taskId === null && id !== MAIN ? null : "shop",
+    supervisor: taskId === null && id !== MAIN,
     startedAt: "2026-10-25T12:00:00.000Z",
     run,
     state: state && { state, source: "hook", confidence: "high", reason: "hook", at: "2026-10-25T12:00:00.000Z" },
@@ -117,7 +118,7 @@ describe("messages to a task's session", () => {
       message: { task: "by-main", from: BY_MAIN, text: "Also keep the old endpoint.", readAt: null },
     });
     expect(asked).toEqual([TASK_SESSION]);
-    expect(coordination.unread({ id: TASK_SESSION, repo: "shop", task: "by-main" }).messages).toBe(1);
+    expect(coordination.unread({ id: TASK_SESSION, supervisor: false, task: "by-main" }).messages).toBe(1);
     expect(coordination.takeMessages("by-main").map((m) => m.text)).toEqual(["Also keep the old endpoint."]);
     expect(coordination.takeMessages("by-main")).toEqual([]);
     expect(coordination.messages()).toEqual([expect.objectContaining({ text: "Also keep the old endpoint.", readAt: expect.any(String) })]);
@@ -178,7 +179,7 @@ describe("messages to a task's session", () => {
       tenMillisecondsLater();
       coordination.userTyped({ id: TASK_SESSION, task: "by-main" });
       // The task's session closed and resumed in a new one: the user still took part in the task.
-      coordination.sessionClosed({ id: TASK_SESSION, repo: "shop" });
+      coordination.sessionClosed({ id: TASK_SESSION, supervisor: false });
       tenMillisecondsLater();
       fill();
       tenMillisecondsLater();
@@ -197,7 +198,7 @@ describe("messages to a task's session", () => {
     coordination.taskEnded("by-main");
 
     expect(coordination.messages()).toEqual([]);
-    expect(coordination.unread({ id: TASK_SESSION, repo: "shop", task: "by-main" }).messages).toBe(0);
+    expect(coordination.unread({ id: TASK_SESSION, supervisor: false, task: "by-main" }).messages).toBe(0);
   });
 });
 
@@ -207,7 +208,7 @@ describe("updates on delegated work", () => {
     coordination.sessionEvent({ id: TASK_SESSION, task: "by-main" }, { kind: "turn_ended" });
 
     expect(asked).toEqual([MAIN]);
-    expect(coordination.unread({ id: MAIN, repo: "shop", task: null }).updates).toBe(1);
+    expect(coordination.unread({ id: MAIN, supervisor: false, task: null }).updates).toBe(1);
     expect(coordination.takeUpdates(MAIN)).toEqual({
       updates: [{ kind: "turn_ended", task: "by-main", session: TASK_SESSION, at: expect.any(String) }],
       dropped: 0,
@@ -284,7 +285,7 @@ describe("updates on delegated work", () => {
 
     coordination.sessionEvent({ id: TASK_SESSION, task: "by-gone" }, { kind: "turn_ended" });
 
-    expect(coordination.unread({ id: gone, repo: "shop", task: null }).updates).toBe(0);
+    expect(coordination.unread({ id: gone, supervisor: false, task: null }).updates).toBe(0);
   });
 
   test("a closed main session's updates go with it, the supervisor's stay for the next supervisor", () => {
@@ -292,10 +293,10 @@ describe("updates on delegated work", () => {
     coordination.proposalRejected({ id: "p1", proposedBy: BY_MAIN }, null);
     coordination.proposalRejected({ id: "p2", proposedBy: BY_SUPERVISOR }, null);
 
-    coordination.sessionClosed({ id: MAIN, repo: "shop" });
-    coordination.sessionClosed({ id: SUPERVISOR, repo: null });
+    coordination.sessionClosed({ id: MAIN, supervisor: false });
+    coordination.sessionClosed({ id: SUPERVISOR, supervisor: true });
 
-    expect(coordination.unread({ id: MAIN, repo: "shop", task: null }).updates).toBe(0);
+    expect(coordination.unread({ id: MAIN, supervisor: false, task: null }).updates).toBe(0);
     expect(coordination.takeUpdates(NEW_SUPERVISOR).updates.map((u) => u.task)).toEqual(["p2"]);
   });
 });

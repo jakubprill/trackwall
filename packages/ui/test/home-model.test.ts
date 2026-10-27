@@ -20,6 +20,7 @@ function session(id: string, repoId: string, over: Partial<Session> = {}): Sessi
   return {
     id,
     repo: repoId,
+    supervisor: false,
     startedAt: "2026-10-24T10:00:00Z",
     run: running,
     state: { state: "Working", source: "hook", confidence: "high", at: "2026-10-24T10:01:00Z", reason: "hook" },

@@ -18,6 +18,7 @@ function session(id: string, state: Session["state"], run: Session["run"] = runn
   return {
     id,
     repo: `repo-${id}`,
+    supervisor: false,
     startedAt: "2026-10-23T10:00:00Z",
     run,
     state,

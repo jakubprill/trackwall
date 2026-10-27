@@ -7,8 +7,8 @@ import { envKey } from "../../infra/env-key.ts";
  * Session instructions (§4.4, ADR-46): an `*.instructions.md` file in the session directory that Copilot CLI loads as a
  * repository instruction, because the daemon adds its directory to `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` in the session
  * environment. It changes neither the user's repo nor `~/.copilot`. The content is the session's environment (the
- * Trackwall version and where the user sees the session), its role (the supervisor in the projects folder, a main
- * session in the repo root or a task session in a worktree) and the shared MCP instruction (`MCP_INSTRUCTIONS`), which
+ * Trackwall version and where the user sees the session), its role (the supervisor or a free session in the projects
+ * folder, a main session in the repo root or a task session in a worktree) and the shared MCP instruction (`MCP_INSTRUCTIONS`), which
  * Copilot CLI does not take from the MCP server.
  */
 
@@ -19,10 +19,10 @@ const INSTRUCTIONS_FILE = "trackwall.instructions.md";
 
 /**
  * Who the session is: the supervisor in the projects folder (`repo: null`, ADR-58), which may change code only with
- * `supervisor.changesCode` (ADR-78), a main session in the repo root (`task: null`) or a task session in the task's
- * worktree.
+ * `supervisor.changesCode` (ADR-78), a free session in the projects folder (`free`, ADR-100), a main session in the
+ * repo root (`task: null`) or a task session in the task's worktree.
  */
-export type SessionRole = { repo: null; changesCode: boolean } | { repo: string; task: string | null };
+export type SessionRole = { repo: null; changesCode: boolean } | { repo: null; free: true } | { repo: string; task: string | null };
 
 /**
  * Writes the instructions of a session started by Trackwall `version` to `<sessionDir>/instructions/` and returns that
@@ -45,7 +45,7 @@ export function withInstructionsDir(env: NodeJS.ProcessEnv, dir: string): NodeJS
 }
 
 function sessionInstructions(version: string, role: SessionRole): string {
-  const { repo } = role;
+  const inPanel = role.repo === null && !("free" in role);
   return [
     // `applyTo: "**"`: the instruction applies to every file, i.e. to the whole session, like `.github/instructions` in a repo.
     "---",
@@ -54,7 +54,7 @@ function sessionInstructions(version: string, role: SessionRole): string {
     "# Working in Trackwall",
     "",
     `Trackwall ${version} started this Copilot CLI session, and its \`trackwall\` MCP server is connected. The user ` +
-      `sees this session ${repo === null ? "in the supervisor panel on the right of every Trackwall view" : "in Trackwall's Sessions view next to their other sessions"}, ` +
+      `sees this session ${inPanel ? "in the supervisor panel on the right of every Trackwall view" : "in Trackwall's Sessions view next to their other sessions"}, ` +
       "and Trackwall tells them when you end your turn or ask for approval.",
     "",
     "## Your session",
@@ -69,7 +69,7 @@ function sessionInstructions(version: string, role: SessionRole): string {
 }
 
 function sessionRole(role: SessionRole): string[] {
-  if (role.repo === null) return supervisorRole(role.changesCode);
+  if (role.repo === null) return "free" in role ? freeRole() : supervisorRole(role.changesCode);
   return role.task === null ? repoRole(role.repo) : taskRole(role.repo, role.task);
 }
 
@@ -88,6 +88,16 @@ function supervisorRole(changesCode: boolean): string[] {
     `- You work in no repo, so ${mcpTools.runMiseTask.name}, ${mcpTools.startService.name} and the tools that stop them refuse you; a task that needs a running service asks for it itself.`,
     `- When the user starts their day in Trackwall, your first message asks for a briefing: read ${mcpTools.getDayReport.name} once instead of walking the repos. Other MCP servers of the user may reach their repo host and issue tracker: a repo's remote (from ${mcpTools.listRepos.name}) is its project path there, and a task's branch is the source branch of its merge request.`,
     "- Tell the user what you delegated, what came back and what needs their decision.",
+  ];
+}
+
+function freeRole(): string[] {
+  return [
+    "You are a free session in the projects folder that holds the user's repos, not in one repo: the user started you to work with them on whatever they ask, in any repo or none.",
+    "- The repos here are the user's own working copies, and nothing you change in them goes through a review in Trackwall: change only what the user asks for, and tell them which repos you changed. Do not switch a repo's branch, commit, push or merge unless they ask.",
+    `- A larger piece of work in one repo, or work that can run in parallel, goes to another agent: propose it with ${mcpTools.proposeTask.name}, so it runs in its own worktree and the user reviews it there. Trackwall asks you to call ${mcpTools.getUpdates.name} when its session finishes a turn or reports, and you steer it with ${mcpTools.sendMessage.name}.`,
+    `- You work in no repo of Trackwall, so ${mcpTools.runMiseTask.name}, ${mcpTools.startService.name} and the tools that stop them refuse you; run what you need in the repo's folder yourself, or ask the user.`,
+    `- ${mcpTools.reportResult.name} is only for task sessions; here you answer the user directly.`,
   ];
 }
 

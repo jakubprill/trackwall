@@ -19,7 +19,7 @@ Give an agent a task on its own branch and worktree, and review its changes befo
 
 ## How it works
 
-Press "+" in "Sessions", pick a repo and write the prompt. Trackwall creates a branch named after the task's title or prompt (`trackwall/<slug>`) from the repo's default branch, in a separate git worktree, and starts Copilot CLI there with your prompt as the first message. The task shows on the list like a session, with the same states.
+Press "+" in "Sessions", pick a repo, keep "In its own worktree" checked and write the prompt. Trackwall creates a branch named after the task's title or prompt (`trackwall/<slug>`) from the repo's default branch, in a separate git worktree, and starts Copilot CLI there with your prompt as the first message. The task shows on the list like a session, with the same states.
 
 The "Changes" tab follows the worktree live: the files and diff against the default branch, the task's commits and what the agent has not committed yet. "VS Code" opens the worktree in your editor. A task proposed with a model shows the model next to the task port, and its session runs on that model every time it starts. When the agent finishes, it leaves a summary above the task's tabs. Everything above the tabs is folded into one line of notices, such as "Summary" or "Verification failed"; click one, or "Details", to see the sections. A task that another session proposed also shows, above the summary, the messages that session sent its agent (see [Main session and task proposals](/features/main-session)).
 

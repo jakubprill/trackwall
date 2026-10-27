@@ -18,6 +18,7 @@ function session(id: string, startedAt: string, task: string | null = null): Ses
   return {
     id,
     repo: "shop",
+    supervisor: false,
     startedAt,
     run: { kind: "running", runId: id, startedAt, pid: 1 },
     state: null,
