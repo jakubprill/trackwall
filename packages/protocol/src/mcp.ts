@@ -783,7 +783,8 @@ export const mcpTools = {
       `listed by ${GET_REPO} (miseTasks) can run; a task that is already running there is not started again, and the result is its ` +
       `current run. Returns run: running with runId. Then call ${WAIT_FOR_MISE_TASK} to learn the exit code and ${TAIL} ` +
       "for the output (records of this run have its runId); pass the same task to both. A mise config the user has not " +
-      "trusted gives mise_unavailable: only the user can trust it, in Trackwall; ask them. In a task worktree that " +
+      "trusted gives mise_unavailable: only the user can trust it, in Trackwall; ask them, and a session in Trackwall is " +
+      "told when they did. In a task worktree that " +
       "also happens when its mise config (mise.toml, mise.local.toml, file tasks…) changed since the user trusted it: " +
       "the user trusts the changed config in the task's panel. A session in Trackwall can run only mise tasks of its own " +
       "repo, a task session only in its own task's worktree or the repo root, and the supervisor none. Long-running " +
@@ -841,7 +842,8 @@ export const mcpTools = {
       `${VERIFICATION_MAX_FAILURES} failed tests and errors the first ${VERIFICATION_MAX_ERRORS} errors of the run's log, ` +
       `${GET_TEST_RESULTS} and ${GET_ERRORS} have the rest) or cancelled (the user stopped it). tests: null or reports: 0 ` +
       `means the run wrote no JUnit reports. not_found when the worktree has no mise task ${VERIFY_MISE_TASK}; ` +
-      "mise_unavailable when its mise config is not trusted (the user trusts it in the task's panel). A task session " +
+      "mise_unavailable when its mise config is not trusted (the user trusts it in the task's panel, and a session in " +
+      "Trackwall is told when they did). A task session " +
       "verifies only its own task, a session in a repo root only tasks of its repo, and the supervisor none: it reads " +
       `the result in ${GET_SESSION}.`,
     args: z

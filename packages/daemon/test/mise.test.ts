@@ -59,7 +59,7 @@ function setup(config: object, command: readonly string[] = FAKE_MISE) {
   const removeRepo = () => {
     present = false;
   };
-  const mise = new Mise({ procs, repos, tasks, command, env: async () => process.env });
+  const mise = new Mise({ procs, repos, tasks, command, env: async () => process.env, onTrusted: () => {} });
   return { mise, repoDir, worktree, procs, logs, removeRepo, refuseWorktree };
 }
 

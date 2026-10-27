@@ -333,7 +333,7 @@ export class AgentTasks {
       throw new DomainError(
         "mise_unavailable",
         `the mise config in the worktree of task ${task.branch} changed since the user trusted it (${changes.map((c) => c.path).join(", ")}); ` +
-          "only the user can trust it, in the task's panel in Trackwall",
+          "only the user can trust it, in the task's panel in Trackwall, and a session in Trackwall is told when they did",
       );
     return { worktree: task.worktree, port: task.port };
   }

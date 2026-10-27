@@ -398,7 +398,7 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     ]);
     await expect(agents.trustedTaskWorktree(task.id, "shop")).rejects.toMatchObject({
       code: "mise_unavailable",
-      message: `the mise config in the worktree of task ${task.branch} changed since the user trusted it (mise-tasks/build, mise.local.toml, mise.toml); only the user can trust it, in the task's panel in Trackwall`,
+      message: `the mise config in the worktree of task ${task.branch} changed since the user trusted it (mise-tasks/build, mise.local.toml, mise.toml); only the user can trust it, in the task's panel in Trackwall, and a session in Trackwall is told when they did`,
     });
 
     writeFileSync(join(task.worktree, "mise.local.toml"), '[env]\nX = "2"\n');

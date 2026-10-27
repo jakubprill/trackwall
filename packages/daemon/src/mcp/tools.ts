@@ -223,9 +223,10 @@ const runs: ToolRuns = {
     const outcome = await facade.agents.waitFor(caller, target, timeoutSeconds * 1000, signal);
     return { ...outcome, session: outcome.session && agentSession(outcome.session) };
   },
-  runMiseTask: async (facade, { repo, task, miseTask }, { caller }) => ({
-    run: await facade.mise.start(callerTarget(facade, caller, repo, task, MISE_TASK_ACTION), miseTask),
-  }),
+  runMiseTask: async (facade, { repo, task, miseTask }, { caller }) => {
+    const target = callerTarget(facade, caller, repo, task, MISE_TASK_ACTION);
+    return { run: await facade.agents.runNeedingMiseTrust(caller, target, () => facade.mise.start(target, miseTask)) };
+  },
   stopMiseTask: async (facade, { repo, task, miseTask }, { caller }) => ({
     run: await facade.mise.stop(callerTarget(facade, caller, repo, task, MISE_TASK_ACTION), miseTask),
   }),
@@ -235,13 +236,15 @@ const runs: ToolRuns = {
   listRunningMiseTasks: async (facade) => ({ miseTasks: facade.mise.running() }),
   verifyTask: async (facade, { repo, task, runId, timeoutSeconds }, { caller, signal }) => {
     assertCallerMayVerify(facade, caller, task);
-    callerTarget(facade, caller, repo, task, VERIFY_ACTION);
-    return { verification: await facade.verifications.verify(task, runId, timeoutSeconds * 1000, signal) };
+    const target = callerTarget(facade, caller, repo, task, VERIFY_ACTION);
+    const verify = () => facade.verifications.verify(task, runId, timeoutSeconds * 1000, signal);
+    return { verification: await facade.agents.runNeedingMiseTrust(caller, target, verify) };
   },
   startService: async (facade, { repo, task, dependencies, timeoutSeconds }, { caller }) => {
     // Only the root comes from the session; its dependencies come from the graph, so they may be other repos.
     const target = callerTarget(facade, caller, repo, task, SERVICE_ACTION);
-    return { slice: await facade.services.start({ ...target, dependencies, waitMs: timeoutSeconds * 1000 }) };
+    const start = () => facade.services.start({ ...target, dependencies, waitMs: timeoutSeconds * 1000 });
+    return { slice: await facade.agents.runNeedingMiseTrust(caller, target, start) };
   },
   stopService: async (facade, { repo, task, dependencies }, { caller }) => {
     const target = callerTarget(facade, caller, repo, task, SERVICE_ACTION);
