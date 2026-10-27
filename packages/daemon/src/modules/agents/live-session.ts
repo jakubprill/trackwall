@@ -1,7 +1,5 @@
-import { createHash } from "node:crypto";
 import type { AgentDialog, DialogAnswer, RunState, Session, TaskState, TaskStateChange, TaskUpdate } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
-import { readAgentDialog, type ScreenDialog } from "./copilot-dialog.ts";
 import { type CopilotHookOutput, hookOutputFor } from "./copilot-hook-output.ts";
 import type { CopilotHookEvent, CopilotHookRecord } from "./copilot-hook-record.ts";
 import { approvalRequest } from "./copilot-hooks.ts";
@@ -10,6 +8,7 @@ import { promptBoxText } from "./copilot-prompt-box.ts";
 import { CopilotSessionState, RETYPE_AFTER_MS } from "./copilot-session-state.ts";
 import { HookTail } from "./hook-tail.ts";
 import { SessionAttention } from "./session-attention.ts";
+import { SessionDialogs, selectsOption } from "./session-dialogs.ts";
 import { type ScreenViewer, TerminalScreen } from "./terminal-screen.ts";
 
 /**
@@ -77,14 +76,6 @@ function typedByUser(data: string): boolean {
 function writesText(data: string, state: TaskState | undefined): boolean {
   if (state === "Approval" || state === "Plan") return false;
   return !data.startsWith(ESCAPE) || data.startsWith(`${ESCAPE}[200~`);
-}
-
-/** A digest of the dialog's text and of the wait it answers, so the same request asked again gets another id. */
-function dialogId(waits: number, dialog: ScreenDialog): string {
-  return createHash("sha256")
-    .update(JSON.stringify([waits, dialog]))
-    .digest("hex")
-    .slice(0, 16);
 }
 
 type SessionUpdate = Extract<TaskUpdate, { kind: "turn_ended" | "error" | "exited" }>;
@@ -172,19 +163,17 @@ export class LiveSession {
   /** The user put text into the input box or pressed Esc since the last end of a turn: the next end is of their turn. */
   #userDrove = false;
   #submitTimer: NodeJS.Timeout | undefined;
-  /** Counts the waits for a dialog (each entry into `Approval` or `Input`), so the same request asked again gets a new id. */
-  #waits = 0;
-  /** The dialog last read, for the screen revision and wait it was read at: the screen is read once per change. */
-  #dialogRead:
-    | { revision: number; waits: number; kind: AgentDialog["kind"]; notice: string | undefined; dialog: AgentDialog | null }
-    | undefined;
-  /** The text of the last hook if it was an approval request ("Use MCP tool: …"): the heading of an approval box cut above. */
-  #notice: string | undefined;
+  readonly #dialogs: SessionDialogs;
   /**
-   * The user answered an approval Copilot CLI drew before its hook reached the daemon (ADR-71): when that hook comes,
-   * the answer it already got moves the session on, as the key would have in `Approval`.
+   * Approvals Copilot CLI drew before their hooks reached the daemon that the user already answered (ADR-71): when such
+   * a hook comes, the answer it already got moves the session on, as the key would have in `Approval`.
    */
-  #answeredEarly = false;
+  #earlyAnswers = 0;
+  /**
+   * An early answer ended a wait, and no hook but a notification came since: a next wait is for a request that came
+   * at once with that wait's, so their texts stay together (`SessionDialogs.requested`).
+   */
+  #requestsGoOn = false;
 
   constructor(o: LiveSessionOptions) {
     this.id = o.id;
@@ -204,6 +193,7 @@ export class LiveSession {
       program: o.program,
     });
     this.#screen = new TerminalScreen(o.cols, o.rows);
+    this.#dialogs = new SessionDialogs(this.#screen);
     this.#hooks = new HookTail(o.hooksFile);
   }
 
@@ -228,18 +218,45 @@ export class LiveSession {
     // After the hooks already written, so that an end of a turn read now does not let a prompt join the user's text.
     // The answer to the agent's question (on the screen in `Input`, ADR-66) leaves nothing in the input box either.
     const key = sessionKey(data);
-    const answersEarly = key !== undefined && this.#answersApprovalOnScreen(key);
-    if (answersEarly) this.#answeredEarly = true;
-    if (writesText(data, this.#last?.state) && this.#dialog() === null && !answersEarly) {
+    const state = this.#last?.state;
+    const midTurn = this.#midTurn();
+    // A digit or Enter mid-turn into an approval Copilot CLI drew before its hook (ADR-71), answered already or not,
+    // leaves nothing in the input box. Only mid-turn, so a message the user starts with a digit is still their text.
+    const intoApproval = midTurn && key !== undefined && answersDialog(key) && this.#dialogs.approvalDrawn();
+    if (writesText(data, state) && this.#dialog() === null && !intoApproval) {
       this.#userDraft = true;
       this.#userTextAt = Date.now();
       this.#userDrove = true;
       this.#onUserText();
     }
     if (data === ESCAPE) this.#userDrove = true;
-    if (key) this.#report(this.#state.key(key));
+    if (key && this.#keyChangesState(key, data)) this.#report(this.#state.key(key));
     // After the key's own state change, so that the `Input` an Esc causes counts as seen.
     if (typedByUser(data)) this.#attention.typed();
+  }
+
+  /** The agent works on its turn, where an approval may be on the screen before its hook (ADR-71). */
+  #midTurn(): boolean {
+    const state = this.#last?.state;
+    return state === "Working" || state === "Stale";
+  }
+
+  /**
+   * Notes a key that selects an option of the approval on the screen, and tells whether the key goes to the state
+   * detectors: a digit the approval does not offer answers nothing (it does nothing, or moves the selection to a "No"
+   * option), so the session still waits.
+   */
+  #keyChangesState(key: SessionKey, data: string): boolean {
+    const state = this.#last?.state;
+    const midTurn = this.#midTurn();
+    const approval = state === "Approval" || midTurn ? this.#dialogOnScreen("approval") : null;
+    if (approval === null) return true;
+    const answers = selectsOption(approval, key, data);
+    if (answers) {
+      if (midTurn) this.#earlyAnswers++;
+      this.#dialogs.answered();
+    }
+    return answers || state !== "Approval" || key !== "choice";
   }
 
   /**
@@ -349,9 +366,11 @@ export class LiveSession {
   tick(): boolean {
     if (this.#finished) return false;
     this.#readHooks();
+    if (this.#last?.state === "Approval" && this.#dialogOnScreen("approval") !== null) this.#state.approvalOnScreen();
     this.#report([this.#state.tick()]);
     this.#settleUserDraft();
     this.#followTypedPrompt();
+    if (!this.#finished) this.#dialogs.forgetAnswerOffScreen();
     // A prompt asked for goes into a box that just appeared before the box can say the session waits for you.
     this.#typePrompt();
     this.#readPromptBox();
@@ -394,27 +413,9 @@ export class LiveSession {
     return kind === undefined ? null : this.#dialogOnScreen(kind);
   }
 
-  /** The agent dialog of `kind` the screen shows now, whatever the state; read once per screen image and wait. */
+  /** The agent dialog of `kind` the screen shows now, whatever the state (`SessionDialogs.onScreen`). */
   #dialogOnScreen(kind: AgentDialog["kind"]): AgentDialog | null {
-    if (this.#finished) return null;
-    const revision = this.#screen.revision;
-    const read = this.#dialogRead;
-    const notice = this.#notice;
-    if (read?.revision === revision && read.waits === this.#waits && read.kind === kind && read.notice === notice) return read.dialog;
-    const found = readAgentDialog(this.#screen.lines(), kind, notice);
-    const dialog = found ? { ...found, id: dialogId(this.#waits, found) } : null;
-    this.#dialogRead = { revision, waits: this.#waits, kind, notice, dialog };
-    return dialog;
-  }
-
-  /**
-   * A digit or Enter in the middle of a turn while Copilot CLI already shows an approval whose hook has not reached the
-   * daemon yet (ADR-71): the state is still `Working`, but the key answers the approval and leaves nothing in the input
-   * box. Only mid-turn, so a message the user starts with a digit in the input box is still their text.
-   */
-  #answersApprovalOnScreen(key: SessionKey): boolean {
-    const state = this.#last?.state;
-    return answersDialog(key) && (state === "Working" || state === "Stale") && this.#dialogOnScreen("approval") !== null;
+    return this.#finished ? null : this.#dialogs.onScreen(kind);
   }
 
   dispose(): void {
@@ -444,8 +445,10 @@ export class LiveSession {
       this.#hasConversation = true;
     }
     if (record.event === "userPromptSubmitted" || record.event === "agentStop") this.#contextGiven = undefined;
-    this.#notice = approvalRequest(record) ? record.payload.message : undefined;
+    if (record.event !== "notification") this.#requestsGoOn = false;
     this.#report(this.#state.hook(record));
+    // After the state change, which starts a new wait on the first request.
+    if (approvalRequest(record)) this.#dialogs.requested(record.payload.message);
     this.#applyEarlyAnswer(record.event);
     // The end of a turn from its hook, not from the state: a question dialog and an Esc give `Input` mid-turn too.
     if (record.event !== "agentStop") return false;
@@ -456,13 +459,16 @@ export class LiveSession {
 
   /**
    * The approval's hook after the user already answered it (ADR-71) would leave the session in `Approval` until the
-   * command ends, so the answer counts now. Any other hook of the turn means the answer went to no approval of record.
+   * command ends, so the answer counts now, one per hook. Any other hook of the turn means the answers went to no
+   * approval of record.
    */
   #applyEarlyAnswer(event: CopilotHookEvent): void {
-    if (!this.#answeredEarly) return;
-    if (this.#last?.state === "Approval") this.#report(this.#state.key("choice"));
-    else if (event === "notification") return;
-    this.#answeredEarly = false;
+    if (this.#earlyAnswers === 0) return;
+    if (this.#last?.state === "Approval") {
+      this.#earlyAnswers--;
+      this.#report(this.#state.key("choice"));
+      this.#requestsGoOn = true;
+    } else if (event !== "notification") this.#earlyAnswers = 0;
   }
 
   /** Until the session has a state, its screen may show the input box of a new session (ADR-69). */
@@ -474,7 +480,7 @@ export class LiveSession {
     for (const change of changes) {
       if (!change) continue;
       this.#attention.changed(this.#last?.state, change.state);
-      if (change.state !== this.#last?.state && DIALOG_IN_STATE.has(change.state)) this.#waits++;
+      if (change.state !== this.#last?.state && DIALOG_IN_STATE.has(change.state)) this.#dialogs.waitStarted(this.#requestsGoOn);
       const wasError = this.#last?.state === "Error";
       this.#last = change;
       if (change.state === "Error" && !wasError && !this.#finished) this.#onEvent({ kind: "error" });

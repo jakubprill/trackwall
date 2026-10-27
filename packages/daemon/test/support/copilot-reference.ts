@@ -52,6 +52,9 @@ export type CopilotReference = z.infer<typeof CopilotReference>;
 
 export const PROMPT_PLACEHOLDER = "{prompt}";
 
+/** The prompt after which the fake Copilot CLI's agent calls two commands at once, each asking for approval (ADR-66). */
+export const PARALLEL_TOOLS_PROMPT = "run two commands at once";
+
 export function referenceFile(platform: string = process.platform): string {
   return join(import.meta.dir, "..", "fixtures", "copilot", "reference", `${platform}.json`);
 }
