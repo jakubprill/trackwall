@@ -1,6 +1,7 @@
 import { statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { delimiter, dirname, extname, isAbsolute, join } from "node:path";
+import type { ToolPermissions } from "@trackwall/protocol";
 import { envKey } from "../../infra/env-key.ts";
 
 /**
@@ -9,6 +10,17 @@ import { envKey } from "../../infra/env-key.ts";
  * so instead of the script we take the native `copilot.exe` from the platform package, as the script itself does. On
  * macOS Homebrew gives a plain executable.
  */
+
+/** Copilot CLI as configured (a name from `PATH` or a full path, then arguments) resolved to the program to run. */
+export type ResolvedCopilot = { program: string; args: string[] } | { missing: string; message: string };
+
+/** The one way sessions and the doctor find Copilot CLI (ADR-101), so the doctor's answer is the sessions' answer. */
+export function resolveCopilot(command: readonly string[], env: NodeJS.ProcessEnv): ResolvedCopilot {
+  const [name, ...args] = command;
+  if (name === undefined) throw new Error("the Copilot CLI command is empty");
+  const program = findCopilot(name, env);
+  return program ? { program, args } : { missing: name, message: `Copilot CLI (${name}) not found in PATH` };
+}
 
 /** The program's full path or `undefined` when it is missing; `program` can be a name from `PATH` or a full path. */
 export function findCopilot(program: string, env: NodeJS.ProcessEnv): string | undefined {
@@ -55,4 +67,9 @@ function isFile(path: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Copilot CLI's own approval rules (ADR-66); one argument each, with `=`, so a pattern never reads as another option. */
+export function toolPermissionArgs(permissions: ToolPermissions): string[] {
+  return [...permissions.allow.map((p) => `--allow-tool=${p}`), ...permissions.deny.map((p) => `--deny-tool=${p}`)];
 }

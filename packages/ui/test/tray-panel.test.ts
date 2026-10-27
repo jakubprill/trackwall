@@ -8,6 +8,7 @@ function session(id: string, needsAttention: boolean, dialog: Session["dialog"] 
   return {
     id,
     repo: `repo-${id}`,
+    supervisor: false,
     startedAt: "2026-10-24T10:00:00Z",
     run: running,
     state: null,
@@ -20,10 +21,12 @@ function session(id: string, needsAttention: boolean, dialog: Session["dialog"] 
 
 const proposal: TaskProposal = {
   id: "p1",
+  kind: "task",
   repo: "billing",
   title: "Retry failed invoices",
   prompt: "Retry invoices that failed to send",
   proposedBy: { session: null, supervisor: false },
+  model: null,
   createdAt: "2026-10-24T10:00:00Z",
 };
 
@@ -33,7 +36,7 @@ test("the tray panel lists the task proposals and only the sessions that wait fo
     tasks: [],
     proposals: [proposal],
     messages: [],
-    worktreesDir: "worktrees",
+    lastSupervisor: null,
   };
   const entries = trayPanelEntries(list);
   expect(entries.proposals).toEqual([proposal]);
@@ -55,7 +58,7 @@ test("sessions asking for approval come first, apart from the other waiting sess
     tasks: [],
     proposals: [proposal],
     messages: [],
-    worktreesDir: "worktrees",
+    lastSupervisor: null,
   };
   const entries = trayPanelEntries(list);
   expect(entries.approvals.map((s) => s.id)).toEqual(["b"]);

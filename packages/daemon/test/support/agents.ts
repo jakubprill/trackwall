@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Session, ToolPermissions } from "@trackwall/protocol";
+import type { Session, SupervisorSettings, ToolPermissions } from "@trackwall/protocol";
 import { DomainError } from "../../src/infra/errors.ts";
 import { Agents } from "../../src/modules/agents/agents.ts";
 import { Logs } from "../../src/modules/logs/logs.ts";
@@ -11,15 +11,17 @@ import { RuntimeFile } from "../../src/modules/procs/runtime-file.ts";
 import { Vcs } from "../../src/modules/vcs/vcs.ts";
 import { groupPlatform } from "../../src/platform/group-platform.ts";
 import { terminalPlatform } from "../../src/platform/terminal.ts";
+import { hookServerFor } from "./hook-server.ts";
 
 const fakeCopilot = join(import.meta.dir, "..", "fixtures", "fake-copilot-session.ts");
-const daemonMain = join(import.meta.dir, "..", "..", "src", "main.ts");
 
 /**
- * Sessions with a real PTY, a process group, real git and hooks through the daemon's `copilot-hook` subcommand;
+ * Sessions with a real PTY, a process group, real git and the hooks POSTed to the daemon's hook route (ADR-88);
  * Copilot CLI is a fake. `repos` are the repos of the projects folder: identifier → directory. A `home` passed in
  * simulates a daemon restart with the same state directory. `projectsDir` is where the supervisor runs; `null` is an unset
- * projects folder. `toolPermissions` are the patterns every session gets from the workspace (ADR-66).
+ * projects folder. `toolPermissions` are the patterns every session gets from the workspace (ADR-66), and
+ * `supervisor` is `supervisor` from the workspace (ADR-78). `worktreesDir` is the task worktrees folder the workspace gives
+ * new tasks (ADR-84); by default one in `home`, so that a restarted daemon with the same `home` finds the same folder.
  */
 export function makeAgents(
   repos: Record<string, string>,
@@ -27,6 +29,8 @@ export function makeAgents(
   projectsDir: string | null = null,
   toolPermissions: ToolPermissions = { allow: [], deny: [] },
   env: NodeJS.ProcessEnv = process.env,
+  supervisor: SupervisorSettings = { changesCode: false },
+  worktreesDir: () => string = () => join(home, "task-worktrees"),
 ) {
   const procs = new ProcessGroups({
     logs: new Logs({ dir: join(home, "logs"), maxFileBytes: 1024 * 1024, log: () => {} }),
@@ -36,7 +40,7 @@ export function makeAgents(
     log: () => {},
   });
   const opened: string[] = [];
-  const agents = new Agents({
+  const agents: Agents = new Agents({
     procs,
     repos: {
       repoPath: async (id) => {
@@ -48,15 +52,18 @@ export function makeAgents(
         if (projectsDir === null) throw new DomainError("bad_request", "set the projects folder first");
         return projectsDir;
       },
+      worktreesDir: async () => worktreesDir(),
       toolPermissions: () => toolPermissions,
+      supervisorSettings: () => supervisor,
+      removeRepo: () => Promise.reject(new Error("unused")),
     },
     vcs: new Vcs(),
     home,
     copilot: [process.execPath, fakeCopilot],
     version: "0.0.0-test",
     env: async () => env,
-    hookCommand: (event, hooksFile) => ({ exec: process.execPath, args: ["--no-env-file", daemonMain, "copilot-hook", event, hooksFile] }),
-    sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
+    sessionHook: hookServerFor(() => agents),
+    sessionMcpServer: (sessionToken) => ({ url: "http://127.0.0.1:9/mcp", headers: { "x-trackwall-session-token": sessionToken } }),
     openEditor: (dir) => opened.push(dir),
     log: () => {},
   });

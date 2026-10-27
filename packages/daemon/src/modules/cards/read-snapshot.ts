@@ -1,7 +1,8 @@
-import type { CardProblem, TreeEntry } from "@trackwall/protocol";
+import type { CardProblem } from "@trackwall/protocol";
 import { messageOf } from "../../infra/errors.ts";
+import type { JavaCalls } from "./java-calls.ts";
 import { stemOf } from "./repo-path.ts";
-import type { RepoSnapshot } from "./snapshot.ts";
+import type { CallSource, RepoSnapshot } from "./snapshot.ts";
 
 /**
  * Reading a commit for the extractors: the file list (`ls-tree`), source files chosen by a content search (`git grep`,
@@ -10,9 +11,16 @@ import type { RepoSnapshot } from "./snapshot.ts";
  * limits goes to the commit snapshot's `problems`, so an incomplete card says what it lacks.
  */
 
+/** A commit's file with its size and blob id, as `vcs` lists it. */
+interface CommitFile {
+  path: string;
+  size: number;
+  oid: string;
+}
+
 /** What `cards` needs from `vcs` to read a commit; wired in the facade. */
 export interface SnapshotVcs {
-  commitFiles(dir: string, commit: string, maxBytes: number): Promise<{ files: TreeEntry[]; truncated: boolean }>;
+  commitFiles(dir: string, commit: string, maxBytes: number): Promise<{ files: CommitFile[]; truncated: boolean }>;
   readFiles(dir: string, commit: string, paths: readonly string[], maxBytes: number): Promise<Map<string, Buffer>>;
   grepFiles(
     dir: string,
@@ -23,17 +31,36 @@ export interface SnapshotVcs {
   ): Promise<{ paths: string[]; truncated: boolean }>;
 }
 
-/** Source files to read: matching `globs` and `accepts`, with content matching the ERE expression `pattern`. */
-export interface SourceSelection {
+/** Files to read by content: matching `globs` and `accepts`, with content matching the ERE expression `pattern`. */
+export interface ContentSearch {
   pattern: string;
   globs: readonly string[];
   accepts: (path: string) => boolean;
+  /** At most this many files from the search; more is a card problem. */
+  max: number;
+  /** What the files hold, for a person (`controllers or HTTP clients`), in the problems of the search. */
+  holding: string;
+}
+
+/** Source files to read by content, and the files named after the types they mention. */
+export interface SourceSelection extends ContentSearch {
   /**
    * The type names a source file mentions (ADR-38). The read fetches the source files with those names (`OrderDto.java`,
    * `OrderDto.kt`), in further rounds also the names from them, because a DTO from an endpoint contract usually has no
    * annotation the search would find it by.
    */
   referencedTypes: (text: string) => Iterable<string>;
+}
+
+/**
+ * The source files the endpoint reach reads (ADR-82): all of them, because a handler's path to a client goes through
+ * services that have no annotation the search would find. `known` says a file with this blob id is already read
+ * (`call-files.ts`), so its content is not fetched again.
+ */
+export interface CallSelection {
+  accepts: (path: string) => boolean;
+  /** What an earlier card read from this blob; such a file is not fetched again. */
+  kept: (oid: string) => JavaCalls | undefined;
 }
 
 /** Directories with dependencies copied into the repo: their files are not part of the repo, for builds or for mechanisms. */
@@ -43,8 +70,6 @@ const MAX_LIST_BYTES = 64 * 1024 * 1024;
 /** A build file larger than this is generated or is not a build file. */
 const MAX_FILE_BYTES = 1024 * 1024;
 const MAX_FILES = 2000;
-/** Source files from the search: controllers and HTTP clients are a fraction of the code, so this fits even in a large monorepo. */
-const MAX_SOURCE_FILES = 3000;
 /** The name list from `git grep`: 3000 paths of 300 characters is under 1 MB. */
 const MAX_GREP_BYTES = 4 * 1024 * 1024;
 const MAX_READ_BYTES = 64 * 1024 * 1024;
@@ -52,31 +77,115 @@ const MAX_READ_BYTES = 64 * 1024 * 1024;
 const RELATED_ROUNDS = 3;
 /** Files fetched by type names, across all rounds together. */
 const MAX_RELATED_FILES = 3000;
+/** Source files for the endpoint reach: a large monolith has a few thousand; more is generated code. */
+const MAX_CALL_SOURCES = 20_000;
 
+/**
+ * `reads` chooses the build and configuration files by path, `documents` further files by content, read together with
+ * them (OpenAPI specs under any name, ADR-87), `sources` the source files for the HTTP facts and `calls` those for the
+ * endpoint reach.
+ */
 export async function readSnapshot(
   vcs: SnapshotVcs,
   dir: string,
   commit: string,
   reads: (path: string) => boolean,
   sources: SourceSelection,
+  calls: CallSelection,
+  documents: ContentSearch,
 ): Promise<RepoSnapshot> {
   const problems: CardProblem[] = [];
   const listed = await vcs.commitFiles(dir, commit, MAX_LIST_BYTES);
   if (listed.truncated)
     problems.push({
+      code: "files-not-read",
       path: "",
       message: `the commit's file list is longer than ${MAX_LIST_BYTES} B; the card describes only its beginning`,
     });
   const files = listed.files.filter((f) => !f.path.split("/").some((segment) => SKIPPED_DIRS.has(segment)));
   const wanted = files.filter((f) => reads(f.path) && isReadable(f)).map((f) => f.path);
   if (wanted.length > MAX_FILES)
-    problems.push({ path: "", message: `the repo has ${wanted.length} build files; the card reads the first ${MAX_FILES}` });
-  const requested = [...wanted.slice(0, MAX_FILES), ...(await sourceFiles(vcs, dir, commit, files, sources, problems))];
+    problems.push({
+      code: "files-not-read",
+      path: "",
+      message: `the repo has ${wanted.length} build files; the card reads the first ${MAX_FILES}`,
+    });
+  const [searched, sourced] = await Promise.all([
+    searchFiles(vcs, dir, commit, files, documents, problems),
+    searchFiles(vcs, dir, commit, files, sources, problems),
+  ]);
+  const requested = [...new Set([...wanted.slice(0, MAX_FILES), ...searched, ...sourced])];
   const reader = new BudgetedReader(vcs, dir, commit);
   for (const path of await reader.read(requested))
-    problems.push({ path, message: `the file was not read within the ${MAX_READ_BYTES} B commit read limit` });
+    problems.push({ code: "files-not-read", path, message: `the file was not read within the ${MAX_READ_BYTES} B commit read limit` });
   const typeFiles = await readTypeFiles(reader, files, sources, new Set(requested), problems);
-  return { commit, paths: files.map((f) => f.path), text: (path) => reader.texts.get(path), typeFiles, problems };
+  // Read last, so the card's own facts come first within the read limit; the extractors see only the files read for them.
+  const cardTexts = new Map(reader.texts);
+  // A cut file list (reported above) misses code a handler may run through, so it gives no reach rather than a short one.
+  const callSources = listed.truncated ? null : await readCallSources(reader, files, calls, problems);
+  return {
+    commit,
+    paths: files.map((f) => f.path),
+    pathsComplete: !listed.truncated,
+    text: (path) => cardTexts.get(path),
+    typeFiles,
+    callSources,
+    problems,
+  };
+}
+
+/**
+ * All source files for the endpoint reach, with the text of those not read before; `null` with a problem when some
+ * cannot be read (too many, too large, over the read limit), because a reach without some of the code would be wrong
+ * rather than incomplete.
+ */
+async function readCallSources(
+  reader: BudgetedReader,
+  files: readonly CommitFile[],
+  calls: CallSelection,
+  problems: CardProblem[],
+): Promise<CallSource[] | null> {
+  const accepted = files.filter((f) => calls.accepts(f.path));
+  const unreadable = accepted.filter((f) => !isReadable(f));
+  if (accepted.length > MAX_CALL_SOURCES || unreadable.length > 0) {
+    const reason =
+      unreadable.length > 0
+        ? `${unreadable.length} source files are larger than ${MAX_FILE_BYTES} B`
+        : `the repo has ${accepted.length} source files, more than ${MAX_CALL_SOURCES}`;
+    problems.push({ code: "files-not-read", path: unreadable[0]?.path ?? "", message: `${reason}; endpoints have no reach` });
+    return null;
+  }
+  // Kept reads count against the limit as if fetched, so whether the reach fits depends on the commit, not on what
+  // earlier cards left in memory: a card without a reach is saved to disk for good.
+  const unread = accepted.filter((f) => !reader.texts.has(f.path));
+  const bytes = unread.reduce((sum, f) => sum + f.size, 0);
+  if (bytes > reader.left()) {
+    problems.push({
+      code: "files-not-read",
+      path: "",
+      message: `${unread.length} source files do not fit within the ${MAX_READ_BYTES} B commit read limit; endpoints have no reach`,
+    });
+    return null;
+  }
+  const sources = accepted.map((f): CallSource | { path: string; oid: string } => {
+    const kept = calls.kept(f.oid);
+    return kept ? { path: f.path, oid: f.oid, calls: kept } : { path: f.path, oid: f.oid };
+  });
+  const missed = await reader.read(sources.filter((s) => !("calls" in s) && !reader.texts.has(s.path)).map((s) => s.path));
+  if (missed.length > 0) {
+    problems.push({
+      code: "files-not-read",
+      path: missed[0] ?? "",
+      message: `${missed.length} source files could not be read; endpoints have no reach`,
+    });
+    return null;
+  }
+  return sources.map((s) => {
+    if ("calls" in s) return s;
+    const text = reader.texts.get(s.path);
+    if (text === undefined) throw new Error(`${s.path} was neither read nor reported as missed`);
+    return { ...s, text };
+  });
 }
 
 /** Reading the commit's files in successive batches with the shared `MAX_READ_BYTES` limit. */
@@ -93,9 +202,14 @@ class BudgetedReader {
     this.commit = commit;
   }
 
+  /** Bytes the limit still allows. */
+  left(): number {
+    return MAX_READ_BYTES - this.bytes;
+  }
+
   /** Reads `paths` and returns the files that did not fit in the limit; the caller records a problem for each of them. */
   async read(paths: readonly string[]): Promise<string[]> {
-    const left = MAX_READ_BYTES - this.bytes;
+    const left = this.left();
     const contents =
       paths.length === 0 || left <= 0 ? new Map<string, Buffer>() : await this.vcs.readFiles(this.dir, this.commit, paths, left);
     const missed: string[] = [];
@@ -120,7 +234,7 @@ class BudgetedReader {
  */
 async function readTypeFiles(
   reader: BudgetedReader,
-  files: readonly TreeEntry[],
+  files: readonly CommitFile[],
   sources: SourceSelection,
   requested: ReadonlySet<string>,
   problems: CardProblem[],
@@ -141,6 +255,7 @@ async function readTypeFiles(
   }
   if (skipped.size > 0)
     problems.push({
+      code: "files-not-read",
       path: "",
       message: `${skipped.size} type files referenced from HTTP code were not read (at most ${MAX_RELATED_FILES} files within the ${MAX_READ_BYTES} B commit read limit); their DTOs are missing`,
     });
@@ -148,7 +263,7 @@ async function readTypeFiles(
 }
 
 /** Source files that can be read, by the type name from the file name, without `excluded`. */
-function sourcesByTypeName(files: readonly TreeEntry[], sources: SourceSelection, excluded: ReadonlySet<string>): Map<string, string[]> {
+function sourcesByTypeName(files: readonly CommitFile[], sources: SourceSelection, excluded: ReadonlySet<string>): Map<string, string[]> {
   const byType = new Map<string, string[]>();
   for (const f of files.filter((f) => sources.accepts(f.path) && isReadable(f) && !excluded.has(f.path))) {
     const paths = byType.get(stemOf(f.path));
@@ -173,39 +288,43 @@ function referencedFiles(
 }
 
 /**
- * Source files from the content search in the commit; a repo without any file matching `accepts` does not run
- * `git grep` at all.
+ * Files from a content search in the commit; a repo without any file matching `accepts` does not run `git grep` at all.
  */
-async function sourceFiles(
+async function searchFiles(
   vcs: SnapshotVcs,
   dir: string,
   commit: string,
-  files: readonly TreeEntry[],
-  sources: SourceSelection,
+  files: readonly CommitFile[],
+  search: ContentSearch,
   problems: CardProblem[],
 ): Promise<string[]> {
-  const candidates = new Map(files.filter((f) => sources.accepts(f.path) && isReadable(f)).map((f) => [f.path, f]));
+  const candidates = new Map(files.filter((f) => search.accepts(f.path) && isReadable(f)).map((f) => [f.path, f]));
   if (candidates.size === 0) return [];
   let found: { paths: string[]; truncated: boolean };
   try {
-    found = await vcs.grepFiles(dir, commit, sources.pattern, sources.globs, MAX_GREP_BYTES);
+    found = await vcs.grepFiles(dir, commit, search.pattern, search.globs, MAX_GREP_BYTES);
   } catch (err) {
     // A search error (e.g. a timeout in a huge repo) takes away only the facts from code, not the card from build files.
-    problems.push({ path: "", message: `searching for files with controllers and HTTP clients failed: ${messageOf(err)}` });
+    problems.push({
+      code: "files-not-read",
+      path: "",
+      message: `searching for files with ${search.holding} failed: ${messageOf(err)}`,
+    });
     return [];
   }
   const matched = found.paths.filter((p) => candidates.has(p));
-  if (found.truncated || matched.length > MAX_SOURCE_FILES)
+  if (found.truncated || matched.length > search.max)
     problems.push({
+      code: "files-not-read",
       path: "",
-      message: `the repo has more than ${MAX_SOURCE_FILES} files with controllers or HTTP clients; the card reads the first ones`,
+      message: `the repo has more than ${search.max} files with ${search.holding}; the card reads the first ones`,
     });
-  return matched.slice(0, MAX_SOURCE_FILES);
+  return matched.slice(0, search.max);
 }
 
 /** A file to read: within the size limit and without control characters, because paths go to git line by line. */
-function isReadable(file: TreeEntry): boolean {
-  return (file.size ?? 0) <= MAX_FILE_BYTES && ![...file.path].some((c) => c < " ");
+function isReadable(file: Pick<CommitFile, "path" | "size">): boolean {
+  return file.size <= MAX_FILE_BYTES && ![...file.path].some((c) => c < " ");
 }
 
 /** Text without a BOM and with `\n` instead of `\r\n`, so that expressions and line numbers work the same for files from Windows. */

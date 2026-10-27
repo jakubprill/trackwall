@@ -51,7 +51,7 @@ export function readCatalog(snapshot: RepoSnapshot, path: string, out: ProblemSi
   try {
     parsed = VersionCatalog.parse(parseToml(text));
   } catch (err) {
-    out.problems.push({ path, message: messageOf(err) });
+    out.problems.push({ code: "file-invalid", path, message: messageOf(err) });
     return catalog;
   }
   const version = (v: CatalogVersion | undefined) => catalogVersion(v, parsed.versions);

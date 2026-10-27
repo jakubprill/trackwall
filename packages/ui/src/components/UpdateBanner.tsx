@@ -1,15 +1,17 @@
 import type { ReactNode } from "react";
+import { UpdateInstallStatus } from "@/components/UpdateInstallStatus";
+import { UpdateOffer } from "@/components/UpdateOffer";
 import { Button } from "@/components/ui/button";
-import { availableText, installingText } from "@/lib/updates";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 
-/** Strip above the views while a newer version is available or being installed (ADR-53). */
-export function UpdateBanner({ handle: { update, install, dismissed, dismiss } }: { handle: AppUpdateHandle }) {
+/** Strip above the views while a newer version is available (also waiting for the agents' turns) or being installed (ADR-53). */
+export function UpdateBanner({ handle }: { handle: AppUpdateHandle }) {
+  const { update, install, cancel, dismissed, dismiss } = handle;
   switch (update.state) {
     case "installing":
       return (
         <Strip>
-          <p className="min-w-0 flex-1 text-sm">{installingText(update)} The app restarts on its own.</p>
+          <UpdateInstallStatus update={update} cancel={cancel} />
         </Strip>
       );
     case "install-failed":
@@ -22,16 +24,10 @@ export function UpdateBanner({ handle: { update, install, dismissed, dismiss } }
         </Strip>
       );
     case "available":
-      if (dismissed === update.version) return null;
+      if (dismissed === update.version && !update.afterTurns) return null;
       return (
         <Strip>
-          <p className="min-w-0 flex-1 text-sm">{availableText(update)}</p>
-          <Button size="sm" onClick={() => install(update.version)}>
-            Update and restart
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => dismiss(update.version)}>
-            Later
-          </Button>
+          <UpdateOffer handle={handle} update={update} onLater={() => dismiss(update.version)} />
         </Strip>
       );
     default:

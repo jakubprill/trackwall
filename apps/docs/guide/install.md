@@ -14,7 +14,7 @@ Trackwall runs on Windows (x64) and macOS (Apple Silicon). Each version on the [
 A browser marks a downloaded file as coming from the internet, and SmartScreen then blocks `trackwall.exe`, often without a "Run anyway" button. Command-line tools do not add that mark. In PowerShell, with the [GitHub CLI](https://cli.github.com) signed in (`gh auth login`), this downloads the version in `$v`, checks its sum and unpacks it to `%LOCALAPPDATA%\Programs\Trackwall`:
 
 ```powershell
-$v = "0.4.0"
+$v = "0.5.5"
 $zip = "trackwall-$v-windows-x64.zip"
 gh release download "v$v" -R jakubprill/trackwall -p $zip -p SHA256SUMS.txt -D $env:TEMP --clobber
 if ($LASTEXITCODE) { throw "gh release download failed" }
@@ -48,7 +48,7 @@ Gatekeeper reports an unsigned app downloaded with a browser as "damaged". Downl
 
 ```sh
 shasum -a 256 -c SHA256SUMS.txt --ignore-missing
-ditto -x -k trackwall-0.4.0-macos-arm64.zip /Applications
+ditto -x -k trackwall-0.5.5-macos-arm64.zip /Applications
 xattr -dr com.apple.quarantine /Applications/Trackwall.app
 ```
 
@@ -56,7 +56,7 @@ xattr -dr com.apple.quarantine /Applications/Trackwall.app
 
 Trackwall offers new versions itself: see [App updates](/features/updates).
 
-To update by hand, for example when a proxy stops the download: your data lives in `~/.trackwall` (on Windows `%USERPROFILE%\.trackwall`), outside the app folder. Quit Trackwall from the tray ("Quit", which also stops what runs in the background, so its files can be replaced) and install the new version the same way.
+To update by hand, for example when a proxy stops the download or on 0.4.0, which cannot update itself: your data lives in `~/.trackwall` (on Windows `%USERPROFILE%\.trackwall`), outside the app folder. Quit Trackwall from the tray ("Quit", which also stops what runs in the background, so its files can be replaced) and install the new version the same way.
 
 ## First start
 

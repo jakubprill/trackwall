@@ -1,11 +1,12 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agents, sessionHooksFile } from "../src/modules/agents/agents.ts";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
 import { isAlive } from "../src/platform/process-group.ts";
 import { makeAgents, viewer, waitFor } from "./support/agents.ts";
+import { untilInputBox } from "./support/screen-lines.ts";
 import { PARALLEL_TOOLS_PROMPT } from "./support/copilot-reference.ts";
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -36,12 +37,22 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const instructions = readFileSync(join(home, "sessions", started.id, "instructions", "trackwall.instructions.md"), "utf8");
     expect(instructions).toContain("You are a main session in the root of the repo `shop`");
     expect(readdirSync(repoDir)).toEqual([]);
-    // The session's stdio bridge gets the file with this session's token, by which the MCP server knows who is calling (ADR-39).
-    const tokenFile = join(home, "sessions", started.id, "session-token");
-    const mcpConfig = readFileSync(join(home, "sessions", started.id, "mcp-config.json"), "utf8");
-    expect(JSON.parse(mcpConfig).mcpServers.trackwall.args).toEqual(["mcp-stdio", "--session-token-file", tokenFile]);
-    expect(agents.callerSession(readFileSync(tokenFile, "utf8"))).toBe(started.id);
+    // The session reaches the MCP server over HTTP with this session's token, by which the server knows who is calling (ADR-39, ADR-89).
+    const mcpConfig = JSON.parse(readFileSync(join(home, "sessions", started.id, "mcp-config.json"), "utf8"));
+    const sessionToken = mcpConfig.mcpServers.trackwall.headers["x-trackwall-session-token"];
+    expect(mcpConfig.mcpServers.trackwall).toEqual({
+      type: "http",
+      url: "http://127.0.0.1:9/mcp",
+      headers: { "x-trackwall-session-token": sessionToken },
+      tools: ["*"],
+    });
+    expect(agents.callerSession(sessionToken)).toBe(started.id);
     expect(agents.callerSession("another token")).toBeUndefined();
+    // Both files carry the daemon token and the session token, so only the user reads them (§8; Windows has no mode bits).
+    if (process.platform !== "win32") {
+      expect(statSync(join(home, "sessions", started.id, "mcp-config.json")).mode & 0o777).toBe(0o600);
+      expect(statSync(join(home, "sessions", started.id, "plugin", "hooks.json")).mode & 0o777).toBe(0o600);
+    }
 
     window.attachment.input("fix the test\r");
     const approval = await waitFor(agents, started.id, (s) => s.state?.state === "Approval", "approval request");
@@ -53,6 +64,8 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
 
     window.attachment.input("1");
     await waitFor(agents, started.id, (s) => s.state?.reason === "hook agentStop", "end of turn");
+    // Keys typed before the input box is drawn again are lost, as in Copilot CLI (ADR-68).
+    await untilInputBox(window, "empty");
 
     window.attachment.input("/exit\r");
     const done = await waitFor(agents, started.id, (s) => s.run.kind === "exited", "end of session");
@@ -76,6 +89,26 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     expect(stopped.state).toMatchObject({ state: "Input", confidence: "medium", reason: "key escape" });
     // The Esc the user typed means they see the session, so it is idle, not waiting for you (ADR-47).
     expect(stopped.needsAttention).toBe(false);
+    window.attachment.detach();
+    await agents.stop(started.id);
+  }, 60_000);
+
+  test("an approval cut above by a short terminal is read with the text of its notification as the heading", async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
+    const { agents, procs } = makeAgents({ shop: repoDir });
+    cleanups.push(() => procs.stopAll());
+    const started = await agents.start("shop");
+    const window = viewer(agents, started.id);
+    await waitFor(agents, started.id, () => window.text().includes("Welcome"), "welcome screen");
+    window.attachment.resize(100, 10);
+    window.attachment.input("fix the test\r");
+
+    const approval = await waitFor(agents, started.id, (s) => s.dialog !== null, "the approval dialog");
+    expect(approval.dialog).toMatchObject({
+      kind: "approval",
+      title: expect.stringMatching(/^Run command: /),
+      question: "Do you want to run this command?",
+    });
     window.attachment.detach();
     await agents.stop(started.id);
   }, 60_000);
@@ -195,7 +228,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const { agents, procs, home } = makeAgents({}, undefined, projectsDir);
     cleanups.push(() => procs.stopAll());
 
-    const supervisor = await agents.startSupervisor();
+    const supervisor = await agents.startSupervisor("new");
     expect(supervisor).toMatchObject({ repo: null, task: null, run: { kind: "running" } });
     const window = viewer(agents, supervisor.id);
     await waitFor(
@@ -206,7 +239,66 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     );
     const instructions = readFileSync(join(home, "sessions", supervisor.id, "instructions", "trackwall.instructions.md"), "utf8");
     expect(instructions).toContain("You are the supervisor");
+    expect(instructions).toContain("Copilot CLI refuses you its shell and the tools that write files");
     window.attachment.detach();
+    await agents.stop(supervisor.id);
+  }, 60_000);
+
+  test("a session in the repo root with a prompt gets it as its first message and works from the start (ADR-100)", async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
+    const { agents, procs } = makeAgents({ shop: repoDir });
+    cleanups.push(() => procs.stopAll());
+
+    const started = await agents.start("shop", "Fix the build");
+    expect(started).toMatchObject({ repo: "shop", supervisor: false, task: null });
+    const window = viewer(agents, started.id);
+    await waitFor(agents, started.id, () => window.text().includes("--interactive="), "the first message on the screen");
+    expect(window.unwrappedText()).toContain(`Argument: --session-id=${started.id}`);
+    expect(window.unwrappedText()).toContain("Argument: --interactive=Fix the build");
+    expect(window.unwrappedText()).toContain(repoDir);
+    await waitFor(agents, started.id, (s) => s.state?.state === "Working" || s.state?.state === "Approval", "the first turn");
+    expect(agents.sessions().tasks).toEqual([]);
+    window.attachment.detach();
+    await agents.stop(started.id);
+  }, 60_000);
+
+  test("free sessions start in the projects folder with their own instructions, next to the supervisor and to each other (ADR-100)", async () => {
+    const projectsDir = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
+    const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
+    const { agents, procs, home } = makeAgents({ shop: repoDir }, undefined, projectsDir);
+    cleanups.push(() => procs.stopAll());
+    const supervisor = await agents.startSupervisor("new");
+
+    const free = await agents.start(null);
+    const another = await agents.start(null, "Compare the two APIs");
+    expect(free).toMatchObject({ repo: null, supervisor: false, task: null, run: { kind: "running" } });
+    expect(another).toMatchObject({ repo: null, supervisor: false, run: { kind: "running" } });
+    const window = viewer(agents, free.id);
+    await waitFor(agents, free.id, () => window.unwrappedText().includes(projectsDir), "the projects folder as the working directory");
+    const instructions = readFileSync(join(home, "sessions", free.id, "instructions", "trackwall.instructions.md"), "utf8");
+    expect(instructions).toContain("You are a free session in the projects folder");
+    expect(instructions).not.toContain("You are the supervisor");
+    // A free session is no supervisor: the supervisor stays the one that runs, and what a free session proposes is its own.
+    expect((await agents.startSupervisor("new")).id).toBe(supervisor.id);
+    const proposal = await agents.propose(free.id, { repo: "shop", title: "Add a test", prompt: "Add a cart test", model: null });
+    expect(proposal.proposedBy).toEqual({ session: free.id, supervisor: false });
+    window.attachment.detach();
+    for (const session of [supervisor, free, another]) await agents.stop(session.id);
+  }, 60_000);
+
+  test("a free session needs the projects folder to be set (ADR-100)", async () => {
+    const { agents } = makeAgents({});
+    await expect(agents.start(null)).rejects.toMatchObject({ code: "bad_request", message: "set the projects folder first" });
+  });
+
+  test("a supervisor the user lets change code is told so in its instructions (ADR-78)", async () => {
+    const projectsDir = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
+    const { agents, procs, home } = makeAgents({}, undefined, projectsDir, undefined, process.env, { changesCode: true });
+    cleanups.push(() => procs.stopAll());
+
+    const supervisor = await agents.startSupervisor("new");
+    const instructions = readFileSync(join(home, "sessions", supervisor.id, "instructions", "trackwall.instructions.md"), "utf8");
+    expect(instructions).toContain("The user lets you run commands and change files yourself");
     await agents.stop(supervisor.id);
   }, 60_000);
 
@@ -214,9 +306,9 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const { agents, procs } = makeAgents({}, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
     cleanups.push(() => procs.stopAll());
 
-    const [first, second] = await Promise.all([agents.startSupervisor(), agents.startSupervisor()]);
+    const [first, second] = await Promise.all([agents.startSupervisor("new"), agents.startSupervisor("new")]);
     expect(second.id).toBe(first.id);
-    expect((await agents.startSupervisor()).id).toBe(first.id);
+    expect((await agents.startSupervisor("new")).id).toBe(first.id);
     expect(agents.sessions().sessions.map((s) => s.id)).toEqual([first.id]);
     await agents.stop(first.id);
   }, 60_000);
@@ -225,11 +317,16 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
     const { agents, procs } = makeAgents({ shop: repoDir }, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
     cleanups.push(() => procs.stopAll());
-    const supervisor = await agents.startSupervisor();
+    const supervisor = await agents.startSupervisor("new");
     const session = await agents.start("shop");
 
-    const fromSupervisor = await agents.propose(supervisor.id, { repo: "shop", title: "Fix the cart", prompt: "Fix the cart total" });
-    const fromSession = await agents.propose(session.id, { repo: "shop", title: "Add a test", prompt: "Add a cart test" });
+    const fromSupervisor = await agents.propose(supervisor.id, {
+      repo: "shop",
+      title: "Fix the cart",
+      prompt: "Fix the cart total",
+      model: null,
+    });
+    const fromSession = await agents.propose(session.id, { repo: "shop", title: "Add a test", prompt: "Add a cart test", model: null });
     expect(fromSupervisor.proposedBy).toEqual({ session: supervisor.id, supervisor: true });
     expect(fromSession.proposedBy).toEqual({ session: session.id, supervisor: false });
     await agents.stop(supervisor.id);
@@ -240,11 +337,11 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
     const { agents, procs, home } = makeAgents({ shop: repoDir }, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
     cleanups.push(() => procs.stopAll());
-    const first = await agents.startSupervisor();
-    const proposal = await agents.propose(first.id, { repo: "shop", title: "Fix the cart", prompt: "Fix the cart total" });
+    const first = await agents.startSupervisor("new");
+    const proposal = await agents.propose(first.id, { repo: "shop", title: "Fix the cart", prompt: "Fix the cart total", model: null });
     await agents.stop(first.id);
 
-    const next = await agents.startSupervisor();
+    const next = await agents.startSupervisor("new");
     expect(next.id).not.toBe(first.id);
     expect(agents.sessions().sessions.map((s) => s.id)).toEqual([next.id]);
     expect(existsSync(join(home, "sessions", first.id))).toBe(false);
@@ -255,7 +352,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
   test("a supervisor with a first message gets it as its first prompt and works from the start, and replaces the ended one", async () => {
     const { agents, procs } = makeAgents({}, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
     cleanups.push(() => procs.stopAll());
-    const ended = await agents.startSupervisor();
+    const ended = await agents.startSupervisor("new");
     await agents.stop(ended.id);
 
     const supervisor = await agents.startSupervisorWith("Start my day.\n\nCheck my issues.");
@@ -273,7 +370,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const { agents, procs } = makeAgents({}, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
     cleanups.push(() => procs.stopAll());
 
-    const starting = agents.startSupervisor();
+    const starting = agents.startSupervisor("new");
     const refusal = "the supervisor is running; stop it to start your day with a new one";
     expect(() => agents.assertNoSupervisor()).toThrow(refusal);
     const running = await starting;
@@ -286,10 +383,10 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
   test("a supervisor start succeeds even when the ended supervisor is dismissed while it starts", async () => {
     const { agents, procs } = makeAgents({}, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
     cleanups.push(() => procs.stopAll());
-    const first = await agents.startSupervisor();
+    const first = await agents.startSupervisor("new");
     await agents.stop(first.id);
 
-    const starting = agents.startSupervisor();
+    const starting = agents.startSupervisor("new");
     agents.dismiss(first.id);
     const next = await starting;
     expect(agents.sessions().sessions.map((s) => s.id)).toEqual([next.id]);
@@ -298,7 +395,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
 
   test("the supervisor needs the projects folder to be set", async () => {
     const { agents } = makeAgents({});
-    await expect(agents.startSupervisor()).rejects.toMatchObject({ code: "bad_request", message: "set the projects folder first" });
+    await expect(agents.startSupervisor("new")).rejects.toMatchObject({ code: "bad_request", message: "set the projects folder first" });
     expect(agents.sessions().sessions).toEqual([]);
   });
 
@@ -314,14 +411,21 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
         stop: async () => undefined,
         liveIn: () => false,
       },
-      repos: { repoPath: async () => repoDir, projectsDir: async () => repoDir, toolPermissions: () => ({ allow: [], deny: [] }) },
+      repos: {
+        repoPath: async () => repoDir,
+        projectsDir: async () => repoDir,
+        worktreesDir: async () => repoDir,
+        toolPermissions: () => ({ allow: [], deny: [] }),
+        supervisorSettings: () => ({ changesCode: false }),
+        removeRepo: () => Promise.reject(new Error("unused")),
+      },
       vcs: new Vcs(),
       home: mkdtempSync(join(tmpdir(), "trackwall-agents-")),
       copilot: ["copilot-that-does-not-exist"],
       version: "0.0.0-test",
       env: async () => ({ PATH: repoDir }),
-      hookCommand: () => ({ exec: "unused", args: [] }),
-      sessionMcpCommand: () => ["unused"],
+      sessionHook: () => ({ url: "http://127.0.0.1:9/hooks/unused", headers: {} }),
+      sessionMcpServer: () => ({ url: "http://127.0.0.1:9/mcp", headers: {} }),
       openEditor: () => {},
       log: () => {},
     });

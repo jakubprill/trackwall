@@ -1,0 +1,97 @@
+openapi: 3.0.3
+info:
+  title: Catalog
+  version: 1.0.0
+servers:
+  - url: http://localhost:8083/{base}
+    variables:
+      base:
+        default: api
+paths:
+  /products/{productId}:
+    get:
+      operationId: getProduct
+      summary: Get a product by its id
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /products:
+    post:
+      operationId: createProduct
+      summary: Add a product to the catalog
+      requestBody:
+        $ref: "#/components/requestBodies/NewProduct"
+      responses:
+        "201":
+          description: The added product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+  /products/{productId}/stock:
+    get:
+      operationId: get-product-stock
+      description: |
+        Stock level of a product in every warehouse.
+        Read from the stock service.
+      responses:
+        "200":
+          description: Levels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockLevel"
+  /products/search:
+    get:
+      operationId: searchProducts
+      summary: Search products by name
+      responses:
+        "200":
+          description: Products
+  /categories:
+    get:
+      operationId: listCategories
+      summary: List product categories
+      responses:
+        "200":
+          description: Categories
+components:
+  requestBodies:
+    NewProduct:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/NewProduct"
+  responses:
+    NotFound:
+      description: No such product
+  schemas:
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+    NewProduct:
+      type: object
+      properties:
+        name:
+          type: string
+    StockLevel:
+      type: object
+      properties:
+        warehouse:
+          type: string

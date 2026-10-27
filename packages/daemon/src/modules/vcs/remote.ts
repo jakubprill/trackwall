@@ -45,3 +45,15 @@ function fromScp(url: string): { host: string; path: string } | undefined {
   const [, host = "", path = ""] = m ?? [];
   return host.length < 2 ? undefined : { host, path };
 }
+
+/**
+ * An HTTPS or SSH (also scp-style) address as `host/path`, so both spellings of one repo match and a token in a URL never
+ * reaches a message; `undefined` for anything else: a local path, `file://`, `git://`, `http://`, `ext::`. Trackwall
+ * pushes only to such an address (ADR-77, ADR-86): a local path or a transport would run a program the repo it reaches
+ * configures, whose hooks `core.hooksPath` on this side does not turn off.
+ */
+export function networkAddress(url: string): string | undefined {
+  const scheme = /^([A-Za-z][A-Za-z0-9+.-]*):\/\//.exec(url)?.[1]?.toLowerCase();
+  if (scheme !== undefined && scheme !== "https" && scheme !== "ssh") return undefined;
+  return remoteAddress(url);
+}

@@ -33,6 +33,22 @@ test("a link clicked in a session terminal goes to the command the shell defines
   expect(ui).toBe(shell);
 });
 
+test("the UI copies through the clipboard command the shell defines, which takes text and hands nothing back", () => {
+  const clipboardSource = read("apps/desktop/src-tauri/src/clipboard.rs");
+  const shell = /#\[tauri::command\]\s*pub fn (\w+)\((\w+): String\) -> Result<\(\), String>/.exec(clipboardSource);
+  const ui = read("packages/ui/src/lib/clipboard.ts");
+  expect(shell?.[1]).toBe("copy_text");
+  expect(/const COPY_TEXT_COMMAND = "([^"]+)";/.exec(ui)?.[1]).toBe(shell?.[1]);
+  expect(ui).toContain(`invoke(COPY_TEXT_COMMAND, { ${shell?.[2]} })`);
+});
+
+test("the shell never reads the clipboard", () => {
+  const shell = read("apps/desktop/src-tauri/src/clipboard.rs");
+  expect(shell.match(/#\[tauri::command\]/g)).toHaveLength(1);
+  expect(shell).not.toMatch(/get_text|\.get\(/);
+  expect(read("apps/desktop/src-tauri/src/main.rs").match(/arboard/g)).toBeNull();
+});
+
 test("the shell knows the same link kinds as protocol", () => {
   const parse = /pub fn parse\(([\s\S]*?)\n\}/.exec(linkSource)?.[1] ?? "";
   const kinds = [...parse.matchAll(/"(\w+)" => /g)].map((m) => m[1]);
@@ -51,13 +67,19 @@ test("the kinds of jump targets (`kind`) are the same in the shell and in the UI
 const updatesShell = read("apps/desktop/src-tauri/src/updates.rs");
 const updatesUi = read("packages/ui/src/lib/updates.ts");
 
-test("the shell sends the update download progress under the same event name and fields the UI reads", () => {
+test("the shell sends the stages of the update install under the same event name, stage names and fields the UI reads", () => {
   const shell = /const PROGRESS_EVENT: &str = "([^"]+)";/.exec(updatesShell)?.[1];
   const ui = /const PROGRESS_EVENT = "([^"]+)";/.exec(updatesUi)?.[1];
   expect(shell).toBe("update-progress");
   expect(ui).toBe(shell);
-  const shellFields = [...(/struct Progress \{([^}]*)\}/.exec(updatesShell)?.[1] ?? "").matchAll(/(\w+):/g)].map((m) => m[1]);
-  const uiFields = [...(/const UpdateProgress = z\.object\(\{([^}]*)\}/.exec(updatesUi)?.[1] ?? "").matchAll(/(\w+):/g)].map((m) => m[1]);
+  // `Progress` in Rust has `tag = "stage", rename_all = "kebab-case"`; every variant name is one word.
+  const variants = /enum Progress \{([\s\S]*?)\n\}/.exec(updatesShell)?.[1] ?? "";
+  const shellStages = [...variants.matchAll(/^ {4}(\w+)/gm)].map((m) => m[1]?.toLowerCase());
+  const uiStages = [...updatesUi.matchAll(/stage: z\.literal\("([\w-]+)"\)/g)].map((m) => m[1]);
+  expect(shellStages).toEqual(["connecting", "downloading", "verifying", "installing", "restarting"]);
+  expect(uiStages).toEqual(shellStages);
+  const shellFields = [...(/Downloading \{([^}]*)\}/.exec(updatesShell)?.[1] ?? "").matchAll(/(\w+):/g)].map((m) => m[1]);
+  const uiFields = [...(/stage: z\.literal\("downloading"\),([^}]*)\}/.exec(updatesUi)?.[1] ?? "").matchAll(/(\w+):/g)].map((m) => m[1]);
   expect(shellFields).toEqual(["downloaded", "total"]);
   expect(uiFields).toEqual(shellFields);
 });
@@ -66,7 +88,9 @@ test("the UI calls the update commands the shell has, with the argument and resu
   expect(updatesShell).toContain("pub async fn check_update(");
   expect(updatesShell).toContain("pub async fn install_update(app: AppHandle, updates: State<'_, Updates>, version: String)");
   expect(updatesUi).toContain('invoke<unknown>("check_update")');
+  expect(updatesShell).toContain("pub fn cancel_update(updates: State<'_, Updates>)");
   expect(updatesUi).toContain('invoke("install_update", { version })');
+  expect(updatesUi).toContain('invoke("cancel_update")');
   // `UpdateCheck` in Rust has `rename_all = "camelCase"`.
   const shellFields = [...(/pub struct UpdateCheck \{([^}]*)\}/.exec(updatesShell)?.[1] ?? "").matchAll(/^\s+(\w+):/gm)].map((m) =>
     m[1]?.replace(/_(\w)/g, (_, c: string) => c.toUpperCase()),
@@ -122,7 +146,7 @@ test("the View menu has the activity bar's views with their names and shortcuts,
     m[2],
     m[3],
   ]);
-  expect(ui.map((v) => v[0])).toEqual(["home", "repos", "sessions", "graph", "daemon", "settings"]);
+  expect(ui.map((v) => v[0])).toEqual(["home", "repos", "sessions", "graph", "settings"]);
   expect(shell).toEqual(ui);
 });
 

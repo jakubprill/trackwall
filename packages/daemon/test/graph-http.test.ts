@@ -7,7 +7,8 @@ import { CardCache } from "../src/modules/cards/card-cache.ts";
 import { Cards } from "../src/modules/cards/cards.ts";
 import { extractCard } from "../src/modules/cards/extract-card.ts";
 import { loadSyntaxParsers } from "../src/modules/cards/syntax-tree.ts";
-import { buildGraph } from "../src/modules/graph/build-graph.ts";
+import { buildGraph, buildGraphWithIndex } from "../src/modules/graph/build-graph.ts";
+import { findEndpoints } from "../src/modules/graph/find-endpoint.ts";
 import { Graph } from "../src/modules/graph/graph.ts";
 import type { GraphCardInput } from "../src/modules/graph/graph-input.ts";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
@@ -15,7 +16,7 @@ import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { commitFiles, makeRepo } from "./support/git-repo.ts";
 import { fakeHosting } from "./support/hosting.ts";
-import { snapshotOf } from "./support/snapshot.ts";
+import { NO_REACH, snapshotOf } from "./support/snapshot.ts";
 import { fixtureFiles } from "./support/spring-fixtures.ts";
 
 const parsers = await loadSyntaxParsers();
@@ -26,7 +27,13 @@ const SHOP = ["orders-api", "orders-bff", "payments", "legacy-reports", "shop-we
 
 /** The cards of the shop repos from the fixtures (`test/fixtures/spring`), computed without git. */
 function shopCards(): GraphCardInput[] {
-  return SHOP.map((repo) => ({ kind: "ok", repo, remote: null, card: extractCard(snapshotOf(fixtureFiles(repo)), parsers), tags: [] }));
+  return SHOP.map((repo) => ({
+    kind: "ok",
+    repo,
+    remote: null,
+    card: extractCard(snapshotOf(fixtureFiles(repo)), parsers, NO_REACH),
+    tags: [],
+  }));
 }
 
 function card(provides: RepoCard["provides"], consumes: RepoCard["consumes"]): RepoCard {
@@ -39,6 +46,7 @@ function card(provides: RepoCard["provides"], consumes: RepoCard["consumes"]): R
     tools: [],
     mise: { configFiles: [], tasks: [], complete: true },
     mechanisms: [],
+    reachTraced: false,
     problems: [],
   };
 }
@@ -50,12 +58,15 @@ function app(name: string, port: number | null = null): ProvidedApp {
 function endpoint(path: string, method: ProvidedEndpoint["method"] = "GET"): ProvidedEndpoint {
   return {
     kind: "endpoint",
+    source: "code",
     method,
     path,
     app: null,
     handler: "Api.handle",
     request: null,
     response: null,
+    reaches: null,
+    operation: null,
     evidence: { path: "src/main/java/Api.java", line: 10 },
   };
 }
@@ -97,7 +108,7 @@ describe("http edges on the shop repos", () => {
       ["orders-api", ["orders-api"], 3],
       ["orders-bff", ["orders-bff"], 0],
       ["payments", ["payments-service"], 1],
-      ["legacy-reports", ["legacy-reports"], 0],
+      ["legacy-reports", ["legacy-reports"], 1],
       ["shop-web", [], 0],
     ]);
   });
@@ -238,6 +249,35 @@ describe("http edges: target matching", () => {
     expect(graph.edges[0]?.evidence[0]?.detail).toBe("address in config orders.url: orders, http://orders:8080 (profiles: dev, prod)");
   });
 
+  test("find_endpoint lists a callee once for a client split by profile, and `from` is unknown while one endpoint of the repo has no reach (ADR-82)", () => {
+    const call = { method: "GET" as const, path: "/api/orders/{id}", evidence: { path: "src/main/java/OrdersClient.java", line: 4 } };
+    const ordersClient = (url: string, profiles: string[]) =>
+      client({ via: "feign", name: "OrdersClient", app: "orders", url, profiles, calls: [call] });
+    const reach = { via: "feign" as const, client: "OrdersClient", method: call.method, path: call.path, evidence: call.evidence };
+    const bff = (untraced: ProvidedEndpoint[]) => {
+      // A mapping with two methods is two reaches on one line.
+      const c = card(
+        [{ ...endpoint("/orders/{id}"), reaches: [reach, { ...reach, method: "POST" as const }] }, ...untraced],
+        [ordersClient("http://orders:8080", ["default"]), ordersClient("http://orders.prod", ["prod"])],
+      );
+      return { ...c, reachTraced: true };
+    };
+    const find = (untraced: ProvidedEndpoint[], query: string) => {
+      const cards = [repo("bff", bff(untraced)), repo("orders-api", card([app("orders"), endpoint("/api/orders/{id}")], []))];
+      return findEndpoints(buildGraphWithIndex(cards, { config: NO_CONFIG, file: CONFIG_FILE, problems: [] }).http, query, "GET").endpoints;
+    };
+
+    expect(find([], "/orders/7")[0]?.calls?.map((c) => `${c.repo} ${c.method} ${c.path} ${c.client}`)).toEqual([
+      "orders-api GET /api/orders/{id} OrdersClient",
+    ]);
+    expect(find([], "/api/orders/7")[0]?.callers.map((c) => c.from?.map((e) => e.path) ?? null)).toEqual([
+      ["/orders/{id}"],
+      ["/orders/{id}"],
+    ]);
+    // A handler the call graph did not find might make the call too, so no endpoint is not the answer.
+    expect(find([endpoint("/other")], "/api/orders/7")[0]?.callers.map((c) => c.from)).toEqual([null, null]);
+  });
+
   test("the same app name in two repos (a clone, a fork) gives an edge to each with medium confidence", () => {
     const graph = buildGraph(
       [
@@ -317,7 +357,7 @@ describe("the graph and find_endpoint on real git", () => {
   // Several repos with commits and two card computations on real git take longer than the default 5 s on Windows in CI.
   const REAL_GIT_TIMEOUT = 30_000;
 
-  async function setup() {
+  async function setup(extra: readonly string[] = []) {
     const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
     const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
     const vcs = new Vcs();
@@ -329,7 +369,7 @@ describe("the graph and find_endpoint on real git", () => {
       openFolder: () => {},
     });
     await workspace.setProjectsDir(projects);
-    for (const name of SHOP) makeRepo(fixtureFiles(name), name, projects);
+    for (const name of [...SHOP, ...extra]) makeRepo(fixtureFiles(name), name, projects);
     const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(join(home, "cards"), () => {}), log: () => {} });
     return { home, projects, cards, graph: new Graph({ cards, workspace }), workspace };
   }
@@ -358,6 +398,37 @@ describe("the graph and find_endpoint on real git", () => {
   );
 
   test(
+    "find_endpoint tells which endpoints of a caller reach the call and which endpoints an endpoint calls (ADR-82)",
+    async () => {
+      const { graph } = await setup();
+      const ref = (e: { method: string | null; path: string; handler: string | null }) => `${e.method} ${e.path} ${e.handler}`;
+      const [get] = (await graph.findEndpoint("/api/orders/42", "GET")).endpoints;
+      expect(get?.callers.map((c) => [c.repo, c.from?.map(ref) ?? null])).toEqual([
+        ["legacy-reports", ["GET /reports/orders/{id} ReportsController.order"]],
+        // orders-bff has Kotlin code, which the reach does not read yet.
+        ["orders-bff", null],
+        ["orders-bff", null],
+      ]);
+      const [cancel] = (await graph.findEndpoint("/api/orders/{id}/cancel", "PUT")).endpoints;
+      // Only the scheduled job makes this call.
+      expect(cancel?.callers.find((c) => c.repo === "legacy-reports")?.from).toEqual([]);
+
+      const [report] = (await graph.findEndpoint("/reports/orders/7", "GET")).endpoints;
+      expect(report?.calls?.map((c) => [c.repo, ref(c), c.client, c.confidence, `${c.evidence.path}:${c.evidence.line}`])).toEqual([
+        [
+          "orders-api",
+          "GET /api/orders/{id} OrdersController.get",
+          "OrdersReport",
+          "medium",
+          "src/main/java/com/example/reports/OrdersReport.java:17",
+        ],
+      ]);
+      expect((await graph.findEndpoint("/api/orders/42", "GET")).endpoints[0]?.calls).toEqual([]);
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
     "find_endpoint also searches by a fragment of the path, handler and app name, case-insensitive",
     async () => {
       const { graph } = await setup();
@@ -365,6 +436,31 @@ describe("the graph and find_endpoint on real git", () => {
       expect(await paths("payments-SERVICE")).toEqual(["POST /api/payments/{orderId}"]);
       expect(await paths("ordersController.cancel")).toEqual(["PUT /api/orders/{id}/cancel"]);
       expect(await paths("/api/orders")).toEqual(["POST /api/orders", "GET /api/orders/{id}", "PUT /api/orders/{id}/cancel"]);
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "find_endpoint finds endpoints from an OpenAPI spec by the end of their path, a whole address and words, best match first (ADR-87)",
+    async () => {
+      const { graph } = await setup(["catalog"]);
+      const found = async (query: string) =>
+        (await graph.findEndpoint(query, undefined)).endpoints.map(
+          (e) => `${e.match} ${e.repo} ${e.method} ${e.path} ${e.source} ${e.handler}`,
+        );
+      // The agent knows the path without the context path.
+      expect(await found("/api/products/42")).toEqual([
+        "path-end catalog GET /catalog/api/products/{productId} openapi ProductsController.getProduct",
+      ]);
+      expect(await found("GET http://localhost:8083/catalog/api/products/42/stock?warehouse=1")).toEqual([
+        "path catalog GET /catalog/api/products/{productId}/stock openapi ProductsController.getProductStock",
+      ]);
+      // Words from the operation summary; the mapped endpoint in the code has the summary too.
+      expect(await found("product categories")).toEqual([
+        "text catalog GET /catalog/api/categories code CategoriesController.listCategories",
+      ]);
+      // The client spec in catalog is not an orders endpoint.
+      expect((await found("/api/orders/42")).map((e) => e.split(" ")[1])).toEqual(["orders-api"]);
     },
     REAL_GIT_TIMEOUT,
   );

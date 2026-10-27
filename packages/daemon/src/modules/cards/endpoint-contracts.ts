@@ -65,6 +65,7 @@ export function extractContracts(snapshot: RepoSnapshot, provides: readonly Prov
  * interface the controller implements has a method with the same name).
  */
 function withContract(endpoint: ProvidedEndpoint, syntax: SyntaxOfFiles): ProvidedEndpoint {
+  if (endpoint.handler === null) return endpoint;
   const name = simpleName(endpoint.handler);
   const methods = (syntax.of(endpoint.evidence.path)?.methods ?? []).filter((m) => m.name === name);
   const contract = methodAt(methods, endpoint.evidence.line) ?? methods[0];
@@ -106,7 +107,7 @@ function reachableDtos(endpoints: readonly ProvidedEndpoint[], syntax: SyntaxOfF
     const found = syntax.declaration(name);
     if (!found) continue;
     if (dtos.length === MAX_DTOS) {
-      problems.push({ path: "", message: `the repo has more than ${MAX_DTOS} DTOs; the card lists the first ones` });
+      problems.push({ code: "truncated", path: "", message: `the repo has more than ${MAX_DTOS} DTOs; the card lists the first ones` });
       break;
     }
     const dto = toDto(found.type, found.path, problems);
@@ -126,7 +127,11 @@ function fieldTypeNames(dto: Dto): string[] {
 function toDto(declared: TypeDeclaration, path: string, problems: CardProblem[]): Dto {
   const evidence = { path, line: declared.line };
   const tooMany = (members: string) =>
-    problems.push({ path, message: `${declared.name} has more than ${MAX_DTO_MEMBERS} ${members}; the card lists the first ones` });
+    problems.push({
+      code: "truncated",
+      path,
+      message: `${declared.name} has more than ${MAX_DTO_MEMBERS} ${members}; the card lists the first ones`,
+    });
   if (declared.kind === "enum") {
     if (declared.values.length > MAX_DTO_MEMBERS) tooMany("constants");
     return { name: declared.name, kind: "enum", values: declared.values.slice(0, MAX_DTO_MEMBERS), evidence };
@@ -158,7 +163,11 @@ function clipTypes({ provides, dtos, problems }: Contracts): Contracts {
   const clippedDtos = dtos.map((d) =>
     d.kind === "enum" ? d : { ...d, fields: d.fields.map((f): DtoField => ({ name: f.name, type: clip(f.type) })) },
   );
-  const clipProblem = { path: "", message: `some types are longer than ${MAX_TYPE_LENGTH} characters; the card shows their beginning` };
+  const clipProblem: CardProblem = {
+    code: "truncated",
+    path: "",
+    message: `some types are longer than ${MAX_TYPE_LENGTH} characters; the card shows their beginning`,
+  };
   return { provides: clippedProvides, dtos: clippedDtos, problems: clippedAny ? [...problems, clipProblem] : problems };
 }
 
@@ -211,6 +220,7 @@ class SyntaxOfFiles {
         return result.value;
       case "timeout":
         this.problems.push({
+          code: "parse-incomplete",
           path,
           message: `parsing the file took longer than ${PARSE_TIME_LIMIT_MS} ms; its endpoints have no request and response types and its DTOs are missing`,
         });
@@ -231,7 +241,7 @@ class SyntaxOfFiles {
   /** Once the budget is used up or without parsers no further file gets a tree, so one problem per card. */
   private stop(message: string): void {
     this.stopped = true;
-    this.problems.push({ path: "", message });
+    this.problems.push({ code: "parse-incomplete", path: "", message });
   }
 }
 

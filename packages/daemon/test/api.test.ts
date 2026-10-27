@@ -11,6 +11,7 @@ import {
   graphApi,
   HealthResult,
   LogTail,
+  localConfigApi,
   logsApi,
   miseApi,
   RepoGraph,
@@ -20,7 +21,7 @@ import {
 import { EventHub } from "../src/api/event-hub.ts";
 import { postRoutes } from "../src/api/routes.ts";
 import { type ApiServer, startApi } from "../src/api/server.ts";
-import { createFacade } from "../src/facade.ts";
+import { createFacade, HOSTING_CLIS } from "../src/facade.ts";
 import { type LoopbackOptions, loopbackRequest } from "../src/infra/loopback.ts";
 import { createMcpEndpoint } from "../src/mcp/endpoint.ts";
 import { makeRepo } from "./support/git-repo.ts";
@@ -77,8 +78,9 @@ function modules() {
     miseCommand: ["mise"],
     copilotCommand: ["copilot"],
     version: "0.0.0-test",
-    hookCommand: () => ({ exec: "true", args: [] }),
-    sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
+    sessionHook: () => ({ url: "http://127.0.0.1:9/hooks/unused", headers: {} }),
+    sessionMcpServer: (sessionToken) => ({ url: "http://127.0.0.1:9/mcp", headers: { "x-trackwall-session-token": sessionToken } }),
+    hostingClis: HOSTING_CLIS,
     userEnv: async () => process.env,
     log: () => {},
   });
@@ -172,11 +174,12 @@ describe("api", () => {
 describe("api workspace", () => {
   const post = (path: string, body: string) => authed(path, { method: "POST", headers: { "content-type": "application/json" }, body });
 
-  test("every action of the workspace, cards, graph, mise and batch contracts has a route in the daemon", () => {
+  test("every action of the workspace, cards, graph, local config, mise and batch contracts has a route in the daemon", () => {
     const endpoints = [
       ...Object.values(workspaceApi),
       ...Object.values(cardsApi),
       ...Object.values(graphApi),
+      ...Object.values(localConfigApi),
       ...Object.values(miseApi),
       ...Object.values(batchApi),
     ];

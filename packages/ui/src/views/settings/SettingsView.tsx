@@ -1,169 +1,90 @@
-import { isTauri } from "@tauri-apps/api/core";
-import { workspaceApi } from "@trackwall/protocol";
-import { FolderOpen } from "lucide-react";
-import { type FormEvent, useCallback, useState } from "react";
-import { ErrorWithRetry } from "@/components/ErrorWithRetry";
-import { Loading } from "@/components/Loading";
-import { Surface } from "@/components/Surface";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { errorMessage, post } from "@/lib/api";
+import type { CardWarmupProgress } from "@trackwall/protocol";
+import { type ReactNode, useState } from "react";
 import type { Connection } from "@/lib/connection";
-import { pickFolder } from "@/lib/folder-picker";
+import type { LiveFeed } from "@/lib/daemon-events";
+import { SETTINGS_CATEGORIES, type SettingsCategory, type SettingsSection, settingsCategory } from "@/lib/settings-categories";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
-import { useRemote } from "@/lib/use-remote";
-import { RepoHostsForm } from "./RepoHostsForm.tsx";
+import { cn } from "@/lib/utils";
+import { ConnectCopilotSurface } from "./ConnectCopilotSurface.tsx";
+import { DaemonSurface } from "./DaemonSurface.tsx";
+import { DoctorSurface } from "./DoctorSurface.tsx";
+import { ErrorJournalSurface } from "./ErrorJournalSurface.tsx";
+import { LocalConfigStoreSurface } from "./LocalConfigStoreSurface.tsx";
+import { RepoHostsSurface } from "./RepoHostsSurface.tsx";
 import { StartAtSignInSurface } from "./StartAtSignInSurface.tsx";
 import { UpdatesSurface } from "./UpdatesSurface.tsx";
+import { WorkspaceFolders } from "./WorkspaceFolders.tsx";
 
-/** Workspace settings; each one is also a key in `workspace.yaml`, which can be edited by hand (ADR-13, ADR-18). */
-export function SettingsView({
-  conn,
-  update,
-  onRetry,
-  onSaved,
-}: {
+type SettingsProps = {
   conn: Connection;
   update: AppUpdateHandle | undefined;
+  warmupLive: LiveFeed<CardWarmupProgress> | undefined;
+  /** Reconnects to the daemon, for a read that failed because the daemon is gone. */
   onRetry: () => void;
+  /** After the projects folder is saved, so that the app can show its repos. */
   onSaved: () => void;
-}) {
-  const load = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
-  const settings = useRemote(load);
+};
 
+/**
+ * Settings (ADR-102): the list of categories on the left and the sections of the chosen one on the right; in a narrow
+ * window, for example next to the supervisor panel, the list becomes a row above the sections. Each setting is also a
+ * key in `workspace.yaml`, which can be edited by hand (ADR-13, ADR-18, ADR-84).
+ */
+export function SettingsView({ initialCategory, ...props }: SettingsProps & { initialCategory: SettingsCategory }) {
+  const [current, setCurrent] = useState(initialCategory);
+  const category = settingsCategory(current);
   return (
-    <div className="flex w-full max-w-xl flex-col gap-4">
-      <Surface label="Projects folder">
-        <div className="flex flex-col gap-4 p-4">
-          <p className="text-muted-foreground text-sm">
-            The Repos view shows every git repo directly inside this folder. A repo cloned into it appears in the list on its own.
-          </p>
-          {settings.error && (
-            <ErrorWithRetry
-              message={settings.error}
-              onRetry={() => {
-                onRetry();
-                settings.reload();
-              }}
-            />
-          )}
-          {!settings.data && !settings.error && <Loading />}
-          {settings.data && (
-            <ProjectsDirForm
-              conn={conn}
-              initialPath={settings.data.projectsDir ?? ""}
-              configFile={settings.data.configFile}
-              onSaved={onSaved}
-            />
-          )}
-          {/* A bad `projectsDir` typed by hand into `workspace.yaml` is fixed with this very form. */}
-          {settings.errorCode === "invalid_config" && <ProjectsDirForm conn={conn} initialPath="" onSaved={onSaved} />}
+    <div className="@container w-full max-w-4xl">
+      <div className="flex flex-col gap-4 @3xl:flex-row @3xl:items-start @3xl:gap-6">
+        <nav aria-label="Settings categories" className="flex shrink-0 gap-1 overflow-x-auto @3xl:w-44 @3xl:flex-col">
+          {SETTINGS_CATEGORIES.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              aria-current={c.id === current ? "page" : undefined}
+              onClick={() => setCurrent(c.id)}
+              className={cn(
+                "shrink-0 rounded-md px-3 py-1.5 text-left text-sm whitespace-nowrap transition-colors",
+                c.id === current ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
+            >
+              {c.label}
+            </button>
+          ))}
+        </nav>
+        <div className="flex w-full max-w-xl min-w-0 flex-col gap-4">
+          <header className="flex flex-col gap-1">
+            <h1 className="text-lg font-semibold">{category.label}</h1>
+            <p className="text-muted-foreground text-sm">{category.description}</p>
+          </header>
+          {category.sections.map((section) => (
+            <Section key={section} section={section} {...props} />
+          ))}
         </div>
-      </Surface>
-      <RepoHostsSurface conn={conn} />
-      <StartAtSignInSurface />
-      <UpdatesSurface handle={update} />
+      </div>
     </div>
   );
 }
 
-/** Repo hosts (ADR-19) have their own request: a bad `repoHosts` entry does not block the projects folder and vice versa. */
-function RepoHostsSurface({ conn }: { conn: Connection }) {
-  const load = useCallback(() => post(conn, workspaceApi.repoHosts, {}), [conn]);
-  const hosts = useRemote(load);
-  return (
-    <Surface label="Repo hosts">
-      <div className="flex flex-col gap-4 p-4">
-        <p className="text-muted-foreground text-sm">
-          The Repos view searches these hosts and clones a repo into your projects folder in one click. Trackwall asks them through the glab
-          (GitLab) and gh (GitHub) CLIs you are signed in to, so it never stores a token.
-        </p>
-        {hosts.error && <ErrorWithRetry message={hosts.error} onRetry={hosts.reload} />}
-        {!hosts.data && !hosts.error && <Loading />}
-        {hosts.data && <RepoHostsForm conn={conn} initial={hosts.data} />}
-        {/* A bad `repoHosts` typed by hand is fixed by saving the list again. */}
-        {hosts.errorCode === "invalid_config" && <RepoHostsForm conn={conn} initial={[]} />}
-      </div>
-    </Surface>
-  );
-}
-
-function ProjectsDirForm({
-  conn,
-  initialPath,
-  configFile,
-  onSaved,
-}: {
-  conn: Connection;
-  initialPath: string;
-  /** Unknown when `workspace.yaml` failed validation. */
-  configFile?: string;
-  onSaved: () => void;
-}) {
-  const [path, setPath] = useState(initialPath);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-
-  async function save(dir: string) {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await post(conn, workspaceApi.setProjectsDir, { path: dir });
-      onSaved();
-    } catch (err) {
-      setError(errorMessage(err));
-      setBusy(false);
-    }
+function Section({ section, conn, update, warmupLive, onRetry, onSaved }: SettingsProps & { section: SettingsSection }): ReactNode {
+  switch (section) {
+    case "folders":
+      return <WorkspaceFolders conn={conn} onRetry={onRetry} onSaved={onSaved} />;
+    case "local-config-store":
+      return <LocalConfigStoreSurface conn={conn} />;
+    case "repo-hosts":
+      return <RepoHostsSurface conn={conn} />;
+    case "copilot-cli":
+      return <ConnectCopilotSurface conn={conn} onRetry={onRetry} />;
+    case "start-at-sign-in":
+      return <StartAtSignInSurface />;
+    case "updates":
+      return <UpdatesSurface handle={update} />;
+    case "daemon":
+      return <DaemonSurface conn={conn} warmupLive={warmupLive} onRetry={onRetry} />;
+    case "doctor":
+      return <DoctorSurface conn={conn} />;
+    case "trackwall-errors":
+      return <ErrorJournalSurface conn={conn} />;
   }
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    void save(path.trim());
-  }
-
-  /** Only the Tauri window has the system picker (ADR-51). A folder chosen in it is saved at once: choosing it already says what the user wants. */
-  async function browse() {
-    setError(undefined);
-    let picked: string | undefined;
-    try {
-      picked = await pickFolder(path.trim());
-    } catch (err) {
-      return setError(errorMessage(err));
-    }
-    if (picked === undefined) return;
-    setPath(picked);
-    await save(picked);
-  }
-
-  return (
-    <form onSubmit={submit} className="flex flex-col gap-2">
-      <div className="flex gap-2">
-        <Input
-          value={path}
-          onChange={(e) => setPath(e.target.value)}
-          placeholder="C:\Users\me\Projects or /Users/me/Projects"
-          aria-label="Full path to the projects folder"
-          className="font-mono text-xs"
-        />
-        {isTauri() && (
-          <Button type="button" variant="outline" size="sm" onClick={() => void browse()} disabled={busy}>
-            <FolderOpen /> Choose…
-          </Button>
-        )}
-        <Button type="submit" size="sm" disabled={busy || path.trim() === ""}>
-          Save
-        </Button>
-      </div>
-      {error && <p className="text-destructive text-xs break-words">{error}</p>}
-      <p className="text-muted-foreground text-xs break-all">
-        {configFile ? (
-          <>
-            Saved as <span className="font-mono">projectsDir</span> in <span className="font-mono">{configFile}</span>
-          </>
-        ) : (
-          "Fix the YAML syntax error in the file named above; saving here only fixes a bad projectsDir."
-        )}
-      </p>
-    </form>
-  );
 }

@@ -11,6 +11,12 @@ import type { AgentApproval, AgentDialog, AgentDialogOption, AgentQuestion } fro
  * again. Both layouts were taken from the real binary (fixtures in `test/fixtures/copilot/`); a layout this reader does
  * not recognise is no dialog, and the user answers in the terminal as before. The id is not read here: it belongs to
  * the wait the dialog answers (`LiveSession`), since the agent can ask the same thing twice.
+ *
+ * An approval taller than the terminal (the JSON arguments of an MCP tool in a short task terminal) loses its top:
+ * Copilot CLI keeps its tab bar on the first line and a blank line under it, and the box below them is cut above. The
+ * question, options and footer are still there, so such a box counts when only the first line (the tab bar, not
+ * checked) and blank lines are above its left border, which runs unbroken up from the footer; the heading is then gone, and the approval's text from its
+ * notification hook stands in.
  */
 
 /** A dialog as read from the screen, before it gets the id of its wait. */
@@ -26,51 +32,75 @@ const NEEDS_TEXT = /^No\b/;
 /** Lines made only of box drawing and spaces (the inner box's top and bottom, the rule under the heading). */
 const BOX_ONLY = /^[\s╭╮╰╯─│]*$/;
 const MAX_DETAIL_LINES = 20;
+/** The heading of a cut box whose notification hook brought no text. */
+const CUT_BOX_TITLE = "Approval request";
+/** The first detail line of a cut box: the detail starts in the middle of what the dialog shows. */
+const CUT_DETAIL = "…";
 const MAX_TEXT = 300;
 
 /**
  * The dialog of `kind` on the screen (its visible lines, top to bottom), or `undefined` when there is none or its layout
  * is unknown. Only the kind the session's state waits for is read, so an approval not cleared yet hides no question.
+ * `notice` is the text of the approval's notification hook ("Use MCP tool: …"), the heading of a box cut above.
  */
-export function readAgentDialog(lines: readonly string[], kind: AgentDialog["kind"]): ScreenDialog | undefined {
+export function readAgentDialog(lines: readonly string[], kind: AgentDialog["kind"], notice?: string): ScreenDialog | undefined {
   // Copilot CLI indents the lines of a file diff with no-break spaces.
   const plain = lines.map((l) => l.replaceAll("\u00a0", " "));
-  return kind === "approval" ? readApproval(plain) : readQuestion(plain);
+  return kind === "approval" ? readApproval(plain, notice) : readQuestion(plain);
 }
 
-function readApproval(lines: readonly string[]): ScreenDialog | undefined {
+function readApproval(lines: readonly string[], notice: string | undefined): ScreenDialog | undefined {
   const footer = lines.findLastIndex((l) => l.includes(APPROVAL_FOOTER));
   if (footer < 0) return undefined;
-  // The dialog's box starts in the first column; the agent's output, which could imitate it, is indented.
-  const top = lines.slice(0, footer).findLastIndex((l) => l.startsWith("╭"));
-  if (top < 0) return undefined;
-  const [heading = "", ...body] = lines.slice(top + 1, footer).map(insideBox);
+  const box = approvalBox(lines.slice(0, footer));
+  if (!box) return undefined;
+  const { body } = box;
   // The rule under the heading.
   if (body[0] !== undefined && body[0].trim() !== "" && BOX_ONLY.test(body[0])) body.shift();
   const paragraphs = split(body);
   const options = readOptions(paragraphs.pop() ?? []);
-  const title = cut(heading.trim());
+  const cutAbove = box.heading === undefined;
+  const title = cut((box.heading ?? notice ?? CUT_BOX_TITLE).trim());
   const question = cut(joinWrapped(paragraphs.pop() ?? []));
   if (!title || !question || !options?.length) return undefined;
   const answerable = options.filter((o) => !NEEDS_TEXT.test(o.label));
   // The selection moved to an option that takes text (it may already be taking it), so a digit would not answer.
   if (options.some((o) => o.selected && !answerable.includes(o))) return undefined;
+  // A cut box's detail starts with "…", which takes the place of its last line rather than of the one nearest the question.
+  const detail = detailLines(paragraphs, cutAbove ? MAX_DETAIL_LINES - 1 : MAX_DETAIL_LINES);
   return {
     kind: "approval",
     title,
-    detail: detailLines(paragraphs),
+    detail: cutAbove ? [CUT_DETAIL, ...detail] : detail,
     question,
     options: answerable.map(({ key, label }) => ({ key, label })),
   };
 }
 
+/**
+ * The box's heading and the lines under it, without its borders, from the screen lines above the footer. The dialog's
+ * box starts in the first column; the agent's output, which could imitate it, is indented. A box cut above has no
+ * heading (`undefined`).
+ */
+function approvalBox(above: readonly string[]): { heading: string | undefined; body: string[] } | undefined {
+  const top = above.findLastIndex((l) => l.startsWith("╭"));
+  if (top >= 0) {
+    const [heading = "", ...body] = above.slice(top + 1).map(insideBox);
+    return { heading, body };
+  }
+  // Cut above: only the first line (the tab bar) and blank lines above the box's left border.
+  const border = above.findLastIndex((l) => !l.startsWith("│")) + 1;
+  const cutAbove = above.slice(1, border).every((l) => l.trim() === "");
+  return cutAbove ? { heading: undefined, body: above.slice(border).map(insideBox) } : undefined;
+}
+
 /** The paragraphs between the rule and the question, without the inner box around a command. */
-function detailLines(paragraphs: readonly string[][]): string[] {
+function detailLines(paragraphs: readonly string[][], max: number): string[] {
   return paragraphs
     .flatMap((p, i) => (i === 0 ? p : ["", ...p]))
     .map((l) => insideBox(l).trimEnd())
     .filter((l) => l === "" || !BOX_ONLY.test(l))
-    .slice(0, MAX_DETAIL_LINES)
+    .slice(0, max)
     .map(cut);
 }
 

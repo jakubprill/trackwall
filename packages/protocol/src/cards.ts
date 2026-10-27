@@ -103,7 +103,7 @@ export type DeclaredMiseTask = z.infer<typeof DeclaredMiseTask>;
 export const MiseSetup = z.object({
   configFiles: z.array(z.string()),
   tasks: z.array(DeclaredMiseTask),
-  /** `false` when the card did not read one of the config files (limits): then it is unknown whether the repo has mise tasks. */
+  /** `false` when the card did not read one of the config files (limits) or the commit's file list was cut at its limit: then it is unknown whether the repo has mise tasks. */
   complete: z.boolean(),
 });
 export type MiseSetup = z.infer<typeof MiseSetup>;
@@ -147,8 +147,17 @@ export const Mechanism = z.object({
 });
 export type Mechanism = z.infer<typeof Mechanism>;
 
-/** A build or configuration file the extractor could not read; the rest of the card is made without it. */
-export const CardProblem = z.object({ path: z.string(), message: z.string() });
+/**
+ * What kind of gap a card problem is (ADR-80), so the UI and MCP can tell a missing file from a cut list without reading
+ * the message: `files-not-read` a file or files the card did not read (read limits, a failed search), `file-invalid` a
+ * file the extractor could not parse, `parse-incomplete` Java or Kotlin without syntax trees (no request and response
+ * types, DTOs missing), `truncated` a list the card keeps only the first part of, or a type only its beginning.
+ */
+export const CardProblemCode = z.enum(["files-not-read", "file-invalid", "parse-incomplete", "truncated"]);
+export type CardProblemCode = z.infer<typeof CardProblemCode>;
+
+/** Something the card could not read or shows only in part; the rest of the card is made without it. `path` is a file or a module directory, empty for the repo root or the whole repo. */
+export const CardProblem = z.object({ code: CardProblemCode, path: z.string(), message: z.string() });
 export type CardProblem = z.infer<typeof CardProblem>;
 
 /**
@@ -168,6 +177,13 @@ export const RepoCard = z.object({
   consumes: z.array(Consumed),
   /** DTOs of the repo's HTTP endpoints, in the order found from the endpoints (ADR-38). */
   dtos: z.array(Dto),
+  /**
+   * Whether the card traced which client calls each endpoint reaches (`ProvidedEndpoint.reaches`, ADR-82): `false` when
+   * the repo has Kotlin code, which is not read yet, or not every Java file was read and parsed (then `problems` say
+   * why). A card without endpoints
+   * tells by this whether its client calls come from no endpoint or from code the card did not trace.
+   */
+  reachTraced: z.boolean(),
   tools: z.array(ToolRequirement),
   mise: MiseSetup,
   mechanisms: z.array(Mechanism),

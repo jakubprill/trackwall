@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Endpoint } from "./api.ts";
 import { MechanismEvidence, TagName } from "./cards.ts";
 import { Evidence } from "./evidence.ts";
-import { HttpClientVia, HttpMethod } from "./http.ts";
+import { EndpointSource, HttpClientVia, HttpMethod, OpenApiOperation } from "./http.ts";
 import { RepoId } from "./workspace.ts";
 
 /**
@@ -148,6 +148,10 @@ export type WhoCallsResult = z.infer<typeof WhoCallsResult>;
 /** The most endpoints in a `find_endpoint` result: more does not fit an agent's context sensibly. */
 export const MAX_FOUND_ENDPOINTS = 50;
 
+/** An endpoint by its method, full path and handler, as on its repo card. */
+export const EndpointRef = z.object({ method: HttpMethod.nullable(), path: z.string(), handler: z.string().nullable() });
+export type EndpointRef = z.infer<typeof EndpointRef>;
+
 /** A repo whose HTTP client calls the found endpoint (ADR-30). */
 export const EndpointCaller = z.object({
   repo: RepoId,
@@ -159,21 +163,54 @@ export const EndpointCaller = z.object({
   path: z.string(),
   confidence: EdgeConfidence,
   evidence: Evidence,
+  /**
+   * The caller repo's endpoints whose handlers reach this call (ADR-82): `[]` when none does (a scheduled job, a
+   * listener or startup code makes the call), `null` when the caller's card could not trace or some endpoint of the
+   * caller repo has no reach (`ProvidedEndpoint.reaches`), because that endpoint might make the call.
+   */
+  from: z.array(EndpointRef).nullable(),
 });
 export type EndpointCaller = z.infer<typeof EndpointCaller>;
+
+/** An endpoint of another repo that an endpoint's handler calls (ADR-82), with the confidence of the client's target. */
+export const EndpointCallee = EndpointRef.extend({
+  repo: RepoId,
+  via: HttpClientVia,
+  client: z.string(),
+  confidence: EdgeConfidence,
+  /** The call's file and line in the calling repo. */
+  evidence: Evidence,
+});
+export type EndpointCallee = z.infer<typeof EndpointCallee>;
+
+/**
+ * How a found endpoint matches the `find_endpoint` query (ADR-87), from the best: `path` the whole path (variables match
+ * any segment), `path-end` the end of one path is the other one (the query lacks the context path or prefix the card has,
+ * or has a gateway prefix the card does not), `text` every word of the query is in the path, handler, app or OpenAPI
+ * operation id or summary.
+ */
+export const EndpointMatch = z.enum(["path", "path-end", "text"]);
+export type EndpointMatch = z.infer<typeof EndpointMatch>;
 
 /** An endpoint from a repo card that matches the query, with the repos that call it. */
 export const FoundEndpoint = z.object({
   repo: RepoId,
+  match: EndpointMatch,
   app: z.string().nullable(),
   method: HttpMethod.nullable(),
   path: z.string(),
-  handler: z.string(),
+  handler: z.string().nullable(),
+  /** Whether the endpoint is a mapping in the code or only an operation in an OpenAPI spec (ADR-87). */
+  source: EndpointSource,
+  /** The OpenAPI operation describing the endpoint (ADR-87). */
+  operation: OpenApiOperation.nullable(),
   /** The request and response body types from the card (ADR-38). */
   request: z.string().nullable(),
   response: z.string().nullable(),
   evidence: Evidence,
   callers: z.array(EndpointCaller),
+  /** The endpoints of other repos this endpoint's handler calls (ADR-82); `null` when its card could not trace. */
+  calls: z.array(EndpointCallee).nullable(),
 });
 export type FoundEndpoint = z.infer<typeof FoundEndpoint>;
 

@@ -93,7 +93,7 @@ describe.skipIf(process.versions.bun === undefined)("main session over MCP (real
     );
     expect(proposal.proposedBy).toEqual({ session: main.id, supervisor: false });
 
-    const task = await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: "fix login and add a test" });
+    const task = await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: "fix login and add a test", model: null });
     expect(task).toMatchObject({
       id: proposal.id,
       title: "Fix login",
@@ -174,9 +174,9 @@ describe.skipIf(process.versions.bun === undefined)("main session over MCP (real
   test("a proposal in an unknown repo is not_found, and so is approving a proposal that no longer exists", async () => {
     const result = await call(outside, "propose_task", { repo: "skelp", title: "x", prompt: "y" });
     expect(JSON.stringify(result.content)).toContain('"text":"not_found:');
-    await expect(daemon.post(agentsApi.approveProposal, { proposal: "00000000-0000-4000-8000-000000000000", prompt: "y" })).rejects.toThrow(
-      "no task proposal",
-    );
+    await expect(
+      daemon.post(agentsApi.approveProposal, { proposal: "00000000-0000-4000-8000-000000000000", prompt: "y", model: null }),
+    ).rejects.toThrow("no task proposal");
   });
 
   test("the daemon refuses a request with an unknown session token instead of treating the session as an agent outside Trackwall", async () => {

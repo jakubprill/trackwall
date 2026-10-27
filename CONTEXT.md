@@ -17,8 +17,12 @@ A newer version of Trackwall from GitHub Releases, installed by the shell after 
 _Avoid_: upgrade, sync (that is the repo synchronization)
 
 **View** (`View`):
-A screen of the app in the UI (Home, Repos, Sessions, Overview, Daemon, Settings), switched with the view bar (`ActivityBar`) at the left edge of the window or with a shortcut.
+A screen of the app in the UI (Home, Repos, Sessions, Overview, Settings), switched with the view bar (`ActivityBar`) at the left edge of the window or with a shortcut.
 _Avoid_: tab (for a whole screen)
+
+**Settings category** (`SettingsCategory`, `SETTINGS_CATEGORIES`; its sections `SettingsSection`):
+A group of Settings listed on the left of the Settings view: Workspace, Repo hosts, Agents, App and Diagnostics (ADR-102). Each holds a few sections, such as the projects folder or the daemon's state.
+_Avoid_: tab (that is `TabBar`), page
 
 **Tab** (`TabBar`):
 A switch for part of the content inside a view, for example README, Files, Commits and mise tasks in the Repos view.
@@ -75,8 +79,8 @@ _Avoid_: command, action (those are API and CLI terms)
 The process an agent CLI starts as a local MCP server; it passes messages from stdin to the MCP server of the running daemon, with the port and token from `daemon.json`.
 _Avoid_: proxy, thin client (without qualification)
 
-**Session token** (`session-token` in the session directory, the `x-trackwall-session-token` header, `callerSession`):
-A random token of every Trackwall session next to the daemon token, which its stdio bridge sends to the MCP server; by it the daemon knows which session is calling and, for example, stores a summary only in that session's task (ADR-39, §8). An agent outside Trackwall does not have it.
+**Session token** (the `x-trackwall-session-token` header in the session's `mcp-config.json` and `hooks.json`, `callerSession`):
+A random token of every Trackwall session next to the daemon token, which its Copilot CLI sends to the MCP server and with its hooks (ADR-88, ADR-89); by it the daemon knows which session is calling and, for example, stores a summary only in that session's task (ADR-39, §8). An agent outside Trackwall does not have it.
 _Avoid_: task token (an earlier plan; every session has a token, also in a repo root)
 
 ## Workspace and knowledge
@@ -146,8 +150,11 @@ _Avoid_: check, CI, validation (that is a schema at the point of entry)
 A fixed string or a regular expression in the files of the latest commit of many repos of the projects folder at once, through `git grep` (ADR-40); a match (`CodeMatch`) is a repo, path, line, column and context lines. It does not see uncommitted changes, just like browsing a repo.
 _Avoid_: grep (the tool underneath), index (there is none)
 
+**Task worktrees folder** (`worktreesDir` in `workspace.yaml` and `tasks.json`):
+The folder new task worktrees go into (ADR-84): the user's setting, or by default `.trackwall-worktrees` in the projects folder, which the repo list skips. Never the projects folder itself or a folder inside one of its repos. Each task keeps the folder it was created in, so changing the setting moves no existing worktree.
+
 **Worktree** (task worktree, `Task.worktree`):
-A separate git working directory for a task, on the task's branch, in `worktrees/<repo>/<branch without prefix>` in the state directory, outside the projects folder (ADR-31). Computed from the repo and branch (`taskWorktree`), not stored in `tasks.json`. Removed only at the user's request and only without a running task session; uncommitted changes are lost only after confirmation.
+A separate git working directory for a task, on the task's branch, in `<task worktrees folder>/<repo>/<branch without prefix>` (ADR-31, ADR-84). Computed from the task's worktrees folder, the repo and the branch (`taskWorktree`), not stored in `tasks.json`; a task saved before ADR-84 has it in `worktrees/` of the state directory. Removed only at the user's request and only without a running task session; uncommitted changes are lost only after confirmation.
 
 **Base commit** (`Task.base`):
 The commit of the default branch from which the task's branch started. The task changes (`TaskChanges`) are the worktree's working directory against it: the task's commits and uncommitted files together.
@@ -162,9 +169,24 @@ _Avoid_: copied files, local files
 **Trusted mise config** (`StoredTask.trustedMiseConfig`, `TaskMiseConfig`, actions `task-mise-config` and `trust-task-mise-config`; UI "Trust this config"):
 The mise files of a task's worktree (config files, `.tool-versions`, file tasks) as the user consented to them, kept as hashes in `tasks.json`: as the worktree was created, or as the user trusted them later in the task panel (ADR-59). A mise task runs in the worktree only while its files match; a changed file shows up as a `MiseConfigChange`.
 
+**Trust notice** (`MiseTrustNotices`, `Unread.trustNotice`):
+The sentence in the daemon's prompt that tells a session the user trusted the mise config that refused its last `run_mise_task`, `verify_task` or `start_service`, so it runs it again (ADR-92). The trust is "Trust this config" for a task worktree or mise trust for a repo root, and only a session refused there since its last try gets the notice.
+
+**Local config** (`LOCAL_CONFIG_FILES`, `RepoLocalConfig`, module `local-config`; UI "Local config"):
+The files a repo keeps outside git on purpose, only for this clone: `mise.local.toml` (`MISE_LOCAL_CONFIG_FILE`, mise tasks, tools and variables mise reads on top of `mise.toml`) and `.worktreeinclude` (ADR-86). A file the repo's commits have is not local config. Each file's state against the store is `absent`, `tracked`, `backed_up`, `pending` or `missing` (`LocalConfigFileState`); "Restore from the store" copies a missing file back, and "Ignore locally" adds the files to the clone's `.git/info/exclude`.
+_Avoid_: overlay, local files (that is `.worktreeinclude`'s included files)
+
+**Local config store** (`LOCAL_CONFIG_STORE_DIR` = `.trackwall-local`, `LocalConfigStore`; UI "Local config store"):
+The git repo in the projects folder that holds the local config of every repo as `<repo folder>/<file>`, committed by Trackwall a few seconds after a file changes and pushed to the store's remote when the user added one (ADR-86). The repo list skips it.
+_Avoid_: backup repo, overlay folder
+
 **Card** (repo card, `RepoCard`):
 Facts about a repo extracted deterministically from build files, configuration and code in the HEAD commit: build files, what the repo provides (`provides`), what it uses (`consumes`), required tools, mechanisms and problems, every fact with evidence. It depends only on the commit, so it is computed once per commit (ADR-25). An LLM will add only a description and connection proposals marked `origin: 'llm'` (ADR-6). In the UI, the "Card" tab in the repo details.
 _Avoid_: profile, metadata; "repo card" for the whole repo details panel
+
+**Card problem** (`CardProblem`, code `CardProblemCode`; UI "Incomplete"):
+Something the card is missing or shows only in part, with a code (ADR-80): `files-not-read`, `file-invalid`, `parse-incomplete`, `truncated`, and the file or module directory it concerns (empty for the repo root or the whole repo).
+_Avoid_: error, warning (the card is still built)
 
 **Card warm-up** (`CardWarmup`, progress `CardWarmupProgress`, `cards/warmup`, topic `cards.warmup.changed`; UI "Repo cards"):
 Computing the cards of new and changed repos in the background, two at once, after the daemon's start and for new repos and repos whose HEAD moved, as the repo watch sees them (ADR-63), so that the graph and MCP take them from the cache. A request never waits for it.
@@ -181,10 +203,18 @@ A Spring Boot application from the repo card: the module's `spring.application.n
 _Avoid_: service, microservice (for a fact from the card)
 
 **HTTP endpoint** (`ProvidedEndpoint`, `kind: "endpoint"` on the card):
-A method and full path (context path, controller prefix, method path) from a Spring controller, with the handler `Class.method`. A `null` method is any method (`@RequestMapping` without `method`). It has a request type (`request`, the parameter with `@RequestBody`) and a response type (`response`, the return type without `ResponseEntity`, `Mono` and similar wrappers), `null` when there is none or it was not read (ADR-38).
+A method and full path (context path, controller prefix, method path) from a Spring controller, with the handler `Class.method`, or an operation of an OpenAPI spec in the repo that no mapping in the code matches (`source: "openapi"`, ADR-87), whose handler is the controller method named like its `operationId` or `null`. A `null` method is any method (`@RequestMapping` without `method`). It has a request type (`request`, the parameter with `@RequestBody`) and a response type (`response`, the return type without `ResponseEntity`, `Mono` and similar wrappers), `null` when there is none or it was not read (ADR-38).
+
+**OpenAPI spec** (`readOpenApiSpec`, `withOpenApi`; `ProvidedEndpoint.operation`, `OpenApiOperation`):
+An OpenAPI 3 or Swagger 2 file in the repo, found by its `openapi` or `swagger` key whatever its name, that describes the repo's own API; a spec the build generates a client from describes another app and is not read for endpoints (ADR-87). Its operation (`operationId`, summary, file and line) is on the endpoint it describes. In product texts "OpenAPI spec" and, for an endpoint only in a spec, "OpenAPI".
+_Avoid_: swagger (for both versions), contract (that is the request and response types)
 
 **Endpoint contract** (`ProvidedEndpoint.request` and `response`, computed by `extractContracts`):
 The request type and response type of an HTTP endpoint (`ProvidedEndpoint.request`, `response`) together, from the method that contains the endpoint's mapping (ADR-38). In product texts "request and response types".
+
+**Endpoint reach** (`ProvidedEndpoint.reaches`, `EndpointReach`, computed by `withReaches`; `RepoCard.reachTraced`):
+The client calls on the same card that an endpoint's handler reaches through the repo's Java code, through any chain of method calls and every implementation of an interface in the repo (ADR-82). "Reaches" means may call: a branch counts. `null` when the card did not trace the repo (Kotlin code, files not read or parsed). In product texts "calls made by this endpoint"; `find_endpoint` shows it as `from` (the endpoints of a caller repo that make a call) and `calls` (the endpoints of other repos an endpoint calls).
+_Avoid_: trace, call path (for the fact on the card)
 
 **DTO** (`Dto`, `RepoCard.dtos`):
 A data type from the repo that an endpoint takes or returns, and the types of its fields: a record, a `data class`, a class with fields (a type without fields is not a DTO) or an enum (the `kind`), with fields and their types or enum constants. It is identified by the type's simple name, without the package (ADR-38).
@@ -277,6 +307,10 @@ A process group from `runtime.json` that the daemon no longer supervises (for ex
 The work of one agent on one repo: a prompt, a worktree, a `trackwall/<slug>` branch from the default branch, sessions and a summary; eventually also a budget and leases. Today (ADR-31) the Sessions view creates it from the form or from an approved task proposal (ADR-39), it is stored in `tasks.json`, and the task session can be stopped and resumed. A task does not point to a session; the session has `Session.task`. In code and the API `task` always means a task.
 _Avoid_: job; a bare *task* always means a task, a mise task is always a *mise task*
 
+**Task notice** (`TaskNotice`, `taskNotices`, "Task notices" in the UI):
+One short line for a section above a task's terminal: a warning (shared files, a changed mise config, files not copied) or what is there (messages, summary, verification, merge request, a running mise task). In the one-entry layout the notices are a strip of chips that "Details" unfolds; on a grid tile a badge opens them as an overlay, and a new warning lies over the terminal as a banner until opened or dismissed (ADR-91).
+_Avoid_: alert, notification (that is the tray's), badge (that is only the tile's count)
+
 **End task** (`removeTask`, "End task" in the UI):
 Removing a task's worktree, and optionally its branch. Only without a running session; what would be lost (uncommitted files, commits from a detached HEAD, a directory git no longer knows, and with the branch also the task's commits) the daemon lists in the `unsaved_changes` refusal, and it is lost only after confirmation. Files ignored by git are always lost.
 _Avoid_: delete task (the task disappears from the list, but the branch may stay)
@@ -289,9 +323,21 @@ _Avoid_: instruction, command
 A short one-line description of a task (up to 80 characters), given by the session that proposes the task, like a thread title; the branch slug comes from it. A task from the form has no title (`null`), and the UI then shows the prompt.
 _Avoid_: window title (that is a session's `windowTitle`)
 
+**Task model** (`Task.model`, `TaskProposal.model`, `TaskModel`; "Model" in the UI):
+The Copilot CLI model a task's session runs on, as Copilot CLI names it (`claude-opus-5.5`), passed as `--model` on every start and resume of the task's session; `null` for Copilot CLI's default. Optional: a proposer names it when the user asked for a model, and the user may change it before the start (ADR-98).
+_Avoid_: LLM, engine, agent (for the model)
+
 **Task proposal** (`TaskProposal`, MCP tool `propose_task`, the `approve-proposal` and `reject-proposal` actions):
 A task that a session or an agent outside Trackwall submitted through MCP and that waits in the Sessions view for the user's decision: "Start task" turns it into a task with the same identifier, "Reject…" rejects it with an optional rejection reason. Until then nothing starts. It lives only in daemon memory (ADR-39). The proposals of one main session are one entry in the Sessions view, reviewed together (ADR-55).
 _Avoid_: order, request, application
+
+**Folder action** (`propose_folder_action`, `ProposalKind`):
+A change to the projects folder itself that no task can make, because a task works inside one repo's worktree. A session proposes it from a closed list, it waits for the user like a task proposal, and the daemon carries it out on approval (ADR-83). Today the only one is a repo removal.
+_Avoid_: command, operation
+
+**Repo removal** (`TaskProposal.kind: "remove_repo"`, the `approve-repo-removal` action, `REMOVED_REPOS_DIR`):
+The folder action that takes a repo out of the projects folder: "Remove repo" moves its folder into `.trackwall-removed` in the projects folder, where the user can move it back or delete it, once no session, task or process runs in it (ADR-83).
+_Avoid_: delete repo, archive
 
 **Rejection reason** (`reason` of `reject-proposal`, `rejectionReason` of `wait_for_session`):
 What the user writes when rejecting a task proposal, for the session that proposed it, so it can propose the work differently. Optional; up to 1000 characters (ADR-55).
@@ -307,7 +353,15 @@ _Avoid_: code review (that is the pre-PR review in `AGENTS.md`), feedback
 
 **Review comment** (`ReviewComment`, `ReviewSide`, MCP tool `get_review_comments`):
 What the user writes on one line of a task's changes for its agent: the file, the side (`new` for an added or unchanged line, `old` for a removed one), the line number, the line's code and the text. Queued in daemon memory until the task's session reads it with `get_review_comments`, which marks it read (ADR-62).
-_Avoid_: note, remark, comment on a pull request (Trackwall opens none)
+_Avoid_: note, remark, comment on a merge request (that lives on the repo host)
+
+**Merge request** (`MergeRequest`, module `merge-requests`, `mergeRequestsApi`; the "Merge request" section of the task panel):
+The request on the repo host to merge a task branch into the task's base branch, on GitHub called a pull request. Trackwall pushes the task branch at the user's request and opens the repo host's form for it with a title and description from the task; the user creates it there, and the task panel follows it, found by the task branch as its source branch (ADR-77).
+_Avoid_: pull request (except for GitHub's own pages), PR, MR in product texts
+
+**Pipeline** (`Pipeline`, `PipelineState`):
+What ran on a merge request's last commit, as one state: GitLab's pipeline, or GitHub's check runs and commit statuses summed up worst first (ADR-77).
+_Avoid_: CI, build (a build is a mise task), checks
 
 **Proposer** (`Task.proposedBy`, `proposerOf` in `proposer.ts`):
 The session that proposed a task: a main session, or for the supervisor's work whichever supervisor runs now. Only the proposer sends the task's session task messages (a session in Trackwall; an agent outside Trackwall sends none), and only it gets the task's task updates (ADR-68).
@@ -326,7 +380,7 @@ A session or supervising agent that talks to the user and commissions work to ot
 _Avoid_: orchestrator, planner (ADR-9: a human splits goals)
 
 **mise task**:
-A named command from a repo's `mise.toml`: `setup`, `dev`, `test`, `build`, `lint`, `health`. In code always qualified (`miseTask`, `mise.run(...)`), never a bare `task`. Tasks stored in the commit (`DeclaredMiseTask` in `RepoCard.mise`, type `MiseSetup`: mise configuration files and the tasks from `[tasks]` and task directories) are computed by the repo card; a repo without them has the `no-mise` tag (ADR-34). The MCP tools for mise tasks have `mise` in the name and the `miseTask` argument (`run_mise_task`, `stop_mise_task`, `wait_for_mise_task`, `list_running_mise_tasks`, ADR-41).
+A named command from a repo's `mise.toml`: `setup`, `dev`, `test`, `build`, `lint`, `health`. In code always qualified (`miseTask`, `mise.run(...)`), never a bare `task`. Tasks stored in the commit (`DeclaredMiseTask` in `RepoCard.mise`, type `MiseSetup`: mise configuration files and the tasks from `[tasks]` and task directories) are computed by the repo card; a repo without them, and without mise tasks in its `mise.local.toml` (ADR-86), has the `no-mise` tag (ADR-34). The MCP tools for mise tasks have `mise` in the name and the `miseTask` argument (`run_mise_task`, `stop_mise_task`, `wait_for_mise_task`, `list_running_mise_tasks`, ADR-41).
 
 **Run** (`run`, `runId`, state: `RunState`):
 A one-off execution of a mise task from the UI or through `run_mise_task`, with its own process group and logs. State `running`, `stopping` or `exited` (exit code, signal, whether the user stopped it, the last output lines), always observed. It is neither a task nor a service.
@@ -339,11 +393,15 @@ _Avoid_: authorisation, acceptance
 Everything Trackwall knows about one agent CLI: the command template, the MCP configuration, resuming, state detectors. The only adapter is Copilot CLI (ADR-8).
 
 **Supervisor** (`isSupervisor`, `startSupervisor`, `ProposedBy.supervisor`, "Supervisor" in the UI):
-The one Trackwall session above all others: Copilot CLI in the projects folder, not in a repo (`Session.repo` is `null`), at most one running at a time (ADR-58). The user talks to it in the supervisor panel on the right of every view; it plans work across repos, proposes tasks and follows them. What it proposes carries `ProposedBy.supervisor`, so that its work stays under the "Supervisor" heading of the Sessions list after the session that proposed it is gone. It is the main session above all repos; it has no more rights than any other session. Unlike a supervising agent, Trackwall starts and owns it, with a session token.
+The one Trackwall session above all others: Copilot CLI in the projects folder, not in a repo (`Session.repo` is `null` and `Session.supervisor` is `true`), at most one running at a time (ADR-58). The user talks to it in the supervisor panel on the right of every view; it plans work across repos, proposes tasks and follows them. What it proposes carries `ProposedBy.supervisor`, so that its work stays under the "Supervisor" heading of the Sessions list after the session that proposed it is gone. It is the main session above all repos; it has no more rights than any other session, and fewer: it starts without Copilot CLI's shell and file-writing tools unless the user sets `supervisor.changesCode` in `workspace.yaml` (ADR-78). Unlike a supervising agent, Trackwall starts and owns it, with a session token.
 _Avoid_: orchestrator, root session, supervising agent (that is an agent outside Trackwall)
 
+**Free session** (`isFreeSession`, `start {repo: null}`, "Free session" in the UI):
+A Trackwall session in the projects folder that is not the supervisor (`Session.repo` is `null`, `Session.supervisor` is `false`): plain Copilot CLI the user talks to without a repo, any number at once (ADR-100). It may change files in any repo of the folder, without a review; to MCP it is a main session in no repo, so it proposes tasks but runs no mise task or service.
+_Avoid_: repo-less session, scratch session
+
 **Supervisor panel** (`SupervisorPanel`):
-The column on the right of the main window, in every view, with the supervisor's terminal, its state and the work it delegated, or "Start my day" and "Start supervisor" while there is none (ADR-58, ADR-70). Pinned open, or folded to a strip that keeps a bell while the supervisor or a task proposal under it waits for you; Alt+0 pins it open and puts the keyboard in its terminal.
+The column on the right of the main window, in every view, with the supervisor's terminal, its state and the work it delegated, or "Start my day" and "Start supervisor" while there is none, with "Resume" (the last supervisor's conversation, `SessionList.lastSupervisor`) and "New" in place of "Start supervisor" once Copilot CLI keeps one (ADR-58, ADR-70, ADR-96). Pinned open, or folded to a strip that keeps a bell while the supervisor or a task proposal under it waits for you; Alt+0 pins it open and puts the keyboard in its terminal.
 _Avoid_: sidebar (that is the list on the left of a view), drawer
 
 **Day start** (`DayStart`, `dayStartApi`, `DayStartRun`, `startSupervisorWith`; "Start my day" in the UI; `dayStart` in `workspace.yaml`):
@@ -419,12 +477,16 @@ A directory with `plugin.json` and `hooks.json` that the daemon gives Copilot CL
 _Avoid_: plugin (without qualification), hook configuration
 
 **Session instructions** (`writeSessionInstructions`, file `trackwall.instructions.md`):
-The instruction file in the session directory that the daemon gives Copilot CLI through `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`: the Trackwall version that started the session and where the user sees it, the session's role (a main session in the repo root, or a task session in its worktree with the task rules and `report_result` at the end) and the **MCP instruction** (`MCP_INSTRUCTIONS`, also the MCP server's `instructions`): when to reach for which Trackwall tool and where the documentation is (ADR-46). It changes neither the repo nor `~/.copilot`.
+The instruction file in the session directory that the daemon gives Copilot CLI through `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`: the Trackwall version that started the session and where the user sees it, the session's role (the supervisor or a free session in the projects folder, a main session in the repo root, or a task session in its worktree with the task rules and `report_result` at the end) and the **MCP instruction** (`MCP_INSTRUCTIONS`, also the MCP server's `instructions`): when to reach for which Trackwall tool and where the documentation is (ADR-46). It changes neither the repo nor `~/.copilot`.
 _Avoid_: system prompt (Copilot CLI builds it itself), repository instructions (those are files in the user's repo)
 
 **Hook record** (`CopilotHookRecord`):
-One call of a hook from the session plugin: the event, the time it was received and only the payload fields needed for the state, and for the rest only their names (without the prompt, tool arguments and results). A line of `hooks.jsonl` and a marker in the recording.
+One call of a hook from the session plugin: the event, the time it was received and only the payload fields needed for the state and the hook output, and for the rest only their names (without the prompt, tool arguments and results). A line of `hooks.jsonl` and a marker in the recording.
 _Avoid_: record (without qualification; that is a log line)
+
+**Hook output** (`CopilotHookOutput`, `hookOutputFor`):
+What the daemon answers a session plugin hook with and Copilot CLI acts on (ADR-85): empty, a block of `agentStop` whose reason becomes the next turn's message, or `additionalContext` of `postToolUse` added to the tool's result. It carries the daemon's prompt about what waits for the session.
+_Avoid_: hook response, hook result
 
 **Window title** (`windowTitle`):
 The title an agent CLI sets with the OSC 0 / 2 sequence; in Copilot CLI it is a description of the current work. Shown next to the state, it is never the state.
@@ -459,6 +521,17 @@ _Avoid_: console, terminal (that is a task session's PTY)
 **Error** (error from logs, `LogError`, MCP tool `get_errors`):
 A record at `error` (or `warn`) level or an exception header together with the lines that belong to it (stack trace, `Caused by:`, a Spring or Gradle report), from one source, run and stream. The same error repeated in a source is one error with a count (`count`); `exception` is its cause (ADR-42).
 _Avoid_: exception (only one kind of error), problem (that is the repo card and the graph), incident
+
+**Error journal** (`ErrorJournal`, the `error-journal` module, `errorJournalApi`; in the UI *Trackwall errors* in Settings):
+Trackwall's own errors on this computer: the daemon's unexpected errors, the UI's and the desktop shell's, in `logs/errors.json` (ADR-94). Each is a **Trackwall error** (`TrackwallError`): source (`daemon`, `shell`, `ui`), area, kind, anonymized message, frames in Trackwall's code, count. Do not confuse with an error from logs (`LogError`), which comes from the output of the user's processes.
+_Avoid_: crash log, telemetry, bug report (nothing is sent)
+
+**Doctor** (`Doctor`, the `doctor` module, `doctorApi`; in the UI *Doctor* in Settings):
+The checks of what Trackwall needs on this computer: the projects folder, git, Copilot CLI and its trusted folders, mise, `gh` and `glab` signed in to the repo hosts (ADR-101). Each is a **doctor check** (`DoctorCheck`) with a state (`ok`, `warn`, `fail`), what was found and what to do. It only reads.
+_Avoid_: health check (that is `GET /api/health`), diagnostics, setup wizard
+
+**Anonymization** (`anonymize`):
+Replacing what names the computer, its user or their repos in a Trackwall error's message (paths, user and computer names, repo names, hosts, addresses, token shapes) with a label such as `<projects>` or `<host>`, before it is saved (ADR-94). Do not confuse with masking, which hides secret values in process output.
 
 **`seq`**:
 A global, increasing record number for all sources; every daemon run starts from the moment of its start, so numbers do not repeat. The cursor (`sinceSeq` in the API and in MCP tools) works for one source and for the whole workspace; `dropped` says that some records after the cursor were lost.

@@ -18,6 +18,8 @@ import {
   type RepoStatusOk,
   type RepoTagRules,
   type SearchCodeResult,
+  type Session,
+  type SupervisorSettings,
   type SyncResult,
   type SyncRun,
   sameHost,
@@ -31,10 +33,12 @@ import { mapLimit } from "../../infra/map-limit.ts";
 import { CloneJobs } from "./clone-jobs.ts";
 import { type CodeSearchQuery, type CodeSearchVcs, searchCode } from "./code-search.ts";
 import { describeDroppedFolder } from "./dropped-folder.ts";
-import { dirKey, findRepos, projectsDirUnavailable, type RepoEntry, resolveProjectsDir, takenNames } from "./projects-dir.ts";
+import { dirKey, findRepos, projectsDirUnavailable, type RepoEntry, resolveFolderSetting, takenNames } from "./projects-dir.ts";
+import { moveRepoOut } from "./repo-removal.ts";
 import { SyncRuns } from "./sync-runs.ts";
-import { sessionToolPermissions } from "./tool-permissions.ts";
+import { sessionToolPermissions, supervisorToolPermissions } from "./tool-permissions.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
+import { checkWorktreesDir, defaultWorktreesDir } from "./worktrees-dir.ts";
 
 /**
  * The `workspace` module (§4): repos from the projects folder set in `workspace.yaml` (ADR-18) and their state
@@ -104,12 +108,33 @@ export class Workspace {
   }
 
   settings(): WorkspaceSettings {
-    return { projectsDir: this.deps.file.projectsDir(), configFile: this.configFile() };
+    const projectsDir = this.deps.file.projectsDir();
+    // A bad `worktreesDir` typed by hand must not take away the projects folder form, and saving a folder fixes it.
+    const worktreesDir = configOrProblem(() => this.deps.file.worktreesDir(), null);
+    return {
+      projectsDir,
+      worktreesDir: worktreesDir.value,
+      worktreesDirProblem: worktreesDir.problem,
+      defaultWorktreesDir: projectsDir === null ? null : defaultWorktreesDir(projectsDir),
+      configFile: this.configFile(),
+    };
   }
 
   async setProjectsDir(path: string): Promise<WorkspaceSettings> {
-    this.deps.file.setProjectsDir(await resolveProjectsDir(path));
+    this.deps.file.setProjectsDir(await resolveFolderSetting(path));
     return this.settings();
+  }
+
+  /** `null` goes back to the default folder; tasks that already exist keep their worktrees where they are (ADR-84). */
+  async setWorktreesDir(path: string | null): Promise<WorkspaceSettings> {
+    this.deps.file.setWorktreesDir(path === null ? null : await this.checkedWorktreesDir(path));
+    return this.settings();
+  }
+
+  private async checkedWorktreesDir(path: string): Promise<string> {
+    const dir = await resolveFolderSetting(path);
+    await checkWorktreesDir(dir, this.deps.file.projectsDir());
+    return dir;
   }
 
   /**
@@ -264,11 +289,38 @@ export class Workspace {
     return (await this.entry(id)).path;
   }
 
+  /**
+   * Moves the repo into the removed repos folder of the projects folder (ADR-83) and returns its new path. Refused when
+   * the identifier now names another folder (the projects folder changed since the proposal) or a clone writes into it.
+   */
+  async removeRepo(id: string, expectedDir: string, beforeMove: () => void): Promise<string> {
+    const entry = await this.entry(id);
+    if (entry.path !== expectedDir)
+      throw new DomainError("bad_request", `${id} is no longer ${expectedDir}; reject this proposal and propose the removal again`);
+    const projectsDir = await this.projectsDir();
+    return moveRepoOut(projectsDir, entry.path, () => {
+      if (this.clones.runningInto(entry.path))
+        throw new DomainError("bad_request", `${id} is still being cloned; wait for the clone to end`);
+      beforeMove();
+    });
+  }
+
   /** The projects folder itself, where the supervisor runs (ADR-58); `bad_request` while it is not set. */
   async projectsDir(): Promise<string> {
     const projectsDir = this.deps.file.projectsDir();
     if (projectsDir === null) throw new DomainError("bad_request", "set the projects folder first");
     return projectsDir;
+  }
+
+  /**
+   * The folder for a new task's worktree (ADR-84): `worktreesDir` or `.trackwall-worktrees` in the projects folder,
+   * checked again here, because the projects folder may have changed since the setting was saved.
+   */
+  async worktreesDir(): Promise<string> {
+    const projectsDir = await this.projectsDir();
+    const dir = this.deps.file.worktreesDir() ?? defaultWorktreesDir(projectsDir);
+    await checkWorktreesDir(dir, projectsDir);
+    return dir;
   }
 
   /** Repos from the projects folder (identifier and root), for modules that read every repo (`cards`). */
@@ -282,11 +334,21 @@ export class Workspace {
   }
 
   /**
-   * The tool permissions of a Copilot CLI session in repo `repo` (`null` for the supervisor) from `workspace.yaml`
-   * (ADR-66); `invalid_config` for a bad `toolPermissions`, so that no session starts without a denial the user wrote.
+   * The tool permissions of a Copilot CLI session in repo `repo` (`null` in the projects folder), or of the supervisor,
+   * from `workspace.yaml` (ADR-66); `invalid_config` for a bad `toolPermissions`, so that no session starts without a
+   * denial the user wrote. A free session (ADR-100) gets the rules without `repos`, without the supervisor's denial.
    */
-  toolPermissions(repo: string | null): ToolPermissions {
-    return sessionToolPermissions(this.deps.file.toolPermissionRules(), repo);
+  toolPermissions(session: Pick<Session, "repo" | "supervisor">): ToolPermissions {
+    const rules = this.deps.file.toolPermissionRules();
+    return session.supervisor ? supervisorToolPermissions(rules, this.supervisorSettings()) : sessionToolPermissions(rules, session.repo);
+  }
+
+  /**
+   * The supervisor settings (`supervisor` in `workspace.yaml`, ADR-78); `invalid_config` for a bad key, so that a typo
+   * never lifts the supervisor's denial.
+   */
+  supervisorSettings(): SupervisorSettings {
+    return this.deps.file.supervisorSettings();
   }
 
   /** The user's addition to the day start's first message (`dayStart` in `workspace.yaml`, ADR-70); `null` without one. */

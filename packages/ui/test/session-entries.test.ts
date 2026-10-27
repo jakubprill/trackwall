@@ -4,6 +4,8 @@ import {
   entryId,
   entrySelection,
   findEntry,
+  proposalKindLabel,
+  proposalsName,
   proposerLabel,
   proposerName,
   selectionAfterClose,
@@ -16,6 +18,7 @@ function session(id: string, startedAt: string, task: string | null = null): Ses
   return {
     id,
     repo: "shop",
+    supervisor: false,
     startedAt,
     run: { kind: "running", runId: id, startedAt, pid: 1 },
     state: null,
@@ -38,6 +41,7 @@ function task(id: string, createdAt: string): Task {
     createdAt,
     title: null,
     proposedBy: null,
+    model: null,
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },
@@ -45,7 +49,16 @@ function task(id: string, createdAt: string): Task {
 }
 
 function proposal(id: string, createdAt: string, proposer: string | null = null): TaskProposal {
-  return { id, repo: "shop", title: "Add a test", prompt: "add a test", proposedBy: { session: proposer, supervisor: false }, createdAt };
+  return {
+    id,
+    kind: "task",
+    repo: "shop",
+    title: "Add a test",
+    prompt: "add a test",
+    proposedBy: { session: proposer, supervisor: false },
+    model: null,
+    createdAt,
+  };
 }
 
 function delegated(id: string, createdAt: string, proposer: string): Task {
@@ -69,7 +82,7 @@ describe("Sessions view entries", () => {
       tasks: [task("t2", "2026-10-23T11:30:00Z"), task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
       messages: [],
-      worktreesDir: "/home/me/.trackwall/worktrees",
+      lastSupervisor: null,
     };
     expect(rowEntries(list).map((e) => (e.kind === "task" ? `task ${e.task.id} ${e.session?.id}` : `session ${entryId(e)}`))).toEqual([
       "task t1 s3",
@@ -84,7 +97,7 @@ describe("Sessions view entries", () => {
       tasks: [],
       proposals: [],
       messages: [],
-      worktreesDir: "/home/me/.trackwall/worktrees",
+      lastSupervisor: null,
     });
     const [s1, s2, s3] = entries;
     if (!s1 || !s2 || !s3) throw new Error("expected three entries");
@@ -99,7 +112,7 @@ describe("Sessions view entries", () => {
       tasks: [task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
       messages: [],
-      worktreesDir: "/home/me/.trackwall/worktrees",
+      lastSupervisor: null,
     });
     const [taskEntry, s2] = entries;
     if (!taskEntry || !s2) throw new Error("expected two entries");
@@ -115,7 +128,7 @@ describe("Sessions view entries", () => {
       tasks: [task("t1", "2026-10-23T12:00:00Z"), task("t2", "2026-10-23T11:00:00Z")],
       proposals: [],
       messages: [],
-      worktreesDir: "/home/me/.trackwall/worktrees",
+      lastSupervisor: null,
     });
     const [t1, t2] = entries;
     if (!t1 || !t2) throw new Error("expected two entries");
@@ -130,7 +143,7 @@ describe("Sessions view entries", () => {
       tasks: [task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
       messages: [],
-      worktreesDir: "/home/me/.trackwall/worktrees",
+      lastSupervisor: null,
     });
     expect(findEntry(entries, { kind: "session", id: "s1" })).toMatchObject({ kind: "task", task: { id: "t1" } });
     expect(findEntry(entries, { kind: "new" })).toBeUndefined();
@@ -144,7 +157,7 @@ describe("Sessions view entries", () => {
       tasks: [task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
       messages: [],
-      worktreesDir: "/home/me/.trackwall/worktrees",
+      lastSupervisor: null,
     });
     if (!entry) throw new Error("no entry");
     expect(entrySelection(entry)).toEqual({ kind: "task", id: "t1" });
@@ -156,7 +169,7 @@ describe("Sessions view entries", () => {
       tasks: [task("t1", "2026-10-23T13:00:00Z")],
       proposals: [proposal("p2", "2026-10-23T11:00:00Z"), proposal("p1", "2026-10-23T10:00:00Z")],
       messages: [],
-      worktreesDir: "/home/me/.trackwall/worktrees",
+      lastSupervisor: null,
     });
     expect(entries.map((e) => `${e.kind} ${entryId(e)}`)).toEqual(["proposals proposals:outside", "task t1", "session s1"]);
     expect(findEntry(entries, { kind: "proposal", id: "p1" })).toMatchObject({ kind: "proposals", proposer: null });
@@ -173,7 +186,7 @@ describe("Sessions view entries", () => {
         proposal("p1", "2026-10-23T10:00:00Z", "s1"),
       ],
       messages: [],
-      worktreesDir: "/w",
+      lastSupervisor: null,
     });
     expect(entries.map((e) => (e.kind === "proposals" ? `${e.proposer}: ${e.proposals.map((p) => p.id).join(" ")}` : entryId(e)))).toEqual([
       "s2",
@@ -196,7 +209,7 @@ describe("Sessions view entries", () => {
       tasks: [task("t0", "2026-10-23T14:00:00Z"), task("p1", "2026-10-23T13:00:00Z")],
       proposals: [],
       messages: [],
-      worktreesDir: "/home/me/.trackwall/worktrees",
+      lastSupervisor: null,
     });
     expect(findEntry(entries, { kind: "proposal", id: "p1" })).toMatchObject({ kind: "task", task: { id: "p1" } });
   });
@@ -208,7 +221,7 @@ describe("Sessions view entries", () => {
       tasks: [],
       proposals: [proposal("p1", "2026-10-23T10:00:00Z")],
     };
-    expect(attentionCount({ ...list, messages: [], worktreesDir: "/w" })).toBe(2);
+    expect(attentionCount({ ...list, messages: [], lastSupervisor: null })).toBe(2);
     expect(attentionCount(undefined)).toBe(0);
   });
 
@@ -218,7 +231,7 @@ describe("Sessions view entries", () => {
       tasks: [delegated("t1", "2026-10-23T11:00:00Z", "s1"), task("t2", "2026-10-23T09:00:00Z")],
       proposals: [proposal("p1", "2026-10-23T11:30:00Z", "s1")],
       messages: [],
-      worktreesDir: "/w",
+      lastSupervisor: null,
     };
     expect(shape(list)).toEqual(["session s2 @0", "session s1 @0", "proposals proposals:s1 @1", "task t1 @1", "task t2 @0"]);
     expect(sessionRows(list).find((r) => entryId(r.entry) === "s1")?.children).toBe(2);
@@ -230,7 +243,7 @@ describe("Sessions view entries", () => {
       tasks: [delegated("p1", "2026-10-23T12:00:00Z", "s1"), task("t0", "2026-10-23T13:00:00Z")],
       proposals: [],
       messages: [],
-      worktreesDir: "/w",
+      lastSupervisor: null,
     });
     expect(findEntry(entries, { kind: "proposals", proposer: "s1" })).toMatchObject({ kind: "task", task: { id: "p1" } });
     expect(findEntry(entries, { kind: "proposals", proposer: "s9" })).toBe(entries[0]);
@@ -243,7 +256,7 @@ describe("Sessions view entries", () => {
       tasks: [task("t0", "2026-10-23T13:00:00Z"), outside],
       proposals: [],
       messages: [],
-      worktreesDir: "/w",
+      lastSupervisor: null,
     });
     expect(findEntry(entries, { kind: "proposals", proposer: null })).toMatchObject({ kind: "task", task: { id: "p1" } });
   });
@@ -254,7 +267,7 @@ describe("Sessions view entries", () => {
       tasks: [delegated("t1", "2026-10-23T11:00:00Z", "s1")],
       proposals: [proposal("p2", "2026-10-23T11:40:00Z", "s1"), proposal("p1", "2026-10-23T11:30:00Z", "s1")],
       messages: [],
-      worktreesDir: "/w",
+      lastSupervisor: null,
     };
     expect(sessionRows(list).find((r) => entryId(r.entry) === "s1")?.children).toBe(3);
   });
@@ -265,7 +278,7 @@ describe("Sessions view entries", () => {
       tasks: [delegated("t2", "2026-10-23T11:00:00Z", "s1"), task("t1", "2026-10-23T09:00:00Z")],
       proposals: [],
       messages: [],
-      worktreesDir: "/w",
+      lastSupervisor: null,
     };
     expect(shape(list)).toEqual(["task t1 @0", "task t2 @1"]);
   });
@@ -276,7 +289,7 @@ describe("Sessions view entries", () => {
       tasks: [delegated("t1", "2026-10-23T11:00:00Z", "closed")],
       proposals: [proposal("p1", "2026-10-23T09:00:00Z")],
       messages: [],
-      worktreesDir: "/w",
+      lastSupervisor: null,
     };
     expect(shape(list)).toEqual(["proposals proposals:outside @0", "task t1 @0", "session s1 @0"]);
   });
@@ -287,7 +300,7 @@ describe("Sessions view entries", () => {
       tasks: [delegated("t2", "2026-10-23T10:00:00Z", "s1"), delegated("t1", "2026-10-23T09:00:00Z", "s2")],
       proposals: [],
       messages: [],
-      worktreesDir: "/w",
+      lastSupervisor: null,
     };
     expect(shape(list)).toEqual(["task t2 @0", "task t1 @1"]);
     // t1 delegated t2, but t2 is already above it, so t1 has nothing under it and gets no “main” badge.
@@ -305,5 +318,24 @@ describe("Sessions view entries", () => {
     const sessions = [{ ...session("s1", "2026-10-23T12:00:00Z"), windowTitle: "Sprint plan" }];
     expect(`from ${proposerName({ session: "s1", supervisor: false }, sessions)}`).toBe("from the session in shop (Sprint plan)");
     expect(`from ${proposerName({ session: "s2", supervisor: true }, sessions)}`).toBe("from the supervisor");
+  });
+
+  test("a free session, which has no repo, is named as a free session (ADR-100)", () => {
+    const sessions = [{ ...session("f1", "2026-10-27T12:00:00Z"), repo: null, windowTitle: "API compare" }];
+    expect(proposerLabel({ session: "f1", supervisor: false }, sessions)).toBe("proposed by a free session (API compare)");
+  });
+});
+
+describe("proposal kinds (ADR-83)", () => {
+  test("a single proposal is headed by what it asks for: a task, or removing a repo", () => {
+    expect(proposalKindLabel(proposal("p1", "2026-10-26T10:00:00Z"))).toBe("Task proposal");
+    expect(proposalKindLabel({ ...proposal("p2", "2026-10-26T10:00:00Z"), kind: "remove_repo" })).toBe("Repo removal");
+  });
+
+  test("a group with a repo removal in it is counted as proposals, not as task proposals", () => {
+    const task = proposal("p1", "2026-10-26T10:00:00Z");
+    const removal: TaskProposal = { ...proposal("p2", "2026-10-26T10:00:00Z"), kind: "remove_repo" };
+    expect(proposalsName([task, { ...task, id: "p3" }])).toBe("2 task proposals");
+    expect(proposalsName([task, removal])).toBe("2 proposals");
   });
 });

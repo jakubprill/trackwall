@@ -82,7 +82,7 @@ pub fn open_link(app: AppHandle, url: String) {
 #[cfg(all(windows, not(debug_assertions)))]
 fn register(app: &AppHandle) {
     if let Err(err) = app.deep_link().register(SCHEME) {
-        eprintln!("trackwall: could not register the {SCHEME}:// links: {err}");
+        crate::report_error!("could not register the {SCHEME}:// links: {err}");
     }
 }
 

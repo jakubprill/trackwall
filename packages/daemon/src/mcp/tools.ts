@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import {
   type AgentRepo,
   type AgentSession,
+  isSupervisor,
   type McpTool,
   type MiseTarget,
   mcpTools,
@@ -11,19 +12,22 @@ import {
   type Session,
   type SyncRun,
 } from "@trackwall/protocol";
-import type { z } from "zod";
+import { z } from "zod";
 import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
 
 /**
  * The daemon's MCP tools (§5.3, ADR-24): each is a thin mapping onto the facade, so the agent sees the same state as the UI
- * (§1.1). None changes the configuration or a repo (§8), and none starts a session, answers in one or stops one. Only
+ * (§1.1). None changes the configuration or a repo (§8), none answers in a session or stops one, and only `resume_task`
+ * starts one: a new session of a task the user already approved, in its own worktree (ADR-90). Only
  * `propose_task` (a proposal, which only the user turns into a task in the UI) and `report_result` (the summary of the
  * session's own task) write anything, ADR-39, `get_review_comments` marks the user's review comments read (ADR-62),
  * `send_message` queues text for the session of a task the caller proposed, and `get_messages` and `get_updates` mark
  * what they return read (ADR-68);
  * only `run_mise_task` and `stop_mise_task` start and stop processes: a mise task from the current list of the repo's
  * trusted configuration, like the button in the UI (ADR-41), and `verify_task` runs the mise task `test` the same way (ADR-64).
+ * A tool that a session's untrusted mise config can refuse runs inside `agents.runNeedingMiseTrust`, so the session is told
+ * when the user trusts it (ADR-92).
  */
 
 /**
@@ -93,7 +97,7 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
         // will come with SQLite.
         const label = ctx.caller === null ? tool.name : `${tool.name} (session ${ctx.caller})`;
         try {
-          const parsed = tool.args.parse(args);
+          const parsed = parseArgs(tool.args, args);
           // A destructive tool (it runs or stops repo code) logs its arguments before acting: until the `audit` table
           // exists, this line says who ran what (ADR-41). Their arguments are identifiers, never free text.
           if (!tool.readOnly && tool.destructive) ctx.log(`${label}: ${JSON.stringify(auditView(parsed, tool.auditArgs))}`);
@@ -102,13 +106,28 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
           return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
         } catch (err) {
           ctx.log(`${label}: error in ${Date.now() - started} ms: ${String(err)}`);
-          // An error a module raised on purpose goes to the agent with its code and message, as in the API (§5.2); others without details.
-          const text = err instanceof DomainError ? `${err.code}: ${err.message}` : "internal: daemon error";
-          return { content: [{ type: "text", text }], isError: true };
+          return { content: [{ type: "text", text: toolErrorText(ctx.facade, tool.name, err) }], isError: true };
         }
       },
     );
   };
+}
+
+/** Arguments that fail the tool's schema are the agent's mistake: `bad_request` with what is wrong, as in the API (§5.2). */
+function parseArgs<T extends z.ZodType>(schema: T, args: unknown): z.output<T> {
+  const parsed = schema.safeParse(args);
+  if (!parsed.success) throw new DomainError("bad_request", z.prettifyError(parsed.error));
+  return parsed.data;
+}
+
+/**
+ * What the agent reads for a failed tool: an error a module raised on purpose with its code and message, as in the API
+ * (§5.2), others without details. Those others are Trackwall's errors and go into the error journal (ADR-94).
+ */
+function toolErrorText(facade: Facade, tool: string, err: unknown): string {
+  if (err instanceof DomainError) return `${err.code}: ${err.message}`;
+  facade.errorJournal.recordDaemonError(`mcp:${tool}`, err);
+  return "internal: daemon error";
 }
 
 type ToolRuns = { [K in keyof typeof mcpTools]: (typeof mcpTools)[K] extends McpTool<infer A, infer R> ? ToolRun<A, R> : never };
@@ -205,10 +224,20 @@ const runs: ToolRuns = {
   },
   getDayReport: async (facade) => ({ report: facade.dayStart.report() }),
   getTaskChanges: (facade, { task, paths, maxPatchBytes }) => facade.agents.agentTaskChanges(task, maxPatchBytes, paths),
-  proposeTask: async (facade, proposal, { caller }) => ({ proposal: await facade.agents.propose(caller, proposal) }),
+  proposeTask: async (facade, { model, ...proposal }, { caller }) => ({
+    // Without a model the task runs on Copilot CLI's default (ADR-98).
+    proposal: await facade.agents.propose(caller, { ...proposal, model: model ?? null }),
+  }),
+  proposeFolderAction: async (facade, { repo, reason }, { caller }) => ({
+    proposal: await facade.agents.proposeRepoRemoval(caller, repo, reason),
+  }),
   reportResult: async (facade, { summary }, { caller }) => ({ task: facade.agents.reportSummary(caller, summary) }),
   getReviewComments: async (facade, _args, { caller }) => ({ comments: facade.agents.takeReviewComments(caller) }),
   sendMessage: async (facade, { task, text }, { caller }) => facade.agents.sendMessage(caller, task, text),
+  resumeTask: async (facade, { task }, { caller }) => {
+    const resumed = await facade.agents.resumeTaskFor(caller, task);
+    return { task: resumed.task, session: agentSession(resumed.session) };
+  },
   getMessages: async (facade, _args, { caller }) => ({
     messages: facade.agents.takeMessages(caller).map(({ readAt: _, ...message }) => message),
   }),
@@ -220,9 +249,10 @@ const runs: ToolRuns = {
     const outcome = await facade.agents.waitFor(caller, target, timeoutSeconds * 1000, signal);
     return { ...outcome, session: outcome.session && agentSession(outcome.session) };
   },
-  runMiseTask: async (facade, { repo, task, miseTask }, { caller }) => ({
-    run: await facade.mise.start(callerTarget(facade, caller, repo, task, MISE_TASK_ACTION), miseTask),
-  }),
+  runMiseTask: async (facade, { repo, task, miseTask }, { caller }) => {
+    const target = callerTarget(facade, caller, repo, task, MISE_TASK_ACTION);
+    return { run: await facade.agents.runNeedingMiseTrust(caller, target, () => facade.mise.start(target, miseTask)) };
+  },
   stopMiseTask: async (facade, { repo, task, miseTask }, { caller }) => ({
     run: await facade.mise.stop(callerTarget(facade, caller, repo, task, MISE_TASK_ACTION), miseTask),
   }),
@@ -232,13 +262,15 @@ const runs: ToolRuns = {
   listRunningMiseTasks: async (facade) => ({ miseTasks: facade.mise.running() }),
   verifyTask: async (facade, { repo, task, runId, timeoutSeconds }, { caller, signal }) => {
     assertCallerMayVerify(facade, caller, task);
-    callerTarget(facade, caller, repo, task, VERIFY_ACTION);
-    return { verification: await facade.verifications.verify(task, runId, timeoutSeconds * 1000, signal) };
+    const target = callerTarget(facade, caller, repo, task, VERIFY_ACTION);
+    const verify = () => facade.verifications.verify(task, runId, timeoutSeconds * 1000, signal);
+    return { verification: await facade.agents.runNeedingMiseTrust(caller, target, verify) };
   },
   startService: async (facade, { repo, task, dependencies, timeoutSeconds }, { caller }) => {
     // Only the root comes from the session; its dependencies come from the graph, so they may be other repos.
     const target = callerTarget(facade, caller, repo, task, SERVICE_ACTION);
-    return { slice: await facade.services.start({ ...target, dependencies, waitMs: timeoutSeconds * 1000 }) };
+    const start = () => facade.services.start({ ...target, dependencies, waitMs: timeoutSeconds * 1000 });
+    return { slice: await facade.agents.runNeedingMiseTrust(caller, target, start) };
   },
   stopService: async (facade, { repo, task, dependencies }, { caller }) => {
     const target = callerTarget(facade, caller, repo, task, SERVICE_ACTION);
@@ -269,9 +301,11 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.getDayReport, runs.getDayReport),
   defineTool(mcpTools.getTaskChanges, runs.getTaskChanges),
   defineTool(mcpTools.proposeTask, runs.proposeTask),
+  defineTool(mcpTools.proposeFolderAction, runs.proposeFolderAction),
   defineTool(mcpTools.reportResult, runs.reportResult),
   defineTool(mcpTools.getReviewComments, runs.getReviewComments),
   defineTool(mcpTools.sendMessage, runs.sendMessage),
+  defineTool(mcpTools.resumeTask, runs.resumeTask),
   defineTool(mcpTools.getMessages, runs.getMessages),
   defineTool(mcpTools.getUpdates, runs.getUpdates),
   defineTool(mcpTools.waitForSession, runs.waitForSession),
@@ -305,9 +339,13 @@ function hasEveryTag(tags: readonly string[], wanted: readonly string[]): boolea
  */
 function assertCallerRepo(facade: Facade, caller: string | null, repo: string, action: string): void {
   if (caller === null) return;
-  const own = facade.agents.session(caller).repo;
+  const session = facade.agents.session(caller);
+  const own = session.repo;
   if (own === null)
-    throw new DomainError("bad_request", `the supervisor works in no repo and runs nothing in one; propose a task in ${repo} instead`);
+    throw new DomainError(
+      "bad_request",
+      `${inNoRepo(session)} works in no repo and runs nothing in one; propose a task in ${repo} instead`,
+    );
   if (own !== repo) throw new DomainError("bad_request", `a session in ${own} can ${action} of ${own}, not of ${repo}`);
 }
 
@@ -334,10 +372,15 @@ function assertCallerMayVerify(facade: Facade, caller: string | null, task: stri
   if (session.repo === null)
     throw new DomainError(
       "bad_request",
-      `the supervisor runs no tests; read task ${task}'s verification with ${mcpTools.getSession.name}, or ask its session to verify it`,
+      `${inNoRepo(session)} runs no tests; read task ${task}'s verification with ${mcpTools.getSession.name}, or ask its session to verify it`,
     );
   if (session.task !== null && session.task !== task)
     throw new DomainError("bad_request", `a task session can verify only its own task ${session.task}, not task ${task}`);
+}
+
+/** A session in the projects folder as a refusal names it: the supervisor (ADR-58) or a free session (ADR-100). */
+function inNoRepo(session: Session): string {
+  return isSupervisor(session) ? "the supervisor" : "a free session";
 }
 
 /** The repo root, or the worktree of a task of that repo (`bad_request` for a task of another repo, ADR-59). */

@@ -193,7 +193,11 @@ describe("a Maven project and a Gradle project", () => {
       {
         buildFiles: [["pom.xml", "maven"]],
         apps: [["orders", ORDERS_PORT]],
-        endpoints: [["GET", "/api/orders/{id}", "OrderDto"]],
+        // The second is only in the OpenAPI spec: the build generates its interface (ADR-87).
+        endpoints: [
+          ["GET", "/api/orders/{id}", "OrderDto"],
+          ["GET", "/orders/{id}/status", "string"],
+        ],
         http: [],
         tags: ["backend", "java"],
       },
@@ -207,12 +211,18 @@ describe("a Maven project and a Gradle project", () => {
     ]);
   });
 
-  test("find_endpoint finds the orders endpoint with checkout as its caller", async () => {
+  test("find_endpoint finds the orders endpoint with checkout as its caller, and the checkout endpoint that makes the call", async () => {
     const found = FindEndpointResult.parse(await call("find_endpoint", { query: "/api/orders/{id}", method: "GET" }));
 
-    expect(found.endpoints.map((e) => [e.repo, e.method, e.path, e.response, e.callers.map((c) => [c.repo, c.via])])).toEqual([
-      ["orders", "GET", "/api/orders/{id}", "OrderDto", [["checkout", "rest-client"]]],
-    ]);
+    expect(
+      found.endpoints.map((e) => [
+        e.repo,
+        e.method,
+        e.path,
+        e.response,
+        e.callers.map((c) => [c.repo, c.via, c.from?.map((f) => f.handler)]),
+      ]),
+    ).toEqual([["orders", "GET", "/api/orders/{id}", "OrderDto", [["checkout", "rest-client", ["CheckoutController.checkout"]]]]]);
   });
 
   test("run_mise_task runs mvn test and gradle test, and get_test_results reads the reports each one wrote", async () => {
@@ -238,12 +248,23 @@ describe("a Maven project and a Gradle project", () => {
     });
   });
 
+  test("find_endpoint finds the endpoint from the OpenAPI spec under its generated path, with the controller implementing the generated interface", async () => {
+    const found = FindEndpointResult.parse(await call("find_endpoint", { query: "GET /orders/42/status" }));
+    expect(found.endpoints.map((e) => [e.match, e.repo, e.path, e.source, e.handler, e.operation?.summary])).toEqual([
+      ["path", "orders", "/orders/{id}/status", "openapi", "OrderStatusController.getOrderStatus", "The delivery status of an order"],
+    ]);
+  });
+
   test("start_service starts orders before checkout from the graph, and call_endpoint reaches orders through checkout", async () => {
     const { services: started } = await startService({ repo: "checkout" });
     expect(started.map((s) => [s?.repo, s?.state, s?.port])).toEqual([
       ["orders", "healthy", ORDERS_PORT],
       ["checkout", "healthy", CHECKOUT_PORT],
     ]);
+
+    // The app serves the operation from the spec where the card says: the generated interface maps the bare spec path.
+    const status = CallEndpointResult.parse(await call("call_endpoint", { repo: "orders", path: "/orders/42/status" }));
+    expect([status.response?.status, status.response?.body]).toEqual([200, "shipped"]);
 
     const answer = CallEndpointResult.parse(await call("call_endpoint", { repo: "checkout", path: "/api/checkout/42" }));
     expect({ status: answer.response?.status, body: answer.response?.body, errors: answer.errors }).toEqual({

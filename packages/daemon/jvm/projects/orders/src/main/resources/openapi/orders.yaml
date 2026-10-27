@@ -1,0 +1,27 @@
+openapi: 3.0.3
+info:
+  title: Orders
+  version: 1.0.0
+servers:
+  - url: http://localhost:18081/api
+tags:
+  - name: OrderStatus
+paths:
+  /orders/{id}/status:
+    get:
+      tags: [OrderStatus]
+      operationId: get-order-status
+      summary: The delivery status of an order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The status
+          content:
+            text/plain:
+              schema:
+                type: string

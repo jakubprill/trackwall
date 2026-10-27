@@ -6,7 +6,8 @@ import { ProposalActions, ProposalError } from "./ProposalActions.tsx";
 
 /**
  * The body of a grid tile with task proposals (ADR-48, ADR-55): every prompt in full, to read before “Start task”,
- * which starts it as proposed, and “Reject…”. Editing a prompt or starting several at once is in the full panel.
+ * which starts it as proposed (with the proposed model, ADR-98), and “Reject…”. Editing a prompt or a model or starting
+ * several at once is in the full panel.
  */
 export function ProposalTile({
   conn,
@@ -30,12 +31,14 @@ export function ProposalTile({
         <li key={p.id} className="flex flex-col gap-2 border-b pb-3 last:border-b-0">
           <span className="text-xs font-medium">{proposalName(p)}</span>
           <p className="text-muted-foreground font-mono text-xs whitespace-pre-wrap">{p.prompt}</p>
+          {p.model !== null && <p className="text-muted-foreground text-xs">Model: {p.model}</p>}
           <ProposalActions
             proposal={p}
             tasks={tasks}
             pending={decisions.pending}
             canStart
-            onStart={() => decisions.start([{ id: p.id, prompt: p.prompt }])}
+            onStart={() => decisions.start([{ id: p.id, prompt: p.prompt, model: p.model }])}
+            onRemoveRepo={() => decisions.removeRepo(p.id)}
             onReject={(reason) => decisions.reject(p.id, reason)}
           />
           <ProposalError error={decisions.errors.get(p.id)} />

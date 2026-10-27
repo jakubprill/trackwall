@@ -1,7 +1,8 @@
 /**
  * The real Copilot CLI for the contract tests (ADR-67): the native binary of the pinned version for this system, from
  * the npm registry, checked against the registry's sha512 and kept in `node_modules/.cache`. A newer Copilot CLI comes
- * in a PR that changes `COPILOT_CLI_VERSION` and passes the contract tests on it. `TRACKWALL_COPILOT_CLI` runs them on
+ * in a PR that changes `TESTED_COPILOT_CLI_VERSION` (`packages/protocol/src/copilot-cli-version.ts`, which the doctor
+ * compares the user's Copilot CLI with) and passes the contract tests on it. `TRACKWALL_COPILOT_CLI` runs them on
  * another version without that PR, as the nightly workflow does with the newest one on npm.
  *
  *   bun packages/daemon/scripts/copilot-cli.ts     # downloads it when missing and prints the binary's path
@@ -12,10 +13,9 @@ import { chmodSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } f
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
+import { TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
 import { z } from "zod";
-
-/** The Copilot CLI version Trackwall is checked against; a download whose `copilot --version` says otherwise is refused. */
-export const COPILOT_CLI_VERSION = "1.0.103";
+import { versionIn } from "../src/modules/doctor/version.ts";
 
 /** An exact version that replaces the pinned one in the contract tests (`.github/workflows/contract.yml`, from nightly.yml). */
 const VERSION_ENV = "TRACKWALL_COPILOT_CLI";
@@ -25,7 +25,7 @@ const EXACT_VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/;
 /** The version the contract tests run on: `TRACKWALL_COPILOT_CLI` when set, otherwise the pinned one. */
 export function copilotCliVersion(env: NodeJS.ProcessEnv = process.env): string {
   const wanted = env[VERSION_ENV];
-  if (wanted === undefined || wanted === "") return COPILOT_CLI_VERSION;
+  if (wanted === undefined || wanted === "") return TESTED_COPILOT_CLI_VERSION;
   if (!EXACT_VERSION.test(wanted)) throw new Error(`${VERSION_ENV}="${wanted}" is not an exact version such as 1.0.104`);
   return wanted;
 }
@@ -65,7 +65,8 @@ export async function copilotCli(): Promise<string> {
   chmodSync(partial, 0o755);
   const check = spawnSync(partial, ["--version"], { encoding: "utf8", env: { ...process.env, ...PINNED_COPILOT_ENV } });
   if (check.error) throw new Error(`${name}: the downloaded binary does not start (${check.error.message})`);
-  if (!check.stdout.includes(` ${version}.`)) {
+  // The doctor's parser must read the same version, or it would warn about the very Copilot CLI it is tested with.
+  if (!check.stdout.includes(` ${version}.`) || versionIn(check.stdout) !== version.replace(/-.*$/, "")) {
     throw new Error(`${name} says it is "${check.stdout.trim()}" (exit ${check.status}, ${check.stderr.trim()}), not ${version}`);
   }
   rmSync(binary, { force: true });

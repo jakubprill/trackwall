@@ -1,24 +1,25 @@
-import { readFileSync, renameSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { noIncludedFiles, Task } from "@trackwall/protocol";
 import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
+import { readStateFile } from "./state-file.ts";
 import { TaskBranch } from "./task-branch.ts";
 import { MAX_MISE_PATH } from "./task-mise-config.ts";
 
 /**
  * `tasks.json` in the state directory (ADR-31): tasks survive a daemon restart, because their worktrees and branches
- * stay on disk until the user ends them. A task session lives only in memory, and the worktree follows from the repo
- * and branch (`taskWorktree`), so neither of them is stored. The file can be edited by hand, and its fields go to git
+ * stay on disk until the user ends them. A task session lives only in memory, and the worktree follows from the task
+ * worktrees folder, the repo and the branch (`taskWorktree`), so neither of them is stored. The file can be edited by hand, and its fields go to git
  * (`branch -D`, `diff <base commit>`), so the schema allows only a task branch and a full commit hash (`CommitHash` in `Task`).
  * Fields added later (title, origin and summary, ADR-39; the trusted mise config, ADR-59; the port and the included
- * files, ADR-61) have a default in the file, so tasks saved by an older version are not moved aside as an unreadable file.
+ * files, ADR-61; the task worktrees folder, ADR-84; the model, ADR-98) have a default in the file, so tasks saved by an older version are not moved aside as an unreadable file.
  */
 
 export const StoredTask = Task.omit({ worktree: true }).extend({
   branch: TaskBranch,
   title: Task.shape.title.default(null),
   proposedBy: Task.shape.proposedBy.default(null),
+  model: Task.shape.model.default(null),
   summary: Task.shape.summary.default(null),
   /** `null` in a task saved by an older version: `AgentTasks` gives it a free port when it reads the file. */
   port: Task.shape.port.nullable().default(null),
@@ -32,6 +33,11 @@ export const StoredTask = Task.omit({ worktree: true }).extend({
     .record(z.string().max(MAX_MISE_PATH), z.string().regex(/^[0-9a-f]{64}$/))
     .nullable()
     .default(null),
+  /**
+   * The task worktrees folder the task's worktree went into (ADR-84), so that changing the setting does not lose the
+   * worktrees of existing tasks. `null` in a task saved by an older version: its worktree is in `worktrees/` of the state directory.
+   */
+  worktreesDir: z.string().max(4096).refine(isAbsolute, "task worktrees folder must be a full path").nullable().default(null),
   /** The root of the repo in the projects folder the task came from: git keeps the worktree registry and the branch there. */
   repoDir: z.string().refine(isAbsolute, "repo root must be a full path"),
 });
@@ -50,34 +56,13 @@ export class TaskFile {
 
   /** A missing file means no tasks. An unreadable file is moved aside (`tasks.json.broken-<time>`), and its tasks go to the log. */
   read(): StoredTask[] {
-    let text: string;
-    try {
-      text = readFileSync(this.#path, "utf8");
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
-      throw err;
-    }
-    const parsed = parse(text);
-    if (typeof parsed !== "string") return parsed;
-    const aside = `${this.#path}.broken-${Date.now()}`;
-    renameSync(this.#path, aside);
-    this.#log(`${this.#path}: ${parsed}; file moved to ${aside}, task worktrees were left on disk`);
-    return [];
+    const file = readStateFile(this.#path, TaskFileSchema, (problem, aside) =>
+      this.#log(`${this.#path}: ${problem}; file moved to ${aside}, task worktrees were left on disk`),
+    );
+    return file?.tasks ?? [];
   }
 
   write(tasks: readonly StoredTask[]): void {
     writeFileAtomic(this.#path, `${JSON.stringify({ tasks }, null, 2)}\n`);
   }
-}
-
-/** The tasks from the file or a description of what is wrong with it. */
-function parse(text: string): StoredTask[] | string {
-  let json: unknown;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    return "not JSON";
-  }
-  const parsed = TaskFileSchema.safeParse(json);
-  return parsed.success ? parsed.data.tasks : z.prettifyError(parsed.error);
 }

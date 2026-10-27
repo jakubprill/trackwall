@@ -1,8 +1,8 @@
 /**
  * The daemon with the real Copilot CLI (ADR-67): the pinned binary from `scripts/copilot-cli.ts`, in BYOK mode against
  * the scripted model, with its own `COPILOT_HOME` and without the developer's `COPILOT_*` variables, so no account, no
- * network and not the developer's Copilot settings take part. Everything else is the daemon as `main.ts` builds it: the session plugin's hooks, the MCP
- * stdio bridge and the session instructions.
+ * network and not the developer's Copilot settings take part. Everything else is the daemon as `main.ts` builds it: the session plugin's HTTP hooks, the
+ * HTTP MCP entry and the session instructions.
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -10,7 +10,7 @@ import { copilotCli, PINNED_COPILOT_ENV } from "../../scripts/copilot-cli.ts";
 import { sessionHooksFile } from "../../src/modules/agents/agents.ts";
 import { CopilotHookRecord } from "../../src/modules/agents/copilot-hook-record.ts";
 import { jsonOf } from "../../src/modules/agents/json.ts";
-import { ONE_REPO, startSessionApi } from "../../test/support/session-api.ts";
+import { ONE_REPO, type SessionApiOptions, startSessionApi } from "../../test/support/session-api.ts";
 import { SCRIPTED_MODEL, type ScriptedModel } from "./scripted-model.ts";
 
 /**
@@ -46,13 +46,21 @@ const TOKEN = "c".repeat(43);
 
 /**
  * The daemon API with the real Copilot CLI on a projects folder with the one repo `shop`, and the path of the Copilot
- * CLI binary.
+ * CLI binary; `options` change the session API's options (where the hooks go), and `env` the user environment the
+ * daemon starts its sessions with (`undefined` leaves a variable out).
  */
-export async function startRealCopilotDaemon(model: ScriptedModel) {
+export async function startRealCopilotDaemon(
+  model: ScriptedModel,
+  options: Partial<SessionApiOptions> = {},
+  env: Record<string, string | undefined> = {},
+) {
   const copilot = await copilotCli();
+  const userEnv = (dirs: { home: string; projects: string }) =>
+    Object.fromEntries(Object.entries({ ...byokEnv(model, dirs), ...env }).filter(([, value]) => value !== undefined));
   const api = await startSessionApi(TOKEN, {
     ...ONE_REPO,
-    copilot: { command: [copilot], env: (dirs) => byokEnv(model, dirs) },
+    ...options,
+    copilot: { command: [copilot], env: userEnv },
   });
   return { ...api, copilot };
 }

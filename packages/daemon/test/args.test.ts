@@ -24,16 +24,9 @@ describe("arguments", () => {
   });
 
   test("mcp-stdio as the first argument starts the bridge with an optional --home, without daemon options", () => {
-    expect(parseCommandLine(["mcp-stdio"])).toEqual({ command: "mcp-stdio", home: undefined, sessionTokenFile: undefined });
-    expect(parseCommandLine(["mcp-stdio", "--home", "/state"])).toEqual({
-      command: "mcp-stdio",
-      home: "/state",
-      sessionTokenFile: undefined,
-    });
-    expect(parseCommandLine(["mcp-stdio", "--session-token-file", "/state/sessions/s1/session-token"])).toEqual({
-      command: "mcp-stdio",
-      sessionTokenFile: "/state/sessions/s1/session-token",
-    });
+    expect(parseCommandLine(["mcp-stdio"])).toEqual({ command: "mcp-stdio", home: undefined });
+    expect(parseCommandLine(["mcp-stdio", "--home", "/state"])).toEqual({ command: "mcp-stdio", home: "/state" });
+    expect(() => parseCommandLine(["mcp-stdio", "--session-token-file", "/state/sessions/s1/session-token"])).toThrow();
     expect(() => parseCommandLine(["mcp-stdio", "--port", "1"])).toThrow();
     expect(parseCommandLine(["--port", "7"])).toMatchObject({ command: "daemon", args: { port: 7 } });
   });

@@ -55,7 +55,7 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     const task = await agents.createTask("shop", "Fix the login in the shop");
     expect(task).toMatchObject({ repo: "shop", prompt: "Fix the login in the shop", baseBranch: "main", base: mainCommit });
     expect(task.branch).toMatch(/^trackwall\/fix-the-login-in-the-shop-[0-9a-f]{6}$/);
-    expect(task.worktree).toBe(join(home, "worktrees", "shop", task.branch.slice("trackwall/".length)));
+    expect(task.worktree).toBe(join(home, "task-worktrees", "shop", task.branch.slice("trackwall/".length)));
     expect(gitIn(task.worktree, "branch", "--show-current").trim()).toBe(task.branch);
     expect(existsSync(join(task.worktree, "src", "feature.ts"))).toBe(false);
     expect(gitIn(dir, "branch", "--show-current").trim()).toBe("feature");
@@ -145,7 +145,10 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     const { dir } = cloneOnFeatureBranch();
     const first = makeAgents({ shop: dir });
     const task = await first.agents.createTask("shop", "fix the build");
-    await first.agents.stop(sessionOf(first.agents, task.id));
+    // Once the first prompt is in, Copilot CLI keeps the task's conversation, which a resume goes on with.
+    const firstSession = sessionOf(first.agents, task.id);
+    await waitFor(first.agents, firstSession, (s) => s.state !== null, "the task prompt's sessionStart");
+    await first.agents.stop(firstSession);
 
     const restarted = makeAgents({ shop: dir }, first.home);
     cleanups.push(() => restarted.procs.stopAll());
@@ -154,7 +157,7 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
       tasks: [task],
       proposals: [],
       messages: [],
-      worktreesDir: join(first.home, "worktrees"),
+      lastSupervisor: null,
     });
 
     expect(await restarted.agents.resumeTask(task.id)).toEqual(task);
@@ -172,12 +175,55 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     expect(restarted.opened).toEqual([task.worktree]);
   }, 60_000);
 
+  test("a new task's worktree goes into the task worktrees folder of the moment, and a changed folder does not move existing tasks", async () => {
+    const { dir } = cloneOnFeatureBranch();
+    const folders = mkdtempSync(join(tmpdir(), "trackwall-folders-"));
+    let worktreesDir = join(folders, "first");
+    const first = makeAgents({ shop: dir }, undefined, null, undefined, undefined, undefined, () => worktreesDir);
+    const before = await first.agents.createTask("shop", "fix the build");
+    await first.agents.stop(sessionOf(first.agents, before.id));
+    worktreesDir = join(folders, "second");
+    const after = await first.agents.createTask("shop", "add a test");
+    await first.agents.stop(sessionOf(first.agents, after.id));
+
+    expect(before.worktree).toBe(join(folders, "first", "shop", before.branch.slice(TASK_BRANCH_PREFIX.length)));
+    expect(after.worktree).toBe(join(folders, "second", "shop", after.branch.slice(TASK_BRANCH_PREFIX.length)));
+    const restarted = makeAgents({ shop: dir }, first.home, null, undefined, undefined, undefined, () => join(folders, "third"));
+    cleanups.push(() => restarted.procs.stopAll());
+    expect(restarted.agents.sessions().tasks.map((t) => t.worktree)).toEqual([after.worktree, before.worktree]);
+
+    await restarted.agents.removeTask(before.id, false, true);
+    expect(existsSync(before.worktree)).toBe(false);
+    expect(existsSync(after.worktree)).toBe(true);
+  }, 60_000);
+
+  test("a task saved before the task worktrees folder keeps its worktree in worktrees/ of the state directory", async () => {
+    const { dir } = cloneOnFeatureBranch();
+    const first = makeAgents({ shop: dir });
+    const task = await first.agents.createTask("shop", "fix the build");
+    await first.agents.stop(sessionOf(first.agents, task.id));
+    // What an older version left behind: the worktree in the state directory and no `worktreesDir` in `tasks.json`.
+    const legacy = join(first.home, "worktrees", "shop", task.branch.slice(TASK_BRANCH_PREFIX.length));
+    mkdirSync(join(first.home, "worktrees", "shop"), { recursive: true });
+    gitIn(dir, "worktree", "move", task.worktree, legacy);
+    const file = join(first.home, "tasks.json");
+    const saved = z.object({ tasks: z.array(z.record(z.string(), z.unknown())) }).parse(JSON.parse(readFileSync(file, "utf8")));
+    writeFileSync(file, JSON.stringify({ tasks: saved.tasks.map(({ worktreesDir: _, ...old }) => old) }));
+
+    const restarted = makeAgents({ shop: dir }, first.home);
+    cleanups.push(() => restarted.procs.stopAll());
+    expect(restarted.agents.sessions().tasks.map((t) => t.worktree)).toEqual([legacy]);
+    await restarted.agents.removeTask(task.id, false, true);
+    expect(existsSync(legacy)).toBe(false);
+    expect(gitIn(dir, "worktree", "list", "--porcelain")).not.toContain(task.branch);
+  }, 60_000);
+
   test("a task in a repo without commits is a repo error, without a worktree and without an entry on the list", async () => {
     const empty = makeRepo({}, "empty");
     const { agents, home } = makeAgents({ empty });
     await expect(agents.createTask("empty", "anything")).rejects.toMatchObject({ code: "repo_unavailable" });
     expect(agents.sessions().tasks).toEqual([]);
-    expect(existsSync(join(home, "worktrees", "empty"))).toBe(false);
+    expect(existsSync(join(home, "task-worktrees", "empty"))).toBe(false);
   });
   test("two tasks at once in one repo get separate branches and worktrees", async () => {
     const { dir } = cloneOnFeatureBranch();
@@ -319,18 +365,18 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     const moved = `${dir}-moved`;
     const { agents, procs } = makeAgents({ shop: dir });
     cleanups.push(() => procs.stopAll());
-    const proposal = await agents.propose(null, { repo: "shop", title: "Add logout", prompt: "add logout" });
+    const proposal = await agents.propose(null, { repo: "shop", title: "Add logout", prompt: "add logout", model: null });
 
     renameSync(dir, moved);
-    await expect(agents.approveProposal(proposal.id, proposal.prompt)).rejects.toMatchObject({ code: "repo_unavailable" });
+    await expect(agents.approveProposal(proposal.id, proposal.prompt, null)).rejects.toMatchObject({ code: "repo_unavailable" });
     expect(agents.sessions().proposals).toEqual([proposal]);
     expect(agents.sessions().tasks).toEqual([]);
 
     renameSync(moved, dir);
-    const task = await agents.approveProposal(proposal.id, proposal.prompt);
+    const task = await agents.approveProposal(proposal.id, proposal.prompt, null);
     expect(task).toMatchObject({ id: proposal.id, title: "Add logout", proposedBy: { session: null, supervisor: false } });
     expect(agents.sessions().proposals).toEqual([]);
-    await expect(agents.approveProposal(proposal.id, proposal.prompt)).rejects.toMatchObject({ code: "not_found" });
+    await expect(agents.approveProposal(proposal.id, proposal.prompt, null)).rejects.toMatchObject({ code: "not_found" });
   }, 60_000);
   test("a new task trusts the mise config of its fresh worktree, and a mise file the agent adds, changes or deletes is a change until the user trusts the config they saw", async () => {
     const dir = makeRepo(
@@ -356,7 +402,7 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     ]);
     await expect(agents.trustedTaskWorktree(task.id, "shop")).rejects.toMatchObject({
       code: "mise_unavailable",
-      message: `the mise config in the worktree of task ${task.branch} changed since the user trusted it (mise-tasks/build, mise.local.toml, mise.toml); only the user can trust it, in the task's panel in Trackwall`,
+      message: `the mise config in the worktree of task ${task.branch} changed since the user trusted it (mise-tasks/build, mise.local.toml, mise.toml); only the user can trust it, in the task's panel in Trackwall, and a session in Trackwall refused for it is told when they do`,
     });
 
     writeFileSync(join(task.worktree, "mise.local.toml"), '[env]\nX = "2"\n');

@@ -13,12 +13,11 @@ use tauri::{AppHandle, Emitter, Manager};
 /// `packages/ui/src/App.tsx` (`apps/desktop/test/shell-events.test.ts` keeps them equal). The menu bar has to exist
 /// before any page loads, and a menu set from a page would send its clicks to that page, so the table is here and not
 /// in the UI. Settings is in the app menu.
-const VIEWS: [MenuView; 5] = [
+const VIEWS: [MenuView; 4] = [
     MenuView { id: "home", label: "Home", shortcut: "1" },
     MenuView { id: "repos", label: "Repos", shortcut: "2" },
     MenuView { id: "sessions", label: "Sessions", shortcut: "3" },
     MenuView { id: "graph", label: "Overview", shortcut: "4" },
-    MenuView { id: "daemon", label: "Daemon", shortcut: "9" },
 ];
 const SETTINGS: MenuView = MenuView { id: "settings", label: "Settings", shortcut: "," };
 
@@ -94,14 +93,14 @@ pub fn handle(app: &AppHandle, item_id: &str) {
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || {
                 if let Err(err) = zoom::apply_step(&app, &label, step) {
-                    eprintln!("[desktop] zooming {label}: {err}");
+                    crate::report_error!("zooming {label}: {err}");
                 }
             });
         }
         MenuAction::Page(command) => {
             windows::show_once_loaded(app, &label);
             if let Err(err) = app.emit_to(label.as_str(), APP_MENU_EVENT, command) {
-                eprintln!("[desktop] sending a menu command to {label}: {err}");
+                crate::report_error!("sending a menu command to {label}: {err}");
             }
         }
     }

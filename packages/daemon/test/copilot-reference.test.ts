@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { COPILOT_CLI_VERSION } from "../scripts/copilot-cli.ts";
+import { TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
 import { readAgentDialog } from "../src/modules/agents/copilot-dialog.ts";
 import { promptBoxOnScreen } from "../src/modules/agents/copilot-prompt-box.ts";
 import { CopilotSessionState } from "../src/modules/agents/copilot-session-state.ts";
@@ -35,7 +35,7 @@ describe("the Copilot CLI references that the fake replays (ADR-67)", () => {
       const reference = readReference(platform);
       if (reference === undefined) throw new Error(`no reference for ${platform}`);
 
-      expect(reference).toMatchObject({ copilotVersion: COPILOT_CLI_VERSION, platform });
+      expect(reference).toMatchObject({ copilotVersion: TESTED_COPILOT_CLI_VERSION, platform });
       expect(promptBoxOnScreen(reference.promptBox)).toBe("empty");
       const dialog = readAgentDialog(reference.approval.dialog, "approval");
       if (dialog?.kind !== "approval") throw new Error(`no approval dialog in the reference for ${platform}`);

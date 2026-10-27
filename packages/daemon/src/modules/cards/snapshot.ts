@@ -8,6 +8,7 @@ import type {
   ProvidedPackage,
   ToolRequirement,
 } from "@trackwall/protocol";
+import type { JavaCalls } from "./java-calls.ts";
 
 /**
  * A commit as the extractors see it: the file list and the content of build and configuration files, read from git in
@@ -18,6 +19,8 @@ export interface RepoSnapshot {
   commit: string;
   /** The commit's files outside dependency directories (`SKIPPED_DIRS` in `read-snapshot.ts`). */
   paths: readonly string[];
+  /** `false` when git's file list was cut at the read limit: a file missing from `paths` may still be in the commit. */
+  pathsComplete: boolean;
   /** The file's content; `undefined` when it does not exist or was not read (it is neither a build nor a configuration file). */
   text(path: string): string | undefined;
   /**
@@ -25,9 +28,20 @@ export interface RepoSnapshot {
    * HTTP extractors do not see them, so the HTTP facts depend only on the files from the search.
    */
   typeFiles: ReadonlySet<string>;
+  /**
+   * Every Java and Kotlin source file for the endpoint reach (ADR-82), with its text when it was read; a file whose blob
+   * was read before (`CallSelection.known`) has none. `null` when the read could not take them all (a problem says why).
+   */
+  callSources: readonly CallSource[] | null;
   /** What reading the commit could not read (limits); it goes on the card together with the extractors' problems. */
   problems: readonly CardProblem[];
 }
+
+/**
+ * A source file for the endpoint reach: its path and blob id, with its text, or with what an earlier card read from the
+ * same blob (`CallReads`), taken when the commit is read so that it cannot be dropped before the parse.
+ */
+export type CallSource = { path: string; oid: string; text: string } | { path: string; oid: string; calls: JavaCalls };
 
 /** What an extractor adds to the card; build extractors give packages, HTTP extractors apps, endpoints and clients. */
 export interface Extracted<P extends Provided = ProvidedPackage, C extends Consumed = ConsumedPackage> {

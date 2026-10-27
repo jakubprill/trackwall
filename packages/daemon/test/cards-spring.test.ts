@@ -3,7 +3,7 @@ import type { ConsumedHttp, ProvidedEndpoint, RepoCard } from "@trackwall/protoc
 import { extractCard } from "../src/modules/cards/extract-card.ts";
 import { resolvePlaceholders } from "../src/modules/cards/placeholders.ts";
 import { loadSyntaxParsers } from "../src/modules/cards/syntax-tree.ts";
-import { snapshotOf } from "./support/snapshot.ts";
+import { NO_REACH, snapshotOf } from "./support/snapshot.ts";
 import { fixtureFiles } from "./support/spring-fixtures.ts";
 
 const parsers = await loadSyntaxParsers();
@@ -11,7 +11,7 @@ const parsers = await loadSyntaxParsers();
 const POM = "<project><groupId>com.example</groupId><artifactId>app</artifactId></project>";
 
 function card(files: Record<string, string>): RepoCard {
-  return extractCard(snapshotOf({ "pom.xml": POM, ...files }), parsers);
+  return extractCard(snapshotOf({ "pom.xml": POM, ...files }), parsers, NO_REACH);
 }
 
 function endpoints(c: RepoCard): string[] {
@@ -33,7 +33,7 @@ function summary(c: RepoCard): string[] {
 
 describe("Spring repo card from the shop fixtures", () => {
   test(`orders-api: the app with the port from \${PORT:8081}, endpoints with path constants, without code from src/test and annotations in comments`, () => {
-    const c = extractCard(snapshotOf(fixtureFiles("orders-api")), parsers);
+    const c = extractCard(snapshotOf(fixtureFiles("orders-api")), parsers, NO_REACH);
     expect(c.provides.filter((p) => p.kind === "app")).toEqual([
       { kind: "app", name: "orders-api", port: 8081, module: "", evidence: { path: "src/main/resources/application.yml", line: 3 } },
     ]);
@@ -46,7 +46,7 @@ describe("Spring repo card from the shop fixtures", () => {
   });
 
   test("orders-bff: a Feign client in Kotlin with an address in every profile, WebClient with @Value and the Zipkin address from the configuration", () => {
-    expect(summary(extractCard(snapshotOf(fixtureFiles("orders-bff")), parsers))).toEqual([
+    expect(summary(extractCard(snapshotOf(fixtureFiles("orders-bff")), parsers, NO_REACH))).toEqual([
       "webclient PaymentsGateway app=null url=http://payments-service:8080/api [default] {POST /payments/{orderId}}",
       "feign OrdersClient app=orders-api url=http://localhost:8081 [default] {GET /api/orders/{id}, POST /api/orders}",
       "feign OrdersClient app=orders-api url=http://orders-api.shop.svc.cluster.local [prod] {GET /api/orders/{id}, POST /api/orders}",
@@ -55,19 +55,19 @@ describe("Spring repo card from the shop fixtures", () => {
   });
 
   test("payments: application.properties with a #--- document for the prod profile, and Gradle", () => {
-    const c = extractCard(snapshotOf(fixtureFiles("payments")), parsers);
+    const c = extractCard(snapshotOf(fixtureFiles("payments")), parsers, NO_REACH);
     expect(c.provides.filter((p) => p.kind === "app").map((a) => [a.name, a.port])).toEqual([["payments-service", 8082]]);
     expect(endpoints(c)).toEqual(["POST /api/payments/{orderId} PaymentsController.pay:12"]);
   });
 
   test("legacy-reports: RestTemplate without a base address gives calls with a variable in place of the concatenated argument", () => {
-    expect(summary(extractCard(snapshotOf(fixtureFiles("legacy-reports")), parsers))).toEqual([
+    expect(summary(extractCard(snapshotOf(fixtureFiles("legacy-reports")), parsers, NO_REACH))).toEqual([
       "rest-template OrdersReport app=null url=null [] {GET /api/orders/{}, PUT /api/orders/{}/cancel}",
     ]);
   });
 
   test("shop-web: the API address from .env and the Vite proxy target", () => {
-    expect(summary(extractCard(snapshotOf(fixtureFiles("shop-web")), parsers))).toEqual([
+    expect(summary(extractCard(snapshotOf(fixtureFiles("shop-web")), parsers, NO_REACH))).toEqual([
       "env VITE_API_URL app=null url=http://localhost:8090 [] {}",
       "proxy vite.config.mjs app=null url=http://localhost:8090 [] {}",
     ]);
@@ -150,6 +150,21 @@ describe("Spring endpoints", () => {
     expect(endpoints(c)).toEqual([]);
   });
 
+  test(`\${…} in a mapping is expanded from the module's configuration, with a default after the colon, and an unknown key stays as text (ADR-87)`, () => {
+    const c = card({
+      "src/main/resources/application.yml": "api:\n  prefix: /api/v2\n",
+      "src/main/java/a/Orders.java": `@RestController @RequestMapping("\${api.prefix}/orders")
+class Orders { @GetMapping("/{id}") Order get() {} }`,
+      "src/main/java/a/Generated.java": `@RestController @RequestMapping("\${openapi.shop.base-path:/shop}")
+class Generated { @GetMapping("/items") Item items() {} @GetMapping("\${UNKNOWN}/x") Item x() {} }`,
+    });
+    expect(endpoints(c)).toEqual([
+      "GET /api/v2/orders/{id} Orders.get:2",
+      "GET /shop/items Generated.items:2",
+      `GET /shop/\${UNKNOWN}/x Generated.x:2`,
+    ]);
+  });
+
   test("@RequestMapping without a method is an endpoint for every method, and a class without @Controller has no endpoints", () => {
     const c = card({
       "src/main/java/a/Any.java": '@Controller\nclass Any {\n  @RequestMapping("/any")\n  String any() { return ""; }\n}\n',
@@ -217,7 +232,9 @@ describe("Spring HTTP clients", () => {
       "src/main/java/a/Rest.java": `class Rest {\n  RestTemplate rest;\n  void x() { rest.exchange("/api/orders", HttpMethod.POST, new HttpEntity<>(Map.of(${body})), String.class); }\n}\n`,
     });
     expect(summary(c)).toEqual(["rest-template Rest app=null url=null [] {POST /api/orders}"]);
-    expect(c.problems).toEqual([{ path: "", message: "profiles skipped over the limit of 32 in this module: 1 (the last ones by name)" }]);
+    expect(c.problems).toEqual([
+      { code: "truncated", path: "", message: "profiles skipped over the limit of 32 in this module: 1 (the last ones by name)" },
+    ]);
   });
 
   test("a profile file (application-prod.yml) overrides an on-profile document from application.yml, as in Spring Boot", () => {

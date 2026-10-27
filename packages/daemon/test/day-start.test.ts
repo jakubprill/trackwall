@@ -53,14 +53,14 @@ function setup(
     file: new DayStartFile(join(home, "day-start.json"), (msg) => logged.push(msg)),
     log: (msg) => logged.push(msg),
     agents: {
-      sessions: () => ({ sessions: o.sessions ?? [], tasks: o.tasks ?? [], proposals: [], messages: [], worktreesDir: home }),
+      sessions: () => ({ sessions: o.sessions ?? [], tasks: o.tasks ?? [], proposals: [], messages: [], lastSupervisor: null }),
       assertNoSupervisor: () => {
         if (o.supervisorRuns) throw new DomainError("bad_request", "the supervisor is running; stop it to start your day with a new one");
       },
       startSupervisorWith: async (firstMessage) => {
         if (o.supervisorFails !== undefined) throw new DomainError("agent_unavailable", o.supervisorFails);
         firstMessages.push(firstMessage);
-        return session({ repo: null });
+        return session({ repo: null, supervisor: true });
       },
     },
   });
@@ -108,6 +108,7 @@ function session(fields: Partial<Session>): Session {
   return {
     id: SESSION_ID,
     repo: "api",
+    supervisor: false,
     startedAt: "2026-10-26T07:00:00.000Z",
     run: { kind: "running", runId: "r1", startedAt: "2026-10-26T07:00:00.000Z", pid: 4242 },
     state: null,
@@ -130,6 +131,7 @@ function task(fields: Partial<Task> & Pick<Task, "base">): Task {
     createdAt: "2026-10-25T09:00:00.000Z",
     title: null,
     proposedBy: null,
+    model: null,
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },

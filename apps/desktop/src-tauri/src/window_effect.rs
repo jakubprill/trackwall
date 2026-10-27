@@ -82,6 +82,7 @@ fn first_applied<W, E: Display>(window: &W, candidates: &[(WindowEffect, Apply<W
     for (effect, apply) in candidates {
         match apply(window) {
             Ok(()) => return Some(*effect),
+            // An effect this system lacks is expected (the next one is tried), not an error of the shell.
             Err(err) => eprintln!("[desktop] window effect {effect:?} unavailable: {err}"),
         }
     }
@@ -170,7 +171,7 @@ fn ui_script(effect: WindowEffect) -> String {
 fn pass_to_ui(webview: &Webview, applied: &AppliedEffect) {
     if let Some(Some(effect)) = applied.effect.get() {
         if let Err(err) = webview.eval(ui_script(*effect)) {
-            eprintln!("[desktop] passing the window effect to the UI: {err}");
+            crate::report_error!("passing the window effect to the UI: {err}");
         }
     }
 }
@@ -196,7 +197,7 @@ pub fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>) {
     let (after, after_label, after_applied) = (app.clone(), label.clone(), Arc::clone(&applied));
     let shown = webview.eval_with_callback(ui_script(effect), move |_| after_applied.reveal_once(|| windows::show(&after, &after_label)));
     if let Err(err) = shown {
-        eprintln!("[desktop] passing the window effect to the UI: {err}");
+        crate::report_error!("passing the window effect to the UI: {err}");
         applied.reveal_once(|| windows::show(&app, &label));
     }
 }

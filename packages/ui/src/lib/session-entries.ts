@@ -151,12 +151,13 @@ function entryProposer(entry: SessionEntry): string | null {
   return entry.task.proposedBy?.session ?? null;
 }
 
-/** `SessionList.sessions` goes from the newest. */
-function latestSession(sessions: readonly Session[], task: string): Session | undefined {
+/** A task's current session: `SessionList.sessions` goes from the newest. */
+export function latestSession(sessions: readonly Session[], task: string): Session | undefined {
   return sessions.find((s) => s.task === task);
 }
 
-function entryTime(entry: StartedEntry): string {
+/** When an entry started, for "most recently started first": a task by its latest session, without one by its creation. */
+export function entryTime(entry: StartedEntry): string {
   if (entry.kind === "session") return entry.session.startedAt;
   return entry.session?.startedAt ?? entry.task.createdAt;
 }
@@ -301,11 +302,18 @@ export function proposalName(proposal: TaskProposal): string {
   return `${proposal.repo} · ${proposal.title}`;
 }
 
+/** What a single proposal asks for, as its heading: a task, or removing a repo from the projects folder (ADR-83). */
+export function proposalKindLabel(proposal: TaskProposal): string {
+  return proposal.kind === "remove_repo" ? "Repo removal" : "Task proposal";
+}
+
 /** The name of a group of proposals (ADR-55): the proposal's name for one, a count for more. */
 export function proposalsName(proposals: ProposalsEntry["proposals"]): string {
   return proposals.length === 1
     ? proposalName(proposals[0])
-    : countLabel(proposals.length, { one: "task proposal", other: "task proposals" });
+    : proposals.every((p) => p.kind === "task")
+      ? countLabel(proposals.length, { one: "task proposal", other: "task proposals" })
+      : countLabel(proposals.length, { one: "proposal", other: "proposals" });
 }
 
 /**
@@ -322,5 +330,6 @@ export function proposerName(proposedBy: ProposedBy, sessions: readonly Session[
   if (proposedBy.session === null) return "an agent outside Trackwall";
   const session = sessions.find((s) => s.id === proposedBy.session);
   if (!session) return "a session that is no longer listed";
-  return `the session in ${session.repo}${session.windowTitle ? ` (${session.windowTitle})` : ""}`;
+  const who = session.repo === null ? "a free session" : `the session in ${session.repo}`;
+  return `${who}${session.windowTitle ? ` (${session.windowTitle})` : ""}`;
 }

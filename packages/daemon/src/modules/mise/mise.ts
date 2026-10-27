@@ -57,6 +57,8 @@ export interface MiseDeps {
   command: readonly string[];
   /** The environment of the user's processes (`PATH` from the login shell on macOS). */
   env: () => Promise<NodeJS.ProcessEnv>;
+  /** The user trusted the repo root's mise config and mise lists its tasks now, for the sessions it refused (ADR-92). */
+  onTrusted: (repo: string) => void;
 }
 
 /** The `mise tasks ls --json` fields we use; the rest (dependencies, sources, `run`) stays in mise. */
@@ -213,7 +215,9 @@ export class Mise {
     const result = await runMiseCli(this.deps.command, ["trust"], dir, await this.deps.env());
     if (result.kind !== "exited") throw new DomainError("mise_unavailable", result.message);
     if (result.code !== 0) throw new DomainError("mise_unavailable", failure(result.stderr, result.code));
-    return this.tasks(repo);
+    const tasks = await this.tasks(repo);
+    if (tasks.kind === "ok") this.deps.onTrusted(repo);
+    return tasks;
   }
 
   /**

@@ -1,6 +1,8 @@
 import { realpath } from "node:fs/promises";
 import { delimiter, dirname, resolve as resolvePath } from "node:path";
-import { type RunOptions, type RunOutput, runProgram } from "./run.ts";
+import { type RunOptions, type RunOutput, runProgram } from "../../infra/run-program.ts";
+import { GIT_FROM_PATH, gitProgram, withPathPrefix } from "./git-program.ts";
+import { Slots } from "./slots.ts";
 
 /**
  * Runs `git` for the `vcs` module. Arguments always as an array, without a shell; the repo directory through `-C`,
@@ -17,7 +19,7 @@ import { type RunOptions, type RunOutput, runProgram } from "./run.ts";
 const NO_REPO_COMMANDS = ["-c", "core.fsmonitor=false", "-c", "log.showSignature=false"];
 
 /**
- * On Windows, paths over 260 characters only with `core.longpaths`: task worktrees lie in the state directory (ADR-31), so
+ * On Windows, paths over 260 characters only with `core.longpaths`: task worktrees lie in the task worktrees folder (ADR-84), so
  * repo file paths are longer in them than in the projects folder. The key changes nothing outside Windows.
  */
 const PLATFORM_CONFIG = process.platform === "win32" ? ["-c", "core.longpaths=true"] : [];
@@ -49,29 +51,66 @@ type GitOptions = Pick<RunOptions, "maxBytes" | "stdin" | "okExitCodes"> & {
   network?: GitNetwork;
   /** An index instead of the repo index (`GIT_INDEX_FILE`): task changes counted without touching the index the agent uses. */
   indexFile?: string;
+  /** `-c key=value` for this command only, over the repo's own configuration (a push without the repo's hooks, ADR-77). */
+  config?: readonly string[];
 };
 
 /** `core.sshCommand` from the repo and user configuration for a command that connects to a server. */
 export type GitNetwork = { sshCommand: string | undefined };
 
+/**
+ * Short git calls running at once in the whole daemon (§4.5, ADR-79). Every view and module reads many repos in parallel,
+ * and where an antivirus scans each process start, dozens of starts at once take the machine and the daemon's event loop
+ * with them, so that even `/api/health` answers late. A call waits for a slot before its time limit starts. Network
+ * commands (a fetch takes minutes) and local ones with a longer limit take no slot, so they cannot starve the reads.
+ */
+const LOCAL_CALL_SLOTS = new Slots(6);
+
+let started = 0;
+
+/** How many git processes the daemon has started: the measure of the git budget tests (`git-budget.test.ts`). */
+export function gitProcessesStarted(): number {
+  return started;
+}
+
 export async function git(repoDir: string, args: readonly string[], opts: GitOptions = {}): Promise<RunOutput> {
   const ceiling = await ceilingFor(repoDir);
   const { maxBytes, stdin, okExitCodes } = opts;
-  return runProgram("git", [...NO_REPO_COMMANDS, ...PLATFORM_CONFIG, "-C", repoDir, ...args], {
-    maxBytes,
-    stdin,
-    okExitCodes,
-    label: `git ${args[0]}`,
-    // Reading state must not take `index.lock`: the daemon asks periodically, and the user commits in the meantime.
-    env: {
-      ...gitEnv(),
-      ...(opts.network && networkEnv(opts.network.sshCommand)),
-      ...(opts.indexFile && { GIT_INDEX_FILE: opts.indexFile }),
-      GIT_CEILING_DIRECTORIES: ceiling,
-      GIT_OPTIONAL_LOCKS: "0",
-    },
-    timeoutMs: opts.timeoutMs ?? TIMEOUT_MS,
+  const config = (opts.config ?? []).flatMap((entry) => ["-c", entry]);
+  // The launcher stays for network commands: credential helpers and ssh run exactly as from the user's shell.
+  const program = opts.network ? GIT_FROM_PATH : await gitProgram();
+  const call = () => {
+    started++;
+    return runProgram(program.command, [...NO_REPO_COMMANDS, ...PLATFORM_CONFIG, ...config, "-C", repoDir, ...args], {
+      maxBytes,
+      stdin,
+      okExitCodes,
+      label: `git ${args[0]}`,
+      // Reading state must not take `index.lock`: the daemon asks periodically, and the user commits in the meantime.
+      env: {
+        ...withPathPrefix(gitEnv(), program.pathPrefix),
+        ...(opts.network && networkEnv(opts.network.sshCommand)),
+        ...(opts.indexFile && { GIT_INDEX_FILE: opts.indexFile }),
+        GIT_CEILING_DIRECTORIES: ceiling,
+        GIT_OPTIONAL_LOCKS: "0",
+      },
+      timeoutMs: opts.timeoutMs ?? TIMEOUT_MS,
+    });
+  };
+  // A long command (a worktree, a search) would hold a slot for minutes and the views would wait behind it again.
+  const short = !opts.network && (opts.timeoutMs ?? TIMEOUT_MS) <= TIMEOUT_MS;
+  return short ? LOCAL_CALL_SLOTS.run(call) : call();
+}
+
+/** `git --version` of the git the daemon runs: the doctor shows it (ADR-101). */
+export async function gitVersion(timeoutMs: number): Promise<string> {
+  const program = await gitProgram();
+  const { stdout } = await runProgram(program.command, ["--version"], {
+    label: "git --version",
+    env: withPathPrefix(gitEnv(), program.pathPrefix),
+    timeoutMs,
   });
+  return stdout.toString("utf8").trim();
 }
 
 /** The full hash of the commit `ref` points to; `undefined` when there is no such commit or git fails. */

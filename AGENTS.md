@@ -29,13 +29,13 @@ Do not weaken checks to get green: no skipped or deleted tests, no `biome-ignore
 
 ## Pre-PR review
 
-Before opening a PR, and before every later push with new code, the change goes through a ruthless code review. Three independent reviews, each run separately, with their findings merged into one list:
+Before opening a PR, the change goes through one ruthless code review: `/thermo-nuclear-code-quality-review` (skill in `.claude/skills/`, a copy from the Thermos plugin in `cursor/plugins`, MIT license next to it), which covers structure, abstractions, file growth and "code judo", and also flags correctness bugs and breaks of the documented rules (this file, `CONTEXT.md`, `docs/architecture.md`). The original has `disable-model-invocation: true`; the copy drops that line so that an agent can run it on its own. When updating from the original, remove it again. Every finding is fixed or rejected with a reason.
 
-- `/thermo-nuclear-code-quality-review` (skill in `.claude/skills/`, a copy from the Thermos plugin in `cursor/plugins`, MIT license next to it): structure, abstractions, file growth, "code judo". The original has `disable-model-invocation: true`; the copy drops that line so that an agent can run it on its own. When updating from the original, remove it again.
-- `/code-review`: correctness bugs, every finding verified.
-- `mattpocock-skills:code-review`: conformance with the documented rules (this file, `CONTEXT.md`, `docs/architecture.md`) and with what the task asked for.
+- **A second round only when the fixes changed logic**, and then only on the diff of the fixes. Renames, comments and documentation do not need one. Tests and CI on three systems catch the rest; more rounds mostly find trivia.
+- **A security review (`/security-review`) only when the change touches a sensitive place**: the CSP and the Tauri window, the token and the MCP and HTTP guard, starting processes or writing into a session's terminal, network and proxy settings, the updater and its signatures, secrets.
+- **An urgent fix** (a broken release, an empty window) gets one round, without a second.
 
-The first round runs at the highest level (`/code-review max`), later rounds on the diff of the fixes (`high`). You are done when a round brings no confirmed finding to fix; after three rounds, whatever is left goes into the PR description as knowingly left. If one of the skills is missing from the environment, run that review through a separate subagent with the same scope and say so in the PR. In the PR description: how many rounds, what was fixed, what was rejected and why.
+If a skill is missing from the environment, run that review through a separate subagent with the same scope and say so in the PR. In the PR description: which reviews ran, what was fixed, what was rejected and why.
 
 ## Documentation
 
@@ -84,7 +84,7 @@ The repo is meant to be published as open source (header of `docs/architecture.m
 - **Comments explain why, not what.** A non-obvious module starts with a short comment: what it is for, what it guarantees, where it is described (architecture section).
 - **Explicit over clever**: no magic strings shared between files (export a constant), no hidden global state, no silent defaults for something that must be set.
 - **Delete dead code** instead of commenting it out.
-- **File names**: kebab-case (`system-open.ts`), React components in PascalCase (`DaemonPanel.tsx`). Exception: shadcn/ui components in `components/ui/` keep the names the generator gives them (`button.tsx`).
+- **File names**: kebab-case (`system-open.ts`), React components in PascalCase (`DaemonSurface.tsx`). Exception: shadcn/ui components in `components/ui/` keep the names the generator gives them (`button.tsx`).
 - **npm dependencies at exact versions** (no `^` or `~`; `.npmrc` has `save-exact=true`, so `pnpm add` takes care of it). Do not add a dependency for something a few lines of code can do. A native addon requires checking that it works in `bun build --compile` on both systems (a spike in a separate PR, findings in an ADR, like ADR-1).
 - **Tests read like documentation**: a test name is a sentence describing the behaviour, and the test shows the input and the expected result without helpers that hide them.
 - **Rules are enforced by a tool wherever possible**: a linter rule holds better than a sentence in this file. When you repeat the same finding in reviews, turn it into a rule. Today these guard the code:

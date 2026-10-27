@@ -1,11 +1,21 @@
-import { HOST_CLI, type HostedRepo, hostKey, type RepoHost, type RepoHostKind } from "@trackwall/protocol";
+import {
+  HOST_CLI,
+  type HostedProject,
+  type HostedRepo,
+  hostKey,
+  type MergeRequest,
+  type MergeRequestForm,
+  type RepoHost,
+  type RepoHostKind,
+} from "@trackwall/protocol";
+import { runProgram } from "../../infra/run-program.ts";
 import { gitEnv } from "./git.ts";
+import { findMergeRequest, mergeRequestFormUrl } from "./hosted-merge-request.ts";
 import { githubApi, gitlabApi, type HostingApi } from "./hosted-repo.ts";
-import { runProgram } from "./run.ts";
 
 /**
- * Repo hosts in the `vcs` module (§4.5, ADR-19): the list of repos available to the user and a clone of the chosen one, through
- * `gh` (GitHub) and `glab` (GitLab). Sign-in and the token belong to those programs (`gh auth login`, `glab auth login`),
+ * Repo hosts in the `vcs` module (§4.5, ADR-19): the list of repos available to the user, a clone of the chosen one and the
+ * merge request of a task branch with its pipeline (ADR-77), through `gh` (GitHub) and `glab` (GitLab). Sign-in and the token belong to those programs (`gh auth login`, `glab auth login`),
  * so Trackwall neither sees nor stores the token, and the clone uses the protocol (SSH or HTTPS) and credentials
  * the user set in them.
  */
@@ -69,6 +79,25 @@ export class Hosting {
     await this.run(host, ["repo", "clone", fullName, dest], CLONE_TIMEOUT_MS);
   }
 
+  /** The address of the repo host's new merge request form with `form` filled in (ADR-77); nothing is sent to the repo host. */
+  mergeRequestForm(project: HostedProject, form: MergeRequestForm): string {
+    return mergeRequestFormUrl(project, form);
+  }
+
+  /**
+   * The most recently updated merge request from `branch` in `project`, with its pipeline (ADR-77); `null` when there is
+   * none. Only reads: the user creates the merge request in the repo host's form.
+   */
+  mergeRequest(project: HostedProject, branch: string): Promise<MergeRequest | null> {
+    const host = { kind: project.kind, host: project.host };
+    return findMergeRequest((path, schema) => this.api(host, path, (json) => schema.parse(json)), project, branch);
+  }
+
+  /** Resolves when `gh` or `glab` is signed in to `host` (`auth status` ends with 0); the doctor asks it (ADR-101). */
+  async signedIn(host: RepoHost, timeoutMs: number): Promise<void> {
+    await this.run(host, ["auth", "status", "--hostname", host.host], timeoutMs);
+  }
+
   /** A failed fetch does not stay in memory, so "Try again" after signing in asks the repo host anew. */
   private fetchCached(host: RepoHost, serverQuery: string): Promise<HostedRepos> {
     const now = Date.now();
@@ -87,16 +116,21 @@ export class Hosting {
     const repos: HostedRepo[] = [];
     let truncated = true;
     for (let page = 1; page <= api.maxPages && truncated; page++) {
-      const { stdout } = await this.run(
-        host,
-        ["api", "--hostname", host.host, api.reposPage(page, PAGE_SIZE, serverQuery)],
-        PAGE_TIMEOUT_MS,
-      );
-      const pageRepos = parsePage(api, stdout.toString("utf8"), host);
+      const pageRepos = await this.api(host, api.reposPage(page, PAGE_SIZE, serverQuery), (json) => api.parseReposPage(json));
       repos.push(...pageRepos.items);
       truncated = pageRepos.received === PAGE_SIZE;
     }
     return { repos, truncated };
+  }
+
+  /** One `<cli> api` call; the response is outside data, so JSON checked by `parse`, and an error without a dump of it. */
+  private async api<T>(host: RepoHost, path: string, parse: (json: unknown) => T): Promise<T> {
+    const { stdout } = await this.run(host, ["api", "--hostname", host.host, path], PAGE_TIMEOUT_MS);
+    try {
+      return parse(JSON.parse(stdout.toString("utf8")));
+    } catch {
+      throw new Error(`${HOST_CLI[host.kind]} api returned a response that does not match the ${host.host} API`);
+    }
   }
 
   private run(host: RepoHost, args: string[], timeoutMs: number) {
@@ -106,15 +140,6 @@ export class Hosting {
       env: { ...gitEnv(), ...APIS[host.kind].env(host.host) },
       timeoutMs,
     });
-  }
-}
-
-/** The API response is outside data: JSON checked with a schema, and an error without a dump of the response. */
-function parsePage(api: HostingApi, text: string, host: RepoHost): ReturnType<HostingApi["parseReposPage"]> {
-  try {
-    return api.parseReposPage(JSON.parse(text));
-  } catch {
-    throw new Error(`${HOST_CLI[host.kind]} api returned a response that does not match the ${host.host} API`);
   }
 }
 

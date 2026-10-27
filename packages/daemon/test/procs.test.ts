@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Logs } from "../src/modules/logs/logs.ts";
@@ -63,6 +63,27 @@ async function waitForTree(dir: string, depth: number): Promise<number[]> {
 }
 
 describe("procs", () => {
+  test(
+    "a live group counts as working in its directory and every folder above it, not in a sibling with the same prefix",
+    async () => {
+      const { dir, groups } = setup();
+      const repo = join(dir, "shop");
+      const sub = join(repo, "service");
+      mkdirSync(sub, { recursive: true });
+      await groups.start({ owner: "o", command: [process.execPath, TREE, sub, "0", "1"], cwd: sub, env: process.env, logSource: SOURCE });
+      await waitForTree(sub, 1);
+
+      expect(groups.liveIn(repo)).toBe(true);
+      expect(groups.liveIn(sub)).toBe(true);
+      expect(groups.liveIn(join(dir, "shop-2"))).toBe(false);
+      expect(groups.liveIn(join(sub, "src"))).toBe(false);
+
+      await groups.stop("o");
+      expect(groups.liveIn(repo)).toBe(false);
+    },
+    TIMEOUT,
+  );
+
   test(
     "stop halts the whole group, including grandchildren that ignore a gentle stop, and removes it from runtime.json",
     async () => {
@@ -446,6 +467,38 @@ describe.skipIf(process.versions.bun === undefined)("procs with the leader in a 
       expect(state.lastLines.join("\n")).not.toContain("secret-password-123");
       logs.flush();
       expect(readdirSync(logsDir)).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "an owner whose terminal group ended starts it again, and one whose group runs does not",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "trackwall-procs-"));
+      const groups = new ProcessGroups({
+        logs: testLogs(),
+        runtime: new RuntimeFile(join(dir, "runtime.json")),
+        platform: groupPlatform(),
+        terminals: terminalPlatform(),
+        log: () => {},
+      });
+      const spec = (code: string) => ({
+        owner: "agent:x",
+        command: [process.execPath, "-e", code],
+        cwd: dir,
+        env: process.env,
+        cols: 80,
+        rows: 24,
+        onData: () => {},
+      });
+      await groups.startTerminal(spec("0"));
+      expect(await waitUntil(() => groups.state("agent:x")?.kind === "exited", 15_000)).toBe(true);
+
+      const again = await groups.startTerminal(spec("setInterval(() => {}, 1000)"));
+
+      expect(again.run.kind).toBe("running");
+      await expect(groups.startTerminal(spec("0"))).rejects.toThrow("owner agent:x already has a group");
+      expect((await groups.stop("agent:x"))?.kind).toBe("exited");
     },
     TIMEOUT,
   );

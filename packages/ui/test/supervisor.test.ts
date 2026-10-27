@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Session, SessionList, Task, TaskProposal } from "@trackwall/protocol";
 import { entryId, proposerLabel, sessionRows } from "../src/lib/session-entries.ts";
 import { attentionCount, sessionTitle } from "../src/lib/session-state.ts";
-import { selectsSupervisor, showingTakesKeyboard, supervisorSummary } from "../src/lib/supervisor.ts";
+import { selectsSupervisor, showingTakesKeyboard, supervisorStarts, supervisorSummary } from "../src/lib/supervisor.ts";
 import { readSupervisorPinned, saveSupervisorPinned } from "../src/lib/supervisor-pin.ts";
 
 function session(id: string, repo: string | null, run: Session["run"]["kind"] = "running"): Session {
@@ -10,6 +10,7 @@ function session(id: string, repo: string | null, run: Session["run"]["kind"] = 
   return {
     id,
     repo,
+    supervisor: repo === null,
     startedAt,
     run:
       run === "exited"
@@ -35,6 +36,7 @@ function task(id: string, proposedBy: Task["proposedBy"]): Task {
     createdAt: "2026-10-25T10:05:00Z",
     title: "Fix the cart",
     proposedBy,
+    model: null,
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },
@@ -42,11 +44,20 @@ function task(id: string, proposedBy: Task["proposedBy"]): Task {
 }
 
 function proposal(id: string, proposedBy: TaskProposal["proposedBy"]): TaskProposal {
-  return { id, repo: "billing", title: "Add refunds", prompt: "add refunds", proposedBy, createdAt: "2026-10-25T10:10:00Z" };
+  return {
+    id,
+    kind: "task",
+    repo: "billing",
+    title: "Add refunds",
+    prompt: "add refunds",
+    model: null,
+    proposedBy,
+    createdAt: "2026-10-25T10:10:00Z",
+  };
 }
 
 function list(parts: Partial<SessionList>): SessionList {
-  return { sessions: [], tasks: [], proposals: [], messages: [], worktreesDir: "/home/me/.trackwall/worktrees", ...parts };
+  return { sessions: [], tasks: [], proposals: [], messages: [], lastSupervisor: null, ...parts };
 }
 
 const summary = (data: SessionList) => supervisorSummary(data, sessionRows(data));
@@ -132,5 +143,22 @@ describe("the supervisor (ADR-58)", () => {
     };
     expect(readSupervisorPinned(refusing)).toBe(true);
     expect(() => saveSupervisorPinned(refusing, false)).not.toThrow();
+  });
+});
+
+describe("the supervisor's start buttons (ADR-96)", () => {
+  test("while the last supervisor's conversation can go on, the panel offers Resume and New", () => {
+    const data = list({ sessions: [session("sup", null, "exited")], lastSupervisor: "sup" });
+
+    expect(supervisorStarts(summary(data)).map((s) => `${s.label} ${s.conversation}`)).toEqual(["Resume last", "New new"]);
+  });
+
+  test("Resume is offered also when the daemon no longer lists the last supervisor, after a restart", () => {
+    expect(supervisorStarts(summary(list({ lastSupervisor: "sup" }))).map((s) => s.label)).toEqual(["Resume", "New"]);
+  });
+
+  test("without a conversation to go on with, one start begins a new one", () => {
+    expect(supervisorStarts(summary(list({}))).map((s) => `${s.label} ${s.conversation}`)).toEqual(["Start supervisor new"]);
+    expect(supervisorStarts(summary(list({ sessions: [session("sup", null, "exited")] }))).map((s) => s.label)).toEqual(["Start again"]);
   });
 });

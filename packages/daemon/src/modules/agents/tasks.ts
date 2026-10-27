@@ -70,7 +70,14 @@ export interface TasksVcs {
 /** Copilot CLI sessions from `Agents`, in which tasks run. */
 interface TaskSessions {
   /** Copilot CLI in the task's worktree with the task's arguments (the prompt, then `promptOnStart`, or a resume). */
-  launch(spec: { repo: string; cwd: string; task: string; args: readonly string[]; promptOnStart: boolean }): Promise<Session>;
+  launch(spec: {
+    repo: string;
+    cwd: string;
+    task: string;
+    args: readonly string[];
+    promptOnStart: boolean;
+    hasConversation: boolean;
+  }): Promise<Session>;
   /** The task's sessions, newest first. */
   of(task: string): Session[];
   /** Removes an ended session from the list. */
@@ -79,22 +86,31 @@ interface TaskSessions {
 
 export interface AgentTasksDeps {
   vcs: TasksVcs;
-  repos: { repoPath(id: string): Promise<string> };
+  repos: {
+    repoPath(id: string): Promise<string>;
+    /** The task worktrees folder for a new task (ADR-84). */
+    worktreesDir(): Promise<string>;
+  };
   sessions: TaskSessions;
   file: TaskFile;
   /** Some process group still works in this directory (`procs.liveIn`): a mise task in the worktree locks its files on Windows. */
   liveIn: (dir: string) => boolean;
-  /** The task worktrees directory in the state directory; outside the projects folder, so the repo list does not see them. */
-  worktreesDir: string;
+  /** `worktrees/` in the state directory, where tasks saved before ADR-84 (without `worktreesDir`) have their worktrees. */
+  legacyWorktreesDir: string;
   openEditor: (dir: string) => void;
   log: (msg: string) => void;
 }
 
-/** Where a task comes from: the form (without a title and a proposer) or an approved proposal (ADR-39), whose identifier it takes. */
+/**
+ * Where a task comes from: the form (without a title, a proposer and a model) or an approved proposal (ADR-39), whose
+ * identifier it takes, with the model the user approved (ADR-98).
+ */
 export interface TaskOrigin {
   id: string;
   title: string | null;
   proposedBy: ProposedBy | null;
+  /** The model the task's sessions run on (ADR-98); `null` for Copilot CLI's default. */
+  model: string | null;
 }
 
 /** A task from the file with the worktree that follows from it, and its port (one given when it was read, if it had none). */
@@ -114,6 +130,8 @@ export class AgentTasks {
   readonly #busy = new Set<string>();
   /** Ports of tasks being created, not on the list yet: two tasks created at once must not get the same one. */
   readonly #creatingPorts = new Set<number>();
+  /** Repo to the number of its tasks being created: they are not on the list until their worktree is on disk. */
+  readonly #creatingIn = new Map<string, number>();
   /** Tasks being ended: computing changes refuses, because the worktree is about to disappear. */
   readonly #removing = new Set<string>();
   /** The task's change computations in progress (several windows at once): ending waits until git stops reading the worktree. */
@@ -131,17 +149,33 @@ export class AgentTasks {
     return this.#tasks.map(view);
   }
 
+  /** A task of the repo is being created, so its worktree may be half made (a repo removal waits for it, ADR-83). */
+  creatingIn(repo: string): boolean {
+    return (this.#creatingIn.get(repo) ?? 0) > 0;
+  }
+
   /**
    * A worktree on a new branch from the default branch and Copilot CLI in it with the prompt as its first message; the
    * title names the branch, and without one the prompt.
    */
-  async create(repo: string, prompt: string, { id, title, proposedBy }: TaskOrigin): Promise<Task> {
+  async create(repo: string, prompt: string, origin: TaskOrigin): Promise<Task> {
+    this.#creatingIn.set(repo, (this.#creatingIn.get(repo) ?? 0) + 1);
+    try {
+      return await this.#create(repo, prompt, origin);
+    } finally {
+      this.#creatingIn.set(repo, (this.#creatingIn.get(repo) ?? 1) - 1);
+    }
+  }
+
+  async #create(repo: string, prompt: string, { id, title, proposedBy, model }: TaskOrigin): Promise<Task> {
     const repoDir = await this.#deps.repos.repoPath(repo);
     const base = await asRepoUnavailable(repo, this.#deps.vcs.defaultBase(repoDir));
+    const worktreesDir = await this.#deps.repos.worktreesDir();
     const task = this.#known({
       id,
       repo,
       repoDir,
+      worktreesDir,
       prompt,
       branch: `${TASK_BRANCH_PREFIX}${taskSlug(title ?? prompt, id)}`,
       baseBranch: base.branch,
@@ -149,6 +183,7 @@ export class AgentTasks {
       createdAt: new Date().toISOString(),
       title,
       proposedBy,
+      model,
       summary: null,
       trustedMiseConfig: null,
       port: freeTaskPort([...this.#tasks.map((t) => t.port), ...this.#creatingPorts]),
@@ -311,7 +346,7 @@ export class AgentTasks {
       throw new DomainError(
         "mise_unavailable",
         `the mise config in the worktree of task ${task.branch} changed since the user trusted it (${changes.map((c) => c.path).join(", ")}); ` +
-          "only the user can trust it, in the task's panel in Trackwall",
+          "only the user can trust it, in the task's panel in Trackwall, and a session in Trackwall refused for it is told when they do",
       );
     return { worktree: task.worktree, port: task.port };
   }
@@ -393,7 +428,17 @@ export class AgentTasks {
   }
 
   async #launch(task: KnownTask, args: readonly string[], promptOnStart: boolean): Promise<void> {
-    await this.#deps.sessions.launch({ repo: task.repo, cwd: task.worktree, task: task.id, args, promptOnStart });
+    // The model on every start, the first and each resume: Copilot CLI would otherwise resume on its default (ADR-98).
+    const modelArgs = task.model === null ? [] : [`--model=${task.model}`];
+    // A task's conversation exists from its first message on, which a resume goes on with.
+    await this.#deps.sessions.launch({
+      repo: task.repo,
+      cwd: task.worktree,
+      task: task.id,
+      args: [...modelArgs, ...args],
+      promptOnStart,
+      hasConversation: true,
+    });
   }
 
   /** A running session writes in the worktree and holds its files (on Windows it blocks deletion), so stop it first. */
@@ -431,7 +476,7 @@ export class AgentTasks {
   }
 
   #known(task: StoredTask & { port: number }): KnownTask {
-    return { ...task, worktree: taskWorktree(this.#deps.worktreesDir, task.repo, task.branch) };
+    return { ...task, worktree: taskWorktree(task.worktreesDir ?? this.#deps.legacyWorktreesDir, task.repo, task.branch) };
   }
 
   #save(tasks: KnownTask[]): void {
@@ -448,7 +493,7 @@ function capFiles(files: ChangedFile[]): { files: ChangedFile[]; filesTruncated:
   return { files: files.slice(0, TASK_SUMMARY_MAX_FILES), filesTruncated: files.length > TASK_SUMMARY_MAX_FILES };
 }
 
-function view({ repoDir: _, trustedMiseConfig: __, ...task }: KnownTask): Task {
+function view({ repoDir: _, trustedMiseConfig: __, worktreesDir: ___, ...task }: KnownTask): Task {
   return task;
 }
 

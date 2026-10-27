@@ -1,6 +1,6 @@
 import { agentsApi, type RunningMiseTask, type Session, TASK_PORT_ENV, type Task, type TaskMessage } from "@trackwall/protocol";
-import { Code, GitBranch, Play, Plug, Square, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Bot, Code, GitBranch, Play, Plug, Square, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
 import { SessionTerminal } from "@/components/SessionTerminal";
 import { StatusLabel } from "@/components/StatusLabel";
 import { TabBar } from "@/components/TabBar";
@@ -12,29 +12,23 @@ import { relativeTime } from "@/lib/format";
 import { proposerLabel, taskName } from "@/lib/session-entries";
 import { isLive, sessionStateLabel } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
+import { useTaskDetails } from "@/lib/use-task-details";
 import { useTaskReview } from "@/lib/use-task-review";
-import { useTaskVerification } from "@/lib/use-task-verification";
-import { SharedFiles } from "./SharedFiles.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
-import { TaskIncludedFiles } from "./TaskIncludedFiles.tsx";
-import { TaskMessages } from "./TaskMessages.tsx";
-import { TaskMiseConfig } from "./TaskMiseConfig.tsx";
-import { TaskMiseRuns } from "./TaskMiseRuns.tsx";
+import { scrollToSection, TaskDetails } from "./TaskDetails.tsx";
+import { TaskNoticeStrip } from "./TaskNotices.tsx";
 import { TaskRemoval } from "./TaskRemoval.tsx";
-import { TaskVerification, VerifyButton } from "./TaskVerification.tsx";
+import { VerifyButton } from "./TaskVerification.tsx";
 
 type TaskTab = "terminal" | "changes";
 
 /**
- * The selected task (ADR-31): title or prompt, branch and session state in the header, the session terminal and the
- * worktree changes in tabs. A task from a proposal says who proposed it, and the summary from the task session (ADR-39)
- * sits above the tabs. A task without a running session can be resumed or ended; the worktree always opens in VS Code.
- * The warnings about files another task also changes (ADR-44) and about a changed mise config of the worktree (ADR-59)
- * sit above the summary, and the mise tasks the agent runs in the worktree below it. The header shows the task port, and
- * the files copied from the repo root into the worktree come first (ADR-61). The review comments written in the
- * "Changes" tab live here, so that switching tabs keeps them (ADR-62). The Verify button in the header runs the
- * task's tests, and the verdict sits below the summary (ADR-64). The messages the task's proposer sent its session sit
- * above the summary (ADR-68).
+ * The selected task (ADR-31): title or prompt, branch, task port, its model when it has one (ADR-98) and session state in the header, the session terminal
+ * and the worktree changes in tabs. A task from a proposal says who proposed it. A task without a running session can
+ * be resumed or ended; the worktree always opens in VS Code, and the Verify button runs the task's tests (ADR-64).
+ * What the task has to say above its terminal (`TaskDetails`: warnings, messages, summary, verification, merge
+ * request, mise tasks) is folded into one strip of notices that "Details" unfolds (ADR-91), so the terminal keeps the
+ * panel's height. The review comments written in the "Changes" tab live here, so that switching tabs keeps them (ADR-62).
  */
 export function TaskPanel({
   conn,
@@ -68,7 +62,9 @@ export function TaskPanel({
   const [removing, setRemoving] = useState(false);
   const review = useTaskReview(conn, task.id);
   const confirmingRemoval = removing && !liveSession;
-  const verification = useTaskVerification(conn, task.id, confirmingRemoval);
+  const details = useTaskDetails({ conn, task, tasks, messages, runningLive, paused: confirmingRemoval });
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const detailsArea = useRef<HTMLElement>(null);
   const resume = useAction(
     () => post(conn, agentsApi.resumeTask, { task: task.id }),
     () => {
@@ -91,10 +87,12 @@ export function TaskPanel({
 
   return (
     <>
-      <header className="flex items-center gap-4 border-b px-4 py-2">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      {/* In a narrow column (the supervisor panel pinned on a small screen) the buttons wrap under the task. */}
+      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-2">
+        <div className="flex min-w-60 flex-1 flex-col gap-0.5">
           <span className="flex min-w-0 items-center gap-3">
-            <span className="truncate text-sm font-medium">{task.repo}</span>
+            {/* The branch, longer and repeating the task, gives way first. */}
+            <span className="max-w-1/2 shrink-0 truncate text-sm font-medium">{task.repo}</span>
             <span className="text-muted-foreground flex min-w-0 items-center gap-1 font-mono text-xs">
               <GitBranch className="size-3 shrink-0" aria-label="branch" />
               <span className="truncate">{task.branch}</span>
@@ -106,6 +104,12 @@ export function TaskPanel({
               <Plug className="size-3" aria-label="task port" />
               {task.port}
             </span>
+            {task.model !== null && (
+              <span className="text-muted-foreground flex shrink-0 items-center gap-1 font-mono text-xs" title="Copilot CLI model">
+                <Bot className="size-3" aria-label="model" />
+                {task.model}
+              </span>
+            )}
             <span className="text-muted-foreground shrink-0 text-xs">
               {session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}
             </span>
@@ -116,37 +120,42 @@ export function TaskPanel({
           </span>
         </div>
         {error && <span className="text-destructive max-w-xs truncate text-xs">{error}</span>}
-        <VerifyButton state={verification} disabled={confirmingRemoval} />
-        <Button variant="outline" size="sm" onClick={openEditor.run} disabled={openEditor.pending}>
-          <Code /> VS Code
-        </Button>
-        {liveSession ? (
-          <StopButton conn={conn} session={liveSession} onStopped={onChanged} />
-        ) : (
-          <>
-            <Button variant="outline" size="sm" onClick={resume.run} disabled={resume.pending || removing}>
-              <Play /> Resume
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setRemoving(true)} disabled={removing}>
-              <Trash2 /> End task
-            </Button>
-          </>
-        )}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <VerifyButton state={details.verification} disabled={confirmingRemoval} />
+          <Button variant="outline" size="sm" onClick={openEditor.run} disabled={openEditor.pending}>
+            <Code /> VS Code
+          </Button>
+          {liveSession ? (
+            <StopButton conn={conn} session={liveSession} onStopped={onChanged} />
+          ) : (
+            <>
+              <Button variant="outline" size="sm" onClick={resume.run} disabled={resume.pending || removing}>
+                <Play /> Resume
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setRemoving(true)} disabled={removing}>
+                <Trash2 /> End task
+              </Button>
+            </>
+          )}
+        </div>
       </header>
       {confirmingRemoval && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
-      <TaskIncludedFiles included={task.included} />
-      <SharedFiles conn={conn} task={task.id} tasks={tasks} paused={confirmingRemoval} onOpenTask={onOpenTask} />
-      <TaskMiseConfig conn={conn} task={task.id} paused={confirmingRemoval} />
-      <TaskMessages messages={messages} sessions={sessions} />
-      {task.summary && <TaskSummary summary={task.summary} />}
-      <TaskVerification conn={conn} state={verification} />
-      <TaskMiseRuns
-        conn={conn}
-        task={task.id}
-        live={runningLive}
-        paused={confirmingRemoval}
-        shownElsewhere={verification.runningMiseTask}
+      <TaskNoticeStrip
+        notices={details.notices}
+        open={detailsOpen}
+        onToggle={() => setDetailsOpen(!detailsOpen)}
+        onOpen={(section) => {
+          setDetailsOpen(true);
+          scrollToSection(detailsArea.current, section);
+        }}
       />
+      {/* At most a third of the panel, scrolling beyond it: on a small screen the sections would leave the terminal a few
+          lines, and Copilot CLI cuts a dialog taller than its terminal. */}
+      {/* Hidden rather than unmounted when folded, so that a section keeps what the user did in it (the mise config shown
+          for trust, an open log). */}
+      <section ref={detailsArea} hidden={!detailsOpen} aria-label="Task details" className="max-h-1/3 shrink-0 overflow-y-auto">
+        <TaskDetails conn={conn} task={task} details={details} sessions={sessions} onOpenTask={onOpenTask} />
+      </section>
       <div className="px-4">
         <TabBar tabs={tabs} active={shown} onSelect={setTab} />
       </div>
@@ -166,19 +175,6 @@ export function TaskPanel({
 function taskSubtitle(task: Task, sessions: readonly Session[]): string {
   const name = taskName(task);
   return task.proposedBy ? `${name} · ${proposerLabel(task.proposedBy, sessions)}` : name;
-}
-
-/** The summary from the task session (`report_result`) with the time it was reported. */
-function TaskSummary({ summary }: { summary: NonNullable<Task["summary"]> }) {
-  return (
-    <section aria-label="Summary from the task session" className="flex flex-col gap-1 border-b px-4 py-3">
-      <span className="hud-label">
-        Summary <span className="text-muted-foreground font-sans normal-case">{relativeTime(summary.reportedAt, new Date())}</span>
-      </span>
-      {/* A few lines at most: a longer summary scrolls instead of squeezing the session terminal below. */}
-      <p className="max-h-32 max-w-prose overflow-auto text-sm whitespace-pre-wrap">{summary.text}</p>
-    </section>
-  );
 }
 
 /** Stopping the task's running session; the error shows next to the button. */

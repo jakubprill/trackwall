@@ -1,4 +1,4 @@
-import { graphApi, miseApi, type RunningMiseTask, type SessionList, workspaceApi } from "@trackwall/protocol";
+import { graphApi, type RunningMiseTask, type SessionList, workspaceApi } from "@trackwall/protocol";
 import { type HomeKey, parseHomeKey } from "@trackwall/scene/model";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -10,10 +10,11 @@ import type { LiveFeed } from "@/lib/daemon-events";
 import { daemonAnswered, homeHasObject, homeModel } from "@/lib/home-model";
 import { listNeedsSettings } from "@/lib/repo-status";
 import { GRAPH_PACE, REPO_LIST_PACE } from "@/lib/repo-watch";
-import { RUNNING_MISE_POLL_MS } from "@/lib/run-state";
 import type { SessionSelection } from "@/lib/session-entries";
+import type { SettingsCategory } from "@/lib/settings-categories";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
+import { useRunningMiseTasks } from "@/lib/use-running-mise-tasks";
 import { HomeDetails } from "./HomeDetails.tsx";
 import { HomeHoverCard } from "./HomeHoverCard.tsx";
 import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
@@ -53,7 +54,7 @@ export function HomeView({
   onOpenInSessions: (selection: SessionSelection) => void;
   onOpenRepo: (id: string) => void;
   onOpenDaemon: () => void;
-  onOpenSettings: () => void;
+  onOpenSettings: (category: SettingsCategory) => void;
 }) {
   const repos = useRemote(
     useCallback(() => post(conn, workspaceApi.list, {}), [conn]),
@@ -63,10 +64,7 @@ export function HomeView({
     useCallback(() => post(conn, graphApi.graph, {}), [conn]),
     repoWatch.options(GRAPH_PACE),
   );
-  const running = useRemote(
-    useCallback(() => post(conn, miseApi.running, {}), [conn]),
-    { pollMs: RUNNING_MISE_POLL_MS, live: runningLive },
-  );
+  const running = useRunningMiseTasks(conn, runningLive);
   const [selected, setSelected] = useState<HomeKey | null>(null);
   const [hovered, setHovered] = useState<HomeKey | null>(null);
   const [unavailable, setUnavailable] = useState<string>();
@@ -93,6 +91,8 @@ export function HomeView({
   useEffect(() => {
     if (loaded && selected && !current) setSelected(null);
   }, [loaded, selected, current]);
+  // Until both lists arrive the panels say so, instead of counts of zero that look like an empty environment.
+  const loading = !loaded && !repos.error && !sessions.error;
   const unavailableNow = useCallback((reason: string) => {
     setHovered(null);
     setUnavailable(reason);
@@ -117,7 +117,7 @@ export function HomeView({
     return (
       <div className="flex flex-col items-start gap-3 p-6">
         <p className="text-sm">{needsSettings ? repos.error : "Choose a projects folder to see your repos and sessions here."}</p>
-        <Button variant="outline" size="sm" onClick={onOpenSettings}>
+        <Button variant="outline" size="sm" onClick={() => onOpenSettings("workspace")}>
           Open Settings
         </Button>
       </div>
@@ -125,8 +125,10 @@ export function HomeView({
   }
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[var(--spacing-sidebar)_1fr_var(--spacing-sidebar)]">
+    // On a small window (1280 wide with the supervisor panel pinned) the side panels give way before the scene does.
+    <div className="grid h-full min-h-0 grid-cols-[minmax(12rem,var(--spacing-sidebar))_minmax(20rem,1fr)_minmax(12rem,var(--spacing-sidebar))]">
       <NeedsYouPanel
+        loading={loading}
         model={model}
         sessions={lookup.sessions}
         proposals={sessions.data?.proposals ?? []}
@@ -170,6 +172,7 @@ export function HomeView({
       </div>
       <HomeDetails
         conn={conn}
+        loading={loading}
         selected={current}
         model={model}
         repos={lookup.repos}

@@ -90,6 +90,21 @@ export function visibleText(text: z.ZodString): z.ZodString {
   });
 }
 
+/**
+ * The Copilot CLI model a task's session runs on (ADR-98), passed as `--model=<id>` when the task starts and whenever it
+ * resumes; `null` for Copilot CLI's own default. The catalog of models depends on the Copilot CLI version and the user's
+ * account, so Trackwall checks only the shape of an id (`claude-opus-5.5`, `gpt-5.5`, `auto`) and Copilot CLI the rest.
+ */
+export const TASK_MODEL_MAX = 64;
+export const TaskModel = z
+  .string()
+  .trim()
+  .min(1)
+  .max(TASK_MODEL_MAX)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, {
+    message: "a model id is letters, digits, dots, dashes and underscores, such as claude-opus-5.5",
+  });
+
 /** A task summary from its session (`report_result`, ADR-39): what it did and what is left, for the session that delegated the task. */
 export const TASK_SUMMARY_MAX = 4000;
 export const TaskSummaryText = z.string().trim().min(1).max(TASK_SUMMARY_MAX);
@@ -148,8 +163,13 @@ export type DialogAnswer = z.infer<typeof DialogAnswer>;
 
 export const Session = z.object({
   id: SessionId,
-  /** The repo the session works in; `null` for the supervisor, which runs in the projects folder above all repos (ADR-58). */
+  /**
+   * The repo the session works in; `null` in the projects folder above all repos: the supervisor (ADR-58) or a free
+   * session (ADR-100).
+   */
   repo: RepoId.nullable(),
+  /** The supervisor (ADR-58); a session in the projects folder without it is a free session (ADR-100). */
+  supervisor: z.boolean(),
   /** ISO 8601. */
   startedAt: z.string(),
   /** The session's process group: `running`, `stopping`, and after the end the exit code and the last screen lines. */
@@ -170,10 +190,22 @@ export const Session = z.object({
 });
 export type Session = z.infer<typeof Session>;
 
-/** The supervisor (ADR-58) is the session without a repo: it runs in the projects folder, above all repos. */
-export function isSupervisor(session: Pick<Session, "repo">): boolean {
-  return session.repo === null;
+/** The supervisor (ADR-58): it runs in the projects folder, above all repos. */
+export function isSupervisor(session: Pick<Session, "supervisor">): boolean {
+  return session.supervisor;
 }
+
+/** A free session (ADR-100): Copilot CLI in the projects folder that is neither the supervisor nor in a repo. */
+export function isFreeSession(session: Pick<Session, "repo" | "supervisor">): boolean {
+  return session.repo === null && !session.supervisor;
+}
+
+/**
+ * Which conversation a supervisor start goes on with (ADR-96): `last` resumes the newest supervisor's under its id, or
+ * starts a new one when there is none; `new` always starts a new one.
+ */
+export const SupervisorConversation = z.enum(["last", "new"]);
+export type SupervisorConversation = z.infer<typeof SupervisorConversation>;
 
 export const Task = z.object({
   id: TaskId,
@@ -185,7 +217,7 @@ export const Task = z.object({
   baseBranch: z.string().nullable(),
   /** The base commit: the task's changes are the difference between it and the worktree's working directory. */
   base: CommitHash,
-  /** Full path of the worktree in the state directory (`worktrees/<repo>/<branch without prefix>`). */
+  /** Full path of the worktree: `<task worktrees folder>/<repo>/<branch without prefix>` (ADR-84). */
   worktree: z.string(),
   /** ISO 8601. */
   createdAt: z.string(),
@@ -193,6 +225,8 @@ export const Task = z.object({
   title: z.string().nullable(),
   /** Where the task came from: an approved proposal (`ProposedBy`), or `null` when the user typed it. */
   proposedBy: ProposedBy.nullable(),
+  /** The model its sessions run on (ADR-98); `null` for Copilot CLI's default. */
+  model: TaskModel.nullable(),
   /** The last summary from the task session (`report_result`); `null` until it has reported one. */
   summary: z.object({ text: z.string(), reportedAt: z.string() }).nullable(),
   /** The task port (ADR-61): `TASK_PORT_ENV` in every mise task run in the worktree, and the port of the task's service. */
@@ -202,16 +236,36 @@ export const Task = z.object({
 export type Task = z.infer<typeof Task>;
 
 /**
+ * What a proposal asks for (ADR-83): `task`, a task in the repo (`propose_task`), or an action on the projects folder
+ * that a task cannot do, because a task is a worktree of one repo (`propose_folder_action`): today `remove_repo`, which
+ * moves the repo out of the projects folder into `REMOVED_REPOS_DIR`.
+ */
+export const ProposalKind = z.enum(["task", "remove_repo"]);
+export type ProposalKind = z.infer<typeof ProposalKind>;
+
+/** The proposer's reason for a folder action, shown to the user in place of a task's prompt. */
+export const FOLDER_ACTION_REASON_MAX = 2000;
+export const FolderActionReason = z.string().trim().min(1).max(FOLDER_ACTION_REASON_MAX);
+
+/** The folder in the projects folder where a removed repo goes (ADR-83); hidden, so the repo list does not see it. */
+export const REMOVED_REPOS_DIR = ".trackwall-removed";
+
+/**
  * A task proposal (ADR-39): a task that a session or an agent outside Trackwall submitted with the MCP tool `propose_task`.
  * Nothing starts until the user approves it in the Sessions view; an approved proposal becomes a task with the same id,
- * a rejected one disappears. It lives only in the daemon's memory, like the session that submitted it.
+ * a rejected one disappears. It lives only in the daemon's memory, like the session that submitted it. Since ADR-83 a
+ * proposal can also be an action on the projects folder (`kind`), approved and rejected in the same place.
  */
 export const TaskProposal = z.object({
   /** The id the task gets once approved. */
   id: TaskId,
+  kind: ProposalKind,
   repo: RepoId,
   title: z.string(),
+  /** The task's prompt; for a folder action, the proposer's reason. */
   prompt: z.string(),
+  /** The model the proposer chose for the task (ADR-98), which the user may change before the start; `null` for the default. */
+  model: TaskModel.nullable(),
   proposedBy: ProposedBy,
   /** ISO 8601. */
   createdAt: z.string(),
@@ -252,7 +306,7 @@ export type TaskMessage = z.infer<typeof TaskMessage>;
  * went into the session's input box (now, or a moment ago for something earlier the session has not taken yet);
  * `queued`, the session is not in its input box (working, asking for approval or a question, interrupted with Esc, the
  * user typing), and the prompt goes in when it next ends a turn; `on_resume`, the task has no running session, and the
- * prompt goes to the session the user resumes.
+ * prompt goes to the session that resumes it (the user, or `resume_task`, ADR-90).
  */
 export const PromptDelivery = z.enum(["typed", "queued", "on_resume"]);
 export type PromptDelivery = z.infer<typeof PromptDelivery>;
@@ -276,8 +330,11 @@ export const SessionList = z.object({
   proposals: z.array(TaskProposal),
   /** The messages kept for the tasks on the list (ADR-68), oldest first. */
   messages: z.array(TaskMessage),
-  /** The directory of task worktrees; the UI suggests it for Copilot CLI's trusted folders, because trust covers subdirectories. */
-  worktreesDir: z.string(),
+  /**
+   * The newest supervisor while it had a prompt, so Copilot CLI keeps its conversation, which a start with `last` goes
+   * on with (ADR-96); also after the daemon restarts and after the user closed it. `null` when there is none.
+   */
+  lastSupervisor: SessionId.nullable(),
 });
 export type SessionList = z.infer<typeof SessionList>;
 
@@ -372,13 +429,17 @@ const ProposalRequest = z.object({ proposal: TaskId }).strict();
 
 export const agentsApi = {
   sessions: endpoint("sessions", z.object({}).strict(), SessionList),
-  /** Starts Copilot CLI in the repo root, with the session plugin (ADR-17). */
-  start: endpoint("start", z.object({ repo: RepoId }).strict(), Session),
+  /**
+   * Starts Copilot CLI with the session plugin (ADR-17) in the repo root, or with `repo: null` a free session in the
+   * projects folder (ADR-100); with `prompt` as its first message, so it works from the start.
+   */
+  start: endpoint("start", z.object({ repo: RepoId.nullable(), prompt: TaskPrompt.optional() }).strict(), Session),
   /**
    * Starts the supervisor (ADR-58): Copilot CLI in the projects folder, above the sessions of all repos. There is at
-   * most one running at a time, so while one runs this returns it instead of starting another.
+   * most one running at a time, so while one runs this returns it instead of starting another. Otherwise `conversation`
+   * says whether it goes on with the last supervisor's conversation or starts a new one (ADR-96).
    */
-  startSupervisor: endpoint("start-supervisor", z.object({}).strict(), Session),
+  startSupervisor: endpoint("start-supervisor", z.object({ conversation: SupervisorConversation }).strict(), Session),
   /** Returns after confirming that no process of the session is alive; an ended session returns its state. */
   stop: endpoint("stop", SessionRequest, Session),
   /**
@@ -423,7 +484,12 @@ export const agentsApi = {
    * Approving a task proposal (ADR-39): a task with its id, like `create-task`, with the prompt the user may have edited
    * before the start. A failed start leaves the proposal for another try or a rejection.
    */
-  approveProposal: endpoint("approve-proposal", ProposalRequest.extend({ prompt: TaskPrompt }), Task),
+  approveProposal: endpoint("approve-proposal", ProposalRequest.extend({ prompt: TaskPrompt, model: TaskModel.nullable() }), Task),
+  /**
+   * Approving a proposal to remove a repo (ADR-83): refused while a session, a task or a process runs in the repo; then
+   * the repo moves into `REMOVED_REPOS_DIR` in the projects folder. A refusal leaves the proposal waiting.
+   */
+  approveRepoRemoval: endpoint("approve-repo-removal", ProposalRequest, Done),
   /**
    * Rejects a proposal: it leaves the list, and a session waiting on it gets `proposal_rejected` with the user's reason
    * when they gave one (ADR-55); an empty reason is no reason.

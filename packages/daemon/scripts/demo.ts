@@ -13,15 +13,14 @@ import { arch, platform } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { EventHub } from "../src/api/event-hub.ts";
+import { sessionHookRequest } from "../src/api/hooks.ts";
 import { startApi } from "../src/api/server.ts";
-import { createFacade } from "../src/facade.ts";
-import { COPILOT_HOOK_COMMAND } from "../src/infra/args.ts";
+import { createFacade, HOSTING_CLIS } from "../src/facade.ts";
 import { newToken, writeDaemonFile } from "../src/infra/discovery.ts";
-import { selfCommand } from "../src/infra/self-command.ts";
 import { SHUTDOWN_SIGNALS, shutdownOnce, stopDaemon } from "../src/infra/shutdown.ts";
 import { userEnv } from "../src/infra/user-env.ts";
-import { createMcpEndpoint } from "../src/mcp/endpoint.ts";
-import { mcpStdioCommand, sessionMcpStdioCommand } from "../src/mcp/stdio-command.ts";
+import { createMcpEndpoint, sessionMcpRequest } from "../src/mcp/endpoint.ts";
+import { mcpStdioCommand } from "../src/mcp/stdio-command.ts";
 import { runtimeInfo } from "../src/platform/runtime.ts";
 import { TURNS } from "./demo/turns.ts";
 import { createDemoWorkspace, DEMO_REPOS, writePricingTaskChanges } from "./demo/workspace.ts";
@@ -49,8 +48,9 @@ const facade = createFacade({
   miseCommand: ["mise"],
   copilotCommand: [process.execPath, here("demo/copilot.ts")],
   version: VERSION,
-  hookCommand: (event, hooksFile) => selfCommand([COPILOT_HOOK_COMMAND, event, hooksFile]),
-  sessionMcpCommand: (tokenFile) => sessionMcpStdioCommand(home, tokenFile),
+  sessionHook: (event, sessionToken) => sessionHookRequest(api.port, token, event, sessionToken),
+  sessionMcpServer: (sessionToken) => sessionMcpRequest(api.port, token, sessionToken),
+  hostingClis: HOSTING_CLIS,
   userEnv,
   log,
 });
@@ -90,7 +90,7 @@ async function setTheScene(): Promise<void> {
   for (const repo of Object.keys(TURNS)) sessions.push(await facade.agents.start(repo));
   const main = sessions[0];
   if (main === undefined) throw new Error("no main session");
-  const propose = (repo: string, title: string, prompt: string) => facade.agents.propose(main.id, { repo, title, prompt });
+  const propose = (repo: string, title: string, prompt: string) => facade.agents.propose(main.id, { repo, title, prompt, model: null });
   const retry = await propose(
     "payments",
     "Retry the payment call",
@@ -111,7 +111,7 @@ async function setTheScene(): Promise<void> {
     "Invoice an order once, however often it is paid",
     "Skip the invoice when billing already has one for the order id.",
   );
-  for (const proposal of [retry, notify]) await facade.agents.approveProposal(proposal.id, proposal.prompt);
+  for (const proposal of [retry, notify]) await facade.agents.approveProposal(proposal.id, proposal.prompt, proposal.model);
   // The main session steers its notifications task (ADR-68): its agent has read the first message, not the second yet.
   facade.agents.sendMessage(
     main.id,

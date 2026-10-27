@@ -19,13 +19,15 @@ import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
 import { Badge } from "@/components/ui/badge";
 import { post } from "@/lib/api";
-import { HTTP_CLIENT_LABELS, MECHANISM_LABELS } from "@/lib/card";
+import { CARD_PROBLEM_LABELS, HTTP_CLIENT_LABELS, MECHANISM_LABELS } from "@/lib/card";
 import type { Connection } from "@/lib/connection";
 import { useRemote } from "@/lib/use-remote";
+import { RepoCardGlance } from "./RepoCardGlance.tsx";
 
 /**
- * The "Card" tab (§4.6, ADR-25, ADR-30): facts from the build, configuration and code files in the last commit, each
- * with evidence (file and line), and the repo's tags with reasons. A new HEAD in the list fetches the card anew.
+ * The "Card" tab (§4.6, ADR-25, ADR-30), with "At a glance" on top (ADR-103): facts from the build, configuration and
+ * code files in the last commit, each with evidence (file and line), and the repo's tags with reasons. A new HEAD in the
+ * list fetches the card anew.
  */
 export function RepoCardView({ conn, repo, head }: { conn: Connection; repo: string; head: string }) {
   const load = useCallback(() => post(conn, cardsApi.card, { repo }), [conn, repo]);
@@ -39,6 +41,7 @@ function CardPanel({ result }: { result: RepoCardResult }) {
   const { card, tags } = result;
   return (
     <div className="flex flex-col gap-4">
+      {card && <RepoCardGlance card={card} tags={tags} />}
       <Surface label="Tags" meta={tags.length}>
         {tags.length === 0 ? (
           <Empty>No tags. Add your own tags with the repoTags key in workspace.yaml.</Empty>
@@ -67,11 +70,12 @@ function CardFacts({ card }: { card: RepoCard }) {
   return (
     <>
       {card.problems.length > 0 && (
-        <Surface label="Could not read" meta={card.problems.length}>
+        <Surface label="Incomplete" meta={card.problems.length}>
           <ul className="divide-y">
             {card.problems.map((p) => (
               <Row key={`${p.path}:${p.message}`}>
-                <span className="text-warning font-mono text-xs">{p.path || "repo"}</span>
+                <span className="text-warning shrink-0 text-xs">{CARD_PROBLEM_LABELS[p.code]}</span>
+                <span className="min-w-0 font-mono text-xs break-all">{p.path || "repo"}</span>
                 <span className="text-muted-foreground min-w-0 text-xs break-words">{p.message}</span>
               </Row>
             ))}
@@ -204,17 +208,22 @@ function Endpoints({ endpoints }: { endpoints: ProvidedEndpoint[] }) {
   return (
     <Surface label="HTTP endpoints" meta={endpoints.length}>
       {endpoints.length === 0 ? (
-        <Empty>No @RestController or @Controller controllers found.</Empty>
+        <Empty>No @RestController or @Controller controllers or OpenAPI specs found.</Empty>
       ) : (
         <ul className="divide-y">
           {endpoints.map((e) => (
             <Row key={`${e.method} ${e.path} ${evidenceLabel(e.evidence)}`}>
               <Badge variant="secondary">{e.method ?? "any"}</Badge>
-              <span className="min-w-0 flex-1 truncate font-mono text-xs" title={e.path}>
+              <span className="min-w-0 flex-1 truncate font-mono text-xs" title={e.operation?.summary ?? e.path}>
                 {e.path}
               </span>
+              {e.source === "openapi" && (
+                <Badge variant="outline" title="From an OpenAPI spec in the repo, without a mapping in the code">
+                  OpenAPI
+                </Badge>
+              )}
               {(e.request !== null || e.response !== null) && <Contract endpoint={e} />}
-              <span className="text-muted-foreground max-w-48 truncate font-mono text-xs">{e.handler}</span>
+              {e.handler !== null && <span className="text-muted-foreground max-w-48 truncate font-mono text-xs">{e.handler}</span>}
               <Evidence label={evidenceLabel(e.evidence)} />
             </Row>
           ))}

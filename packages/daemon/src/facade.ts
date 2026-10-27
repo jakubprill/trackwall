@@ -1,20 +1,28 @@
 import { join } from "node:path";
 import { SERVICE_RELEASE_MS } from "@trackwall/protocol";
 import { vscodeUrl } from "./infra/editor-url.ts";
+import { DomainError } from "./infra/errors.ts";
+import { runProgram } from "./infra/run-program.ts";
 import { Agents, type AgentsDeps } from "./modules/agents/agents.ts";
+import { resolveCopilot } from "./modules/agents/copilot-command.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { CardCache } from "./modules/cards/card-cache.ts";
 import { Cards } from "./modules/cards/cards.ts";
 import { DayStart } from "./modules/day-start/day-start.ts";
 import { DayStartFile } from "./modules/day-start/day-start-file.ts";
+import { Doctor } from "./modules/doctor/doctor.ts";
+import { ErrorJournal } from "./modules/error-journal/error-journal.ts";
+import type { ErrorJournalWorkspace } from "./modules/error-journal/known-values.ts";
 import { Graph } from "./modules/graph/graph.ts";
+import { LocalConfig } from "./modules/local-config/local-config.ts";
 import { Logs } from "./modules/logs/logs.ts";
+import { MergeRequests } from "./modules/merge-requests/merge-requests.ts";
 import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
 import { Services } from "./modules/services/services.ts";
 import { TestReports } from "./modules/test-results/test-reports.ts";
-import { HOSTING_CLIS, Hosting } from "./modules/vcs/hosting.ts";
+import { Hosting, type HostingClis } from "./modules/vcs/hosting.ts";
 import { Vcs } from "./modules/vcs/vcs.ts";
 import { Verifications } from "./modules/verification/verifications.ts";
 import { RepoWatch } from "./modules/workspace/repo-watch.ts";
@@ -33,6 +41,8 @@ export interface Facade {
   repoWatch: RepoWatch;
   cards: Cards;
   graph: Graph;
+  /** The local config files of the repos, backed up into the local config store every few seconds (ADR-86); `main.ts` starts it. */
+  localConfig: LocalConfig;
   mise: Mise;
   procs: ProcessGroups;
   logs: Logs;
@@ -41,8 +51,14 @@ export interface Facade {
   services: Services;
   testReports: TestReports;
   verifications: Verifications;
+  /** A finished task's push, its repo host's merge request form, and the merge request with its pipeline (ADR-77). */
+  mergeRequests: MergeRequests;
   /** "Start my day": sync, the day report, and a new supervisor that reads it (ADR-70). */
   dayStart: DayStart;
+  /** Trackwall's own errors from the daemon, the shell and the UI, anonymized, on this computer only (ADR-94). */
+  errorJournal: ErrorJournal;
+  /** Checks of what Trackwall needs on this computer, each with what to do when it fails (ADR-101). */
+  doctor: Doctor;
   /**
    * Opens a link from a README in the system (ADR-35): an `http` or `https` address checked by the `ExternalLink` schema.
    * It belongs to no module, because it concerns neither a repo nor the daemon's state.
@@ -50,7 +66,9 @@ export interface Facade {
   openLink: (url: string) => void;
 }
 
-export { runCopilotHook } from "./modules/agents/copilot-hook-command.ts";
+export type { CopilotHookOutput } from "./modules/agents/copilot-hook-output.ts";
+export type { CopilotHookEvent } from "./modules/agents/copilot-hook-record.ts";
+export { HOSTING_CLIS } from "./modules/vcs/hosting.ts";
 
 const WORKSPACE_FILE = "workspace.yaml";
 const RUNTIME_FILE = "runtime.json";
@@ -76,22 +94,45 @@ export interface FacadeOptions {
   copilotCommand: readonly string[];
   /** The daemon's version (`VERSION`), given to every Copilot CLI session. */
   version: string;
-  /** The session plugin's hook program (`trackwall-daemon copilot-hook …` in the daemon). */
-  hookCommand: AgentsDeps["hookCommand"];
-  /** The Stdio bridge to this daemon's MCP server with the session token file (`sessionMcpStdioCommand`), for every Copilot CLI session. */
-  sessionMcpCommand: AgentsDeps["sessionMcpCommand"];
+  /** Where the session plugin's hooks POST to: this daemon's hook route (`sessionHookRequest`, ADR-88). */
+  sessionHook: AgentsDeps["sessionHook"];
+  /** This daemon's MCP server over HTTP with a session's tokens (`sessionMcpRequest`, ADR-89), for every Copilot CLI session. */
+  sessionMcpServer: AgentsDeps["sessionMcpServer"];
+  /** `gh` and `glab` for the repo hosts (`HOSTING_CLIS` in the daemon, a fake in tests). */
+  hostingClis: HostingClis;
   /** The environment of processes started for the user (`userEnv`). */
   userEnv: () => Promise<NodeJS.ProcessEnv>;
+  /** The folder the daemon serves the UI from: the error journal maps the UI's frames with its source maps (ADR-94). */
+  uiDir?: string;
   log: (msg: string) => void;
+}
+
+/**
+ * The error journal (ADR-94) of the state directory `home`. `createFacade` gives it the workspace and the UI folder; a start
+ * that fails before the facade exists makes one without them, which still leaves its error for the next daemon to show.
+ */
+export function createErrorJournal(
+  o: Pick<FacadeOptions, "home" | "version" | "uiDir" | "log"> & { workspace?: ErrorJournalWorkspace },
+): ErrorJournal {
+  return new ErrorJournal({
+    dir: join(o.home, LOGS_DIR),
+    stateDir: o.home,
+    uiDir: o.uiDir,
+    version: o.version,
+    workspace: o.workspace,
+    env: process.env,
+    log: o.log,
+  });
 }
 
 export function createFacade(o: FacadeOptions): Facade {
   const vcs = new Vcs();
+  const hosting = new Hosting(o.hostingClis);
   const openEditor = (dir: string) => o.openUrl(vscodeUrl(dir));
   const workspace = new Workspace({
     file: new WorkspaceFile(join(o.home, WORKSPACE_FILE)),
     vcs,
-    hosting: new Hosting(HOSTING_CLIS),
+    hosting,
     openEditor,
     openFolder: o.openFolder,
   });
@@ -108,6 +149,7 @@ export function createFacade(o: FacadeOptions): Facade {
   const cards = new Cards({ vcs, repos: workspace, cache, log: o.log });
   // A new repo or one whose HEAD moved gets its card in the background, so the next graph does not wait for it (ADR-63).
   const repoWatch = new RepoWatch({ repos: workspace, vcs, onHeadMoved: (repos) => cards.warmUp(repos), log: o.log });
+  const localConfig = new LocalConfig({ repos: workspace, vcs, log: o.log });
   const agents = new Agents({
     procs,
     repos: workspace,
@@ -116,12 +158,19 @@ export function createFacade(o: FacadeOptions): Facade {
     copilot: o.copilotCommand,
     version: o.version,
     env: o.userEnv,
-    hookCommand: o.hookCommand,
-    sessionMcpCommand: o.sessionMcpCommand,
+    sessionHook: o.sessionHook,
+    sessionMcpServer: o.sessionMcpServer,
     openEditor,
     log: o.log,
   });
-  const mise = new Mise({ procs, repos: workspace, tasks: agents, command: o.miseCommand, env: o.userEnv });
+  const mise = new Mise({
+    procs,
+    repos: workspace,
+    tasks: agents,
+    command: o.miseCommand,
+    env: o.userEnv,
+    onTrusted: (repo) => agents.miseTrusted({ repo, task: null }),
+  });
   const batch = new Batch({ workspace, mise, log: o.log });
   const graph = new Graph({ cards, workspace });
   const taskPort = (repo: string, task: string) => agents.taskOfRepo(task, repo).port;
@@ -135,6 +184,13 @@ export function createFacade(o: FacadeOptions): Facade {
     onVerdict: (verification) => agents.verificationFinished(verification),
     log: o.log,
   });
+  const mergeRequests = new MergeRequests({
+    tasks: agents,
+    vcs,
+    hosting,
+    repoHosts: () => workspace.repoHosts(),
+    openUrl: o.openUrl,
+  });
   const dayStart = new DayStart({
     workspace,
     agents,
@@ -142,11 +198,30 @@ export function createFacade(o: FacadeOptions): Facade {
     file: new DayStartFile(join(o.home, DAY_START_FILE), o.log),
     log: o.log,
   });
+  const errorJournal = createErrorJournal({ ...o, workspace });
+  const doctor = new Doctor({
+    env: o.userEnv,
+    run: async (command, args, { env, timeoutMs }) =>
+      (await runProgram(command, args, { label: `${command} ${args.join(" ")}`, env, timeoutMs })).stdout.toString("utf8"),
+    gitVersion: (timeoutMs) => vcs.version(timeoutMs),
+    signedIn: (host, timeoutMs) => hosting.signedIn(host, timeoutMs),
+    resolveCopilot: (env) => resolveCopilot(o.copilotCommand, env),
+    mise: o.miseCommand,
+    // Not set yet is a state the doctor reports; a broken `workspace.yaml` is an error it shows as one.
+    projectsDir: () =>
+      workspace.projectsDir().catch((err: unknown) => {
+        if (err instanceof DomainError && err.code === "bad_request") return null;
+        throw err;
+      }),
+    repoHosts: () => workspace.repoHosts(),
+    now: () => new Date(),
+  });
   return {
     workspace,
     repoWatch,
     cards,
     graph,
+    localConfig,
     mise,
     procs,
     logs,
@@ -155,7 +230,10 @@ export function createFacade(o: FacadeOptions): Facade {
     services,
     testReports,
     verifications,
+    mergeRequests,
     dayStart,
+    errorJournal,
+    doctor,
     openLink: o.openUrl,
   };
 }

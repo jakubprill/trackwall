@@ -9,7 +9,7 @@ import {
   SUPERVISOR_TARGET,
   type WaitingTarget,
 } from "../src/lib/session-entries.ts";
-import { closeCutsOffTurn, sessionStateLabel } from "../src/lib/session-state.ts";
+import { agentsInTurn, closeCutsOffTurn, sessionPlace, sessionStateLabel } from "../src/lib/session-state.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-23T10:00:00Z", pid: 10 } as const;
 
@@ -18,6 +18,7 @@ function session(id: string, state: Session["state"], run: Session["run"] = runn
   return {
     id,
     repo: `repo-${id}`,
+    supervisor: false,
     startedAt: "2026-10-23T10:00:00Z",
     run,
     state,
@@ -66,6 +67,14 @@ describe("session state in one line", () => {
   });
 });
 
+describe("where a session works", () => {
+  test("a repo, or for a session in the projects folder the supervisor or a free session (ADR-100)", () => {
+    expect(sessionPlace({ repo: "shop", supervisor: false })).toBe("shop");
+    expect(sessionPlace({ repo: null, supervisor: true })).toBe("Supervisor");
+    expect(sessionPlace({ repo: null, supervisor: false })).toBe("Free session");
+  });
+});
+
 describe("closing a session", () => {
   test("asks first while the agent is working or asking for approval of a step or a plan", () => {
     expect(closeCutsOffTurn(session("a", change("Working")))).toBe(true);
@@ -86,6 +95,21 @@ describe("closing a session", () => {
   });
 });
 
+describe("agents in the middle of a turn, which an update waits for (ADR-97)", () => {
+  test("counts the running agents that work or ask for approval, not those waiting for a prompt or ended", () => {
+    const sessions = [
+      session("a", change("Working")),
+      waiting("b", change("Approval")),
+      waiting("c", change("Input")),
+      session("d", null),
+      session("e", change("Working"), exited(0)),
+    ];
+
+    expect(agentsInTurn(sessions)).toBe(2);
+    expect(agentsInTurn([])).toBe(0);
+  });
+});
+
 /** Session entries of the list, in this order. */
 const entries = (...sessions: Session[]): SessionEntry[] => sessions.map((session) => ({ kind: "session", session }));
 
@@ -95,10 +119,12 @@ const proposals: SessionEntry = {
   proposals: [
     {
       id: "p1",
+      kind: "task",
       repo: "billing",
       title: "Add refunds",
       prompt: "add refunds",
       proposedBy: { session: null, supervisor: false },
+      model: null,
       createdAt: "",
     },
   ],

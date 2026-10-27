@@ -12,6 +12,7 @@ import {
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { AgentDialogCard } from "@/components/AgentDialogCard";
+import { Loading } from "@/components/Loading";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
@@ -27,6 +28,7 @@ import { sessionPlace, sessionStateLabel } from "@/lib/session-state";
  */
 export function HomeDetails({
   conn,
+  loading,
   selected,
   model,
   repos,
@@ -36,6 +38,8 @@ export function HomeDetails({
   onOpen,
 }: {
   conn: Connection;
+  /** The repo or session list has not arrived yet: the summary says so instead of counts of zero. */
+  loading: boolean;
   selected: HomeKey | null;
   model: HomeModel;
   repos: ReadonlyMap<string, Repo>;
@@ -52,7 +56,7 @@ export function HomeDetails({
         <Panel title="Daemon" onClose={close}>
           <Summary model={model} />
           <Button size="sm" onClick={() => onOpen(DAEMON_KEY)}>
-            Open Daemon
+            Open Diagnostics
           </Button>
         </Panel>
       );
@@ -98,7 +102,7 @@ export function HomeDetails({
     return (
       <div className="flex flex-col gap-4 p-4">
         <h2 className="hud-label">Environment</h2>
-        <Summary model={model} />
+        {loading ? <Loading /> : <Summary model={model} />}
         <p className="text-muted-foreground text-xs">Click an object to see it here; double-click to open it.</p>
       </div>
     );

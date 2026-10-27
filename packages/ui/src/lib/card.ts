@@ -1,6 +1,6 @@
-import type { HttpClientVia, MechanismId } from "@trackwall/protocol";
+import type { CardProblemCode, HttpClientVia, MechanismId } from "@trackwall/protocol";
 
-/** Human names of mechanisms and HTTP client kinds from the repo card (ADR-25, ADR-30). */
+/** Human names of mechanisms, HTTP client kinds and problem codes from the repo card (ADR-25, ADR-30, ADR-80). */
 
 /** A mechanism's human name; `Record` forces an entry for every mechanism in the contract. */
 export const MECHANISM_LABELS: Record<MechanismId, string> = {
@@ -34,4 +34,12 @@ export const HTTP_CLIENT_LABELS: Record<HttpClientVia, string> = {
   config: "configuration",
   env: ".env",
   proxy: "proxy",
+};
+
+/** What a card problem means for the card (ADR-80); `Record` forces an entry for every code in the contract. */
+export const CARD_PROBLEM_LABELS: Record<CardProblemCode, string> = {
+  "files-not-read": "not read",
+  "file-invalid": "invalid file",
+  "parse-incomplete": "not parsed",
+  truncated: "cut short",
 };

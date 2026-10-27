@@ -1,21 +1,23 @@
-import type { Task } from "@trackwall/protocol";
+import type { RunningMiseTask, Session, Task, TaskMessage } from "@trackwall/protocol";
 import { Maximize2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { SessionTerminal } from "@/components/SessionTerminal";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
+import type { LiveFeed } from "@/lib/daemon-events";
 import { IS_MAC } from "@/lib/platform";
 import { entryId, entrySession, proposalsName, type SessionEntry, type SessionSelection } from "@/lib/session-entries";
 import { type GridPage, gridShape } from "@/lib/session-grid";
 import { sessionShortcutLabel } from "@/lib/session-shortcut";
-import { isLive, PROPOSAL_STATUS, sessionStateLabel } from "@/lib/session-state";
+import { isLive, PROPOSAL_STATUS, sessionPlace, sessionStateLabel } from "@/lib/session-state";
 import { useSessionClose } from "@/lib/use-session-close";
 import { useTaskEnding } from "@/lib/use-task-ending";
 import { cn } from "@/lib/utils";
 import { ProposalTile } from "./ProposalTile.tsx";
 import { EndTaskButton, SessionCloseButton, SessionCloseConfirmation, TaskEnding } from "./SessionClose.tsx";
 import { TaskLine } from "./TaskLine.tsx";
+import { useTaskTileNotices } from "./TaskTileNotices.tsx";
 
 /**
  * A page of the Sessions list as a grid of terminals (ADR-48). The selected tile has the accent ring and the keyboard,
@@ -37,6 +39,9 @@ export function SessionGrid({
   currentSelection,
   onSessionClosed,
   onTaskRemoved,
+  sessions,
+  messages,
+  runningLive,
 }: {
   conn: Connection;
   page: GridPage<SessionEntry>;
@@ -50,6 +55,10 @@ export function SessionGrid({
   currentSelection: () => SessionSelection;
   onSessionClosed: (entry: SessionEntry) => void;
   onTaskRemoved: (task: string) => void;
+  /** For a task tile's notices (ADR-91): the sessions that sent its messages, the messages and the running mise tasks. */
+  sessions: readonly Session[];
+  messages: readonly TaskMessage[];
+  runningLive: LiveFeed<RunningMiseTask[]> | undefined;
 }) {
   const area = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ width: number; height: number }>();
@@ -86,6 +95,9 @@ export function SessionGrid({
             currentSelection={currentSelection}
             onSessionClosed={() => onSessionClosed(entry)}
             onTaskRemoved={onTaskRemoved}
+            sessions={sessions}
+            messages={messages}
+            runningLive={runningLive}
           />
         ))}
     </div>
@@ -105,6 +117,9 @@ function SessionTile({
   currentSelection,
   onSessionClosed,
   onTaskRemoved,
+  sessions,
+  messages,
+  runningLive,
 }: {
   conn: Connection;
   entry: SessionEntry;
@@ -118,11 +133,26 @@ function SessionTile({
   currentSelection: () => SessionSelection;
   onSessionClosed: () => void;
   onTaskRemoved: (task: string) => void;
+  sessions: readonly Session[];
+  messages: readonly TaskMessage[];
+  runningLive: LiveFeed<RunningMiseTask[]> | undefined;
 }) {
   const session = entrySession(entry);
   const close = useSessionClose(conn, session, onSessionClosed);
   const sessionlessTask = entry.kind === "task" && !session ? entry.task : undefined;
   const ending = useTaskEnding(sessionlessTask !== undefined);
+  const task = entry.kind === "task" ? entry.task : undefined;
+  const notices = useTaskTileNotices({
+    conn,
+    task,
+    tasks,
+    messages: messages.filter((m) => m.task === task?.id),
+    sessions,
+    runningLive,
+    selected,
+    paused: ending.open,
+    onOpenTask: (id) => onNavigate({ kind: "task", id }),
+  });
   const tile = useRef<HTMLDivElement>(null);
   // A selected tile without a terminal takes the keyboard itself, so that keys stop going to the terminal selected before.
   useEffect(() => {
@@ -154,44 +184,49 @@ function SessionTile({
           {sessionShortcutLabel({ kind: "position", position }, IS_MAC) ?? position}
         </span>
         <TileTitle entry={entry} />
+        {notices.badge}
         <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={onOpenAlone} aria-label="Open alone">
           <Maximize2 />
         </Button>
         {session && <SessionCloseButton close={close} />}
         {sessionlessTask && <EndTaskButton onClick={ending.show} />}
       </header>
-      {session && (
-        // The question lies over the terminal instead of pushing it down, so that it does not resize the PTY mid-turn.
-        <div className="relative flex min-h-0 flex-1 flex-col">
-          <SessionCloseConfirmation close={close} className="absolute inset-x-0 top-0 z-10" />
-          <SessionTerminal conn={conn} session={session.id} live={isLive(session)} selected={selected} />
-        </div>
-      )}
-      {entry.kind === "proposals" && (
-        <ProposalTile
-          conn={conn}
-          group={entry}
-          tasks={tasks}
-          onChanged={onChanged}
-          onSelect={onNavigate}
-          currentSelection={currentSelection}
-        />
-      )}
-      {sessionlessTask && ending.open && (
-        // A small tile scrolls the question, so that its buttons stay reachable.
-        <TaskEnding
-          className="min-h-0 flex-1 overflow-y-auto"
-          conn={conn}
-          task={sessionlessTask}
-          onRemoved={() => onTaskRemoved(sessionlessTask.id)}
-          onCancel={ending.hide}
-        />
-      )}
-      {sessionlessTask && !ending.open && (
-        <div className="text-muted-foreground flex flex-1 items-center justify-center p-4 text-center text-xs">
-          This task has no session. Open it alone to resume it or to see its changes, or end it with the X.
-        </div>
-      )}
+      {/* The notices lie over the body like the close question, so that they do not resize the PTY. */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {notices.overlay}
+        {session && (
+          // The question lies over the terminal instead of pushing it down, so that it does not resize the PTY mid-turn.
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            <SessionCloseConfirmation close={close} className="absolute inset-x-0 top-0 z-10" />
+            <SessionTerminal conn={conn} session={session.id} live={isLive(session)} selected={selected} />
+          </div>
+        )}
+        {entry.kind === "proposals" && (
+          <ProposalTile
+            conn={conn}
+            group={entry}
+            tasks={tasks}
+            onChanged={onChanged}
+            onSelect={onNavigate}
+            currentSelection={currentSelection}
+          />
+        )}
+        {sessionlessTask && ending.open && (
+          // A small tile scrolls the question, so that its buttons stay reachable.
+          <TaskEnding
+            className="min-h-0 flex-1 overflow-y-auto"
+            conn={conn}
+            task={sessionlessTask}
+            onRemoved={() => onTaskRemoved(sessionlessTask.id)}
+            onCancel={ending.hide}
+          />
+        )}
+        {sessionlessTask && !ending.open && (
+          <div className="text-muted-foreground flex flex-1 items-center justify-center p-4 text-center text-xs">
+            This task has no session. Open it alone to resume it or to see its changes, or end it with the X.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -212,7 +247,7 @@ function TileTitle({ entry }: { entry: SessionEntry }) {
   const task = entry.kind === "task" ? entry.task : undefined;
   return (
     <>
-      <span className="min-w-0 truncate text-xs font-medium">{task?.repo ?? session?.repo}</span>
+      <span className="min-w-0 truncate text-xs font-medium">{task?.repo ?? (session && sessionPlace(session))}</span>
       <span className="text-muted-foreground shrink-0 text-xs">
         {session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}
       </span>

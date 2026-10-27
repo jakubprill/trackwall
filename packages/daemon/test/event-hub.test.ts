@@ -3,7 +3,7 @@ import { type CardWarmupProgress, DaemonEvent, type RunningMiseTask, type Sessio
 import { EventHub } from "../src/api/event-hub.ts";
 import type { Facade } from "../src/facade.ts";
 
-const EMPTY: SessionList = { sessions: [], tasks: [], proposals: [], messages: [], worktreesDir: "/state/worktrees" };
+const EMPTY: SessionList = { sessions: [], tasks: [], proposals: [], messages: [], lastSupervisor: null };
 const RUNNING: RunningMiseTask = {
   repo: "shop",
   task: null,
@@ -58,7 +58,19 @@ describe("the /ws event source", () => {
     await tick();
     expect(client.events).toHaveLength(4);
 
-    sessions = { ...EMPTY, worktreesDir: "/other/worktrees" };
+    sessions = {
+      ...EMPTY,
+      messages: [
+        {
+          id: "7c1e2d3a-0000-4000-8000-000000000000",
+          task: "3f2a9c1e-0000-4000-8000-000000000000",
+          from: { session: null, supervisor: true },
+          text: "rebase on main",
+          sentAt: STARTED_AT,
+          readAt: null,
+        },
+      ],
+    };
     await tick();
     expect(client.events.slice(4)).toEqual([{ type: "sessions.changed", payload: sessions }]);
     unsubscribe();

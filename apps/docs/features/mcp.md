@@ -23,7 +23,7 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 
 ## Use it
 
-1. Connect Copilot CLI once, with the command from the "Daemon" view.
+1. Connect Copilot CLI once, with the command from "Settings > Agents".
 2. Ask the agent things like "which repos call orders-api?" or "start the shop with its dependencies and call /api/orders".
 
 ## Tools
@@ -36,7 +36,7 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 | `search_code` | Text or a regular expression in all repos at once, narrowed by repo, tag or path, with line and context. |
 | `who_calls` | Who uses a repo, through packages and HTTP, with evidence. |
 | `subgraph_for` | The part of the connection graph around a repo. |
-| `find_endpoint` | An HTTP endpoint by path or name, with its types and the repos that call it. |
+| `find_endpoint` | An HTTP endpoint from code or an OpenAPI spec, by path, URL or words, with its types, the repos and endpoints that call it, and the endpoints it calls. |
 | `run_mise_task`, `wait_for_mise_task`, `stop_mise_task`, `list_running_mise_tasks` | Run a repo's mise task, wait up to 55 s for it, stop it, list what runs. With `task`, in that task's worktree. |
 | `tail` | A mise task's log from a cursor, with secrets replaced by `***`; with `task`, the run in that task's worktree. |
 | `get_errors` | Errors from the mise task logs, newest first: error lines, compiler errors, exceptions with stack traces, Spring and Gradle failure reports; repeats counted once. With `minLevel: warn`, warnings too. |
@@ -47,6 +47,7 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 | `propose_task`, `wait_for_session`, `report_result` | Propose a task, wait up to 55 s for a session or task to need someone, report a task's summary. |
 | `get_review_comments` | The comments you sent on lines of a task's changes, for that task's agent; see [Agent tasks](/features/tasks). |
 | `send_message`, `get_messages` | A message from the session that proposed a task to that task's agent, and the agent reading it; see [Main session and task proposals](/features/main-session). |
+| `resume_task` | Continue a task whose session no longer runs, in its own worktree and conversation, the same as "Resume". The supervisor resumes any task, another session only the tasks it proposed. |
 | `get_day_report` | The report of your last [day start](/features/start-my-day): new commits on each repo's main branch since the one before, repos the sync could not update, and open tasks with how far behind they are. |
 | `get_updates` | What happened to the tasks a session proposed since it last asked: a finished turn, a reported result, a verification verdict, an error or end, a rejected proposal. |
 

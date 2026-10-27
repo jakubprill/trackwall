@@ -11,6 +11,7 @@ import {
   type ProvidedApp,
   type ProvidedEndpoint,
   parseHttpUrl,
+  type RepoCard,
 } from "@trackwall/protocol";
 import type { GraphCardInput } from "./graph-input.ts";
 import { type Join, push } from "./graph-join.ts";
@@ -73,6 +74,11 @@ const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "[::1]", "host
 export class HttpIndex {
   readonly clients: RepoClient[] = [];
   readonly endpoints: IndexedEndpoint[] = [];
+  /**
+   * Repos whose card traced the endpoint reach of every endpoint (ADR-82): only there does no endpoint reaching a call
+   * mean that none makes it.
+   */
+  readonly reachTraced = new Set<string>();
   private readonly apps = new Map<string, AppOf[]>();
   private readonly ports = new Map<number, AppOf[]>();
   private readonly repoNames = new Map<string, string[]>();
@@ -98,6 +104,7 @@ export class HttpIndex {
   }
 
   private addRepo(entry: Extract<GraphCardInput, { kind: "ok" }>): void {
+    if (tracesEveryEndpoint(entry.card)) this.reachTraced.add(entry.repo);
     const names = [entry.repo, entry.remote?.split("/").at(-1)].filter((n) => n !== undefined);
     for (const name of new Set(names.map((n) => n.toLowerCase()))) push(this.repoNames, name, entry.repo);
     for (const fact of entry.card?.provides ?? []) {
@@ -263,7 +270,8 @@ function callPath(base: string, call: HttpCall): { path: string; segments: strin
   return { path, segments: httpPathSegments(path) };
 }
 
-function isLiteral(segment: string): boolean {
+/** Whether a path segment is fixed text, not a variable (`{id}`, `*`) or the rest of the path (`**`). */
+export function isLiteral(segment: string): boolean {
   return !segment.startsWith("{") && segment !== "*" && segment !== "**";
 }
 
@@ -274,4 +282,9 @@ function matches(call: HttpCall, segments: readonly string[], e: IndexedEndpoint
 function appEvidence(repo: string, app: ProvidedApp): EdgeEvidence {
   const port = app.port === null ? "" : ` on port ${app.port}`;
   return { repo, ...app.evidence, detail: `app ${app.name}${port}` };
+}
+
+/** Whether the card traced the reach of every endpoint: a handler the call graph did not find leaves its endpoint without one. */
+function tracesEveryEndpoint(card: RepoCard | null): boolean {
+  return card?.reachTraced === true && card.provides.every((p) => p.kind !== "endpoint" || p.reaches !== null);
 }

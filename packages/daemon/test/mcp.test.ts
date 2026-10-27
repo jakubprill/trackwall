@@ -28,7 +28,7 @@ import {
 import { z } from "zod";
 import { EventHub } from "../src/api/event-hub.ts";
 import { type ApiServer, startApi } from "../src/api/server.ts";
-import { createFacade, type Facade } from "../src/facade.ts";
+import { createFacade, type Facade, HOSTING_CLIS } from "../src/facade.ts";
 import { readDaemonFile, writeDaemonFile } from "../src/infra/discovery.ts";
 import { loopbackRequest } from "../src/infra/loopback.ts";
 import { createMcpEndpoint, MCP_PATH } from "../src/mcp/endpoint.ts";
@@ -64,8 +64,9 @@ beforeAll(async () => {
     miseCommand: ["trackwall-test-no-mise"],
     copilotCommand: ["copilot"],
     version: "0.0.0-test",
-    hookCommand: () => ({ exec: "true", args: [] }),
-    sessionMcpCommand: (tokenFile) => ["trackwall-daemon", "mcp-stdio", "--session-token-file", tokenFile],
+    sessionHook: () => ({ url: "http://127.0.0.1:9/hooks/unused", headers: {} }),
+    sessionMcpServer: (sessionToken) => ({ url: "http://127.0.0.1:9/mcp", headers: { "x-trackwall-session-token": sessionToken } }),
+    hostingClis: HOSTING_CLIS,
     userEnv: async () => process.env,
     log: () => {},
   });
@@ -105,9 +106,11 @@ describe("MCP server over Streamable HTTP", () => {
       "get_day_report",
       "get_task_changes",
       "propose_task",
+      "propose_folder_action",
       "report_result",
       "get_review_comments",
       "send_message",
+      "resume_task",
       "get_messages",
       "get_updates",
       "wait_for_session",
@@ -126,8 +129,10 @@ describe("MCP server over Streamable HTTP", () => {
     const writing = tools.filter((t) => t.annotations?.readOnlyHint !== true).map((t) => t.name);
     expect(writing).toEqual([
       "propose_task",
+      "propose_folder_action",
       "report_result",
       "send_message",
+      "resume_task",
       "run_mise_task",
       "stop_mise_task",
       "verify_task",
@@ -135,10 +140,12 @@ describe("MCP server over Streamable HTTP", () => {
       "stop_service",
       "call_endpoint",
     ]);
-    // A proposal and a summary only write text for a human and a message only text for another agent; running a
+    // A proposal (of a task or a folder action) and a summary only write text for a human and a message only text for another agent; running a
     // mise task executes repo code, and stopping one can kill a process the user started from the UI; so do starting
-    // and stopping a service and verifying a task (which runs its tests), and a request to a service can change its data.
+    // and stopping a service and verifying a task (which runs its tests), and a request to a service can change its data;
+    // a resumed task's agent runs commands in its worktree.
     expect(tools.filter((t) => t.annotations?.destructiveHint !== false).map((t) => t.name)).toEqual([
+      "resume_task",
       "run_mise_task",
       "stop_mise_task",
       "verify_task",
@@ -431,12 +438,12 @@ describe("MCP server over Streamable HTTP", () => {
 });
 
 /** The bridge in the same process: lines on input (objects as JSON), replies as objects from the output lines. */
-async function throughBridge(home: string, messages: (object | string)[], sessionTokenFile?: string): Promise<unknown[]> {
+async function throughBridge(home: string, messages: (object | string)[]): Promise<unknown[]> {
   const input = new PassThrough();
   const output = new PassThrough();
   const lines: string[] = [];
   output.on("data", (chunk: Buffer) => lines.push(...chunk.toString("utf8").split("\n").filter(Boolean)));
-  const done = runStdioBridge({ home, sessionTokenFile, input, output, log: () => {} });
+  const done = runStdioBridge({ home, input, output, log: () => {} });
   for (const m of messages) input.write(`${typeof m === "string" ? m : JSON.stringify(m)}\n`);
   input.end();
   await done;
@@ -467,26 +474,6 @@ describe("Stdio bridge", () => {
     expect(replies).toContainEqual(expect.objectContaining({ id: 1, result: expect.objectContaining({ protocolVersion: "2025-06-18" }) }));
     const call = replies.map((r) => ToolCallReply.safeParse(r)).find((r) => r.success);
     expect(ListReposResult.parse(call?.data?.result.structuredContent).repos.map((r) => r.id)).toEqual(["orders-bff"]);
-  });
-
-  test("in a Trackwall session it sends the session token from the file, and the daemon refuses a token it does not know", async () => {
-    const home = mkdtempSync(join(tmpdir(), "trackwall-mcp-session-"));
-    writeDaemonFile(home, { pid: process.pid, port: api.port, token: TOKEN, startedAt: "2026-10-23T00:00:00Z", version: "9.9.9" });
-    const tokenFile = join(home, "session-token");
-    writeFileSync(tokenFile, "token-of-a-closed-session");
-
-    const [reply] = await throughBridge(home, [INITIALIZE], tokenFile);
-    expect(reply).toMatchObject({ id: 1, error: { code: -32000 } });
-    expect(JSON.stringify(reply)).toContain("unknown session token");
-  });
-
-  test("without the session token file it does not send the request as an agent outside Trackwall, but reports the end of the session", async () => {
-    const home = mkdtempSync(join(tmpdir(), "trackwall-mcp-notoken-"));
-    writeDaemonFile(home, { pid: process.pid, port: api.port, token: TOKEN, startedAt: "2026-10-23T00:00:00Z", version: "9.9.9" });
-
-    const [reply] = await throughBridge(home, [INITIALIZE], join(home, "missing"));
-    expect(reply).toMatchObject({ id: 1, error: { code: -32000 } });
-    expect(JSON.stringify(reply)).toContain("this session has ended");
   });
 
   test("it rejects the server/discover probe like a server without that method, so that the client falls back to initialize", async () => {

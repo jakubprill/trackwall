@@ -12,7 +12,7 @@ Let one agent plan work and hand it to other agents, while you approve every tas
 ## What you get
 
 - A main session that splits a larger job into tasks and proposes them, each with a title and a prompt.
-- Every proposal waiting for your decision: read it, edit the prompt, start it or reject it with a reason.
+- Every proposal waiting for your decision: read it, edit the prompt or the model, start it or reject it with a reason.
 - Several proposals started with one press; they start one after another.
 - The main session following its tasks to the end and reading their summaries and changes.
 - The main session woken up when a task moves, and able to send the task's agent a message.
@@ -25,7 +25,7 @@ All proposals of one session are one entry, indented under that session, which g
 
 A task's agent finishes with a summary, shown above the task's tabs. The main session does not need to keep asking about its tasks: when a task's agent finishes a turn, reports its result, gets a verification verdict, errs or stops, or when you reject a proposal, Trackwall types one line into the main session asking it to read what happened, once it waits for input. It then reads the summaries and changes, down to the diff of the files it cares about, so it can check the work and plan the next step.
 
-To steer a running task, the main session sends its agent a message: a correction, an answer to the agent's question, or what changed in another repo. The task's agent is asked to read it the same way, once it waits for input, or when you resume the task. The messages appear in the task's panel under "Messages", with who sent them and whether the agent has read them yet.
+To steer a running task, the main session sends its agent a message: a correction, an answer to the agent's question, or what changed in another repo. The task's agent is asked to read it the same way, once it waits for input, or when you resume the task. The agent takes a message as an update of its task: where it differs from the task's prompt, it follows the message, but what you type into the task's terminal or send as a review comes first. The messages appear in the task's panel under "Messages", with who sent them and whether the agent has read them yet.
 
 ![Two messages from the main session in orders-api to its notifications task, the second not read yet](/screenshots/task-messages.png)
 
@@ -38,7 +38,9 @@ To steer a running task, the main session sends its agent a message: a correctio
 
 ## Good to know
 
+- A proposal can name the Copilot CLI model its task runs on, for example a stronger one for a code review. The model shows in a field under the prompt: change it, or clear it to use Copilot CLI's default. Most proposals leave it empty. The task keeps its model when it is resumed, and its panel shows it next to the task port. Switching the model with `/model` in the task's terminal lasts until the task is resumed, which goes back to the task's model.
 - A proposal for a repo that already has tasks says so.
+- A main session can also propose removing a repo, shown as "Repo removal" with its reason and a "Remove repo" button instead of a prompt; see the [supervisor](/features/supervisor).
 - In the session grid, a tile with proposals shows their prompts with "Start task" and "Reject…"; "Next waiting" and Alt+J go to proposals too.
 - Proposals last until Trackwall quits, at most 20 at a time; summaries stay with their tasks.
 - A proposal from an agent outside Trackwall is marked "agent outside Trackwall" and listed at the top level, like a proposal from a session you have closed. Such an agent can propose tasks, but cannot report a task's summary, is not woken when its tasks move and cannot send them messages; it has to keep checking on them itself.

@@ -3,6 +3,7 @@ import type { Client } from "@modelcontextprotocol/client";
 import { agentsApi, GetReviewCommentsResult, type ReviewComment } from "@trackwall/protocol";
 import { viewer, waitFor } from "./support/agents.ts";
 import { connectSessionClient } from "./support/mcp-client.ts";
+import { untilInputBox } from "./support/screen-lines.ts";
 import { startSessionApi } from "./support/session-api.ts";
 
 const TOKEN = "r".repeat(43);
@@ -66,7 +67,11 @@ describe.skipIf(process.versions.bun === undefined)("a review from the Changes t
     window.attachment.input("start\r");
     await waitFor(daemon.facade.agents, session, (s) => s.state?.state === "Approval", "the approval request");
     window.attachment.input("1");
-    await waitFor(daemon.facade.agents, session, () => window.unwrappedText().includes(TYPED_REVIEW), "the typed review prompt");
+    await waitFor(daemon.facade.agents, session, () => window.unwrappedText().includes(TYPED_REVIEW), "the review prompt's turn");
+    // Through the hooks' output, without typing (ADR-85): with the tool's result during the turn, and as the next turn's
+    // message from the agentStop block, which the fake shows in its input line.
+    expect(window.unwrappedText()).toContain("Tool result context: The user sent a review of your changes in Trackwall");
+    expect(window.unwrappedText()).toContain("❯ The user sent a review of your changes in Trackwall");
 
     const client = await clientOfSession(session);
     expect(await reviewComments(client)).toEqual([README_COMMENT, LOGIN_COMMENT]);
@@ -98,10 +103,11 @@ describe.skipIf(process.versions.bun === undefined)("a review from the Changes t
     await waitFor(daemon.facade.agents, resumed, () => window.unwrappedText().includes(TYPED_REVIEW), "the typed review prompt");
     expect(await reviewComments(await clientOfSession(resumed))).toEqual([LOGIN_COMMENT, README_COMMENT]);
 
-    // The session now waits for input after its turn, so the next review goes in at once.
+    // Once the session waits in its input box again after its turn, the next review goes in at once.
     await waitFor(daemon.facade.agents, resumed, (s) => s.state?.state === "Approval", "the review turn's approval request");
     window.attachment.input("1");
     await waitFor(daemon.facade.agents, resumed, (s) => s.state?.reason === "hook agentStop", "the end of the turn");
+    await untilInputBox(window, "empty");
     expect(await daemon.post(agentsApi.sendReview, { task: task.id, comments: [LOGIN_COMMENT] })).toEqual({ delivery: "typed", unread: 1 });
     window.attachment.input("1");
     window.attachment.detach();

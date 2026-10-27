@@ -1,16 +1,17 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
-import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
+import { MCP_SERVER_NAME, mcpTools, type Session, TASK_MESSAGE_RULE } from "@trackwall/protocol";
 import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
-import { promptBoxOnScreen } from "../src/modules/agents/copilot-prompt-box.ts";
 import { inboxPrompt } from "../src/modules/agents/inbox-prompt.ts";
 import { OscParser } from "../src/modules/agents/osc-parser.ts";
 import { viewer, waitFor } from "../test/support/agents.ts";
 import { REFERENCE_COLS, REFERENCE_ROWS } from "../test/support/copilot-reference.ts";
+import { untilInputBox } from "../test/support/screen-lines.ts";
 import { hookRecords, startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { type Recorder, startRecorder } from "./support/recorder.ts";
-import { screenLines } from "./support/screen-lines.ts";
 import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
 import { USER_MCP_ISSUES, USER_MCP_SERVER, USER_MCP_TOOL } from "./support/user-mcp-server.ts";
 
@@ -66,25 +67,40 @@ function shellCall(request: ModelRequest, command: { bash: string; powershell: s
 }
 
 /**
- * How long a session may take to start and to finish a turn: a cold ~170 MB binary that Windows Defender scans, the MCP
- * stdio bridge and the hooks running from source.
+ * How long a session may take to start and to finish a turn: a cold ~170 MB binary that Windows Defender scans.
  */
 const SESSION_MS = 60_000;
+/** A model other than the scripted model's default (`COPILOT_MODEL`), which only a task's `--model` asks for (ADR-98). */
+const REVIEW_MODEL = "trackwall-review-model";
 // A test waits for at most three such steps; its own limit is above their sum, so a slow step fails on its own message.
 setDefaultTimeout(4 * SESSION_MS);
 
-/** Starts a session in `shop` and waits until Copilot CLI shows its input box with the MCP servers loaded. */
-async function startSession() {
-  const { agents } = daemon.facade;
-  const started = await agents.start("shop");
-  const window = viewer(agents, started.id);
-  windows.set(started.id, window);
-  // The size the reference is taken in (`REFERENCE_COLS`), so the screen compares with it.
+type Daemon = typeof daemon;
+
+/**
+ * Waits until Copilot CLI in session `id` has loaded: its input box is on the screen, which it draws once its loading
+ * line is gone, and the daemon's MCP server has answered its `tools/list`. Not the "1 MCP server" in the loading line:
+ * Copilot CLI draws the line by changed cells and may replace it with the footer without ever drawing that part, and
+ * when it falls back to the older MCP revision (with `initialize`) the line ends before `tools/list` is answered.
+ */
+function untilLoaded(id: string, on: Daemon = daemon) {
+  const loaded = (s: Session) => s.state !== null && on.hasListedTools(id);
+  return waitFor(on.facade.agents, id, loaded, "Copilot CLI with its input box and the Trackwall MCP tools", SESSION_MS);
+}
+
+/** The terminal of session `id`, kept until the end of the test, in the size the reference is taken in. */
+function openWindow(id: string, on: Daemon = daemon) {
+  const window = viewer(on.facade.agents, id);
+  windows.set(id, window);
   window.attachment.resize(REFERENCE_COLS, REFERENCE_ROWS);
-  // Copilot CLI shows "1 MCP server" in its loading line only for a moment, so it is looked for in the whole output;
-  // without blanks, because ConPTY on Windows replaces runs of blanks with cursor moves.
-  const loaded = () => window.unwrappedText().replace(/\s/g, "").includes("1MCPserver");
-  await waitFor(agents, started.id, loaded, "Copilot CLI with the MCP servers loaded", SESSION_MS);
+  return window;
+}
+
+/** Starts a session in `shop` and waits until Copilot CLI has loaded. */
+async function startSession() {
+  const started = await daemon.facade.agents.start("shop");
+  const window = openWindow(started.id);
+  await untilLoaded(started.id);
   return { id: started.id, window };
 }
 
@@ -92,15 +108,6 @@ function windowOf(id: string): ReturnType<typeof viewer> {
   const window = windows.get(id);
   if (window === undefined) throw new Error(`no terminal of session ${id}`);
   return window;
-}
-
-/** Waits until the window's screen ends with Copilot CLI's input box, empty or with text in it. */
-async function untilInputBox(window: ReturnType<typeof viewer>, box: "empty" | "text"): Promise<void> {
-  const until = Date.now() + SESSION_MS;
-  while (promptBoxOnScreen(await screenLines(window)) !== box) {
-    if (Date.now() > until) throw new Error(`gave up waiting for the input box (${box}):\n${(await screenLines(window)).join("\n")}`);
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
 }
 
 const endOfTurn = (id: string) => waitFor(daemon.facade.agents, id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
@@ -165,6 +172,30 @@ describe("a session of the real Copilot CLI", () => {
     expect(records.map((r) => r.event)).toEqual(["sessionStart", "userPromptSubmitted", "notification", "postToolUse", "agentStop"]);
     expect(records[2]?.payload).toMatchObject({ notification_type: "permission_prompt" });
     recorder.approval(records, dialogBox);
+  });
+
+  test("an MCP tool approval taller than a short terminal loses its heading, and the daemon reads it with the notification's text", async () => {
+    const { agents } = daemon.facade;
+    const { id, window } = await startSession();
+    // A task terminal squeezed by the panels above it (1280×720 at 150%): the JSON arguments do not fit.
+    window.attachment.resize(REFERENCE_COLS, 14);
+    const note = Array.from({ length: 20 }, (_, i) => `step ${i}`).join("\n");
+
+    model.reply({ tool: copilotToolName(mcpTools.verifyTask.name), arguments: { task: "no-such-task", note } });
+    window.attachment.input("verify the task\r");
+    const approval = await waitFor(agents, id, (s) => s.state?.state === "Approval" && s.dialog !== null, "approval dialog", SESSION_MS);
+    const { dialog } = approval;
+    if (dialog?.kind !== "approval") throw new Error(`no approval dialog: ${JSON.stringify(dialog)}`);
+    expect(dialog).toMatchObject({
+      title: `Use MCP tool: ${MCP_SERVER_NAME}/${mcpTools.verifyTask.name}`,
+      question: "Do you want to use this tool?",
+    });
+    expect(dialog.detail[0]).toBe("…");
+    expect(dialog.options[0]).toEqual({ key: "1", label: "Yes" });
+
+    model.reply({ text: "There is no such task." });
+    agents.answerDialog(id, dialog.id, "1");
+    await endOfTurn(id);
   });
 
   test("two tools called at once ask for both approvals at once, and after the first is answered the session waits for the second", async () => {
@@ -272,7 +303,7 @@ describe("a session of the real Copilot CLI", () => {
     }
   });
 
-  test("the agent gets every Trackwall MCP tool through the session's stdio bridge and the session instructions in its prompt", async () => {
+  test("the agent gets every Trackwall MCP tool over HTTP from the daemon and the session instructions in its prompt", async () => {
     const { id, window } = await startSession();
 
     model.reply({ tool: copilotToolName(mcpTools.listRepos.name), arguments: {} }, { text: "There is one repo." });
@@ -290,6 +321,36 @@ describe("a session of the real Copilot CLI", () => {
     expect(second?.toolResults.join("\n")).toContain('"id":"shop"');
     // A read-only Trackwall tool runs without an approval request.
     expect(hookRecords(daemon.home, id).map((r) => r.event)).not.toContain("notification");
+  });
+
+  // The session terminal in the UI copies this text to the clipboard (`osc52Text` in packages/ui/src/lib/terminal-copy.ts).
+  test("text selected with a mouse drag is copied on Ctrl+C as OSC 52 to the clipboard target", async () => {
+    const { agents } = daemon.facade;
+    const { id, window } = await startSession();
+    const copies = () => new OscParser().feed(window.text()).filter((osc) => osc.code === "52");
+    // SGR mouse reports (mode 1006, which Copilot CLI turns on): press at the start of the banner, below the tab bar on
+    // the first row, drag across it, release.
+    window.attachment.input("\x1b[<0;1;3M");
+    for (let row = 4; row <= 6; row++) window.attachment.input(`\x1b[<32;${REFERENCE_COLS};${row}M`);
+    window.attachment.input(`\x1b[<0;${REFERENCE_COLS};6m`);
+    // On release it may already set the primary selection (`p!`, Linux) or the clipboard (macOS); the terminal ignores
+    // those, because the user did not ask for a copy, so only what Ctrl+C sends counts.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const onRelease = copies().length;
+
+    window.attachment.input("\x03");
+    const ctrlC = () =>
+      copies()
+        .slice(onRelease)
+        .find((osc) => osc.data.startsWith("c;"));
+    await waitFor(agents, id, () => ctrlC() !== undefined, "the clipboard copy on Ctrl+C", 10_000).catch((err: unknown) => {
+      throw new Error(`${err}\nsequences on release: ${onRelease}\nscreen: ${JSON.stringify(window.text().slice(-4000))}`);
+    });
+    const copied = Buffer.from(ctrlC()?.data.slice(2) ?? "", "base64").toString("utf8");
+    expect(copied).toContain("Copilot");
+    expect(copied).not.toContain("\x1b");
+    // Ctrl+C with a selection copies; it does not end the session.
+    expect(agents.sessions().sessions.find((s) => s.id === id)?.run.kind).toBe("running");
   });
 
   test("/exit ends the session with sessionEnd, and the session is Done", async () => {
@@ -354,6 +415,35 @@ describe("an agent task with the real Copilot CLI", () => {
   });
 });
 
+describe("a task's model with the real Copilot CLI (ADR-98)", () => {
+  test("a task approved with a model asks the model provider for it, on its first turn and after a resume", async () => {
+    const { agents } = daemon.facade;
+    const proposal = await agents.propose(null, {
+      repo: "shop",
+      title: "Review the login",
+      prompt: "review the login",
+      model: REVIEW_MODEL,
+    });
+    model.reply({ text: "Reviewing the login." });
+    const task = await agents.approveProposal(proposal.id, proposal.prompt, proposal.model);
+    const first = agents.sessions().sessions.find((s) => s.task === task.id);
+    if (first === undefined) throw new Error("the task has no session");
+    await endOfTurn(first.id);
+    expect(model.requests().at(-1)).toMatchObject({ model: REVIEW_MODEL });
+    await agents.stop(first.id);
+
+    await agents.resumeTask(task.id);
+    const resumed = agents.sessions().sessions.find((s) => s.task === task.id);
+    if (resumed === undefined) throw new Error("the resumed task has no session");
+    await waitFor(agents, resumed.id, (s) => s.state !== null, "the input box of the resumed session", SESSION_MS);
+    model.reply({ text: "I will read the review." });
+    agents.sendReview(task.id, [{ path: "README.md", side: "new", line: 1, code: "# shop", text: "Check the login too." }]);
+    await endOfTurn(resumed.id);
+    expect(model.requests().at(-1)).toMatchObject({ model: REVIEW_MODEL });
+    await agents.stop(resumed.id);
+  });
+});
+
 describe("a review of a task's changes with the real Copilot CLI (ADR-62)", () => {
   test("the agent asked to read the review reads the comments without an approval request", async () => {
     const { agents } = daemon.facade;
@@ -362,6 +452,11 @@ describe("a review of a task's changes with the real Copilot CLI (ADR-62)", () =
     const session = agents.sessions().sessions.find((s) => s.task === task.id);
     if (session === undefined) throw new Error("the task has no session");
     await endOfTurn(session.id);
+    // The daemon types only once Copilot CLI has drawn its input box again after agentStop (ADR-68).
+    const window = viewer(agents, session.id);
+    windows.set(session.id, window);
+    window.attachment.resize(REFERENCE_COLS, REFERENCE_ROWS);
+    await untilInputBox(window, "empty");
 
     model.reply({ tool: copilotToolName(mcpTools.getReviewComments.name), arguments: {} }, { text: "Renamed it." });
     const review = { path: "README.md", side: "new" as const, line: 1, code: "# shop", text: "Call it @login-test" };
@@ -377,6 +472,89 @@ describe("a review of a task's changes with the real Copilot CLI (ADR-62)", () =
 
     expect(hookRecords(daemon.home, session.id).map((r) => r.event)).not.toContain("notification");
     expect(model.requests().at(-1)?.toolResults.join("\n")).toContain("Call it @login-test");
+  });
+});
+
+describe("what waits for a working session, given through the hooks' output with the real Copilot CLI (ADR-85)", () => {
+  test("a review sent while the agent works blocks the end of its turn, and the next turn starts with the prompt without typing", async () => {
+    const { agents } = daemon.facade;
+    let taskId: string | undefined;
+    let delivery: string | undefined;
+    const review = { path: "README.md", side: "new" as const, line: 1, code: "# shop", text: "Mention the signup page" };
+    // The review goes out while Copilot CLI waits for the model's answer, so the turn is still running.
+    model.reply(
+      () => {
+        if (taskId === undefined) throw new Error("the task's first request came before the task was created");
+        delivery = agents.sendReview(taskId, [review]).delivery;
+        return { text: "Added the signup test." };
+      },
+      { text: "I will read the review." },
+    );
+    const task = await agents.createTask("shop", "add a signup test");
+    taskId = task.id;
+    const session = agents.sessions().sessions.find((s) => s.task === task.id);
+    if (session === undefined) throw new Error("the task has no session");
+
+    await waitFor(
+      agents,
+      session.id,
+      () => hookRecords(daemon.home, session.id).filter((r) => r.event === "agentStop").length >= 2,
+      "the turn the review starts",
+      SESSION_MS,
+    );
+
+    expect(delivery).toBe("queued");
+    expect(model.requests().at(-1)?.lastUserText).toContain("sent a review of your changes in Trackwall");
+    // The second turn was started by the block, so its end is not blocked again.
+    expect(hookRecords(daemon.home, session.id).map((r) => [r.event, r.payload.stop_hook_active])).toEqual([
+      ["sessionStart", undefined],
+      ["userPromptSubmitted", undefined],
+      ["agentStop", false],
+      ["userPromptSubmitted", undefined],
+      ["agentStop", true],
+    ]);
+    await agents.stop(session.id);
+  });
+
+  test("a review sent while a tool runs reaches the agent with the tool's result, in the same turn", async () => {
+    const { agents } = daemon.facade;
+    let taskId: string | undefined;
+    const review = { path: "README.md", side: "new" as const, line: 1, code: "# shop", text: "Mention the signup page" };
+    model.reply(
+      () => {
+        if (taskId === undefined) throw new Error("the task's first request came before the task was created");
+        agents.sendReview(taskId, [review]);
+        return { tool: copilotToolName(mcpTools.getMessages.name), arguments: {} };
+      },
+      { text: "I will read the review." },
+      { text: "Reading it." },
+    );
+    const task = await agents.createTask("shop", "add a signup test");
+    taskId = task.id;
+    const session = agents.sessions().sessions.find((s) => s.task === task.id);
+    if (session === undefined) throw new Error("the task has no session");
+
+    await waitFor(
+      agents,
+      session.id,
+      () => hookRecords(daemon.home, session.id).filter((r) => r.event === "agentStop").length >= 2,
+      "the turn the review's block starts",
+      SESSION_MS,
+    );
+
+    const [, afterTool, blocked] = model.requests().slice(-3);
+    expect(afterTool?.toolResults.join("\n")).toContain("sent a review of your changes in Trackwall");
+    expect(afterTool?.lastUserText).not.toContain("sent a review of your changes in Trackwall");
+    expect(blocked?.lastUserText).toContain("sent a review of your changes in Trackwall");
+    expect(hookRecords(daemon.home, session.id).map((r) => r.event)).toEqual([
+      "sessionStart",
+      "userPromptSubmitted",
+      "postToolUse",
+      "agentStop",
+      "userPromptSubmitted",
+      "agentStop",
+    ]);
+    await agents.stop(session.id);
   });
 });
 
@@ -407,8 +585,8 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
         { tool: copilotToolName(mcpTools.getUpdates.name), arguments: {} },
         { text: "The task has started." },
       );
-      const proposal = await agents.propose(main.id, { repo: "shop", title: "Add a login test", prompt: "add a login test" });
-      const task = await agents.approveProposal(proposal.id, "add a login test");
+      const proposal = await agents.propose(main.id, { repo: "shop", title: "Add a login test", prompt: "add a login test", model: null });
+      const task = await agents.approveProposal(proposal.id, "add a login test", null);
       const session = agents.sessions().sessions.find((s) => s.task === task.id);
       if (session === undefined) throw new Error("the task has no session");
       await turnsEnded(session.id, 1);
@@ -426,16 +604,47 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
       await turnsEnded(main.id, 3);
 
       const requests = model.requests();
-      const updatesPrompt = inboxPrompt({ reviewComments: 0, messages: 0, updates: 1 });
-      const messagesPrompt = inboxPrompt({ reviewComments: 0, messages: 1, updates: 0 });
+      const updatesPrompt = inboxPrompt({ reviewComments: 0, messages: 0, updates: 1, trustNotice: false });
+      const messagesPrompt = inboxPrompt({ reviewComments: 0, messages: 1, updates: 0, trustNotice: false });
       const readUpdates = requests.findIndex((r) => r.lastUserText.endsWith(updatesPrompt ?? "-"));
       expect(requests[readUpdates + 1]?.toolResults.join("\n")).toContain('"kind":"turn_ended"');
       const readMessages = requests.findIndex((r) => r.lastUserText.endsWith(messagesPrompt ?? "-"));
       expect(requests[readMessages + 1]?.toolResults.join("\n")).toContain(JSON.stringify(text).slice(1, -1));
+      // The agent reading the message has the rule that it updates the task over the prompt in its instructions.
+      expect(requests[readMessages]?.system).toContain(TASK_MESSAGE_RULE);
       expect(requests.at(-1)?.lastUserText).toEndWith(updatesPrompt ?? "-");
     },
     7 * SESSION_MS,
   );
+});
+
+describe("the supervisor with the real Copilot CLI", () => {
+  test("Copilot CLI refuses the supervisor its shell and its file-writing tools without asking, and the projects folder stays as it was (ADR-78)", async () => {
+    const { agents } = daemon.facade;
+    const supervisor = await agents.startSupervisor("new");
+    const window = openWindow(supervisor.id);
+    await untilLoaded(supervisor.id);
+    model.reply(
+      (request) => shellCall(request, { bash: "touch by-shell.txt", powershell: "New-Item by-shell.txt" }),
+      (request) => {
+        expect(request.tools).toContain("create");
+        return { tool: "create", arguments: { path: join(daemon.projects, "by-create.txt"), file_text: "x" } };
+      },
+      { text: "Both were refused." },
+    );
+
+    window.attachment.input("make two files\r");
+    await endOfTurn(supervisor.id);
+
+    const [, second, third] = model.requests().slice(-3);
+    expect(second?.toolResults.join("\n")).toContain("denied");
+    expect(third?.toolResults.join("\n")).toContain("denied");
+    expect(existsSync(join(daemon.projects, "by-shell.txt"))).toBe(false);
+    expect(existsSync(join(daemon.projects, "by-create.txt"))).toBe(false);
+    expect(hookRecords(daemon.home, supervisor.id).map((r) => r.event)).not.toContain("notification");
+    expect(agents.session(supervisor.id).dialog).toBeNull();
+    await agents.stop(supervisor.id);
+  });
 });
 
 describe("the day start with the real Copilot CLI", () => {
@@ -473,6 +682,151 @@ describe("the day start with the real Copilot CLI", () => {
       await agents.stop(supervisor);
     } finally {
       rmSync(userConfig, { force: true });
+    }
+  });
+});
+
+describe("session plugin hooks over HTTP with the real Copilot CLI (ADR-88)", () => {
+  test("a hook the daemon answers with an error does not hold up the turn: Copilot CLI goes on to the model and to the end of the turn", async () => {
+    // A stand-in for a daemon that cannot take the hooks: it answers every POST with 500 and keeps the event of each.
+    const refused: string[] = [];
+    const standIn = createServer((req, res) => {
+      refused.push(req.url ?? "");
+      req.resume();
+      res.writeHead(500);
+      res.end();
+    });
+    await new Promise<void>((resolve) => standIn.listen(0, "127.0.0.1", resolve));
+    const port = (standIn.address() as AddressInfo).port;
+    const broken = await startRealCopilotDaemon(model, {
+      sessionHook: (event) => ({ url: `http://127.0.0.1:${port}/hooks/${event}`, headers: {} }),
+    });
+    try {
+      const { agents } = broken.facade;
+      const started = await agents.start("shop");
+      const window = viewer(agents, started.id);
+      window.attachment.resize(REFERENCE_COLS, REFERENCE_ROWS);
+      await untilInputBox(window, "empty");
+      model.reply({ text: "The shop repo has only a README." });
+
+      window.attachment.input("what is in this repo?\r");
+      const until = Date.now() + SESSION_MS;
+      while (!refused.includes("/hooks/agentStop") && Date.now() < until) await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(refused).toEqual(["/hooks/sessionStart", "/hooks/userPromptSubmitted", "/hooks/agentStop"]);
+      expect(model.requests().at(-1)?.lastUserText).toEndWith("what is in this repo?");
+      expect(hookRecords(broken.home, started.id)).toEqual([]);
+      window.attachment.detach();
+      await agents.stop(started.id);
+    } finally {
+      await broken.stop();
+      standIn.close();
+    }
+  });
+});
+
+describe("the daemon's MCP server with the real Copilot CLI behind the user's proxy (ADR-89)", () => {
+  test("with HTTP_PROXY set and no NO_PROXY the session still reaches the MCP server, the hooks and the model on 127.0.0.1", async () => {
+    // A proxy that answers nothing: whatever Copilot CLI sends through it fails.
+    const deadProxy = "http://127.0.0.1:9";
+    const proxied = await startRealCopilotDaemon(
+      model,
+      {},
+      {
+        HTTP_PROXY: deadProxy,
+        http_proxy: deadProxy,
+        HTTPS_PROXY: deadProxy,
+        https_proxy: deadProxy,
+        NO_PROXY: undefined,
+        no_proxy: undefined,
+      },
+    );
+    try {
+      const { agents } = proxied.facade;
+      const started = await agents.start("shop");
+      const window = openWindow(started.id, proxied);
+      await untilLoaded(started.id, proxied);
+      model.reply({ tool: copilotToolName(mcpTools.listRepos.name), arguments: {} }, { text: "There is one repo." });
+
+      window.attachment.input("which repos are there?\r");
+      await waitFor(agents, started.id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
+
+      expect(model.requests().at(-1)?.toolResults.join("\n")).toContain('"id":"shop"');
+      expect(hookRecords(proxied.home, started.id).map((r) => r.event)).toEqual([
+        "sessionStart",
+        "userPromptSubmitted",
+        "postToolUse",
+        "agentStop",
+      ]);
+      window.attachment.detach();
+      await agents.stop(started.id);
+    } finally {
+      await proxied.stop();
+    }
+  });
+});
+
+describe("sessions across a daemon restart with the real Copilot CLI (ADR-95)", () => {
+  test("the supervisor and a main session that ran when the daemon stopped go on with their conversations in the next daemon", async () => {
+    const before = await startRealCopilotDaemon(model);
+    const main = await before.facade.agents.start("shop");
+    const supervisor = await before.facade.agents.startSupervisor("new");
+    for (const id of [main.id, supervisor.id]) await untilLoaded(id, before);
+    model.reply({ text: "Noted: the code word is TEAL." });
+    openWindow(main.id, before).attachment.input("remember the code word TEAL\r");
+    await waitFor(before.facade.agents, main.id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
+    windowOf(main.id).attachment.detach();
+    windows.delete(main.id);
+
+    await before.stop();
+    const after = await startRealCopilotDaemon(model, { restartOf: { home: before.home, projects: before.projects } });
+    try {
+      // The same ids: the supervisor never had a prompt, and still starts again in its place.
+      for (const id of [main.id, supervisor.id]) await untilLoaded(id, after);
+      expect(after.facade.agents.session(supervisor.id)).toMatchObject({ repo: null, run: { kind: "running" } });
+      model.reply({ text: "The code word is TEAL." });
+      openWindow(main.id, after).attachment.input("what is the code word?\r");
+      await waitFor(after.facade.agents, main.id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
+
+      const userTexts = model.requests().at(-1)?.userTexts ?? [];
+      expect(userTexts.some((t) => t.endsWith("remember the code word TEAL"))).toBe(true);
+      expect(userTexts.at(-1)).toEndWith("what is the code word?");
+    } finally {
+      for (const window of windows.values()) window.attachment.detach();
+      windows.clear();
+      await after.stop();
+    }
+  });
+});
+
+describe("the supervisor's last conversation with the real Copilot CLI (ADR-96)", () => {
+  test("a supervisor the user stopped goes on with its conversation when they resume it", async () => {
+    const daemon = await startRealCopilotDaemon(model);
+    try {
+      const { agents } = daemon.facade;
+      const first = await agents.startSupervisor("new");
+      await untilLoaded(first.id, daemon);
+      model.reply({ text: "Noted: the code word is AMBER." });
+      openWindow(first.id, daemon).attachment.input("remember the code word AMBER\r");
+      await waitFor(agents, first.id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
+      windowOf(first.id).attachment.detach();
+      windows.delete(first.id);
+      await agents.stop(first.id);
+
+      const resumed = await agents.startSupervisor("last");
+      expect(resumed.id).toBe(first.id);
+      await untilLoaded(resumed.id, daemon);
+      model.reply({ text: "The code word is AMBER." });
+      openWindow(resumed.id, daemon).attachment.input("what is the code word?\r");
+      await waitFor(agents, resumed.id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
+
+      const userTexts = model.requests().at(-1)?.userTexts ?? [];
+      expect(userTexts.some((t) => t.endsWith("remember the code word AMBER"))).toBe(true);
+      expect(userTexts.at(-1)).toEndWith("what is the code word?");
+    } finally {
+      for (const window of windows.values()) window.attachment.detach();
+      windows.clear();
+      await daemon.stop();
     }
   });
 });

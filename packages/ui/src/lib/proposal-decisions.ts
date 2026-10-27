@@ -1,4 +1,4 @@
-import type { Task } from "@trackwall/protocol";
+import { type Task, TaskModel } from "@trackwall/protocol";
 import { errorMessage } from "./api.ts";
 import type { ProposalsEntry, SessionSelection } from "./session-entries.ts";
 
@@ -7,10 +7,22 @@ import type { ProposalsEntry, SessionSelection } from "./session-entries.ts";
  * goes after a decision. Without React, so that both the proposals panel and the grid tile use the same rules.
  */
 
-/** A proposal to start, with the prompt the user may have edited. */
+/** A proposal to start, with the prompt and the model (ADR-98) the user may have edited. */
 export interface ProposalStart {
   id: string;
   prompt: string;
+  /** `null` for Copilot CLI's default model. */
+  model: string | null;
+}
+
+/**
+ * The model typed in a proposal's model field (ADR-98): an empty field is Copilot CLI's default (`null`), an id the
+ * daemon would refuse is `undefined`, so the start waits until the user fixes it.
+ */
+export function typedModel(text: string): string | null | undefined {
+  if (text.trim() === "") return null;
+  const model = TaskModel.safeParse(text);
+  return model.success ? model.data : undefined;
 }
 
 /**

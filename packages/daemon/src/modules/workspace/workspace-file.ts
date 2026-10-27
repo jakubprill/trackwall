@@ -1,6 +1,14 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { DayStartSettings, GraphConfig, type RepoHost, RepoHosts, RepoTagRules, ToolPermissionRules } from "@trackwall/protocol";
+import {
+  DayStartSettings,
+  GraphConfig,
+  type RepoHost,
+  RepoHosts,
+  RepoTagRules,
+  SupervisorSettings,
+  ToolPermissionRules,
+} from "@trackwall/protocol";
 import { type Document, isMap, parseDocument } from "yaml";
 import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
@@ -10,7 +18,7 @@ import { isFullPath, NOT_FULL_PATH } from "./full-path.ts";
 /**
  * `workspace.yaml` (§4.5, ADR-13): the workspace configuration, which the user can edit by hand and keep
  * in a private repo. Read on every use, so a manual edit works without restarting the daemon. A write changes
- * only one key (`projectsDir` or `repoHosts`; `repoTags`, `graph`, `toolPermissions` and `dayStart` only by hand) and keeps comments and the other keys,
+ * only one key (`projectsDir`, `worktreesDir` or `repoHosts`; `repoTags`, `graph`, `toolPermissions`, `dayStart` and `supervisor` only by hand) and keeps comments and the other keys,
  * including the `repos` list from version 0.2.0, which is no longer read (ADR-18): it is the user's file, so removing it is up to them.
  */
 
@@ -25,6 +33,12 @@ const Keys = {
     .refine((dir) => isFullPath(dir), NOT_FULL_PATH)
     .nullish()
     .transform((dir) => dir ?? null),
+  // Where new task worktrees go (ADR-84); a missing key means `.trackwall-worktrees` in the projects folder.
+  worktreesDir: z
+    .string()
+    .refine((dir) => isFullPath(dir), NOT_FULL_PATH)
+    .nullish()
+    .transform((dir) => dir ?? null),
   // Repo hosts (ADR-19); a missing key means no repo hosts, because only the user knows the GitLab address.
   repoHosts: RepoHosts.nullish().transform((hosts) => hosts ?? []),
   // Repo tag rules (ADR-25); only by hand in the file, because only the user knows team and group names.
@@ -35,6 +49,8 @@ const Keys = {
   toolPermissions: ToolPermissionRules.nullish().transform((rules) => rules ?? []),
   // The user's addition to the day start's first message (ADR-70); only by hand, like `repoTags`.
   dayStart: DayStartSettings.nullish().transform((settings) => settings ?? null),
+  // Whether the supervisor may change code itself (ADR-78); only by hand, like `repoTags`.
+  supervisor: SupervisorSettings.nullish().transform((settings) => settings ?? { changesCode: false }),
 };
 type Key = keyof typeof Keys;
 
@@ -48,6 +64,11 @@ export class WorkspaceFile {
   /** The projects folder (ADR-18); `null` until it is set. */
   projectsDir(): string | null {
     return this.get("projectsDir", Keys.projectsDir);
+  }
+
+  /** The task worktrees folder (ADR-84); `null` for the default. */
+  worktreesDir(): string | null {
+    return this.get("worktreesDir", Keys.worktreesDir);
   }
 
   /** Repo hosts in file order (ADR-19). */
@@ -75,8 +96,18 @@ export class WorkspaceFile {
     return this.get("dayStart", Keys.dayStart);
   }
 
+  /** The supervisor settings (`supervisor`, ADR-78); the defaults without the key. */
+  supervisorSettings(): SupervisorSettings {
+    return this.get("supervisor", Keys.supervisor);
+  }
+
   setProjectsDir(dir: string): void {
     this.set("projectsDir", dir);
+  }
+
+  /** `null` removes the key, so that the file says nothing about a setting the user did not choose. */
+  setWorktreesDir(dir: string | null): void {
+    this.set("worktreesDir", dir);
   }
 
   setRepoHosts(hosts: RepoHost[]): void {
@@ -91,9 +122,11 @@ export class WorkspaceFile {
     return parsed.data;
   }
 
+  /** `null` removes the key. */
   private set(key: Key, value: unknown): void {
     const doc = this.load();
-    doc.set(key, value);
+    if (value === null) doc.delete(key);
+    else doc.set(key, value);
     this.save(doc);
   }
 

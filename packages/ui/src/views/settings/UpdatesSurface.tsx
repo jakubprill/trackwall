@@ -1,7 +1,8 @@
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
+import { UpdateInstallStatus } from "@/components/UpdateInstallStatus";
+import { UpdateOffer } from "@/components/UpdateOffer";
 import { Button } from "@/components/ui/button";
-import { availableText, installingText } from "@/lib/updates";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 
 /** Updates from GitHub Releases (ADR-53). Without the Tauri window (`trackwall-daemon --ui`) the app is updated by hand. */
@@ -19,7 +20,8 @@ export function UpdatesSurface({ handle }: { handle: AppUpdateHandle | undefined
   );
 }
 
-function UpdateStatus({ handle: { update, check, install } }: { handle: AppUpdateHandle }) {
+function UpdateStatus({ handle }: { handle: AppUpdateHandle }) {
+  const { update, check, install, cancel } = handle;
   const checkButton = (
     <Button variant="outline" size="sm" onClick={check}>
       Check for updates
@@ -39,21 +41,29 @@ function UpdateStatus({ handle: { update, check, install } }: { handle: AppUpdat
       );
     case "available":
       return (
-        <>
-          <p className="text-sm">{availableText(update)}</p>
-          <Button size="sm" onClick={() => install(update.version)}>
-            Update and restart
-          </Button>
-        </>
+        <div className="flex w-full flex-wrap items-center gap-3">
+          <UpdateOffer handle={handle} update={update} />
+        </div>
       );
     case "installing":
-      return <Loading text={installingText(update)} />;
+      return <UpdateInstallStatus update={update} cancel={cancel} />;
     case "check-failed":
-    case "install-failed":
       return (
         <>
           <p className="text-destructive text-sm whitespace-pre-wrap break-words">{update.message}</p>
           {checkButton}
+        </>
+      );
+    case "install-failed":
+      return (
+        <>
+          <p className="text-destructive text-sm whitespace-pre-wrap break-words">{update.message}</p>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => install(update.version)}>
+              Try again
+            </Button>
+            {checkButton}
+          </div>
         </>
       );
   }

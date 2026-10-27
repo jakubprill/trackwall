@@ -30,8 +30,12 @@ function dialogId(ids: number, dialog: ScreenDialog): string {
     .slice(0, 16);
 }
 
+/**
+ * The same dialog on the screen. The title is left out: a box cut above takes it from the last hook's notice, which a
+ * later hook clears, and the answered dialog must stay answered when only that changes.
+ */
 function sameDialog(a: ScreenDialog | undefined, b: ScreenDialog | undefined): boolean {
-  return a !== undefined && isDeepStrictEqual(a, b);
+  return a !== undefined && b !== undefined && isDeepStrictEqual({ ...a, title: "" }, { ...b, title: "" });
 }
 
 /**
@@ -48,8 +52,10 @@ export class SessionDialogs {
   /** Counts the sets of ids: waits and answers to approvals. */
   #ids = 0;
   /** The dialog last read, for the screen revision it was read at: the screen is read once per change. */
-  #read: { revision: number; kind: AgentDialog["kind"]; found: ScreenDialog | undefined } | undefined;
+  #read: { revision: number; kind: AgentDialog["kind"]; notice: string | undefined; found: ScreenDialog | undefined } | undefined;
   #answered: ScreenDialog | undefined;
+  /** The text of the last hook if it was an approval request ("Use MCP tool: …"): the heading of an approval box cut above. */
+  #notice: string | undefined;
 
   constructor(screen: DialogScreen) {
     this.#screen = screen;
@@ -58,6 +64,11 @@ export class SessionDialogs {
   /** The session entered a state that waits for a dialog's answer. */
   waitStarted(): void {
     this.#ids++;
+  }
+
+  /** The last hook record was the approval request with this text, or `undefined` for any other hook. */
+  noticed(notice: string | undefined): void {
+    this.#notice = notice;
   }
 
   /** The dialog of `kind` the screen shows now, unless it is the approval just answered. */
@@ -85,9 +96,10 @@ export class SessionDialogs {
   #readScreen(kind: AgentDialog["kind"]): ScreenDialog | undefined {
     const revision = this.#screen.revision;
     const read = this.#read;
-    if (read?.revision === revision && read.kind === kind) return read.found;
-    const found = readAgentDialog(this.#screen.lines(), kind);
-    this.#read = { revision, kind, found };
+    const notice = this.#notice;
+    if (read?.revision === revision && read.kind === kind && read.notice === notice) return read.found;
+    const found = readAgentDialog(this.#screen.lines(), kind, notice);
+    this.#read = { revision, kind, notice, found };
     return found;
   }
 }

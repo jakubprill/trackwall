@@ -3,9 +3,13 @@ import {
   batchApi,
   cardsApi,
   dayStartApi,
+  doctorApi,
   type Endpoint,
+  errorJournalApi,
   graphApi,
+  localConfigApi,
   logsApi,
+  mergeRequestsApi,
   miseApi,
   servicesApi,
   verificationApi,
@@ -39,6 +43,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.list, (f) => f.workspace.list()),
   route(workspaceApi.settings, (f) => f.workspace.settings()),
   route(workspaceApi.setProjectsDir, (f, b) => f.workspace.setProjectsDir(b.path)),
+  route(workspaceApi.setWorktreesDir, (f, b) => f.workspace.setWorktreesDir(b.path)),
   route(workspaceApi.overview, (f, b) => f.workspace.overview(b.repo)),
   route(workspaceApi.tree, (f, b) => f.workspace.tree(b.repo, b.path)),
   route(workspaceApi.file, (f, b) => f.workspace.file(b.repo, b.path)),
@@ -67,6 +72,20 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(cardsApi.tags, (f) => f.cards.tags()),
   route(cardsApi.warmup, (f) => f.cards.warmupProgress()),
   route(graphApi.graph, (f) => f.graph.graph()),
+  route(doctorApi.run, (f) => f.doctor.run()),
+  route(errorJournalApi.errors, (f) => f.errorJournal.list()),
+  route(errorJournalApi.recordUiError, (f, b) => {
+    f.errorJournal.recordUiError(b);
+    return null;
+  }),
+  route(errorJournalApi.clear, (f) => {
+    f.errorJournal.clear();
+    return null;
+  }),
+  route(localConfigApi.store, (f) => f.localConfig.store()),
+  route(localConfigApi.repo, (f, b) => f.localConfig.repo(b.repo)),
+  route(localConfigApi.restore, (f, b) => f.localConfig.restore(b.repo)),
+  route(localConfigApi.ignore, (f, b) => f.localConfig.ignore(b.repo)),
   route(miseApi.tasks, (f, b) => f.mise.tasks(b.repo)),
   route(miseApi.running, (f) => f.mise.running()),
   route(miseApi.start, (f, b) => f.mise.start({ repo: b.repo, task: b.task }, b.miseTask)),
@@ -84,9 +103,15 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(verificationApi.start, (f, b) => f.verifications.start(b.task)),
   route(verificationApi.get, (f, b) => f.verifications.get(b.task)),
   route(verificationApi.cancel, (f, b) => f.verifications.cancel(b.task)),
+  route(mergeRequestsApi.get, (f, b) => f.mergeRequests.get(b.task)),
+  route(mergeRequestsApi.push, (f, b) => f.mergeRequests.push(b.task)),
+  route(mergeRequestsApi.openForm, async (f, b) => {
+    await f.mergeRequests.openForm(b);
+    return null;
+  }),
   route(agentsApi.sessions, (f) => f.agents.sessions()),
-  route(agentsApi.start, (f, b) => f.agents.start(b.repo)),
-  route(agentsApi.startSupervisor, (f) => f.agents.startSupervisor()),
+  route(agentsApi.start, (f, b) => f.agents.start(b.repo, b.prompt)),
+  route(agentsApi.startSupervisor, (f, b) => f.agents.startSupervisor(b.conversation)),
   route(agentsApi.stop, (f, b) => f.agents.stop(b.session)),
   route(agentsApi.answerDialog, (f, b) => f.agents.answerDialog(b.session, b.dialog, b.answer)),
   route(agentsApi.dismiss, (f, b) => f.agents.dismiss(b.session)),
@@ -105,7 +130,11 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     await f.agents.removeTask(b.task, b.keepBranch, b.discardChanges);
     return null;
   }),
-  route(agentsApi.approveProposal, (f, b) => f.agents.approveProposal(b.proposal, b.prompt)),
+  route(agentsApi.approveProposal, (f, b) => f.agents.approveProposal(b.proposal, b.prompt, b.model)),
+  route(agentsApi.approveRepoRemoval, async (f, b) => {
+    await f.agents.approveRepoRemoval(b.proposal);
+    return null;
+  }),
   route(agentsApi.rejectProposal, (f, b) => {
     f.agents.rejectProposal(b.proposal, b.reason);
     return null;

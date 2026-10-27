@@ -8,6 +8,7 @@ import { readBody } from "./body.ts";
 import type { EventHub } from "./event-hub.ts";
 import { eventSocketRoute } from "./event-socket.ts";
 import { hasValidToken, OriginPolicy } from "./guard.ts";
+import { HOOKS_PATH, handleHook } from "./hooks.ts";
 import { ptySocketRoute } from "./pty-socket.ts";
 import { postRoutes } from "./routes.ts";
 import { attachSockets } from "./sockets.ts";
@@ -65,6 +66,7 @@ export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer
     handle(req, res, options, policy).catch((err: unknown) => {
       if (err instanceof DomainError && !res.headersSent) return fail(res, err.code, err.message);
       process.stderr.write(`[api] ${req.method} ${req.url}: ${String(err)}\n`);
+      options.facade.errorJournal.recordDaemonError(journalArea(req.url), err);
       if (!res.headersSent) send(res, 500, { ok: false, error: { code: "internal", message: "internal error" } });
       else res.destroy();
     });
@@ -120,14 +122,31 @@ async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, 
     return void res.end();
   }
 
-  // Only `GET /api/health` and the static UI files are public; the rest of the API and MCP pass one token check.
+  // Only `GET /api/health` and the static UI files are public; the rest of the API, MCP and the hooks pass one token check.
   if (path === "/api/health" && req.method === "GET") return ok<Health>(res, { status: "ok", version: o.version });
-  const api = path.startsWith("/api/");
-  if ((api || path === MCP_PATH) && !hasValidToken(req, o.token)) return fail(res, "unauthorized", "missing or invalid token");
-  if (api) return handleApi(req, res, path, o);
-  if (path === MCP_PATH) return handleMcp(req, res, o);
+  const route = protectedRoute(req, res, path, o);
+  if (route) return hasValidToken(req, o.token) ? route() : fail(res, "unauthorized", "missing or invalid token");
   if (o.uiDir && (req.method === "GET" || req.method === "HEAD")) return serveStatic(o.uiDir, path, res);
   return fail(res, "not_found", `no route ${req.method} ${path}`);
+}
+
+/** The handler of a route behind the token: the API, MCP and the session plugin's hooks (ADR-88). */
+function protectedRoute(req: IncomingMessage, res: ServerResponse, path: string, o: ApiOptions): (() => Promise<void> | void) | undefined {
+  if (path.startsWith("/api/")) return () => handleApi(req, res, path, o);
+  if (path === MCP_PATH) return () => handleMcp(req, res, o);
+  if (path.startsWith(HOOKS_PATH)) return () => handleHook(req, res, (...args) => o.facade.agents.receiveHook(...args));
+  return undefined;
+}
+
+/**
+ * Where a failed request goes in the error journal (ADR-94): the action's path when it is one of the API's, else one area
+ * for all the rest, so a path a client made up never reaches the journal. Plain string work: the request's address may be
+ * one `URL` refuses, which is how this request may have failed.
+ */
+function journalArea(url: string | undefined): string {
+  const path = (url ?? "").split("?")[0] ?? "";
+  if (postRoutes.has(path)) return `api:${path}`;
+  return path.startsWith(HOOKS_PATH) ? "api:hooks" : "api:other";
 }
 
 /** `/api/*` routes with the token, already checked. */

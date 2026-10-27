@@ -10,12 +10,12 @@ export const LOG_FORMAT = "--format=%H%x1f%an%x1f%aI%x1f%s";
 
 /** The result of `git status --porcelain=v2 --branch -z` without the HEAD commit (`vcs` adds it). */
 export interface ParsedStatus extends Omit<RepoStatusOk, "head"> {
-  /** `false` in a repo without commits (`branch.oid (initial)`). */
-  hasCommits: boolean;
+  /** The HEAD commit's hash (`branch.oid`); `null` in a repo without commits (`branch.oid (initial)`). */
+  headOid: string | null;
 }
 
 export function parseStatus(out: string): ParsedStatus {
-  const status: ParsedStatus = { kind: "ok", branch: null, changes: 0, untracked: 0, upstream: null, hasCommits: true };
+  const status: ParsedStatus = { kind: "ok", branch: null, changes: 0, untracked: 0, upstream: null, headOid: null };
   let upstreamName: string | undefined;
   const fields = out.split("\0");
   for (let i = 0; i < fields.length; i++) {
@@ -36,7 +36,7 @@ function applyHeader(status: ParsedStatus, header: string, upstreamName: string 
   const space = header.indexOf(" ");
   const key = header.slice(0, space);
   const value = header.slice(space + 1);
-  if (key === "branch.oid") status.hasCommits = value !== "(initial)";
+  if (key === "branch.oid") status.headOid = value === "(initial)" ? null : value;
   else if (key === "branch.head") status.branch = value === "(detached)" ? null : value;
   else if (key === "branch.upstream") return value;
   else if (key === "branch.ab" && upstreamName !== undefined) {
@@ -73,6 +73,24 @@ export function parseTree(out: string, dir: string): TreeEntry[] {
     else entries.push({ name, path, kind: "file", size: Number(size) });
   }
   return entries.sort(byKindThenName);
+}
+
+/** A commit's file with its size and blob id, as `git ls-tree -r -z --long <commit>` lists it. */
+export interface CommitFile {
+  path: string;
+  size: number;
+  /** The blob id: the same content has the same id in every commit and repo. */
+  oid: string;
+}
+
+/** Files from `git ls-tree -r -z --long <commit>`, in git's order, without directories and submodules. */
+export function parseCommitFiles(out: string): CommitFile[] {
+  const files: CommitFile[] = [];
+  for (const record of out.split("\0")) {
+    const m = /^\d+ blob ([0-9a-f]+) +(\d+)\t(.+)$/s.exec(record);
+    if (m) files.push({ oid: m[1] ?? "", size: Number(m[2]), path: m[3] ?? "" });
+  }
+  return files;
 }
 
 const KIND_ORDER: Record<TreeEntry["kind"], number> = { dir: 0, submodule: 1, file: 2 };
