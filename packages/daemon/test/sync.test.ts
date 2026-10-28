@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SyncRun } from "@trackwall/protocol";
-import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
@@ -16,7 +16,7 @@ async function setup() {
   const remotes = mkdtempSync(join(tmpdir(), "trackwall-remotes-"));
   const workspace = new Workspace({
     file: new WorkspaceFile(file),
-    vcs: new Vcs(),
+    vcs: new Vcs(systemTempFolder),
     hosting: fakeHosting().hosting,
     openEditor: () => {},
     openFolder: () => {},
@@ -332,7 +332,7 @@ describe("sync of all repos", () => {
 
       const empty = new Workspace({
         file: new WorkspaceFile(join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml")),
-        vcs: new Vcs(),
+        vcs: new Vcs(systemTempFolder),
         hosting: fakeHosting().hosting,
         openEditor: () => {},
         openFolder: () => {},

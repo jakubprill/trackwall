@@ -11,6 +11,7 @@ import {
   type LocalConfigStore,
   MISE_CONFIG_NAME,
   REMOVED_REPOS_DIR,
+  SCRATCH_DIR_NAME,
   type WorkspaceKeyState,
   type WorkspaceKeysRead,
   workspaceKeysSummary,
@@ -149,6 +150,8 @@ export class ConfigFiles {
         return taskWorktrees(ctx.worktreesDir);
       case "removed-repos-dir":
         return removedRepos(ctx.projectsDir);
+      case "scratch-dir":
+        return ctx.projectsDir === null ? notSet(SCRATCH_DIR_NAME) : plainEntry(join(ctx.projectsDir, SCRATCH_DIR_NAME));
       case "copilot-config":
         return this.#copilotConfig(ctx);
     }

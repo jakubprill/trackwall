@@ -1,5 +1,4 @@
 import { lstat, mkdir, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { existingCommit, git, symbolicRef } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
@@ -70,12 +69,12 @@ export async function ensureBackupRepo(dir: string): Promise<void> {
  * Commits `files` on top of `main`; `false` when the tree stays the same. Call after `ensureBackupRepo`, and one at a
  * time. The user's index is updated after the commit, only for the backed-up paths; when that fails the commit stands.
  */
-export async function commitBackups(dir: string, files: readonly BackupFile[], message: string): Promise<boolean> {
+export async function commitBackups(dir: string, files: readonly BackupFile[], message: string, scratchDir: string): Promise<boolean> {
   // Even `read-tree` and `update-index` run a hook (`post-index-change`), so no command here may see the store's hooks.
   return withoutHooks(async (hooksPath) => {
     const config = [hooksPath];
     const parent = (await existingCommit(dir, BRANCH)) ?? null;
-    const scratch = await mkdtemp(join(tmpdir(), "trackwall-store-index-"));
+    const scratch = await mkdtemp(join(scratchDir, "store-index-"));
     const indexFile = join(scratch, "index");
     let entries: { path: string; oid: string }[];
     try {

@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFile
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agents, sessionHooksFile } from "../src/modules/agents/agents.ts";
-import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { isAlive } from "../src/platform/process-group.ts";
 import { makeAgents, viewer, waitFor } from "./support/agents.ts";
 import { PARALLEL_TOOLS_PROMPT } from "./support/copilot-reference.ts";
@@ -466,7 +466,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
         agentSecrets: () => [],
         removeRepo: () => Promise.reject(new Error("unused")),
       },
-      vcs: new Vcs(),
+      vcs: new Vcs(systemTempFolder),
       home: mkdtempSync(join(tmpdir(), "trackwall-agents-")),
       copilot: ["copilot-that-does-not-exist"],
       version: "0.0.0-test",

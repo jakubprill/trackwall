@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, renameSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 
 async function stateOf(vcs: Vcs, repo: string) {
@@ -11,7 +11,7 @@ async function stateOf(vcs: Vcs, repo: string) {
 
 describe("git state from the files of the git directory", () => {
   test("a commit and a checkout move HEAD, a new branch and a ref from a fetch change only the refs, git status changes nothing", async () => {
-    const vcs = new Vcs();
+    const vcs = new Vcs(systemTempFolder);
     const repo = makeRepo({ "a.txt": "1" });
     const start = await stateOf(vcs, repo);
 
@@ -39,7 +39,7 @@ describe("git state from the files of the git directory", () => {
   });
 
   test("a ref directory created in the same second as the previous listing is still found on a file system with whole-second times", async () => {
-    const vcs = new Vcs();
+    const vcs = new Vcs(systemTempFolder);
     const repo = makeRepo({ "a.txt": "1" });
     const heads = join(repo, ".git", "refs", "heads");
     const second = new Date(Math.floor(Date.now() / 1000) * 1000);
@@ -56,7 +56,7 @@ describe("git state from the files of the git directory", () => {
   });
 
   test("a worktree's HEAD is its own, and its commit is seen", async () => {
-    const vcs = new Vcs();
+    const vcs = new Vcs(systemTempFolder);
     const repo = makeRepo({ "a.txt": "1" });
     const worktree = join(mkdtempSync(join(tmpdir(), "trackwall-wt-")), "wt");
     gitIn(repo, "worktree", "add", "-q", "-b", "task", worktree);
@@ -69,7 +69,7 @@ describe("git state from the files of the git directory", () => {
   });
 
   test("a directory without a readable git directory has no state", async () => {
-    const vcs = new Vcs();
+    const vcs = new Vcs(systemTempFolder);
     const dir = mkdtempSync(join(tmpdir(), "trackwall-nogit-"));
     expect(await stateOf(vcs, dir)).toBeNull();
     writeFileSync(join(dir, ".git"), "gitdir: ../nowhere\n");
@@ -77,7 +77,7 @@ describe("git state from the files of the git directory", () => {
   });
 
   test("with the reftable ref backend a change of the ref tables counts as HEAD moving", async () => {
-    const vcs = new Vcs();
+    const vcs = new Vcs(systemTempFolder);
     const repo = mkdtempSync(join(tmpdir(), "trackwall-reftable-"));
     mkdirSync(join(repo, ".git", "reftable"), { recursive: true });
     mkdirSync(join(repo, ".git", "refs", "heads"), { recursive: true });

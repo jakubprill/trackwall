@@ -1,4 +1,6 @@
 import { existsSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import type {
   Commit,
@@ -7,10 +9,11 @@ import type {
   RepoHost,
   RepoStatusOk,
   SyncResult,
+  TaskChanges,
   TreeEntry,
   WorkingTreeChanges,
 } from "@trackwall/protocol";
-import { backupRemote, commitBackups, ensureBackupRepo, pushBackups, storeHead } from "./backup-repo.ts";
+import { type BackupFile, backupRemote, commitBackups, ensureBackupRepo, pushBackups, storeHead } from "./backup-repo.ts";
 import { branchOnRemote, pushBranch } from "./branch-push.ts";
 import { CommitMemo } from "./commit-memo.ts";
 import {
@@ -50,6 +53,9 @@ import { addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } f
 import { workingTreeChanges, worktreeChanges } from "./worktree-changes.ts";
 import { copyIncludedFiles } from "./worktree-include.ts";
 
+/** The system temp folder for git's scratch files, while there is no projects folder to keep them in. */
+export const systemTempFolder = async (): Promise<string> => tmpdir();
+
 /**
  * The `vcs` module (§4, §4.5): the local git adapter. It knows directories, not repo identifiers; `workspace` translates those.
  * It reads repo contents from the objects of the HEAD commit (ADR-14), so a path cannot point to a file outside the repo,
@@ -61,6 +67,25 @@ import { copyIncludedFiles } from "./worktree-include.ts";
  * push of the local config store, a repo only the daemon writes to.
  */
 export class Vcs {
+  /**
+   * `scratchDir` gives the folder for git's temporary indexes: in the projects folder, not the system temp folder, which an
+   * antivirus may scan on every poll, and not a repo's `.git`, where an editor would see a change every poll (clarification
+   * to ADR-31). The folder is made when needed, but not its parent, so a projects folder that is gone stays gone.
+   */
+  private readonly scratchDir: () => Promise<string>;
+
+  constructor(scratchDir: () => Promise<string>) {
+    this.scratchDir = scratchDir;
+  }
+
+  private async scratch(): Promise<string> {
+    const dir = await this.scratchDir();
+    await mkdir(dir).catch((err: unknown) => {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+    });
+    return dir;
+  }
+
   /**
    * Running syncs by `.git` directory (shared by a repo and its worktrees): a repo and its worktree, or a
    * link in the projects folder, are several list entries, and two simultaneous fetches in one `.git` fight over the
@@ -106,7 +131,7 @@ export class Vcs {
    * index. In a repo without commits, against the empty tree: then every file is new.
    */
   async changes(dir: string, maxPatchBytes: number): Promise<WorkingTreeChanges> {
-    return workingTreeChanges(dir, (await this.headCommit(dir)) ?? (await emptyTree(dir)), maxPatchBytes, []);
+    return workingTreeChanges(dir, (await this.headCommit(dir)) ?? (await emptyTree(dir)), maxPatchBytes, [], await this.scratch());
   }
 
   /** The address of the main remote (`origin` or the only one) as `host/path` (ADR-21); `null` without such a remote. */
@@ -148,9 +173,12 @@ export class Vcs {
   readonly ignoredPaths = ignoredPaths;
   readonly excludeLocally = excludeLocally;
   readonly ensureBackupRepo = ensureBackupRepo;
-  readonly commitBackups = commitBackups;
   readonly backupRemote = backupRemote;
   readonly storeHead = storeHead;
+
+  async commitBackups(dir: string, files: readonly BackupFile[], message: string): Promise<boolean> {
+    return commitBackups(dir, files, message, await this.scratch());
+  }
   readonly pushBackups = pushBackups;
 
   // `git grep` over a commit's objects (`grep.ts`): source files for cards (ADR-30) and code search (ADR-40).
@@ -161,8 +189,11 @@ export class Vcs {
   // registry and branches go one after another within one repo.
   readonly defaultBase = defaultBase;
   readonly pendingWork = pendingWork;
-  readonly worktreeChanges = worktreeChanges;
   readonly copyIncludedFiles = copyIncludedFiles;
+
+  async worktreeChanges(dir: string, base: string, maxPatchBytes: number, paths: readonly string[]): Promise<TaskChanges> {
+    return worktreeChanges(dir, base, maxPatchBytes, paths, await this.scratch());
+  }
 
   addWorktree(repoDir: string, path: string, branch: string, commit: string): Promise<void> {
     return this.serialWorktreeOp(repoDir, () => addWorktree(repoDir, path, branch, commit));

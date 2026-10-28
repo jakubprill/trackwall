@@ -77,6 +77,13 @@ describe("config files", () => {
       state: "missing",
       detail: null,
     });
+    expect(entry("scratch-dir")).toEqual({
+      id: "scratch-dir",
+      name: ".trackwall-scratch",
+      path: join(projects, ".trackwall-scratch"),
+      state: "missing",
+      detail: null,
+    });
     expect(entry("projects-mise-config")).toEqual({
       id: "projects-mise-config",
       name: "mise.toml",

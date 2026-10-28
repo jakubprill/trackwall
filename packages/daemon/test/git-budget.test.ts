@@ -6,7 +6,7 @@ import { CardCache } from "../src/modules/cards/card-cache.ts";
 import { Cards } from "../src/modules/cards/cards.ts";
 import { Graph } from "../src/modules/graph/graph.ts";
 import { gitProcessesStarted } from "../src/modules/vcs/git.ts";
-import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
@@ -27,7 +27,7 @@ const REAL_GIT_TIMEOUT = 120_000;
 async function folderOfTwentyRepos() {
   const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
-  const vcs = new Vcs();
+  const vcs = new Vcs(systemTempFolder);
   const workspace = new Workspace({
     file: new WorkspaceFile(join(home, "workspace.yaml")),
     vcs,
