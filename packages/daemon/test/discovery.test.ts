@@ -4,6 +4,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   daemonFilePath,
+  lockHeldElsewhere,
   newToken,
   readDaemonFile,
   removeDaemonFile,
@@ -55,6 +56,14 @@ describe("start lock", () => {
     for (let i = 0; i < trace.length; i += 2) expect(trace[i + 1]).toBe(`-${trace[i]?.slice(1)}`);
     expect(existsSync(join(home, "daemon.lock"))).toBe(false);
   }, 20_000);
+
+  test("a lock being removed on Windows (EPERM or EACCES) is held elsewhere, so the start waits instead of failing", () => {
+    expect(lockHeldElsewhere("EEXIST", "linux")).toBe(true);
+    expect(lockHeldElsewhere("EPERM", "win32")).toBe(true);
+    expect(lockHeldElsewhere("EACCES", "win32")).toBe(true);
+    expect(lockHeldElsewhere("EPERM", "darwin")).toBe(false);
+    expect(lockHeldElsewhere("ENOSPC", "win32")).toBe(false);
+  });
 
   test("a lock with our own PID is a previous incarnation of the process (bun --watch)", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-lock-"));
