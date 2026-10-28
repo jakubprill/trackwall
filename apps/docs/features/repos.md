@@ -31,7 +31,7 @@ The "+" button above the list searches the GitLab and GitHub hosts you added in 
 
 ## Use it
 
-1. Open "Settings" and choose your projects folder with "Choose…", or drop the folder onto the Trackwall window.
+1. Open "Settings" and choose your projects folder with "Choose…", or drop the folder onto the Trackwall window. When your home folder has a `Dev`, `Projects`, `Code` or `source\repos` folder, Settings offers it with "Use this folder".
 2. Open "Repos" (Ctrl+2, ⌘2 on macOS) and select a repo.
 3. Press "Sync all" to bring every repo up to date.
 4. To clone, press "+", search for the repo and pick it.

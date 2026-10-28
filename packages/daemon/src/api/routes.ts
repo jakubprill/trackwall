@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import {
   agentsApi,
   batchApi,
@@ -43,6 +44,7 @@ function route<Req extends z.ZodType, Data extends z.ZodType>(
 export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.list, (f) => f.workspace.list()),
   route(workspaceApi.settings, (f) => f.workspace.settings()),
+  route(workspaceApi.suggestedProjectsDir, (f) => f.workspace.suggestedProjectsDir(homedir())),
   route(workspaceApi.setProjectsDir, (f, b) => f.workspace.setProjectsDir(b.path)),
   route(workspaceApi.setWorktreesDir, (f, b) => f.workspace.setWorktreesDir(b.path)),
   route(workspaceApi.overview, (f, b) => f.workspace.overview(b.repo)),
