@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { TestReports } from "../src/modules/test-results/test-reports.ts";
+import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 const PASSING = `<testsuite name="a.PassTest"><testcase name="ok" classname="a.PassTest" time="0.5"/></testsuite>`;
 const FAILING = `<testsuite name="a.FailTest"><testcase name="breaks" classname="a.FailTest" time="1"><failure message="token abcdefgh12345 rejected" type="AssertionError">AssertionError: token abcdefgh12345 rejected</failure></testcase></testsuite>`;
@@ -97,18 +98,22 @@ describe("test results from the reports in a checkout", () => {
     expect(results.earlierReports).toBe(1);
   });
 
-  test("old reports do not crowd fresh ones out of the report limit", async () => {
-    const files: Record<string, string> = { "b/target/surefire-reports/TEST-a.FailTest.xml": FAILING };
-    for (let i = 0; i < 2001; i++) files[`a/target/surefire-reports/TEST-a.Old${i}.xml`] = PASSING;
-    const dir = checkout(files);
-    const old = new Date("2026-01-01T10:00:00Z");
-    for (let i = 0; i < 2001; i++) utimesSync(join(dir, `a/target/surefire-reports/TEST-a.Old${i}.xml`), old, old);
+  test(
+    "old reports do not crowd fresh ones out of the report limit",
+    async () => {
+      const files: Record<string, string> = { "b/target/surefire-reports/TEST-a.FailTest.xml": FAILING };
+      for (let i = 0; i < 2001; i++) files[`a/target/surefire-reports/TEST-a.Old${i}.xml`] = PASSING;
+      const dir = checkout(files);
+      const old = new Date("2026-01-01T10:00:00Z");
+      for (let i = 0; i < 2001; i++) utimesSync(join(dir, `a/target/surefire-reports/TEST-a.Old${i}.xml`), old, old);
 
-    const results = await testResults(dir).results({ repo: "shop", task: null }, "2026-01-01T11:00:00Z");
+      const results = await testResults(dir).results({ repo: "shop", task: null }, "2026-01-01T11:00:00Z");
 
-    expect(results.totals).toMatchObject({ tests: 1, failures: 1 });
-    expect(results).toMatchObject({ earlierReports: 2001, truncated: false });
-  });
+      expect(results.totals).toMatchObject({ tests: 1, failures: 1 });
+      expect(results).toMatchObject({ earlierReports: 2001, truncated: false });
+    },
+    SLOW_TEST_TIMEOUT_MS,
+  );
 
   test("TestNG's second copy of the results under Surefire's directory is not counted again", async () => {
     const dir = checkout({

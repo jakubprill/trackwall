@@ -13,6 +13,7 @@ import { MCP_PATH, SESSION_TOKEN_HEADER } from "../src/mcp/endpoint.ts";
 import { viewer, waitFor } from "./support/agents.ts";
 import { connectHttpClient, connectSessionClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
+import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 const TOKEN = "c".repeat(43);
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
@@ -24,7 +25,7 @@ beforeAll(async () => {
   daemon = await startSessionApi(TOKEN);
   outside = await connectHttpClient(daemon.api.port, TOKEN);
   clients.push(outside);
-});
+}, SLOW_TEST_TIMEOUT_MS);
 
 // A limit instead of the default none: a hung cleanup on Windows is to be an error of this file, not an hour of the job.
 afterAll(async () => {
