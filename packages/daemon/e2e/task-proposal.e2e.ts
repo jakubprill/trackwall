@@ -6,7 +6,7 @@ import { sessionList, showSessions, useTrackwall, waitForTerminal } from "./supp
 const trackwall = useTrackwall();
 
 describe("a task proposal from a main session", () => {
-  test("the user edits the prompt and the model of a main session's proposal and starts it, and the main session follows the task with them", async () => {
+  test("the user edits the prompt and the model of a main session's proposal, keeps it without approvals and starts it, and the main session follows the task with them", async () => {
     const { daemon } = trackwall();
     const main = await daemon.post(agentsApi.start, { repo: "shop" });
     await waitFor(daemon.facade.agents, main.id, (s) => s.state !== null, "the main session's first state");
@@ -16,7 +16,13 @@ describe("a task proposal from a main session", () => {
       (
         await agent.callTool({
           name: "propose_task",
-          arguments: { repo: "shop", title: "Add a licence", prompt: "Add an MIT LICENSE file", model: "claude-opus-5.5" },
+          arguments: {
+            repo: "shop",
+            title: "Add a licence",
+            prompt: "Add an MIT LICENSE file",
+            model: "claude-opus-5.5",
+            approvals: "auto",
+          },
         })
       ).structuredContent,
     );
@@ -30,9 +36,14 @@ describe("a task proposal from a main session", () => {
     const model = page.getByRole("textbox", { name: "Model for the agent: Add a licence" });
     expect(await model.inputValue()).toBe("claude-opus-5.5");
     await model.fill("gpt-5.5");
+    // The proposer asked for no approvals (ADR-105): the box is ticked, and the user sees what it means before the start.
+    expect(await page.getByRole("checkbox", { name: "Run without asking for approvals: Add a licence" }).isChecked()).toBe(true);
+    await page.getByText("The agent runs commands, edits files and calls tools without asking you.").waitFor();
     await page.getByRole("button", { name: "Start task" }).click();
 
     await waitForTerminal(page, "Argument: --model=gpt-5.5");
+    await waitForTerminal(page, "Argument: --allow-all-tools");
+    await page.getByText("No approvals").waitFor();
     await waitForTerminal(page, "Argument: --interactive=Add an Apache-2.0 LICENSE file");
     await sessionList(page)
       .getByRole("button", { name: /Task proposal/ })
@@ -43,6 +54,9 @@ describe("a task proposal from a main session", () => {
     const followed = WaitForSessionResult.parse(
       (await agent.callTool({ name: "wait_for_session", arguments: { task: proposal.id, timeoutSeconds: 1 } })).structuredContent,
     );
-    expect(followed).toMatchObject({ status: "working", task: { prompt: "Add an Apache-2.0 LICENSE file", model: "gpt-5.5" } });
+    expect(followed).toMatchObject({
+      status: "working",
+      task: { prompt: "Add an Apache-2.0 LICENSE file", model: "gpt-5.5", approvals: "auto" },
+    });
   }, 60_000);
 });

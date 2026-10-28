@@ -80,6 +80,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).toContain("You coordinate, you do not change code: hand each piece of work to an agent with propose_task");
     expect(text).toContain("Copilot CLI refuses you its shell and the tools that write files, so do not try them");
     expect(text).toContain("When the user names a model for the work (a review on a stronger model, say), pass it as the proposal's model");
+    expect(text).toContain("before proposing work that only reads and reports (an analysis, a review), ask the user whether it may");
     expect(text).toContain("Do not poll the work you delegated: end your turn");
     expect(text).toContain("Steer your tasks with send_message");
     expect(text).toContain("When the user starts their day in Trackwall, your first message asks for a briefing: read get_day_report once");

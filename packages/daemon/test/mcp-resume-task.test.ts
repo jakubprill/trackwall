@@ -62,7 +62,12 @@ describe.skipIf(process.versions.bun === undefined)("resume_task (real PTY and g
     const { proposal } = ProposeTaskResult.parse(
       (await call(main.client, "propose_task", { repo: "shop", title: "Fix login", prompt: "fix login" })).structuredContent,
     );
-    const task = await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: "fix login", model: null });
+    const task = await daemon.post(agentsApi.approveProposal, {
+      proposal: proposal.id,
+      prompt: "fix login",
+      model: null,
+      approvals: "ask",
+    });
     await stopSessionOf(task.id);
     const sent = SendMessageResult.parse(
       (await call(main.client, "send_message", { task: task.id, text: "Keep the old endpoint." })).structuredContent,
@@ -90,7 +95,7 @@ describe.skipIf(process.versions.bun === undefined)("resume_task (real PTY and g
     expect((await call(main.client, "resume_task", { task: task.id })).content).toEqual([
       { type: "text", text: `bad_request: task ${task.branch} has a running session; stop it before resuming` },
     ]);
-    const other = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "describe the repo" });
+    const other = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "describe the repo", approvals: "ask" });
     await stopSessionOf(other.id);
     const taskClient = await clientOfSession(resumed.session.id);
     expect((await call(taskClient, "resume_task", { task: other.id })).content).toEqual([
@@ -118,7 +123,7 @@ describe.skipIf(process.versions.bun === undefined)("resume_task (real PTY and g
       const { proposal } = ProposeTaskResult.parse(
         (await call(client, "propose_task", { repo: "shop", title, prompt: title })).structuredContent,
       );
-      const task = await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: title, model: null });
+      const task = await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: title, model: null, approvals: "ask" });
       await stopSessionOf(task.id);
       tasks.push(task);
     }
@@ -136,7 +141,7 @@ describe.skipIf(process.versions.bun === undefined)("resume_task (real PTY and g
 
   test("the supervisor and an agent outside Trackwall resume a task the user started, a main session does not", async () => {
     const main = await mainSession();
-    const typed = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "describe the repo" });
+    const typed = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "describe the repo", approvals: "ask" });
     await stopSessionOf(typed.id);
 
     expect((await call(main.client, "resume_task", { task: typed.id })).content).toEqual([

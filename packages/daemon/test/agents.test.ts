@@ -280,7 +280,13 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     expect(instructions).not.toContain("You are the supervisor");
     // A free session is no supervisor: the supervisor stays the one that runs, and what a free session proposes is its own.
     expect((await agents.startSupervisor("new")).id).toBe(supervisor.id);
-    const proposal = await agents.propose(free.id, { repo: "shop", title: "Add a test", prompt: "Add a cart test", model: null });
+    const proposal = await agents.propose(free.id, {
+      repo: "shop",
+      title: "Add a test",
+      prompt: "Add a cart test",
+      model: null,
+      approvals: "ask",
+    });
     expect(proposal.proposedBy).toEqual({ session: free.id, supervisor: false });
     window.attachment.detach();
     for (const session of [supervisor, free, another]) await agents.stop(session.id);
@@ -325,8 +331,15 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
       title: "Fix the cart",
       prompt: "Fix the cart total",
       model: null,
+      approvals: "ask",
     });
-    const fromSession = await agents.propose(session.id, { repo: "shop", title: "Add a test", prompt: "Add a cart test", model: null });
+    const fromSession = await agents.propose(session.id, {
+      repo: "shop",
+      title: "Add a test",
+      prompt: "Add a cart test",
+      model: null,
+      approvals: "ask",
+    });
     expect(fromSupervisor.proposedBy).toEqual({ session: supervisor.id, supervisor: true });
     expect(fromSession.proposedBy).toEqual({ session: session.id, supervisor: false });
     await agents.stop(supervisor.id);
@@ -338,7 +351,13 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const { agents, procs, home } = makeAgents({ shop: repoDir }, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
     cleanups.push(() => procs.stopAll());
     const first = await agents.startSupervisor("new");
-    const proposal = await agents.propose(first.id, { repo: "shop", title: "Fix the cart", prompt: "Fix the cart total", model: null });
+    const proposal = await agents.propose(first.id, {
+      repo: "shop",
+      title: "Fix the cart",
+      prompt: "Fix the cart total",
+      model: null,
+      approvals: "ask",
+    });
     await agents.stop(first.id);
 
     const next = await agents.startSupervisor("new");

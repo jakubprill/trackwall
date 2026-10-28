@@ -69,6 +69,12 @@ function isFile(path: string): boolean {
   }
 }
 
+/**
+ * Copilot CLI runs every tool without asking (ADR-105); its `--deny-tool` rules still refuse. Not `--allow-all`/`--yolo`,
+ * which also drop the questions about paths outside the working directory and about URLs.
+ */
+export const ALLOW_ALL_TOOLS = "--allow-all-tools";
+
 /** Copilot CLI's own approval rules (ADR-66); one argument each, with `=`, so a pattern never reads as another option. */
 export function toolPermissionArgs(permissions: ToolPermissions): string[] {
   return [...permissions.allow.map((p) => `--allow-tool=${p}`), ...permissions.deny.map((p) => `--deny-tool=${p}`)];

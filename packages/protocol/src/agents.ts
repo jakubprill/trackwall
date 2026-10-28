@@ -105,6 +105,14 @@ export const TaskModel = z
     message: "a model id is letters, digits, dots, dashes and underscores, such as claude-opus-5.5",
   });
 
+/**
+ * How a task's sessions answer tool approvals (ADR-105): `ask`, Copilot CLI asks the user before each tool its rules do not
+ * already allow; `auto`, it runs every tool without asking (`--allow-all-tools`) on every start and resume. `deny` rules
+ * from `toolPermissions` still refuse, and Copilot CLI still asks before a path outside the worktree or a URL.
+ */
+export const TaskApprovals = z.enum(["ask", "auto"]);
+export type TaskApprovals = z.infer<typeof TaskApprovals>;
+
 /** A task summary from its session (`report_result`, ADR-39): what it did and what is left, for the session that delegated the task. */
 export const TASK_SUMMARY_MAX = 4000;
 export const TaskSummaryText = z.string().trim().min(1).max(TASK_SUMMARY_MAX);
@@ -250,6 +258,8 @@ export const Task = z.object({
   proposedBy: ProposedBy.nullable(),
   /** The model its sessions run on (ADR-98); `null` for Copilot CLI's default. */
   model: TaskModel.nullable(),
+  /** How its sessions answer tool approvals (ADR-105). */
+  approvals: TaskApprovals,
   /** The last summary from the task session (`report_result`); `null` until it has reported one. */
   summary: z.object({ text: z.string(), reportedAt: z.string() }).nullable(),
   /** The task port (ADR-61): `TASK_PORT_ENV` in every mise task run in the worktree, and the port of the task's service. */
@@ -289,6 +299,8 @@ export const TaskProposal = z.object({
   prompt: z.string(),
   /** The model the proposer chose for the task (ADR-98), which the user may change before the start; `null` for the default. */
   model: TaskModel.nullable(),
+  /** The approvals mode the proposer suggested (ADR-105), which the user may change before the start; `ask` for a folder action. */
+  approvals: TaskApprovals,
   proposedBy: ProposedBy,
   /** ISO 8601. */
   createdAt: z.string(),
@@ -474,7 +486,7 @@ export const agentsApi = {
   /** Removes an ended session from the list; a running one cannot be closed without stopping it. */
   dismiss: endpoint("dismiss", SessionRequest, SessionList),
   /** Creates a worktree on a new branch from the default branch and starts Copilot CLI in it with the prompt (ADR-31). */
-  createTask: endpoint("create-task", z.object({ repo: RepoId, prompt: TaskPrompt }).strict(), Task),
+  createTask: endpoint("create-task", z.object({ repo: RepoId, prompt: TaskPrompt, approvals: TaskApprovals }).strict(), Task),
   /** A new session for a task that has no running session: Copilot CLI resumes the task's conversation (`--resume`). */
   resumeTask: endpoint("resume-task", TaskRequest, Task),
   taskChanges: endpoint("task-changes", TaskRequest, TaskChanges),
@@ -507,7 +519,11 @@ export const agentsApi = {
    * Approving a task proposal (ADR-39): a task with its id, like `create-task`, with the prompt the user may have edited
    * before the start. A failed start leaves the proposal for another try or a rejection.
    */
-  approveProposal: endpoint("approve-proposal", ProposalRequest.extend({ prompt: TaskPrompt, model: TaskModel.nullable() }), Task),
+  approveProposal: endpoint(
+    "approve-proposal",
+    ProposalRequest.extend({ prompt: TaskPrompt, model: TaskModel.nullable(), approvals: TaskApprovals }),
+    Task,
+  ),
   /**
    * Approving a proposal to remove a repo (ADR-83): refused while a session, a task or a process runs in the repo; then
    * the repo moves into `REMOVED_REPOS_DIR` in the projects folder. A refusal leaves the proposal waiting.

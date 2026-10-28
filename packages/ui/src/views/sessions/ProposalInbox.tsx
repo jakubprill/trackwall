@@ -1,4 +1,4 @@
-import { type Session, TASK_PROMPT_MAX, type Task, type TaskProposal } from "@trackwall/protocol";
+import { type Session, TASK_PROMPT_MAX, type Task, type TaskApprovals, type TaskProposal } from "@trackwall/protocol";
 import { ChevronDown, ChevronRight, GitBranch, Lightbulb } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -20,10 +20,11 @@ import { cn } from "@/lib/utils";
 import { ProposalActions, ProposalError } from "./ProposalActions.tsx";
 import { ProposalModel } from "./ProposalModel.tsx";
 import { RepoRemovalNote } from "./RepoRemovalNote.tsx";
+import { TaskApprovalsChoice } from "./TaskApprovalsChoice.tsx";
 
 /**
  * The task proposals of one main session or of agents outside Trackwall (ADR-39, ADR-55), reviewed together as the plan
- * they are: each with its repo, title, prompt and model (ADR-98), which the user opens to read and may edit before the start. The user
+ * they are: each with its repo, title, prompt, model (ADR-98) and approvals mode (ADR-105), which the user opens to read and may edit before the start. The user
  * starts one, or ticks several and starts them together; a proposal can be ticked only once it has been opened, so a
  * prompt from an agent is never started unread. “Reject…” takes an optional reason for the session that proposed it.
  * Until then nothing runs. `focus` is the proposal to open (from the list, the tray, a link or the last decision).
@@ -51,6 +52,7 @@ export function ProposalInbox({
   const decisions = useProposalDecisions({ conn, group, onChanged, onSelect, currentSelection });
   const [prompts, setPrompts] = useState<ReadonlyMap<string, string>>(new Map());
   const [models, setModels] = useState<ReadonlyMap<string, string>>(new Map());
+  const [approvals, setApprovals] = useState<ReadonlyMap<string, TaskApprovals>>(new Map());
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
   // `null` once the user closed it; an id that is no longer waiting falls back to the first proposal.
   const [open, setOpen] = useState<string | null>(focus ?? proposals[0].id);
@@ -67,10 +69,13 @@ export function ProposalInbox({
   }, [focus]);
   const promptOf = (p: TaskProposal) => prompts.get(p.id) ?? p.prompt;
   const modelTextOf = (p: TaskProposal) => models.get(p.id) ?? p.model ?? "";
+  const approvalsOf = (p: TaskProposal) => approvals.get(p.id) ?? p.approvals;
   /** The start as the user left the proposal, or `undefined` while its prompt is empty or its model not an id. */
   const startOf = (p: TaskProposal): ProposalStart | undefined => {
     const model = typedModel(modelTextOf(p));
-    return promptOf(p).trim() === "" || model === undefined ? undefined : { id: p.id, prompt: promptOf(p), model };
+    return promptOf(p).trim() === "" || model === undefined
+      ? undefined
+      : { id: p.id, prompt: promptOf(p), model, approvals: approvalsOf(p) };
   };
   const toStart = proposals.filter((p) => ticked.has(p.id));
   // Ticking and "Start selected" are for tasks; a folder action has its own button (ADR-83).
@@ -156,6 +161,11 @@ export function ProposalInbox({
                         title={p.title}
                         value={modelTextOf(p)}
                         onChange={(value) => setModels(new Map(models).set(p.id, value))}
+                      />
+                      <TaskApprovalsChoice
+                        label={`Run without asking for approvals: ${p.title}`}
+                        value={approvalsOf(p)}
+                        onChange={(value) => setApprovals(new Map(approvals).set(p.id, value))}
                       />
                     </>
                   )}

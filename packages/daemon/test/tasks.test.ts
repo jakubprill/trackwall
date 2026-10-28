@@ -365,18 +365,18 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     const moved = `${dir}-moved`;
     const { agents, procs } = makeAgents({ shop: dir });
     cleanups.push(() => procs.stopAll());
-    const proposal = await agents.propose(null, { repo: "shop", title: "Add logout", prompt: "add logout", model: null });
+    const proposal = await agents.propose(null, { repo: "shop", title: "Add logout", prompt: "add logout", model: null, approvals: "ask" });
 
     renameSync(dir, moved);
-    await expect(agents.approveProposal(proposal.id, proposal.prompt, null)).rejects.toMatchObject({ code: "repo_unavailable" });
+    await expect(agents.approveProposal(proposal.id, proposal.prompt, null, "ask")).rejects.toMatchObject({ code: "repo_unavailable" });
     expect(agents.sessions().proposals).toEqual([proposal]);
     expect(agents.sessions().tasks).toEqual([]);
 
     renameSync(moved, dir);
-    const task = await agents.approveProposal(proposal.id, proposal.prompt, null);
+    const task = await agents.approveProposal(proposal.id, proposal.prompt, null, "ask");
     expect(task).toMatchObject({ id: proposal.id, title: "Add logout", proposedBy: { session: null, supervisor: false } });
     expect(agents.sessions().proposals).toEqual([]);
-    await expect(agents.approveProposal(proposal.id, proposal.prompt, null)).rejects.toMatchObject({ code: "not_found" });
+    await expect(agents.approveProposal(proposal.id, proposal.prompt, null, "ask")).rejects.toMatchObject({ code: "not_found" });
   }, 60_000);
   test("a new task trusts the mise config of its fresh worktree, and a mise file the agent adds, changes or deletes is a change until the user trusts the config they saw", async () => {
     const dir = makeRepo(

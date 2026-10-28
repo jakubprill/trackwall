@@ -1,4 +1,4 @@
-import { agentsApi, countLabel, pluralNoun, type Session, TASK_PROMPT_MAX, workspaceApi } from "@trackwall/protocol";
+import { agentsApi, countLabel, pluralNoun, type Session, TASK_PROMPT_MAX, type TaskApprovals, workspaceApi } from "@trackwall/protocol";
 import { GitBranch, Play } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -10,6 +10,7 @@ import { newSessionStart, sessionsInSameFolder } from "@/lib/new-session";
 import type { SessionSelection } from "@/lib/session-entries";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
+import { TaskApprovalsChoice } from "./TaskApprovalsChoice.tsx";
 
 /** The place choice's value for the projects folder; a repo id is never empty. */
 const PROJECTS_FOLDER = "";
@@ -18,6 +19,7 @@ const PROJECTS_FOLDER = "";
  * A new task or session (ADR-100): a repo from the projects folder, or the projects folder itself, and a prompt for the
  * agent. In a repo with its own worktree it becomes a task (ADR-31); without one a main session in the repo's working
  * copy (ADR-26), and in the projects folder a free session, both with the prompt as their first message when there is one.
+ * Only a task, which changes nothing outside its worktree, can run without asking for approvals (ADR-105).
  */
 export function NewSession({
   conn,
@@ -36,11 +38,12 @@ export function NewSession({
   const [place, setPlace] = useState<string>();
   const [worktree, setWorktree] = useState(true);
   const [prompt, setPrompt] = useState("");
+  const [approvals, setApprovals] = useState<TaskApprovals>("ask");
   const chosen = place ?? repos.data?.repos[0]?.id ?? PROJECTS_FOLDER;
   const repo = chosen === PROJECTS_FOLDER ? null : chosen;
   const start = newSessionStart(repo, worktree, prompt);
   const createTask = useAction(
-    (repo: string, prompt: string) => post(conn, agentsApi.createTask, { repo, prompt }),
+    (repo: string, prompt: string) => post(conn, agentsApi.createTask, { repo, prompt, approvals }),
     (task) => onStarted({ kind: "task", id: task.id }),
   );
   const startSession = useAction(
@@ -103,7 +106,11 @@ export function NewSession({
             maxLength={TASK_PROMPT_MAX}
             rows={5}
           />
-          {start.kind === "session" && <WithoutWorktree repo={repo} sessions={sessions} />}
+          {start.kind === "session" ? (
+            <WithoutWorktree repo={repo} sessions={sessions} />
+          ) : (
+            <TaskApprovalsChoice label="Run the task without asking for approvals" value={approvals} onChange={setApprovals} />
+          )}
           <div className="flex flex-wrap items-center gap-2">
             {start.kind === "session" ? (
               <Button onClick={run} disabled={pending}>

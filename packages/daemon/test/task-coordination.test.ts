@@ -27,6 +27,7 @@ function task(id: string, proposedBy: ProposedBy | null): Task {
     title: "Fix login",
     proposedBy,
     model: null,
+    approvals: "ask",
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },
