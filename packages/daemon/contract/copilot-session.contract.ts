@@ -363,6 +363,20 @@ describe("a session of the real Copilot CLI", () => {
     expect(agents.sessions().sessions.find((s) => s.id === id)?.run.kind).toBe("running");
   });
 
+  test("Copilot CLI reports the mouse in the SGR encoding, and a terminal connected later gets that encoding too", async () => {
+    const { id, window } = await startSession();
+    expect(window.text()).toContain("\x1b[?1003h");
+    expect(window.text()).toContain("\x1b[?1006h");
+    const late = viewer(daemon.facade.agents, id);
+    try {
+      await waitFor(daemon.facade.agents, id, () => late.text().length > 0, "screen image for the new terminal", 10_000);
+      expect(late.text()).toContain("\x1b[?1003h");
+      expect(late.text()).toContain("\x1b[?1006h");
+    } finally {
+      late.attachment.detach();
+    }
+  });
+
   test("/exit ends the session with sessionEnd, and the session is Done", async () => {
     const { agents } = daemon.facade;
     const { id, window } = await startSession();

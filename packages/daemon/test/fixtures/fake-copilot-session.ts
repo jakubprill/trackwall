@@ -176,6 +176,8 @@ const secondRequest = real.approval.hooks.slice(2, asked).map((h) => ({
 const [startTitle, ...turnTitles] = real.titles;
 if (startTitle === undefined) throw new Error("the reference has no window title");
 title(startTitle);
+// Like Copilot CLI: every mouse move reported, in the SGR encoding (`copilot-session.contract.ts`).
+process.stdout.write("\x1b[?1003h\x1b[?1006h");
 process.stdout.write(`Welcome to the fake, MCP: ${mcpServers.join(", ")}\r\n`);
 process.stdout.write(`Instructions: ${instructionFiles.join(", ")}\r\n`);
 /** Half the session screen (`INITIAL_COLS` in `agents.ts`, 120 columns). */

@@ -3,7 +3,8 @@ name: Nightly
 # Every night, outside `CI ok` (docs/development.md):
 # - the contract tests on the newest stable Copilot CLI on npm instead of the pinned one; a failure on main opens an
 #   issue for that version (ADR-67, clarification of 2026-10-26);
-# - the tests with real Java builds (jvm.yml, ADR-72); a failure on main opens one issue, closed by the next green night.
+# - the tests with real Java builds (jvm.yml, ADR-72); a failure on main opens one issue, closed by the next green night;
+# - the whole of ci.yml with macOS added, which PRs run without it (ADR-109); a failure on main opens one issue the same way.
 on:
   schedule:
     # Once a night (UTC), outside the full hour when scheduled runs queue the longest.
@@ -124,32 +125,66 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      contents: read
       issues: write
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      RESULT: ${{ needs.jvm.result }}
-      RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
-      - name: Open, update or close the issue
-        run: |
-          title="Tests with real Java builds fail"
-          number=$(gh issue list --state open --limit 100 --search "\"$title\" in:title" --json number,title \
-            | jq -r --arg title "$title" 'map(select(.title == $title))[0].number // empty')
-          if [ "$RESULT" = success ]; then
-            if [ -n "$number" ]; then
-              gh issue close "$number" --comment "The tests with real Java builds pass again on all three systems: $RUN"
-            fi
-            exit 0
-          fi
-          if [ -n "$number" ]; then
-            gh issue comment "$number" --body "Still failing: $RUN"
-            exit 0
-          fi
-          gh issue create --title "$title" --body-file - <<EOF
-          The nightly tests with real Java builds fail: $RUN
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions
+      - uses: ./.github/actions/nightly-issue
+        with:
+          title: Tests with real Java builds fail
+          result: ${{ needs.jvm.result }}
+          passed: The tests with real Java builds pass again on all three systems
+          body: |
+            The nightly tests with real Java builds fail: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-          They build the Spring Boot projects in \`packages/daemon/jvm/projects\` with real Maven and Gradle through mise and check what Trackwall reads from them: cards, the graph, services, test reports, task verification and log errors. Maven, Gradle, Spring Boot and mise are pinned, so a failure means a change on main broke what the daemon reads from Java builds, or something outside the repo changed (a new Java 21 build, the dependency repositories); the log of each failed \`jvm\` job names the test and what differed.
+            They build the Spring Boot projects in `packages/daemon/jvm/projects` with real Maven and Gradle through mise and check what Trackwall reads from them: cards, the graph, services, test reports, task verification and log errors. Maven, Gradle, Spring Boot and mise are pinned, so a failure means a change on main broke what the daemon reads from Java builds, or something outside the repo changed (a new Java 21 build, the dependency repositories); the log of each failed `jvm` job names the test and what differed.
 
-          To fix: reproduce with \`pnpm test:jvm\` (docs/development.md, "Tests with real Java builds"), fix the daemon and add the new output to the unit tests in \`packages/daemon/test\`. This issue closes on the first night the tests pass again.
-          EOF
+            To fix: reproduce with `pnpm test:jvm` (docs/development.md, "Tests with real Java builds"), fix the daemon and add the new output to the unit tests in `packages/daemon/test`. This issue closes on the first night the tests pass again.
+
+  # PRs run CI without macOS (ADR-109), so the night runs all of it on all three systems. Not on a manual run for one
+  # Copilot CLI version, which is about the contract tests only.
+  ci:
+    if: inputs.copilot-cli == ''
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      macos: true
+
+  # The same rules as `report`. `CI ok` sums up the run; the jobs that failed are in the run's log.
+  ci-report:
+    name: report CI on all systems
+    needs: ci
+    if: >-
+      always() && github.ref == 'refs/heads/main'
+      && (needs.ci.result == 'success' || needs.ci.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions
+      - uses: ./.github/actions/nightly-issue
+        with:
+          title: Nightly CI fails on main
+          result: ${{ needs.ci.result }}
+          passed: CI passes again on Linux, Windows and macOS
+          body: |
+            The nightly run of CI on Linux, Windows and macOS fails on main: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            PRs run CI on Linux and Windows only, so a change that breaks macOS reaches main and shows up here first; a job that fails on Linux or Windows too is more likely a flaky test. The failed jobs of the run name the system and the test.
+
+            To fix: reproduce on a Mac, or run CI on the fix's branch by hand with macOS ticked (Actions → CI → Run workflow), and fix it in a PR. This issue closes on the first night CI passes again.

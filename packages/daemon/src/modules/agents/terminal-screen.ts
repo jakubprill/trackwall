@@ -1,5 +1,6 @@
 import { SerializeAddon } from "@xterm/addon-serialize";
 import headless from "@xterm/headless";
+import { MouseEncoding } from "./mouse-encoding.ts";
 
 /**
  * The session's screen on the daemon side (§4.4, ADR-26): a windowless terminal emulator fed the whole PTY output. A
@@ -22,11 +23,13 @@ export class TerminalScreen {
   readonly #terminal: InstanceType<typeof Terminal>;
   readonly #serializer = new SerializeAddon();
   readonly #viewers = new Set<ScreenViewer>();
+  readonly #mouseEncoding: MouseEncoding;
   #revision = 0;
 
   constructor(cols: number, rows: number) {
     this.#terminal = new Terminal({ cols, rows, scrollback: SCROLLBACK_LINES, allowProposedApi: true });
     this.#terminal.loadAddon(this.#serializer);
+    this.#mouseEncoding = new MouseEncoding(this.#terminal.parser);
   }
 
   get cols(): number {
@@ -61,14 +64,14 @@ export class TerminalScreen {
   }
 
   /**
-   * Attaches a viewer: `onSnapshot` gets the screen image after all output so far has been processed, and the viewer every
-   * following chunk. Returns the detach function.
+   * Attaches a viewer: `onSnapshot` gets the screen image after all output so far has been processed, with the mouse
+   * encoding the image itself leaves out (`MouseEncoding`), and the viewer every following chunk. Returns the detach function.
    */
   attach(viewer: ScreenViewer, onSnapshot: (snapshot: string) => void): () => void {
     let attached = true;
     this.#terminal.write("", () => {
       if (!attached) return;
-      onSnapshot(this.#serializer.serialize());
+      onSnapshot(this.#serializer.serialize() + this.#mouseEncoding.sequence());
       this.#viewers.add(viewer);
     });
     return () => {
