@@ -19,7 +19,7 @@ Give Copilot CLI and other agents your whole projects folder: repos, code search
 
 Trackwall runs an MCP server that every session in "Sessions" is connected to. Copilot CLI in your own terminal, or another MCP client, can connect to it too: [Connect Copilot CLI](/guide/connect-copilot-cli) shows how.
 
-The agent sees the same projects folder you see in Trackwall, through the tools below. It can read everything, and it can run mise tasks and services, but never in a repo whose mise configuration you have not trusted. No tool changes Trackwall's settings, and no tool starts, answers or stops a session: those stay with you.
+The agent sees the same projects folder you see in Trackwall, through the tools below. It can read everything, and it can run mise tasks and services, but never in a repo whose mise configuration you have not trusted. No tool changes Trackwall's settings, answers an approval or stops a session: those stay with you. A new task starts only when you approve its proposal; after that, the session that proposed it can send its agent messages and resume it.
 
 ## Use it
 
@@ -45,6 +45,7 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 | `start_service`, `stop_service`, `list_services`, `call_endpoint` | Start a service with its dependencies, stop it, list services, send an HTTP request to a running one; from a repo or from a task's worktree on the task's port. |
 | `list_sessions`, `get_session`, `get_task_changes` | The sessions and tasks in "Sessions", with state, repo, a task's changed files and their diff, and its last verification. |
 | `propose_task`, `wait_for_session`, `report_result` | Propose a task, wait up to 55 s for a session or task to need someone, report a task's summary. |
+| `propose_folder_action` | Propose removing a repo from the projects folder; nothing happens until you approve it, see the [supervisor](/features/supervisor). |
 | `get_review_comments` | The comments you sent on lines of a task's changes, for that task's agent; see [Agent tasks](/features/tasks). |
 | `send_message`, `get_messages` | A message from the session that proposed a task to that task's agent, and the agent reading it; see [Main session and task proposals](/features/main-session). |
 | `resume_task` | Continue a task whose session no longer runs, in its own worktree and conversation, the same as "Resume". The supervisor resumes any task, another session only the tasks it proposed. |
