@@ -135,8 +135,8 @@ export class Doctor {
     const git = `git ${versionIn(output) ?? firstLine(output)}`;
     if (source === "fallback")
       return warn(`${git} from PATH: the Git program ${chosen} did not answer.`, "Fix or clear the Git program in Settings > Workspace.");
-    // Git for Windows from `PATH` resolves to its real binary (ADR-79), which is worth naming too.
-    return ok(program === "git" ? git : `${git} at ${program}`);
+    // Only a chosen program is named: Git for Windows from `PATH` resolves to its real binary too (ADR-79), which says nothing new.
+    return ok(source === "chosen" ? `${git} at ${program}` : git);
   }
 
   private async copilotCli({ env }: CheckContext): Promise<Outcome> {

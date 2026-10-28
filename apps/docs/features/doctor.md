@@ -24,7 +24,7 @@ The checks are:
 | --- | --- |
 | Projects folder | it is set and exists |
 | Workspace settings file | every key of `workspace.yaml` can be read; one that cannot is named with its line, and [Config files](/features/config-files) shows them all |
-| Git | `git --version` answers; the line names the git Trackwall runs, and warns when the "Git program" from Settings did not answer and git from `PATH` is used instead |
+| Git | `git --version` answers; with a "Git program" chosen in Settings the line names the git it runs, and it warns when the "Git program" from Settings did not answer and git from `PATH` is used instead |
 | Copilot CLI | Trackwall finds it the way it starts sessions, and it is not older than the version Trackwall is tested with |
 | Copilot CLI trusted folder | `trustedFolders` in Copilot CLI's `config.json` covers your projects folder, so Copilot CLI does not ask before working in each repo and task |
 | mise | `mise --version` answers; repo tasks, services and task verification need it |
