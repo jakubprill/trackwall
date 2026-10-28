@@ -25,6 +25,7 @@ import { createFacade, HOSTING_CLIS } from "../src/facade.ts";
 import { type LoopbackOptions, loopbackRequest } from "../src/infra/loopback.ts";
 import { createMcpEndpoint } from "../src/mcp/endpoint.ts";
 import { makeRepo } from "./support/git-repo.ts";
+import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 const TOKEN = "t".repeat(43);
 let api: ApiServer;
@@ -60,7 +61,7 @@ beforeAll(async () => {
     },
     ...modules(),
   });
-});
+}, SLOW_TEST_TIMEOUT_MS);
 
 afterAll(() => api.close());
 
