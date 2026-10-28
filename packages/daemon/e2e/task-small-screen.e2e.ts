@@ -62,27 +62,25 @@ describe("a small screen", () => {
     await panel.getByText("Nothing is waiting for you.").waitFor();
   }, 90_000);
 
-  test("Home with the supervisor panel pinned keeps the 3D scene wide enough to read", async () => {
+  // One page for both layouts: every page with Home draws the 3D scene on SwiftShader, and a third such page beside the
+  // earlier ones starved a Windows runner until a click timed out.
+  test("Home keeps the 3D scene wide enough to read with the supervisor panel pinned, and widened", async () => {
     const page = await trackwall().open(SMALL_SCREEN);
-    await page.getByRole("button", { name: /Pin the supervisor panel open/ }).click();
-    const canvas = page.locator("canvas").first();
-    await canvas.waitFor();
+    try {
+      await page.getByRole("button", { name: /Pin the supervisor panel open/ }).click();
+      const panel = page.getByRole("complementary", { name: "Supervisor" });
+      const canvas = page.locator("canvas").first();
+      await canvas.waitFor();
+      expect((await canvas.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(320);
+      const pinned = await panel.boundingBox();
 
-    const box = await canvas.boundingBox();
-    expect(box?.width ?? 0).toBeGreaterThanOrEqual(320);
-  }, 60_000);
+      await page.getByRole("button", { name: "Widen the supervisor panel" }).click();
+      await page.getByRole("button", { name: "Narrow the supervisor panel" }).waitFor();
 
-  test("Home with the supervisor panel widened still keeps the 3D scene wide enough to read", async () => {
-    const page = await trackwall().open(SMALL_SCREEN);
-    await page.getByRole("button", { name: /Pin the supervisor panel open/ }).click();
-    const panel = page.getByRole("complementary", { name: "Supervisor" });
-    const pinned = await panel.boundingBox();
-    await page.getByRole("button", { name: "Widen the supervisor panel" }).click();
-    await page.getByRole("button", { name: "Narrow the supervisor panel" }).waitFor();
-    const canvas = page.locator("canvas").first();
-    await canvas.waitFor();
-
-    expect((await panel.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(pinned?.width ?? Number.POSITIVE_INFINITY);
-    expect((await canvas.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(320);
+      expect((await panel.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(pinned?.width ?? Number.POSITIVE_INFINITY);
+      expect((await canvas.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(320);
+    } finally {
+      await page.close();
+    }
   }, 60_000);
 });
