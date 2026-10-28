@@ -64,12 +64,12 @@ export class Logs {
   }
 
   /**
-   * The output of a new run of a source. The secrets to mask are the values from the process environment (`secretValues`);
-   * the environment itself is not passed on.
+   * The output of a new run of a source. The secrets to mask are the values from the process environment and `secrets`,
+   * the values the process gets elsewhere (`secretValues`); the environment itself is not passed on.
    */
-  open(source: LogSource, runId: string, env: NodeJS.ProcessEnv): RunOutput {
+  open(source: LogSource, runId: string, env: NodeJS.ProcessEnv, secrets: readonly string[] = []): RunOutput {
     const log = this.sourceLog(source);
-    return new RunOutput(secretValues(env), (stream, msg) => this.append(log, source, { runId, stream, msg }));
+    return new RunOutput(secretValues(env, secrets), (stream, msg) => this.append(log, source, { runId, stream, msg }));
   }
 
   /** A cursor before every record of this daemon run: `tail` from it pages from the oldest record still buffered. */
@@ -83,8 +83,8 @@ export class Logs {
   }
 
   /** Output only for the state's last lines, masked the same way, but without a log (the PTY screen of a task session). */
-  lastLinesOnly(env: NodeJS.ProcessEnv): RunOutput {
-    return new RunOutput(secretValues(env), () => {});
+  lastLinesOnly(env: NodeJS.ProcessEnv, secrets: readonly string[] = []): RunOutput {
+    return new RunOutput(secretValues(env, secrets), () => {});
   }
 
   /**

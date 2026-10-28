@@ -111,4 +111,20 @@ describe("workspace.yaml", () => {
       expect.objectContaining({ code: "invalid_config", message: expect.stringContaining("supervisor") }),
     );
   });
+  test("agentSecrets names the secrets from mise a session's tools get, none without the key, and a name that is not a variable is a configuration error", () => {
+    const path = tempFile();
+    expect(new WorkspaceFile(path).agentSecrets()).toEqual([]);
+
+    writeFileSync(path, "agentSecrets:\n  - JIRA_TOKEN\n  - GITLAB_TOKEN\n");
+    expect(new WorkspaceFile(path).agentSecrets()).toEqual(["JIRA_TOKEN", "GITLAB_TOKEN"]);
+
+    writeFileSync(path, "agentSecrets: JIRA_TOKEN,GITLAB_TOKEN\n");
+    expect(() => new WorkspaceFile(path).agentSecrets()).toThrow(
+      expect.objectContaining({ code: "invalid_config", message: expect.stringContaining("agentSecrets") }),
+    );
+    writeFileSync(path, "agentSecrets: [JIRA_TOKEN,GITLAB_TOKEN]\n");
+    expect(new WorkspaceFile(path).agentSecrets()).toEqual(["JIRA_TOKEN", "GITLAB_TOKEN"]);
+    writeFileSync(path, "agentSecrets: ['JIRA TOKEN']\n");
+    expect(() => new WorkspaceFile(path).agentSecrets()).toThrow(expect.objectContaining({ code: "invalid_config" }));
+  });
 });

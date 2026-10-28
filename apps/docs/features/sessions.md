@@ -53,6 +53,7 @@ Alt+1 … Alt+9, Alt+0 and Alt+J work while a terminal has the focus too, and ar
 ## Good to know
 
 - Copilot CLI must be on your `PATH` as `copilot` and signed in.
+- Each session gets the variables and tokens of your mise config, and the line under its header says which: see [Environment from mise](/features/mise-environment).
 - A free session runs in the projects folder, so the trusted folder you set for Copilot CLI and the antivirus exclusion of that folder cover it. It can change any repo there, and it can hand work over as a [task proposal](/features/main-session), but it does not run a repo's mise tasks or services through Trackwall. Unlike the [supervisor](/features/supervisor), you can run several, and it may run commands and change files.
 - The [supervisor](/features/supervisor) is not one of the numbered entries: its heading tops the list with the work it delegated under it, and selecting it opens its panel on the right.
 - Copilot CLI takes over the mouse in the terminal. Drag over text to select it and press Ctrl+C or right-click to copy it, as the hint under the selection says. You can also drag with Option (macOS) or Shift (Windows) held down, then copy with Cmd+C or Ctrl+C. Ctrl+C without a selection interrupts the agent. Paste with Cmd+V or Ctrl+V (Ctrl+Shift+V works too). While text is selected, links in the session open only after you clear the selection with a click.

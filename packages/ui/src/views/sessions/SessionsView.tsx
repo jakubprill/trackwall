@@ -57,6 +57,7 @@ import { cn } from "@/lib/utils";
 import { NewSession } from "./NewSession.tsx";
 import { ProposalInbox } from "./ProposalInbox.tsx";
 import { EndTaskButton, SessionCloseButton, SessionCloseConfirmation, TaskEnding } from "./SessionClose.tsx";
+import { SessionEnvironment } from "./SessionEnvironment.tsx";
 import { SessionGrid } from "./SessionGrid.tsx";
 import { TaskLine } from "./TaskLine.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
@@ -671,6 +672,7 @@ function SessionPanel({
           </Button>
         )}
       </header>
+      <SessionEnvironment environment={session.environment} />
       <SessionTerminal conn={conn} session={session.id} live={live} selected />
     </>
   );

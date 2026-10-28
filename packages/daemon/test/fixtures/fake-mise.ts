@@ -7,6 +7,9 @@
 // `fake-service.ts` with that config instead (the `services` tests, ADR-45). A config in a directory listed in
 // `MISE_TRUSTED_CONFIG_PATHS` counts as trusted (task worktrees, ADR-59). A mise task in `exits` first prints its lines in
 // `prints` and writes its files in `writes` (path relative to the working directory -> content), e.g. a JUnit report (ADR-64).
+// `env --json` prints `env` (the variables of the config's `[env]`, as decrypted values) and `env --redacted --json` only those
+// named in `redacted`, as mise does for `redact = true` and age values (ADR-93); an untrusted config fails both like `tasks
+// ls`, and `envError` fails them with that mise error (e.g. a missing age key), `redactedError` only the `--redacted` one.
 import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, join, sep } from "node:path";
@@ -20,6 +23,10 @@ const config = JSON.parse(readFileSync(configPath, "utf8")) as {
   servers?: Record<string, object>;
   prints?: Record<string, string[]>;
   writes?: Record<string, Record<string, string>>;
+  env?: Record<string, string>;
+  redacted?: string[];
+  envError?: string;
+  redactedError?: string;
 };
 const args = process.argv.slice(2);
 const calls = join(process.cwd(), "calls.log");
@@ -39,13 +46,29 @@ function canonical(path: string): string {
   return process.platform === "win32" ? real.toLowerCase() : real;
 }
 
+function refuseUntrusted(): void {
+  if (!config.untrusted || trustedByEnv) return;
+  console.error("mise WARN  HTTP GET https://mise.jdx.dev/releases.tsv failed");
+  console.error(`mise ERROR Config files in ${join(process.cwd(), "mise.toml")} are not trusted.`);
+  process.exit(1);
+}
+
 if (args[0] === "tasks" && args[1] === "ls" && args[2] === "--json") {
-  if (config.untrusted && !trustedByEnv) {
-    console.error("mise WARN  HTTP GET https://mise.jdx.dev/releases.tsv failed");
-    console.error(`mise ERROR Config files in ${join(process.cwd(), "mise.toml")} are not trusted.`);
+  refuseUntrusted();
+  console.log(JSON.stringify(config.tasks));
+} else if (args[0] === "env" && args.at(-1) === "--json") {
+  refuseUntrusted();
+  const envError = args[1] === "--redacted" ? (config.redactedError ?? config.envError) : config.envError;
+  if (envError !== undefined) {
+    console.error(`mise ERROR ${envError}`);
+    console.error("mise ERROR Version: 2026.10.21 linux-x64 (2026-10-27)");
+    console.error("mise ERROR Run with --verbose or MISE_VERBOSE=1 for more information");
     process.exit(1);
   }
-  console.log(JSON.stringify(config.tasks));
+  const env = config.env ?? {};
+  const redacted = config.redacted ?? [];
+  const shown = args[1] === "--redacted" ? Object.fromEntries(Object.entries(env).filter(([name]) => redacted.includes(name))) : env;
+  console.log(JSON.stringify(shown, null, 2));
 } else if (args[0] === "trust") {
   writeFileSync(configPath, JSON.stringify({ ...config, untrusted: false }));
   console.error(`mise trusted ${process.cwd()}`);

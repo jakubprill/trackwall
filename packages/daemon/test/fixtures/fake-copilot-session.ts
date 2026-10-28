@@ -56,10 +56,18 @@ const instructionFiles = (process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS ?? "")
   .flatMap((dir) => readdirSync(dir).filter((name) => name.endsWith(".instructions.md")));
 
 /**
- * Task arguments (`--interactive=`, `--resume=`, `--session-id=`) and tool permissions (`--allow-tool=`, `--deny-tool=`)
- * the fake prints, so that the test sees them.
+ * Task arguments (`--interactive=`, `--resume=`, `--session-id=`), tool permissions (`--allow-tool=`, `--deny-tool=`) and
+ * the secrets Copilot CLI redacts (`--secret-env-vars=`, ADR-93) the fake prints, so that the test sees them.
  */
-const taskArgs = process.argv.filter((a) => /^--(interactive|resume|session-id|model|allow-tool|deny-tool)=/.test(a));
+const taskArgs = process.argv.filter((a) => /^--(interactive|resume|session-id|model|allow-tool|deny-tool|secret-env-vars)=/.test(a));
+
+/**
+ * Variables the fake prints with the values its tools would get, named in `FAKE_COPILOT_SHOW_ENV` (comma-separated). Like
+ * Copilot CLI, it keeps the variables of `--secret-env-vars` out of its tools (the contract test of ADR-93).
+ */
+const shownEnv = (process.env.FAKE_COPILOT_SHOW_ENV ?? "").split(",").filter((name) => name !== "");
+const hiddenEnv = (taskArgs.find((a) => a.startsWith("--secret-env-vars="))?.slice("--secret-env-vars=".length) ?? "").split(",");
+const toolEnv = (name: string) => (hiddenEnv.includes(name) ? "(hidden)" : (process.env[name] ?? "(unset)"));
 
 const real = reference();
 const title = (text: string) => process.stdout.write(`\x1b]0;${text}\x07`);
@@ -166,6 +174,7 @@ const CWD_LINE_CHARS = 60;
 // The directory in lines shorter than the screen: ConPTY on Windows wraps a longer line its own way, and the test joins the lines.
 process.stdout.write(`Directory:\r\n${process.cwd().replace(new RegExp(`.{${CWD_LINE_CHARS}}`, "g"), "$&\r\n")}\r\n`);
 for (const arg of taskArgs) process.stdout.write(`Argument: ${arg}\r\n`);
+for (const name of shownEnv) process.stdout.write(`Env ${name}=${toolEnv(name)}\r\n`);
 draw(real.promptBox);
 
 // A prompt given at the start (`--interactive=`, a task's session) is the first prompt, so it starts the hooks at once.

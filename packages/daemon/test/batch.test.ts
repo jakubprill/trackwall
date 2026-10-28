@@ -53,7 +53,7 @@ function setup(
   });
   const mise = new Mise({
     procs,
-    repos: { repoPath },
+    repos: { repoPath, projectsDir: async () => home },
     tasks: NO_TASKS,
     command: FAKE_MISE,
     env: async () => process.env,

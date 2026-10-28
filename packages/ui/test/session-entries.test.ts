@@ -26,6 +26,7 @@ function session(id: string, startedAt: string, task: string | null = null): Ses
     needsAttention: false,
     task,
     dialog: null,
+    environment: { variables: [], secrets: [], agentSecrets: [], problem: null },
   };
 }
 

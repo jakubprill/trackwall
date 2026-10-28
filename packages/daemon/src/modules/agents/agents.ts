@@ -13,6 +13,7 @@ import {
   type SendMessageResult,
   type SendReviewResult,
   type Session,
+  type SessionEnvironment,
   type SessionList,
   type SupervisorConversation,
   type SupervisorSettings,
@@ -40,6 +41,7 @@ import { MiseTrustNotices } from "./mise-trust-notices.ts";
 import { withLoopbackNoProxy } from "./no-proxy.ts";
 import { proposedByOf, proposerKeyOf, proposerOf, SUPERVISOR } from "./proposer.ts";
 import { type ResumableSession, ResumableSessions, type ResumeLaunch, resumablePlace, resumeLaunch } from "./resumable-sessions.ts";
+import { type SessionMiseEnv, sessionMiseLaunch } from "./session-env.ts";
 import { type SessionRole, withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
@@ -106,6 +108,7 @@ interface AgentsProcs {
     command: readonly string[];
     cwd: string;
     env: NodeJS.ProcessEnv;
+    secrets: readonly string[];
     cols: number;
     rows: number;
     onData: (bytes: Uint8Array) => void;
@@ -129,6 +132,8 @@ interface AgentsRepos {
   toolPermissions(session: Pick<Session, "repo" | "supervisor">): ToolPermissions;
   /** `supervisor` from `workspace.yaml` (ADR-78); `invalid_config` for a bad key. */
   supervisorSettings(): SupervisorSettings;
+  /** `agentSecrets` from `workspace.yaml` (ADR-93): the secrets from mise a session's tools get; `invalid_config` for a bad key. */
+  agentSecrets(): readonly string[];
   /** Moves the repo out of the projects folder (ADR-83) and returns where it went. */
   /**
    * Moves repo `id` out of the projects folder (ADR-83) while its folder is still `expectedDir`; `beforeMove` runs right
@@ -156,6 +161,8 @@ export interface AgentsDeps {
   version: string;
   /** The environment of user processes (`PATH` from the login shell on macOS). */
   env: () => Promise<NodeJS.ProcessEnv>;
+  /** What mise sets for a session in its place (ADR-93); a refused place is its `problem`, not a failed start. */
+  miseEnv: (place: { repo: string | null; task: string | null }) => Promise<SessionMiseEnv>;
   /**
    * Where the session plugin's hook for an event POSTs its payload (ADR-88): the daemon's hook route with the daemon token
    * and the session token, which `receiveHook` takes; the API's port is known only once it listens.
@@ -656,19 +663,33 @@ export class Agents {
    * `promptOnStart` when the arguments carry the first message (`--interactive`), so the session works from the start.
    */
   async #launch({ id = randomUUID(), repo, supervisor, cwd, task, args, promptOnStart, hasConversation }: LaunchSpec): Promise<Session> {
-    // The MCP server and the hooks are the daemon on `127.0.0.1`, which a proxy of the user must not get (ADR-89).
-    const env = withLoopbackNoProxy({ ...(await this.#deps.env()), TERM: "xterm-256color", COLORTERM: "truecolor", ...LOOPBACK_HOOKS_ENV });
-    const copilot = resolveCopilot(this.#deps.copilot, env);
+    const userEnv = await this.#deps.env();
+    // The user's `PATH`, not mise's: a mise config an agent can change must not choose the program that gets every secret.
+    const copilot = resolveCopilot(this.#deps.copilot, userEnv);
     if ("missing" in copilot) throw new DomainError("agent_unavailable", copilot.message);
     const { program, args: prefix } = copilot;
     const permissions = this.#deps.repos.toolPermissions({ repo, supervisor });
+    const mise = sessionMiseLaunch(await this.#deps.miseEnv({ repo, task }), userEnv, this.#deps.repos.agentSecrets());
+    // The MCP server and the hooks are the daemon on `127.0.0.1`, which a proxy of the user must not get (ADR-89).
+    const env = withLoopbackNoProxy({ ...mise.env, TERM: "xterm-256color", COLORTERM: "truecolor", ...LOOPBACK_HOOKS_ENV });
     const role = this.#role(repo, supervisor, task);
     if (this.#sessions.has(id)) throw new Error(`session ${id} is already listed`);
     const dir = sessionDir(this.#deps.home, id);
     const token = this.#tokens.issue(id);
     let prepared: PreparedSession;
     try {
-      prepared = this.#prepare({ id, role, repo, task, dir, token, promptOnStart, hasConversation, program });
+      prepared = this.#prepare({
+        id,
+        role,
+        repo,
+        task,
+        dir,
+        token,
+        promptOnStart,
+        hasConversation,
+        program,
+        environment: mise.environment,
+      });
     } catch (err) {
       this.#tokens.revoke(id);
       rmSync(dir, { recursive: true, force: true });
@@ -686,10 +707,12 @@ export class Agents {
           "--additional-mcp-config",
           `@${join(dir, MCP_CONFIG_FILE)}`,
           ...toolPermissionArgs(permissions),
+          ...mise.args,
           ...args,
         ],
         cwd,
         env: instructionsDir === null ? env : withInstructionsDir(env, instructionsDir),
+        secrets: mise.secretValues,
         cols: INITIAL_COLS,
         rows: INITIAL_ROWS,
         onData: (bytes) => session.output(bytes),
@@ -826,7 +849,7 @@ export class Agents {
    * The session directory with the session plugin, MCP config, session instructions and an empty
    * `hooks.jsonl`, before Copilot CLI starts.
    */
-  #prepare({ id, role, repo, task, dir, token, promptOnStart, hasConversation, program }: SessionFiles): PreparedSession {
+  #prepare({ id, role, repo, task, dir, token, promptOnStart, hasConversation, program, environment }: SessionFiles): PreparedSession {
     const supervisor = role.kind === "supervisor";
     const pluginDir = join(dir, "plugin");
     const hooksFile = join(dir, HOOKS_FILENAME);
@@ -850,6 +873,7 @@ export class Agents {
       promptOnStart,
       hasConversation,
       program,
+      environment,
       run: () => this.#deps.procs.state(owner(id)),
       prompt: () => this.#inboxPrompt({ id, supervisor, task }),
       onUserText: () => this.#coordination.userTyped({ id, task }),
@@ -976,6 +1000,8 @@ interface SessionFiles {
   hasConversation: boolean;
   /** The Copilot CLI program the session starts. */
   program: string;
+  /** What the session got from mise (ADR-93). */
+  environment: SessionEnvironment;
 }
 
 /** A prepared session directory: the session and its instructions directory (`null` when it could not be written). */

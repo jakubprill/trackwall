@@ -27,6 +27,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
     items: [
       { text: "mise tasks", link: "/features/mise-tasks" },
       { text: "Local config backup", link: "/features/local-config" },
+      { text: "Environment from mise", link: "/features/mise-environment" },
       { text: "Services", link: "/features/services" },
       { text: "Batch command", link: "/features/batch-command" },
     ],
