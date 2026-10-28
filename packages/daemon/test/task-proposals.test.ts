@@ -74,11 +74,28 @@ describe("task proposals", () => {
     before.take(approved.id);
 
     const after = new TaskProposals(() => {});
-    after.restore(before.stored(), (p) => p.id !== approved.id);
+    after.restore(before.stored(), (id) => id === approved.id);
 
     expect(after.list()).toEqual([waiting]);
     expect(after.take(waiting.id)).toEqual(waiting);
     expect(after.rejection(rejected.id)).toEqual({ reason: "Not now" });
+  });
+
+  test("a repo removal keeps its folder across the restart until it is decided, and one without its folder in the file is dropped", () => {
+    const removal = { ...PROPOSAL, kind: "remove_repo" as const, title: "Remove shop" };
+    const before = new TaskProposals(() => {});
+    const kept = before.add(removal, "/projects/shop");
+    const rejected = before.add(removal, "/projects/web");
+    before.reject(rejected.id, null);
+    expect(before.stored().removalDirs).toEqual({ [kept.id]: "/projects/shop" });
+
+    const after = new TaskProposals(() => {});
+    after.restore(before.stored(), () => false);
+    expect(after.removalDir(kept.id)).toBe("/projects/shop");
+
+    const planted = new TaskProposals(() => {});
+    planted.restore({ ...before.stored(), removalDirs: {} }, () => false);
+    expect(planted.list()).toEqual([]);
   });
 
   test("every change of what waits is reported, taking a proposal for approval is not", () => {

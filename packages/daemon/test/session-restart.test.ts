@@ -216,33 +216,46 @@ describe.skipIf(process.versions.bun === undefined)(
       expect(after.facade.agents.sessions().messages.map((m) => m.text)).toEqual(["Use the v2 API"]);
     }, 60_000);
 
-    test("a waiting proposal and the supervisor's unread updates come back, and the resumed supervisor is asked to read them", async () => {
+    test("a waiting proposal and the unread updates come back, the stop adds none, and the resumed sessions are asked to read them", async () => {
       const before = await startDaemon();
       const { agents } = before.facade;
       const supervisor = await agents.startSupervisor("new", "terminal");
+      const main = await agents.start("shop");
       await waitFor(agents, supervisor.id, (s) => s.state !== null, "the supervisor's input box");
+      await waitFor(agents, main.id, (s) => s.state !== null, "the main session's input box");
+      // A task of the supervisor that is in its first turn when the daemon stops; the fake stays in it until it gets a line.
+      const delegated = await agents.propose(supervisor.id, { ...PROPOSAL, title: "Delegated" });
+      const task = await agents.approveProposal(delegated.id, delegated.prompt, null, "ask");
+      await waitFor(agents, await resumedSessionOf(before, task.id), (s) => s.state?.state === "Working", "the task's first turn");
+      agents.takeUpdates(supervisor.id);
       const waiting = await agents.propose(supervisor.id, { ...PROPOSAL, title: "Login test" });
       const rejected = await agents.propose(supervisor.id, { ...PROPOSAL, title: "Logout test" });
       agents.rejectProposal(rejected.id, "Not now");
+      const byMain = await agents.propose(main.id, { ...PROPOSAL, title: "Signup test" });
+      agents.rejectProposal(byMain.id, undefined);
 
       await stopDaemon(before);
       const after = await startDaemon({ home: before.home, projects: before.projects });
 
       expect(after.facade.agents.sessions().proposals).toEqual([waiting]);
-      await waitFor(after.facade.agents, supervisor.id, (s) => s.run.kind === "running", "the supervisor started again");
-      const window = viewer(after.facade.agents, supervisor.id);
-      await waitFor(
-        after.facade.agents,
-        supervisor.id,
-        () => window.unwrappedText().includes("Thinking about: There is news about the work you delegated in Trackwall"),
-        "the typed prompt to read the updates",
-      );
-      window.attachment.detach();
+      for (const id of [supervisor.id, main.id]) {
+        await waitFor(after.facade.agents, id, (s) => s.run.kind === "running", "the session started again");
+        const window = viewer(after.facade.agents, id);
+        await waitFor(
+          after.facade.agents,
+          id,
+          () => window.unwrappedText().includes("Thinking about: There is news about the work you delegated in Trackwall"),
+          "the typed prompt to read the updates",
+        );
+        window.attachment.detach();
+      }
+      // The task session the stop ended is not news: the next daemon resumes it.
       expect(after.facade.agents.takeUpdates(supervisor.id).updates).toEqual([
         { kind: "proposal_rejected", task: rejected.id, session: null, reason: "Not now", at: expect.any(String) },
       ]);
-      const task = await after.facade.agents.approveProposal(waiting.id, waiting.prompt, null, "ask");
-      expect(task).toMatchObject({ id: waiting.id, title: "Login test", proposedBy: { session: supervisor.id, supervisor: true } });
+      expect(after.facade.agents.takeUpdates(main.id).updates.map((u) => u.task)).toEqual([byMain.id]);
+      const approved = await after.facade.agents.approveProposal(waiting.id, waiting.prompt, null, "ask");
+      expect(approved).toMatchObject({ id: waiting.id, title: "Login test", proposedBy: { session: supervisor.id, supervisor: true } });
     }, 60_000);
 
     test("a repo removal proposed before the restart is approved in the next daemon", async () => {

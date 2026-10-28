@@ -6,7 +6,7 @@ import { DomainError } from "../../infra/errors.ts";
 /**
  * Task messages (ADR-68): what a task's proposer sent its session with `send_message`, per task, oldest first. The last
  * `TASK_MESSAGES_KEPT` of a task stay, read ones included, so the task panel shows the user what the agents told each
- * other. Since ADR-115 they outlive a daemon restart in `agent-queues.json` (`list`, `restore`); every change is
+ * other. Since ADR-115 they outlive a daemon restart in `agent-queues.json` (`stored`, `restore`); every change is
  * reported to `changed`, which writes the file. A message counts as read once `take` returns it, also when the agent's
  * call is cancelled before the result reaches it.
  */
@@ -21,6 +21,10 @@ export class TaskMessages {
 
   constructor(changed: () => void) {
     this.#changed = changed;
+  }
+
+  stored(): StoredMessages {
+    return this.list();
   }
 
   /** The messages the previous daemon kept, of the tasks that are still there (`hasTask`), at most `TASK_MESSAGES_KEPT` of each. */

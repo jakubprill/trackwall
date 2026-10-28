@@ -355,7 +355,7 @@ describe("the coordination across a daemon restart", () => {
     expect(Object.keys(stored.userInSession)).toEqual([MAIN, TASK_SESSION]);
 
     const { coordination: after } = setup();
-    after.restore(stored, { hasTask: (id) => id === kept, hasProposer: (key) => key === SUPERVISOR_WORK || key === MAIN });
+    after.restore(stored, { hasTask: (id) => id === kept, hasSession: (id) => id === MAIN });
 
     expect(after.messages().map((m) => [m.task, m.text])).toEqual([[kept, "use the v2 API"]]);
     expect(after.takeMessages(kept).map((m) => m.text)).toEqual(["use the v2 API"]);
@@ -367,6 +367,37 @@ describe("the coordination across a daemon restart", () => {
     expect(after.stored()).toMatchObject({ userInSession: { [MAIN]: expect.any(Number) }, userInTask: { [kept]: expect.any(Number) } });
     expect(Object.keys(after.stored().userInSession)).toEqual([MAIN]);
     expect(Object.keys(after.stored().userInTask)).toEqual([kept]);
+  });
+});
+
+describe("what the agent queues file hears about (ADR-115)", () => {
+  test("a message or an update that comes or is read is a change, and so is a review's time; typing is not", () => {
+    let changes = 0;
+    const coordination = new TaskCoordination({
+      task: (id) => task(id, BY_MAIN),
+      findTask: (id) => task(id, BY_MAIN),
+      proposedBy: () => BY_MAIN,
+      proposerKey: () => MAIN,
+      runningOfTask: () => undefined,
+      runningProposer: () => undefined,
+      hasProposer: () => true,
+      changed: () => changes++,
+      log: () => {},
+    });
+
+    coordination.send(MAIN, "by-main", "use the v2 API");
+    coordination.takeMessages("by-main");
+    coordination.takeMessages("by-main");
+    expect(changes).toBe(2);
+    coordination.proposalRejected({ id: "p1", proposedBy: BY_MAIN }, null);
+    coordination.takeUpdates(MAIN);
+    coordination.takeUpdates(MAIN);
+    expect(changes).toBe(4);
+    coordination.userTyped({ id: MAIN, task: "by-main" });
+    expect(changes).toBe(4);
+    coordination.reviewed("by-main");
+    coordination.taskEnded("by-main");
+    expect(changes).toBe(6);
   });
 });
 

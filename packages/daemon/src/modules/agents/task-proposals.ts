@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isAbsolute } from "node:path";
 import { TaskId, TaskProposal } from "@trackwall/protocol";
 import { z } from "zod";
 import { DomainError } from "../../infra/errors.ts";
@@ -7,7 +8,8 @@ import { DomainError } from "../../infra/errors.ts";
  * Task proposals (ADR-39): tasks submitted with the MCP tool `propose_task` that wait for the user's decision in the
  * Sessions view. Rejected ones disappear from the list, but their identifiers stay, so that a session waiting for the
  * proposal gets `proposal_rejected` instead of `not_found`. Since ADR-55 a rejection also keeps the user's reason for
- * that session. Since ADR-115 both outlive a daemon restart in `agent-queues.json` (`stored`, `restore`), because the
+ * that session. A repo removal (ADR-83) keeps the folder it names, fixed when it was proposed: approval moves that folder
+ * or none. Since ADR-115 all of it outlives a daemon restart in `agent-queues.json` (`stored`, `restore`), because the
  * sessions that proposed them are resumed (ADR-95); every change is reported to `changed`, which writes the file.
  */
 
@@ -16,9 +18,13 @@ export const MAX_PENDING_PROPOSALS = 20;
 /** This many recent rejections the daemon remembers for waiting sessions. */
 const REMEMBERED_REJECTIONS = 100;
 
-/** What `agent-queues.json` keeps of the proposals: the waiting ones (newest first) and the remembered rejections (oldest first). */
+/**
+ * What `agent-queues.json` keeps of the proposals: the waiting ones (newest first), the folder of each waiting repo
+ * removal and the remembered rejections (oldest first).
+ */
 export const StoredProposals = z.object({
   pending: z.array(TaskProposal).max(MAX_PENDING_PROPOSALS),
+  removalDirs: z.record(TaskId, z.string().max(4096).refine(isAbsolute, "a repo folder must be a full path")),
   rejected: z.array(z.object({ id: TaskId, reason: z.string().nullable() })).max(REMEMBERED_REJECTIONS),
 });
 export type StoredProposals = z.infer<typeof StoredProposals>;
@@ -33,6 +39,8 @@ export class TaskProposals {
   readonly #approving = new Set<string>();
   /** Rejected id to the user's reason (`null` without one), oldest first; the oldest drop out after `REMEMBERED_REJECTIONS`. */
   readonly #rejected = new Map<string, string | null>();
+  /** The folder each waiting repo removal names. */
+  readonly #removalDirs = new Map<string, string>();
   readonly #changed: () => void;
 
   constructor(changed: () => void) {
@@ -41,12 +49,25 @@ export class TaskProposals {
 
   /** The proposals to keep across a restart; one being approved counts as waiting, since its approval ends with the daemon. */
   stored(): StoredProposals {
-    return { pending: this.list(), rejected: [...this.#rejected].map(([id, reason]) => ({ id, reason })) };
+    return {
+      pending: this.list(),
+      removalDirs: Object.fromEntries(this.#removalDirs),
+      rejected: [...this.#rejected].map(([id, reason]) => ({ id, reason })),
+    };
   }
 
-  /** The proposals the previous daemon kept that still wait (`waits`: not one that became a task while it stopped). */
-  restore({ pending, rejected }: StoredProposals, waits: (proposal: TaskProposal) => boolean): void {
-    this.#pending = pending.filter(waits);
+  /**
+   * The proposals the previous daemon kept that still wait: not one that became a task while it stopped (`isTask`), nor
+   * a repo removal without its folder. The move checks the folder against the repo's folder of now (`removeRepo`), so a
+   * path from the file moves nothing else.
+   */
+  restore({ pending, removalDirs, rejected }: StoredProposals, isTask: (id: string) => boolean): void {
+    this.#pending = pending.filter((p) => !isTask(p.id) && (p.kind !== "remove_repo" || removalDirs[p.id] !== undefined));
+    this.#removalDirs.clear();
+    for (const p of this.#pending) {
+      const dir = removalDirs[p.id];
+      if (p.kind === "remove_repo" && dir !== undefined) this.#removalDirs.set(p.id, dir);
+    }
     this.#rejected.clear();
     for (const { id, reason } of rejected) this.#rejected.set(id, reason);
   }
@@ -55,12 +76,16 @@ export class TaskProposals {
     return [...this.#pending];
   }
 
-  add(proposal: Omit<TaskProposal, "id" | "createdAt">): TaskProposal {
+  /** A new proposal; a repo removal (`kind: "remove_repo"`) with the folder it names. */
+  add(proposal: Omit<TaskProposal, "id" | "createdAt">, removalDir?: string): TaskProposal {
+    if ((proposal.kind === "remove_repo") !== (removalDir !== undefined))
+      throw new Error("a repo removal, and only a repo removal, names a folder");
     if (this.#pending.length >= MAX_PENDING_PROPOSALS) {
       throw new DomainError("bad_request", `${MAX_PENDING_PROPOSALS} proposals are already waiting for the user; wait for their decision`);
     }
     const added: TaskProposal = { id: randomUUID(), ...proposal, createdAt: new Date().toISOString() };
     this.#pending = [added, ...this.#pending];
+    if (removalDir !== undefined) this.#removalDirs.set(added.id, removalDir);
     this.#changed();
     return added;
   }
@@ -75,6 +100,11 @@ export class TaskProposals {
     const proposal = this.find(id);
     if (!proposal) throw new DomainError("not_found", `no task proposal ${id} is waiting for a decision`);
     return proposal;
+  }
+
+  /** The folder a waiting repo removal names, or `undefined` for a task proposal. */
+  removalDir(id: string): string | undefined {
+    return this.#removalDirs.get(id);
   }
 
   /** A proposal approved while its task is being created, or `undefined`. */
@@ -97,12 +127,14 @@ export class TaskProposals {
     this.#approving.delete(id);
     if (restore) return;
     this.#pending = this.#pending.filter((p) => p.id !== id);
+    this.#removalDirs.delete(id);
     this.#changed();
   }
 
   reject(id: string, reason: string | null): void {
     this.get(id);
     this.#pending = this.#pending.filter((p) => p.id !== id);
+    this.#removalDirs.delete(id);
     this.#rejected.set(id, reason);
     for (const old of this.#rejected.keys()) {
       if (this.#rejected.size <= REMEMBERED_REJECTIONS) break;
