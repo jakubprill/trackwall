@@ -341,4 +341,21 @@ describe("a Copilot CLI session over ACP", () => {
       { type: "entries", reset: false, entries: [{ id: "agent-1", kind: "agent", text: "All tests pass." }] },
     ]);
   });
+
+  test("the views get the end of the answer before the session says the turn has ended", async () => {
+    const s = session();
+    await s.ready();
+    const frames: ConversationServerMessage[] = [];
+    s.acp.attachConversation({ send: (m) => frames.push(m), closed: () => {} });
+    s.acp.say("Check the build");
+    s.send({
+      method: "session/update",
+      params: { sessionId: "c1", update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Done." } } },
+    });
+    s.answer("session/prompt", { stopReason: "end_turn" });
+    await s.settle();
+
+    expect(s.acp.view()?.state?.state).toBe("Input");
+    expect(frames.at(-1)?.entries.at(-1)).toEqual({ id: "agent-2", kind: "agent", text: "Done." });
+  });
 });
