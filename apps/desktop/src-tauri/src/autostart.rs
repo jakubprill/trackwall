@@ -73,7 +73,7 @@ pub fn before_restart(app: &AppHandle) {
         .ok_or_else(|| std::io::Error::other("no configuration directory"))
         .and_then(|marker| write_restart_marker(&marker, SystemTime::now()));
     if let Err(err) = written {
-        eprintln!("[desktop] marking the restart after an update: {err}");
+        crate::report_error!("marking the restart after an update: {err}");
     }
 }
 
@@ -155,7 +155,7 @@ pub fn refresh(app: &AppHandle) {
         false => Ok(()),
     });
     if let Err(err) = refreshed {
-        eprintln!("[desktop] refreshing the start at sign-in: {err}");
+        crate::report_error!("refreshing the start at sign-in: {err}");
     }
 }
 

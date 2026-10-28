@@ -23,6 +23,7 @@ pub fn register(app: &AppHandle) {
         }
     });
     if let Err(err) = registered {
+        // Another app holding the shortcut is the user's setup, not an error of the shell.
         eprintln!("[desktop] registering the global shortcut {}: {err}", next_waiting());
     }
 }

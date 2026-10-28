@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import { appendFileSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -114,6 +114,7 @@ describe("an agent dialog read from the session's screen (ADR-66)", () => {
 const sessions: LiveSession[] = [];
 afterEach(() => {
   for (const s of sessions.splice(0)) s.dispose();
+  setSystemTime();
 });
 
 /** A session in a 120×30 terminal (or `terminal`) whose screen shows `name` and whose last hook record is `notification`. */
@@ -163,6 +164,12 @@ async function sessionShowing(
   notify(notificationType);
   await screenProcessed(session);
   return { session, written, notify, hooksFile, typedText };
+}
+
+/** Copilot CLI clears the screen and draws `lines`, e.g. the next dialog in place of the answered one. */
+async function redraw(session: LiveSession, lines: readonly string[]): Promise<void> {
+  session.output(new TextEncoder().encode(`\u001b[2J\u001b[H${lines.join("\r\n")}`));
+  await screenProcessed(session);
 }
 
 function dialogError(answer: () => void): string | undefined {
@@ -225,6 +232,10 @@ describe("answering an agent dialog from outside the terminal (ADR-66)", () => {
     const { session, written, notify } = await sessionShowing("shell-120", "permission_prompt");
     const first = session.view()?.dialog?.id ?? "";
     session.answerDialog(first, "1");
+    // Copilot CLI clears the dialog and runs the command, then draws the same request again.
+    await redraw(session, [" $ Shell Write a file", "   touch /src/app-outside/x.txt"]);
+    session.tick();
+    await redraw(session, screen("shell-120"));
     notify("permission_prompt");
 
     const again = session.view()?.dialog;
@@ -254,6 +265,177 @@ describe("answering an agent dialog from outside the terminal (ADR-66)", () => {
     const { session } = await sessionShowing("shell-120", "elicitation_dialog");
 
     expect(session.view()).toMatchObject({ state: { state: "Input" }, dialog: null });
+  });
+});
+
+describe("approvals of tools the agent called at once (ADR-66)", () => {
+  test("after the first answer the session waits for the second, whose dialog is shown once it is drawn", async () => {
+    const { session, written, notify } = await sessionShowing("shell-120", "permission_prompt");
+    notify("permission_prompt");
+    const first = session.view()?.dialog;
+    expect(first).toMatchObject({ kind: "approval", title: "Write a file" });
+
+    session.answerDialog(first?.id ?? "", "1");
+    // The answered dialog is still on the screen for a moment; it is not offered again, so no answer reaches the next unseen.
+    expect(session.view()).toMatchObject({ state: { state: "Approval" }, dialog: null });
+
+    await redraw(session, screen("create-120"));
+    const second = session.view()?.dialog;
+    expect(second).toMatchObject({ kind: "approval", title: "Create file" });
+    expect(second?.id).not.toBe(first?.id);
+    session.answerDialog(second?.id ?? "", "1");
+
+    expect(written).toEqual(["1", "1"]);
+    expect(session.view()).toMatchObject({ state: { state: "Working", source: "keyboard" }, dialog: null });
+  });
+
+  test("an answered approval cut above stays answered while its dialog is still on the screen", async () => {
+    const terminal = { cols: 100, rows: 14, message: "Use MCP tool: trackwall/verify_task" };
+    const { session, written, notify, hooksFile } = await sessionShowing("mcp-cut-14", "permission_prompt", undefined, terminal);
+    notify("permission_prompt");
+    const first = session.view()?.dialog;
+    expect(first).toMatchObject({ kind: "approval", title: "Approval request" });
+    session.answerDialog(first?.id ?? "", "1");
+
+    // The answered tool's postToolUse, read while its dialog is still on the screen.
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "postToolUse", receivedAt: 0, payload: { toolName: "view" }, omitted: [] })}\n`);
+    session.tick();
+
+    expect(session.view()).toMatchObject({ state: { state: "Approval" }, dialog: null });
+    expect(written).toEqual(["1"]);
+  });
+
+  test("an approval cut above, with a second request of the same wait, gets a plain heading and keeps its id", async () => {
+    const terminal = { cols: 100, rows: 14, message: "Use MCP tool: trackwall/verify_task" };
+    const { session, hooksFile } = await sessionShowing("mcp-cut-14", "permission_prompt", undefined, terminal);
+    const alone = session.view()?.dialog;
+    expect(alone).toMatchObject({ kind: "approval", title: "Use MCP tool: trackwall/verify_task" });
+
+    // The requests come at once and in either order, so neither text can stand for the heading of the dialog shown.
+    const second = { notification_type: "permission_prompt", message: "Use MCP tool: trackwall/call_endpoint" };
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "notification", receivedAt: 0, payload: second, omitted: [] })}\n`);
+    session.tick();
+
+    const shown = session.view()?.dialog;
+    expect(shown).toMatchObject({ kind: "approval", title: "Approval request" });
+    expect(shown?.id).toBe(alone?.id);
+  });
+
+  test("an approval cut above keeps its heading when another tool's postToolUse comes while it waits", async () => {
+    const terminal = { cols: 100, rows: 14, message: "Use MCP tool: trackwall/verify_task" };
+    const { session, hooksFile } = await sessionShowing("mcp-cut-14", "permission_prompt", undefined, terminal);
+    const before = session.view()?.dialog;
+
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "postToolUse", receivedAt: 0, payload: { toolName: "view" }, omitted: [] })}\n`);
+    session.tick();
+
+    expect(session.view()).toMatchObject({ state: { state: "Approval" }, dialog: { title: "Use MCP tool: trackwall/verify_task" } });
+    expect(session.view()?.dialog?.id).toBe(before?.id);
+  });
+
+  test("the postToolUse of another tool does not end waiting for an approval still on the screen", async () => {
+    const { session, hooksFile } = await sessionShowing("shell-120", "permission_prompt");
+
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "postToolUse", receivedAt: 0, payload: { toolName: "view" }, omitted: [] })}\n`);
+    session.tick();
+
+    expect(session.view()).toMatchObject({ state: { state: "Approval" }, dialog: { kind: "approval", title: "Write a file" } });
+  });
+
+  test("the postToolUse of another tool that comes before the approval is drawn does not end waiting for it", async () => {
+    const { session, hooksFile } = await sessionShowing("shell-120", "permission_prompt");
+    await redraw(session, [" ⠋ Thinking"]);
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "postToolUse", receivedAt: 0, payload: { toolName: "view" }, omitted: [] })}\n`);
+    session.tick();
+
+    await redraw(session, screen("shell-120"));
+    session.tick();
+    setSystemTime(new Date(Date.now() + 10_000));
+    session.tick();
+
+    expect(session.view()).toMatchObject({ state: { state: "Approval" }, dialog: { kind: "approval", title: "Write a file" } });
+  });
+
+  test("the postToolUse after the approval left the screen without a key the daemon saw is work 3 s later, as before", async () => {
+    const { session, hooksFile } = await sessionShowing("shell-120", "permission_prompt");
+    await redraw(session, [" $ Shell Write a file", "   touch /src/app-outside/x.txt"]);
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "postToolUse", receivedAt: 0, payload: { toolName: "bash" }, omitted: [] })}\n`);
+    session.tick();
+    expect(session.view()?.state).toMatchObject({ state: "Approval" });
+
+    setSystemTime(new Date(Date.now() + 3000));
+    session.tick();
+
+    expect(session.view()).toMatchObject({ state: { state: "Working", reason: "hook postToolUse" }, dialog: null });
+  });
+
+  test("the same command asked twice at once gets another id after the first answer, so a second click on the first types nothing", async () => {
+    const { session, written, notify } = await sessionShowing("shell-120", "permission_prompt");
+    notify("permission_prompt");
+    const first = session.view()?.dialog?.id ?? "";
+    session.answerDialog(first, "1");
+    await redraw(session, [" $ Shell Write a file"]);
+    session.tick();
+    await redraw(session, screen("shell-120"));
+
+    expect(session.view()?.dialog?.id).not.toBe(first);
+    expect(dialogError(() => session.answerDialog(first, "1"))).toBe("dialog_changed");
+    expect(written).toEqual(["1"]);
+  });
+
+  test("a digit the approval does not offer answers nothing, so the session still waits for both", async () => {
+    const { session, notify } = await sessionShowing("shell-120", "permission_prompt");
+    notify("permission_prompt");
+    const dialog = session.view()?.dialog;
+
+    session.input("9");
+    expect(session.view()).toMatchObject({ state: { state: "Approval" }, dialog: { id: dialog?.id } });
+    session.answerDialog(dialog?.id ?? "", "1");
+
+    expect(session.view()?.state).toMatchObject({ state: "Approval" });
+  });
+
+  test("a cut approval waiting after an early answer, whose request came at once with the answered one's, gets a plain heading", async () => {
+    const terminal = { cols: 100, rows: 14 };
+    const { session, hooksFile } = await sessionShowing("mcp-cut-14", "agent_idle", undefined, terminal);
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+
+    // The first approval, drawn before its hook, is answered; Copilot CLI draws the second.
+    session.input("1");
+    await redraw(
+      session,
+      screen("mcp-cut-14").map((line) => line.replace("│ │ }", "│ │ ]")),
+    );
+    // Both requests come now, the second one's first: its hook takes the early answer, the first one's waits.
+    const request = (message: string) => ({
+      event: "notification",
+      receivedAt: 0,
+      payload: { notification_type: "permission_prompt", message },
+      omitted: [],
+    });
+    const hooks = [request("Use MCP tool: trackwall/call_endpoint"), request("Use MCP tool: trackwall/verify_task")];
+    appendFileSync(hooksFile, `${hooks.map((h) => JSON.stringify(h)).join("\n")}\n`);
+    session.tick();
+
+    expect(session.view()).toMatchObject({ state: { state: "Approval" }, dialog: { kind: "approval", title: "Approval request" } });
+  });
+
+  test("two approvals answered before their hooks came are both answered when the hooks come (ADR-71)", async () => {
+    const { session, hooksFile, typedText, written } = await sessionShowing("shell-120", "agent_idle");
+    appendFileSync(hooksFile, `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`);
+    session.tick();
+
+    session.input("1");
+    await redraw(session, screen("create-120"));
+    session.input("1");
+    const request = { event: "notification", receivedAt: 0, payload: { notification_type: "permission_prompt" }, omitted: [] };
+    appendFileSync(hooksFile, `${JSON.stringify(request)}\n${JSON.stringify(request)}\n`);
+    session.tick();
+
+    expect(session.view()?.state).toMatchObject({ state: "Working", source: "keyboard" });
+    expect(typedText.count).toBe(0);
+    expect(written).toEqual(["1", "1"]);
   });
 });
 

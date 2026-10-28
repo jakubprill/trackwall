@@ -29,7 +29,7 @@ import {
   type Verification,
 } from "@trackwall/protocol";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
-import { findCopilot, toolPermissionArgs } from "./copilot-command.ts";
+import { resolveCopilot, toolPermissionArgs } from "./copilot-command.ts";
 import type { CopilotHookOutput } from "./copilot-hook-output.ts";
 import { CopilotHookEvent } from "./copilot-hook-record.ts";
 import { writeCopilotPlugin } from "./copilot-plugin.ts";
@@ -664,10 +664,10 @@ export class Agents {
    */
   async #launch({ id = randomUUID(), repo, supervisor, cwd, task, args, promptOnStart, hasConversation }: LaunchSpec): Promise<Session> {
     const userEnv = await this.#deps.env();
-    const [name = "copilot", ...prefix] = this.#deps.copilot;
     // The user's `PATH`, not mise's: a mise config an agent can change must not choose the program that gets every secret.
-    const program = findCopilot(name, userEnv);
-    if (!program) throw new DomainError("agent_unavailable", `Copilot CLI (${name}) not found in PATH`);
+    const copilot = resolveCopilot(this.#deps.copilot, userEnv);
+    if ("missing" in copilot) throw new DomainError("agent_unavailable", copilot.message);
+    const { program, args: prefix } = copilot;
     const permissions = this.#deps.repos.toolPermissions({ repo, supervisor });
     const mise = sessionMiseLaunch(await this.#deps.miseEnv({ repo, task }), userEnv, this.#deps.repos.agentSecrets());
     // The MCP server and the hooks are the daemon on `127.0.0.1`, which a proxy of the user must not get (ADR-89).

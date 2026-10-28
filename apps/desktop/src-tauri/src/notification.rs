@@ -72,7 +72,7 @@ fn app_id(app: &AppHandle) -> String {
 /// Prepares the system for the app's notifications; once, in `setup`.
 pub fn init(app: &AppHandle) {
     if let Err(err) = platform::init(&app_id(app)) {
-        eprintln!("[desktop] preparing system notifications: {err}");
+        crate::report_error!("preparing system notifications: {err}");
     }
 }
 
@@ -86,7 +86,7 @@ pub fn show_news(app: &AppHandle, news: &News) {
             move || jump::request(&app, target.clone())
         };
         if let Err(err) = platform::show(&app_id, &notice, clicked) {
-            eprintln!("[desktop] showing a system notification: {err}");
+            crate::report_error!("showing a system notification: {err}");
         }
     }
 }
@@ -124,7 +124,7 @@ mod platform {
         });
         match icon {
             Ok(path) => set_string(&key, "IconUri", &path.to_string_lossy())?,
-            Err(err) => eprintln!("[desktop] writing the notification icon: {err}"),
+            Err(err) => crate::report_error!("writing the notification icon: {err}"),
         }
         Ok(())
     }
@@ -187,7 +187,7 @@ mod platform {
             match Notification::new().title(&title).message(&body).wait_for_click(wait).send() {
                 Ok(NotificationResponse::Click) => clicked(),
                 Ok(_) => {}
-                Err(err) => eprintln!("[desktop] showing a system notification: {err}"),
+                Err(err) => crate::report_error!("showing a system notification: {err}"),
             }
             if wait {
                 WAITING_FOR_CLICK.fetch_sub(1, Ordering::SeqCst);

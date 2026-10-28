@@ -99,7 +99,7 @@ pub fn release(app: &AppHandle, icon: Rect) {
         Release::Nothing => {}
         Release::Show => {
             if let Err(err) = place(&panel, icon) {
-                eprintln!("[desktop] placing the tray panel: {err}");
+                crate::report_error!("placing the tray panel: {err}");
             }
             let _ = panel.show();
             let _ = panel.set_focus();

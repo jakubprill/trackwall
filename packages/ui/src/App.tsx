@@ -1,4 +1,4 @@
-import { Activity, FolderGit2, Network, Orbit, Settings, SquareTerminal } from "lucide-react";
+import { FolderGit2, Network, Orbit, Settings, SquareTerminal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
 import { ErrorBanner } from "@/components/ErrorBanner";
@@ -17,6 +17,7 @@ import { entrySelection, findEntry, nextWaitingShortcut, type SessionSelection }
 import { SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
 import { sessionShortcut } from "@/lib/session-shortcut";
 import { agentsInTurn, attentionCount } from "@/lib/session-state";
+import { FIRST_SETTINGS_CATEGORY, type SettingsCategory } from "@/lib/settings-categories";
 import { selectsSupervisor, showingTakesKeyboard, supervisorSummary } from "@/lib/supervisor";
 import { readSupervisorPinned, saveSupervisorPinned } from "@/lib/supervisor-pin";
 import { useAppMenu } from "@/lib/use-app-menu";
@@ -30,7 +31,6 @@ import { useSessionTree } from "@/lib/use-session-tree";
 import { useSessions } from "@/lib/use-sessions";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { zoomStepOf, zoomWindow } from "@/lib/zoom-shortcut";
-import { DaemonPanel } from "@/views/daemon/DaemonPanel";
 import { GraphView } from "@/views/graph/GraphView";
 import { HomeView } from "@/views/home/HomeView";
 import { ReposView } from "@/views/repos/ReposView";
@@ -45,22 +45,31 @@ const VIEWS = [
   { id: "repos", label: "Repos", icon: FolderGit2, shortcut: "2", placement: "top" },
   { id: "sessions", label: "Sessions", icon: SquareTerminal, shortcut: "3", placement: "top" },
   { id: "graph", label: "Overview", icon: Network, shortcut: "4", placement: "top" },
-  { id: "daemon", label: "Daemon", icon: Activity, shortcut: "9", placement: "bottom" },
   { id: "settings", label: "Settings", icon: Settings, shortcut: ",", placement: "bottom" },
 ] as const satisfies readonly ActivityView<string>[];
 type View = (typeof VIEWS)[number]["id"];
 const VIEW_IDS = VIEWS.map((v) => v.id);
 
 export function App() {
-  // A repo opened from the dashboard belongs to the navigation, not to the view: any other navigation to "Repos" starts without it.
+  // A repo opened from the dashboard belongs to the navigation, not to the view: any other navigation to "Repos" starts without it;
+  // the same holds for the category Settings opens on.
   // An extra window starts with the view it was opened with or showed at the last run (ADR-49), the main window with
-  // Home. `visit` grows with every opening of a repo, so that Repos is mounted again with it even when it is already open.
-  const [{ view, repo, visit }, setNav] = useState<{ view: View; repo?: string; visit: number }>(() => ({
+  // Home. `visit` grows with every opening of a repo or of a Settings category, so that the view is mounted again with it even when it is already open.
+  const [{ view, repo, settingsCategory, visit }, setNav] = useState<{
+    view: View;
+    repo?: string;
+    settingsCategory?: SettingsCategory;
+    visit: number;
+  }>(() => ({
     view: startFromLocation(window.location.search, START_PARAMS.view, VIEW_IDS) ?? "home",
     visit: 0,
   }));
   const setView = useCallback((next: View) => setNav((nav) => ({ view: next, visit: nav.visit })), []);
   const openRepos = useCallback((openRepo?: string) => setNav((nav) => ({ view: "repos", repo: openRepo, visit: nav.visit + 1 })), []);
+  const openSettings = useCallback(
+    (category: SettingsCategory) => setNav((nav) => ({ view: "settings", settingsCategory: category, visit: nav.visit + 1 })),
+    [],
+  );
   const [session, setSession] = useState<SessionSelection>();
   const [sessionLayout, setSessionLayout] = useState<SessionLayout>(
     () => startFromLocation(window.location.search, START_PARAMS.sessionLayout, SESSION_LAYOUTS) ?? "1",
@@ -208,7 +217,7 @@ export function App() {
               </div>
             )}
             {/* One view that throws keeps the view bar and the other views. The key mounts the view afresh, with a fresh boundary, on
-                a view change, a reconnect (`epoch`) and every opening of a repo (`visit`). */}
+                a view change, a reconnect (`epoch`) and every opening of a repo or a Settings category (`visit`). */}
             <ErrorBoundary
               key={`${view}:${epoch}:${visit}`}
               fallback={(message, retry) => <ViewFailed message={message} onRetry={retry} />}
@@ -221,8 +230,8 @@ export function App() {
                   sessions={sessions}
                   onOpenInSessions={openInSessions}
                   onOpenRepo={openRepos}
-                  onOpenDaemon={() => setView("daemon")}
-                  onOpenSettings={() => setView("settings")}
+                  onOpenDaemon={() => openSettings("diagnostics")}
+                  onOpenSettings={openSettings}
                 />
               )}
               {conn && view === "repos" && (
@@ -230,8 +239,11 @@ export function App() {
                   conn={conn}
                   initialRepo={repo}
                   repoWatch={repoWatch}
+                  sessions={sessions.data}
+                  runningLive={runningLive}
+                  onOpenInSessions={openInSessions}
                   onRetry={retry}
-                  onOpenSettings={() => setView("settings")}
+                  onOpenSettings={openSettings}
                 />
               )}
               {conn && view === "sessions" && (
@@ -249,14 +261,16 @@ export function App() {
                 />
               )}
               {conn && view === "graph" && <GraphView conn={conn} warmupLive={warmupLive} repoWatch={repoWatch} />}
-              {conn && view === "daemon" && (
-                <div className="flex justify-center p-6">
-                  <DaemonPanel conn={conn} warmupLive={warmupLive} onRetry={retry} />
-                </div>
-              )}
               {conn && view === "settings" && (
                 <div className="flex justify-center p-6">
-                  <SettingsView conn={conn} update={appUpdate} onRetry={retry} onSaved={() => setView("repos")} />
+                  <SettingsView
+                    conn={conn}
+                    initialCategory={settingsCategory ?? FIRST_SETTINGS_CATEGORY}
+                    update={appUpdate}
+                    warmupLive={warmupLive}
+                    onRetry={retry}
+                    onSaved={() => setView("repos")}
+                  />
                 </div>
               )}
             </ErrorBoundary>

@@ -13,11 +13,11 @@ import type { LiveFeed } from "@/lib/daemon-events";
 import { formatUptime } from "@/lib/format";
 import { useCardWarmup } from "@/lib/use-card-warmup";
 import { type Remote, useRemote } from "@/lib/use-remote";
-import { ConnectCopilot } from "./ConnectCopilot.tsx";
 
 const POLL_MS = 5000;
 
-export function DaemonPanel({
+/** The daemon's state for Settings › Diagnostics (ADR-102), refreshed every few seconds while it is shown. */
+export function DaemonSurface({
   conn,
   warmupLive,
   onRetry,
@@ -33,35 +33,32 @@ export function DaemonPanel({
   const ready = info.error ? undefined : info.data;
 
   return (
-    <div className="flex w-full max-w-xl flex-col gap-4">
-      <Surface
-        label="Daemon"
-        meta={
-          <span className="flex items-center gap-2">
-            <StatusBadge info={info} />
-            <Button variant="ghost" size="icon" className="size-6" onClick={info.reload} aria-label="Refresh">
-              <RefreshCw />
-            </Button>
-          </span>
-        }
-      >
-        <div className="flex flex-col gap-4 p-4">
-          <p className="text-muted-foreground text-sm">The process that holds all of Trackwall's state.</p>
-          {!info.data && !info.error && <Loading text="Connecting to the daemon…" />}
-          {info.error && (
-            <ErrorWithRetry
-              message={info.error}
-              onRetry={() => {
-                onRetry();
-                info.reload();
-              }}
-            />
-          )}
-          {ready && <InfoTable info={ready} warmup={warmup} />}
-        </div>
-      </Surface>
-      {ready && <ConnectCopilot info={ready} />}
-    </div>
+    <Surface
+      label="Daemon"
+      meta={
+        <span className="flex items-center gap-2">
+          <StatusBadge info={info} />
+          <Button variant="ghost" size="icon" className="size-6" onClick={info.reload} aria-label="Refresh">
+            <RefreshCw />
+          </Button>
+        </span>
+      }
+    >
+      <div className="flex flex-col gap-4 p-4">
+        <p className="text-muted-foreground text-sm">The process that holds all of Trackwall's state.</p>
+        {!info.data && !info.error && <Loading text="Connecting to the daemon…" />}
+        {info.error && (
+          <ErrorWithRetry
+            message={info.error}
+            onRetry={() => {
+              onRetry();
+              info.reload();
+            }}
+          />
+        )}
+        {ready && <InfoTable info={ready} warmup={warmup} />}
+      </div>
+    </Surface>
   );
 }
 

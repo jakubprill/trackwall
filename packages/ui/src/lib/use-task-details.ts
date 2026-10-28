@@ -1,12 +1,12 @@
-import { agentsApi, miseApi, type RunningMiseTask, type Task, type TaskMessage, type TaskMiseConfig } from "@trackwall/protocol";
+import { agentsApi, type RunningMiseTask, type Task, type TaskMessage, type TaskMiseConfig } from "@trackwall/protocol";
 import { useCallback } from "react";
 import { post } from "./api.ts";
 import type { Connection } from "./connection.ts";
 import type { LiveFeed } from "./daemon-events.ts";
-import { RUNNING_MISE_POLL_MS } from "./run-state.ts";
 import { taskName } from "./session-entries.ts";
 import { type TaskNoticeInput, taskNotices } from "./task-notices.ts";
 import { type Remote, useRemote } from "./use-remote.ts";
+import { useRunningMiseTasks } from "./use-running-mise-tasks.ts";
 import { useTaskMergeRequest } from "./use-task-merge-request.ts";
 import { useTaskVerification } from "./use-task-verification.ts";
 
@@ -49,8 +49,7 @@ export function useTaskDetails({
   const shared = useRemote(off ? undefined : loadShared, { pollMs: warningPollMs });
   const loadMiseConfig = useCallback(() => post(conn, agentsApi.taskMiseConfig, { task: id }), [conn, id]);
   const miseConfig = useRemote(off ? undefined : loadMiseConfig, { pollMs: warningPollMs });
-  const loadRunning = useCallback(() => post(conn, miseApi.running, {}), [conn]);
-  const running = useRemote(off ? undefined : loadRunning, { pollMs: RUNNING_MISE_POLL_MS, live: runningLive });
+  const running = useRunningMiseTasks(conn, runningLive, off);
 
   const sharedFiles = (shared.error ? [] : (shared.data?.shared ?? [])).flatMap(({ task: other, files }) => {
     const found = tasks.find((t) => t.id === other);

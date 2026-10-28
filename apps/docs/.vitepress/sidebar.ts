@@ -53,6 +53,8 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       { text: "trackwall:// links", link: "/features/links" },
       { text: "Start at sign-in", link: "/features/start-at-sign-in" },
       { text: "App updates", link: "/features/updates" },
+      { text: "Doctor", link: "/features/doctor" },
+      { text: "Trackwall errors", link: "/features/trackwall-errors" },
     ],
   },
 ];

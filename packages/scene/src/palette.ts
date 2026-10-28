@@ -12,9 +12,9 @@ export interface ScenePalette {
   warning: string;
   /** `--destructive`: error, repo unavailable. */
   destructive: string;
-  /** `--muted-foreground`: ended sessions, text on screens. */
+  /** `--muted-foreground`: ended sessions, clean repos, text on screens. */
   muted: string;
-  /** `--secondary` without transparency: calm state, clean repo. */
+  /** `--secondary` without transparency: idle session, the session track. */
   idle: string;
   /** `--card` without transparency: model bodies. */
   body: string;
@@ -34,7 +34,8 @@ export function repoStateColor(state: HomeRepoState, palette: ScenePalette): str
   if (state === "changed") return palette.warning;
   if (state === "behind") return palette.primary;
   if (state === "unavailable") return palette.destructive;
-  return palette.idle;
+  // Not `idle`: that is nearly the background, and a clean repo must still stand out on the ring (ADR-104).
+  return palette.muted;
 }
 
 const SESSION_STATE_COLORS: Record<HomeSessionState, keyof ScenePalette> = {

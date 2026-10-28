@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 
 /**
- * Runs the `vcs` module's programs (`git`, `gh`, `glab`): arguments always as an array, without a shell, output
- * limited, and an error is the message from stderr. Short processes without a group; long processes that stop the whole
+ * Runs a short program to its end (`git`, `gh`, `glab` for `vcs`, `--version` of Copilot CLI and mise for the doctor):
+ * arguments always as an array, without a shell, output limited, and an error is the message from stderr. Short processes without a group; long processes that stop the whole
  * tree belong to the `procs` module.
  */
 

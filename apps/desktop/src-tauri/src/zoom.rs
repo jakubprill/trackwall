@@ -98,7 +98,7 @@ fn apply(webview: &Webview, zoom: f64) -> Result<(), String> {
 pub fn apply_to_main(app: &AppHandle) {
     if let Some(main) = app.get_webview_window(windows::MAIN) {
         if let Err(err) = apply(main.as_ref(), app.state::<Zooms>().zoom_of(windows::MAIN)) {
-            eprintln!("[desktop] {err}");
+            crate::report_error!("{err}");
         }
     }
 }
@@ -107,7 +107,7 @@ pub fn apply_to_main(app: &AppHandle) {
 fn pass_to_page(webview: &Webview, zoom: f64) {
     let script = format!("document.documentElement.setAttribute({ZOOM_ATTRIBUTE:?}, {:?});", zoom.to_string());
     if let Err(err) = webview.eval(script) {
-        eprintln!("[desktop] passing the zoom to {}: {err}", webview.label());
+        crate::report_error!("passing the zoom to {}: {err}", webview.label());
     }
 }
 
@@ -121,7 +121,7 @@ pub fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>) {
         // Before the page draws; the attribute waits for the page, which would drop it while it starts.
         PageLoadEvent::Started if zoom != LEVELS[ACTUAL_SIZE] => {
             if let Err(err) = set_zoom(webview, zoom) {
-                eprintln!("[desktop] {err}");
+                crate::report_error!("{err}");
             }
         }
         PageLoadEvent::Finished => pass_to_page(webview, zoom),
@@ -150,7 +150,7 @@ pub fn apply_step(app: &AppHandle, label: &str, step: ZoomStep) -> Result<(), St
     drop(levels);
     if let Some(file) = zooms.file.get() {
         if let Err(err) = json_file::save(file, &saved) {
-            eprintln!("[desktop] saving the zoom: {err}");
+            crate::report_error!("saving the zoom: {err}");
         }
     }
     Ok(())

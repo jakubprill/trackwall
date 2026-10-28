@@ -1,8 +1,12 @@
 import {
   AdditiveBlending,
   BoxGeometry,
+  BufferGeometry,
   CylinderGeometry,
+  DataTexture,
+  DoubleSide,
   EdgesGeometry,
+  Float32BufferAttribute,
   LineBasicMaterial,
   LineSegments,
   type Material,
@@ -11,6 +15,10 @@ import {
   MeshStandardMaterial,
   NormalBlending,
   type Object3D,
+  RingGeometry,
+  SphereGeometry,
+  Sprite,
+  SpriteMaterial,
   TorusGeometry,
 } from "three";
 
@@ -77,12 +85,112 @@ export function cylinder<M extends Material>(
   return mesh;
 }
 
+export function sphere<M extends Material>(radius: number, material: M, at: [number, number, number] = [0, 0, 0]): Mesh<SphereGeometry, M> {
+  const mesh = new Mesh(new SphereGeometry(radius, 20, 14), material);
+  mesh.position.set(...at);
+  return mesh;
+}
+
 /** A flat ring lying on the floor (a torus turned horizontal). */
 export function flatRing<M extends Material>(radius: number, tube: number, segments: number, material: M, y = 0): Mesh<TorusGeometry, M> {
   const mesh = new Mesh(new TorusGeometry(radius, tube, 6, segments), material);
   mesh.rotation.x = Math.PI / 2;
   mesh.position.y = y;
   return mesh;
+}
+
+/**
+ * Translucent body of a hologram (ADR-104): the background shows through, the edges drawn with `outline` carry the shape.
+ * It does not write depth, so the glowing parts inside stay visible.
+ */
+export function glass(color: string, glow: string, opacity = 0.5): MeshStandardMaterial {
+  const material = solid(color, 0, opacity);
+  material.emissive.set(glow);
+  material.emissiveIntensity = 0.08;
+  material.depthWrite = false;
+  return material;
+}
+
+/** A flat ring or arc lying on the floor, from `start` through `span` radians, counted from +x towards +z like the layout. */
+export function flatArc<M extends Material>(inner: number, outer: number, start: number, span: number, material: M): Mesh<RingGeometry, M> {
+  // RingGeometry lies in the XY plane with the angle from +X to +Y; turned horizontal, +Y becomes −Z, so the scene angle is
+  // the geometry angle with a minus sign.
+  const mesh = new Mesh(
+    new RingGeometry(inner, outer, Math.max(8, Math.ceil(span * 12)), 1, -start - span, span).rotateX(-Math.PI / 2),
+    material,
+  );
+  mesh.material.side = DoubleSide;
+  return mesh;
+}
+
+/** Short radial ticks around a circle on the floor, like the scale of a HUD dial, as one geometry. */
+export function tickRing<M extends Material>(
+  radius: number,
+  count: number,
+  length: number,
+  width: number,
+  material: M,
+): Mesh<BufferGeometry, M> {
+  const positions: number[] = [];
+  const indices: number[] = [];
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2;
+    const [cos, sin] = [Math.cos(angle), Math.sin(angle)];
+    // Across the tick: perpendicular to the radius, half the width each way.
+    const [dx, dz] = [-sin * (width / 2), cos * (width / 2)];
+    const [inner, outer] = [radius - length / 2, radius + length / 2];
+    const base = i * 4;
+    positions.push(cos * inner - dx, 0, sin * inner - dz, cos * inner + dx, 0, sin * inner + dz);
+    positions.push(cos * outer + dx, 0, sin * outer + dz, cos * outer - dx, 0, sin * outer - dz);
+    indices.push(base, base + 2, base + 1, base, base + 3, base + 2);
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  const mesh = new Mesh(geometry, material);
+  mesh.material.side = DoubleSide;
+  return mesh;
+}
+
+/** Side of the glow texture in pixels: it is blurred anyway, so a small one is enough. */
+const GLOW_SIZE = 64;
+let glowPixels: Uint8Array | null = null;
+
+/**
+ * A white spot fading to the edge, generated in code, so the scene needs no image files and no canvas. Every glow gets its
+ * own texture, because disposing a model disposes its textures; only the pixels, which nothing frees, are computed once.
+ */
+function glowMap(): DataTexture {
+  glowPixels ??= glowSpot();
+  const texture = new DataTexture(glowPixels, GLOW_SIZE, GLOW_SIZE);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function glowSpot(): Uint8Array {
+  const data = new Uint8Array(GLOW_SIZE * GLOW_SIZE * 4);
+  for (let y = 0; y < GLOW_SIZE; y++) {
+    for (let x = 0; x < GLOW_SIZE; x++) {
+      const distance = Math.hypot(x + 0.5 - GLOW_SIZE / 2, y + 0.5 - GLOW_SIZE / 2) / (GLOW_SIZE / 2);
+      const fade = Math.max(0, 1 - distance);
+      const i = (y * GLOW_SIZE + x) * 4;
+      data.set([255, 255, 255, Math.round(255 * fade * fade)], i);
+    }
+  }
+  return data;
+}
+
+/**
+ * A soft glow around a light (ADR-104): a sprite that adds its colour to whatever is behind it. It replaces a bloom pass,
+ * which costs several full-screen passes per frame and drops frames on a laptop's integrated graphics.
+ */
+export function glow(color: string, size: number, y: number, opacity = 1): Sprite {
+  const sprite = new Sprite(
+    new SpriteMaterial({ map: glowMap(), color, transparent: true, opacity, blending: AdditiveBlending, depthWrite: false }),
+  );
+  sprite.scale.set(size, size, 1);
+  sprite.position.y = y;
+  return unpickable(sprite);
 }
 
 /**

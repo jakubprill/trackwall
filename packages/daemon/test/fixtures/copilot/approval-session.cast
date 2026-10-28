@@ -6,6 +6,7 @@
 [3.0, "m", "{\"kind\":\"hook\",\"record\":{\"event\":\"postToolUse\",\"receivedAt\":1792756803000,\"payload\":{\"sessionId\":\"00000000-0000-4000-8000-000000000001\",\"timestamp\":1792756803000,\"toolName\":\"view\"},\"omitted\":[\"cwd\"]}}"]
 [3.9, "o", "Allow bash to run `bun test`? (y/n)"]
 [4.0, "m", "{\"kind\":\"hook\",\"record\":{\"event\":\"notification\",\"receivedAt\":1792756804000,\"payload\":{\"sessionId\":\"00000000-0000-4000-8000-000000000001\",\"timestamp\":1792756804000,\"notification_type\":\"permission_prompt\",\"message\":\"Copilot needs permission to run bash\"},\"omitted\":[\"cwd\"]}}"]
+[69.0, "m", "{\"kind\":\"key\",\"key\":\"enter\"}"]
 [70.0, "m", "{\"kind\":\"hook\",\"record\":{\"event\":\"postToolUse\",\"receivedAt\":1792756870000,\"payload\":{\"sessionId\":\"00000000-0000-4000-8000-000000000001\",\"timestamp\":1792756870000,\"toolName\":\"bash\"},\"omitted\":[\"cwd\"]}}"]
 [71.0, "o", "\u001b]9;4;0;0\u0007Done. "]
 [71.2, "m", "{\"kind\":\"hook\",\"record\":{\"event\":\"agentStop\",\"receivedAt\":1792756871200,\"payload\":{\"sessionId\":\"00000000-0000-4000-8000-000000000001\",\"timestamp\":1792756871200,\"stopReason\":\"end_turn\"},\"omitted\":[\"cwd\"]}}"]

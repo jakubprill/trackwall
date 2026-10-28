@@ -50,7 +50,13 @@ impl DaemonState {
             let result = me.home.clone().and_then(|home| daemon::ensure_daemon(&home, &me.cancel));
             *me.lock() = match result {
                 Ok(conn) => Phase::Ready(conn),
-                Err(err) => Phase::Failed(err),
+                Err(err) => {
+                    // The first line says what failed; the rest is the startup log, which the daemon's own journal entry covers.
+                    if !me.cancel.load(Ordering::SeqCst) {
+                        crate::report_error!("starting the daemon: {}", err.lines().next().unwrap_or_default());
+                    }
+                    Phase::Failed(err)
+                }
             };
             me.changed.notify_all();
         });
@@ -119,13 +125,13 @@ impl DaemonState {
         if let Some(conn) = own {
             match daemon::shutdown(conn) {
                 Ok(()) => return,
-                Err(err) => eprintln!("[desktop] stopping the daemon: {err}"),
+                Err(err) => crate::report_error!("stopping the daemon: {err}"),
             }
         }
         let other = self.home.as_deref().ok().and_then(daemon::discover).filter(|c| own.is_none_or(|o| o.port != c.port));
         if let Some(conn) = other {
             if let Err(err) = daemon::shutdown(&conn) {
-                eprintln!("[desktop] stopping the daemon from daemon.json: {err}");
+                crate::report_error!("stopping the daemon from daemon.json: {err}");
             }
         }
     }

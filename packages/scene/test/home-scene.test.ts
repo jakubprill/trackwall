@@ -67,9 +67,27 @@ function linkOpacities(): number[] {
 
 const positionOf = (key: HomeKey, scene: HomeScene) => scene.entity(key)?.get(Position);
 
+function meshCount(key: HomeKey, scene: HomeScene): number {
+  let count = 0;
+  scene
+    .entity(key)
+    ?.get(Visual)
+    ?.traverse((o) => {
+      if (o instanceof Mesh) count++;
+    });
+  return count;
+}
+
+/** A label element for a scene without a browser: it only remembers the CSS variables the scene sets on it. */
+function fakeLabelElement() {
+  const properties = new Map<string, string>();
+  const element = { style: { setProperty: (name: string, value: string) => properties.set(name, value) }, dataset: {}, properties };
+  return element as unknown as HTMLElement & { properties: Map<string, string> };
+}
+
 describe("dashboard scene", () => {
   test("every repo, session and the daemon get an entity with a model to draw", () => {
-    const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
+    const scene = new HomeScene(engine, { palette: PALETTE, style: "holo", labels: "needs-you", motion: true });
     scene.apply(MODEL);
 
     const keys: HomeKey[] = [
@@ -86,7 +104,7 @@ describe("dashboard scene", () => {
   });
 
   test("the same snapshot a second time does not rebuild the models", () => {
-    const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
+    const scene = new HomeScene(engine, { palette: PALETTE, style: "holo", labels: "needs-you", motion: true });
     scene.apply(MODEL);
     const before = scene.entity("repo:orders-api")?.get(Visual);
 
@@ -96,7 +114,7 @@ describe("dashboard scene", () => {
   });
 
   test("a change of repo state replaces only its model", () => {
-    const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
+    const scene = new HomeScene(engine, { palette: PALETTE, style: "holo", labels: "needs-you", motion: true });
     scene.apply(MODEL);
     const orders = scene.entity("repo:orders-api")?.get(Visual);
     const web = scene.entity("repo:web-shop")?.get(Visual);
@@ -108,7 +126,7 @@ describe("dashboard scene", () => {
   });
 
   test("a repo that vanished from the snapshot loses its entity together with its session and connections", () => {
-    const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
+    const scene = new HomeScene(engine, { palette: PALETTE, style: "holo", labels: "needs-you", motion: true });
     scene.apply(MODEL);
 
     scene.apply({ ...MODEL, repos: MODEL.repos.filter((r) => r.id !== "payments-api") });
@@ -123,6 +141,8 @@ describe("dashboard scene", () => {
     const opened: HomeKey[] = [];
     const scene = new HomeScene(engine, {
       palette: PALETTE,
+      style: "holo",
+      labels: "needs-you",
       motion: true,
       onSelect: (k) => selected.push(k),
       onOpen: (k) => opened.push(k),
@@ -140,7 +160,7 @@ describe("dashboard scene", () => {
   });
 
   test("adding a repo moves the other repos and their sessions to new places in the layout", () => {
-    const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
+    const scene = new HomeScene(engine, { palette: PALETTE, style: "holo", labels: "needs-you", motion: true });
     scene.apply({ ...MODEL, repos: MODEL.repos.filter((r) => r.id !== "payments-api") });
     const at = positionOf("repo:orders-api", scene);
     const before = { x: at?.x, z: at?.z };
@@ -156,8 +176,8 @@ describe("dashboard scene", () => {
     );
   });
 
-  test("a change in the number of changes beyond the number of bars does not rebuild the repo model", () => {
-    const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
+  test("a change in the number of changes past the level that closes the state arc does not rebuild the repo model", () => {
+    const scene = new HomeScene(engine, { palette: PALETTE, style: "holo", labels: "needs-you", motion: true });
     const withCount = (count: number): HomeModel => ({
       ...MODEL,
       repos: MODEL.repos.map((r) => (r.id === "payments-api" ? { ...r, count } : r)),
@@ -172,7 +192,13 @@ describe("dashboard scene", () => {
 
   test("a hovered object that vanished from the snapshot ends the hover", () => {
     const hovered: Array<HomeKey | null> = [];
-    const scene = new HomeScene(engine, { palette: PALETTE, motion: true, onHover: (k) => hovered.push(k) });
+    const scene = new HomeScene(engine, {
+      palette: PALETTE,
+      style: "holo",
+      labels: "needs-you",
+      motion: true,
+      onHover: (k) => hovered.push(k),
+    });
     scene.apply(MODEL);
     const session = scene.entity("session:s2");
     if (!session) throw new Error("no entity for session s2");
@@ -185,7 +211,13 @@ describe("dashboard scene", () => {
 
   test("a selected object that vanished from the snapshot ends the selection", () => {
     const selected: Array<HomeKey | null> = [];
-    const scene = new HomeScene(engine, { palette: PALETTE, motion: true, onSelect: (k) => selected.push(k) });
+    const scene = new HomeScene(engine, {
+      palette: PALETTE,
+      style: "holo",
+      labels: "needs-you",
+      motion: true,
+      onSelect: (k) => selected.push(k),
+    });
     scene.apply(MODEL);
     const session = scene.entity("session:s2");
     if (!session) throw new Error("no entity for session s2");
@@ -198,7 +230,7 @@ describe("dashboard scene", () => {
   });
 
   test("wires do not hide repos or sessions from the pointer", () => {
-    const scene = new HomeScene(engine, { palette: PALETTE, motion: false });
+    const scene = new HomeScene(engine, { palette: PALETTE, style: "holo", labels: "needs-you", motion: false });
     scene.apply(MODEL);
     const hits: Intersection[] = [];
     engine.scene.traverse((o) => {
@@ -214,7 +246,14 @@ describe("dashboard scene", () => {
 
   test("a disposed scene reports no end of hover or selection", () => {
     const calls: Array<HomeKey | null> = [];
-    const scene = new HomeScene(engine, { palette: PALETTE, motion: true, onHover: (k) => calls.push(k), onSelect: (k) => calls.push(k) });
+    const scene = new HomeScene(engine, {
+      palette: PALETTE,
+      style: "holo",
+      labels: "needs-you",
+      motion: true,
+      onHover: (k) => calls.push(k),
+      onSelect: (k) => calls.push(k),
+    });
     scene.apply(MODEL);
     const session = scene.entity("session:s1");
     if (!session) throw new Error("no entity for session s1");
@@ -227,7 +266,7 @@ describe("dashboard scene", () => {
   });
 
   test("connections of repos whose names contain separators do not merge into one", () => {
-    const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
+    const scene = new HomeScene(engine, { palette: PALETTE, style: "holo", labels: "needs-you", motion: true });
     const repo = (id: string, layer: number) => ({ id, layer, state: "clean" as const, count: 0, runningTask: null });
 
     scene.apply({
@@ -245,11 +284,19 @@ describe("dashboard scene", () => {
   });
 
   test("a colour not written as #rrggbb, for example an oklch token straight from CSS, is an error when the scene is created", () => {
-    expect(() => new HomeScene(engine, { palette: { ...PALETTE, primary: "oklch(0.82 0.12 210)" }, motion: true })).toThrow("primary");
+    expect(
+      () =>
+        new HomeScene(engine, {
+          palette: { ...PALETTE, primary: "oklch(0.82 0.12 210)" },
+          style: "holo",
+          labels: "needs-you",
+          motion: true,
+        }),
+    ).toThrow("primary");
   });
 
   test("selecting a session enlarges it and brightens its repo's connections, and dims the rest", () => {
-    const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
+    const scene = new HomeScene(engine, { palette: PALETTE, style: "holo", labels: "needs-you", motion: true });
     scene.apply(MODEL);
 
     scene.focus("session:s1");
@@ -260,14 +307,16 @@ describe("dashboard scene", () => {
     expect(linkOpacities()).toEqual([0.22, 0.22, 0.22]);
   });
 
-  test("only repos that are not clean and sessions that are waiting or have an error get labels", () => {
+  test("with labels for what needs you, repos that are not clean and sessions waiting or with an error get labels", () => {
     const labelled: string[] = [];
     const scene = new HomeScene(engine, {
       palette: PALETTE,
+      style: "holo",
+      labels: "needs-you",
       motion: true,
       createLabel: (target) => {
         labelled.push(target.key);
-        return { style: {} } as unknown as HTMLElement;
+        return fakeLabelElement();
       },
     });
 
@@ -278,8 +327,53 @@ describe("dashboard scene", () => {
     expect(scene.entity("repo:orders-api")?.has(Label)).toBe(false);
   });
 
+  test("with labels for all repos, a clean repo with nothing running gets a quiet label and the rest a full one", () => {
+    const tones = new Map<string, string>();
+    const scene = new HomeScene(engine, {
+      palette: PALETTE,
+      style: "holo",
+      labels: "all",
+      motion: true,
+      createLabel: (target) => {
+        if (target.kind === "repo") tones.set(target.repo.id, target.tone);
+        return fakeLabelElement();
+      },
+    });
+
+    scene.apply(MODEL);
+
+    expect(Object.fromEntries(tones)).toEqual({ "web-shop": "full", "orders-api": "full", "payments-api": "full", "common-dto": "quiet" });
+  });
+
+  test("in the orbs style every repo, session and the daemon still get an entity with a model to draw", () => {
+    const scene = new HomeScene(engine, { palette: PALETTE, style: "orbs", labels: "all", motion: true });
+    scene.apply(MODEL);
+
+    const keys: HomeKey[] = [
+      "daemon",
+      "repo:web-shop",
+      "repo:orders-api",
+      "repo:payments-api",
+      "repo:common-dto",
+      "session:s1",
+      "session:s2",
+    ];
+    for (const key of keys) expect(scene.entity(key)?.get(Visual)).toBeDefined();
+  });
+
+  test("the two styles draw a repo differently", () => {
+    const holo = new HomeScene(engine, { palette: PALETTE, style: "holo", labels: "all", motion: true });
+    holo.apply(MODEL);
+    const holoParts = meshCount("repo:web-shop", holo);
+    holo.dispose();
+    const orbs = new HomeScene(engine, { palette: PALETTE, style: "orbs", labels: "all", motion: true });
+    orbs.apply(MODEL);
+
+    expect(meshCount("repo:web-shop", orbs)).toBeLessThan(holoParts);
+  });
+
   test("disposing the scene frees model geometries also after the engine is disposed", () => {
-    const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
+    const scene = new HomeScene(engine, { palette: PALETTE, style: "holo", labels: "needs-you", motion: true });
     scene.apply(MODEL);
     let geometries = 0;
     let disposed = 0;
@@ -296,7 +390,7 @@ describe("dashboard scene", () => {
   });
 
   test("without motion the scene stands still: frames do not change the models", () => {
-    const scene = new HomeScene(engine, { palette: PALETTE, motion: false });
+    const scene = new HomeScene(engine, { palette: PALETTE, style: "holo", labels: "needs-you", motion: false });
     scene.apply(MODEL);
     const before = pose("session:s1", scene);
 
@@ -306,7 +400,7 @@ describe("dashboard scene", () => {
   });
 
   test("with motion a waiting session moves", () => {
-    const scene = new HomeScene(engine, { palette: PALETTE, motion: true });
+    const scene = new HomeScene(engine, { palette: PALETTE, style: "holo", labels: "needs-you", motion: true });
     scene.apply(MODEL);
     const before = pose("session:s1", scene);
 
