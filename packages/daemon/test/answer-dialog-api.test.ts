@@ -2,13 +2,14 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { agentsApi } from "@trackwall/protocol";
 import { loopbackRequest } from "../src/infra/loopback.ts";
 import { startSessionApi } from "./support/session-api.ts";
+import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 const TOKEN = "d".repeat(43);
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
 
 beforeAll(async () => {
   daemon = await startSessionApi(TOKEN);
-});
+}, SLOW_TEST_TIMEOUT_MS);
 
 afterAll(() => daemon.stop());
 

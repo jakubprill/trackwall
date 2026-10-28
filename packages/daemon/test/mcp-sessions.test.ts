@@ -5,6 +5,7 @@ import type { Client } from "@modelcontextprotocol/client";
 import { GetSessionResult, ListSessionsResult } from "@trackwall/protocol";
 import { connectHttpClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
+import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 const TOKEN = "s".repeat(43);
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
@@ -13,7 +14,7 @@ let client: Client;
 beforeAll(async () => {
   daemon = await startSessionApi(TOKEN);
   client = await connectHttpClient(daemon.api.port, TOKEN);
-});
+}, SLOW_TEST_TIMEOUT_MS);
 
 afterAll(async () => {
   await client.close();

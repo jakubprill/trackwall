@@ -3,6 +3,7 @@ import { agentsApi, DaemonEvent, EVENTS_SOCKET } from "@trackwall/protocol";
 
 import WebSocket from "ws";
 import { startSessionApi } from "./support/session-api.ts";
+import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 const TOKEN = "e".repeat(43);
 const EVENTS_SUBPROTOCOL = EVENTS_SOCKET.subprotocol;
@@ -10,7 +11,7 @@ let daemon: Awaited<ReturnType<typeof startSessionApi>>;
 
 beforeAll(async () => {
   daemon = await startSessionApi(TOKEN);
-});
+}, SLOW_TEST_TIMEOUT_MS);
 
 afterAll(() => daemon.stop());
 

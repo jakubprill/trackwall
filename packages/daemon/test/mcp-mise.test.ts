@@ -8,6 +8,7 @@ import { viewer, waitFor } from "./support/agents.ts";
 import { connectHttpClient, connectSessionClient } from "./support/mcp-client.ts";
 import { untilInputBox } from "./support/screen-lines.ts";
 import { startSessionApi } from "./support/session-api.ts";
+import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 const TOKEN = "t".repeat(43);
 const FAKE_MISE = [process.execPath, join(import.meta.dir, "fixtures", "fake-mise.ts")];
@@ -31,7 +32,7 @@ beforeAll(async () => {
   });
   outside = await connectHttpClient(daemon.api.port, TOKEN);
   clients.push(outside);
-});
+}, SLOW_TEST_TIMEOUT_MS);
 
 // A limit instead of none: a cleanup that hangs on Windows should fail this file, not take an hour of the job.
 afterAll(async () => {

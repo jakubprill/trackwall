@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { Session } from "@trackwall/protocol";
 import { viewer, waitFor } from "./support/agents.ts";
 import { startSessionApi } from "./support/session-api.ts";
+import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 const TOKEN = "e".repeat(43);
 const FAKE_MISE = [process.execPath, join(import.meta.dir, "fixtures", "fake-mise.ts")];
@@ -27,7 +28,7 @@ beforeAll(async () => {
       env: () => ({ ...process.env, FAKE_COPILOT_SHOW_ENV: "GITLAB_TOKEN,JIRA_KEY,SHOP_REGION,SHOP_JAVA_OPTS" }),
     },
   });
-});
+}, SLOW_TEST_TIMEOUT_MS);
 
 afterAll(async () => {
   await daemon.stop();

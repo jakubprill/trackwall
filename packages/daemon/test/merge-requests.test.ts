@@ -6,6 +6,7 @@ import { mergeRequestsApi } from "@trackwall/protocol";
 import { gitIn } from "./support/git-repo.ts";
 import { fakeHostingClis } from "./support/hosting.ts";
 import { startSessionApi } from "./support/session-api.ts";
+import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 const TOKEN = "m".repeat(43);
 const GITLAB_MRS = "projects/shop%2Fshop/merge_requests";
@@ -44,7 +45,7 @@ beforeAll(async () => {
   gitIn(orders, "config", "ssh.variant", "simple");
   gitIn(orders, "push", "-q", "origin", "main");
   daemon.facade.workspace.setRepoHosts([{ kind: "gitlab", host: "gitlab.example.com" }]);
-});
+}, SLOW_TEST_TIMEOUT_MS);
 
 afterAll(async () => {
   await daemon.stop();

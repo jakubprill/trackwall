@@ -4,13 +4,14 @@ import { agentsApi, PTY_CLOSE_NOT_FOUND, PTY_SUBPROTOCOL } from "@trackwall/prot
 import WebSocket from "ws";
 import { loopbackRequest } from "../src/infra/loopback.ts";
 import { startSessionApi } from "./support/session-api.ts";
+import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 const TOKEN = "p".repeat(43);
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
 
 beforeAll(async () => {
   daemon = await startSessionApi(TOKEN);
-});
+}, SLOW_TEST_TIMEOUT_MS);
 
 afterAll(() => daemon.stop());
 
