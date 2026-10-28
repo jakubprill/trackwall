@@ -1,4 +1,4 @@
-import { graphApi, type RunningMiseTask, type SessionList, workspaceApi } from "@trackwall/protocol";
+import { graphApi, type RunningMiseTask, type SessionList } from "@trackwall/protocol";
 import { type HomeKey, parseHomeKey } from "@trackwall/scene/model";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -13,6 +13,7 @@ import { GRAPH_PACE, REPO_LIST_PACE } from "@/lib/repo-watch";
 import type { SessionSelection } from "@/lib/session-entries";
 import type { SettingsCategory } from "@/lib/settings-categories";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
+import { useRepoList } from "@/lib/use-repo-list";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
 import { useRunningMiseTasks } from "@/lib/use-running-mise-tasks";
 import { HomeDetails } from "./HomeDetails.tsx";
@@ -31,6 +32,9 @@ import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
 
 /** The scene's own messages are for people developing Trackwall, so a failure shows a general text, as in `HomeCanvas`. */
 const CANVAS_FAILED = "the 3D view failed to load";
+
+/** Every repo is on the scene at once, so none goes first (ADR-113). */
+const NO_PRIORITY: { readonly current: readonly string[] } = { current: [] };
 
 const HomeCanvas = lazy(() => import("./HomeCanvas.tsx").then((m) => ({ default: m.HomeCanvas })));
 
@@ -56,10 +60,7 @@ export function HomeView({
   onOpenDaemon: () => void;
   onOpenSettings: (category: SettingsCategory) => void;
 }) {
-  const repos = useRemote(
-    useCallback(() => post(conn, workspaceApi.list, {}), [conn]),
-    repoWatch.options(REPO_LIST_PACE),
-  );
+  const repos = useRepoList(conn, repoWatch.options(REPO_LIST_PACE), NO_PRIORITY);
   const graph = useRemote(
     useCallback(() => post(conn, graphApi.graph, {}), [conn]),
     repoWatch.options(GRAPH_PACE),

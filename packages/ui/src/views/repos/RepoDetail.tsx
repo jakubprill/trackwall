@@ -67,9 +67,11 @@ export function RepoDetail({
         </div>
         <RepoActions conn={conn} repo={repo} />
       </header>
-      {status.kind === "unavailable" ? (
+      {status.kind === "loading" && <Loading />}
+      {status.kind === "unavailable" && (
         <p className="text-destructive text-sm whitespace-pre-wrap">The repo is unavailable: {status.message}</p>
-      ) : (
+      )}
+      {status.kind === "ok" && (
         <>
           <RepoStats status={status} onShowChanges={() => setTab("changes")} />
           <RepoActivityBar items={repoActivity(repo.id, sessions, running.data ?? [])} onOpen={openActivity} />

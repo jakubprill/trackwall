@@ -21,6 +21,8 @@ Browse, clone and sync every git repo in your projects folder from one list.
 
 Trackwall works with one projects folder: every git repo directly inside it is on the list in "Repos". A repo you clone into the folder appears by itself. Select a repo and it opens on its [card](/features/repo-card), a summary of what the repo is and provides. The other tabs show its files, its latest commits, its uncommitted changes, its mise tasks and, last, its README (formatted as on GitHub, with tables, task lists, code and Mermaid diagrams).
 
+The list shows every repo as soon as you open it. Each one says "loading" until git has read it, and the repo you selected and the ones at the top of the list come first, so you do not wait for the whole folder.
+
 The list and the repo header count your uncommitted work as "3 changed, 1 new". The "Changes" tab, or a click on the "Working tree" tile, shows those files with their diff; you commit or discard them in your editor.
 
 "In this repo", under the header, lists the repo's task proposals, the sessions running in it, its tasks and its running mise tasks, each with its state, whichever tab is open. Click one to go to it: a proposal, session or task opens in "Sessions", a mise task in the "mise tasks" tab, and a mise task running in a task opens that task.

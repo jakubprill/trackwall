@@ -179,6 +179,26 @@ describe("workspace", () => {
   });
 
   test(
+    "the quick list has every repo of the folder as loading, and repos describes the ones named in the order asked, without the unknown",
+    async () => {
+      const { workspace, projects } = await workspaceWithProjectsDir();
+      makeRepo({ "README.md": "# api" }, "api", projects);
+      makeRepo({ "README.md": "# web" }, "web", projects);
+
+      expect((await workspace.entryList()).repos).toEqual([
+        { id: "api", path: join(projects, "api"), remote: null, status: { kind: "loading" } },
+        { id: "web", path: join(projects, "web"), remote: null, status: { kind: "loading" } },
+      ]);
+      const described = await workspace.repos(["web", "gone", "api", "web"]);
+      expect(described.map((r) => [r.id, r.status.kind])).toEqual([
+        ["web", "ok"],
+        ["api", "ok"],
+      ]);
+    },
+    SLOW_TEST_TIMEOUT_MS,
+  );
+
+  test(
     "setting the folder saves the full path in workspace.yaml",
     async () => {
       const { workspace, file, projects } = await workspaceWithProjectsDir();

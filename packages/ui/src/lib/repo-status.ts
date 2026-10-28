@@ -8,7 +8,9 @@ export type StatusTone = "ok" | "warning" | "error";
  * A repo's state in one line (§4.5): the dot tone and the text next to it. One place for the rule
  * "unavailable = error, working directory changes = warning, clean = ok" for the list and the repo header.
  */
-export function repoStatusTone(status: RepoStatus): { tone: StatusTone; label: string } {
+export function repoStatusTone(status: RepoStatus): { tone?: StatusTone; label: string } {
+  // No tone while the status is on its way (ADR-113): a dot would claim a state the view does not know yet.
+  if (status.kind === "loading") return { label: "loading" };
   if (status.kind !== "ok") return { tone: "error", label: "unavailable" };
   const changes = workingTreeLabel(trackedChanges(status), status.untracked);
   return changes ? { tone: "warning", label: changes } : { tone: "ok", label: "clean" };

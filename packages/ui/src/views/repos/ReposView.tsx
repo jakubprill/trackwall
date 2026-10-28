@@ -1,19 +1,10 @@
-import {
-  NO_MISE_TAG,
-  type Repo,
-  type RepoList,
-  type RepoTag,
-  type RunningMiseTask,
-  type SessionList,
-  workspaceApi,
-} from "@trackwall/protocol";
+import { NO_MISE_TAG, type Repo, type RepoList, type RepoTag, type RunningMiseTask, type SessionList } from "@trackwall/protocol";
 import { FolderOpen, Plus, RefreshCw } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useRef, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
-import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { relativeTime, twoDigits } from "@/lib/format";
@@ -24,7 +15,7 @@ import type { SettingsCategory } from "@/lib/settings-categories";
 import { statusTextClass } from "@/lib/status-tone";
 import { listSyncBadge, type SyncBadge, syncedByPath } from "@/lib/sync-state";
 import { type BatchRunHandle, useBatchRun } from "@/lib/use-batch-run";
-import { useRemote } from "@/lib/use-remote";
+import { useRepoList } from "@/lib/use-repo-list";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
 import { type SyncRunHandle, useSyncRun } from "@/lib/use-sync-run";
 import { useTagFilter } from "@/lib/use-tag-filter";
@@ -37,6 +28,15 @@ import { TagFilter } from "./TagFilter.tsx";
 
 /** What the right side shows: the selected repo, the search for repos to clone, the sync, or the batch command. */
 type Panel = "repo" | "clone" | "sync" | "batch";
+
+/** About how many repos the list shows without scrolling: they get their statuses before the rest (ADR-113). */
+const FIRST_SHOWN = 15;
+
+/** The repos whose statuses the view asks for first: the selected one, then the top of the filtered list. */
+function shownFirst(selected: string | undefined, repos: readonly Repo[]): string[] {
+  const top = repos.slice(0, FIRST_SHOWN).map((r) => r.id);
+  return selected ? [selected, ...top] : top;
+}
 
 export function ReposView({
   conn,
@@ -63,8 +63,9 @@ export function ReposView({
 }) {
   const [selected, setSelected] = useState(initialRepo);
   const [panel, setPanel] = useState<Panel>("repo");
-  const load = useCallback(() => post(conn, workspaceApi.list, {}), [conn]);
-  const list = useRemote(load, repoWatch.options(REPO_LIST_PACE));
+  // Filled in below, once the filtered list is known; read when a round of statuses starts (ADR-113).
+  const first = useRef<readonly string[]>([]);
+  const list = useRepoList(conn, repoWatch.options(REPO_LIST_PACE), first);
   const sync = useSyncRun(conn, list.reload);
   const synced = syncedByPath(sync.run);
   const batch = useBatchRun(conn, list.reload);
@@ -74,6 +75,7 @@ export function ReposView({
   const filter = useTagFilter(conn, allRepos, repoWatch);
   const repos = filter.repos;
   const current = repos.find((r) => r.id === selected) ?? repos[0];
+  first.current = shownFirst(selected, repos);
   const canSync = Boolean(list.data?.projectsDir) && !needsSettings;
   const syncedAgo = sync.run && relativeTime(sync.run.startedAt, new Date());
 
