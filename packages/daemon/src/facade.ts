@@ -155,6 +155,7 @@ export function createFacade(o: FacadeOptions): Facade {
     openEditor,
     openFolder: o.openFolder,
   });
+  workspace.useGitProgramFromFile();
   const logs = new Logs({ dir: join(o.home, LOGS_DIR), maxFileBytes: LOG_FILE_MAX_BYTES, log: o.log });
   const procs = new ProcessGroups({
     runtime: new RuntimeFile(join(o.home, RUNTIME_FILE)),

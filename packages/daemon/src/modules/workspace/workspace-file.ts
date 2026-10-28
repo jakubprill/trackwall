@@ -17,13 +17,13 @@ import { type Document, isMap, isScalar, LineCounter, parseDocument } from "yaml
 import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
 import { DomainError } from "../../infra/errors.ts";
-import { isFullPath, NOT_FULL_PATH } from "./full-path.ts";
+import { isFullPath, NOT_FULL_PATH, NOT_FULL_PROGRAM_PATH } from "./full-path.ts";
 import { type WorkspaceKeyValues, workspaceKeyValue } from "./workspace-key-value.ts";
 
 /**
  * `workspace.yaml` (§4.5, ADR-13): the workspace configuration, which the user can edit by hand and keep
  * in a private repo. Read on every use, so a manual edit works without restarting the daemon. A write changes
- * only one key (`projectsDir`, `worktreesDir` or `repoHosts`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `supervisor` and `agentSecrets` only by hand) and keeps comments and the other keys,
+ * only one key (`projectsDir`, `worktreesDir`, `gitProgram` or `repoHosts`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `supervisor` and `agentSecrets` only by hand) and keeps comments and the other keys,
  * including the `repos` list from version 0.2.0, which is no longer read (ADR-18): it is the user's file, so removing it is up to them.
  */
 
@@ -44,6 +44,12 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
     .refine((dir) => isFullPath(dir), NOT_FULL_PATH)
     .nullish()
     .transform((dir) => dir ?? null),
+  // The git for local git calls (ADR-112); a missing key means git from `PATH`.
+  gitProgram: z
+    .string()
+    .refine((path) => isFullPath(path), NOT_FULL_PROGRAM_PATH)
+    .nullish()
+    .transform((path) => path ?? null),
   // Repo hosts (ADR-19); a missing key means no repo hosts, because only the user knows the GitLab address.
   repoHosts: RepoHosts.nullish().transform((hosts) => hosts ?? []),
   // Repo tag rules (ADR-25); only by hand in the file, because only the user knows team and group names.
@@ -76,6 +82,11 @@ export class WorkspaceFile {
   /** The task worktrees folder (ADR-84); `null` for the default. */
   worktreesDir(): string | null {
     return this.get("worktreesDir", Keys.worktreesDir);
+  }
+
+  /** The git program for local git calls (ADR-112); `null` for git from `PATH`. */
+  gitProgram(): string | null {
+    return this.get("gitProgram", Keys.gitProgram);
   }
 
   /** Repo hosts in file order (ADR-19). */
@@ -137,6 +148,11 @@ export class WorkspaceFile {
   /** `null` removes the key, so that the file says nothing about a setting the user did not choose. */
   setWorktreesDir(dir: string | null): void {
     this.set("worktreesDir", dir);
+  }
+
+  /** `null` removes the key, like `setWorktreesDir`. */
+  setGitProgram(path: string | null): void {
+    this.set("gitProgram", path);
   }
 
   setRepoHosts(hosts: RepoHost[]): void {

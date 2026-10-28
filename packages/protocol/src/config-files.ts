@@ -198,6 +198,7 @@ export type ConfigEntry = z.infer<typeof ConfigEntry>;
 export const WorkspaceKey = z.enum([
   "projectsDir",
   "worktreesDir",
+  "gitProgram",
   "repoHosts",
   "toolPermissions",
   "agentSecrets",
@@ -218,6 +219,7 @@ export interface WorkspaceKeyInfo {
 export const WORKSPACE_KEYS: Record<WorkspaceKey, WorkspaceKeyInfo> = {
   projectsDir: { purpose: "The folder with all your repos.", docs: "repos", settings: "workspace" },
   worktreesDir: { purpose: "Where agent tasks get their own copy of a repo.", docs: "tasks", settings: "workspace" },
+  gitProgram: { purpose: "Which git Trackwall runs to read your repos.", docs: "repos", settings: "workspace" },
   repoHosts: { purpose: "Where the Repos view searches and clones from.", docs: "repos", settings: "repo-hosts" },
   toolPermissions: { purpose: "Which tools sessions may use without asking you.", docs: "approvals", settings: null },
   agentSecrets: { purpose: "The secrets from mise that the tools of sessions may read.", docs: "mise-environment", settings: null },

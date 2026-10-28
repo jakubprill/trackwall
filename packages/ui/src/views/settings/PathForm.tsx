@@ -6,8 +6,11 @@ import { Input } from "@/components/ui/input";
 import { errorMessage } from "@/lib/api";
 import { pickFolder } from "@/lib/folder-picker";
 
-/** A folder setting saved as one key of `workspace.yaml`: the projects folder (ADR-18) or the task worktrees folder (ADR-84). */
-export function FolderForm({
+/**
+ * A path setting saved as one key of `workspace.yaml`: the projects folder (ADR-18), the task worktrees folder (ADR-84) or
+ * the git program (ADR-112).
+ */
+export function PathForm({
   label,
   placeholder,
   configKey,
@@ -15,6 +18,7 @@ export function FolderForm({
   configFile,
   save,
   reset,
+  folder = true,
 }: {
   label: string;
   placeholder: string;
@@ -25,6 +29,8 @@ export function FolderForm({
   save: (path: string) => Promise<void>;
   /** Back to the default; without it the setting has no default to go back to, or already uses it. */
   reset?: () => Promise<void>;
+  /** A folder gets the system folder picker; a program is typed or pasted. */
+  folder?: boolean;
 }) {
   const [path, setPath] = useState(initialPath);
   const [busy, setBusy] = useState(false);
@@ -71,7 +77,7 @@ export function FolderForm({
           aria-label={label}
           className="font-mono text-xs"
         />
-        {isTauri() && (
+        {folder && isTauri() && (
           <Button type="button" variant="outline" size="sm" onClick={() => void browse()} disabled={busy}>
             <FolderOpen /> Choose…
           </Button>

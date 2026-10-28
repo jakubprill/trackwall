@@ -1,7 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { delimiter, dirname, resolve as resolvePath } from "node:path";
 import { type RunOptions, type RunOutput, runProgram } from "../../infra/run-program.ts";
-import { GIT_FROM_PATH, gitProgram, withPathPrefix } from "./git-program.ts";
+import { chosenGitProgram, GIT_FROM_PATH, type GitProgramSource, gitProgram, gitResolution, withPathPrefix } from "./git-program.ts";
 import { Slots } from "./slots.ts";
 import { WaitingCalls } from "./waiting-calls.ts";
 
@@ -147,15 +147,35 @@ export function slowCallNote(label: string, repoDir: string, waitedMs: number, r
   return `${label} in ${repoDir} took ${Math.round(ranMs)} ms after ${Math.round(waitedMs)} ms waiting for a slot`;
 }
 
-/** `git --version` of the git the daemon runs: the doctor shows it (ADR-101). */
-export async function gitVersion(timeoutMs: number): Promise<string> {
-  const program = await gitProgram();
+/** `git --version` of the git the daemon runs and which program that is: the doctor shows them (ADR-101, ADR-112). */
+export async function gitVersion(timeoutMs: number): Promise<GitVersion> {
+  const { program, source } = await gitResolution();
   const { stdout } = await runProgram(program.command, ["--version"], {
     label: "git --version",
     env: withPathPrefix(gitEnv(), program.pathPrefix),
     timeoutMs,
   });
-  return stdout.toString("utf8").trim();
+  return { output: stdout.toString("utf8").trim(), program: program.command, source, chosen: chosenGitProgram() };
+}
+
+export interface GitVersion {
+  /** What `git --version` printed. */
+  output: string;
+  /** The program the daemon starts for local calls: `git` from `PATH`, or the full path of the binary it resolved. */
+  program: string;
+  source: GitProgramSource;
+  /** The "Git program" setting (ADR-112); `null` for git from `PATH`. */
+  chosen: string | null;
+}
+
+/**
+ * Whether `path` is a git: it must answer `--version` like git does. Checked before the setting is saved (ADR-112), so a
+ * typo does not silently leave the daemon on git from `PATH`.
+ */
+export async function checkGitProgram(path: string, timeoutMs: number): Promise<void> {
+  const { stdout } = await runProgram(path, ["--version"], { label: `${path} --version`, env: gitEnv(), timeoutMs });
+  const output = stdout.toString("utf8").trim();
+  if (!output.startsWith("git version ")) throw new Error(`${path} is not git: --version printed "${output.slice(0, 80)}"`);
 }
 
 /** The full hash of the commit `ref` points to; `undefined` when there is no such commit or git fails. */

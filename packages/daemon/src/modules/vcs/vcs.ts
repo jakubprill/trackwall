@@ -26,8 +26,9 @@ import {
   remoteDefaultBranch,
 } from "./commit-range.ts";
 import { ConfigMemo } from "./config-memo.ts";
-import { git, gitRead, gitVersion } from "./git.ts";
+import { checkGitProgram, type GitVersion, git, gitRead, gitVersion } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
+import { useGitProgram } from "./git-program.ts";
 import { type GitState, GitStateReader } from "./git-state.ts";
 import { grep, grepFiles } from "./grep.ts";
 import { readHeadCommit } from "./head-commit.ts";
@@ -52,6 +53,9 @@ import { syncRepo } from "./sync.ts";
 import { addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
 import { workingTreeChanges, worktreeChanges } from "./worktree-changes.ts";
 import { copyIncludedFiles } from "./worktree-include.ts";
+
+/** A git that does not answer `--version` within this is not one to save as the "Git program" (ADR-112). */
+const GIT_PROGRAM_CHECK_TIMEOUT_MS = 15_000;
 
 /** The system temp folder for git's scratch files, while there is no projects folder to keep them in. */
 export const systemTempFolder = async (): Promise<string> => tmpdir();
@@ -98,8 +102,21 @@ export class Vcs {
   private readonly configs = new ConfigMemo();
 
   /** `git --version` of the git the daemon runs (the doctor, ADR-101). */
-  version(timeoutMs: number): Promise<string> {
+  version(timeoutMs: number): Promise<GitVersion> {
     return gitVersion(timeoutMs);
+  }
+
+  /** Throws with a reason when `path` is not a git program (ADR-112). */
+  checkGitProgram(path: string): Promise<void> {
+    return checkGitProgram(path, GIT_PROGRAM_CHECK_TIMEOUT_MS);
+  }
+
+  /**
+   * From now on local git calls start `path`, or git from `PATH` for `null` (ADR-112); network commands keep git from `PATH`.
+   * Process-wide, not per instance: `git()` reads it for every call. A path that fell back to `PATH` is tried again.
+   */
+  useGitProgram(path: string | null): void {
+    useGitProgram(path);
   }
 
   /**

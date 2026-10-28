@@ -180,6 +180,10 @@ export const WorkspaceSettings = z.object({
   worktreesDirProblem: z.string().nullable(),
   /** The default task worktrees folder, `.trackwall-worktrees` in the projects folder; `null` while that is not set. */
   defaultWorktreesDir: z.string().nullable(),
+  /** `gitProgram` from `workspace.yaml` (ADR-112): the git the daemon starts for local git calls; `null` for git from `PATH`. */
+  gitProgram: z.string().nullable(),
+  /** Why `gitProgram` in `workspace.yaml` cannot be read (`gitProgram` is then `null`); saving a program or the default fixes it. */
+  gitProgramProblem: z.string().nullable(),
   /** The full path of `workspace.yaml`, so that the user knows which file to edit by hand. */
   configFile: z.string(),
 });
@@ -257,6 +261,11 @@ export const workspaceApi = {
   suggestedProjectsDir: endpoint("suggested-projects-dir", z.object({}).strict(), z.string().nullable()),
   /** `path` like `setProjectsDir`; `null` removes `worktreesDir` from `workspace.yaml`, so new tasks use the default folder. */
   setWorktreesDir: endpoint("set-worktrees-dir", z.object({ path: z.string().min(1).max(4096).nullable() }).strict(), WorkspaceSettings),
+  /**
+   * `path` is the full path of a git program (`git.exe` of MinGit or another Git for Windows) that answers `--version`;
+   * `null` removes `gitProgram` from `workspace.yaml`, so the daemon uses git from `PATH` again (ADR-112).
+   */
+  setGitProgram: endpoint("set-git-program", z.object({ path: z.string().min(1).max(4096).nullable() }).strict(), WorkspaceSettings),
   overview: endpoint("overview", RepoRequest, RepoOverview),
   tree: endpoint("tree", z.object({ repo: RepoId, path: RepoPath }).strict(), z.array(TreeEntry)),
   file: endpoint(

@@ -30,8 +30,14 @@ export interface DoctorDeps {
   env: () => Promise<NodeJS.ProcessEnv>;
   /** Runs a program without a shell; the error says why it failed. */
   run: (command: string, args: readonly string[], o: { env: NodeJS.ProcessEnv; timeoutMs: number }) => Promise<string>;
-  /** `git --version` of the git the daemon runs (`vcs`). */
-  gitVersion: (timeoutMs: number) => Promise<string>;
+  /** `git --version` of the git the daemon runs and which program that is (`vcs`). */
+  gitVersion: (timeoutMs: number) => Promise<{
+    output: string;
+    program: string;
+    /** `fallback`: the Git program from Settings did not answer, and git from `PATH` runs instead (ADR-112). */
+    source: "path" | "chosen" | "fallback";
+    chosen: string | null;
+  }>;
   /** Resolves when `gh` or `glab` is signed in to the repo host (`vcs`); the error says why not. */
   signedIn: (host: RepoHost, timeoutMs: number) => Promise<void>;
   /** Copilot CLI found as sessions find it (`agents`), so the doctor's answer is the sessions' answer. */
@@ -125,7 +131,12 @@ export class Doctor {
   private async git(): Promise<Outcome> {
     const version = await settle(this.deps.gitVersion(CHECK_TIMEOUT_MS));
     if (!version.ok) return fail(`git: ${version.message}`, "Install Git (git-scm.com) and restart Trackwall.");
-    return ok(`git ${versionIn(version.value) ?? firstLine(version.value)}`);
+    const { output, program, source, chosen } = version.value;
+    const git = `git ${versionIn(output) ?? firstLine(output)}`;
+    if (source === "fallback")
+      return warn(`${git} from PATH: the Git program ${chosen} did not answer.`, "Fix or clear the Git program in Settings > Workspace.");
+    // Only a chosen program is named: Git for Windows from `PATH` resolves to its real binary too (ADR-79), which says nothing new.
+    return ok(source === "chosen" ? `${git} at ${program}` : git);
   }
 
   private async copilotCli({ env }: CheckContext): Promise<Outcome> {

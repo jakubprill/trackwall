@@ -11,3 +11,6 @@ export function isFullPath(p: string, paths: PlatformPath = path): boolean {
 
 export const NOT_FULL_PATH =
   "the projects folder must be a full path: on Windows with a drive letter (C:\\...) or \\\\server\\share, without `~` and not relative";
+
+export const NOT_FULL_PROGRAM_PATH =
+  "the git program must be a full path to git (git.exe on Windows), not a name from PATH and not relative";
