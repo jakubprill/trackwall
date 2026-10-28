@@ -39,9 +39,24 @@ export function miseTargetKey({ repo, task }: MiseTarget): string {
   return task === null ? `repo:${repo}` : `task:${task}:${repo}`;
 }
 
+/**
+ * Where a mise task is defined (ADR-110): `repo` in a file the repo's git tracks, `local` in a file of the repo git does
+ * not track (`mise.local.toml`, a `mise.toml` kept out of git, a file mise task nobody committed), `outside` in a mise
+ * config outside the repo (the user's global config, a parent folder's).
+ */
+export const MiseTaskOrigin = z.enum(["repo", "local", "outside"]);
+export type MiseTaskOrigin = z.infer<typeof MiseTaskOrigin>;
+
 export const MiseTask = z.object({
   name: MiseTaskName,
   description: z.string(),
+  /**
+   * The file that defines the mise task, as mise reports it: relative to the repo root with `/` when it is in the repo,
+   * otherwise its full path; `null` when unknown (a mise task that left the config while it ran, a mise that does not say).
+   */
+  source: z.string().nullable(),
+  /** Where `source` is; `null` when it is unknown. */
+  origin: MiseTaskOrigin.nullable(),
   /** The last run since the daemon started; `null` when the mise task was not run. */
   run: RunState.nullable(),
 });

@@ -358,7 +358,7 @@ export const mcpTools = {
     description:
       "Repos in the user's projects folder: id, path, remote address (host/path), branch, latest commit, number of " +
       "local changes (untracked: how many of them are new), ahead/behind, the result of the latest sync since Trackwall started (lastSync: null when there " +
-      "was none) and repo tags (e.g. java, frontend, bff, monorepo, no-mise for a repo without mise tasks, and tags from the user's rules). The tags argument " +
+      "was none) and repo tags (e.g. java, frontend, bff, monorepo, no-mise for a repo without mise tasks, local-mise for one with mise tasks only this clone has, and tags from the user's rules). The tags argument " +
       "narrows the list to repos with every given tag. Start with this tool; pass the id field to the other tools.",
     args: z
       .object({
@@ -372,7 +372,8 @@ export const mcpTools = {
     readOnly: true,
     description:
       `Details of one repo: the same as ${LIST_REPOS} (with tags; empty when the card cannot be built), the README from the latest commit (truncated), ` +
-      "recent commits and mise tasks (name, description, run state) or the reason mise did not list them.",
+      "recent commits and mise tasks (name, description, run state, origin: repo for a file in the repo's git, local for a file of the repo git " +
+      "does not keep, outside for a mise config outside the repo, with the file as source) or the reason mise did not list them.",
     args: z.object({ repo: RepoArg }).strict(),
     result: GetRepoResult,
   },

@@ -12,7 +12,7 @@ See every file and folder Trackwall reads or writes on your computer, what each 
 - One list of Trackwall's files and folders, grouped by where they lie, each with a sentence on what it is for and a link to its page here.
 - Every key of `workspace.yaml` with its value, whether you set it or Trackwall uses its default, and where to change it, including the keys you can only write by hand.
 - A key you typed wrong or misspelled, named with its line in the file, also in the doctor.
-- The local config of all your repos at once: which have `mise.local.toml` or `.worktreeinclude`, whether each is backed up and whether git ignores it.
+- The local config of all your repos at once: which have `mise.local.toml`, a `mise.toml` kept out of git, or `.worktreeinclude`, whether each is backed up and whether git ignores it.
 
 ## How it works
 

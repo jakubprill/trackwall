@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
-import { agentsApi, ListRunningMiseTasksResult, LogTail, MiseTaskRunResult, miseApi } from "@trackwall/protocol";
+import { agentsApi, GetRepoResult, ListRunningMiseTasksResult, LogTail, MiseTaskRunResult, miseApi } from "@trackwall/protocol";
 import { z } from "zod";
 import { viewer, waitFor } from "./support/agents.ts";
 import { connectHttpClient, connectSessionClient } from "./support/mcp-client.ts";
@@ -27,7 +27,7 @@ const clients: Client[] = [];
 
 beforeAll(async () => {
   daemon = await startSessionApi(TOKEN, {
-    repos: { shop: { "fake-mise.json": MISE_CONFIG }, warehouse: { "fake-mise.json": MISE_CONFIG } },
+    repos: { shop: { "fake-mise.json": MISE_CONFIG }, warehouse: { "fake-mise.json": MISE_CONFIG }, billing: { "mise.toml": "" } },
     miseCommand: FAKE_MISE,
   });
   outside = await connectHttpClient(daemon.api.port, TOKEN);
@@ -91,6 +91,32 @@ describe("mise tasks over MCP (real process groups, fake mise)", () => {
     },
     TIMEOUT,
   );
+
+  test("get_repo says for each mise task whether the repo's git, a local file or a config outside the repo defines it", async () => {
+    const billing = join(daemon.projects, "billing");
+    writeFileSync(join(billing, "mise.local.toml"), "");
+    // A config above the repo, as the user's global one is.
+    const global = join(daemon.projects, ".global-mise.toml");
+    writeFileSync(global, "");
+    writeFileSync(
+      join(billing, "fake-mise.json"),
+      JSON.stringify({
+        tasks: [
+          { name: "build", source: join(billing, "mise.toml") },
+          { name: "dev", source: join(billing, "mise.local.toml") },
+          { name: "notes", source: global },
+        ],
+      }),
+    );
+
+    const repo = GetRepoResult.parse((await call(outside, "get_repo", { repo: "billing" })).structuredContent);
+
+    expect(repo.miseTasks.kind === "ok" && repo.miseTasks.tasks.map((t) => [t.name, t.origin, t.source])).toEqual([
+      ["build", "repo", "mise.toml"],
+      ["dev", "local", "mise.local.toml"],
+      ["notes", "outside", global],
+    ]);
+  });
 
   test("a task not on the mise list is not_found and nothing runs", async () => {
     expect(errorText(await call(outside, "run_mise_task", { repo: "warehouse", miseTask: "deploy" }))).toBe(

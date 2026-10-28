@@ -22,12 +22,13 @@ import { useRemote } from "@/lib/use-remote";
 
 /** What each local config file is for, in the legend above the table. */
 const FILE_PURPOSES: Record<(typeof LOCAL_CONFIG_FILES)[number], string> = {
+  "mise.toml": "mise tasks, tools and variables you keep out of git, when the repo's commits have no mise.toml",
   "mise.local.toml": "your own mise tasks, tools and variables for this repo, on top of mise.toml",
   ".worktreeinclude": "which ignored files a task's worktree gets from the repo",
 };
 
 /**
- * The local config of every repo at once (ADR-86, ADR-108): which repos have `mise.local.toml` or `.worktreeinclude`,
+ * The local config of every repo at once (ADR-86, ADR-108): which repos have a local config file (`LOCAL_CONFIG_FILES`),
  * whether each is backed up and ignored by git, with the same Restore and Ignore locally as the repo's mise tasks tab.
  */
 export function LocalConfigReposSurface({ conn }: { conn: Connection }) {

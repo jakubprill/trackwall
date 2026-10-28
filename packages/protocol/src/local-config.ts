@@ -9,11 +9,20 @@ import { Commit, RepoId } from "./workspace.ts";
  * `POST /api/local-config/<action>`.
  */
 
+/**
+ * mise's main config file in the repo root. Local config only in a repo whose commits do not have it, where the user keeps
+ * it out of git because the team does not accept mise configuration (ADR-110).
+ */
+export const MISE_CONFIG_FILE = "mise.toml";
+
 /** mise's config file for one clone, which git should not see: mise reads it on top of `mise.toml` (ADR-20). */
 export const MISE_LOCAL_CONFIG_FILE = "mise.local.toml";
 
-/** The local config files, by name in the repo root; nothing else is backed up, so no `.env` with secrets by accident. */
-export const LOCAL_CONFIG_FILES = [MISE_LOCAL_CONFIG_FILE, WORKTREE_INCLUDE_FILE] as const;
+/**
+ * The local config files, by name in the repo root; nothing else is backed up, so no `.env` with secrets by accident. A
+ * file the repo's commits have is the repo's, not local config, so a tracked `mise.toml` is left alone.
+ */
+export const LOCAL_CONFIG_FILES = [MISE_CONFIG_FILE, MISE_LOCAL_CONFIG_FILE, WORKTREE_INCLUDE_FILE] as const;
 export const LocalConfigFileName = z.enum(LOCAL_CONFIG_FILES);
 export type LocalConfigFileName = z.infer<typeof LocalConfigFileName>;
 

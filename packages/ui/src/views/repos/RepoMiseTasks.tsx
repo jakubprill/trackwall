@@ -6,10 +6,12 @@ import { Loading } from "@/components/Loading";
 import { MiseTaskLog } from "@/components/MiseTaskLog";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Surface } from "@/components/Surface";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
+import { miseTaskOriginLabel } from "@/lib/mise-task-origin";
 import { isLive, runStateLabel, showsLastLines } from "@/lib/run-state";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
@@ -24,8 +26,8 @@ const POLL_LIVE_MS = 2000;
 const POLL_IDLE_MS = 10_000;
 
 /**
- * The repo's mise tasks (ADR-20): the list from `mise tasks ls`, start and stop of the whole process group, the run state;
- * above them the repo's local config files and their backup (ADR-86).
+ * The repo's mise tasks (ADR-20): the list from `mise tasks ls`, each with where it is defined (ADR-110), start and stop of
+ * the whole process group, the run state; above them the repo's local config files and their backup (ADR-86).
  */
 export function RepoMiseTasks({ conn, repo }: { conn: Connection; repo: string }) {
   const load = useCallback(() => post(conn, miseApi.tasks, { repo }), [conn, repo]);
@@ -125,6 +127,7 @@ function TaskRow({ conn, repo, task, onChange }: { conn: Connection; repo: strin
   const live = isLive(task.run);
   const state = runStateLabel(task.run);
   const [showLog, setShowLog] = useState(false);
+  const origin = miseTaskOriginLabel(task);
   // Also while `stopping`: after `stop_unconfirmed` the stop can be retried, and the daemon merges parallel requests into one.
   const action = useAction(
     () => post(conn, live ? miseApi.stop : miseApi.start, { repo, miseTask: task.name }),
@@ -139,7 +142,14 @@ function TaskRow({ conn, repo, task, onChange }: { conn: Connection; repo: strin
     <li className="flex flex-col gap-2 px-3 py-2 text-sm">
       <div className="flex items-center gap-3">
         <div className="flex min-w-0 flex-1 flex-col">
-          <code className="text-primary truncate text-xs">{task.name}</code>
+          <span className="flex min-w-0 items-center gap-2">
+            <code className="text-primary truncate text-xs">{task.name}</code>
+            {origin && (
+              <Badge variant={origin.local ? "default" : "secondary"} title={origin.title}>
+                {origin.label}
+              </Badge>
+            )}
+          </span>
           {task.description && <span className="text-muted-foreground truncate text-xs">{task.description}</span>}
         </div>
         <span className="text-xs" title={task.run ? `started ${relativeTime(task.run.startedAt, new Date())}` : undefined}>
