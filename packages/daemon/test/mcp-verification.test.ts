@@ -127,7 +127,7 @@ describe.skipIf(process.versions.bun === undefined)("verify_task (real worktree 
         `bad_request: task ${own.id} is in warehouse, not in shop`,
       );
 
-      const supervisor = await daemon.facade.agents.startSupervisor("new");
+      const supervisor = await daemon.facade.agents.startSupervisor("new", "terminal");
       const asSupervisor = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, supervisor.id);
       clients.push(asSupervisor);
       expect(errorText(await verify(asSupervisor, { repo: "warehouse", task: own.id }))).toBe(

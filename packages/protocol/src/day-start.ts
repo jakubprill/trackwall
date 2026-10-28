@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { SessionId, TaskId, TaskPrompt } from "./agents.ts";
 import type { Endpoint } from "./api.ts";
+import { SessionView } from "./conversation.ts";
 import { SyncOutcome } from "./sync.ts";
 import { TaskState } from "./task-state.ts";
 import { Commit, RepoId } from "./workspace.ts";
@@ -106,8 +107,9 @@ export const dayStartApi = {
   /**
    * Starts a day start in the background and returns it at once; a running one is returned instead. `bad_request` while a
    * supervisor runs (the user stops it first, so no conversation is closed without them) or without a projects folder.
+   * `view` is how the new supervisor shows (ADR-107).
    */
-  start: endpoint("start", z.object({}).strict(), DayStartRun),
+  start: endpoint("start", z.object({ view: SessionView.default("terminal") }).strict(), DayStartRun),
   /** The last day start since the daemon started; `null` when there was none. */
   run: endpoint("run", z.object({}).strict(), DayStartRun.nullable()),
 };

@@ -57,7 +57,7 @@ describe.skipIf(process.versions.bun === undefined)("sessions across a daemon re
     window.attachment.input("start\r");
     await waitFor(agents, main.id, (s) => s.state?.state === "Approval", "the approval request");
     window.attachment.detach();
-    const supervisor = await agents.startSupervisor("new");
+    const supervisor = await agents.startSupervisor("new", "terminal");
     const task = await agents.createTask("shop", "fix the build");
     const taskSession = agents.sessions().sessions.find((s) => s.task === task.id)?.id;
     if (taskSession === undefined) throw new Error(`task ${task.id} has no session`);
@@ -97,7 +97,7 @@ describe.skipIf(process.versions.bun === undefined)("sessions across a daemon re
   test("a free session starts again as a free session, next to the supervisor, not in its place (ADR-100)", async () => {
     const before = await startDaemon();
     const { agents } = before.facade;
-    const supervisor = await agents.startSupervisor("new");
+    const supervisor = await agents.startSupervisor("new", "terminal");
     const free = await agents.start(null, "Compare the two APIs");
     await waitFor(agents, supervisor.id, (s) => s.state !== null, "the supervisor's input box");
     await waitFor(agents, free.id, (s) => s.state !== null, "the free session's first turn");
@@ -181,7 +181,7 @@ describe.skipIf(process.versions.bun === undefined)("the supervisor's last conve
   test("Resume goes on with the ended supervisor's conversation under its id, New starts another one", async () => {
     const daemon = await startDaemon();
     const { agents } = daemon.facade;
-    const first = await agents.startSupervisor("new");
+    const first = await agents.startSupervisor("new", "terminal");
     await waitFor(agents, first.id, (s) => s.state?.state === "Input", "sessionStart");
     expect(agents.sessions().lastSupervisor).toBeNull();
     const window = viewer(agents, first.id);
@@ -190,20 +190,20 @@ describe.skipIf(process.versions.bun === undefined)("the supervisor's last conve
     window.attachment.detach();
     await agents.stop(first.id);
 
-    const resumed = await agents.startSupervisor("last");
+    const resumed = await agents.startSupervisor("last", "terminal");
 
     expect(resumed.id).toBe(first.id);
     expect(await argumentOnScreen(daemon, first.id, "--resume=")).toContain(`Argument: --resume=${first.id}`);
     expect(agents.sessions().sessions.map((s) => s.id)).toEqual([first.id]);
     await agents.stop(first.id);
-    const fresh = await agents.startSupervisor("new");
+    const fresh = await agents.startSupervisor("new", "terminal");
     expect(fresh.id).not.toBe(first.id);
     expect(await argumentOnScreen(daemon, fresh.id, "--session-id=")).toContain(`Argument: --session-id=${fresh.id}`);
     expect(agents.sessions().sessions.map((s) => s.id)).toEqual([fresh.id]);
     // The newest supervisor has had no prompt yet, so there is no conversation to go on with.
     await waitFor(agents, fresh.id, () => agents.sessions().lastSupervisor === null, "no conversation to resume");
     await agents.stop(fresh.id);
-    const next = await agents.startSupervisor("last");
+    const next = await agents.startSupervisor("last", "terminal");
     expect(next.id).not.toBe(fresh.id);
     expect(agents.sessions().sessions.map((s) => s.id)).toEqual([next.id]);
   }, 60_000);
@@ -211,7 +211,7 @@ describe.skipIf(process.versions.bun === undefined)("the supervisor's last conve
   test("the conversation of a supervisor the user stopped and closed goes on after the daemon restarts", async () => {
     const before = await startDaemon();
     const { agents } = before.facade;
-    const supervisor = await agents.startSupervisor("new");
+    const supervisor = await agents.startSupervisor("new", "terminal");
     await waitFor(agents, supervisor.id, (s) => s.state?.state === "Input", "sessionStart");
     const window = viewer(agents, supervisor.id);
     window.attachment.input("start\r");
@@ -225,7 +225,7 @@ describe.skipIf(process.versions.bun === undefined)("the supervisor's last conve
 
     // A supervisor the user stopped does not start again by itself, but its conversation is there to resume.
     expect(after.facade.agents.sessions()).toMatchObject({ sessions: [], lastSupervisor: supervisor.id });
-    const resumed = await after.facade.agents.startSupervisor("last");
+    const resumed = await after.facade.agents.startSupervisor("last", "terminal");
     expect(resumed.id).toBe(supervisor.id);
     expect(await argumentOnScreen(after, supervisor.id, "--resume=")).toContain(`Argument: --resume=${supervisor.id}`);
   }, 60_000);
@@ -233,7 +233,7 @@ describe.skipIf(process.versions.bun === undefined)("the supervisor's last conve
   test("without a supervisor before, Resume starts a new one", async () => {
     const daemon = await startDaemon();
 
-    const supervisor = await daemon.facade.agents.startSupervisor("last");
+    const supervisor = await daemon.facade.agents.startSupervisor("last", "terminal");
 
     expect(await argumentOnScreen(daemon, supervisor.id, "--session-id=")).toContain(`Argument: --session-id=${supervisor.id}`);
     expect(daemon.facade.agents.sessions().sessions.map((s) => s.id)).toEqual([supervisor.id]);

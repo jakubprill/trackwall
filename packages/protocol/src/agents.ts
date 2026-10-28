@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Done, type Endpoint } from "./api.ts";
 import { WorkingTreeChanges } from "./changes.ts";
+import { SessionMessage, SessionView } from "./conversation.ts";
 import { RunState } from "./procs.ts";
 import { REVIEW_COMMENTS_MAX, ReviewComment } from "./review.ts";
 import { TaskStateChange } from "./task-state.ts";
@@ -219,6 +220,8 @@ export const Session = z.object({
   /** The agent dialog on the screen while the session is in `Approval` (an approval) or in `Input` (a question); otherwise `null`. */
   dialog: AgentDialog.nullable(),
   environment: SessionEnvironment,
+  /** Copilot CLI's own screen in a terminal, or Trackwall's conversation view over ACP (ADR-107). */
+  view: SessionView,
 });
 export type Session = z.infer<typeof Session>;
 
@@ -475,9 +478,20 @@ export const agentsApi = {
    * most one running at a time, so while one runs this returns it instead of starting another. Otherwise `conversation`
    * says whether it goes on with the last supervisor's conversation or starts a new one (ADR-96).
    */
-  startSupervisor: endpoint("start-supervisor", z.object({ conversation: SupervisorConversation }).strict(), Session),
+  startSupervisor: endpoint(
+    "start-supervisor",
+    z.object({ conversation: SupervisorConversation, view: SessionView.default("terminal") }).strict(),
+    Session,
+  ),
   /** Returns after confirming that no process of the session is alive; an ended session returns its state. */
   stop: endpoint("stop", SessionRequest, Session),
+  /**
+   * A message from the user to a session in the conversation view (ADR-107): its next prompt, sent at once when the agent
+   * waits, otherwise after its turn. A session in a terminal gets what the user types there instead (`bad_request`).
+   */
+  say: endpoint("say", SessionRequest.extend({ text: SessionMessage }), Session),
+  /** Stops the agent's turn in a session in the conversation view (ADR-107), as Esc does in the terminal. */
+  interrupt: endpoint("interrupt", SessionRequest, Session),
   /**
    * Answers the session's agent dialog named by its `dialog` id (ADR-66): the daemon types the option's digit or Esc
    * into the session, as a key from the session terminal. A dialog no longer on the screen is `dialog_changed`, and

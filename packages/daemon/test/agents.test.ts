@@ -235,7 +235,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const { agents, procs, home } = makeAgents({}, undefined, projectsDir);
     cleanups.push(() => procs.stopAll());
 
-    const supervisor = await agents.startSupervisor("new");
+    const supervisor = await agents.startSupervisor("new", "terminal");
     expect(supervisor).toMatchObject({ repo: null, task: null, run: { kind: "running" } });
     const window = viewer(agents, supervisor.id);
     await waitFor(
@@ -248,6 +248,22 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     expect(instructions).toContain("You are the supervisor");
     expect(instructions).toContain("Copilot CLI refuses you its shell and the tools that write files");
     window.attachment.detach();
+    await agents.stop(supervisor.id);
+  }, 60_000);
+
+  test("a supervisor in the conversation view whose Copilot CLI ends before the handshake fails to start, leaves nothing behind, and the next start works", async () => {
+    const projectsDir = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
+    const env: NodeJS.ProcessEnv = { ...process.env, FAKE_COPILOT_ACP_EXIT: "1" };
+    const { agents, procs, home } = makeAgents({}, undefined, projectsDir, undefined, env);
+    cleanups.push(() => procs.stopAll());
+
+    await expect(agents.startSupervisor("new", "conversation")).rejects.toThrow();
+
+    expect(agents.sessions().sessions).toEqual([]);
+    expect(readdirSync(join(home, "sessions"))).toEqual([]);
+    delete env.FAKE_COPILOT_ACP_EXIT;
+    const supervisor = await agents.startSupervisor("new", "conversation");
+    expect(supervisor).toMatchObject({ supervisor: true, view: "conversation", run: { kind: "running" } });
     await agents.stop(supervisor.id);
   }, 60_000);
 
@@ -274,7 +290,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
     const { agents, procs, home } = makeAgents({ shop: repoDir }, undefined, projectsDir);
     cleanups.push(() => procs.stopAll());
-    const supervisor = await agents.startSupervisor("new");
+    const supervisor = await agents.startSupervisor("new", "terminal");
 
     const free = await agents.start(null);
     const another = await agents.start(null, "Compare the two APIs");
@@ -286,7 +302,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     expect(instructions).toContain("You are a free session in the projects folder");
     expect(instructions).not.toContain("You are the supervisor");
     // A free session is no supervisor: the supervisor stays the one that runs, and what a free session proposes is its own.
-    expect((await agents.startSupervisor("new")).id).toBe(supervisor.id);
+    expect((await agents.startSupervisor("new", "terminal")).id).toBe(supervisor.id);
     const proposal = await agents.propose(free.id, {
       repo: "shop",
       title: "Add a test",
@@ -309,7 +325,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const { agents, procs, home } = makeAgents({}, undefined, projectsDir, undefined, process.env, { changesCode: true });
     cleanups.push(() => procs.stopAll());
 
-    const supervisor = await agents.startSupervisor("new");
+    const supervisor = await agents.startSupervisor("new", "terminal");
     const instructions = readFileSync(join(home, "sessions", supervisor.id, "instructions", "trackwall.instructions.md"), "utf8");
     expect(instructions).toContain("The user lets you run commands and change files yourself");
     await agents.stop(supervisor.id);
@@ -319,9 +335,9 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const { agents, procs } = makeAgents({}, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
     cleanups.push(() => procs.stopAll());
 
-    const [first, second] = await Promise.all([agents.startSupervisor("new"), agents.startSupervisor("new")]);
+    const [first, second] = await Promise.all([agents.startSupervisor("new", "terminal"), agents.startSupervisor("new", "terminal")]);
     expect(second.id).toBe(first.id);
-    expect((await agents.startSupervisor("new")).id).toBe(first.id);
+    expect((await agents.startSupervisor("new", "terminal")).id).toBe(first.id);
     expect(agents.sessions().sessions.map((s) => s.id)).toEqual([first.id]);
     await agents.stop(first.id);
   }, 60_000);
@@ -330,7 +346,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
     const { agents, procs } = makeAgents({ shop: repoDir }, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
     cleanups.push(() => procs.stopAll());
-    const supervisor = await agents.startSupervisor("new");
+    const supervisor = await agents.startSupervisor("new", "terminal");
     const session = await agents.start("shop");
 
     const fromSupervisor = await agents.propose(supervisor.id, {
@@ -357,7 +373,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
     const { agents, procs, home } = makeAgents({ shop: repoDir }, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
     cleanups.push(() => procs.stopAll());
-    const first = await agents.startSupervisor("new");
+    const first = await agents.startSupervisor("new", "terminal");
     const proposal = await agents.propose(first.id, {
       repo: "shop",
       title: "Fix the cart",
@@ -367,7 +383,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     });
     await agents.stop(first.id);
 
-    const next = await agents.startSupervisor("new");
+    const next = await agents.startSupervisor("new", "terminal");
     expect(next.id).not.toBe(first.id);
     expect(agents.sessions().sessions.map((s) => s.id)).toEqual([next.id]);
     expect(existsSync(join(home, "sessions", first.id))).toBe(false);
@@ -378,10 +394,10 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
   test("a supervisor with a first message gets it as its first prompt and works from the start, and replaces the ended one", async () => {
     const { agents, procs } = makeAgents({}, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
     cleanups.push(() => procs.stopAll());
-    const ended = await agents.startSupervisor("new");
+    const ended = await agents.startSupervisor("new", "terminal");
     await agents.stop(ended.id);
 
-    const supervisor = await agents.startSupervisorWith("Start my day.\n\nCheck my issues.");
+    const supervisor = await agents.startSupervisorWith("Start my day.\n\nCheck my issues.", "terminal");
     const window = viewer(agents, supervisor.id);
     await waitFor(agents, supervisor.id, () => window.text().includes("--interactive="), "the first message on the screen");
     expect(window.unwrappedText()).toContain("Argument: --interactive=Start my day.");
@@ -396,11 +412,11 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const { agents, procs } = makeAgents({}, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
     cleanups.push(() => procs.stopAll());
 
-    const starting = agents.startSupervisor("new");
+    const starting = agents.startSupervisor("new", "terminal");
     const refusal = "the supervisor is running; stop it to start your day with a new one";
     expect(() => agents.assertNoSupervisor()).toThrow(refusal);
     const running = await starting;
-    await expect(agents.startSupervisorWith("Start my day.")).rejects.toThrow(refusal);
+    await expect(agents.startSupervisorWith("Start my day.", "terminal")).rejects.toThrow(refusal);
     expect(agents.sessions().sessions.map((s) => s.id)).toEqual([running.id]);
     await agents.stop(running.id);
     expect(() => agents.assertNoSupervisor()).not.toThrow();
@@ -409,10 +425,10 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
   test("a supervisor start succeeds even when the ended supervisor is dismissed while it starts", async () => {
     const { agents, procs } = makeAgents({}, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
     cleanups.push(() => procs.stopAll());
-    const first = await agents.startSupervisor("new");
+    const first = await agents.startSupervisor("new", "terminal");
     await agents.stop(first.id);
 
-    const starting = agents.startSupervisor("new");
+    const starting = agents.startSupervisor("new", "terminal");
     agents.dismiss(first.id);
     const next = await starting;
     expect(agents.sessions().sessions.map((s) => s.id)).toEqual([next.id]);
@@ -421,7 +437,10 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
 
   test("the supervisor needs the projects folder to be set", async () => {
     const { agents } = makeAgents({});
-    await expect(agents.startSupervisor("new")).rejects.toMatchObject({ code: "bad_request", message: "set the projects folder first" });
+    await expect(agents.startSupervisor("new", "terminal")).rejects.toMatchObject({
+      code: "bad_request",
+      message: "set the projects folder first",
+    });
     expect(agents.sessions().sessions).toEqual([]);
   });
 
@@ -433,6 +452,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const missing = new Agents({
       procs: {
         startTerminal: () => Promise.reject(new Error("should not start")),
+        startChannel: () => Promise.reject(new Error("should not start")),
         state: () => undefined,
         stop: async () => undefined,
         liveIn: () => false,

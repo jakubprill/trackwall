@@ -673,7 +673,7 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
 describe("the supervisor with the real Copilot CLI", () => {
   test("Copilot CLI refuses the supervisor its shell and its file-writing tools without asking, and the projects folder stays as it was (ADR-78)", async () => {
     const { agents } = daemon.facade;
-    const supervisor = await agents.startSupervisor("new");
+    const supervisor = await agents.startSupervisor("new", "terminal");
     const window = openWindow(supervisor.id);
     await untilLoaded(supervisor.id);
     model.reply(
@@ -714,7 +714,7 @@ describe("the day start with the real Copilot CLI", () => {
     );
 
     try {
-      await dayStart.start();
+      await dayStart.start("terminal");
       const until = Date.now() + SESSION_MS;
       while (dayStart.run()?.finishedAt === null && Date.now() < until) await new Promise((resolve) => setTimeout(resolve, 100));
       const run = dayStart.run();
@@ -885,7 +885,7 @@ describe("sessions across a daemon restart with the real Copilot CLI (ADR-95)", 
   test("the supervisor and a main session that ran when the daemon stopped go on with their conversations in the next daemon", async () => {
     const before = await startRealCopilotDaemon(model);
     const main = await before.facade.agents.start("shop");
-    const supervisor = await before.facade.agents.startSupervisor("new");
+    const supervisor = await before.facade.agents.startSupervisor("new", "terminal");
     for (const id of [main.id, supervisor.id]) await untilLoaded(id, before);
     model.reply({ text: "Noted: the code word is TEAL." });
     openWindow(main.id, before).attachment.input("remember the code word TEAL\r");
@@ -919,7 +919,7 @@ describe("the supervisor's last conversation with the real Copilot CLI (ADR-96)"
     const daemon = await startRealCopilotDaemon(model);
     try {
       const { agents } = daemon.facade;
-      const first = await agents.startSupervisor("new");
+      const first = await agents.startSupervisor("new", "terminal");
       await untilLoaded(first.id, daemon);
       model.reply({ text: "Noted: the code word is AMBER." });
       openWindow(first.id, daemon).attachment.input("remember the code word AMBER\r");
@@ -928,7 +928,7 @@ describe("the supervisor's last conversation with the real Copilot CLI (ADR-96)"
       windows.delete(first.id);
       await agents.stop(first.id);
 
-      const resumed = await agents.startSupervisor("last");
+      const resumed = await agents.startSupervisor("last", "terminal");
       expect(resumed.id).toBe(first.id);
       await untilLoaded(resumed.id, daemon);
       model.reply({ text: "The code word is AMBER." });

@@ -1,6 +1,7 @@
-import { RepoId, TaskId } from "@trackwall/protocol";
+import { RepoId, SessionView, TaskId } from "@trackwall/protocol";
 import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
+import { ConversationId } from "./acp-messages.ts";
 import { readStateFile } from "./state-file.ts";
 
 /**
@@ -25,6 +26,13 @@ export const ResumableSession = z.preprocess(
       task: TaskId.nullable(),
       /** Copilot CLI keeps a conversation under the id (the session had a prompt): it resumes it, otherwise starts anew. */
       hasConversation: z.boolean(),
+      /** The terminal or the conversation view (ADR-107); a file of a Trackwall before it has only terminals. */
+      view: SessionView.default("terminal"),
+      /**
+       * Copilot CLI's id of the conversation when it is not the session id: one started in the conversation view, where
+       * Copilot CLI picks the id itself (ADR-107).
+       */
+      conversation: ConversationId.optional(),
     })
     .refine((s) => !s.supervisor || (s.repo === null && s.task === null), "the supervisor has no repo and no task"),
 );
@@ -40,20 +48,44 @@ export function resumablePlace({ repo, supervisor, task }: ResumableSession): st
   return repo ?? (supervisor ? "supervisor" : "free session");
 }
 
-/** A start of Copilot CLI under a session's id: its arguments, and whether they carry its first message or resume its conversation. */
-export interface ResumeLaunch {
+/** A start of Copilot CLI in a terminal under a session's id: its arguments, and whether they carry its first message or resume its conversation. */
+interface ResumeLaunch {
   id: string;
   args: readonly string[];
   promptOnStart: boolean;
   hasConversation: boolean;
+  /** Copilot CLI's id of the conversation: the session id, unless it was started in the conversation view (ADR-107). */
+  conversation: string;
 }
 
+/** A start of Copilot CLI in the conversation view (ADR-107): the conversation it loads, or a new one with a first message. */
+export interface ConversationLaunch {
+  id: string;
+  load: string | undefined;
+  firstMessage: string | undefined;
+}
+
+/** A start under a session's id, in the view it shows in. */
+export type SessionLaunch = ({ view: "terminal" } & ResumeLaunch) | ({ view: "conversation" } & ConversationLaunch);
+
+/** What a start that goes on with a session needs to know of it. */
+type Resumed = Pick<ResumableSession, "session" | "hasConversation" | "conversation">;
+
 /**
- * A start that goes on with the conversation Copilot CLI keeps under the session's id (ADR-95, ADR-96). It refuses to
- * resume a session that never had a prompt: that one starts anew under the same id.
+ * A start that goes on with the conversation Copilot CLI keeps under the session's id (ADR-95, ADR-96), or under its own
+ * id for one started in the conversation view (ADR-107). It refuses to resume a session that never had a prompt: that
+ * one starts anew under the same id.
  */
-export function resumeLaunch({ session: id, hasConversation }: Pick<ResumableSession, "session" | "hasConversation">): ResumeLaunch {
-  return { id, args: [hasConversation ? `--resume=${id}` : `--session-id=${id}`], promptOnStart: false, hasConversation };
+function resumeLaunch({ session: id, hasConversation, conversation = id }: Resumed): ResumeLaunch {
+  const args = [hasConversation ? `--resume=${conversation}` : `--session-id=${id}`];
+  return { id, args, promptOnStart: false, hasConversation, conversation: hasConversation ? conversation : id };
+}
+
+/** The same in `view`: a terminal resumes with `--resume`, the conversation view loads the conversation (ADR-107). */
+export function sessionLaunch(view: SessionView, resumed: Resumed): SessionLaunch {
+  if (view === "terminal") return { view, ...resumeLaunch(resumed) };
+  const { session: id, hasConversation, conversation = id } = resumed;
+  return { view, id, load: hasConversation ? conversation : undefined, firstMessage: undefined };
 }
 
 const ResumableSessionsFile = z.object({ sessions: z.array(ResumableSession) });

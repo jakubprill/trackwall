@@ -15,6 +15,7 @@ function session(id: string, over: Partial<Session>): Session {
     task: null,
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], problem: null },
+    view: "terminal",
     ...over,
   };
 }
