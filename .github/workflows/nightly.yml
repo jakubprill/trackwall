@@ -139,7 +139,6 @@ jobs:
         with:
           title: Tests with real Java builds fail
           result: ${{ needs.jvm.result }}
-          run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           passed: The tests with real Java builds pass again on all three systems
           body: |
             The nightly tests with real Java builds fail: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -180,9 +179,8 @@ jobs:
           sparse-checkout: .github/actions
       - uses: ./.github/actions/nightly-issue
         with:
-          title: CI fails on main with macOS
+          title: Nightly CI fails on main
           result: ${{ needs.ci.result }}
-          run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           passed: CI passes again on Linux, Windows and macOS
           body: |
             The nightly run of CI on Linux, Windows and macOS fails on main: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

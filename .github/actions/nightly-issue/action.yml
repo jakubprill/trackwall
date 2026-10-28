@@ -9,9 +9,6 @@ inputs:
   result:
     description: The result of the checked job, success or failure
     required: true
-  run:
-    description: The URL of the workflow run
-    required: true
   passed:
     description: The comment that closes the issue on a green night
     required: true
@@ -26,7 +23,7 @@ runs:
       env:
         TITLE: ${{ inputs.title }}
         RESULT: ${{ inputs.result }}
-        RUN: ${{ inputs.run }}
+        RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         PASSED: ${{ inputs.passed }}
         BODY: ${{ inputs.body }}
       run: |

@@ -31,7 +31,7 @@ Do not weaken checks to get green: no skipped or deleted tests, no `biome-ignore
 
 Before opening a PR, the change goes through one ruthless code review: `/thermo-nuclear-code-quality-review` (skill in `.claude/skills/`, a copy from the Thermos plugin in `cursor/plugins`, MIT license next to it), which covers structure, abstractions, file growth and "code judo", and also flags correctness bugs and breaks of the documented rules (this file, `CONTEXT.md`, `docs/architecture.md`). The original has `disable-model-invocation: true`; the copy drops that line so that an agent can run it on its own. When updating from the original, remove it again. Every finding is fixed or rejected with a reason.
 
-- **A second round only when the fixes changed logic**, and then only on the diff of the fixes. Renames, comments and documentation do not need one. Tests and CI on three systems catch the rest; more rounds mostly find trivia.
+- **A second round only when the fixes changed logic**, and then only on the diff of the fixes. Renames, comments and documentation do not need one. Tests and CI on Linux and Windows, with macOS every night, catch the rest; more rounds mostly find trivia.
 - **A security review (`/security-review`) only when the change touches a sensitive place**: the CSP and the Tauri window, the token and the MCP and HTTP guard, starting processes or writing into a session's terminal, network and proxy settings, the updater and its signatures, secrets.
 - **An urgent fix** (a broken release, an empty window) gets one round, without a second.
 
