@@ -17,6 +17,7 @@ describe("Copilot CLI session state from a recording", () => {
       "Input hook medium hook sessionStart",
       "Working hook high hook userPromptSubmitted",
       "Approval hook high hook notification permission_prompt",
+      "Working keyboard medium key enter",
       "Working hook high hook postToolUse",
       "Input osc low osc 9;4;0",
       "Input hook high hook agentStop",

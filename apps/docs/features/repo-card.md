@@ -19,7 +19,7 @@ See what a repo is made of, read from its build and configuration files, without
 
 ## How it works
 
-Select a repo: it opens on its "Card" tab. Trackwall reads the build and configuration files of the latest commit and lists what it finds, every fact with the file and line it comes from. Nothing is built or run, so the card is there even for a repo you have never set up.
+Select a repo: it opens on its "Card" tab. Trackwall reads the build and configuration files of the latest commit and lists what it finds, every fact with the file and line it comes from. Nothing is built or run, so the card is there even for a repo you have never set up. "At a glance" at the top sums it up in four lines: the stack, the apps and their ports, how many endpoints and DTOs, and what the repo depends on.
 
 The card covers the packages the repo provides and uses, required tools (`mise.toml`, `.tool-versions`, `.nvmrc`, build wrappers), frameworks, Spring Boot apps and their ports, HTTP endpoints from controllers and OpenAPI specs with their request and response types, the fields of those types (Java records and classes, Kotlin `data class`, enums), and HTTP clients (Feign, `@HttpExchange`, WebClient, RestClient, RestTemplate) with the addresses from `application*.yml` in every profile, from `.env` and from the frontend's dev proxy.
 

@@ -526,6 +526,10 @@ _Avoid_: exception (only one kind of error), problem (that is the repo card and 
 Trackwall's own errors on this computer: the daemon's unexpected errors, the UI's and the desktop shell's, in `logs/errors.json` (ADR-94). Each is a **Trackwall error** (`TrackwallError`): source (`daemon`, `shell`, `ui`), area, kind, anonymized message, frames in Trackwall's code, count. Do not confuse with an error from logs (`LogError`), which comes from the output of the user's processes.
 _Avoid_: crash log, telemetry, bug report (nothing is sent)
 
+**Doctor** (`Doctor`, the `doctor` module, `doctorApi`; in the UI *Doctor* in Settings):
+The checks of what Trackwall needs on this computer: the projects folder, git, Copilot CLI and its trusted folders, mise, `gh` and `glab` signed in to the repo hosts (ADR-101). Each is a **doctor check** (`DoctorCheck`) with a state (`ok`, `warn`, `fail`), what was found and what to do. It only reads.
+_Avoid_: health check (that is `GET /api/health`), diagnostics, setup wizard
+
 **Anonymization** (`anonymize`):
 Replacing what names the computer, its user or their repos in a Trackwall error's message (paths, user and computer names, repo names, hosts, addresses, token shapes) with a label such as `<projects>` or `<host>`, before it is saved (ADR-94). Do not confuse with masking, which hides secret values in process output.
 
@@ -562,7 +566,7 @@ The dashboard's 3D scene on Pawn. It does not know the daemon API: it gets succe
 The first screen, the "Home" view (`HomeView`): the daemon state, sessions (especially those waiting for you), repos and the connections between them, in the "Orbit" layout (`orbitLayout`).
 
 **"Needs you" queue** (`NeedsYouPanel`):
-The left panel of the dashboard: sessions that are waiting for you or have an error, then task proposals waiting for a decision (ADR-39), then repos that are not clean. Sessions and repos also have a label on the scene; proposals are not on the scene, and a click opens them in the Sessions view.
+The left panel of the dashboard: sessions that are waiting for you or have an error, then task proposals waiting for a decision (ADR-39), then repos that are not clean. Those sessions and repos always have a label on the scene, and with the scene labels `all` every other repo has one too; proposals are not on the scene, and a click opens them in the Sessions view.
 
 **Dashboard snapshot** (`HomeModel`):
 What the dashboard shows, computed by the UI from the daemon's responses and given to the scene whole on every change.
@@ -574,3 +578,13 @@ A repo's level on the dashboard, the same column as in the "Overview" view: the 
 **Repo kind** (`RepoKind`: `entry`, `gateway`, `backend`, `library`):
 A repo's role in the graph computed from its layer: entry, gateway, backend, library.
 _Avoid_: service (that is a process from the repo configuration). On the dashboard every kind has a different solid.
+
+**Scene style** (`SceneStyle`: `holo`, `orbs`; "Holograms", "Orbs" in Settings):
+How the dashboard draws repos and sessions on this computer (ADR-104): holograms with a different solid for every repo kind, or glowing orbs, lighter for a slow graphics card.
+_Avoid_: theme (that is the colours of the UI).
+
+**Scene labels** (`SceneLabelMode`: `all`, `needs-you`; "Every repo", "Only what needs you" in Settings):
+Which objects on the dashboard have a label: every repo, or only what the "Needs you" queue lists (repos that are not clean, sessions waiting for you or with an error).
+
+**Callout** (`layoutCallouts`, `scene-callout`):
+A label on the scene: a plate beside its object, away from the middle of the ring, joined to it by a leader line; callouts that would cover each other are lifted apart.

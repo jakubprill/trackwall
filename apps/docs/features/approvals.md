@@ -47,6 +47,7 @@ toolPermissions:
 - The [supervisor](/features/supervisor) runs no shell commands and writes no files, whatever your rules allow, unless you set `supervisor.changesCode: true`.
 - Rules apply to sessions started after you save the file. A mistake in `toolPermissions` stops new sessions from starting, with a message that names the problem, so a denial you wrote is never silently dropped.
 - "Yes, and don't ask again" is remembered by Copilot CLI for the folder the session runs in. Each agent task has its own folder, so for something every task of a repo may do, add a rule instead.
+- When the agent runs several commands at once, Copilot CLI asks about them one after another. The session keeps "asking for approval" until you have answered all of them, and the panel shows the next request as soon as the terminal does, never the one you just answered.
 - If you move the selection in the terminal to "No, and tell Copilot what to do differently", the buttons disappear until the agent asks again, so a click cannot type into the text you are writing there.
 - Answering from outside the terminal is for approvals only. The option "No, and tell Copilot what to do differently" needs text, so it stays in the terminal.
 - Trackwall reads requests in the layout of Copilot CLI 1.0.103. A request it cannot read is still in the terminal and still makes the session "asking for approval", it only has no buttons.

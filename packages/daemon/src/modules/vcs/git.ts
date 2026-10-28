@@ -1,7 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { delimiter, dirname, resolve as resolvePath } from "node:path";
+import { type RunOptions, type RunOutput, runProgram } from "../../infra/run-program.ts";
 import { GIT_FROM_PATH, gitProgram, withPathPrefix } from "./git-program.ts";
-import { type RunOptions, type RunOutput, runProgram } from "./run.ts";
 import { Slots } from "./slots.ts";
 
 /**
@@ -100,6 +100,17 @@ export async function git(repoDir: string, args: readonly string[], opts: GitOpt
   // A long command (a worktree, a search) would hold a slot for minutes and the views would wait behind it again.
   const short = !opts.network && (opts.timeoutMs ?? TIMEOUT_MS) <= TIMEOUT_MS;
   return short ? LOCAL_CALL_SLOTS.run(call) : call();
+}
+
+/** `git --version` of the git the daemon runs: the doctor shows it (ADR-101). */
+export async function gitVersion(timeoutMs: number): Promise<string> {
+  const program = await gitProgram();
+  const { stdout } = await runProgram(program.command, ["--version"], {
+    label: "git --version",
+    env: withPathPrefix(gitEnv(), program.pathPrefix),
+    timeoutMs,
+  });
+  return stdout.toString("utf8").trim();
 }
 
 /** The full hash of the commit `ref` points to; `undefined` when there is no such commit or git fails. */

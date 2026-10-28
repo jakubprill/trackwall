@@ -7,22 +7,32 @@
  * turn with an approval request (the first turn after `sessionStart`, at once with a prompt from `--interactive=`; cut
  * above in a short terminal),
  * a "Yes" option or Enter approves and ends the turn (the input box comes back a moment after `agentStop`, and keys
- * typed in that gap are lost, as in Copilot CLI), and `/exit` ends the session. The fake also prints what the tests check
+ * typed in that gap are lost, as in Copilot CLI), and `/exit` ends the session. The line `PARALLEL_TOOLS_PROMPT` starts
+ * a turn in which the agent calls two such commands at once: as in Copilot CLI (the contract test of ADR-66), both
+ * approval requests come at once, the second dialog follows the first answer, and the first command's `postToolUse`
+ * comes while the second dialog waits. The fake also prints what the tests check
  * (MCP servers, instructions, directory, arguments, the prompt) and, on every turn, starts a helper process (like an
  * agent's tool) and prints its PID, so that the test can check that stopping the session ends the whole group. The
  * helper starts only after input from the user, because on Windows the leader joins the job a moment after the start.
  * Like Copilot CLI it keeps a conversation per session id once the session has had a prompt (a marker file in the
- * temporary directory), and refuses `--resume=<id>` of an id without one (ADR-95).
+ * temporary directory), and refuses `--resume=<id>` of an id without one (ADR-95). `--version` alone prints the version.
  */
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
 import { z } from "zod";
 import { ESCAPE } from "../../src/modules/agents/copilot-keys.ts";
 import { stripAnsi } from "../../src/modules/logs/stream-lines.ts";
-import { PROMPT_PLACEHOLDER, type ReferenceHook, reference } from "../support/copilot-reference.ts";
+import { PARALLEL_TOOLS_PROMPT, PROMPT_PLACEHOLDER, type ReferenceHook, reference } from "../support/copilot-reference.ts";
 import { pluginHooks } from "../support/plugin-hooks.ts";
+
+// `--version` answers as Copilot CLI does (`GitHub Copilot CLI 1.0.103.` and a hint), for the doctor (ADR-101).
+if (process.argv[2] === "--version") {
+  process.stdout.write(`GitHub Copilot CLI ${TESTED_COPILOT_CLI_VERSION}.\nRun 'copilot update' to check for updates.\n`);
+  process.exit(0);
+}
 
 const fire = pluginHooks(process.argv, "s1");
 
@@ -131,6 +141,20 @@ if (firstHook?.event !== "sessionStart" || secondHook?.event !== "userPromptSubm
 }
 const startHook: ReferenceHook = firstHook;
 const promptHook: ReferenceHook = secondHook;
+/** The approved command's hook, which the first of two commands at once sends while the second dialog waits. */
+const approvedHook = real.approval.hooks[asked];
+if (approvedHook?.event !== "postToolUse") throw new Error("the approval turn of the reference has no postToolUse after the approval");
+const firstToolDone: ReferenceHook = approvedHook;
+
+/**
+ * The second of two commands called at once: the reference's command with another file, in its approval request and
+ * its dialog. Of the same length, so the dialog's box keeps its width.
+ */
+const secondCommand = (text: string) => text.replaceAll("made-by-agent", "made-by-other");
+const secondRequest = real.approval.hooks.slice(2, asked).map((h) => ({
+  ...h,
+  payload: Object.fromEntries(Object.entries(h.payload).map(([k, v]) => [k, typeof v === "string" ? secondCommand(v) : v])),
+}));
 
 const [startTitle, ...turnTitles] = real.titles;
 if (startTitle === undefined) throw new Error("the reference has no window title");
@@ -150,7 +174,8 @@ if (started) {
   keepConversation();
   replay([startHook]);
 }
-let awaitingApproval = false;
+/** Approval requests of the turn not answered yet. */
+let awaitingApprovals = 0;
 /** Between a turn's end and the input box drawn again, where Copilot CLI drops what is typed (ADR-68). */
 let redrawing = false;
 let typed = "";
@@ -169,8 +194,9 @@ function submit(line: string): void {
   for (const turnTitle of turnTitles) title(turnTitle.replaceAll(PROMPT_PLACEHOLDER, line));
   process.stdout.write(`Thinking about: ${line}\r\n`);
   drawDialog(real.approval.dialog);
-  awaitingApproval = true;
-  replay(real.approval.hooks.slice(2, asked));
+  const parallel = line === PARALLEL_TOOLS_PROMPT;
+  awaitingApprovals = parallel ? 2 : 1;
+  replay([...real.approval.hooks.slice(2, asked), ...(parallel ? secondRequest : [])]);
 }
 
 /** Acts on the hook outputs of a turn's end: a block starts the next turn at once, without the input box. */
@@ -198,9 +224,14 @@ function endTurn(outputs: HookOutputs): void {
  */
 const REDRAW_MS = 300;
 
-/** A "Yes" option of the approval: the command runs and the turn ends. */
+/** A "Yes" option of the approval: the command runs, and the next dialog follows or the turn ends. */
 function approve(): void {
-  awaitingApproval = false;
+  awaitingApprovals--;
+  if (awaitingApprovals > 0) {
+    drawDialog(real.approval.dialog.map(secondCommand));
+    replay([firstToolDone]);
+    return;
+  }
   endTurn(replay(real.approval.hooks.slice(asked)));
 }
 
@@ -222,7 +253,7 @@ const typedText = (chunk: Buffer) => stripAnsi(chunk.toString("utf8")).replaceAl
 process.stdin.setRawMode?.(true);
 process.stdin.on("data", (chunk: Buffer) => {
   for (const key of typedText(chunk)) {
-    if (awaitingApproval) {
+    if (awaitingApprovals > 0) {
       if (APPROVE_KEYS.has(key)) approve();
     } else if (redrawing) {
       // lost, as in Copilot CLI

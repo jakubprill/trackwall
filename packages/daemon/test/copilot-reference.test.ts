@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { COPILOT_CLI_VERSION } from "../scripts/copilot-cli.ts";
+import { TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
 import { readAgentDialog } from "../src/modules/agents/copilot-dialog.ts";
 import { promptBoxOnScreen } from "../src/modules/agents/copilot-prompt-box.ts";
 import { CopilotSessionState } from "../src/modules/agents/copilot-session-state.ts";
@@ -11,10 +11,18 @@ const platforms = readdirSync(dirname(referenceFile()))
   .filter((name) => name.endsWith(".json"))
   .map((name) => name.replace(/\.json$/, ""));
 
-/** The states the daemon gives the reference's hooks of a session without a prompt at its start. */
+/**
+ * The states the daemon gives the reference's hooks of a session without a prompt at its start, with the user answering
+ * an approval request with "1", as the contract test does.
+ */
 function states(hooks: readonly ReferenceHook[]): string[] {
   const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program: null });
-  return hooks.flatMap(({ event, payload }) => session.hook({ event, receivedAt: 0, payload, omitted: [] })).map((c) => c.state);
+  return hooks
+    .flatMap(({ event, payload }) => [
+      ...session.hook({ event, receivedAt: 0, payload, omitted: [] }),
+      ...(event === "notification" ? session.key("choice") : []),
+    ])
+    .map((c) => c.state);
 }
 
 describe("the Copilot CLI references that the fake replays (ADR-67)", () => {
@@ -27,14 +35,14 @@ describe("the Copilot CLI references that the fake replays (ADR-67)", () => {
       const reference = readReference(platform);
       if (reference === undefined) throw new Error(`no reference for ${platform}`);
 
-      expect(reference).toMatchObject({ copilotVersion: COPILOT_CLI_VERSION, platform });
+      expect(reference).toMatchObject({ copilotVersion: TESTED_COPILOT_CLI_VERSION, platform });
       expect(promptBoxOnScreen(reference.promptBox)).toBe("empty");
       const dialog = readAgentDialog(reference.approval.dialog, "approval");
       if (dialog?.kind !== "approval") throw new Error(`no approval dialog in the reference for ${platform}`);
       // "Yes" may be the only option (a PowerShell command on Windows); it is the one the fake is answered with.
       expect(dialog.options[0]).toEqual({ key: "1", label: "Yes" });
       expect(states(reference.turn)).toEqual(["Input", "Working", "Input"]);
-      expect(states(reference.approval.hooks)).toEqual(["Input", "Working", "Approval", "Working", "Input"]);
+      expect(states(reference.approval.hooks)).toEqual(["Input", "Working", "Approval", "Working", "Working", "Input"]);
       expect(states(reference.exit)).toEqual(["Done"]);
     });
   }

@@ -151,12 +151,13 @@ function entryProposer(entry: SessionEntry): string | null {
   return entry.task.proposedBy?.session ?? null;
 }
 
-/** `SessionList.sessions` goes from the newest. */
-function latestSession(sessions: readonly Session[], task: string): Session | undefined {
+/** A task's current session: `SessionList.sessions` goes from the newest. */
+export function latestSession(sessions: readonly Session[], task: string): Session | undefined {
   return sessions.find((s) => s.task === task);
 }
 
-function entryTime(entry: StartedEntry): string {
+/** When an entry started, for "most recently started first": a task by its latest session, without one by its creation. */
+export function entryTime(entry: StartedEntry): string {
   if (entry.kind === "session") return entry.session.startedAt;
   return entry.session?.startedAt ?? entry.task.createdAt;
 }

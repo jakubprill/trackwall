@@ -1,9 +1,6 @@
 import type { ExitedRun, RunState } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 
-/** Running mise tasks come live from the events WebSocket; polled only while it is not connected (Home, task panel). */
-export const RUNNING_MISE_POLL_MS = 3000;
-
 /**
  * The state of a run (`RunState`, §4.1) in one line; today mise tasks show it, later services. Only what needs attention
  * or is running has a tone; a mise task never run and one stopped by the user have no tone (plain text).

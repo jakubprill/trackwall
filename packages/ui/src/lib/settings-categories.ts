@@ -26,13 +26,13 @@ export const SETTINGS_CATEGORIES = [
     id: "app",
     label: "App",
     description: "The desktop app on this computer.",
-    sections: ["start-at-sign-in", "updates"],
+    sections: ["start-at-sign-in", "updates", "home-scene"],
   },
   {
     id: "diagnostics",
     label: "Diagnostics",
     description: "Where to look when something does not work.",
-    sections: ["daemon", "trackwall-errors"],
+    sections: ["doctor", "daemon", "trackwall-errors"],
   },
 ] as const;
 
