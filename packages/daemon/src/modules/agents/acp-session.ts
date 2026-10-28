@@ -422,6 +422,9 @@ export class AcpSession implements AgentSession {
   }
 
   #report(state: TaskState, reason: string, source: TaskStateChange["source"] = "acp"): void {
+    // The views get the conversation up to a state before the state: an Input that reaches the panel, the tray or a
+    // notification ahead of the answer's last chunk would show a finished turn without its answer.
+    this.#flushNow();
     const previous = this.#last?.state;
     this.#last = { state, source, confidence: "exact", at: new Date().toISOString(), reason };
     this.#attention.changed(previous, state);
@@ -437,6 +440,12 @@ export class AcpSession implements AgentSession {
       for (const entry of entries) this.#pending.set(entry.id, entry);
     }
     this.#flush ??= setTimeout(() => this.#sendPending(), FLUSH_MS);
+  }
+
+  #flushNow(): void {
+    if (this.#flush === undefined) return;
+    clearTimeout(this.#flush);
+    this.#sendPending();
   }
 
   #sendPending(): void {
