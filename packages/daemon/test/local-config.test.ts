@@ -6,13 +6,15 @@ import { createFacade, HOSTING_CLIS } from "../src/facade.ts";
 import { LocalConfig } from "../src/modules/local-config/local-config.ts";
 import { gitProcessesStarted } from "../src/modules/vcs/git.ts";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
+import { finishedClone } from "./support/clone-jobs.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
+import { fakeHostingClis } from "./support/hosting.ts";
 
 /**
  * The local config store (ADR-86) through the real facade, on a real projects folder and real git; the test runs each
  * backup itself instead of the timer, and waits for the store's push with `settled`.
  */
-async function setup(projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"))) {
+async function setup(projects = mkdtempSync(join(tmpdir(), "trackwall-projects-")), hostingClis = HOSTING_CLIS) {
   const logged: string[] = [];
   const facade = createFacade({
     home: mkdtempSync(join(tmpdir(), "trackwall-home-")),
@@ -24,7 +26,7 @@ async function setup(projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"
     version: "0.0.0-test",
     sessionHook: () => ({ url: "http://127.0.0.1:9/hooks/unused", headers: {} }),
     sessionMcpServer: (sessionToken) => ({ url: "http://127.0.0.1:9/mcp", headers: { "x-trackwall-session-token": sessionToken } }),
-    hostingClis: HOSTING_CLIS,
+    hostingClis,
     userEnv: async () => process.env,
     log: (msg) => logged.push(msg),
   });
@@ -235,6 +237,29 @@ describe("the local config store", () => {
     expect((await facade.localConfig.repo("orders")).files[0]).toEqual({ kind: "tracked", file: "mise.toml" });
     await expect(facade.localConfig.restore("orders")).rejects.toThrow("the local config store has nothing this repo lacks");
     expect(existsSync(join(orders, "mise.toml"))).toBe(false);
+  });
+
+  test("a repo Trackwall clones gets its local config files back from the store before the clone is done", async () => {
+    const { projects, facade, backUp } = await setup(undefined, fakeHostingClis().clis);
+    const gitlab = { kind: "gitlab", host: "gitlab.example.com" } as const;
+    facade.workspace.setRepoHosts([gitlab]);
+    const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
+    writeFileSync(join(orders, "mise.local.toml"), TASKS);
+    writeFileSync(join(orders, "mise.toml"), TASKS);
+    await backUp();
+    rmSync(orders, { recursive: true, force: true });
+
+    await facade.workspace.clone(gitlab, "shop/orders");
+    await facade.workspace.clone(gitlab, "shop/web");
+    const done = async (fullName: string) => (await finishedClone(() => facade.workspace.cloneJobs(), fullName))?.state;
+
+    expect(await done("shop/orders")).toBe("done");
+    expect(readFileSync(join(orders, "mise.local.toml"), "utf8")).toBe(TASKS);
+    expect(readFileSync(join(orders, "mise.toml"), "utf8")).toBe(TASKS);
+    expect(readFileSync(join(orders, ".git", "info", "exclude"), "utf8")).toEndWith("\n/mise.toml\n/mise.local.toml\n");
+    // A repo the store has nothing for is cloned as before.
+    expect(await done("shop/web")).toBe("done");
+    expect(readdirSync(join(projects, "web"))).toEqual([".git"]);
   });
 
   test("Ignore adds the unignored local config files to info/exclude once, keeping the user's lines", async () => {

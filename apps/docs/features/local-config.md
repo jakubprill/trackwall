@@ -11,7 +11,7 @@ Keep mise tasks only on your computer, out of the repo, with every version backe
 
 - mise tasks that never reach the repo: write them in `mise.local.toml`, or keep a whole `mise.toml` out of git when the repo has none of its own.
 - A backup a few seconds after you or an agent save the file, with every earlier version kept.
-- "Restore from the store" in a fresh clone, so a deleted folder costs you nothing.
+- Your files back by themselves when Trackwall clones a repo again, so a deleted folder costs you nothing.
 - "Ignore locally", so the file never slips into a commit or a merge request.
 - The same tasks on a second computer, through a private repo you choose as the remote.
 
@@ -21,9 +21,9 @@ Some teams do not want mise configuration in their repos. Then the tasks you wor
 
 Trackwall watches `mise.toml`, `mise.local.toml` and `.worktreeinclude` in every repo of your projects folder. A few seconds after one of them changes, it copies the file into the local config store: the folder `.trackwall-local` in your projects folder, a git repo with one folder per repo. Each copy is a commit, so an older version is always there. A file that disappears from a repo stays in the store. A file the repo's own commits already have is the team's, and Trackwall leaves it alone: a `mise.toml` the repo commits is never copied, one you keep out of git is.
 
-The "mise tasks" tab of a repo shows a "Local config" section with each file's state. In a fresh clone the state is "only in the store", and "Restore from the store" puts the files back. A file git does not ignore shows a warning: anyone working in the repo could commit it, an agent too. "Ignore locally" adds it to the clone's `.git/info/exclude`, which git never pushes. Restore does this by itself.
+The "mise tasks" tab of a repo shows a "Local config" section with each file's state. When you clone a repo with the "+" button above the [repo list](/features/repos), its files come back from the store before the clone shows as done. In a repo cloned another way the state is "only in the store", and "Restore from the store" puts the files back. A file git does not ignore shows a warning: anyone working in the repo could commit it, an agent too. "Ignore locally" adds it to the clone's `.git/info/exclude`, which git never pushes. Restore does this by itself.
 
-"Settings > Workspace" shows where the store is, the last backup, and whether it was pushed. Without a remote the backups stay on this computer. With one, an HTTPS or SSH address of a private repo on a repo host, Trackwall pushes after every backup, and on another computer you clone the store into its projects folder and press "Restore from the store" in each repo.
+"Settings > Workspace" shows where the store is, the last backup, and whether it was pushed. Without a remote the backups stay on this computer. With one, an HTTPS or SSH address of a private repo on a repo host, Trackwall pushes after every backup, and on another computer you clone the store into its projects folder; repos you then clone with Trackwall get their files back by themselves, and a repo already there gets them with "Restore from the store".
 
 ## Use it
 

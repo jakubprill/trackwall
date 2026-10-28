@@ -123,6 +123,7 @@ describe("the card warm-up", () => {
       hosting: fakeHosting().hosting,
       openEditor: () => {},
       openFolder: () => {},
+      afterClone: async () => {},
     });
     await workspace.setProjectsDir(projects);
     const path = makeRepo({ "package.json": JSON.stringify({ name: "web", private: true }) }, "web", projects);

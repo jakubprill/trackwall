@@ -367,6 +367,7 @@ describe("the graph and find_endpoint on real git", () => {
       hosting: fakeHosting().hosting,
       openEditor: () => {},
       openFolder: () => {},
+      afterClone: async () => {},
     });
     await workspace.setProjectsDir(projects);
     for (const name of [...SHOP, ...extra]) makeRepo(fixtureFiles(name), name, projects);

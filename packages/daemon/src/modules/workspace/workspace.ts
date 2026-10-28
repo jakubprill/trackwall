@@ -97,6 +97,11 @@ export interface WorkspaceDeps {
   openEditor: (dir: string) => void;
   /** Opens a folder in Explorer, Finder or the Linux file manager (ADR-51). */
   openFolder: (dir: string) => void;
+  /**
+   * Runs once a clone into `dir` has finished, before the clone is reported done: the local config files the store keeps for
+   * the repo go back in (ADR-114). A failure here is reported as the clone's, so the facade keeps its own to itself.
+   */
+  afterClone: (dir: string) => Promise<void>;
 }
 
 export class Workspace {
@@ -238,7 +243,10 @@ export class Workspace {
     if (running && sameHost(running.host, host) && running.fullName === fullName) return running;
     if (running) throw new DomainError("bad_request", `${running.fullName} is already being cloned into ${path}`);
     if (taken(dir)) throw new DomainError("bad_request", `the projects folder already has ${dir}`);
-    return this.clones.start({ host, fullName, path }, () => this.deps.hosting.clone(host, fullName, path));
+    return this.clones.start({ host, fullName, path }, async () => {
+      await this.deps.hosting.clone(host, fullName, path);
+      await this.deps.afterClone(path);
+    });
   }
 
   /** Clones into the current projects folder; those into the folder from before a settings change say nothing about it. */

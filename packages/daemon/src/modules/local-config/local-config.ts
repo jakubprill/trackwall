@@ -178,9 +178,25 @@ export class LocalConfig {
    */
   async restore(id: string): Promise<RepoLocalConfig> {
     const dir = await this.#deps.repos.repoPath(id);
+    if ((await this.#restoreInto(id, dir)) === null)
+      throw new DomainError("bad_request", `${id}: the local config store has nothing this repo lacks`);
+    return this.repo(id);
+  }
+
+  /**
+   * Restore without a click, right after Trackwall cloned a repo into `dir` (ADR-114): a clone has none of the local config
+   * files, so whatever the store keeps for its folder goes back in. Nothing to restore is the usual case, not an error.
+   */
+  async restoreCloned(dir: string): Promise<LocalConfigFileName[]> {
+    // The store knows a repo only by its folder name (`storePath`), so the folder name also names it in errors.
+    return (await this.#restoreInto(basename(dir), dir)) ?? [];
+  }
+
+  /** Writes the files only the store has into `dir` and has git ignore them; `null` when the store has nothing it lacks. */
+  async #restoreInto(id: string, dir: string): Promise<LocalConfigFileName[] | null> {
     const inStore = await this.#backups([dir]);
-    const missing = (await this.repo(id)).files.flatMap((f) => (f.kind === "missing" ? [f.file] : []));
-    if (missing.length === 0) throw new DomainError("bad_request", `${id}: the local config store has nothing this repo lacks`);
+    const missing = (await this.#repoState(id, dir, inStore)).files.flatMap((f) => (f.kind === "missing" ? [f.file] : []));
+    if (missing.length === 0) return null;
     const written: LocalConfigFileName[] = [];
     try {
       try {
@@ -192,7 +208,7 @@ export class LocalConfig {
     } catch (err) {
       throw new DomainError("repo_unavailable", `${id}: ${messageOf(err)}`);
     }
-    return this.repo(id);
+    return written;
   }
 
   /** Has git ignore, in this clone, the local config files the repo has that git neither tracks nor ignores. */

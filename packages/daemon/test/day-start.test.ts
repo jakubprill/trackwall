@@ -44,6 +44,7 @@ function setup(
     hosting: fakeHosting().hosting,
     openEditor: () => {},
     openFolder: () => {},
+    afterClone: async () => {},
   });
   const firstMessages: string[] = [];
   const logged: string[] = [];

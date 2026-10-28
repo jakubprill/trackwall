@@ -266,7 +266,14 @@ describe("Graph on cards from real git", () => {
     const projects = mkdtempSync(join(tmpdir(), "trackwall-graph-projects-"));
     const vcs = new Vcs(systemTempFolder);
     const file = new WorkspaceFile(join(home, "workspace.yaml"));
-    const workspace = new Workspace({ file, vcs, hosting: fakeHosting().hosting, openEditor: () => {}, openFolder: () => {} });
+    const workspace = new Workspace({
+      file,
+      vcs,
+      hosting: fakeHosting().hosting,
+      openEditor: () => {},
+      openFolder: () => {},
+      afterClone: async () => {},
+    });
     await workspace.setProjectsDir(projects);
     const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(join(home, "cards"), () => {}), log: () => {} });
     return { projects, workspaceFile: file.path, graph: new Graph({ cards, workspace }) };

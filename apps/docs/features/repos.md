@@ -29,7 +29,7 @@ The list and the repo header count your uncommitted work as "3 changed, 1 new". 
 
 "Sync all" fetches every repo and moves its default branch to the remote one when that is a clean fast-forward. A repo with changes on its default branch, or with a branch that has diverged, stays untouched. When the sync is done, a panel says in one sentence per repo what happened: whether the default branch moved, whether your files changed, and how many uncommitted files are left. The same sentence is in the tooltip on the list.
 
-The "+" button above the list searches the GitLab and GitHub hosts you added in "Settings > Repo hosts" and clones the repo you pick into the projects folder.
+The "+" button above the list searches the GitLab and GitHub hosts you added in "Settings > Repo hosts" and clones the repo you pick into the projects folder. If the [local config backup](/features/local-config) has files for that repo, such as `mise.local.toml`, they are put back before the clone shows as done.
 
 ## Use it
 

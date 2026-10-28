@@ -34,6 +34,7 @@ async function folderOfTwentyRepos() {
     hosting: fakeHosting().hosting,
     openEditor: () => {},
     openFolder: () => {},
+    afterClone: async () => {},
   });
   await workspace.setProjectsDir(projects);
   const repos = Array.from({ length: REPO_COUNT }, (_, i) => {
