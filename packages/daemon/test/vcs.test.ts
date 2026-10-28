@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
+import { withTempFolderGone } from "./support/temp-folder.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
-const vcs = new Vcs();
+const vcs = new Vcs(systemTempFolder);
 
 describe("vcs on real git", () => {
   test(
@@ -292,6 +293,36 @@ describe("vcs on real git", () => {
     },
     SLOW_TEST_TIMEOUT_MS,
   );
+
+  test(
+    "worktree changes keep their temporary index in the scratch folder, not the system temp folder or .git, and leave nothing behind",
+    async () => {
+      const dir = makeRepo({ "a.txt": "a\n" }, "no-temp");
+      const base = gitIn(dir, "rev-parse", "HEAD").trim();
+      writeFileSync(join(dir, "a.txt"), "b\n");
+      writeFileSync(join(dir, "new.txt"), "new\n");
+      const scratch = join(mkdtempSync(join(tmpdir(), "trackwall-projects-")), ".trackwall-scratch");
+      const inProjects = new Vcs(async () => scratch);
+      const gitDirBefore = readdirSync(join(dir, ".git"));
+
+      const changes = await withTempFolderGone(() => inProjects.worktreeChanges(dir, base, 0, []));
+
+      expect(changes.files.map((f) => f.path)).toEqual(["a.txt", "new.txt"]);
+      expect(readdirSync(scratch)).toEqual([]);
+      expect(readdirSync(join(dir, ".git"))).toEqual(gitDirBefore);
+    },
+    SLOW_TEST_TIMEOUT_MS,
+  );
+
+  test("worktree changes do not recreate a projects folder that is gone just to keep their scratch files in it", async () => {
+    const dir = makeRepo({ "a.txt": "a\n" }, "projects-gone");
+    const base = gitIn(dir, "rev-parse", "HEAD").trim();
+    const projects = join(mkdtempSync(join(tmpdir(), "trackwall-gone-")), "Dev");
+    const inGoneProjects = new Vcs(async () => join(projects, ".trackwall-scratch"));
+
+    await expect(inGoneProjects.worktreeChanges(dir, base, 0, [])).rejects.toThrow();
+    expect(existsSync(projects)).toBe(false);
+  });
 
   test(
     "worktree changes with a diff limit of 0 give files and counts without the change contents",

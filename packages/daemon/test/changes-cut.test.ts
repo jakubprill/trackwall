@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { makeRepo } from "./support/git-repo.ts";
 
-const vcs = new Vcs();
+const vcs = new Vcs(systemTempFolder);
 
 describe("a cut diff of the working directory", () => {
   test("ends after its last whole line and never in the middle of a character", async () => {

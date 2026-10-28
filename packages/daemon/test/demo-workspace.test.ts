@@ -7,7 +7,7 @@ import { createDemoWorkspace, DEMO_REPOS, DEMO_SERVICES } from "../scripts/demo/
 import { CardCache } from "../src/modules/cards/card-cache.ts";
 import { Cards } from "../src/modules/cards/cards.ts";
 import { Graph } from "../src/modules/graph/graph.ts";
-import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { fakeHosting } from "./support/hosting.ts";
@@ -21,7 +21,7 @@ test(
     const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
     const projects = mkdtempSync(join(tmpdir(), "trackwall-demo-"));
     createDemoWorkspace(projects);
-    const vcs = new Vcs();
+    const vcs = new Vcs(systemTempFolder);
     const workspace = new Workspace({
       file: new WorkspaceFile(join(home, "workspace.yaml")),
       vcs,

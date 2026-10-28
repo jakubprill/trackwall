@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import type { RepoEntry } from "../src/modules/workspace/projects-dir.ts";
 import { RepoWatch } from "../src/modules/workspace/repo-watch.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
@@ -14,7 +14,7 @@ import { fakeHosting } from "./support/hosting.ts";
 async function setup() {
   const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
-  const vcs = new Vcs();
+  const vcs = new Vcs(systemTempFolder);
   const workspace = new Workspace({
     file: new WorkspaceFile(join(home, "workspace.yaml")),
     vcs,

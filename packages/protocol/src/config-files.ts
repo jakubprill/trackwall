@@ -26,6 +26,7 @@ export const ConfigEntryId = z.enum([
   "local-config-store",
   "task-worktrees-dir",
   "removed-repos-dir",
+  "scratch-dir",
   "copilot-config",
 ]);
 export type ConfigEntryId = z.infer<typeof ConfigEntryId>;
@@ -158,6 +159,14 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     internal: false,
     purpose: "Repos the supervisor removed at your request. Nothing is deleted; move a repo back to restore it.",
     docs: "supervisor",
+  },
+  "scratch-dir": {
+    place: "projects",
+    kind: "folder",
+    writer: "trackwall",
+    internal: true,
+    purpose: "Git's scratch files while Trackwall reads changes or backs up local config; empty between git commands.",
+    docs: "config-files",
   },
   "copilot-config": {
     place: "copilot",

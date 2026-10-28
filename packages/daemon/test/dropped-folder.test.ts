@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
-import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { makeRepo } from "./support/git-repo.ts";
@@ -12,7 +12,7 @@ function newWorkspace() {
   const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
   return new Workspace({
     file: new WorkspaceFile(file),
-    vcs: new Vcs(),
+    vcs: new Vcs(systemTempFolder),
     hosting: fakeHosting().hosting,
     openEditor: () => {},
     openFolder: () => {},
@@ -90,7 +90,7 @@ describe("dropped folder", () => {
     writeFileSync(join(dir, "workspace.yaml"), `projectsDir: ${JSON.stringify(projects + sep)}\n`);
     const workspace = new Workspace({
       file: new WorkspaceFile(join(dir, "workspace.yaml")),
-      vcs: new Vcs(),
+      vcs: new Vcs(systemTempFolder),
       hosting: fakeHosting().hosting,
       openEditor: () => {},
       openFolder: () => {},

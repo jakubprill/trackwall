@@ -11,7 +11,7 @@ import { buildGraph, buildGraphWithIndex } from "../src/modules/graph/build-grap
 import { findEndpoints } from "../src/modules/graph/find-endpoint.ts";
 import { Graph } from "../src/modules/graph/graph.ts";
 import type { GraphCardInput } from "../src/modules/graph/graph-input.ts";
-import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { commitFiles, makeRepo } from "./support/git-repo.ts";
@@ -360,7 +360,7 @@ describe("the graph and find_endpoint on real git", () => {
   async function setup(extra: readonly string[] = []) {
     const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
     const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
-    const vcs = new Vcs();
+    const vcs = new Vcs(systemTempFolder);
     const workspace = new Workspace({
       file: new WorkspaceFile(join(home, "workspace.yaml")),
       vcs,

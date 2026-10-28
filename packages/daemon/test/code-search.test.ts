@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseGrep } from "../src/modules/vcs/grep.ts";
-import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { type CodeSearchQuery, searchCode } from "../src/modules/workspace/code-search.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
@@ -27,7 +27,7 @@ async function workspaceWithRepos() {
   gitIn(join(projects, "empty"), "init", "-q");
   const workspace = new Workspace({
     file: new WorkspaceFile(join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml")),
-    vcs: new Vcs(),
+    vcs: new Vcs(systemTempFolder),
     hosting: fakeHosting().hosting,
     openEditor: () => {},
     openFolder: () => {},

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CloneJob } from "@trackwall/protocol";
-import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { type FakeHostingConfig, fakeHosting } from "./support/hosting.ts";
@@ -23,7 +23,7 @@ async function workspaceWithGitLab(config: FakeHostingConfig = {}) {
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
   const workspace = new Workspace({
     file: new WorkspaceFile(file),
-    vcs: new Vcs(),
+    vcs: new Vcs(systemTempFolder),
     hosting: fakeHosting(config).hosting,
     openEditor: () => {},
     openFolder: () => {},
@@ -163,7 +163,7 @@ describe("cloning from a repo host into the projects folder", () => {
     const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
     const bare = new Workspace({
       file: new WorkspaceFile(file),
-      vcs: new Vcs(),
+      vcs: new Vcs(systemTempFolder),
       hosting: fakeHosting().hosting,
       openEditor: () => {},
       openFolder: () => {},

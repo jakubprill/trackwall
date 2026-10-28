@@ -8,7 +8,7 @@ import { Logs } from "../../src/modules/logs/logs.ts";
 import { stripAnsi } from "../../src/modules/logs/stream-lines.ts";
 import { ProcessGroups } from "../../src/modules/procs/process-groups.ts";
 import { RuntimeFile } from "../../src/modules/procs/runtime-file.ts";
-import { Vcs } from "../../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../../src/modules/vcs/vcs.ts";
 import { groupPlatform } from "../../src/platform/group-platform.ts";
 import { terminalPlatform } from "../../src/platform/terminal.ts";
 import { hookServerFor } from "./hook-server.ts";
@@ -60,7 +60,7 @@ export function makeAgents(
       agentSecrets: () => [],
       removeRepo: () => Promise.reject(new Error("unused")),
     },
-    vcs: new Vcs(),
+    vcs: new Vcs(systemTempFolder),
     home,
     copilot: [process.execPath, fakeCopilot],
     version: "0.0.0-test",

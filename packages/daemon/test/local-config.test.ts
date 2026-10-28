@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFacade, HOSTING_CLIS } from "../src/facade.ts";
 import { LocalConfig } from "../src/modules/local-config/local-config.ts";
 import { gitProcessesStarted } from "../src/modules/vcs/git.ts";
-import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 
 /**
@@ -83,6 +83,17 @@ describe("the local config store", () => {
       "Trackwall|Back up orders: .worktreeinclude, mise.local.toml\n\norders/.worktreeinclude\norders/mise.local.toml",
     );
     expect((await facade.workspace.list()).repos.map((r) => r.id)).toEqual(["orders"]);
+  });
+
+  test("a backup builds its commit with a temporary index in the projects folder's scratch folder and leaves it empty", async () => {
+    const { projects, backUp, storeLog } = await setup();
+    const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
+    writeFileSync(join(orders, "mise.local.toml"), TASKS);
+
+    await backUp();
+
+    expect(storeLog()).toBe("Trackwall|Back up orders: mise.local.toml\n\norders/mise.local.toml");
+    expect(readdirSync(join(projects, ".trackwall-scratch"))).toEqual([]);
   });
 
   test("without a change nothing is committed, and a changed file is a new commit", async () => {
@@ -424,7 +435,7 @@ describe("the local config store", () => {
     async () => {
       const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
       const { facade } = await setup(projects);
-      const vcs = new Vcs();
+      const vcs = new Vcs(systemTempFolder);
       const localConfig = new LocalConfig({ repos: facade.workspace, vcs, log: () => {}, pushRetryMs: 0 });
       const backUp = async () => {
         await localConfig.backUp();
