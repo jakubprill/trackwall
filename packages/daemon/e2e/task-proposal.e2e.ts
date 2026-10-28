@@ -38,7 +38,7 @@ describe("a task proposal from a main session", () => {
     await model.fill("gpt-5.5");
     // The proposer asked for no approvals (ADR-105): the box is ticked, and the user sees what it means before the start.
     expect(await page.getByRole("checkbox", { name: "Run without asking for approvals: Add a licence" }).isChecked()).toBe(true);
-    await page.getByText("The agent runs commands, edits files and calls tools without asking you.").waitFor();
+    await page.getByText("also commands such as git push", { exact: false }).waitFor();
     await page.getByRole("button", { name: "Start task" }).click();
 
     await waitForTerminal(page, "Argument: --model=gpt-5.5");
