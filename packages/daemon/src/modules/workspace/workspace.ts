@@ -35,6 +35,7 @@ import { mapLimit } from "../../infra/map-limit.ts";
 import { CloneJobs } from "./clone-jobs.ts";
 import { type CodeSearchQuery, type CodeSearchVcs, searchCode } from "./code-search.ts";
 import { describeDroppedFolder } from "./dropped-folder.ts";
+import { isFullPath, NOT_FULL_PROGRAM_PATH } from "./full-path.ts";
 import { dirKey, findRepos, projectsDirUnavailable, type RepoEntry, resolveFolderSetting, takenNames } from "./projects-dir.ts";
 import { moveRepoOut } from "./repo-removal.ts";
 import { suggestedProjectsDir } from "./suggested-projects-dir.ts";
@@ -71,6 +72,8 @@ const SYNC_CONCURRENCY = 4;
 
 /** What `workspace` needs from `vcs`; wired in the facade (§4: modules do not import each other). */
 interface WorkspaceVcs extends CodeSearchVcs {
+  checkGitProgram(path: string): Promise<void>;
+  useGitProgram(path: string | null): void;
   status(dir: string): Promise<RepoStatusOk>;
   remote(dir: string): Promise<string | null>;
   sync(dir: string): Promise<SyncResult>;
@@ -114,11 +117,14 @@ export class Workspace {
     const projectsDir = this.deps.file.projectsDir();
     // A bad `worktreesDir` typed by hand must not take away the projects folder form, and saving a folder fixes it.
     const worktreesDir = configOrProblem(() => this.deps.file.worktreesDir(), null);
+    const gitProgram = configOrProblem(() => this.deps.file.gitProgram(), null);
     return {
       projectsDir,
       worktreesDir: worktreesDir.value,
       worktreesDirProblem: worktreesDir.problem,
       defaultWorktreesDir: projectsDir === null ? null : defaultWorktreesDir(projectsDir),
+      gitProgram: gitProgram.value,
+      gitProgramProblem: gitProgram.problem,
       configFile: this.configFile(),
     };
   }
@@ -138,6 +144,29 @@ export class Workspace {
   async setWorktreesDir(path: string | null): Promise<WorkspaceSettings> {
     this.deps.file.setWorktreesDir(path === null ? null : await this.checkedWorktreesDir(path));
     return this.settings();
+  }
+
+  /**
+   * The git for local git calls (ADR-112), checked by running it first; `null` goes back to git from `PATH`. Takes effect at
+   * once. A hand edit of `workspace.yaml` takes effect at the next daemon start (`useGitProgramFromFile`).
+   */
+  async setGitProgram(path: string | null): Promise<WorkspaceSettings> {
+    if (path !== null) await this.checkedGitProgram(path);
+    this.deps.file.setGitProgram(path);
+    this.deps.vcs.useGitProgram(path);
+    return this.settings();
+  }
+
+  /** Hands the saved "Git program" to `vcs` at the daemon start; a bad key means git from `PATH`, and Settings shows why. */
+  useGitProgramFromFile(): void {
+    this.deps.vcs.useGitProgram(configOrProblem(() => this.deps.file.gitProgram(), null).value);
+  }
+
+  private async checkedGitProgram(path: string): Promise<void> {
+    if (!isFullPath(path)) throw new DomainError("bad_request", `${path}: ${NOT_FULL_PROGRAM_PATH}`);
+    await this.deps.vcs.checkGitProgram(path).catch((err: unknown) => {
+      throw new DomainError("bad_request", `${path} cannot be used as the git program: ${messageOf(err)}`);
+    });
   }
 
   private async checkedWorktreesDir(path: string): Promise<string> {

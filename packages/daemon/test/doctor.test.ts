@@ -182,6 +182,43 @@ describe("doctor", () => {
   });
 });
 
+describe("the git check with a Git program chosen in Settings (ADR-112)", () => {
+  function gitCheck(version: Awaited<ReturnType<DoctorDeps["gitVersion"]>>) {
+    const deps: DoctorDeps = {
+      env: async () => process.env,
+      run: () => Promise.resolve(""),
+      gitVersion: () => Promise.resolve(version),
+      signedIn: () => Promise.resolve(),
+      resolveCopilot: () => ({ program: "copilot", args: [] }),
+      mise: ["mise"],
+      projectsDir: async () => null,
+      repoHosts: () => [],
+      workspaceFile: join(tmpdir(), "trackwall-doctor-no-such-workspace.yaml"),
+      workspaceKeys: () => ({ keys: [], unknown: [] }),
+      now: () => NOW,
+    };
+    return new Doctor(deps).run().then((report) => report.checks.find((c) => c.id === "git"));
+  }
+
+  test("names the program the daemon runs when it is not git from PATH", async () => {
+    const check = await gitCheck({
+      output: "git version 2.47.1.windows.1",
+      program: "C:\\Dev\\tools\\MinGit\\mingw64\\bin\\git.exe",
+      chosen: "C:\\Dev\\tools\\MinGit\\cmd\\git.exe",
+    });
+    expect(check).toMatchObject({ status: "ok", summary: "git 2.47.1 at C:\\Dev\\tools\\MinGit\\mingw64\\bin\\git.exe" });
+  });
+
+  test("warns when the chosen program did not answer and the daemon fell back to git from PATH", async () => {
+    const check = await gitCheck({ output: "git version 2.47.1", program: null, chosen: "C:\\Dev\\tools\\MinGit\\cmd\\git.exe" });
+    expect(check).toMatchObject({
+      status: "warn",
+      summary: "git 2.47.1 from PATH: the Git program C:\\Dev\\tools\\MinGit\\cmd\\git.exe did not answer.",
+      fix: "Fix or clear the Git program in Settings > Workspace.",
+    });
+  });
+});
+
 describe("program versions", () => {
   test.each([
     ["GitHub Copilot CLI 1.0.103.\nRun 'copilot update' to check for updates.", "1.0.103"],

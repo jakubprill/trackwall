@@ -47,6 +47,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.suggestedProjectsDir, (f) => f.workspace.suggestedProjectsDir(homedir())),
   route(workspaceApi.setProjectsDir, (f, b) => f.workspace.setProjectsDir(b.path)),
   route(workspaceApi.setWorktreesDir, (f, b) => f.workspace.setWorktreesDir(b.path)),
+  route(workspaceApi.setGitProgram, (f, b) => f.workspace.setGitProgram(b.path)),
   route(workspaceApi.overview, (f, b) => f.workspace.overview(b.repo)),
   route(workspaceApi.tree, (f, b) => f.workspace.tree(b.repo, b.path)),
   route(workspaceApi.file, (f, b) => f.workspace.file(b.repo, b.path)),

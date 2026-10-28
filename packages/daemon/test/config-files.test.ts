@@ -53,7 +53,7 @@ describe("config files", () => {
       name: "workspace.yaml",
       path: workspaceFile,
       state: "present",
-      detail: "2 of 9 keys set in the file",
+      detail: "2 of 10 keys set in the file",
     });
     expect(entry("tasks-file")).toEqual({
       id: "tasks-file",
@@ -101,6 +101,7 @@ describe("config files", () => {
     expect(report.workspaceKeys.map((k) => [k.key, k.from, k.value, k.line])).toEqual([
       ["projectsDir", "file", projects, 1],
       ["worktreesDir", "default", join(projects, ".trackwall-worktrees"), null],
+      ["gitProgram", "default", "git from PATH", null],
       ["repoHosts", "default", "none", null],
       ["toolPermissions", "default", "none", null],
       ["agentSecrets", "file", "GITLAB_TOKEN", 2],

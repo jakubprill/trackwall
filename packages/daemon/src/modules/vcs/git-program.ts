@@ -8,6 +8,8 @@ import { runProgram } from "../../infra/run-program.ts";
  * second on a managed machine), each call pays that twice. On Windows the daemon therefore asks the launcher once for git's
  * `--exec-path` and from then on starts the real binary itself, with the same directories at the front of `PATH` that the
  * launcher adds, so filters (`sh`, `git-lfs`) still resolve. Elsewhere, or when the layout is not the usual one, `git`.
+ * The user can choose another git in Settings (`gitProgram`, ADR-112), resolved the same way; network commands keep `git`
+ * from `PATH` whatever the choice (`GIT_FROM_PATH`).
  */
 
 export interface GitProgram {
@@ -18,16 +20,42 @@ export interface GitProgram {
 
 export const GIT_FROM_PATH: GitProgram = { command: "git", pathPrefix: [] };
 
-let resolved: Promise<GitProgram> | undefined;
+/**
+ * The "Git program" setting (ADR-112), handed over by `Vcs.useGitProgram` when the daemon starts and when Settings saves it;
+ * `null` for git from `PATH`. Kept here, not read from `workspace.yaml` per call, because every git call asks for it.
+ */
+let setting: string | null = null;
+/** One resolution per program ever chosen, so that switching back and forth asks `--exec-path` once per program. */
+const resolved = new Map<string | null, Promise<GitProgram>>();
 
-/** Resolved once per daemon; any failure gives `git` from `PATH`, which works, only slower. */
+export function useGitProgram(path: string | null): void {
+  setting = path;
+}
+
+export function chosenGitProgram(): string | null {
+  return setting;
+}
+
+/**
+ * The program for local git calls, resolved once per setting. A chosen program that no longer answers gives git from `PATH`,
+ * which still works, and the doctor names the git it got (ADR-112).
+ */
 export function gitProgram(): Promise<GitProgram> {
-  if (process.platform !== "win32") return Promise.resolve(GIT_FROM_PATH);
-  resolved ??= runProgram("git", ["--exec-path"], { label: "git --exec-path", env: process.env, timeoutMs: 30_000 }).then(
-    ({ stdout }) => directGit(stdout.toString("utf8").trim(), existsSync) ?? GIT_FROM_PATH,
+  const known = resolved.get(setting);
+  if (known) return known;
+  const program = resolveProgram(setting);
+  resolved.set(setting, program);
+  return program;
+}
+
+function resolveProgram(chosen: string | null): Promise<GitProgram> {
+  if (process.platform !== "win32") return Promise.resolve(chosen === null ? GIT_FROM_PATH : { command: chosen, pathPrefix: [] });
+  // The chosen program can be MinGit's launcher `cmd\git.exe` too: asking it for `--exec-path` finds the real binary.
+  const command = chosen ?? "git";
+  return runProgram(command, ["--exec-path"], { label: "git --exec-path", env: process.env, timeoutMs: 30_000 }).then(
+    ({ stdout }) => directGit(stdout.toString("utf8").trim(), existsSync) ?? { command, pathPrefix: [] },
     () => GIT_FROM_PATH,
   );
-  return resolved;
 }
 
 /**

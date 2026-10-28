@@ -8,9 +8,10 @@ import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
-import { FolderForm } from "./FolderForm.tsx";
+import { GitProgramSurface } from "./GitProgramSurface.tsx";
+import { PathForm } from "./PathForm.tsx";
 
-/** The projects folder and the task worktrees folder; both come from one read of the workspace settings. */
+/** The projects folder, the task worktrees folder and the git program; all come from one read of the workspace settings. */
 export function WorkspaceFolders({ conn, onRetry, onSaved }: { conn: Connection; onRetry: () => void; onSaved: () => void }) {
   const load = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
   const settings = useRemote(load);
@@ -23,6 +24,11 @@ export function WorkspaceFolders({ conn, onRetry, onSaved }: { conn: Connection;
 
   async function saveWorktreesDir(path: string | null) {
     await post(conn, workspaceApi.setWorktreesDir, { path });
+    settings.reload();
+  }
+
+  async function saveGitProgram(path: string | null) {
+    await post(conn, workspaceApi.setGitProgram, { path });
     settings.reload();
   }
 
@@ -45,7 +51,7 @@ export function WorkspaceFolders({ conn, onRetry, onSaved }: { conn: Connection;
           {!settings.data && !settings.error && <Loading />}
           {settings.data?.projectsDir === null && <SuggestedProjectsDir conn={conn} use={saveProjectsDir} />}
           {settings.data && (
-            <FolderForm
+            <PathForm
               key={settings.data.projectsDir ?? ""}
               {...PROJECTS_DIR}
               initialPath={settings.data.projectsDir ?? ""}
@@ -54,9 +60,7 @@ export function WorkspaceFolders({ conn, onRetry, onSaved }: { conn: Connection;
             />
           )}
           {/* A bad `projectsDir` typed by hand into `workspace.yaml` is fixed with this very form. */}
-          {settings.errorCode === "invalid_config" && (
-            <FolderForm {...PROJECTS_DIR} initialPath="" save={(path) => saveProjectsDir(path)} />
-          )}
+          {settings.errorCode === "invalid_config" && <PathForm {...PROJECTS_DIR} initialPath="" save={(path) => saveProjectsDir(path)} />}
         </div>
       </Surface>
       {settings.data && (
@@ -67,7 +71,7 @@ export function WorkspaceFolders({ conn, onRetry, onSaved }: { conn: Connection;
               folders your antivirus skips, or git and builds in a task get slow. Tasks you already have keep their worktrees where they
               are.
             </p>
-            <FolderForm
+            <PathForm
               key={settings.data.worktreesDir ?? ""}
               label="Full path to the task worktrees folder"
               placeholder={settings.data.defaultWorktreesDir ?? "Set the projects folder first"}
@@ -89,6 +93,7 @@ export function WorkspaceFolders({ conn, onRetry, onSaved }: { conn: Connection;
           </div>
         </Surface>
       )}
+      {settings.data && <GitProgramSurface settings={settings.data} save={saveGitProgram} />}
     </>
   );
 }
