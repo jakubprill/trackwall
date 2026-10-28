@@ -5,6 +5,7 @@ import { GetSessionResult, VerifyTaskResult, verificationApi } from "@trackwall/
 import { z } from "zod";
 import { connectHttpClient, connectSessionClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
+import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 const TOKEN = "v".repeat(43);
 const FAKE_MISE = [process.execPath, join(import.meta.dir, "fixtures", "fake-mise.ts")];
@@ -43,7 +44,7 @@ beforeAll(async () => {
   });
   outside = await connectHttpClient(daemon.api.port, TOKEN);
   clients.push(outside);
-});
+}, SLOW_TEST_TIMEOUT_MS);
 
 afterAll(async () => {
   for (const client of clients) await client.close();

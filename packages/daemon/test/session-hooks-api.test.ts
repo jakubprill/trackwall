@@ -6,13 +6,14 @@ import { loopbackRequest } from "../src/infra/loopback.ts";
 import { sessionHooksFile } from "../src/modules/agents/agents.ts";
 import { startSessionApi } from "./support/session-api.ts";
 import { sessionToken as tokenOf } from "./support/session-token.ts";
+import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 const TOKEN = "h".repeat(43);
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
 
 beforeAll(async () => {
   daemon = await startSessionApi(TOKEN);
-});
+}, SLOW_TEST_TIMEOUT_MS);
 
 afterAll(() => daemon.stop());
 

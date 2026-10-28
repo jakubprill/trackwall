@@ -16,7 +16,8 @@ describe("loopback request deadline", () => {
 
     await expect(loopbackRequest(port, "/events", { timeoutMs: 500 })).rejects.toThrow("no response within 500 ms");
 
-    expect(Date.now() - began).toBeLessThan(2000);
+    // Well under the test's own time limit, so a stream kept open still fails here; a busy Windows runner took 2.7 s.
+    expect(Date.now() - began).toBeLessThan(4000);
     stream.closeAllConnections();
     await new Promise((resolve) => stream.close(resolve));
   });

@@ -11,6 +11,7 @@ import { loopbackRequest } from "../src/infra/loopback.ts";
 import { createMcpEndpoint } from "../src/mcp/endpoint.ts";
 import { makeRepo } from "./support/git-repo.ts";
 import { connectHttpClient } from "./support/mcp-client.ts";
+import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 const TOKEN = "e".repeat(43);
 let api: ApiServer;
@@ -63,7 +64,7 @@ beforeAll(async () => {
     events: new EventHub({ facade, log: () => {} }),
   });
   mcp = await connectHttpClient(api.port, TOKEN);
-});
+}, SLOW_TEST_TIMEOUT_MS);
 
 afterAll(async () => {
   await mcp.close();

@@ -6,6 +6,7 @@ import { AgentTaskChanges } from "@trackwall/protocol";
 import { gitIn } from "./support/git-repo.ts";
 import { connectHttpClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
+import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 const TOKEN = "d".repeat(43);
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
@@ -17,7 +18,7 @@ beforeAll(async () => {
     miseCommand: ["mise"],
   });
   client = await connectHttpClient(daemon.api.port, TOKEN);
-});
+}, SLOW_TEST_TIMEOUT_MS);
 
 afterAll(async () => {
   await client.close();

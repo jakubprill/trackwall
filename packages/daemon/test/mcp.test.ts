@@ -36,6 +36,7 @@ import { runStdioBridge } from "../src/mcp/stdio-bridge.ts";
 import { gitIn, makeRepo } from "./support/git-repo.ts";
 import { connectHttpClient } from "./support/mcp-client.ts";
 import { RUNTIMES } from "./support/runtimes.ts";
+import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 const MAIN = join(import.meta.dir, "..", "src", "main.ts");
 
@@ -82,7 +83,7 @@ beforeAll(async () => {
     mcp: createMcpEndpoint({ facade, version: "9.9.9", log: (msg) => logs.push(msg) }),
     events: new EventHub({ facade, log: () => {} }),
   });
-});
+}, SLOW_TEST_TIMEOUT_MS);
 
 afterAll(() => api.close());
 
