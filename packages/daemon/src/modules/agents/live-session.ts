@@ -1,4 +1,13 @@
-import type { AgentDialog, DialogAnswer, RunState, Session, TaskState, TaskStateChange, TaskUpdate } from "@trackwall/protocol";
+import type {
+  AgentDialog,
+  DialogAnswer,
+  RunState,
+  Session,
+  SessionEnvironment,
+  TaskState,
+  TaskStateChange,
+  TaskUpdate,
+} from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 import { type CopilotHookOutput, hookOutputFor } from "./copilot-hook-output.ts";
 import type { CopilotHookEvent, CopilotHookRecord } from "./copilot-hook-record.ts";
@@ -105,6 +114,8 @@ export interface LiveSessionOptions {
   hasConversation: boolean;
   /** The Copilot CLI program the session runs, the full path from `findCopilot`. */
   program: string;
+  /** What the session got from mise when it started (ADR-93). */
+  environment: SessionEnvironment;
   /** The state of the session's process group in `procs`; `undefined` before the start. */
   run: () => RunState | undefined;
   /**
@@ -126,6 +137,7 @@ export class LiveSession {
   readonly supervisor: boolean;
   readonly task: string | null;
   readonly startedAt = new Date().toISOString();
+  readonly environment: SessionEnvironment;
   readonly #run: () => RunState | undefined;
   readonly #promptText: () => string | undefined;
   readonly #onUserText: () => void;
@@ -180,6 +192,7 @@ export class LiveSession {
     this.repo = o.repo;
     this.supervisor = o.supervisor;
     this.task = o.task;
+    this.environment = o.environment;
     this.#run = o.run;
     this.#promptText = o.prompt;
     this.#onUserText = o.onUserText;
@@ -401,6 +414,7 @@ export class LiveSession {
       needsAttention: run.kind === "running" && this.#attention.waiting(this.#last?.state),
       task: this.task,
       dialog: run.kind === "running" ? this.#dialog() : null,
+      environment: this.environment,
     };
   }
 

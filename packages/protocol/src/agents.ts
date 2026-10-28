@@ -161,6 +161,28 @@ export type AgentDialog = z.infer<typeof AgentDialog>;
 export const DialogAnswer = z.union([AgentDialogOption.shape.key, z.literal("stop")]);
 export type DialogAnswer = z.infer<typeof DialogAnswer>;
 
+/**
+ * What a session got from mise when it started (ADR-93): the variables of the mise `[env]` of its place (a task's
+ * worktree, the repo root or the projects folder), by name only, never with values.
+ */
+export const SessionEnvironment = z.object({
+  /** The names of the variables mise set for the session. */
+  variables: z.array(z.string()),
+  /** The names among `variables` that are secrets; the daemon masks their values in what it keeps of the session. */
+  secrets: z.array(z.string()),
+  /**
+   * The secrets the session's tools get (its shell commands and the MCP servers Copilot CLI starts), because the user
+   * named them in `agentSecrets`; Copilot CLI hides the other secrets from them.
+   */
+  agentSecrets: z.array(z.string()),
+  /**
+   * Why the session got less than its place gives, e.g. a mise config that is not trusted or an age key that is missing;
+   * `null` when nothing is missing (also without mise).
+   */
+  problem: z.string().nullable(),
+});
+export type SessionEnvironment = z.infer<typeof SessionEnvironment>;
+
 export const Session = z.object({
   id: SessionId,
   /**
@@ -187,6 +209,7 @@ export const Session = z.object({
   task: TaskId.nullable(),
   /** The agent dialog on the screen while the session is in `Approval` (an approval) or in `Input` (a question); otherwise `null`. */
   dialog: AgentDialog.nullable(),
+  environment: SessionEnvironment,
 });
 export type Session = z.infer<typeof Session>;
 

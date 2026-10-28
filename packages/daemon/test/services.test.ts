@@ -66,7 +66,14 @@ function setup(
     return join(home, id);
   };
   const env = async () => ({ ...process.env, FAKE_API_TOKEN: SECRET });
-  const mise = new Mise({ procs, repos: { repoPath }, tasks: worktrees, command: FAKE_MISE, env, onTrusted: () => {} });
+  const mise = new Mise({
+    procs,
+    repos: { repoPath, projectsDir: async () => home },
+    tasks: worktrees,
+    command: FAKE_MISE,
+    env,
+    onTrusted: () => {},
+  });
   const graph = { graph: async () => ({ nodes: [], edges: opts.edges ?? [], configProblems: [], configFile: "" }) as RepoGraph };
   const cards = {
     card: async (repo: string) => {

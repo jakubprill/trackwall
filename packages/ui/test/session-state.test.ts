@@ -26,6 +26,7 @@ function session(id: string, state: Session["state"], run: Session["run"] = runn
     needsAttention,
     task: null,
     dialog: null,
+    environment: { variables: [], secrets: [], agentSecrets: [], problem: null },
   };
 }
 

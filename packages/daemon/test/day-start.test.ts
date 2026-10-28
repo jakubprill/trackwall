@@ -116,6 +116,7 @@ function session(fields: Partial<Session>): Session {
     needsAttention: false,
     task: null,
     dialog: null,
+    environment: { variables: [], secrets: [], agentSecrets: [], problem: null },
     ...fields,
   };
 }

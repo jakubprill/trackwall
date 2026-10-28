@@ -769,6 +769,69 @@ describe("the daemon's MCP server with the real Copilot CLI behind the user's pr
   });
 });
 
+describe("a session's environment from mise with the real Copilot CLI (ADR-93)", () => {
+  test("--secret-env-vars keeps a secret out of the agent's shell, not just out of its output, and a secret left out of it reaches the shell", async () => {
+    const secret = "deploy-key-from-age-0123456789";
+    const withMise = await startRealCopilotDaemon(model, {
+      repos: {
+        shop: {
+          "README.md": "# shop\n",
+          "fake-mise.json": JSON.stringify({
+            tasks: [],
+            env: { SHOP_DEPLOY_KEY: secret, SHOP_REGION: "eu-central" },
+            redacted: ["SHOP_DEPLOY_KEY"],
+          }),
+        },
+      },
+      miseCommand: [process.execPath, join(import.meta.dir, "..", "test", "fixtures", "fake-mise.ts")],
+    });
+    /** One turn in a new session of `shop` that prints both variables in the shell; what the shell printed, as the model got it. */
+    async function printedBySession(): Promise<{ environment: Session["environment"]; printed: string }> {
+      const { agents } = withMise.facade;
+      const started = await agents.start("shop");
+      const window = openWindow(started.id, withMise);
+      await untilLoaded(started.id, withMise);
+      model.reply(
+        (request) =>
+          shellCall(request, {
+            bash: 'echo "key=$SHOP_DEPLOY_KEY region=$SHOP_REGION"',
+            powershell: 'Write-Output "key=$env:SHOP_DEPLOY_KEY region=$env:SHOP_REGION"',
+          }),
+        { text: "Printed them." },
+      );
+      window.attachment.input("print the deploy settings\r");
+      // Copilot CLI may run a command that only prints without asking; when it asks, the user allows it.
+      const askedOrDone = (s: Session) => s.dialog?.kind === "approval" || s.state?.reason === "hook agentStop";
+      const first = await waitFor(agents, started.id, askedOrDone, "approval dialog or end of turn", SESSION_MS);
+      if (first.dialog?.kind === "approval") agents.answerDialog(started.id, first.dialog.id, "1");
+      await waitFor(agents, started.id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
+      window.attachment.detach();
+      await agents.stop(started.id);
+      return { environment: started.environment, printed: model.requests().at(-1)?.toolResults.join("\n") ?? "" };
+    }
+    try {
+      const hidden = await printedBySession();
+      expect(hidden.environment).toEqual({
+        variables: ["SHOP_DEPLOY_KEY", "SHOP_REGION"],
+        secrets: ["SHOP_DEPLOY_KEY"],
+        agentSecrets: [],
+        problem: null,
+      });
+      expect(hidden.printed).toContain("key= region=eu-central");
+
+      writeFileSync(
+        join(withMise.home, "workspace.yaml"),
+        `projectsDir: ${JSON.stringify(withMise.projects)}\nagentSecrets: [SHOP_DEPLOY_KEY]\n`,
+      );
+      const given = await printedBySession();
+      expect(given.environment.agentSecrets).toEqual(["SHOP_DEPLOY_KEY"]);
+      expect(given.printed).toContain(`key=${secret} region=eu-central`);
+    } finally {
+      await withMise.stop();
+    }
+  });
+});
+
 describe("sessions across a daemon restart with the real Copilot CLI (ADR-95)", () => {
   test("the supervisor and a main session that ran when the daemon stopped go on with their conversations in the next daemon", async () => {
     const before = await startRealCopilotDaemon(model);

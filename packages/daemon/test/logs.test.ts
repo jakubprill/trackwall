@@ -236,6 +236,12 @@ describe("secrets to mask", () => {
     ).toEqual(["ghp_123456789", "a-long-database-password", "sk_test_abcdefgh"]);
   });
 
+  test("values the process gets elsewhere (mise [env], ADR-93) are secrets too, each line of a key on its own, without short ones", () => {
+    expect(
+      secretValues({ GH_TOKEN: "ghp_123456789" }, ["jira-key-from-age", "-----BEGIN KEY-----\nMIIEvQIBADANBgkqh\nend", "short"]),
+    ).toEqual(["ghp_123456789", "jira-key-from-age", "-----BEGIN KEY-----", "MIIEvQIBADANBgkqh"]);
+  });
+
   test("a secret containing another one is masked entirely", () => {
     const secrets = secretValues({ A_TOKEN: "abcdefgh", B_TOKEN: "abcdefgh-ijkl" });
     const lines: string[] = [];

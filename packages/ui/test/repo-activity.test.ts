@@ -16,6 +16,7 @@ function session(id: string, repo: string, state: TaskState, more: Partial<Sessi
     needsAttention: state === "Approval",
     task: null,
     dialog: null,
+    environment: { variables: [], secrets: [], agentSecrets: [], problem: null },
     ...more,
   };
 }

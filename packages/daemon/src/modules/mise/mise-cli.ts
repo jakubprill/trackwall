@@ -57,3 +57,15 @@ export function runMiseCli(
     });
   });
 }
+
+/**
+ * A mise error message without the lines that are not its cause: warnings (e.g. a failed check for a new version), and
+ * the version and `--verbose` hints mise prints after every error.
+ */
+export function miseFailure(stderr: string, code: number | null): string {
+  const lines = stderr
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l !== "" && !/^mise WARN/.test(l) && !/^mise ERROR (Version:|Run with --verbose)/.test(l));
+  return lines.join("\n") || `mise exited with code ${code}`;
+}
