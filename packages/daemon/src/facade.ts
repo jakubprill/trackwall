@@ -4,6 +4,7 @@ import { vscodeUrl } from "./infra/editor-url.ts";
 import { DomainError } from "./infra/errors.ts";
 import { runProgram } from "./infra/run-program.ts";
 import {
+  AGENT_QUEUES_FILE,
   Agents,
   type AgentsDeps,
   LAST_SUPERVISOR_FILE,
@@ -248,6 +249,7 @@ export function createFacade(o: FacadeOptions): Facade {
       "tasks-file": join(o.home, TASKS_FILE),
       "resumable-sessions-file": join(o.home, RESUMABLE_SESSIONS_FILE),
       "last-supervisor-file": join(o.home, LAST_SUPERVISOR_FILE),
+      "agent-queues-file": join(o.home, AGENT_QUEUES_FILE),
       "day-start-file": join(o.home, DAY_START_FILE),
       "cards-dir": join(o.home, CARDS_DIR),
       "logs-dir": join(o.home, LOGS_DIR),

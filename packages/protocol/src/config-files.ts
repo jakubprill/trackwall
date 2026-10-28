@@ -18,6 +18,7 @@ export const ConfigEntryId = z.enum([
   "tasks-file",
   "resumable-sessions-file",
   "last-supervisor-file",
+  "agent-queues-file",
   "day-start-file",
   "cards-dir",
   "logs-dir",
@@ -95,6 +96,14 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     internal: true,
     purpose: "The supervisor conversation that Start resumes.",
     docs: "supervisor",
+  },
+  "agent-queues-file": {
+    place: "state",
+    kind: "file",
+    writer: "trackwall",
+    internal: true,
+    purpose: "Task proposals, reviews, messages and updates that still wait, so they come back after a restart.",
+    docs: "sessions",
   },
   "day-start-file": {
     place: "state",

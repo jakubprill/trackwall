@@ -32,6 +32,7 @@ import {
 } from "@trackwall/protocol";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { AcpSession, type ConversationViewer, type ConversationWindow } from "./acp-session.ts";
+import { type AgentQueues, agentQueuesFile } from "./agent-queues.ts";
 import type { AgentSession } from "./agent-session.ts";
 import { resolveCopilot, toolPermissionArgs } from "./copilot-command.ts";
 import type { CopilotHookOutput } from "./copilot-hook-output.ts";
@@ -56,6 +57,7 @@ import { type SessionMiseEnv, sessionMiseLaunch } from "./session-env.ts";
 import { type SessionRole, withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
+import type { FollowedStateFile } from "./state-file.ts";
 import { TaskCoordination } from "./task-coordination.ts";
 import { TaskFile } from "./task-file.ts";
 import { TaskProposals } from "./task-proposals.ts";
@@ -94,6 +96,8 @@ export const TASKS_FILE = "tasks.json";
 /** The sessions that run, for the next daemon to resume (ADR-95). */
 export const RESUMABLE_SESSIONS_FILE = "resumable-sessions.json";
 export const LAST_SUPERVISOR_FILE = "last-supervisor.json";
+/** Proposals, reviews, messages and updates that wait, for the next daemon (ADR-115). */
+export const AGENT_QUEUES_FILE = "agent-queues.json";
 /** Where task worktrees went before ADR-84; tasks from then keep them there until they end. */
 export const LEGACY_WORKTREES_DIR = "worktrees";
 
@@ -207,10 +211,10 @@ export class Agents {
   readonly #sessions = new Map<string, AgentSession>();
   readonly #tokens = new SessionTokens();
   readonly #tasks: AgentTasks;
-  readonly #proposals = new TaskProposals();
+  readonly #proposals = new TaskProposals(() => this.#followQueues());
   /** The folder each waiting repo removal names, fixed when it was proposed: approval moves that folder or none (ADR-83). */
   readonly #removalDirs = new Map<string, string>();
-  readonly #reviews = new TaskReviews();
+  readonly #reviews = new TaskReviews(() => this.#followQueues());
   readonly #miseTrust = new MiseTrustNotices();
   readonly #coordination: TaskCoordination;
   /** The supervisor start under way, so that two requests at once start one supervisor, not two (ADR-58). */
@@ -220,9 +224,11 @@ export class Agents {
   /** The sessions the previous daemon left running, until `resumeLeftSessions` takes them (ADR-95). */
   #left: ResumableSession[] = [];
   readonly #lastSupervisor: LastSupervisorFile;
+  readonly #queues: FollowedStateFile<AgentQueues>;
 
   constructor(deps: AgentsDeps) {
     this.#deps = deps;
+    this.#queues = agentQueuesFile(join(deps.home, AGENT_QUEUES_FILE), deps.log);
     this.#resumable = new ResumableSessions(join(deps.home, RESUMABLE_SESSIONS_FILE), deps.log);
     this.#lastSupervisor = new LastSupervisorFile(join(deps.home, LAST_SUPERVISOR_FILE), deps.log);
     this.#tasks = new AgentTasks({
@@ -247,6 +253,7 @@ export class Agents {
       runningOfTask: (task) => this.#runningOfTask(task),
       runningProposer: (proposer) => [...this.#sessions.values()].find((s) => proposerKeyOf(s) === proposer && this.#isRunning(s)),
       hasProposer: (proposer) => proposer === SUPERVISOR || this.#sessions.has(proposer),
+      changed: () => this.#followQueues(),
       log: deps.log,
     });
   }
@@ -397,6 +404,7 @@ export class Agents {
       proposedBy: proposedByOf(session),
     });
     this.#removalDirs.set(proposal.id, repoDir);
+    this.#followQueues();
     return proposal;
   }
 
@@ -423,9 +431,9 @@ export class Agents {
    */
   async approveRepoRemoval(id: string): Promise<void> {
     const proposal = this.#proposals.get(id);
+    if (proposal.kind !== "remove_repo") throw new DomainError("bad_request", `proposal ${id} is not a repo removal`);
     const repoDir = this.#removalDirs.get(id);
-    if (proposal.kind !== "remove_repo" || repoDir === undefined)
-      throw new DomainError("bad_request", `proposal ${id} is not a repo removal`);
+    if (repoDir === undefined) throw new Error(`repo removal ${id} has no folder`);
     if (this.#proposals.list().some((p) => p.repo === proposal.repo && this.#proposals.approving(p.id)))
       throw new DomainError("bad_request", `${proposal.repo} is already being removed or a task of it started`);
     this.#assertNothingRunsIn(proposal.repo, repoDir);
@@ -881,11 +889,12 @@ export class Agents {
   }
 
   /**
-   * Daemon start: session files from the previous run (sessions do not outlive the daemon), and the list of the
-   * sessions it left running, which `resumeLeftSessions` resumes once the API listens (ADR-95).
+   * Daemon start: session files from the previous run (sessions do not outlive the daemon), the list of the sessions it
+   * left running, which `resumeLeftSessions` resumes once the API listens (ADR-95), and the queues it left (ADR-115).
    */
   sweepLeftovers(): void {
     this.#left = this.#resumable.read();
+    this.#restoreQueues();
     try {
       rmSync(join(this.#deps.home, SESSIONS_DIR), { recursive: true, force: true });
     } catch (err) {
@@ -923,10 +932,21 @@ export class Agents {
     if (left.supervisor) {
       if (this.#supervisorStart || this.#runningSupervisor()) throw new Error("a supervisor already runs");
       await this.#startSupervisorAs(spec);
+      this.#askToReadLeft(left.session);
       return;
     }
     const cwd = repo === null ? await this.#deps.repos.projectsDir() : await this.#deps.repos.repoPath(repo);
     await this.#launchAs(spec, { repo, supervisor: false, cwd, task: null });
+    this.#askToReadLeft(left.session);
+  }
+
+  /**
+   * A supervisor or main session the restart brought back is asked to read the updates it had not read before the stop
+   * (ADR-115), unlike a new one (`#listed`); a task's session is asked anyway.
+   */
+  #askToReadLeft(id: string): void {
+    const session = this.#sessions.get(id);
+    if (session !== undefined && this.#inboxPrompt(session) !== undefined) session.askToRead();
   }
 
   /** A start in the view it names, in `place`. */
@@ -934,12 +954,53 @@ export class Agents {
     return spec.view === "terminal" ? this.#launch({ ...spec, ...place }) : this.#launchConversation({ ...spec, ...place });
   }
 
-  /** Daemon exit, before `procs.stopAll`: the sessions it stops stay in the list for the next daemon to resume (ADR-95). */
+  /**
+   * Daemon exit, before `procs.stopAll`: the sessions it stops stay in the list for the next daemon to resume (ADR-95),
+   * and the queues stay as they are now (ADR-115), with the user's latest typing in them.
+   */
   keepRunningSessionsForResume(): void {
     // The list of this moment, not of the last check: a session stopped or started since then counts as it is now.
     this.#followLive([...this.#sessions.values()].filter((s) => this.#deps.procs.state(owner(s.id))?.kind === "running"));
     this.#followLastSupervisor();
+    this.#followQueues();
     this.#resumable.stopFollowing();
+    this.#queues.stopFollowing();
+  }
+
+  /**
+   * What the previous daemon's queues still mean: the proposals that did not become tasks, the reviews and messages of
+   * the tasks that are still there, the updates of the supervisor and of the sessions resumed under the same id (a
+   * task's session gets a new one and proposes nothing).
+   */
+  #restoreQueues(): void {
+    const stored = this.#queues.read();
+    if (stored === undefined) return;
+    const hasTask = (task: string) => this.#tasks.find(task) !== undefined;
+    const resumed = new Set(this.#left.filter((s) => s.task === null).map((s) => s.session));
+    // A repo removal waits only with its folder; the move checks it against the repo's folder of now (`removeRepo`), so a
+    // path from the file moves nothing else.
+    const { removalDirs } = stored;
+    this.#proposals.restore(stored.proposals, (p) => !hasTask(p.id) && (p.kind !== "remove_repo" || removalDirs[p.id] !== undefined));
+    for (const p of this.#proposals.list()) {
+      const dir = removalDirs[p.id];
+      if (p.kind === "remove_repo" && dir !== undefined) this.#removalDirs.set(p.id, dir);
+    }
+    this.#reviews.restore(stored.reviews, hasTask);
+    this.#coordination.restore(stored.coordination, { hasTask, hasProposer: (p) => p === SUPERVISOR || resumed.has(p) });
+  }
+
+  /** The queues as they are now (ADR-115); a failed write goes to the log and is tried again at the next change. */
+  #followQueues(): void {
+    try {
+      this.#queues.follow({
+        proposals: this.#proposals.stored(),
+        removalDirs: Object.fromEntries(this.#removalDirs),
+        reviews: this.#reviews.stored(),
+        coordination: this.#coordination.stored(),
+      });
+    } catch (err) {
+      this.#deps.log(`writing ${AGENT_QUEUES_FILE}: ${String(err)}`);
+    }
   }
 
   /** Daemon exit: `procs.stopAll` stops the processes, here only the observing ends. */

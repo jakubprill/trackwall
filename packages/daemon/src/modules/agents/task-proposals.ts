@@ -1,19 +1,27 @@
 import { randomUUID } from "node:crypto";
-import type { TaskProposal } from "@trackwall/protocol";
+import { TaskId, TaskProposal } from "@trackwall/protocol";
+import { z } from "zod";
 import { DomainError } from "../../infra/errors.ts";
 
 /**
  * Task proposals (ADR-39): tasks submitted with the MCP tool `propose_task` that wait for the user's decision in the
- * Sessions view. Only in daemon memory, like the sessions that submit them: after a restart the proposing session is
- * not alive anyway, so nobody waits for an answer. Rejected ones disappear from the list, but their identifiers stay, so
- * that a session waiting for the proposal gets `proposal_rejected` instead of `not_found`.
- * Since ADR-55 a rejection also keeps the user's reason for that session.
+ * Sessions view. Rejected ones disappear from the list, but their identifiers stay, so that a session waiting for the
+ * proposal gets `proposal_rejected` instead of `not_found`. Since ADR-55 a rejection also keeps the user's reason for
+ * that session. Since ADR-115 both outlive a daemon restart in `agent-queues.json` (`stored`, `restore`), because the
+ * sessions that proposed them are resumed (ADR-95); every change is reported to `changed`, which writes the file.
  */
 
 /** This many proposals can wait at once: a session in a loop does not flood the list, and a human would not review more anyway. */
 export const MAX_PENDING_PROPOSALS = 20;
 /** This many recent rejections the daemon remembers for waiting sessions. */
 const REMEMBERED_REJECTIONS = 100;
+
+/** What `agent-queues.json` keeps of the proposals: the waiting ones (newest first) and the remembered rejections (oldest first). */
+export const StoredProposals = z.object({
+  pending: z.array(TaskProposal).max(MAX_PENDING_PROPOSALS),
+  rejected: z.array(z.object({ id: TaskId, reason: z.string().nullable() })).max(REMEMBERED_REJECTIONS),
+});
+export type StoredProposals = z.infer<typeof StoredProposals>;
 
 export class TaskProposals {
   /** Newest first. */
@@ -25,6 +33,23 @@ export class TaskProposals {
   readonly #approving = new Set<string>();
   /** Rejected id to the user's reason (`null` without one), oldest first; the oldest drop out after `REMEMBERED_REJECTIONS`. */
   readonly #rejected = new Map<string, string | null>();
+  readonly #changed: () => void;
+
+  constructor(changed: () => void) {
+    this.#changed = changed;
+  }
+
+  /** The proposals to keep across a restart; one being approved counts as waiting, since its approval ends with the daemon. */
+  stored(): StoredProposals {
+    return { pending: this.list(), rejected: [...this.#rejected].map(([id, reason]) => ({ id, reason })) };
+  }
+
+  /** The proposals the previous daemon kept that still wait (`waits`: not one that became a task while it stopped). */
+  restore({ pending, rejected }: StoredProposals, waits: (proposal: TaskProposal) => boolean): void {
+    this.#pending = pending.filter(waits);
+    this.#rejected.clear();
+    for (const { id, reason } of rejected) this.#rejected.set(id, reason);
+  }
 
   list(): TaskProposal[] {
     return [...this.#pending];
@@ -36,6 +61,7 @@ export class TaskProposals {
     }
     const added: TaskProposal = { id: randomUUID(), ...proposal, createdAt: new Date().toISOString() };
     this.#pending = [added, ...this.#pending];
+    this.#changed();
     return added;
   }
 
@@ -69,7 +95,9 @@ export class TaskProposals {
    */
   release(id: string, restore: boolean): void {
     this.#approving.delete(id);
-    if (!restore) this.#pending = this.#pending.filter((p) => p.id !== id);
+    if (restore) return;
+    this.#pending = this.#pending.filter((p) => p.id !== id);
+    this.#changed();
   }
 
   reject(id: string, reason: string | null): void {
@@ -80,6 +108,7 @@ export class TaskProposals {
       if (this.#rejected.size <= REMEMBERED_REJECTIONS) break;
       this.#rejected.delete(old);
     }
+    this.#changed();
   }
 
   /** How the user rejected the proposal, or `undefined` when it was not rejected (or long enough ago to be forgotten). */
