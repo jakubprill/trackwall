@@ -51,7 +51,7 @@ const TYPED_REVIEW = "Thinking about: The user sent a review of your changes in 
 
 describe.skipIf(process.versions.bun === undefined)("a review from the Changes tab (real PTY and git, fake Copilot CLI)", () => {
   test("a review waits for the end of the turn, then the daemon asks the agent to read it, and the comments are read once", async () => {
-    const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "describe how to run shop" });
+    const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "describe how to run shop", approvals: "ask" });
     const session = taskSession(task.id);
     // The task's session starts working on its prompt, so the review waits instead of landing in the middle of the turn.
     await waitFor(daemon.facade.agents, session, (s) => s.state?.state === "Working", "the task prompt's turn");
@@ -83,7 +83,7 @@ describe.skipIf(process.versions.bun === undefined)("a review from the Changes t
   }, 60_000);
 
   test("a review of a task without a running session goes to the session the user resumes", async () => {
-    const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "add a license" });
+    const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "add a license", approvals: "ask" });
     const first = taskSession(task.id);
     await waitFor(daemon.facade.agents, first, (s) => s.state !== null, "the first state");
     await daemon.facade.agents.stop(first);

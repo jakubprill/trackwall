@@ -6,7 +6,7 @@
  * welcome screen with the input box and no hook (waiting for you, read from the screen), a line from the user starts a
  * turn with an approval request (the first turn after `sessionStart`, at once with a prompt from `--interactive=`; cut
  * above in a short terminal),
- * a "Yes" option or Enter approves and ends the turn (the input box comes back a moment after `agentStop`, and keys
+ * a "Yes" option or Enter approves and ends the turn (with `--allow-all-tools` the turn runs without asking) (the input box comes back a moment after `agentStop`, and keys
  * typed in that gap are lost, as in Copilot CLI), and `/exit` ends the session. The line `PARALLEL_TOOLS_PROMPT` starts
  * a turn in which the agent calls two such commands at once: as in Copilot CLI (the contract test of ADR-66), both
  * approval requests come at once, the second dialog follows the first answer, and the first command's `postToolUse`
@@ -56,10 +56,19 @@ const instructionFiles = (process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS ?? "")
   .flatMap((dir) => readdirSync(dir).filter((name) => name.endsWith(".instructions.md")));
 
 /**
- * Task arguments (`--interactive=`, `--resume=`, `--session-id=`), tool permissions (`--allow-tool=`, `--deny-tool=`) and
+ * Copilot CLI runs every tool without an approval request (ADR-105, its contract test): no dialog and no `notification`
+ * hook, the command's `postToolUse` comes at once.
+ */
+const ALLOW_ALL_TOOLS = "--allow-all-tools";
+const allowAllTools = process.argv.includes(ALLOW_ALL_TOOLS);
+
+/**
+ * Task arguments (`--interactive=`, `--resume=`, `--session-id=`), tool permissions (`--allow-tool=`, `--deny-tool=`, `--allow-all-tools`) and
  * the secrets Copilot CLI redacts (`--secret-env-vars=`, ADR-93) the fake prints, so that the test sees them.
  */
-const taskArgs = process.argv.filter((a) => /^--(interactive|resume|session-id|model|allow-tool|deny-tool|secret-env-vars)=/.test(a));
+const taskArgs = process.argv.filter(
+  (a) => /^--(interactive|resume|session-id|model|allow-tool|deny-tool|secret-env-vars)=/.test(a) || a === ALLOW_ALL_TOOLS,
+);
 
 /**
  * Variables the fake prints with the values its tools would get, named in `FAKE_COPILOT_SHOW_ENV` (comma-separated). Like
@@ -202,8 +211,12 @@ function submit(line: string): void {
   process.stdout.write(`helper PID: ${helper.pid}\r\n`);
   for (const turnTitle of turnTitles) title(turnTitle.replaceAll(PROMPT_PLACEHOLDER, line));
   process.stdout.write(`Thinking about: ${line}\r\n`);
-  drawDialog(real.approval.dialog);
   const parallel = line === PARALLEL_TOOLS_PROMPT;
+  if (allowAllTools) {
+    endTurn(replay([...(parallel ? [firstToolDone] : []), ...real.approval.hooks.slice(asked)]));
+    return;
+  }
+  drawDialog(real.approval.dialog);
   awaitingApprovals = parallel ? 2 : 1;
   replay([...real.approval.hooks.slice(2, asked), ...(parallel ? secondRequest : [])]);
 }

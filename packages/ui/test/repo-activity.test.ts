@@ -34,6 +34,7 @@ function task(id: string, repo: string, title: string): Task {
     title,
     proposedBy: null,
     model: null,
+    approvals: "ask",
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },
@@ -49,6 +50,7 @@ function proposal(id: string, repo: string, title: string): TaskProposal {
     prompt: title.toLowerCase(),
     proposedBy: { session: null, supervisor: false },
     model: null,
+    approvals: "ask",
     createdAt: AT,
   };
 }

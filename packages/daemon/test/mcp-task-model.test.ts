@@ -53,7 +53,12 @@ describe.skipIf(process.versions.bun === undefined)("the model of a proposed tas
     );
     expect(proposal.model).toBe("claude-opus-5.5");
 
-    const task = await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: proposal.prompt, model: proposal.model });
+    const task = await daemon.post(agentsApi.approveProposal, {
+      proposal: proposal.id,
+      prompt: proposal.prompt,
+      model: proposal.model,
+      approvals: "ask",
+    });
     expect(task.model).toBe("claude-opus-5.5");
     const first = sessionOf(task.id);
     expect(await argumentsOf(first, "--session-id=")).toContain("Argument: --model=claude-opus-5.5");
@@ -87,7 +92,12 @@ describe.skipIf(process.versions.bun === undefined)("the model of a proposed tas
     const cleared = await propose({ model: "gpt-5.5" });
 
     for (const proposal of [plain, cleared]) {
-      const task = await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: proposal.prompt, model: null });
+      const task = await daemon.post(agentsApi.approveProposal, {
+        proposal: proposal.id,
+        prompt: proposal.prompt,
+        model: null,
+        approvals: "ask",
+      });
       expect(task.model).toBeNull();
       const session = sessionOf(task.id);
       expect(await argumentsOf(session, "--session-id=")).not.toContain("--model=");

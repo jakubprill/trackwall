@@ -79,6 +79,21 @@ describe.skipIf(process.versions.bun === undefined)("sessions across a daemon re
     expect(await argumentOnScreen(after, resumedTask, "--resume=")).toContain(`Argument: --resume=${task.id}`);
   }, 60_000);
 
+  test("a task started without approvals keeps running without them in the next daemon (ADR-105)", async () => {
+    const before = await startDaemon();
+    const task = await before.facade.agents.createTask("shop", "map the endpoints", "auto");
+    const first = before.facade.agents.sessions().sessions.find((s) => s.task === task.id)?.id;
+    if (first === undefined) throw new Error(`task ${task.id} has no session`);
+    await waitFor(before.facade.agents, first, (s) => s.state !== null, "the task session's state");
+
+    await stopDaemon(before);
+    const after = await startDaemon({ home: before.home, projects: before.projects });
+
+    const resumed = await resumedSessionOf(after, task.id);
+    expect(await argumentOnScreen(after, resumed, "--resume=")).toContain("Argument: --allow-all-tools");
+    expect(after.facade.agents.task(task.id).approvals).toBe("auto");
+  }, 60_000);
+
   test("a free session starts again as a free session, next to the supervisor, not in its place (ADR-100)", async () => {
     const before = await startDaemon();
     const { agents } = before.facade;

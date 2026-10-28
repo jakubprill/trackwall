@@ -38,6 +38,7 @@ function task(id: string, proposedBy: Task["proposedBy"]): Task {
     title: "Fix the cart",
     proposedBy,
     model: null,
+    approvals: "ask",
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },
@@ -52,6 +53,7 @@ function proposal(id: string, proposedBy: TaskProposal["proposedBy"]): TaskPropo
     title: "Add refunds",
     prompt: "add refunds",
     model: null,
+    approvals: "ask",
     proposedBy,
     createdAt: "2026-10-25T10:10:00Z",
   };

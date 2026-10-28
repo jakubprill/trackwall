@@ -18,6 +18,7 @@ import {
   type SupervisorConversation,
   type SupervisorSettings,
   type Task,
+  type TaskApprovals,
   type TaskChanges,
   type TaskChangesSummary,
   type TaskMessage,
@@ -348,7 +349,10 @@ export class Agents {
   }
 
   /** A task proposal from session `caller` (`null`: an agent outside Trackwall) in a repo from the projects folder (ADR-39). */
-  async propose(caller: string | null, proposal: Pick<TaskProposal, "repo" | "title" | "prompt" | "model">): Promise<TaskProposal> {
+  async propose(
+    caller: string | null,
+    proposal: Pick<TaskProposal, "repo" | "title" | "prompt" | "model" | "approvals">,
+  ): Promise<TaskProposal> {
     await this.#deps.repos.repoPath(proposal.repo);
     return this.#proposals.add({ kind: "task", ...proposal, proposedBy: proposedByOf(caller === null ? null : this.session(caller)) });
   }
@@ -368,6 +372,7 @@ export class Agents {
       title: `Remove ${repo} from the projects folder`,
       prompt: reason,
       model: null,
+      approvals: "ask",
       proposedBy: proposedByOf(session),
     });
     this.#removalDirs.set(proposal.id, repoDir);
@@ -375,15 +380,15 @@ export class Agents {
   }
 
   /**
-   * A task from a proposal, with the prompt and the model (ADR-98) as the user left them. The proposal stays on the list until there is a task with
+   * A task from a proposal, with the prompt, the model (ADR-98) and the approvals mode (ADR-105) as the user left them. The proposal stays on the list until there is a task with
    * its identifier, but a second approval is `not_found`; it waits for a decision again when the task was not created. A
    * task left behind by a failed cleanup is ended by the user, so the proposal then disappears.
    */
-  async approveProposal(id: string, prompt: string, model: string | null): Promise<Task> {
+  async approveProposal(id: string, prompt: string, model: string | null, approvals: TaskApprovals): Promise<Task> {
     if (this.#proposals.get(id).kind !== "task") throw new DomainError("bad_request", `proposal ${id} is not a task`);
     const { repo, title, proposedBy } = this.#proposals.take(id);
     try {
-      return await this.#tasks.create(repo, prompt, { id, title, proposedBy, model });
+      return await this.#tasks.create(repo, prompt, { id, title, proposedBy, model, approvals });
     } finally {
       this.#proposals.release(id, this.#tasks.find(id) === undefined);
     }
@@ -524,8 +529,9 @@ export class Agents {
     throw new DomainError("not_found", `no task or task proposal ${target.task}`);
   }
 
-  createTask(repo: string, prompt: string): Promise<Task> {
-    return this.#tasks.create(repo, prompt, { id: randomUUID(), title: null, proposedBy: null, model: null });
+  /** A task the user typed; its agent asks before tools unless the user chose `auto` (ADR-105). */
+  createTask(repo: string, prompt: string, approvals: TaskApprovals = "ask"): Promise<Task> {
+    return this.#tasks.create(repo, prompt, { id: randomUUID(), title: null, proposedBy: null, model: null, approvals });
   }
 
   resumeTask(id: string): Promise<Task> {

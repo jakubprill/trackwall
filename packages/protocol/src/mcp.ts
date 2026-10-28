@@ -18,6 +18,7 @@ import {
   TASK_SUMMARY_MAX_FILES,
   TASK_TITLE_MAX,
   Task,
+  TaskApprovals,
   TaskChangesSummary,
   TaskId,
   TaskMessage,
@@ -659,6 +660,12 @@ export const mcpTools = {
           "Copilot CLI model id the task's session runs on (its --model), e.g. claude-opus-5.5, gpt-5.5 or auto; pass it " +
             "whenever the user named a model for the work, written as Copilot CLI's /model lists it. Omitted: Copilot CLI's " +
             "default model. The user sees it on the proposal and may change it; resuming the task keeps it.",
+        ),
+        approvals: TaskApprovals.optional().describe(
+          "ask (the default): the task's agent asks the user before each tool its rules do not allow; auto: it runs every " +
+            "tool without asking (deny rules still apply). Pass auto only when the user said this task may run without " +
+            "approvals; before proposing work that only reads and reports (an analysis, a review), ask the user whether it " +
+            "may. The user sees it on the proposal and may change it; resuming the task keeps it.",
         ),
       })
       .strict(),

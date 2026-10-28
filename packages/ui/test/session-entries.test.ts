@@ -43,6 +43,7 @@ function task(id: string, createdAt: string): Task {
     title: null,
     proposedBy: null,
     model: null,
+    approvals: "ask",
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },
@@ -58,6 +59,7 @@ function proposal(id: string, createdAt: string, proposer: string | null = null)
     prompt: "add a test",
     proposedBy: { session: proposer, supervisor: false },
     model: null,
+    approvals: "ask",
     createdAt,
   };
 }

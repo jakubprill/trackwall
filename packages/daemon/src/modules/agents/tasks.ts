@@ -10,6 +10,7 @@ import {
   type Session,
   TASK_SUMMARY_MAX_FILES,
   type Task,
+  type TaskApprovals,
   type TaskChanges,
   type TaskChangesSummary,
   type TaskMiseConfig,
@@ -17,6 +18,7 @@ import {
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
+import { approvalArgs } from "./copilot-command.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
 import { type MiseSnapshot, miseConfigChanges, miseConfigDigest, readMiseConfig, reviewMiseConfig } from "./task-mise-config.ts";
@@ -111,6 +113,8 @@ export interface TaskOrigin {
   proposedBy: ProposedBy | null;
   /** The model the task's sessions run on (ADR-98); `null` for Copilot CLI's default. */
   model: string | null;
+  /** How the task's sessions answer tool approvals (ADR-105). */
+  approvals: TaskApprovals;
 }
 
 /** A task from the file with the worktree that follows from it, and its port (one given when it was read, if it had none). */
@@ -167,7 +171,7 @@ export class AgentTasks {
     }
   }
 
-  async #create(repo: string, prompt: string, { id, title, proposedBy, model }: TaskOrigin): Promise<Task> {
+  async #create(repo: string, prompt: string, { id, title, proposedBy, model, approvals }: TaskOrigin): Promise<Task> {
     const repoDir = await this.#deps.repos.repoPath(repo);
     const base = await asRepoUnavailable(repo, this.#deps.vcs.defaultBase(repoDir));
     const worktreesDir = await this.#deps.repos.worktreesDir();
@@ -184,6 +188,7 @@ export class AgentTasks {
       title,
       proposedBy,
       model,
+      approvals,
       summary: null,
       trustedMiseConfig: null,
       port: freeTaskPort([...this.#tasks.map((t) => t.port), ...this.#creatingPorts]),
@@ -428,14 +433,15 @@ export class AgentTasks {
   }
 
   async #launch(task: KnownTask, args: readonly string[], promptOnStart: boolean): Promise<void> {
-    // The model on every start, the first and each resume: Copilot CLI would otherwise resume on its default (ADR-98).
+    // The model and the approvals mode on every start, the first and each resume: Copilot CLI would otherwise resume
+    // on its default model and ask again (ADR-98, ADR-105).
     const modelArgs = task.model === null ? [] : [`--model=${task.model}`];
     // A task's conversation exists from its first message on, which a resume goes on with.
     await this.#deps.sessions.launch({
       repo: task.repo,
       cwd: task.worktree,
       task: task.id,
-      args: [...modelArgs, ...args],
+      args: [...modelArgs, ...approvalArgs(task.approvals), ...args],
       promptOnStart,
       hasConversation: true,
     });
