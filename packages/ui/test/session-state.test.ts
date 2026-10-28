@@ -126,6 +126,7 @@ const proposals: SessionEntry = {
       prompt: "add refunds",
       proposedBy: { session: null, supervisor: false },
       model: null,
+      approvals: "ask",
       createdAt: "",
     },
   ],

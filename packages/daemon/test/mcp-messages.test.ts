@@ -59,7 +59,12 @@ describe.skipIf(process.versions.bun === undefined)(
       const { proposal } = ProposeTaskResult.parse(
         (await call(main.client, "propose_task", { repo: "shop", title: "Fix login", prompt: "fix login" })).structuredContent,
       );
-      const task = await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: "fix login", model: null });
+      const task = await daemon.post(agentsApi.approveProposal, {
+        proposal: proposal.id,
+        prompt: "fix login",
+        model: null,
+        approvals: "ask",
+      });
       const session = taskSession(task.id);
       await waitFor(daemon.facade.agents, session, (s) => s.state?.state === "Working", "the task prompt's turn");
 
@@ -125,7 +130,7 @@ describe.skipIf(process.versions.bun === undefined)(
       expect((await call(outside, "get_updates")).content).toEqual([
         { type: "text", text: "bad_request: an agent outside Trackwall gets no updates; follow its tasks with wait_for_session" },
       ]);
-      const typed = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "describe the repo" });
+      const typed = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "describe the repo", approvals: "ask" });
       expect((await call(main.client, "send_message", { task: typed.id, text: "Hi" })).content).toEqual([
         { type: "text", text: `bad_request: the user started task ${typed.id}, so no session sends it messages; tell the user instead` },
       ]);

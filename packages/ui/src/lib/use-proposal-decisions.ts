@@ -42,7 +42,7 @@ export function useProposalDecisions({
   const start = (starts: readonly ProposalStart[]) => {
     begin();
     void startProposals(starts, (item) =>
-      post(conn, agentsApi.approveProposal, { proposal: item.id, prompt: item.prompt, model: item.model }),
+      post(conn, agentsApi.approveProposal, { proposal: item.id, prompt: item.prompt, model: item.model, approvals: item.approvals }),
     ).then(({ started, failed }) => settle(failed, new Set(started.map((t) => t.id)), started));
   };
 

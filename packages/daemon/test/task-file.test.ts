@@ -17,6 +17,7 @@ const stored = {
   title: "Fix the login",
   proposedBy: { session: "9b1e7d2a-0000-4000-8000-000000000000", supervisor: false },
   model: "claude-opus-5.5",
+  approvals: "ask" as const,
   summary: { text: "Fixed, test added.", reportedAt: "2026-10-24T10:00:00.000Z" },
   trustedMiseConfig: { "mise.toml": "b".repeat(64) },
   port: 41003,
@@ -42,6 +43,7 @@ describe("tasks.json", () => {
       title: _,
       proposedBy: __,
       model: _model,
+      approvals: _approvals,
       summary: ___,
       trustedMiseConfig: ____,
       port: _____,
@@ -56,6 +58,7 @@ describe("tasks.json", () => {
         title: null,
         proposedBy: null,
         model: null,
+        approvals: "ask",
         summary: null,
         trustedMiseConfig: null,
         port: null,
@@ -87,7 +90,24 @@ describe("tasks.json", () => {
     const { model: _, ...old } = stored;
     writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
 
-    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, model: null }]);
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, model: null, approvals: "ask" }]);
+  });
+
+  test("a task saved before the approvals mode comes back asking, so a resume never drops approvals on its own", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
+    const { approvals: _, ...old } = { ...stored, approvals: "auto" };
+    writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
+
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, approvals: "ask" }]);
+  });
+
+  test("a task saved without approvals comes back without them", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
+    const file = new TaskFile(join(home, "tasks.json"), () => {});
+    const auto = { ...stored, approvals: "auto" as const };
+    file.write([auto]);
+
+    expect(file.read()).toEqual([auto]);
   });
 
   test("a task saved before the task worktrees folder comes back without one, so its worktree stays in the state directory", () => {

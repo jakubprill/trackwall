@@ -79,7 +79,7 @@ describe.skipIf(process.versions.bun === undefined)("removing a repo from the pr
   }, 30_000);
 
   test("a repo with a task is not removed until the user ends the task, and the proposal keeps waiting", async () => {
-    const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "add a test" });
+    const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "add a test", approvals: "ask" });
     const proposal = await proposeRemoval(outside, "shop", "Archived");
     const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === task.id);
     if (!session) throw new Error("the task has no session");
@@ -161,9 +161,9 @@ describe.skipIf(process.versions.bun === undefined)("removing a repo from the pr
     await daemon.post(agentsApi.approveRepoRemoval, { proposal: removal.id });
 
     expect(daemon.facade.agents.sessions().proposals.map((p) => p.id)).not.toContain(task.id);
-    await expect(daemon.post(agentsApi.approveProposal, { proposal: task.id, prompt: "fix", model: null })).rejects.toThrow(
-      "no task proposal",
-    );
+    await expect(
+      daemon.post(agentsApi.approveProposal, { proposal: task.id, prompt: "fix", model: null, approvals: "ask" }),
+    ).rejects.toThrow("no task proposal");
   });
 
   test("a repo removed under a name already removed before gets a numbered folder", async () => {
@@ -181,9 +181,9 @@ describe.skipIf(process.versions.bun === undefined)("removing a repo from the pr
       (await outside.callTool({ name: "propose_task", arguments: { repo: "web", title: "Fix", prompt: "fix" } })).structuredContent,
     ).proposal;
 
-    await expect(daemon.post(agentsApi.approveProposal, { proposal: removal.id, prompt: "x", model: null })).rejects.toThrow(
-      "is not a task",
-    );
+    await expect(
+      daemon.post(agentsApi.approveProposal, { proposal: removal.id, prompt: "x", model: null, approvals: "ask" }),
+    ).rejects.toThrow("is not a task");
     await expect(daemon.post(agentsApi.approveRepoRemoval, { proposal: task.id })).rejects.toThrow("is not a repo removal");
     const unknown = await outside.callTool({
       name: "propose_folder_action",

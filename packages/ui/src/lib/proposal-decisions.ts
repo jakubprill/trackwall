@@ -1,4 +1,4 @@
-import { type Task, TaskModel } from "@trackwall/protocol";
+import { type Task, type TaskApprovals, TaskModel } from "@trackwall/protocol";
 import { errorMessage } from "./api.ts";
 import type { ProposalsEntry, SessionSelection } from "./session-entries.ts";
 
@@ -7,12 +7,13 @@ import type { ProposalsEntry, SessionSelection } from "./session-entries.ts";
  * goes after a decision. Without React, so that both the proposals panel and the grid tile use the same rules.
  */
 
-/** A proposal to start, with the prompt and the model (ADR-98) the user may have edited. */
+/** A proposal to start, with the prompt, the model (ADR-98) and the approvals mode (ADR-105) the user may have edited. */
 export interface ProposalStart {
   id: string;
   prompt: string;
   /** `null` for Copilot CLI's default model. */
   model: string | null;
+  approvals: TaskApprovals;
 }
 
 /**

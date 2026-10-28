@@ -110,6 +110,13 @@ function windowOf(id: string): ReturnType<typeof viewer> {
   return window;
 }
 
+/** The newest session of task `id`. */
+function taskSessionOf(id: string): string {
+  const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === id);
+  if (session === undefined) throw new Error(`task ${id} has no session`);
+  return session.id;
+}
+
 const endOfTurn = (id: string) => waitFor(daemon.facade.agents, id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
 
 describe("a session of the real Copilot CLI", () => {
@@ -377,13 +384,6 @@ describe("a session of the real Copilot CLI", () => {
 });
 
 describe("an agent task with the real Copilot CLI", () => {
-  /** The newest session of task `id`. */
-  function taskSessionOf(id: string): string {
-    const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === id);
-    if (session === undefined) throw new Error(`task ${id} has no session`);
-    return session.id;
-  }
-
   test("the task's prompt reaches the model as the first message, in the task worktree, without typing", async () => {
     const { agents } = daemon.facade;
     model.reply({ text: "Starting on the login test." });
@@ -426,9 +426,10 @@ describe("a task's model with the real Copilot CLI (ADR-98)", () => {
       title: "Review the login",
       prompt: "review the login",
       model: REVIEW_MODEL,
+      approvals: "ask",
     });
     model.reply({ text: "Reviewing the login." });
-    const task = await agents.approveProposal(proposal.id, proposal.prompt, proposal.model);
+    const task = await agents.approveProposal(proposal.id, proposal.prompt, proposal.model, proposal.approvals);
     const first = agents.sessions().sessions.find((s) => s.task === task.id);
     if (first === undefined) throw new Error("the task has no session");
     await endOfTurn(first.id);
@@ -444,6 +445,34 @@ describe("a task's model with the real Copilot CLI (ADR-98)", () => {
     await endOfTurn(resumed.id);
     expect(model.requests().at(-1)).toMatchObject({ model: REVIEW_MODEL });
     await agents.stop(resumed.id);
+  });
+});
+
+describe("a task without approvals with the real Copilot CLI (ADR-105)", () => {
+  test("a task started auto runs a shell command without an approval request, and a deny rule still refuses one", async () => {
+    const { agents } = daemon.facade;
+    const workspaceFile = join(daemon.home, "workspace.yaml");
+    const workspace = readFileSync(workspaceFile, "utf8");
+    writeFileSync(workspaceFile, `${workspace}toolPermissions:\n  - repos: [shop]\n    deny: ["shell(rm)", "shell(Remove-Item)"]\n`);
+    try {
+      model.reply(
+        (request) => shellCall(request, { bash: "touch allowed.txt", powershell: "New-Item allowed.txt" }),
+        (request) => shellCall(request, { bash: "rm README.md", powershell: "Remove-Item README.md" }),
+        { text: "Created one file; removing the README was refused." },
+      );
+      const task = await agents.createTask("shop", "create a file, then remove the README", "auto");
+      const session = taskSessionOf(task.id);
+      await endOfTurn(session);
+
+      expect(existsSync(join(task.worktree, "allowed.txt"))).toBe(true);
+      expect(existsSync(join(task.worktree, "README.md"))).toBe(true);
+      // Copilot CLI asks for an approval with a notification hook; neither command got one.
+      expect(hookRecords(daemon.home, session).map((r) => r.event)).not.toContain("notification");
+      expect(agents.session(session).dialog).toBeNull();
+      await agents.stop(session);
+    } finally {
+      writeFileSync(workspaceFile, workspace);
+    }
   });
 });
 
@@ -588,8 +617,14 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
         { tool: copilotToolName(mcpTools.getUpdates.name), arguments: {} },
         { text: "The task has started." },
       );
-      const proposal = await agents.propose(main.id, { repo: "shop", title: "Add a login test", prompt: "add a login test", model: null });
-      const task = await agents.approveProposal(proposal.id, "add a login test", null);
+      const proposal = await agents.propose(main.id, {
+        repo: "shop",
+        title: "Add a login test",
+        prompt: "add a login test",
+        model: null,
+        approvals: "ask",
+      });
+      const task = await agents.approveProposal(proposal.id, "add a login test", null, "ask");
       const session = agents.sessions().sessions.find((s) => s.task === task.id);
       if (session === undefined) throw new Error("the task has no session");
       await turnsEnded(session.id, 1);

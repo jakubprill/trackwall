@@ -115,7 +115,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.stop, (f, b) => f.agents.stop(b.session)),
   route(agentsApi.answerDialog, (f, b) => f.agents.answerDialog(b.session, b.dialog, b.answer)),
   route(agentsApi.dismiss, (f, b) => f.agents.dismiss(b.session)),
-  route(agentsApi.createTask, (f, b) => f.agents.createTask(b.repo, b.prompt)),
+  route(agentsApi.createTask, (f, b) => f.agents.createTask(b.repo, b.prompt, b.approvals)),
   route(agentsApi.resumeTask, (f, b) => f.agents.resumeTask(b.task)),
   route(agentsApi.taskChanges, (f, b) => f.agents.taskChanges(b.task)),
   route(agentsApi.sendReview, (f, b) => f.agents.sendReview(b.task, b.comments)),
@@ -130,7 +130,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     await f.agents.removeTask(b.task, b.keepBranch, b.discardChanges);
     return null;
   }),
-  route(agentsApi.approveProposal, (f, b) => f.agents.approveProposal(b.proposal, b.prompt, b.model)),
+  route(agentsApi.approveProposal, (f, b) => f.agents.approveProposal(b.proposal, b.prompt, b.model, b.approvals)),
   route(agentsApi.approveRepoRemoval, async (f, b) => {
     await f.agents.approveRepoRemoval(b.proposal);
     return null;

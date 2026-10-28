@@ -12,6 +12,7 @@ function proposal(id: string): TaskProposal {
     prompt: `do ${id}`,
     proposedBy: { session: "main", supervisor: false },
     model: null,
+    approvals: "ask",
     createdAt: "2026-10-25T10:00:00Z",
   };
 }
@@ -29,6 +30,7 @@ function task(id: string): Task {
     title: `Task ${id}`,
     proposedBy: { session: "main", supervisor: false },
     model: null,
+    approvals: "ask",
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },
@@ -40,9 +42,9 @@ describe("starting several task proposals", () => {
     const calls: string[] = [];
     const result = await startProposals(
       [
-        { id: "p1", prompt: "do p1", model: null },
-        { id: "p2", prompt: "do p2", model: null },
-        { id: "p3", prompt: "do p3, edited", model: "claude-opus-5.5" },
+        { id: "p1", prompt: "do p1", model: null, approvals: "ask" },
+        { id: "p2", prompt: "do p2", model: null, approvals: "ask" },
+        { id: "p3", prompt: "do p3, edited", model: "claude-opus-5.5", approvals: "ask" },
       ],
       async ({ id, prompt }) => {
         calls.push(`${id}: ${prompt}`);

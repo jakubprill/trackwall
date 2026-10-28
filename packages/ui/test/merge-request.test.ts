@@ -21,6 +21,7 @@ const task = (fields: Partial<Task> = {}): Task => ({
   title: null,
   proposedBy: null,
   model: null,
+  approvals: "ask",
   summary: null,
   port: 41000,
   included: { files: [], problems: [] },
