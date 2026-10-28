@@ -28,7 +28,7 @@ test("mise.toml sets the versions of Node, Bun, pnpm and Rust", () => {
 
 /**
  * The versions each workflow sets in `env`; the documentation site, the contract tests and the Java build tests build no
- * Rust, the nightly workflow only calls contract.yml and jvm.yml.
+ * Rust, the nightly workflow only calls contract.yml, jvm.yml and ci.yml.
  */
 const WORKFLOW_TOOLS = {
   ".github/workflows/ci.yml": { node: "NODE_VERSION", bun: "BUN_VERSION", rust: "RUST_VERSION" },

@@ -1,26 +1,42 @@
 name: CI
 
-# The repo is public, so standard runners have no minute limit (ADR-22). Every PR and push to main runs:
+# The repo is public, so standard runners cost nothing, but every run is a wait (ADR-22, ADR-109). Every PR runs:
 # - lint, rustfmt, typecheck, tests and the documentation site build on Linux, plus the dependency audit;
-# - tests on Windows and macOS;
-# - the contract tests with the real Copilot CLI on all three systems (ADR-67);
-# - the E2E tests of the UI in Chromium on all three systems (ADR-71);
-# - the daemon build and the Tauri portable build on Windows and macOS (clippy, cargo test, sidecar smoke test);
+# - tests on Windows;
+# - the contract tests with the real Copilot CLI on Linux and Windows (ADR-67);
+# - the E2E tests of the UI in Chromium on Linux and Windows (ADR-71);
+# - the daemon build and the Tauri portable build on Windows (clippy, cargo test, sidecar smoke test);
 # - the aggregate `CI ok` job, the only check to require in main branch protection.
-# Jobs run in parallel: a run takes as long as the longest job (the Windows build), not the sum.
+# macOS joins every one of these jobs every night (nightly.yml calls this workflow with `macos`), in a manual run with
+# `macos` ticked, and at release (release.yml tests and builds on it).
+# A push to main runs only the Linux job, the audit and the Windows build: `CI ok` is strict in main's protection, so the
+# merged tree is the one the PR already tested, and the build is what keeps main's Rust cache warm for PRs.
+# Jobs run in parallel: a run takes as long as the longest job (Windows), not the sum.
 # No paths-ignore: the required check must report on every PR, and tests check docs/release-notes.
-# Manual runs remain for branches without a PR. release.yml builds releases independently of this file.
+# release.yml builds releases independently of this file.
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      macos:
+        description: Also run tests, contract tests, E2E tests and the build on macOS
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      macos:
+        description: Also run tests, contract tests, E2E tests and the build on macOS
+        type: boolean
+        default: false
 
 # A new push to a PR branch cancels its previous run, because the next one covers the same changes. On main
 # every commit has its own group, so pushing the next commit does not cancel it (only a manual run of the same commit does): a shared group keeps only one pending
-# run and drops it when another arrives, and then nobody knows which commit broke main.
+# run and drops it when another arrives, and then nobody knows which commit broke main. The event is in the group, so the
+# nightly run of a commit does not cancel its push run, or the other way round.
 concurrency:
-  group: ci-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
   cancel-in-progress: true
 
 # No permissions by default; every job gets only what it needs.
@@ -85,12 +101,14 @@ jobs:
           package-manager-cache: false
       - run: pnpm audit --audit-level high
 
+  # Not on a push to main, which only repeats what the PR tested (see the top of this file).
   test:
     name: test (${{ matrix.os }})
+    if: github.event_name != 'push'
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: ${{ fromJSON(inputs.macos && '["windows-latest", "macos-latest"]' || '["windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     permissions:
@@ -105,20 +123,24 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
       - run: pnpm test
 
-  # The real Copilot CLI of the pinned version on all three systems (ADR-67); nightly.yml runs the same on the newest one.
+  # The real Copilot CLI of the pinned version (ADR-67); nightly.yml runs the same on the newest one on all three systems.
   contract:
+    if: github.event_name != 'push'
     permissions:
       contents: read
     uses: ./.github/workflows/contract.yml
+    with:
+      systems: ${{ inputs.macos && '["ubuntu-latest", "windows-latest", "macos-latest"]' || '["ubuntu-latest", "windows-latest"]' }}
 
-  # Four paths through the built UI in Chromium from Playwright, on the daemon with the fake Copilot CLI (ADR-71). On all
-  # three systems, because the fake's screen reaches the browser through the PTY, which is ConPTY on Windows.
+  # Four paths through the built UI in Chromium from Playwright, on the daemon with the fake Copilot CLI (ADR-71). Also on
+  # Windows, because the fake's screen reaches the browser through the PTY, which is ConPTY there.
   e2e:
     name: e2e (${{ matrix.os }})
+    if: github.event_name != 'push'
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: ${{ fromJSON(inputs.macos && '["ubuntu-latest", "windows-latest", "macos-latest"]' || '["ubuntu-latest", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     permissions:
@@ -142,7 +164,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: ${{ fromJSON(inputs.macos && '["windows-latest", "macos-latest"]' || '["windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     permissions:
@@ -164,7 +186,8 @@ jobs:
           workspaces: apps/desktop/src-tauri
           # The same key as in release.yml (without it the key contains the job name), so that a release hits the cache from main.
           shared-key: desktop
-          # Only main saves the cache; PR runs read it instead of keeping their own copies within the 10 GB limit.
+          # Only main saves the cache (on a push for Windows, at night for macOS); PR runs read it instead of keeping their
+          # own copies within the 10 GB limit.
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: pnpm build:desktop
       # After the build, because tauri-build needs the sidecar binary that build:desktop creates.
@@ -183,7 +206,7 @@ jobs:
 
   # The check to require in main protection (the repo owner sets it up): matrix job names may change, this one does not.
   # `always()`, because GitHub counts a skipped required check as passed; here a skipped or
-  # cancelled dependency gives a red result.
+  # cancelled dependency gives a red result, except the jobs a push to main skips on purpose.
   ci-ok:
     name: CI ok
     needs: [check, audit, test, contract, e2e, desktop]
@@ -194,7 +217,9 @@ jobs:
       - name: All jobs green
         env:
           RESULTS: ${{ toJSON(needs) }}
+          EVENT: ${{ github.event_name }}
         run: |
-          jq -e 'all(.[]; .result == "success")' <<< "$RESULTS" > /dev/null && exit 0
-          jq -r 'to_entries[] | select(.value.result != "success") | "::error::\(.key): \(.value.result)"' <<< "$RESULTS"
+          passed='.value.result == "success" or ($event == "push" and .value.result == "skipped" and (.key | IN("test", "contract", "e2e")))'
+          jq -e --arg event "$EVENT" "all(to_entries[]; $passed)" <<< "$RESULTS" > /dev/null && exit 0
+          jq -r --arg event "$EVENT" "to_entries[] | select(($passed) | not) | \"::error::\\(.key): \\(.value.result)\"" <<< "$RESULTS"
           exit 1
