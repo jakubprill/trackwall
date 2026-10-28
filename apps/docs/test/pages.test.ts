@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { CONFIG_ENTRIES, WORKSPACE_KEYS } from "@trackwall/protocol";
 import { FEATURE_GROUPS } from "../.vitepress/sidebar.ts";
 
 // Every feature page follows TEMPLATE.md, so "All features", the sidebar and llms.txt stay complete (ADR-56).
@@ -127,4 +128,9 @@ test("the install commands download the current version", () => {
   const install = read("guide/install.md");
   const versions = [...install.matchAll(/\$v = "([^"]+)"|trackwall-(\d[^-]*)-macos/g)].map((m) => m[1] ?? m[2]);
   expect(versions).toEqual([version, version]);
+});
+
+test("every page Settings › Files links to for a file or a key of workspace.yaml is a feature page", () => {
+  const pages = [...Object.values(CONFIG_ENTRIES), ...Object.values(WORKSPACE_KEYS)].map((info) => `${info.docs}.md`);
+  expect(pages.filter((page) => !featurePages.includes(page))).toEqual([]);
 });

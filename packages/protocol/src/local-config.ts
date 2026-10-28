@@ -79,6 +79,8 @@ const RepoRequest = z.object({ repo: RepoId }).strict();
 export const localConfigApi = {
   store: endpoint("store", z.object({}).strict(), LocalConfigStore),
   repo: endpoint("repo", RepoRequest, RepoLocalConfig),
+  /** Every repo that has a local config file or a backup of one, by identifier (ADR-108); repos with neither are left out. */
+  repos: endpoint("repos", z.object({}).strict(), z.array(RepoLocalConfig)),
   /**
    * Copies the files only the store has into the repo root, never over an existing file, and has git ignore them in
    * this clone (`.git/info/exclude`). Only from the UI, never from MCP: it writes into the user's repo.

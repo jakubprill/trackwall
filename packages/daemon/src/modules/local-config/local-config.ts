@@ -126,7 +126,31 @@ export class LocalConfig {
 
   async repo(id: string): Promise<RepoLocalConfig> {
     const dir = await this.#deps.repos.repoPath(id);
-    const inStore = await this.#backups(dir);
+    return this.#repoState(id, dir, await this.#backups([dir]));
+  }
+
+  /**
+   * Every repo with a local config file or a backup of one (ADR-108), for the view of all the files: the store is read
+   * once for all repos, and git runs only in the repos that have a file, so a projects folder of mostly repos without
+   * local config costs one `stat` per file.
+   */
+  async repos(): Promise<RepoLocalConfig[]> {
+    const entries = await this.#deps.repos.repoEntries();
+    const inStore = await this.#backups(entries.map((e) => e.path));
+    const withConfig = await Promise.all(
+      entries.map(async (entry) => {
+        const present = await Promise.all(LOCAL_CONFIG_FILES.map((file) => exists(join(entry.path, file))));
+        const backedUp = LOCAL_CONFIG_FILES.some((file) => inStore.has(storePath(entry.path, file)));
+        return present.some(Boolean) || backedUp ? [entry] : [];
+      }),
+    );
+    // git's own budget (ADR-79) paces the repos with files, so they can all start at once; this takes the git slots ahead of
+    // other reads for a moment, which is accepted because it runs only when Settings › Files opens.
+    return Promise.all(withConfig.flat().map(({ id, path }) => this.#repoState(id, path, inStore)));
+  }
+
+  /** The repo's files against `inStore`, the store's last commit by store path. */
+  async #repoState(id: string, dir: string, inStore: Map<string, Buffer>): Promise<RepoLocalConfig> {
     const read = await Promise.all(
       LOCAL_CONFIG_FILES.map(async (file) => ({ file, inRepo: await readRegularFile(join(dir, file), MAX_LOCAL_CONFIG_BYTES) })),
     );
@@ -137,7 +161,7 @@ export class LocalConfig {
       present.filter((file) => !tracked.has(file)),
     );
     const files = read.map(({ file, inRepo }): LocalConfigFileState => {
-      const backup = inStore.get(file);
+      const backup = inStore.get(storePath(dir, file));
       if (inRepo === undefined) return backup === undefined ? { kind: "absent", file } : { kind: "missing", file };
       if (tracked.has(file)) return { kind: "tracked", file };
       return { kind: backup?.equals(inRepo) ? "backed_up" : "pending", file, ignored: ignored.has(file) };
@@ -151,13 +175,13 @@ export class LocalConfig {
    */
   async restore(id: string): Promise<RepoLocalConfig> {
     const dir = await this.#deps.repos.repoPath(id);
-    const inStore = await this.#backups(dir);
+    const inStore = await this.#backups([dir]);
     const missing = (await this.repo(id)).files.flatMap((f) => (f.kind === "missing" ? [f.file] : []));
     if (missing.length === 0) throw new DomainError("bad_request", `${id}: the local config store has nothing this repo lacks`);
     const written: LocalConfigFileName[] = [];
     try {
       try {
-        for (const file of missing) if (await writeNew(join(dir, file), inStore.get(file))) written.push(file);
+        for (const file of missing) if (await writeNew(join(dir, file), inStore.get(storePath(dir, file)))) written.push(file);
       } finally {
         // A file written before a failure is in the repo all the same, so git must ignore it.
         await this.#ignoreUnignored(dir, written);
@@ -176,19 +200,13 @@ export class LocalConfig {
     return this.repo(id);
   }
 
-  /** The repo's files in the store's last commit, by file name. */
-  async #backups(dir: string): Promise<Map<LocalConfigFileName, Buffer>> {
+  /** The local config files of the repos in `dirs` in the store's last commit, by store path (`storePath`). */
+  async #backups(dirs: readonly string[]): Promise<Map<string, Buffer>> {
     const store = await this.#storeDir();
     const head = store === null ? null : await this.#deps.vcs.storeHead(store);
-    if (store === null || head === null) return new Map();
-    const paths = LOCAL_CONFIG_FILES.map((file) => storePath(dir, file));
-    const read = await this.#deps.vcs.readFiles(store, head, paths, readLimit(paths.length));
-    const backups = new Map<LocalConfigFileName, Buffer>();
-    for (const file of LOCAL_CONFIG_FILES) {
-      const content = read.get(storePath(dir, file));
-      if (content) backups.set(file, content);
-    }
-    return backups;
+    if (store === null || head === null || dirs.length === 0) return new Map();
+    const paths = dirs.flatMap((dir) => LOCAL_CONFIG_FILES.map((file) => storePath(dir, file)));
+    return this.#deps.vcs.readFiles(store, head, paths, readLimit(paths.length));
   }
 
   async #ignoreUnignored(dir: string, files: readonly string[]): Promise<void> {
@@ -358,6 +376,14 @@ async function writeStoreCopy(store: string, path: string, content: Buffer): Pro
     await rm(temp, { force: true });
     throw err;
   });
+}
+
+/** Whether anything is at `path`; a file that cannot be checked counts as there, so its repo is shown with the reason. */
+async function exists(path: string): Promise<boolean> {
+  return lstat(path).then(
+    () => true,
+    (err: NodeJS.ErrnoException) => err.code !== "ENOENT",
+  );
 }
 
 /** Writes `content` to a file that must not exist yet; `false` when one appeared meanwhile, which stays as it is. */

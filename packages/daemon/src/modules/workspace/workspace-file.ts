@@ -9,12 +9,16 @@ import {
   RepoTagRules,
   SupervisorSettings,
   ToolPermissionRules,
+  WorkspaceKey,
+  type WorkspaceKeyState,
+  type WorkspaceKeysRead,
 } from "@trackwall/protocol";
-import { type Document, isMap, parseDocument } from "yaml";
+import { type Document, isMap, isScalar, LineCounter, parseDocument } from "yaml";
 import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
 import { DomainError } from "../../infra/errors.ts";
 import { isFullPath, NOT_FULL_PATH } from "./full-path.ts";
+import { type WorkspaceKeyValues, workspaceKeyValue } from "./workspace-key-value.ts";
 
 /**
  * `workspace.yaml` (§4.5, ADR-13): the workspace configuration, which the user can edit by hand and keep
@@ -27,7 +31,7 @@ import { isFullPath, NOT_FULL_PATH } from "./full-path.ts";
  * Keys read separately, so a bad entry in one does not break the other: a typo in the repo hosts does not take away the repo list,
  * and the message says which key to fix.
  */
-const Keys = {
+const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } = {
   // YAML reads an empty key (`projectsDir:`) as `null`, the same as a missing key.
   projectsDir: z
     .string()
@@ -55,7 +59,7 @@ const Keys = {
   // The secrets from mise that the tools of sessions get (ADR-93); only by hand, like `repoTags`.
   agentSecrets: AgentSecrets.nullish().transform((names) => names ?? []),
 };
-type Key = keyof typeof Keys;
+type Key = WorkspaceKey;
 
 export class WorkspaceFile {
   readonly path: string;
@@ -109,6 +113,23 @@ export class WorkspaceFile {
     return this.get("agentSecrets", Keys.agentSecrets);
   }
 
+  /**
+   * Each key with its value in one line, whether the file has it, its line and why it cannot be read, and the keys
+   * Trackwall does not read, for the view of the config files and the doctor (ADR-108). Throws, like every read, when the
+   * file as a whole cannot be read.
+   */
+  keyStates(): WorkspaceKeysRead {
+    const { doc, lines } = this.read();
+    const raw: unknown = doc.toJS();
+    const config = isRecord(raw) ? raw : {};
+    const keys = WorkspaceKey.options.map((key) => keyState(key, config[key] ?? null, keyLine(doc, lines, key)));
+    const known = new Set<string>(WorkspaceKey.options);
+    const unknown = Object.keys(config)
+      .filter((name) => !known.has(name))
+      .map((name) => ({ name, line: keyLine(doc, lines, name) }));
+    return { keys, unknown };
+  }
+
   setProjectsDir(dir: string): void {
     this.set("projectsDir", dir);
   }
@@ -139,6 +160,11 @@ export class WorkspaceFile {
   }
 
   private load(): Document {
+    return this.read().doc;
+  }
+
+  /** The document with its line counter, for the line of a key. */
+  private read(): { doc: Document; lines: LineCounter } {
     let text: string;
     try {
       text = readFileSync(this.path, "utf8");
@@ -146,10 +172,11 @@ export class WorkspaceFile {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
       text = "";
     }
-    const doc = parseDocument(text);
+    const lines = new LineCounter();
+    const doc = parseDocument(text, { lineCounter: lines });
     if (doc.errors.length > 0) throw this.invalid(doc.errors.map((e) => e.message).join("; "));
     if (doc.contents !== null && !isMap(doc.contents)) throw this.invalid("the file must be a map of keys, e.g. `projectsDir: <path>`");
-    return doc;
+    return { doc, lines };
   }
 
   private save(doc: Document): void {
@@ -160,4 +187,25 @@ export class WorkspaceFile {
   private invalid(details: string): DomainError {
     return new DomainError("invalid_config", `${this.path} is invalid: ${details}`);
   }
+}
+
+/** A key that YAML reads as `null` (`dayStart:` with every line commented out) is a default, like a missing key. */
+function keyState<K extends WorkspaceKey>(key: K, raw: unknown, line: number | null): WorkspaceKeyState {
+  const parsed = Keys[key].safeParse(raw);
+  if (!parsed.success) return { key, from: "file", value: null, line, problem: z.prettifyError(parsed.error) };
+  const from = raw === null ? "default" : "file";
+  return { key, from, value: workspaceKeyValue[key](parsed.data), line: from === "file" ? line : null, problem: null };
+}
+
+/** The line of `key` in the file, from 1; `null` without the key. `read` guarantees a map or an empty document. */
+function keyLine(doc: Document, lines: LineCounter, key: string): number | null {
+  if (!isMap(doc.contents)) return null;
+  const pair = doc.contents.items.find((item) => isScalar(item.key) && item.key.value === key);
+  const offset = pair && isScalar(pair.key) ? pair.key.range?.[0] : undefined;
+  return offset === undefined ? null : lines.linePos(offset).line;
+}
+
+/** `read` guarantees a map or an empty document, which YAML gives as an object or `null`. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

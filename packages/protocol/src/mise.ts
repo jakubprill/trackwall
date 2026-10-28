@@ -10,6 +10,12 @@ import { RepoId } from "./workspace.ts";
  */
 
 /**
+ * A mise config file name: `mise.toml`, `.mise.toml`, `mise.local.toml`, `mise.dev.toml`, `.mise.dev.local.toml`…, without
+ * regard to case, as mise finds them on the case-insensitive file systems of Windows and macOS.
+ */
+export const MISE_CONFIG_NAME = /^\.?mise(\.[^/\\]+)?\.toml$/i;
+
+/**
  * A mise task name as `mise tasks ls` returns it (for example `dev`, `build:ui`). The daemon runs only a mise task from the
  * repo's current list anyway; the schema rejects what mise would take for an option or what cannot be shown.
  */

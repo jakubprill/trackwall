@@ -59,6 +59,7 @@ beforeAll(async () => {
   home = mkdtempSync(join(tmpdir(), "trackwall-mcp-home-"));
   facade = createFacade({
     home,
+    homeFrom: "flag",
     openUrl: () => {},
     openFolder: () => {},
     // A program that is not in PATH: the mise task list is then in the `not_installed` state, the same on every machine.

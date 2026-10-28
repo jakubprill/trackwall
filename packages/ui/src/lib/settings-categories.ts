@@ -29,6 +29,13 @@ export const SETTINGS_CATEGORIES = [
     sections: ["start-at-sign-in", "updates", "home-scene"],
   },
   {
+    id: "files",
+    label: "Files",
+    description:
+      "Every file and folder Trackwall reads or writes on this computer: what it is for, where it is and what is in it. Trackwall changes them only through Settings; the rest you edit by hand.",
+    sections: ["config-files", "local-config-repos"],
+  },
+  {
     id: "diagnostics",
     label: "Diagnostics",
     description: "Where to look when something does not work.",

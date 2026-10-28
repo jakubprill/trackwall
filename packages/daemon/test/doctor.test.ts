@@ -32,6 +32,7 @@ function doctorFacade(o: Setup) {
     writeFileSync(join(copilotHome, "config.json"), o.copilotConfig.replace("<projects>", JSON.stringify(projects).slice(1, -1)));
   const facade = createFacade({
     home,
+    homeFrom: "flag",
     openUrl: () => {},
     openFolder: () => {},
     miseCommand: o.mise === null ? ["trackwall-test-no-mise"] : [process.execPath, printVersion, o.mise],
@@ -56,6 +57,7 @@ describe("doctor", () => {
     const report = await facade.doctor.run();
     expect(report.checks.map((c) => [c.id, c.status])).toEqual([
       ["projects-folder", "ok"],
+      ["workspace-file", "ok"],
       ["git", "ok"],
       ["copilot-cli", "ok"],
       ["copilot-trusted-folder", "ok"],
@@ -92,6 +94,25 @@ describe("doctor", () => {
     expect(checks[0]?.summary).toStartWith("The workspace settings could not be read: ");
     expect(checks[0]?.summary).toContain("workspace.yaml is invalid");
     expect(checks.filter((c) => c.id === "github-cli" || c.id === "gitlab-cli").map((c) => c.status)).toEqual(["fail", "fail"]);
+  });
+
+  test("a key of workspace.yaml written wrong by hand fails its own check with the key and its line", async () => {
+    const { facade, home, projects } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: trusting });
+    writeFileSync(join(home, "workspace.yaml"), `projectsDir: ${JSON.stringify(projects)}\n# my tags\nrepoTags:\n  team-web: oops\n`);
+    const check = (await facade.doctor.run()).checks.find((c) => c.id === "workspace-file");
+    expect(check?.status).toBe("fail");
+    expect(check?.summary).toBe("workspace.yaml: 1 key cannot be read: repoTags (line 3).");
+    expect(check?.fix).toBe(
+      `Correct it in ${join(home, "workspace.yaml")}; "Settings > Files" shows every key with its value and what is wrong.`,
+    );
+  });
+
+  test("a key of workspace.yaml Trackwall does not read, such as a typo, is a warning with its line", async () => {
+    const { facade, home, projects } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: trusting });
+    writeFileSync(join(home, "workspace.yaml"), `projectsDir: ${JSON.stringify(projects)}\ndayStrat:\n  prompt: hi\n`);
+    const check = (await facade.doctor.run()).checks.find((c) => c.id === "workspace-file");
+    expect(check?.status).toBe("warn");
+    expect(check?.summary).toBe("workspace.yaml: Trackwall does not read 1 key: dayStrat (line 2).");
   });
 
   test.each([
@@ -144,6 +165,8 @@ describe("doctor", () => {
       repoHosts: () => {
         throw new Error("workspace.yaml is invalid: repoHosts");
       },
+      workspaceFile: join(tmpdir(), "trackwall-doctor-no-such-workspace.yaml"),
+      workspaceKeys: () => ({ keys: [], unknown: [] }),
       now: () => NOW,
     };
     const report = await new Doctor(deps).run();

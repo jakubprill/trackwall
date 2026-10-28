@@ -9,7 +9,7 @@ import { isUiDir } from "./api/static.ts";
 import { createErrorJournal, createFacade, type Facade, HOSTING_CLIS } from "./facade.ts";
 import { type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./infra/args.ts";
 import { newToken, probeRunningDaemon, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
-import { trackwallHome } from "./infra/home.ts";
+import { resolveTrackwallHome, trackwallHome } from "./infra/home.ts";
 import { SHUTDOWN_SIGNALS, shutdownOnce, stopDaemon } from "./infra/shutdown.ts";
 import { openBrowser, openFolder } from "./infra/system-open.ts";
 import { userEnv } from "./infra/user-env.ts";
@@ -84,6 +84,7 @@ async function start(
     const token = newToken();
     facade = createFacade({
       home,
+      homeFrom: resolveTrackwallHome(args.home).from,
       openUrl: openBrowser,
       openFolder,
       miseCommand: ["mise"],

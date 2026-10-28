@@ -9,7 +9,7 @@ The doctor in Settings checks what Trackwall needs on your computer and says wha
 
 ## What you get
 
-- One list of what Trackwall relies on: your projects folder, Git, Copilot CLI, mise, and gh or glab for your repo hosts.
+- One list of what Trackwall relies on: your projects folder, your workspace settings file, Git, Copilot CLI, mise, and gh or glab for your repo hosts.
 - For each problem, the step that fixes it, such as the folder to add to Copilot CLI's trusted folders or the login command.
 - A warning when your Copilot CLI is older than the version Trackwall is tested with.
 - A fresh check whenever you open "Settings > Diagnostics" or click "Check again".
@@ -23,6 +23,7 @@ The checks are:
 | Check | OK when |
 | --- | --- |
 | Projects folder | it is set and exists |
+| Workspace settings file | every key of `workspace.yaml` can be read; one that cannot is named with its line, and [Config files](/features/config-files) shows them all |
 | Git | `git --version` answers |
 | Copilot CLI | Trackwall finds it the way it starts sessions, and it is not older than the version Trackwall is tested with |
 | Copilot CLI trusted folder | `trustedFolders` in Copilot CLI's `config.json` covers your projects folder, so Copilot CLI does not ask before working in each repo and task |

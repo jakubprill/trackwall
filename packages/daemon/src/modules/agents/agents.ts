@@ -80,12 +80,12 @@ const HOOKS_FILENAME = "hooks.jsonl";
 const SESSIONS_DIR = "sessions";
 /** Without it Copilot CLI silently drops the session plugin's hooks, which POST to the daemon on `127.0.0.1` (ADR-88). */
 const LOOPBACK_HOOKS_ENV = { COPILOT_HOOK_ALLOW_LOCALHOST: "1" };
-const TASKS_FILE = "tasks.json";
+export const TASKS_FILE = "tasks.json";
 /** The sessions that run, for the next daemon to resume (ADR-95). */
-const RESUMABLE_SESSIONS_FILE = "resumable-sessions.json";
-const LAST_SUPERVISOR_FILE = "last-supervisor.json";
+export const RESUMABLE_SESSIONS_FILE = "resumable-sessions.json";
+export const LAST_SUPERVISOR_FILE = "last-supervisor.json";
 /** Where task worktrees went before ADR-84; tasks from then keep them there until they end. */
-const LEGACY_WORKTREES_DIR = "worktrees";
+export const LEGACY_WORKTREES_DIR = "worktrees";
 
 /** A session's directory in the state directory: its plugin, MCP configuration, token and hook records. */
 function sessionDir(home: string, id: string): string {

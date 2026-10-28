@@ -2,6 +2,7 @@ import {
   agentsApi,
   batchApi,
   cardsApi,
+  configFilesApi,
   dayStartApi,
   doctorApi,
   type Endpoint,
@@ -73,6 +74,15 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(cardsApi.warmup, (f) => f.cards.warmupProgress()),
   route(graphApi.graph, (f) => f.graph.graph()),
   route(doctorApi.run, (f) => f.doctor.run()),
+  route(configFilesApi.list, (f) => f.configFiles.list()),
+  route(configFilesApi.openInEditor, async (f, b) => {
+    await f.configFiles.openInEditor(b.id);
+    return null;
+  }),
+  route(configFilesApi.showInFolder, async (f, b) => {
+    await f.configFiles.showInFolder(b.id);
+    return null;
+  }),
   route(errorJournalApi.errors, (f) => f.errorJournal.list()),
   route(errorJournalApi.recordUiError, (f, b) => {
     f.errorJournal.recordUiError(b);
@@ -84,6 +94,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   }),
   route(localConfigApi.store, (f) => f.localConfig.store()),
   route(localConfigApi.repo, (f, b) => f.localConfig.repo(b.repo)),
+  route(localConfigApi.repos, (f) => f.localConfig.repos()),
   route(localConfigApi.restore, (f, b) => f.localConfig.restore(b.repo)),
   route(localConfigApi.ignore, (f, b) => f.localConfig.ignore(b.repo)),
   route(miseApi.tasks, (f, b) => f.mise.tasks(b.repo)),

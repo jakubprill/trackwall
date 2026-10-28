@@ -163,6 +163,9 @@ export const ENV_VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export const AgentSecrets = z.array(z.string().regex(ENV_VARIABLE_NAME, "an environment variable name, e.g. JIRA_TOKEN")).max(200);
 export type AgentSecrets = z.infer<typeof AgentSecrets>;
 
+/** The default task worktrees folder's name in the projects folder (ADR-84). */
+export const DEFAULT_WORKTREES_DIR_NAME = ".trackwall-worktrees";
+
 export const WorkspaceSettings = z.object({
   projectsDir: ProjectsDir,
   /** `worktreesDir` from `workspace.yaml` (ADR-84): where new task worktrees go; `null` for the default. */
