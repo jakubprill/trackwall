@@ -17,7 +17,7 @@ import { IS_MAC } from "@/lib/platform";
 import { asksProgramToCopy, copiesSelection, keepsSelection, osc52Text, ProgramCopy, pastesClipboard } from "@/lib/terminal-copy";
 import { hyperlinkHandler, trackwallLinkProvider } from "@/lib/terminal-links";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
-import { terminalTheme } from "@/lib/terminal-theme";
+import { cssTokens, terminalTheme } from "@/lib/terminal-theme";
 import { cn } from "@/lib/utils";
 import { FocusReporter, terminalInFront } from "@/lib/window-focus";
 
@@ -66,7 +66,9 @@ export function SessionTerminal({
     const element = host.current;
     const container = frame.current;
     if (!element || !container) return;
-    const terminal = new Terminal(sessionTerminalOptions(terminalTheme(document.documentElement), getComputedStyle(element).fontFamily));
+    const terminal = new Terminal(
+      sessionTerminalOptions(terminalTheme(cssTokens(document.documentElement)), getComputedStyle(element).fontFamily),
+    );
     const fit = new FitAddon();
     terminal.loadAddon(fit);
     let links: { dispose: () => void } | undefined;
@@ -226,11 +228,7 @@ export function SessionTerminal({
           The session has ended; the terminal shows what was left on its screen.
         </p>
       )}
-      <div
-        ref={frame}
-        {...{ [FILE_DROP_TARGET]: "" }}
-        className={cn("bg-background relative min-h-0 flex-1 overflow-hidden", DROP_HOVER_RING)}
-      >
+      <div ref={frame} {...{ [FILE_DROP_TARGET]: "" }} className={cn("relative min-h-0 flex-1 overflow-hidden", DROP_HOVER_RING)}>
         <div ref={host} className="absolute inset-2 font-mono" />
       </div>
     </div>

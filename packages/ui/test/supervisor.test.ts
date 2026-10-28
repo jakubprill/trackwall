@@ -3,7 +3,7 @@ import type { Session, SessionList, Task, TaskProposal } from "@trackwall/protoc
 import { entryId, proposerLabel, sessionRows } from "../src/lib/session-entries.ts";
 import { attentionCount, sessionTitle } from "../src/lib/session-state.ts";
 import { selectsSupervisor, showingTakesKeyboard, supervisorStarts, supervisorSummary } from "../src/lib/supervisor.ts";
-import { readSupervisorPinned, saveSupervisorPinned } from "../src/lib/supervisor-pin.ts";
+import { readSupervisorLayout, saveSupervisorLayout, unfolded, widenedOrNarrowed } from "../src/lib/supervisor-layout.ts";
 
 function session(id: string, repo: string | null, run: Session["run"]["kind"] = "running"): Session {
   const startedAt = "2026-10-25T10:00:00Z";
@@ -130,20 +130,39 @@ describe("the supervisor (ADR-58)", () => {
     expect(proposerLabel({ session: "sup", supervisor: true }, [])).toBe("proposed by the supervisor");
   });
 
-  test("the panel is pinned until folded, and storage that refuses access reads as pinned", () => {
+  test("the panel is pinned until folded or widened, and storage that refuses access reads as pinned", () => {
     const stored = new Map<string, string>();
     const storage = {
       getItem: (key: string) => stored.get(key) ?? null,
       setItem: (key: string, value: string) => void stored.set(key, value),
     };
-    expect(readSupervisorPinned(() => storage)).toBe(true);
-    saveSupervisorPinned(() => storage, false);
-    expect(readSupervisorPinned(() => storage)).toBe(false);
+    expect(readSupervisorLayout(() => storage)).toBe("pinned");
+    saveSupervisorLayout(() => storage, "folded");
+    expect(readSupervisorLayout(() => storage)).toBe("folded");
+    saveSupervisorLayout(() => storage, "wide");
+    expect(readSupervisorLayout(() => storage)).toBe("wide");
     const refusing = () => {
       throw new Error("SecurityError");
     };
-    expect(readSupervisorPinned(refusing)).toBe(true);
-    expect(() => saveSupervisorPinned(refusing, false)).not.toThrow();
+    expect(readSupervisorLayout(refusing)).toBe("pinned");
+    expect(() => saveSupervisorLayout(refusing, "folded")).not.toThrow();
+  });
+
+  test("a panel folded or pinned before it could be widened keeps its layout", () => {
+    const storage = (value: string) => () => ({ getItem: () => value });
+    expect(readSupervisorLayout(storage("false"))).toBe("folded");
+    expect(readSupervisorLayout(storage("true"))).toBe("pinned");
+  });
+
+  test("showing the supervisor unfolds a folded panel and keeps a wide one wide", () => {
+    expect(unfolded("folded")).toBe("pinned");
+    expect(unfolded("pinned")).toBe("pinned");
+    expect(unfolded("wide")).toBe("wide");
+  });
+
+  test("Widen makes a pinned panel wide, and Narrow pins a wide one again", () => {
+    expect(widenedOrNarrowed("pinned")).toBe("wide");
+    expect(widenedOrNarrowed("wide")).toBe("pinned");
   });
 });
 

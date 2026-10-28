@@ -23,7 +23,7 @@ Ask it for something larger than one repo, like "add refunds to billing and show
 
 Once a task runs, the supervisor does not have to keep checking on it. When the task's agent finishes a turn, reports its result, gets a verification verdict, or stops, Trackwall types one line into the supervisor's terminal asking it to look, as soon as the supervisor waits for input. The same happens in the other direction when the supervisor sends a task a message. If the session is in the middle of a turn, the line reaches its agent without typing: with the result of the next tool it runs, and again as the start of a new turn when the current one ends, so a busy supervisor or task picks it up right away. If the session sits idle, Trackwall types the line once the input box is really back on the screen, never types into text you are writing, and tries again a few seconds later if the line did not go through. The supervisor then reads the summary, reviews the diff, and tells you what came back and what needs your decision. It can also send the task's agent a message, for example "the BFF now returns `totalCents`, use that", which you see in the task's panel. A task's agent can still propose more work of its own; that work sits under the task, inside the supervisor's part of the list.
 
-The panel can be folded to a narrow strip at the right edge, which keeps a bell when something waits for you. The panel stays pinned or folded the next time you open Trackwall. In a small window the panel is narrower, and the views next to it narrow their side panels, so a task's terminal and the Home dashboard keep their room.
+The panel can be folded to a narrow strip at the right edge, which keeps a bell when something waits for you, or widened with the arrows in its header when you want to read what the supervisor wrote; the view next to it keeps enough room for the dashboard and a task's terminal, so in a small window the panel widens only a little. The panel stays as you left it the next time you open Trackwall. The supervisor keeps its answers short, with the conclusion first, and gives the details when you ask. In a small window the panel is narrower, and the views next to it narrow their side panels, so a task's terminal and the Home dashboard keep their room.
 
 ## Use it
 
@@ -56,4 +56,11 @@ The panel can be folded to a narrow strip at the right edge, which keeps a bell 
 - Ask for a model, as in "review this on Opus", and the supervisor names it on the proposal, so the task runs on it; you see it, and can change it, before you start the task.
 - The supervisor does not run mise tasks or services itself: it works in no single repo, so it proposes a task in the repo instead.
 - A task works in a copy of one repo, so the supervisor does not hand it work on the projects folder itself, such as removing a repo; it tells you what that takes instead. A follow-up on a task that is still running goes to that task as a message rather than to a new task, so it ends up on the same branch.
+- To make Copilot CLI quieter in every terminal, the supervisor's included, hide its tab bar, the tip and the animated banner it shows at the start. These are your own Copilot CLI settings, so run them once in any terminal:
+
+  ```sh
+  copilot config tabs.enabled false
+  copilot config showTipsOnStartup false
+  copilot config banner never
+  ```
 - It needs Copilot CLI, like any [session](/features/sessions), and the projects folder to be set.
