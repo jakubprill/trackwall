@@ -3,6 +3,7 @@ import { delimiter, dirname, resolve as resolvePath } from "node:path";
 import { type RunOptions, type RunOutput, runProgram } from "../../infra/run-program.ts";
 import { GIT_FROM_PATH, gitProgram, withPathPrefix } from "./git-program.ts";
 import { Slots } from "./slots.ts";
+import { WaitingCalls } from "./waiting-calls.ts";
 
 /**
  * Runs `git` for the `vcs` module. Arguments always as an array, without a shell; the repo directory through `-C`,
@@ -53,6 +54,11 @@ type GitOptions = Pick<RunOptions, "maxBytes" | "stdin" | "okExitCodes"> & {
   indexFile?: string;
   /** `-c key=value` for this command only, over the repo's own configuration (a push without the repo's hooks, ADR-77). */
   config?: readonly string[];
+  /**
+   * The call only reads (`status`): an identical call still waiting for a slot is joined instead of queued again (ADR-111).
+   * Not for a call with `stdin`, `indexFile` or `config`, which the key does not cover.
+   */
+  joinWaiting?: boolean;
 };
 
 /** `core.sshCommand` from the repo and user configuration for a command that connects to a server. */
@@ -63,8 +69,17 @@ export type GitNetwork = { sshCommand: string | undefined };
  * and where an antivirus scans each process start, dozens of starts at once take the machine and the daemon's event loop
  * with them, so that even `/api/health` answers late. A call waits for a slot before its time limit starts. Network
  * commands (a fetch takes minutes) and local ones with a longer limit take no slot, so they cannot starve the reads.
+ * Windows gets fewer (ADR-111): there the scanner, not git, is what the starts wait on, and more at once only lengthens
+ * each one towards its time limit.
  */
-const LOCAL_CALL_SLOTS = new Slots(6);
+const LOCAL_CALL_SLOTS = new Slots(process.platform === "win32" ? 4 : 6);
+const WAITING_READS = new WaitingCalls<RunOutput>(LOCAL_CALL_SLOTS);
+
+/**
+ * A call that took longer than this, waiting for a slot included, gets a daemon log line (ADR-111), so a slow machine shows
+ * where its time goes without `GIT_TRACE2`. A third of the time limit: well above a healthy call even with a scanned start.
+ */
+const SLOW_CALL_MS = 5_000;
 
 let started = 0;
 
@@ -79,9 +94,11 @@ export async function git(repoDir: string, args: readonly string[], opts: GitOpt
   const config = (opts.config ?? []).flatMap((entry) => ["-c", entry]);
   // The launcher stays for network commands: credential helpers and ssh run exactly as from the user's shell.
   const program = opts.network ? GIT_FROM_PATH : await gitProgram();
-  const call = () => {
+  const askedAt = performance.now();
+  const call = async () => {
     started++;
-    return runProgram(program.command, [...NO_REPO_COMMANDS, ...PLATFORM_CONFIG, ...config, "-C", repoDir, ...args], {
+    const startedAt = performance.now();
+    const output = runProgram(program.command, [...NO_REPO_COMMANDS, ...PLATFORM_CONFIG, ...config, "-C", repoDir, ...args], {
       maxBytes,
       stdin,
       okExitCodes,
@@ -96,10 +113,26 @@ export async function git(repoDir: string, args: readonly string[], opts: GitOpt
       },
       timeoutMs: opts.timeoutMs ?? TIMEOUT_MS,
     });
+    // A failed call is logged too: a timeout is the slowest call of all.
+    const report = () => logIfSlow(`git ${args[0]}`, repoDir, startedAt - askedAt, performance.now() - startedAt);
+    output.then(report, report);
+    return output;
   };
   // A long command (a worktree, a search) would hold a slot for minutes and the views would wait behind it again.
   const short = !opts.network && (opts.timeoutMs ?? TIMEOUT_MS) <= TIMEOUT_MS;
-  return short ? LOCAL_CALL_SLOTS.run(call) : call();
+  if (!short) return call();
+  return opts.joinWaiting ? WAITING_READS.run([repoDir, ...args].join("\0"), call) : LOCAL_CALL_SLOTS.run(call);
+}
+
+function logIfSlow(label: string, repoDir: string, waitedMs: number, ranMs: number): void {
+  const note = slowCallNote(label, repoDir, waitedMs, ranMs);
+  if (note) process.stderr.write(`[git] ${note}\n`);
+}
+
+/** The log line of a call slower than `SLOW_CALL_MS`, or `undefined` for one that was not. */
+export function slowCallNote(label: string, repoDir: string, waitedMs: number, ranMs: number): string | undefined {
+  if (waitedMs + ranMs < SLOW_CALL_MS) return undefined;
+  return `${label} in ${repoDir} took ${Math.round(ranMs)} ms after ${Math.round(waitedMs)} ms waiting for a slot`;
 }
 
 /** `git --version` of the git the daemon runs: the doctor shows it (ADR-101). */
