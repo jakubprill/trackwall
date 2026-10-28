@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { copyFile, rm, stat, utimes } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import type { TaskChanges, WorkingTreeChanges } from "@trackwall/protocol";
 import { mapLimit } from "../../infra/map-limit.ts";
@@ -44,10 +43,20 @@ const NO_PATCH: RunOutput = { stdout: Buffer.alloc(0), truncated: false };
  *
  * `paths` (git pathspecs) narrows the files and the diff; the commit and uncommitted counts stay those of the whole worktree.
  */
-export async function worktreeChanges(dir: string, base: string, maxPatchBytes: number, paths: readonly string[]): Promise<TaskChanges> {
+export async function worktreeChanges(
+  dir: string,
+  base: string,
+  maxPatchBytes: number,
+  paths: readonly string[],
+  scratchDir: string,
+): Promise<TaskChanges> {
   // Each one to the end: ending a task waits for this read before it deletes the worktree, so rejecting one part
   // must not leave a git still reading the directory.
-  const work = [workingTreeChanges(dir, base, maxPatchBytes, paths), commitCount(dir, base, "HEAD"), uncommittedCount(dir)] as const;
+  const work = [
+    workingTreeChanges(dir, base, maxPatchBytes, paths, scratchDir),
+    commitCount(dir, base, "HEAD"),
+    uncommittedCount(dir),
+  ] as const;
   await Promise.allSettled(work);
   const [changes, commits, uncommitted] = await Promise.all(work);
   return { ...changes, commits, uncommitted };
@@ -69,19 +78,23 @@ async function copyIndex(index: string, copy: string): Promise<void> {
   }
 }
 
-/** The working directory `dir` against `base` (a commit or a tree), only under `paths` (git pathspecs; none is the whole tree). */
+/**
+ * The working directory `dir` against `base` (a commit or a tree), only under `paths` (git pathspecs; none is the whole
+ * tree). The temporary index lies in `scratchDir`.
+ */
 export async function workingTreeChanges(
   dir: string,
   base: string,
   maxPatchBytes: number,
   paths: readonly string[],
+  scratchDir: string,
 ): Promise<WorkingTreeChanges> {
   const out = (await git(dir, ["rev-parse", "--git-path", "index", "--show-object-format"])).stdout.toString("utf8").trim();
   const [indexPath, objectFormat] = out.split(/\r?\n/);
   const emptyBlob = objectFormat === undefined ? undefined : EMPTY_BLOB.get(objectFormat);
   if (!indexPath || emptyBlob === undefined) throw new Error(`git rev-parse did not give the index path and a known object format: ${out}`);
   const index = resolve(dir, indexPath);
-  const tmp = resolve(tmpdir(), `trackwall-index-${randomUUID()}`);
+  const tmp = resolve(scratchDir, `index-${randomUUID()}`);
   try {
     await copyIndex(index, tmp);
     const untrackedTruncated = await addUntracked(dir, tmp, emptyBlob, paths);
@@ -108,7 +121,7 @@ export async function workingTreeChanges(
       truncated: patch.truncated || names.truncated || stats.truncated || untrackedTruncated,
     };
   } finally {
-    // A leftover of a git killed after the time limit; a file in the temp directory is not worth hiding the error for.
+    // A leftover of a git killed after the time limit; a file in the scratch folder is not worth hiding the error for.
     await Promise.all([tmp, `${tmp}.lock`].map((file) => rm(file, { force: true }).catch(() => {})));
   }
 }

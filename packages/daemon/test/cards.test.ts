@@ -5,14 +5,14 @@ import { join } from "node:path";
 import type { RepoCard } from "@trackwall/protocol";
 import { CardCache } from "../src/modules/cards/card-cache.ts";
 import { Cards } from "../src/modules/cards/cards.ts";
-import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 import { fakeHosting } from "./support/hosting.ts";
 
 /** The `cards` module on real git and a projects folder, with the card cache in a temporary directory. */
-async function setup(vcs: Vcs = new Vcs()) {
+async function setup(vcs: Vcs = new Vcs(systemTempFolder)) {
   const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
   const file = new WorkspaceFile(join(home, "workspace.yaml"));
@@ -48,7 +48,7 @@ describe("cards", () => {
     expect(existsSync(join(cardsDir, `${first.card?.commit}.json`))).toBe(true);
 
     // A new instance (a daemon restart) with a git that cannot read files: the card must come from disk.
-    const blind = new Vcs();
+    const blind = new Vcs(systemTempFolder);
     blind.commitFiles = () => Promise.reject(new Error("should not read files"));
     const restarted = new Cards({ vcs: blind, repos: workspace, cache: new CardCache(cardsDir, () => {}), log: () => {} });
     expect((await restarted.card("web")).card).toEqual(first.card);
@@ -84,7 +84,7 @@ describe("cards", () => {
   });
 
   test("concurrent requests for the card of the same commit (the tag list and the card at once) read git once", async () => {
-    const vcs = new Vcs();
+    const vcs = new Vcs(systemTempFolder);
     let reads = 0;
     const commitFilesOf = vcs.commitFiles.bind(vcs);
     vcs.commitFiles = (...args) => {

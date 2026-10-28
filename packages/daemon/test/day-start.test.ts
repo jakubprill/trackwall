@@ -7,7 +7,7 @@ import { DomainError } from "../src/infra/errors.ts";
 import { dayReport } from "../src/modules/day-start/day-report.ts";
 import { DayStart } from "../src/modules/day-start/day-start.ts";
 import { DayStartFile } from "../src/modules/day-start/day-start-file.ts";
-import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
@@ -40,7 +40,7 @@ function setup(
   writeFileSync(yaml, `projectsDir: ${JSON.stringify(projects)}\n${o.workspaceYaml ?? ""}`);
   const workspace = new Workspace({
     file: new WorkspaceFile(yaml),
-    vcs: new Vcs(),
+    vcs: new Vcs(systemTempFolder),
     hosting: fakeHosting().hosting,
     openEditor: () => {},
     openFolder: () => {},
@@ -49,7 +49,7 @@ function setup(
   const logged: string[] = [];
   const dayStart = new DayStart({
     workspace,
-    vcs: new Vcs(),
+    vcs: new Vcs(systemTempFolder),
     file: new DayStartFile(join(home, "day-start.json"), (msg) => logged.push(msg)),
     log: (msg) => logged.push(msg),
     agents: {

@@ -166,6 +166,11 @@ export type AgentSecrets = z.infer<typeof AgentSecrets>;
 /** The default task worktrees folder's name in the projects folder (ADR-84). */
 export const DEFAULT_WORKTREES_DIR_NAME = ".trackwall-worktrees";
 
+/**
+ * The folder in the projects folder for git's temporary indexes, which Trackwall removes after each git command: in the projects folder, which an antivirus may be told to skip (clarification to ADR-31).
+ */
+export const SCRATCH_DIR_NAME = ".trackwall-scratch";
+
 export const WorkspaceSettings = z.object({
   projectsDir: ProjectsDir,
   /** `worktreesDir` from `workspace.yaml` (ADR-84): where new task worktrees go; `null` for the default. */

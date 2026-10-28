@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, 
 import { tmpdir } from "node:os";
 import { join, posix, win32 } from "node:path";
 import { vscodeUrl } from "../src/infra/editor-url.ts";
-import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { isFullPath } from "../src/modules/workspace/full-path.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
@@ -19,7 +19,7 @@ async function workspaceWithProjectsDir() {
   const opened: string[] = [];
   const workspace = new Workspace({
     file: new WorkspaceFile(file),
-    vcs: new Vcs(),
+    vcs: new Vcs(systemTempFolder),
     hosting: fakeHosting().hosting,
     openEditor: (dir) => opened.push(dir),
     openFolder: () => {},
@@ -102,7 +102,7 @@ describe("workspace", () => {
       const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
       const workspace = new Workspace({
         file: new WorkspaceFile(file),
-        vcs: new Vcs(),
+        vcs: new Vcs(systemTempFolder),
         hosting: fakeHosting().hosting,
         openEditor: () => {},
         openFolder: () => {},
@@ -190,7 +190,7 @@ describe("workspace", () => {
       const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
       const workspace = new Workspace({
         file: new WorkspaceFile(file),
-        vcs: new Vcs(),
+        vcs: new Vcs(systemTempFolder),
         hosting: fakeHosting().hosting,
         openEditor: () => {},
         openFolder: () => {},
@@ -442,7 +442,7 @@ describe("the task worktrees folder (ADR-84)", () => {
     const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
     const workspace = new Workspace({
       file: new WorkspaceFile(file),
-      vcs: new Vcs(),
+      vcs: new Vcs(systemTempFolder),
       hosting: fakeHosting().hosting,
       openEditor: () => {},
       openFolder: () => {},

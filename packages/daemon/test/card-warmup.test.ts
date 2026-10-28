@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { CardCache } from "../src/modules/cards/card-cache.ts";
 import { CardWarmup, type WarmupRepo } from "../src/modules/cards/card-warmup.ts";
 import { Cards } from "../src/modules/cards/cards.ts";
-import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { makeRepo } from "./support/git-repo.ts";
@@ -116,7 +116,7 @@ describe("the card warm-up", () => {
   test("a warmed-up card is in the cache, so a request after it does not read files from git", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
     const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
-    const vcs = new Vcs();
+    const vcs = new Vcs(systemTempFolder);
     const workspace = new Workspace({
       file: new WorkspaceFile(join(home, "workspace.yaml")),
       vcs,
