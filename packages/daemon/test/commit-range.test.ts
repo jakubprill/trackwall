@@ -4,12 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
+import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 const vcs = new Vcs();
 const head = (dir: string) => gitIn(dir, "rev-parse", "HEAD").trim();
 const MISSING = "0123456789abcdef0123456789abcdef01234567";
-/** Each test runs a few dozen git processes, which on a busy Windows runner take over bun's default 5 s. */
-const GIT_TEST_TIMEOUT_MS = 30_000;
 
 describe("the commits between two day starts, on real git", () => {
   test(
@@ -27,7 +26,7 @@ describe("the commits between two day starts, on real git", () => {
       expect(await vcs.countBetween(dir, from, head(dir))).toBe(3);
       expect((await vcs.newestCommits(dir, head(dir), 1)).map((c) => c.subject)).toEqual(["Add d"]);
     },
-    GIT_TEST_TIMEOUT_MS,
+    SLOW_TEST_TIMEOUT_MS,
   );
 
   test(
@@ -46,7 +45,7 @@ describe("the commits between two day starts, on real git", () => {
       expect(await vcs.commitsBetween(dir, MISSING, head(dir), 5)).toBeUndefined();
       expect(await vcs.countBetween(dir, MISSING, head(dir))).toBeUndefined();
     },
-    GIT_TEST_TIMEOUT_MS,
+    SLOW_TEST_TIMEOUT_MS,
   );
 
   test(
@@ -58,7 +57,7 @@ describe("the commits between two day starts, on real git", () => {
       await expect(vcs.commitsBetween(notARepo, MISSING, MISSING, 5)).rejects.toThrow();
       await expect(vcs.countBetween(notARepo, MISSING, MISSING)).rejects.toThrow();
     },
-    GIT_TEST_TIMEOUT_MS,
+    SLOW_TEST_TIMEOUT_MS,
   );
 
   test(
@@ -71,6 +70,6 @@ describe("the commits between two day starts, on real git", () => {
       expect(await vcs.remoteDefaultBranch(clone)).toEqual({ name: "origin/main", commit: head(server) });
       expect(await vcs.remoteDefaultBranch(server)).toBeNull();
     },
-    GIT_TEST_TIMEOUT_MS,
+    SLOW_TEST_TIMEOUT_MS,
   );
 });
