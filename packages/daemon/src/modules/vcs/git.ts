@@ -54,11 +54,6 @@ type GitOptions = Pick<RunOptions, "maxBytes" | "stdin" | "okExitCodes"> & {
   indexFile?: string;
   /** `-c key=value` for this command only, over the repo's own configuration (a push without the repo's hooks, ADR-77). */
   config?: readonly string[];
-  /**
-   * The call only reads (`status`): an identical call still waiting for a slot is joined instead of queued again (ADR-111).
-   * Not for a call with `stdin`, `indexFile` or `config`, which the key does not cover.
-   */
-  joinWaiting?: boolean;
 };
 
 /** `core.sshCommand` from the repo and user configuration for a command that connects to a server. */
@@ -88,14 +83,26 @@ export function gitProcessesStarted(): number {
   return started;
 }
 
-export async function git(repoDir: string, args: readonly string[], opts: GitOptions = {}): Promise<RunOutput> {
+export function git(repoDir: string, args: readonly string[], opts: GitOptions = {}): Promise<RunOutput> {
+  return runGit(repoDir, args, opts, false);
+}
+
+/**
+ * A short read with no options (`status`): an identical read still waiting for a slot is joined instead of queued again
+ * (ADR-111). Without options, so that the key (the repo and the arguments) is the whole call.
+ */
+export function gitRead(repoDir: string, args: readonly string[]): Promise<RunOutput> {
+  return runGit(repoDir, args, {}, true);
+}
+
+async function runGit(repoDir: string, args: readonly string[], opts: GitOptions, joinWaiting: boolean): Promise<RunOutput> {
   const ceiling = await ceilingFor(repoDir);
   const { maxBytes, stdin, okExitCodes } = opts;
   const config = (opts.config ?? []).flatMap((entry) => ["-c", entry]);
   // The launcher stays for network commands: credential helpers and ssh run exactly as from the user's shell.
   const program = opts.network ? GIT_FROM_PATH : await gitProgram();
   const askedAt = performance.now();
-  const call = async () => {
+  const call = () => {
     started++;
     const startedAt = performance.now();
     const output = runProgram(program.command, [...NO_REPO_COMMANDS, ...PLATFORM_CONFIG, ...config, "-C", repoDir, ...args], {
@@ -113,15 +120,20 @@ export async function git(repoDir: string, args: readonly string[], opts: GitOpt
       },
       timeoutMs: opts.timeoutMs ?? TIMEOUT_MS,
     });
+    return { output, startedAt };
+  };
+  // A long command (a worktree, a search) would hold a slot for minutes and the views would wait behind it again.
+  const short = !opts.network && (opts.timeoutMs ?? TIMEOUT_MS) <= TIMEOUT_MS;
+  if (!short) return (await call()).output;
+  // Only a short call is logged when slow: a fetch or a worktree is meant to take long and would bury the lines that matter.
+  const slotted = async () => {
+    const { output, startedAt } = await call();
     // A failed call is logged too: a timeout is the slowest call of all.
     const report = () => logIfSlow(`git ${args[0]}`, repoDir, startedAt - askedAt, performance.now() - startedAt);
     output.then(report, report);
     return output;
   };
-  // A long command (a worktree, a search) would hold a slot for minutes and the views would wait behind it again.
-  const short = !opts.network && (opts.timeoutMs ?? TIMEOUT_MS) <= TIMEOUT_MS;
-  if (!short) return call();
-  return opts.joinWaiting ? WAITING_READS.run([repoDir, ...args].join("\0"), call) : LOCAL_CALL_SLOTS.run(call);
+  return joinWaiting ? WAITING_READS.run([repoDir, ...args].join("\0"), slotted) : LOCAL_CALL_SLOTS.run(slotted);
 }
 
 function logIfSlow(label: string, repoDir: string, waitedMs: number, ranMs: number): void {
