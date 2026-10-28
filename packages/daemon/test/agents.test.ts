@@ -164,8 +164,12 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     await waitFor(agents, started.id, () => late.text().includes("Do you want to run this command?"), "screen image for the new terminal");
     expect(late.text()).toContain("Welcome to the fake");
     // Without the SGR encoding the window would encode the wheel and clicks the X10 way, and they would not reach Copilot CLI.
-    expect(late.text()).toContain("\x1b[?1003h");
-    expect(late.text()).toContain("\x1b[?1006h");
+    // ConPTY passes mouse modes on only from a program that turned on VT input, which the fake does not; the contract test
+    // checks Windows with the real Copilot CLI.
+    if (process.platform !== "win32") {
+      expect(late.text()).toContain("\x1b[?1003h");
+      expect(late.text()).toContain("\x1b[?1006h");
+    }
     late.attachment.detach();
     await agents.stop(started.id);
   }, 60_000);
