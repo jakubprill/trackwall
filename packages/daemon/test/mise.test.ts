@@ -7,8 +7,10 @@ import { Logs } from "../src/modules/logs/logs.ts";
 import { Mise, parseTaskList } from "../src/modules/mise/mise.ts";
 import { ProcessGroups } from "../src/modules/procs/process-groups.ts";
 import { RuntimeFile } from "../src/modules/procs/runtime-file.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { groupPlatform } from "../src/platform/group-platform.ts";
 import { isAlive, waitUntil } from "../src/platform/process-group.ts";
+import { commitFiles, gitIn } from "./support/git-repo.ts";
 
 const FAKE_MISE = [process.execPath, join(import.meta.dir, "fixtures", "fake-mise.ts")];
 const TIMEOUT = 30_000;
@@ -62,7 +64,15 @@ function setup(config: object, command: readonly string[] = FAKE_MISE) {
   const removeRepo = () => {
     present = false;
   };
-  const mise = new Mise({ procs, repos, tasks, command, env: async () => process.env, onTrusted: () => {} });
+  const mise = new Mise({
+    procs,
+    repos,
+    tasks,
+    vcs: new Vcs(systemTempFolder),
+    command,
+    env: async () => process.env,
+    onTrusted: () => {},
+  });
   return { mise, home, repoDir, worktree, procs, logs, removeRepo, refuseWorktree };
 }
 
@@ -79,10 +89,67 @@ describe("mise", () => {
     expect(await mise.tasks("web")).toEqual({
       kind: "ok",
       tasks: [
-        { name: "dev", description: "development server", run: null },
-        { name: "build:ui", description: "", run: null },
+        { name: "dev", description: "development server", source: null, origin: null, run: null },
+        { name: "build:ui", description: "", source: null, origin: null, run: null },
       ],
     });
+  });
+
+  test("each mise task says whether a file git tracks, a file git does not track or a config outside the repo defines it", async () => {
+    const { mise, home, repoDir } = setup({ tasks: [] });
+    gitIn(repoDir, "init", "-q", "-b", "main");
+    commitFiles(repoDir, { "mise.toml": '[tasks.build]\nrun = "make"\n' }, "add mise.toml");
+    writeFileSync(join(repoDir, "mise.local.toml"), '[tasks.dev]\nrun = "make dev"\n');
+    mkdirSync(join(repoDir, "mise-tasks"));
+    writeFileSync(join(repoDir, "mise-tasks", "lint"), "#!/bin/sh\n");
+    writeFileSync(join(home, "global.toml"), '[tasks.notes]\nrun = "true"\n');
+    // mise reports each source as a full path, as in the format test below.
+    writeConfig(repoDir, {
+      tasks: [
+        { name: "build", source: join(repoDir, "mise.toml") },
+        { name: "dev", source: join(repoDir, "mise.local.toml") },
+        { name: "lint", source: join(repoDir, "mise-tasks", "lint") },
+        { name: "notes", source: join(home, "global.toml") },
+      ],
+    });
+
+    const listed = await mise.tasks("web");
+
+    expect(listed.kind === "ok" && listed.tasks.map((t) => [t.name, t.origin, t.source])).toEqual([
+      ["build", "repo", "mise.toml"],
+      ["dev", "local", "mise.local.toml"],
+      ["lint", "local", "mise-tasks/lint"],
+      ["notes", "outside", join(home, "global.toml")],
+    ]);
+  });
+
+  test("a mise.toml kept out of git defines local mise tasks; without git, or for a file that is gone, the origin is unknown", async () => {
+    const { mise, home, repoDir } = setup({ tasks: [] });
+    writeFileSync(join(repoDir, "mise.toml"), '[tasks.build]\nrun = "make"\n');
+    writeFileSync(join(home, "global.toml"), '[tasks.notes]\nrun = "true"\n');
+    writeConfig(repoDir, {
+      tasks: [
+        { name: "build", source: join(repoDir, "mise.toml") },
+        { name: "notes", source: join(home, "global.toml") },
+        { name: "gone", source: join(repoDir, "removed.toml") },
+      ],
+    });
+    const origins = async () => {
+      const listed = await mise.tasks("web");
+      return listed.kind === "ok" ? listed.tasks.map((t) => [t.name, t.origin]) : [];
+    };
+
+    expect(await origins()).toEqual([
+      ["build", null],
+      ["notes", "outside"],
+      ["gone", null],
+    ]);
+    gitIn(repoDir, "init", "-q", "-b", "main");
+    expect(await origins()).toEqual([
+      ["build", "local"],
+      ["notes", "outside"],
+      ["gone", null],
+    ]);
   });
 
   test("an untrusted config gives the state untrusted, and trust clears it", async () => {
@@ -93,7 +160,7 @@ describe("mise", () => {
     expect(before.kind !== "ok" && before.message).toContain("are not trusted");
     expect(before.kind !== "ok" && before.message).not.toContain("WARN");
 
-    expect(await mise.trust("web")).toEqual({ kind: "ok", tasks: [{ ...DEV, run: null }] });
+    expect(await mise.trust("web")).toEqual({ kind: "ok", tasks: [{ ...DEV, source: null, origin: null, run: null }] });
     expect(JSON.parse(readFileSync(join(repoDir, "fake-mise.json"), "utf8")).untrusted).toBe(false);
   });
 
@@ -460,7 +527,7 @@ describe("the environment mise sets (ADR-93)", () => {
 });
 
 describe("mise tasks ls --json", () => {
-  test("the format from a real mise (2026.10) gives the name and description, and skips the other fields", () => {
+  test("the format from a real mise (2026.10) gives the name, description and source file, and skips the other fields", () => {
     const stdout = JSON.stringify([
       {
         name: "dev",
@@ -474,7 +541,7 @@ describe("mise tasks ls --json", () => {
     ]);
     expect(parseTaskList({ kind: "exited", code: 0, stdout, stderr: "" })).toEqual({
       kind: "ok",
-      tasks: [{ name: "dev", description: "Daemon and Vite" }],
+      tasks: [{ name: "dev", description: "Daemon and Vite", source: "/repo/mise.toml" }],
     });
   });
 
@@ -495,7 +562,7 @@ describe("mise tasks ls --json", () => {
     const stdout = JSON.stringify([{ name: "--help" }, { name: "lint" }]);
     expect(parseTaskList({ kind: "exited", code: 0, stdout, stderr: "" })).toEqual({
       kind: "ok",
-      tasks: [{ name: "lint", description: "" }],
+      tasks: [{ name: "lint", description: "", source: null }],
     });
   });
 });

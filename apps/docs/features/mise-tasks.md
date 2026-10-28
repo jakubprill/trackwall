@@ -11,7 +11,7 @@ Run, stop and follow the mise tasks of any repo, with live logs and the errors p
 
 ## What you get
 
-- Every mise task of a repo in one tab, with "Run" and "Stop".
+- Every mise task of a repo in one tab, with "Run" and "Stop", and where it comes from: the repo, your local files or your global mise config.
 - A live log of each task, with errors and warnings highlighted.
 - A clean stop: a stopped task takes everything it started with it.
 - Secrets kept out of the log.
@@ -19,7 +19,7 @@ Run, stop and follow the mise tasks of any repo, with live logs and the errors p
 
 ## How it works
 
-Select a repo and open its "mise tasks" tab: it lists the repo's tasks as `mise tasks ls` shows them. "Run" starts a task in the repo root and opens its log, which follows the output live, with errors and warnings highlighted. When a task fails, the tab shows its exit code and the last lines of output. "Log" next to any task shows or hides its log, also for a run an agent started.
+Select a repo and open its "mise tasks" tab: it lists the repo's tasks as `mise tasks ls` shows them. A label next to each name says where the task is defined: "repo" for a file in the repo's git, "local" for a file only your clone has, such as `mise.local.toml`, and "outside repo" for your global mise config or a parent folder's. Hover the label to see the file. "Run" starts a task in the repo root and opens its log, which follows the output live, with errors and warnings highlighted. When a task fails, the tab shows its exit code and the last lines of output. "Log" next to any task shows or hides its log, also for a run an agent started.
 
 "Stop" ends the task together with every process it started, on Windows and on macOS alike, so no server is left holding a port. Quitting Trackwall stops every task, and if Trackwall ever crashes, its next start cleans up what was left running.
 
@@ -39,4 +39,4 @@ mise asks you to trust a repo's configuration before it runs its tasks. When it 
 - On macOS the `PATH` from your login shell is enough.
 - The full log of every task is kept in `~/.trackwall/logs/mise-task/<repo>/<task>.jsonl`, at most 10 MB plus one previous file. Characters other than lowercase letters, digits, `_` and `-` in the name are written as `%XX`: the task `build:ui` is `build%3Aui.jsonl`. A run in a task's worktree is kept in `~/.trackwall/logs/task-mise-task/<task>/<mise task>.jsonl`.
 - A repo with a mise task called `dev` also gets a [Services](/features/services) panel at the top of this tab.
-- Tasks only for your computer go in `mise.local.toml`; above the tasks the tab shows its [backup](/features/local-config).
+- Tasks only for your computer go in `mise.local.toml`, or in a `mise.toml` you keep out of git; above the tasks the tab shows their [backup](/features/local-config). The repo list marks such repos with the `local-mise` tag.

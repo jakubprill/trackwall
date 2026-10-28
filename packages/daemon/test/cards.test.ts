@@ -120,6 +120,22 @@ describe("cards", () => {
     expect(result.tags.map((t) => t.name)).not.toContain("no-mise");
   });
 
+  test("mise tasks in files of the working directory git does not have give local-mise instead of no-mise", async () => {
+    const { projects, cards } = await setup();
+    const web = makeRepo({ "package.json": PACKAGE_JSON }, "web", projects);
+    writeFileSync(join(web, "mise.toml"), '[tasks.build]\nrun = "pnpm build"\n');
+    writeFileSync(join(web, "mise.local.toml"), '[tasks.dev]\nrun = "pnpm dev"\n');
+    // The commit has mise.toml, so a task added to it in the working directory is the repo's, only not committed yet.
+    const api = makeRepo({ "mise.toml": '[tools]\njava = "21"\n' }, "api", projects);
+    writeFileSync(join(api, "mise.toml"), '[tasks.build]\nrun = "mvn package"\n');
+
+    expect((await cards.card("web")).tags).toEqual([
+      { name: "frontend", reason: "react in package.json:5" },
+      { name: "local-mise", reason: "2 mise tasks in mise.toml and mise.local.toml, outside git" },
+    ]);
+    expect((await cards.card("api")).tags.map((t) => t.name)).toEqual(["no-mise"]);
+  });
+
   test("tags of every listed repo; a repo git cannot read has a reason instead of tags", async () => {
     const { projects, cards } = await setup();
     makeRepo({ "pom.xml": "<project><groupId>g</groupId><artifactId>lib</artifactId></project>" }, "lib", projects);

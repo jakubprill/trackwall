@@ -1,6 +1,9 @@
 import {
+  countLabel,
+  type DeclaredMiseTask,
   type Evidence,
   evidenceLabel,
+  LOCAL_MISE_TAG,
   type MechanismId,
   NO_MISE_TAG,
   type RepoCard,
@@ -20,8 +23,11 @@ import { dirOf } from "./repo-path.ts";
 export interface TaggedRepo {
   id: string;
   remote: string | null;
-  /** How many mise tasks the repo's `mise.local.toml` declares in the working directory (ADR-86): the commit never has them. */
-  localMiseTasks: number;
+  /**
+   * The mise tasks of the repo's local mise config in the working directory (ADR-86, ADR-110): `mise.local.toml`, and a
+   * `mise.toml` the commit does not have. The commit never has them.
+   */
+  localMiseTasks: DeclaredMiseTask[];
 }
 
 const FRONTEND: MechanismId[] = ["react", "angular", "vue", "svelte"];
@@ -60,6 +66,8 @@ function cardTags(card: RepoCard, repo: TaggedRepo): [string, string][] {
   if (monorepo) tags.push(["monorepo", monorepo]);
   const noMise = noMiseReason(card, repo);
   if (noMise) tags.push([NO_MISE_TAG, noMise]);
+  const localMise = localMiseReason(repo);
+  if (localMise) tags.push([LOCAL_MISE_TAG, localMise]);
   return tags;
 }
 
@@ -69,9 +77,19 @@ function cardTags(card: RepoCard, repo: TaggedRepo): [string, string][] {
  * such a repo has to be found with a filter to give it mise tasks.
  */
 function noMiseReason(card: RepoCard, repo: TaggedRepo): string | undefined {
-  if (card.mise.tasks.length > 0 || repo.localMiseTasks > 0 || !card.mise.complete) return undefined;
+  if (card.mise.tasks.length > 0 || repo.localMiseTasks.length > 0 || !card.mise.complete) return undefined;
   const [config] = card.mise.configFiles;
   return config ? `${config} declares no tasks` : "no mise config in the repo root";
+}
+
+/**
+ * `local-mise`: the repo has mise tasks only this clone has, in files git does not keep (ADR-110), so a new clone or another
+ * computer lacks them until they are restored from the local config store.
+ */
+function localMiseReason(repo: TaggedRepo): string | undefined {
+  const files = [...new Set(repo.localMiseTasks.map((t) => t.evidence.path))];
+  if (files.length === 0) return undefined;
+  return `${countLabel(repo.localMiseTasks.length, { one: "mise task", other: "mise tasks" })} in ${files.join(" and ")}, outside git`;
 }
 
 function bffName(card: RepoCard, repo: TaggedRepo): string | undefined {

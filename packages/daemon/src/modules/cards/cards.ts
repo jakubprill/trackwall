@@ -1,4 +1,12 @@
-import type { CardWarmupProgress, RepoCard, RepoCardResult, RepoTag, RepoTagRules, RepoTags } from "@trackwall/protocol";
+import {
+  type CardWarmupProgress,
+  MISE_CONFIG_FILE,
+  type RepoCard,
+  type RepoCardResult,
+  type RepoTag,
+  type RepoTagRules,
+  type RepoTags,
+} from "@trackwall/protocol";
 import { configOrProblem, DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
 import { CallReads, readCallFiles } from "./call-files.ts";
@@ -118,11 +126,12 @@ export class Cards {
 
   /**
    * The repo card and its tags, from the remote address (without it only from the identifier), from the mise tasks of
-   * `mise.local.toml` (ADR-86) and from the rules.
+   * the local mise config (ADR-86, ADR-110) and from the rules.
    */
   private async tagged(id: string, dir: string, rules: RepoTagRules): Promise<TaggedCard> {
-    const [card, remote, local] = await Promise.all([this.cardOf(dir), this.deps.vcs.remote(dir).catch(() => null), localMiseTasks(dir)]);
-    return { card, remote, tags: repoTags(card, { id, remote, localMiseTasks: local.length }, rules) };
+    const [card, remote] = await Promise.all([this.cardOf(dir), this.deps.vcs.remote(dir).catch(() => null)]);
+    const localMise = await localMiseTasks(dir, card?.mise.configFiles.includes(MISE_CONFIG_FILE) ?? false);
+    return { card, remote, tags: repoTags(card, { id, remote, localMiseTasks: localMise }, rules) };
   }
 
   /** The card of the HEAD commit of the repo in directory `dir`; `null` in a repo without commits. */

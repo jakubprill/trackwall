@@ -188,6 +188,7 @@ export function createFacade(o: FacadeOptions): Facade {
     procs,
     repos: workspace,
     tasks: agents,
+    vcs,
     command: o.miseCommand,
     env: o.userEnv,
     onTrusted: (repo) => agents.miseTrusted({ repo, task: null }),
