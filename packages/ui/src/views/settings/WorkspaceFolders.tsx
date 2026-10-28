@@ -10,6 +10,7 @@ import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 import { GitProgramSurface } from "./GitProgramSurface.tsx";
 import { PathForm } from "./PathForm.tsx";
+import { WorktreesDirSurface } from "./WorktreesDirSurface.tsx";
 
 /** The projects folder, the task worktrees folder and the git program; all come from one read of the workspace settings. */
 export function WorkspaceFolders({ conn, onRetry, onSaved }: { conn: Connection; onRetry: () => void; onSaved: () => void }) {
@@ -63,36 +64,7 @@ export function WorkspaceFolders({ conn, onRetry, onSaved }: { conn: Connection;
           {settings.errorCode === "invalid_config" && <PathForm {...PROJECTS_DIR} initialPath="" save={(path) => saveProjectsDir(path)} />}
         </div>
       </Surface>
-      {settings.data && (
-        <Surface label="Task worktrees folder">
-          <div className="flex flex-col gap-4 p-4">
-            <p className="text-muted-foreground text-sm">
-              Each agent task works in its own git worktree in this folder. Keep it on the same fast disk as your repos and inside the
-              folders your antivirus skips, or git and builds in a task get slow. Tasks you already have keep their worktrees where they
-              are.
-            </p>
-            <PathForm
-              key={settings.data.worktreesDir ?? ""}
-              label="Full path to the task worktrees folder"
-              placeholder={settings.data.defaultWorktreesDir ?? "Set the projects folder first"}
-              configKey="worktreesDir"
-              initialPath={settings.data.worktreesDir ?? ""}
-              configFile={settings.data.configFile}
-              save={(path) => saveWorktreesDir(path)}
-              reset={settings.data.worktreesDir === null && !settings.data.worktreesDirProblem ? undefined : () => saveWorktreesDir(null)}
-            />
-            {settings.data.worktreesDirProblem && (
-              <p className="text-destructive text-xs break-words">{settings.data.worktreesDirProblem}</p>
-            )}
-            {settings.data.worktreesDir === null && !settings.data.worktreesDirProblem && settings.data.defaultWorktreesDir && (
-              <p className="text-muted-foreground text-xs break-all">
-                Empty: new tasks use <span className="font-mono">{settings.data.defaultWorktreesDir}</span>, which the Repos view does not
-                list.
-              </p>
-            )}
-          </div>
-        </Surface>
-      )}
+      {settings.data && <WorktreesDirSurface settings={settings.data} save={saveWorktreesDir} />}
       {settings.data && <GitProgramSurface settings={settings.data} save={saveGitProgram} />}
     </>
   );
