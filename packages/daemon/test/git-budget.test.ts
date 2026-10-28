@@ -68,6 +68,21 @@ describe("the git budget of a refresh with 20 repos", () => {
   );
 
   test(
+    "two repo lists asked at once share every git status that has not started yet",
+    async () => {
+      const { workspace } = await folderOfTwentyRepos();
+      await workspace.list();
+
+      // A status that already started when the second list asks runs again (WaitingCalls). How many did depends on how fast
+      // git is here; but the first batches of both lists ask before the slots can take them all, so some are always shared.
+      const processes = await gitProcessesOf(() => Promise.all([workspace.list(), workspace.list()]));
+      expect(processes).toBeGreaterThanOrEqual(REPO_COUNT);
+      expect(processes).toBeLessThan(2 * REPO_COUNT);
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
     "after a commit in one repo only that repo costs more: its new HEAD commit in the list, its new card in the graph",
     async () => {
       const { repos, workspace, cards, graph } = await folderOfTwentyRepos();

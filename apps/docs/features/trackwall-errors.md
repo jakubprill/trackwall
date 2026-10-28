@@ -35,3 +35,4 @@ Before an error is saved, its message is anonymized. Your projects folder become
 - Anonymization covers what Trackwall knows and what looks like a name, an address or a token. A name it cannot recognise, such as a client's name in a library's message, can stay, so read an error before you paste it anywhere.
 - The list keeps the 100 errors seen most recently.
 - The daemon's last start log is `logs/daemon-start.log`, and the one before it `logs/daemon-start.prev.log`.
+- When Trackwall feels slow, look in that log for lines starting with `[git]`: every git call that took 5 seconds or more is there, with the repo and how long it waited for its turn.

@@ -26,7 +26,7 @@ import {
   remoteDefaultBranch,
 } from "./commit-range.ts";
 import { ConfigMemo } from "./config-memo.ts";
-import { git, gitVersion } from "./git.ts";
+import { git, gitRead, gitVersion } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { type GitState, GitStateReader } from "./git-state.ts";
 import { grep, grepFiles } from "./grep.ts";
@@ -113,10 +113,11 @@ export class Vcs {
 
   /**
    * One `git status` per call: the HEAD commit's author, date and subject come from `headCommits` by the hash status gives,
-   * so the repo list starts one process per repo (ADR-79), not two.
+   * so the repo list starts one process per repo (ADR-79), not two. A status of the same repo still waiting for a slot is
+   * joined, so two lists asked at once do not read a repo twice (ADR-111).
    */
   async status(dir: string): Promise<RepoStatusOk> {
-    const { stdout } = await git(dir, ["status", "--porcelain=v2", "--branch", "-z"]);
+    const { stdout } = await gitRead(dir, ["status", "--porcelain=v2", "--branch", "-z"]);
     const { headOid, ...status } = parseStatus(stdout.toString("utf8"));
     return { ...status, head: headOid === null ? null : await this.headCommits.get(headOid, () => this.newestCommit(dir, headOid)) };
   }
