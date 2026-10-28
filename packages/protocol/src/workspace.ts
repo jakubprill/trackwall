@@ -62,11 +62,15 @@ export function trackedChanges(status: Pick<RepoStatusOk, "changes" | "untracked
   return status.changes - status.untracked;
 }
 
-/** The repo status observed in git on every request; it is never saved. */
+/**
+ * The repo status observed in git on every request; it is never saved. `loading` is a repo of the quick list (`entries`,
+ * ADR-113) whose status is still on its way; `list` and `repos` never return it.
+ */
 export const RepoStatus = z.discriminatedUnion("kind", [
   RepoStatusOk,
   /** The directory has `.git`, but git cannot read it (a damaged repo, no permissions, no `git` in `PATH`). */
   z.object({ kind: z.literal("unavailable"), message: z.string() }),
+  z.object({ kind: z.literal("loading") }),
 ]);
 export type RepoStatus = z.infer<typeof RepoStatus>;
 
@@ -95,6 +99,9 @@ export const RepoList = z.object({
   repos: z.array(Repo),
 });
 export type RepoList = z.infer<typeof RepoList>;
+
+/** How many repos one `repos` request may ask for: a few screens of the list, so one answer does not wait for the whole folder. */
+export const MAX_REPOS_PER_REQUEST = 50;
 
 /**
  * The repo watch (ADR-63): the revision grows when the HEAD or refs of a repo in the projects folder change, or the set of
@@ -254,6 +261,13 @@ const RepoRequest = z.object({ repo: RepoId }).strict();
 
 export const workspaceApi = {
   list: endpoint("list", z.object({}).strict(), RepoList),
+  /**
+   * The repos of the projects folder without asking git (ADR-113): every status is `loading` and every remote `null`, so a view
+   * shows the list at once and fills it with `repos`.
+   */
+  entries: endpoint("entries", z.object({}).strict(), RepoList),
+  /** The repos named, with status and remote, in the order asked; a repo no longer in the folder is left out (ADR-113). */
+  repos: endpoint("repos", z.object({ repos: z.array(RepoId).min(1).max(MAX_REPOS_PER_REQUEST) }).strict(), z.array(Repo)),
   settings: endpoint("settings", z.object({}).strict(), WorkspaceSettings),
   /** `path` is the full path of an existing directory on the user's disk; saved in `workspace.yaml`. */
   setProjectsDir: endpoint("set-projects-dir", z.object({ path: z.string().min(1).max(4096) }).strict(), WorkspaceSettings),

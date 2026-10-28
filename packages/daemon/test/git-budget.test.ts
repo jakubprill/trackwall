@@ -68,6 +68,20 @@ describe("the git budget of a refresh with 20 repos", () => {
   );
 
   test(
+    "the quick list starts no git process, and repos asks git only for the repos named (ADR-113)",
+    async () => {
+      const { repos, workspace } = await folderOfTwentyRepos();
+      await workspace.list();
+      const ids = (await workspace.entryList()).repos.map((r) => r.id);
+
+      expect(await gitProcessesOf(() => workspace.entryList())).toBe(0);
+      expect(await gitProcessesOf(() => workspace.repos(ids.slice(0, 3)))).toBe(3);
+      expect(repos).toHaveLength(REPO_COUNT);
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
     "two repo lists asked at once share every git status that has not started yet",
     async () => {
       const { workspace } = await folderOfTwentyRepos();

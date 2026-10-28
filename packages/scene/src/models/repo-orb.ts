@@ -1,4 +1,5 @@
 import { Group } from "three";
+import { repoNeedsYou } from "../home-model.ts";
 import { repoStateColor, type ScenePalette } from "../palette.ts";
 import { cylinder, flatArc, flatRing, glow, type HomeVisual, light, sphere, unpickable } from "./kit.ts";
 import { MAX_REPO_LEVEL, type RepoLook } from "./repo-model.ts";
@@ -14,7 +15,7 @@ const ORB_Y = 0.7;
 export function repoOrb(look: RepoLook, palette: ScenePalette): HomeVisual {
   const group = new Group();
   const color = repoStateColor(look.state, palette);
-  const quiet = look.state === "clean";
+  const quiet = !repoNeedsYou(look.state);
   const radius = 0.28 + (0.17 * look.level) / MAX_REPO_LEVEL;
   const orb = sphere(radius, light(color, 0.95), [0, ORB_Y, 0]);
   group.add(orb, glow(color, radius * (quiet ? 5 : 8), ORB_Y, quiet ? 0.45 : 0.8));

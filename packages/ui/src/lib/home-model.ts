@@ -55,6 +55,7 @@ export function homeModel({ repos, sessions, graph, running, daemonRunning }: Ho
  */
 function repoState(repo: Repo): { state: HomeRepoState; count: number } {
   const { status } = repo;
+  if (status.kind === "loading") return { state: "loading", count: 0 };
   if (status.kind !== "ok") return { state: "unavailable", count: 0 };
   if (status.changes > 0) return { state: "changed", count: status.changes };
   const behind = status.upstream?.behind ?? 0;
@@ -67,7 +68,13 @@ export interface HomeStatus {
   label: string;
 }
 
-const REPO_TONES: Record<HomeRepoState, StatusTone> = { clean: "ok", behind: "warning", changed: "warning", unavailable: "error" };
+const REPO_TONES: Record<HomeRepoState, StatusTone | undefined> = {
+  loading: undefined,
+  clean: "ok",
+  behind: "warning",
+  changed: "warning",
+  unavailable: "error",
+};
 
 /** The repo state on the dashboard in the same words as the repo list, and for a repo to pull with the number of commits. */
 export function homeRepoStatus(repo: HomeRepo): HomeStatus {

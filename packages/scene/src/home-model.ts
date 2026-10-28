@@ -9,11 +9,20 @@ import type { EdgeKind } from "@trackwall/protocol";
  */
 
 /**
- * A repo's state on the dashboard, from least to most urgent: `unavailable` is the repo state `unavailable`,
+ * A repo's state on the dashboard, from least to most urgent: `loading` is a repo whose status has not come yet (ADR-113),
+ * `unavailable` is the repo state `unavailable`,
  * `changed` is local changes, `behind` is commits to pull; a repo with only unpushed commits is `clean`.
  */
-export const HOME_REPO_STATES = ["clean", "behind", "changed", "unavailable"] as const;
+export const HOME_REPO_STATES = ["loading", "clean", "behind", "changed", "unavailable"] as const;
 export type HomeRepoState = (typeof HOME_REPO_STATES)[number];
+
+/**
+ * A repo that waits for the user: the "Needs you" queue, a loud label and a strong glow. A `loading` repo does not, until its
+ * status says so.
+ */
+export function repoNeedsYou(state: HomeRepoState): boolean {
+  return state !== "clean" && state !== "loading";
+}
 
 export interface HomeRepo {
   id: string;

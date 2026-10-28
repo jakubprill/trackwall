@@ -12,11 +12,12 @@ describe("the main window under the desktop shell's CSP", () => {
   test(
     "Home draws the 3D scene of the repos and gets the daemon's events, with nothing refused by the CSP",
     async () => {
-      // A repo with a change has a label in the scene, so the label shows the scene was built.
+      // A repo with a change has a label in the scene with its change, so the label shows the scene was built and the
+      // repo's status reached it after the quick list (ADR-113).
       writeFileSync(join(trackwall().daemon.projects, "shop", "notes.txt"), "to do\n");
       const { page, problems, eventsArrived, close } = await trackwall().openDesktopWindow();
 
-      const label = page.locator("div:has(> canvas)").getByText("shop", { exact: true });
+      const label = page.locator("div:has(> canvas)").getByText("1 change", { exact: true });
       // Either way the scene ends, so that a refused scene fails on what the CSP refused rather than on a timeout.
       await label.or(page.getByText("The 3D view is unavailable here")).waitFor({ timeout: SCENE_TIMEOUT_MS });
       expect(problems).toEqual([]);

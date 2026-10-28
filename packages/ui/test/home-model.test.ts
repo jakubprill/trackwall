@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { GraphEdge, Repo, RepoGraph, Session } from "@trackwall/protocol";
+import { repoNeedsYou } from "@trackwall/scene/model";
 import { daemonAnswered, homeHasObject, homeModel, homeRepoStatus, homeSessionState } from "../src/lib/home-model.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-24T10:00:00Z", pid: 10 } as const;
@@ -62,6 +63,18 @@ describe("dashboard snapshot", () => {
       ["c", "behind", 2],
       ["d", "clean", 0],
     ]);
+  });
+
+  test("a repo whose status has not come yet is loading and does not need you", () => {
+    const model = homeModel({
+      repos: [{ id: "a", path: "/p/a", remote: null, status: { kind: "loading" } }],
+      sessions: [],
+      graph: undefined,
+      running: [],
+      daemonRunning: true,
+    });
+
+    expect(model.repos.map((r) => [r.id, r.state, r.count, repoNeedsYou(r.state)])).toEqual([["a", "loading", 0, false]]);
   });
 
   test("a repo's layer is its column from the Overview view, and a repo without connections has no layer", () => {

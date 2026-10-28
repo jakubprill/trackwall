@@ -113,6 +113,23 @@ export class Workspace {
     return { projectsDir, repos: await mapLimit(entries, STATUS_CONCURRENCY, (entry) => this.describe(entry)) };
   }
 
+  /** The list without git (ADR-113): only the folder is read, so it answers at once even where every git start is slow. */
+  async entryList(): Promise<RepoList> {
+    const { projectsDir, entries } = await this.entries();
+    return { projectsDir, repos: entries.map((entry) => ({ ...entry, remote: null, status: { kind: "loading" } })) };
+  }
+
+  /**
+   * The repos named, described like `list` does, in the order asked (ADR-113). A view asks for the repos it shows first and
+   * the rest after; a repo removed from the folder meanwhile is left out, as the next `entries` will.
+   */
+  async repos(ids: readonly string[]): Promise<Repo[]> {
+    const { entries } = await this.entries();
+    const byId = new Map(entries.map((entry) => [entry.id, entry]));
+    const asked = [...new Set(ids)].flatMap((id) => byId.get(id) ?? []);
+    return mapLimit(asked, STATUS_CONCURRENCY, (entry) => this.describe(entry));
+  }
+
   settings(): WorkspaceSettings {
     const projectsDir = this.deps.file.projectsDir();
     // A bad `worktreesDir` typed by hand must not take away the projects folder form, and saving a folder fixes it.

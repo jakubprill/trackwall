@@ -18,6 +18,12 @@ test("a clean repo with nothing running has a quiet label only when every repo i
   expect(repoLabelTone(quiet, "needs-you")).toBeNull();
 });
 
+test("a repo whose status has not come yet is not in the Needs you labels, and is named quietly when every repo is", () => {
+  const loading = { id: "users-api", layer: 0, state: "loading", count: 0, runningTask: null } as const;
+  expect(repoLabelTone(loading, "needs-you")).toBeNull();
+  expect(repoLabelTone(loading, "all")).toBe("quiet");
+});
+
 test("a session has a label only when it is waiting for you or has an error", () => {
   expect(sessionHasLabel({ id: "s1", repo: "orders-bff", state: "attention" })).toBe(true);
   expect(sessionHasLabel({ id: "s2", repo: "orders-bff", state: "error" })).toBe(true);

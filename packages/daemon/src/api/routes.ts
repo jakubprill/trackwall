@@ -43,6 +43,8 @@ function route<Req extends z.ZodType, Data extends z.ZodType>(
 
 export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.list, (f) => f.workspace.list()),
+  route(workspaceApi.entries, (f) => f.workspace.entryList()),
+  route(workspaceApi.repos, (f, b) => f.workspace.repos(b.repos)),
   route(workspaceApi.settings, (f) => f.workspace.settings()),
   route(workspaceApi.suggestedProjectsDir, (f) => f.workspace.suggestedProjectsDir(homedir())),
   route(workspaceApi.setProjectsDir, (f, b) => f.workspace.setProjectsDir(b.path)),

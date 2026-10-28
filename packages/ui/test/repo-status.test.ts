@@ -5,13 +5,14 @@ import { branchLabel, listNeedsSettings, repoStatusTone } from "../src/lib/repo-
 const ok = { kind: "ok", branch: "main", head: null, upstream: null, untracked: 0 } as const;
 
 describe("repo state in the UI", () => {
-  test("a clean repo has tone ok, a repo with changes tone warning with changed and new files separately, an unavailable one tone error", () => {
+  test("a clean repo has tone ok, a repo with changes tone warning with changed and new files separately, an unavailable one tone error, a loading one no tone", () => {
     const statuses: RepoStatus[] = [
       { ...ok, changes: 0 },
       { ...ok, changes: 3 },
       { ...ok, changes: 4, untracked: 1 },
       { ...ok, changes: 2, untracked: 2 },
       { kind: "unavailable", message: "no directory" },
+      { kind: "loading" },
     ];
     expect(statuses.map(repoStatusTone)).toEqual([
       { tone: "ok", label: "clean" },
@@ -19,6 +20,7 @@ describe("repo state in the UI", () => {
       { tone: "warning", label: "3 changed, 1 new" },
       { tone: "warning", label: "2 new" },
       { tone: "error", label: "unavailable" },
+      { label: "loading" },
     ]);
   });
 

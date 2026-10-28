@@ -1,5 +1,5 @@
 import type { Session, TaskProposal } from "@trackwall/protocol";
-import { type HomeKey, type HomeModel, repoKey, sessionKey } from "@trackwall/scene/model";
+import { type HomeKey, type HomeModel, repoKey, repoNeedsYou, sessionKey } from "@trackwall/scene/model";
 import { Lightbulb } from "lucide-react";
 import type { ReactNode } from "react";
 import { Loading } from "@/components/Loading";
@@ -38,7 +38,7 @@ export function NeedsYouPanel({
   onOpenProposal: (id: string) => void;
 }) {
   const urgent = model.sessions.filter((s) => s.state === "attention" || s.state === "error");
-  const repos = model.repos.filter((r) => r.state !== "clean");
+  const repos = model.repos.filter((r) => repoNeedsYou(r.state));
   const working = model.sessions.filter((s) => s.state === "working").length;
   if (loading) {
     return (

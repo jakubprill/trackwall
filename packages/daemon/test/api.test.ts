@@ -13,11 +13,14 @@ import {
   LogTail,
   localConfigApi,
   logsApi,
+  MAX_REPOS_PER_REQUEST,
   miseApi,
+  Repo,
   RepoGraph,
   RepoList,
   workspaceApi,
 } from "@trackwall/protocol";
+import { z } from "zod";
 import { EventHub } from "../src/api/event-hub.ts";
 import { postRoutes } from "../src/api/routes.ts";
 import { type ApiServer, startApi } from "../src/api/server.ts";
@@ -203,6 +206,33 @@ describe("api workspace", () => {
 
     const graph = apiResult(RepoGraph).parse(JSON.parse((await post(graphApi.graph.path, "")).body));
     expect(graph.ok && graph.data.nodes.map((n) => n.repo)).toEqual(["shop"]);
+  });
+
+  test("the quick list names the repos without their state, and repos gives the state of those asked, in that order (ADR-113)", async () => {
+    const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
+    makeRepo({ "a.txt": "1" }, "shop", projects);
+    makeRepo({ "a.txt": "1" }, "api", projects);
+    expect((await post(workspaceApi.setProjectsDir.path, JSON.stringify({ path: projects }))).status).toBe(200);
+
+    const entries = apiResult(RepoList).parse(JSON.parse((await post(workspaceApi.entries.path, "")).body));
+    expect(entries.ok && entries.data.repos.map((r) => [r.id, r.status.kind])).toEqual([
+      ["api", "loading"],
+      ["shop", "loading"],
+    ]);
+
+    const repos = apiResult(z.array(Repo)).parse(
+      JSON.parse((await post(workspaceApi.repos.path, JSON.stringify({ repos: ["shop", "gone", "api"] }))).body),
+    );
+    expect(repos.ok && repos.data.map((r) => [r.id, r.status.kind])).toEqual([
+      ["shop", "ok"],
+      ["api", "ok"],
+    ]);
+  });
+
+  test("repos refuses an empty request and one over the limit", async () => {
+    expect((await post(workspaceApi.repos.path, JSON.stringify({ repos: [] }))).status).toBe(400);
+    const tooMany = Array.from({ length: MAX_REPOS_PER_REQUEST + 1 }, (_, i) => `repo-${i}`);
+    expect((await post(workspaceApi.repos.path, JSON.stringify({ repos: tooMany }))).status).toBe(400);
   });
 
   test("open-folder opens the folder of a listed repo in the system, and an unknown repo is 404", async () => {

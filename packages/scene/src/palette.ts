@@ -34,6 +34,8 @@ export function repoStateColor(state: HomeRepoState, palette: ScenePalette): str
   if (state === "changed") return palette.warning;
   if (state === "behind") return palette.primary;
   if (state === "unavailable") return palette.destructive;
+  // A repo whose status is still on its way is there, but says nothing yet (ADR-113).
+  if (state === "loading") return palette.idle;
   // Not `idle`: that is nearly the background, and a clean repo must still stand out on the ring (ADR-104).
   return palette.muted;
 }

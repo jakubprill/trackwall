@@ -1,4 +1,4 @@
-import { graphApi, type RunningMiseTask, type SessionList, workspaceApi } from "@trackwall/protocol";
+import { graphApi, type RunningMiseTask, type SessionList } from "@trackwall/protocol";
 import { type HomeKey, parseHomeKey } from "@trackwall/scene/model";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -13,6 +13,7 @@ import { GRAPH_PACE, REPO_LIST_PACE } from "@/lib/repo-watch";
 import type { SessionSelection } from "@/lib/session-entries";
 import type { SettingsCategory } from "@/lib/settings-categories";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
+import { useRepoList } from "@/lib/use-repo-list";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
 import { useRunningMiseTasks } from "@/lib/use-running-mise-tasks";
 import { HomeDetails } from "./HomeDetails.tsx";
@@ -56,10 +57,7 @@ export function HomeView({
   onOpenDaemon: () => void;
   onOpenSettings: (category: SettingsCategory) => void;
 }) {
-  const repos = useRemote(
-    useCallback(() => post(conn, workspaceApi.list, {}), [conn]),
-    repoWatch.options(REPO_LIST_PACE),
-  );
+  const repos = useRepoList(conn, repoWatch.options(REPO_LIST_PACE));
   const graph = useRemote(
     useCallback(() => post(conn, graphApi.graph, {}), [conn]),
     repoWatch.options(GRAPH_PACE),
