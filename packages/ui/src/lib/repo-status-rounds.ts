@@ -1,5 +1,5 @@
 import type { Repo } from "@trackwall/protocol";
-import { errorMessage } from "./api.ts";
+import { type CallErrorCode, errorCode, errorMessage } from "./api.ts";
 
 /**
  * Lazy loading of the repo list (ADR-113): the quick list (`entries`) has every repo as `loading`, and rounds of `repos`
@@ -34,6 +34,12 @@ export function withLoadedRepos(entries: readonly Repo[], loaded: ReadonlyMap<st
   });
 }
 
+/** Why the last batch failed, with the daemon's code when it answered, so a view can tell a daemon error from no daemon. */
+export interface RepoStatusError {
+  message: string;
+  code?: CallErrorCode;
+}
+
 /** What the rounds need from the view: the request, the repos to ask first, and a call when the list has changed. */
 export interface RepoStatusSource {
   fetch: (ids: string[]) => Promise<Repo[]>;
@@ -44,7 +50,7 @@ export interface RepoStatusSource {
 /**
  * One round at a time: a quick list that comes during a round waits for its end and then starts one more round, however
  * many came, so a list refreshed faster than git reads it still reaches its last repo. A failed batch ends the round with
- * its error, which the next successful batch clears.
+ * its error, which the next successful batch, or a round with nothing to read, clears.
  */
 export class RepoStatusRounds {
   readonly #source: RepoStatusSource;
@@ -53,7 +59,7 @@ export class RepoStatusRounds {
   #running = false;
   #again = false;
   #stopped = false;
-  #error: string | undefined;
+  #error: RepoStatusError | undefined;
 
   constructor(source: RepoStatusSource) {
     this.#source = source;
@@ -64,11 +70,12 @@ export class RepoStatusRounds {
     return withLoadedRepos(this.#entries, this.#loaded);
   }
 
-  get error(): string | undefined {
+  get error(): RepoStatusError | undefined {
     return this.#error;
   }
 
   refresh(entries: readonly Repo[]): void {
+    if (this.#stopped) return;
     this.#entries = entries;
     this.#source.changed();
     if (this.#running) {
@@ -99,6 +106,10 @@ export class RepoStatusRounds {
     for (const batch of repoBatches(ids, this.#source.first(), REPO_BATCH_SIZE)) {
       if (!(await this.#load(batch))) return;
     }
+    if (this.#error && !this.#stopped) {
+      this.#error = undefined;
+      this.#source.changed();
+    }
   }
 
   /** One batch; `false` ends the round. */
@@ -112,7 +123,7 @@ export class RepoStatusRounds {
       return true;
     } catch (err) {
       if (this.#stopped) return false;
-      this.#error = errorMessage(err);
+      this.#error = { message: errorMessage(err), code: errorCode(err) };
       this.#source.changed();
       return false;
     }

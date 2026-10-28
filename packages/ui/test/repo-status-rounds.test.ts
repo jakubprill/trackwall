@@ -116,11 +116,23 @@ describe("rounds of repo statuses (ADR-113)", () => {
 
     rounds.refresh(twentyRepos);
     await failNext("The projects folder is not available.");
-    expect(rounds.error).toBe("The projects folder is not available.");
+    expect(rounds.error?.message).toBe("The projects folder is not available.");
     expect(asked).toHaveLength(1);
 
     rounds.refresh(twentyRepos);
     await answerNext();
+    expect(rounds.error).toBeUndefined();
+  });
+
+  test("an error goes away with a list that has nothing to read, such as an emptied projects folder", async () => {
+    const { source, failNext } = scriptedSource();
+    const rounds = new RepoStatusRounds(source);
+    rounds.refresh(twentyRepos);
+    await failNext("The projects folder is not available.");
+
+    rounds.refresh([]);
+    await Bun.sleep(0);
+
     expect(rounds.error).toBeUndefined();
   });
 

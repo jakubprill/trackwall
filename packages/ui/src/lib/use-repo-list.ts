@@ -2,7 +2,7 @@ import { type Repo, type RepoList, workspaceApi } from "@trackwall/protocol";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { post } from "./api.ts";
 import type { Connection } from "./connection.ts";
-import { RepoStatusRounds } from "./repo-status-rounds.ts";
+import { type RepoStatusError, RepoStatusRounds } from "./repo-status-rounds.ts";
 import { type RemoteHandle, type RemoteOptions, useRemote } from "./use-remote.ts";
 
 export type RepoListHandle = RemoteHandle<RepoList> & {
@@ -13,14 +13,14 @@ export type RepoListHandle = RemoteHandle<RepoList> & {
 /**
  * The repo list of a view, loaded lazily (ADR-113): the quick list without git at once, every repo `loading`, then the
  * statuses in rounds of batches (`RepoStatusRounds`). A refresh keeps the statuses already shown until their new ones
- * come, so the list does not flash back to `loading`. The error is the quick list's, or else the last failed batch's.
+ * come, so the list does not flash back to `loading`. The error and its code are the quick list's, or else the last failed batch's.
  */
 export function useRepoList(conn: Connection, options: RemoteOptions<RepoList>): RepoListHandle {
   const load = useCallback(() => post(conn, workspaceApi.entries, {}), [conn]);
   const entries = useRemote(load, options);
   const first = useRef<readonly string[]>([]);
   const [rounds, setRounds] = useState<RepoStatusRounds>();
-  const [shown, setShown] = useState<{ repos: Repo[]; error?: string }>();
+  const [shown, setShown] = useState<{ repos: Repo[]; error?: RepoStatusError }>();
 
   useEffect(() => {
     setShown(undefined);
@@ -41,5 +41,7 @@ export function useRepoList(conn: Connection, options: RemoteOptions<RepoList>):
   const showFirst = useCallback((ids: readonly string[]) => {
     first.current = ids;
   }, []);
-  return { ...entries, data, error: entries.error ?? shown?.error, showFirst };
+  // The quick list's error first: without it the batches' error stands, with its code (a daemon that answered).
+  const error = entries.error === undefined ? shown?.error : { message: entries.error, code: entries.errorCode };
+  return { ...entries, data, error: error?.message, errorCode: error?.code, showFirst };
 }
