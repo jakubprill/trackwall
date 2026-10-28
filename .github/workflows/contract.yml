@@ -1,7 +1,8 @@
 name: Contract tests
 
 # The contract tests with the real Copilot CLI in BYOK mode against a scripted model (ADR-67): no account and no secret.
-# Called by ci.yml on every PR with the pinned version, and by nightly.yml with the newest one, so both run the same steps.
+# Called by ci.yml on every PR with the pinned version (Linux and Windows; macOS at night and in a manual run, ADR-109),
+# and by nightly.yml with the newest one on all three systems, so both run the same steps.
 on:
   workflow_call:
     inputs:
@@ -10,6 +11,11 @@ on:
         type: string
         required: false
         default: ""
+      systems:
+        description: The runners to test on, as a JSON array
+        type: string
+        required: false
+        default: '["ubuntu-latest", "windows-latest", "macos-latest"]'
 
 # No permissions by default; the job gets only what it needs.
 permissions: {}
@@ -25,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: ${{ fromJSON(inputs.systems) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     permissions:

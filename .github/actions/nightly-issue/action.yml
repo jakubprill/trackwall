@@ -1,0 +1,42 @@
+# One issue per nightly check of main: opened when the check fails, commented on while it keeps failing, closed by the
+# next green night. Used by the `report` jobs of nightly.yml, which decide when a run speaks for main.
+name: Report a nightly check in an issue
+description: Opens, updates or closes the issue with the given title according to the check's result
+inputs:
+  title:
+    description: The issue title, the same every night
+    required: true
+  result:
+    description: The result of the checked job, success or failure
+    required: true
+  passed:
+    description: The comment that closes the issue on a green night
+    required: true
+  body:
+    description: The body of a new issue
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Open, update or close the issue
+      shell: bash
+      env:
+        TITLE: ${{ inputs.title }}
+        RESULT: ${{ inputs.result }}
+        RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        PASSED: ${{ inputs.passed }}
+        BODY: ${{ inputs.body }}
+      run: |
+        number=$(gh issue list --state open --limit 100 --search "\"$TITLE\" in:title" --json number,title \
+          | jq -r --arg title "$TITLE" 'map(select(.title == $title))[0].number // empty')
+        if [ "$RESULT" = success ]; then
+          if [ -n "$number" ]; then
+            gh issue close "$number" --comment "$PASSED: $RUN"
+          fi
+          exit 0
+        fi
+        if [ -n "$number" ]; then
+          gh issue comment "$number" --body "Still failing: $RUN"
+          exit 0
+        fi
+        printf '%s\n' "$BODY" | gh issue create --title "$TITLE" --body-file -

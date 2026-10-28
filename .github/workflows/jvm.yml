@@ -3,9 +3,9 @@ name: Java build tests
 # The daemon on real Spring Boot projects built by real Maven and Gradle through real mise (ADR-72): cards, the graph,
 # services, test reports, task verification and log errors (`pnpm test:jvm`, packages/daemon/jvm/). Outside `CI ok`:
 # a run downloads a JDK and the Spring Boot dependencies, and a new release of a build tool must not block every PR.
-# Every night from nightly.yml, which opens an issue when it fails on main; on a PR only when it touches the daemon, the
-# protocol or the dependencies, which the tests go through end to end, so its author sees the result before the merge;
-# by hand from Actions.
+# Every night from nightly.yml on all three systems, which opens an issue when it fails on main; on a PR, on Linux and
+# Windows (ADR-109), only when it touches the daemon, the protocol or the dependencies, which the tests go through end to
+# end, so its author sees the result before the merge; by hand from Actions on all three systems.
 on:
   workflow_call:
   workflow_dispatch:
@@ -39,7 +39,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # macOS only at night and by hand, like the rest of CI (ADR-109).
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest", "windows-latest"]' || '["ubuntu-latest", "windows-latest", "macos-latest"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     permissions:
