@@ -12,7 +12,7 @@ const FAKE_COPILOT = [process.execPath, join(import.meta.dir, "fixtures", "fake-
 /** What mise gives in the repo root of `shop` (`fake-mise.json`, committed, so a task's worktree has it too). */
 const SHOP_MISE = {
   tasks: [],
-  env: { GITLAB_TOKEN: "glpat-repo-root-value", JIRA_KEY: "jira-key-from-age", MAVEN_OPTS: "-Xmx2g", SHOP_REGION: "repo-root" },
+  env: { GITLAB_TOKEN: "glpat-repo-root-value", JIRA_KEY: "jira-key-from-age", SHOP_JAVA_OPTS: "-Xmx2g", SHOP_REGION: "repo-root" },
   redacted: ["GITLAB_TOKEN", "JIRA_KEY"],
 };
 
@@ -24,7 +24,7 @@ beforeAll(async () => {
     miseCommand: FAKE_MISE,
     copilot: {
       command: FAKE_COPILOT,
-      env: () => ({ ...process.env, FAKE_COPILOT_SHOW_ENV: "GITLAB_TOKEN,JIRA_KEY,SHOP_REGION,MAVEN_OPTS" }),
+      env: () => ({ ...process.env, FAKE_COPILOT_SHOW_ENV: "GITLAB_TOKEN,JIRA_KEY,SHOP_REGION,SHOP_JAVA_OPTS" }),
     },
   });
 });
@@ -57,15 +57,15 @@ describe.skipIf(process.versions.bun === undefined)(
       workspace("agentSecrets: [JIRA_KEY]\n");
       const started = await daemon.facade.agents.start("shop");
       const window = viewer(daemon.facade.agents, started.id);
-      await waitFor(daemon.facade.agents, started.id, () => window.text().includes("Env MAVEN_OPTS"), "the environment on the screen");
+      await waitFor(daemon.facade.agents, started.id, () => window.text().includes("Env SHOP_JAVA_OPTS"), "the environment on the screen");
 
       // `JIRA_KEY` is a secret only because mise redacts it (an age value), `GITLAB_TOKEN` also by its name.
       expect(window.text()).toContain("Argument: --secret-env-vars=GITLAB_TOKEN\r");
       expect(window.text()).toContain("Env GITLAB_TOKEN=(hidden)");
       expect(window.text()).toContain("Env JIRA_KEY=jira-key-from-age");
-      expect(window.text()).toContain("Env MAVEN_OPTS=-Xmx2g");
+      expect(window.text()).toContain("Env SHOP_JAVA_OPTS=-Xmx2g");
       expect(started.environment).toEqual({
-        variables: ["GITLAB_TOKEN", "JIRA_KEY", "MAVEN_OPTS", "SHOP_REGION"],
+        variables: ["GITLAB_TOKEN", "JIRA_KEY", "SHOP_JAVA_OPTS", "SHOP_REGION"],
         secrets: ["GITLAB_TOKEN", "JIRA_KEY"],
         agentSecrets: ["JIRA_KEY"],
         problem: null,
@@ -76,7 +76,7 @@ describe.skipIf(process.versions.bun === undefined)(
       const ended = daemon.facade.agents.session(started.id).run;
       if (ended.kind !== "exited") throw new Error(`the session did not end: ${ended.kind}`);
       const lastLines = ended.lastLines.join("\n");
-      expect(lastLines).toContain("Env MAVEN_OPTS=-Xmx2g");
+      expect(lastLines).toContain("Env SHOP_JAVA_OPTS=-Xmx2g");
       expect(lastLines).toContain("Env JIRA_KEY=***");
       expect(lastLines).not.toContain("jira-key-from-age");
     }, 60_000);
@@ -86,7 +86,7 @@ describe.skipIf(process.versions.bun === undefined)(
       workspace();
       const started = await daemon.facade.agents.start("shop");
       const window = viewer(daemon.facade.agents, started.id);
-      await waitFor(daemon.facade.agents, started.id, () => window.text().includes("Env MAVEN_OPTS"), "the environment on the screen");
+      await waitFor(daemon.facade.agents, started.id, () => window.text().includes("Env SHOP_JAVA_OPTS"), "the environment on the screen");
 
       expect(window.text()).toContain("Argument: --secret-env-vars=GITLAB_TOKEN,JIRA_KEY");
       expect(window.text()).toContain("Env GITLAB_TOKEN=(hidden)");
@@ -103,10 +103,15 @@ describe.skipIf(process.versions.bun === undefined)(
       try {
         const started = await daemon.facade.agents.start("shop");
         const window = viewer(daemon.facade.agents, started.id);
-        await waitFor(daemon.facade.agents, started.id, () => window.text().includes("Env MAVEN_OPTS"), "the environment on the screen");
+        await waitFor(
+          daemon.facade.agents,
+          started.id,
+          () => window.text().includes("Env SHOP_JAVA_OPTS"),
+          "the environment on the screen",
+        );
 
         expect(window.text()).toContain("Env SHOP_REGION=projects-folder");
-        expect(window.text()).toContain("Env MAVEN_OPTS=(unset)");
+        expect(window.text()).toContain("Env SHOP_JAVA_OPTS=(unset)");
         expect(started.environment.variables).toEqual(["SHOP_REGION"]);
         expect(started.environment.problem).toContain("the root of shop: mise ERROR Config files in");
         expect(started.environment.problem).toContain("The session has the environment of the projects folder.");
@@ -123,7 +128,12 @@ describe.skipIf(process.versions.bun === undefined)(
       const task = await daemon.facade.agents.createTask("shop", "use the token");
       const first = runningSessionOf(task.id);
       const firstWindow = viewer(daemon.facade.agents, first.id);
-      await waitFor(daemon.facade.agents, first.id, () => firstWindow.text().includes("Env MAVEN_OPTS"), "the environment on the screen");
+      await waitFor(
+        daemon.facade.agents,
+        first.id,
+        () => firstWindow.text().includes("Env SHOP_JAVA_OPTS"),
+        "the environment on the screen",
+      );
       firstWindow.attachment.detach();
       await daemon.facade.agents.stop(first.id);
 
@@ -132,7 +142,7 @@ describe.skipIf(process.versions.bun === undefined)(
       await daemon.facade.agents.resumeTask(task.id);
       const resumed = runningSessionOf(task.id);
       const window = viewer(daemon.facade.agents, resumed.id);
-      await waitFor(daemon.facade.agents, resumed.id, () => window.text().includes("Env MAVEN_OPTS"), "the environment on the screen");
+      await waitFor(daemon.facade.agents, resumed.id, () => window.text().includes("Env SHOP_JAVA_OPTS"), "the environment on the screen");
       expect(window.text()).toContain("Env SHOP_REGION=worktree");
       expect(resumed.environment.problem).toBeNull();
       window.attachment.detach();
@@ -143,7 +153,7 @@ describe.skipIf(process.versions.bun === undefined)(
       await daemon.facade.agents.resumeTask(task.id);
       const again = runningSessionOf(task.id);
       const second = viewer(daemon.facade.agents, again.id);
-      await waitFor(daemon.facade.agents, again.id, () => second.text().includes("Env MAVEN_OPTS"), "the environment on the screen");
+      await waitFor(daemon.facade.agents, again.id, () => second.text().includes("Env SHOP_JAVA_OPTS"), "the environment on the screen");
       expect(second.text()).toContain("Env SHOP_REGION=repo-root");
       expect(again.environment.problem).toContain("mise.toml");
       expect(again.environment.problem).toContain("The session has the environment of the root of shop.");
