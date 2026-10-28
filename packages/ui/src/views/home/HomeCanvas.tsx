@@ -1,4 +1,4 @@
-import { CameraRig, Engine, Labels, Pointer } from "@pawnjs/core";
+import { CameraRig, Engine, Labels, type LoopDriver, Pointer } from "@pawnjs/core";
 import { HomeScene, type LabelTarget } from "@trackwall/scene";
 import type { HomeKey, HomeModel } from "@trackwall/scene/model";
 import { useEffect, useRef } from "react";
@@ -6,6 +6,7 @@ import { errorMessage } from "@/lib/api";
 import { HOME_CAMERA_FOV, HOME_CAMERA_MAX_DISTANCE, homeCameraDistance, homeCameraPosition } from "@/lib/home-camera";
 import { HOME_SESSION_STATUS, homeRepoStatus } from "@/lib/home-model";
 import { readHomeSceneSettings } from "@/lib/home-scene-settings";
+import { PacedFrames } from "@/lib/paced-frames";
 import { readScenePalette } from "@/lib/scene-palette";
 import { statusTextClass } from "@/lib/status-tone";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ const SCENE_FAILED = "the 3D scene could not be built";
 
 interface Mounted {
   scene: HomeScene;
+  frames: PacedFrames;
   rig: CameraRig;
   /** The framing of the whole scene for the current canvas size. */
   overview: () => void;
@@ -47,7 +49,8 @@ export function HomeCanvas(props: HomeCanvasProps) {
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const created = createEngine(host, (reason) => latest.current.onUnavailable(reason));
+    const frames = new PacedFrames();
+    const created = createEngine(host, frames, (reason) => latest.current.onUnavailable(reason));
     if (!created) return;
     const { engine, canvas } = created;
     const rig = new CameraRig({ minDistance: 8, maxDistance: HOME_CAMERA_MAX_DISTANCE, maxPolarAngle: Math.PI * 0.45, enablePan: false });
@@ -82,10 +85,16 @@ export function HomeCanvas(props: HomeCanvasProps) {
       rig.reset();
       rig.focus(ORIGIN, { distance: homeCameraDistance(host.clientWidth, host.clientHeight) });
     };
-    mountedRef.current = { scene, rig, overview };
+    mountedRef.current = { scene, frames, rig, overview };
+    // Pointing, dragging and zooming are the user working with the scene: every frame while they last (ADR-106).
+    const wake = () => frames.wake();
+    const interactions = ["pointermove", "pointerdown", "wheel"] as const;
+    const listening = { capture: true, passive: true };
+    for (const type of interactions) host.addEventListener(type, wake, listening);
     // Resizing the window or the panels: without a selected object the distance fits the new proportions, and the user's
     // rotation stays.
     engine.fitToElement(host, () => {
+      frames.wake();
       if (!latest.current.focus) rig.focus(ORIGIN, { distance: homeCameraDistance(host.clientWidth, host.clientHeight), immediate: true });
     });
     const lost = (event: Event) => {
@@ -97,8 +106,10 @@ export function HomeCanvas(props: HomeCanvasProps) {
     // would keep computing frames.
     const visibility = () => (document.hidden ? engine.stop() : engine.start());
     document.addEventListener("visibilitychange", visibility);
+    frames.wake();
     if (!document.hidden) engine.start();
     return () => {
+      for (const type of interactions) host.removeEventListener(type, wake, listening);
       document.removeEventListener("visibilitychange", visibility);
       canvas.removeEventListener("webglcontextlost", lost);
       mountedRef.current = null;
@@ -120,6 +131,8 @@ export function HomeCanvas(props: HomeCanvasProps) {
   useEffect(() => {
     const mounted = mountedRef.current;
     if (!mounted) return;
+    // The camera flies to the object.
+    mounted.frames.wake();
     mounted.scene.focus(props.focus);
     const entity = props.focus && mounted.scene.entity(props.focus);
     if (entity) mounted.rig.focus(entity);
@@ -133,7 +146,11 @@ export function HomeCanvas(props: HomeCanvasProps) {
  * The engine on a new canvas, or `null` with the reason in `onUnavailable`. WebGL 2 is checked on a separate canvas before
  * the engine, because a failed `Engine` constructor leaves a koota world behind that cannot be freed (a limit of 16 per page).
  */
-function createEngine(host: HTMLElement, onUnavailable: (reason: string) => void): { engine: Engine; canvas: HTMLCanvasElement } | null {
+function createEngine(
+  host: HTMLElement,
+  driver: LoopDriver,
+  onUnavailable: (reason: string) => void,
+): { engine: Engine; canvas: HTMLCanvasElement } | null {
   const probe = document.createElement("canvas").getContext("webgl2");
   if (!probe) {
     onUnavailable("WebGL 2 is not available");
@@ -148,6 +165,7 @@ function createEngine(host: HTMLElement, onUnavailable: (reason: string) => void
   try {
     const engine = new Engine({
       canvas,
+      driver,
       enableTransparency: true,
       lights: "studio",
       camera: { position: homeCameraPosition(distance), fov: HOME_CAMERA_FOV },
