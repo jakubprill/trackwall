@@ -28,6 +28,7 @@ test(
       hosting: fakeHosting().hosting,
       openEditor: () => {},
       openFolder: () => {},
+      afterClone: async () => {},
     });
     await workspace.setProjectsDir(projects);
     const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(join(home, "cards"), () => {}), log: () => {} });

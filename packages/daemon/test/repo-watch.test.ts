@@ -21,6 +21,7 @@ async function setup() {
     hosting: fakeHosting().hosting,
     openEditor: () => {},
     openFolder: () => {},
+    afterClone: async () => {},
   });
   await workspace.setProjectsDir(projects);
   const handed: string[][] = [];

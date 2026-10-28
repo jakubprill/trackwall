@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { SCRATCH_DIR_NAME, SERVICE_RELEASE_MS, type StateDirSource } from "@trackwall/protocol";
 import { vscodeUrl } from "./infra/editor-url.ts";
-import { DomainError } from "./infra/errors.ts";
+import { DomainError, messageOf } from "./infra/errors.ts";
 import { runProgram } from "./infra/run-program.ts";
 import {
   Agents,
@@ -154,6 +154,16 @@ export function createFacade(o: FacadeOptions): Facade {
     hosting,
     openEditor,
     openFolder: o.openFolder,
+    // `localConfig` needs `workspace`, so it is made below; a clone ends long after both exist.
+    // A restore that fails is logged, not the clone's failure: the repo is cloned, and Restore stays in its mise tasks tab.
+    afterClone: async (dir) => {
+      try {
+        const restored = await localConfig.restoreCloned(dir);
+        if (restored.length > 0) o.log(`restored ${restored.join(", ")} from the local config store into ${dir}`);
+      } catch (err) {
+        o.log(`restoring local config into ${dir} failed: ${messageOf(err)}`);
+      }
+    },
   });
   workspace.useGitProgramFromFile();
   const logs = new Logs({ dir: join(o.home, LOGS_DIR), maxFileBytes: LOG_FILE_MAX_BYTES, log: o.log });

@@ -20,6 +20,7 @@ async function setup() {
     hosting: fakeHosting().hosting,
     openEditor: () => {},
     openFolder: () => {},
+    afterClone: async () => {},
   });
   await workspace.setProjectsDir(projects);
   return { workspace, projects, remotes };
@@ -336,6 +337,7 @@ describe("sync of all repos", () => {
         hosting: fakeHosting().hosting,
         openEditor: () => {},
         openFolder: () => {},
+        afterClone: async () => {},
       });
       await expect(empty.sync()).rejects.toMatchObject({ code: "bad_request" });
       expect(empty.syncRun()).toBeNull();

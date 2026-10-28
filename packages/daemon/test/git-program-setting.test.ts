@@ -31,6 +31,7 @@ async function workspaceWithRepo() {
     hosting: fakeHosting().hosting,
     openEditor: () => {},
     openFolder: () => {},
+    afterClone: async () => {},
   });
   await workspace.setProjectsDir(projects);
   makeRepo({ "README.md": "# orders" }, "orders", projects);

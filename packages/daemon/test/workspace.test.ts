@@ -23,6 +23,7 @@ async function workspaceWithProjectsDir() {
     hosting: fakeHosting().hosting,
     openEditor: (dir) => opened.push(dir),
     openFolder: () => {},
+    afterClone: async () => {},
   });
   await workspace.setProjectsDir(projects);
   return { workspace, file, projects, opened };
@@ -106,6 +107,7 @@ describe("workspace", () => {
         hosting: fakeHosting().hosting,
         openEditor: () => {},
         openFolder: () => {},
+        afterClone: async () => {},
       });
 
       expect(await workspace.list()).toEqual({ projectsDir: null, repos: [] });
@@ -134,6 +136,7 @@ describe("workspace", () => {
       hosting: fakeHosting().hosting,
       openEditor: () => {},
       openFolder: () => {},
+      afterClone: async () => {},
     });
 
     expect(await workspace.suggestedProjectsDir(home)).toBe(join(home, "dev"));
@@ -147,6 +150,7 @@ describe("workspace", () => {
       hosting: fakeHosting().hosting,
       openEditor: () => {},
       openFolder: () => {},
+      afterClone: async () => {},
     });
     expect(await workspace.suggestedProjectsDir(home)).toBeNull();
 
@@ -165,6 +169,7 @@ describe("workspace", () => {
       hosting: fakeHosting().hosting,
       openEditor: () => {},
       openFolder: () => {},
+      afterClone: async () => {},
     });
 
     expect(await workspace.suggestedProjectsDir(home)).toBe(join(home, "Dev"));
@@ -272,6 +277,7 @@ describe("workspace", () => {
         hosting: fakeHosting().hosting,
         openEditor: () => {},
         openFolder: () => {},
+        afterClone: async () => {},
       });
       mkdirSync(join(outer, "Projects", "empty", ".git"), { recursive: true });
       await workspace.setProjectsDir(join(outer, "Projects"));
@@ -524,6 +530,7 @@ describe("the task worktrees folder (ADR-84)", () => {
       hosting: fakeHosting().hosting,
       openEditor: () => {},
       openFolder: () => {},
+      afterClone: async () => {},
     });
 
     await expect(workspace.worktreesDir()).rejects.toMatchObject({ code: "bad_request", message: "set the projects folder first" });

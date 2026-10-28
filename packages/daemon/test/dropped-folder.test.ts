@@ -16,6 +16,7 @@ function newWorkspace() {
     hosting: fakeHosting().hosting,
     openEditor: () => {},
     openFolder: () => {},
+    afterClone: async () => {},
   });
 }
 
@@ -94,6 +95,7 @@ describe("dropped folder", () => {
       hosting: fakeHosting().hosting,
       openEditor: () => {},
       openFolder: () => {},
+      afterClone: async () => {},
     });
 
     expect(await workspace.droppedFolder(projects)).toEqual({ kind: "projects-dir" });

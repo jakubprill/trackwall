@@ -16,7 +16,14 @@ async function setup(vcs: Vcs = new Vcs(systemTempFolder)) {
   const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
   const file = new WorkspaceFile(join(home, "workspace.yaml"));
-  const workspace = new Workspace({ file, vcs, hosting: fakeHosting().hosting, openEditor: () => {}, openFolder: () => {} });
+  const workspace = new Workspace({
+    file,
+    vcs,
+    hosting: fakeHosting().hosting,
+    openEditor: () => {},
+    openFolder: () => {},
+    afterClone: async () => {},
+  });
   await workspace.setProjectsDir(projects);
   const cardsDir = join(home, "cards");
   const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(cardsDir, () => {}), log: () => {} });

@@ -6,6 +6,7 @@ import type { CloneJob } from "@trackwall/protocol";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
+import { finishedClone } from "./support/clone-jobs.ts";
 import { type FakeHostingConfig, fakeHosting } from "./support/hosting.ts";
 
 const GITLAB = { kind: "gitlab", host: "gitlab.example.com" } as const;
@@ -18,7 +19,7 @@ const project = (path: string) => ({
 });
 
 /** A workspace with a projects folder, a GitLab repo host in the settings and a fake glab. */
-async function workspaceWithGitLab(config: FakeHostingConfig = {}) {
+async function workspaceWithGitLab(config: FakeHostingConfig = {}, afterClone = async (_dir: string) => {}) {
   const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
   const workspace = new Workspace({
@@ -27,19 +28,15 @@ async function workspaceWithGitLab(config: FakeHostingConfig = {}) {
     hosting: fakeHosting(config).hosting,
     openEditor: () => {},
     openFolder: () => {},
+    afterClone,
   });
   await workspace.setProjectsDir(projects);
   workspace.setRepoHosts([GITLAB]);
   return { workspace, projects, file };
 }
 
-async function finished(workspace: Workspace, fullName: string): Promise<CloneJob | undefined> {
-  for (let i = 0; i < 200; i++) {
-    const job = workspace.cloneJobs().find((j) => j.fullName === fullName);
-    if (job?.state !== "running") return job;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  throw new Error(`the clone of ${fullName} did not finish within the test`);
+function finished(workspace: Workspace, fullName: string): Promise<CloneJob | undefined> {
+  return finishedClone(() => workspace.cloneJobs(), fullName);
 }
 
 describe("cloning from a repo host into the projects folder", () => {
@@ -100,6 +97,18 @@ describe("cloning from a repo host into the projects folder", () => {
       code: "bad_request",
       message: "the projects folder already has orders-bff",
     });
+  });
+
+  test("after the clone the folder goes to afterClone, and the clone is done only once it has finished", async () => {
+    const seen: { dir: string; state: string | undefined; files: string[] }[] = [];
+    const { workspace, projects } = await workspaceWithGitLab({}, async (dir) => {
+      seen.push({ dir, state: workspace.cloneJobs()[0]?.state, files: readdirSync(dir) });
+    });
+
+    await workspace.clone(GITLAB, "shop/orders/orders-bff");
+
+    expect(await finished(workspace, "shop/orders/orders-bff")).toMatchObject({ state: "done" });
+    expect(seen).toEqual([{ dir: join(projects, "orders-bff"), state: "running", files: [".git"] }]);
   });
 
   test("a failed clone stays on the clone list with the glab message", async () => {
@@ -167,6 +176,7 @@ describe("cloning from a repo host into the projects folder", () => {
       hosting: fakeHosting().hosting,
       openEditor: () => {},
       openFolder: () => {},
+      afterClone: async () => {},
     });
     bare.setRepoHosts([GITLAB]);
     await expect(bare.clone(GITLAB, "shop/api")).rejects.toMatchObject({
