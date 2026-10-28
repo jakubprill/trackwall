@@ -116,9 +116,11 @@ describe.skipIf(process.versions.bun === undefined)("a task's approvals mode (AD
     expect(task.approvals).toBe("auto");
     const session = sessionOf(task.id);
     const screen = await argumentsOf(session, "--session-id=");
-    expect(screen).toContain("Argument: --allow-all-tools");
-    expect(screen).not.toContain("Argument: --allow-all\n");
-    expect(screen).not.toContain("--yolo");
+    const permissionArgs = screen
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith("Argument: --allow") || line.startsWith("Argument: --yolo"))
+      .map((line) => line.trim());
+    expect(permissionArgs).toEqual(["Argument: --allow-all-tools"]);
     // A turn, which the fake asks to approve otherwise, ends without an approval dialog.
     const window = viewer(daemon.facade.agents, session);
     window.attachment.input("list the files\r");

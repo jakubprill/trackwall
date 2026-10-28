@@ -18,7 +18,7 @@ import {
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
-import { ALLOW_ALL_TOOLS } from "./copilot-command.ts";
+import { approvalArgs } from "./copilot-command.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
 import { type MiseSnapshot, miseConfigChanges, miseConfigDigest, readMiseConfig, reviewMiseConfig } from "./task-mise-config.ts";
@@ -433,16 +433,15 @@ export class AgentTasks {
   }
 
   async #launch(task: KnownTask, args: readonly string[], promptOnStart: boolean): Promise<void> {
-    // The model on every start, the first and each resume: Copilot CLI would otherwise resume on its default (ADR-98).
+    // The model and the approvals mode on every start, the first and each resume: Copilot CLI would otherwise resume
+    // on its default model and ask again (ADR-98, ADR-105).
     const modelArgs = task.model === null ? [] : [`--model=${task.model}`];
-    // The mode too, or a resumed task would ask again (ADR-105).
-    const approvalArgs = task.approvals === "auto" ? [ALLOW_ALL_TOOLS] : [];
     // A task's conversation exists from its first message on, which a resume goes on with.
     await this.#deps.sessions.launch({
       repo: task.repo,
       cwd: task.worktree,
       task: task.id,
-      args: [...modelArgs, ...approvalArgs, ...args],
+      args: [...modelArgs, ...approvalArgs(task.approvals), ...args],
       promptOnStart,
       hasConversation: true,
     });

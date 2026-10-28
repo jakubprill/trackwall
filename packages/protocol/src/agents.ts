@@ -107,8 +107,9 @@ export const TaskModel = z
 
 /**
  * How a task's sessions answer tool approvals (ADR-105): `ask`, Copilot CLI asks the user before each tool its rules do not
- * already allow; `auto`, it runs every tool without asking (`--allow-all-tools`) on every start and resume. `deny` rules
- * from `toolPermissions` still refuse, and Copilot CLI still asks before a path outside the worktree or a URL.
+ * already allow; `auto`, it runs every tool without asking (`--allow-all-tools`) on every start and resume, shell commands
+ * such as `git push` included. `deny` rules from `toolPermissions` still refuse, and Copilot CLI still asks before a path
+ * it recognises outside the worktree and before a URL.
  */
 export const TaskApprovals = z.enum(["ask", "auto"]);
 export type TaskApprovals = z.infer<typeof TaskApprovals>;

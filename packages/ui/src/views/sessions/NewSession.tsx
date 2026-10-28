@@ -19,7 +19,7 @@ const PROJECTS_FOLDER = "";
  * A new task or session (ADR-100): a repo from the projects folder, or the projects folder itself, and a prompt for the
  * agent. In a repo with its own worktree it becomes a task (ADR-31); without one a main session in the repo's working
  * copy (ADR-26), and in the projects folder a free session, both with the prompt as their first message when there is one.
- * Only a task, which changes nothing outside its worktree, can run without asking for approvals (ADR-105).
+ * Only a task, which works in its own worktree, can run without asking for approvals (ADR-105).
  */
 export function NewSession({
   conn,
@@ -109,7 +109,7 @@ export function NewSession({
           {start.kind === "session" ? (
             <WithoutWorktree repo={repo} sessions={sessions} />
           ) : (
-            <TaskApprovalsChoice label="Run the task without asking for approvals" value={approvals} onChange={setApprovals} />
+            <TaskApprovalsChoice label="Run without asking for approvals" value={approvals} onChange={setApprovals} disabled={pending} />
           )}
           <div className="flex flex-wrap items-center gap-2">
             {start.kind === "session" ? (

@@ -1,7 +1,7 @@
 import { statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { delimiter, dirname, extname, isAbsolute, join } from "node:path";
-import type { ToolPermissions } from "@trackwall/protocol";
+import type { TaskApprovals, ToolPermissions } from "@trackwall/protocol";
 import { envKey } from "../../infra/env-key.ts";
 
 /**
@@ -70,10 +70,12 @@ function isFile(path: string): boolean {
 }
 
 /**
- * Copilot CLI runs every tool without asking (ADR-105); its `--deny-tool` rules still refuse. Not `--allow-all`/`--yolo`,
- * which also drop the questions about paths outside the working directory and about URLs.
+ * A task's approvals mode (ADR-105): `auto` lets Copilot CLI run every tool without asking, its `--deny-tool` rules still
+ * refusing. Not `--allow-all`/`--yolo`, which also drop the questions about paths outside the working directory and URLs.
  */
-export const ALLOW_ALL_TOOLS = "--allow-all-tools";
+export function approvalArgs(approvals: TaskApprovals): string[] {
+  return approvals === "auto" ? ["--allow-all-tools"] : [];
+}
 
 /** Copilot CLI's own approval rules (ADR-66); one argument each, with `=`, so a pattern never reads as another option. */
 export function toolPermissionArgs(permissions: ToolPermissions): string[] {

@@ -21,7 +21,7 @@ export function ProposalActions({
   proposal: TaskProposal;
   tasks: readonly Task[];
   pending: boolean;
-  /** False with an empty prompt or a model that is not an id. */
+  /** False with an empty prompt or a model that is not an id, and in a grid tile for a proposal without approvals. */
   canStart: boolean;
   onStart: () => void;
   onRemoveRepo: () => void;

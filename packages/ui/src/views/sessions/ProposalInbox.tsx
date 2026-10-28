@@ -166,6 +166,7 @@ export function ProposalInbox({
                         label={`Run without asking for approvals: ${p.title}`}
                         value={approvalsOf(p)}
                         onChange={(value) => setApprovals(new Map(approvals).set(p.id, value))}
+                        disabled={decisions.pending}
                       />
                     </>
                   )}

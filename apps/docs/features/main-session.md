@@ -39,7 +39,7 @@ To steer a running task, the main session sends its agent a message: a correctio
 ## Good to know
 
 - A proposal can name the Copilot CLI model its task runs on, for example a stronger one for a code review. The model shows in a field under the prompt: change it, or clear it to use Copilot CLI's default. Most proposals leave it empty. The task keeps its model when it is resumed, and its panel shows it next to the task port. Switching the model with `/model` in the task's terminal lasts until the task is resumed, which goes back to the task's model.
-- A proposal can suggest running its task without asking for approvals: "Run without asking for approvals" is then ticked under the model. Untick it to keep the approvals. The grid tile says "Runs without asking for approvals" on such a proposal, so you know before "Start task" there.
+- A proposal can suggest running its task without asking for approvals: "Run without asking for approvals" is then ticked under the model. Untick it to keep the approvals. In the session grid such a proposal cannot be started from its tile: open it, so you see the box before you start it.
 - A proposal for a repo that already has tasks says so.
 - A main session can also propose removing a repo, shown as "Repo removal" with its reason and a "Remove repo" button instead of a prompt; see the [supervisor](/features/supervisor).
 - In the session grid, a tile with proposals shows their prompts with "Start task" and "Reject…"; "Next waiting" and Alt+J go to proposals too.

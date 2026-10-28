@@ -14,7 +14,7 @@ export function TaskApprovalsChoice({
   label: string;
   value: TaskApprovals;
   onChange: (value: TaskApprovals) => void;
-  disabled?: boolean;
+  disabled: boolean;
 }) {
   return (
     <div className="flex flex-col gap-1">
@@ -31,8 +31,8 @@ export function TaskApprovalsChoice({
       </label>
       {value === "auto" && (
         <p className="text-muted-foreground max-w-prose text-xs">
-          The agent runs commands, edits files and calls tools without asking you. Your deny rules still refuse what they name, and Copilot
-          CLI still asks before it reaches files outside the worktree or a URL.
+          The agent runs commands, edits files and calls tools without asking you, also commands such as git push. Your deny rules still
+          refuse what they name, and Copilot CLI still asks before paths it sees outside the worktree and before URLs.
         </p>
       )}
     </div>
