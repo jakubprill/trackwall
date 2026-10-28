@@ -60,12 +60,13 @@ describe.each(RUNTIMES)("daemon process under %s", (name, runtime) => {
   test("simultaneous starts leave exactly one daemon", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-race-"));
     const env = { ...process.env, TRACKWALL_HOME: home };
-    const procs = Array.from({ length: 5 }, () => Bun.spawn([...runtime, MAIN], { env, stdout: "ignore", stderr: "ignore" }));
+    const procs = Array.from({ length: 5 }, () => Bun.spawn([...runtime, MAIN], { env, stdout: "ignore", stderr: "pipe" }));
     try {
       const file = await waitFor(() => readDaemonFile(home));
-      // The losers exit by themselves with code 0; the winner keeps running.
+      // The losers exit by themselves with code 0; the winner keeps running. A loser's stderr says why it did not.
       const losers = procs.filter((p) => p.pid !== file.pid);
-      expect(await Promise.all(losers.map((p) => p.exited))).toEqual([0, 0, 0, 0]);
+      const ended = await Promise.all(losers.map(async (p) => ({ code: await p.exited, stderr: await new Response(p.stderr).text() })));
+      expect(ended.filter((loser) => loser.code !== 0)).toEqual([]);
       expect(procs.filter((p) => isAlive(p.pid)).map((p) => p.pid)).toEqual([file.pid]);
     } finally {
       for (const p of procs) p.kill();

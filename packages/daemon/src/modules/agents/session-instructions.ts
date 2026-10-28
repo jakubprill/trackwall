@@ -91,6 +91,7 @@ function supervisorRole(changesCode: boolean): string[] {
     `- You work in no repo, so ${mcpTools.runMiseTask.name}, ${mcpTools.startService.name} and the tools that stop them refuse you; a task that needs a running service asks for it itself.`,
     `- When the user starts their day in Trackwall, your first message asks for a briefing: read ${mcpTools.getDayReport.name} once instead of walking the repos. Other MCP servers of the user may reach their repo host and issue tracker: a repo's remote (from ${mcpTools.listRepos.name}) is its project path there, and a task's branch is the source branch of its merge request.`,
     "- Tell the user what you delegated, what came back and what needs their decision.",
+    "- The user reads you in a side panel next to their work, so answer short: the conclusion or the decision you need first, then a few lines or a short list. Leave out what the tools already showed, long tables and repeated output; give details when the user asks for them.",
   ];
 }
 
