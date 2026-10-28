@@ -66,7 +66,16 @@ function conversationOf(id: string) {
     },
     closed: () => {},
   });
-  return { entries: () => entries, detach: () => window.detach() };
+  // The daemon sends what it has before each state change, but an update Copilot CLI sends after a prompt's result
+  // (none seen so far) would come later; waiting for it keeps the tests about the content, not that order.
+  const until = async (check: (entries: ConversationEntry[]) => boolean, what: string) => {
+    const deadline = Date.now() + 5_000;
+    while (!check(entries)) {
+      if (Date.now() > deadline) throw new Error(`gave up waiting for ${what}: ${JSON.stringify(entries)}`);
+      await new Promise((r) => setTimeout(r, 20));
+    }
+  };
+  return { entries: () => entries, until, detach: () => window.detach() };
 }
 
 async function startSupervisor(): Promise<Session> {
@@ -101,6 +110,7 @@ describe("the supervisor in the conversation view with the real Copilot CLI", ()
     expect(first?.lastUserText).toEndWith("make a file");
     expect(first?.tools).toContain(`${MCP_SERVER_NAME}-${mcpTools.listRepos.name}`);
     expect(first?.system).toContain("You are the supervisor");
+    await view.until((entries) => entries.at(-1)?.kind === "agent", "the answer");
     const entries = view.entries();
     expect(entries[0]).toEqual({ id: expect.any(String), kind: "user", text: "make a file" });
     expect(entries.find((e) => e.kind === "tool")).toMatchObject({ tool: "execute", status: "completed" });
@@ -121,6 +131,7 @@ describe("the supervisor in the conversation view with the real Copilot CLI", ()
     await inState(supervisor.id, "Input");
 
     expect(existsSync(join(daemon.projects, "refused.txt"))).toBe(false);
+    await view.until((entries) => entries.some((e) => e.kind === "tool" && e.status === "failed"), "the refused tool");
     expect(view.entries().find((e) => e.kind === "tool")).toMatchObject({
       status: "failed",
       detail: ["The user rejected this tool call."],
