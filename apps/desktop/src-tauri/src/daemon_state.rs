@@ -11,6 +11,7 @@ const SHELL_EXITING: &str = "the app is quitting";
 
 #[derive(Clone)]
 enum Phase {
+    /// No start requested yet. `setup` and `restart_if_down` always request one and `stop` ends it, so `wait` on it ends.
     Idle,
     Starting,
     Ready(Connection),
@@ -84,13 +85,14 @@ impl DaemonState {
         }
     }
 
-    /// Waits for a start in progress to finish. `Idle` means no start was requested.
+    /// Waits for the start to finish, also for one not requested yet: Tauri creates the windows from `tauri.conf.json`
+    /// before the `setup` hook that calls `start`, so a fast UI asks while the phase is still `Idle`.
     pub fn wait(&self) -> Result<Connection, String> {
-        let phase = self.wait_while(self.lock(), |p| matches!(p, Phase::Starting));
+        let phase = self.wait_while(self.lock(), |p| matches!(p, Phase::Idle | Phase::Starting));
         match &*phase {
             Phase::Ready(conn) => Ok(conn.clone()),
             Phase::Failed(err) => Err(err.clone()),
-            Phase::Idle | Phase::Starting => Err("the daemon was not started".into()),
+            Phase::Idle | Phase::Starting => unreachable!("wait_while returns only once the start has an outcome"),
             Phase::Stopping | Phase::Stopped => Err(SHELL_EXITING.into()),
         }
     }
@@ -236,6 +238,36 @@ mod tests {
         assert!(matches!(*state.lock(), Phase::Stopped));
         assert_eq!(state.wait().unwrap_err(), SHELL_EXITING);
         assert_eq!(shutdown_requests(&rx).len(), 1);
+    }
+
+    #[test]
+    fn ui_asking_before_the_start_waits_for_its_result() {
+        let state = Arc::new(DaemonState::new(no_home()));
+        let ui = {
+            let state = Arc::clone(&state);
+            std::thread::spawn(move || state.wait())
+        };
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        assert!(!ui.is_finished());
+
+        state.start();
+
+        assert_eq!(ui.join().expect("waiting UI").unwrap_err(), "no state directory in the test");
+    }
+
+    #[test]
+    fn ui_waiting_before_the_start_gets_an_answer_when_the_app_quits() {
+        let state = Arc::new(DaemonState::new(no_home()));
+        let ui = {
+            let state = Arc::clone(&state);
+            std::thread::spawn(move || state.wait())
+        };
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        assert!(!ui.is_finished());
+
+        state.stop();
+
+        assert_eq!(ui.join().expect("waiting UI").unwrap_err(), SHELL_EXITING);
     }
 
     #[test]
